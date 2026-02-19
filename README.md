@@ -58,6 +58,21 @@ python -m src.bot.trainer_app  # тренерский бот (вход по сс
     - `postgresql+asyncpg://trainer_crm:trainer_crm_dev@localhost:5432/trainer_crm`
   - `DATABASE_URL_SYNC` — sync‑URL для Alembic:
     - `postgresql://trainer_crm:trainer_crm_dev@localhost:5432/trainer_crm`
+  - **Файлы (фото тренеров)** — хранятся в S3 (`S3_ENDPOINT`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_BUCKET`). В БД только метаданные: `trainer_photos.file_key`.
+
+**Загрузить фото с компьютера в S3 и привязать к тренеру (один запрос):** в `.env` настроены S3, запущен API (`uvicorn src.api.app:app --reload --port 8000`). Затем:
+```bash
+curl -X POST http://localhost:8000/api/upload/photo -F "trainer_id=1" -F "file=@/путь/к/фото.jpg"
+```
+Ответ `{"file_key":"trainers/1/....jpg"}` — файл в S3, запись в `trainer_photos` создана.
+
+**API для сайта (профили тренеров заполняются и управляются на сайте):**
+- **POST /api/trainers** — создать тренера. Тело (JSON): `first_name`, `last_name`, `age` (обязательные), `experience_years`, `description`, `phone`, `contacts`, `education`, `service_ids` (опционально). Ответ: `{"id": 1}`.
+- **GET /api/trainers/{id}** — тренер целиком: профиль, фото (file_key), service_ids.
+- **PATCH /api/trainers/{id}/profile** — частичное обновление профиля и/или `service_ids`.
+- **GET /api/trainers** — список тренеров (limit, offset).
+
+Профиль: имя, фамилия, возраст (обязательные), стаж в годах (опционально), описание, телефон, контакты, образование. После миграции 0005: `alembic upgrade head`. Заполнить пару профилей для теста: `python scripts/seed_trainer_profiles.py` (нужны услуги: сначала `python scripts/seed_services.py`).
 
 ## Health-check (`/health`)
 
