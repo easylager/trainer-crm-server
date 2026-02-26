@@ -41,9 +41,19 @@ async def consume_link_token(session: AsyncSession, token: str, telegram_id: int
 
 
 async def get_trainer_by_telegram_id(session: AsyncSession, telegram_id: int) -> bool:
-    """True if this telegram_id is linked to a trainer."""
+    """True if this telegram_id is linked to an active trainer (bot access allowed)."""
     r = await session.execute(
-        text("SELECT 1 FROM trainers WHERE telegram_id = :tid LIMIT 1"),
+        text("SELECT 1 FROM trainers WHERE telegram_id = :tid AND status = 'active' LIMIT 1"),
         {"tid": telegram_id},
     )
     return r.fetchone() is not None
+
+
+async def get_trainer_id_by_telegram_id(session: AsyncSession, telegram_id: int) -> int | None:
+    """Return trainer id if linked and status=active (bot access allowed), else None."""
+    r = await session.execute(
+        text("SELECT id FROM trainers WHERE telegram_id = :tid AND status = 'active' LIMIT 1"),
+        {"tid": telegram_id},
+    )
+    row = r.fetchone()
+    return row[0] if row else None

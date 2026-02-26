@@ -14,6 +14,10 @@ class Settings(BaseSettings):
     # Telegram: two bots in one repo (client + trainer), separate processes
     telegram_bot_token_client: str
     telegram_bot_token_trainer: str
+    # Optional: admin bot for moderation (separate process, can be disabled if token is not set)
+    telegram_bot_token_admin: str | None = None
+    # Comma-separated list of admin telegram IDs, e.g. "123,456"
+    admin_telegram_ids: list[int] | None = None
     # Optional: one-time token for trainer link from site (dev stub; later from DB)
     trainer_link_token: str | None = None
 

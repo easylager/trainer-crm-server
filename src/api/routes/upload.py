@@ -39,10 +39,13 @@ async def upload_and_register(
     file: UploadFile = File(...),
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, str]:
-    """Upload file to S3/local and add to trainer_photos in one request."""
+    """Upload file to S3/local (resized), add to trainer_photos. Returns file_key (and file_key_list if thumb generated)."""
     content_type = file.content_type or "image/jpeg"
-    file_key = s3.upload_photo(trainer_id, await file.read(), content_type)
-    ok = await register_photo(session, trainer_id, file_key)
+    file_key, file_key_list = s3.upload_photo(trainer_id, await file.read(), content_type)
+    ok = await register_photo(session, trainer_id, file_key, 0, file_key_list=file_key_list)
     if not ok:
         raise HTTPException(status_code=404, detail="Trainer not found")
-    return {"file_key": file_key}
+    out: dict[str, str] = {"file_key": file_key}
+    if file_key_list:
+        out["file_key_list"] = file_key_list
+    return out

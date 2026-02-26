@@ -1,10 +1,17 @@
 """
 Storage: S3 (presigned or proxy) or local dir when S3 not configured.
+Photos resized on upload: main 800px, list thumb 320px (JPEG 82%/80%) for faster catalog.
 """
+import io
 import uuid
 from pathlib import Path
 
 from src.shared.config import Settings
+
+PHOTO_MAIN_MAX_SIZE = 800
+PHOTO_LIST_MAX_SIZE = 320
+PHOTO_MAIN_QUALITY = 82
+PHOTO_LIST_QUALITY = 80
 
 
 def _use_local() -> bool:
@@ -30,27 +37,52 @@ def _ext_from_content_type(ct: str) -> str | None:
     return None
 
 
-def upload_photo(trainer_id: int, body: bytes, content_type: str) -> str:
-    """
-    Save photo: to S3 if configured, else to local_storage_path (same file_key format).
-    """
+def _resize_image(body: bytes, content_type: str, max_size: int, quality: int) -> bytes | None:
+    """Resize to max_size (longest side), JPEG quality. Returns bytes or None."""
+    try:
+        from PIL import Image
+    except ImportError:
+        return None
+    try:
+        img = Image.open(io.BytesIO(body)).convert("RGB")
+    except Exception:
+        return None
+    w, h = img.size
+    if w <= max_size and h <= max_size and content_type and "jpeg" in content_type.lower():
+        return body
+    if w > h:
+        nw, nh = max_size, max(1, int(h * max_size / w))
+    else:
+        nw, nh = max(1, int(w * max_size / h)), max_size
+    img = img.resize((nw, nh), Image.Resampling.LANCZOS)
+    buf = io.BytesIO()
+    img.save(buf, "JPEG", quality=quality, optimize=True)
+    return buf.getvalue()
+
+
+def upload_photo(trainer_id: int, body: bytes, content_type: str) -> tuple[str, str | None]:
+    """Save photo: resize (800px main, 320px list), then S3 or local. Returns (file_key, file_key_list)."""
+    main_bytes = _resize_image(body, content_type or "", PHOTO_MAIN_MAX_SIZE, PHOTO_MAIN_QUALITY) or body
+    list_bytes = _resize_image(main_bytes, "image/jpeg", PHOTO_LIST_MAX_SIZE, PHOTO_LIST_QUALITY)
     ext = _ext_from_content_type(content_type) or ".jpg"
-    file_key = f"trainers/{trainer_id}/{uuid.uuid4().hex}{ext}"
+    base = f"trainers/{trainer_id}/{uuid.uuid4().hex}"
+    file_key = base + ext
+    file_key_list = (base + "_list.jpg") if (list_bytes and list_bytes != main_bytes) else None
+
     settings = Settings()
+    ct = "image/jpeg"
     if _use_local():
         root = Path(settings.local_storage_path).resolve()
-        path = root / file_key
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(body)
-        return file_key
+        (root / file_key).parent.mkdir(parents=True, exist_ok=True)
+        (root / file_key).write_bytes(main_bytes)
+        if file_key_list and list_bytes:
+            (root / file_key_list).write_bytes(list_bytes)
+        return file_key, file_key_list
     client = _get_client()
-    client.put_object(
-        Bucket=settings.s3_bucket,
-        Key=file_key,
-        Body=body,
-        ContentType=content_type or "image/jpeg",
-    )
-    return file_key
+    client.put_object(Bucket=settings.s3_bucket, Key=file_key, Body=main_bytes, ContentType=ct)
+    if file_key_list and list_bytes:
+        client.put_object(Bucket=settings.s3_bucket, Key=file_key_list, Body=list_bytes, ContentType=ct)
+    return file_key, file_key_list
 
 
 def _get_client():

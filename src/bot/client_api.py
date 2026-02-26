@@ -9,25 +9,75 @@ from src.shared.config import Settings
 logger = logging.getLogger(__name__)
 
 
-async def fetch_active_trainers(limit: int = 50) -> list[dict[str, Any]]:
-    """Load active trainers with profile, photos, service_ids from public API."""
+async def _get_json(path: str, params: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    """GET public API path; returns items list or []."""
     base = Settings().api_base_url.rstrip("/")
-    url = f"{base}/api/public/trainers?limit={limit}"
+    url = f"{base}{path}"
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.get(url) as resp:
+            async with session.get(url, params=params or {}) as resp:
                 if resp.status != 200:
-                    logger.warning("Catalog API returned %s: %s", resp.status, await resp.text())
+                    logger.warning("API %s returned %s: %s", path, resp.status, await resp.text())
                     return []
                 data = await resp.json()
                 return data.get("items") or []
     except Exception as e:
-        logger.exception("Failed to fetch catalog: %s", e)
+        logger.exception("Failed to fetch %s: %s", path, e)
         return []
+
+
+async def fetch_cities() -> list[dict[str, Any]]:
+    """Load cities for city picker."""
+    return await _get_json("/api/public/cities")
+
+
+async def fetch_services() -> list[dict[str, Any]]:
+    """Load services for service picker."""
+    return await _get_json("/api/public/services")
+
+
+async def fetch_arenas(city_id: int) -> list[dict[str, Any]]:
+    """Load arenas in a city."""
+    return await _get_json("/api/public/arenas", {"city_id": city_id})
+
+
+async def fetch_active_trainers(
+    limit: int = 10,
+    offset: int = 0,
+    city_id: int | None = None,
+    service_id: int | None = None,
+    arena_id: int | None = None,
+    order_by: str = "rating",
+) -> tuple[list[dict[str, Any]], int]:
+    """Load active trainers; paginated. Returns (items, total)."""
+    base = Settings().api_base_url.rstrip("/")
+    url = f"{base}/api/public/trainers"
+    params: dict[str, Any] = {"limit": limit, "offset": offset, "order_by": order_by}
+    if city_id is not None:
+        params["city_id"] = city_id
+    if service_id is not None:
+        params["service_id"] = service_id
+    if arena_id is not None:
+        params["arena_id"] = arena_id
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, params=params) as resp:
+                if resp.status != 200:
+                    logger.warning("API trainers returned %s: %s", resp.status, await resp.text())
+                    return [], 0
+                data = await resp.json()
+                items = data.get("items") or []
+                total = data.get("total", len(items))
+                return items, total
+    except Exception as e:
+        logger.exception("Failed to fetch trainers: %s", e)
+        return [], 0
 
 
 def build_photo_url(file_key: str) -> str | None:
     """Build full photo URL (PHOTO_BASE_URL or API_BASE_URL + /api/public/photos)."""
+    if not file_key:
+        return None
     s = Settings()
     base = s.photo_base_url or (s.api_base_url.rstrip("/") + "/api/public/photos")
     return f"{base.rstrip('/')}/{file_key}"

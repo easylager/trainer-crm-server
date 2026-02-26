@@ -26,11 +26,17 @@ async def create(
     body: TrainerCreateBody,
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, int]:
-    """Create trainer; optional profile and service_ids in body."""
+    """Create trainer; optional profile, services (with prices), arena_ids in body."""
+    services_payload: list[dict] | None = None
+    if body.services:
+        services_payload = [s.model_dump() for s in body.services]
+    elif body.service_ids:
+        services_payload = [{"service_id": sid, "price_byn": None} for sid in body.service_ids]
     trainer_id = await create_trainer(
         session,
         profile=body.profile.model_dump() if body.profile else None,
-        service_ids=body.service_ids or None,
+        services=services_payload,
+        arena_ids=body.arena_ids or None,
     )
     return {"id": trainer_id}
 
@@ -67,8 +73,14 @@ async def patch_profile(
 ) -> dict[str, bool]:
     """Partial update of profile and/or service_ids."""
     profile = body.profile.model_dump(exclude_unset=True) if body.profile else {}
+    services_payload = [s.model_dump() for s in body.services] if body.services is not None else None
     ok = await update_trainer_profile(
-        session, trainer_id, profile=profile, service_ids=body.service_ids
+        session,
+        trainer_id,
+        profile=profile,
+        service_ids=body.service_ids if services_payload is None else None,
+        services=services_payload,
+        arena_ids=body.arena_ids,
     )
     if not ok:
         raise _NOT_FOUND
