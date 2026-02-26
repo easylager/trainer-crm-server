@@ -141,6 +141,58 @@ async def generate_reminders_for_booking(session: AsyncSession, booking_id: int)
     await session.commit()
 
 
+async def list_pending_reminders(session: AsyncSession, limit: int = 100) -> list[dict]:
+    """
+    Reminders due to send: status=pending, send_at <= now.
+    Only for non-cancelled bookings. Returns list of dicts with id, client_telegram_id, kind, slot_date, start_time.
+    """
+    r = await session.execute(
+        text("""
+            SELECT r.id, r.client_telegram_id, r.kind, s.slot_date, s.start_time
+            FROM reminders r
+            JOIN bookings b ON b.id = r.booking_id
+            JOIN slots s ON s.id = b.slot_id
+            WHERE r.status = 'pending'
+              AND r.send_at <= now()
+              AND b.status != 'cancelled'
+            ORDER BY r.send_at
+            LIMIT :lim
+        """),
+        {"lim": limit},
+    )
+    rows = r.fetchall()
+    return [
+        {
+            "id": row[0],
+            "client_telegram_id": row[1],
+            "kind": row[2],
+            "slot_date": row[3],
+            "start_time": row[4],
+        }
+        for row in rows
+    ]
+
+
+async def mark_reminder_sent(session: AsyncSession, reminder_id: int) -> None:
+    await session.execute(
+        text(
+            "UPDATE reminders SET status = 'sent', sent_at = now() WHERE id = :id"
+        ),
+        {"id": reminder_id},
+    )
+    await session.commit()
+
+
+async def mark_reminder_failed(session: AsyncSession, reminder_id: int, error: str) -> None:
+    await session.execute(
+        text(
+            "UPDATE reminders SET status = 'failed', error = :err WHERE id = :id"
+        ),
+        {"id": reminder_id, "err": (error or "")[:500]},
+    )
+    await session.commit()
+
+
 async def get_booking_with_slot(
     session: AsyncSession,
     booking_id: int,

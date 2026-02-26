@@ -116,6 +116,10 @@ PYTHONPATH=. python scripts/create_trainer_link.py --bot-username YourTrainerBot
 
 См. [PROJECT_PLAN.md](./PROJECT_PLAN.md) — полный план задач и этапов.
 
+## CI
+
+На каждый push и pull request в `master`/`main` запускается [GitHub Actions](.github/workflows/tests.yml): поднимается PostgreSQL 16, накатываются миграции, выполняется `pytest tests/`. Токены ботов в CI задаются заглушками.
+
 ## Лицензия
 
 Proprietary. Все права защищены.

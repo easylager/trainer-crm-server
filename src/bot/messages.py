@@ -119,6 +119,9 @@ CLIENT_BOOKING_CANCELLED_BY_TRAINER = (
     "⚠️ Тренер отменил запись на <b>{date}</b> ({day}) в {time}.\n\n"
     "Можете выбрать другое время или другого тренера: /book или «Настройки» → каталог."
 )
+# Reminders (24h and 2h before slot). Placeholders: date, day, time.
+CLIENT_REMINDER_24H = "⏰ Напоминание: через 24 часа у вас занятие — <b>{date}</b> ({day}) {time}."
+CLIENT_REMINDER_2H = "⏰ Напоминание: через 2 часа занятие — <b>{date}</b> ({day}) {time}."
 CLIENT_BOOKING_COMPLETED = (
     "✅ Занятие <b>{date}</b> ({day}) {time} завершено.\n\n"
     "Поделитесь впечатлениями — поставьте оценку тренеру и при желании напишите отзыв."

@@ -13,8 +13,11 @@ from aiogram.types import BotCommand, InlineKeyboardButton, InlineKeyboardMarkup
 from src.application.booking_use_cases import (
     get_pending_booking_cancel_notifications,
     list_bookings_to_complete,
+    list_pending_reminders,
     mark_booking_cancel_notification_sent,
     mark_booking_completed_and_notify,
+    mark_reminder_failed,
+    mark_reminder_sent,
 )
 from src.application.client_request_use_cases import (
     get_pending_response_notifications,
@@ -30,49 +33,81 @@ logger = logging.getLogger(__name__)
 
 RESPONSE_NOTIFIER_INTERVAL_SEC = 20
 CANCEL_NOTIFIER_INTERVAL_SEC = 15
-BOOKING_COMPLETE_INTERVAL_SEC = 60  # TODO: 30 * 60 for prod; 1 min for testing
+BOOKING_COMPLETE_INTERVAL_SEC = 30 * 60  # 30 min; for testing set lower (e.g. 60)
+REMINDER_INTERVAL_SEC = 60  # poll reminders every minute
+
+
+def _slot_display_strings(slot_date, start_time):
+    """Shared formatting for slot date/day/time in notifications."""
+    date_str = slot_date.strftime("%d.%m") if slot_date and hasattr(slot_date, "strftime") else "—"
+    day_str = msg.TRAINER_DAYS[slot_date.weekday()] if slot_date and hasattr(slot_date, "weekday") else ""
+    time_str = start_time.strftime("%H:%M") if start_time and hasattr(start_time, "strftime") else "—"
+    return date_str, day_str, time_str
+
+
+async def _reminder_loop(bot: Bot) -> None:
+    """Send due reminders (24h / 2h before slot) to clients."""
+    while True:
+        await asyncio.sleep(REMINDER_INTERVAL_SEC)
+        try:
+            async with async_session_factory() as session:
+                pending = await list_pending_reminders(session)
+                for p in pending:
+                    chat_id = p.get("client_telegram_id")
+                    if not chat_id:
+                        continue
+                    date_str, day_str, time_str = _slot_display_strings(
+                        p.get("slot_date"), p.get("start_time")
+                    )
+                    kind = p.get("kind") or ""
+                    if kind == "before_24h":
+                        text = msg.CLIENT_REMINDER_24H.format(date=date_str, day=day_str, time=time_str)
+                    else:
+                        text = msg.CLIENT_REMINDER_2H.format(date=date_str, day=day_str, time=time_str)
+                    try:
+                        await bot.send_message(chat_id=chat_id, text=text)
+                        await mark_reminder_sent(session, p["id"])
+                    except Exception as e:
+                        logger.warning("Reminder send to client %s (reminder_id=%s): %s", chat_id, p["id"], e)
+                        await mark_reminder_failed(session, p["id"], str(e))
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.exception("Reminder loop: %s", e)
 
 
 async def _booking_complete_loop(bot: Bot) -> None:
-    print("[booking_complete_loop] started")
-    """Mark past-slot bookings as completed; notify client with 'leave feedback' button."""
-    # while True:
-    #     await asyncio.sleep(BOOKING_COMPLETE_INTERVAL_SEC)
-    print("[booking_complete_loop] tick")
-    try:
-        async with async_session_factory() as session:
-            to_complete = await list_bookings_to_complete(session)
-            print(f"[booking_complete_loop] found {len(to_complete)} bookings to complete")
-            for b in to_complete:
-                print(f"[booking_complete_loop] completing booking_id={b['id']} client_telegram_id={b.get('client_telegram_id')}")
-                await mark_booking_completed_and_notify(session, b["id"])
-                chat_id = b.get("client_telegram_id")
-                if not chat_id:
-                    print(f"[booking_complete_loop] skip booking_id={b['id']}: no client_telegram_id")
-                    continue
-                slot_date = b.get("slot_date")
-                start_time = b.get("start_time")
-                date_str = slot_date.strftime("%d.%m") if slot_date and hasattr(slot_date, "strftime") else "—"
-                day_str = msg.TRAINER_DAYS[slot_date.weekday()] if slot_date and hasattr(slot_date, "weekday") else ""
-                time_str = start_time.strftime("%H:%M") if start_time and hasattr(start_time, "strftime") else "—"
-                text = msg.CLIENT_BOOKING_COMPLETED.format(date=date_str, day=day_str, time=time_str)
-                kb = InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(
-                        text=msg.CLIENT_BUTTON_LEAVE_FEEDBACK,
-                        callback_data=f"feedback_booking:{b['id']}",
-                    )],
-                ])
-                try:
-                    await bot.send_message(chat_id=chat_id, text=text, reply_markup=kb)
-                    print(f"[booking_complete_loop] sent 'completed + feedback' to client chat_id={chat_id}")
-                except Exception as e:
-                    logger.warning("Completed notifier send to client %s: %s", chat_id, e)
-                    print(f"[booking_complete_loop] send failed chat_id={chat_id}: {e}")
-    except asyncio.CancelledError:
-        print("[booking_complete_loop] cancelled")
-    except Exception as e:
-        logger.exception("Booking complete loop: %s", e)
-        print(f"[booking_complete_loop] error: {e}")
+    """Mark past-slot bookings as completed; notify client with 'leave feedback' button. Runs every BOOKING_COMPLETE_INTERVAL_SEC."""
+    logger.info("[booking_complete_loop] started")
+    while True:
+        try:
+            await asyncio.sleep(BOOKING_COMPLETE_INTERVAL_SEC)
+            async with async_session_factory() as session:
+                to_complete = await list_bookings_to_complete(session)
+                for b in to_complete:
+                    await mark_booking_completed_and_notify(session, b["id"])
+                    chat_id = b.get("client_telegram_id")
+                    if not chat_id:
+                        continue
+                    date_str, day_str, time_str = _slot_display_strings(
+                        b.get("slot_date"), b.get("start_time")
+                    )
+                    text = msg.CLIENT_BOOKING_COMPLETED.format(date=date_str, day=day_str, time=time_str)
+                    kb = InlineKeyboardMarkup(inline_keyboard=[
+                        [InlineKeyboardButton(
+                            text=msg.CLIENT_BUTTON_LEAVE_FEEDBACK,
+                            callback_data=f"feedback_booking:{b['id']}",
+                        )],
+                    ])
+                    try:
+                        await bot.send_message(chat_id=chat_id, text=text, reply_markup=kb)
+                    except Exception as e:
+                        logger.warning("Completed notifier send to client %s: %s", chat_id, e)
+        except asyncio.CancelledError:
+            logger.info("[booking_complete_loop] cancelled")
+            break
+        except Exception as e:
+            logger.exception("Booking complete loop: %s", e)
 
 
 async def _cancel_notifier_loop(bot: Bot) -> None:
@@ -156,11 +191,13 @@ async def main() -> None:
     response_notifier = asyncio.create_task(_response_notifier_loop(bot))
     cancel_notifier = asyncio.create_task(_cancel_notifier_loop(bot))
     complete_notifier = asyncio.create_task(_booking_complete_loop(bot))
+    reminder_loop_task = asyncio.create_task(_reminder_loop(bot))
     logger.info(
-        "Client bot polling started (response %ss, cancel %ss, complete %ss)",
+        "Client bot polling started (response %ss, cancel %ss, complete %ss, reminder %ss)",
         RESPONSE_NOTIFIER_INTERVAL_SEC,
         CANCEL_NOTIFIER_INTERVAL_SEC,
         BOOKING_COMPLETE_INTERVAL_SEC,
+        REMINDER_INTERVAL_SEC,
     )
     try:
         await dp.start_polling(bot)
@@ -168,7 +205,8 @@ async def main() -> None:
         response_notifier.cancel()
         cancel_notifier.cancel()
         complete_notifier.cancel()
-        for t in (response_notifier, cancel_notifier, complete_notifier):
+        reminder_loop_task.cancel()
+        for t in (response_notifier, cancel_notifier, complete_notifier, reminder_loop_task):
             try:
                 await t
             except asyncio.CancelledError:
