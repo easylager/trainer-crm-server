@@ -9,8 +9,8 @@
 1. **Репозиторий на GitHub** — код в `main`/`master`, всё закоммичено.
 2. **Railway:** [railway.app](https://railway.app) → Login → **New Project**.
 3. **Подключить GitHub:** в проекте → **Add Service** → **GitHub Repo** → выберите репо → Deploy.  
-   Первый сервис должен подняться по **Procfile** (web = API + миграции). Если сборка прошла, но процесс не стартует — в **Settings** → **Deploy** → **Custom Start Command** задайте:  
-   `sh -c 'alembic upgrade head && uvicorn src.api.app:app --host 0.0.0.0 --port $PORT'`  
+   Первый сервис стартует по **Procfile** (`web: sh scripts/railway-start-api.sh`). Если в логах **Failed to parse start command** — в **Settings** → **Deploy** → **Custom Start Command** укажите одну строку без кавычек:  
+   `sh scripts/railway-start-api.sh`  
    Дамейн: **Settings** → **Networking** → **Generate Domain**.
 4. **База:** в том же проекте → **Add Service** → **Database** → **PostgreSQL**.  
    Railway подставит переменную **`DATABASE_URL`** (формат `postgresql://...`) во все сервисы. Код сам подставляет `+asyncpg` для приложения и использует этот URL для Alembic — отдельно `DATABASE_URL_SYNC` не нужен.
