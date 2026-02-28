@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.deps import get_session
+from src.shared.audit import ACTOR_API, audit_log
 from src.api.schemas import (
     TrainerCreateBody,
     TrainerProfilePatchBody,
@@ -38,6 +39,7 @@ async def create(
         services=services_payload,
         arena_ids=body.arena_ids or None,
     )
+    audit_log("trainer.created", ACTOR_API, "api", {"trainer_id": trainer_id})
     return {"id": trainer_id}
 
 
@@ -84,6 +86,7 @@ async def patch_profile(
     )
     if not ok:
         raise _NOT_FOUND
+    audit_log("trainer.profile_updated", ACTOR_API, "api", {"trainer_id": trainer_id})
     return {"ok": True}
 
 
@@ -97,4 +100,5 @@ async def patch_status(
     ok = await update_trainer_status(session, trainer_id, body.status)
     if not ok:
         raise _NOT_FOUND
+    audit_log("trainer.status_updated", ACTOR_API, "api", {"trainer_id": trainer_id, "status": body.status})
     return {"ok": True}

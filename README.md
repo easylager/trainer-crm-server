@@ -9,6 +9,12 @@ CRM-платформа для тренеров в Беларуси. Два Teleg
 - PostgreSQL
 - SQLAlchemy 2.0 + Alembic
 
+## Деплой на Railway (push → deploy)
+
+Подключи репо к Railway, добавь PostgreSQL и 3 сервиса для ботов — пошагово: **[docs/RAILWAY_DEPLOY.md](docs/RAILWAY_DEPLOY.md)**.
+
+---
+
 ## Быстрый старт
 
 ```bash
@@ -112,9 +118,10 @@ PYTHONPATH=. python scripts/create_trainer_link.py --bot-username YourTrainerBot
 ```
 Скрипт создаёт запись в `trainers`, токен в `trainer_link_tokens` и выводит готовую ссылку.
 
-## Структура проекта
+## Структура проекта и боевой режим
 
-См. [PROJECT_PLAN.md](./PROJECT_PLAN.md) — полный план задач и этапов.
+- [PROJECT_PLAN.md](./PROJECT_PLAN.md) — полный план задач и этапов.
+- [docs/PRODUCTION_PLAN.md](./docs/PRODUCTION_PLAN.md) — **боевой план**: CI, деплой, откат, мониторинг, runbook для продакшена.
 
 ## CI
 

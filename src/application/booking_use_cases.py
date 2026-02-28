@@ -1,5 +1,5 @@
 """
-Booking use cases: create booking (slot + client phone, comment), list for trainer, pending notifications.
+Booking use cases: create booking (slot + client_id, comment), list for trainer, pending notifications.
 """
 from datetime import datetime, timedelta
 
@@ -11,8 +11,7 @@ async def create_booking(
     session: AsyncSession,
     slot_id: int,
     trainer_id: int,
-    client_telegram_id: int,
-    client_phone: str,
+    client_id: int,
     client_comment: str | None = None,
     client_request_id: int | None = None,
 ) -> int | None:
@@ -32,15 +31,14 @@ async def create_booking(
         return None
     r = await session.execute(
         text("""
-            INSERT INTO bookings (slot_id, trainer_id, client_telegram_id, client_phone, client_comment, client_request_id)
-            VALUES (:sid, :tid, :ctid, :phone, :comment, :req_id)
+            INSERT INTO bookings (slot_id, trainer_id, client_id, client_comment, client_request_id)
+            VALUES (:sid, :tid, :cid, :comment, :req_id)
             RETURNING id
         """),
         {
             "sid": slot_id,
             "tid": trainer_id,
-            "ctid": client_telegram_id,
-            "phone": (client_phone or "").strip()[:32],
+            "cid": client_id,
             "comment": (client_comment or "").strip() or None,
             "req_id": client_request_id,
         },
@@ -69,12 +67,9 @@ async def generate_reminders_for_booking(session: AsyncSession, booking_id: int)
     r = await session.execute(
         text(
             """
-            SELECT b.id,
-                   b.client_telegram_id,
-                   b.created_at,
-                   s.slot_date,
-                   s.start_time
+            SELECT b.id, c.telegram_id, b.created_at, s.slot_date, s.start_time
             FROM bookings b
+            JOIN clients c ON c.id = b.client_id
             JOIN slots s ON s.id = b.slot_id
             WHERE b.id = :id
             """
@@ -201,9 +196,10 @@ async def get_booking_with_slot(
     """Load booking by id with slot date/time; None if not found or wrong trainer."""
     r = await session.execute(
         text("""
-            SELECT b.id, b.slot_id, b.client_telegram_id, b.client_phone, b.client_comment, b.created_at,
+            SELECT b.id, b.slot_id, c.telegram_id, c.phone, b.client_comment, b.created_at,
                    s.slot_date, s.start_time, s.end_time
             FROM bookings b
+            JOIN clients c ON c.id = b.client_id
             JOIN slots s ON s.id = b.slot_id
             WHERE b.id = :id AND b.trainer_id = :tid
         """),
@@ -216,7 +212,7 @@ async def get_booking_with_slot(
         "id": row[0],
         "slot_id": row[1],
         "client_telegram_id": row[2],
-        "client_phone": row[3],
+        "client_phone": row[3] or "",
         "client_comment": row[4],
         "created_at": row[5],
         "slot_date": row[6],
@@ -228,17 +224,39 @@ async def get_booking_with_slot(
 async def list_bookings_for_trainer(
     session: AsyncSession,
     trainer_id: int,
-    limit: int = 50,
+    limit: int = 100,
 ) -> list[dict]:
-    """List active bookings for trainer (slot still booked); newest first."""
+    """
+    List active bookings for trainer (slot still booked).
+    Sorted furthest first (slot_date, start_time DESC) so nearest is at the end — trainer sees it after scrolling.
+    Includes: client name, trainer's services/arenas (aggregated), session number (N-th for this client with this trainer).
+    """
     r = await session.execute(
         text("""
-            SELECT b.id, b.slot_id, b.client_telegram_id, b.client_phone, b.client_comment, b.created_at,
-                   s.slot_date, s.start_time, s.end_time
-            FROM bookings b
-            JOIN slots s ON s.id = b.slot_id
-            WHERE b.trainer_id = :tid AND s.status = 'booked'
-            ORDER BY b.created_at DESC
+            WITH numbered AS (
+                SELECT b.id, b.slot_id, b.client_id,
+                       c.telegram_id, c.phone, c.first_name AS client_first_name, c.last_name AS client_last_name,
+                       b.client_comment, b.created_at,
+                       s.slot_date, s.start_time, s.end_time,
+                       ROW_NUMBER() OVER (PARTITION BY b.trainer_id, b.client_id ORDER BY s.slot_date, s.start_time) AS session_num,
+                       (SELECT string_agg(srv.name, ', ' ORDER BY srv.name)
+                        FROM trainer_services ts
+                        JOIN services srv ON srv.id = ts.service_id
+                        WHERE ts.trainer_id = b.trainer_id) AS services_str,
+                       (SELECT string_agg(a.name, ', ' ORDER BY a.name)
+                        FROM trainer_arenas ta
+                        JOIN arenas a ON a.id = ta.arena_id
+                        WHERE ta.trainer_id = b.trainer_id) AS arenas_str
+                FROM bookings b
+                JOIN clients c ON c.id = b.client_id
+                JOIN slots s ON s.id = b.slot_id
+                WHERE b.trainer_id = :tid AND s.status = 'booked'
+            )
+            SELECT id, slot_id, telegram_id, phone, client_first_name, client_last_name,
+                   client_comment, created_at, slot_date, start_time, end_time,
+                   session_num, services_str, arenas_str
+            FROM numbered
+            ORDER BY slot_date DESC, start_time DESC
             LIMIT :lim
         """),
         {"tid": trainer_id, "lim": limit},
@@ -249,12 +267,57 @@ async def list_bookings_for_trainer(
             "id": row[0],
             "slot_id": row[1],
             "client_telegram_id": row[2],
-            "client_phone": row[3],
-            "client_comment": row[4],
-            "created_at": row[5],
-            "slot_date": row[6],
-            "start_time": row[7],
-            "end_time": row[8],
+            "client_phone": row[3] or "",
+            "client_first_name": row[4],
+            "client_last_name": row[5],
+            "client_comment": row[6],
+            "created_at": row[7],
+            "slot_date": row[8],
+            "start_time": row[9],
+            "end_time": row[10],
+            "session_num": row[11],
+            "services_str": (row[12] or "").strip() or None,
+            "arenas_str": (row[13] or "").strip() or None,
+        }
+        for row in rows
+    ]
+
+
+async def list_bookings_for_client(
+    session: AsyncSession,
+    client_telegram_id: int,
+    limit: int = 50,
+) -> list[dict]:
+    """List client's active (upcoming) bookings only — pending, not completed/cancelled; slot still booked."""
+    r = await session.execute(
+        text("""
+            SELECT b.id, b.slot_id, b.trainer_id, b.client_comment,
+                   s.slot_date, s.start_time, s.end_time,
+                   COALESCE(TRIM(p.first_name || ' ' || p.last_name), 'Тренер') AS trainer_name,
+                   t.telegram_id AS trainer_telegram_id
+            FROM bookings b
+            JOIN clients c ON c.id = b.client_id
+            JOIN slots s ON s.id = b.slot_id
+            JOIN trainers t ON t.id = b.trainer_id
+            LEFT JOIN trainer_profiles p ON p.trainer_id = b.trainer_id
+            WHERE c.telegram_id = :ctid AND s.status = 'booked' AND b.status = 'pending'
+            ORDER BY s.slot_date ASC, s.start_time ASC
+            LIMIT :lim
+        """),
+        {"ctid": client_telegram_id, "lim": limit},
+    )
+    rows = r.fetchall()
+    return [
+        {
+            "id": row[0],
+            "slot_id": row[1],
+            "trainer_id": row[2],
+            "client_comment": row[3],
+            "slot_date": row[4],
+            "start_time": row[5],
+            "end_time": row[6],
+            "trainer_name": (row[7] or "").strip() or "Тренер",
+            "trainer_telegram_id": row[8],
         }
         for row in rows
     ]
@@ -264,9 +327,10 @@ async def get_bookings_pending_notification(session: AsyncSession) -> list[dict]
     """Bookings where notified_at is null (for trainer bot to send push)."""
     r = await session.execute(
         text("""
-            SELECT b.id, b.trainer_id, b.slot_id, b.client_telegram_id, b.client_phone, b.client_comment,
+            SELECT b.id, b.trainer_id, b.slot_id, c.telegram_id, c.phone, b.client_comment,
                    s.slot_date, s.start_time, s.end_time
             FROM bookings b
+            JOIN clients c ON c.id = b.client_id
             JOIN slots s ON s.id = b.slot_id
             WHERE b.notified_at IS NULL
             ORDER BY b.created_at ASC
@@ -279,7 +343,7 @@ async def get_bookings_pending_notification(session: AsyncSession) -> list[dict]
             "trainer_id": row[1],
             "slot_id": row[2],
             "client_telegram_id": row[3],
-            "client_phone": row[4],
+            "client_phone": row[4] or "",
             "client_comment": row[5],
             "slot_date": row[6],
             "start_time": row[7],
@@ -329,12 +393,13 @@ async def cancel_booking(session: AsyncSession, booking_id: int, trainer_id: int
 
 async def _schedule_booking_cancel_notification(session: AsyncSession, booking_id: int) -> None:
     """Enqueue one row for client bot to send 'trainer cancelled your booking' message."""
-    r = await session.execute(
+    await session.execute(
         text("""
             INSERT INTO booking_cancel_notifications (booking_id, client_telegram_id, slot_date, start_time, trainer_display_name)
-            SELECT b.id, b.client_telegram_id, s.slot_date, s.start_time,
+            SELECT b.id, c.telegram_id, s.slot_date, s.start_time,
                    TRIM(CONCAT(COALESCE(p.first_name, ''), ' ', COALESCE(p.last_name, '')))
             FROM bookings b
+            JOIN clients c ON c.id = b.client_id
             JOIN slots s ON s.id = b.slot_id
             LEFT JOIN trainer_profiles p ON p.trainer_id = b.trainer_id
             WHERE b.id = :bid
@@ -395,9 +460,10 @@ async def list_bookings_to_complete(session: AsyncSession, limit: int = 50) -> l
     """Bookings with status=pending and slot (date + end_time) already in the past."""
     r = await session.execute(
         text("""
-            SELECT b.id, b.client_telegram_id, b.trainer_id,
+            SELECT b.id, c.telegram_id, b.trainer_id,
                    s.slot_date, s.start_time, s.end_time
             FROM bookings b
+            JOIN clients c ON c.id = b.client_id
             JOIN slots s ON s.id = b.slot_id
             WHERE b.status = 'pending' AND s.status = 'booked'
               AND (s.slot_date + s.end_time) < CURRENT_TIMESTAMP
@@ -429,10 +495,11 @@ async def mark_booking_completed_and_notify(
         text("UPDATE bookings SET status = 'completed' WHERE id = :bid"),
         {"bid": booking_id},
     )
-    r = await session.execute(
+    await session.execute(
         text("""
             INSERT INTO booking_completed_notifications (booking_id, client_telegram_id, trainer_id)
-            SELECT id, client_telegram_id, trainer_id FROM bookings WHERE id = :bid
+            SELECT b.id, c.telegram_id, b.trainer_id FROM bookings b
+            JOIN clients c ON c.id = b.client_id WHERE b.id = :bid
             ON CONFLICT (booking_id) DO NOTHING
         """),
         {"bid": booking_id},
@@ -487,8 +554,9 @@ async def get_booking_for_client_feedback(
         text("""
             SELECT b.id, b.trainer_id, s.slot_date, s.start_time
             FROM bookings b
+            JOIN clients c ON c.id = b.client_id
             JOIN slots s ON s.id = b.slot_id
-            WHERE b.id = :bid AND b.client_telegram_id = :ctid AND b.status = 'completed'
+            WHERE b.id = :bid AND c.telegram_id = :ctid AND b.status = 'completed'
         """),
         {"bid": booking_id, "ctid": client_telegram_id},
     )

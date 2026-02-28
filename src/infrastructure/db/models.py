@@ -200,6 +200,25 @@ class ClientSession(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class Client(Base):
+    """
+    Single identity for a bot user. Natural key: telegram_id (unique).
+    Name/phone updated from Telegram or from first booking/request.
+    """
+    __tablename__ = "clients"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    telegram_id: Mapped[int] = mapped_column(BigInteger, unique=True, nullable=False, index=True)
+    first_name: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    last_name: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    phone: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    bookings: Mapped[list["Booking"]] = relationship(back_populates="client", lazy="raise")
+    client_requests: Mapped[list["ClientRequest"]] = relationship(back_populates="client", lazy="raise")
+
+
 # --- Trainer schedule: weekly template → generated slots for booking ---
 
 class TrainerScheduleTemplate(Base):
@@ -230,20 +249,21 @@ class Slot(Base):
 
 
 class Booking(Base):
-    """Client booking: one slot, client telegram + phone + comment. notified_at when trainer was pushed."""
+    """Client booking: one slot, client (FK), per-booking comment. notified_at when trainer was pushed."""
     __tablename__ = "bookings"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     slot_id: Mapped[int] = mapped_column(ForeignKey("slots.id", ondelete="CASCADE"), nullable=False)
     trainer_id: Mapped[int] = mapped_column(ForeignKey("trainers.id", ondelete="CASCADE"), nullable=False)
-    client_telegram_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
-    client_phone: Mapped[str] = mapped_column(String(32), nullable=False)
+    client_id: Mapped[int] = mapped_column(ForeignKey("clients.id", ondelete="CASCADE"), nullable=False, index=True)
     client_comment: Mapped[Optional[str]] = mapped_column(Text(), nullable=True)
     client_request_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("client_requests.id", ondelete="SET NULL"), nullable=True, index=True
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     notified_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    client: Mapped["Client"] = relationship(back_populates="bookings", lazy="raise")
 
 
 class Reminder(Base):
@@ -272,12 +292,14 @@ class ClientRequest(Base):
     __tablename__ = "client_requests"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    client_telegram_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+    client_id: Mapped[int] = mapped_column(ForeignKey("clients.id", ondelete="CASCADE"), nullable=False, index=True)
     city_id: Mapped[int] = mapped_column(ForeignKey("cities.id", ondelete="CASCADE"), nullable=False)
     service_id: Mapped[int] = mapped_column(ForeignKey("services.id", ondelete="CASCADE"), nullable=False)
     comment: Mapped[Optional[str]] = mapped_column(Text(), nullable=True)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default=REQUEST_STATUS_NEW)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    client: Mapped["Client"] = relationship(back_populates="client_requests", lazy="raise")
 
 
 class ClientRequestResponse(Base):

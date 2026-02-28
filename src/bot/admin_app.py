@@ -11,7 +11,9 @@ from aiogram.enums import ParseMode
 from aiogram.types import BotCommand, MenuButtonCommands
 
 from src.bot.handlers.admin_handlers import router as admin_router
+from src.bot.middlewares.rate_limit_middleware import RateLimitMiddleware
 from src.shared.config import Settings
+from src.shared.rate_limit import RateLimiter
 
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s [%(name)s] %(message)s")
@@ -23,6 +25,7 @@ async def setup_menu_and_commands(bot: Bot) -> None:
     await bot.set_my_commands(
         [
             BotCommand(command="pending", description="Тренеры на модерацию"),
+            BotCommand(command="stats", description="Статистика платформы"),
         ]
     )
     await bot.set_chat_menu_button(menu_button=MenuButtonCommands())
@@ -39,6 +42,11 @@ async def main() -> None:
     )
     await setup_menu_and_commands(bot)
     dp = Dispatcher()
+    limiter = RateLimiter(
+        max_requests=settings.rate_limit_requests,
+        window_sec=settings.rate_limit_window_sec,
+    )
+    dp.update.outer_middleware(RateLimitMiddleware(limiter, bot))
     dp.include_router(admin_router)
     logger.info("Admin bot polling started")
     await dp.start_polling(bot)

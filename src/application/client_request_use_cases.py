@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 async def create_client_request(
     session: AsyncSession,
-    client_telegram_id: int,
+    client_id: int,
     city_id: int,
     service_id: int,
     comment: str | None = None,
@@ -15,13 +15,13 @@ async def create_client_request(
     """Insert client_requests row. Returns new id."""
     r = await session.execute(
         text("""
-            INSERT INTO client_requests (client_telegram_id, city_id, service_id, comment, status)
-            VALUES (:tid, :cid, :sid, :comment, 'new')
+            INSERT INTO client_requests (client_id, city_id, service_id, comment, status)
+            VALUES (:cid, :city_id, :sid, :comment, 'new')
             RETURNING id
         """),
         {
-            "tid": client_telegram_id,
-            "cid": city_id,
+            "cid": client_id,
+            "city_id": city_id,
             "sid": service_id,
             "comment": (comment or "").strip() or None,
         },
@@ -131,9 +131,10 @@ async def list_my_requests_with_responses(
             SELECT r.id, r.city_id, r.service_id, r.comment, r.created_at, r.status,
                    c.name AS city_name, s.name AS service_name
             FROM client_requests r
+            INNER JOIN clients cl ON cl.id = r.client_id
             INNER JOIN cities c ON c.id = r.city_id
             INNER JOIN services s ON s.id = r.service_id
-            WHERE r.client_telegram_id = :tid AND r.status != 'archived'
+            WHERE cl.telegram_id = :tid AND r.status != 'archived'
             ORDER BY r.created_at DESC
             LIMIT :lim
         """),
@@ -237,11 +238,12 @@ async def get_pending_response_notifications(session: AsyncSession, limit: int =
     """
     r = await session.execute(
         text("""
-            SELECT resp.id, req.client_telegram_id,
+            SELECT resp.id, cl.telegram_id,
                    c.name AS city_name, s.name AS service_name,
                    COALESCE(TRIM(CONCAT(tp.first_name, ' ', tp.last_name)), 'Тренер') AS responder_name
             FROM client_request_responses resp
             INNER JOIN client_requests req ON req.id = resp.client_request_id
+            INNER JOIN clients cl ON cl.id = req.client_id
             INNER JOIN cities c ON c.id = req.city_id
             INNER JOIN services s ON s.id = req.service_id
             INNER JOIN trainers t ON t.id = resp.trainer_id

@@ -8,9 +8,9 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
-async def consume_link_token(session: AsyncSession, token: str, telegram_id: int) -> bool:
+async def consume_link_token(session: AsyncSession, token: str, telegram_id: int) -> int | None:
     """
-    Find valid token, set trainer.telegram_id, mark token used. Returns True if linked.
+    Find valid token, set trainer.telegram_id, mark token used. Returns trainer_id if linked, else None.
     """
     now = datetime.now(timezone.utc)
     r = await session.execute(
@@ -20,14 +20,10 @@ async def consume_link_token(session: AsyncSession, token: str, telegram_id: int
         """),
         {"token": token, "now": now},
     )
-
     row = r.fetchone()
     if not row:
-        print(f"No valid token found for token: {token}")
-        print(f"Now: {now}")
-        return False
+        return None
     trainer_id = row[0]
-    print(f"Trainer id: {trainer_id}")
     await session.execute(
         text("UPDATE trainers SET telegram_id = :tid WHERE id = :id"),
         {"tid": telegram_id, "id": trainer_id},
@@ -37,7 +33,7 @@ async def consume_link_token(session: AsyncSession, token: str, telegram_id: int
         {"now": now, "token": token},
     )
     await session.commit()
-    return True
+    return trainer_id
 
 
 async def get_trainer_by_telegram_id(session: AsyncSession, telegram_id: int) -> bool:

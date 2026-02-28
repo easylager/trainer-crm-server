@@ -19,7 +19,10 @@ from src.application.client_request_use_cases import (
     create_request_response,
     list_requests_for_trainer,
 )
+from src.application.stats_use_cases import get_trainer_stats
 from src.application.trainer_link import consume_link_token, get_trainer_by_telegram_id, get_trainer_id_by_telegram_id
+from src.shared.audit import ACTOR_TRAINER_BOT, audit_log
+from src.shared.validation import MAX_REVIEW_LEN, safe_parse_id, truncate_text
 from src.application.trainer_schedule_use_cases import (
     add_template,
     delete_slot,
@@ -62,6 +65,7 @@ CANCEL_BOOKING_CONFIRM_PREFIX = "cancel_booking_confirm:"
 REQUESTS_CALLBACK = "requests"
 REQUEST_RESPOND_PREFIX = "request_respond:"
 FEEDBACK_BOOKING_TRAINER_PREFIX = "feedback_booking_trainer:"
+GUIDE_CALLBACK = "guide"
 
 # Add state: telegram_id -> { week_start?: str (YYYY-MM-DD), day: int, hours: set[int] }. No week_start = template.
 _schedule_add_state: dict[int, dict] = {}
@@ -127,8 +131,9 @@ async def cmd_start(message: Message) -> None:
     async with async_session_factory() as session:
         if len(args) > 1 and args[1].startswith(START_LINK_PREFIX):
             token = args[1].removeprefix(START_LINK_PREFIX)
-            ok = await consume_link_token(session, token, user_id)
-            if ok:
+            trainer_id = await consume_link_token(session, token, user_id)
+            if trainer_id is not None:
+                audit_log("trainer.linked", ACTOR_TRAINER_BOT, user_id, {"trainer_id": trainer_id})
                 await message.answer(msg.TRAINER_LINK_SUCCESS)
             else:
                 await message.answer(msg.TRAINER_LINK_INVALID)
@@ -138,6 +143,17 @@ async def cmd_start(message: Message) -> None:
         await message.answer(msg.TRAINER_ONLY_VIA_SITE)
         return
     await message.answer(msg.TRAINER_START_WELCOME)
+
+
+@router.message(Command("guide"))
+async def cmd_guide(message: Message) -> None:
+    """Show instruction only; no buttons — trainer uses main menu (left of input)."""
+    async with async_session_factory() as session:
+        trainer_id = await get_trainer_id_by_telegram_id(session, message.from_user.id if message.from_user else 0)
+    if not trainer_id:
+        await message.answer(msg.TRAINER_ONLY_VIA_SITE)
+        return
+    await message.answer(msg.TRAINER_GUIDE)
 
 
 def _format_slot_time(st, et) -> str:
@@ -243,20 +259,31 @@ async def _bookings_content(trainer_id: int) -> tuple[str, InlineKeyboardMarkup]
             [InlineKeyboardButton(text=msg.TRAINER_BUTTON_BACK_TO_SCHEDULE, callback_data=SCHEDULE_CALLBACK)],
         ])
         return text, keyboard
+
     lines = [msg.TRAINER_BOOKINGS_TITLE]
-    for i, b in enumerate(bookings):
-        if i > 0:
-            lines.append("")
+    current_date = None
+    for b in bookings:
         d = b["slot_date"]
-        date_str = d.strftime("%d.%m") if hasattr(d, "strftime") else str(d)
-        dow = msg.TRAINER_DAYS[d.weekday()] if hasattr(d, "weekday") else ""
+        if d != current_date:
+            current_date = d
+            date_str = d.strftime("%d.%m") if hasattr(d, "strftime") else str(d)
+            dow = msg.TRAINER_DAYS[d.weekday()] if hasattr(d, "weekday") else ""
+            lines.append(msg.TRAINER_BOOKINGS_DAY_HEADER.format(date=date_str, day=dow))
+
         time_range = _format_slot_time(b["start_time"], b["end_time"])
-        phone = b.get("client_phone") or "—"
+        first = (b.get("client_first_name") or "").strip()
+        last = (b.get("client_last_name") or "").strip()
+        client_display = f"{first} {last}".strip() or (b.get("client_phone") or "Клиент")
+        services = b.get("services_str") or "—"
+        arenas = b.get("arenas_str") or "—"
+        session_num = b.get("session_num") or 1
+        session_label = msg.TRAINER_BOOKINGS_SESSION_NTH.format(n=session_num)
+        extra = ", ".join([services, arenas, client_display, session_label])
+        lines.append(msg.TRAINER_BOOKINGS_ROW_TIME_CLIENT.format(time=time_range, client_display=client_display))
+        lines.append(msg.TRAINER_BOOKINGS_ROW_EXTRA.format(extra=extra))
         comment = (b.get("client_comment") or "").strip()
         if comment:
-            lines.append(msg.TRAINER_BOOKINGS_ROW.format(date=date_str, day=dow, time=time_range, phone=phone, comment=comment))
-        else:
-            lines.append(msg.TRAINER_BOOKINGS_ROW_NO_COMMENT.format(date=date_str, day=dow, time=time_range, phone=phone))
+            lines.append(msg.TRAINER_BOOKINGS_ROW_COMMENT.format(comment=comment))
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text=msg.TRAINER_BOOKINGS_BUTTON_WRITE, callback_data=WRITE_BOOKING_LIST)],
         [InlineKeyboardButton(text=msg.TRAINER_BOOKINGS_BUTTON_CANCEL, callback_data=CANCEL_BOOKING_LIST)],
@@ -328,6 +355,55 @@ async def cmd_requests(message: Message) -> None:
         return
     text, keyboard = await _requests_content(trainer_id)
     await message.answer(text, reply_markup=keyboard)
+
+
+def _format_stats_date(d: date) -> str:
+    return d.strftime("%d.%m") if hasattr(d, "strftime") else str(d)
+
+
+@router.message(Command("stats"))
+async def cmd_stats(message: Message) -> None:
+    """Show trainer statistics: week/month bookings, load, new clients, rating."""
+    telegram_id = message.from_user.id if message.from_user else 0
+    async with async_session_factory() as session:
+        trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    if not trainer_id:
+        await message.answer(msg.TRAINER_ONLY_VIA_SITE)
+        return
+    async with async_session_factory() as session:
+        s = await get_trainer_stats(session, trainer_id)
+    parts = [msg.TRAINER_STATS_TITLE]
+    parts.append(
+        msg.TRAINER_STATS_WEEK.format(
+            week_start=_format_stats_date(s["week_start"]),
+            week_end=_format_stats_date(s["week_end"]),
+            week_total=s["week_total"],
+            week_completed=s["week_completed"],
+            week_upcoming=s["week_upcoming"],
+        )
+    )
+    parts.append(msg.TRAINER_STATS_MONTH.format(month_total=s["month_total"]))
+    if s["week_slots_total"] and s["load_pct"] is not None:
+        parts.append(
+            msg.TRAINER_STATS_LOAD.format(
+                week_slots_total=s["week_slots_total"],
+                week_slots_booked=s["week_slots_booked"],
+                load_pct=int(s["load_pct"]),
+            )
+        )
+    else:
+        parts.append(msg.TRAINER_STATS_LOAD_EMPTY)
+    parts.append(msg.TRAINER_STATS_NEW_CLIENTS.format(new_clients_30d=s["new_clients_30d"]))
+    if s["rating_avg"] is not None and s["rating_count"]:
+        parts.append(
+            msg.TRAINER_STATS_RATING.format(
+                rating_avg=round(s["rating_avg"], 1),
+                rating_count=s["rating_count"],
+            )
+        )
+    else:
+        parts.append(msg.TRAINER_STATS_RATING_NONE)
+    await message.answer("\n".join(parts))
 
 
 @router.callback_query(lambda c: c.data == SCHEDULE_CALLBACK)
@@ -408,7 +484,9 @@ async def show_write_booking_list(callback: CallbackQuery) -> None:
 async def show_write_booking_link(callback: CallbackQuery) -> None:
     """Show single 'Write to client' link for chosen booking."""
     await callback.answer()
-    booking_id = int(callback.data[len(WRITE_BOOKING_PREFIX):])
+    booking_id = safe_parse_id(callback.data[len(WRITE_BOOKING_PREFIX):])
+    if booking_id is None:
+        return
     telegram_id = callback.from_user.id if callback.from_user else 0
     async with async_session_factory() as session:
         trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
@@ -418,7 +496,7 @@ async def show_write_booking_link(callback: CallbackQuery) -> None:
     async with async_session_factory() as session:
         booking = await get_booking_with_slot(session, booking_id, trainer_id)
     if not booking:
-        await callback.message.answer("Запись не найдена.")
+        await callback.message.answer(msg.TRAINER_ERROR_BOOKING_NOT_FOUND)
         return
     d = booking["slot_date"]
     date_str = d.strftime("%d.%m") if hasattr(d, "strftime") else str(d)
@@ -468,7 +546,9 @@ async def show_cancel_booking_list(callback: CallbackQuery) -> None:
 async def show_cancel_booking_confirm(callback: CallbackQuery) -> None:
     """Show warning and confirm before cancelling a booking."""
     await callback.answer()
-    booking_id = int(callback.data[len(CANCEL_BOOKING_PREFIX):])
+    booking_id = safe_parse_id(callback.data[len(CANCEL_BOOKING_PREFIX):])
+    if booking_id is None:
+        return
     telegram_id = callback.from_user.id if callback.from_user else 0
     async with async_session_factory() as session:
         trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
@@ -478,7 +558,7 @@ async def show_cancel_booking_confirm(callback: CallbackQuery) -> None:
     async with async_session_factory() as session:
         booking = await get_booking_with_slot(session, booking_id, trainer_id)
     if not booking:
-        await callback.message.answer("Запись не найдена.")
+        await callback.message.answer(msg.TRAINER_ERROR_BOOKING_NOT_FOUND)
         return
     d = booking["slot_date"]
     date_str = d.strftime("%d.%m") if hasattr(d, "strftime") else str(d)
@@ -496,7 +576,9 @@ async def show_cancel_booking_confirm(callback: CallbackQuery) -> None:
 async def on_cancel_booking_confirm(callback: CallbackQuery) -> None:
     """Cancel the booking and refresh the list."""
     await callback.answer()
-    booking_id = int(callback.data[len(CANCEL_BOOKING_CONFIRM_PREFIX):])
+    booking_id = safe_parse_id(callback.data[len(CANCEL_BOOKING_CONFIRM_PREFIX):])
+    if booking_id is None:
+        return
     telegram_id = callback.from_user.id if callback.from_user else 0
     async with async_session_factory() as session:
         trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
@@ -506,8 +588,9 @@ async def on_cancel_booking_confirm(callback: CallbackQuery) -> None:
     async with async_session_factory() as session:
         ok = await cancel_booking(session, booking_id, trainer_id)
     if not ok:
-        await callback.message.answer("Не удалось отменить запись (уже отменена или не найдена).")
+        await callback.message.answer(msg.TRAINER_ERROR_CANCEL_FAILED)
         return
+    audit_log("booking.cancelled", ACTOR_TRAINER_BOT, telegram_id, {"booking_id": booking_id, "trainer_id": trainer_id})
     text, keyboard = await _bookings_content(trainer_id)
     await callback.message.edit_text(text, reply_markup=keyboard)
     await callback.message.answer(msg.TRAINER_BOOKINGS_CANCELLED)
@@ -518,11 +601,8 @@ async def on_feedback_booking_trainer(callback: CallbackQuery) -> None:
     """Trainer tapped 'Leave feedback' after completed booking: ask for optional review text."""
     await callback.answer()
     raw = (callback.data or "").replace(FEEDBACK_BOOKING_TRAINER_PREFIX, "").strip()
-    if not raw:
-        return
-    try:
-        booking_id = int(raw)
-    except ValueError:
+    booking_id = safe_parse_id(raw)
+    if booking_id is None:
         return
     telegram_id = callback.from_user.id if callback.from_user else 0
     async with async_session_factory() as session:
@@ -533,7 +613,7 @@ async def on_feedback_booking_trainer(callback: CallbackQuery) -> None:
     async with async_session_factory() as session:
         booking = await get_booking_for_trainer_feedback(session, booking_id, trainer_id)
     if not booking:
-        await callback.message.answer("Запись не найдена или уже закрыта.")
+        await callback.message.answer(msg.TRAINER_ERROR_BOOKING_CLOSED_OR_NOT_FOUND)
         return
     _trainer_feedback_state[telegram_id] = {"booking_id": booking_id, "trainer_id": trainer_id}
     await callback.message.answer(msg.TRAINER_FEEDBACK_PROMPT)
@@ -552,9 +632,10 @@ async def on_trainer_feedback_message(message: Message) -> None:
             session, state["booking_id"], state["trainer_id"], text
         )
     if ok:
+        audit_log("trainer.review", ACTOR_TRAINER_BOT, telegram_id, {"booking_id": state["booking_id"], "trainer_id": state["trainer_id"]})
         await message.answer(msg.TRAINER_FEEDBACK_THANKS)
     else:
-        await message.answer("Не удалось сохранить отзыв.")
+        await message.answer(msg.TRAINER_ERROR_FEEDBACK_SAVE_FAILED)
 
 
 @router.callback_query(lambda c: c.data == REQUESTS_CALLBACK)
@@ -585,8 +666,9 @@ async def on_request_respond(callback: CallbackQuery) -> None:
     async with async_session_factory() as session:
         resp_id = await create_request_response(session, request_id, trainer_id)
     if resp_id is None:
-        await callback.message.answer("Не удалось откликнуться (заявка уже закрыта или вы уже откликались).")
+        await callback.message.answer(msg.TRAINER_ERROR_RESPOND_FAILED)
         return
+    audit_log("request_response.created", ACTOR_TRAINER_BOT, telegram_id, {"request_id": request_id, "trainer_id": trainer_id, "response_id": resp_id})
     await callback.message.answer(msg.TRAINER_RESPOND_SUCCESS)
     # Refresh requests list
     text, keyboard = await _requests_content(trainer_id)
@@ -680,7 +762,10 @@ def _hour_from_start_time(st) -> int:
 async def schedule_choose_time(callback: CallbackQuery) -> None:
     """Day chosen; show hour picker 8–20. Pre-fill from template (template) or real slots (week)."""
     await callback.answer()
-    day = int(callback.data[len(SCHEDULE_DAY_PREFIX):])
+    day_val = safe_parse_id(callback.data[len(SCHEDULE_DAY_PREFIX):])
+    if day_val is None or day_val < 0 or day_val > 6:
+        return
+    day = day_val
     telegram_id = callback.from_user.id if callback.from_user else 0
     state = _schedule_add_state.get(telegram_id) or {}
     state["day"] = day
@@ -740,7 +825,10 @@ async def schedule_toggle_time(callback: CallbackQuery) -> None:
 @router.callback_query(lambda c: c.data and c.data.startswith(SCHEDULE_DONE_PREFIX))
 async def schedule_done_times(callback: CallbackQuery) -> None:
     """Save selection (no duration step; fixed 60 min). Return to day picker."""
-    day = int(callback.data[len(SCHEDULE_DONE_PREFIX):])
+    day_val = safe_parse_id(callback.data[len(SCHEDULE_DONE_PREFIX):])
+    if day_val is None or day_val < 0 or day_val > 6:
+        return
+    day = day_val
     telegram_id = callback.from_user.id if callback.from_user else 0
     state = _schedule_add_state.get(telegram_id)
     if not state:
@@ -757,6 +845,7 @@ async def schedule_done_times(callback: CallbackQuery) -> None:
             week_start = date.fromisoformat(state["week_start"])
             slot_date = week_start + timedelta(days=day)
             await replace_slots_for_day(session, trainer_id, slot_date, hours)
+            audit_log("schedule.week_slots_updated", ACTOR_TRAINER_BOT, telegram_id, {"trainer_id": trainer_id, "week_start": state["week_start"], "day": day, "slots_count": len(hours)})
             _schedule_add_state[telegram_id] = {"week_start": state["week_start"]}
             await callback.message.edit_text(
                 msg.TRAINER_SCHEDULE_ADDED_TO_WEEK_MORE.format(count=len(hours)) if hours else msg.TRAINER_SCHEDULE_DAY_CLEARED_WEEK,
@@ -826,6 +915,7 @@ async def schedule_apply_this_week(callback: CallbackQuery) -> None:
             return
         count = await replace_week_with_template(session, trainer_id, this_week_monday())
     if count:
+        audit_log("schedule.week_applied", ACTOR_TRAINER_BOT, telegram_id, {"trainer_id": trainer_id, "week": "this", "slots_count": count})
         await callback.message.edit_text(msg.TRAINER_SCHEDULE_GENERATED.format(count=count))
     else:
         await callback.message.edit_text(msg.TRAINER_SCHEDULE_GENERATED_NONE)
@@ -845,6 +935,7 @@ async def schedule_apply_next_week(callback: CallbackQuery) -> None:
             return
         count = await replace_week_with_template(session, trainer_id, next_week_monday())
     if count:
+        audit_log("schedule.week_applied", ACTOR_TRAINER_BOT, telegram_id, {"trainer_id": trainer_id, "week": "next", "slots_count": count})
         await callback.message.edit_text(msg.TRAINER_SCHEDULE_GENERATED.format(count=count))
     else:
         await callback.message.edit_text(msg.TRAINER_SCHEDULE_GENERATED_NONE)
@@ -856,8 +947,10 @@ async def schedule_apply_next_week(callback: CallbackQuery) -> None:
 async def schedule_delete(callback: CallbackQuery) -> None:
     """Delete one template and refresh schedule screen."""
     await callback.answer()
+    template_id = safe_parse_id(callback.data[len(SCHEDULE_DELETE_PREFIX):])
+    if template_id is None:
+        return
     telegram_id = callback.from_user.id if callback.from_user else 0
-    template_id = int(callback.data[len(SCHEDULE_DELETE_PREFIX):])
     async with async_session_factory() as session:
         trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
         if not trainer_id:
@@ -873,7 +966,9 @@ async def schedule_delete(callback: CallbackQuery) -> None:
 async def slot_delete(callback: CallbackQuery) -> None:
     """Delete one applied slot (available only); refresh slots screen."""
     telegram_id = callback.from_user.id if callback.from_user else 0
-    slot_id = int(callback.data[len(SLOT_DELETE_PREFIX):])
+    slot_id = safe_parse_id(callback.data[len(SLOT_DELETE_PREFIX):])
+    if slot_id is None:
+        return
     async with async_session_factory() as session:
         trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
         if not trainer_id:
@@ -881,6 +976,7 @@ async def slot_delete(callback: CallbackQuery) -> None:
             return
         deleted = await delete_slot(session, trainer_id, slot_id)
     if deleted:
+        audit_log("slot.deleted", ACTOR_TRAINER_BOT, telegram_id, {"trainer_id": trainer_id, "slot_id": slot_id})
         await callback.answer(msg.TRAINER_SLOT_DELETED)
     else:
         await callback.answer(msg.TRAINER_SLOT_CANNOT_DELETE_BOOKED, show_alert=True)
@@ -890,14 +986,24 @@ async def slot_delete(callback: CallbackQuery) -> None:
     await callback.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=back_row))
 
 
+@router.callback_query(lambda c: c.data == GUIDE_CALLBACK)
+async def on_guide_callback(callback: CallbackQuery) -> None:
+    """Inline 'Инструкция' button: show same as /guide (no buttons)."""
+    await callback.answer()
+    async with async_session_factory() as session:
+        trainer_id = await get_trainer_id_by_telegram_id(session, callback.from_user.id if callback.from_user else 0)
+    if not trainer_id:
+        await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
+        return
+    await callback.message.answer(msg.TRAINER_GUIDE)
+
+
 @router.message()
 async def fallback(message: Message) -> None:
+    """Any other message: direct to main menu and /guide; no buttons."""
     async with async_session_factory() as session:
         is_trainer = await get_trainer_by_telegram_id(session, message.from_user.id if message.from_user else 0)
     if not is_trainer:
         await message.answer(msg.TRAINER_ONLY_VIA_SITE)
         return
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=msg.TRAINER_BUTTON_SCHEDULE, callback_data=SCHEDULE_CALLBACK)],
-    ])
-    await message.answer(msg.TRAINER_START_WELCOME, reply_markup=keyboard)
+    await message.answer(msg.TRAINER_FALLBACK)

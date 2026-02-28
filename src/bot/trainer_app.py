@@ -23,8 +23,10 @@ from src.application.client_request_use_cases import (
 )
 from src.bot import messages as msg
 from src.bot.handlers.trainer_handlers import router as trainer_router
+from src.bot.middlewares.rate_limit_middleware import RateLimitMiddleware
 from src.infrastructure.db import async_session_factory
 from src.shared.config import Settings
+from src.shared.rate_limit import RateLimiter
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s [%(name)s] %(message)s")
 logger = logging.getLogger(__name__)
@@ -149,10 +151,12 @@ async def setup_menu_and_commands(bot: Bot) -> None:
     """Menu button (left of attachment): opens command list."""
     await bot.set_my_commands(
         [
+            BotCommand(command="guide", description="Инструкция"),
             BotCommand(command="editor", description="Редактор расписания"),
             BotCommand(command="schedule", description="Мое расписание"),
             BotCommand(command="requests", description="Заявки клиентов"),
             BotCommand(command="bookings", description="Мои записи"),
+            BotCommand(command="stats", description="Статистика"),
         ]
     )
     await bot.set_chat_menu_button(menu_button=MenuButtonCommands())
@@ -167,6 +171,11 @@ async def main() -> None:
     )
     await setup_menu_and_commands(bot)
     dp = Dispatcher()
+    limiter = RateLimiter(
+        max_requests=settings.rate_limit_requests,
+        window_sec=settings.rate_limit_window_sec,
+    )
+    dp.update.outer_middleware(RateLimitMiddleware(limiter, bot))
     dp.include_router(trainer_router)
     booking_notifier = asyncio.create_task(_booking_notifier_loop(bot))
     request_notifier = asyncio.create_task(_request_notifier_loop(bot))

@@ -26,7 +26,9 @@ from src.application.client_request_use_cases import (
 from src.shared.config import Settings
 from src.bot import messages as msg
 from src.bot.handlers.client_handlers import router as client_router
+from src.bot.middlewares.rate_limit_middleware import RateLimitMiddleware
 from src.infrastructure.db import async_session_factory
+from src.shared.rate_limit import RateLimiter
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s [%(name)s] %(message)s")
 logger = logging.getLogger(__name__)
@@ -169,10 +171,12 @@ async def setup_menu_and_commands(bot: Bot) -> None:
     """Menu button (left of attachment): opens command list. Only /settings (no /start)."""
     await bot.set_my_commands(
         [
-            BotCommand(command="settings", description="Настройки выбора"),
+            BotCommand(command="guide", description="Инструкция"),
+            BotCommand(command="settings", description="Выбор тренера"),
             BotCommand(command="book", description="Записаться к выбранному тренеру"),
             BotCommand(command="request", description="Оставить заявку"),
             BotCommand(command="my_requests", description="Мои заявки и отклики"),
+            BotCommand(command="my_bookings", description="Мои записи"),
         ]
     )
     await bot.set_chat_menu_button(menu_button=MenuButtonCommands())
@@ -187,6 +191,11 @@ async def main() -> None:
     )
     await setup_menu_and_commands(bot)
     dp = Dispatcher()
+    limiter = RateLimiter(
+        max_requests=settings.rate_limit_requests,
+        window_sec=settings.rate_limit_window_sec,
+    )
+    dp.update.outer_middleware(RateLimitMiddleware(limiter, bot))
     dp.include_router(client_router)
     response_notifier = asyncio.create_task(_response_notifier_loop(bot))
     cancel_notifier = asyncio.create_task(_cancel_notifier_loop(bot))

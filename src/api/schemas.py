@@ -1,5 +1,5 @@
-"""API request/response DTOs."""
-from typing import Any, Literal
+"""API request/response DTOs. All inputs validated (length, range) before use."""
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -12,23 +12,29 @@ TrainerStatus = Literal[
     "deactivated",
 ]
 
+# Limits aligned with DB: String(32/64/128), Text() capped for API safety
+LEN_FIRST_LAST = 64
+LEN_PHONE = 32
+LEN_DESCRIPTION = 5000
+LEN_FILE_KEY = 512
+
 
 class ProfileCreate(BaseModel):
-    first_name: str = ""
-    last_name: str = ""
-    age: int = 0
-    city_id: int | None = None
-    experience_years: int | None = None
-    description: str | None = None
-    phone: str | None = None
-    contacts: str | None = None
-    education: str | None = None
+    first_name: str = Field(default="", max_length=LEN_FIRST_LAST)
+    last_name: str = Field(default="", max_length=LEN_FIRST_LAST)
+    age: int = Field(default=0, ge=0, le=120)
+    city_id: int | None = Field(default=None, ge=0)
+    experience_years: int | None = Field(default=None, ge=0, le=80)
+    description: str | None = Field(default=None, max_length=LEN_DESCRIPTION)
+    phone: str | None = Field(default=None, max_length=LEN_PHONE)
+    contacts: str | None = Field(default=None, max_length=LEN_DESCRIPTION)
+    education: str | None = Field(default=None, max_length=LEN_DESCRIPTION)
 
 
 class TrainerServiceItem(BaseModel):
     """Service offered by trainer with optional price in BYN (rubles). Stored as kopecks in DB."""
-    service_id: int
-    price_byn: float | None = None
+    service_id: int = Field(..., ge=1)
+    price_byn: float | None = Field(default=None, ge=0)
 
 
 class TrainerCreateBody(BaseModel):
@@ -39,15 +45,15 @@ class TrainerCreateBody(BaseModel):
 
 
 class ProfilePatch(BaseModel):
-    first_name: str | None = None
-    last_name: str | None = None
-    age: int | None = None
-    city_id: int | None = None
-    experience_years: int | None = None
-    description: str | None = None
-    phone: str | None = None
-    contacts: str | None = None
-    education: str | None = None
+    first_name: str | None = Field(default=None, max_length=LEN_FIRST_LAST)
+    last_name: str | None = Field(default=None, max_length=LEN_FIRST_LAST)
+    age: int | None = Field(default=None, ge=0, le=120)
+    city_id: int | None = Field(default=None, ge=0)
+    experience_years: int | None = Field(default=None, ge=0, le=80)
+    description: str | None = Field(default=None, max_length=LEN_DESCRIPTION)
+    phone: str | None = Field(default=None, max_length=LEN_PHONE)
+    contacts: str | None = Field(default=None, max_length=LEN_DESCRIPTION)
+    education: str | None = Field(default=None, max_length=LEN_DESCRIPTION)
 
 
 class TrainerProfilePatchBody(BaseModel):
@@ -58,12 +64,12 @@ class TrainerProfilePatchBody(BaseModel):
 
 
 class PhotoRegisterBody(BaseModel):
-    file_key: str
+    file_key: str = Field(..., max_length=LEN_FILE_KEY)
 
 
 class PresignBody(BaseModel):
-    trainer_id: int
-    content_type: str = "image/jpeg"
+    trainer_id: int = Field(..., ge=1)
+    content_type: str = Field(default="image/jpeg", max_length=128)
 
 
 class TrainerStatusPatchBody(BaseModel):

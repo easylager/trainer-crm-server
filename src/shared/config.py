@@ -38,6 +38,11 @@ class Settings(BaseSettings):
     # App
     debug: bool = False
     log_level: str = "INFO"
+    # Audit log level (logger "audit"); INFO = emit, WARNING+ = suppress
+    audit_log_level: str = "INFO"
+    # Bot rate limit: max N updates per user per window (seconds)
+    rate_limit_requests: int = 30
+    rate_limit_window_sec: float = 60.0
     # For client bot: API base (e.g. http://localhost:8000 or https://your-api.railway.app)
     api_base_url: str = "http://localhost:8000"
     # Optional: base URL for photos. If not set, bot uses api_base_url + /api/public/photos (backend proxies S3)

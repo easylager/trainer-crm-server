@@ -17,7 +17,7 @@ target_metadata = None
 
 
 def get_database_url() -> str:
-    url = os.getenv("DATABASE_URL_SYNC")
+    url = os.getenv("DATABASE_URL_SYNC") or os.getenv("DATABASE_URL")
     if not url:
         url = "postgresql://trainer_crm:trainer_crm_dev@localhost:5432/trainer_crm"
     # Convert postgresql:// to postgresql+psycopg:// to use psycopg v3 driver

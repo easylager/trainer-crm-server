@@ -4,9 +4,9 @@ Prefixes: client bot vs trainer bot.
 """
 
 # --- Client bot ---
-CLIENT_START_WELCOME = "Привет! Здесь ты можешь найти тренера и записаться на занятие. Нажми «Каталог тренеров» ниже."
-CLIENT_FALLBACK = "Отправь /start или нажми «Каталог тренеров»."
-CLIENT_CATALOG_LOADING = "Загружаю каталог тренеров..."
+CLIENT_START_WELCOME = "Привет! Здесь можно найти тренера и записаться на занятие. Все разделы — в меню слева от поля ввода. Подробнее: /guide"
+CLIENT_FALLBACK = "Используйте меню слева от поля ввода — там все разделы бота. Инструкция: /guide"
+CLIENT_CATALOG_LOADING = "Загружаю Выбор тренера..."
 CLIENT_CATALOG_HEADER = "Вот наши тренеры:"
 CLIENT_CATALOG_EMPTY = "Пока нет активных тренеров. Загляни позже."
 CLIENT_CATALOG_PAGINATION_LEAVE_REQUEST = "Не нашли подходящего тренера? Оставьте заявку — мы подберём для вас тренера."
@@ -39,6 +39,36 @@ CLIENT_BOOK_WHAT_NEXT = "Что дальше?"
 CLIENT_BOOK_BUTTON_BACK = "◀️ Назад"
 CLIENT_BOOK_PHONE_INVALID = "Нужен номер телефона. Отправьте текст (например +375291234567) или нажмите «Отправить контакт»."
 CLIENT_BOOK_BUTTON_SEND_CONTACT = "📱 Отправить контакт"
+CLIENT_BOOK_RECORDED = "Запись оформлена."
+CLIENT_BOOK_COMMENT_OR_BUTTON = "Напишите комментарий или нажмите кнопку:"
+
+# Client: errors and hints (what to do next)
+CLIENT_ERROR_BOOKING_CLOSED = "Эта запись уже закрыта или недоступна. Выберите другого тренера или время в каталоге."
+CLIENT_ERROR_BOOKING_UNAVAILABLE = "Эта запись недоступна. Выберите слот в каталоге или нажмите «Записаться»."
+CLIENT_ERROR_NO_CITIES = "Нет доступных городов. Выберите город позже или напишите в поддержку."
+CLIENT_ERROR_NO_SERVICES = "Нет доступных услуг. Выберите услугу позже или напишите в поддержку."
+CLIENT_ERROR_NO_CITIES_ADMIN = "Нет доступных городов. Обратитесь к администратору."
+CLIENT_ERROR_NO_SERVICES_ADMIN = "Нет доступных услуг. Обратитесь к администратору."
+CLIENT_ERROR_CHOOSE_CITY_FIRST = "Сначала выберите город в настройках (меню → Настройки)."
+CLIENT_ERROR_REQUEST_NOT_FOUND = "Заявка не найдена. Откройте «Мои заявки» и попробуйте снова."
+CLIENT_ERROR_TRY_AGAIN = "Произошла ошибка. Попробуйте ещё раз или введите /guide."
+CLIENT_ERROR_TRAINER_NOT_FOUND = "Тренер не найден. Откройте каталог и выберите тренера заново."
+
+# Client: /guide — instruction only; describes main menu (left of input), no buttons under message
+CLIENT_GUIDE = (
+    "📖 <b>Инструкция</b>\n\n"
+    "Все разделы — в <b>меню слева от поля ввода</b>. Что делает каждый пункт:\n\n"
+    "📍 <b>Выбор тренера</b>\n"
+    "Настройте город, услугу и при желании арену — откроется каталог. Выберите тренера, чтобы записаться к нему или посмотреть профиль.\n\n"
+    "📅 <b>Записаться к выбранному тренеру</b>\n"
+    "Выберите время из свободных слотов, укажите телефон и при желании комментарий. После записи придёт подтверждение и напоминания перед занятием.\n\n"
+    "📋 <b>Оставить заявку</b>\n"
+    "Нет подходящего тренера в каталоге? Оставьте заявку — тренеры по вашему городу и услуге откликнутся, вы сможете записаться или написать.\n\n"
+    "📩 <b>Мои заявки и отклики</b>\n"
+    "Ваши заявки и список откликнувшихся тренеров: записаться к одному из них или написать в Telegram.\n\n"
+    "📆 <b>Мои записи</b>\n"
+    "Ближайшие занятия: дата, время, тренер. Для отмены — напишите тренеру (ссылка в списке)."
+)
 
 # --- Settings (my choices) ---
 CLIENT_SETTINGS_TITLE = "⚙️ <b>Настройки</b>\n\nВаши текущие выборы. Нажми кнопку, чтобы изменить."
@@ -79,6 +109,12 @@ CLIENT_MY_REQUESTS_RESPONSES_HEADER = "Откликнулись ({count}):"
 CLIENT_MY_REQUESTS_BUTTON_RESPONSES = "{index}. Показать отклики ({count})"
 CLIENT_MY_REQUESTS_NO_RESPONSES = "{index}. Пока нет откликов"
 CLIENT_BUTTON_MY_REQUESTS = "Мои заявки и отклики"
+CLIENT_BUTTON_MY_BOOKINGS = "Мои записи"
+CLIENT_MY_BOOKINGS_TITLE = "📋 <b>Мои записи</b>"
+CLIENT_MY_BOOKINGS_CANCEL_HINT = "Для отмены записи напишите вашему тренеру в Telegram. Имя тренера в списке ниже — ссылка для перехода в чат."
+CLIENT_MY_BOOKINGS_EMPTY = "У вас пока нет записей. Выберите тренера в каталоге и нажмите «Записаться»."
+CLIENT_MY_BOOKINGS_ROW = "{index}. {date} ({day}) {time} — {trainer_display}"
+CLIENT_BUTTON_BACK_FROM_BOOKINGS = "◀️ В меню"
 CLIENT_BUTTON_RESPONDER_WRITE = "✉️ Написать"
 CLIENT_BUTTON_RESPONDER_BOOK = "Записаться"
 CLIENT_BUTTON_RESPONDER_PROFILE = "👤 Профиль"
@@ -138,10 +174,41 @@ TRAINER_BOOKING_COMPLETED = (
 TRAINER_BUTTON_LEAVE_FEEDBACK = "✍️ Оставить отзыв"
 TRAINER_FEEDBACK_PROMPT = "Напишите отзыв о занятии (необязательно, можно коротко):"
 TRAINER_FEEDBACK_THANKS = "Спасибо! Отзыв сохранён."
-TRAINER_START_WELCOME = "Привет! Ты зашёл как тренер. Ниже — расписание и управление."
+TRAINER_START_WELCOME = (
+    "Привет!\n\n"
+    "Ты в боте как <b>тренер</b>. Все разделы — в <b>меню слева от поля ввода</b>: расписание, заявки клиентов, записи.\n\n"
+    "Подробная инструкция по каждому пункту: /guide"
+)
 TRAINER_ONLY_VIA_SITE = "Этот бот только для тренеров. Подключение по ссылке с сайта после регистрации и оплаты."
-TRAINER_LINK_SUCCESS = "Твой аккаунт тренера привязан к этому Telegram. Можешь пользоваться ботом."
+TRAINER_LINK_SUCCESS = (
+    "Аккаунт тренера привязан к этому Telegram.\n\n"
+    "Все разделы — в <b>меню слева от поля ввода</b>. Инструкция: /guide"
+)
 TRAINER_LINK_INVALID = "Ссылка недействительна или уже использована. Получи новую на сайте после оплаты."
+TRAINER_FALLBACK = "Используйте меню слева от поля ввода — там все разделы. Инструкция: /guide"
+
+# Trainer: errors and hints
+TRAINER_ERROR_BOOKING_NOT_FOUND = "Запись не найдена. Обновите список «Мои записи»."
+TRAINER_ERROR_CANCEL_FAILED = "Не удалось отменить запись (уже отменена или не найдена). Обновите «Мои записи»."
+TRAINER_ERROR_BOOKING_CLOSED_OR_NOT_FOUND = "Запись не найдена или уже закрыта. Откройте «Мои записи» заново."
+TRAINER_ERROR_FEEDBACK_SAVE_FAILED = "Не удалось сохранить отзыв. Попробуйте ещё раз или пропустите."
+TRAINER_ERROR_RESPOND_FAILED = "Не удалось откликнуться (заявка уже закрыта или вы уже откликались). Обновите «Заявки клиентов»."
+
+# Trainer: /guide — instruction only; describes main menu (left of input), no buttons under message
+TRAINER_GUIDE = (
+    "📖 <b>Инструкция (тренер)</b>\n\n"
+    "Все разделы — в <b>меню слева от поля ввода</b>. Что делает каждый пункт:\n\n"
+    "📅 <b>Редактор расписания</b>\n"
+    "Настройка шаблона недели (день и время) и слотов на текущую или следующую неделю. Можно применить шаблон на неделю целиком — свободные слоты станут доступны клиентам для записи.\n\n"
+    "📋 <b>Мое расписание</b>\n"
+    "Просмотр слотов на эту и следующую неделю: свободен или занят. Удобно сверяться с календарём.\n\n"
+    "📩 <b>Заявки клиентов</b>\n"
+    "Заявки по вашему городу и услугам. Откликнитесь — клиент увидит вас в списке и сможет записаться или написать. Новые заявки приходят уведомлением.\n\n"
+    "✉️ <b>Мои записи</b>\n"
+    "Список записей: контакт клиента, дата и время. Можно написать клиенту в Telegram или отменить запись (перед отменой предупредите клиента).\n\n"
+    "📊 <b>Статистика</b>\n"
+    "Занятия за неделю и месяц, загрузка расписания, новые клиенты за 30 дней и ваш рейтинг."
+)
 
 # --- Admin bot: trainer moderation ---
 ADMIN_START = (
@@ -228,11 +295,14 @@ TRAINER_SLOTS_STATUS_CANCELLED = "отменён"
 TRAINER_SLOT_DELETED = "Слот удалён."
 TRAINER_SLOT_CANNOT_DELETE_BOOKED = "Занятый слот нельзя удалить."
 
-# Trainer: my bookings
-TRAINER_BOOKINGS_TITLE = "📋 <b>Мои записи</b>\n\nЗабронированные слоты (клиент, телефон, комментарий):"
+# Trainer: my bookings (grouped by day, nearest first; extra: service, arena, client, session number)
+TRAINER_BOOKINGS_TITLE = "📋 <b>Мои записи</b>\n\nБлижайшие занятия сверху, по дням. В скобках: услуга, арена, клиент, какое занятие по счёту."
 TRAINER_BOOKINGS_EMPTY = "Пока нет записей."
-TRAINER_BOOKINGS_ROW = "{date} ({day}) {time} — тел. {phone}" + "\n   Комментарий: {comment}"
-TRAINER_BOOKINGS_ROW_NO_COMMENT = "{date} ({day}) {time} — тел. {phone}"
+TRAINER_BOOKINGS_DAY_HEADER = "\n📅 <b>{date} ({day})</b>"
+TRAINER_BOOKINGS_ROW_TIME_CLIENT = "{time} — {client_display}"
+TRAINER_BOOKINGS_ROW_EXTRA = "   ({extra})"
+TRAINER_BOOKINGS_ROW_COMMENT = "   Комментарий: {comment}"
+TRAINER_BOOKINGS_SESSION_NTH = "{n}-е занятие"
 TRAINER_BOOKINGS_BUTTON_WRITE = "✉️ Написать клиенту"
 TRAINER_BOOKINGS_BUTTON_WRITE_SLOT = "✉️ Написать клиенту — {date} {time}"
 TRAINER_BOOKINGS_BUTTON_CANCEL = "❌ Отменить запись"
@@ -261,3 +331,52 @@ TRAINER_BOOKING_NOTIFICATION_NO_COMMENT = (
     "Телефон: {phone}\n\n"
     "Нажмите кнопку ниже, чтобы написать клиенту в Telegram."
 )
+
+# Trainer: /stats — statistics for subscription value
+TRAINER_STATS_TITLE = "📊 <b>Статистика</b>\n\n"
+TRAINER_STATS_WEEK = (
+    "📅 <b>Эта неделя</b> ({week_start}–{week_end})\n"
+    "Занятий: {week_total} (проведено {week_completed}, предстоит {week_upcoming})\n\n"
+)
+TRAINER_STATS_MONTH = "📆 <b>Этот месяц</b>\nЗанятий: {month_total}\n\n"
+TRAINER_STATS_LOAD = (
+    "📈 <b>Загрузка</b> (эта неделя)\n"
+    "Слотов в расписании: {week_slots_total}, занято: {week_slots_booked} ({load_pct}%)\n\n"
+)
+TRAINER_STATS_LOAD_EMPTY = "📈 <b>Загрузка</b> (эта неделя)\nНет слотов в расписании на эту неделю.\n\n"
+TRAINER_STATS_NEW_CLIENTS = "👤 <b>Новые клиенты</b> (за 30 дней): {new_clients_30d}\n\n"
+TRAINER_STATS_RATING = "⭐ <b>Рейтинг</b>: {rating_avg} из 5 ({rating_count} отзывов)"
+TRAINER_STATS_RATING_NONE = "⭐ <b>Рейтинг</b>: пока нет оценок"
+
+# Admin: /stats — platform overview (current + 7d + 30d + signals)
+ADMIN_STATS_TITLE = "📊 <b>Статистика платформы</b>\n\n"
+ADMIN_STATS_SECTION_NOW = "🟢 <b>Сейчас</b>\n{lines}\n"
+ADMIN_STATS_SECTION_7D = "📆 <b>За 7 дней</b>\n{lines}\n"
+ADMIN_STATS_SECTION_30D = "📆 <b>За 30 дней</b>\n{lines}\n"
+ADMIN_STATS_SECTION_TRAINERS = "👥 <b>Тренеры</b>\n{lines}\n"
+ADMIN_STATS_SECTION_SIGNALS = "⚠️ <b>Обратить внимание</b>\n{lines}"
+ADMIN_STATS_ROW = "• {label}: {value}"
+ADMIN_STATS_NOW_BOOKINGS_TODAY = "занятий сегодня"
+ADMIN_STATS_NOW_BOOKINGS_WEEK = "занятий на эту неделю (предстоит)"
+ADMIN_STATS_NOW_REQUESTS_OPEN = "заявок без отклика (в работе)"
+ADMIN_STATS_NOW_PENDING_MOD = "тренеров на модерации"
+ADMIN_STATS_7D_BOOKINGS = "записей создано"
+ADMIN_STATS_7D_REQUESTS = "заявок от клиентов"
+ADMIN_STATS_7D_RESPONSES = "откликов тренеров на заявки"
+ADMIN_STATS_7D_TRAINERS = "новых тренеров (регистраций)"
+ADMIN_STATS_30D_BOOKINGS = "записей создано"
+ADMIN_STATS_30D_REQUESTS = "заявок от клиентов"
+ADMIN_STATS_30D_REQUESTS_NEW = "из них ещё без отклика"
+ADMIN_STATS_30D_RESPONSES = "откликов тренеров"
+ADMIN_STATS_30D_CONVERSION = "заявок получили отклик (конверсия)"
+ADMIN_STATS_30D_TRAINERS = "новых тренеров"
+ADMIN_STATS_TRAINERS_TOTAL = "всего в системе"
+ADMIN_STATS_TRAINERS_ACTIVE_LINKED = "активных и в боте"
+ADMIN_STATS_SIGNAL_PENDING = "На модерации {n} тренер(ов) — /pending"
+ADMIN_STATS_SIGNAL_REQUESTS_OPEN = "Заявок без отклика: {n} — клиенты ждут"
+ADMIN_STATS_SIGNAL_REQUESTS_STALE = "Заявок без отклика дольше 7 дней: {n}"
+ADMIN_STATS_SIGNAL_NO_BOOKINGS = "За 7 дней ни одной записи при {active} активных тренерах"
+ADMIN_STATS_SIGNAL_LOW_CONVERSION = "Низкая конверсия заявка→отклик ({pct}%) за 30 дней"
+
+# Shared (rate limit)
+RATE_LIMIT_MESSAGE = "Слишком много запросов. Подождите минуту и попробуйте снова."
