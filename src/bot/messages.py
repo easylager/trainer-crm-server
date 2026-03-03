@@ -17,6 +17,7 @@ CLIENT_TRAINER_CARD = (
     "Рейтинг: {rating}\n"
     "Возраст: {age} лет\n"
     "Опыт: {experience}\n"
+    "Занятие: {duration} мин\n"
     "Арены: {arenas}\n"
     "Услуги и цены: {services_prices}\n"
     "{description}"
@@ -34,7 +35,7 @@ CLIENT_BOOK_NO_TRAINER = "Сначала выберите тренера в ка
 CLIENT_BOOK_ENTER_PHONE = "Введите номер телефона (например +375291234567) или нажмите кнопку ниже, чтобы отправить контакт."
 CLIENT_BOOK_ENTER_COMMENT = "Комментарий к записи (необязательно). Напишите текст или нажмите «Пропустить»."
 CLIENT_BOOK_SKIP_COMMENT = "Пропустить"
-CLIENT_BOOK_SUCCESS = "✅ Вы записаны на <b>{date}</b> ({day}) {time}."
+CLIENT_BOOK_SUCCESS = "✅ Вы записаны на <b>{date}</b> ({day}) {time}, {duration} мин."
 CLIENT_BOOK_WHAT_NEXT = "Что дальше?"
 CLIENT_BOOK_BUTTON_BACK = "◀️ Назад"
 CLIENT_BOOK_PHONE_INVALID = "Нужен номер телефона. Отправьте текст (например +375291234567) или нажмите «Отправить контакт»."
@@ -93,7 +94,11 @@ CLIENT_SETTINGS_NEED_CITY_SERVICE = "Сначала выберите город 
 CLIENT_REQUEST_BUTTON_LEAVE = "Оставить заявку на подбор тренера"
 CLIENT_BUTTON_LEAVE_REQUEST = "📋 Оставить заявку"
 CLIENT_REQUEST_BUTTON_EMPTY_CATALOG = "Оставить заявку — мы подберём вариант"
-CLIENT_REQUEST_PROMPT_COMMENT = "Опишите кратко, что ищете (необязательно). Или нажмите «Пропустить»."
+CLIENT_REQUEST_PROMPT_COMMENT = (
+    "Напишите всё, что важно для тренера: удобные день и время, возраст, цели, пожелания.\n\n"
+    "Например: <i>Пн и Ср после 18:00, ребёнку 8 лет, хочу научить кататься с нуля</i>.\n\n"
+    "Или нажмите «Пропустить»."
+)
 CLIENT_REQUEST_SKIP = "Пропустить"
 CLIENT_REQUEST_NEED_CITY_SERVICE = "Сначала выберите город и услугу в настройках — тогда можно оставить заявку."
 CLIENT_REQUEST_SUCCESS = "Заявка принята. Когда появится подходящий тренер — напишем вам."
@@ -101,19 +106,35 @@ CLIENT_REQUEST_BACK = "◀️ В настройки"
 CLIENT_BUTTON_BACK_TO_MENU = "◀️ В главное меню"
 
 # --- My requests & responses (client sees who responded) ---
-CLIENT_MY_REQUESTS_TITLE = "📋 <b>Мои заявки</b>\n\nПод каждой заявкой — кнопка «Показать отклики» или «Пока нет откликов»."
+CLIENT_MY_REQUESTS_TITLE = "📋 <b>Мои заявки</b>"
+CLIENT_MY_REQUESTS_LIST_HINT = "Нажмите на заявку — откроются отклики тренеров: можно написать или записаться."
 CLIENT_MY_REQUESTS_EMPTY = "У вас пока нет заявок. Оставьте заявку в настройках или когда каталог пуст."
-CLIENT_MY_REQUESTS_ROW = "{index}. 📍 {city}, {service}. Комментарий: {comment}"
+CLIENT_MY_REQUESTS_BUTTON_LABEL = "{city}, {service}"
+CLIENT_MY_REQUESTS_ROW = "{index}. 📍 {city}, {service}. {comment}"
 CLIENT_MY_REQUESTS_ROW_NO_COMMENT = "{index}. 📍 {city}, {service}"
 CLIENT_MY_REQUESTS_RESPONSES_HEADER = "Откликнулись ({count}):"
-CLIENT_MY_REQUESTS_BUTTON_RESPONSES = "{index}. Показать отклики ({count})"
-CLIENT_MY_REQUESTS_NO_RESPONSES = "{index}. Пока нет откликов"
+CLIENT_RESPONDER_LINE = "• {name}: {comment}"
+CLIENT_RESPONDER_LINE_NO_COMMENT = "• {name}"
+CLIENT_TRAINER_COMMENT_LABEL = "💬 Комментарий тренера: {comment}"
+CLIENT_MY_REQUESTS_PAGE_PREV = "◀ Предыдущие"
+CLIENT_MY_REQUESTS_PAGE_NEXT = "Следующие ▶"
+CLIENT_REQUEST_EDIT_DELETE_BUTTON = "✏️ Удалить / Редактировать"
+CLIENT_REQUEST_EDIT_HEAD = "Редактирование заявки"
+CLIENT_REQUEST_EDIT_CURRENT = "Город: {city}\nУслуга: {service}\nТекущий комментарий: {comment}"
+CLIENT_REQUEST_EDIT_CURRENT_NO_COMMENT = "Город: {city}\nУслуга: {service}\nТекущий комментарий: нет"
+CLIENT_REQUEST_EDIT_PROMPT = "Отправьте новое сообщение с текстом комментария для замены или нажмите «Удалить заявку»."
+CLIENT_REQUEST_EDIT_CONFIRM = "Новый комментарий:\n{comment}\n\nСохранить или удалить заявку?"
+CLIENT_REQUEST_EDIT_SAVE = "✅ Сохранить комментарий"
+CLIENT_REQUEST_DELETE_BUTTON = "🗑 Удалить заявку"
+CLIENT_REQUEST_EDIT_BACK = "◀️ Назад"
+CLIENT_REQUEST_EDIT_SAVED = "Комментарий обновлён."
+CLIENT_REQUEST_DELETED = "Заявка удалена."
 CLIENT_BUTTON_MY_REQUESTS = "Мои заявки и отклики"
 CLIENT_BUTTON_MY_BOOKINGS = "Мои записи"
 CLIENT_MY_BOOKINGS_TITLE = "📋 <b>Мои записи</b>"
 CLIENT_MY_BOOKINGS_CANCEL_HINT = "Для отмены записи напишите вашему тренеру в Telegram. Имя тренера в списке ниже — ссылка для перехода в чат."
 CLIENT_MY_BOOKINGS_EMPTY = "У вас пока нет записей. Выберите тренера в каталоге и нажмите «Записаться»."
-CLIENT_MY_BOOKINGS_ROW = "{index}. {date} ({day}) {time} — {trainer_display}"
+CLIENT_MY_BOOKINGS_ROW = "{index}. {date} ({day}) {time}, {duration} мин — {trainer_display}"
 CLIENT_BUTTON_BACK_FROM_BOOKINGS = "◀️ В меню"
 CLIENT_BUTTON_RESPONDER_WRITE = "✉️ Написать"
 CLIENT_BUTTON_RESPONDER_BOOK = "Записаться"
@@ -123,46 +144,128 @@ CLIENT_BUTTON_BACK_TO_REQUESTS = "◀️ Назад к заявкам"
 CLIENT_RESPONDER_NO_TG = "(тренер ещё не в боте — только запись)"
 CLIENT_PICK_TRAINER_DONE = "Тренер выбран. Нажмите «Записаться» в меню или ниже, чтобы выбрать время."
 
-# --- Trainer bot: client requests (respond = ready to fulfill) ---
-TRAINER_REQUESTS_TITLE = "📋 <b>Заявки клиентов</b>\n\nПо вашему городу и услугам. Под каждой заявкой — кнопка «Готов взять» (откликнуться) или «Вы откликнулись»."
+# --- Trainer bot: client requests (list = Новые / В работе, tap → detail) ---
+TRAINER_REQUESTS_TITLE = "📋 <b>Заявки клиентов</b>"
+TRAINER_REQUESTS_FILTER_LINE = "По вашему городу и услугам из профиля."
 TRAINER_REQUESTS_EMPTY = "Пока нет заявок по вашему профилю (город + услуги). Заполните профиль на сайте."
-TRAINER_REQUEST_ROW = "{index}. 📍 {city}, {service}. Комментарий: {comment}"
-TRAINER_REQUEST_ROW_NO_COMMENT = "{index}. 📍 {city}, {service}"
+TRAINER_REQUESTS_SECTION_NEW = "📥 <b>Новые</b> — откликнитесь, клиент увидит вас в списке."
+TRAINER_REQUESTS_SECTION_IN_PROGRESS = "✓ <b>В работе</b> — вы откликнулись, можно записать клиента на слот."
+TRAINER_REQUESTS_SECTION_NEW_EMPTY = "📥 Новых заявок нет."
+TRAINER_REQUESTS_SECTION_IN_PROGRESS_EMPTY = "✓ В работе заявок нет."
+TRAINER_REQUESTS_PAGE_BACK = "◀ Назад"
+TRAINER_REQUESTS_PAGE_NEXT = "Далее ▶"
+# Detail screen (one request)
+TRAINER_REQUEST_DETAIL_HEAD = "<b>{city}</b>  ·  <b>{service}</b>"
+TRAINER_REQUEST_DETAIL_COMMENT = "💬 Комментарий клиента: {comment}"
+TRAINER_REQUEST_DETAIL_RESPONDED_HINT = (
+    "Вы уже откликнулись на эту заявку. Клиент видит вас в списке откликнувшихся."
+)
+TRAINER_REQUEST_ROW = "{index}. {city}, {service}. {comment}"
+TRAINER_REQUEST_ROW_NO_COMMENT = "{index}. {city}, {service}"
 TRAINER_BUTTON_REQUESTS = "📋 Заявки клиентов"
-TRAINER_BUTTON_RESPOND = "Готов взять"
+TRAINER_BUTTON_RESPOND = "✅ Готов взять"
 TRAINER_BUTTON_RESPOND_INDEX = "{index}. Готов взять"
 TRAINER_RESPONDED = "Вы откликнулись"
 TRAINER_RESPONDED_INDEX = "{index}. Вы откликнулись"
+TRAINER_REQUESTS_BACK_TO_LIST = "◀️ К списку заявок"
+TRAINER_REQUEST_WRITE_CLIENT = "✉️ Написать клиенту"
+TRAINER_REQUEST_BOOK_CLIENT = "Записать клиента"
+TRAINER_REQUEST_REMIND_WHEN_SLOTS = "Напомнить когда появятся слоты"
+TRAINER_REQUEST_REMIND_SLOTS_SET = "Напомним, когда появятся свободные слоты — запишите клиента по этой заявке."
+TRAINER_REQUEST_BOOK_CHOOSE_SLOT = "Выберите слот для записи клиента по заявке:"
+TRAINER_REQUEST_BOOK_SUCCESS = "Клиент записан. Заявка закрыта, клиенту отправлено уведомление."
+TRAINER_REQUEST_REMIND_HAS_SLOTS = "У вас заявка в работе — клиент ждёт записи. Есть свободные слоты: запишите его."
+TRAINER_PENDING_BOOKING_REMINDER = (
+    "У вас {count} {requests_word}: клиент ждёт записи с вашей стороны. "
+    "Откройте «Заявки клиентов» — там можно оформить запись."
+)
+CLIENT_TRAINER_BOOKED_YOU = "Вас записал тренер <b>{name}</b> на <b>{date}</b> ({day}) {time}. Подробности в разделе «Мои записи»."
 TRAINER_RESPOND_SUCCESS = "Вы откликнулись на заявку. Клиент увидит вас в списке и сможет записаться или написать."
+TRAINER_RESPOND_PROMPT_COMMENT = (
+    "Напишите комментарий для клиента (необязательно).\n\n"
+    "Например: <i>Когда появится слот на это время — запишу вас</i> или <i>Могу предложить Ср 18:00, Пт 19:00</i>.\n\n"
+    "Клиент увидит это в откликах. Или нажмите «Отправить без комментария»."
+)
+TRAINER_RESPOND_SKIP = "Отправить без комментария"
+TRAINER_BUTTON_DECLINE = "❌ Отклонить"
+TRAINER_REQUEST_DECLINED = "Вы отклонили эту заявку. Она больше не отображается в списке."
 
 # --- Notifications ---
+TRAINER_DAILY_REQUESTS_REMINDER = (
+    "Добрый день! По вашим услугам и городу сейчас открыто {count} {requests_word} от клиентов. "
+    "Загляните в раздел «Заявки клиентов» — откликнитесь, и клиент сможет записаться к вам или написать."
+)
 TRAINER_REQUEST_NOTIFICATION = (
     "📩 <b>Новая заявка клиента</b>\n\n"
-    "📍 {city}, {service}\n"
+    "{city}, {service}\n"
     "Комментарий: {comment}\n\n"
-    "Откройте бота → «Заявки клиентов», чтобы откликнуться."
+    "Список заявок вы можете посмотреть в меню бота."
 )
 TRAINER_REQUEST_NOTIFICATION_NO_COMMENT = (
     "📩 <b>Новая заявка клиента</b>\n\n"
-    "📍 {city}, {service}\n\n"
-    "Откройте бота → «Заявки клиентов», чтобы откликнуться."
+    "{city}, {service}\n\n"
+    "Список заявок вы можете посмотреть в меню бота."
 )
 CLIENT_RESPONSE_NOTIFICATION = (
     "📩 По вашей заявке откликнулся тренер.\n\n"
-    "Откройте «Мои заявки» в настройках — там можно написать тренеру или записаться."
+    "Нажмите кнопку ниже — откроются отклики: можно написать тренеру или записаться к нему."
+)
+CLIENT_RESPONSE_NOTIFICATION_WITH_COMMENT = (
+    "📩 По вашей заявке откликнулся тренер.\n\n"
+    "💬 <b>{responder_name}</b>: {comment}\n\n"
+    "Нажмите кнопку ниже — откроются все отклики: можно написать тренеру или записаться к нему."
+)
+CLIENT_RESPONSE_BUTTON_VIEW = "👤 Посмотреть отклики"
+CLIENT_NO_RESPONSE_REMINDER = (
+    "Пока по вашей заявке никто не откликнулся — мы ещё раз напомнили тренерам. "
+    "Параллельно можете сами посмотреть тренеров в каталоге и записаться к тому, кто подойдёт. "
+    "Если появятся отклики — мы сразу напишем."
 )
 CLIENT_BOOKING_CANCELLED_BY_TRAINER = (
     "⚠️ Тренер отменил запись на <b>{date}</b> ({day}) в {time}.\n\n"
     "Можете выбрать другое время или другого тренера: /book или «Настройки» → каталог."
 )
 # Reminders (24h and 2h before slot). Placeholders: date, day, time.
-CLIENT_REMINDER_24H = "⏰ Напоминание: через 24 часа у вас занятие — <b>{date}</b> ({day}) {time}."
-CLIENT_REMINDER_2H = "⏰ Напоминание: через 2 часа занятие — <b>{date}</b> ({day}) {time}."
+CLIENT_REMINDER_24H = "⏰ Напоминание: через 24 часа у вас занятие — <b>{date}</b> ({day}) {time}, {duration} мин."
+CLIENT_REMINDER_2H = "⏰ Напоминание: через 2 часа занятие — <b>{date}</b> ({day}) {time}, {duration} мин."
 CLIENT_BOOKING_COMPLETED = (
     "✅ Занятие <b>{date}</b> ({day}) {time} завершено.\n\n"
     "Поделитесь впечатлениями — поставьте оценку тренеру и при желании напишите отзыв."
 )
 CLIENT_BUTTON_LEAVE_FEEDBACK = "⭐ Оставить отзыв и оценку"
+CLIENT_BUTTON_REPEAT_SAME_TIME = "🔄 Повторить в это же время"
+CLIENT_BUTTON_BECOME_REGULAR = "📅 Стать постоянным клиентом"
+CLIENT_REPEAT_BOOKED = "✅ Записали вас на следующую неделю на <b>{date}</b> ({day}) {time}."
+CLIENT_REPEAT_SLOT_BOOKED = (
+    "На это время на следующую неделю слот уже занят. "
+    "Можете <b>стать постоянным</b> — тогда на следующие недели это время будет резервироваться за вами при создании расписания; "
+    "или выбрать другое время в каталоге."
+)
+CLIENT_REPEAT_SLOT_TAKEN_BY_REGULAR = (
+    "На это время уже закреплён другой постоянный клиент. "
+    "Выберите другое время в каталоге — там видны все свободные слоты."
+)
+CLIENT_REPEAT_NO_SLOT_YET = (
+    "На это время на следующую неделю в расписании тренера пока нет окна. "
+    "Когда тренер добавит слот — мы запишем вас и напишем."
+)
+CLIENT_RECURRING_DONE = (
+    "Вы закреплены как постоянный клиент: каждую неделю в <b>{day}</b> в {time} слот будет резервироваться за вами. "
+    "Когда тренер выставит расписание на неделю — запись создастся автоматически."
+)
+CLIENT_RECURRING_DONE_AND_BOOKED = (
+    "Вы закреплены как постоянный клиент. Мы уже записали вас на следующую неделю на <b>{date}</b> ({day}) {time} — "
+    "дальше запись будет создаваться автоматически, когда тренер выставит расписание."
+)
+CLIENT_RECURRING_ALREADY = "У вас уже закреплено это время как постоянное."
+CLIENT_RECURRING_SLOT_TAKEN = (
+    "Это время уже закреплено за другим постоянным клиентом. "
+    "Выберите другое время в каталоге — там видны все свободные слоты."
+)
+CLIENT_SLOT_AVAILABLE = (
+    "Появилось окно на <b>{date}</b> ({day}) {time} у тренера <b>{trainer_name}</b>. Записаться?"
+)
+CLIENT_BUTTON_BOOK_THIS_SLOT = "Записаться"
 CLIENT_FEEDBACK_RATE_PROMPT = "Поставьте оценку тренеру от 1 до 5 звёзд:"
 CLIENT_FEEDBACK_REVIEW_PROMPT = "Напишите отзыв (необязательно) или нажмите «Пропустить»:"
 CLIENT_FEEDBACK_SKIP = "Пропустить"
@@ -271,6 +374,7 @@ TRAINER_SCHEDULE_CHOOSE_DURATION = "Длительность занятия (д�
 TRAINER_SCHEDULE_DONE = "Готово ({count})"
 TRAINER_SCHEDULE_CANCEL_ADD = "Отмена"
 TRAINER_SCHEDULE_SELECT_AT_LEAST_ONE = "Выбери хотя бы один час."
+TRAINER_SCHEDULE_BOOKED_SLOT_CANNOT_REMOVE = "Занятой слот нельзя убрать из расписания."
 TRAINER_SCHEDULE_ADDED = "Слот добавлен в шаблон."
 TRAINER_SCHEDULE_ADDED_MULTI = "В шаблон добавлено слотов: {count}."
 TRAINER_SCHEDULE_DAY_CLEARED = "Слоты на этот день в шаблоне убраны."
@@ -295,17 +399,30 @@ TRAINER_SLOTS_STATUS_CANCELLED = "отменён"
 TRAINER_SLOT_DELETED = "Слот удалён."
 TRAINER_SLOT_CANNOT_DELETE_BOOKED = "Занятый слот нельзя удалить."
 
-# Trainer: my bookings (grouped by day, nearest first; extra: service, arena, client, session number)
-TRAINER_BOOKINGS_TITLE = "📋 <b>Мои записи</b>\n\nБлижайшие занятия сверху, по дням. В скобках: услуга, арена, клиент, какое занятие по счёту."
+# Trainer: my bookings (list = buttons by day, tap → detail + Write/Cancel)
+TRAINER_BOOKINGS_TITLE = "📋 <b>Мои записи</b>"
+TRAINER_BOOKINGS_LIST_HINT = "Нажмите на запись — откроются детали и кнопки «Написать» / «Отменить»."
 TRAINER_BOOKINGS_EMPTY = "Пока нет записей."
+TRAINER_BOOKINGS_DAY_EMPTY = "На этот день записей нет."
+TRAINER_BOOKINGS_PAGE_BACK = "◀ Предыдущий день"
+TRAINER_BOOKINGS_PAGE_NEXT = "Следующий день ▶"
 TRAINER_BOOKINGS_DAY_HEADER = "\n📅 <b>{date} ({day})</b>"
 TRAINER_BOOKINGS_ROW_TIME_CLIENT = "{time} — {client_display}"
 TRAINER_BOOKINGS_ROW_EXTRA = "   ({extra})"
 TRAINER_BOOKINGS_ROW_COMMENT = "   Комментарий: {comment}"
+# Detail screen (one booking): clearer layout
+TRAINER_BOOKINGS_DETAIL_HEAD = "📅 <b>{date}</b> ({day})  ·  <b>{time}</b>"
+TRAINER_BOOKINGS_DETAIL_CLIENT = "👤 {client_display}"
+TRAINER_BOOKINGS_DETAIL_META = "Услуга: {services}  ·  Арена: {arenas}  ·  {session_label}"
+TRAINER_BOOKINGS_DETAIL_COMMENT = "💬 Комментарий: {comment}"
 TRAINER_BOOKINGS_SESSION_NTH = "{n}-е занятие"
 TRAINER_BOOKINGS_BUTTON_WRITE = "✉️ Написать клиенту"
 TRAINER_BOOKINGS_BUTTON_WRITE_SLOT = "✉️ Написать клиенту — {date} {time}"
 TRAINER_BOOKINGS_BUTTON_CANCEL = "❌ Отменить запись"
+TRAINER_BOOKINGS_BUTTON_MAKE_REGULAR = "📅 Сделать постоянным клиентом"
+TRAINER_BOOKINGS_BUTTON_REMOVE_REGULARITY = "📅 Снять регулярность"
+TRAINER_RECURRING_DONE = "Клиент закреплён как постоянный: каждую неделю в это время слот будет автоматически бронироваться за ним."
+TRAINER_RECURRING_REMOVED = "Регулярность снята."
 TRAINER_BOOKINGS_CHOOSE_WRITE = "Выберите запись, чтобы написать клиенту:"
 TRAINER_BOOKINGS_CHOOSE_CANCEL = "Какую запись отменить? Перед отменой предупредите клиента."
 TRAINER_BOOKINGS_WRITE_LINK = "Запись {date} {time}. Написать клиенту в Telegram?"

@@ -19,13 +19,23 @@ from src.application.booking_use_cases import (
 )
 from src.application.client_request_use_cases import (
     get_pending_request_notifications,
+    get_trainers_for_daily_request_reminder,
     mark_request_trainer_notified,
+    mark_trainer_daily_request_reminder_sent,
 )
 from src.bot import messages as msg
-from src.bot.handlers.trainer_handlers import router as trainer_router
+from src.bot.schedule_notifications import set_client_bot
+from src.bot.handlers.trainer_handlers import (
+    REQUEST_BOOK_CLIENT_PREFIX,
+    REQUEST_DECLINE_PREFIX,
+    REQUESTS_CALLBACK,
+    REQUEST_RESPOND_PREFIX,
+    router as trainer_router,
+)
 from src.bot.middlewares.rate_limit_middleware import RateLimitMiddleware
 from src.infrastructure.db import async_session_factory
 from src.shared.config import Settings
+from src.shared.notification_hours import is_within_notification_hours
 from src.shared.rate_limit import RateLimiter
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s [%(name)s] %(message)s")
@@ -34,6 +44,16 @@ logger = logging.getLogger(__name__)
 BOOKING_NOTIFIER_INTERVAL_SEC = 15
 REQUEST_NOTIFIER_INTERVAL_SEC = 20
 COMPLETED_FEEDBACK_INTERVAL_SEC = 20
+DAILY_REQUEST_REMINDER_INTERVAL_SEC = 3 * 24 * 60 * 60  # once per 2 days
+
+
+def _requests_word(n: int) -> str:
+    """Russian plural: 1 заявка, 2 заявки, 5 заявок."""
+    if n % 10 == 1 and n % 100 != 11:
+        return "заявка"
+    if n % 10 in (2, 3, 4) and n % 100 not in (12, 13, 14):
+        return "заявки"
+    return "заявок"
 
 
 async def _completed_feedback_loop(bot: Bot) -> None:
@@ -41,6 +61,8 @@ async def _completed_feedback_loop(bot: Bot) -> None:
     while True:
         await asyncio.sleep(COMPLETED_FEEDBACK_INTERVAL_SEC)
         try:
+            if not is_within_notification_hours():
+                continue
             async with async_session_factory() as session:
                 pending = await get_pending_completed_for_trainer(session)
                 for p in pending:
@@ -76,6 +98,8 @@ async def _booking_notifier_loop(bot: Bot) -> None:
     while True:
         await asyncio.sleep(BOOKING_NOTIFIER_INTERVAL_SEC)
         try:
+            if not is_within_notification_hours():
+                continue
             async with async_session_factory() as session:
                 pending = await get_bookings_pending_notification(session)
                 for b in pending:
@@ -116,6 +140,8 @@ async def _request_notifier_loop(bot: Bot) -> None:
     while True:
         await asyncio.sleep(REQUEST_NOTIFIER_INTERVAL_SEC)
         try:
+            if not is_within_notification_hours():
+                continue
             async with async_session_factory() as session:
                 pending = await get_pending_request_notifications(session)
                 for p in pending:
@@ -134,8 +160,20 @@ async def _request_notifier_loop(bot: Bot) -> None:
                             city=p["city_name"],
                             service=p["service_name"],
                         )
+                    kb = InlineKeyboardMarkup(inline_keyboard=[
+                        [
+                            InlineKeyboardButton(
+                                text=msg.TRAINER_BUTTON_RESPOND,
+                                callback_data=f"{REQUEST_RESPOND_PREFIX}{p['request_id']}",
+                            ),
+                            InlineKeyboardButton(
+                                text=msg.TRAINER_BUTTON_DECLINE,
+                                callback_data=f"{REQUEST_DECLINE_PREFIX}{p['request_id']}",
+                            ),
+                        ],
+                    ])
                     try:
-                        await bot.send_message(chat_id=tid, text=text)
+                        await bot.send_message(chat_id=tid, text=text, reply_markup=kb)
                     except Exception as e:
                         logger.warning("Request notifier send to %s: %s", tid, e)
                     await mark_request_trainer_notified(
@@ -145,6 +183,42 @@ async def _request_notifier_loop(bot: Bot) -> None:
             break
         except Exception as e:
             logger.exception("Request notifier: %s", e)
+
+
+async def _daily_request_reminder_loop(bot: Bot) -> None:
+    """Once per day: notify trainers how many open requests match their city+service."""
+    while True:
+        await asyncio.sleep(DAILY_REQUEST_REMINDER_INTERVAL_SEC)
+        try:
+            if not is_within_notification_hours():
+                continue
+            async with async_session_factory() as session:
+                trainers = await get_trainers_for_daily_request_reminder(session)
+                for p in trainers:
+                    tid = p.get("trainer_telegram_id")
+                    if not tid:
+                        continue
+                    count = p.get("request_count") or 0
+                    if count <= 0:
+                        continue
+                    text = msg.TRAINER_DAILY_REQUESTS_REMINDER.format(
+                        count=count,
+                        requests_word=_requests_word(count),
+                    )
+                    try:
+                        await bot.send_message(chat_id=tid, text=text)
+                        await mark_trainer_daily_request_reminder_sent(session, p["trainer_id"])
+                    except Exception as e:
+                        logger.warning(
+                            "Daily request reminder to trainer %s (id=%s): %s",
+                            tid,
+                            p.get("trainer_id"),
+                            e,
+                        )
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.exception("Daily request reminder loop: %s", e)
 
 
 async def setup_menu_and_commands(bot: Bot) -> None:
@@ -169,6 +243,11 @@ async def main() -> None:
         token=settings.telegram_bot_token_trainer,
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
     )
+    client_bot = Bot(
+        token=settings.telegram_bot_token_client,
+        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+    )
+    set_client_bot(client_bot)
     await setup_menu_and_commands(bot)
     dp = Dispatcher()
     limiter = RateLimiter(
@@ -180,19 +259,24 @@ async def main() -> None:
     booking_notifier = asyncio.create_task(_booking_notifier_loop(bot))
     request_notifier = asyncio.create_task(_request_notifier_loop(bot))
     completed_feedback = asyncio.create_task(_completed_feedback_loop(bot))
+    daily_reminder = asyncio.create_task(_daily_request_reminder_loop(bot))
     logger.info(
-        "Trainer bot polling started (booking %ss, request %ss, completed feedback %ss)",
+        "Trainer bot polling started (booking %ss, request %ss, completed %ss, daily %ss)",
         BOOKING_NOTIFIER_INTERVAL_SEC,
         REQUEST_NOTIFIER_INTERVAL_SEC,
         COMPLETED_FEEDBACK_INTERVAL_SEC,
+        DAILY_REQUEST_REMINDER_INTERVAL_SEC,
     )
     try:
         await dp.start_polling(bot)
     finally:
+        set_client_bot(None)
+        await client_bot.session.close()
         booking_notifier.cancel()
         request_notifier.cancel()
         completed_feedback.cancel()
-        for t in (booking_notifier, request_notifier, completed_feedback):
+        daily_reminder.cancel()
+        for t in (booking_notifier, request_notifier, completed_feedback, daily_reminder):
             try:
                 await t
             except asyncio.CancelledError:

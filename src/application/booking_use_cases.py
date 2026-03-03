@@ -1,10 +1,17 @@
 """
 Booking use cases: create booking (slot + client_id, comment), list for trainer, pending notifications.
 """
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.shared.notification_hours import NOTIFICATION_TZ
+
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:
+    from backports.zoneinfo import ZoneInfo  # type: ignore[no-redef]
 
 
 async def create_booking(
@@ -14,10 +21,14 @@ async def create_booking(
     client_id: int,
     client_comment: str | None = None,
     client_request_id: int | None = None,
+    created_by_trainer: bool = False,
 ) -> int | None:
     """
     Create booking: insert row and set slot status to 'booked'.
     If client_request_id is set, link booking to that request and archive the request.
+    When created_by_trainer=True and client_request_id is set, leave client_notified_trainer_booked_at
+    null so client bot sends "trainer booked you"; when False (client booked themselves) set it to now()
+    to avoid duplicate notification.
     Returns booking id or None if slot not available / wrong trainer.
     """
     r = await session.execute(
@@ -53,6 +64,11 @@ async def create_booking(
             text("UPDATE client_requests SET status = 'archived' WHERE id = :id"),
             {"id": client_request_id},
         )
+    if client_request_id is not None and not created_by_trainer:
+        await session.execute(
+            text("UPDATE bookings SET client_notified_trainer_booked_at = NOW() WHERE id = :id"),
+            {"id": booking_id},
+        )
     await session.commit()
     return booking_id
 
@@ -86,13 +102,17 @@ async def generate_reminders_for_booking(session: AsyncSession, booking_id: int)
     slot_date = row[3]
     start_time = row[4]
 
-    # Combine date + time into one datetime; reuse timezone from created_at if present.
-    slot_dt = datetime.combine(slot_date, start_time)
-    if created_at.tzinfo is not None:
-        slot_dt = slot_dt.replace(tzinfo=created_at.tzinfo)
+    # Treat slot_date/start_time as local (Europe/Minsk) time, and compare in that timezone.
+    local_tz = ZoneInfo(NOTIFICATION_TZ)
+    # created_at comes from DB as UTC (timestamptz) – normalize and convert to local tz.
+    if created_at.tzinfo is None:
+        created_local = created_at.replace(tzinfo=timezone.utc).astimezone(local_tz)
+    else:
+        created_local = created_at.astimezone(local_tz)
+    slot_dt_local = datetime.combine(slot_date, start_time).replace(tzinfo=local_tz)
 
     # If slot already started or in the past relative to creation – no reminders.
-    if slot_dt <= created_at:
+    if slot_dt_local <= created_local:
         return
 
     def is_quiet_hours(dt: datetime) -> bool:
@@ -101,23 +121,25 @@ async def generate_reminders_for_booking(session: AsyncSession, booking_id: int)
 
     reminders: list[tuple[str, datetime]] = []
 
-    t24 = slot_dt - timedelta(hours=24)
-    t2 = slot_dt - timedelta(hours=2)
+    t24 = slot_dt_local - timedelta(hours=24)
+    t2 = slot_dt_local - timedelta(hours=2)
 
     # Booking created before slot calendar day → потенциально 24h + 2h.
-    if created_at.date() < slot_date:
-        if t24 > created_at and t24 < slot_dt and not is_quiet_hours(t24):
+    if created_local.date() < slot_date:
+        if t24 > created_local and t24 < slot_dt_local and not is_quiet_hours(t24):
             reminders.append(("before_24h", t24))
-        if t2 > created_at and t2 < slot_dt and not is_quiet_hours(t2):
+        if t2 > created_local and t2 < slot_dt_local and not is_quiet_hours(t2):
             reminders.append(("before_2h", t2))
     else:
         # Booking created in the same calendar day as slot.
         # Если до слота осталось больше 2 часов, создаём только 2h-напоминание.
-        if created_at < t2 and t2 < slot_dt and not is_quiet_hours(t2):
+        if created_local < t2 and t2 < slot_dt_local and not is_quiet_hours(t2):
             reminders.append(("before_2h", t2))
         # Если клиент записался позже, чем за 2 часа до начала, дополнительных напоминаний не создаём.
 
     for kind, send_at in reminders:
+        # Store send_at in UTC so comparison with NOW() in DB is correct.
+        send_at_utc = send_at.astimezone(timezone.utc)
         await session.execute(
             text(
                 """
@@ -129,10 +151,53 @@ async def generate_reminders_for_booking(session: AsyncSession, booking_id: int)
                 "bid": bid,
                 "ctid": client_telegram_id,
                 "kind": kind,
-                "send_at": send_at,
+                "send_at": send_at_utc,
             },
         )
     # Напоминания можно коммитить отдельно от самой брони (create_booking уже сделал commit).
+    await session.commit()
+
+
+async def get_pending_trainer_booked_notifications(session: AsyncSession, limit: int = 50) -> list[dict]:
+    """
+    Bookings created by trainer with client_request_id, client not yet notified.
+    Returns: booking_id, client_telegram_id, trainer_name, slot_date, start_time.
+    """
+    r = await session.execute(
+        text("""
+            SELECT b.id, c.telegram_id,
+                   COALESCE(TRIM(CONCAT(tp.first_name, ' ', tp.last_name)), 'Тренер'),
+                   s.slot_date, s.start_time
+            FROM bookings b
+            JOIN clients c ON c.id = b.client_id
+            JOIN slots s ON s.id = b.slot_id
+            JOIN trainers t ON t.id = b.trainer_id
+            LEFT JOIN trainer_profiles tp ON tp.trainer_id = t.id
+            WHERE b.client_request_id IS NOT NULL
+              AND b.client_notified_trainer_booked_at IS NULL
+            LIMIT :lim
+        """),
+        {"lim": limit},
+    )
+    rows = r.fetchall()
+    return [
+        {
+            "booking_id": row[0],
+            "client_telegram_id": row[1],
+            "trainer_name": (row[2] or "Тренер").strip(),
+            "slot_date": row[3],
+            "start_time": row[4],
+        }
+        for row in rows
+    ]
+
+
+async def mark_trainer_booked_notified(session: AsyncSession, booking_id: int) -> None:
+    """Mark that we sent the client the 'trainer booked you' notification."""
+    await session.execute(
+        text("UPDATE bookings SET client_notified_trainer_booked_at = NOW() WHERE id = :id"),
+        {"id": booking_id},
+    )
     await session.commit()
 
 
@@ -143,7 +208,7 @@ async def list_pending_reminders(session: AsyncSession, limit: int = 100) -> lis
     """
     r = await session.execute(
         text("""
-            SELECT r.id, r.client_telegram_id, r.kind, s.slot_date, s.start_time
+            SELECT r.id, r.client_telegram_id, r.kind, s.slot_date, s.start_time, s.end_time
             FROM reminders r
             JOIN bookings b ON b.id = r.booking_id
             JOIN slots s ON s.id = b.slot_id
@@ -163,6 +228,7 @@ async def list_pending_reminders(session: AsyncSession, limit: int = 100) -> lis
             "kind": row[2],
             "slot_date": row[3],
             "start_time": row[4],
+            "end_time": row[5],
         }
         for row in rows
     ]
@@ -193,10 +259,10 @@ async def get_booking_with_slot(
     booking_id: int,
     trainer_id: int,
 ) -> dict | None:
-    """Load booking by id with slot date/time; None if not found or wrong trainer."""
+    """Load booking by id with slot date/time and client_id; None if not found or wrong trainer."""
     r = await session.execute(
         text("""
-            SELECT b.id, b.slot_id, c.telegram_id, c.phone, b.client_comment, b.created_at,
+            SELECT b.id, b.slot_id, b.client_id, c.telegram_id, c.phone, b.client_comment, b.created_at,
                    s.slot_date, s.start_time, s.end_time
             FROM bookings b
             JOIN clients c ON c.id = b.client_id
@@ -211,13 +277,14 @@ async def get_booking_with_slot(
     return {
         "id": row[0],
         "slot_id": row[1],
-        "client_telegram_id": row[2],
-        "client_phone": row[3] or "",
-        "client_comment": row[4],
-        "created_at": row[5],
-        "slot_date": row[6],
-        "start_time": row[7],
-        "end_time": row[8],
+        "client_id": row[2],
+        "client_telegram_id": row[3],
+        "client_phone": row[4] or "",
+        "client_comment": row[5],
+        "created_at": row[6],
+        "slot_date": row[7],
+        "start_time": row[8],
+        "end_time": row[9],
     }
 
 
@@ -227,9 +294,9 @@ async def list_bookings_for_trainer(
     limit: int = 100,
 ) -> list[dict]:
     """
-    List active bookings for trainer (slot still booked).
-    Sorted furthest first (slot_date, start_time DESC) so nearest is at the end — trainer sees it after scrolling.
-    Includes: client name, trainer's services/arenas (aggregated), session number (N-th for this client with this trainer).
+    List active upcoming bookings for trainer (slot_date >= today, slot still booked).
+    Sorted nearest first (slot_date ASC, start_time ASC) so first page = today, next = tomorrow, etc.
+    No past days — trainer sees only current day and future.
     """
     r = await session.execute(
         text("""
@@ -250,13 +317,13 @@ async def list_bookings_for_trainer(
                 FROM bookings b
                 JOIN clients c ON c.id = b.client_id
                 JOIN slots s ON s.id = b.slot_id
-                WHERE b.trainer_id = :tid AND s.status = 'booked'
+                WHERE b.trainer_id = :tid AND s.status = 'booked' AND s.slot_date >= CURRENT_DATE
             )
             SELECT id, slot_id, telegram_id, phone, client_first_name, client_last_name,
                    client_comment, created_at, slot_date, start_time, end_time,
                    session_num, services_str, arenas_str
             FROM numbered
-            ORDER BY slot_date DESC, start_time DESC
+            ORDER BY slot_date ASC, start_time ASC
             LIMIT :lim
         """),
         {"tid": trainer_id, "lim": limit},
@@ -293,6 +360,7 @@ async def list_bookings_for_client(
         text("""
             SELECT b.id, b.slot_id, b.trainer_id, b.client_comment,
                    s.slot_date, s.start_time, s.end_time,
+                   (EXTRACT(EPOCH FROM (s.end_time - s.start_time)) / 60)::int AS duration_minutes,
                    COALESCE(TRIM(p.first_name || ' ' || p.last_name), 'Тренер') AS trainer_name,
                    t.telegram_id AS trainer_telegram_id
             FROM bookings b
@@ -316,8 +384,9 @@ async def list_bookings_for_client(
             "slot_date": row[4],
             "start_time": row[5],
             "end_time": row[6],
-            "trainer_name": (row[7] or "").strip() or "Тренер",
-            "trainer_telegram_id": row[8],
+            "duration_minutes": row[7] if row[7] is not None else 45,
+            "trainer_name": (row[8] or "").strip() or "Тренер",
+            "trainer_telegram_id": row[9],
         }
         for row in rows
     ]
@@ -564,6 +633,35 @@ async def get_booking_for_client_feedback(
     if not row:
         return None
     return {"id": row[0], "trainer_id": row[1], "slot_date": row[2], "start_time": row[3]}
+
+
+async def get_completed_booking_for_repeat(
+    session: AsyncSession,
+    booking_id: int,
+    client_telegram_id: int,
+) -> dict | None:
+    """Completed booking by id and client; for repeat/recurring flows. Returns trainer_id, client_id, slot_date, start_time, end_time."""
+    r = await session.execute(
+        text("""
+            SELECT b.id, b.trainer_id, b.client_id, s.slot_date, s.start_time, s.end_time
+            FROM bookings b
+            JOIN clients c ON c.id = b.client_id
+            JOIN slots s ON s.id = b.slot_id
+            WHERE b.id = :bid AND c.telegram_id = :ctid AND b.status = 'completed'
+        """),
+        {"bid": booking_id, "ctid": client_telegram_id},
+    )
+    row = r.fetchone()
+    if not row:
+        return None
+    return {
+        "id": row[0],
+        "trainer_id": row[1],
+        "client_id": row[2],
+        "slot_date": row[3],
+        "start_time": row[4],
+        "end_time": row[5],
+    }
 
 
 async def get_booking_for_trainer_feedback(

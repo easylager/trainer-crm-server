@@ -32,12 +32,14 @@ class TrainerRepository:
         phone: str | None = None,
         contacts: str | None = None,
         education: str | None = None,
+        session_duration_minutes: int | None = None,
     ) -> None:
         """Insert trainer profile (one per trainer)."""
+        dur = 45 if session_duration_minutes is None else session_duration_minutes
         await self._session.execute(
             text("""
-                INSERT INTO trainer_profiles (trainer_id, first_name, last_name, age, city_id, experience_years, description, phone, contacts, education)
-                VALUES (:tid, :fn, :ln, :age, :city_id, :exp, :desc, :phone, :contacts, :edu)
+                INSERT INTO trainer_profiles (trainer_id, first_name, last_name, age, city_id, experience_years, description, phone, contacts, education, session_duration_minutes)
+                VALUES (:tid, :fn, :ln, :age, :city_id, :exp, :desc, :phone, :contacts, :edu, :dur)
             """),
             {
                 "tid": trainer_id,
@@ -50,6 +52,7 @@ class TrainerRepository:
                 "phone": phone,
                 "contacts": contacts,
                 "edu": education,
+                "dur": dur,
             },
         )
 
@@ -99,7 +102,7 @@ class TrainerRepository:
             "moderation_feedback": row[4],
         }
         rp = await self._session.execute(
-            text("SELECT first_name, last_name, age, city_id, experience_years, description, phone, contacts, education, rating_avg, rating_count FROM trainer_profiles WHERE trainer_id = :id"),
+            text("SELECT first_name, last_name, age, city_id, experience_years, description, phone, contacts, education, rating_avg, rating_count, session_duration_minutes FROM trainer_profiles WHERE trainer_id = :id"),
             {"id": trainer_id},
         )
         prof = rp.fetchone()
@@ -109,6 +112,7 @@ class TrainerRepository:
                 "experience_years": prof[4], "description": prof[5], "phone": prof[6], "contacts": prof[7], "education": prof[8],
                 "rating_avg": float(prof[9]) if prof[9] is not None else None,
                 "rating_count": prof[10] or 0,
+                "session_duration_minutes": prof[11] if prof[11] is not None else 45,
             }
             if prof
             else None
@@ -176,6 +180,7 @@ class TrainerRepository:
         phone: str | None = None,
         contacts: str | None = None,
         education: str | None = None,
+        session_duration_minutes: int | None = None,
     ) -> None:
         """Partial update of profile; only non-None fields are set."""
         updates: list[str] = []
@@ -189,6 +194,7 @@ class TrainerRepository:
         if phone is not None: updates.append("phone = :phone"); params["phone"] = phone
         if contacts is not None: updates.append("contacts = :contacts"); params["contacts"] = contacts
         if education is not None: updates.append("education = :edu"); params["edu"] = education
+        if session_duration_minutes is not None: updates.append("session_duration_minutes = :dur"); params["dur"] = session_duration_minutes
         if not updates:
             return
         await self._session.execute(
@@ -304,7 +310,8 @@ class TrainerRepository:
             SELECT DISTINCT t.id, t.telegram_id,
                    p.first_name, p.last_name, p.age, p.city_id, p.experience_years,
                    p.description, p.phone, p.contacts, p.education,
-                   p.rating_avg, p.rating_count
+                   p.rating_avg, p.rating_count,
+                   COALESCE(p.session_duration_minutes, 45) AS session_duration_minutes
         """
         if order_by == "rating":
             # Bayesian: (v/(v+m))*R + (m/(v+m))*C. Must be in SELECT when using DISTINCT (PG rule).
@@ -320,6 +327,7 @@ class TrainerRepository:
                    p.first_name, p.last_name, p.age, p.city_id, p.experience_years,
                    p.description, p.phone, p.contacts, p.education,
                    p.rating_avg, p.rating_count,
+                   COALESCE(p.session_duration_minutes, 45) AS session_duration_minutes,
                    ({has_rating_expr}) AS _has_rating,
                    ({score_expr}) AS _score
         """
@@ -400,6 +408,8 @@ class TrainerRepository:
             tid = row[0]
             arena_ids = arenas_by_id.get(tid, [])
             arena_names = [arena_names_by_id.get(aid, "—") for aid in arena_ids]
+            # session_duration_minutes at index 13; for rating order, _has_rating=14, _score=15
+            duration = row[13] if len(row) > 13 and row[13] is not None else 45
             out.append({
                 "id": tid,
                 "telegram_id": row[1],
@@ -409,6 +419,7 @@ class TrainerRepository:
                     "phone": row[8], "contacts": row[9], "education": row[10],
                     "rating_avg": float(row[11]) if row[11] is not None else None,
                     "rating_count": row[12] or 0,
+                    "session_duration_minutes": duration,
                 } if row[2] is not None else None,
                 "photos": photos_by_id.get(tid, []),
                 "service_ids": services_by_id.get(tid, []),

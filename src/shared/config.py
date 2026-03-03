@@ -45,5 +45,7 @@ class Settings(BaseSettings):
     rate_limit_window_sec: float = 60.0
     # For client bot: API base (e.g. http://localhost:8000 or https://your-api.railway.app)
     api_base_url: str = "http://localhost:8000"
+    # Cooldown (minutes) before sending "у вас заявки в обработке" again after schedule change. 0 = every time (for testing).
+    schedule_reminder_cooldown_minutes: int = 180
     # Optional: base URL for photos. If not set, bot uses api_base_url + /api/public/photos (backend proxies S3)
     photo_base_url: str | None = None

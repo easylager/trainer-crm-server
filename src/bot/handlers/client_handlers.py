@@ -5,7 +5,7 @@ import asyncio
 import html
 import logging
 from collections import defaultdict
-from datetime import timedelta
+from datetime import date, datetime, timedelta
 
 from aiogram import Bot, Router
 from aiogram.enums import ChatAction, ParseMode
@@ -35,13 +35,24 @@ from src.application.client_session_use_cases import (
 )
 from src.application.client_request_use_cases import (
     create_client_request,
+    delete_client_request,
     list_my_requests_with_responses,
+    replace_client_request_with_new,
 )
 from src.application.booking_use_cases import (
     create_booking,
     generate_reminders_for_booking,
     get_booking_for_client_feedback,
+    get_completed_booking_for_repeat,
     list_bookings_for_client,
+)
+from src.application.recurring_use_cases import (
+    add_slot_wait_request,
+    create_recurring_client_slot,
+    find_available_slot_next_week,
+    get_active_recurring_for_booking,
+    get_slot_status_next_week,
+    has_other_active_recurring,
 )
 from src.application.trainer_schedule_use_cases import (
     get_slot,
@@ -86,8 +97,13 @@ CLIENT_START_PREFIX = "client_"
 BOOK_SLOT_PREFIX = "book_slot:"
 BOOKING_SKIP_COMMENT = "booking_skip_comment"
 MY_REQUESTS_CALLBACK = "my_requests"
+MY_REQUESTS_PAGE_PREFIX = "my_requests_page:"
+MY_REQUESTS_PER_PAGE = 8
 MY_BOOKINGS_CALLBACK = "my_bookings"
 MY_REQUEST_PREFIX = "my_request:"
+REQUEST_EDIT_PREFIX = "request_edit:"
+REQUEST_EDIT_CONFIRM_PREFIX = "request_edit_confirm:"
+REQUEST_DELETE_PREFIX = "request_delete:"
 BOOK_FROM_REQUEST_PREFIX = "book_from_req:"
 CATALOG_PAGE_PREFIX = "catalog_page:"
 PICK_RESPONDER_PREFIX = "pick_responder:"
@@ -99,10 +115,15 @@ _booking_state: dict[int, dict] = {}
 
 # Request (leave demand) flow: telegram_id -> { city_id, service_id }; next step = comment or skip
 _request_state: dict[int, dict] = {}
+# Request edit: telegram_id -> request_id (int) when awaiting new comment, or { "request_id": int, "pending_comment": str }
+_request_edit_state: dict[int, int | dict] = {}
 
 # Feedback after completed booking: telegram_id -> { booking_id, trainer_id, rating? }; next = review text or skip
 FEEDBACK_BOOKING_PREFIX = "feedback_booking:"
 FEEDBACK_RATING_PREFIX = "feedback_rating:"
+REPEAT_BOOKING_PREFIX = "repeat_booking:"
+MAKE_RECURRING_PREFIX = "make_recurring:"
+BOOK_AVAILABLE_SLOT_PREFIX = "book_available_slot:"
 _feedback_state: dict[int, dict] = {}
 
 
@@ -128,6 +149,59 @@ def _trainer_name(trainer: dict) -> str:
     profile = trainer.get("profile") or {}
     name = (profile.get("first_name") or "") + " " + (profile.get("last_name") or "")
     return name.strip() or "Тренер"
+
+
+def _request_list_button_label(req: dict) -> str:
+    """Label for one request in list: city, service only. Telegram button 64 bytes max."""
+    city = (req.get("city_name") or "").strip()
+    service = (req.get("service_name") or "").strip()
+    raw = msg.CLIENT_MY_REQUESTS_BUTTON_LABEL.format(city=city, service=service)
+    if len(raw.encode("utf-8")) <= 64:
+        return raw
+    for n in range(len(raw), 0, -1):
+        if len(raw[:n].encode("utf-8")) <= 64:
+            return raw[:n].rstrip() + "…"
+    return "…"
+
+
+async def _my_requests_content(telegram_id: int, page: int = 0) -> tuple[str, InlineKeyboardMarkup]:
+    """List = buttons only (one per request). Pagination by page. Back to settings."""
+    async with async_session_factory() as db_session:
+        requests_list = await list_my_requests_with_responses(db_session, telegram_id)
+    if not requests_list:
+        back_kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text=msg.CLIENT_REQUEST_BACK, callback_data=SETTINGS_CALLBACK)],
+        ])
+        text = msg.CLIENT_MY_REQUESTS_TITLE + "\n\n" + msg.CLIENT_MY_REQUESTS_EMPTY
+        return text, back_kb
+    total = len(requests_list)
+    page = max(0, min(page, (total - 1) // MY_REQUESTS_PER_PAGE))
+    start = page * MY_REQUESTS_PER_PAGE
+    page_requests = requests_list[start : start + MY_REQUESTS_PER_PAGE]
+    text = msg.CLIENT_MY_REQUESTS_TITLE + "\n\n" + msg.CLIENT_MY_REQUESTS_LIST_HINT
+    button_rows = []
+    for req in page_requests:
+        button_rows.append([InlineKeyboardButton(
+            text=_request_list_button_label(req),
+            callback_data=f"{MY_REQUEST_PREFIX}{req['id']}",
+        )])
+    if total > MY_REQUESTS_PER_PAGE:
+        nav = []
+        if page > 0:
+            nav.append(InlineKeyboardButton(
+                text=msg.CLIENT_MY_REQUESTS_PAGE_PREV,
+                callback_data=f"{MY_REQUESTS_PAGE_PREFIX}{page - 1}",
+            ))
+        if start + MY_REQUESTS_PER_PAGE < total:
+            nav.append(InlineKeyboardButton(
+                text=msg.CLIENT_MY_REQUESTS_PAGE_NEXT,
+                callback_data=f"{MY_REQUESTS_PAGE_PREFIX}{page + 1}",
+            ))
+        if nav:
+            button_rows.append(nav)
+    button_rows.append([InlineKeyboardButton(text=msg.CLIENT_REQUEST_BACK, callback_data=SETTINGS_CALLBACK)])
+    keyboard = InlineKeyboardMarkup(inline_keyboard=button_rows)
+    return text, keyboard
 
 
 def _format_services_prices(services: list[dict]) -> str:
@@ -165,11 +239,13 @@ def _trainer_caption(trainer: dict) -> str:
     arenas_str = ", ".join(arena_names) if arena_names else "—"
     services_prices_str = _format_services_prices(trainer.get("services") or [])
     desc = (profile.get("description") or "").strip() or "—"
+    duration = profile.get("session_duration_minutes") or 45
     return msg.CLIENT_TRAINER_CARD.format(
         name=name,
         rating=rating_str,
         age=age_str,
         experience=exp_str,
+        duration=duration,
         arenas=arenas_str,
         services_prices=services_prices_str,
         description=desc,
@@ -235,43 +311,10 @@ async def cmd_request(message: Message) -> None:
 
 @router.message(Command("my_requests"))
 async def cmd_my_requests(message: Message) -> None:
-    """Open 'Мои заявки и отклики' from menu (left of attachment). Same as callback MY_REQUESTS_CALLBACK."""
+    """Open 'Мои заявки и отклики' from menu. List = one button per request."""
     telegram_id = message.from_user.id if message.from_user else 0
-    async with async_session_factory() as db_session:
-        requests_list = await list_my_requests_with_responses(db_session, telegram_id)
-    if not requests_list:
-        back_kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text=msg.CLIENT_REQUEST_BACK, callback_data=SETTINGS_CALLBACK)],
-        ])
-        await message.answer(msg.CLIENT_MY_REQUESTS_EMPTY, reply_markup=back_kb)
-        return
-    lines = [msg.CLIENT_MY_REQUESTS_TITLE]
-    buttons = []
-    for i, req in enumerate(requests_list, start=1):
-        comment = (req.get("comment") or "").strip()
-        if comment:
-            lines.append(msg.CLIENT_MY_REQUESTS_ROW.format(
-                index=i, city=req["city_name"], service=req["service_name"], comment=comment
-            ))
-        else:
-            lines.append(msg.CLIENT_MY_REQUESTS_ROW_NO_COMMENT.format(
-                index=i, city=req["city_name"], service=req["service_name"]
-            ))
-        count = len(req.get("responses") or [])
-        if count:
-            buttons.append([InlineKeyboardButton(
-                text=msg.CLIENT_MY_REQUESTS_BUTTON_RESPONSES.format(index=i, count=count),
-                callback_data=f"{MY_REQUEST_PREFIX}{req['id']}",
-            )])
-        else:
-            buttons.append([InlineKeyboardButton(
-                text=msg.CLIENT_MY_REQUESTS_NO_RESPONSES.format(index=i),
-                callback_data="req_no_resp",
-            )])
-    buttons.append([InlineKeyboardButton(text=msg.CLIENT_REQUEST_BACK, callback_data=SETTINGS_CALLBACK)])
-    body = "\n\n".join(lines[1:])
-    text = lines[0] + "\n\n" + body if body else lines[0]
-    await message.answer(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons))
+    text, keyboard = await _my_requests_content(telegram_id)
+    await message.answer(text, reply_markup=keyboard)
 
 
 def _trainer_display_for_booking(b: dict, client_telegram_id: int) -> str:
@@ -307,11 +350,13 @@ async def _my_bookings_content(telegram_id: int) -> tuple[str, InlineKeyboardMar
         day_str = CLIENT_DAYS[d.weekday()] if hasattr(d, "weekday") else ""
         st = b["start_time"]
         time_str = st.strftime("%H:%M") if hasattr(st, "strftime") else str(st)[:5]
+        duration = b.get("duration_minutes") or 45
         lines.append(msg.CLIENT_MY_BOOKINGS_ROW.format(
             index=i,
             date=date_str,
             day=day_str,
             time=time_str,
+            duration=duration,
             trainer_display=_trainer_display_for_booking(b, telegram_id),
         ))
     return "\n".join(lines), back_kb
@@ -447,6 +492,17 @@ def _format_slot_time(st, et) -> str:
         s = str(t)
         return s[:5] if len(s) >= 5 else s
     return f"{_str(st)}–{_str(et)}"
+
+
+def _slot_duration_minutes(start_time, end_time) -> int:
+    """Duration in minutes from slot start/end time (time or string)."""
+    try:
+        if hasattr(start_time, "hour") and hasattr(end_time, "hour"):
+            delta = datetime.combine(date.today(), end_time) - datetime.combine(date.today(), start_time)
+            return max(0, int(delta.total_seconds() // 60))
+    except (TypeError, ValueError):
+        pass
+    return 45
 
 
 async def _client_slots_content(trainer_id: int) -> tuple[str, InlineKeyboardMarkup | None]:
@@ -588,7 +644,8 @@ async def _finish_booking(message: Message, telegram_id: int, slot_id: int, trai
     date_str = d.strftime("%d.%m") if hasattr(d, "strftime") else str(d)
     dow = CLIENT_DAYS[d.weekday()] if hasattr(d, "weekday") else ""
     time_range = _format_slot_time(slot["start_time"], slot["end_time"])
-    text = msg.CLIENT_BOOK_SUCCESS.format(date=date_str, day=dow, time=time_range)
+    duration = _slot_duration_minutes(slot["start_time"], slot["end_time"])
+    text = msg.CLIENT_BOOK_SUCCESS.format(date=date_str, day=dow, time=time_range, duration=duration)
     await message.answer(text, reply_markup=ReplyKeyboardRemove())
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text=msg.CLIENT_BUTTON_ANOTHER_TRAINER, callback_data=CATALOG_CALLBACK)],
@@ -738,6 +795,170 @@ async def on_feedback_review_message(message: Message) -> None:
         )
     audit_log("trainer.rated", ACTOR_CLIENT_BOT, telegram_id, {"trainer_id": state["trainer_id"], "booking_id": state.get("booking_id"), "rating": state["rating"]})
     await message.answer(msg.CLIENT_FEEDBACK_THANKS)
+
+
+# --- Repeat / Become regular: scenarios ---
+# Repeat (Повторить): 1) slot next week available → book, success. 2) slot booked → no wait;
+#   if another client has recurring for this time → "закреплён за другим постоянным"; else "слот занят, можно стать постоянным или другое время".
+# 3) No slot yet → add wait_request, "когда тренер добавит слот — запишем и напишем".
+# Become permanent (Стать постоянным): 1) This client already recurring → "уже закреплено". 2) Another client has recurring for (trainer, day, time) → "закреплено за другим". 3) OK → create recurring; if slot next week free → also book and say "записали на следующую неделю".
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith(REPEAT_BOOKING_PREFIX))
+async def on_repeat_booking(callback: CallbackQuery) -> None:
+    """Repeat same time next week: book if slot available; else honest message (booked / taken by regular) or add wait."""
+    await callback.answer()
+    raw = (callback.data or "").replace(REPEAT_BOOKING_PREFIX, "").strip()
+    booking_id = safe_parse_id(raw)
+    if booking_id is None:
+        return
+    telegram_id = callback.from_user.id if callback.from_user else 0
+    async with async_session_factory() as db_session:
+        booking = await get_completed_booking_for_repeat(db_session, booking_id, telegram_id)
+    if not booking:
+        await callback.message.answer(msg.CLIENT_ERROR_BOOKING_CLOSED)
+        return
+    trainer_id = booking["trainer_id"]
+    client_id = booking["client_id"]
+    slot_date = booking["slot_date"]
+    start_time = booking["start_time"]
+    day_of_week = slot_date.weekday()
+    async with async_session_factory() as db_session:
+        status, slot_info = await get_slot_status_next_week(db_session, trainer_id, day_of_week, start_time)
+    if status == "available" and slot_info:
+        async with async_session_factory() as db_session:
+            new_booking_id = await create_booking(
+                db_session, slot_info["slot_id"], trainer_id, client_id, client_comment=None
+            )
+        if new_booking_id:
+            async with async_session_factory() as db_session:
+                await generate_reminders_for_booking(db_session, new_booking_id)
+            date_str = slot_info["slot_date"].strftime("%d.%m") if hasattr(slot_info["slot_date"], "strftime") else str(slot_info["slot_date"])
+            day_str = msg.TRAINER_DAYS[slot_info["slot_date"].weekday()] if hasattr(slot_info["slot_date"], "weekday") else ""
+            time_str = start_time.strftime("%H:%M") if hasattr(start_time, "strftime") else ""
+            await callback.message.answer(
+                msg.CLIENT_REPEAT_BOOKED.format(date=date_str, day=day_str, time=time_str)
+            )
+            return
+    if status == "booked":
+        async with async_session_factory() as db_session:
+            taken_by_regular = await has_other_active_recurring(
+                db_session, trainer_id, day_of_week, start_time, exclude_client_id=client_id
+            )
+        # Remove Repeat/Become regular buttons from the message so they don't stay visible
+        try:
+            kb = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text=msg.CLIENT_BUTTON_LEAVE_FEEDBACK, callback_data=f"feedback_booking:{booking_id}")],
+            ])
+            await callback.message.edit_reply_markup(reply_markup=kb)
+        except Exception:
+            pass
+        await callback.message.answer(
+            msg.CLIENT_REPEAT_SLOT_TAKEN_BY_REGULAR if taken_by_regular else msg.CLIENT_REPEAT_SLOT_BOOKED
+        )
+        return
+    async with async_session_factory() as db_session:
+        await add_slot_wait_request(db_session, trainer_id, client_id, day_of_week, start_time)
+    await callback.message.answer(msg.CLIENT_REPEAT_NO_SLOT_YET)
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith(MAKE_RECURRING_PREFIX))
+async def on_make_recurring(callback: CallbackQuery) -> None:
+    """Become regular: create recurring if no other client has this (trainer, day, time); optionally book next week."""
+    await callback.answer()
+    raw = (callback.data or "").replace(MAKE_RECURRING_PREFIX, "").strip()
+    booking_id = safe_parse_id(raw)
+    if booking_id is None:
+        return
+    telegram_id = callback.from_user.id if callback.from_user else 0
+    async with async_session_factory() as db_session:
+        booking = await get_completed_booking_for_repeat(db_session, booking_id, telegram_id)
+    if not booking:
+        await callback.message.answer(msg.CLIENT_ERROR_BOOKING_CLOSED)
+        return
+    trainer_id = booking["trainer_id"]
+    client_id = booking["client_id"]
+    slot_date = booking["slot_date"]
+    start_time = booking["start_time"]
+    end_time = booking["end_time"]
+    day_of_week = slot_date.weekday()
+    async with async_session_factory() as db_session:
+        existing = await get_active_recurring_for_booking(db_session, trainer_id, client_id, day_of_week, start_time)
+    if existing:
+        await callback.message.answer(msg.CLIENT_RECURRING_ALREADY)
+        return
+    async with async_session_factory() as db_session:
+        if await has_other_active_recurring(db_session, trainer_id, day_of_week, start_time, exclude_client_id=client_id):
+            try:
+                kb = InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text=msg.CLIENT_BUTTON_LEAVE_FEEDBACK, callback_data=f"feedback_booking:{booking_id}")],
+                ])
+                await callback.message.edit_reply_markup(reply_markup=kb)
+            except Exception:
+                pass
+            await callback.message.answer(msg.CLIENT_RECURRING_SLOT_TAKEN)
+            return
+    async with async_session_factory() as db_session:
+        recurring_id = await create_recurring_client_slot(
+            db_session, trainer_id, client_id, day_of_week, start_time, end_time
+        )
+    if recurring_id is None:
+        await callback.message.answer(msg.CLIENT_RECURRING_ALREADY)
+        return
+    day_str = msg.TRAINER_DAYS[day_of_week]
+    time_str = start_time.strftime("%H:%M") if hasattr(start_time, "strftime") else ""
+    async with async_session_factory() as db_session:
+        slot_info = await find_available_slot_next_week(db_session, trainer_id, day_of_week, start_time)
+    if slot_info:
+        async with async_session_factory() as db_session:
+            new_booking_id = await create_booking(
+                db_session, slot_info["slot_id"], trainer_id, client_id, client_comment=None
+            )
+        if new_booking_id:
+            async with async_session_factory() as db_session:
+                await generate_reminders_for_booking(db_session, new_booking_id)
+        date_str = slot_info["slot_date"].strftime("%d.%m") if hasattr(slot_info["slot_date"], "strftime") else str(slot_info["slot_date"])
+        await callback.message.answer(
+            msg.CLIENT_RECURRING_DONE_AND_BOOKED.format(date=date_str, day=day_str, time=time_str)
+        )
+    else:
+        await callback.message.answer(
+            msg.CLIENT_RECURRING_DONE.format(day=day_str, time=time_str)
+        )
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith(BOOK_AVAILABLE_SLOT_PREFIX))
+async def on_book_available_slot(callback: CallbackQuery) -> None:
+    """Book the slot from 'slot available' notification (repeat wait)."""
+    await callback.answer()
+    raw = (callback.data or "").replace(BOOK_AVAILABLE_SLOT_PREFIX, "").strip()
+    slot_id = safe_parse_id(raw)
+    if slot_id is None:
+        return
+    telegram_id = callback.from_user.id if callback.from_user else 0
+    async with async_session_factory() as db_session:
+        client_id = await get_or_create_client(db_session, telegram_id)
+        slot = await get_slot(db_session, slot_id)
+        if not slot or slot.get("status") != "available":
+            await callback.message.answer(msg.CLIENT_ERROR_BOOKING_UNAVAILABLE)
+            return
+        trainer_id = slot["trainer_id"]
+        new_booking_id = await create_booking(
+            db_session, slot_id, trainer_id, client_id, client_comment=None
+        )
+    if not new_booking_id:
+        await callback.message.answer(msg.CLIENT_ERROR_BOOKING_UNAVAILABLE)
+        return
+    async with async_session_factory() as db_session:
+        await generate_reminders_for_booking(db_session, new_booking_id)
+    slot_date = slot["slot_date"]
+    start_time = slot["start_time"]
+    date_str = slot_date.strftime("%d.%m") if hasattr(slot_date, "strftime") else str(slot_date)
+    day_str = msg.TRAINER_DAYS[slot_date.weekday()] if hasattr(slot_date, "weekday") else ""
+    time_str = start_time.strftime("%H:%M") if hasattr(start_time, "strftime") else ""
+    await callback.message.answer(
+        msg.CLIENT_REPEAT_BOOKED.format(date=date_str, day=day_str, time=time_str)
+    )
 
 
 CATALOG_PAGE_SIZE = 10
@@ -1142,48 +1363,28 @@ async def on_request_comment_message(message: Message) -> None:
 
 @router.callback_query(lambda c: c.data == MY_REQUESTS_CALLBACK)
 async def show_my_requests(callback: CallbackQuery) -> None:
-    """List client's requests; each with button to show responders."""
+    """List = one button per request (page 0)."""
     await callback.answer()
     telegram_id = callback.from_user.id if callback.from_user else 0
-    async with async_session_factory() as db_session:
-        requests_list = await list_my_requests_with_responses(db_session, telegram_id)
-    if not requests_list:
-        back_kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text=msg.CLIENT_REQUEST_BACK, callback_data=SETTINGS_CALLBACK)],
-        ])
-        await callback.message.answer(msg.CLIENT_MY_REQUESTS_EMPTY, reply_markup=back_kb)
-        return
-    lines = [msg.CLIENT_MY_REQUESTS_TITLE]
-    buttons = []
-    for i, req in enumerate(requests_list, start=1):
-        comment = (req.get("comment") or "").strip()
-        if comment:
-            lines.append(msg.CLIENT_MY_REQUESTS_ROW.format(
-                index=i, city=req["city_name"], service=req["service_name"], comment=comment
-            ))
-        else:
-            lines.append(msg.CLIENT_MY_REQUESTS_ROW_NO_COMMENT.format(
-                index=i, city=req["city_name"], service=req["service_name"]
-            ))
-        count = len(req.get("responses") or [])
-        if count:
-            buttons.append([InlineKeyboardButton(
-                text=msg.CLIENT_MY_REQUESTS_BUTTON_RESPONSES.format(index=i, count=count),
-                callback_data=f"{MY_REQUEST_PREFIX}{req['id']}",
-            )])
-        else:
-            buttons.append([InlineKeyboardButton(
-                text=msg.CLIENT_MY_REQUESTS_NO_RESPONSES.format(index=i),
-                callback_data="req_no_resp",
-            )])
-    buttons.append([InlineKeyboardButton(text=msg.CLIENT_REQUEST_BACK, callback_data=SETTINGS_CALLBACK)])
-    body = "\n\n".join(lines[1:])
-    text = lines[0] + "\n\n" + body if body else lines[0]
-    await callback.message.answer(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons))
+    text, keyboard = await _my_requests_content(telegram_id)
+    await callback.message.edit_text(text, reply_markup=keyboard)
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith(MY_REQUESTS_PAGE_PREFIX))
+async def show_my_requests_page(callback: CallbackQuery) -> None:
+    """Pagination for My requests list."""
+    await callback.answer()
+    try:
+        page = int(callback.data[len(MY_REQUESTS_PAGE_PREFIX):])
+    except ValueError:
+        page = 0
+    telegram_id = callback.from_user.id if callback.from_user else 0
+    text, keyboard = await _my_requests_content(telegram_id, page=page)
+    await callback.message.edit_text(text, reply_markup=keyboard)
 
 
 def _format_request_responses_keyboard(req: dict) -> InlineKeyboardMarkup:
-    """Build keyboard: for each responder, button 'Профиль: {name}' → opens full trainer card; then Back."""
+    """Build keyboard: each responder → Profile; then Edit/Delete; then Back."""
     rows = []
     for r in (req.get("responses") or []):
         name = r.get("name") or "Тренер"
@@ -1191,6 +1392,10 @@ def _format_request_responses_keyboard(req: dict) -> InlineKeyboardMarkup:
             text=f"{msg.CLIENT_BUTTON_RESPONDER_PROFILE}: {name}",
             callback_data=f"{RESPONDER_PROFILE_PREFIX}{req['id']}:{r['trainer_id']}",
         )])
+    rows.append([InlineKeyboardButton(
+        text=msg.CLIENT_REQUEST_EDIT_DELETE_BUTTON,
+        callback_data=f"{REQUEST_EDIT_PREFIX}{req['id']}",
+    )])
     rows.append([InlineKeyboardButton(text=msg.CLIENT_BUTTON_BACK_TO_REQUESTS, callback_data=MY_REQUESTS_CALLBACK)])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
@@ -1201,6 +1406,7 @@ async def show_request_responses(callback: CallbackQuery) -> None:
     await callback.answer()
     request_id = int(callback.data[len(MY_REQUEST_PREFIX):])
     telegram_id = callback.from_user.id if callback.from_user else 0
+    _request_edit_state.pop(telegram_id, None)
     async with async_session_factory() as db_session:
         requests_list = await list_my_requests_with_responses(db_session, telegram_id)
     req = next((r for r in requests_list if r["id"] == request_id), None)
@@ -1218,6 +1424,13 @@ async def show_request_responses(callback: CallbackQuery) -> None:
             index=request_index, city=req["city_name"], service=req["service_name"]
         )
     text += "\n\n" + msg.CLIENT_MY_REQUESTS_RESPONSES_HEADER.format(count=len(req.get("responses") or []))
+    for r in (req.get("responses") or []):
+        name = r.get("name") or "Тренер"
+        tc = (r.get("trainer_comment") or "").strip()
+        if tc:
+            text += "\n" + msg.CLIENT_RESPONDER_LINE.format(name=name, comment=tc)
+        else:
+            text += "\n" + msg.CLIENT_RESPONDER_LINE_NO_COMMENT.format(name=name)
     keyboard = _format_request_responses_keyboard(req)
     await callback.message.answer(text, reply_markup=keyboard)
 
@@ -1225,6 +1438,126 @@ async def show_request_responses(callback: CallbackQuery) -> None:
 @router.callback_query(lambda c: c.data == "req_no_resp")
 async def req_no_resp_callback(callback: CallbackQuery) -> None:
     await callback.answer()
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith(REQUEST_EDIT_PREFIX))
+async def show_request_edit(callback: CallbackQuery) -> None:
+    """Show edit screen: city, service, current comment; await new message or Delete."""
+    await callback.answer()
+    try:
+        request_id = int(callback.data[len(REQUEST_EDIT_PREFIX):])
+    except ValueError:
+        return
+    telegram_id = callback.from_user.id if callback.from_user else 0
+    async with async_session_factory() as db_session:
+        requests_list = await list_my_requests_with_responses(db_session, telegram_id)
+    req = next((r for r in requests_list if r["id"] == request_id), None)
+    if not req:
+        await callback.message.answer(msg.CLIENT_ERROR_REQUEST_NOT_FOUND)
+        return
+    _request_edit_state[telegram_id] = request_id
+    city = (req.get("city_name") or "").strip() or "—"
+    service = (req.get("service_name") or "").strip() or "—"
+    comment = (req.get("comment") or "").strip()
+    if comment:
+        body = msg.CLIENT_REQUEST_EDIT_CURRENT.format(city=city, service=service, comment=comment)
+    else:
+        body = msg.CLIENT_REQUEST_EDIT_CURRENT_NO_COMMENT.format(city=city, service=service)
+    text = msg.CLIENT_REQUEST_EDIT_HEAD + "\n\n" + body + "\n\n" + msg.CLIENT_REQUEST_EDIT_PROMPT
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=msg.CLIENT_REQUEST_DELETE_BUTTON, callback_data=f"{REQUEST_DELETE_PREFIX}{request_id}")],
+        [InlineKeyboardButton(text=msg.CLIENT_REQUEST_EDIT_BACK, callback_data=f"{MY_REQUEST_PREFIX}{request_id}")],
+    ])
+    await callback.message.edit_text(text, reply_markup=keyboard)
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith(REQUEST_EDIT_CONFIRM_PREFIX))
+async def confirm_request_edit(callback: CallbackQuery) -> None:
+    """Save new comment and return to request detail."""
+    await callback.answer()
+    try:
+        request_id = int(callback.data[len(REQUEST_EDIT_CONFIRM_PREFIX):])
+    except ValueError:
+        return
+    telegram_id = callback.from_user.id if callback.from_user else 0
+    state = _request_edit_state.get(telegram_id)
+    pending = state.get("pending_comment", "") if isinstance(state, dict) else None
+    if not isinstance(state, dict) or state.get("request_id") != request_id or pending is None:
+        _request_edit_state.pop(telegram_id, None)
+        await callback.message.answer(msg.CLIENT_ERROR_REQUEST_NOT_FOUND)
+        return
+    _request_edit_state.pop(telegram_id, None)
+    async with async_session_factory() as db_session:
+        new_request_id = await replace_client_request_with_new(
+            db_session, request_id, telegram_id, pending
+        )
+    if new_request_id is None:
+        await callback.message.answer(msg.CLIENT_ERROR_REQUEST_NOT_FOUND)
+        return
+    async with async_session_factory() as db_session:
+        requests_list = await list_my_requests_with_responses(db_session, telegram_id)
+    req = next((r for r in requests_list if r["id"] == new_request_id), None)
+    if not req:
+        await callback.message.answer(msg.CLIENT_REQUEST_EDIT_SAVED)
+        return
+    comment = (req.get("comment") or "").strip()
+    text = msg.CLIENT_REQUEST_EDIT_SAVED + "\n\n"
+    text += msg.CLIENT_MY_REQUESTS_ROW.format(
+        index=1, city=req["city_name"], service=req["service_name"], comment=comment
+    ) if comment else msg.CLIENT_MY_REQUESTS_ROW_NO_COMMENT.format(
+        index=1, city=req["city_name"], service=req["service_name"]
+    )
+    text += "\n\n" + msg.CLIENT_MY_REQUESTS_RESPONSES_HEADER.format(count=len(req.get("responses") or []))
+    for r in (req.get("responses") or []):
+        name = r.get("name") or "Тренер"
+        tc = (r.get("trainer_comment") or "").strip()
+        text += "\n" + (msg.CLIENT_RESPONDER_LINE.format(name=name, comment=tc) if tc else msg.CLIENT_RESPONDER_LINE_NO_COMMENT.format(name=name))
+    await callback.message.edit_text(text, reply_markup=_format_request_responses_keyboard(req))
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith(REQUEST_DELETE_PREFIX))
+async def delete_request(callback: CallbackQuery) -> None:
+    """Delete client request and show list."""
+    await callback.answer()
+    try:
+        request_id = int(callback.data[len(REQUEST_DELETE_PREFIX):])
+    except ValueError:
+        return
+    telegram_id = callback.from_user.id if callback.from_user else 0
+    _request_edit_state.pop(telegram_id, None)
+    async with async_session_factory() as db_session:
+        ok = await delete_client_request(db_session, request_id, telegram_id)
+    if not ok:
+        await callback.message.answer(msg.CLIENT_ERROR_REQUEST_NOT_FOUND)
+        return
+    await callback.answer(msg.CLIENT_REQUEST_DELETED)
+    text, keyboard = await _my_requests_content(telegram_id)
+    await callback.message.edit_text(msg.CLIENT_REQUEST_DELETED + "\n\n" + text, reply_markup=keyboard)
+
+
+@router.message(lambda m: m.text and m.from_user and m.from_user.id in _request_edit_state)
+async def on_request_edit_message(message: Message) -> None:
+    """User sent new comment text → show confirm (Save or Delete)."""
+    telegram_id = message.from_user.id if message.from_user else 0
+    state = _request_edit_state.get(telegram_id)
+    if state is None:
+        return
+    request_id = state if isinstance(state, int) else state.get("request_id")
+    if request_id is None:
+        _request_edit_state.pop(telegram_id, None)
+        return
+    comment = truncate_text(message.text, MAX_COMMENT_LEN)
+    _request_edit_state[telegram_id] = {"request_id": request_id, "pending_comment": comment}
+    preview = comment if comment else "(пусто)"
+    text = msg.CLIENT_REQUEST_EDIT_CONFIRM.format(comment=preview)
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text=msg.CLIENT_REQUEST_EDIT_SAVE, callback_data=f"{REQUEST_EDIT_CONFIRM_PREFIX}{request_id}"),
+            InlineKeyboardButton(text=msg.CLIENT_REQUEST_DELETE_BUTTON, callback_data=f"{REQUEST_DELETE_PREFIX}{request_id}"),
+        ],
+        [InlineKeyboardButton(text=msg.CLIENT_REQUEST_EDIT_BACK, callback_data=f"{MY_REQUEST_PREFIX}{request_id}")],
+    ])
+    await message.answer(text, reply_markup=keyboard)
 
 
 @router.callback_query(lambda c: c.data and c.data.startswith(RESPONDER_PROFILE_PREFIX))
@@ -1246,6 +1579,17 @@ async def show_responder_profile(callback: CallbackQuery, bot: Bot) -> None:
     if not trainer:
         await callback.message.answer(msg.CLIENT_ERROR_TRAINER_NOT_FOUND)
         return
+    client_telegram_id = callback.from_user.id if callback.from_user else 0
+    trainer_comment = None
+    async with async_session_factory() as db_session:
+        requests_list = await list_my_requests_with_responses(db_session, client_telegram_id)
+    req = next((r for r in requests_list if r["id"] == request_id), None)
+    if req:
+        resp = next((r for r in (req.get("responses") or []) if r.get("trainer_id") == trainer_id), None)
+        if resp:
+            trainer_comment = (resp.get("trainer_comment") or "").strip() or None
+    if trainer_comment:
+        await callback.message.answer(msg.CLIENT_TRAINER_COMMENT_LABEL.format(comment=trainer_comment))
     telegram_id = trainer.get("telegram_id")
     buttons = []
     if telegram_id:

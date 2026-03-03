@@ -266,8 +266,8 @@ async def replace_slots_for_day(
     duration_minutes: int = DEFAULT_SLOT_DURATION_MINUTES,
 ) -> None:
     """
-    Set slots for one calendar day: remove all available slots for that date,
-    then create one slot per hour. Booked slots are left unchanged.
+    Set slots for one calendar day: remove available slots not in start_hours,
+    ensure a slot exists for each hour in start_hours (insert only if missing; booked slots stay).
     """
     await session.execute(
         text("""
@@ -276,7 +276,17 @@ async def replace_slots_for_day(
         """),
         {"tid": trainer_id, "d": slot_date},
     )
+    r = await session.execute(
+        text("""
+            SELECT EXTRACT(HOUR FROM start_time)::int FROM slots
+            WHERE trainer_id = :tid AND slot_date = :d
+        """),
+        {"tid": trainer_id, "d": slot_date},
+    )
+    existing_hours = {int(row[0]) for row in r.fetchall()}
     for h in sorted(start_hours):
+        if h in existing_hours:
+            continue
         start_time = time(h, 0)
         end_time = _time_end(start_time, duration_minutes)
         await session.execute(
@@ -345,10 +355,10 @@ async def get_slot(
     session: AsyncSession,
     slot_id: int,
 ) -> dict | None:
-    """Get one slot by id. Returns dict with slot_date, start_time, end_time, status or None."""
+    """Get one slot by id. Returns dict with trainer_id, slot_date, start_time, end_time, status or None."""
     r = await session.execute(
         text("""
-            SELECT id, slot_date, start_time, end_time, status
+            SELECT id, trainer_id, slot_date, start_time, end_time, status
             FROM slots WHERE id = :id
         """),
         {"id": slot_id},
@@ -358,10 +368,11 @@ async def get_slot(
         return None
     return {
         "id": row[0],
-        "slot_date": row[1],
-        "start_time": row[2],
-        "end_time": row[3],
-        "status": row[4],
+        "trainer_id": row[1],
+        "slot_date": row[2],
+        "start_time": row[3],
+        "end_time": row[4],
+        "status": row[5],
     }
 
 

@@ -132,6 +132,7 @@ class TrainerProfile(Base):
     education: Mapped[Optional[str]] = mapped_column(Text(), nullable=True)
     rating_avg: Mapped[Optional[float]] = mapped_column(nullable=True)
     rating_count: Mapped[int] = mapped_column(Integer(), server_default="0", nullable=False)
+    session_duration_minutes: Mapped[Optional[int]] = mapped_column(Integer(), nullable=True, server_default="45")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
@@ -262,6 +263,9 @@ class Booking(Base):
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     notified_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    client_notified_trainer_booked_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     client: Mapped["Client"] = relationship(back_populates="bookings", lazy="raise")
 
@@ -298,6 +302,9 @@ class ClientRequest(Base):
     comment: Mapped[Optional[str]] = mapped_column(Text(), nullable=True)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default=REQUEST_STATUS_NEW)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    no_response_reminder_sent_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     client: Mapped["Client"] = relationship(back_populates="client_requests", lazy="raise")
 
@@ -305,6 +312,20 @@ class ClientRequest(Base):
 class ClientRequestResponse(Base):
     """Trainer responded to a client request: can fulfill it (one response per request per trainer)."""
     __tablename__ = "client_request_responses"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    client_request_id: Mapped[int] = mapped_column(
+        ForeignKey("client_requests.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    trainer_id: Mapped[int] = mapped_column(
+        ForeignKey("trainers.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ClientRequestDecline(Base):
+    """Trainer declined a request: hidden from their list; client is not notified."""
+    __tablename__ = "client_request_declines"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     client_request_id: Mapped[int] = mapped_column(

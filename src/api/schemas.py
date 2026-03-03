@@ -29,6 +29,7 @@ class ProfileCreate(BaseModel):
     phone: str | None = Field(default=None, max_length=LEN_PHONE)
     contacts: str | None = Field(default=None, max_length=LEN_DESCRIPTION)
     education: str | None = Field(default=None, max_length=LEN_DESCRIPTION)
+    session_duration_minutes: int | None = Field(default=None, ge=15, le=240)
 
 
 class TrainerServiceItem(BaseModel):
@@ -54,6 +55,7 @@ class ProfilePatch(BaseModel):
     phone: str | None = Field(default=None, max_length=LEN_PHONE)
     contacts: str | None = Field(default=None, max_length=LEN_DESCRIPTION)
     education: str | None = Field(default=None, max_length=LEN_DESCRIPTION)
+    session_duration_minutes: int | None = Field(default=None, ge=15, le=240)
 
 
 class TrainerProfilePatchBody(BaseModel):

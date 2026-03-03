@@ -20,6 +20,7 @@ def _profile_to_kwargs(profile: dict[str, Any]) -> dict[str, Any]:
         "phone": profile.get("phone"),
         "contacts": profile.get("contacts"),
         "education": profile.get("education"),
+        "session_duration_minutes": profile.get("session_duration_minutes"),
     }
 
 
