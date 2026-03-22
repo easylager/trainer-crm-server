@@ -7,6 +7,8 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from tests.conftest import belarus_test_phone, unique_test_telegram_id
+
 from src.application.booking_use_cases import (
     create_booking,
     generate_reminders_for_booking,
@@ -62,15 +64,16 @@ async def _create_trainer_and_slot(
     return trainer_id, slot_id, service_id
 
 
-async def _create_client(session: AsyncSession, telegram_id: int = 999888777) -> int:
+async def _create_client(session: AsyncSession, telegram_id: int) -> int:
     """Insert client. Returns client_id."""
+    phone, phone_normalized = belarus_test_phone(telegram_id)
     r = await session.execute(
         text("""
             INSERT INTO clients (telegram_id, first_name, last_name, phone, phone_normalized)
-            VALUES (:tid, 'Test', 'Client', '+375291234567', '375291234567')
+            VALUES (:tid, 'Test', 'Client', :phone, :phone_normalized)
             RETURNING id
         """),
-        {"tid": telegram_id},
+        {"tid": telegram_id, "phone": phone, "phone_normalized": phone_normalized},
     )
     (client_id,) = r.fetchone()
     await session.commit()
@@ -84,7 +87,7 @@ async def test_create_booking_success(db_session: AsyncSession) -> None:
     trainer_id, slot_id, service_id = await _create_trainer_and_slot(
         db_session, tomorrow, time(10, 0), time(11, 0)
     )
-    client_id = await _create_client(db_session, 999888777)
+    client_id = await _create_client(db_session, unique_test_telegram_id())
     booking_id = await create_booking(
         db_session,
         slot_id=slot_id,
@@ -104,7 +107,7 @@ async def test_create_booking_wrong_slot_returns_none(db_session: AsyncSession) 
     trainer_id, slot_id, service_id = await _create_trainer_and_slot(
         db_session, tomorrow, time(10, 0), time(11, 0)
     )
-    client_id = await _create_client(db_session, 999888777)
+    client_id = await _create_client(db_session, unique_test_telegram_id())
     wrong_slot_id = slot_id + 10_000
     booking_id = await create_booking(
         db_session,
@@ -123,8 +126,8 @@ async def test_create_booking_same_slot_twice_second_fails(db_session: AsyncSess
     trainer_id, slot_id, service_id = await _create_trainer_and_slot(
         db_session, tomorrow, time(10, 0), time(11, 0)
     )
-    client_id_1 = await _create_client(db_session, 111111111)
-    client_id_2 = await _create_client(db_session, 222222222)
+    client_id_1 = await _create_client(db_session, unique_test_telegram_id())
+    client_id_2 = await _create_client(db_session, unique_test_telegram_id())
     first = await create_booking(
         db_session, slot_id, trainer_id, client_id_1, service_id=service_id
     )
@@ -143,7 +146,8 @@ async def test_generate_reminders_and_list_pending(db_session: AsyncSession) -> 
     trainer_id, slot_id, service_id = await _create_trainer_and_slot(
         db_session, future, time(14, 0), time(15, 0)
     )
-    client_id = await _create_client(db_session, 333333333)
+    client_tg = unique_test_telegram_id()
+    client_id = await _create_client(db_session, client_tg)
     booking_id = await create_booking(
         db_session, slot_id, trainer_id, client_id, service_id=service_id
     )
@@ -152,28 +156,28 @@ async def test_generate_reminders_and_list_pending(db_session: AsyncSession) -> 
 
     # No reminder due yet (send_at in future)
     pending = await list_pending_reminders(db_session)
-    due_for_this_booking = [p for p in pending if p.get("client_telegram_id") == 333333333]
+    due_for_this_booking = [p for p in pending if p.get("client_telegram_id") == client_tg]
     assert len(due_for_this_booking) == 0
 
     # Insert one reminder with send_at in the past
     await db_session.execute(
         text("""
             INSERT INTO reminders (booking_id, client_telegram_id, kind, send_at, status)
-            VALUES (:bid, 333333333, 'before_24h', now() - interval '1 minute', 'pending')
+            VALUES (:bid, :ctg, 'before_24h', now() - interval '1 minute', 'pending')
         """),
-        {"bid": booking_id},
+        {"bid": booking_id, "ctg": client_tg},
     )
     await db_session.commit()
 
     pending = await list_pending_reminders(db_session)
-    due_for_this_booking = [p for p in pending if p.get("client_telegram_id") == 333333333]
+    due_for_this_booking = [p for p in pending if p.get("client_telegram_id") == client_tg]
     assert len(due_for_this_booking) == 1
     assert due_for_this_booking[0]["kind"] == "before_24h"
     reminder_id = due_for_this_booking[0]["id"]
 
     await mark_reminder_sent(db_session, reminder_id)
     pending_after = await list_pending_reminders(db_session)
-    due_after = [p for p in pending_after if p.get("client_telegram_id") == 333333333]
+    due_after = [p for p in pending_after if p.get("client_telegram_id") == client_tg]
     assert len(due_after) == 0
 
 
@@ -184,7 +188,7 @@ async def test_list_bookings_to_complete_and_mark_completed(db_session: AsyncSes
     trainer_id, slot_id, service_id = await _create_trainer_and_slot(
         db_session, yesterday, time(9, 0), time(10, 0), status="booked"
     )
-    client_id = await _create_client(db_session, 444444444)
+    client_id = await _create_client(db_session, unique_test_telegram_id())
     r = await db_session.execute(
         text("""
             INSERT INTO bookings (slot_id, trainer_id, client_id, service_id, status)
