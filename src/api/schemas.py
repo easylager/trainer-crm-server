@@ -76,3 +76,13 @@ class PresignBody(BaseModel):
 
 class TrainerStatusPatchBody(BaseModel):
     status: TrainerStatus
+
+
+class TrainerTermsCreateBody(BaseModel):
+    """Admin: create trainer_terms legal document metadata. File is stored in bucket under file_key."""
+    version: int = Field(..., ge=1)
+    title: str | None = Field(default=None, max_length=256)
+    file_key: str = Field(..., max_length=LEN_FILE_KEY)
+    make_active: bool = True
+
+

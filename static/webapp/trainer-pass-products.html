@@ -1,0 +1,1304 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Абонементы и сертификаты</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --tg-theme-bg-color: #1a1a1a;
+      --tg-theme-text-color: #f5f5f5;
+      --tg-theme-hint-color: #8e8e93;
+      --tg-theme-button-color: #F7A600;
+      --tg-theme-button-text-color: #1a1a1a;
+      --tg-theme-secondary-bg-color: #2a2a2a;
+      --card-bg: #242424;
+      --accent: #F7A600;
+    }
+    @media (prefers-color-scheme: light) {
+      :root {
+        --tg-theme-bg-color: #FFFBEB;
+        --tg-theme-text-color: #1a1a1a;
+        --tg-theme-hint-color: #666;
+        --tg-theme-secondary-bg-color: #FFF3CC;
+        --card-bg: #fff;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: 'Manrope', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--tg-theme-bg-color);
+      color: var(--tg-theme-text-color);
+      min-height: 100vh;
+      padding: 16px;
+      padding-bottom: calc(24px + env(safe-area-inset-bottom, 0));
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 24px;
+    }
+    .header h1 { margin: 0; font-size: 24px; font-weight: 700; }
+    .loading, .error { text-align: center; padding: 48px 24px; color: var(--tg-theme-hint-color); }
+    .error { color: #ef4444; }
+    .empty-state {
+      text-align: center;
+      padding: 32px 20px;
+      color: var(--tg-theme-hint-color);
+      font-size: 14px;
+    }
+    .products-hint {
+      font-size: 13px;
+      color: var(--tg-theme-hint-color);
+      margin-bottom: 12px;
+    }
+    .product-card {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 18px;
+      margin-bottom: 10px;
+      border-radius: 14px;
+      background: var(--card-bg);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-left: 4px solid var(--accent);
+      width: 100%;
+      font: inherit;
+      color: inherit;
+      text-align: left;
+      cursor: pointer;
+    }
+    @media (prefers-color-scheme: light) {
+      .product-card { border-left-color: var(--accent); }
+    }
+    .product-card:active { opacity: 0.9; }
+    .product-card.inactive { opacity: 0.65; }
+    .product-card .main { flex: 1; min-width: 0; }
+    .product-card .title { font-weight: 600; font-size: 16px; margin-bottom: 4px; }
+    .product-card .meta { font-size: 14px; color: var(--tg-theme-hint-color); }
+    .product-card .arrow { color: var(--tg-theme-hint-color); font-size: 16px; }
+    .btn-add {
+      display: block;
+      width: 100%;
+      padding: 14px 18px;
+      margin-top: 16px;
+      border-radius: 14px;
+      border: none;
+      font-size: 16px;
+      font-weight: 600;
+      background: var(--accent);
+      color: var(--tg-theme-button-text-color);
+      cursor: pointer;
+    }
+    .btn-add:active { opacity: 0.9; }
+    [data-screen] { display: none; }
+    [data-screen].active { display: block; }
+    .form-group { margin-bottom: 16px; }
+    .form-group label {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--tg-theme-hint-color);
+      margin-bottom: 6px;
+    }
+    .form-group input {
+      width: 100%;
+      padding: 12px 14px;
+      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,0.15);
+      background: var(--tg-theme-secondary-bg-color);
+      color: var(--tg-theme-text-color);
+      font-size: 16px;
+    }
+    @media (prefers-color-scheme: light) {
+      .form-group input { border-color: rgba(0,0,0,0.12); }
+    }
+    .form-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 24px;
+    }
+    .form-actions button {
+      flex: 1;
+      padding: 14px;
+      border-radius: 12px;
+      border: none;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .btn-save {
+      background: var(--accent);
+      color: var(--tg-theme-button-text-color);
+    }
+    .btn-cancel {
+      background: var(--tg-theme-secondary-bg-color);
+      color: var(--tg-theme-text-color);
+    }
+    .btn-delete {
+      margin-top: 16px;
+      padding: 12px;
+      border-radius: 12px;
+      border: 1px solid #ef4444;
+      background: transparent;
+      color: #ef4444;
+      font-size: 14px;
+      width: 100%;
+      cursor: pointer;
+    }
+    .back-link {
+      display: inline-block;
+      margin-bottom: 20px;
+      font-size: 15px;
+      color: var(--accent);
+      text-decoration: none;
+    }
+    .back-link:active { opacity: 0.8; }
+    .toggle-active {
+      font-size: 12px;
+      padding: 4px 8px;
+      border-radius: 8px;
+      margin-left: 8px;
+    }
+    .toggle-active.on { background: rgba(52, 199, 89, 0.2); color: #34c759; }
+    .toggle-active.off { background: rgba(142, 142, 147, 0.25); color: var(--tg-theme-hint-color); }
+    .tabs {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 20px;
+      padding: 4px;
+      background: var(--tg-theme-secondary-bg-color);
+      border-radius: 12px;
+    }
+    .tabs .tab {
+      flex: 1;
+      padding: 10px 14px;
+      border: none;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 600;
+      background: transparent;
+      color: var(--tg-theme-hint-color);
+      cursor: pointer;
+    }
+    .tabs .tab.active {
+      background: var(--card-bg);
+      color: var(--tg-theme-text-color);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+    }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+    .cert-product-card {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 18px;
+      margin-bottom: 10px;
+      border-radius: 14px;
+      background: var(--card-bg);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-left: 4px solid var(--accent);
+      width: 100%;
+      font: inherit;
+      color: inherit;
+      text-align: left;
+      cursor: pointer;
+    }
+    .cert-product-card.inactive { opacity: 0.65; }
+    .cert-product-card .main { flex: 1; min-width: 0; }
+    .cert-product-card .title { font-weight: 600; font-size: 16px; }
+    .cert-product-card .arrow { color: var(--tg-theme-hint-color); font-size: 16px; }
+    .cert-empty { text-align: center; padding: 32px 20px; color: var(--tg-theme-hint-color); font-size: 14px; }
+    .form-group-checkbox { margin-bottom: 16px; }
+    .form-group-checkbox label { display: flex; align-items: center; gap: 10px; font-size: 15px; cursor: pointer; }
+    .form-group-checkbox input[type="checkbox"] { width: 20px; height: 20px; }
+    .form-group select {
+      width: 100%;
+      padding: 12px 14px;
+      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,0.15);
+      background: var(--tg-theme-secondary-bg-color);
+      color: var(--tg-theme-text-color);
+      font-size: 16px;
+    }
+    @media (prefers-color-scheme: light) {
+      .form-group select { border-color: rgba(0,0,0,0.12); }
+    }
+    .btn-secondary {
+      background: var(--tg-theme-secondary-bg-color);
+      color: var(--tg-theme-text-color);
+    }
+    .cert-code-result {
+      margin-top: 24px;
+      padding: 20px;
+      border-radius: 14px;
+      background: var(--card-bg);
+      text-align: center;
+    }
+    .cert-code-result .code {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      margin: 12px 0;
+      word-break: break-all;
+    }
+    .btn-copy {
+      margin-top: 16px;
+      padding: 14px 24px;
+      border-radius: 12px;
+      border: none;
+      font-size: 16px;
+      font-weight: 600;
+      background: var(--accent);
+      color: var(--tg-theme-button-text-color);
+      cursor: pointer;
+      width: 100%;
+    }
+    .btn-copy:active { opacity: 0.9; }
+    .cert-issued-section { margin-top: 24px; padding-top: 20px; border-top: 1px solid rgba(255,255,255,0.1); }
+    @media (prefers-color-scheme: light) {
+      .cert-issued-section { border-top-color: rgba(0,0,0,0.08); }
+    }
+    .cert-issued-section h3 { font-size: 15px; font-weight: 600; margin: 0 0 12px 0; color: var(--tg-theme-hint-color); }
+    .cert-issued-card { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; margin-bottom: 8px; border-radius: 12px; background: var(--card-bg); border: 1px solid rgba(255,255,255,0.06); }
+    @media (prefers-color-scheme: light) {
+      .cert-issued-card { border-color: rgba(0,0,0,0.06); }
+    }
+    .cert-issued-card .main { flex: 1; min-width: 0; }
+    .cert-issued-card .code { font-weight: 600; font-size: 14px; }
+    .cert-issued-card .meta { font-size: 12px; color: var(--tg-theme-hint-color); margin-top: 2px; }
+    .cert-issued-card .cert-download-link { font-size: 12px; white-space: nowrap; color: var(--tg-theme-link-color, var(--accent, #2481cc)); text-decoration: none; }
+    .cert-issued-empty { font-size: 13px; color: var(--tg-theme-hint-color); padding: 12px 0; }
+    .pass-issue-search { margin-bottom: 10px; }
+    .pass-issue-search input { width: 100%; padding: 10px 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.15); background: var(--tg-theme-secondary-bg-color); color: var(--tg-theme-text-color); font-size: 15px; box-sizing: border-box; }
+    @media (prefers-color-scheme: light) {
+      .pass-issue-search input { border-color: rgba(0,0,0,0.12); }
+    }
+    .pass-issue-client-list { max-height: 200px; overflow-y: auto; margin-bottom: 12px; }
+    .pass-issue-client-card { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; margin-bottom: 6px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.08); background: var(--tg-theme-secondary-bg-color); cursor: pointer; width: 100%; font: inherit; color: inherit; text-align: left; }
+    @media (prefers-color-scheme: light) {
+      .pass-issue-client-card { border-color: rgba(0,0,0,0.08); }
+    }
+    .pass-issue-client-card:active { opacity: 0.9; }
+    .pass-issue-client-card.selected { border-color: var(--accent); background: rgba(36, 129, 204, 0.15); }
+    .pass-issue-client-name { font-weight: 600; font-size: 15px; }
+    .pass-issue-client-phone { font-size: 13px; color: var(--tg-theme-hint-color); }
+    .pass-issue-selected { margin-bottom: 12px; padding: 10px 12px; border-radius: 10px; background: var(--tg-theme-secondary-bg-color); font-size: 14px; }
+    .pass-issue-selected strong { display: block; margin-bottom: 4px; }
+    .pass-issue-change-client { font-size: 13px; color: var(--accent); cursor: pointer; border: none; background: none; padding: 0; }
+    .pass-issue-success {
+      text-align: center;
+      padding: 24px 16px;
+      margin-top: 20px;
+      border-radius: 14px;
+      background: var(--tg-theme-secondary-bg-color);
+      border: 1px solid rgba(247, 166, 0, 0.35);
+    }
+    .pass-issue-success-icon {
+      width: 48px;
+      height: 48px;
+      margin: 0 auto 12px;
+      border-radius: 50%;
+      background: var(--accent);
+      color: var(--tg-theme-button-text-color);
+      font-size: 24px;
+      font-weight: 700;
+      line-height: 48px;
+    }
+    .pass-issue-success-text {
+      margin: 0 0 16px;
+      font-size: 17px;
+      font-weight: 600;
+      color: var(--tg-theme-text-color);
+    }
+    .pass-issue-success .btn-save { min-width: 160px; }
+  </style>
+</head>
+<body>
+  <div id="screenList" data-screen class="active">
+    <div class="header">
+      <h1>📦 Абонементы / Сертификаты</h1>
+    </div>
+    <div class="tabs">
+      <button type="button" class="tab active" id="tabPasses" data-tab="passes">Абонементы</button>
+      <button type="button" class="tab" id="tabCerts" data-tab="certs">Сертификаты</button>
+    </div>
+    <div id="panelPasses" class="tab-panel active">
+      <p class="products-hint" id="productsHint" style="display:none;">Нажмите на абонемент, чтобы изменить или удалить</p>
+      <div id="listContent">
+        <div class="loading">Загрузка…</div>
+      </div>
+      <button type="button" class="btn-add" id="btnIssuePass">📦 Выдать абонемент</button>
+      <button type="button" class="btn-add btn-secondary" id="btnPassWelcomeLink" style="margin-top:8px;">🔗 Создать welcome-ссылку (абонемент)</button>
+      <button type="button" class="btn-add btn-secondary" id="btnAdd" style="margin-top:10px;">+ Добавить абонемент</button>
+    </div>
+    <div id="panelCerts" class="tab-panel">
+      <p class="products-hint" id="certsHint" style="display:none;">Нажмите на сертификат, чтобы изменить или удалить</p>
+      <div id="certListContent">
+        <div class="loading">Загрузка…</div>
+      </div>
+      <button type="button" class="btn-add" id="btnIssueCert">🎁 Выдать сертификат</button>
+      <button type="button" class="btn-add btn-secondary" id="btnAddCert" style="margin-top:10px;">+ Добавить сертификат</button>
+      <p class="cert-issued-hint" style="font-size:13px; color: var(--tg-theme-hint-color); margin-top:16px;">Списание с сертификата происходит автоматически, когда вы отмечаете занятие как «Проведено» в расписании.</p>
+    </div>
+  </div>
+
+  <div id="screenCertIssue" data-screen>
+    <a href="#" class="back-link" id="backFromCertIssue">← К списку</a>
+    <div class="header">
+      <h1>Выдать сертификат</h1>
+      <p class="cert-issue-desc" style="font-size:13px; color: var(--tg-theme-hint-color); margin-top:4px;">Клиент оплачивает → вы указываете имя получателя и email → сертификат уходит на почту. Получатель активирует код в боте и записывается к вам.</p>
+    </div>
+    <div class="form-group">
+      <label for="issueProductSelect">Сертификат (номинал)</label>
+      <select id="issueProductSelect">
+        <option value="">— Выберите —</option>
+      </select>
+    </div>
+    <div class="form-group" id="certIssueClientSearchGroup">
+      <label for="certIssueClientSearch">Клиент (необязательно — для подстановки телефона или привязки в CRM)</label>
+      <div class="pass-issue-search">
+        <input type="search" id="certIssueClientSearch" placeholder="Поиск по имени или телефону" autocomplete="off">
+      </div>
+      <div id="certIssueClientList" class="pass-issue-client-list"></div>
+    </div>
+    <div class="form-group" id="certIssueSelectedGroup" style="display:none;">
+      <div class="pass-issue-selected">
+        <strong id="certIssueSelectedName"></strong>
+        <span id="certIssueSelectedPhone" class="pass-issue-client-phone"></span>
+        <button type="button" class="pass-issue-change-client" id="certIssueChangeClient">Выбрать другого</button>
+      </div>
+    </div>
+    <div class="form-group">
+      <label for="issueRecipientName">Имя получателя (кому в подарок — указывается в сертификате)</label>
+      <input type="text" id="issueRecipientName" placeholder="Иван Иванов" maxlength="200">
+    </div>
+    <div class="form-group">
+      <label for="issueRecipientEmail">Email (необязательно — отправим сертификат PDF на почту)</label>
+      <input type="email" id="issueRecipientEmail" placeholder="email@example.com" maxlength="255">
+    </div>
+    <div class="form-actions">
+      <button type="button" class="btn-cancel" id="btnCancelCertIssue">Отмена</button>
+      <button type="button" class="btn-save" id="btnSubmitCertIssue">Выдать</button>
+    </div>
+    <div id="certIssueResult" class="cert-code-result" style="display:none;">
+      <div class="detail-label" style="font-size:13px; color: var(--tg-theme-hint-color);">Код сертификата</div>
+      <div class="code" id="certIssueCode"></div>
+      <button type="button" class="btn-copy" id="btnCopyCertCode">Скопировать код</button>
+      <p id="certIssueEmailSent" style="display:none; margin-top:0.5rem; color:var(--tg-theme-hint-color, #666); font-size:13px;"></p>
+      <p style="margin-top:0.5rem;"><a id="certIssueDownloadLink" href="#" target="_blank" rel="noopener" style="display:none;">Скачать сертификат (PDF)</a></p>
+    </div>
+  </div>
+
+  <div id="screenPassWelcomeLink" data-screen>
+    <a href="#" class="back-link" id="backFromPassWelcomeLink">← К списку</a>
+    <div class="header">
+      <h1>🔗 Welcome-ссылка (абонемент)</h1>
+      <p class="welcome-link-desc" style="font-size:14px; color: var(--tg-theme-hint-color); margin-top:6px;">Клиент перейдёт по ссылке — ему подставятся город, услуга и тренер; сможет записаться или купить абонемент. Ссылка одноразовая.</p>
+    </div>
+    <div class="form-group">
+      <label for="passWelcomeProductSelect">Абонемент</label>
+      <select id="passWelcomeProductSelect">
+        <option value="">— Выберите —</option>
+      </select>
+    </div>
+    <div class="form-actions">
+      <button type="button" class="btn-cancel" id="btnCancelPassWelcomeLink">Отмена</button>
+      <button type="button" class="btn-save" id="btnGetPassWelcomeLink">Создать ссылку</button>
+    </div>
+    <div id="passWelcomeLinkResult" class="cert-code-result" style="display:none;">
+      <p class="welcome-link-success-text" style="font-weight:600; margin-bottom:12px;">Отправьте клиенту ссылку:</p>
+      <div class="code" id="passWelcomeLinkUrl" style="word-break:break-all; font-size:12px;"></div>
+      <button type="button" class="btn-copy" id="btnCopyPassWelcomeLinkUrl">Скопировать ссылку</button>
+    </div>
+  </div>
+
+  <div id="screenPassIssue" data-screen>
+    <a href="#" class="back-link" id="backFromPassIssue">← К списку</a>
+    <div class="header">
+      <h1>Выдать абонемент</h1>
+    </div>
+    <div class="form-group" id="passIssueClientSearchGroup">
+      <label for="passIssueClientSearch">Клиент</label>
+      <div class="pass-issue-search">
+        <input type="search" id="passIssueClientSearch" placeholder="Поиск по имени или телефону" autocomplete="off">
+      </div>
+      <div id="passIssueClientList" class="pass-issue-client-list"></div>
+    </div>
+    <div class="form-group" id="passIssueSelectedGroup" style="display:none;">
+      <div class="pass-issue-selected">
+        <strong id="passIssueSelectedName"></strong>
+        <span id="passIssueSelectedPhone" class="pass-issue-client-phone"></span>
+        <button type="button" class="pass-issue-change-client" id="passIssueChangeClient">Выбрать другого</button>
+      </div>
+    </div>
+    <div class="form-group" id="passIssueProductGroup">
+      <label for="passIssueProductSelect">Абонемент</label>
+      <select id="passIssueProductSelect">
+        <option value="">— Выберите абонемент —</option>
+      </select>
+    </div>
+    <div class="form-actions" id="passIssueFormActions">
+      <button type="button" class="btn-cancel" id="btnCancelPassIssue">Отмена</button>
+      <button type="button" class="btn-save" id="btnSubmitPassIssue">Выдать</button>
+    </div>
+    <div id="passIssueSuccess" class="pass-issue-success" style="display:none;">
+      <div class="pass-issue-success-icon">✓</div>
+      <p class="pass-issue-success-text">Абонемент выдан</p>
+      <button type="button" class="btn-save" id="btnPassIssueSuccessBack">К списку</button>
+    </div>
+  </div>
+
+  <div id="screenForm" data-screen>
+    <a href="#" class="back-link" id="backFromForm">← К списку</a>
+    <div class="header">
+      <h1 id="formTitle">Новый абонемент</h1>
+    </div>
+    <div class="form-group">
+      <label for="inputName">Название</label>
+      <input type="text" id="inputName" placeholder="Например: 5 занятий" maxlength="128">
+    </div>
+    <div class="form-group">
+      <label for="inputSessions">Количество занятий</label>
+      <input type="number" id="inputSessions" min="1" max="999" placeholder="5">
+    </div>
+    <div class="form-group">
+      <label for="inputPrice">Цена, BYN</label>
+      <input type="number" id="inputPrice" min="0" step="1" placeholder="200" inputmode="numeric">
+    </div>
+    <div class="form-group">
+      <label for="inputServiceId">Услуга</label>
+      <select id="inputServiceId">
+        <option value="">Любая услуга</option>
+      </select>
+    </div>
+    <div class="form-group" id="groupActive" style="display: none;">
+      <label>
+        <input type="checkbox" id="inputActive" checked>
+        <span id="labelActive">Активен (клиенты видят в каталоге)</span>
+      </label>
+    </div>
+    <div class="form-actions">
+      <button type="button" class="btn-cancel" id="btnCancelForm">Отмена</button>
+      <button type="button" class="btn-save" id="btnSaveForm">Сохранить</button>
+    </div>
+    <button type="button" class="btn-delete" id="btnDeleteProduct" style="display: none;">Удалить абонемент</button>
+  </div>
+
+  <div id="screenCertForm" data-screen>
+    <a href="#" class="back-link" id="backFromCertForm">← К списку</a>
+    <div class="header">
+      <h1 id="certFormTitle">Новый сертификат</h1>
+    </div>
+    <div class="form-group-checkbox">
+      <label>
+        <input type="checkbox" id="certAnyAmount" checked>
+        <span>Любая сумма (клиент и тренер договариваются)</span>
+      </label>
+    </div>
+    <div class="form-group" id="certAmountGroup" style="display: none;">
+      <label for="certAmountByn">Сумма, BYN</label>
+      <input type="number" id="certAmountByn" min="1" step="1" placeholder="100" inputmode="numeric">
+    </div>
+    <div class="form-group" id="certActiveGroup" style="display: none;">
+      <label>
+        <input type="checkbox" id="certActive" checked>
+        <span>Активен (клиенты видят в каталоге)</span>
+      </label>
+    </div>
+    <div class="form-actions">
+      <button type="button" class="btn-cancel" id="btnCancelCertForm">Отмена</button>
+      <button type="button" class="btn-save" id="btnSaveCertForm">Сохранить</button>
+    </div>
+    <button type="button" class="btn-delete" id="btnDeleteCert" style="display: none;">Удалить сертификат</button>
+  </div>
+
+  <script>
+    (function() {
+      var tg = window.Telegram && window.Telegram.WebApp;
+      if (tg) { tg.ready(); tg.expand(); }
+      var initData = tg ? tg.initData : '';
+      function initDataParam() {
+        return initData ? '?init_data=' + encodeURIComponent(initData) : '';
+      }
+      function headers() {
+        var h = { 'Content-Type': 'application/json' };
+        if (initData) h['X-Telegram-Init-Data'] = initData;
+        return h;
+      }
+      function apiUrl(path) { return '/api/webapp' + path; }
+
+      function showScreen(id) {
+        document.querySelectorAll('[data-screen]').forEach(function(el) { el.classList.remove('active'); });
+        var el = document.getElementById(id);
+        if (el) el.classList.add('active');
+      }
+      function setTab(tab) {
+        state.activeTab = tab;
+        document.querySelectorAll('.tab').forEach(function(t) { t.classList.toggle('active', t.dataset.tab === tab); });
+        document.querySelectorAll('.tab-panel').forEach(function(p) {
+          var isPasses = p.id === 'panelPasses';
+          p.classList.toggle('active', (tab === 'passes' && isPasses) || (tab === 'certs' && !isPasses));
+        });
+      }
+
+      var state = { items: [], editingId: null, certItems: [], editingCertId: null, activeTab: 'passes', clients: [], services: [], prefillClientIdForPassIssue: null, passIssueFilteredClients: [], passIssueSelectedClientId: null, passIssueSelectedClient: null, certIssueSubmitting: false, certIssueIdempotencyKey: null };
+
+      function formatPrice(cents) {
+        if (cents == null) return '—';
+        return (cents / 100).toFixed(2).replace(/\.?0+$/, '') + ' BYN';
+      }
+
+      function escapeHtml(s) {
+        if (s == null) return '';
+        var d = document.createElement('div');
+        d.textContent = s;
+        return d.innerHTML;
+      }
+
+      function renderList() {
+        var wrap = document.getElementById('listContent');
+        var hintEl = document.getElementById('productsHint');
+        if (hintEl) hintEl.style.display = state.items.length > 0 ? 'block' : 'none';
+        if (state.items.length === 0) {
+          wrap.innerHTML = '<div class="empty-state">Нет абонементов. Добавьте первый — клиенты смогут покупать их у вас через платформу.</div>';
+          return;
+        }
+        var html = '';
+        state.items.forEach(function(p) {
+          var serviceLabel = (p.service_name && p.service_name.trim()) ? p.service_name.trim() : 'любая услуга';
+          var meta = p.sessions_total + ' занятий · ' + formatPrice(p.price_cents) + ' · ' + serviceLabel;
+          var cardClass = 'product-card';
+          if (!p.is_active) cardClass += ' inactive';
+          html += '<button type="button" class="' + cardClass + '" data-id="' + p.id + '">';
+          html += '<div class="main">';
+          html += '<div class="title">' + escapeHtml(p.name) + '</div>';
+          html += '<div class="meta">' + meta + '</div>';
+          html += '</div>';
+          html += '<span class="arrow">→</span></button>';
+        });
+        wrap.innerHTML = html;
+        wrap.querySelectorAll('.product-card').forEach(function(btn) {
+          btn.onclick = function() {
+            var id = parseInt(btn.dataset.id, 10);
+            var p = state.items.find(function(x) { return x.id === id; });
+            if (p) { state.editingId = p.id; openForm(p); showScreen('screenForm'); }
+          };
+        });
+      }
+
+      function updateActiveLabel() {
+        var checked = document.getElementById('inputActive').checked;
+        document.getElementById('labelActive').textContent = checked
+          ? 'Активен (клиенты видят в каталоге)'
+          : 'Неактивен (скрыт из каталога)';
+      }
+
+      function fillServiceSelect() {
+        var sel = document.getElementById('inputServiceId');
+        if (!sel) return;
+        var current = sel.value;
+        sel.innerHTML = '<option value="">Любая услуга</option>';
+        (state.services || []).forEach(function(s) {
+          var opt = document.createElement('option');
+          opt.value = s.id;
+          opt.textContent = s.name || '—';
+          sel.appendChild(opt);
+        });
+        if (current) sel.value = current;
+      }
+      function openForm(product) {
+        document.getElementById('formTitle').textContent = product ? 'Редактировать абонемент' : 'Новый абонемент';
+        document.getElementById('inputName').value = product ? product.name : '';
+        document.getElementById('inputSessions').value = product ? String(product.sessions_total) : '';
+        document.getElementById('inputPrice').value = product ? String(Math.round(product.price_cents / 100)) : '';
+        document.getElementById('inputActive').checked = product ? product.is_active : true;
+        updateActiveLabel();
+        document.getElementById('groupActive').style.display = product ? 'block' : 'none';
+        document.getElementById('btnDeleteProduct').style.display = product ? 'block' : 'none';
+        state.editingId = product ? product.id : null;
+        var serviceIdVal = product && product.service_id ? String(product.service_id) : '';
+        if (state.services.length === 0) {
+          fetch(apiUrl('/trainer/my-services') + initDataParam(), { headers: headers() })
+            .then(function(r) { return r.json(); })
+            .then(function(data) { state.services = data.services || []; fillServiceSelect(); document.getElementById('inputServiceId').value = serviceIdVal; })
+            .catch(function() { fillServiceSelect(); document.getElementById('inputServiceId').value = serviceIdVal; });
+        } else {
+          fillServiceSelect();
+          document.getElementById('inputServiceId').value = serviceIdVal;
+        }
+      }
+
+      function loadList() {
+        document.getElementById('listContent').innerHTML = '<div class="loading">Загрузка…</div>';
+        fetch(apiUrl('/trainer/pass-products') + initDataParam(), { headers: headers() })
+          .then(function(r) { return r.json(); })
+          .then(function(data) {
+            state.items = data.items || [];
+            renderList();
+          })
+          .catch(function() {
+            document.getElementById('listContent').innerHTML = '<div class="error">Не удалось загрузить. Откройте из бота.</div>';
+          });
+      }
+
+      document.getElementById('inputActive').onchange = function() {
+        updateActiveLabel();
+      };
+
+      function applyPassIssueClientFilter() {
+        var q = (document.getElementById('passIssueClientSearch').value || '').trim();
+        if (!q) {
+          state.passIssueFilteredClients = (state.clients || []).slice();
+        } else {
+          var qLower = q.toLowerCase();
+          var digits = q.replace(/\D/g, '');
+          state.passIssueFilteredClients = (state.clients || []).filter(function(c) {
+            var name = ((c.first_name || '') + ' ' + (c.last_name || '')).trim().toLowerCase();
+            var phone = (c.phone || '').toLowerCase();
+            var phoneDigits = (c.phone || '').replace(/\D/g, '');
+            return name.indexOf(qLower) !== -1
+              || phone.indexOf(qLower) !== -1
+              || (digits && phoneDigits.indexOf(digits) !== -1);
+          });
+        }
+        renderPassIssueClientList();
+      }
+      function renderPassIssueClientList() {
+        var wrap = document.getElementById('passIssueClientList');
+        var list = state.passIssueSelectedClientId ? [] : state.passIssueFilteredClients;
+        if (list.length === 0) {
+          wrap.innerHTML = '<div class="cert-issued-empty">' + (state.passIssueFilteredClients.length === 0 && (document.getElementById('passIssueClientSearch').value || '').trim() ? 'Никого не найдено' : 'Введите имя или телефон') + '</div>';
+          return;
+        }
+        var html = '';
+        list.forEach(function(cl) {
+          var name = [cl.first_name, cl.last_name].filter(Boolean).join(' ').trim() || cl.phone || 'Клиент #' + cl.id;
+          var phone = (cl.phone || '').trim() || '—';
+          var selected = state.passIssueSelectedClientId === cl.id ? ' selected' : '';
+          html += '<button type="button" class="pass-issue-client-card' + selected + '" data-id="' + cl.id + '">';
+          html += '<span class="pass-issue-client-name">' + escapeHtml(name) + '</span>';
+          html += '<span class="pass-issue-client-phone">' + escapeHtml(phone) + '</span>';
+          html += '</button>';
+        });
+        wrap.innerHTML = html;
+        wrap.querySelectorAll('.pass-issue-client-card').forEach(function(btn) {
+          btn.onclick = function() {
+            var id = parseInt(btn.dataset.id, 10);
+            var cl = state.clients.find(function(c) { return c.id === id; });
+            if (!cl) return;
+            state.passIssueSelectedClientId = id;
+            state.passIssueSelectedClient = cl;
+            document.getElementById('passIssueSelectedName').textContent = [cl.first_name, cl.last_name].filter(Boolean).join(' ').trim() || cl.phone || 'Клиент #' + cl.id;
+            document.getElementById('passIssueSelectedPhone').textContent = (cl.phone || '').trim() ? (cl.phone || '') : '';
+            document.getElementById('passIssueSelectedPhone').style.display = (cl.phone || '').trim() ? '' : 'none';
+            document.getElementById('passIssueClientSearchGroup').style.display = 'none';
+            document.getElementById('passIssueSelectedGroup').style.display = 'block';
+          };
+        });
+      }
+      function openPassIssueScreen() {
+        state.passIssueSelectedClientId = null;
+        state.passIssueSelectedClient = null;
+        document.getElementById('passIssueFormActions').style.display = '';
+        document.getElementById('passIssueProductGroup').style.display = '';
+        document.getElementById('passIssueSuccess').style.display = 'none';
+        var searchEl = document.getElementById('passIssueClientSearch');
+        searchEl.value = '';
+        document.getElementById('passIssueClientSearchGroup').style.display = 'block';
+        document.getElementById('passIssueSelectedGroup').style.display = 'none';
+        state.passIssueFilteredClients = (state.clients || []).slice();
+        renderPassIssueClientList();
+        var productSelect = document.getElementById('passIssueProductSelect');
+        productSelect.innerHTML = '<option value="">— Выберите абонемент —</option>';
+        var activePasses = (state.items || []).filter(function(p) { return p.is_active; });
+        activePasses.forEach(function(p) {
+          var opt = document.createElement('option');
+          opt.value = p.id;
+          var serviceLabel = (p.service_name && p.service_name.trim()) ? p.service_name.trim() : 'любая услуга';
+          opt.textContent = (p.name || '') + ' · ' + (p.sessions_total || 0) + ' занятий · ' + serviceLabel;
+          productSelect.appendChild(opt);
+        });
+        if (state.prefillClientIdForPassIssue) {
+          var prefillId = state.prefillClientIdForPassIssue;
+          state.prefillClientIdForPassIssue = null;
+          var cl = state.clients.find(function(c) { return c.id === prefillId; });
+          if (cl) {
+            state.passIssueSelectedClientId = cl.id;
+            state.passIssueSelectedClient = cl;
+            document.getElementById('passIssueSelectedName').textContent = [cl.first_name, cl.last_name].filter(Boolean).join(' ').trim() || cl.phone || 'Клиент #' + cl.id;
+            document.getElementById('passIssueSelectedPhone').textContent = (cl.phone || '').trim() || '';
+            document.getElementById('passIssueSelectedPhone').style.display = (cl.phone || '').trim() ? '' : 'none';
+            document.getElementById('passIssueClientSearchGroup').style.display = 'none';
+            document.getElementById('passIssueSelectedGroup').style.display = 'block';
+          }
+        }
+        showScreen('screenPassIssue');
+      }
+      document.getElementById('passIssueClientSearch').oninput = function() {
+        applyPassIssueClientFilter();
+      };
+      document.getElementById('passIssueChangeClient').onclick = function() {
+        state.passIssueSelectedClientId = null;
+        state.passIssueSelectedClient = null;
+        document.getElementById('passIssueClientSearch').value = '';
+        document.getElementById('passIssueClientSearchGroup').style.display = 'block';
+        document.getElementById('passIssueSelectedGroup').style.display = 'none';
+        state.passIssueFilteredClients = (state.clients || []).slice();
+        renderPassIssueClientList();
+      };
+      document.getElementById('btnIssuePass').onclick = function() {
+        function openWhenReady() {
+          openPassIssueScreen();
+        }
+        var itemsPromise = state.items.length > 0
+          ? Promise.resolve()
+          : fetch(apiUrl('/trainer/pass-products') + initDataParam(), { headers: headers() })
+              .then(function(r) { return r.json(); })
+              .then(function(data) { state.items = data.items || []; });
+        var clientsPromise = fetch(apiUrl('/trainer/clients') + initDataParam(), { headers: headers() })
+          .then(function(r) { return r.json(); })
+          .then(function(data) { state.clients = data.clients || []; })
+          .catch(function() { state.clients = []; });
+        Promise.all([itemsPromise, clientsPromise]).then(function() {
+          if (state.items.filter(function(p) { return p.is_active; }).length === 0) {
+            alert('Сначала добавьте хотя бы один активный абонемент.');
+            return;
+          }
+          if (!state.clients.length) {
+            alert('Нет клиентов. Клиенты появятся после записей на занятия.');
+            return;
+          }
+          openWhenReady();
+        });
+      };
+      document.getElementById('backFromPassIssue').onclick = function(e) {
+        e.preventDefault();
+        showScreen('screenList');
+        setTab('passes');
+      };
+      document.getElementById('btnCancelPassIssue').onclick = function() {
+        showScreen('screenList');
+        setTab('passes');
+      };
+      document.getElementById('btnPassIssueSuccessBack').onclick = function() {
+        showScreen('screenList');
+        setTab('passes');
+      };
+      document.getElementById('btnSubmitPassIssue').onclick = function() {
+        var clientId = state.passIssueSelectedClientId;
+        var productId = parseInt(document.getElementById('passIssueProductSelect').value, 10);
+        if (!clientId) { alert('Выберите клиента'); return; }
+        if (!productId) { alert('Выберите абонемент'); return; }
+        var btn = document.getElementById('btnSubmitPassIssue');
+        btn.disabled = true;
+        fetch(apiUrl('/trainer/clients/' + clientId + '/pass-issue'), {
+          method: 'POST',
+          headers: headers(),
+          body: JSON.stringify({ pass_product_id: productId })
+        })
+          .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
+          .then(function(o) {
+            btn.disabled = false;
+            if (o.ok && o.data.id) {
+              document.getElementById('passIssueFormActions').style.display = 'none';
+              document.getElementById('passIssueClientSearchGroup').style.display = 'none';
+              document.getElementById('passIssueSelectedGroup').style.display = 'none';
+              document.getElementById('passIssueProductGroup').style.display = 'none';
+              document.getElementById('passIssueSuccess').style.display = 'block';
+            } else {
+              alert(o.data.detail || 'Ошибка выдачи');
+            }
+          })
+          .catch(function() {
+            btn.disabled = false;
+            alert('Ошибка сети');
+          });
+      };
+
+      document.getElementById('tabPasses').onclick = function() { setTab('passes'); };
+      document.getElementById('tabCerts').onclick = function() {
+        setTab('certs');
+        if (state.certItems.length === 0) loadCertList();
+      };
+
+      document.getElementById('certAnyAmount').onchange = function() {
+        document.getElementById('certAmountGroup').style.display = document.getElementById('certAnyAmount').checked ? 'none' : 'block';
+      };
+
+      function formatCertAmount(c) {
+        if (c.amount_cents == null) return 'Любая сумма';
+        return (c.amount_cents / 100) + ' BYN';
+      }
+      function renderCertList() {
+        var wrap = document.getElementById('certListContent');
+        var hintEl = document.getElementById('certsHint');
+        if (hintEl) hintEl.style.display = state.certItems.length > 0 ? 'block' : 'none';
+        if (state.certItems.length === 0) {
+          wrap.innerHTML = '<div class="cert-empty">Нет сертификатов. Сертификат — это номинал на определённую сумму (или любая сумма). Клиенты увидят это в карточке тренера.</div>';
+          return;
+        }
+        var html = '';
+        state.certItems.forEach(function(c) {
+          var cardClass = 'cert-product-card';
+          if (!c.is_active) cardClass += ' inactive';
+          html += '<button type="button" class="' + cardClass + '" data-id="' + c.id + '">';
+          html += '<div class="main"><div class="title">' + escapeHtml(formatCertAmount(c)) + '</div></div>';
+          html += '<span class="arrow">→</span></button>';
+        });
+        wrap.innerHTML = html;
+        wrap.querySelectorAll('.cert-product-card').forEach(function(btn) {
+          btn.onclick = function() {
+            var id = parseInt(btn.dataset.id, 10);
+            var c = state.certItems.find(function(x) { return x.id === id; });
+            if (c) { state.editingCertId = c.id; openCertForm(c); showScreen('screenCertForm'); }
+          };
+        });
+      }
+      function loadCertList() {
+        document.getElementById('certListContent').innerHTML = '<div class="loading">Загрузка…</div>';
+        fetch(apiUrl('/trainer/certificate-products') + initDataParam(), { headers: headers() })
+          .then(function(r) { return r.json(); })
+          .then(function(data) {
+            state.certItems = data.items || [];
+            renderCertList();
+          })
+          .catch(function() {
+            document.getElementById('certListContent').innerHTML = '<div class="error">Не удалось загрузить.</div>';
+          });
+      }
+      function openCertForm(cert) {
+        document.getElementById('certFormTitle').textContent = cert ? 'Редактировать сертификат' : 'Новый сертификат';
+        var anyAmount = cert ? cert.amount_cents == null : true;
+        document.getElementById('certAnyAmount').checked = anyAmount;
+        document.getElementById('certAmountGroup').style.display = anyAmount ? 'none' : 'block';
+        document.getElementById('certAmountByn').value = cert && cert.amount_cents != null ? String(Math.round(cert.amount_cents / 100)) : '';
+        document.getElementById('certActive').checked = cert ? cert.is_active : true;
+        document.getElementById('certActiveGroup').style.display = cert ? 'block' : 'none';
+        document.getElementById('btnDeleteCert').style.display = cert ? 'block' : 'none';
+        state.editingCertId = cert ? cert.id : null;
+      }
+      document.getElementById('btnAddCert').onclick = function() {
+        state.editingCertId = null;
+        openCertForm(null);
+        showScreen('screenCertForm');
+      };
+
+      function filterCertIssueClients() {
+        var q = (document.getElementById('certIssueClientSearch').value || '').trim();
+        if (!q) {
+          state.certIssueFilteredClients = (state.clients || []).slice();
+        } else {
+          var qLower = q.toLowerCase();
+          var digits = q.replace(/\D/g, '');
+          state.certIssueFilteredClients = (state.clients || []).filter(function(c) {
+            var name = ((c.first_name || '') + ' ' + (c.last_name || '')).trim().toLowerCase();
+            var phone = (c.phone || '').toLowerCase();
+            var phoneDigits = (c.phone || '').replace(/\D/g, '');
+            return name.indexOf(qLower) !== -1
+              || phone.indexOf(qLower) !== -1
+              || (digits && phoneDigits.indexOf(digits) !== -1);
+          });
+        }
+        renderCertIssueClientList();
+      }
+      function renderCertIssueClientList() {
+        var wrap = document.getElementById('certIssueClientList');
+        var list = state.certIssueSelectedClientId ? [] : (state.certIssueFilteredClients || []);
+        if (list.length === 0) {
+          var q = (document.getElementById('certIssueClientSearch').value || '').trim();
+          wrap.innerHTML = '<div class="cert-issued-empty">' + (q ? 'Никого не найдено' : 'Введите имя или телефон или оставьте пусто') + '</div>';
+          return;
+        }
+        var html = '';
+        list.forEach(function(cl) {
+          var name = [cl.first_name, cl.last_name].filter(Boolean).join(' ').trim() || cl.phone || 'Клиент #' + cl.id;
+          var phone = (cl.phone || '').trim() || '—';
+          var selected = state.certIssueSelectedClientId === cl.id ? ' selected' : '';
+          html += '<button type="button" class="pass-issue-client-card' + selected + '" data-id="' + cl.id + '">';
+          html += '<span class="pass-issue-client-name">' + escapeHtml(name) + '</span>';
+          html += '<span class="pass-issue-client-phone">' + escapeHtml(phone) + '</span>';
+          html += '</button>';
+        });
+        wrap.innerHTML = html;
+        wrap.querySelectorAll('.pass-issue-client-card').forEach(function(btn) {
+          btn.onclick = function() {
+            var id = parseInt(btn.dataset.id, 10);
+            var cl = state.clients.find(function(c) { return c.id === id; });
+            if (!cl) return;
+            state.certIssueSelectedClientId = id;
+            state.certIssueSelectedClient = cl;
+            document.getElementById('certIssueSelectedName').textContent = [cl.first_name, cl.last_name].filter(Boolean).join(' ').trim() || cl.phone || 'Клиент #' + cl.id;
+            document.getElementById('certIssueSelectedPhone').textContent = (cl.phone || '').trim() ? (cl.phone || '') : '';
+            document.getElementById('certIssueSelectedPhone').style.display = (cl.phone || '').trim() ? '' : 'none';
+            document.getElementById('certIssueClientSearchGroup').style.display = 'none';
+            document.getElementById('certIssueSelectedGroup').style.display = 'block';
+          };
+        });
+      }
+      function openCertIssueScreen() {
+        state.certIssueSelectedClientId = null;
+        state.certIssueSelectedClient = null;
+        state.certIssueFilteredClients = (state.clients || []).slice();
+        var productSelect = document.getElementById('issueProductSelect');
+        productSelect.innerHTML = '<option value="">— Выберите —</option>';
+        var activeCerts = (state.certItems || []).filter(function(c) { return c.is_active; });
+        activeCerts.forEach(function(c) {
+          var opt = document.createElement('option');
+          opt.value = c.id;
+          opt.textContent = formatCertAmount(c);
+          productSelect.appendChild(opt);
+        });
+        document.getElementById('certIssueClientSearch').value = '';
+        document.getElementById('certIssueClientSearchGroup').style.display = 'block';
+        document.getElementById('certIssueSelectedGroup').style.display = 'none';
+        renderCertIssueClientList();
+        document.getElementById('issueRecipientName').value = '';
+        document.getElementById('issueRecipientEmail').value = '';
+        document.getElementById('certIssueResult').style.display = 'none';
+        document.getElementById('certIssueEmailSent').style.display = 'none';
+        document.getElementById('certIssueDownloadLink').style.display = 'none';
+        showScreen('screenCertIssue');
+      }
+      document.getElementById('btnIssueCert').onclick = function() {
+        function openWhenReady() {
+          openCertIssueScreen();
+        }
+        var certsPromise = state.certItems.length > 0
+          ? Promise.resolve()
+          : fetch(apiUrl('/trainer/certificate-products') + initDataParam(), { headers: headers() })
+              .then(function(r) { return r.json(); })
+              .then(function(data) { state.certItems = data.items || []; });
+        var clientsPromise = fetch(apiUrl('/trainer/clients') + initDataParam(), { headers: headers() })
+          .then(function(r) { return r.json(); })
+          .then(function(data) { state.clients = data.clients || []; })
+          .catch(function() { state.clients = []; });
+        Promise.all([certsPromise, clientsPromise]).then(openWhenReady);
+      };
+      document.getElementById('certIssueClientSearch').addEventListener('input', filterCertIssueClients);
+      document.getElementById('certIssueChangeClient').onclick = function() {
+        state.certIssueSelectedClientId = null;
+        state.certIssueSelectedClient = null;
+        document.getElementById('certIssueClientSearch').value = '';
+        document.getElementById('certIssueClientSearchGroup').style.display = 'block';
+        document.getElementById('certIssueSelectedGroup').style.display = 'none';
+        state.certIssueFilteredClients = (state.clients || []).slice();
+        renderCertIssueClientList();
+      };
+      document.getElementById('backFromCertIssue').onclick = function(e) {
+        e.preventDefault();
+        showScreen('screenList');
+        setTab('certs');
+      };
+      document.getElementById('btnCancelCertIssue').onclick = function() {
+        showScreen('screenList');
+        setTab('certs');
+      };
+      document.getElementById('btnSubmitCertIssue').onclick = function() {
+        if (state.certIssueSubmitting) return;
+        var productId = parseInt(document.getElementById('issueProductSelect').value, 10);
+        var recipientName = (document.getElementById('issueRecipientName').value || '').trim();
+        var recipientEmail = (document.getElementById('issueRecipientEmail').value || '').trim() || null;
+        if (!productId) { alert('Выберите сертификат (номинал)'); return; }
+        if (!recipientName) { alert('Укажите имя получателя — оно будет указано в сертификате'); return; }
+        var body = { certificate_product_id: productId, recipient_name: recipientName };
+        if (recipientEmail) body.recipient_email = recipientEmail;
+
+        var btn = document.getElementById('btnSubmitCertIssue');
+        var btnText = btn.textContent;
+        state.certIssueSubmitting = true;
+        btn.disabled = true;
+        btn.textContent = 'Отправляем…';
+        state.certIssueIdempotencyKey = state.certIssueIdempotencyKey || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 'key-' + Date.now());
+
+        var reqHeaders = headers();
+        reqHeaders['Idempotency-Key'] = state.certIssueIdempotencyKey;
+        fetch(apiUrl('/trainer/certificate-issue'), {
+          method: 'POST',
+          headers: reqHeaders,
+          body: JSON.stringify(body)
+        })
+          .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
+          .then(function(o) {
+            if (o.ok && o.data.code) {
+              document.getElementById('certIssueCode').textContent = o.data.code;
+              document.getElementById('certIssueResult').style.display = 'block';
+              state.lastIssuedCode = o.data.code;
+              var downloadLink = document.getElementById('certIssueDownloadLink');
+              if (o.data.id && o.data.file_url) {
+                downloadLink.href = apiUrl('/trainer/certificates/' + o.data.id + '/file') + initDataParam();
+                downloadLink.style.display = 'inline';
+              } else {
+                downloadLink.style.display = 'none';
+              }
+              var emailSentEl = document.getElementById('certIssueEmailSent');
+              if (recipientEmail) {
+                emailSentEl.style.display = 'block';
+                if (o.data.email_sent) {
+                  emailSentEl.textContent = 'Сертификат отправлен на ' + recipientEmail;
+                  emailSentEl.style.color = '';
+                } else if (o.data.email_pending) {
+                  emailSentEl.textContent = 'Письмо будет отправлено в ближайшее время (при сбое — повторная отправка по очереди).';
+                  emailSentEl.style.color = 'var(--tg-theme-hint-color, #666)';
+                } else {
+                  emailSentEl.textContent = 'Письмо не удалось отправить на ' + recipientEmail + '. Проверьте настройки SMTP в .env и логи сервера.';
+                  emailSentEl.style.color = 'var(--tg-theme-destructive-text-color, #e53935)';
+                }
+              } else {
+                emailSentEl.style.display = 'none';
+              }
+            } else {
+              alert(o.data.detail || 'Ошибка выдачи');
+            }
+          })
+          .catch(function() { alert('Ошибка сети'); })
+          .finally(function() {
+            state.certIssueSubmitting = false;
+            state.certIssueIdempotencyKey = null;
+            btn.disabled = false;
+            btn.textContent = btnText;
+          });
+      };
+      document.getElementById('btnCopyCertCode').onclick = function() {
+        var code = document.getElementById('certIssueCode').textContent;
+        if (!code) return;
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(code).then(function() {
+            alert('Код скопирован');
+          }).catch(function() { alert('Код: ' + code); });
+        } else {
+          alert('Код: ' + code);
+        }
+      };
+
+      function openPassWelcomeLinkScreen() {
+        var sel = document.getElementById('passWelcomeProductSelect');
+        sel.innerHTML = '<option value="">— Выберите —</option>';
+        var activePasses = (state.items || []).filter(function(p) { return p.is_active !== false; });
+        activePasses.forEach(function(p) {
+          var opt = document.createElement('option');
+          opt.value = p.id;
+          opt.textContent = (p.name || '').trim() || (p.sessions_total + ' занятий · ' + formatPrice(p.price_cents));
+          sel.appendChild(opt);
+        });
+        document.getElementById('passWelcomeLinkResult').style.display = 'none';
+        showScreen('screenPassWelcomeLink');
+      }
+      document.getElementById('btnPassWelcomeLink').onclick = function() {
+        var promise = state.items.length > 0
+          ? Promise.resolve()
+          : fetch(apiUrl('/trainer/pass-products') + initDataParam(), { headers: headers() })
+              .then(function(r) { return r.json(); })
+              .then(function(data) { state.items = data.items || []; })
+              .catch(function() { state.items = []; });
+        promise.then(openPassWelcomeLinkScreen).catch(function() { state.items = []; openPassWelcomeLinkScreen(); });
+      };
+      document.getElementById('backFromPassWelcomeLink').onclick = function(e) {
+        e.preventDefault();
+        showScreen('screenList');
+        setTab('passes');
+      };
+      document.getElementById('btnCancelPassWelcomeLink').onclick = function() {
+        showScreen('screenList');
+        setTab('passes');
+      };
+      document.getElementById('btnGetPassWelcomeLink').onclick = function() {
+        var productId = parseInt(document.getElementById('passWelcomeProductSelect').value, 10);
+        if (!productId) { alert('Выберите абонемент'); return; }
+        var url = apiUrl('/trainer/welcome-link/pass') + (initDataParam() ? initDataParam() + '&' : '?') + 'pass_product_id=' + productId;
+        fetch(url, { headers: headers() })
+          .then(function(r) { return r.json(); })
+          .then(function(o) {
+            var link = o.welcome_link;
+            if (link) {
+              document.getElementById('passWelcomeLinkUrl').textContent = link;
+              document.getElementById('passWelcomeLinkResult').style.display = 'block';
+            } else {
+              alert('Ссылка недоступна. Проверьте настройки бота.');
+            }
+          })
+          .catch(function() { alert('Ошибка сети'); });
+      };
+      document.getElementById('btnCopyPassWelcomeLinkUrl').onclick = function() {
+        var link = document.getElementById('passWelcomeLinkUrl').textContent;
+        if (!link) return;
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(link).then(function() { alert('Ссылка скопирована'); }).catch(function() { alert(link); });
+        } else { alert(link); }
+      };
+
+      document.getElementById('backFromCertForm').onclick = function(e) {
+        e.preventDefault();
+        showScreen('screenList');
+        setTab('certs');
+        loadCertList();
+      };
+      document.getElementById('btnCancelCertForm').onclick = function() {
+        showScreen('screenList');
+        setTab('certs');
+        loadCertList();
+      };
+      document.getElementById('btnSaveCertForm').onclick = function() {
+        var name = (document.getElementById('certName').value || '').trim();
+        if (!name) { alert('Укажите название сертификата'); return; }
+        var anyAmount = document.getElementById('certAnyAmount').checked;
+        var amountCents = null;
+        if (!anyAmount) {
+          var byn = parseInt(document.getElementById('certAmountByn').value, 10);
+          if (isNaN(byn) || byn < 1) { alert('Укажите сумму в BYN'); return; }
+          amountCents = byn * 100;
+        }
+        var expiresDaysInput = document.getElementById('certExpiresDays');
+        var expiresInDays = null;
+        if (expiresDaysInput && expiresDaysInput.value) {
+          var d = parseInt(expiresDaysInput.value, 10);
+          if (!isNaN(d) && d > 0) { expiresInDays = d; }
+        }
+        if (state.editingCertId) {
+          var body = {
+            name: name,
+            amount_cents: amountCents,
+            expires_in_days: expiresInDays,
+            is_active: document.getElementById('certActive').checked
+          };
+          fetch(apiUrl('/trainer/certificate-products/' + state.editingCertId), {
+            method: 'PATCH',
+            headers: headers(),
+            body: JSON.stringify(body)
+          })
+            .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
+            .then(function(o) {
+              if (o.ok) { showScreen('screenList'); setTab('certs'); loadCertList(); }
+              else { alert(o.data.detail || 'Ошибка сохранения'); }
+            })
+            .catch(function() { alert('Ошибка сети'); });
+        } else {
+          fetch(apiUrl('/trainer/certificate-products'), {
+            method: 'POST',
+            headers: headers(),
+            body: JSON.stringify({
+              name: name,
+              amount_cents: amountCents,
+              expires_in_days: expiresInDays,
+              sort_order: 0
+            })
+          })
+            .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
+            .then(function(o) {
+              if (o.ok && o.data.id) { showScreen('screenList'); setTab('certs'); loadCertList(); }
+              else { alert(o.data.detail || 'Ошибка создания'); }
+            })
+            .catch(function() { alert('Ошибка сети'); });
+        }
+      };
+      document.getElementById('btnDeleteCert').onclick = function() {
+        if (!state.editingCertId || !confirm('Удалить этот сертификат?')) return;
+        fetch(apiUrl('/trainer/certificate-products/' + state.editingCertId), {
+          method: 'DELETE',
+          headers: headers()
+        })
+          .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
+          .then(function(o) {
+            if (o.ok) { showScreen('screenList'); setTab('certs'); loadCertList(); }
+            else { alert(o.data.detail || 'Ошибка удаления'); }
+          })
+          .catch(function() { alert('Ошибка сети'); });
+      };
+
+      document.getElementById('btnAdd').onclick = function() {
+        state.editingId = null;
+        openForm(null);
+        showScreen('screenForm');
+      };
+
+      document.getElementById('backFromForm').onclick = function(e) {
+        e.preventDefault();
+        showScreen('screenList');
+        loadList();
+      };
+      document.getElementById('btnCancelForm').onclick = function() {
+        showScreen('screenList');
+        loadList();
+      };
+
+      document.getElementById('btnSaveForm').onclick = function() {
+        var name = (document.getElementById('inputName').value || '').trim();
+        var sessions = parseInt(document.getElementById('inputSessions').value, 10);
+        var priceByn = parseInt(document.getElementById('inputPrice').value, 10);
+        if (!name) { alert('Введите название'); return; }
+        if (!sessions || sessions < 1) { alert('Укажите количество занятий'); return; }
+        if (isNaN(priceByn) || priceByn < 0) { alert('Укажите цену в BYN'); return; }
+        var priceCents = priceByn * 100;
+
+        var serviceVal = document.getElementById('inputServiceId').value;
+        var serviceId = serviceVal ? parseInt(serviceVal, 10) : null;
+        if (state.editingId) {
+          var body = { name: name, sessions_total: sessions, price_cents: priceCents, is_active: document.getElementById('inputActive').checked, service_id: serviceId };
+          fetch(apiUrl('/trainer/pass-products/' + state.editingId), {
+            method: 'PATCH',
+            headers: headers(),
+            body: JSON.stringify(body)
+          })
+            .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
+            .then(function(o) {
+              if (o.ok) { showScreen('screenList'); loadList(); }
+              else { alert(o.data.detail || 'Ошибка сохранения'); }
+            })
+            .catch(function() { alert('Ошибка сети'); });
+        } else {
+          var body = { name: name, sessions_total: sessions, price_cents: priceCents, service_id: serviceId };
+          fetch(apiUrl('/trainer/pass-products'), {
+            method: 'POST',
+            headers: headers(),
+            body: JSON.stringify(body)
+          })
+            .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
+            .then(function(o) {
+              if (o.ok && o.data.id) { showScreen('screenList'); loadList(); }
+              else { alert(o.data.detail || 'Ошибка создания'); }
+            })
+            .catch(function() { alert('Ошибка сети'); });
+        }
+      };
+
+      document.getElementById('btnDeleteProduct').onclick = function() {
+        if (!state.editingId || !confirm('Удалить этот абонемент? Удаление возможно только если по нему не было покупок.')) return;
+        fetch(apiUrl('/trainer/pass-products/' + state.editingId), {
+          method: 'DELETE',
+          headers: headers()
+        })
+          .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
+          .then(function(o) {
+            if (o.ok) { showScreen('screenList'); loadList(); }
+            else { alert(o.data.detail || 'Не удалось удалить. Возможно, по абонементу уже были покупки — тогда деактивируйте его (снимите галочку «Активен»).'); }
+          })
+          .catch(function() { alert('Ошибка сети'); });
+      };
+
+      loadList();
+      loadCertList();
+      (function checkPassIssuePrefill() {
+        var params = new URLSearchParams(window.location.search || '');
+        var cid = params.get('client_id');
+        if (!cid) return;
+        var clientId = parseInt(cid, 10);
+        if (!clientId) return;
+        state.prefillClientIdForPassIssue = clientId;
+        setTab('passes');
+        var itemsP = fetch(apiUrl('/trainer/pass-products') + initDataParam(), { headers: headers() }).then(function(r) { return r.json(); }).then(function(data) { state.items = data.items || []; });
+        var clientsP = fetch(apiUrl('/trainer/clients') + initDataParam(), { headers: headers() }).then(function(r) { return r.json(); }).then(function(data) { state.clients = data.clients || []; }).catch(function() { state.clients = []; });
+        Promise.all([itemsP, clientsP]).then(function() {
+          if (state.items.filter(function(p) { return p.is_active; }).length === 0 || !state.clients.length) return;
+          openPassIssueScreen();
+        });
+      })();
+    })();
+  </script>
+</body>
+</html>

@@ -8,6 +8,7 @@ from src.api.schemas import (
     TrainerCreateBody,
     TrainerProfilePatchBody,
     TrainerStatusPatchBody,
+    TrainerTermsCreateBody,
 )
 from src.application.trainer_use_cases import (
     create_trainer,
@@ -15,6 +16,11 @@ from src.application.trainer_use_cases import (
     list_trainers,
     update_trainer_profile,
     update_trainer_status,
+)
+from src.application.legal_use_cases import (
+    accept_trainer_terms,
+    create_trainer_terms_document,
+    get_trainer_terms_status,
 )
 
 router = APIRouter(prefix="/api/trainers", tags=["trainers"])
@@ -102,3 +108,46 @@ async def patch_status(
         raise _NOT_FOUND
     audit_log("trainer.status_updated", ACTOR_API, "api", {"trainer_id": trainer_id, "status": body.status})
     return {"ok": True}
+
+
+@router.post("/admin/legal/trainer-terms")
+async def admin_create_trainer_terms(
+    body: TrainerTermsCreateBody,
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Admin: register trainer_terms document stored in bucket under file_key."""
+    # NOTE: auth for admin is expected at API gateway / infra level.
+    doc = await create_trainer_terms_document(
+        session,
+        version=body.version,
+        title=body.title,
+        file_key=body.file_key,
+        make_active=body.make_active,
+    )
+    audit_log("legal.trainer_terms_created", ACTOR_API, "api", {"document_id": doc["id"], "version": body.version})
+    return doc
+
+
+@router.get("/{trainer_id}/terms-status")
+async def get_trainer_terms_status_api(
+    trainer_id: int,
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Return status of trainer_terms acceptance for given trainer (for site onboarding)."""
+    # We do not perform auth here; caller must ensure trainer_id belongs to current user.
+    status = await get_trainer_terms_status(session, trainer_id)
+    return status
+
+
+@router.post("/{trainer_id}/terms-accept")
+async def post_trainer_terms_accept(
+    trainer_id: int,
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Mark active trainer_terms as accepted by trainer (idempotent)."""
+    ok = await accept_trainer_terms(session, trainer_id)
+    if not ok:
+        raise HTTPException(status_code=400, detail="No active trainer_terms configured")
+    audit_log("legal.trainer_terms_accepted", ACTOR_API, "api", {"trainer_id": trainer_id})
+    return {"ok": True}
+

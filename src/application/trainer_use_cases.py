@@ -5,6 +5,8 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.subscription_use_cases import create_trial_subscription
+from src.infrastructure.db.models import TRAINER_STATUS_ACTIVE
 from src.infrastructure.repositories import TrainerRepository
 
 
@@ -100,11 +102,15 @@ async def list_trainers(
 
 
 async def update_trainer_status(session: AsyncSession, trainer_id: int, status: str) -> bool:
-    """Set trainer status. Returns False if trainer not found."""
+    """Set trainer status. Returns False if trainer not found.
+    When status is set to active, creates trial subscription if trainer has not used trial yet.
+    """
     repo = TrainerRepository(session)
     if not await repo.update_status(trainer_id, status):
         return False
     await session.commit()
+    if status == TRAINER_STATUS_ACTIVE:
+        await create_trial_subscription(session, trainer_id)
     return True
 
 

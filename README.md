@@ -9,9 +9,16 @@ CRM-платформа для тренеров в Беларуси. Два Teleg
 - PostgreSQL
 - SQLAlchemy 2.0 + Alembic
 
-## Деплой на Railway (push → deploy)
+## Cursor: MCP (AI + локальная разработка)
 
-Подключи репо к Railway, добавь PostgreSQL и 3 сервиса для ботов — пошагово: **[docs/RAILWAY_DEPLOY.md](docs/RAILWAY_DEPLOY.md)**.
+В репозитории есть [`.cursor/mcp.json`](.cursor/mcp.json): filesystem, fetch, PostgreSQL (read-only), GitHub, Playwright.  
+Подстановка секретов через переменные окружения (`POSTGRES_MCP_URL`, `GITHUB_PERSONAL_ACCESS_TOKEN`). Подробности и чеклист после правок — **[docs/CURSOR_MCP.md](docs/CURSOR_MCP.md)**.
+
+## Деплой и CI/CD
+
+- **Railway:** PostgreSQL + API + 3 бота + **notification service** — **[docs/RAILWAY_DEPLOY.md](docs/RAILWAY_DEPLOY.md)**.
+- **Staging / production, ветки, чеклист Railway:** **[docs/CI_CD.md](docs/CI_CD.md)**.
+- Тесты на GitHub Actions: [`.github/workflows/tests.yml`](.github/workflows/tests.yml) (`main`, `master`, `develop`, `staging`).
 
 ---
 

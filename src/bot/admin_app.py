@@ -26,6 +26,8 @@ async def setup_menu_and_commands(bot: Bot) -> None:
         [
             BotCommand(command="pending", description="Тренеры на модерацию"),
             BotCommand(command="stats", description="Статистика платформы"),
+            BotCommand(command="support", description="Обращения в поддержку"),
+            BotCommand(command="dicts", description="Города и арены"),
         ]
     )
     await bot.set_chat_menu_button(menu_button=MenuButtonCommands())

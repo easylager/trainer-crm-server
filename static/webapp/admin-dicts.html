@@ -1,0 +1,706 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Справочники: города и арены</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--tg-theme-bg-color, #1a1a1a);
+      color: var(--tg-theme-text-color, #f5f5f5);
+      min-height: 100vh;
+      padding: 16px;
+      padding-bottom: calc(24px + env(safe-area-inset-bottom, 0));
+    }
+    .header { margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; }
+    .header h1 { margin: 0; font-size: 20px; font-weight: 700; }
+    .pill {
+      font-size: 11px;
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.08);
+      color: var(--tg-theme-hint-color, #9ca3af);
+    }
+    .columns {
+      display: grid;
+      grid-template-columns: 1.1fr 1.4fr;
+      gap: 12px;
+      min-width: 0;
+    }
+    @media (max-width: 600px) {
+      .columns { grid-template-columns: 1fr; }
+    }
+    .section-title {
+      font-size: 13px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--tg-theme-hint-color, #9ca3af);
+      margin-bottom: 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .btn {
+      border: none;
+      border-radius: 999px;
+      padding: 6px 10px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      background: var(--tg-theme-button-color, #2ea6ff);
+      color: var(--tg-theme-button-text-color, #fff);
+    }
+    .btn-ghost {
+      background: transparent;
+      color: var(--tg-theme-link-color, #38bdf8);
+      border-radius: 999px;
+      padding: 4px 8px;
+      border: 1px solid rgba(148, 163, 184, 0.4);
+      font-size: 11px;
+      cursor: pointer;
+    }
+    .card {
+      background: var(--tg-theme-secondary-bg-color, #111827);
+      border-radius: 14px;
+      padding: 10px;
+      border: 1px solid rgba(148, 163, 184, 0.3);
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    #citiesCard {
+      max-height: 220px;
+    }
+    #arenasCard {
+      max-height: calc(100vh - 140px);
+    }
+    .list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .city-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 10px;
+      border-radius: 10px;
+      cursor: pointer;
+    }
+    .city-row.active {
+      background: rgba(59, 130, 246, 0.15);
+      border: 1px solid rgba(59, 130, 246, 0.5);
+    }
+    .city-main {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 0;
+    }
+    .city-name {
+      font-size: 14px;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .city-meta {
+      font-size: 11px;
+      color: var(--tg-theme-hint-color, #9ca3af);
+    }
+    .city-actions {
+      display: flex;
+      gap: 4px;
+      margin-left: 8px;
+      flex-shrink: 0;
+    }
+    .icon-btn {
+      width: 26px;
+      height: 26px;
+      border-radius: 999px;
+      border: 1px solid rgba(148, 163, 184, 0.4);
+      background: transparent;
+      color: var(--tg-theme-hint-color, #9ca3af);
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+    }
+    .empty {
+      font-size: 13px;
+      color: var(--tg-theme-hint-color, #9ca3af);
+      padding: 8px 4px;
+    }
+    .arena-row {
+      border-radius: 10px;
+      padding: 8px 10px;
+      border: 1px solid rgba(148, 163, 184, 0.4);
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      margin-bottom: 6px;
+    }
+    .arena-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 6px;
+    }
+    .arena-name {
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .arena-meta {
+      font-size: 11px;
+      color: var(--tg-theme-hint-color, #9ca3af);
+    }
+    .field-row {
+      display: flex;
+      gap: 6px;
+      margin-top: 4px;
+    }
+    .field {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .field label {
+      font-size: 11px;
+      color: var(--tg-theme-hint-color, #9ca3af);
+    }
+    .field input, .field textarea {
+      width: 100%;
+      border-radius: 8px;
+      border: 1px solid rgba(148, 163, 184, 0.5);
+      padding: 6px 8px;
+      font-size: 13px;
+      background: rgba(15, 23, 42, 0.8);
+      color: inherit;
+      font-family: inherit;
+    }
+    .field textarea {
+      min-height: 2.5em;
+      resize: vertical;
+      line-height: 1.35;
+    }
+    .field input:focus, .field textarea:focus {
+      outline: none;
+      border-color: rgba(59, 130, 246, 0.9);
+      box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.7);
+    }
+    .field-address { flex: 1; min-width: 0; }
+    .field-hint {
+      display: block;
+      font-size: 11px;
+      color: var(--tg-theme-hint-color, #9ca3af);
+      margin-top: 4px;
+    }
+    .small-hint {
+      font-size: 11px;
+      color: var(--tg-theme-hint-color, #9ca3af);
+      margin-top: 4px;
+    }
+    .muted {
+      color: var(--tg-theme-hint-color, #9ca3af);
+      font-size: 11px;
+    }
+    .search-wrap { margin-bottom: 8px; }
+    .search-wrap input {
+      width: 100%;
+      border-radius: 8px;
+      border: 1px solid rgba(148, 163, 184, 0.4);
+      padding: 6px 10px;
+      font-size: 13px;
+      background: rgba(15, 23, 42, 0.6);
+      color: inherit;
+    }
+    .search-wrap input::placeholder { color: var(--tg-theme-hint-color, #9ca3af); }
+    .show-inactive { display: flex; align-items: center; gap: 6px; margin-top: 6px; font-size: 12px; color: var(--tg-theme-hint-color); }
+    .show-inactive input { width: auto; }
+    .badge-inactive { font-size: 10px; padding: 2px 6px; border-radius: 6px; background: rgba(239, 68, 68, 0.25); color: #f87171; }
+    .map-links { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+    .map-links a, .btn-geocode {
+      font-size: 11px;
+      padding: 4px 8px;
+      border-radius: 8px;
+      text-decoration: none;
+      border: 1px solid rgba(148, 163, 184, 0.4);
+      background: rgba(255,255,255,0.06);
+      color: var(--tg-theme-link-color, #38bdf8);
+      cursor: pointer;
+    }
+    .btn-geocode { border: none; cursor: pointer; }
+    .add-arena-form {
+      display: none;
+      padding: 12px;
+      margin-bottom: 10px;
+      border-radius: 12px;
+      background: rgba(59, 130, 246, 0.12);
+      border: 1px solid rgba(59, 130, 246, 0.4);
+    }
+    .add-arena-form.visible { display: block; }
+    .add-arena-form .field { margin-bottom: 8px; }
+    .add-arena-form .field label { display: block; font-size: 11px; margin-bottom: 4px; color: var(--tg-theme-hint-color); }
+    .add-arena-form .field input, .add-arena-form .field textarea { width: 100%; padding: 6px 8px; border-radius: 8px; border: 1px solid rgba(148, 163, 184, 0.5); background: rgba(15, 23, 42, 0.8); color: inherit; font-size: 13px; font-family: inherit; }
+    .add-arena-form .field textarea { min-height: 2.5em; resize: vertical; }
+    .add-arena-form .form-actions { display: flex; gap: 8px; margin-top: 12px; }
+    .add-arena-form .form-actions button { padding: 8px 14px; border-radius: 8px; font-size: 13px; cursor: pointer; border: none; }
+    .add-arena-form .form-actions .btn-submit { background: var(--tg-theme-button-color, #2ea6ff); color: var(--tg-theme-button-text-color, #fff); }
+    .add-arena-form .form-actions .btn-cancel { background: rgba(148, 163, 184, 0.3); color: var(--tg-theme-text-color); }
+    .add-city-form { display: none; padding: 12px; margin-bottom: 10px; border-radius: 12px; background: rgba(59, 130, 246, 0.12); border: 1px solid rgba(59, 130, 246, 0.4); }
+    .add-city-form.visible { display: block; }
+    .add-city-form .field { margin-bottom: 8px; }
+    .add-city-form .field label { display: block; font-size: 11px; margin-bottom: 4px; color: var(--tg-theme-hint-color); }
+    .add-city-form .field input { width: 100%; padding: 6px 8px; border-radius: 8px; border: 1px solid rgba(148, 163, 184, 0.5); background: rgba(15, 23, 42, 0.8); color: inherit; font-size: 13px; }
+    .add-city-form .form-actions { display: flex; gap: 8px; margin-top: 12px; }
+    .add-city-form .form-actions button { padding: 8px 14px; border-radius: 8px; font-size: 13px; cursor: pointer; border: none; }
+    .add-city-form .form-actions .btn-submit { background: var(--tg-theme-button-color, #2ea6ff); color: var(--tg-theme-button-text-color, #fff); }
+    .add-city-form .form-actions .btn-cancel { background: rgba(148, 163, 184, 0.3); color: var(--tg-theme-text-color); }
+    .toast {
+      position: fixed; left: 50%; transform: translateX(-50%);
+      bottom: calc(24px + env(safe-area-inset-bottom, 0));
+      padding: 10px 16px; border-radius: 12px;
+      background: rgba(34, 197, 94, 0.95); color: #fff; font-size: 14px; font-weight: 500;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      z-index: 9999; opacity: 0; pointer-events: none; transition: opacity 0.2s;
+    }
+    .toast.visible { opacity: 1; }
+  </style>
+</head>
+<body>
+  <div id="toast" class="toast" aria-live="polite"></div>
+  <div class="header">
+    <h1>🏙 Справочники</h1>
+    <span class="pill">города и арены</span>
+  </div>
+  <div class="columns">
+    <div>
+      <div class="section-title">
+        <span>Города</span>
+        <button class="btn-ghost" id="btnAddCity">+ Город</button>
+      </div>
+      <div class="search-wrap">
+        <input type="text" id="citySearch" placeholder="Поиск по названию">
+        <label class="show-inactive"><input type="checkbox" id="cityShowInactive"> Показать неактивные</label>
+      </div>
+      <div id="addCityForm" class="add-city-form">
+        <div class="field"><label>Название города</label><input type="text" id="newCityName" placeholder="Минск, Гомель…"></div>
+        <div class="form-actions">
+          <button type="button" class="btn-submit" id="btnCitySubmit">Добавить</button>
+          <button type="button" class="btn-cancel" id="btnCityCancel">Отмена</button>
+        </div>
+      </div>
+      <div id="editCityForm" class="add-city-form">
+        <div class="field"><label>Название города</label><input type="text" id="editCityName" placeholder="Минск, Гомель…"></div>
+        <div class="form-actions">
+          <button type="button" class="btn-submit" id="btnCityEditSubmit">Сохранить</button>
+          <button type="button" class="btn-cancel" id="btnCityEditCancel">Отмена</button>
+        </div>
+      </div>
+      <div class="card" id="citiesCard">
+        <div class="empty">Пока нет городов. Добавьте первый.</div>
+      </div>
+    </div>
+    <div>
+      <div class="section-title">
+        <span id="arenasTitle">Арены</span>
+        <button class="btn-ghost" id="btnAddArena" disabled>+ Арена</button>
+      </div>
+      <div class="search-wrap">
+        <input type="text" id="arenaSearch" placeholder="Поиск по названию или адресу">
+        <label class="show-inactive"><input type="checkbox" id="arenaShowInactive"> Показать неактивные</label>
+      </div>
+      <div id="addArenaForm" class="add-arena-form">
+        <div class="field"><label>Название арены</label><input type="text" id="newArenaName" placeholder="Манеж, стадион…"></div>
+        <div class="field"><label>Адрес (необязательно)</label><textarea id="newArenaAddress" rows="2" placeholder="Улица, дом, ориентиры"></textarea></div>
+        <div class="form-actions">
+          <button type="button" class="btn-submit" id="btnArenaSubmit">Добавить</button>
+          <button type="button" class="btn-cancel" id="btnArenaCancel">Отмена</button>
+        </div>
+      </div>
+      <div class="card" id="arenasCard">
+        <div class="empty">Выберите город слева, чтобы увидеть арены.</div>
+      </div>
+    </div>
+  </div>
+  <p class="small-hint">
+    В карточке арены можно изменить адрес (поле в несколько строк) и нажать 💾 — адрес сохранится в базу. Ссылки «Яндекс карта» и «Google карта» открывают карту по этому адресу.
+  </p>
+
+  <script>
+    (function() {
+      var tg = window.Telegram && window.Telegram.WebApp;
+      if (tg) { tg.ready(); tg.expand(); }
+      var initData = tg ? tg.initData : '';
+
+      function apiUrl(path) {
+        if (path.indexOf('/api') === 0) return path;
+        return '/api/webapp' + path;
+      }
+      function fetchWithTimeout(url, opts, ms) {
+        ms = ms || 15000;
+        var c = new AbortController();
+        var t = setTimeout(function() { c.abort(); }, ms);
+        return fetch(url, Object.assign({}, opts || {}, { signal: c.signal }))
+          .then(function(r) { clearTimeout(t); return r; })
+          .catch(function(e) { clearTimeout(t); throw e; });
+      }
+      function withInit(url) {
+        var sep = url.indexOf('?') >= 0 ? '&' : '?';
+        if (initData) url += sep + 'init_data=' + encodeURIComponent(initData);
+        return url;
+      }
+      function getJson(path) {
+        var url = withInit(apiUrl(path));
+        return fetchWithTimeout(url).then(function(r) {
+          if (!r.ok) throw new Error(r.statusText);
+          return r.json();
+        });
+      }
+      function sendJson(method, path, body) {
+        var url = withInit(apiUrl(path));
+        return fetchWithTimeout(url, {
+          method: method,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body || {})
+        }, 15000).then(function(r) {
+          if (!r.ok) {
+            return r.json().catch(function() {}).then(function(err) {
+              var msg = (err && err.detail) || ('Ошибка ' + r.status);
+              throw new Error(msg);
+            });
+          }
+          return r.json().catch(function() { return {}; });
+        });
+      }
+
+      var state = {
+        cities: [],
+        selectedCityId: null,
+        arenas: [],
+        cityQ: '',
+        cityIncludeInactive: false,
+        arenaQ: '',
+        arenaIncludeInactive: false
+      };
+
+      function showAlert(text) {
+        if (tg && tg.showAlert) tg.showAlert(text);
+        else window.alert(text);
+      }
+      function showToast(text) {
+        var el = document.getElementById('toast');
+        if (!el) return;
+        el.textContent = text;
+        el.classList.add('visible');
+        clearTimeout(el._toastT);
+        el._toastT = setTimeout(function() { el.classList.remove('visible'); }, 2500);
+      }
+
+      function renderCities() {
+        var card = document.getElementById('citiesCard');
+        if (!state.cities.length) {
+          card.innerHTML = '<div class="empty">Пока нет городов. Добавьте первый.</div>';
+          document.getElementById('btnAddArena').disabled = true;
+          document.getElementById('arenasCard').innerHTML = '<div class="empty">Выберите город слева, чтобы увидеть арены.</div>';
+          document.getElementById('arenasTitle').textContent = 'Арены';
+          return;
+        }
+        var html = '<div class="list">';
+        state.cities.forEach(function(c) {
+          var active = c.id === state.selectedCityId;
+          var isActive = c.is_active !== false;
+          html += '<div class="city-row' + (active ? ' active' : '') + '" data-id="' + c.id + '">';
+          html += '<div class="city-main">';
+          html += '<div class="city-name">' + (c.name || '—') + (isActive ? '' : ' <span class="badge-inactive">неактив.</span>') + '</div>';
+          html += '<div class="city-meta">Арен: ' + (c.arenas_count || 0) + '</div>';
+          html += '</div>';
+          html += '<div class="city-actions">';
+          html += '<button class="icon-btn" data-role="' + (isActive ? 'deactivate' : 'activate') + '" data-id="' + c.id + '" title="' + (isActive ? 'Деактивировать' : 'Вернуть') + '">' + (isActive ? '⏸' : '▶') + '</button>';
+          html += '<button class="icon-btn" data-role="edit" data-id="' + c.id + '">✏️</button>';
+          html += '</div>';
+          html += '</div>';
+        });
+        html += '</div>';
+        card.innerHTML = html;
+
+        card.querySelectorAll('.city-row').forEach(function(el) {
+          el.addEventListener('click', function(e) {
+            var id = Number(el.getAttribute('data-id'));
+            if (state.selectedCityId !== id) {
+              state.selectedCityId = id;
+              loadArenas();
+              renderCities();
+            }
+          });
+        });
+        card.querySelectorAll('.icon-btn[data-role="edit"]').forEach(function(btn) {
+          btn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            var id = Number(btn.getAttribute('data-id'));
+            var city = state.cities.find(function(c) { return c.id === id; });
+            if (!city) return;
+            showEditCityForm(true, id, city.name || '');
+          });
+        });
+        card.querySelectorAll('.icon-btn[data-role="deactivate"], .icon-btn[data-role="activate"]').forEach(function(btn) {
+          btn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            var id = Number(btn.getAttribute('data-id'));
+            var isAct = btn.getAttribute('data-role') === 'activate';
+            sendJson('PATCH', '/admin/cities/' + id, { is_active: isAct })
+              .then(function() { return loadCities(true); })
+              .catch(function(err) { showAlert(err.message || String(err)); });
+          });
+        });
+      }
+
+      function renderArenas() {
+        var card = document.getElementById('arenasCard');
+        var btnAdd = document.getElementById('btnAddArena');
+        var title = document.getElementById('arenasTitle');
+        var selectedCity = state.cities.find(function(c) { return c.id === state.selectedCityId; });
+        if (!selectedCity) {
+          btnAdd.disabled = true;
+          title.textContent = 'Арены';
+          card.innerHTML = '<div class="empty">Выберите город слева, чтобы увидеть арены.</div>';
+          return;
+        }
+        btnAdd.disabled = false;
+        title.textContent = 'Арены: ' + (selectedCity.name || '');
+        if (!state.arenas.length) {
+          card.innerHTML = '<div class="empty">Пока нет арен. Нажмите «+ Арена».</div>';
+          return;
+        }
+        var html = '';
+        state.arenas.forEach(function(a) {
+          var isActive = a.is_active !== false;
+          var addr = (a.address || '').trim();
+          var yandexUrl = addr ? 'https://yandex.ru/maps/?text=' + encodeURIComponent(addr) : '';
+          var googleUrl = addr ? 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(addr) : '';
+          html += '<div class="arena-row" data-id="' + a.id + '">';
+          html += '<div class="arena-header">';
+          html += '<div>';
+          html += '<div class="arena-name">' + (a.name || '—') + (isActive ? '' : ' <span class="badge-inactive">неактив.</span>') + '</div>';
+          html += '<div class="arena-meta">' + (addr || 'Адрес не указан') + '</div>';
+          html += '</div>';
+          html += '<div style="display:flex;gap:4px;">';
+          html += '<button class="icon-btn" data-role="' + (isActive ? 'deactivate' : 'activate') + '" data-id="' + a.id + '" title="' + (isActive ? 'Деактивировать' : 'Вернуть') + '">' + (isActive ? '⏸' : '▶') + '</button>';
+          html += '<button class="icon-btn" data-role="save" data-id="' + a.id + '" title="Сохранить адрес этой арены на сервер">💾</button>';
+          html += '</div>';
+          html += '</div>';
+          html += '<div class="field-row">';
+          html += '<div class="field field-address">';
+          html += '<label>Адрес (можно в несколько строк)</label>';
+          html += '<textarea data-field="address" rows="2" placeholder="Улица, дом, ориентиры">' + (a.address || '').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;') + '</textarea>';
+          html += '<span class="field-hint">💾 Сохранить — записывает адрес этой арены в базу.</span>';
+          html += '</div>';
+          html += '</div>';
+          html += '<div class="map-links">';
+          if (yandexUrl) html += '<a href="' + yandexUrl + '" target="_blank" rel="noopener">Яндекс карта</a>';
+          if (googleUrl) html += '<a href="' + googleUrl + '" target="_blank" rel="noopener">Google карта</a>';
+          html += '</div>';
+          html += '</div>';
+        });
+        card.innerHTML = html;
+
+        card.querySelectorAll('.icon-btn[data-role="save"]').forEach(function(btn) {
+          btn.addEventListener('click', function() {
+            var id = Number(btn.getAttribute('data-id'));
+            var row = btn.closest('.arena-row');
+            if (!row) return;
+            var addressEl = row.querySelector('textarea[data-field="address"], input[data-field="address"]');
+            var address = (addressEl && addressEl.value || '').trim();
+            sendJson('PATCH', '/admin/arenas/' + id, { address: address || null }).then(function() {
+              showToast('Адрес сохранён');
+              return loadArenas();
+            }).catch(function(err) {
+              showAlert(err.message || String(err));
+            });
+          });
+        });
+        card.querySelectorAll('.icon-btn[data-role="deactivate"], .icon-btn[data-role="activate"]').forEach(function(btn) {
+          btn.addEventListener('click', function() {
+            var id = Number(btn.getAttribute('data-id'));
+            var isAct = btn.getAttribute('data-role') === 'activate';
+            sendJson('PATCH', '/admin/arenas/' + id, { is_active: isAct })
+              .then(function() { return loadArenas(); })
+              .catch(function(err) { showAlert(err.message || String(err)); });
+          });
+        });
+      }
+
+      function buildCitiesPath() {
+        var path = '/admin/cities';
+        var parts = [];
+        if (state.cityQ) parts.push('q=' + encodeURIComponent(state.cityQ));
+        if (state.cityIncludeInactive) parts.push('include_inactive=true');
+        if (parts.length) path += '?' + parts.join('&');
+        return path;
+      }
+
+      function buildArenasPath() {
+        var path = '/admin/arenas?city_id=' + encodeURIComponent(state.selectedCityId);
+        if (state.arenaQ) path += '&q=' + encodeURIComponent(state.arenaQ);
+        if (state.arenaIncludeInactive) path += '&include_inactive=true';
+        return path;
+      }
+
+      function loadCities(keepSelection) {
+        return getJson(buildCitiesPath()).then(function(data) {
+          state.cities = (data && data.items) || [];
+          if (!keepSelection || !state.cities.some(function(c) { return c.id === state.selectedCityId; })) {
+            state.selectedCityId = state.cities.length ? state.cities[0].id : null;
+          }
+          renderCities();
+          return loadArenas();
+        }).catch(function(err) {
+          showAlert(err.message || 'Не удалось загрузить города');
+        });
+      }
+
+      function loadArenas() {
+        if (!state.selectedCityId) {
+          state.arenas = [];
+          renderArenas();
+          return Promise.resolve();
+        }
+        return getJson(buildArenasPath())
+          .then(function(data) {
+            state.arenas = (data && data.items) || [];
+            renderArenas();
+          }).catch(function(err) {
+            showAlert(err.message || 'Не удалось загрузить арены');
+          });
+      }
+
+      function showAddCityForm(show) {
+        var form = document.getElementById('addCityForm');
+        if (!form) return;
+        form.classList.toggle('visible', !!show);
+        if (show) {
+          document.getElementById('editCityForm').classList.remove('visible');
+          document.getElementById('newCityName').value = '';
+          document.getElementById('newCityName').focus();
+        }
+      }
+      function showEditCityForm(show, cityId, currentName) {
+        var form = document.getElementById('editCityForm');
+        if (!form) return;
+        form.classList.toggle('visible', !!show);
+        if (show) {
+          document.getElementById('addCityForm').classList.remove('visible');
+          form._editCityId = cityId;
+          var inp = document.getElementById('editCityName');
+          inp.value = currentName || '';
+          inp.focus();
+        } else {
+          form._editCityId = null;
+        }
+      }
+      document.getElementById('btnAddCity').addEventListener('click', function() {
+        showAddCityForm(true);
+      });
+      document.getElementById('btnCityCancel').addEventListener('click', function() { showAddCityForm(false); });
+      document.getElementById('btnCityEditCancel').addEventListener('click', function() { showEditCityForm(false); });
+      document.getElementById('btnCityEditSubmit').addEventListener('click', function() {
+        var form = document.getElementById('editCityForm');
+        var id = form && form._editCityId;
+        if (!id) return;
+        var name = (document.getElementById('editCityName').value || '').trim();
+        if (!name) {
+          showAlert('Введите название города');
+          return;
+        }
+        showEditCityForm(false);
+        sendJson('PATCH', '/admin/cities/' + id, { name: name })
+          .then(function() {
+            showToast('Город сохранён');
+            return loadCities(true);
+          })
+          .catch(function(err) { showAlert(err.message || String(err)); });
+      });
+      document.getElementById('btnCitySubmit').addEventListener('click', function() {
+        var name = (document.getElementById('newCityName').value || '').trim();
+        if (!name) {
+          showAlert('Введите название города');
+          return;
+        }
+        showAddCityForm(false);
+        sendJson('POST', '/admin/cities', { name: name, sort_order: 0 })
+          .then(function() {
+            showToast('Город добавлен');
+            return loadCities(true);
+          })
+          .catch(function(err) { showAlert(err.message || String(err)); });
+      });
+
+      function showAddArenaForm(show) {
+        var form = document.getElementById('addArenaForm');
+        if (!form) return;
+        form.classList.toggle('visible', !!show);
+        if (show) {
+          document.getElementById('newArenaName').value = '';
+          document.getElementById('newArenaAddress').value = '';
+          document.getElementById('newArenaName').focus();
+        }
+      }
+      document.getElementById('btnAddArena').addEventListener('click', function() {
+        if (!state.selectedCityId) return;
+        showAddArenaForm(true);
+      });
+      document.getElementById('btnArenaCancel').addEventListener('click', function() {
+        showAddArenaForm(false);
+      });
+      document.getElementById('btnArenaSubmit').addEventListener('click', function() {
+        var name = (document.getElementById('newArenaName').value || '').trim();
+        if (!name) {
+          showAlert('Введите название арены');
+          return;
+        }
+        var addr = (document.getElementById('newArenaAddress').value || '').trim();
+        showAddArenaForm(false);
+        sendJson('POST', '/admin/arenas', {
+          city_id: state.selectedCityId,
+          name: name,
+          address: addr || undefined
+        }).then(function() {
+          showToast('Арена добавлена');
+          return loadCities(true);
+        }).catch(function(err) {
+          showAlert(err.message || String(err));
+        });
+      });
+
+      var searchDebounce;
+      document.getElementById('citySearch').addEventListener('input', function() {
+        state.cityQ = this.value.trim();
+        clearTimeout(searchDebounce);
+        searchDebounce = setTimeout(function() { loadCities(true); }, 300);
+      });
+      document.getElementById('cityShowInactive').addEventListener('change', function() {
+        state.cityIncludeInactive = this.checked;
+        loadCities(true);
+      });
+      document.getElementById('arenaSearch').addEventListener('input', function() {
+        state.arenaQ = this.value.trim();
+        clearTimeout(searchDebounce);
+        searchDebounce = setTimeout(function() { loadArenas(); }, 300);
+      });
+      document.getElementById('arenaShowInactive').addEventListener('change', function() {
+        state.arenaIncludeInactive = this.checked;
+        loadArenas();
+      });
+
+      loadCities(false);
+    })();
+  </script>
+</body>
+</html>
+

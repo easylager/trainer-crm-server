@@ -49,3 +49,33 @@ class Settings(BaseSettings):
     schedule_reminder_cooldown_minutes: int = 180
     # Optional: base URL for photos. If not set, bot uses api_base_url + /api/public/photos (backend proxies S3)
     photo_base_url: str | None = None
+    # Presigned GET URL expiry for catalog photos (seconds). When S3 is used, API returns these URLs so client loads from S3 directly.
+    photo_presigned_expires_sec: int = 3600
+    # CDN base URL for photos (e.g. https://cdn.yourdomain.com or R2 public URL). When set, API returns photo URLs as {photo_cdn_base_url}/{file_key} instead of presigned S3; client loads from CDN.
+    photo_cdn_base_url: str | None = None
+    # Optional: Telegram ID to send test notifications (e.g. "inactive client" push scripts)
+    notify_telegram_id: int | None = None
+    # Base URL for Telegram Web App (trainer schedule). Must be HTTPS in production. Example: https://api.yoursite.com
+    webapp_base_url: str = "http://localhost:8000"
+
+    # Payment (bePaid): checkout token API. When not set, adapter returns stub URL for tests.
+    bepaid_shop_id: str | None = None
+    bepaid_secret_key: str | None = None
+    # Checkout API base, e.g. https://checkout.bepaid.by (sandbox may differ)
+    bepaid_checkout_base_url: str = "https://checkout.bepaid.by"
+    payment_sandbox: bool = True
+
+    # Trainer subscription: trial and reminders
+    # Trial: if set, overrides subscription_plans.period_days for the trial plan when creating trial
+    trial_period_days: int | None = None
+    # Reminder: send "subscription ending soon" this many days before expires_at (default 3)
+    subscription_reminder_days_ahead: int = 3
+
+    # Client bot: username for deep links (e.g. t.me/<username>?start=cert_XXX). Required for certificate email links.
+    client_bot_username: str | None = None
+    # SMTP for sending certificate link emails. When any is missing, email sending is disabled.
+    smtp_host: str | None = None
+    smtp_port: int = 587
+    smtp_user: str | None = None
+    smtp_password: str | None = None
+    smtp_from_email: str | None = None

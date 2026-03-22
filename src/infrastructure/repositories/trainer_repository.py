@@ -2,6 +2,7 @@
 Infrastructure: trainer persistence. All SQL here; no business rules.
 """
 from typing import Any
+from datetime import date, timedelta
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -102,7 +103,7 @@ class TrainerRepository:
             "moderation_feedback": row[4],
         }
         rp = await self._session.execute(
-            text("SELECT first_name, last_name, age, city_id, experience_years, description, phone, contacts, education, rating_avg, rating_count, session_duration_minutes FROM trainer_profiles WHERE trainer_id = :id"),
+            text("SELECT first_name, last_name, age, city_id, experience_years, description, phone, contacts, education, rating_avg, rating_count, session_duration_minutes, min_hours_before_booking FROM trainer_profiles WHERE trainer_id = :id"),
             {"id": trainer_id},
         )
         prof = rp.fetchone()
@@ -113,6 +114,7 @@ class TrainerRepository:
                 "rating_avg": float(prof[9]) if prof[9] is not None else None,
                 "rating_count": prof[10] or 0,
                 "session_duration_minutes": prof[11] if prof[11] is not None else 45,
+                "min_hours_before_booking": int(prof[12]) if prof[12] is not None else 3,
             }
             if prof
             else None
@@ -160,6 +162,16 @@ class TrainerRepository:
             out["arena_names"] = [name_by_id.get(aid, "—") for aid in out["arena_ids"]]
         else:
             out["arena_names"] = []
+        r_has_pass = await self._session.execute(
+            text("SELECT 1 FROM trainer_pass_products WHERE trainer_id = :id AND is_active = true LIMIT 1"),
+            {"id": trainer_id},
+        )
+        r_has_cert = await self._session.execute(
+            text("SELECT 1 FROM trainer_certificate_products WHERE trainer_id = :id AND is_active = true LIMIT 1"),
+            {"id": trainer_id},
+        )
+        out["has_pass_products"] = r_has_pass.fetchone() is not None
+        out["has_certificate_products"] = r_has_cert.fetchone() is not None
         return out
 
     async def exists(self, trainer_id: int) -> bool:
@@ -181,6 +193,7 @@ class TrainerRepository:
         contacts: str | None = None,
         education: str | None = None,
         session_duration_minutes: int | None = None,
+        min_hours_before_booking: int | None = None,
     ) -> None:
         """Partial update of profile; only non-None fields are set."""
         updates: list[str] = []
@@ -195,6 +208,7 @@ class TrainerRepository:
         if contacts is not None: updates.append("contacts = :contacts"); params["contacts"] = contacts
         if education is not None: updates.append("education = :edu"); params["edu"] = education
         if session_duration_minutes is not None: updates.append("session_duration_minutes = :dur"); params["dur"] = session_duration_minutes
+        if min_hours_before_booking is not None: updates.append("min_hours_before_booking = :mhb"); params["mhb"] = min_hours_before_booking
         if not updates:
             return
         await self._session.execute(
@@ -284,12 +298,21 @@ class TrainerRepository:
         Active trainers with profile, photos, service_ids; paginated.
         arena_id: only trainers that have at least one slot in this arena.
         Returns (items, total_count).
+
+        Each trainer dict also contains:
+        - free_slots_14d: count of available slots in the next 14 days (inclusive of today).
         """
         base = """
             FROM trainers t
             LEFT JOIN trainer_profiles p ON p.trainer_id = t.id
         """
         where = " WHERE t.status = 'active'"
+        where += """ AND EXISTS (
+            SELECT 1 FROM trainer_subscriptions ts
+            WHERE ts.trainer_id = t.id
+              AND ts.expires_at > NOW()
+              AND ts.status IN ('trial', 'active')
+        )"""
         params: dict[str, Any] = {"lim": limit, "off": offset}
         if service_id is not None:
             base += " INNER JOIN trainer_services ts ON ts.trainer_id = t.id AND ts.service_id = :service_id"
@@ -311,7 +334,8 @@ class TrainerRepository:
                    p.first_name, p.last_name, p.age, p.city_id, p.experience_years,
                    p.description, p.phone, p.contacts, p.education,
                    p.rating_avg, p.rating_count,
-                   COALESCE(p.session_duration_minutes, 45) AS session_duration_minutes
+                   COALESCE(p.session_duration_minutes, 45) AS session_duration_minutes,
+                   COALESCE(p.min_hours_before_booking, 3) AS min_hours_before_booking
         """
         if order_by == "rating":
             # Bayesian: (v/(v+m))*R + (m/(v+m))*C. Must be in SELECT when using DISTINCT (PG rule).
@@ -328,6 +352,7 @@ class TrainerRepository:
                    p.description, p.phone, p.contacts, p.education,
                    p.rating_avg, p.rating_count,
                    COALESCE(p.session_duration_minutes, 45) AS session_duration_minutes,
+                   COALESCE(p.min_hours_before_booking, 3) AS min_hours_before_booking,
                    ({has_rating_expr}) AS _has_rating,
                    ({score_expr}) AS _score
         """
@@ -403,30 +428,74 @@ class TrainerRepository:
             )
             for arow in r_an.fetchall():
                 arena_names_by_id[arow[0]] = arow[1] or ""
+
+        # Count available slots for each trainer in the next 14 days (client-side signal).
+        today = date.today()
+        horizon_end = today + timedelta(days=13)
+        r_slots = await self._session.execute(
+            text(
+                f"""
+                SELECT trainer_id, COUNT(*) AS free_slots
+                FROM slots
+                WHERE trainer_id IN ({placeholders})
+                  AND status = 'available'
+                  AND slot_date >= :from_d AND slot_date <= :to_d
+                GROUP BY trainer_id
+                """
+            ),
+            {**id_params, "from_d": today, "to_d": horizon_end},
+        )
+        free_slots_by_id: dict[int, int] = {row[0]: row[1] or 0 for row in r_slots.fetchall()}
+        # Catalog: show "Абонементы/Сертификаты" button only when trainer has at least one
+        r_pass = await self._session.execute(
+            text(f"SELECT DISTINCT trainer_id FROM trainer_pass_products WHERE trainer_id IN ({placeholders}) AND is_active = true"),
+            id_params,
+        )
+        pass_trainer_ids: set[int] = {row[0] for row in r_pass.fetchall()}
+        r_cert = await self._session.execute(
+            text(f"SELECT DISTINCT trainer_id FROM trainer_certificate_products WHERE trainer_id IN ({placeholders}) AND is_active = true"),
+            id_params,
+        )
+        cert_trainer_ids: set[int] = {row[0] for row in r_cert.fetchall()}
         out = []
         for row in rows:
             tid = row[0]
             arena_ids = arenas_by_id.get(tid, [])
             arena_names = [arena_names_by_id.get(aid, "—") for aid in arena_ids]
-            # session_duration_minutes at index 13; for rating order, _has_rating=14, _score=15
+            # session_duration_minutes=13, min_hours_before_booking=14; for rating order, _has_rating=15, _score=16
             duration = row[13] if len(row) > 13 and row[13] is not None else 45
-            out.append({
-                "id": tid,
-                "telegram_id": row[1],
-                "profile": {
-                    "first_name": row[2], "last_name": row[3], "age": row[4], "city_id": row[5],
-                    "experience_years": row[6], "description": row[7],
-                    "phone": row[8], "contacts": row[9], "education": row[10],
-                    "rating_avg": float(row[11]) if row[11] is not None else None,
-                    "rating_count": row[12] or 0,
-                    "session_duration_minutes": duration,
-                } if row[2] is not None else None,
-                "photos": photos_by_id.get(tid, []),
-                "service_ids": services_by_id.get(tid, []),
-                "services": services_detail_by_id.get(tid, []),
-                "arena_ids": arena_ids,
-                "arena_names": arena_names,
-            })
+            min_hours = int(row[14]) if len(row) > 14 and row[14] is not None else 3
+            out.append(
+                {
+                    "id": tid,
+                    "telegram_id": row[1],
+                    "profile": {
+                        "first_name": row[2],
+                        "last_name": row[3],
+                        "age": row[4],
+                        "city_id": row[5],
+                        "experience_years": row[6],
+                        "description": row[7],
+                        "phone": row[8],
+                        "contacts": row[9],
+                        "education": row[10],
+                        "rating_avg": float(row[11]) if row[11] is not None else None,
+                        "rating_count": row[12] or 0,
+                        "session_duration_minutes": duration,
+                        "min_hours_before_booking": min_hours,
+                    }
+                    if row[2] is not None
+                    else None,
+                    "photos": photos_by_id.get(tid, []),
+                    "service_ids": services_by_id.get(tid, []),
+                    "services": services_detail_by_id.get(tid, []),
+                    "arena_ids": arena_ids,
+                    "arena_names": arena_names,
+                    "free_slots_14d": free_slots_by_id.get(tid, 0),
+                    "has_pass_products": tid in pass_trainer_ids,
+                    "has_certificate_products": tid in cert_trainer_ids,
+                }
+            )
         return out, total
 
     async def add_rating(

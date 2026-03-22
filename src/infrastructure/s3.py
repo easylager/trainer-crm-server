@@ -85,6 +85,47 @@ def upload_photo(trainer_id: int, body: bytes, content_type: str) -> tuple[str, 
     return file_key, file_key_list
 
 
+def upload_legal_document(body: bytes, content_type: str | None = None) -> str:
+    """Upload legal document file to S3/local under legal/ prefix. Returns file_key."""
+    settings = Settings()
+    ext = ""
+    ct = content_type or "application/octet-stream"
+    # simple mapping for common types; others leave without extension
+    c = ct.lower()
+    if "html" in c:
+        ext = ".html"
+    elif "pdf" in c:
+        ext = ".pdf"
+    elif "plain" in c or "text" in c:
+        ext = ".txt"
+    file_key = f"legal/{uuid.uuid4().hex}{ext}"
+    if _use_local():
+        root = Path(settings.local_storage_path).resolve()
+        path = root / file_key
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(body)
+        return file_key
+    client = _get_client()
+    client.put_object(Bucket=settings.s3_bucket, Key=file_key, Body=body, ContentType=ct)
+    return file_key
+
+
+def upload_certificate_file(body: bytes, trainer_id: int, certificate_id: int) -> str:
+    """Upload certificate PDF to S3/local under certificates/{trainer_id}/{certificate_id}.pdf. Returns file_key."""
+    file_key = f"certificates/{trainer_id}/{certificate_id}.pdf"
+    ct = "application/pdf"
+    settings = Settings()
+    if _use_local():
+        root = Path(settings.local_storage_path).resolve()
+        path = root / file_key
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(body)
+        return file_key
+    client = _get_client()
+    client.put_object(Bucket=settings.s3_bucket, Key=file_key, Body=body, ContentType=ct)
+    return file_key
+
+
 def _get_client():
     settings = Settings()
     if not all([settings.s3_endpoint, settings.s3_access_key, settings.s3_secret_key]):
@@ -105,12 +146,12 @@ def _get_client():
     )
 
 
-def get_photo(file_key: str) -> tuple[bytes, str] | None:
+def get_file(file_key: str, allowed_prefixes: tuple[str, ...] = ("trainers/",)) -> tuple[bytes, str] | None:
     """
-    Read photo by file_key from S3 or local storage. Returns (body, content_type) or None.
-    Only keys under trainers/ are allowed (no path traversal).
+    Read file by file_key from S3 or local storage. Returns (body, content_type) or None.
+    allowed_prefixes: e.g. ("trainers/", "certificates/", "legal/") to restrict keys.
     """
-    if not file_key.startswith("trainers/") or ".." in file_key:
+    if not file_key or ".." in file_key or not any(file_key.startswith(p) for p in allowed_prefixes):
         return None
     settings = Settings()
     if _use_local():
@@ -120,14 +161,49 @@ def get_photo(file_key: str) -> tuple[bytes, str] | None:
             return None
         body = path.read_bytes()
         ext = path.suffix.lower()
-        content_type = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp", ".gif": "image/gif"}.get(ext, "image/jpeg")
+        content_type = {
+            ".pdf": "application/pdf", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+            ".png": "image/png", ".html": "text/html", ".txt": "text/plain",
+        }.get(ext, "application/octet-stream")
         return body, content_type
     client = _get_client()
     try:
         resp = client.get_object(Bucket=settings.s3_bucket, Key=file_key)
         body = resp["Body"].read()
-        content_type = resp.get("ContentType") or "image/jpeg"
+        content_type = resp.get("ContentType") or "application/octet-stream"
         return body, content_type
+    except Exception:
+        return None
+
+
+def get_photo(file_key: str) -> tuple[bytes, str] | None:
+    """
+    Read photo by file_key from S3 or local storage. Returns (body, content_type) or None.
+    Only keys under trainers/ are allowed (no path traversal).
+    """
+    return get_file(file_key, allowed_prefixes=("trainers/",))
+
+
+def presign_get_url(file_key: str, expires_in: int | None = None) -> str | None:
+    """
+    Presigned GET URL for direct client download. Returns None when using local storage or on error.
+    Only keys under trainers/ are allowed.
+    """
+    if not file_key or not file_key.startswith("trainers/") or ".." in file_key:
+        return None
+    if _use_local():
+        return None
+    settings = Settings()
+    if expires_in is None:
+        expires_in = settings.photo_presigned_expires_sec
+    try:
+        client = _get_client()
+        url = client.generate_presigned_url(
+            "get_object",
+            Params={"Bucket": settings.s3_bucket, "Key": file_key},
+            ExpiresIn=expires_in,
+        )
+        return url
     except Exception:
         return None
 

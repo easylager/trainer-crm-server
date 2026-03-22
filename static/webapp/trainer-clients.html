@@ -1,0 +1,838 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Мои клиенты</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    :root {
+      --tg-theme-bg-color: #FFFBEB;
+      --tg-theme-text-color: #1a1a1a;
+      --tg-theme-hint-color: #666;
+      --tg-theme-button-color: #F7A600;
+      --tg-theme-button-text-color: #1a1a1a;
+      --tg-theme-secondary-bg-color: #FFF3CC;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --tg-theme-bg-color: #1a1a1a;
+        --tg-theme-text-color: #f5f5f5;
+        --tg-theme-hint-color: #8e8e93;
+        --tg-theme-button-color: #F7A600;
+        --tg-theme-button-text-color: #1a1a1a;
+        --tg-theme-secondary-bg-color: #2a2a2a;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--tg-theme-bg-color);
+      color: var(--tg-theme-text-color);
+      min-height: 100vh;
+      padding: 12px;
+      padding-bottom: env(safe-area-inset-bottom, 12px);
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+    }
+    .header-title { flex: 1; }
+    .btn-close {
+      flex-shrink: 0;
+      padding: 8px 14px;
+      border-radius: 8px;
+      border: none;
+      font-size: 14px;
+      background: var(--tg-theme-secondary-bg-color);
+      color: var(--tg-theme-text-color);
+      cursor: pointer;
+    }
+    .search-box {
+      margin-bottom: 10px;
+    }
+    .search-input {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: none;
+      background: var(--tg-theme-secondary-bg-color);
+      color: var(--tg-theme-text-color);
+      font: inherit;
+      font-size: 15px;
+    }
+    .search-input::placeholder {
+      color: var(--tg-theme-hint-color);
+    }
+    .section-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--tg-theme-hint-color);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin: 10px 0 6px;
+    }
+    .client-card {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 14px;
+      margin-bottom: 8px;
+      border-radius: 12px;
+      background: var(--tg-theme-secondary-bg-color);
+      cursor: pointer;
+      border: none;
+      width: 100%;
+      font: inherit;
+      color: inherit;
+      text-align: left;
+    }
+    .client-card:active { opacity: 0.9; }
+    .client-main {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      flex: 1;
+      min-width: 0;
+    }
+    .client-name {
+      font-size: 16px;
+      font-weight: 600;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      overflow: hidden;
+    }
+    .client-meta {
+      font-size: 13px;
+      color: var(--tg-theme-hint-color);
+    }
+    .client-arrow {
+      flex-shrink: 0;
+      margin-left: 8px;
+      color: var(--tg-theme-hint-color);
+      font-size: 16px;
+    }
+    .empty {
+      text-align: center;
+      padding: 24px 12px;
+      font-size: 14px;
+      color: var(--tg-theme-hint-color);
+    }
+    .loading, .error {
+      text-align: center;
+      padding: 24px 12px;
+      font-size: 14px;
+      color: var(--tg-theme-hint-color);
+    }
+    .error { color: #ff3b30; }
+    .detail-card {
+      margin-top: 4px;
+      padding: 16px 18px;
+      border-radius: 14px;
+      background: var(--tg-theme-secondary-bg-color);
+    }
+    .detail-name-hero {
+      font-size: 20px;
+      font-weight: 700;
+      margin: 0 0 4px;
+      letter-spacing: -0.02em;
+      line-height: 1.25;
+    }
+    .detail-client-since {
+      font-size: 13px;
+      color: var(--tg-theme-hint-color);
+      margin: 0 0 14px;
+    }
+    .detail-stats {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px 20px;
+      margin-bottom: 16px;
+      padding-bottom: 14px;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+    }
+    .detail-stat {
+      font-size: 13px;
+      color: var(--tg-theme-hint-color);
+    }
+    .detail-stat strong {
+      color: var(--tg-theme-text-color);
+      font-weight: 600;
+    }
+    .detail-row {
+      margin-bottom: 10px;
+      font-size: 14px;
+    }
+    .detail-label {
+      font-size: 11px;
+      color: var(--tg-theme-hint-color);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 3px;
+    }
+    .detail-value {
+      font-size: 15px;
+    }
+    .detail-contact-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 4px;
+    }
+    .detail-actions {
+      margin-top: 16px;
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .detail-actions a.btn {
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      box-sizing: border-box;
+    }
+    .detail-note {
+      margin-top: 20px;
+    }
+    .detail-note textarea {
+      width: 100%;
+      min-height: 80px;
+      border-radius: 10px;
+      border: 2px solid var(--tg-theme-button-color);
+      padding: 10px 12px;
+      font: inherit;
+      font-size: 14px;
+      background: var(--tg-theme-secondary-bg-color);
+      color: var(--tg-theme-text-color);
+      resize: vertical;
+    }
+    .detail-note textarea::placeholder {
+      color: var(--tg-theme-hint-color);
+    }
+    .detail-note-footer {
+      margin-top: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .detail-note-status {
+      font-size: 12px;
+      color: var(--tg-theme-hint-color);
+      text-align: center;
+    }
+    .history-section-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--tg-theme-hint-color);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin: 18px 0 8px;
+    }
+    .history-list {
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    .history-item {
+      margin-bottom: 6px;
+      padding: 4px 0;
+    }
+    .history-item-service {
+      font-size: 12px;
+      color: var(--tg-theme-hint-color);
+      margin-top: 1px;
+    }
+    .history-toggle {
+      margin-top: 8px;
+      text-align: right;
+    }
+    .history-toggle-button {
+      border: none;
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      cursor: pointer;
+      background: var(--tg-theme-secondary-bg-color);
+      color: var(--tg-theme-text-color);
+    }
+    .btn {
+      flex: 1;
+      min-width: 120px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: none;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .btn-primary {
+      background: #F7A600 !important;
+      color: #1a1a1a !important;
+    }
+    .btn-secondary {
+      background: var(--tg-theme-secondary-bg-color);
+      color: var(--tg-theme-text-color);
+    }
+    /* JUSTSKATE.BY — перебиваем тему Telegram, как в расписании */
+    body {
+      background: #1a1a1a !important;
+      color: #f5f5f5 !important;
+    }
+    .client-card,
+    .detail-card {
+      background: #242424 !important;
+    }
+    .btn-close,
+    .search-input {
+      background: #2a2a2a !important;
+      color: #f5f5f5 !important;
+    }
+    .search-input::placeholder {
+      color: var(--tg-theme-hint-color);
+    }
+    @media (prefers-color-scheme: light) {
+      body {
+        background: #FFFBEB !important;
+        color: #1a1a1a !important;
+      }
+      .client-card,
+      .detail-card {
+        background: #FFF3CC !important;
+      }
+      .btn-close,
+      .search-input {
+        background: #FFF3CC !important;
+        color: #1a1a1a !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <script>
+    (function() {
+      var d = document.documentElement;
+      var dark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+      d.style.setProperty('--tg-theme-button-color', '#F7A600');
+      d.style.setProperty('--tg-theme-button-text-color', '#1a1a1a');
+      d.style.setProperty('--tg-theme-bg-color', dark ? '#1a1a1a' : '#FFFBEB');
+      d.style.setProperty('--tg-theme-text-color', dark ? '#f5f5f5' : '#1a1a1a');
+      d.style.setProperty('--tg-theme-secondary-bg-color', dark ? '#2a2a2a' : '#FFF3CC');
+    })();
+  </script>
+  <div class="header">
+    <div class="header-title">Мои клиенты</div>
+    <button type="button" class="btn-close" id="btnClose">Закрыть</button>
+  </div>
+  <div class="search-box">
+    <input id="searchInput" class="search-input" type="search" placeholder="Поиск по имени или телефону">
+  </div>
+  <div id="clientsSection">
+    <div class="section-title">Клиенты</div>
+    <div id="clientsList"></div>
+    <div class="invite-link-section" style="margin-top:20px; margin-bottom:16px; padding:12px 14px; border-radius:12px; background: var(--tg-theme-secondary-bg-color);">
+      <div class="section-title" style="margin-top:0;">Пригласить клиента (вне системы)</div>
+      <p style="font-size:13px; color: var(--tg-theme-hint-color); margin:4px 0 10px;">Отправьте ссылку человеку — он перейдёт в бота с вами выбранным (город и услуга подставятся). Ссылка одноразовая.</p>
+      <button type="button" class="btn btn-secondary" id="btnShowInviteLink" style="margin-bottom:8px;">🔗 Получить пригласительную ссылку</button>
+      <div id="inviteLinkBlock" style="display:none;">
+        <div class="detail-label" style="font-size:11px; margin-bottom:4px;">Ссылка:</div>
+        <div id="inviteLinkUrl" style="word-break:break-all; font-size:12px; margin-bottom:8px;"></div>
+        <button type="button" class="btn btn-secondary" id="btnCopyInviteLink">Скопировать ссылку</button>
+      </div>
+    </div>
+  </div>
+  <div id="detailSection" style="display:none;">
+    <button type="button" class="btn-close" id="btnBackToList" style="margin-bottom:8px;">◀ К списку</button>
+    <div class="section-title">Карточка клиента</div>
+    <div id="clientDetail" class="detail-card"></div>
+  </div>
+  <div id="stateMessage" class="loading" style="display:none;"></div>
+
+  <script>
+    (function() {
+      var tg = window.Telegram && window.Telegram.WebApp;
+      if (tg && tg.ready) tg.ready();
+      var initData = tg && tg.initData ? tg.initData : '';
+      var headerTitleEl = document.querySelector('.header-title');
+      var defaultHeaderTitle = headerTitleEl ? headerTitleEl.textContent : '';
+
+      function withInit(url) {
+        if (!initData) return url;
+        return url + (url.indexOf('?') === -1 ? '?' : '&') + 'init_data=' + encodeURIComponent(initData);
+      }
+
+      var state = {
+        allClients: [],
+        filteredClients: [],
+        selectedClientId: null,
+      };
+
+      function setStateMessage(text, kind) {
+        var el = document.getElementById('stateMessage');
+        if (!text) {
+          el.style.display = 'none';
+          el.textContent = '';
+          el.className = 'loading';
+          return;
+        }
+        el.textContent = text;
+        el.className = kind === 'error' ? 'error' : 'loading';
+        el.style.display = 'block';
+      }
+
+      function formatDate(d) {
+        if (!d) return '—';
+        var dt = new Date(d);
+        if (isNaN(dt.getTime())) return d.toString().slice(0, 10);
+        var day = String(dt.getDate()).padStart(2, '0');
+        var month = String(dt.getMonth() + 1).padStart(2, '0');
+        var year = dt.getFullYear();
+        return day + '.' + month + '.' + year;
+      }
+
+      function formatTime(t) {
+        if (!t) return '';
+        // backend likely returns \"HH:MM:SS\" or \"HH:MM\"
+        return t.toString().slice(0, 5);
+      }
+
+      function escapeHtml(s) {
+        if (s == null) return '';
+        return String(s)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/\"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+      }
+
+      function applyFilter() {
+        var q = (document.getElementById('searchInput').value || '').trim();
+        if (!q) {
+          state.filteredClients = state.allClients.slice();
+        } else {
+          var qLower = q.toLowerCase();
+          var digits = q.replace(/\\D/g, '');
+          state.filteredClients = state.allClients.filter(function(c) {
+            var name = ((c.first_name || '') + ' ' + (c.last_name || '')).trim().toLowerCase();
+            var phone = (c.phone || '').toLowerCase();
+            var phoneDigits = (c.phone || '').replace(/\\D/g, '');
+            return name.indexOf(qLower) !== -1
+              || phone.indexOf(qLower) !== -1
+              || (digits && phoneDigits.indexOf(digits) !== -1);
+          });
+        }
+        renderList();
+      }
+
+      function renderList() {
+        var listEl = document.getElementById('clientsList');
+        listEl.innerHTML = '';
+        if (!state.filteredClients.length) {
+          listEl.innerHTML = '<div class=\"empty\">Пока нет клиентов с записями. Как только клиенты начнут записываться, они появятся здесь.</div>';
+          return;
+        }
+        var html = state.filteredClients.map(function(c) {
+          var name = ((c.first_name || '') + ' ' + (c.last_name || '')).trim() || 'Клиент';
+          var phone = c.phone || 'Телефон не указан';
+          var lastLabel = c.last_date
+            ? ('Последнее занятие: ' + formatDate(c.last_date) + (c.last_start ? ' ' + formatTime(c.last_start) : ''))
+            : 'Был(а) на занятии ранее';
+          return (
+            '<button type=\"button\" class=\"client-card\" data-id=\"' + c.id + '\">' +
+              '<div class=\"client-main\">' +
+                '<div class=\"client-name\">' + escapeHtml(name) + '</div>' +
+                '<div class=\"client-meta\">' + escapeHtml(phone) + '</div>' +
+                '<div class=\"client-meta\">' + escapeHtml(lastLabel) + '</div>' +
+              '</div>' +
+              '<span class=\"client-arrow\">→</span>' +
+            '</button>'
+          );
+        }).join('');
+        listEl.innerHTML = html;
+        listEl.querySelectorAll('.client-card').forEach(function(btn) {
+          btn.onclick = function() {
+            var id = parseInt(btn.dataset.id, 10);
+            openClientDetail(id);
+          };
+        });
+      }
+
+      function loadClientHistory(id) {
+        var detailContainer = document.getElementById('clientDetail');
+        var loadingBlock = document.createElement('div');
+        loadingBlock.className = 'detail-row';
+        loadingBlock.innerHTML = '<div class="history-section-title">История занятий</div><div class="history-list">Загрузка…</div>';
+        detailContainer.appendChild(loadingBlock);
+        var url = '/api/webapp/trainer/clients/' + encodeURIComponent(id) + '/history?limit=10';
+        url = withInit(url);
+        fetch(url).then(function(r) {
+          return r.json().then(function(data) {
+            if (!r.ok) throw new Error(data.detail || r.statusText);
+            return data;
+          });
+        }).then(function(data) {
+          var items = data.items || [];
+          var total = typeof data.total === 'number' ? data.total : items.length;
+          var totalWrap = document.getElementById('clientTotalWrap');
+          var totalCount = document.getElementById('clientTotalCount');
+          if (totalWrap && totalCount) {
+            totalCount.textContent = String(total);
+            totalWrap.style.display = '';
+          }
+          var html = '';
+          html += '<div class="detail-row"><div class="history-section-title">История занятий' + (total > 0 ? ' (' + total + ')' : '') + '</div>';
+          if (!items.length) {
+            html += '<div class="history-list">Пока нет занятий с этим клиентом.</div></div>';
+          } else {
+            var first = items.slice(0, 5);
+            var rest = items.slice(5);
+            var renderItem = function(it) {
+              var dateStr = formatDate(it.slot_date);
+              var timeStr = it.start_time ? formatTime(it.start_time) : '';
+              var place = it.arena_name ? it.arena_name : '—';
+              var status = (it.status || '').toLowerCase();
+              var statusLabel = status === 'completed' ? 'прошло' : status === 'pending' ? 'ожидает' : status === 'confirmed' ? 'подтверждено' : status || '—';
+              var serviceName = (it.service_name || '').trim() || '—';
+              var line1 = dateStr + (timeStr ? ' ' + timeStr : '') + ' · ' + place + ' · ' + statusLabel;
+              return '<div class="history-item">' + escapeHtml(line1) + '<div class="history-item-service">' + escapeHtml(serviceName) + '</div></div>';
+            };
+            html += '<div class="history-list">';
+            first.forEach(function(it) { html += renderItem(it); });
+            if (rest.length) {
+              html += '<div id="historyMore" style="display:none;">';
+              rest.forEach(function(it) { html += renderItem(it); });
+              html += '</div>';
+            }
+            html += '</div>';
+            if (rest.length) {
+              html += '<div class="history-toggle"><button type="button" class="history-toggle-button" id="btnHistoryToggle">Показать все (' + items.length + ')</button></div>';
+            }
+            html += '</div>';
+          }
+          detailContainer.removeChild(loadingBlock);
+          detailContainer.insertAdjacentHTML('beforeend', html);
+          var toggle = document.getElementById('btnHistoryToggle');
+          if (toggle) {
+            toggle.onclick = function() {
+              var more = document.getElementById('historyMore');
+              if (!more) return;
+              var isHidden = more.style.display === 'none';
+              more.style.display = isHidden ? 'block' : 'none';
+              toggle.textContent = isHidden ? 'Свернуть' : 'Показать все занятия';
+            };
+          }
+        }).catch(function() {
+          detailContainer.removeChild(loadingBlock);
+          detailContainer.insertAdjacentHTML(
+            'beforeend',
+            '<div class="detail-row"><div class="detail-label">История занятий</div><div class="detail-value">Не удалось загрузить историю.</div></div>'
+          );
+        });
+      }
+
+      function openClientDetail(id) {
+        var client = state.allClients.find(function(c) { return c.id === id; });
+        if (!client) return;
+        state.selectedClientId = id;
+        var name = ((client.first_name || '') + ' ' + (client.last_name || '')).trim() || 'Клиент';
+        var phone = client.phone || '—';
+        var lastLabel = client.last_date
+          ? (formatDate(client.last_date) + (client.last_start ? ' ' + formatTime(client.last_start) : ''))
+          : '—';
+        var firstDateLabel = client.first_date ? ('Клиент с ' + formatDate(client.first_date)) : '';
+        var detail = '' +
+          '<h1 class=\"detail-name-hero\">' + escapeHtml(name) + '</h1>' +
+          (firstDateLabel ? '<p class=\"detail-client-since\">' + escapeHtml(firstDateLabel) + '</p>' : '') +
+          '<div class=\"detail-stats\">' +
+            '<span class=\"detail-stat\">Последнее: <strong id=\"clientLastLabel\">' + escapeHtml(lastLabel) + '</strong></span>' +
+            '<span class=\"detail-stat\">Следующее: <strong id=\"clientNextBooking\">…</strong></span>' +
+            '<span class=\"detail-stat\" id=\"clientTotalWrap\" style=\"display:none;\">Всего занятий: <strong id=\"clientTotalCount\">0</strong></span>' +
+          '</div>' +
+          '<div class=\"detail-row\"><div class=\"detail-label\">Телефон</div><div class=\"detail-value\">' + escapeHtml(phone) + '</div></div>' +
+          '<div class=\"detail-row\" id=\"clientPassesCertsBlock\">' +
+            '<div class=\"detail-label\">Абонементы и сертификаты</div>' +
+            '<div class=\"detail-value\" id=\"clientPassesCertsContent\">Загрузка…</div>' +
+          '</div>' +
+          '<div class=\"detail-note\">' +
+            '<div class=\"detail-label\">Заметка тренера</div>' +
+            '<textarea id=\"clientNoteInput\" placeholder=\"Цели, уровень, травмы, предпочтения по времени. Только вам — не теряйте важное в чатах и блокнотах.\"></textarea>' +
+            '<div class=\"detail-note-footer\">' +
+              '<button type=\"button\" class=\"btn btn-secondary\" id=\"btnSaveNote\">Сохранить</button>' +
+            '</div>' +
+            '<div class=\"detail-note-status\" id=\"clientNoteStatus\"></div>' +
+            '</div>' +
+          '</div>';
+        detail += '<div class=\"detail-actions\">';
+        detail += '<a href=\"#\" class=\"btn btn-primary\" id=\"btnBookClient\">Записать на занятие</a>';
+        detail += '<button type=\"button\" class=\"btn btn-secondary\" id=\"btnIssuePass\">Выдать абонемент</button>';
+        if (phone && phone !== '—') {
+          detail += '<button type=\"button\" class=\"btn btn-secondary\" id=\"btnCopyPhone\">Скопировать телефон</button>';
+        }
+        detail += '<button type=\"button\" class=\"btn btn-secondary\" id=\"btnWriteClient\">Написать в TG</button>';
+        detail += '</div>';
+        document.getElementById('clientDetail').innerHTML = detail;
+        document.getElementById('clientsSection').style.display = 'none';
+        document.querySelector('.search-box').style.display = 'none';
+        document.getElementById('detailSection').style.display = 'block';
+        if (headerTitleEl) headerTitleEl.textContent = 'Карточка клиента';
+        var backBtn = document.getElementById('btnBackToList');
+        if (backBtn) {
+          backBtn.onclick = function() {
+            document.getElementById('clientsSection').style.display = 'block';
+            document.querySelector('.search-box').style.display = 'block';
+            document.getElementById('detailSection').style.display = 'none';
+            state.selectedClientId = null;
+            if (headerTitleEl) headerTitleEl.textContent = defaultHeaderTitle || 'Мои клиенты';
+          };
+        }
+        var copyBtn = document.getElementById('btnCopyPhone');
+        if (copyBtn && phone && phone !== '—') {
+          copyBtn.onclick = async function() {
+            var noteStatus = document.getElementById('clientNoteStatus');
+            try {
+              if (navigator.clipboard && navigator.clipboard.writeText) {
+                await navigator.clipboard.writeText(phone);
+                if (noteStatus) noteStatus.textContent = 'Телефон скопирован.';
+              } else {
+                if (noteStatus) noteStatus.textContent = 'Скопируйте телефон вручную: ' + phone;
+              }
+            } catch (err) {
+              if (noteStatus) noteStatus.textContent = 'Не удалось скопировать телефон.';
+            }
+          };
+        }
+        var writeBtn = document.getElementById('btnWriteClient');
+        var username = client && client.telegram_username;
+        if (writeBtn && username) {
+          writeBtn.onclick = function() {
+            var url = 'https://t.me/' + encodeURIComponent(username);
+            if (tg && tg.openLink) {
+              tg.openLink(url);
+            } else {
+              window.location.href = url;
+            }
+          };
+        } else if (writeBtn) {
+          writeBtn.style.display = 'none';
+        }
+        // load note
+        var noteInput = document.getElementById('clientNoteInput');
+        var noteStatus = document.getElementById('clientNoteStatus');
+        var saveBtn = document.getElementById('btnSaveNote');
+        // Initially hide save button until there is a change
+        if (saveBtn) saveBtn.style.display = 'none';
+        var noteUrl = withInit('/api/webapp/trainer/clients/' + encodeURIComponent(id) + '/note');
+        fetch(noteUrl).then(function(r) {
+          return r.json().then(function(data) {
+            if (!r.ok) throw new Error(data.detail || r.statusText);
+            return data;
+          });
+        }).then(function(data) {
+          var existing = data.note || '';
+          noteInput.value = existing;
+          noteInput.dataset.originalValue = existing;
+          noteStatus.textContent = existing ? 'Заметка сохранена' : 'Напишите важное о клиенте (цели, уровень, особенности).';
+          // Show button only when user changes text
+          noteInput.addEventListener('input', function() {
+            if (saveBtn) {
+              saveBtn.style.display = noteInput.value !== (noteInput.dataset.originalValue || '') ? 'inline-flex' : 'none';
+            }
+            noteStatus.textContent = '';
+          });
+        }).catch(function() {
+          noteStatus.textContent = 'Не удалось загрузить заметку';
+        });
+        if (saveBtn) {
+          saveBtn.onclick = function() {
+            noteStatus.textContent = 'Сохранение…';
+            var saveUrl = withInit('/api/webapp/trainer/clients/' + encodeURIComponent(id) + '/note');
+            fetch(saveUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ note: noteInput.value || '' }),
+            }).then(function(r) {
+              return r.json().then(function(data) {
+                if (!r.ok) throw new Error(data.detail || r.statusText);
+                return data;
+              });
+            }).then(function(data) {
+              var saved = data.note || '';
+              noteInput.value = saved;
+              noteInput.dataset.originalValue = saved;
+              noteStatus.textContent = 'Спасибо, заметка сохранена.';
+              // Hide button after successful save until next change
+              if (saveBtn) saveBtn.style.display = 'none';
+            }).catch(function() {
+              noteStatus.textContent = 'Ошибка при сохранении';
+            });
+          };
+        }
+        loadClientHistory(id);
+        (function loadPassesAndCerts() {
+          var contentEl = document.getElementById('clientPassesCertsContent');
+          if (!contentEl) return;
+          var passesUrl = withInit('/api/webapp/trainer/clients/' + encodeURIComponent(id) + '/passes');
+          var certsUrl = withInit('/api/webapp/trainer/clients/' + encodeURIComponent(id) + '/certificates');
+          Promise.all([
+            fetch(passesUrl).then(function(r) { return r.json().then(function(d) { if (!r.ok) throw new Error(d.detail || r.statusText); return d; }); }),
+            fetch(certsUrl).then(function(r) { return r.json().then(function(d) { if (!r.ok) throw new Error(d.detail || r.statusText); return d; }); }),
+          ]).then(function(results) {
+            var passes = (results[0] && results[0].items) ? results[0].items : [];
+            var certs = (results[1] && results[1].items) ? results[1].items : [];
+            var activePasses = passes.filter(function(p) { return (p.status || '') === 'active'; });
+            var activeCerts = certs.filter(function(c) { return (c.status || '') === 'active'; });
+            var parts = [];
+            if (activePasses.length) {
+              var lines = activePasses.map(function(p) {
+                var total = typeof p.sessions_total === 'number' ? p.sessions_total : 0;
+                var left = typeof p.sessions_remaining === 'number' ? p.sessions_remaining : 0;
+                var name = (p.product_name || '').trim() || 'Абонемент';
+                return name + ': ' + left + ' из ' + total;
+              });
+              parts.push('Абонементы: ' + lines.join('; '));
+            } else if (passes.length) {
+              parts.push('Абонементы: нет активных');
+            }
+            if (activeCerts.length) {
+              var certLines = activeCerts.map(function(c) {
+                var amount = typeof c.amount_cents === 'number' ? (c.amount_cents / 100) + ' BYN' : '—';
+                return amount;
+              });
+              parts.push('Сертификаты: ' + activeCerts.length + ' активных (' + certLines.join(', ') + ')');
+            } else if (certs.length) {
+              parts.push('Сертификаты: нет активных');
+            }
+            if (!parts.length) parts.push('Нет активных абонементов и сертификатов');
+            contentEl.textContent = parts.join(' · ');
+          }).catch(function() {
+            contentEl.textContent = 'Не удалось загрузить';
+          });
+        })();
+        fetch(withInit('/api/webapp/trainer/clients/' + encodeURIComponent(id) + '/next-booking'))
+          .then(function(r) { return r.json(); })
+          .then(function(data) {
+            var nextEl = document.getElementById('clientNextBooking');
+            if (!nextEl) return;
+            var nb = data.next_booking;
+            var upcomingCount = typeof data.upcoming_count === 'number' ? data.upcoming_count : 0;
+            if (nb && nb.slot_date) {
+              var t = formatDate(nb.slot_date) + (nb.start_time ? ' ' + formatTime(nb.start_time) : '');
+              if (nb.arena_name) t += ' · ' + nb.arena_name;
+              if (upcomingCount > 1) t += ' (+' + (upcomingCount - 1) + ' ещё)';
+              nextEl.textContent = t;
+            } else {
+              nextEl.textContent = '—';
+            }
+          })
+          .catch(function() {
+            var nextEl = document.getElementById('clientNextBooking');
+            if (nextEl) nextEl.textContent = '—';
+          });
+        var bookBtn = document.getElementById('btnBookClient');
+        if (bookBtn) {
+          var path = (window.location.pathname || '').replace(/[^/]+$/, '') || '/webapp/';
+          var bookHref = path + 'schedule-editor?client_id=' + encodeURIComponent(id);
+          if (initData) bookHref += '&init_data=' + encodeURIComponent(initData);
+          bookBtn.href = bookHref;
+          bookBtn.onclick = function(e) {
+            e.preventDefault();
+            window.location.href = bookBtn.href;
+          };
+        }
+        var issuePassBtn = document.getElementById('btnIssuePass');
+        if (issuePassBtn) {
+          issuePassBtn.onclick = function() {
+            var path = (window.location.pathname || '').replace(/[^/]+$/, '') || '/webapp/';
+            var passUrl = path + 'trainer-pass-products?client_id=' + encodeURIComponent(id);
+            window.location.href = passUrl;
+          };
+        }
+      }
+
+      function loadClients() {
+        setStateMessage('Загрузка клиентов…', 'loading');
+        var base = '/api/webapp/trainer/clients';
+        var url = withInit(base);
+        fetch(url, {
+          headers: {}
+        }).then(function(r) {
+          return r.json().then(function(data) {
+            if (!r.ok) {
+              throw new Error(data.detail || r.statusText);
+            }
+            return data;
+          });
+        }).then(function(data) {
+          state.allClients = data.clients || [];
+          state.filteredClients = state.allClients.slice();
+          setStateMessage('');
+          renderList();
+        }).catch(function(err) {
+          console.error(err);
+          setStateMessage('Не удалось загрузить клиентов. Попробуйте ещё раз.', 'error');
+        });
+      }
+
+      document.getElementById('btnClose').onclick = function() {
+        if (tg && tg.close) tg.close();
+        else window.close();
+      };
+      document.getElementById('searchInput').addEventListener('input', function() {
+        applyFilter();
+      });
+
+      document.getElementById('btnShowInviteLink').onclick = function() {
+        var block = document.getElementById('inviteLinkBlock');
+        var urlEl = document.getElementById('inviteLinkUrl');
+        if (block.style.display === 'block' && urlEl.textContent) return;
+        var btn = this;
+        btn.disabled = true;
+        fetch(withInit('/api/webapp/trainer/welcome-link'), { headers: { 'Content-Type': 'application/json' } })
+          .then(function(r) { return r.json(); })
+          .then(function(o) {
+            var link = o.welcome_link;
+            if (link) {
+              urlEl.textContent = link;
+              block.style.display = 'block';
+            } else {
+              setStateMessage('Пригласительная ссылка недоступна. Откройте из бота тренера.', 'error');
+            }
+          })
+          .catch(function() { setStateMessage('Ошибка загрузки ссылки.', 'error'); })
+          .finally(function() { btn.disabled = false; });
+      };
+      document.getElementById('btnCopyInviteLink').onclick = function() {
+        var link = document.getElementById('inviteLinkUrl').textContent;
+        if (!link) return;
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(link).then(function() { alert('Ссылка скопирована'); }).catch(function() { alert(link); });
+        } else { alert(link); }
+      };
+
+      // Tap outside "Заметка тренера" → blur and dismiss keyboard (important in Telegram WebView)
+      var detailSectionEl = document.getElementById('detailSection');
+      if (detailSectionEl) {
+        detailSectionEl.addEventListener('click', function(e) {
+          var noteInput = document.getElementById('clientNoteInput');
+          if (!noteInput) return;
+          if (e.target !== noteInput && !noteInput.contains(e.target)) {
+            noteInput.blur();
+          }
+        });
+      }
+
+      loadClients();
+    })();
+  </script>
+</body>
+</html>
+

@@ -1,12 +1,18 @@
 """
-Admin bot: moderation of trainers (approve / reject).
-Shows trainer card (profile + photo) and lets admins set Trainer.status.
+Admin bot: moderation of trainers (approve / reject), platform stats Mini App, support inbox.
 """
-from aiogram import Router
+import html
+
+from aiogram import Bot, Router
 from aiogram.filters import Command, CommandStart
-from aiogram.types import BufferedInputFile, CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
+from aiogram.types import BufferedInputFile, CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message, WebAppInfo
 
 from src.application.stats_use_cases import get_platform_stats
+from src.application.support_use_cases import (
+    get_support_message,
+    list_support_messages,
+    reply_support_message,
+)
 from src.application.trainer_use_cases import (
     get_trainer,
     list_trainers,
@@ -39,6 +45,9 @@ TRAINER_STATUS_LABELS = {
 
 # In-memory state: admin user_id -> trainer_id (awaiting moderation feedback text)
 _admin_awaiting_feedback: dict[int, int] = {}
+# admin user_id -> support_id (awaiting reply text)
+_admin_awaiting_support_reply: dict[int, int] = {}
+ADMIN_SUPPORT_REPLY_PREFIX = "admin:support:reply:"
 
 
 def _is_admin(user_id: int | None) -> bool:
@@ -118,7 +127,10 @@ async def cmd_start(message: Message) -> None:
     if not _is_admin(user_id):
         await message.answer(msg.ADMIN_NO_ACCESS)
         return
-    await message.answer(msg.ADMIN_START)
+    # No keyboard: all actions via menu commands (/pending, /stats, /support, /dicts)
+    await message.answer(
+        msg.ADMIN_START + "\n\nИспользуйте команды из меню (слева от поля ввода):\n/pending — модерация\n/stats — статистика\n/support — поддержка\n/dicts — города и арены"
+    )
 
 
 def _admin_stats_message(s: dict) -> str:
@@ -164,6 +176,19 @@ def _admin_stats_message(s: dict) -> str:
     status_lines += [msg.ADMIN_STATS_ROW.format(label=TRAINER_STATUS_LABELS.get(k, k), value=v) for k, v in sorted(by_status.items())]
     parts.append(msg.ADMIN_STATS_SECTION_TRAINERS.format(lines="\n".join(status_lines)))
 
+    # Section: Абонементы и сертификаты
+    cert_byn = (s.get("cert_balance_cents_total") or 0) / 100
+    cert_byn_str = f"{cert_byn:.0f}" if cert_byn == int(cert_byn) else f"{cert_byn:.2f}"
+    pass_cert_lines = [
+        msg.ADMIN_STATS_ROW.format(label=msg.ADMIN_STATS_PASSES_ACTIVE, value=s.get("passes_active_total", 0)),
+        msg.ADMIN_STATS_ROW.format(label=msg.ADMIN_STATS_PASSES_ISSUED_30D, value=s.get("passes_issued_30d_total", 0)),
+        msg.ADMIN_STATS_ROW.format(label=msg.ADMIN_STATS_CERTS_ISSUED, value=s.get("certs_issued_total", 0)),
+        msg.ADMIN_STATS_ROW.format(label=msg.ADMIN_STATS_CERTS_WITH_BALANCE, value=s.get("certs_with_balance_total", 0)),
+        msg.ADMIN_STATS_ROW.format(label=msg.ADMIN_STATS_CERTS_BALANCE_BYN, value=cert_byn_str),
+        msg.ADMIN_STATS_ROW.format(label=msg.ADMIN_STATS_CERTS_REDEEMED_30D, value=s.get("certs_redeemed_30d_total", 0)),
+    ]
+    parts.append(msg.ADMIN_STATS_SECTION_PASSES_CERTS.format(lines="\n".join(pass_cert_lines)))
+
     # Section: Сигналы (что проверить)
     signal_lines = []
     if s["trainers_pending_moderation"] > 0:
@@ -182,16 +207,127 @@ def _admin_stats_message(s: dict) -> str:
     return "\n".join(parts)
 
 
-@router.message(Command("stats"))
-async def cmd_stats(message: Message) -> None:
-    """Platform statistics: current state, 7d/30d, trainers, and signals for decisions."""
+@router.callback_query(lambda c: c.data == "admin:menu:pending")
+async def admin_menu_pending(callback: CallbackQuery) -> None:
+    if not _is_admin(callback.from_user.id if callback.from_user else 0):
+        await callback.answer("Нет доступа", show_alert=True)
+        return
+    await callback.answer()
+    await callback.message.answer("Используйте команду /pending для очереди тренеров на модерацию.")
+
+
+@router.callback_query(lambda c: c.data == "admin:menu:support")
+async def admin_menu_support(callback: CallbackQuery) -> None:
+    if not _is_admin(callback.from_user.id if callback.from_user else 0):
+        await callback.answer("Нет доступа", show_alert=True)
+        return
+    await callback.answer()
+    async with async_session_factory() as session:
+        items = await list_support_messages(session, limit=15, status=None)
+    if not items:
+        await callback.message.answer(msg.ADMIN_SUPPORT_EMPTY)
+        return
+    parts = [msg.ADMIN_SUPPORT_LIST_TITLE]
+    kb_rows = []
+    for it in items:
+        role = "тренер" if it.get("from_role") == "trainer" else "клиент"
+        date_str = (it.get("created_at") or "")[:10] if it.get("created_at") else ""
+        text_preview = (it.get("message_text") or "")[:80].replace("\n", " ")
+        if len((it.get("message_text") or "")) > 80:
+            text_preview += "..."
+        parts.append(msg.ADMIN_SUPPORT_ITEM.format(id=it["id"], role=role, date=date_str, text=text_preview))
+        kb_rows.append([InlineKeyboardButton(
+            text=f"Ответить #{it['id']}",
+            callback_data=f"{ADMIN_SUPPORT_REPLY_PREFIX}{it['id']}",
+        )])
+    await callback.message.answer(
+        "\n".join(parts),
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=kb_rows),
+    )
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith(ADMIN_SUPPORT_REPLY_PREFIX))
+async def admin_support_reply_start(callback: CallbackQuery) -> None:
+    if not _is_admin(callback.from_user.id if callback.from_user else 0):
+        await callback.answer("Нет доступа", show_alert=True)
+        return
+    support_id = safe_parse_id(callback.data[len(ADMIN_SUPPORT_REPLY_PREFIX) :])
+    if support_id is None:
+        await callback.answer("Ошибка", show_alert=True)
+        return
+    await callback.answer()
+    _admin_awaiting_support_reply[callback.from_user.id] = support_id  # type: ignore[union-attr]
+    await callback.message.answer(msg.ADMIN_SUPPORT_REPLY_PROMPT)
+
+
+@router.message(Command("support"))
+async def cmd_support(message: Message) -> None:
+    """List support tickets and allow reply."""
     if not _is_admin(message.from_user.id if message.from_user else 0):
         await message.answer(msg.ADMIN_NO_ACCESS)
         return
     async with async_session_factory() as session:
-        s = await get_platform_stats(session)
-    text = _admin_stats_message(s)
-    await message.answer(text)
+        items = await list_support_messages(session, limit=15, status=None)
+    if not items:
+        await message.answer(msg.ADMIN_SUPPORT_EMPTY)
+        return
+    parts = [msg.ADMIN_SUPPORT_LIST_TITLE]
+    kb_rows = []
+    for it in items:
+        role = "тренер" if it.get("from_role") == "trainer" else "клиент"
+        date_str = (it.get("created_at") or "")[:10] if it.get("created_at") else ""
+        text_preview = (it.get("message_text") or "")[:80].replace("\n", " ")
+        if len((it.get("message_text") or "")) > 80:
+            text_preview += "..."
+        parts.append(msg.ADMIN_SUPPORT_ITEM.format(id=it["id"], role=role, date=date_str, text=text_preview))
+        kb_rows.append([InlineKeyboardButton(
+            text=f"Ответить #{it['id']}",
+            callback_data=f"{ADMIN_SUPPORT_REPLY_PREFIX}{it['id']}",
+        )])
+    await message.answer(
+        "\n".join(parts),
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=kb_rows),
+    )
+
+
+@router.message(Command("stats"))
+async def cmd_stats(message: Message) -> None:
+    """Open platform stats Mini App."""
+    if not _is_admin(message.from_user.id if message.from_user else 0):
+        await message.answer(msg.ADMIN_NO_ACCESS)
+        return
+    base = Settings().webapp_base_url or ""
+    url = f"{base.rstrip('/')}/webapp/admin-stats" if base else ""
+    if not url:
+        async with async_session_factory() as session:
+            s = await get_platform_stats(session)
+        await message.answer(_admin_stats_message(s))
+        return
+    await message.answer(
+        "📊 Статистика платформы",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="Открыть дашборд", web_app=WebAppInfo(url=url))],
+        ]),
+    )
+
+
+@router.message(Command("dicts"))
+async def cmd_dicts(message: Message) -> None:
+    """Open cities & arenas Mini App."""
+    if not _is_admin(message.from_user.id if message.from_user else 0):
+        await message.answer(msg.ADMIN_NO_ACCESS)
+        return
+    base = Settings().webapp_base_url or ""
+    url = f"{base.rstrip('/')}/webapp/admin-dicts" if base else ""
+    if not url:
+        await message.answer("Не настроен webapp_base_url. Укажите в .env.")
+        return
+    await message.answer(
+        "🏙 Города и арены",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="Открыть справочники", web_app=WebAppInfo(url=url))],
+        ]),
+    )
 
 
 @router.message(Command("pending"))
@@ -266,16 +402,47 @@ async def on_needs_edit(callback: CallbackQuery) -> None:
 
 @router.message()
 async def on_admin_message(message: Message) -> None:
-    """Handle next message when admin is in 'awaiting feedback' state (plain text = feedback)."""
+    """Handle: 1) awaiting moderation feedback; 2) awaiting support reply."""
     user_id = message.from_user.id if message.from_user else 0
-    trainer_id = _admin_awaiting_feedback.pop(user_id, None)
-    if trainer_id is None:
-        return
     if not _is_admin(user_id):
         return
     text = (message.text or "").strip()
     if text.lower() in ("/cancel", "отмена", "отменить"):
-        await message.answer(msg.ADMIN_NEEDS_EDIT_CANCELLED)
+        _admin_awaiting_feedback.pop(user_id, None)
+        support_id = _admin_awaiting_support_reply.pop(user_id, None)
+        if support_id is not None:
+            await message.answer(msg.ADMIN_SUPPORT_REPLY_CANCELLED)
+        else:
+            await message.answer(msg.ADMIN_NEEDS_EDIT_CANCELLED)
+        return
+
+    support_id = _admin_awaiting_support_reply.pop(user_id, None)
+    if support_id is not None:
+        async with async_session_factory() as session:
+            ticket = await get_support_message(session, support_id)
+            if not ticket:
+                await message.answer("Обращение не найдено.")
+                return
+            ok = await reply_support_message(session, support_id, user_id, text)
+            if not ok:
+                await message.answer("Не удалось сохранить ответ.")
+                return
+        if ticket:
+            settings = Settings()
+            from_role = ticket.get("from_role") or "client"
+            token = settings.telegram_bot_token_trainer if from_role == "trainer" else settings.telegram_bot_token_client
+            bot = Bot(token=token)
+            try:
+                reply_text = f"📩 <b>Ответ поддержки:</b>\n\n{html.escape(text)}"
+                await bot.send_message(chat_id=ticket["from_telegram_id"], text=reply_text)
+            except Exception:
+                pass
+            await bot.session.close()
+        await message.answer(msg.ADMIN_SUPPORT_REPLY_SENT)
+        return
+
+    trainer_id = _admin_awaiting_feedback.pop(user_id, None)
+    if trainer_id is None:
         return
     async with async_session_factory() as session:
         await set_trainer_moderation_feedback(session, trainer_id, text or None)

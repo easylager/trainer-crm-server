@@ -3,20 +3,26 @@ Trainer bot: entry only via paid link from site (t.me/bot?start=link_<token>).
 Schedule: by calendar week (this/next). Template for quick apply; add slots to a specific week.
 """
 import asyncio
-from datetime import date, time, timedelta
+from datetime import date, datetime, time, timedelta
 from itertools import groupby
 
-from aiogram import Router
+from aiogram import Bot, Router
+from aiogram.client.default import DefaultBotProperties
+from aiogram.enums import ParseMode
 from aiogram.filters import Command, CommandStart
-from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message, WebAppInfo
 
 from src.application.booking_use_cases import (
     cancel_booking,
+    confirm_booking,
     create_booking,
+    decline_booking,
     generate_reminders_for_booking,
     get_booking_for_trainer_feedback,
     get_booking_with_slot,
+    get_first_service_id_for_trainer,
     list_bookings_for_trainer,
+    list_trainer_clients,
     set_booking_trainer_review,
 )
 from src.application.recurring_use_cases import (
@@ -34,13 +40,18 @@ from src.application.client_request_use_cases import (
     list_requests_for_trainer,
 )
 from src.application.stats_use_cases import get_trainer_stats
+from src.application.subscription_use_cases import get_active_subscription
 from src.application.trainer_link import consume_link_token, get_trainer_by_telegram_id, get_trainer_id_by_telegram_id
+from src.application.trainer_use_cases import get_trainer
+from src.application.support_use_cases import create_support_message
+from src.infrastructure.db.models import SUPPORT_FROM_TRAINER
 from src.shared.audit import ACTOR_TRAINER_BOT, audit_log
 from src.shared.validation import MAX_COMMENT_LEN, MAX_REVIEW_LEN, safe_parse_id, truncate_text
 from src.application.trainer_schedule_use_cases import (
     add_template,
     delete_slot,
     delete_template,
+    get_slot,
     list_slots,
     list_templates,
     next_week_monday,
@@ -50,8 +61,16 @@ from src.application.trainer_schedule_use_cases import (
     this_week_monday,
 )
 from src.bot import messages as msg
+from src.shared.config import Settings
+from src.shared.notification_hours import NOTIFICATION_TZ
+
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:
+    from backports.zoneinfo import ZoneInfo  # type: ignore[no-redef]
 from src.bot.schedule_notifications import run_after_schedule_changed
 from src.infrastructure.db import async_session_factory
+from src.shared.config import Settings
 
 router = Router(name="trainer")
 
@@ -65,6 +84,9 @@ SCHEDULE_TIME_PREFIX = "schedule:time:"
 SCHEDULE_TIME_LOCKED_PREFIX = "schedule:time_locked:"
 SCHEDULE_DONE_PREFIX = "schedule:done:"
 SCHEDULE_CANCEL_ADD = "schedule:cancel_add"
+SCHEDULE_CREATE_BOOKING = "schedule:create_booking"
+SCHEDULE_CREATE_BOOKING_SLOT_PREFIX = "schedule:create_booking_slot:"
+SCHEDULE_CREATE_BOOKING_CLIENT_PREFIX = "schedule:create_booking_client:"
 SCHEDULE_GEN_THIS = "schedule:gen:this"
 SCHEDULE_GEN_NEXT = "schedule:gen:next"
 SCHEDULE_CONFIRM_THIS = "schedule:confirm:this"
@@ -78,6 +100,8 @@ BOOKINGS_PAGE_PREFIX = "bookings_page:"
 WRITE_BOOKING_PREFIX = "write_booking:"
 CANCEL_BOOKING_PREFIX = "cancel_booking:"
 CANCEL_BOOKING_CONFIRM_PREFIX = "cancel_booking_confirm:"
+CONFIRM_BOOKING_PREFIX = "confirm_booking:"
+DECLINE_BOOKING_PREFIX = "decline_booking:"
 MAKE_RECURRING_TRAINER_PREFIX = "make_recurring_trainer:"
 REMOVE_RECURRING_PREFIX = "remove_recurring:"
 REQUESTS_CALLBACK = "requests"
@@ -92,6 +116,8 @@ REQUEST_REMIND_SLOTS_PREFIX = "request_remind_slots:"
 REQUEST_BOOK_SLOT_PREFIX = "request_book_slot:"
 FEEDBACK_BOOKING_TRAINER_PREFIX = "feedback_booking_trainer:"
 GUIDE_CALLBACK = "guide"
+TRAINER_SUPPORT_CALLBACK = "trainer:support"
+_trainer_support_awaiting: set[int] = set()
 
 # Add state: telegram_id -> { week_start?: str (YYYY-MM-DD), day: int, hours: set[int] }. No week_start = template.
 _schedule_add_state: dict[int, dict] = {}
@@ -99,6 +125,8 @@ _schedule_add_state: dict[int, dict] = {}
 _trainer_feedback_state: dict[int, dict] = {}
 # Trainer responding to request: telegram_id -> request_id (awaiting optional comment)
 _request_respond_state: dict[int, int] = {}
+# Trainer declining booking: telegram_id -> booking_id (awaiting required comment)
+_booking_decline_state: dict[int, int] = {}
 
 
 def _format_time(t) -> str:
@@ -142,8 +170,14 @@ async def _schedule_keyboard(trainer_id: int) -> tuple[str, InlineKeyboardMarkup
     this_m = this_week_monday()
     next_m = next_week_monday()
 
+    base = (Settings().webapp_base_url or "").rstrip("/")
+    if base and base.lower().startswith("https://"):
+        schedule_row = [InlineKeyboardButton(text=msg.TRAINER_BUTTON_MY_SLOTS, web_app=WebAppInfo(url=f"{base}/webapp/schedule"))]
+    else:
+        schedule_row = [InlineKeyboardButton(text=msg.TRAINER_BUTTON_MY_SLOTS, callback_data=SLOTS_CALLBACK)]
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=msg.TRAINER_BUTTON_MY_SLOTS, callback_data=SLOTS_CALLBACK)],
+        schedule_row,
+        [InlineKeyboardButton(text=msg.TRAINER_BUTTON_CREATE_BOOKING, callback_data=SCHEDULE_CREATE_BOOKING)],
         [InlineKeyboardButton(text=msg.TRAINER_BUTTON_ADD_SLOT, callback_data=SCHEDULE_ADD)],
         [InlineKeyboardButton(text=f"{msg.TRAINER_BUTTON_APPLY_THIS_WEEK}", callback_data=SCHEDULE_GEN_THIS)],
         [InlineKeyboardButton(text=f"{msg.TRAINER_BUTTON_APPLY_NEXT_WEEK}", callback_data=SCHEDULE_GEN_NEXT)],
@@ -159,7 +193,8 @@ async def cmd_start(message: Message) -> None:
     async with async_session_factory() as session:
         if len(args) > 1 and args[1].startswith(START_LINK_PREFIX):
             token = args[1].removeprefix(START_LINK_PREFIX)
-            trainer_id = await consume_link_token(session, token, user_id)
+            username = (message.from_user.username if message.from_user else None) or None
+            trainer_id = await consume_link_token(session, token, user_id, telegram_username=username)
             if trainer_id is not None:
                 audit_log("trainer.linked", ACTOR_TRAINER_BOT, user_id, {"trainer_id": trainer_id})
                 await message.answer(msg.TRAINER_LINK_SUCCESS)
@@ -173,15 +208,21 @@ async def cmd_start(message: Message) -> None:
     await message.answer(msg.TRAINER_START_WELCOME)
 
 
+def _trainer_guide_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="💬 Написать в поддержку", callback_data=TRAINER_SUPPORT_CALLBACK)],
+    ])
+
+
 @router.message(Command("guide"))
 async def cmd_guide(message: Message) -> None:
-    """Show instruction only; no buttons — trainer uses main menu (left of input)."""
+    """Show help (Помощь) and support button."""
     async with async_session_factory() as session:
         trainer_id = await get_trainer_id_by_telegram_id(session, message.from_user.id if message.from_user else 0)
     if not trainer_id:
         await message.answer(msg.TRAINER_ONLY_VIA_SITE)
         return
-    await message.answer(msg.TRAINER_GUIDE)
+    await message.answer(msg.TRAINER_GUIDE, reply_markup=_trainer_guide_keyboard())
 
 
 def _format_slot_time(st, et) -> str:
@@ -204,13 +245,48 @@ def _slot_status_label(status: str) -> str:
     return msg.TRAINER_SLOTS_STATUS_CANCELLED
 
 
+def _schedule_webapp_keyboard(
+    include_back: bool = False,
+    include_create_booking: bool = False,
+) -> InlineKeyboardMarkup:
+    """Keyboard with Web App 'Open schedule' button; optionally Create booking and Back rows. Web App only if HTTPS (Telegram requirement)."""
+    base = (Settings().webapp_base_url or "").rstrip("/")
+    url = f"{base}/webapp/schedule" if base else ""
+    rows = []
+    if url and base.lower().startswith("https://"):
+        rows.append([
+            InlineKeyboardButton(
+                text=msg.TRAINER_BUTTON_OPEN_SCHEDULE_WEBAPP,
+                web_app=WebAppInfo(url=url),
+            )
+        ])
+    if include_create_booking:
+        rows.append([InlineKeyboardButton(text=msg.TRAINER_BUTTON_CREATE_BOOKING, callback_data=SCHEDULE_CREATE_BOOKING)])
+    if include_back:
+        rows.append([InlineKeyboardButton(text=msg.TRAINER_BUTTON_BACK_TO_SCHEDULE, callback_data=SCHEDULE_CALLBACK)])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def _slot_is_future(slot_date: date, start_time: time, now_date: date, now_time: time) -> bool:
+    """True if slot (date + start_time) is strictly after (now_date, now_time)."""
+    if slot_date > now_date:
+        return True
+    if slot_date < now_date:
+        return False
+    return start_time > now_time
+
+
 async def _slots_content(trainer_id: int) -> tuple[str, InlineKeyboardMarkup | None]:
-    """Build applied schedule screen: text only (this week / next week), no delete buttons. Always returns (text, None)."""
+    """Build applied schedule screen: text only (this week / next week), no delete buttons. Past slots hidden. Always returns (text, None)."""
     this_m = this_week_monday()
     next_m = next_week_monday()
     to_date = next_m + timedelta(days=6)
     async with async_session_factory() as session:
         slots = await list_slots(session, trainer_id, this_m, to_date)
+    now_minsk = datetime.now(ZoneInfo(NOTIFICATION_TZ))
+    now_date = now_minsk.date()
+    now_time = now_minsk.time()
+    slots = [s for s in slots if _slot_is_future(s["slot_date"], s["start_time"], now_date, now_time)]
     if not slots:
         return msg.TRAINER_SLOTS_TITLE + "\n\n" + msg.TRAINER_SLOTS_EMPTY, None
     s1, e1 = _week_range(this_m)
@@ -252,12 +328,23 @@ async def _slots_content(trainer_id: int) -> tuple[str, InlineKeyboardMarkup | N
 
 @router.message(Command("editor"))
 async def cmd_editor(message: Message) -> None:
-    """Open schedule editor from menu button or /editor. Same screen as callback Редактор расписания."""
+    """Open schedule editor: Mini App (HTTPS) or chat keyboard with template + add/apply."""
     telegram_id = message.from_user.id if message.from_user else 0
     async with async_session_factory() as session:
         trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
     if not trainer_id:
         await message.answer(msg.TRAINER_ONLY_VIA_SITE)
+        return
+    base = (Settings().webapp_base_url or "").rstrip("/")
+    if base.startswith("https://"):
+        url = f"{base}/webapp/schedule-editor"
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text=msg.TRAINER_BUTTON_SCHEDULE, web_app=WebAppInfo(url=url))],
+        ])
+        await message.answer(
+            "Откройте расписание — шаблон недели, календарь слотов и применение на неделю. По клику на свободный слот можно записать клиента.",
+            reply_markup=kb,
+        )
         return
     text, keyboard = await _schedule_keyboard(trainer_id)
     await message.answer(text, reply_markup=keyboard)
@@ -265,15 +352,8 @@ async def cmd_editor(message: Message) -> None:
 
 @router.message(Command("schedule"))
 async def cmd_schedule(message: Message) -> None:
-    """View applied schedule (this week + next) from menu or /schedule."""
-    telegram_id = message.from_user.id if message.from_user else 0
-    async with async_session_factory() as session:
-        trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
-    if not trainer_id:
-        await message.answer(msg.TRAINER_ONLY_VIA_SITE)
-        return
-    text, _ = await _slots_content(trainer_id)
-    await message.answer(text)
+    """Same as /editor: open schedule (editor) Mini App or chat keyboard. Kept for backwards compatibility."""
+    await cmd_editor(message)
 
 
 def _booking_button_label(b: dict) -> str:
@@ -467,25 +547,66 @@ async def _requests_content(
 
 @router.message(Command("bookings"))
 async def cmd_bookings(message: Message) -> None:
-    """Open 'Мои записи' from menu (left of attachment)."""
+    """Open 'Мои записи' from menu: Mini App (HTTPS) or chat list."""
     telegram_id = message.from_user.id if message.from_user else 0
     async with async_session_factory() as session:
         trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
     if not trainer_id:
         await message.answer(msg.TRAINER_ONLY_VIA_SITE)
         return
+    base = (Settings().webapp_base_url or "").rstrip("/")
+    if base.startswith("https://"):
+        url = f"{base}/webapp/trainer-bookings"
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text=msg.TRAINER_BUTTON_MY_BOOKINGS, web_app=WebAppInfo(url=url))],
+        ])
+        await message.answer("Откройте список записей — там можно подтверждать, отменять и писать клиентам.", reply_markup=kb)
+        return
     text, keyboard = await _bookings_content(trainer_id)
     await message.answer(text, reply_markup=keyboard)
 
 
-@router.message(Command("requests"))
-async def cmd_requests(message: Message) -> None:
-    """Open 'Заявки клиентов' from menu (left of attachment)."""
+@router.message(Command("clients"))
+async def cmd_clients(message: Message) -> None:
+    """Open 'Мои клиенты' Mini App for trainer (HTTPS only)."""
     telegram_id = message.from_user.id if message.from_user else 0
     async with async_session_factory() as session:
         trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
     if not trainer_id:
         await message.answer(msg.TRAINER_ONLY_VIA_SITE)
+        return
+    base = (Settings().webapp_base_url or "").rstrip("/")
+    if not base or not base.startswith("https://"):
+        await message.answer("Раздел «Мои клиенты» доступен в продакшене по HTTPS (нужен WEBAPP_BASE_URL).")
+        return
+    url = f"{base}/webapp/trainer-clients"
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=msg.TRAINER_BUTTON_CLIENTS, web_app=WebAppInfo(url=url))],
+        ]
+    )
+    await message.answer("Откройте список клиентов с записями: там видно телефон и последнее занятие.", reply_markup=kb)
+
+
+@router.message(Command("requests"))
+async def cmd_requests(message: Message) -> None:
+    """Open 'Заявки клиентов' from menu: Mini App (HTTPS) or chat list."""
+    telegram_id = message.from_user.id if message.from_user else 0
+    async with async_session_factory() as session:
+        trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    if not trainer_id:
+        await message.answer(msg.TRAINER_ONLY_VIA_SITE)
+        return
+    base = (Settings().webapp_base_url or "").rstrip("/")
+    if base.startswith("https://"):
+        url = f"{base}/webapp/trainer-requests"
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text=msg.TRAINER_BUTTON_REQUESTS, web_app=WebAppInfo(url=url))],
+        ])
+        await message.answer(
+            "Откройте «Заявки клиентов» — там можно откликнуться, записать клиента на слот или отклонить заявку.",
+            reply_markup=kb,
+        )
         return
     text, keyboard = await _requests_content(trainer_id)
     await message.answer(text, reply_markup=keyboard)
@@ -497,12 +618,19 @@ def _format_stats_date(d: date) -> str:
 
 @router.message(Command("stats"))
 async def cmd_stats(message: Message) -> None:
-    """Show trainer statistics: week/month bookings, load, new clients, rating."""
+    """Open stats Mini App (HTTPS) or show text statistics."""
     telegram_id = message.from_user.id if message.from_user else 0
     async with async_session_factory() as session:
         trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
     if not trainer_id:
         await message.answer(msg.TRAINER_ONLY_VIA_SITE)
+        return
+    base = (Settings().webapp_base_url or "").rstrip("/")
+    if base.startswith("https://"):
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text=msg.TRAINER_BUTTON_STATS_APP, web_app=WebAppInfo(url=f"{base}/webapp/trainer-stats"))],
+        ])
+        await message.answer(msg.TRAINER_STATS_OPEN_APP, reply_markup=kb)
         return
     async with async_session_factory() as session:
         s = await get_trainer_stats(session, trainer_id)
@@ -537,7 +665,77 @@ async def cmd_stats(message: Message) -> None:
         )
     else:
         parts.append(msg.TRAINER_STATS_RATING_NONE)
+    parts.append(
+        msg.TRAINER_STATS_PASSES.format(
+            passes_active=s["passes_active"],
+            passes_issued_30d=s["passes_issued_30d"],
+        )
+    )
+    cert_balance_byn = (s.get("certificate_balance_cents") or 0) / 100
+    parts.append(
+        msg.TRAINER_STATS_CERTS.format(
+            certificates_issued_total=s["certificates_issued_total"],
+            certificates_with_balance=s["certificates_with_balance"],
+            certificate_balance_byn=f"{cert_balance_byn:.0f}" if cert_balance_byn == int(cert_balance_byn) else f"{cert_balance_byn:.2f}",
+            certificates_redeemed_30d=s["certificates_redeemed_30d"],
+        )
+    )
     await message.answer("\n".join(parts))
+
+
+@router.message(Command("passes"))
+async def cmd_passes(message: Message) -> None:
+    """Open pass products Mini App (HTTPS) or hint to use app."""
+    telegram_id = message.from_user.id if message.from_user else 0
+    async with async_session_factory() as session:
+        trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    if not trainer_id:
+        await message.answer(msg.TRAINER_ONLY_VIA_SITE)
+        return
+    base = (Settings().webapp_base_url or "").rstrip("/")
+    if base.startswith("https://"):
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text=msg.TRAINER_BUTTON_PASSES, web_app=WebAppInfo(url=f"{base}/webapp/trainer-pass-products"))],
+        ])
+        await message.answer(
+            "Настройте абонементы (N занятий за цену) и сертификаты (номинал на сумму или «любая сумма»). Клиенты видят это в карточке тренера.",
+            reply_markup=kb,
+        )
+        return
+    await message.answer("Откройте приложение по ссылке с HTTPS (например, в продакшене) для настройки абонементов.")
+
+
+@router.message(Command("subscription"))
+async def cmd_subscription(message: Message) -> None:
+    """Show subscription status and 'Оплатить подписку' button (Web App to payment flow)."""
+    telegram_id = message.from_user.id if message.from_user else 0
+    async with async_session_factory() as session:
+        trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    if not trainer_id:
+        await message.answer(msg.TRAINER_ONLY_VIA_SITE)
+        return
+    base = (Settings().webapp_base_url or "").rstrip("/")
+    pay_url = f"{base}/webapp/trainer-pay-subscription" if base and base.startswith("https://") else None
+    async with async_session_factory() as session:
+        sub = await get_active_subscription(session, trainer_id)
+    if sub:
+        expires_at = sub.get("expires_at") or ""
+        if isinstance(expires_at, str) and len(expires_at) >= 10:
+            y, m, d = expires_at[:10].split("-")
+            expires_date = f"{d}.{m}.{y}"
+        elif hasattr(expires_at, "strftime"):
+            expires_date = expires_at.strftime("%d.%m.%Y")
+        else:
+            expires_date = str(expires_at)[:10]
+        text = msg.TRAINER_SUBSCRIPTION_ACTIVE.format(expires_date=expires_date)
+    else:
+        text = msg.TRAINER_SUBSCRIPTION_EXPIRED
+    kb = None
+    if pay_url:
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text=msg.TRAINER_BUTTON_PAY_SUBSCRIPTION, web_app=WebAppInfo(url=pay_url))],
+        ])
+    await message.answer(text, reply_markup=kb, parse_mode=ParseMode.HTML)
 
 
 @router.callback_query(lambda c: c.data == SCHEDULE_CALLBACK)
@@ -564,7 +762,169 @@ async def show_slots_from_schedule(callback: CallbackQuery) -> None:
         await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
         return
     text, _ = await _slots_content(trainer_id)
-    await callback.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=[]))
+    await callback.message.edit_text(
+        text,
+        reply_markup=_schedule_webapp_keyboard(include_back=True, include_create_booking=True),
+    )
+
+
+@router.callback_query(lambda c: c.data == SCHEDULE_CREATE_BOOKING)
+async def schedule_create_booking_start(callback: CallbackQuery) -> None:
+    """Trainer wants to create a booking from schedule: choose future free slot first."""
+    await callback.answer()
+    telegram_id = callback.from_user.id if callback.from_user else 0
+    async with async_session_factory() as session:
+        trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    if not trainer_id:
+        await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
+        return
+    now = datetime.now()
+    cutoff = now + timedelta(hours=2)
+    from_date = cutoff.date()
+    to_date = from_date + timedelta(days=14)
+    async with async_session_factory() as session:
+        slots = await list_slots(session, trainer_id, from_date, to_date)
+    free_slots: list[dict] = []
+    for s in slots:
+        status = (s.get("status") or "").strip()
+        if status != "available":
+            continue
+        slot_date = s.get("slot_date")
+        start_time = s.get("start_time")
+        if not slot_date or not start_time:
+            continue
+        try:
+            slot_dt = datetime.combine(slot_date, start_time)
+        except Exception:
+            continue
+        if slot_dt < cutoff:
+            continue
+        free_slots.append(s)
+    if not free_slots:
+        await callback.message.answer(msg.TRAINER_CREATE_BOOKING_NO_SLOTS)
+        return
+    rows: list[list[InlineKeyboardButton]] = []
+    for s in free_slots:
+        d = s["slot_date"]
+        date_str = d.strftime("%d.%m") if hasattr(d, "strftime") else str(d)
+        dow = msg.TRAINER_DAYS[d.weekday()] if hasattr(d, "weekday") else ""
+        time_range = _format_slot_time(s["start_time"], s["end_time"])
+        label = f"{date_str} {dow} {time_range}"
+        rows.append([
+            InlineKeyboardButton(
+                text=label,
+                callback_data=f"{SCHEDULE_CREATE_BOOKING_SLOT_PREFIX}{s['id']}",
+            )
+        ])
+    rows.append([InlineKeyboardButton(text=msg.TRAINER_BUTTON_BACK_TO_SCHEDULE, callback_data=SCHEDULE_CALLBACK)])
+    kb = InlineKeyboardMarkup(inline_keyboard=rows)
+    await callback.message.edit_text(msg.TRAINER_CREATE_BOOKING_CHOOSE_SLOT, reply_markup=kb)
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith(SCHEDULE_CREATE_BOOKING_SLOT_PREFIX))
+async def schedule_create_booking_choose_client(callback: CallbackQuery) -> None:
+    """After slot chosen, ask trainer to pick one of their existing clients."""
+    await callback.answer()
+    raw = callback.data[len(SCHEDULE_CREATE_BOOKING_SLOT_PREFIX):]
+    slot_id = safe_parse_id(raw)
+    if slot_id is None:
+        return
+    telegram_id = callback.from_user.id if callback.from_user else 0
+    async with async_session_factory() as session:
+        trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    if not trainer_id:
+        await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
+        return
+    # Validate slot and load its date/time for caption
+    async with async_session_factory() as session:
+        slot = await get_slot(session, slot_id)
+    if not slot or slot.get("trainer_id") != trainer_id or (slot.get("status") or "").strip() != "available":
+        await callback.message.answer(msg.TRAINER_CREATE_BOOKING_SLOT_UNAVAILABLE)
+        return
+    async with async_session_factory() as session:
+        clients = await list_trainer_clients(session, trainer_id, limit=50)
+    if not clients:
+        await callback.message.answer(msg.TRAINER_CREATE_BOOKING_NO_CLIENTS)
+        return
+    slot_date = slot.get("slot_date")
+    start_time = slot.get("start_time")
+    date_str = slot_date.strftime("%d.%m") if slot_date and hasattr(slot_date, "strftime") else "—"
+    day_str = msg.TRAINER_DAYS[slot_date.weekday()] if slot_date and hasattr(slot_date, "weekday") else ""
+    time_str = _format_time(start_time)
+    rows: list[list[InlineKeyboardButton]] = []
+    for c in clients:
+        name = ((c.get("first_name") or "") + " " + (c.get("last_name") or "")).strip() or "Клиент"
+        rows.append([
+            InlineKeyboardButton(
+                text=name,
+                callback_data=f"{SCHEDULE_CREATE_BOOKING_CLIENT_PREFIX}{slot_id}:{c['id']}",
+            )
+        ])
+    rows.append([InlineKeyboardButton(text=msg.TRAINER_BUTTON_BACK_TO_SCHEDULE, callback_data=SCHEDULE_CALLBACK)])
+    kb = InlineKeyboardMarkup(inline_keyboard=rows)
+    await callback.message.edit_text(
+        msg.TRAINER_CREATE_BOOKING_CHOOSE_CLIENT.format(date=date_str, day=day_str, time=time_str),
+        reply_markup=kb,
+    )
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith(SCHEDULE_CREATE_BOOKING_CLIENT_PREFIX))
+async def schedule_create_booking_finalize(callback: CallbackQuery) -> None:
+    """Create booking for chosen client and slot."""
+    await callback.answer()
+    payload = (callback.data or "")[len(SCHEDULE_CREATE_BOOKING_CLIENT_PREFIX):]
+    parts = payload.split(":")
+    if len(parts) != 2:
+        return
+    slot_id = safe_parse_id(parts[0])
+    client_id = safe_parse_id(parts[1])
+    if slot_id is None or client_id is None:
+        return
+    telegram_id = callback.from_user.id if callback.from_user else 0
+    async with async_session_factory() as session:
+        trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    if not trainer_id:
+        await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
+        return
+    async with async_session_factory() as session:
+        slot = await get_slot(session, slot_id)
+    if not slot or slot.get("trainer_id") != trainer_id or (slot.get("status") or "").strip() != "available":
+        await callback.message.answer(msg.TRAINER_CREATE_BOOKING_SLOT_UNAVAILABLE)
+        return
+    async with async_session_factory() as session:
+        service_id = await get_first_service_id_for_trainer(session, trainer_id)
+        if not service_id:
+            await callback.message.answer("У вас не указана ни одна услуга. Добавьте услугу в профиле.")
+            return
+        booking_id = await create_booking(
+            session,
+            slot_id=slot_id,
+            trainer_id=trainer_id,
+            client_id=client_id,
+            service_id=service_id,
+            client_comment=None,
+            client_request_id=None,
+            created_by_trainer=True,
+        )
+    if not booking_id:
+        await callback.message.answer(msg.TRAINER_CREATE_BOOKING_SLOT_UNAVAILABLE)
+        return
+    async with async_session_factory() as session:
+        await generate_reminders_for_booking(session, booking_id)
+    slot_date = slot.get("slot_date")
+    start_time = slot.get("start_time")
+    date_str = slot_date.strftime("%d.%m") if slot_date and hasattr(slot_date, "strftime") else "—"
+    day_str = msg.TRAINER_DAYS[slot_date.weekday()] if slot_date and hasattr(slot_date, "weekday") else ""
+    time_str = _format_time(start_time)
+    # For confirmation we don't fetch client name again; it is secondary.
+    await callback.message.answer(
+        msg.TRAINER_CREATE_BOOKING_DONE.format(
+            client_name="клиент",
+            date=date_str,
+            day=day_str,
+            time=time_str,
+        )
+    )
 
 
 @router.callback_query(lambda c: c.data == BOOKINGS_CALLBACK)
@@ -722,6 +1082,68 @@ async def show_write_booking_link(callback: CallbackQuery) -> None:
     await callback.message.edit_text(text, reply_markup=keyboard)
 
 
+@router.callback_query(lambda c: c.data and c.data.startswith(CONFIRM_BOOKING_PREFIX))
+async def on_confirm_booking(callback: CallbackQuery) -> None:
+    """Trainer tapped 'Подтвердить' for a booking: mark confirmed and notify both sides."""
+    await callback.answer()
+    booking_id = safe_parse_id(callback.data[len(CONFIRM_BOOKING_PREFIX) :])
+    if booking_id is None:
+        return
+    telegram_id = callback.from_user.id if callback.from_user else 0
+    async with async_session_factory() as session:
+        trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    if not trainer_id:
+        await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
+        return
+    async with async_session_factory() as session:
+        info = await confirm_booking(session, booking_id, trainer_id)
+    if not info:
+        await callback.message.answer(msg.TRAINER_ERROR_BOOKING_NOT_FOUND)
+        return
+    d = info["slot_date"]
+    date_str = d.strftime("%d.%m") if hasattr(d, "strftime") else str(d)
+    dow = msg.TRAINER_DAYS[d.weekday()] if hasattr(d, "weekday") else ""
+    start_time = info["start_time"]
+    time_str = _format_time(start_time)
+    client_phone = info.get("client_phone") or "—"
+    client_display = client_phone
+    # Notify trainer in current chat
+    text_trainer = msg.TRAINER_BOOKING_CONFIRMED.format(
+        client_display=client_display,
+        date=date_str,
+        day=dow,
+        time=time_str,
+    )
+    await callback.message.answer(text_trainer)
+    # Notify client via client bot (separate token)
+    client_tid = info.get("client_telegram_id")
+    if not client_tid:
+        return
+    async with async_session_factory() as session:
+        trainer_obj = await get_trainer(session, trainer_id)
+    profile = (trainer_obj or {}).get("profile") or {}
+    trainer_name = (
+        ((profile.get("first_name") or "") + " " + (profile.get("last_name") or "")).strip()
+        or "Тренер"
+    )
+    settings = Settings()
+    client_bot = Bot(
+        token=settings.telegram_bot_token_client,
+        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+    )
+    try:
+        await client_bot.send_message(
+            chat_id=client_tid,
+            text=msg.CLIENT_BOOKING_CONFIRMED_BY_TRAINER.format(
+                date=date_str,
+                day=dow,
+                time=time_str,
+                trainer_name=trainer_name,
+            ),
+        )
+    finally:
+        await client_bot.session.close()
+
 @router.callback_query(lambda c: c.data and c.data.startswith(CANCEL_BOOKING_PREFIX))
 async def show_cancel_booking_confirm(callback: CallbackQuery) -> None:
     """Show warning and confirm before cancelling a booking."""
@@ -776,6 +1198,28 @@ async def on_cancel_booking_confirm(callback: CallbackQuery) -> None:
     await callback.message.answer(msg.TRAINER_BOOKINGS_CANCELLED)
 
 
+@router.callback_query(lambda c: c.data and c.data.startswith(DECLINE_BOOKING_PREFIX))
+async def on_decline_booking_start(callback: CallbackQuery) -> None:
+    """Trainer tapped 'Отклонить' in notification: ask for required comment."""
+    await callback.answer()
+    booking_id = safe_parse_id(callback.data[len(DECLINE_BOOKING_PREFIX) :])
+    if booking_id is None:
+        return
+    telegram_id = callback.from_user.id if callback.from_user else 0
+    async with async_session_factory() as session:
+        trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    if not trainer_id:
+        await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
+        return
+    async with async_session_factory() as session:
+        booking = await get_booking_with_slot(session, booking_id, trainer_id)
+    if not booking:
+        await callback.message.answer(msg.TRAINER_ERROR_BOOKING_NOT_FOUND)
+        return
+    _booking_decline_state[telegram_id] = booking_id
+    await callback.message.answer(msg.TRAINER_BOOKING_DECLINE_PROMPT)
+
+
 @router.callback_query(lambda c: c.data and c.data.startswith(FEEDBACK_BOOKING_TRAINER_PREFIX))
 async def on_feedback_booking_trainer(callback: CallbackQuery) -> None:
     """Trainer tapped 'Leave feedback' after completed booking: ask for optional review text."""
@@ -816,6 +1260,57 @@ async def on_trainer_feedback_message(message: Message) -> None:
         await message.answer(msg.TRAINER_FEEDBACK_THANKS)
     else:
         await message.answer(msg.TRAINER_ERROR_FEEDBACK_SAVE_FAILED)
+
+
+@router.message(lambda m: m.from_user and m.from_user.id in _booking_decline_state)
+async def on_decline_booking_comment(message: Message) -> None:
+    """Trainer sent decline comment for booking."""
+    telegram_id = message.from_user.id if message.from_user else 0
+    booking_id = _booking_decline_state.get(telegram_id)
+    if booking_id is None:
+        return
+    raw_comment = (message.text or "").strip()
+    if not raw_comment:
+        await message.answer(msg.TRAINER_BOOKING_DECLINE_COMMENT_REQUIRED)
+        return
+    comment = truncate_text(raw_comment, MAX_COMMENT_LEN)
+    _booking_decline_state.pop(telegram_id, None)
+    async with async_session_factory() as session:
+        trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    if not trainer_id:
+        await message.answer(msg.TRAINER_ONLY_VIA_SITE)
+        return
+    async with async_session_factory() as session:
+        info = await decline_booking(session, booking_id, trainer_id)
+    if not info:
+        await message.answer(msg.TRAINER_ERROR_BOOKING_NOT_FOUND)
+        return
+    d = info["slot_date"]
+    date_str = d.strftime("%d.%m") if hasattr(d, "strftime") else str(d)
+    dow = msg.TRAINER_DAYS[d.weekday()] if hasattr(d, "weekday") else ""
+    start_time = info["start_time"]
+    time_str = _format_time(start_time)
+    await message.answer(msg.TRAINER_BOOKING_DECLINED_DONE)
+    client_tid = info.get("client_telegram_id")
+    if not client_tid:
+        return
+    settings = Settings()
+    client_bot = Bot(
+        token=settings.telegram_bot_token_client,
+        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+    )
+    try:
+        await client_bot.send_message(
+            chat_id=client_tid,
+            text=msg.CLIENT_BOOKING_DECLINED_BY_TRAINER.format(
+                date=date_str,
+                day=dow,
+                time=time_str,
+                reason=comment,
+            ),
+        )
+    finally:
+        await client_bot.session.close()
 
 
 @router.message(lambda m: m.text and m.from_user and m.from_user.id in _request_respond_state)
@@ -1036,7 +1531,7 @@ async def on_request_book_client(callback: CallbackQuery) -> None:
         slots = await list_slots(session, trainer_id, today, to_date)
     available = [s for s in slots if (s.get("status") or "") == "available"]
     if not available:
-        await callback.message.answer("Нет свободных слотов на ближайшие 2 недели. Добавьте слоты в редакторе расписания.")
+        await callback.message.answer("Нет свободных слотов на ближайшие 2 недели. Добавьте слоты в разделе «Расписание».")
         return
     rows = []
     for s in available:
@@ -1085,6 +1580,7 @@ async def on_request_book_slot(callback: CallbackQuery) -> None:
             slot_id=slot_id,
             trainer_id=trainer_id,
             client_id=client_info["client_id"],
+            service_id=client_info["service_id"],
             client_comment=None,
             client_request_id=request_id,
             created_by_trainer=True,
@@ -1427,26 +1923,48 @@ async def slot_delete(callback: CallbackQuery) -> None:
         await callback.answer(msg.TRAINER_SLOT_CANNOT_DELETE_BOOKED, show_alert=True)
         return
     text, _ = await _slots_content(trainer_id)
-    await callback.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=[]))
+    await callback.message.edit_text(
+        text,
+        reply_markup=_schedule_webapp_keyboard(include_back=True, include_create_booking=True),
+    )
 
 
 @router.callback_query(lambda c: c.data == GUIDE_CALLBACK)
 async def on_guide_callback(callback: CallbackQuery) -> None:
-    """Inline 'Инструкция' button: show same as /guide (no buttons)."""
+    """Inline 'Помощь' button: show same as /guide with support button."""
     await callback.answer()
     async with async_session_factory() as session:
         trainer_id = await get_trainer_id_by_telegram_id(session, callback.from_user.id if callback.from_user else 0)
     if not trainer_id:
         await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
         return
-    await callback.message.answer(msg.TRAINER_GUIDE)
+    await callback.message.answer(msg.TRAINER_GUIDE, reply_markup=_trainer_guide_keyboard())
+
+
+@router.callback_query(lambda c: c.data == TRAINER_SUPPORT_CALLBACK)
+async def on_trainer_support_callback(callback: CallbackQuery) -> None:
+    await callback.answer()
+    tid = callback.from_user.id if callback.from_user else 0
+    _trainer_support_awaiting.add(tid)
+    await callback.message.answer(msg.TRAINER_SUPPORT_PROMPT)
 
 
 @router.message()
 async def fallback(message: Message) -> None:
-    """Any other message: direct to main menu and /guide; no buttons."""
+    """Any other message: handle support state or direct to main menu."""
+    telegram_id = message.from_user.id if message.from_user else 0
+    if telegram_id in _trainer_support_awaiting:
+        _trainer_support_awaiting.discard(telegram_id)
+        text = (message.text or "").strip()[: 4000]
+        if not text:
+            await message.answer(msg.TRAINER_SUPPORT_PROMPT)
+            return
+        async with async_session_factory() as session:
+            await create_support_message(session, telegram_id, SUPPORT_FROM_TRAINER, text)
+        await message.answer(msg.TRAINER_SUPPORT_SENT)
+        return
     async with async_session_factory() as session:
-        is_trainer = await get_trainer_by_telegram_id(session, message.from_user.id if message.from_user else 0)
+        is_trainer = await get_trainer_by_telegram_id(session, telegram_id)
     if not is_trainer:
         await message.answer(msg.TRAINER_ONLY_VIA_SITE)
         return

@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Мои записи</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    /* JUSTSKATE.BY brand: black + yellow */
+    :root {
+      --tg-theme-bg-color: #FFFBEB;
+      --tg-theme-text-color: #1a1a1a;
+      --tg-theme-hint-color: #666;
+      --tg-theme-button-color: #F7A600;
+      --tg-theme-button-text-color: #1a1a1a;
+      --tg-theme-secondary-bg-color: #FFF3CC;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --tg-theme-bg-color: #1a1a1a;
+        --tg-theme-text-color: #f5f5f5;
+        --tg-theme-hint-color: #8e8e93;
+        --tg-theme-button-color: #F7A600;
+        --tg-theme-button-text-color: #1a1a1a;
+        --tg-theme-secondary-bg-color: #2a2a2a;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--tg-theme-bg-color);
+      color: var(--tg-theme-text-color);
+      min-height: 100vh;
+      padding: 12px;
+      padding-bottom: env(safe-area-inset-bottom, 12px);
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 16px;
+      padding-bottom: 8px;
+    }
+    .header-title { flex: 1; }
+    .btn-close {
+      flex-shrink: 0;
+      padding: 8px 14px;
+      border-radius: 8px;
+      border: none;
+      font-size: 14px;
+      background: #FFF3CC !important;
+      color: #1a1a1a;
+      cursor: pointer;
+    }
+    .day-nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+    .day-nav span { font-weight: 600; font-size: 15px; }
+    .day-nav button {
+      width: 36px; height: 36px;
+      border-radius: 50%;
+      border: none;
+      background: #FFF3CC !important;
+      color: #1a1a1a;
+      font-size: 18px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .booking-card {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 16px;
+      margin-bottom: 8px;
+      border-radius: 12px;
+      background: #FFF3CC !important;
+      cursor: pointer;
+      border: none;
+      width: 100%;
+      font: inherit;
+      color: inherit;
+      text-align: left;
+    }
+    .booking-card:active { opacity: 0.9; }
+    .booking-card .time { font-weight: 600; font-size: 15px; margin-right: 8px; }
+    .booking-card .client { flex: 1; min-width: 0; font-size: 14px; }
+    .booking-card .badge {
+      font-size: 12px;
+      padding: 4px 8px;
+      border-radius: 8px;
+      flex-shrink: 0;
+    }
+    .booking-card .badge.pending { background: rgba(255, 149, 0, 0.2); color: #ff9500; }
+    .booking-card .badge.confirmed { background: rgba(52, 199, 89, 0.2); color: #34c759; }
+    .booking-card .no-bot, .detail-value .no-bot { font-size: 11px; color: var(--tg-theme-hint-color, #666); font-style: italic; margin-left: 4px; }
+    .detail-block { margin-bottom: 16px; }
+    .detail-label { font-size: 12px; color: var(--tg-theme-hint-color); margin-bottom: 4px; text-transform: uppercase; }
+    .detail-value { font-size: 15px; }
+    .btn-row { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+    .btn-row button {
+      flex: 1;
+      min-width: 120px;
+      padding: 12px;
+      border-radius: 12px;
+      border: none;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .btn-primary { background: #F7A600 !important; color: #1a1a1a !important; }
+    .btn-secondary { background: #FFF3CC !important; color: #1a1a1a !important; }
+    .btn-danger { background: rgba(255, 59, 48, 0.2); color: #ff3b30; }
+    .back-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 12px;
+      padding: 10px 0;
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--tg-theme-hint-color);
+      cursor: pointer;
+      border: none;
+      background: none;
+      font: inherit;
+    }
+    .back-link .back-link-chevron { flex-shrink: 0; width: 16px; height: 16px; color: inherit; }
+    .back-link:active { opacity: 0.7; }
+    .loading, .error { text-align: center; padding: 24px; color: var(--tg-theme-hint-color); }
+    .error { color: #ff3b30; }
+    .empty { text-align: center; padding: 32px 16px; color: var(--tg-theme-hint-color); font-size: 15px; }
+    .form-block { margin-bottom: 16px; }
+    .form-block .form-label { font-size: 13px; font-weight: 600; color: var(--tg-theme-hint-color); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.3px; }
+    .form-block textarea {
+      width: 100%;
+      padding: 14px 16px;
+      border-radius: 12px;
+      border: none;
+      background: var(--tg-theme-secondary-bg-color);
+      color: var(--tg-theme-text-color);
+      font-size: 15px;
+      line-height: 1.4;
+      min-height: 100px;
+      resize: vertical;
+      display: block;
+      box-sizing: border-box;
+    }
+    .form-block textarea::placeholder { color: var(--tg-theme-hint-color); }
+    .decline-screen .screen-title { font-size: 18px; font-weight: 600; margin-bottom: 8px; }
+    .decline-screen .screen-hint { font-size: 14px; color: var(--tg-theme-hint-color); margin-bottom: 16px; }
+    .decline-screen .card-wrap { background: #FFF3CC !important; border-radius: 12px; padding: 16px; margin-bottom: 20px; }
+    .decline-screen .btn-primary { width: 100%; padding: 14px; border-radius: 12px; font-size: 16px; margin-bottom: 12px; }
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.4);
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      z-index: 100;
+      padding: max(16px, env(safe-area-inset-top)) 16px 16px;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    .modal {
+      background: var(--tg-theme-bg-color);
+      border-radius: 16px;
+      padding: 20px;
+      max-width: 360px;
+      width: 100%;
+    }
+    .modal h3 { margin: 0 0 12px; font-size: 17px; }
+    .modal .actions { display: flex; gap: 8px; margin-top: 16px; }
+    .modal .actions button { flex: 1; padding: 12px; border-radius: 10px; border: none; font-weight: 600; cursor: pointer; }
+    [data-screen] { display: none; }
+    [data-screen].active { display: block; }
+    /* JUSTSKATE.BY — перебиваем тему Telegram */
+    body { background: #FFFBEB !important; color: #1a1a1a !important; }
+    .btn-close, .day-nav button, .booking-card, .btn-secondary, .decline-screen .card-wrap { background: #FFF3CC !important; color: #1a1a1a !important; }
+    @media (prefers-color-scheme: dark) {
+      body { background: #1a1a1a !important; color: #f5f5f5 !important; }
+      .btn-close, .day-nav button, .booking-card, .btn-secondary, .decline-screen .card-wrap { background: #2a2a2a !important; color: #f5f5f5 !important; }
+    }
+  </style>
+</head>
+<body>
+  <script>
+  (function(){var d=document.documentElement;d.style.setProperty('--tg-theme-button-color','#F7A600');d.style.setProperty('--tg-theme-button-text-color','#1a1a1a');d.style.setProperty('--tg-theme-bg-color',window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'#1a1a1a':'#FFFBEB');d.style.setProperty('--tg-theme-text-color',window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'#f5f5f5':'#1a1a1a');d.style.setProperty('--tg-theme-secondary-bg-color',window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'#2a2a2a':'#FFF3CC');})();
+  </script>
+  <div class="header">
+    <span class="header-title">📋 Мои записи</span>
+  </div>
+
+  <div id="screenList" data-screen>
+    <div class="day-nav">
+      <button type="button" id="prevDay" aria-label="Пред. день">‹</button>
+      <span id="dayLabel">—</span>
+      <button type="button" id="nextDay" aria-label="След. день">›</button>
+    </div>
+    <div id="listContent"></div>
+  </div>
+
+  <div id="screenDetail" data-screen>
+    <div id="detailContent"></div>
+    <div class="btn-row" id="detailActions"></div>
+    <button type="button" class="back-link" id="backToList"><svg class="back-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>К списку записей</button>
+  </div>
+
+  <div id="screenDecline" data-screen class="decline-screen">
+    <div class="screen-title">Отклонить запись</div>
+    <div class="screen-hint">Клиент увидит причину в уведомлении. Напишите коротко.</div>
+    <div class="card-wrap">
+      <div class="form-block">
+        <label class="form-label" for="declineComment">Причина отклонения</label>
+        <textarea id="declineComment" placeholder="Например: нет свободного времени в этот день"></textarea>
+      </div>
+    </div>
+    <button type="button" class="btn-primary" id="btnDeclineSubmit">Отклонить запись</button>
+    <button type="button" class="back-link" id="backFromDecline"><svg class="back-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>Назад к записи</button>
+  </div>
+
+  <div id="modalCancel" class="modal-overlay" style="display:none;">
+    <div class="modal">
+      <h3>Отменить запись?</h3>
+      <p style="margin:0 0 8px;font-size:14px;color:var(--tg-theme-hint-color);">Предупредите клиента (звонок или сообщение).</p>
+      <div class="actions">
+        <button type="button" class="btn-secondary" id="modalCancelNo">Нет</button>
+        <button type="button" class="btn-danger" id="modalCancelYes">Да, отменить</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function() {
+      var tg = window.Telegram && window.Telegram.WebApp;
+      if (tg) { tg.ready(); tg.expand(); }
+
+      function closeApp() { if (tg) tg.close(); else window.close(); }
+      var btnClose = document.getElementById('btnClose');
+      if (btnClose) btnClose.onclick = closeApp;
+
+      var state = { days: [], currentDayIndex: 0, selectedBooking: null, initData: tg ? tg.initData : '' };
+
+      function authQuery() { return state.initData ? 'init_data=' + encodeURIComponent(state.initData) : ''; }
+      function authHeader() { return state.initData ? { 'X-Telegram-Init-Data': state.initData } : {}; }
+
+      function showScreen(id) {
+        document.querySelectorAll('[data-screen]').forEach(function(el) { el.classList.remove('active'); });
+        var el = document.getElementById(id);
+        if (el) el.classList.add('active');
+      }
+
+      function getJson(url) {
+        var q = authQuery();
+        return fetch(url + (q ? (url.indexOf('?') >= 0 ? '&' : '?') + q : '')).then(function(r) {
+          if (!r.ok) throw new Error(r.statusText);
+          return r.json();
+        });
+      }
+
+      function postJson(url, body) {
+        var q = authQuery();
+        return fetch(url + (q ? (url.indexOf('?') >= 0 ? '&' : '?') + q : ''), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...authHeader() },
+          body: body ? JSON.stringify(body) : undefined
+        }).then(function(r) {
+          var j = r.json();
+          if (!r.ok) throw new Error('Request failed');
+          return j;
+        });
+      }
+
+      function loadBookings() {
+        document.getElementById('listContent').innerHTML = '<div class="loading">Загрузка...</div>';
+        getJson('/api/webapp/trainer/bookings').then(function(data) {
+          state.days = data.days || [];
+          if (state.days.length === 0) {
+            document.getElementById('listContent').innerHTML = '<div class="empty">Пока нет записей.</div>';
+            document.getElementById('dayLabel').textContent = '';
+            return;
+          }
+          state.currentDayIndex = 0;
+          renderDay();
+        }).catch(function() {
+          document.getElementById('listContent').innerHTML = '<div class="error">Ошибка загрузки</div>';
+        });
+      }
+
+      function renderDay() {
+        var days = state.days;
+        var idx = Math.max(0, Math.min(state.currentDayIndex, days.length - 1));
+        state.currentDayIndex = idx;
+        var day = days[idx];
+        document.getElementById('dayLabel').textContent = day.date + ' (' + day.day_label + ')';
+        var html = '';
+        if (!day.bookings || day.bookings.length === 0) {
+          html = '<div class="empty">На этот день записей нет</div>';
+        } else {
+          day.bookings.forEach(function(b) {
+            var client = [b.client_first_name, b.client_last_name].filter(Boolean).join(' ') || b.client_phone || 'Клиент';
+            var statusClass = (b.status || 'confirmed') === 'pending' ? 'pending' : 'confirmed';
+            var statusText = statusClass === 'pending' ? 'Ожидает' : 'Подтверждено';
+            var noBot = b.client_has_telegram === false;
+            html += '<button type="button" class="booking-card" data-id="' + b.id + '">';
+            html += '<span class="time">' + (b.start_time || '') + '</span>';
+            html += '<span class="client">' + client + (noBot ? ' <span class="no-bot">Без бота</span>' : '') + '</span>';
+            html += '<span class="badge ' + statusClass + '">' + statusText + '</span>';
+            html += '</button>';
+          });
+        }
+        document.getElementById('listContent').innerHTML = html;
+        document.querySelectorAll('.booking-card').forEach(function(btn) {
+          btn.onclick = function() { openDetail(parseInt(btn.dataset.id, 10)); };
+        });
+      }
+
+      document.getElementById('prevDay').onclick = function() {
+        if (state.currentDayIndex > 0) { state.currentDayIndex--; renderDay(); }
+      };
+      document.getElementById('nextDay').onclick = function() {
+        if (state.currentDayIndex < state.days.length - 1) { state.currentDayIndex++; renderDay(); }
+      };
+
+      function formatDate(slotDate) {
+        if (!slotDate) return '—';
+        var s = String(slotDate);
+        var parts = s.split('-');
+        if (parts.length >= 3) return parts[2] + '.' + parts[1] + '.' + parts[0];
+        return s;
+      }
+
+      function escapeHtml(str) {
+        if (!str) return '';
+        return String(str)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;');
+      }
+
+      function openDetail(bookingId) {
+        state.selectedBooking = null;
+        getJson('/api/webapp/trainer/bookings/' + bookingId).then(function(b) {
+          state.selectedBooking = b;
+          var client = [b.client_first_name, b.client_last_name].filter(Boolean).join(' ') || b.client_phone || 'Клиент';
+          var dateStr = formatDate(b.slot_date);
+          var html = '';
+          html += '<div class="detail-block"><div class="detail-label">Дата и время</div><div class="detail-value">' + dateStr + ' (' + (b.day_label || '') + ')  ·  ' + (b.start_time || '') + '–' + (b.end_time || '') + '</div></div>';
+          html += '<div class="detail-block"><div class="detail-label">Клиент</div><div class="detail-value">' + escapeHtml(client) + (b.client_has_telegram === false ? ' <span class="no-bot">Без бота</span>' : '') + '</div></div>';
+          if (b.client_phone) {
+            html += '<div class="detail-block"><div class="detail-label">Телефон</div><div class="detail-value">' + escapeHtml(b.client_phone) + '</div></div>';
+          }
+          html += '<div class="detail-block"><div class="detail-label">Услуга · Арена</div><div class="detail-value">' + escapeHtml(b.services_str || '—') + '  ·  ' + escapeHtml(b.arenas_str || '—') + '</div></div>';
+          html += '<div class="detail-block"><div class="detail-label">Занятие</div><div class="detail-value">' + (b.session_num || 1) + '-е занятие</div></div>';
+          if (b.client_comment) html += '<div class="detail-block"><div class="detail-label">Комментарий</div><div class="detail-value">' + escapeHtml(b.client_comment) + '</div></div>';
+          document.getElementById('detailContent').innerHTML = html;
+
+          var actions = document.getElementById('detailActions');
+          actions.innerHTML = '';
+          var pending = (b.status || '') === 'pending';
+
+          if (pending) {
+            actions.innerHTML += '<button type="button" class="btn-primary" data-action="confirm">✅ Подтвердить</button>';
+            actions.innerHTML += '<button type="button" class="btn-danger" data-action="decline">❌ Отклонить</button>';
+          } else {
+            actions.innerHTML += '<button type="button" class="btn-secondary" data-action="cancel">❌ Отменить запись</button>';
+            actions.innerHTML += '<button type="button" class="btn-primary" data-action="complete">✅ Проведено</button>';
+          }
+
+          actions.querySelectorAll('button[data-action]').forEach(function(btn) {
+            btn.onclick = function() {
+              var act = btn.dataset.action;
+              if (act === 'confirm') doConfirm(b.id);
+              else if (act === 'decline') { showScreen('screenDecline'); document.getElementById('declineComment').value = ''; }
+              else if (act === 'cancel') document.getElementById('modalCancel').style.display = 'flex';
+              else if (act === 'complete') doComplete(b.id);
+            };
+          });
+
+          showScreen('screenDetail');
+        }).catch(function() {
+          alert('Ошибка загрузки');
+        });
+      }
+
+      function doConfirm(bookingId) {
+        postJson('/api/webapp/trainer/bookings/' + bookingId + '/confirm').then(function() {
+          showScreen('screenList');
+          loadBookings();
+        }).catch(function() { alert('Ошибка'); });
+      }
+
+      function doComplete(bookingId) {
+        postJson('/api/webapp/trainer/bookings/' + bookingId + '/complete').then(function(res) {
+          showScreen('screenList');
+          loadBookings();
+          if (res && res.pass_redeemed) {
+            if (typeof showToast === 'function') showToast('Занятие проведено. С абонемента списано одно занятие.');
+            else alert('Занятие проведено. С абонемента списано одно занятие.');
+          } else {
+            if (typeof showToast === 'function') showToast('Занятие проведено.');
+            else alert('Занятие проведено.');
+          }
+        }).catch(function() { alert('Ошибка'); });
+      }
+
+      document.getElementById('btnDeclineSubmit').onclick = function() {
+        var comment = (document.getElementById('declineComment').value || '').trim();
+        if (!comment) { alert('Напишите причину отклонения для клиента.'); return; }
+        var id = state.selectedBooking && state.selectedBooking.id;
+        if (!id) return;
+        postJson('/api/webapp/trainer/bookings/' + id + '/decline', { comment: comment }).then(function() {
+          showScreen('screenList');
+          loadBookings();
+        }).catch(function() { alert('Ошибка'); });
+      };
+      document.getElementById('backFromDecline').onclick = function() { showScreen('screenDetail'); };
+
+      document.getElementById('modalCancelYes').onclick = function() {
+        document.getElementById('modalCancel').style.display = 'none';
+        var id = state.selectedBooking && state.selectedBooking.id;
+        if (!id) return;
+        postJson('/api/webapp/trainer/bookings/' + id + '/cancel').then(function() {
+          showScreen('screenList');
+          loadBookings();
+        }).catch(function() { alert('Ошибка'); });
+      };
+      document.getElementById('modalCancelNo').onclick = function() { document.getElementById('modalCancel').style.display = 'none'; };
+
+      function doMakeRegular(bookingId) {
+        postJson('/api/webapp/trainer/bookings/' + bookingId + '/make_regular').then(function() {
+          openDetail(bookingId);
+        }).catch(function() { alert('Ошибка или уже закреплён'); });
+      }
+
+      function doRemoveRegular(recurringId) {
+        if (!recurringId) return;
+        postJson('/api/webapp/trainer/recurring/' + recurringId + '/remove').then(function() {
+          var id = state.selectedBooking && state.selectedBooking.id;
+          if (id) openDetail(id);
+        }).catch(function() { alert('Ошибка'); });
+      }
+
+      document.getElementById('backToList').onclick = function() { showScreen('screenList'); };
+
+      loadBookings();
+      showScreen('screenList');
+    })();
+  </script>
+</body>
+</html>

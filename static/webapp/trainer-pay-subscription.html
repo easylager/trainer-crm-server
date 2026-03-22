@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Оплата подписки</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    :root {
+      --tg-theme-bg-color: #FFFBEB;
+      --tg-theme-text-color: #1a1a1a;
+      --tg-theme-hint-color: #666;
+      --tg-theme-button-color: #F7A600;
+      --tg-theme-button-text-color: #1a1a1a;
+      --tg-theme-secondary-bg-color: #FFF3CC;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --tg-theme-bg-color: #1a1a1a;
+        --tg-theme-text-color: #f5f5f5;
+        --tg-theme-hint-color: #8e8e93;
+        --tg-theme-button-color: #F7A600;
+        --tg-theme-secondary-bg-color: #2a2a2a;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--tg-theme-bg-color);
+      color: var(--tg-theme-text-color);
+      min-height: 100vh;
+      padding: 12px;
+      padding-bottom: env(safe-area-inset-bottom, 12px);
+    }
+    .screen { display: none; }
+    .screen.active { display: block; }
+    .loading, .error, .message { text-align: center; padding: 32px 16px; }
+    .error { color: #ef4444; }
+    .message { color: var(--tg-theme-hint-color); }
+    .success-title { font-size: 20px; font-weight: 600; margin-bottom: 12px; color: var(--tg-theme-text-color); }
+    .btn {
+      display: inline-block;
+      margin-top: 16px;
+      padding: 12px 20px;
+      border-radius: 12px;
+      border: none;
+      font-size: 16px;
+      font-weight: 600;
+      background: var(--tg-theme-button-color);
+      color: var(--tg-theme-button-text-color);
+      cursor: pointer;
+      text-decoration: none;
+    }
+    .plan-card {
+      display: block;
+      width: 100%;
+      padding: 16px 18px;
+      margin-bottom: 10px;
+      border-radius: 14px;
+      background: var(--tg-theme-secondary-bg-color);
+      border: none;
+      font: inherit;
+      color: inherit;
+      text-align: left;
+      cursor: pointer;
+    }
+    .plan-card:active { opacity: 0.9; }
+    .plan-card .title { font-weight: 600; font-size: 16px; margin-bottom: 4px; }
+    .plan-card .meta { font-size: 14px; color: var(--tg-theme-hint-color); }
+    .pay-summary {
+      background: var(--tg-theme-secondary-bg-color);
+      border-radius: 14px;
+      padding: 16px;
+      margin-bottom: 16px;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    .pay-summary .period { color: var(--tg-theme-hint-color); margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <div id="screenChoose" class="screen active">
+    <p class="message" style="margin-bottom:16px;">Выберите срок подписки. Оплата за <b>следующий период</b> после текущей подписки (или с сегодня, если подписки нет).</p>
+    <div id="planList"><p class="loading">Загрузка тарифов…</p></div>
+  </div>
+  <div id="screenPay" class="screen">
+    <div id="paySummary" class="pay-summary"></div>
+    <p class="loading" id="payLoading">Переход к оплате…</p>
+  </div>
+  <div id="screenSuccess" class="screen">
+    <p class="success-title">✅ Подписка оплачена</p>
+    <p class="message">Доступ продлён до указанной даты. Вы в каталоге.</p>
+    <button type="button" class="btn" id="btnClose">Закрыть</button>
+  </div>
+  <div id="screenError" class="screen">
+    <p class="error" id="errorText">Не удалось загрузить.</p>
+    <button type="button" class="btn" id="btnRetry">Повторить</button>
+  </div>
+  <script>
+    (function() {
+      var tg = window.Telegram && window.Telegram.WebApp;
+      if (tg) { tg.ready(); tg.expand(); }
+      function initData() { return (tg && tg.initData) ? tg.initData : ''; }
+      function headers() {
+        var h = { 'Accept': 'application/json' };
+        if (initData()) h['X-Telegram-Init-Data'] = initData();
+        return h;
+      }
+      function showScreen(id) {
+        document.querySelectorAll('.screen').forEach(function(el) { el.classList.remove('active'); });
+        var el = document.getElementById(id);
+        if (el) el.classList.add('active');
+      }
+      function closeApp() { if (tg) tg.close(); else window.history.back(); }
+      var params = new URLSearchParams(window.location.search || '');
+      if (params.get('payment_stub') === '1' && params.get('tracking_id')) {
+        var tid = params.get('tracking_id');
+        if (tid.indexOf('inv_') === 0) {
+          var invoiceId = parseInt(tid.slice(4), 10);
+          if (!isNaN(invoiceId)) {
+            showScreen('screenPay');
+            document.getElementById('payLoading').textContent = 'Подтверждение оплаты…';
+            document.getElementById('paySummary').innerHTML = '';
+            var url = '/api/webapp/trainer/subscription-stub-confirm' + (initData() ? '?init_data=' + encodeURIComponent(initData()) : '');
+            fetch(url, { method: 'POST', headers: Object.assign(headers(), {'Content-Type': 'application/json'}), body: JSON.stringify({ invoice_id: invoiceId }) })
+              .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }).catch(function() { return { ok: false, data: {} }; }); })
+              .then(function(o) {
+                if (o.ok) { showScreen('screenSuccess'); document.getElementById('btnClose').onclick = closeApp; }
+                else { document.getElementById('errorText').textContent = o.data.detail || 'Ошибка подтверждения'; showScreen('screenError'); document.getElementById('btnRetry').style.display = 'none'; }
+              })
+              .catch(function() {
+                document.getElementById('errorText').textContent = 'Ошибка сети.';
+                showScreen('screenError');
+                document.getElementById('btnRetry').style.display = 'none';
+              });
+            return;
+          }
+        }
+      }
+      if (params.get('payment_success') === '1') {
+        showScreen('screenSuccess');
+        document.getElementById('btnClose').onclick = closeApp;
+        return;
+      }
+      function formatPrice(cents) { return cents == null ? '—' : (cents / 100) + ' BYN'; }
+      function formatPeriodDays(days) {
+        if (days >= 365) {
+          var y = Math.floor(days / 365);
+          var m = Math.round((days % 365) / 30);
+          if (m === 0) return y === 1 ? '1 год' : y + ' г.';
+          return y + ' г. ' + (m > 0 ? m + ' мес.' : '');
+        }
+        if (days >= 30) return Math.round(days / 30) + ' мес.';
+        return days + ' дн.';
+      }
+      function loadPlans() {
+        var url = '/api/webapp/trainer/subscription-plans' + (initData() ? '?init_data=' + encodeURIComponent(initData()) : '');
+        fetch(url, { headers: headers() })
+          .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }).catch(function() { return { ok: false, data: {} }; }); })
+          .then(function(o) {
+            if (!o.ok || !o.data.plans || !o.data.plans.length) {
+              document.getElementById('errorText').textContent = (o.data && o.data.detail) || 'Нет доступных тарифов.';
+              showScreen('screenError');
+              document.getElementById('btnRetry').onclick = function() { showScreen('screenChoose'); loadPlans(); };
+              return;
+            }
+            var html = '';
+            o.data.plans.forEach(function(p) {
+              html += '<button type="button" class="plan-card" data-id="' + p.id + '" data-name="' + (p.name || '').replace(/"/g, '&quot;') + '" data-price="' + p.price_cents + '" data-days="' + p.period_days + '">';
+              html += '<div class="title">' + (p.name || 'Подписка') + '</div>';
+              html += '<div class="meta">' + formatPrice(p.price_cents) + ' · ' + formatPeriodDays(p.period_days) + '</div></button>';
+            });
+            document.getElementById('planList').innerHTML = html;
+            document.querySelectorAll('.plan-card').forEach(function(btn) {
+              btn.onclick = function() {
+                var planId = parseInt(btn.dataset.id, 10);
+                goToPayment(planId);
+              };
+            });
+            showScreen('screenChoose');
+          })
+          .catch(function() {
+            document.getElementById('errorText').textContent = 'Ошибка сети. Откройте из бота тренера.';
+            showScreen('screenError');
+            document.getElementById('btnRetry').onclick = function() { loadPlans(); };
+          });
+      }
+      function goToPayment(planId) {
+        showScreen('screenPay');
+        document.getElementById('paySummary').innerHTML = '<p class="message">Подготовка счёта…</p>';
+        document.getElementById('payLoading').textContent = 'Переход к оплате…';
+        var url = '/api/webapp/trainer/subscription-payment-url?plan_id=' + planId + (initData() ? '&init_data=' + encodeURIComponent(initData()) : '');
+        fetch(url, { headers: headers() })
+          .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }).catch(function() { return { ok: false, data: {} }; }); })
+          .then(function(o) {
+            if (o.ok && o.data.payment_url) {
+              var d = o.data;
+              var summary = 'Оплата подписки <b>«' + (d.plan_name || 'Подписка') + '»</b><br>';
+              if (d.period_start && d.period_end) summary += '<span class="period">Период: с ' + d.period_start + ' по ' + d.period_end + '</span><br>';
+              summary += '<strong>' + formatPrice(d.amount_cents) + '</strong>';
+              document.getElementById('paySummary').innerHTML = summary;
+              document.getElementById('payLoading').textContent = 'Открываю страницу оплаты…';
+              window.location.href = d.payment_url;
+            } else {
+              document.getElementById('errorText').textContent = (o.data && o.data.detail) || 'Не удалось получить ссылку на оплату.';
+              showScreen('screenError');
+              document.getElementById('btnRetry').onclick = function() { showScreen('screenChoose'); loadPlans(); };
+            }
+          })
+          .catch(function() {
+            document.getElementById('errorText').textContent = 'Ошибка сети.';
+            showScreen('screenError');
+            document.getElementById('btnRetry').onclick = function() { showScreen('screenChoose'); loadPlans(); };
+          });
+      }
+      document.getElementById('btnRetry').onclick = function() { showScreen('screenChoose'); loadPlans(); };
+      document.getElementById('btnClose').onclick = closeApp;
+      loadPlans();
+    })();
+  </script>
+</body>
+</html>

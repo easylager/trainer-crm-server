@@ -1,0 +1,1198 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Расписание</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    /* JUSTSKATE.BY brand: black + yellow */
+    :root {
+      --tg-theme-bg-color: #FFFBEB;
+      --tg-theme-text-color: #1a1a1a;
+      --tg-theme-hint-color: #666;
+      --tg-theme-button-color: #F7A600;
+      --tg-theme-button-text-color: #1a1a1a;
+      --tg-theme-secondary-bg-color: #FFF3CC;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --tg-theme-bg-color: #1a1a1a;
+        --tg-theme-text-color: #f5f5f5;
+        --tg-theme-hint-color: #8e8e93;
+        --tg-theme-button-color: #F7A600;
+        --tg-theme-button-text-color: #1a1a1a;
+        --tg-theme-secondary-bg-color: #2a2a2a;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--tg-theme-bg-color);
+      color: var(--tg-theme-text-color);
+      min-height: 100vh;
+      padding: 12px;
+      padding-bottom: env(safe-area-inset-bottom, 12px);
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 16px;
+      padding-bottom: 8px;
+    }
+    .header-title { flex: 1; }
+    .btn-close {
+      flex-shrink: 0;
+      padding: 8px 14px;
+      border-radius: 8px;
+      border: none;
+      font-size: 14px;
+      background: var(--tg-theme-secondary-bg-color);
+      color: var(--tg-theme-text-color);
+      cursor: pointer;
+    }
+    .tabs {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 16px;
+      padding: 4px;
+      background: var(--tg-theme-secondary-bg-color);
+      border-radius: 12px;
+    }
+    .tab {
+      flex: 1;
+      padding: 10px 14px;
+      border: none;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 600;
+      background: transparent;
+      color: var(--tg-theme-hint-color);
+      cursor: pointer;
+      transition: background 0.2s, color 0.2s;
+    }
+    .tab.active {
+      background: var(--tg-theme-bg-color);
+      color: var(--tg-theme-text-color);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+    .week-nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 14px;
+    }
+    .week-nav span { font-weight: 600; font-size: 15px; }
+    .week-nav button {
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      border: none;
+      background: var(--tg-theme-secondary-bg-color);
+      color: var(--tg-theme-text-color);
+      font-size: 18px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .week-nav button:active { opacity: 0.8; }
+    .week-nav button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .action-bar {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 18px;
+    }
+    .btn-block {
+      display: block;
+      width: 100%;
+      padding: 12px 16px;
+      border-radius: 12px;
+      border: none;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      text-align: center;
+    }
+    .btn-primary { background: #F7A600 !important; color: #1a1a1a !important; }
+    .btn-secondary { background: #FFF3CC !important; color: #1a1a1a !important; }
+    .btn-outline {
+      background: transparent !important;
+      color: #F7A600 !important;
+      border: 2px solid #F7A600 !important;
+    }
+    .day-block { margin-bottom: 20px; }
+    .day-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--tg-theme-hint-color);
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .slot-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 14px;
+      margin-bottom: 6px;
+      border-radius: 12px;
+      background: #FFF3CC !important;
+    }
+    .slot-row .slot-time { font-weight: 600; font-size: 15px; }
+    .slot-row .slot-meta { display: flex; align-items: center; gap: 10px; }
+    .slot-status {
+      font-size: 12px;
+      padding: 4px 10px;
+      border-radius: 8px;
+    }
+    .slot-status.available { background: rgba(52, 199, 89, 0.2); color: #34c759; }
+    .slot-status.booked { background: rgba(255, 149, 0, 0.2); color: #ff9500; }
+    .slot-status.cancelled { background: rgba(142, 142, 147, 0.2); color: var(--tg-theme-hint-color); }
+    .btn-slot-del {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      border: none;
+      background: rgba(255, 59, 48, 0.15);
+      color: #ff3b30;
+      font-size: 16px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .btn-slot-del:active { opacity: 0.8; }
+    .slot-row.slot-available { cursor: pointer; }
+    .slot-row.slot-available:active { opacity: 0.9; }
+    .client-list .client-row {
+      display: block;
+      width: 100%;
+      padding: 12px 14px;
+      margin-bottom: 6px;
+      border-radius: 10px;
+      border: none;
+      font-size: 15px;
+      text-align: left;
+      background: var(--tg-theme-secondary-bg-color);
+      color: var(--tg-theme-text-color);
+      cursor: pointer;
+    }
+    .client-row:active { opacity: 0.9; }
+    .client-row .phone { font-size: 13px; color: var(--tg-theme-hint-color); }
+    .client-row .client-no-bot { font-size: 11px; color: var(--tg-theme-hint-color); font-style: italic; }
+    .book-step { display: none; }
+    .book-step.active { display: block !important; }
+    .btn-book-option {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      width: 100%;
+      padding: 14px 16px;
+      margin-bottom: 10px;
+      border: 1px solid var(--tg-theme-hint-color);
+      border-radius: 12px;
+      background: var(--tg-theme-secondary-bg-color);
+      color: var(--tg-theme-text-color);
+      font-size: 15px;
+      font-weight: 600;
+      text-align: left;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .btn-book-option:active { opacity: 0.9; }
+    .btn-book-option-icon { font-size: 20px; margin-bottom: 4px; }
+    .btn-book-option-text { display: block; }
+    .btn-book-option-hint {
+      font-size: 12px;
+      font-weight: 400;
+      color: var(--tg-theme-hint-color);
+      margin-top: 2px;
+    }
+    .book-modal-back {
+      display: inline-flex;
+      align-items: center;
+      padding: 4px 0;
+      margin-bottom: 8px;
+      border: none;
+      background: none;
+      color: var(--tg-theme-hint-color);
+      font-size: 15px;
+      cursor: pointer;
+    }
+    .book-modal-back-chevron { margin-right: 2px; font-size: 18px; }
+    .book-service-select {
+      width: 100%;
+      padding: 10px 14px;
+      border-radius: 10px;
+      border: 1px solid var(--tg-theme-hint-color);
+      margin-bottom: 12px;
+      font-size: 15px;
+      box-sizing: border-box;
+      background: var(--tg-theme-bg-color);
+      color: var(--tg-theme-text-color);
+    }
+    .book-search-input {
+      width: 100%;
+      padding: 10px 14px;
+      margin-bottom: 12px;
+      border-radius: 10px;
+      border: 1px solid var(--tg-theme-hint-color);
+      font-size: 15px;
+      box-sizing: border-box;
+    }
+    .book-client-list { max-height: 200px; overflow-y: auto; margin-bottom: 0; }
+    .book-modal-divider {
+      margin: 16px 0 12px;
+      padding-top: 12px;
+      border-top: 1px solid var(--tg-theme-secondary-bg-color);
+    }
+    .book-modal-divider .label { font-size: 12px; font-weight: 600; color: var(--tg-theme-hint-color); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+    .book-new-client .input {
+      width: 100%;
+      padding: 10px 14px;
+      border-radius: 10px;
+      border: 1px solid var(--tg-theme-hint-color);
+      margin-bottom: 10px;
+      font-size: 15px;
+      background: var(--tg-theme-bg-color);
+      color: var(--tg-theme-text-color);
+    }
+    .book-new-client .input::placeholder { color: var(--tg-theme-hint-color); }
+    .template-day-card {
+      padding: 14px 16px;
+      margin-bottom: 10px;
+      border-radius: 14px;
+      background: #FFF3CC !important;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      cursor: pointer;
+      border: none;
+      width: 100%;
+      font: inherit;
+      color: inherit;
+      text-align: left;
+    }
+    .template-day-card:active { opacity: 0.9; }
+    .template-day-card .day-name { font-weight: 600; font-size: 16px; min-width: 36px; }
+    .template-day-card .day-slots {
+      flex: 1;
+      font-size: 14px;
+      color: var(--tg-theme-hint-color);
+    }
+    .template-day-card .day-slots.empty { font-style: italic; }
+    .template-day-card .arrow { color: var(--tg-theme-hint-color); font-size: 14px; }
+    .hour-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 20px;
+    }
+    .hour-chip {
+      padding: 10px 16px;
+      border-radius: 10px;
+      border: 2px solid #FFF3CC;
+      background: #FFF3CC !important;
+      color: #1a1a1a;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      min-width: 52px;
+    }
+    .hour-chip.selected {
+      border-color: #F7A600 !important;
+      background: rgba(247, 166, 0, 0.2) !important;
+      color: #F7A600 !important;
+    }
+    .hour-chip.locked { opacity: 0.7; cursor: not-allowed; }
+    .edit-actions { display: flex; gap: 10px; margin-top: 8px; }
+    .edit-actions .btn-block { flex: 1; }
+    .back-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 16px;
+      padding: 10px 0;
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--tg-theme-hint-color);
+      cursor: pointer;
+      border: none;
+      background: none;
+      font: inherit;
+    }
+    .back-link .back-link-chevron { flex-shrink: 0; width: 16px; height: 16px; color: inherit; }
+    .back-link:active { opacity: 0.7; }
+    .loading, .error, .empty { text-align: center; padding: 24px; color: var(--tg-theme-hint-color); }
+    .error { color: #ff3b30; }
+    .empty { font-size: 15px; }
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.4);
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      z-index: 100;
+      padding: max(20px, env(safe-area-inset-top)) 20px 20px;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    .modal {
+      background: #FFFBEB !important;
+      border-radius: 16px;
+      padding: 20px;
+      max-width: 340px;
+      width: 100%;
+      max-height: 85vh;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    .modal h3 { margin: 0 0 12px; font-size: 17px; }
+    .modal p { margin: 0 0 20px; font-size: 14px; color: var(--tg-theme-hint-color); line-height: 1.4; }
+    .modal-actions { display: flex; gap: 10px; }
+    .modal-actions button { flex: 1; }
+    .day-pick-title {
+      margin: 0 0 20px;
+      font-size: 17px;
+      font-weight: 600;
+      line-height: 1.3;
+    }
+    /* JUSTSKATE.BY — перебиваем тему Telegram */
+    body { background: #FFFBEB !important; color: #1a1a1a !important; }
+    .btn-close, .tab, .slot-row, .template-day-card, .hour-chip { background: #FFF3CC !important; color: #1a1a1a !important; }
+    .tab.active { background: #FFFBEB !important; color: #1a1a1a !important; }
+    @media (prefers-color-scheme: dark) {
+      body { background: #1a1a1a !important; color: #f5f5f5 !important; }
+      .btn-close, .tab, .slot-row, .template-day-card, .hour-chip { background: #2a2a2a !important; color: #f5f5f5 !important; }
+      .tab.active { background: #1a1a1a !important; color: #f5f5f5 !important; }
+      .modal { background: #1a1a1a !important; }
+    }
+    .toast {
+      position: fixed;
+      left: 12px;
+      right: 12px;
+      bottom: calc(16px + env(safe-area-inset-bottom, 0));
+      padding: 14px 18px;
+      border-radius: 14px;
+      background: #1a1a1a;
+      color: #FFFBEB;
+      font-size: 15px;
+      font-weight: 500;
+      text-align: center;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.25);
+      z-index: 10000;
+      opacity: 0;
+      transform: translateY(12px);
+      pointer-events: none;
+      transition: opacity 0.25s ease, transform 0.25s ease;
+    }
+    .toast.toast-visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  </style>
+</head>
+<body>
+  <script>
+  (function(){var d=document.documentElement;d.style.setProperty('--tg-theme-button-color','#F7A600');d.style.setProperty('--tg-theme-button-text-color','#1a1a1a');d.style.setProperty('--tg-theme-bg-color',window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'#1a1a1a':'#FFFBEB');d.style.setProperty('--tg-theme-text-color',window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'#f5f5f5':'#1a1a1a');d.style.setProperty('--tg-theme-secondary-bg-color',window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'#2a2a2a':'#FFF3CC');})();
+  </script>
+  <div class="header">
+    <span class="header-title">📅 Расписание</span>
+  </div>
+  <div class="tabs">
+    <button type="button" class="tab active" data-tab="calendar">Календарь</button>
+    <button type="button" class="tab" data-tab="template">Шаблон недели</button>
+  </div>
+
+  <div id="tabCalendar" class="tab-content active">
+    <div class="week-nav">
+      <button type="button" id="weekPrev" aria-label="Пред. неделя">‹</button>
+      <span id="weekLabel">—</span>
+      <button type="button" id="weekNext" aria-label="След. неделя">›</button>
+    </div>
+    <div class="action-bar">
+      <button type="button" class="btn-block btn-outline" id="btnAddSlots">➕ Добавить слоты на день</button>
+    </div>
+    <div id="calendarContent"></div>
+  </div>
+
+  <div id="tabTemplate" class="tab-content">
+    <p class="screen-hint" style="font-size:14px;color:var(--tg-theme-hint-color);margin-bottom:12px;">Шаблон повторяется по неделям. При «Применить на неделю» свободные слоты заменяются им.</p>
+    <div class="action-bar" style="margin-bottom:16px;">
+      <button type="button" class="btn-block btn-primary" id="btnApplyThis">Применить шаблон на эту неделю</button>
+      <button type="button" class="btn-block btn-secondary" id="btnApplyNext">Применить шаблон на следующую</button>
+    </div>
+    <div id="templateList"></div>
+  </div>
+
+  <div id="screenEdit" style="display: none;">
+    <div class="screen-title" id="editTitle">Выбор часов</div>
+    <div class="screen-hint" id="editHint" style="font-size:14px;color:var(--tg-theme-hint-color);margin-bottom:12px;">Отметь часы (повторное нажатие снимает). Занятые слоты нельзя убрать.</div>
+    <div class="hour-grid" id="hourGrid"></div>
+    <div class="edit-actions">
+      <button type="button" class="btn-block btn-primary" id="editDone">Готово</button>
+      <button type="button" class="btn-block btn-secondary" id="editCancel">Отмена</button>
+    </div>
+  </div>
+
+  <div id="screenDayPick" style="display: none;">
+    <h2 class="day-pick-title">Добавить слоты на какой день?</h2>
+    <div id="dayPickList"></div>
+    <span class="back-link" id="dayPickBack"><svg class="back-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>Назад к календарю</span>
+  </div>
+
+  <div id="modalConfirm" class="modal-overlay" style="display: none;">
+    <div class="modal">
+      <h3 id="modalConfirmTitle">Применить шаблон?</h3>
+      <p id="modalConfirmText">Свободные слоты на неделю будут заменены шаблоном. Занятые не трогаем.</p>
+      <div class="modal-actions">
+        <button type="button" class="btn-block btn-secondary" id="modalConfirmNo">Отмена</button>
+        <button type="button" class="btn-block btn-primary" id="modalConfirmYes">Применить</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="modalBookClient" class="modal-overlay" style="display: none;">
+    <div class="modal">
+      <h3 id="modalBookTitle" class="book-modal-title">Записать клиента</h3>
+      <div id="bookStepChoice" class="book-step" data-step="choice">
+        <p class="screen-hint" style="font-size:14px;color:var(--tg-theme-hint-color);margin-bottom:16px;">Кого записать на занятие?</p>
+        <button type="button" class="btn-book-option" id="bookOptExisting">
+          <span class="btn-book-option-icon">👤</span>
+          <span class="btn-book-option-text">Выбрать из списка</span>
+          <span class="btn-book-option-hint">Существующий клиент</span>
+        </button>
+        <button type="button" class="btn-book-option" id="bookOptNew">
+          <span class="btn-book-option-icon">➕</span>
+          <span class="btn-book-option-text">Добавить нового</span>
+          <span class="btn-book-option-hint">Телефон, имя — и записать</span>
+        </button>
+        <button type="button" class="btn-block btn-secondary" id="modalBookCancel" style="margin-top:12px;">Отмена</button>
+      </div>
+      <div id="bookStepExisting" class="book-step" data-step="existing" style="display:none;">
+        <button type="button" class="book-modal-back" id="bookBackFromExisting"><span class="book-modal-back-chevron">‹</span> Назад</button>
+        <p class="screen-hint" style="font-size:13px;color:var(--tg-theme-hint-color);margin:8px 0 4px;">Услуга</p>
+        <select id="bookServiceSelect" class="input book-service-select"></select>
+        <p class="screen-hint" style="font-size:13px;color:var(--tg-theme-hint-color);margin:12px 0 8px;">Поиск по имени или телефону</p>
+        <input type="text" id="bookClientSearch" class="input book-search-input" placeholder="Имя или телефон...">
+        <div id="bookClientList" class="client-list book-client-list"></div>
+      </div>
+      <div id="bookStepNew" class="book-step" data-step="new" style="display:none;">
+        <button type="button" class="book-modal-back" id="bookBackFromNew"><span class="book-modal-back-chevron">‹</span> Назад</button>
+        <p class="screen-hint" style="font-size:13px;color:var(--tg-theme-hint-color);margin:8px 0 4px;">Услуга</p>
+        <select id="bookServiceSelectNew" class="input book-service-select"></select>
+        <div class="book-modal-divider" style="margin-top:16px;">
+          <div class="label">Новый клиент</div>
+          <div class="book-new-client">
+            <input type="tel" id="bookNewPhone" class="input" placeholder="Телефон *" autocomplete="tel">
+            <input type="text" id="bookNewFirstName" class="input" placeholder="Имя" autocomplete="given-name">
+            <input type="text" id="bookNewLastName" class="input" placeholder="Фамилия" autocomplete="family-name">
+            <button type="button" class="btn-block btn-primary" id="bookNewSubmit" style="margin-top:8px;">Добавить и записать</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="modalBookConfirm" class="modal-overlay" style="display: none;">
+    <div class="modal">
+      <h3>Подтверждение</h3>
+      <p id="modalBookConfirmText" style="margin-bottom:16px;"></p>
+      <div class="modal-actions">
+        <button type="button" class="btn-block btn-secondary" id="modalBookConfirmNo">Отмена</button>
+        <button type="button" class="btn-block btn-primary" id="modalBookConfirmYes">Записать</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script>
+    (function() {
+      const tg = window.Telegram && window.Telegram.WebApp;
+      if (tg) { tg.ready(); tg.expand(); }
+
+      const DAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+      const MONTHS = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
+      const MONTHS_GENITIVE = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
+
+      function apiUrl(path) { return '/api/webapp' + path; }
+      function headers() {
+        const h = { 'Content-Type': 'application/json' };
+        if (tg && tg.initData) h['X-Telegram-Init-Data'] = tg.initData;
+        return h;
+      }
+      function showToast(message) {
+        var el = document.getElementById('toast');
+        if (!el) return;
+        el.textContent = message;
+        el.classList.remove('toast-visible');
+        void el.offsetHeight;
+        el.classList.add('toast-visible');
+        clearTimeout(el._toastTimer);
+        el._toastTimer = setTimeout(function() {
+          el.classList.remove('toast-visible');
+        }, 2500);
+      }
+
+      let state = {
+        tab: 'calendar',
+        weekStart: null,
+        slots: [],
+        templates: [],
+        editMode: null,
+        editDay: null,
+        editDate: null,
+        selectedHours: new Set(),
+        lockedHours: new Set(),
+        applyWeekStart: null,
+        bookSlotId: null,
+        bookModalStep: 'choice',
+        pendingBookClientId: null,
+        pendingBookClientName: null,
+        bookServices: [],
+        bookServiceId: null,
+      };
+
+      function getMonday(d) {
+        const date = new Date(d);
+        const day = date.getDay();
+        const diff = date.getDate() - day + (day === 0 ? -6 : 1);
+        return new Date(date.setDate(diff));
+      }
+
+      function formatWeekLabel(start) {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const weekEnd = new Date(start);
+        weekEnd.setDate(weekEnd.getDate() + 6);
+        weekEnd.setHours(0, 0, 0, 0);
+        const startCopy = new Date(start);
+        startCopy.setHours(0, 0, 0, 0);
+        const effectiveStart = startCopy < today ? today : startCopy;
+        if (effectiveStart > weekEnd) return 'Прошедшая неделя';
+        if (effectiveStart.getTime() === weekEnd.getTime()) {
+          return effectiveStart.getDate() + ' ' + MONTHS_GENITIVE[effectiveStart.getMonth()];
+        }
+        const fmt = function(d) { return d.getDate() + ' ' + MONTHS[d.getMonth()]; };
+        return fmt(effectiveStart) + ' – ' + fmt(weekEnd);
+      }
+
+      function dateToStr(d) {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return y + '-' + m + '-' + day;
+      }
+
+      function formatDateKey(dateStr) {
+        const d = new Date(dateStr + 'T12:00:00');
+        const wd = d.getDay();
+        return d.getDate() + '.' + String(d.getMonth() + 1).padStart(2, '0') + ' (' + DAYS[wd === 0 ? 6 : wd - 1] + ')';
+      }
+
+      function escapeHtml(s) {
+        if (s == null || s === undefined) return '';
+        return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+      }
+
+      var btnCloseEl = document.getElementById('btnClose');
+      if (btnCloseEl) btnCloseEl.onclick = function() {
+        if (tg) tg.close(); else window.close();
+      };
+
+      function setActiveTab(tabName) {
+        state.tab = tabName;
+        document.querySelectorAll('.tab').forEach(function(x) { x.classList.toggle('active', x.dataset.tab === tabName); });
+        var cal = document.getElementById('tabCalendar');
+        var tpl = document.getElementById('tabTemplate');
+        cal.style.display = '';
+        tpl.style.display = '';
+        cal.classList.toggle('active', tabName === 'calendar');
+        tpl.classList.toggle('active', tabName === 'template');
+        if (tabName === 'calendar') loadSlots();
+        else loadTemplates();
+      }
+
+      document.querySelectorAll('.tab').forEach(function(t) {
+        t.onclick = function() {
+          if (t.dataset.tab === state.tab) return;
+          setActiveTab(t.dataset.tab);
+        };
+      });
+
+      function showMain() {
+        document.getElementById('screenEdit').style.display = 'none';
+        document.getElementById('screenDayPick').style.display = 'none';
+        document.querySelector('.tabs').style.display = 'flex';
+        var cal = document.getElementById('tabCalendar');
+        var tpl = document.getElementById('tabTemplate');
+        cal.style.display = '';
+        tpl.style.display = '';
+        cal.classList.toggle('active', state.tab === 'calendar');
+        tpl.classList.toggle('active', state.tab === 'template');
+        document.querySelectorAll('.tab').forEach(function(x) {
+          x.classList.toggle('active', x.dataset.tab === state.tab);
+        });
+        if (state.tab === 'calendar') loadSlots();
+        else loadTemplates();
+      }
+
+      function loadSlots() {
+        if (!state.weekStart) state.weekStart = getMonday(new Date());
+        const start = state.weekStart;
+        const end = new Date(start);
+        end.setDate(end.getDate() + 6);
+        const from = dateToStr(start);
+        const to = dateToStr(end);
+        document.getElementById('weekLabel').textContent = formatWeekLabel(start);
+        var thisWeekMonday = getMonday(new Date());
+        document.getElementById('weekPrev').disabled = dateToStr(start) <= dateToStr(thisWeekMonday);
+        document.getElementById('calendarContent').innerHTML = '<div class="loading">Загрузка...</div>';
+        fetch(apiUrl('/schedule?from_date=' + encodeURIComponent(from) + '&to_date=' + encodeURIComponent(to)), { headers: headers() })
+          .then(function(r) { return r.json(); })
+          .then(function(data) {
+            state.slots = data.slots || [];
+            renderCalendar();
+          })
+          .catch(function() {
+            document.getElementById('calendarContent').innerHTML = '<div class="error">Ошибка загрузки</div>';
+          });
+      }
+
+      function loadTemplates() {
+        document.getElementById('templateList').innerHTML = '<div class="loading">Загрузка...</div>';
+        fetch(apiUrl('/schedule/templates'), { headers: headers() })
+          .then(function(r) { return r.json(); })
+          .then(function(data) {
+            state.templates = data.templates || [];
+            renderTemplate();
+          })
+          .catch(function() {
+            document.getElementById('templateList').innerHTML = '<div class="error">Ошибка загрузки</div>';
+          });
+      }
+
+      function renderCalendar() {
+        const todayStr = dateToStr(new Date());
+        const byDay = {};
+        state.slots.forEach(function(s) {
+          if (s.slot_date < todayStr) return;
+          const key = s.slot_date;
+          if (!byDay[key]) byDay[key] = [];
+          byDay[key].push(s);
+        });
+        const days = Object.keys(byDay).sort();
+        const content = document.getElementById('calendarContent');
+        if (days.length === 0) {
+          content.innerHTML = '<div class="empty">На эту неделю слотов нет. Добавьте слоты или примените шаблон.</div>';
+          return;
+        }
+        let html = '';
+        days.forEach(function(dateKey) {
+          const daySlots = byDay[dateKey].sort(function(a, b) { return (a.start_time || '').localeCompare(b.start_time || ''); });
+          html += '<div class="day-block"><div class="day-title">' + escapeHtml(formatDateKey(dateKey)) + '</div>';
+          daySlots.forEach(function(s) {
+            const status = s.status || 'available';
+            const statusLabel = status === 'available' ? 'свободен' : status === 'booked' ? 'занят' : 'отменён';
+            const available = status === 'available';
+            html += '<div class="slot-row' + (available ? ' slot-available' : '') + '"' + (available ? ' data-slot-id="' + s.id + '" role="button" tabindex="0"' : '') + '>';
+            html += '<span class="slot-time">' + escapeHtml(s.start_time || '') + '–' + escapeHtml(s.end_time || '') + '</span>';
+            html += '<div class="slot-meta">';
+            html += '<span class="slot-status ' + status + '">' + statusLabel + '</span>';
+            if (available) {
+              html += '<button type="button" class="btn-slot-del" data-slot-id="' + s.id + '" aria-label="Удалить">×</button>';
+            }
+            html += '</div></div>';
+          });
+          html += '</div>';
+        });
+        content.innerHTML = html;
+        content.querySelectorAll('.btn-slot-del').forEach(function(btn) {
+          btn.onclick = function(e) {
+            e.stopPropagation();
+            const id = parseInt(btn.dataset.slotId, 10);
+            if (!confirm('Удалить этот слот?')) return;
+            fetch(apiUrl('/schedule/slots/' + id), { method: 'DELETE', headers: headers() })
+              .then(function(r) {
+                if (r.ok) loadSlots();
+                else r.json().then(function(o) { alert(o.detail || 'Ошибка'); });
+              })
+              .catch(function() { alert('Ошибка сети'); });
+          };
+        });
+        content.querySelectorAll('.slot-available').forEach(function(row) {
+          function openBookModal() {
+            const id = parseInt(row.dataset.slotId, 10);
+            state.bookSlotId = id;
+            state.bookModalStep = 'choice';
+            document.getElementById('bookClientSearch').value = '';
+            document.getElementById('bookNewPhone').value = '';
+            document.getElementById('bookNewFirstName').value = '';
+            document.getElementById('bookNewLastName').value = '';
+            document.querySelectorAll('.book-step').forEach(function(step) { step.classList.remove('active'); step.style.display = ''; });
+            document.getElementById('bookStepChoice').style.display = 'block';
+            document.getElementById('bookStepChoice').classList.add('active');
+            document.getElementById('bookStepExisting').style.display = 'none';
+            document.getElementById('bookStepNew').style.display = 'none';
+            document.getElementById('modalBookClient').style.display = 'flex';
+            fetch(apiUrl('/trainer/my-services'), { headers: headers() })
+              .then(function(r) { return r.ok ? r.json() : Promise.reject(new Error('Ошибка')); })
+              .then(function(data) {
+                state.bookServices = data.services || [];
+                state.bookServiceId = state.bookServices.length ? state.bookServices[0].id : null;
+                function fillServiceSelect(selEl) {
+                  if (!selEl) return;
+                  selEl.innerHTML = '';
+                  state.bookServices.forEach(function(s) {
+                    var opt = document.createElement('option');
+                    opt.value = s.id;
+                    opt.textContent = s.name || '—';
+                    selEl.appendChild(opt);
+                  });
+                  selEl.value = state.bookServiceId != null ? String(state.bookServiceId) : '';
+                }
+                fillServiceSelect(document.getElementById('bookServiceSelect'));
+                fillServiceSelect(document.getElementById('bookServiceSelectNew'));
+                document.getElementById('bookServiceSelect').onchange = function() {
+                  state.bookServiceId = this.value ? parseInt(this.value, 10) : null;
+                };
+                document.getElementById('bookServiceSelectNew').onchange = function() {
+                  state.bookServiceId = this.value ? parseInt(this.value, 10) : null;
+                };
+              })
+              .catch(function() {
+                state.bookServices = [];
+                state.bookServiceId = null;
+                document.getElementById('bookServiceSelect').innerHTML = '<option value="">Нет услуг</option>';
+                document.getElementById('bookServiceSelectNew').innerHTML = '<option value="">Нет услуг</option>';
+              });
+          }
+          row.onclick = function(e) { if (!e.target.closest('.btn-slot-del')) openBookModal(); };
+          row.onkeydown = function(e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openBookModal(); } };
+        });
+      }
+
+      function clientsRequestUrl(q) {
+        var url = apiUrl('/trainer/clients');
+        var sep = '?';
+        if (tg && tg.initData) { url += sep + 'init_data=' + encodeURIComponent(tg.initData); sep = '&'; }
+        if (q && (q = String(q).trim())) { url += sep + 'q=' + encodeURIComponent(q); }
+        return url;
+      }
+      function loadBookClients(q) {
+        fetch(clientsRequestUrl(q), { headers: headers() })
+          .then(function(r) { return r.json(); })
+          .then(function(data) {
+            var list = document.getElementById('bookClientList');
+            var clients = data.clients || [];
+            if (clients.length === 0) {
+              list.innerHTML = '<p class="screen-hint" style="padding:8px 0;">Нет клиентов по поиску. Добавьте нового ниже.</p>';
+              return;
+            }
+            var html = '';
+            clients.forEach(function(c) {
+              var name = ((c.first_name || '') + ' ' + (c.last_name || '')).trim() || 'Клиент';
+              var phone = (c.phone || '').trim();
+              var noBot = !c.telegram_id;
+              html += '<button type="button" class="client-row" data-client-id="' + c.id + '" data-client-name="' + escapeHtml(name).replace(/"/g, '&quot;') + '">' + escapeHtml(name) + (phone ? '<br><span class="phone">' + escapeHtml(phone) + '</span>' : '') + (noBot ? '<br><span class="client-no-bot">Без бота</span>' : '') + '</button>';
+            });
+            list.innerHTML = html;
+            list.querySelectorAll('.client-row').forEach(function(row) {
+              row.onclick = function() {
+                var clientId = parseInt(row.dataset.clientId, 10);
+                var clientName = (row.dataset.clientName || 'Клиент').replace(/&quot;/g, '"');
+                if (!state.bookSlotId) return;
+                var slot = state.slots.find(function(s) { return s.id === state.bookSlotId; });
+                var slotLabel = slot ? (formatDateKey(slot.slot_date) + ' ' + (slot.start_time || '').toString().slice(0, 5)) : '';
+                state.pendingBookClientId = clientId;
+                state.pendingBookClientName = clientName;
+                document.getElementById('modalBookConfirmText').textContent = 'Записать ' + clientName + ' на ' + slotLabel + '?';
+                document.getElementById('modalBookConfirm').style.display = 'flex';
+              };
+            });
+          })
+          .catch(function() {
+            document.getElementById('bookClientList').innerHTML = '<p class="error">Ошибка загрузки</p>';
+          });
+      }
+      function doConfirmBookClient() {
+        var clientId = state.pendingBookClientId;
+        if (clientId == null || !state.bookSlotId) return;
+        var serviceId = state.bookServiceId != null ? state.bookServiceId : (state.bookServices.length ? state.bookServices[0].id : null);
+        if (serviceId == null) {
+          alert('Выберите услугу. Если услуг нет — добавьте услугу в профиле.');
+          return;
+        }
+        document.getElementById('modalBookConfirm').style.display = 'none';
+        state.pendingBookClientId = null;
+        state.pendingBookClientName = null;
+        var url = apiUrl('/trainer/booking');
+        if (tg && tg.initData) url += (url.indexOf('?') >= 0 ? '&' : '?') + 'init_data=' + encodeURIComponent(tg.initData);
+        fetch(url, {
+          method: 'POST',
+          headers: headers(),
+          body: JSON.stringify({ slot_id: state.bookSlotId, client_id: clientId, service_id: serviceId }),
+        })
+          .then(function(r) {
+            if (r.ok) {
+              document.getElementById('modalBookClient').style.display = 'none';
+              state.bookSlotId = null;
+              loadSlots();
+              return;
+            }
+            return r.json().then(function(o) { throw new Error(o.detail || 'Ошибка'); });
+          })
+          .catch(function(e) { alert(e.message || 'Ошибка сети'); });
+      }
+      document.getElementById('modalBookConfirmNo').onclick = function() {
+        document.getElementById('modalBookConfirm').style.display = 'none';
+        state.pendingBookClientId = null;
+        state.pendingBookClientName = null;
+      };
+      document.getElementById('modalBookConfirmYes').onclick = doConfirmBookClient;
+
+      document.getElementById('modalBookCancel').onclick = function() {
+        document.getElementById('modalBookClient').style.display = 'none';
+        state.bookSlotId = null;
+        state.bookModalStep = 'choice';
+      };
+      document.getElementById('bookOptExisting').onclick = function() {
+        document.getElementById('bookStepChoice').classList.remove('active');
+        document.getElementById('bookStepChoice').style.display = 'none';
+        document.getElementById('bookStepExisting').style.display = 'block';
+        document.getElementById('bookStepExisting').classList.add('active');
+        var sel = document.getElementById('bookServiceSelect');
+        if (sel && state.bookServiceId != null) sel.value = String(state.bookServiceId);
+        document.getElementById('bookClientList').innerHTML = '<p class="screen-hint" style="padding:12px;">Загрузка…</p>';
+        loadBookClients();
+      };
+      document.getElementById('bookOptNew').onclick = function() {
+        document.getElementById('bookStepChoice').classList.remove('active');
+        document.getElementById('bookStepChoice').style.display = 'none';
+        document.getElementById('bookStepNew').style.display = 'block';
+        document.getElementById('bookStepNew').classList.add('active');
+        var sel = document.getElementById('bookServiceSelectNew');
+        if (sel && state.bookServiceId != null) sel.value = String(state.bookServiceId);
+      };
+      document.getElementById('bookBackFromExisting').onclick = function() {
+        document.getElementById('bookStepExisting').style.display = 'none';
+        document.getElementById('bookStepExisting').classList.remove('active');
+        document.getElementById('bookStepChoice').style.display = 'block';
+        document.getElementById('bookStepChoice').classList.add('active');
+      };
+      document.getElementById('bookBackFromNew').onclick = function() {
+        document.getElementById('bookStepNew').style.display = 'none';
+        document.getElementById('bookStepNew').classList.remove('active');
+        document.getElementById('bookStepChoice').style.display = 'block';
+        document.getElementById('bookStepChoice').classList.add('active');
+      };
+      // Tap overlay to close keyboard (don't close modal)
+      document.querySelectorAll('.modal-overlay').forEach(function(overlay) {
+        overlay.addEventListener('click', function(e) {
+          if (e.target !== overlay) return;
+          var el = document.activeElement;
+          if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT')) {
+            el.blur();
+          }
+        });
+      });
+      var bookSearchEl = document.getElementById('bookClientSearch');
+      var bookSearchTimer = null;
+      bookSearchEl.oninput = function() {
+        var q = bookSearchEl.value.trim();
+        if (bookSearchTimer) clearTimeout(bookSearchTimer);
+        bookSearchTimer = setTimeout(function() { loadBookClients(q); }, 300);
+      };
+      bookSearchEl.onkeydown = function(e) {
+        if (e.key === 'Enter') { e.preventDefault(); loadBookClients(bookSearchEl.value.trim()); }
+      };
+
+      document.getElementById('bookNewSubmit').onclick = function() {
+        var phoneEl = document.getElementById('bookNewPhone');
+        var firstEl = document.getElementById('bookNewFirstName');
+        var lastEl = document.getElementById('bookNewLastName');
+        var phoneRaw = (phoneEl.value || '').trim();
+        var first = (firstEl.value || '').trim() || null;
+        var last = (lastEl.value || '').trim() || null;
+        if (!/[\d]/.test(phoneRaw)) {
+          alert('Введите телефон (хотя бы цифры).');
+          phoneEl.focus();
+          return;
+        }
+        var phone = phoneRaw;
+        if (phone.indexOf(' ') >= 0 && !first && !last) {
+          var parts = phone.split(/\s+/);
+          var digitParts = [];
+          var nameParts = [];
+          parts.forEach(function(p) {
+            if (/^[\d+\-()]+$/.test(p)) digitParts.push(p);
+            else nameParts.push(p);
+          });
+          if (nameParts.length) {
+            first = nameParts[0] || null;
+            last = nameParts.slice(1).join(' ') || null;
+          }
+          if (digitParts.length) phone = digitParts.join('').replace(/\D/g, function(c) { return c === '+' ? '+' : ''; });
+        }
+        phone = (phone || '').trim();
+        if (!state.bookSlotId) return;
+        var btn = document.getElementById('bookNewSubmit');
+        btn.disabled = true;
+        var postUrl = apiUrl('/trainer/clients');
+        if (tg && tg.initData) postUrl += (postUrl.indexOf('?') >= 0 ? '&' : '?') + 'init_data=' + encodeURIComponent(tg.initData);
+        fetch(postUrl, {
+          method: 'POST',
+          headers: headers(),
+          body: JSON.stringify({ phone: phone, first_name: first || '', last_name: last || '' }),
+        })
+          .then(function(r) {
+            if (!r.ok) return r.json().then(function(o) { throw new Error(o.detail || 'Ошибка'); });
+            return r.json();
+          })
+          .then(function(data) {
+            var clientId = data.client_id;
+            var serviceId = state.bookServiceId != null ? state.bookServiceId : (state.bookServices.length ? state.bookServices[0].id : null);
+            if (serviceId == null) throw new Error('Выберите услугу. Добавьте услугу в профиле, если списка нет.');
+            return fetch(apiUrl('/trainer/booking'), {
+              method: 'POST',
+              headers: headers(),
+              body: JSON.stringify({ slot_id: state.bookSlotId, client_id: clientId, service_id: serviceId }),
+            });
+          })
+          .then(function(r) {
+            if (r.ok) {
+              document.getElementById('modalBookClient').style.display = 'none';
+              state.bookSlotId = null;
+              loadSlots();
+              showToast('Клиент добавлен и записан на занятие.');
+              return;
+            }
+            return r.json().then(function(o) { throw new Error(o.detail || 'Ошибка'); });
+          })
+          .catch(function(e) {
+            alert(e.message || 'Ошибка сети');
+          })
+          .finally(function() { btn.disabled = false; });
+      };
+
+      function renderTemplate() {
+        const byDay = {};
+        state.templates.forEach(function(t) {
+          const d = t.day_of_week;
+          if (!byDay[d]) byDay[d] = [];
+          byDay[d].push(t.start_time);
+        });
+        let html = '';
+        for (let d = 0; d < 7; d++) {
+          const times = (byDay[d] || []).sort();
+          const text = times.length ? times.join(', ') : 'Нет слотов';
+          html += '<button type="button" class="template-day-card" data-day="' + d + '">';
+          html += '<span class="day-name">' + DAYS[d] + '</span>';
+          html += '<span class="day-slots ' + (times.length ? '' : 'empty') + '">' + escapeHtml(text) + '</span>';
+          html += '<span class="arrow">→</span></button>';
+        }
+        document.getElementById('templateList').innerHTML = html;
+        document.querySelectorAll('.template-day-card').forEach(function(btn) {
+          btn.onclick = function() {
+            const day = parseInt(btn.dataset.day, 10);
+            openEditTemplateDay(day);
+          };
+        });
+      }
+
+      function openEditTemplateDay(day) {
+        state.editMode = 'template';
+        state.editDay = day;
+        state.editDate = null;
+        state.lockedHours = new Set();
+        const existing = (state.templates || []).filter(function(t) { return t.day_of_week === day; });
+        state.selectedHours = new Set(existing.map(function(t) {
+          const p = (t.start_time || '').split(':');
+          return parseInt(p[0], 10);
+        }));
+        document.querySelector('.tabs').style.display = 'none';
+        document.getElementById('tabCalendar').style.display = 'none';
+        document.getElementById('tabTemplate').style.display = 'none';
+        document.getElementById('editTitle').textContent = DAYS[day] + ': часы в шаблоне';
+        document.getElementById('editHint').textContent = 'Отметь часы. «Готово» сохранит шаблон на этот день.';
+        document.getElementById('screenEdit').style.display = 'block';
+        renderHourGrid();
+      }
+
+      function openEditCalendarDay(slotDate) {
+        state.editMode = 'calendar';
+        state.editDay = null;
+        state.editDate = slotDate;
+        const daySlots = (state.slots || []).filter(function(s) { return s.slot_date === slotDate; });
+        state.selectedHours = new Set();
+        state.lockedHours = new Set();
+        daySlots.forEach(function(s) {
+          const h = parseInt((s.start_time || '').split(':')[0], 10);
+          state.selectedHours.add(h);
+          if ((s.status || '') === 'booked') state.lockedHours.add(h);
+        });
+        document.querySelector('.tabs').style.display = 'none';
+        document.getElementById('tabCalendar').style.display = 'none';
+        document.getElementById('tabTemplate').style.display = 'none';
+        document.getElementById('editTitle').textContent = 'Слоты на ' + formatDateKey(slotDate);
+        document.getElementById('editHint').textContent = 'Отметь часы. Занятые слоты (🔒) нельзя убрать.';
+        document.getElementById('screenEdit').style.display = 'block';
+        renderHourGrid();
+      }
+
+      function renderHourGrid() {
+        const grid = document.getElementById('hourGrid');
+        let html = '';
+        for (let h = 8; h <= 20; h++) {
+          const selected = state.selectedHours.has(h);
+          const locked = state.lockedHours.has(h);
+          const label = locked ? h + ' 🔒' : h;
+          html += '<button type="button" class="hour-chip' + (selected ? ' selected' : '') + (locked ? ' locked' : '') + '" data-hour="' + h + '"' + (locked ? ' disabled' : '') + '>' + label + '</button>';
+        }
+        grid.innerHTML = html;
+        grid.querySelectorAll('.hour-chip:not(.locked)').forEach(function(btn) {
+          btn.onclick = function() {
+            const h = parseInt(btn.dataset.hour, 10);
+            if (state.selectedHours.has(h)) state.selectedHours.delete(h);
+            else state.selectedHours.add(h);
+            btn.classList.toggle('selected', state.selectedHours.has(h));
+          };
+        });
+      }
+
+      document.getElementById('editDone').onclick = function() {
+        const hours = Array.from(state.selectedHours).sort(function(a, b) { return a - b; });
+        if (state.editMode === 'template') {
+          fetch(apiUrl('/schedule/templates/day'), {
+            method: 'PUT',
+            headers: headers(),
+            body: JSON.stringify({ day_of_week: state.editDay, start_hours: hours, duration_minutes: 60 }),
+          })
+            .then(function(r) {
+              if (r.ok) { showMain(); }
+              else r.json().then(function(o) { alert(o.detail || 'Ошибка'); });
+            })
+            .catch(function() { alert('Ошибка сети'); });
+        } else {
+          fetch(apiUrl('/schedule/slots'), {
+            method: 'POST',
+            headers: headers(),
+            body: JSON.stringify({ slot_date: state.editDate, start_hours: hours, duration_minutes: 60 }),
+          })
+            .then(function(r) {
+              if (r.ok) { showMain(); }
+              else r.json().then(function(o) { alert(o.detail || 'Ошибка'); });
+            })
+            .catch(function() { alert('Ошибка сети'); });
+        }
+      };
+
+      document.getElementById('editCancel').onclick = function() {
+        showMain();
+      };
+
+      document.getElementById('btnApplyThis').onclick = function() {
+        if (!state.weekStart) return;
+        state.applyWeekStart = dateToStr(state.weekStart);
+        document.getElementById('modalConfirmTitle').textContent = 'Применить шаблон на эту неделю?';
+        document.getElementById('modalConfirmText').textContent = 'Свободные слоты будут заменены шаблоном. Занятые не трогаем.';
+        document.getElementById('modalConfirm').style.display = 'flex';
+      };
+
+      document.getElementById('btnApplyNext').onclick = function() {
+        if (!state.weekStart) return;
+        const next = new Date(state.weekStart);
+        next.setDate(next.getDate() + 7);
+        state.applyWeekStart = dateToStr(next);
+        document.getElementById('modalConfirmTitle').textContent = 'Применить шаблон на следующую неделю?';
+        document.getElementById('modalConfirmText').textContent = 'Свободные слоты будут заменены шаблоном. Занятые не трогаем.';
+        document.getElementById('modalConfirm').style.display = 'flex';
+      };
+
+      document.getElementById('modalConfirmNo').onclick = function() {
+        document.getElementById('modalConfirm').style.display = 'none';
+      };
+
+      document.getElementById('modalConfirmYes').onclick = function() {
+        if (!state.applyWeekStart) return;
+        document.getElementById('modalConfirm').style.display = 'none';
+        fetch(apiUrl('/schedule/apply-week'), {
+          method: 'POST',
+          headers: headers(),
+          body: JSON.stringify({ week_start: state.applyWeekStart }),
+        })
+          .then(function(r) { return r.json(); })
+          .then(function(data) {
+            if (data.ok) {
+              const n = data.slots_created != null ? data.slots_created : 0;
+              alert('Готово. Создано слотов: ' + n + '.');
+              loadSlots();
+            } else alert(data.detail || 'Ошибка');
+          })
+          .catch(function() { alert('Ошибка сети'); });
+      };
+
+      document.getElementById('btnAddSlots').onclick = function() {
+        if (!state.weekStart) return;
+        const todayStr = dateToStr(new Date());
+        const list = document.getElementById('dayPickList');
+        let html = '';
+        for (let i = 0; i < 7; i++) {
+          const d = new Date(state.weekStart);
+          d.setDate(d.getDate() + i);
+          const dateStr = dateToStr(d);
+          if (dateStr < todayStr) continue;
+          html += '<button type="button" class="template-day-card" data-date="' + escapeHtml(dateStr) + '">';
+          html += '<span class="day-name">' + DAYS[i] + '</span>';
+          html += '<span class="day-slots">' + formatDateKey(dateStr) + '</span>';
+          html += '<span class="arrow">→</span></button>';
+        }
+        if (!html) {
+          list.innerHTML = '<div class="empty">На эту неделю нет будущих дней. Переключите неделю вперёд (›).</div>';
+        } else {
+          list.innerHTML = html;
+        document.querySelector('.tabs').style.display = 'none';
+        document.getElementById('tabCalendar').style.display = 'none';
+        document.getElementById('tabTemplate').style.display = 'none';
+        document.getElementById('screenDayPick').style.display = 'block';
+          document.querySelectorAll('#dayPickList .template-day-card').forEach(function(btn) {
+            btn.onclick = function() {
+              document.getElementById('screenDayPick').style.display = 'none';
+              openEditCalendarDay(btn.dataset.date);
+            };
+          });
+        }
+      };
+
+      document.getElementById('dayPickBack').onclick = function() {
+        document.getElementById('screenDayPick').style.display = 'none';
+        showMain();
+      };
+
+      document.getElementById('weekPrev').onclick = function() {
+        state.weekStart.setDate(state.weekStart.getDate() - 7);
+        loadSlots();
+      };
+      document.getElementById('weekNext').onclick = function() {
+        state.weekStart.setDate(state.weekStart.getDate() + 7);
+        loadSlots();
+      };
+
+      state.weekStart = getMonday(new Date());
+      loadSlots();
+    })();
+  </script>
+</body>
+</html>

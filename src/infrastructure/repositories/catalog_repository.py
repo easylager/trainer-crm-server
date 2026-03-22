@@ -14,9 +14,9 @@ class CatalogRepository:
         self._session = session
 
     async def list_cities(self) -> list[dict[str, Any]]:
-        """All cities ordered by sort_order, then id."""
+        """Active cities only, ordered by sort_order, then id."""
         r = await self._session.execute(
-            text("SELECT id, name, sort_order FROM cities ORDER BY sort_order, id")
+            text("SELECT id, name, sort_order FROM cities WHERE is_active ORDER BY sort_order, id")
         )
         return [{"id": row[0], "name": row[1], "sort_order": row[2]} for row in r.fetchall()]
 
@@ -28,10 +28,10 @@ class CatalogRepository:
         return [{"id": row[0], "name": row[1], "sort_order": row[2]} for row in r.fetchall()]
 
     async def list_arenas(self, city_id: int) -> list[dict[str, Any]]:
-        """Arenas in a city with address and coords for map link; ordered by sort_order, id."""
+        """Active arenas in a city with address and coords for map link; ordered by sort_order, id."""
         r = await self._session.execute(
             text(
-                "SELECT id, city_id, name, sort_order, address, latitude, longitude FROM arenas WHERE city_id = :cid ORDER BY sort_order, id"
+                "SELECT id, city_id, name, sort_order, address, latitude, longitude FROM arenas WHERE city_id = :cid AND is_active ORDER BY sort_order, id"
             ),
             {"cid": city_id},
         )

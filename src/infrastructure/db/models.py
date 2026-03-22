@@ -49,6 +49,7 @@ class Trainer(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     telegram_id: Mapped[Optional[int]] = mapped_column(BigInteger, unique=True, nullable=True, index=True)
+    telegram_username: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
     status: Mapped[str] = mapped_column(
         Enum(*TRAINER_STATUSES, name="trainer_status_enum", create_constraint=True),
         nullable=False,
@@ -87,6 +88,7 @@ class City(Base):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(128), nullable=False)
     sort_order: Mapped[int] = mapped_column(Integer(), server_default="0", nullable=False)
+    is_active: Mapped[bool] = mapped_column(nullable=False, server_default="true")
 
 
 class Arena(Base):
@@ -100,6 +102,7 @@ class Arena(Base):
     address: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
     latitude: Mapped[Optional[float]] = mapped_column(nullable=True)
     longitude: Mapped[Optional[float]] = mapped_column(nullable=True)
+    is_active: Mapped[bool] = mapped_column(nullable=False, server_default="true")
 
     trainers: Mapped[list["Trainer"]] = relationship(
         "Trainer", secondary= lambda: trainer_arenas_table, back_populates="arenas", lazy="raise"
@@ -133,6 +136,9 @@ class TrainerProfile(Base):
     rating_avg: Mapped[Optional[float]] = mapped_column(nullable=True)
     rating_count: Mapped[int] = mapped_column(Integer(), server_default="0", nullable=False)
     session_duration_minutes: Mapped[Optional[int]] = mapped_column(Integer(), nullable=True, server_default="45")
+    min_hours_before_booking: Mapped[int] = mapped_column(
+        Integer(), nullable=False, server_default="3"
+    )  # Only slots at least this many *working* hours (08:00–22:00 Minsk) from now are bookable by clients
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
@@ -203,21 +209,37 @@ class ClientSession(Base):
 
 class Client(Base):
     """
-    Single identity for a bot user. Natural key: telegram_id (unique).
-    Name/phone updated from Telegram or from first booking/request.
+    Client identity: by telegram_id (bot user) or by phone_normalized (trainer-added, no bot yet).
+    At least one of telegram_id or phone_normalized must be set.
     """
     __tablename__ = "clients"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    telegram_id: Mapped[int] = mapped_column(BigInteger, unique=True, nullable=False, index=True)
+    telegram_id: Mapped[Optional[int]] = mapped_column(BigInteger, unique=True, nullable=True, index=True)
+    telegram_username: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
     first_name: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     last_name: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     phone: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    phone_normalized: Mapped[Optional[str]] = mapped_column(String(32), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     bookings: Mapped[list["Booking"]] = relationship(back_populates="client", lazy="raise")
     client_requests: Mapped[list["ClientRequest"]] = relationship(back_populates="client", lazy="raise")
+
+
+# --- Trainer-private notes about clients ---
+
+
+class TrainerClientNote(Base):
+    """Per-trainer private note about a client (goes into trainer CRM; not visible to other trainers)."""
+    __tablename__ = "trainer_client_notes"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    trainer_id: Mapped[int] = mapped_column(ForeignKey("trainers.id", ondelete="CASCADE"), nullable=False, index=True)
+    client_id: Mapped[int] = mapped_column(ForeignKey("clients.id", ondelete="CASCADE"), nullable=False, index=True)
+    note: Mapped[Optional[str]] = mapped_column(Text(), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 # --- Trainer schedule: weekly template → generated slots for booking ---
@@ -250,13 +272,16 @@ class Slot(Base):
 
 
 class Booking(Base):
-    """Client booking: one slot, client (FK), per-booking comment. notified_at when trainer was pushed."""
+    """Client booking: one slot, client (FK), service (FK), per-booking comment. notified_at when trainer was pushed."""
     __tablename__ = "bookings"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     slot_id: Mapped[int] = mapped_column(ForeignKey("slots.id", ondelete="CASCADE"), nullable=False)
     trainer_id: Mapped[int] = mapped_column(ForeignKey("trainers.id", ondelete="CASCADE"), nullable=False)
     client_id: Mapped[int] = mapped_column(ForeignKey("clients.id", ondelete="CASCADE"), nullable=False, index=True)
+    service_id: Mapped[int] = mapped_column(
+        ForeignKey("services.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
     client_comment: Mapped[Optional[str]] = mapped_column(Text(), nullable=True)
     client_request_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("client_requests.id", ondelete="SET NULL"), nullable=True, index=True
@@ -266,6 +291,10 @@ class Booking(Base):
     client_notified_trainer_booked_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    trainer_confirm_reminder_sent_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    client_cancel_comment: Mapped[Optional[str]] = mapped_column(Text(), nullable=True)
 
     client: Mapped["Client"] = relationship(back_populates="bookings", lazy="raise")
 
@@ -292,13 +321,16 @@ REQUEST_STATUS_ARCHIVED = "archived"
 
 
 class ClientRequest(Base):
-    """Client left a request: city + service + optional comment. Admin/trainers can process later."""
+    """Client left a request: city + service + optional comment; optional trainer_id for personalized."""
     __tablename__ = "client_requests"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     client_id: Mapped[int] = mapped_column(ForeignKey("clients.id", ondelete="CASCADE"), nullable=False, index=True)
     city_id: Mapped[int] = mapped_column(ForeignKey("cities.id", ondelete="CASCADE"), nullable=False)
     service_id: Mapped[int] = mapped_column(ForeignKey("services.id", ondelete="CASCADE"), nullable=False)
+    trainer_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("trainers.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     comment: Mapped[Optional[str]] = mapped_column(Text(), nullable=True)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default=REQUEST_STATUS_NEW)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -335,3 +367,246 @@ class ClientRequestDecline(Base):
         ForeignKey("trainers.id", ondelete="CASCADE"), nullable=False, index=True
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+# --- Pass products (trainer-defined subscription) and instances (client-owned) ---
+
+
+class TrainerPassProduct(Base):
+    """Trainer-defined pass product: e.g. '5 sessions for 200 BYN'. Clients buy these."""
+    __tablename__ = "trainer_pass_products"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    trainer_id: Mapped[int] = mapped_column(
+        ForeignKey("trainers.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    sessions_total: Mapped[int] = mapped_column(Integer(), nullable=False)
+    price_cents: Mapped[int] = mapped_column(Integer(), nullable=False)
+    service_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("services.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    is_active: Mapped[bool] = mapped_column(nullable=False, server_default="true")
+    sort_order: Mapped[int] = mapped_column(Integer(), server_default="0", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+# Client-owned pass instance: trainer issued after client paid externally (no platform payment)
+PASS_INSTANCE_STATUS_ACTIVE = "active"
+PASS_INSTANCE_STATUS_USED_UP = "used_up"
+PASS_INSTANCE_STATUS_CANCELLED = "cancelled"
+
+
+class PassInstance(Base):
+    """One pass held by a client. Issued by trainer when client paid externally. Sessions deducted on completed booking."""
+    __tablename__ = "pass_instances"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    client_id: Mapped[int] = mapped_column(
+        ForeignKey("clients.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    pass_product_id: Mapped[int] = mapped_column(
+        ForeignKey("trainer_pass_products.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    sessions_remaining: Mapped[int] = mapped_column(Integer(), nullable=False)
+    sessions_total: Mapped[int] = mapped_column(Integer(), nullable=False)
+    source_certificate_instance_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("certificate_instances.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    issued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    status: Mapped[str] = mapped_column(
+        String(32), nullable=False, server_default=PASS_INSTANCE_STATUS_ACTIVE
+    )  # active | used_up | cancelled
+
+
+class PassRedemption(Base):
+    """One pass session redeemed for a completed booking. History/audit."""
+    __tablename__ = "pass_redemptions"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    booking_id: Mapped[int] = mapped_column(
+        ForeignKey("bookings.id", ondelete="CASCADE"), nullable=False, unique=True, index=True
+    )
+    pass_instance_id: Mapped[int] = mapped_column(
+        ForeignKey("pass_instances.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    redeemed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class TrainerCertificateProduct(Base):
+    """Trainer-defined certificate: fixed amount (e.g. 100 BYN) or 'any amount'. Info only for clients."""
+    __tablename__ = "trainer_certificate_products"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    trainer_id: Mapped[int] = mapped_column(
+        ForeignKey("trainers.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    name: Mapped[str] = mapped_column(String(128), nullable=False, default="Подарочный сертификат")
+    amount_cents: Mapped[Optional[int]] = mapped_column(Integer(), nullable=True)  # NULL = "любая сумма"
+    expires_in_days: Mapped[Optional[int]] = mapped_column(Integer(), nullable=True)
+    sort_order: Mapped[int] = mapped_column(Integer(), server_default="0", nullable=False)
+    is_active: Mapped[bool] = mapped_column(nullable=False, server_default="true")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+# Issued certificate: trainer gave code to client; client_id nullable (may be issued without account)
+CERTIFICATE_INSTANCE_STATUS_ACTIVE = "active"
+CERTIFICATE_INSTANCE_STATUS_REDEEMED = "redeemed"
+CERTIFICATE_INSTANCE_STATUS_CANCELLED = "cancelled"
+
+
+class CertificateInstance(Base):
+    """One issued certificate: code for client to redeem with trainer."""
+    __tablename__ = "certificate_instances"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    trainer_id: Mapped[int] = mapped_column(
+        ForeignKey("trainers.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    certificate_product_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("trainer_certificate_products.id", ondelete="SET NULL"), nullable=True
+    )
+    purchased_by_name: Mapped[Optional[str]] = mapped_column(Text(), nullable=True)
+    client_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("clients.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    activated_client_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("clients.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    recipient_name: Mapped[str] = mapped_column(Text(), nullable=False)
+    amount_cents: Mapped[int] = mapped_column(Integer(), nullable=False)
+    amount_remaining_cents: Mapped[Optional[int]] = mapped_column(Integer(), nullable=True)
+    code: Mapped[str] = mapped_column(String(32), nullable=False, unique=True)
+    status: Mapped[str] = mapped_column(
+        String(32), nullable=False, server_default=CERTIFICATE_INSTANCE_STATUS_ACTIVE
+    )  # active | redeemed | cancelled
+    issued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    redeemed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    recipient_email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    recipient_phone: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    file_url: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+
+
+# --- Trainer subscription to platform (billing: trial + paid plans) ---
+
+SUBSCRIPTION_STATUS_TRIAL = "trial"
+SUBSCRIPTION_STATUS_ACTIVE = "active"
+SUBSCRIPTION_STATUS_PAST_DUE = "past_due"
+SUBSCRIPTION_STATUS_CANCELLED = "cancelled"
+
+INVOICE_STATUS_DRAFT = "draft"
+INVOICE_STATUS_SENT = "sent"
+INVOICE_STATUS_PAID = "paid"
+INVOICE_STATUS_OVERDUE = "overdue"
+INVOICE_STATUS_CANCELLED = "cancelled"
+
+
+class SubscriptionPlan(Base):
+    """Tariff plan for trainer platform subscription (trial or paid)."""
+    __tablename__ = "subscription_plans"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    price_cents: Mapped[int] = mapped_column(Integer(), nullable=False)
+    period_days: Mapped[int] = mapped_column(Integer(), nullable=False)
+    is_trial: Mapped[bool] = mapped_column(nullable=False, server_default="false")
+    sort_order: Mapped[int] = mapped_column(Integer(), server_default="0", nullable=False)
+
+
+class TrainerSubscription(Base):
+    """One subscription period per trainer: trial or paid. Active when expires_at > now() and status in (trial, active)."""
+    __tablename__ = "trainer_subscriptions"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    trainer_id: Mapped[int] = mapped_column(
+        ForeignKey("trainers.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    plan_id: Mapped[int] = mapped_column(
+        ForeignKey("subscription_plans.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)  # trial, active, past_due, cancelled
+    payment_external_id: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    reminder_sent_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class TrainerInvoice(Base):
+    """Invoice for trainer subscription (one per period). Paid via checkout link or manual bank transfer."""
+    __tablename__ = "trainer_invoices"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    trainer_id: Mapped[int] = mapped_column(
+        ForeignKey("trainers.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    subscription_plan_id: Mapped[int] = mapped_column(
+        ForeignKey("subscription_plans.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    amount_cents: Mapped[int] = mapped_column(Integer(), nullable=False)
+    period_start: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    period_end: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    due_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)  # draft, sent, paid, overdue, cancelled
+    paid_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    payment_external_id: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+
+
+# --- Support: messages from clients/trainers to admins ---
+
+SUPPORT_FROM_CLIENT = "client"
+SUPPORT_FROM_TRAINER = "trainer"
+SUPPORT_STATUS_NEW = "new"
+SUPPORT_STATUS_REPLIED = "replied"
+SUPPORT_STATUS_CLOSED = "closed"
+
+
+class SupportMessage(Base):
+    """One support ticket: user writes, admin can reply. from_role = client|trainer for which bot to use when sending reply."""
+    __tablename__ = "support_messages"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    from_telegram_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+    from_role: Mapped[str] = mapped_column(String(16), nullable=False)  # client | trainer
+    message_text: Mapped[str] = mapped_column(Text(), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    status: Mapped[str] = mapped_column(String(16), nullable=False, server_default="new")  # new | replied | closed
+    admin_reply_text: Mapped[Optional[str]] = mapped_column(Text(), nullable=True)
+    admin_replied_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    admin_telegram_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+
+
+# --- Legal: documents (e.g. trainer terms) and trainer acceptances ---
+
+
+class LegalDocument(Base):
+    """Legal document stored in bucket (HTML/PDF), versioned in DB by code + version."""
+    __tablename__ = "legal_documents"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    code: Mapped[str] = mapped_column(String(64), nullable=False, index=True)  # e.g. 'trainer_terms'
+    version: Mapped[int] = mapped_column(Integer(), nullable=False)
+    title: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    file_key: Mapped[str] = mapped_column(String(512), nullable=False)  # key in bucket, e.g. legal/trainer_terms_v1.html
+    is_active: Mapped[bool] = mapped_column(nullable=False, server_default="false")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class TrainerAgreement(Base):
+    """Trainer accepted specific version of a legal document (e.g. trainer_terms v1)."""
+    __tablename__ = "trainer_agreements"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    trainer_id: Mapped[int] = mapped_column(
+        ForeignKey("trainers.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    document_id: Mapped[int] = mapped_column(
+        ForeignKey("legal_documents.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    accepted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    accepted_version: Mapped[int] = mapped_column(Integer(), nullable=False)
+
+

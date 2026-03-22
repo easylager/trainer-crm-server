@@ -49,3 +49,22 @@ async def upload_and_register(
     if file_key_list:
         out["file_key_list"] = file_key_list
     return out
+
+
+@router.post("/upload/legal")
+async def upload_legal_document(
+    file: UploadFile = File(...),
+) -> dict[str, str]:
+    """
+    Admin: upload legal document file (HTML/PDF/text) to S3/local under 'legal/' prefix.
+    Returns file_key that can be used in legal_documents.file_key.
+
+    NOTE: auth for admin is expected at API gateway / infra level.
+    """
+    content_type = file.content_type or "application/octet-stream"
+    body = await file.read()
+    try:
+        file_key = s3.upload_legal_document(body, content_type)
+    except RuntimeError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"file_key": file_key}
