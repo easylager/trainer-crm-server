@@ -6,6 +6,8 @@
 
 Подробнее про **staging vs production** и CI: **[CI_CD.md](CI_CD.md)**.
 
+**Важно:** не задавайте в корневом [`railway.json`](../railway.json) поле `deploy.startCommand` для монорепо с несколькими сервисами — Railway применит эту команду **ко всем** сервисам и **заблокирует** правку Custom Start Command в UI. Запуск API задаётся через **[Procfile](../Procfile)** (`web:`). Команды ботов и notification — только в **настройках каждого** сервиса в dashboard.
+
 ---
 
 ## 1. Подготовка (один раз на окружение)
