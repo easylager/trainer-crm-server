@@ -5,26 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Записаться</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="stylesheet" href="theme.css" />
   <style>
-    /* JUSTSKATE.BY brand: black + yellow */
-    :root {
-      --tg-theme-bg-color: #FFFBEB;
-      --tg-theme-text-color: #1a1a1a;
-      --tg-theme-hint-color: #666;
-      --tg-theme-button-color: #F7A600;
-      --tg-theme-button-text-color: #1a1a1a;
-      --tg-theme-secondary-bg-color: #FFF3CC;
-    }
-    @media (prefers-color-scheme: dark) {
-      :root {
-        --tg-theme-bg-color: #1a1a1a;
-        --tg-theme-text-color: #f5f5f5;
-        --tg-theme-hint-color: #8e8e93;
-        --tg-theme-button-color: #F7A600;
-        --tg-theme-button-text-color: #1a1a1a;
-        --tg-theme-secondary-bg-color: #2a2a2a;
-      }
-    }
     * { box-sizing: border-box; }
     body {
       margin: 0;
@@ -95,7 +77,7 @@
       padding: 12px 14px;
       margin-bottom: 6px;
       border-radius: 12px;
-      background: #FFF3CC !important;
+      background: var(--tg-theme-secondary-bg-color) !important;
       cursor: pointer;
       border: none;
       width: 100%;
@@ -117,7 +99,7 @@
       padding: 24px;
       color: var(--tg-theme-hint-color);
     }
-    .error { color: #ff3b30; }
+    .error { color: var(--app-danger); }
     .empty {
       text-align: center;
       padding: 32px 16px;
@@ -154,8 +136,8 @@
       border: none;
       font-size: 16px;
       font-weight: 600;
-      background: #F7A600 !important;
-      color: #1a1a1a !important;
+      background: var(--tg-theme-button-color) !important;
+      color: var(--tg-theme-button-text-color) !important;
       cursor: pointer;
       margin-top: 8px;
     }
@@ -182,22 +164,9 @@
     }
     .back-link .back-link-chevron { flex-shrink: 0; width: 16px; height: 16px; color: inherit; }
     .back-link:active { opacity: 0.7; }
-    /* JUSTSKATE.BY — жёстко перебиваем тему Telegram */
-    body { background: #FFFBEB !important; color: #1a1a1a !important; }
-    .btn-primary, .btn-block.btn-primary { background: #F7A600 !important; color: #1a1a1a !important; }
-    .btn-close, .week-nav button, .slot-card, .back-link { background: #FFF3CC !important; color: #1a1a1a !important; }
-    .form-block input, .form-block textarea { background: #FFF3CC !important; }
-    @media (prefers-color-scheme: dark) {
-      body { background: #1a1a1a !important; color: #f5f5f5 !important; }
-      .btn-close, .week-nav button, .slot-card { background: #2a2a2a !important; color: #f5f5f5 !important; }
-      .form-block input, .form-block textarea { background: #2a2a2a !important; color: #f5f5f5 !important; }
-    }
   </style>
 </head>
 <body>
-  <script>
-  (function(){var d=document.documentElement;d.style.setProperty('--tg-theme-button-color','#F7A600');d.style.setProperty('--tg-theme-button-text-color','#1a1a1a');d.style.setProperty('--tg-theme-bg-color',window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'#1a1a1a':'#FFFBEB');d.style.setProperty('--tg-theme-text-color',window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'#f5f5f5':'#1a1a1a');d.style.setProperty('--tg-theme-secondary-bg-color',window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'#2a2a2a':'#FFF3CC');})();
-  </script>
   <div class="header">
     <span class="header-title" id="headerTitle">📅 Записаться</span>
   </div>

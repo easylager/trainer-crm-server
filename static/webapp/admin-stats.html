@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Панель админа</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="stylesheet" href="theme.css" />
   <style>
     * { box-sizing: border-box; }
     body {
@@ -19,7 +20,7 @@
     .header { margin-bottom: 20px; }
     .header h1 { margin: 0; font-size: 22px; font-weight: 700; }
     .loading, .error { text-align: center; padding: 32px 16px; color: var(--tg-theme-hint-color); }
-    .error { color: #ef4444; }
+    .error { color: var(--app-danger); }
     .section { margin-bottom: 20px; }
     .section-title { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--tg-theme-hint-color); margin-bottom: 10px; }
     .card {

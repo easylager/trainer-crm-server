@@ -5,7 +5,7 @@ from alembic import context
 from sqlalchemy import engine_from_config, pool
 from dotenv import load_dotenv
 
-
+print(f"🔗 Migrating to: {context.config.get_main_option('sqlalchemy.url')}")
 config = context.config
 
 if config.config_file_name is not None:

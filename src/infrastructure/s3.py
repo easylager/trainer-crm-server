@@ -12,6 +12,7 @@ PHOTO_MAIN_MAX_SIZE = 800
 PHOTO_LIST_MAX_SIZE = 320
 PHOTO_MAIN_QUALITY = 82
 PHOTO_LIST_QUALITY = 80
+PHOTO_CACHE_CONTROL = "public, max-age=31536000, immutable"
 
 
 def _use_local() -> bool:
@@ -79,9 +80,21 @@ def upload_photo(trainer_id: int, body: bytes, content_type: str) -> tuple[str, 
             (root / file_key_list).write_bytes(list_bytes)
         return file_key, file_key_list
     client = _get_client()
-    client.put_object(Bucket=settings.s3_bucket, Key=file_key, Body=main_bytes, ContentType=ct)
+    client.put_object(
+        Bucket=settings.s3_bucket,
+        Key=file_key,
+        Body=main_bytes,
+        ContentType=ct,
+        CacheControl=PHOTO_CACHE_CONTROL,
+    )
     if file_key_list and list_bytes:
-        client.put_object(Bucket=settings.s3_bucket, Key=file_key_list, Body=list_bytes, ContentType=ct)
+        client.put_object(
+            Bucket=settings.s3_bucket,
+            Key=file_key_list,
+            Body=list_bytes,
+            ContentType=ct,
+            CacheControl=PHOTO_CACHE_CONTROL,
+        )
     return file_key, file_key_list
 
 

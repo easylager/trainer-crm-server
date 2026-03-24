@@ -1,0 +1,38 @@
+---
+description: Project Development Guidelines
+globs: ["**/*"]
+alwaysApply: true
+---
+
+# trainer-crm-belarus Development Guidelines
+
+Auto-generated from all feature plans. Last updated: 2026-03-23
+
+## Active Technologies
+- Статический HTML/CSS; существующий vanilla JS в страницах без изменения сборки. + N/A (нет CSS-фреймворка). (001-mini-app-theme-css)
+- N/A. (001-mini-app-theme-css)
+
+- (001-mini-app-theme-css)
+
+## Project Structure
+
+```text
+src/
+tests/
+```
+
+## Commands
+
+# Add commands for 
+
+## Code Style
+
+: Follow standard conventions
+
+## Recent Changes
+- 001-mini-app-theme-css: Added Статический HTML/CSS; существующий vanilla JS в страницах без изменения сборки. + N/A (нет CSS-фреймворка).
+
+- 001-mini-app-theme-css: Added
+
+<!-- MANUAL ADDITIONS START -->
+<!-- MANUAL ADDITIONS END -->

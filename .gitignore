@@ -53,6 +53,7 @@ logs/
 # Database
 *.db
 *.sqlite3
+*.dump
 
 # Secrets
 *.pem

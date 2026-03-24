@@ -5,26 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Тренеры и запись</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="stylesheet" href="theme.css" />
   <style>
-    /* JUSTSKATE.BY brand: black + yellow */
-    :root {
-      --tg-theme-bg-color: #FFFBEB;
-      --tg-theme-text-color: #1a1a1a;
-      --tg-theme-hint-color: #666;
-      --tg-theme-button-color: #F7A600;
-      --tg-theme-button-text-color: #1a1a1a;
-      --tg-theme-secondary-bg-color: #FFF3CC;
-    }
-    @media (prefers-color-scheme: dark) {
-      :root {
-        --tg-theme-bg-color: #1a1a1a;
-        --tg-theme-text-color: #f5f5f5;
-        --tg-theme-hint-color: #8e8e93;
-        --tg-theme-button-color: #F7A600;
-        --tg-theme-button-text-color: #1a1a1a;
-        --tg-theme-secondary-bg-color: #2a2a2a;
-      }
-    }
     * { box-sizing: border-box; }
     body {
       margin: 0;
@@ -178,7 +160,10 @@
       0% { background-position: 200% 0; }
       100% { background-position: -200% 0; }
     }
-    .trainer-detail-photo-wrap img {
+    /* Base = list thumb (already in cache from catalog row); full = main image on top */
+    .trainer-detail-photo-wrap .trainer-detail-photo-base,
+    .trainer-detail-photo-wrap .trainer-detail-photo-full,
+    .trainer-detail-photo-wrap .trainer-detail-photo {
       position: absolute;
       inset: 0;
       width: 100%;
@@ -189,6 +174,9 @@
       opacity: 0;
       transition: opacity 0.2s ease;
     }
+    .trainer-detail-photo-wrap .trainer-detail-photo-base { z-index: 1; }
+    .trainer-detail-photo-wrap .trainer-detail-photo-full { z-index: 2; }
+    .trainer-detail-photo-wrap .trainer-detail-photo { z-index: 3; }
     .trainer-detail-photo-wrap img.loaded {
       opacity: 1;
     }
@@ -202,8 +190,8 @@
       border: none;
       font-size: 16px;
       font-weight: 600;
-      background: #F7A600 !important;
-      color: #1a1a1a !important;
+      background: var(--tg-theme-button-color) !important;
+      color: var(--tg-theme-button-text-color) !important;
       cursor: pointer;
       margin-top: 12px;
     }
@@ -240,7 +228,7 @@
     }
     .pagination span { font-size: 14px; color: var(--tg-theme-hint-color); align-self: center; }
     .loading, .error { text-align: center; padding: 24px; color: var(--tg-theme-hint-color); }
-    .error { color: #ff3b30; }
+    .error { color: var(--app-danger); }
     .empty { text-align: center; padding: 32px 16px; color: var(--tg-theme-hint-color); font-size: 15px; }
     .success-msg {
       text-align: center;
@@ -659,6 +647,36 @@
         activeTab: 'catalog',
         openedFromMyTrainerTab: false
       };
+      var prefetch = {
+        firstPageKey: null,
+        firstPageData: null,
+        inflightByKey: {}
+      };
+      // Persist first catalog page across Mini App reopens in the same browser session.
+      var CATALOG_CACHE_PREFIX = 'tcb_catalog_trainers_v1_';
+      var CATALOG_CACHE_TTL_MS = 10 * 60 * 1000;
+      function readCatalogFirstPageFromStorage(listKey) {
+        try {
+          var raw = sessionStorage.getItem(CATALOG_CACHE_PREFIX + listKey);
+          if (!raw) return null;
+          var parsed = JSON.parse(raw);
+          if (!parsed || !parsed.ts || !parsed.data) return null;
+          if (Date.now() - parsed.ts > CATALOG_CACHE_TTL_MS) {
+            sessionStorage.removeItem(CATALOG_CACHE_PREFIX + listKey);
+            return null;
+          }
+          return parsed.data;
+        } catch (e) {
+          return null;
+        }
+      }
+      function writeCatalogFirstPageToStorage(listKey, data) {
+        try {
+          sessionStorage.setItem(CATALOG_CACHE_PREFIX + listKey, JSON.stringify({ ts: Date.now(), data: data }));
+        } catch (e) {
+          // QuotaExceeded: ignore; in-memory prefetch still helps.
+        }
+      }
 
       function closeApp() {
         if (tg) tg.close(); else window.close();
@@ -697,6 +715,106 @@
         if (photo.url) return photo.url;
         if (photo.list_url) return photo.list_url;
         return photo.file_key ? photoUrl(photo.file_key) : null;
+      }
+      function warmupImageUrls(urls) {
+        // Warm up browser cache for first visible cards.
+        (urls || []).forEach(function(src) {
+          if (!src) return;
+          var img = new Image();
+          img.decoding = 'async';
+          img.src = src;
+        });
+      }
+      /** Prefetch list + detail URLs for catalog rows (detail may differ from list thumb). */
+      function warmupCatalogImagesFromItems(items, maxRows) {
+        var n = maxRows != null ? maxRows : 16;
+        var slice = (items || []).slice(0, n);
+        warmupImageUrls(slice.map(function(t) {
+          var p0 = t.photos && t.photos[0];
+          return photoSrcList(p0);
+        }));
+        warmupImageUrls(slice.map(function(t) {
+          var p0 = t.photos && t.photos[0];
+          var a = photoSrcDetail(p0);
+          var b = photoSrcList(p0);
+          return a && b && a !== b ? a : null;
+        }));
+      }
+      function photoProxyListFallback(photo) {
+        if (!photo) return '';
+        var fk = photo.file_key_list || photo.file_key;
+        return fk ? photoUrl(fk) : '';
+      }
+      function photoProxyFullFallback(photo) {
+        if (!photo || !photo.file_key) return '';
+        return photoUrl(photo.file_key);
+      }
+      function bindTrainerDetailPhotoWrap() {
+        var wrap = document.querySelector('#trainerDetailContent .trainer-detail-photo-wrap');
+        if (!wrap) return;
+        var ph = wrap.querySelector('.trainer-detail-photo-placeholder');
+        function hidePh() { if (ph) ph.style.display = 'none'; }
+        var single = wrap.querySelector('img.trainer-detail-photo-single');
+        var base = wrap.querySelector('img.trainer-detail-photo-base');
+        var full = wrap.querySelector('img.trainer-detail-photo-full');
+        if (single) {
+          single.onload = function() { single.classList.add('loaded'); hidePh(); };
+          single.onerror = function() {
+            var fb = single.dataset.fallback;
+            if (fb) { single.onerror = null; single.src = fb; }
+          };
+          if (single.complete && single.naturalWidth) { single.classList.add('loaded'); hidePh(); }
+          return;
+        }
+        if (base) {
+          base.onload = function() { base.classList.add('loaded'); hidePh(); };
+          base.onerror = function() {
+            var fb = base.dataset.fallbackBase;
+            if (fb) { base.onerror = null; base.src = fb; }
+          };
+          if (base.complete && base.naturalWidth) { base.classList.add('loaded'); hidePh(); }
+        }
+        if (full) {
+          full.onload = function() { full.classList.add('loaded'); hidePh(); };
+          full.onerror = function() {
+            var fb = full.dataset.fallbackFull;
+            if (fb) { full.onerror = null; full.src = fb; }
+          };
+          if (full.complete && full.naturalWidth) { full.classList.add('loaded'); hidePh(); }
+        }
+      }
+      function makeTrainerListParams(offset) {
+        var params = { limit: state.limit, offset: offset, city_id: state.cityId, service_id: state.serviceId, order_by: 'rating' };
+        if (state.arenaId) params.arena_id = state.arenaId;
+        return params;
+      }
+      function makeFirstPageKey() {
+        return [state.cityId || 0, state.serviceId || 0, state.arenaId || 0, state.limit || 10].join(':');
+      }
+      function prefetchFirstPageIfNeeded() {
+        if (!state.cityId || !state.serviceId) return;
+        var key = makeFirstPageKey();
+        if (prefetch.firstPageKey === key && prefetch.firstPageData) return;
+        var cached = readCatalogFirstPageFromStorage(key);
+        if (cached) {
+          prefetch.firstPageKey = key;
+          prefetch.firstPageData = cached;
+          warmupCatalogImagesFromItems(cached.items || [], 16);
+          return;
+        }
+        if (prefetch.inflightByKey[key]) return;
+        prefetch.inflightByKey[key] = true;
+        getJson('/trainers', makeTrainerListParams(0)).then(function(data) {
+          prefetch.firstPageKey = key;
+          prefetch.firstPageData = data;
+          writeCatalogFirstPageToStorage(key, data);
+          var items = data && data.items ? data.items : [];
+          warmupCatalogImagesFromItems(items, 16);
+        }).catch(function() {
+          // ignore prefetch failures: must never block UX
+        }).finally(function() {
+          delete prefetch.inflightByKey[key];
+        });
       }
 
       function trainerName(t) {
@@ -796,6 +914,10 @@
         if (s == null || s === undefined) return '';
         return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
       }
+      function escapeAttr(s) {
+        if (s == null || s === undefined) return '';
+        return String(s).replace(/"/g, '&quot;');
+      }
       function renderSummary() {
         var rows = [
           { key: 'city', label: 'Город', value: state.cityName || '—', cls: '' },
@@ -880,6 +1002,7 @@
                 loadServices();
                 showScreen('screenService');
               }
+              prefetchFirstPageIfNeeded();
             };
           });
         }).catch(function() {
@@ -915,6 +1038,7 @@
                 loadArenas();
                 showScreen('screenArena');
               }
+              prefetchFirstPageIfNeeded();
             };
           });
         }).catch(function() {
@@ -947,6 +1071,7 @@
                 loadTrainers();
                 showScreen('screenTrainers');
               }
+              prefetchFirstPageIfNeeded();
             };
           });
         }).catch(function() {
@@ -958,9 +1083,24 @@
         document.getElementById('trainerList').innerHTML = '<div class="loading">Загрузка...</div>';
         document.getElementById('pagination').innerHTML = '';
         // Only city/service/arena — never trainer_id, so list shows all matching trainers (selected trainer is on "Мой тренер" tab).
-        var params = { limit: state.limit, offset: state.offset, city_id: state.cityId, service_id: state.serviceId, order_by: 'rating' };
-        if (state.arenaId) params.arena_id = state.arenaId;
-        getJson('/trainers', params).then(function(data) {
+        var params = makeTrainerListParams(state.offset);
+        var request;
+        var firstPageKey = makeFirstPageKey();
+        if (state.offset === 0) {
+          if (!(prefetch.firstPageKey === firstPageKey && prefetch.firstPageData)) {
+            var fromDisk = readCatalogFirstPageFromStorage(firstPageKey);
+            if (fromDisk) {
+              prefetch.firstPageKey = firstPageKey;
+              prefetch.firstPageData = fromDisk;
+            }
+          }
+        }
+        if (state.offset === 0 && prefetch.firstPageKey === firstPageKey && prefetch.firstPageData) {
+          request = Promise.resolve(prefetch.firstPageData);
+        } else {
+          request = getJson('/trainers', params);
+        }
+        request.then(function(data) {
           var items = data.items || [];
           var total = data.total || items.length;
           state.trainers = items;
@@ -980,18 +1120,43 @@
             document.getElementById('trainerListFooter').style.display = 'none';
             return;
           }
-          var firstPhotoSrc = photoSrcList(items[0].photos && items[0].photos[0]);
-          if (firstPhotoSrc) {
-            var preload = document.createElement('link');
-            preload.rel = 'preload';
-            preload.as = 'image';
-            preload.href = firstPhotoSrc;
-            document.head.appendChild(preload);
+          if (state.offset === 0) {
+            writeCatalogFirstPageToStorage(firstPageKey, data);
+            prefetch.firstPageKey = firstPageKey;
+            prefetch.firstPageData = data;
           }
+          document.querySelectorAll('link[data-tcb-catalog-preload]').forEach(function(el) { el.remove(); });
+          for (var pi = 0; pi < Math.min(3, items.length); pi++) {
+            var p0p = items[pi].photos && items[pi].photos[0];
+            var ls = photoSrcList(p0p);
+            if (ls) {
+              var lk = document.createElement('link');
+              lk.rel = 'preload';
+              lk.as = 'image';
+              lk.href = ls;
+              lk.setAttribute('data-tcb-catalog-preload', '1');
+              document.head.appendChild(lk);
+            }
+            var ds = photoSrcDetail(p0p);
+            if (ds && ds !== ls) {
+              var dk = document.createElement('link');
+              dk.rel = 'preload';
+              dk.as = 'image';
+              dk.href = ds;
+              dk.setAttribute('data-tcb-catalog-preload', '1');
+              document.head.appendChild(dk);
+            }
+          }
+          warmupCatalogImagesFromItems(items, 16);
+          var runIdle = window.requestIdleCallback || function(cb) { return setTimeout(function() { cb({}); }, 400); };
+          runIdle(function() {
+            warmupCatalogImagesFromItems(items, 50);
+          }, { timeout: 2500 });
           var html = items.map(function(t, idx) {
             var photo = t.photos && t.photos[0];
             var src = photoSrcList(photo);
             var proxyFallback = photo ? photoUrl(photo.file_key_list || photo.file_key) : '';
+            var isPriority = idx < 3;
             var p = t.profile || {};
 
             var metaTop = [];
@@ -1032,7 +1197,7 @@
             infoHtml += '</div>';
 
             var photoHtml = src
-              ? '<div class="trainer-card-photo-wrap"><div class="trainer-card-photo-placeholder"></div><img src="' + src + '" alt="" loading="lazy" class="trainer-card-img"' + (proxyFallback ? ' data-fallback="' + proxyFallback.replace(/"/g, '&quot;') + '"' : '') + '></div>'
+              ? '<div class="trainer-card-photo-wrap"><div class="trainer-card-photo-placeholder"></div><img src="' + src + '" alt="" loading="' + (isPriority ? 'eager' : 'lazy') + '" fetchpriority="' + (isPriority ? 'high' : 'auto') + '" decoding="async" class="trainer-card-img"' + (proxyFallback ? ' data-fallback="' + proxyFallback.replace(/"/g, '&quot;') + '"' : '') + '></div>'
               : '<div class="trainer-card-photo-wrap"><div class="trainer-card-photo-placeholder"></div></div>';
             return '<button type="button" class="trainer-list-card" data-index="' + idx + '">' +
               photoHtml +
@@ -1061,8 +1226,10 @@
               state.trainerName = trainerName(t);
               persistTrainerSelection(t.id);
               var detailPhoto = t.photos && t.photos[0];
-              var preloadSrc = photoSrcList(detailPhoto) || photoSrcDetail(detailPhoto);
-              if (preloadSrc) { var preload = new Image(); preload.src = preloadSrc; }
+              var pl = photoSrcList(detailPhoto);
+              var pf = photoSrcDetail(detailPhoto);
+              if (pl) { var iml = new Image(); iml.decoding = 'async'; iml.src = pl; }
+              if (pf && pf !== pl) { var imf = new Image(); imf.decoding = 'async'; imf.fetchPriority = 'high'; imf.src = pf; }
               renderTrainerDetail();
               showScreen('screenTrainerDetail');
             };
@@ -1089,6 +1256,16 @@
           document.getElementById('trainerListFooter').style.display = 'block';
           var linkReq = document.getElementById('linkGeneralRequestFromList');
           if (linkReq) linkReq.onclick = openGeneralRequestForm;
+          if (state.offset === 0) {
+            // Preload second page data and lead images while user browses first page.
+            var nextPageParams = makeTrainerListParams(state.limit);
+            getJson('/trainers', nextPageParams).then(function(nextData) {
+              var nextItems = nextData && nextData.items ? nextData.items : [];
+              warmupImageUrls(nextItems.slice(0, 6).map(function(t) {
+                return photoSrcList(t.photos && t.photos[0]) || photoSrcDetail(t.photos && t.photos[0]);
+              }));
+            }).catch(function() { /* no-op */ });
+          }
           if (state.openTrainerIdAfterLoad) {
             var wantId = state.openTrainerIdAfterLoad;
             state.openTrainerIdAfterLoad = null;
@@ -1156,15 +1333,27 @@
         }).join(', ') : '—';
         var desc = (p.description || '').trim() || '—';
         var detailPhoto = t.photos && t.photos[0];
-        var detailSrc = photoSrcList(detailPhoto) || photoSrcDetail(detailPhoto);
-        var detailProxy = detailPhoto ? photoUrl(detailPhoto.file_key) : '';
+        var listSrc = photoSrcList(detailPhoto);
+        var fullSrc = photoSrcDetail(detailPhoto);
+        var fbList = photoProxyListFallback(detailPhoto);
+        var fbFull = photoProxyFullFallback(detailPhoto);
         var html = '';
-        if (detailSrc) {
+        if (listSrc || fullSrc) {
           html += '<div class="trainer-detail-photo-wrap">';
           html += '<div class="trainer-detail-photo-placeholder"></div>';
-          html += '<img src="' + detailSrc + '" alt="" class="trainer-detail-photo"';
-          if (detailProxy) html += ' data-fallback="' + detailProxy.replace(/"/g, '&quot;') + '"';
-          html += '>';
+          if (listSrc && fullSrc && listSrc !== fullSrc) {
+            html += '<img src="' + listSrc + '" alt="" loading="eager" fetchpriority="high" decoding="async" class="trainer-detail-photo-base"';
+            if (fbList) html += ' data-fallback-base="' + escapeAttr(fbList) + '"';
+            html += '>';
+            html += '<img src="' + fullSrc + '" alt="" loading="eager" fetchpriority="high" decoding="async" class="trainer-detail-photo-full"';
+            if (fbFull) html += ' data-fallback-full="' + escapeAttr(fbFull) + '"';
+            html += '>';
+          } else {
+            var oneSrc = fullSrc || listSrc;
+            html += '<img src="' + oneSrc + '" alt="" loading="eager" fetchpriority="high" decoding="async" class="trainer-detail-photo trainer-detail-photo-single"';
+            if (fbFull || fbList) html += ' data-fallback="' + escapeAttr(fbFull || fbList) + '"';
+            html += '>';
+          }
           html += '</div>';
         }
         html += '<div class="trainer-detail-name">' + name + '</div>';
@@ -1178,20 +1367,7 @@
         var photoSourceLabel = (detailPhoto && detailPhoto._source === 'cdn') ? 'Фото: через CDN' : (detailPhoto && detailPhoto._source === 'direct') ? 'Фото: напрямую с S3' : 'Фото: через сервер';
         html += '<div class="photo-source-hint trainer-detail-photo-source">' + photoSourceLabel + '</div>';
         document.getElementById('trainerDetailContent').innerHTML = html;
-        var detailImg = document.querySelector('#trainerDetailContent .trainer-detail-photo');
-        if (detailImg) {
-          function showLoaded() {
-            detailImg.classList.add('loaded');
-            var ph = detailImg.previousElementSibling;
-            if (ph) ph.style.display = 'none';
-          }
-          detailImg.onload = showLoaded;
-          detailImg.onerror = function() {
-            var fb = detailImg.dataset.fallback;
-            if (fb) { detailImg.onerror = null; detailImg.src = fb; }
-          };
-          if (detailImg.complete) showLoaded();
-        }
+        bindTrainerDetailPhotoWrap();
         document.getElementById('trainerDetailSlots').innerHTML = '<div class="slots-empty">Загрузка слотов…</div>';
         document.getElementById('trainerDetailActions').innerHTML = '';
         loadSlotsForTrainer(t.id, t).then(function(data) {
@@ -1496,6 +1672,7 @@
           }
           function showInitialScreen() {
             if (state.cityId && state.serviceId) {
+              prefetchFirstPageIfNeeded();
               renderSummary();
               showScreen('screenSummary');
               switchTab(state.activeTab);
@@ -1531,6 +1708,14 @@
           loadCities();
           showScreen('screenCity');
         });
+
+      // Keep first-page prefetch hot while user is on summary and updates filters.
+      document.addEventListener('click', function(e) {
+        var actionBtn = e.target && e.target.closest && e.target.closest('#summaryRows .summary-row-clickable, #tabCatalog, #tabMyTrainer');
+        if (actionBtn) {
+          setTimeout(prefetchFirstPageIfNeeded, 0);
+        }
+      });
     })();
   </script>
 </body>

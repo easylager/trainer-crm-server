@@ -14,6 +14,10 @@ CRM-платформа для тренеров в Беларуси. Два Teleg
 В репозитории есть [`.cursor/mcp.json`](.cursor/mcp.json): filesystem, fetch, PostgreSQL (read-only), GitHub, Playwright.  
 Подстановка секретов через переменные окружения (`POSTGRES_MCP_URL`, `GITHUB_PERSONAL_ACCESS_TOKEN`). Подробности и чеклист после правок — **[docs/CURSOR_MCP.md](docs/CURSOR_MCP.md)**.
 
+## Cursor: Spec Kit (spec-driven фичи)
+
+В репозитории настроен **[GitHub Spec Kit](https://github.com/github/spec-kit)** для Cursor: slash-команды **`/speckit.constitution`**, **`/speckit.specify`**, **`/speckit.plan`**, **`/speckit.tasks`**, **`/speckit.implement`** и др. в [`.cursor/commands/`](.cursor/commands/). Кратко — **[docs/SPEC_KIT.md](docs/SPEC_KIT.md)**.
+
 ## Деплой и CI/CD
 
 - **Railway:** PostgreSQL + API + 3 бота + **notification service** — **[docs/RAILWAY_DEPLOY.md](docs/RAILWAY_DEPLOY.md)**.
@@ -105,6 +109,8 @@ HTTP‑сервис ещё не реализован. План health‑эндп
 - Telegram‑бот запускается без ошибок и отвечает в чате.
 
 ## Telegram: два бота
+
+Правила единообразия: [.specify/memory/constitution.md](.specify/memory/constitution.md) — **§ VII** (боты: тексты, клавиатуры, разметка), **§ VIII** (Mini App в `static/webapp/`: цвета, типографика, общие UI-токены).
 
 - Создать **двух** ботов в @BotFather (например: «Запись к тренеру» — клиентский, «Trainer CRM» — тренерский).
 - В `.env` прописать `TELEGRAM_BOT_TOKEN_CLIENT` и `TELEGRAM_BOT_TOKEN_TRAINER`.

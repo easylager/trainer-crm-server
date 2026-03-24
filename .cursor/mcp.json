@@ -9,15 +9,15 @@
       ]
     },
     "fetch": {
-      "command": "uvx",
-      "args": ["mcp-server-fetch"]
+      "command": "docker",
+      "args": ["run", "-i", "--rm", "mcp/fetch"]
     },
     "postgres": {
       "command": "npx",
       "args": [
         "-y",
         "@modelcontextprotocol/server-postgres",
-        "${env:POSTGRES_MCP_URL}"
+        "postgresql://trainer_crm:trainer_crm_dev@127.0.0.1:5432/trainer_crm"
       ]
     },
     "github": {
@@ -30,6 +30,18 @@
     "playwright": {
       "command": "npx",
       "args": ["-y", "@playwright/mcp@latest"]
+    },
+    "railway": {
+      "command": "npx",
+      "args": ["-y", "@railway/mcp-server"]
+    },
+    "telegram-client-bot": {
+      "command": "bash",
+      "args": ["${workspaceFolder}/scripts/mcp-telegram-client.sh"]
+    },
+    "telegram-trainer-bot": {
+      "command": "bash",
+      "args": ["${workspaceFolder}/scripts/mcp-telegram-trainer.sh"]
     }
   }
 }

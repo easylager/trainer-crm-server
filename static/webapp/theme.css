@@ -1,0 +1,35 @@
+/**
+ * Mini App design tokens — Trainer CRM Belarus (constitution § VIII).
+ * Telegram-compatible --tg-theme-* names + semantic --app-* aliases.
+ */
+:root {
+  --tg-theme-bg-color: #fffbec;
+  --tg-theme-text-color: #1a1a1a;
+  --tg-theme-hint-color: #666;
+  --tg-theme-button-color: #f7a600;
+  --tg-theme-button-text-color: #1a1a1a;
+  --tg-theme-secondary-bg-color: #fff3cc;
+
+  --app-bg: var(--tg-theme-bg-color);
+  --app-text: var(--tg-theme-text-color);
+  --app-surface: var(--tg-theme-secondary-bg-color);
+  --app-muted: var(--tg-theme-hint-color);
+  --app-accent: var(--tg-theme-button-color);
+  --app-accent-text: var(--tg-theme-button-text-color);
+  --app-danger: #ff3b30;
+  --app-success: #34c759;
+  --app-radius-sm: 8px;
+  --app-radius-md: 12px;
+  --app-font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --tg-theme-bg-color: #1a1a1a;
+    --tg-theme-text-color: #f5f5f5;
+    --tg-theme-hint-color: #8e8e93;
+    --tg-theme-button-color: #f7a600;
+    --tg-theme-button-text-color: #1a1a1a;
+    --tg-theme-secondary-bg-color: #2a2a2a;
+  }
+}

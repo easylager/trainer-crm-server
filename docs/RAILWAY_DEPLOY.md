@@ -70,6 +70,7 @@ S3 (фото): `S3_ENDPOINT`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_BUCKET` (и 
 - **API:** открыть домен → `/health`. Ожидается `{"status":"ok","db":"ok",...}`.
 - **Боты:** проверить ответы в Telegram.
 - **Миграции** выполняются при каждом деплое **только API** (см. `scripts/railway-start-api.sh`).
+- **Копирование локальной БД на Railway** (полный дамп vs только данные, типичные ошибки `COPY`): см. [DATABASE_DUMP_RESTORE.md](DATABASE_DUMP_RESTORE.md).
 
 ---
 
