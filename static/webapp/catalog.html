@@ -348,6 +348,12 @@
       margin-top: 8px;
     }
     .btn-pass-block:active { opacity: 0.9; }
+    /* Same brand orange as passes — Telegram theme often overrides --tg-theme-button-color to blue */
+    #btnBookFromDetail {
+      background: #F7A600 !important;
+      color: #1a1a1a !important;
+    }
+    #btnBookFromDetail:active { opacity: 0.9; }
     .btn-leave-request {
       width: 100%;
       padding: 14px 18px;
@@ -1370,6 +1376,28 @@
         bindTrainerDetailPhotoWrap();
         document.getElementById('trainerDetailSlots').innerHTML = '<div class="slots-empty">Загрузка слотов…</div>';
         document.getElementById('trainerDetailActions').innerHTML = '';
+        var canBook = t.can_book === true;
+        if (!canBook) {
+          var phoneLine = '';
+          var ph = (p.phone || '').trim();
+          var ct = (p.contacts || '').trim();
+          if (ph) phoneLine += '<div class="slots-empty slots-contact"><strong>Телефон:</strong> <a href="tel:' + ph.replace(/[^\d+]/g, '') + '">' + escapeHtml(ph) + '</a></div>';
+          if (ct) phoneLine += '<div class="slots-empty slots-contact"><strong>Контакты:</strong> ' + escapeHtml(ct) + '</div>';
+          document.getElementById('trainerDetailSlots').innerHTML =
+            '<div class="slots-title">Онлайн-запись</div>' +
+            '<div class="slots-empty">У этого тренера нет самозаписи через каталог. Свяжитесь напрямую — тренер в каталоге, как и раньше.</div>' +
+            phoneLine;
+          state.slotsForTrainer = [];
+          var actionsEl = document.getElementById('trainerDetailActions');
+          actionsEl.innerHTML = '<button type="button" class="btn-block btn-leave-request" data-action="leave-request">Оставить заявку</button>';
+          var secondaryEl = document.getElementById('trainerDetailSecondary');
+          if (!state.openedFromMyTrainerTab) {
+            secondaryEl.innerHTML = '<button type="button" class="back-link" data-action="back-to-list"><svg class="back-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>К списку тренеров</button>';
+          } else {
+            secondaryEl.innerHTML = '';
+          }
+          return;
+        }
         loadSlotsForTrainer(t.id, t).then(function(data) {
           state.slotsForTrainer = data.slots || [];
           var slotsEl = document.getElementById('trainerDetailSlots');

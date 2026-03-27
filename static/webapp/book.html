@@ -400,6 +400,14 @@
           const data = await fetchSlots();
           trainerName = data.trainer_name || trainerName;
           document.getElementById('headerTitle').textContent = '📅 Записаться к ' + trainerName;
+          if (data.online_booking_available === false) {
+            document.getElementById('prevWeek').style.display = 'none';
+            document.getElementById('nextWeek').style.display = 'none';
+            document.getElementById('weekLabel').textContent = '';
+            document.getElementById('content').innerHTML =
+              '<div class="empty">У этого тренера нет самозаписи через каталог. Свяжитесь напрямую или откройте карточку тренера в каталоге.</div>';
+            return;
+          }
           allSlots = data.slots || [];
           currentWeekStart = new Date(thisMonday.getTime());
           document.getElementById('weekLabel').textContent = formatWeekLabel(currentWeekStart);

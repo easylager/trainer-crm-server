@@ -11,8 +11,8 @@ CRM-платформа для тренеров в Беларуси. Два Teleg
 
 ## Cursor: MCP (AI + локальная разработка)
 
-В репозитории есть [`.cursor/mcp.json`](.cursor/mcp.json): filesystem, fetch, PostgreSQL (read-only), GitHub, Playwright.  
-Подстановка секретов через переменные окружения (`POSTGRES_MCP_URL`, `GITHUB_PERSONAL_ACCESS_TOKEN`). Подробности и чеклист после правок — **[docs/CURSOR_MCP.md](docs/CURSOR_MCP.md)**.
+В репозитории есть [`.cursor/mcp.json`](.cursor/mcp.json): filesystem, fetch, PostgreSQL (read-only), GitHub, Playwright, опционально Notion и др.  
+Подстановка секретов через переменные окружения (`POSTGRES_MCP_URL`, `GITHUB_PERSONAL_ACCESS_TOKEN`, `NOTION_TOKEN` для Notion). Подробности и чеклист после правок — **[docs/CURSOR_MCP.md](docs/CURSOR_MCP.md)**. Продуктовый хаб для Notion (копирование в рабочее пространство) — **[docs/NOTION_PRODUCT_HUB.md](docs/NOTION_PRODUCT_HUB.md)**.
 
 ## Cursor: Spec Kit (spec-driven фичи)
 
@@ -88,6 +88,7 @@ curl -X POST http://localhost:8000/api/upload/photo -F "trainer_id=1" -F "file=@
 - **GET /api/trainers/{id}** — тренер целиком: профиль, фото (file_key), service_ids.
 - **PATCH /api/trainers/{id}/profile** — частичное обновление профиля и/или `service_ids`.
 - **GET /api/trainers** — список тренеров (limit, offset).
+- **GET /api/trainers/education-options** — варианты образования для select при заполнении профиля тренера.
 
 Профиль: имя, фамилия, возраст (обязательные), стаж в годах (опционально), описание, телефон, контакты, образование. После миграции 0005: `alembic upgrade head`. Заполнить пару профилей для теста: `python scripts/seed_trainer_profiles.py` (нужны услуги: сначала `python scripts/seed_services.py`).
 

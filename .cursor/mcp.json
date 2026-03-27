@@ -42,6 +42,10 @@
     "telegram-trainer-bot": {
       "command": "bash",
       "args": ["${workspaceFolder}/scripts/mcp-telegram-trainer.sh"]
+    },
+    "notion": {
+      "command": "bash",
+      "args": ["${workspaceFolder}/scripts/mcp-notion.sh"]
     }
   }
 }

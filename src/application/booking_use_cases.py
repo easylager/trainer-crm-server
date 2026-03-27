@@ -1,7 +1,7 @@
 """
 Booking use cases: create booking (slot + client_id, comment), list for trainer, pending notifications.
 """
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,6 +14,22 @@ try:
     from zoneinfo import ZoneInfo
 except ImportError:
     from backports.zoneinfo import ZoneInfo  # type: ignore[no-redef]
+
+# Correlated subquery for trainer-facing "Арена" text (alias `b` = bookings row).
+# There is no per-booking or per-slot venue FK; we aggregate all arena names linked via trainer_arenas
+# (same rule as catalog). Keeps schedule slot line and booking detail identical.
+SQL_BOOKING_TRAINER_ARENAS_STR = """(
+    SELECT string_agg(a.name, ', ' ORDER BY a.name)
+    FROM trainer_arenas ta
+    JOIN arenas a ON a.id = ta.arena_id
+    WHERE ta.trainer_id = b.trainer_id
+)"""
+
+
+def _normalize_trainer_arenas_display(raw: str | None) -> str | None:
+    """Single normalization for arenas_str / venue_label (matches list_bookings_for_trainer output)."""
+    s = (raw or "").strip()
+    return s if s else None
 
 
 async def get_first_service_id_for_trainer(session: AsyncSession, trainer_id: int) -> int | None:
@@ -379,10 +395,9 @@ async def list_bookings_for_trainer(
                        ) AS session_num,
                        COALESCE(b.status, 'confirmed') AS status,
                        srv.name AS services_str,
-                       (SELECT string_agg(a.name, ', ' ORDER BY a.name)
-                        FROM trainer_arenas ta
-                        JOIN arenas a ON a.id = ta.arena_id
-                        WHERE ta.trainer_id = b.trainer_id) AS arenas_str
+                       """
+            + SQL_BOOKING_TRAINER_ARENAS_STR
+            + """ AS arenas_str
                 FROM bookings b
                 JOIN clients c ON c.id = b.client_id
                 JOIN slots s ON s.id = b.slot_id
@@ -415,11 +430,60 @@ async def list_bookings_for_trainer(
             "end_time": row[10],
             "session_num": row[11],
             "services_str": (row[12] or "").strip() or None,
-            "arenas_str": (row[13] or "").strip() or None,
+            "arenas_str": _normalize_trainer_arenas_display(row[13] if len(row) > 13 else None),
             "status": (row[14] or "confirmed").strip() if len(row) > 14 else "confirmed",
         }
         for row in rows
     ]
+
+
+async def active_booking_summaries_by_slot_for_trainer_range(
+    session: AsyncSession,
+    trainer_id: int,
+    from_date: date,
+    to_date: date,
+) -> dict[int, dict]:
+    """
+    For booked slots in a date range: slot_id -> display fields for schedule UI.
+    Uses SQL_BOOKING_TRAINER_ARENAS_STR so venue_label matches booking detail arenas_str.
+    """
+    r = await session.execute(
+        text(
+            """
+            SELECT b.slot_id, b.id,
+                   COALESCE(b.status, 'confirmed') AS status,
+                   srv.name AS services_str,
+                   """
+            + SQL_BOOKING_TRAINER_ARENAS_STR
+            + """ AS arenas_str,
+                   c.first_name AS client_first_name, c.last_name AS client_last_name, c.phone AS client_phone
+            FROM bookings b
+            JOIN slots s ON s.id = b.slot_id
+            JOIN clients c ON c.id = b.client_id
+            JOIN services srv ON srv.id = b.service_id
+            WHERE b.trainer_id = :tid
+              AND s.slot_date >= :from_d AND s.slot_date <= :to_d
+              AND s.status = 'booked'
+              AND b.status IN ('pending', 'confirmed')
+        """),
+        {"tid": trainer_id, "from_d": from_date, "to_d": to_date},
+    )
+    out: dict[int, dict] = {}
+    for row in r.fetchall():
+        slot_id = int(row[0])
+        first = (row[5] or "").strip() if row[5] else ""
+        last = (row[6] or "").strip() if row[6] else ""
+        phone = (row[7] or "").strip() if row[7] else ""
+        name = " ".join(p for p in (first, last) if p).strip()
+        client_preview = name or phone or "Клиент"
+        out[slot_id] = {
+            "booking_id": int(row[1]),
+            "status": (row[2] or "confirmed").strip(),
+            "services_str": ((row[3] or "").strip() or None),
+            "venue_label": _normalize_trainer_arenas_display(row[4]),
+            "client_preview": client_preview,
+        }
+    return out
 
 
 async def list_trainer_clients(

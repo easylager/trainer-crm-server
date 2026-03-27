@@ -10,9 +10,9 @@
     * { box-sizing: border-box; }
     body {
       margin: 0;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: var(--tg-theme-bg-color);
-      color: var(--tg-theme-text-color);
+      font-family: var(--app-font-sans);
+      background: var(--app-bg);
+      color: var(--app-text);
       min-height: 100vh;
       padding: 12px;
       padding-bottom: env(safe-area-inset-bottom, 12px);
@@ -34,8 +34,8 @@
       border-radius: 8px;
       border: none;
       font-size: 14px;
-      background: var(--tg-theme-secondary-bg-color);
-      color: var(--tg-theme-text-color);
+      background: var(--app-surface);
+      color: var(--app-text);
       cursor: pointer;
     }
     .day-nav {
@@ -49,8 +49,8 @@
       width: 36px; height: 36px;
       border-radius: 50%;
       border: none;
-      background: var(--tg-theme-secondary-bg-color);
-      color: var(--tg-theme-text-color);
+      background: var(--app-surface);
+      color: var(--app-text);
       font-size: 18px;
       cursor: pointer;
       display: flex;
@@ -64,18 +64,18 @@
       padding: 14px 16px;
       margin-bottom: 10px;
       border-radius: 14px;
-      background: var(--tg-theme-secondary-bg-color);
+      background: var(--app-surface);
       width: 100%;
       text-align: left;
     }
     .booking-card-main { flex: 1; min-width: 0; }
     .booking-card .time { font-weight: 600; font-size: 15px; margin-bottom: 4px; }
-    .booking-card .trainer { font-size: 14px; color: var(--tg-theme-hint-color); margin-bottom: 6px; }
+    .booking-card .trainer { font-size: 14px; color: var(--app-muted); margin-bottom: 6px; }
     .booking-card .arena { font-size: 14px; margin-bottom: 2px; }
-    .booking-card .address { font-size: 13px; color: var(--tg-theme-hint-color); margin-bottom: 4px; }
+    .booking-card .address { font-size: 13px; color: var(--app-muted); margin-bottom: 4px; }
     .booking-card .map-link {
       font-size: 13px;
-      color: var(--tg-theme-button-color);
+      color: var(--app-accent);
       text-decoration: none;
     }
     .booking-card .map-link:active { opacity: 0.8; }
@@ -94,7 +94,7 @@
       height: 36px;
       border: none;
       background: transparent;
-      color: var(--tg-theme-hint-color);
+      color: var(--app-muted);
       cursor: pointer;
       display: flex;
       align-items: center;
@@ -104,9 +104,9 @@
     .booking-card .btn-cancel svg { width: 20px; height: 20px; }
     .booking-card .btn-cancel:active { opacity: 0.6; }
     .booking-card .btn-cancel:hover { color: #ff3b30; }
-    .loading, .error { text-align: center; padding: 24px; color: var(--tg-theme-hint-color); }
+    .loading, .error { text-align: center; padding: 24px; color: var(--app-muted); }
     .error { color: #ff3b30; }
-    .empty { text-align: center; padding: 32px 16px; color: var(--tg-theme-hint-color); font-size: 15px; }
+    .empty { text-align: center; padding: 32px 16px; color: var(--app-muted); font-size: 15px; }
     .modal-overlay {
       position: fixed;
       inset: 0;
@@ -120,7 +120,7 @@
       -webkit-overflow-scrolling: touch;
     }
     .modal {
-      background: var(--tg-theme-bg-color);
+      background: var(--app-bg);
       border-radius: 16px;
       padding: 20px;
       max-width: 360px;
@@ -130,14 +130,14 @@
       -webkit-overflow-scrolling: touch;
     }
     .modal h3 { margin: 0 0 8px; font-size: 17px; }
-    .modal .hint { font-size: 14px; color: var(--tg-theme-hint-color); margin-bottom: 12px; }
+    .modal .hint { font-size: 14px; color: var(--app-muted); margin-bottom: 12px; }
     .modal textarea {
       width: 100%;
       padding: 12px 14px;
       border-radius: 12px;
       border: none;
-      background: var(--tg-theme-secondary-bg-color);
-      color: var(--tg-theme-text-color);
+      background: var(--app-surface);
+      color: var(--app-text);
       font-size: 15px;
       line-height: 1.4;
       min-height: 80px;
@@ -145,7 +145,7 @@
       box-sizing: border-box;
       margin-bottom: 16px;
     }
-    .modal textarea::placeholder { color: var(--tg-theme-hint-color); }
+    .modal textarea::placeholder { color: var(--app-muted); }
     .modal .actions { display: flex; gap: 8px; }
     .modal .actions button { flex: 1; padding: 12px; border-radius: 10px; border: none; font-weight: 600; cursor: pointer; font-size: 14px; }
     .btn-modal-secondary { background: #FFF3CC !important; color: #1a1a1a !important; }

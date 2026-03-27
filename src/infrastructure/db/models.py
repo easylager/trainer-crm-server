@@ -42,6 +42,22 @@ TRAINER_STATUSES = (
     TRAINER_STATUS_DEACTIVATED,
 )
 
+TRAINER_EDUCATION_TYPE_FORMAL = "formal_education"
+TRAINER_EDUCATION_TYPE_COURSE = "course_or_certificate"
+TRAINER_EDUCATION_TYPES = (
+    TRAINER_EDUCATION_TYPE_FORMAL,
+    TRAINER_EDUCATION_TYPE_COURSE,
+)
+
+TRAINER_EDU_MOD_PENDING = "pending_moderation"
+TRAINER_EDU_MOD_APPROVED = "approved"
+TRAINER_EDU_MOD_REJECTED = "rejected"
+TRAINER_EDU_MOD_STATUSES = (
+    TRAINER_EDU_MOD_PENDING,
+    TRAINER_EDU_MOD_APPROVED,
+    TRAINER_EDU_MOD_REJECTED,
+)
+
 
 class Trainer(Base):
     """Trainer: created on site (or by admin); telegram_id set when they open link."""
@@ -57,6 +73,10 @@ class Trainer(Base):
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     moderation_feedback: Mapped[Optional[str]] = mapped_column(Text(), nullable=True)  # shown on site when not approved
+    # Set when trainer successfully queues for admin review; cleared when profile/photo/services/education change.
+    moderation_submitted_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     link_tokens: Mapped[list["TrainerLinkToken"]] = relationship(back_populates="trainer", lazy="raise")
     profile: Mapped[Optional["TrainerProfile"]] = relationship(back_populates="trainer", uselist=False, lazy="raise")
@@ -143,6 +163,56 @@ class TrainerProfile(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     trainer: Mapped["Trainer"] = relationship(back_populates="profile", lazy="raise")
+
+
+class TrainerEducation(Base):
+    """Structured trainer education entries with moderation lifecycle."""
+    __tablename__ = "trainer_education"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    trainer_id: Mapped[int] = mapped_column(ForeignKey("trainers.id", ondelete="CASCADE"), nullable=False, index=True)
+    education_type: Mapped[str] = mapped_column(
+        Enum(*TRAINER_EDUCATION_TYPES, name="trainer_education_type_enum", create_constraint=True),
+        nullable=False,
+    )
+    institution_name: Mapped[str] = mapped_column(String(160), nullable=False)
+    program_or_title: Mapped[str] = mapped_column(String(180), nullable=False)
+    degree_level: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    country: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    city: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    start_year: Mapped[Optional[int]] = mapped_column(Integer(), nullable=True)
+    end_year: Mapped[Optional[int]] = mapped_column(Integer(), nullable=True)
+    is_in_progress: Mapped[bool] = mapped_column(nullable=False, server_default="false")
+    document_url: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    moderation_status: Mapped[str] = mapped_column(
+        Enum(*TRAINER_EDU_MOD_STATUSES, name="trainer_education_moderation_status_enum", create_constraint=True),
+        nullable=False,
+        default=TRAINER_EDU_MOD_PENDING,
+        server_default=TRAINER_EDU_MOD_PENDING,
+    )
+    moderation_comment: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    approved_snapshot: Mapped[bool] = mapped_column(nullable=False, server_default="false")
+    approved_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    approved_by_admin_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    supersedes_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("trainer_education.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class TrainerEducationModerationEvent(Base):
+    """Audit trail for moderation decisions over trainer education rows."""
+    __tablename__ = "trainer_education_moderation_events"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    trainer_education_id: Mapped[int] = mapped_column(
+        ForeignKey("trainer_education.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    admin_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    decision: Mapped[str] = mapped_column(String(16), nullable=False)
+    reason: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class TrainerPhoto(Base):
@@ -504,6 +574,26 @@ INVOICE_STATUS_PAID = "paid"
 INVOICE_STATUS_OVERDUE = "overdue"
 INVOICE_STATUS_CANCELLED = "cancelled"
 
+# Subscription tiers: hierarchical access levels (analytics > online > crm)
+SUBSCRIPTION_TIER_NONE = "none"  # No active subscription or expired
+SUBSCRIPTION_TIER_CRM = "crm"
+SUBSCRIPTION_TIER_ONLINE = "online"
+SUBSCRIPTION_TIER_ANALYTICS = "analytics"
+
+SUBSCRIPTION_TIERS = (
+    SUBSCRIPTION_TIER_CRM,
+    SUBSCRIPTION_TIER_ONLINE,
+    SUBSCRIPTION_TIER_ANALYTICS,
+)
+
+# Tier hierarchy for access checks: higher index = more access
+SUBSCRIPTION_TIER_LEVELS = {
+    SUBSCRIPTION_TIER_NONE: 0,
+    SUBSCRIPTION_TIER_CRM: 1,
+    SUBSCRIPTION_TIER_ONLINE: 2,
+    SUBSCRIPTION_TIER_ANALYTICS: 3,
+}
+
 
 class SubscriptionPlan(Base):
     """Tariff plan for trainer platform subscription (trial or paid)."""
@@ -528,6 +618,10 @@ class TrainerSubscription(Base):
     plan_id: Mapped[int] = mapped_column(
         ForeignKey("subscription_plans.id", ondelete="RESTRICT"), nullable=False, index=True
     )
+    tier: Mapped[Optional[str]] = mapped_column(
+        Enum(*SUBSCRIPTION_TIERS, name="subscription_tier_enum", create_constraint=False),
+        nullable=True,
+    )  # crm | online | analytics — determines feature access
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False)  # trial, active, past_due, cancelled
@@ -553,6 +647,41 @@ class TrainerInvoice(Base):
     status: Mapped[str] = mapped_column(String(32), nullable=False)  # draft, sent, paid, overdue, cancelled
     paid_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     payment_external_id: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+
+
+class SubscriptionTierPricing(Base):
+    """Admin-editable pricing for subscription tiers (crm/online/analytics)."""
+    __tablename__ = "subscription_tier_pricing"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    tier: Mapped[str] = mapped_column(
+        Enum(*SUBSCRIPTION_TIERS, name="subscription_tier_enum", create_constraint=False),
+        nullable=False,
+        unique=True,
+    )
+    price_cents: Mapped[int] = mapped_column(Integer(), nullable=False)
+    currency: Mapped[str] = mapped_column(String(8), server_default="BYN", nullable=False)
+    period_days: Mapped[int] = mapped_column(Integer(), nullable=False)
+    name_ru: Mapped[str] = mapped_column(String(128), nullable=False)
+    short_description_ru: Mapped[Optional[str]] = mapped_column(Text(), nullable=True)
+    bullets_json: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    display_order: Mapped[int] = mapped_column(Integer(), server_default="0", nullable=False)
+    is_active: Mapped[bool] = mapped_column(nullable=False, server_default="true")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class SubscriptionTierPricingAudit(Base):
+    """Audit trail for tier pricing changes by admin."""
+    __tablename__ = "subscription_tier_pricing_audit"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    tier_pricing_id: Mapped[int] = mapped_column(
+        ForeignKey("subscription_tier_pricing.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    admin_telegram_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    changed_fields: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 # --- Support: messages from clients/trainers to admins ---

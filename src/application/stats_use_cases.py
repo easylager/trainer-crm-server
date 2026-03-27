@@ -5,9 +5,11 @@ Read-only aggregates; no side effects.
 from datetime import date, timedelta
 
 from sqlalchemy import text
+from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.trainer_schedule_use_cases import this_week_monday
+from src.infrastructure.db.models import SUBSCRIPTION_STATUS_ACTIVE, SUBSCRIPTION_STATUS_TRIAL
 
 # Short day names for charts (Mon–Sun)
 STATS_DAY_NAMES = ("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс")
@@ -609,6 +611,77 @@ async def get_platform_stats(session: AsyncSession) -> dict:
     if cancel_rate_30d is not None and bookings_30d >= 10 and cancel_rate_30d >= 30:
         alerts.append({"type": "cancellations_high_30d", "title": "Много отмен (30 дней)", "description": f"Отменено {cancelled_30d} занятий за 30 дней ({int(cancel_rate_30d)}%)"})
 
+    # --- Platform subscriptions (tier CRM / Online / Analytics) — optional until migration 0066 ---
+    subscription_tier_crm = 0
+    subscription_tier_online = 0
+    subscription_tier_analytics = 0
+    subscription_trainers_with_tier = 0
+    subscription_expiring_7d = 0
+    subscription_active_trainers_no_tier = 0
+    try:
+        r = await session.execute(
+            text("""
+                WITH ranked AS (
+                    SELECT trainer_id, tier,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY trainer_id
+                            ORDER BY
+                                CASE tier::text
+                                    WHEN 'analytics' THEN 3
+                                    WHEN 'online' THEN 2
+                                    WHEN 'crm' THEN 1
+                                    ELSE 0
+                                END DESC,
+                                expires_at DESC
+                        ) AS rn
+                    FROM trainer_subscriptions
+                    WHERE expires_at > CURRENT_TIMESTAMP
+                      AND status IN (:s1, :s2)
+                      AND tier IS NOT NULL
+                )
+                SELECT tier::text, COUNT(*)::int FROM ranked WHERE rn = 1 GROUP BY tier
+            """),
+            {"s1": SUBSCRIPTION_STATUS_TRIAL, "s2": SUBSCRIPTION_STATUS_ACTIVE},
+        )
+        for row in r.fetchall():
+            tname, cnt = row[0], row[1]
+            if tname == "crm":
+                subscription_tier_crm = cnt
+            elif tname == "online":
+                subscription_tier_online = cnt
+            elif tname == "analytics":
+                subscription_tier_analytics = cnt
+        subscription_trainers_with_tier = (
+            subscription_tier_crm + subscription_tier_online + subscription_tier_analytics
+        )
+        r2 = await session.execute(
+            text("""
+                SELECT COUNT(DISTINCT trainer_id) FROM trainer_subscriptions
+                WHERE expires_at > CURRENT_TIMESTAMP
+                  AND expires_at <= CURRENT_TIMESTAMP + INTERVAL '7 days'
+                  AND status IN (:s1, :s2)
+            """),
+            {"s1": SUBSCRIPTION_STATUS_TRIAL, "s2": SUBSCRIPTION_STATUS_ACTIVE},
+        )
+        subscription_expiring_7d = (r2.fetchone() or (0,))[0]
+        r3 = await session.execute(
+            text("""
+                SELECT COUNT(*) FROM trainers t
+                WHERE t.status = 'active'
+                  AND NOT EXISTS (
+                    SELECT 1 FROM trainer_subscriptions ts
+                    WHERE ts.trainer_id = t.id
+                      AND ts.expires_at > CURRENT_TIMESTAMP
+                      AND ts.status IN (:s1, :s2)
+                      AND ts.tier IS NOT NULL
+                  )
+            """),
+            {"s1": SUBSCRIPTION_STATUS_TRIAL, "s2": SUBSCRIPTION_STATUS_ACTIVE},
+        )
+        subscription_active_trainers_no_tier = (r3.fetchone() or (0,))[0]
+    except ProgrammingError:
+        pass
+
     return {
         "trainers_by_status": trainers_by_status,
         "trainers_total": trainers_total,
@@ -643,4 +716,10 @@ async def get_platform_stats(session: AsyncSession) -> dict:
         "certs_with_balance_total": certs_with_balance_total,
         "cert_balance_cents_total": cert_balance_cents_total,
         "certs_redeemed_30d_total": certs_redeemed_30d_total,
+        "subscription_tier_crm": subscription_tier_crm,
+        "subscription_tier_online": subscription_tier_online,
+        "subscription_tier_analytics": subscription_tier_analytics,
+        "subscription_trainers_with_tier": subscription_trainers_with_tier,
+        "subscription_expiring_7d": subscription_expiring_7d,
+        "subscription_active_trainers_no_tier": subscription_active_trainers_no_tier,
     }

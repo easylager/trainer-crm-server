@@ -1,0 +1,67 @@
+"""
+Trainer bot access: map DB trainer.status + profile completeness to a small enum.
+Aligned with admin moderation (pending_profile queue → approve → active).
+"""
+from enum import Enum
+from typing import Any
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.application.trainer_link import get_trainer_row_by_telegram_id
+from src.application.trainer_profile_completeness import is_profile_complete_for_moderation
+from src.application.trainer_use_cases import get_trainer
+from src.infrastructure.db.models import (
+    TRAINER_STATUS_ACTIVE,
+    TRAINER_STATUS_DEACTIVATED,
+    TRAINER_STATUS_PENDING_CONTRACT,
+    TRAINER_STATUS_PENDING_PAYMENT,
+    TRAINER_STATUS_PENDING_PROFILE,
+)
+
+
+class TrainerAccessState(str, Enum):
+    """Who may use schedule/bookings/requests/etc. in the trainer bot."""
+
+    NOT_LINKED = "not_linked"
+    ACTIVE = "active"
+    BLOCKED_PROFILE = "blocked_profile"
+    PENDING_MODERATION = "pending_moderation"
+    DEACTIVATED = "deactivated"
+
+
+def resolve_trainer_access_state(*, status: str, trainer: dict[str, Any] | None) -> TrainerAccessState:
+    """Pure mapping for tests and single place for rules."""
+    st = (status or "").strip().lower()
+    if st == TRAINER_STATUS_ACTIVE:
+        return TrainerAccessState.ACTIVE
+    if st == TRAINER_STATUS_DEACTIVATED:
+        return TrainerAccessState.DEACTIVATED
+    if st in (TRAINER_STATUS_PENDING_CONTRACT, TRAINER_STATUS_PENDING_PAYMENT):
+        return TrainerAccessState.PENDING_MODERATION
+    if st == TRAINER_STATUS_PENDING_PROFILE:
+        if trainer is not None and is_profile_complete_for_moderation(trainer):
+            return TrainerAccessState.PENDING_MODERATION
+        return TrainerAccessState.BLOCKED_PROFILE
+    return TrainerAccessState.PENDING_MODERATION
+
+
+async def get_trainer_access_state(
+    session: AsyncSession,
+    telegram_id: int,
+) -> tuple[TrainerAccessState, dict[str, Any] | None]:
+    """
+    Returns access state and trainer aggregate (get_trainer) when linked.
+    NOT_LINKED if telegram is not bound to a trainer row.
+    """
+    row = await get_trainer_row_by_telegram_id(session, telegram_id)
+    if not row:
+        return TrainerAccessState.NOT_LINKED, None
+    tid = row["id"]
+    trainer = await get_trainer(session, tid)
+    if not trainer:
+        return TrainerAccessState.NOT_LINKED, None
+    status = str(trainer.get("status") or "")
+    state = resolve_trainer_access_state(status=status, trainer=trainer)
+    if status == TRAINER_STATUS_ACTIVE:
+        return TrainerAccessState.ACTIVE, trainer
+    return state, trainer

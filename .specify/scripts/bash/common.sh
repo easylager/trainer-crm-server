@@ -20,6 +20,20 @@ get_current_branch() {
         return
     fi
 
+    # Optional: work on develop/main while specs stay in specs/<NNN-slug>/ — one line = folder basename
+    local repo_root
+    repo_root=$(get_repo_root)
+    local active_file="$repo_root/.specify/active-feature"
+    if [[ -f "$active_file" ]]; then
+        local af
+        af=$(head -n1 "$active_file" | tr -d '\r\n')
+        af=$(echo "$af" | xargs)
+        if [[ -n "$af" ]] && [[ -d "$repo_root/specs/$af" ]]; then
+            echo "$af"
+            return
+        fi
+    fi
+
     # Then check git if available
     if git rev-parse --abbrev-ref HEAD >/dev/null 2>&1; then
         git rev-parse --abbrev-ref HEAD

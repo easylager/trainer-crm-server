@@ -1,0 +1,993 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Подписка</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="stylesheet" href="theme.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet" />
+  <style>
+    * { box-sizing: border-box; }
+    html {
+      height: 100%;
+      overflow-x: hidden;
+    }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--tg-theme-bg-color);
+      color: var(--tg-theme-text-color);
+      min-height: 100%;
+      min-height: 100dvh;
+      padding: 12px;
+      /* Fixed bottom bar — scroll room for last card */
+      padding-bottom: calc(env(safe-area-inset-bottom, 12px) + 220px);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .sub-head {
+      font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+
+    /* Screens */
+    .screen { display: none; animation: subFadeIn 0.38s cubic-bezier(0.22, 1, 0.36, 1) both; }
+    .screen.active { display: block; }
+    @keyframes subFadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Hero — same language as schedule.html .bd-hero */
+    .sub-hero {
+      position: relative;
+      border-radius: 20px;
+      padding: 22px 20px 24px;
+      margin-bottom: 18px;
+      overflow: hidden;
+      text-align: center;
+      background: linear-gradient(155deg, rgba(247, 166, 0, 0.14) 0%, rgba(247, 166, 0, 0.04) 48%, transparent 100%);
+      border: 1px solid rgba(247, 166, 0, 0.28);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+    }
+    .sub-hero::before {
+      content: '';
+      position: absolute;
+      top: -40%;
+      right: -20%;
+      width: 55%;
+      height: 120%;
+      background: radial-gradient(ellipse, rgba(247, 166, 0, 0.22) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .sub-hero-inner { position: relative; z-index: 1; }
+    .sub-hero-kicker {
+      font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--tg-theme-hint-color);
+      margin: 0 0 10px;
+    }
+    .sub-hero-title {
+      font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: clamp(22px, 5.5vw, 28px);
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1.15;
+      margin: 0 0 10px;
+      color: var(--tg-theme-text-color);
+    }
+    .sub-hero-sub {
+      font-size: 14px;
+      font-weight: 500;
+      line-height: 1.45;
+      color: var(--tg-theme-hint-color);
+      margin: 0;
+      max-width: 320px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      .sub-hero { box-shadow: 0 8px 36px rgba(0, 0, 0, 0.45); }
+    }
+
+    /* Current status — chip like schedule filters / slot-status */
+    #currentStatus { margin-bottom: 16px; }
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 14px;
+      background: var(--app-chip-bg, var(--tg-theme-secondary-bg-color));
+      color: var(--app-chip-text, var(--tg-theme-text-color));
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 600;
+      border: 1px solid rgba(128, 128, 128, 0.14);
+      box-shadow: 0 1px 0 rgba(0, 0, 0, 0.04);
+    }
+    .status-badge.active {
+      background: rgba(52, 199, 89, 0.2);
+      color: var(--app-success, #34c759);
+      border-color: rgba(52, 199, 89, 0.35);
+    }
+    .status-badge .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: currentColor;
+      box-shadow: 0 0 0 2px rgba(52, 199, 89, 0.2);
+    }
+    .status-badge:not(.active) .dot {
+      box-shadow: none;
+      opacity: 0.85;
+    }
+
+    /* Tier cards — slot-card family */
+    .tiers-container {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      padding-bottom: 10px;
+    }
+    .tier-card {
+      position: relative;
+      background: var(--tg-theme-secondary-bg-color);
+      border-radius: 18px;
+      padding: 20px 18px 18px;
+      border: 2px solid transparent;
+      cursor: pointer;
+      transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+      -webkit-tap-highlight-color: transparent;
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+    }
+    @media (prefers-color-scheme: dark) {
+      .tier-card { box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35); }
+    }
+    .tier-card:hover {
+      border-color: rgba(247, 166, 0, 0.2);
+    }
+    .tier-card:active { transform: scale(0.985); }
+    .tier-card.selected {
+      border-color: rgba(247, 166, 0, 0.55);
+      box-shadow: 0 6px 28px rgba(247, 166, 0, 0.22), 0 1px 0 rgba(0, 0, 0, 0.04);
+    }
+    .tier-card.current {
+      background: linear-gradient(160deg, rgba(247, 166, 0, 0.12) 0%, var(--tg-theme-secondary-bg-color) 55%);
+    }
+
+    .badge-popular {
+      position: absolute;
+      top: -9px;
+      right: 14px;
+      font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: linear-gradient(145deg, #ffc23d 0%, #f7a600 55%, #e89400 100%);
+      color: #141414;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      padding: 6px 12px;
+      border-radius: 999px;
+      box-shadow: 0 4px 14px rgba(247, 166, 0, 0.45);
+    }
+    .badge-current {
+      position: absolute;
+      top: -9px;
+      left: 14px;
+      font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: linear-gradient(180deg, #3dd68c 0%, #34c759 100%);
+      color: #0a2e16;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      padding: 6px 11px;
+      border-radius: 999px;
+      box-shadow: 0 4px 14px rgba(52, 199, 89, 0.35);
+    }
+
+    .tier-top {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .tier-header-main {
+      flex: 1;
+      min-width: 0;
+    }
+    .tier-header-inner {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+    }
+    .tier-name {
+      font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 19px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin: 0;
+      flex: 1;
+      min-width: 0;
+      line-height: 1.2;
+    }
+    .tier-price {
+      flex-shrink: 0;
+      text-align: right;
+    }
+    .tier-price .amount {
+      font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      color: var(--tg-theme-button-color);
+    }
+    .tier-price .period {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--tg-theme-hint-color);
+      margin-top: 2px;
+    }
+
+    .tier-description {
+      font-size: 14px;
+      color: var(--tg-theme-hint-color);
+      margin-bottom: 14px;
+      line-height: 1.45;
+    }
+
+    .tier-features {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    .tier-features li {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      font-size: 14px;
+      padding: 7px 0;
+      color: var(--tg-theme-text-color);
+      line-height: 1.4;
+    }
+    .tier-features li::before {
+      content: '✓';
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 22px;
+      height: 22px;
+      margin-top: 1px;
+      background: rgba(52, 199, 89, 0.18);
+      color: var(--app-success, #34c759);
+      border-radius: 8px;
+      font-size: 11px;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+    .tier-features li.inherited {
+      color: var(--tg-theme-hint-color);
+    }
+    .tier-features li.inherited::before {
+      background: rgba(142, 142, 147, 0.15);
+      color: var(--tg-theme-hint-color);
+    }
+
+    .includes-text {
+      font-size: 12px;
+      font-weight: 500;
+      font-style: italic;
+      color: var(--tg-theme-hint-color);
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px dashed rgba(128, 128, 128, 0.25);
+    }
+
+    .selection-indicator {
+      flex-shrink: 0;
+      width: 24px;
+      height: 24px;
+      margin-top: 4px;
+      border-radius: 50%;
+      border: 2px solid rgba(128, 128, 128, 0.35);
+      transition: border-color 0.18s ease, background 0.18s ease, transform 0.18s ease;
+      box-sizing: border-box;
+    }
+    .tier-card.selected .selection-indicator {
+      border-color: var(--tg-theme-button-color);
+      background: linear-gradient(145deg, #ffc23d 0%, #f0a000 100%);
+      box-shadow: 0 2px 8px rgba(247, 166, 0, 0.35);
+    }
+    .tier-card.selected .selection-indicator::after {
+      content: '✓';
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+      color: #141414;
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    /* Fixed bottom bar — glass over scroll; solid fallback uses theme token */
+    .bottom-bar {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      z-index: 20;
+      background: var(--tg-theme-bg-color);
+      padding: 16px 16px;
+      padding-bottom: calc(env(safe-area-inset-bottom, 16px) + 14px);
+      border-top: 1px solid rgba(128, 128, 128, 0.16);
+      box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.12);
+    }
+    @supports (backdrop-filter: blur(1px)) {
+      .bottom-bar {
+        backdrop-filter: blur(14px);
+        -webkit-backdrop-filter: blur(14px);
+      }
+    }
+    @supports (background: color-mix(in srgb, red, blue)) {
+      @supports (backdrop-filter: blur(1px)) {
+        .bottom-bar {
+          background: color-mix(in srgb, var(--tg-theme-bg-color) 90%, transparent);
+        }
+      }
+    }
+    .summary-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+      font-size: 14px;
+      font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+    .summary-row .label { color: var(--tg-theme-hint-color); font-weight: 500; }
+    .summary-row .value { font-weight: 700; letter-spacing: -0.02em; }
+
+    /* Primary CTA — schedule .bd-btn--primary */
+    .btn-primary {
+      width: 100%;
+      padding: 15px 22px;
+      border-radius: 14px;
+      border: none;
+      font-size: 16px;
+      font-weight: 700;
+      font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      letter-spacing: -0.01em;
+      background: linear-gradient(180deg, #ffc23d 0%, #f0a000 100%);
+      color: #141414;
+      cursor: pointer;
+      box-shadow: 0 6px 20px rgba(247, 166, 0, 0.38);
+      transition: transform 0.12s ease, box-shadow 0.12s ease, opacity 0.12s ease;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .btn-primary:hover:not(:disabled) {
+      box-shadow: 0 8px 26px rgba(247, 166, 0, 0.45);
+    }
+    .btn-primary:active:not(:disabled) {
+      transform: scale(0.985);
+      box-shadow: 0 3px 12px rgba(247, 166, 0, 0.28);
+      opacity: 0.95;
+    }
+    .btn-primary:disabled {
+      background: var(--tg-theme-secondary-bg-color);
+      color: var(--tg-theme-hint-color);
+      box-shadow: none;
+      opacity: 0.65;
+      cursor: not-allowed;
+    }
+
+    /* Loading — empty / waiting */
+    .loading-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 72vh;
+      text-align: center;
+      padding: 24px 16px;
+    }
+    .loading-hero {
+      position: relative;
+      width: 100%;
+      max-width: 320px;
+      border-radius: 20px;
+      padding: 32px 24px;
+      margin-bottom: 28px;
+      overflow: hidden;
+      background: linear-gradient(155deg, rgba(247, 166, 0, 0.12) 0%, rgba(247, 166, 0, 0.03) 50%, transparent 100%);
+      border: 1px solid rgba(247, 166, 0, 0.22);
+    }
+    .loading-hero::before {
+      content: '';
+      position: absolute;
+      inset: -20% -30% auto auto;
+      width: 70%;
+      height: 140%;
+      background: radial-gradient(ellipse, rgba(247, 166, 0, 0.18) 0%, transparent 65%);
+      pointer-events: none;
+    }
+    .spinner {
+      position: relative;
+      z-index: 1;
+      width: 48px;
+      height: 48px;
+      border: 3px solid rgba(247, 166, 0, 0.2);
+      border-top-color: var(--tg-theme-button-color);
+      border-radius: 50%;
+      animation: subSpin 0.75s linear infinite;
+      margin: 0 auto 18px;
+    }
+    @keyframes subSpin { to { transform: rotate(360deg); } }
+    .loading-text {
+      position: relative;
+      z-index: 1;
+      font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--tg-theme-hint-color);
+      letter-spacing: -0.01em;
+    }
+
+    /* Error state */
+    .error-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 72vh;
+      text-align: center;
+      padding: 28px 20px;
+    }
+    .error-panel {
+      width: 100%;
+      max-width: 340px;
+      border-radius: 20px;
+      padding: 28px 22px 26px;
+      background: var(--tg-theme-secondary-bg-color);
+      border: 1px solid rgba(255, 59, 48, 0.22);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
+    }
+    @media (prefers-color-scheme: dark) {
+      .error-panel { box-shadow: 0 8px 36px rgba(0, 0, 0, 0.4); }
+    }
+    .error-icon {
+      font-size: 44px;
+      line-height: 1;
+      margin-bottom: 14px;
+      filter: grayscale(0.15);
+    }
+    .error-title {
+      font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin: 0 0 8px;
+    }
+    .error-message {
+      font-size: 14px;
+      line-height: 1.5;
+      color: var(--tg-theme-hint-color);
+      margin: 0 0 22px;
+    }
+    .btn-retry {
+      width: 100%;
+      max-width: 280px;
+      padding: 14px 22px;
+      border-radius: 14px;
+      border: 1px solid rgba(247, 166, 0, 0.35);
+      font-size: 15px;
+      font-weight: 700;
+      font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: rgba(247, 166, 0, 0.12);
+      color: var(--tg-theme-text-color);
+      cursor: pointer;
+      transition: transform 0.12s ease, background 0.12s ease, box-shadow 0.12s ease;
+    }
+    .btn-retry:hover {
+      background: rgba(247, 166, 0, 0.18);
+      box-shadow: 0 4px 16px rgba(247, 166, 0, 0.2);
+    }
+    .btn-retry:active {
+      transform: scale(0.985);
+    }
+
+    /* Success */
+    .success-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 72vh;
+      text-align: center;
+      padding: 24px 16px 32px;
+    }
+    .success-hero {
+      position: relative;
+      width: 100%;
+      max-width: 360px;
+      border-radius: 22px;
+      padding: 28px 22px 26px;
+      margin-bottom: 8px;
+      overflow: hidden;
+      background: linear-gradient(155deg, rgba(52, 199, 89, 0.14) 0%, rgba(247, 166, 0, 0.08) 45%, transparent 100%);
+      border: 1px solid rgba(52, 199, 89, 0.28);
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+    }
+    .success-hero::before {
+      content: '';
+      position: absolute;
+      top: -30%;
+      right: -15%;
+      width: 60%;
+      height: 100%;
+      background: radial-gradient(ellipse, rgba(247, 166, 0, 0.2) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .success-hero-inner { position: relative; z-index: 1; }
+    .success-icon {
+      width: 88px;
+      height: 88px;
+      margin: 0 auto 18px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 44px;
+      background: linear-gradient(145deg, rgba(52, 199, 89, 0.25) 0%, rgba(52, 199, 89, 0.08) 100%);
+      border: 2px solid rgba(52, 199, 89, 0.35);
+      box-shadow: 0 8px 28px rgba(52, 199, 89, 0.25);
+      animation: successPop 0.55s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+    @keyframes successPop {
+      0% { transform: scale(0); opacity: 0; }
+      55% { transform: scale(1.06); }
+      100% { transform: scale(1); opacity: 1; }
+    }
+    .success-title {
+      font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      margin: 0 0 8px;
+    }
+    .success-subtitle {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--tg-theme-hint-color);
+      margin: 0;
+      line-height: 1.5;
+      max-width: 300px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .unlocked-list {
+      width: 100%;
+      max-width: 340px;
+      text-align: left;
+      margin: 22px 0 8px;
+    }
+    .unlocked-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 16px;
+      background: var(--tg-theme-secondary-bg-color);
+      border-radius: 14px;
+      margin-bottom: 10px;
+      font-size: 14px;
+      font-weight: 600;
+      border: 1px solid rgba(128, 128, 128, 0.1);
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+      animation: slideIn 0.45s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+      opacity: 0;
+    }
+    .unlocked-item:nth-child(1) { animation-delay: 0.12s; }
+    .unlocked-item:nth-child(2) { animation-delay: 0.22s; }
+    .unlocked-item:nth-child(3) { animation-delay: 0.32s; }
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .unlocked-item .icon {
+      width: 36px;
+      height: 36px;
+      background: linear-gradient(145deg, #ffc23d 0%, #f0a000 100%);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #141414;
+      font-size: 17px;
+      box-shadow: 0 4px 12px rgba(247, 166, 0, 0.35);
+    }
+    .btn-close-success {
+      width: 100%;
+      max-width: 320px;
+      padding: 15px 28px;
+      border-radius: 14px;
+      border: none;
+      font-size: 16px;
+      font-weight: 700;
+      font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: linear-gradient(180deg, #ffc23d 0%, #f0a000 100%);
+      color: #141414;
+      cursor: pointer;
+      box-shadow: 0 6px 20px rgba(247, 166, 0, 0.38);
+      transition: transform 0.12s ease, box-shadow 0.12s ease;
+    }
+    .btn-close-success:hover {
+      box-shadow: 0 8px 26px rgba(247, 166, 0, 0.45);
+    }
+    .btn-close-success:active {
+      transform: scale(0.985);
+      box-shadow: 0 3px 12px rgba(247, 166, 0, 0.28);
+    }
+
+    .confetti {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      overflow: hidden;
+      z-index: 1000;
+    }
+    .confetti-piece {
+      position: absolute;
+      width: 10px;
+      height: 10px;
+      background: var(--tg-theme-button-color);
+      animation: confettiFall 3s ease-out forwards;
+    }
+    @keyframes confettiFall {
+      0% { transform: translateY(-100%) rotate(0deg); opacity: 1; }
+      100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
+    }
+  </style>
+</head>
+<body>
+  <!-- Loading screen -->
+  <div id="screenLoading" class="screen active">
+    <div class="loading-container">
+      <div class="loading-hero">
+        <div class="spinner" aria-hidden="true"></div>
+        <div class="loading-text">Загрузка тарифов…</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Error screen -->
+  <div id="screenError" class="screen">
+    <div class="error-container">
+      <div class="error-panel">
+        <div class="error-icon" aria-hidden="true">😕</div>
+        <div class="error-title">Не удалось загрузить</div>
+        <div class="error-message" id="errorMessage">Проверьте подключение к интернету</div>
+        <button type="button" class="btn-retry" id="btnRetry">Повторить</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main screen: tier selection -->
+  <div id="screenMain" class="screen">
+    <div class="sub-hero sub-head">
+      <div class="sub-hero-inner">
+        <p class="sub-hero-kicker">Подписка</p>
+        <h1 class="sub-hero-title">Выберите план</h1>
+        <p class="sub-hero-sub">Каждый следующий уровень включает всё из предыдущего</p>
+      </div>
+    </div>
+
+    <div id="currentStatus"></div>
+    <div id="tiersContainer" class="tiers-container"></div>
+  </div>
+
+  <!-- Bottom bar (fixed) -->
+  <div id="bottomBar" class="bottom-bar" style="display:none;">
+    <div class="summary-row">
+      <span class="label">Выбран:</span>
+      <span class="value" id="summaryTier">—</span>
+    </div>
+    <div class="summary-row">
+      <span class="label">К оплате:</span>
+      <span class="value" id="summaryPrice">—</span>
+    </div>
+    <button type="button" class="btn-primary" id="btnPay" disabled>Оплатить (демо)</button>
+  </div>
+
+  <!-- Success screen -->
+  <div id="screenSuccess" class="screen">
+    <div class="success-container sub-head">
+      <div class="success-hero">
+        <div class="success-hero-inner">
+          <div class="success-icon" aria-hidden="true">🎉</div>
+          <div class="success-title">Подписка активирована!</div>
+          <div class="success-subtitle" id="successSubtitle">Теперь вам доступны все функции</div>
+        </div>
+      </div>
+      <div class="unlocked-list" id="unlockedList"></div>
+      <button type="button" class="btn-close-success" id="btnCloseSuccess">Отлично!</button>
+    </div>
+  </div>
+
+  <div id="confetti" class="confetti"></div>
+
+  <script>
+    (function() {
+      'use strict';
+      var tg = window.Telegram && window.Telegram.WebApp;
+      if (tg) { tg.ready(); tg.expand(); }
+
+      function initData() { return (tg && tg.initData) ? tg.initData : ''; }
+      function headers() {
+        var h = { 'Accept': 'application/json' };
+        if (initData()) h['X-Telegram-Init-Data'] = initData();
+        return h;
+      }
+      function haptic(type) {
+        if (tg && tg.HapticFeedback) {
+          if (type === 'success') tg.HapticFeedback.notificationOccurred('success');
+          else if (type === 'error') tg.HapticFeedback.notificationOccurred('error');
+          else if (type === 'light') tg.HapticFeedback.impactOccurred('light');
+          else if (type === 'medium') tg.HapticFeedback.impactOccurred('medium');
+        }
+      }
+      function closeApp() { if (tg) tg.close(); else window.history.back(); }
+
+      // Screen management
+      function showScreen(id) {
+        document.querySelectorAll('.screen').forEach(function(el) { el.classList.remove('active'); });
+        var el = document.getElementById(id);
+        if (el) el.classList.add('active');
+        // Show/hide bottom bar
+        var bottomBar = document.getElementById('bottomBar');
+        bottomBar.style.display = (id === 'screenMain') ? 'block' : 'none';
+      }
+
+      // State
+      var catalog = [];
+      var status = null;
+      var selectedTier = null;
+
+      // Format helpers
+      function formatPrice(cents) {
+        if (cents == null) return '—';
+        var byn = (cents / 100).toFixed(0);
+        return byn + ' BYN';
+      }
+      function formatPeriod(days) {
+        if (days >= 365) return Math.floor(days / 365) + ' год';
+        if (days >= 30) return Math.round(days / 30) + ' мес.';
+        return days + ' дн.';
+      }
+
+      // Tier icons for success screen
+      var tierIcons = {
+        crm: '📋',
+        online: '🌐',
+        analytics: '📊'
+      };
+      var tierLabels = {
+        crm: 'CRM и клиентская база',
+        online: 'Онлайн-запись через каталог',
+        analytics: 'Аналитика и отчёты'
+      };
+
+      // Load data
+      function loadData() {
+        showScreen('screenLoading');
+        var catalogUrl = '/api/webapp/trainer/subscription/catalog' + (initData() ? '?init_data=' + encodeURIComponent(initData()) : '');
+        var statusUrl = '/api/webapp/trainer/subscription/status' + (initData() ? '?init_data=' + encodeURIComponent(initData()) : '');
+
+        Promise.all([
+          fetch(catalogUrl, { headers: headers() }).then(function(r) { return r.json(); }),
+          fetch(statusUrl, { headers: headers() }).then(function(r) { return r.json(); })
+        ])
+        .then(function(results) {
+          var catalogData = results[0];
+          var statusData = results[1];
+          
+          if (!catalogData.tiers || !catalogData.tiers.length) {
+            throw new Error('Нет доступных тарифов');
+          }
+          
+          catalog = catalogData.tiers;
+          status = statusData;
+          renderTiers();
+          showScreen('screenMain');
+        })
+        .catch(function(err) {
+          document.getElementById('errorMessage').textContent = err.message || 'Ошибка загрузки данных';
+          showScreen('screenError');
+        });
+      }
+
+      // Render tiers
+      function renderTiers() {
+        var container = document.getElementById('tiersContainer');
+        var currentTier = status && status.effective_tier;
+        
+        // Render current status
+        var statusContainer = document.getElementById('currentStatus');
+        if (currentTier && currentTier !== 'none') {
+          var expiresText = status.expires_at ? ' до ' + status.expires_at.slice(0, 10) : '';
+          statusContainer.innerHTML = '<div class="status-badge active"><span class="dot"></span>Активна' + expiresText + '</div>';
+        } else {
+          statusContainer.innerHTML = '<div class="status-badge"><span class="dot"></span>Нет активной подписки</div>';
+        }
+
+        // Render tier cards
+        var html = '';
+        catalog.forEach(function(tier, idx) {
+          var isPopular = tier.tier === 'online';
+          var isCurrent = tier.tier === currentTier;
+          var isSelected = selectedTier === tier.tier;
+          
+          html += '<div class="tier-card' + (isSelected ? ' selected' : '') + (isCurrent ? ' current' : '') + '" data-tier="' + tier.tier + '">';
+          
+          if (isPopular) html += '<div class="badge-popular">Популярный</div>';
+          if (isCurrent) html += '<div class="badge-current">Текущий</div>';
+          
+          html += '<div class="tier-top">';
+          html += '<div class="selection-indicator" aria-hidden="true"></div>';
+          html += '<div class="tier-header-main">';
+          html += '<div class="tier-header-inner">';
+          html += '<h3 class="tier-name">' + tier.name_ru + '</h3>';
+          html += '<div class="tier-price"><span class="amount">' + formatPrice(tier.price_cents) + '</span>';
+          html += '<div class="period">/ ' + formatPeriod(tier.period_days) + '</div></div>';
+          html += '</div></div></div>';
+          
+          if (tier.short_description_ru) {
+            html += '<p class="tier-description">' + tier.short_description_ru + '</p>';
+          }
+          
+          // Features
+          html += '<ul class="tier-features">';
+          var bullets = tier.bullets || [];
+          bullets.forEach(function(b, bIdx) {
+            var isInherited = tier.includes_tiers && tier.includes_tiers.length > 1 && bIdx < bullets.length - (tier.tier === 'analytics' ? 4 : tier.tier === 'online' ? 4 : 4);
+            html += '<li' + (isInherited ? ' class="inherited"' : '') + '>' + b + '</li>';
+          });
+          html += '</ul>';
+          
+          // Includes text for higher tiers
+          if (tier.tier === 'online') {
+            html += '<div class="includes-text">+ всё из CRM</div>';
+          } else if (tier.tier === 'analytics') {
+            html += '<div class="includes-text">+ всё из Онлайн-записи и CRM</div>';
+          }
+          
+          html += '</div>';
+        });
+        
+        container.innerHTML = html;
+        
+        // Add click handlers
+        container.querySelectorAll('.tier-card').forEach(function(card) {
+          card.onclick = function() {
+            haptic('light');
+            selectTier(card.dataset.tier);
+          };
+        });
+      }
+
+      // Select tier
+      function selectTier(tier) {
+        selectedTier = tier;
+        
+        // Update UI
+        document.querySelectorAll('.tier-card').forEach(function(card) {
+          card.classList.toggle('selected', card.dataset.tier === tier);
+        });
+        
+        // Update summary
+        var tierData = catalog.find(function(t) { return t.tier === tier; });
+        if (tierData) {
+          document.getElementById('summaryTier').textContent = tierData.name_ru;
+          document.getElementById('summaryPrice').textContent = formatPrice(tierData.price_cents);
+          document.getElementById('btnPay').disabled = false;
+        }
+      }
+
+      // Mock checkout
+      function doCheckout() {
+        if (!selectedTier) return;
+        
+        var btn = document.getElementById('btnPay');
+        btn.disabled = true;
+        btn.textContent = 'Обработка…';
+        
+        var url = '/api/webapp/trainer/subscription/mock-checkout' + (initData() ? '?init_data=' + encodeURIComponent(initData()) : '');
+        
+        fetch(url, {
+          method: 'POST',
+          headers: Object.assign(headers(), { 'Content-Type': 'application/json' }),
+          body: JSON.stringify({ tier: selectedTier })
+        })
+        .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
+        .then(function(res) {
+          if (res.ok && res.data.ok) {
+            haptic('success');
+            showSuccess(res.data);
+          } else {
+            haptic('error');
+            alert(res.data.detail || 'Ошибка оплаты');
+            btn.disabled = false;
+            btn.textContent = 'Оплатить (демо)';
+          }
+        })
+        .catch(function() {
+          haptic('error');
+          alert('Ошибка сети');
+          btn.disabled = false;
+          btn.textContent = 'Оплатить (демо)';
+        });
+      }
+
+      // Show success celebration
+      function showSuccess(data) {
+        var tierData = catalog.find(function(t) { return t.tier === data.tier; });
+        var expiresDate = data.expires_at ? data.expires_at.slice(0, 10) : '';
+        
+        document.getElementById('successSubtitle').textContent = 
+          'План «' + (tierData ? tierData.name_ru : data.tier) + '» активен до ' + expiresDate;
+        
+        // Render unlocked features
+        var unlockedHtml = '';
+        var includedTiers = tierData ? tierData.includes_tiers : [data.tier];
+        includedTiers.forEach(function(t) {
+          unlockedHtml += '<div class="unlocked-item">';
+          unlockedHtml += '<span class="icon">' + (tierIcons[t] || '✓') + '</span>';
+          unlockedHtml += '<span>' + (tierLabels[t] || t) + '</span>';
+          unlockedHtml += '</div>';
+        });
+        document.getElementById('unlockedList').innerHTML = unlockedHtml;
+        
+        showScreen('screenSuccess');
+        createConfetti();
+      }
+
+      // Confetti effect
+      function createConfetti() {
+        var container = document.getElementById('confetti');
+        container.innerHTML = '';
+        var colors = ['#F7A600', '#FF8C00', '#34c759', '#007AFF', '#AF52DE'];
+        
+        for (var i = 0; i < 50; i++) {
+          var piece = document.createElement('div');
+          piece.className = 'confetti-piece';
+          piece.style.left = Math.random() * 100 + '%';
+          piece.style.background = colors[Math.floor(Math.random() * colors.length)];
+          piece.style.animationDelay = Math.random() * 0.5 + 's';
+          piece.style.width = (Math.random() * 8 + 6) + 'px';
+          piece.style.height = (Math.random() * 8 + 6) + 'px';
+          piece.style.borderRadius = Math.random() > 0.5 ? '50%' : '2px';
+          container.appendChild(piece);
+        }
+        
+        setTimeout(function() { container.innerHTML = ''; }, 3500);
+      }
+
+      // Event listeners
+      document.getElementById('btnRetry').onclick = loadData;
+      document.getElementById('btnPay').onclick = doCheckout;
+      document.getElementById('btnCloseSuccess').onclick = closeApp;
+
+      // Initialize
+      loadData();
+    })();
+  </script>
+</body>
+</html>

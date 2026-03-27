@@ -7,8 +7,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.deps import get_session
 from src.application.catalog_use_cases import list_arenas, list_cities, list_services
-from src.application.subscription_use_cases import trainer_has_active_subscription
-from src.application.trainer_use_cases import get_trainer, list_active_trainers_for_client
+from src.application.subscription_tier_use_cases import get_trainer_booking_availability
+from src.application.trainer_use_cases import (
+    get_trainer,
+    list_active_trainers_for_client,
+    list_public_trainer_reviews,
+    list_trainer_education,
+)
 from src.infrastructure import s3
 from src.shared.config import Settings
 
@@ -100,7 +105,12 @@ async def list_active_trainers(
     order_by: str = "rating",
     session: AsyncSession = Depends(get_session),
 ) -> dict:
-    """Active trainers; optional city, service, arena. order_by: rating (Bayesian) or id."""
+    """
+    Active trainers; optional city, service, arena. order_by: rating (Bayesian) or id.
+    
+    Each trainer includes `can_book` flag: True if clients can self-book (tier >= online).
+    Trainers are always visible in catalog if status=active, regardless of subscription tier.
+    """
     items, total = await list_active_trainers_for_client(
         session,
         limit=limit,
@@ -110,8 +120,12 @@ async def list_active_trainers(
         arena_id=arena_id,
         order_by=order_by,
     )
+    # Enrich with booking availability and photo URLs
     for t in items:
         _enrich_trainer_photo_urls(t)
+        availability = await get_trainer_booking_availability(session, t["id"])
+        t["can_book"] = availability["can_book"]
+    
     first_photo_sources = [(t.get("photos") or [{}])[0].get("_source") for t in items if t.get("photos")]
     if any(s == "cdn" for s in first_photo_sources):
         photo_source = "cdn"
@@ -127,15 +141,55 @@ async def get_one_active_trainer(
     trainer_id: int,
     session: AsyncSession = Depends(get_session),
 ) -> dict:
-    """Single active trainer for catalog «Мой тренер» card. Same shape as list item. 404 if no active subscription."""
+    """
+    Single active trainer for catalog. Visible if status=active (regardless of subscription).
+    
+    Returns `can_book` flag: True if clients can self-book (tier >= online).
+    Without online tier, trainer is visible but clients must contact directly.
+    """
     trainer = await get_trainer(session, trainer_id)
     if not trainer or (trainer.get("status") or "").strip().lower() != "active":
         raise HTTPException(status_code=404, detail="Trainer not found")
-    if not await trainer_has_active_subscription(session, trainer_id):
-        raise HTTPException(status_code=404, detail="Trainer not found")
+    
     _enrich_trainer_photo_urls(trainer)
     trainer["_photo_source"] = (trainer.get("photos") or [{}])[0].get("_source", "proxy") if trainer.get("photos") else "proxy"
+    
+    # Add booking availability info
+    availability = await get_trainer_booking_availability(session, trainer_id)
+    trainer["can_book"] = availability["can_book"]
+    trainer["booking_reason"] = availability["reason"]  # null if can_book, else 'crm_only'/'no_subscription'
+    
     return trainer
+
+
+@router.get("/trainers/{trainer_id:int}/reviews")
+async def get_trainer_reviews_public(
+    trainer_id: int,
+    limit: int = 50,
+    offset: int = 0,
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Public list of ratings/reviews for a catalog trainer (no client identifiers). Same visibility as GET /trainers/{id}."""
+    lim = min(max(1, limit), 100)
+    off = max(0, offset)
+    result = await list_public_trainer_reviews(session, trainer_id, limit=lim, offset=off)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Trainer not found")
+    items, total = result
+    return {"items": items, "total": total}
+
+
+@router.get("/trainers/{trainer_id:int}/education")
+async def get_trainer_education_public(
+    trainer_id: int,
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, list]:
+    """Public education list: approved records only for active trainers (visible regardless of subscription)."""
+    trainer = await get_trainer(session, trainer_id)
+    if not trainer or (trainer.get("status") or "").strip().lower() != "active":
+        raise HTTPException(status_code=404, detail="Trainer not found")
+    items = await list_trainer_education(session, trainer_id, public_only=True)
+    return {"items": items or []}
 
 
 @router.get("/photos/{file_key:path}")

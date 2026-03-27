@@ -24,6 +24,7 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 
 from src.api.deps import get_session
 from src.application.booking_use_cases import (
+    active_booking_summaries_by_slot_for_trainer_range,
     cancel_booking,
     cancel_booking_by_client,
     confirm_booking,
@@ -75,7 +76,7 @@ from src.application.recurring_use_cases import (
     create_recurring_client_slot,
     get_active_recurring_for_booking,
 )
-from src.application.trainer_link import get_trainer_id_by_telegram_id
+from src.application.trainer_link import get_trainer_id_by_telegram_id, get_trainer_id_linked_any_status
 from src.application.welcome_link_use_cases import (
     WELCOME_TOKEN_TYPE_CERT,
     WELCOME_TOKEN_TYPE_GENERIC,
@@ -121,8 +122,19 @@ from src.application.subscription_use_cases import (
     get_paid_plan_id,
     get_pending_subscription_invoice,
     list_paid_subscription_plans,
-    trainer_has_active_subscription,
 )
+from src.application.subscription_tier_use_cases import (
+    get_effective_subscription_tier,
+    get_subscription_tier_catalog,
+    get_trainer_subscription_status,
+    list_subscription_tier_pricing_for_admin,
+    set_subscription_after_mock_payment,
+    tier_satisfies,
+    trainer_allows_online_booking,
+    trainer_has_crm_access,
+    update_subscription_tier_pricing,
+)
+from src.infrastructure.db.models import SUBSCRIPTION_TIER_ANALYTICS, SUBSCRIPTION_TIERS
 from src.billing.payment_gateway import create_checkout
 from src.application.trainer_schedule_use_cases import (
     delete_slot as schedule_delete_slot,
@@ -139,7 +151,11 @@ from src.application.client_notes_use_cases import (
     upsert_trainer_client_note,
 )
 from src.bot.schedule_notifications import run_after_schedule_changed
-from src.application.trainer_use_cases import get_trainer
+from src.application.trainer_use_cases import (
+    get_trainer,
+    get_trainer_moderation_readiness,
+    try_submit_trainer_for_moderation_review,
+)
 from src.bot import messages as msg
 from src.shared.ttl_cache import get_slots_cached, set_slots_cached
 from src.shared.config import Settings
@@ -211,18 +227,28 @@ async def get_schedule(
         to_date = from_date + timedelta(days=7 * 4 - 1)  # 4 weeks
 
     slots = await list_slots(session, trainer_id, from_date, to_date)
-    return {
-        "slots": [
-            {
-                "id": s["id"],
-                "slot_date": s["slot_date"].isoformat() if hasattr(s["slot_date"], "isoformat") else str(s["slot_date"]),
-                "start_time": s["start_time"].strftime("%H:%M") if hasattr(s["start_time"], "strftime") else str(s["start_time"])[:5],
-                "end_time": s["end_time"].strftime("%H:%M") if hasattr(s["end_time"], "strftime") else str(s["end_time"])[:5],
-                "status": s.get("status") or "available",
-            }
-            for s in slots
-        ],
-    }
+    summaries = await active_booking_summaries_by_slot_for_trainer_range(
+        session, trainer_id, from_date, to_date
+    )
+    out_slots: list[dict[str, Any]] = []
+    for s in slots:
+        st = s.get("status") or "available"
+        row: dict[str, Any] = {
+            "id": s["id"],
+            "slot_date": s["slot_date"].isoformat() if hasattr(s["slot_date"], "isoformat") else str(s["slot_date"]),
+            "start_time": s["start_time"].strftime("%H:%M") if hasattr(s["start_time"], "strftime") else str(s["start_time"])[:5],
+            "end_time": s["end_time"].strftime("%H:%M") if hasattr(s["end_time"], "strftime") else str(s["end_time"])[:5],
+            "status": st,
+        }
+        if st == "booked":
+            bsum = summaries.get(s["id"])
+            if bsum:
+                row["booking_id"] = bsum["booking_id"]
+                row["booking_status"] = bsum["status"]
+                row["venue_label"] = bsum["venue_label"]
+                row["client_preview"] = bsum["client_preview"]
+        out_slots.append(row)
+    return {"slots": out_slots}
 
 
 # --- Schedule editor Mini App (trainer): templates, slots, apply week, delete slot ---
@@ -276,9 +302,9 @@ async def put_schedule_templates_day(
     trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
-    # Require active subscription to edit templates
-    if not await trainer_has_active_subscription(session, trainer_id):
-        raise HTTPException(status_code=403, detail="Subscription inactive")
+    # Require CRM tier to edit templates
+    if not await trainer_has_crm_access(session, trainer_id):
+        raise HTTPException(status_code=403, detail="Subscription tier required: CRM")
     if body.day_of_week < 0 or body.day_of_week > 6:
         raise HTTPException(status_code=400, detail="day_of_week must be 0-6")
     hours_set = {h for h in body.start_hours if 0 <= h <= 23}
@@ -307,9 +333,9 @@ async def post_schedule_slots(
     trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
-    # Require active subscription to create/update slots
-    if not await trainer_has_active_subscription(session, trainer_id):
-        raise HTTPException(status_code=403, detail="Subscription inactive")
+    # Require CRM tier to create/update slots
+    if not await trainer_has_crm_access(session, trainer_id):
+        raise HTTPException(status_code=403, detail="Subscription tier required: CRM")
     try:
         slot_date = date.fromisoformat(body.slot_date)
     except ValueError:
@@ -338,9 +364,9 @@ async def post_schedule_apply_week(
     trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
-    # Require active subscription to apply template and recurring bookings
-    if not await trainer_has_active_subscription(session, trainer_id):
-        raise HTTPException(status_code=403, detail="Subscription inactive")
+    # Require CRM tier to apply template and recurring bookings
+    if not await trainer_has_crm_access(session, trainer_id):
+        raise HTTPException(status_code=403, detail="Subscription tier required: CRM")
     try:
         week_start = date.fromisoformat(body.week_start)
     except ValueError:
@@ -396,6 +422,19 @@ async def get_client_slots(
         raise HTTPException(status_code=401, detail="Missing init data")
     _client_telegram_id(raw)  # auth only
 
+    if not await trainer_allows_online_booking(session, trainer_id):
+        trainer_row = await get_trainer(session, trainer_id)
+        if not trainer_row or (trainer_row.get("status") or "").strip().lower() != "active":
+            raise HTTPException(status_code=404, detail="Trainer not found")
+        tn = (trainer_name or "").strip()
+        if not tn and trainer_row.get("profile"):
+            first = (trainer_row["profile"].get("first_name") or "").strip()
+            last = (trainer_row["profile"].get("last_name") or "").strip()
+            tn = (first + " " + last).strip() or "Тренер"
+        if not tn:
+            tn = "Тренер"
+        return {"trainer_name": tn, "slots": [], "online_booking_available": False}
+
     min_hours_val = min_hours if min_hours is not None else 3
     trainer_name_val = (trainer_name or "Тренер").strip() or "Тренер"
     if min_hours is None or trainer_name is None:
@@ -409,7 +448,7 @@ async def get_client_slots(
 
     cached_slots = get_slots_cached(trainer_id, min_hours_val)
     if cached_slots is not None:
-        return {"trainer_name": trainer_name_val, "slots": cached_slots}
+        return {"trainer_name": trainer_name_val, "slots": cached_slots, "online_booking_available": True}
 
     this_m = _this_week_monday()
     next_m = this_m + timedelta(days=7)
@@ -431,7 +470,7 @@ async def get_client_slots(
         for s in available
     ]
     set_slots_cached(trainer_id, min_hours_val, serialized)
-    return {"trainer_name": trainer_name_val, "slots": serialized}
+    return {"trainer_name": trainer_name_val, "slots": serialized, "online_booking_available": True}
 
 
 def _this_week_monday() -> date:
@@ -454,7 +493,12 @@ async def post_client_booking(
     x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
     session: AsyncSession = Depends(get_session),
 ):
-    """Create booking from client Mini App. Auth: client bot initData. Phone required. service_id required (or from request)."""
+    """
+    Create booking from client Mini App. Auth: client bot initData.
+    
+    Requires trainer to have tier >= 'online' for self-booking.
+    Phone required. service_id required (or from request).
+    """
     raw = init_data or x_telegram_init_data
     if not raw:
         raise HTTPException(status_code=401, detail="Missing init data")
@@ -468,6 +512,14 @@ async def post_client_booking(
     if not slot or slot.get("status") != "available":
         raise HTTPException(status_code=400, detail="Slot not available")
     trainer_id = slot["trainer_id"]
+
+    # Check trainer has online booking tier
+    if not await trainer_allows_online_booking(session, trainer_id):
+        raise HTTPException(
+            status_code=403,
+            detail="Online booking not available for this trainer",
+            headers={"X-Error-Code": "TRAINER_NO_ONLINE_TIER"},
+        )
 
     client_request_id: int | None = None
     service_id: int
@@ -683,8 +735,8 @@ async def get_client_pass_products(
     if not raw:
         raise HTTPException(status_code=401, detail="Missing init data")
     _client_telegram_id(raw)
-    # Only trainers with active subscription expose pass products in catalog
-    if not await trainer_has_active_subscription(session, trainer_id):
+    # Only trainers with online tier expose pass products in catalog (clients can book)
+    if not await trainer_allows_online_booking(session, trainer_id):
         raise HTTPException(status_code=404, detail="Trainer not found")
     items = await list_pass_products(session, trainer_id, active_only=True)
     from sqlalchemy import text
@@ -1006,6 +1058,9 @@ async def get_trainer_stats_api(
     trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+    tier = await get_effective_subscription_tier(session, trainer_id)
+    if not tier_satisfies(tier, SUBSCRIPTION_TIER_ANALYTICS):
+        raise HTTPException(status_code=403, detail="Analytics tier required for statistics")
     data = await get_trainer_stats_dashboard(session, trainer_id)
     return _serialize_trainer_dashboard(data)
 
@@ -1239,6 +1294,103 @@ async def post_trainer_subscription_stub_confirm(
     return {"success": True}
 
 
+# --- Trainer subscription tiers (three-level access model) ---
+
+
+@router.get("/trainer/subscription/catalog")
+async def get_trainer_subscription_tier_catalog(
+    init_data: str | None = Query(None),
+    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    session: AsyncSession = Depends(get_session),
+):
+    """
+    List subscription tiers with pricing for catalog display.
+    
+    Returns CRM, Online, Analytics tiers with prices, periods, and descriptions.
+    Auth: trainer initData.
+    """
+    raw = init_data or x_telegram_init_data
+    if not raw:
+        raise HTTPException(status_code=401, detail="Missing init data")
+    telegram_id = _trainer_telegram_id(raw)
+    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+    
+    tiers = await get_subscription_tier_catalog(session)
+    return {"tiers": tiers}
+
+
+@router.get("/trainer/subscription/status")
+async def get_trainer_subscription_tier_status(
+    init_data: str | None = Query(None),
+    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    session: AsyncSession = Depends(get_session),
+):
+    """
+    Get trainer's current subscription status.
+    
+    Returns effective tier, expiration date, and unlocked features.
+    Auth: trainer initData.
+    """
+    raw = init_data or x_telegram_init_data
+    if not raw:
+        raise HTTPException(status_code=401, detail="Missing init data")
+    telegram_id = _trainer_telegram_id(raw)
+    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+    
+    status = await get_trainer_subscription_status(session, trainer_id)
+    return status
+
+
+class SubscriptionTierMockCheckoutBody(BaseModel):
+    tier: str
+
+
+@router.post("/trainer/subscription/mock-checkout")
+async def post_trainer_subscription_mock_checkout(
+    body: SubscriptionTierMockCheckoutBody,
+    init_data: str | None = Query(None),
+    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    session: AsyncSession = Depends(get_session),
+):
+    """
+    Mock checkout for subscription tier (demo payment).
+    
+    Activates the tier subscription using pricing from subscription_tier_pricing.
+    In production this would redirect to payment gateway.
+    Auth: trainer initData.
+    """
+    raw = init_data or x_telegram_init_data
+    if not raw:
+        raise HTTPException(status_code=401, detail="Missing init data")
+    telegram_id = _trainer_telegram_id(raw)
+    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+    
+    if body.tier not in SUBSCRIPTION_TIERS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid tier. Must be one of: {', '.join(SUBSCRIPTION_TIERS)}",
+        )
+    
+    result = await set_subscription_after_mock_payment(session, trainer_id, body.tier)
+    if not result:
+        raise HTTPException(status_code=400, detail="Could not activate tier subscription")
+    
+    return {
+        "ok": True,
+        "tier": result["tier"],
+        "expires_at": result["expires_at"],
+        "price_cents": result["price_cents"],
+        "currency": result["currency"],
+        "period_days": result["period_days"],
+    }
+
+
 # --- Trainer pass products (subscription products for sale) ---
 
 
@@ -1257,8 +1409,8 @@ async def get_trainer_pass_products(
     trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
-    if not await trainer_has_active_subscription(session, trainer_id):
-        raise HTTPException(status_code=403, detail="Subscription inactive")
+    if not await trainer_has_crm_access(session, trainer_id):
+        raise HTTPException(status_code=403, detail="Subscription tier required: CRM")
     items = await list_pass_products(session, trainer_id, active_only=active_only)
     return {"items": items}
 
@@ -1286,8 +1438,8 @@ async def post_trainer_pass_product(
     trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
-    if not await trainer_has_active_subscription(session, trainer_id):
-        raise HTTPException(status_code=403, detail="Subscription inactive")
+    if not await trainer_has_crm_access(session, trainer_id):
+        raise HTTPException(status_code=403, detail="Subscription tier required: CRM")
     product_id = await create_pass_product(
         session,
         trainer_id,
@@ -1325,8 +1477,8 @@ async def patch_trainer_pass_product(
     trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
-    if not await trainer_has_active_subscription(session, trainer_id):
-        raise HTTPException(status_code=403, detail="Subscription inactive")
+    if not await trainer_has_crm_access(session, trainer_id):
+        raise HTTPException(status_code=403, detail="Subscription tier required: CRM")
     patch = body.model_dump(exclude_unset=True)
     ok = await update_pass_product(
         session,
@@ -1354,8 +1506,8 @@ async def delete_trainer_pass_product(
     trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
-    if not await trainer_has_active_subscription(session, trainer_id):
-        raise HTTPException(status_code=403, detail="Subscription inactive")
+    if not await trainer_has_crm_access(session, trainer_id):
+        raise HTTPException(status_code=403, detail="Subscription tier required: CRM")
     try:
         ok = await delete_pass_product(session, product_id, trainer_id)
     except IntegrityError:
@@ -1715,6 +1867,90 @@ async def get_admin_geocode(
         return {"latitude": float(lat), "longitude": float(lon)}
     except (TypeError, ValueError):
         raise HTTPException(status_code=404, detail="Invalid coordinates")
+
+
+# --- Admin: subscription tier pricing management ---
+
+
+@router.get("/admin/subscription-tiers")
+async def get_admin_subscription_tiers(
+    init_data: str | None = Query(None),
+    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    session: AsyncSession = Depends(get_session),
+):
+    """
+    List all subscription tier pricing records for admin editing.
+    
+    Returns CRM, Online, Analytics tiers with prices, descriptions, active status.
+    Auth: admin initData.
+    """
+    raw = init_data or x_telegram_init_data
+    if not raw:
+        raise HTTPException(status_code=401, detail="Missing init data")
+    _admin_telegram_id(raw)
+    
+    tiers = await list_subscription_tier_pricing_for_admin(session)
+    return {"tiers": tiers}
+
+
+class SubscriptionTierPatchBody(BaseModel):
+    price_cents: int | None = None
+    period_days: int | None = None
+    name_ru: str | None = None
+    short_description_ru: str | None = None
+    bullets: list[str] | None = None
+    display_order: int | None = None
+    is_active: bool | None = None
+
+
+@router.patch("/admin/subscription-tiers/{tier}")
+async def patch_admin_subscription_tier(
+    tier: str,
+    body: SubscriptionTierPatchBody,
+    init_data: str | None = Query(None),
+    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    session: AsyncSession = Depends(get_session),
+):
+    """
+    Update subscription tier pricing. Changes are logged to audit table.
+    
+    Auth: admin initData. Tier must be one of: crm, online, analytics.
+    """
+    raw = init_data or x_telegram_init_data
+    if not raw:
+        raise HTTPException(status_code=401, detail="Missing init data")
+    admin_tid = _admin_telegram_id(raw)
+    
+    if tier not in SUBSCRIPTION_TIERS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid tier. Must be one of: {', '.join(SUBSCRIPTION_TIERS)}",
+        )
+    
+    # Validation
+    if body.price_cents is not None and body.price_cents < 0:
+        raise HTTPException(status_code=400, detail="price_cents must be >= 0")
+    if body.period_days is not None and body.period_days <= 0:
+        raise HTTPException(status_code=400, detail="period_days must be > 0")
+    
+    result = await update_subscription_tier_pricing(
+        session,
+        tier,
+        admin_tid,
+        price_cents=body.price_cents,
+        period_days=body.period_days,
+        name_ru=body.name_ru,
+        short_description_ru=body.short_description_ru,
+        bullets=body.bullets,
+        display_order=body.display_order,
+        is_active=body.is_active,
+    )
+    
+    if not result:
+        raise HTTPException(status_code=404, detail="Tier not found")
+    
+    return {"ok": True, "tier": result}
+
 
 # --- Trainer certificate products (fixed amount or "any amount") ---
 
@@ -2603,8 +2839,8 @@ async def post_trainer_client_pass_issue(
                 inline_keyboard=[
                     [
                         InlineKeyboardButton(
-                            text=msg.CLIENT_BUTTON_MY_PASSES,
-                            web_app=WebAppInfo(url=f"{base_url}/webapp/client-passes"),
+                            text=msg.CLIENT_BUTTON_MY_PASSES_AND_CERTIFICATES,
+                            web_app=WebAppInfo(url=f"{base_url}/webapp/client-passes-certificates"),
                         )
                     ]
                 ]
@@ -2802,6 +3038,62 @@ def _serialize_trainer_request(req: dict) -> dict:
         "client_first_name": req.get("client_first_name"),
         "client_last_name": req.get("client_last_name"),
     }
+
+
+@router.get("/trainer/onboarding/moderation-readiness")
+async def webapp_trainer_moderation_readiness(
+    init_data: str | None = Query(None),
+    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    session: AsyncSession = Depends(get_session),
+):
+    """Profile completeness for moderation queue; works for linked trainers before active (onboarding Mini App)."""
+    raw = init_data or x_telegram_init_data
+    if not raw:
+        raise HTTPException(status_code=401, detail="Missing init data")
+    telegram_id = _trainer_telegram_id(raw)
+    trainer_id = await get_trainer_id_linked_any_status(session, telegram_id)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail="Telegram not linked to a trainer")
+    data = await get_trainer_moderation_readiness(session, trainer_id)
+    if not data:
+        raise HTTPException(status_code=404, detail="Trainer not found")
+    return data
+
+
+@router.post("/trainer/onboarding/submit-for-moderation")
+async def webapp_trainer_submit_for_moderation(
+    init_data: str | None = Query(None),
+    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    session: AsyncSession = Depends(get_session),
+):
+    """Reject incomplete profiles with 422 + missing field list; otherwise same rules as REST submit."""
+    raw = init_data or x_telegram_init_data
+    if not raw:
+        raise HTTPException(status_code=401, detail="Missing init data")
+    telegram_id = _trainer_telegram_id(raw)
+    trainer_id = await get_trainer_id_linked_any_status(session, telegram_id)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail="Telegram not linked to a trainer")
+    result = await try_submit_trainer_for_moderation_review(session, trainer_id)
+    if result.get("error") == "not_found":
+        raise HTTPException(status_code=404, detail="Trainer not found")
+    if not result.get("ok"):
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": "Profile incomplete for moderation",
+                "missing_fields": result.get("missing_fields", []),
+                "missing_labels_ru": result.get("missing_labels_ru", []),
+            },
+        )
+    if result.get("noop"):
+        return {
+            "ok": True,
+            "noop": True,
+            "trainer_status": result.get("trainer_status"),
+            "reason": result.get("reason"),
+        }
+    return {"ok": True, "submitted": True}
 
 
 @router.get("/trainer/requests/ping")

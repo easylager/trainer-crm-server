@@ -118,6 +118,16 @@
         });
         html += '<div><span>Всего / с Telegram:</span> <span>' + (d.trainers_total || 0) + ' / ' + (d.trainers_with_telegram || 0) + '</span></div>';
         html += '</div></div>';
+        html += '<div class="section"><div class="section-title">💳 Подписки (тарифы)</div>';
+        html += '<div class="card">';
+        html += '<div class="row-list">';
+        html += '<div><span>Тир CRM:</span> <span>' + (d.subscription_tier_crm || 0) + '</span></div>';
+        html += '<div><span>Онлайн-запись:</span> <span>' + (d.subscription_tier_online || 0) + '</span></div>';
+        html += '<div><span>Аналитика:</span> <span>' + (d.subscription_tier_analytics || 0) + '</span></div>';
+        html += '<div><span>Всего с тиром:</span> <span>' + (d.subscription_trainers_with_tier || 0) + '</span></div>';
+        html += '<div><span>Истекает ≤7 дн.:</span> <span>' + (d.subscription_expiring_7d || 0) + '</span></div>';
+        html += '<div><span>Активных без tier:</span> <span>' + (d.subscription_active_trainers_no_tier || 0) + '</span></div>';
+        html += '</div></div></div>';
         html += '<div class="section"><div class="section-title">📦 Абонементы и сертификаты</div>';
         html += '<div class="card">';
         html += '<div class="row-list">';

@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.deps import get_session
 from src.api.schemas import PhotoRegisterBody, PresignBody
-from src.application.trainer_use_cases import register_photo
+from src.application.trainer_use_cases import register_photo, upload_trainer_photo_from_bytes
 from src.infrastructure import s3
 
 router = APIRouter(prefix="/api", tags=["upload"])
@@ -41,11 +41,18 @@ async def upload_and_register(
 ) -> dict[str, str]:
     """Upload file to S3/local (resized), add to trainer_photos. Returns file_key (and file_key_list if thumb generated)."""
     content_type = file.content_type or "image/jpeg"
-    file_key, file_key_list = s3.upload_photo(trainer_id, await file.read(), content_type)
-    ok = await register_photo(session, trainer_id, file_key, 0, file_key_list=file_key_list)
+    ok, err, file_key, file_key_list = await upload_trainer_photo_from_bytes(
+        session, trainer_id, await file.read(), content_type
+    )
     if not ok:
+        if err == "too_large":
+            raise HTTPException(status_code=413, detail="File too large")
+        if err == "not_image":
+            raise HTTPException(status_code=400, detail="Not a valid image")
+        if err == "storage":
+            raise HTTPException(status_code=503, detail="Storage temporarily unavailable")
         raise HTTPException(status_code=404, detail="Trainer not found")
-    out: dict[str, str] = {"file_key": file_key}
+    out: dict[str, str] = {"file_key": file_key or ""}
     if file_key_list:
         out["file_key_list"] = file_key_list
     return out

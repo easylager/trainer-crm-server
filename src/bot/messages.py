@@ -26,13 +26,33 @@ CLIENT_TRAINER_CARD_NO_RATING = "—"
 CLIENT_TRAINER_CARD_NO_EXPERIENCE = "Опыт: не указан"
 CLIENT_BUTTON_SELECT_TRAINER = "Выбрать"
 CLIENT_TRAINER_SELECTED = "Выбран: <b>{name}</b>. Что дальше?"
+# Tier < online: no self-booking in catalog — same UX as Mini App can_book=false
+CLIENT_TRAINER_SELECTED_NO_SELF_BOOK = (
+    "Выбран: <b>{name}</b>.\n\n"
+    "У этого тренера нет самозаписи через каталог — свяжитесь напрямую или оставьте заявку."
+)
+CLIENT_BOOK_NO_ONLINE_TIER = (
+    "У выбранного тренера нет онлайн-записи через каталог. "
+    "Свяжитесь с тренером напрямую или оставьте заявку в каталоге."
+)
 CLIENT_BUTTON_BOOK = "Записаться"
 CLIENT_BUTTON_BACK_TO_CATALOG = "В каталог"
 CLIENT_BUTTON_ANOTHER_TRAINER = "Выбрать другого тренера"
 CLIENT_BOOK_CHOOSE_SLOT = "📅 <b>Выберите время</b>\n\nДоступные слоты (эта и следующая неделя):"
 CLIENT_BOOK_NO_SLOTS = "У этого тренера пока нет свободных слотов. Загляните позже или выберите другого тренера."
 CLIENT_BOOK_NO_TRAINER = "Сначала выберите тренера в каталоге."
-CLIENT_MENU_BOOKING_MOVED = "Записаться теперь можно в «Тренеры и запись»: откройте карточку тренера и выберите слот."
+# Stale in-memory booking flow (restart, old callback) — do not confuse with «no trainer selected».
+CLIENT_BOOK_SESSION_EXPIRED = (
+    "Сессия записи устарела или была сброшена. Откройте каталог, снова выберите тренера и нажмите «Записаться»."
+)
+# When HTTPS Mini App is used, slot list in chat is omitted — clarify where user picks time.
+CLIENT_BOOK_WEBAPP_FOOTER = (
+    "\n\nВремя занятия выберите в <b>Mini App</b> после нажатия кнопки «Записаться» ниже."
+)
+CLIENT_MENU_BOOKING_MOVED = (
+    "Записаться можно в «Тренеры и запись»: откройте каталог и карточку тренера. "
+    "Время и слот выберите в <b>Mini App</b> после нажатия кнопки «Записаться» ниже."
+)
 CLIENT_MENU_REQUEST_MOVED = "Оставить заявку можно в «Тренеры и запись»: внизу списка тренеров или в карточке тренера."
 CLIENT_PROFILE_ENTER_NAME = "Напишите, пожалуйста, <b>Имя и Фамилию</b> в одном сообщении (как показывать вас тренерам)."
 CLIENT_PROFILE_USE_TELEGRAM_NAME = "Использовать имя из Telegram: {name}?"
@@ -271,6 +291,13 @@ CLIENT_CERTIFICATE_ISSUED = (
     "🎁 Вам выдан сертификат на <b>{amount_display}</b>. Код: <code>{code}</code>. Тренер: {trainer_name}."
 )
 CLIENT_BUTTON_MY_CERTIFICATES = "Мои сертификаты"
+# Единое мини-приложение: абонементы + сертификаты (вкладки).
+CLIENT_MENU_PASSES_CERTIFICATES_DESC = "Мои Абонементы/ Сертификаты"
+CLIENT_BUTTON_MY_PASSES_AND_CERTIFICATES = "Мои Абонементы/Сертификаты"
+CLIENT_MY_PASSES_AND_CERTIFICATES_INTRO = (
+    "📦 Абонементы — остаток занятий, тренер, срок. "
+    "🎁 Сертификаты — код, номинал, активация. Нажмите кнопку ниже."
+)
 CLIENT_CERT_BOUND = "Сертификат привязан к вашему аккаунту. Можете записаться к тренеру или посмотреть сертификаты."
 # Generic / pass invite links (no cert)
 CLIENT_WELCOME_REF = "Добро пожаловать! Тренер пригласил вас. Запишитесь на занятие или выберите другого тренера."
@@ -356,23 +383,76 @@ TRAINER_FEEDBACK_PROMPT = "Напишите отзыв о занятии (нео
 TRAINER_FEEDBACK_THANKS = "Спасибо! Отзыв сохранён."
 TRAINER_START_WELCOME = (
     "Привет!\n\n"
-    "Ты в боте как <b>тренер</b>. Все разделы — в <b>меню слева от поля ввода</b>: расписание, заявки клиентов, записи.\n\n"
-    "Подробная инструкция по каждому пункту: /guide"
+    "Ты в боте как тренер. Дальше — <b>меню слева от поля ввода</b>: расписание, заявки, записи, клиенты.\n\n"
+    "Коротко по разделам: /guide"
 )
 TRAINER_ONLY_VIA_SITE = "Этот бот только для тренеров. Подключение по ссылке с сайта после регистрации и оплаты."
+# После привязки по ссылке: без обещания полного меню (гейт может быть закрыт).
 TRAINER_LINK_SUCCESS = (
-    "Аккаунт тренера привязан к этому Telegram.\n\n"
-    "Все разделы — в <b>меню слева от поля ввода</b>. Помощь: /guide"
+    "Аккаунт привязан к этому Telegram.\n\n"
+    "Статус и анкета: <b>/profile</b>. Помощь: /guide"
+)
+# Только если тренер уже active — честно про все пункты меню.
+TRAINER_LINK_SUCCESS_ACTIVE = (
+    "Аккаунт привязан.\n\n"
+    "Разделы тренера — в <b>меню слева</b>: расписание, заявки, записи, клиенты. Помощь: /guide"
 )
 TRAINER_LINK_INVALID = "Ссылка недействительна или уже использована. Получи новую на сайте после оплаты."
 TRAINER_FALLBACK = "Используйте меню слева от поля ввода — там все разделы. Помощь: /guide"
 
 # Trainer: errors and hints
-TRAINER_ERROR_BOOKING_NOT_FOUND = "Запись не найдена. Обновите список «Мои записи»."
-TRAINER_ERROR_CANCEL_FAILED = "Не удалось отменить запись (уже отменена или не найдена). Обновите «Мои записи»."
-TRAINER_ERROR_BOOKING_CLOSED_OR_NOT_FOUND = "Запись не найдена или уже закрыта. Откройте «Мои записи» заново."
+TRAINER_ERROR_BOOKING_NOT_FOUND = "Запись не найдена. Обновите «Моё расписание» в приложении."
+TRAINER_ERROR_CANCEL_FAILED = "Не удалось отменить запись (уже отменена или не найдена). Обновите расписание в приложении."
+TRAINER_ERROR_BOOKING_CLOSED_OR_NOT_FOUND = "Запись не найдена или уже закрыта. Откройте «Моё расписание» в приложении снова."
 TRAINER_ERROR_FEEDBACK_SAVE_FAILED = "Не удалось сохранить отзыв. Попробуйте ещё раз или пропустите."
 TRAINER_ERROR_RESPOND_FAILED = "Не удалось откликнуться (заявка уже закрыта или вы уже откликались). Обновите «Заявки клиентов»."
+TRAINER_ERROR_NO_SERVICES = (
+    "У тебя не указана ни одна услуга. Добавь услугу в профиле: /profile (Mini App при HTTPS) или личный кабинет на сайте."
+)
+TRAINER_ERROR_REQUEST_GONE = (
+    "Заявка не найдена или уже закрыта. Открой «Заявки клиентов» заново."
+)
+TRAINER_REQUEST_BOOK_NO_SLOTS_TWO_WEEKS = (
+    "Нет свободных слотов на ближайшие 2 недели. Добавь слоты в разделе «Расписание»."
+)
+TRAINER_ERROR_REQUEST_BOOK_PAYLOAD = (
+    "Не удалось обработать выбор. Открой список заявок и попробуй снова."
+)
+TRAINER_ERROR_REQUEST_BOOK_PAYLOAD_SHORT = "Не удалось обработать выбор. Попробуй снова."
+TRAINER_ERROR_SLOT_TAKEN_FOR_REQUEST = (
+    "Слот уже занят или недоступен. Выбери другой слот из списка."
+)
+
+# Trainer: Web App intros (HTTPS) — informal «ты» like TRAINER_START_WELCOME
+TRAINER_EDITOR_OPEN_HINT = (
+    "Открой расписание — шаблон недели, календарь слотов и применение на неделю. "
+    "По клику на свободный слот можно записать клиента."
+)
+TRAINER_BOOKINGS_OPEN_WEBAPP = (
+    "Открой <b>«Моё расписание»</b> — занятые слоты с деталями записи: подтвердить, отменить, провести занятие, написать клиенту."
+)
+# When WEBAPP_BASE_URL is not HTTPS: chat list only; full «slots + booking actions» UI is in Mini App.
+TRAINER_BOOKINGS_CHAT_MODE_INTRO = (
+    "Полный сценарий — слоты и записи в одном экране — доступен в мини-приложении при HTTPS (продакшен). "
+    "Сейчас ниже — краткий список в чате.\n\n"
+    "Подробности по командам: /guide"
+)
+TRAINER_CLIENTS_HTTPS_REQUIRED = (
+    "Раздел «Мои клиенты» доступен при HTTPS (нужен WEBAPP_BASE_URL в продакшене)."
+)
+TRAINER_CLIENTS_OPEN_WEBAPP = (
+    "Открой список клиентов с записями: там видно телефон и последнее занятие."
+)
+TRAINER_REQUESTS_OPEN_WEBAPP = (
+    "Открой «Заявки клиентов» — там можно откликнуться, записать клиента на слот или отклонить заявку."
+)
+TRAINER_PASSES_INTRO_WEBAPP = (
+    "Настрой абонементы (N занятий за цену) и сертификаты (номинал на сумму или «любая сумма»). "
+    "Клиенты видят это в карточке тренера."
+)
+TRAINER_PASSES_HTTPS_REQUIRED = (
+    "Чтобы настроить абонементы, нужен HTTPS (открой приложение в продакшене)."
+)
 
 # Trainer: /guide — short, scannable; main menu is left of input
 TRAINER_GUIDE = (
@@ -380,12 +460,99 @@ TRAINER_GUIDE = (
     "Всё в <b>меню слева</b> от поля ввода.\n\n"
     "• <b>Расписание</b> — шаблон недели, календарь слотов и применение на неделю. По клику на свободный слот можно записать клиента.\n"
     "• <b>Заявки клиентов</b> — заявки по городу и услугам. Отклик — клиент увидит вас и сможет записаться.\n"
-    "• <b>Мои записи</b> — список записей, написать клиенту, отменить (предупредите клиента).\n"
+    "• <b>Моё расписание</b> (мини-приложение из раздела «Расписание») — свободные и занятые слоты; по занятому слоту — запись клиента, подтверждение, отмена, «проведено».\n"
     "• <b>Статистика</b> — занятия, загрузка, новые клиенты, рейтинг.\n\n"
+    "Клиентов из лички переведите в бота: <b>/invite</b> или кнопка «Пригласить клиента» ниже — готовый текст со ссылками.\n\n"
+    "Анкета и фото: <b>/profile</b> — кнопка открывает <b>Mini App</b> (нужен HTTPS в продакшене). "
     "Вопрос или проблема? Нажмите «Написать в поддержку» — мы ответим в этом чате."
 )
 TRAINER_SUPPORT_PROMPT = "Опишите ваш вопрос или проблему. Мы ответим здесь в чате."
 TRAINER_SUPPORT_SENT = "Сообщение отправлено. Мы ответим вам в этом чате."
+
+# Trainer: invite clients from DM → client bot deep link + catalog URL (see trainer_invite_links.py)
+TRAINER_INVITE_BUTTON = "📣 Пригласить клиента"
+TRAINER_INVITE_INTRO_HTML = (
+    "📣 <b>Пригласить клиента</b>\n\n"
+    "Чтобы перевести переписку из Direct в продукт: <b>перешлите клиенту следующее сообщение</b> целиком "
+    "или скопируйте из него текст.\n\n"
+    "<i>Первая ссылка — вход в клиентский бот сразу на ваш профиль. Вторая — страница каталога "
+    "(появляется при HTTPS в продакшене).</i>"
+)
+TRAINER_INVITE_PLAIN_CLIENT_WITH_CATALOG = (
+    "Привет! Записаться ко мне удобнее через бота — там слоты и статусы записей.\n\n"
+    "Открыть бота (сразу мой профиль):\n"
+    "{deep_link}\n\n"
+    "Каталог тренеров:\n"
+    "{catalog_url}"
+)
+TRAINER_INVITE_PLAIN_CLIENT_NO_CATALOG = (
+    "Привет! Записаться ко мне удобнее через бота — там слоты и статусы записей.\n\n"
+    "Открыть бота (сразу мой профиль):\n"
+    "{deep_link}\n\n"
+    "Дальше в боте: меню слева → «Тренеры и запись»."
+)
+TRAINER_INVITE_ERR_NO_CLIENT_BOT_USERNAME = (
+    "Не настроено имя клиентского бота для ссылок. Администратору: задайте <code>CLIENT_BOT_USERNAME</code> "
+    "в окружении (как в адресе t.me, <b>без</b> символа @)."
+)
+TRAINER_INVITE_ERR_PROFILE_INCOMPLETE = (
+    "Не получилось собрать ссылку: в профиле нужны <b>город</b> и хотя бы одна <b>услуга</b>. "
+    "Укажите в <b>/profile</b> или в кабинете на сайте и снова нажмите «Пригласить клиента»."
+)
+
+# Trainer: access gate (until profile complete + moderation approved)
+# Tone: «ты», коротко; без дублирования тревоги между /start, middleware и /profile.
+TRAINER_GATE_CALLBACK_BLOCKED = (
+    "Этот раздел пока закрыт. Сначала заполни анкету и дождись одобрения — /profile."
+)
+TRAINER_GATE_BLOCKED_PROFILE = (
+    "Расписание, заявки и записи закрыты: в анкете не хватает обязательных полей.\n\n"
+    "Открой <b>/profile</b> — там видно, что добить. Текущий статус: <b>/profile</b>."
+)
+# Полная анкета, но ещё не нажата отправка на модерацию (moderation_submitted_at пустой).
+TRAINER_GATE_INVITE_SUBMIT = (
+    "Анкета заполнена. Осталось отправить её на проверку: <b>/profile</b> → "
+    "«Готово — отправить на модерацию».\n\n"
+    "После отправки модератор посмотрит профиль; обычно ответ в течение рабочего дня. Статус: /profile"
+)
+# Анкета отправлена, ждём модератора (без комментария «нужны правки»).
+TRAINER_GATE_PENDING_MODERATION = (
+    "Анкета на проверке. Ничего делать не нужно — дождись решения. "
+    "Когда одобрят, разделы откроются сами. Статус: /profile"
+)
+# Комментарий модератора при «нужны правки» (moderation_feedback).
+TRAINER_GATE_NEEDS_EDIT = (
+    "Нужны правки по анкете.\n\n"
+    "<b>Комментарий модератора:</b>\n{feedback}\n\n"
+    "Исправь в <b>/profile</b> или в личном кабинете на сайте и снова отправь на модерацию."
+)
+# Backwards-compatible name (тот же шаблон с {feedback}).
+TRAINER_GATE_PENDING_MODERATION_WITH_FEEDBACK = TRAINER_GATE_NEEDS_EDIT
+# Статус pending_contract / pending_payment — не этап проверки анкеты.
+TRAINER_GATE_AWAITING_ACTIVATION = (
+    "Аккаунт ещё не полностью подключён (договор или оплата). "
+    "Когда всё оформят — откроется полный функционал. Вопросы: /guide"
+)
+TRAINER_GATE_DEACTIVATED = "Аккаунт деактивирован. Если это ошибка — напиши в поддержку: /guide."
+TRAINER_PROFILE_CARD = (
+    "<b>Профиль тренера #{trainer_id}</b>\n"
+    "Статус в системе: <b>{status_label}</b>\n\n"
+    "{gate_hint}"
+)
+TRAINER_PROFILE_ACTIVE_HINT = (
+    "Вам открыт доступ к функционалу бота. Можно приступать к работе."
+)
+TRAINER_PROFILE_SITE_HINT = "Личный кабинет (редактирование профиля): {url}"
+TRAINER_PROFILE_BTN_MINI_APP = "📋 Профиль"
+TRAINER_PROFILE_MINI_APP_HINT = "Анкета, фото и модерация — в кнопке ниже."
+TRAINER_PROFILE_HTTPS_REQUIRED = (
+    "Чтобы открыть профиль в приложении, нужен HTTPS: задайте <code>WEBAPP_BASE_URL</code> в продакшене."
+)
+TRAINER_MYPROFILE_INTRO = "Открой профиль — там анкета, фото и отправка на модерацию."
+TRAINER_PROFILE_WIZARD_DEPRECATED = (
+    "Старый многошаговый мастер в чате отключён. Открой профиль в Mini App — кнопка ниже."
+)
+TRAINER_CANCEL_IDLE = "Нечего отменять. Профиль: /profile."
 
 # --- Admin bot: trainer moderation ---
 ADMIN_START = (
@@ -395,6 +562,7 @@ ADMIN_START = (
 )
 ADMIN_NO_ACCESS = "У вас нет доступа к этому боту."
 ADMIN_PENDING_EMPTY = "Нет тренеров в очереди на модерацию."
+# Legacy short card (moderation UI uses src.bot.admin_moderation_card.format_admin_trainer_moderation_caption).
 ADMIN_TRAINER_CARD = (
     "<b>Тренер #{id}</b>\n"
     "Имя: {name}\n"
@@ -402,6 +570,8 @@ ADMIN_TRAINER_CARD = (
     "Опыт: {experience}\n\n"
     "{description}"
 )
+# Prepended to full moderation caption when trainer submits for review (async notify).
+ADMIN_NOTIFY_NEW_MODERATION_PREFIX = "🆕 <b>Отправлено на модерацию</b>\n\n"
 ADMIN_BUTTON_APPROVE = "✅ Одобрить"
 ADMIN_BUTTON_REJECT = "❌ Отклонить"
 ADMIN_BUTTON_NEEDS_EDIT = "✏️ Нужны правки"
@@ -410,6 +580,12 @@ ADMIN_REJECTED = "Тренер отклонён и не будет виден к
 ADMIN_NEEDS_EDIT_PROMPT = "Напишите текст фидбека для тренера (он увидит его в личном кабинете на сайте):"
 ADMIN_NEEDS_EDIT_DONE = "Фидбек сохранён. Тренер остаётся в статусе «на модерации» и увидит текст на сайте."
 ADMIN_NEEDS_EDIT_CANCELLED = "Отменено."
+TRAINER_EDUCATION_MODERATION_APPROVED = (
+    "✅ Раздел «Образование» в твоём профиле прошёл модерацию."
+)
+TRAINER_EDUCATION_MODERATION_REJECTED = (
+    "⚠️ Раздел «Образование» отправлен на доработку.\n\nКомментарий модератора:\n{reason}"
+)
 
 # Trainer schedule (by calendar week + template for quick apply)
 TRAINER_BUTTON_SCHEDULE = "📅 Расписание"
@@ -425,6 +601,7 @@ TRAINER_SCHEDULE_EMPTY = "Шаблон пуст. Ниже добавь слот�
 TRAINER_SCHEDULE_ROW = "{day} {time} — {duration} мин"
 TRAINER_DAYS = ("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс")
 TRAINER_BUTTON_ADD_SLOT = "➕ Добавить слоты вручную на неделю"
+TRAINER_SCHEDULE_ADD_TO_TEMPLATE_BUTTON = "В шаблон (для быстрого применения)"
 # Short labels for narrow mobile screens (dates appended in code)
 TRAINER_BUTTON_APPLY_THIS_WEEK = "▶ Применить шаблон на эту нед."
 TRAINER_BUTTON_APPLY_NEXT_WEEK = "▶ Применить шаблон на след. нед."
@@ -439,7 +616,7 @@ TRAINER_BUTTON_MY_SLOTS = "📋 Мое расписание"
 TRAINER_MENU_SCHEDULE_WEBAPP = "Расписание"
 # Short message when /schedule or menu opens Web App (one button below)
 TRAINER_SCHEDULE_OPEN_WEBAPP = "📋 Нажмите кнопку ниже, чтобы открыть расписание в приложении."
-TRAINER_BUTTON_MY_BOOKINGS = "📋 Мои записи"
+TRAINER_BUTTON_MY_BOOKINGS = "📋 Моё расписание"
 TRAINER_BUTTON_BACK = "Назад"
 TRAINER_BUTTON_BACK_TO_SCHEDULE = "◀️ Расписание"
 TRAINER_BUTTON_BACK_TO_MENU = "◀️ В главное меню"
@@ -612,6 +789,23 @@ TRAINER_SUBSCRIPTION_REMINDER = (
     "Оплатите до этой даты (можно заранее) — иначе доступ к каталогу и записям будет приостановлен."
 )
 TRAINER_BUTTON_PAY_SUBSCRIPTION = "Оплатить подписку"
+# /subscription — конструктор тарифов (мини-апп trainer-subscription)
+TRAINER_BUTTON_SUBSCRIPTION_CONSTRUCTOR = "🧩 Открыть конструктор подписки"
+TRAINER_SUBSCRIPTION_CONSTRUCTOR_HINT = (
+    "В конструкторе вы выбираете <b>уровень</b> (CRM → Онлайн-запись → Аналитика): каждый следующий включает предыдущий. "
+    "Там же видно цену за период и можно оформить демо-активацию."
+)
+TRAINER_SUBSCRIPTION_WITH_TIER = (
+    "📋 <b>Подписка</b>\n\n"
+    "Текущий уровень: <b>{tier_name}</b>\n"
+    "Действует до: <b>{expires_date}</b>\n\n"
+    "{hint}"
+)
+TRAINER_SUBSCRIPTION_WITHOUT_TIER = (
+    "📋 <b>Подписка</b>\n\n"
+    "Сейчас нет активного тарифа по уровням или срок истёк.\n\n"
+    "{hint}"
+)
 TRAINER_SUBSCRIPTION_ACTIVE = (
     "Подписка на платформу активна до <b>{expires_date}</b>. Вы в каталоге.\n\n"
     "Кнопка ниже — оплата за <b>следующий период</b> (после этой даты). Можно выбрать срок: месяц, 3 мес, год или 1,5 года."
@@ -619,6 +813,23 @@ TRAINER_SUBSCRIPTION_ACTIVE = (
 TRAINER_SUBSCRIPTION_EXPIRED = (
     "Подписка истекла. Оплатите за новый период (месяц / 3 мес / год / 1,5 года), чтобы снова быть в каталоге."
 )
+
+# Subscription tier access messages
+TRAINER_TIER_REQUIRED_CRM = (
+    "⚠️ Для этой функции нужна подписка уровня <b>CRM</b> или выше.\n\n"
+    "Оформите подписку, чтобы использовать расписание, клиентскую базу, абонементы и сертификаты."
+)
+TRAINER_TIER_REQUIRED_ONLINE = (
+    "⚠️ Для онлайн-записи клиентов нужна подписка уровня <b>Онлайн-запись</b> или выше.\n\n"
+    "С этим уровнем клиенты смогут записываться к вам через каталог самостоятельно."
+)
+TRAINER_TIER_REQUIRED_ANALYTICS = (
+    "⚠️ Для аналитики нужна подписка уровня <b>Аналитика</b>.\n\n"
+    "С этим уровнем вам доступны отчёты, статистика и выгрузка данных."
+)
+TRAINER_TIER_CTA = "Оформите подписку в разделе ниже 👇"
+TRAINER_BUTTON_SUBSCRIPTION_TIERS = "💳 Выбрать тариф"
+
 TRAINER_BUTTON_PASSES = "📦 Абонементы/Сертификаты"
 
 # Admin: /stats — platform overview (current + 7d + 30d + signals)
@@ -645,6 +856,16 @@ ADMIN_STATS_30D_CONVERSION = "заявок получили отклик (кон
 ADMIN_STATS_30D_TRAINERS = "новых тренеров"
 ADMIN_STATS_TRAINERS_TOTAL = "всего в системе"
 ADMIN_STATS_TRAINERS_ACTIVE_LINKED = "активных и в боте"
+ADMIN_STATS_SECTION_SUBSCRIPTIONS = "💳 <b>Подписки (тарифы тренеров)</b>\n{lines}\n"
+ADMIN_STATS_SUB_TIER_CRM = "Тир CRM"
+ADMIN_STATS_SUB_TIER_ONLINE = "Тир «Онлайн-запись»"
+ADMIN_STATS_SUB_TIER_ANALYTICS = "Тир «Аналитика»"
+ADMIN_STATS_SUB_TOTAL_WITH_TIER = "Всего с активным тиром"
+ADMIN_STATS_SUB_EXPIRING_7D = "Подписка истекает ≤7 дней (тренеров)"
+ADMIN_STATS_SUB_ACTIVE_NO_TIER = "Активных тренеров без tier в БД"
+ADMIN_SUBSCRIPTION_TIERS_TITLE = "💳 Тарифы подписки тренеров"
+ADMIN_SUBSCRIPTION_TIERS_HINT = "Цены, периоды и описания трёх уровней (CRM / Онлайн / Аналитика)."
+
 ADMIN_STATS_SECTION_PASSES_CERTS = "📦 <b>Абонементы и сертификаты</b>\n{lines}\n"
 ADMIN_STATS_PASSES_ACTIVE = "абонементов активно (с остатком занятий)"
 ADMIN_STATS_PASSES_ISSUED_30D = "абонементов выдано за 30 дней"

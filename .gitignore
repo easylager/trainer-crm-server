@@ -31,6 +31,9 @@ env/
 .env.local
 .env.*.local
 
+# Spec Kit: which feature folder to use while on develop/main (see docs/SPEC_KIT.md)
+.specify/active-feature
+
 # IDE
 .idea/
 .vscode/

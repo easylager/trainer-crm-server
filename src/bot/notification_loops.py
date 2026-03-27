@@ -330,6 +330,8 @@ async def run_no_response_reminder_loop(client_bot: Bot) -> None:
     while True:
         await asyncio.sleep(NO_RESPONSE_REMINDER_INTERVAL_SEC)
         try:
+            if not is_within_notification_hours():
+                continue
             async with async_session_factory() as session:
                 pending = await get_pending_no_response_reminders(session)
                 for p in pending:
