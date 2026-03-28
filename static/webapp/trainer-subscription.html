@@ -132,6 +132,92 @@
       .sub-hero { box-shadow: 0 8px 36px rgba(0, 0, 0, 0.45); }
     }
 
+    /* Period selector */
+    .period-selector {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 20px;
+      padding: 4px;
+      background: var(--tg-theme-secondary-bg-color);
+      border-radius: 12px;
+      position: relative;
+    }
+
+    .period-option {
+      flex: 1;
+      padding: 10px 8px;
+      border: none;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 600;
+      background: transparent;
+      color: var(--tg-theme-hint-color);
+      cursor: pointer;
+      transition: all 0.2s ease;
+      position: relative;
+      text-align: center;
+      font-family: inherit;
+    }
+
+    .period-option.active {
+      background: var(--tg-theme-bg-color);
+      color: var(--tg-theme-text-color);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+
+    .period-option .discount {
+      display: block;
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--success-color, #339249);
+      margin-top: 2px;
+      opacity: 0;
+      transform: translateY(-2px);
+      transition: all 0.2s ease;
+    }
+
+    .period-option.has-discount .discount {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* Upgrade info */
+    .upgrade-info {
+      background: linear-gradient(135deg, rgba(247, 166, 0, 0.1) 0%, rgba(247, 166, 0, 0.05) 100%);
+      border: 1px solid rgba(247, 166, 0, 0.2);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 20px;
+      font-size: 14px;
+      line-height: 1.4;
+    }
+
+    .upgrade-info h3 {
+      margin: 0 0 8px;
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--tg-theme-text-color);
+    }
+
+    .upgrade-info p {
+      margin: 0;
+      color: var(--tg-theme-hint-color);
+    }
+
+    /* Price savings indicator */
+    .price-savings {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--success-color, #339249);
+      background: rgba(51, 146, 73, 0.1);
+      padding: 4px 8px;
+      border-radius: 6px;
+      margin-top: 6px;
+    }
+
     /* Current status — chip like schedule filters / slot-status */
     #currentStatus { margin-bottom: 16px; }
     .status-badge {
@@ -787,6 +873,28 @@
     </div>
 
     <div id="currentStatus"></div>
+    
+    <!-- Period selector -->
+    <div class="period-selector">
+      <button class="period-option active" data-period="1">
+        1 месяц
+      </button>
+      <button class="period-option has-discount" data-period="3">
+        3 месяца
+        <span class="discount">-10%</span>
+      </button>
+      <button class="period-option has-discount" data-period="12">
+        1 год
+        <span class="discount">-20%</span>
+      </button>
+    </div>
+
+    <!-- Upgrade info -->
+    <div class="upgrade-info">
+      <h3>💡 Умный апгрейд</h3>
+      <p>При смене тарифа система автоматически пересчитает стоимость с учётом уже оплаченного периода</p>
+    </div>
+    
     <div id="tiersContainer" class="tiers-container"></div>
   </div>
 
@@ -876,6 +984,14 @@
       var catalog = [];
       var status = null;
       var selectedTier = null;
+      var selectedPeriod = 1; // 1, 3, or 12 months
+
+      // Period discounts
+      var periodDiscounts = {
+        1: 0,    // 1 month - no discount
+        3: 0.1,  // 3 months - 10% discount
+        12: 0.2  // 1 year - 20% discount
+      };
 
       // Format helpers
       function formatPrice(cents) {
@@ -922,6 +1038,7 @@
           catalog = catalogData.tiers;
           status = statusData;
           renderTiers();
+          initPeriodSelector();
           showScreen('screenMain');
         })
         .catch(function(err) {
@@ -961,8 +1078,24 @@
           html += '<div class="tier-header-main">';
           html += '<div class="tier-header-inner">';
           html += '<h3 class="tier-name">' + tier.name_ru + '</h3>';
-          html += '<div class="tier-price"><span class="amount">' + formatPrice(tier.price_cents) + '</span>';
-          html += '<div class="period">/ ' + formatPeriod(tier.period_days) + '</div></div>';
+          
+          // Calculate price with period discount
+          var monthlyPrice = tier.price_cents / 100;
+          var discount = periodDiscounts[selectedPeriod] || 0;
+          var discountedMonthly = monthlyPrice * (1 - discount);
+          var totalPrice = discountedMonthly * selectedPeriod;
+          var savings = (monthlyPrice * selectedPeriod) - totalPrice;
+          
+          html += '<div class="tier-price">';
+          html += '<span class="amount">' + Math.round(discountedMonthly) + ' BYN</span>';
+          html += '<div class="period">/ мес</div>';
+          if (selectedPeriod > 1) {
+            html += '<div class="period">Итого: ' + Math.round(totalPrice) + ' BYN</div>';
+          }
+          if (savings > 0) {
+            html += '<div class="price-savings">💰 Экономия: ' + Math.round(savings) + ' BYN</div>';
+          }
+          html += '</div>';
           html += '</div></div></div>';
           
           if (tier.short_description_ru) {
@@ -999,6 +1132,32 @@
         });
       }
 
+      // Period selector handlers
+      function initPeriodSelector() {
+        document.querySelectorAll('.period-option').forEach(function(btn) {
+          btn.onclick = function() {
+            // Remove active class from all buttons
+            document.querySelectorAll('.period-option').forEach(function(b) {
+              b.classList.remove('active');
+            });
+            
+            // Add active class to clicked button
+            btn.classList.add('active');
+            
+            // Update selected period
+            selectedPeriod = parseInt(btn.dataset.period);
+            
+            // Re-render tiers with new prices
+            renderTiers();
+            
+            // Update checkout button
+            updateCheckoutButton();
+            
+            haptic('light');
+          };
+        });
+      }
+
       // Select tier
       function selectTier(tier) {
         selectedTier = tier;
@@ -1008,12 +1167,26 @@
           card.classList.toggle('selected', card.dataset.tier === tier);
         });
         
-        // Update summary
-        var tierData = catalog.find(function(t) { return t.tier === tier; });
+        updateCheckoutButton();
+      }
+
+      // Update checkout button and summary
+      function updateCheckoutButton() {
+        var tierData = catalog.find(function(t) { return t.tier === selectedTier; });
         if (tierData) {
+          // Calculate price with period discount
+          var monthlyPrice = tierData.price_cents / 100;
+          var discount = periodDiscounts[selectedPeriod] || 0;
+          var discountedMonthly = monthlyPrice * (1 - discount);
+          var totalPrice = discountedMonthly * selectedPeriod;
+          
           document.getElementById('summaryTier').textContent = tierData.name_ru;
-          document.getElementById('summaryPrice').textContent = formatPrice(tierData.price_cents);
+          document.getElementById('summaryPrice').textContent = Math.round(totalPrice) + ' BYN';
           document.getElementById('btnPay').disabled = false;
+          
+          // Update button text
+          var periodText = selectedPeriod === 1 ? 'мес' : selectedPeriod === 3 ? '3 мес' : 'год';
+          document.getElementById('btnPay').textContent = 'Оплатить ' + Math.round(totalPrice) + ' BYN (' + periodText + ')';
         }
       }
 
@@ -1030,7 +1203,10 @@
         fetch(url, {
           method: 'POST',
           headers: Object.assign(headers(), { 'Content-Type': 'application/json' }),
-          body: JSON.stringify({ tier: selectedTier })
+          body: JSON.stringify({ 
+            tier: selectedTier,
+            period_months: selectedPeriod
+          })
         })
         .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
         .then(function(res) {
