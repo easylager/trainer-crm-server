@@ -263,6 +263,24 @@ def webapp_client_passes_certificates_page():
     return _webapp_file_response(path)
 
 
+@app.get("/webapp/theme.css")
+def webapp_theme_css():
+    """Serve theme.css for Mini Apps."""
+    path = _WEBAPP_DIR / "theme.css"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="CSS file not found")
+    return FileResponse(path, media_type="text/css")
+
+
+@app.get("/webapp/mini-app-components.css")
+def webapp_components_css():
+    """Serve mini-app-components.css for Mini Apps."""
+    path = _WEBAPP_DIR / "mini-app-components.css"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="CSS file not found")
+    return FileResponse(path, media_type="text/css")
+
+
 @app.get("/health")
 async def health() -> dict[str, str]:
     """
