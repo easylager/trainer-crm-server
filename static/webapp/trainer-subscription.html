@@ -6,16 +6,18 @@
   <title>Подписка</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <link rel="stylesheet" href="theme.css" />
+  <link rel="stylesheet" href="mini-app-components.css" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet" />
   <style>
-    * { box-sizing: border-box; }
+    /* Shell: theme.css + mini-app-components.css */
+    /* Page palette (dark): navy canvas, bronze frames, blue price accent — scoped to this screen */
     html {
       height: 100%;
       overflow-x: hidden;
     }
-    body {
+    body.subscription-page {
       margin: 0;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       background: var(--tg-theme-bg-color);
@@ -26,6 +28,32 @@
       /* Fixed bottom bar — scroll room for last card */
       padding-bottom: calc(env(safe-area-inset-bottom, 12px) + 220px);
       -webkit-font-smoothing: antialiased;
+      
+      /* Light theme defaults */
+      --tg-theme-bg-color: #FFFBEB;
+      --tg-theme-text-color: #1a1a1a;
+      --tg-theme-hint-color: #666666;
+      --tg-theme-secondary-bg-color: #FFF3CC;
+      --sub-border-bronze: rgba(247, 166, 0, 0.25);
+      --sub-border-bronze-strong: rgba(247, 166, 0, 0.45);
+      --sub-price-accent: #F7A600;
+      --sub-hero-glow: rgba(247, 166, 0, 0.12);
+      --sub-bottom-tint: #FFFBEB;
+      --sub-btn-disabled-bg: #FFF3CC;
+      --sub-btn-disabled-fg: #666666;
+    }
+    body.subscription-page.sub-theme-dark {
+      --tg-theme-bg-color: #1a1a1a;
+      --tg-theme-text-color: #f5f5f5;
+      --tg-theme-hint-color: #8e8e93;
+      --tg-theme-secondary-bg-color: #2a2a2a;
+      --sub-border-bronze: rgba(247, 166, 0, 0.25);
+      --sub-border-bronze-strong: rgba(247, 166, 0, 0.45);
+      --sub-price-accent: #F7A600;
+      --sub-hero-glow: rgba(247, 166, 0, 0.12);
+      --sub-bottom-tint: #1a1a1a;
+      --sub-btn-disabled-bg: #2a2a2a;
+      --sub-btn-disabled-fg: #8e8e93;
     }
 
     .sub-head {
@@ -40,7 +68,7 @@
       to { opacity: 1; transform: translateY(0); }
     }
 
-    /* Hero — same language as schedule.html .bd-hero */
+    /* Hero — same language as schedule.html .bd-hero; dark: bronze frame + warm corner glow */
     .sub-hero {
       position: relative;
       border-radius: 20px;
@@ -52,6 +80,11 @@
       border: 1px solid rgba(247, 166, 0, 0.28);
       box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
     }
+    body.subscription-page.sub-theme-dark .sub-hero {
+      background: linear-gradient(155deg, rgba(20, 22, 26, 0.98) 0%, rgba(12, 14, 18, 0.99) 55%, #0a0c10 100%);
+      border: 1px solid var(--sub-border-bronze, rgba(77, 64, 48, 0.55));
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.45);
+    }
     .sub-hero::before {
       content: '';
       position: absolute;
@@ -61,6 +94,9 @@
       height: 120%;
       background: radial-gradient(ellipse, rgba(247, 166, 0, 0.22) 0%, transparent 70%);
       pointer-events: none;
+    }
+    body.subscription-page.sub-theme-dark .sub-hero::before {
+      background: radial-gradient(ellipse, var(--sub-hero-glow, rgba(247, 166, 0, 0.12)) 0%, transparent 72%);
     }
     .sub-hero-inner { position: relative; z-index: 1; }
     .sub-hero-kicker {
@@ -111,10 +147,20 @@
       border: 1px solid rgba(128, 128, 128, 0.14);
       box-shadow: 0 1px 0 rgba(0, 0, 0, 0.04);
     }
+    body.subscription-page.sub-theme-dark .status-badge {
+      background: rgba(28, 38, 32, 0.95);
+      border-color: rgba(52, 199, 89, 0.22);
+      color: var(--tg-theme-hint-color);
+    }
     .status-badge.active {
       background: rgba(52, 199, 89, 0.2);
       color: var(--app-success, #34c759);
       border-color: rgba(52, 199, 89, 0.35);
+    }
+    body.subscription-page.sub-theme-dark .status-badge.active {
+      background: rgba(22, 101, 52, 0.55);
+      color: #6ee7b7;
+      border-color: rgba(52, 199, 89, 0.4);
     }
     .status-badge .dot {
       width: 8px;
@@ -146,19 +192,35 @@
       -webkit-tap-highlight-color: transparent;
       box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
     }
+    body.subscription-page.sub-theme-dark .tier-card {
+      background: #2a2a2a;
+      border-width: 1px;
+      border-color: var(--sub-border-bronze, rgba(247, 166, 0, 0.25));
+      box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+    }
     @media (prefers-color-scheme: dark) {
       .tier-card { box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35); }
     }
     .tier-card:hover {
       border-color: rgba(247, 166, 0, 0.2);
     }
+    body.subscription-page.sub-theme-dark .tier-card:hover {
+      border-color: var(--sub-border-bronze-strong, rgba(120, 98, 72, 0.65));
+    }
     .tier-card:active { transform: scale(0.985); }
     .tier-card.selected {
       border-color: rgba(247, 166, 0, 0.55);
       box-shadow: 0 6px 28px rgba(247, 166, 0, 0.22), 0 1px 0 rgba(0, 0, 0, 0.04);
     }
+    body.subscription-page.sub-theme-dark .tier-card.selected {
+      border-color: var(--sub-border-bronze-strong, rgba(120, 98, 72, 0.65));
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(247, 166, 0, 0.12);
+    }
     .tier-card.current {
       background: linear-gradient(160deg, rgba(247, 166, 0, 0.12) 0%, var(--tg-theme-secondary-bg-color) 55%);
+    }
+    body.subscription-page.sub-theme-dark .tier-card.current {
+      background: linear-gradient(165deg, rgba(247, 166, 0, 0.08) 0%, #2a2a2a 50%);
     }
 
     .badge-popular {
@@ -229,6 +291,9 @@
       letter-spacing: -0.03em;
       color: var(--tg-theme-button-color);
     }
+    body.subscription-page.sub-theme-dark .tier-price .amount {
+      color: var(--sub-price-accent, #F7A600);
+    }
     .tier-price .period {
       font-size: 12px;
       font-weight: 500;
@@ -272,6 +337,11 @@
       font-weight: 700;
       flex-shrink: 0;
     }
+    body.subscription-page.sub-theme-dark .tier-features li::before {
+      background: rgba(22, 101, 52, 0.85);
+      color: #ffffff;
+      border-radius: 6px;
+    }
     .tier-features li.inherited {
       color: var(--tg-theme-hint-color);
     }
@@ -300,10 +370,19 @@
       transition: border-color 0.18s ease, background 0.18s ease, transform 0.18s ease;
       box-sizing: border-box;
     }
+    body.subscription-page.sub-theme-dark .selection-indicator {
+      border-color: rgba(160, 160, 160, 0.45);
+      background: transparent;
+    }
     .tier-card.selected .selection-indicator {
       border-color: var(--tg-theme-button-color);
       background: linear-gradient(145deg, #ffc23d 0%, #f0a000 100%);
       box-shadow: 0 2px 8px rgba(247, 166, 0, 0.35);
+    }
+    body.subscription-page.sub-theme-dark .tier-card.selected .selection-indicator {
+      border-color: rgba(168, 140, 90, 0.95);
+      background: linear-gradient(145deg, #c9a227 0%, #8b6914 100%);
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
     }
     .tier-card.selected .selection-indicator::after {
       content: '✓';
@@ -329,6 +408,11 @@
       padding-bottom: calc(env(safe-area-inset-bottom, 16px) + 14px);
       border-top: 1px solid rgba(128, 128, 128, 0.16);
       box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.12);
+    }
+    body.subscription-page.sub-theme-dark .bottom-bar {
+      background: var(--sub-bottom-tint, #1a232e);
+      border-top-color: var(--sub-border-bronze, rgba(77, 64, 48, 0.45));
+      box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.45);
     }
     @supports (backdrop-filter: blur(1px)) {
       .bottom-bar {
@@ -386,6 +470,11 @@
       opacity: 0.65;
       cursor: not-allowed;
     }
+    body.subscription-page.sub-theme-dark .btn-primary:disabled {
+      background: var(--sub-btn-disabled-bg, #252f3a);
+      color: var(--sub-btn-disabled-fg, #8a939e);
+      opacity: 1;
+    }
 
     /* Loading — empty / waiting */
     .loading-container {
@@ -408,6 +497,10 @@
       background: linear-gradient(155deg, rgba(247, 166, 0, 0.12) 0%, rgba(247, 166, 0, 0.03) 50%, transparent 100%);
       border: 1px solid rgba(247, 166, 0, 0.22);
     }
+    body.subscription-page.sub-theme-dark .loading-hero {
+      background: linear-gradient(155deg, rgba(20, 22, 26, 0.95) 0%, #0c0e12 100%);
+      border: 1px solid var(--sub-border-bronze, rgba(77, 64, 48, 0.55));
+    }
     .loading-hero::before {
       content: '';
       position: absolute;
@@ -416,6 +509,9 @@
       height: 140%;
       background: radial-gradient(ellipse, rgba(247, 166, 0, 0.18) 0%, transparent 65%);
       pointer-events: none;
+    }
+    body.subscription-page.sub-theme-dark .loading-hero::before {
+      background: radial-gradient(ellipse, rgba(247, 166, 0, 0.1) 0%, transparent 65%);
     }
     .spinner {
       position: relative;
@@ -657,7 +753,7 @@
     }
   </style>
 </head>
-<body>
+<body class="subscription-page">
   <!-- Loading screen -->
   <div id="screenLoading" class="screen active">
     <div class="loading-container">
@@ -729,6 +825,26 @@
       'use strict';
       var tg = window.Telegram && window.Telegram.WebApp;
       if (tg) { tg.ready(); tg.expand(); }
+
+      /** Navy/bronze palette: Telegram colorScheme wins, else OS preference. */
+      function syncSubscriptionTheme() {
+        var dark = (tg && tg.colorScheme)
+          ? tg.colorScheme === 'dark'
+          : (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        document.body.classList.toggle('sub-theme-dark', !!dark);
+        try {
+          var bgHex = dark ? '#1a1a1a' : '#FFFBEB';
+          if (typeof tg.setHeaderColor === 'function') tg.setHeaderColor(bgHex);
+          if (typeof tg.setBackgroundColor === 'function') tg.setBackgroundColor(bgHex);
+        } catch (e) { /* older clients */ }
+      }
+      syncSubscriptionTheme();
+      if (window.matchMedia) {
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', syncSubscriptionTheme);
+      }
+      if (tg && tg.onEvent) {
+        tg.onEvent('themeChanged', syncSubscriptionTheme);
+      }
 
       function initData() { return (tg && tg.initData) ? tg.initData : ''; }
       function headers() {
