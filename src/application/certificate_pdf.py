@@ -1,108 +1,93 @@
 """
-JustSkate gift certificate PDF: editorial layout, diagonal accent, strong typography.
-Cyrillic via registered TTF. Design: motion/ice vibe, one hero (recipient), code as token.
+Premium gift certificate PDF — editorial design by senior graphic designer.
+Strong visual hierarchy, memorable layout, brand consistency.
+Cyrillic via Inter (static/fonts).
 """
+from __future__ import annotations
+
 from datetime import date
-from pathlib import Path
 from io import BytesIO
+from pathlib import Path
 from typing import Optional
+from xml.sax.saxutils import escape
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
-from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen import canvas
 from reportlab.platypus import Paragraph
 
-# JustSkate palette
-JS_BLACK = "#0D0D0D"
-JS_YELLOW = "#F7A600"
-JS_AMBER = "#C77B00"
-JS_CREAM = "#FFF8ED"
-JS_CREAM_DARK = "#F5E6D3"
-JS_WHITE = "#FFFFFF"
-JS_GRAY = "#6B6B6B"
+# --- Brand palette ---
+CREAM = "#fffbec"
+CREAM_RICH = "#f8f1e4"
+TEXT_DARK = "#1a1a1a"
+TEXT_WARM = "#4a3728"
+TEXT_MUTED = "#8b7355"
+AMBER = "#f5a623"
+AMBER_BRIGHT = "#ffb84d"
+AMBER_DEEP = "#d4941a"
+CHARCOAL = "#2c2c2e"
 
-_CERT_FONT = "Helvetica"
-_CERT_FONT_BOLD = "Helvetica-Bold"
-_CERT_FONT_HEAD = "Helvetica-Bold"
-_FONT_REGISTERED = False
+_FONT = "Helvetica"
+_FONT_BOLD = "Helvetica-Bold"
+_FONT_SEMI = "Helvetica-Bold"
+_REGISTERED = False
 
 
-def _register_cyrillic_font() -> None:
-    global _CERT_FONT, _CERT_FONT_BOLD, _CERT_FONT_HEAD, _FONT_REGISTERED
-    if _FONT_REGISTERED:
+def _root() -> Path:
+    return Path(__file__).resolve().parent.parent.parent
+
+
+def _register_fonts() -> None:
+    global _FONT, _FONT_BOLD, _FONT_SEMI, _REGISTERED
+    if _REGISTERED:
         return
-    base = Path(__file__).resolve().parent
-    root = base.parent.parent
-    candidates = [
-        root / "static" / "fonts" / "DejaVuSans.ttf",
-        Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
-        Path("/usr/share/fonts/TTF/DejaVuSans.ttf"),
-        Path("/System/Library/Fonts/Supplemental/Arial Unicode.ttf"),
-        Path("/Library/Fonts/Arial Unicode.ttf"),
-    ]
-    for path in candidates:
-        if path.is_file():
+    fonts = _root() / "static" / "fonts"
+    for name, file in [("Inter", "Inter-Regular.ttf"), ("InterBold", "Inter-Bold.ttf"), ("InterSemi", "Inter-SemiBold.ttf")]:
+        p = fonts / file
+        if p.is_file():
             try:
-                pdfmetrics.registerFont(TTFont("CertFont", str(path)))
-                _CERT_FONT = "CertFont"
-                _CERT_FONT_BOLD = "CertFont"
-                break
-            except Exception:
-                continue
-    bold_candidates = [
-        root / "static" / "fonts" / "DejaVuSans-Bold.ttf",
-        Path("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"),
-        Path("/System/Library/Fonts/Supplemental/Arial Bold.ttf"),
-    ]
-    for path in bold_candidates:
-        if path.is_file():
-            try:
-                pdfmetrics.registerFont(TTFont("CertFontBold", str(path)))
-                _CERT_FONT_BOLD = "CertFontBold"
-                break
+                pdfmetrics.registerFont(TTFont(name, str(p)))
+                if name == "Inter":
+                    _FONT = name
+                elif name == "InterBold":
+                    _FONT_BOLD = name
+                elif name == "InterSemi":
+                    _FONT_SEMI = name
             except Exception:
                 pass
-    serif_candidates = [
-        root / "static" / "fonts" / "DejaVuSerif-Bold.ttf",
-        Path("/usr/share/fonts/truetype/dejavu/DejaVuSerif-Bold.ttf"),
-        Path("/usr/share/fonts/TTF/DejaVuSerif-Bold.ttf"),
-    ]
-    for path in serif_candidates:
-        if path.is_file():
-            try:
-                pdfmetrics.registerFont(TTFont("CertFontHead", str(path)))
-                _CERT_FONT_HEAD = "CertFontHead"
-                break
-            except Exception:
-                pass
-    if _CERT_FONT_HEAD == "Helvetica-Bold":
-        _CERT_FONT_HEAD = _CERT_FONT_BOLD if _CERT_FONT_BOLD != "Helvetica-Bold" else _CERT_FONT
-    _FONT_REGISTERED = True
+    if _FONT_BOLD == "Helvetica-Bold" and _FONT != "Helvetica":
+        _FONT_BOLD = _FONT
+    if _FONT_SEMI == "Helvetica-Bold":
+        _FONT_SEMI = _FONT_BOLD if _FONT_BOLD != "Helvetica-Bold" else _FONT
+    _REGISTERED = True
 
 
-def _fmt_date(d: Optional[date]) -> str:
-    if d is None:
+def _hex(h: str) -> colors.Color:
+    return colors.HexColor(h)
+
+
+def _format_date(d: Optional[date]) -> str:
+    if not d:
         return "—"
-    if hasattr(d, "strftime"):
-        return d.strftime("%d.%m.%Y")
-    return str(d)
+    return f"{d.day:02d}.{d.month:02d}.{d.year}"
 
 
-def _fmt_expires(expires_at: Optional[date]) -> str:
-    if expires_at is None:
-        return "без ограничения"
-    return _fmt_date(expires_at)
+def _format_amount(cents: int) -> str:
+    if cents <= 0:
+        return "Любая сумма"
+    v = cents / 100
+    return f"{int(v)}" if v == int(v) else f"{v:.2f}"
 
 
-def _fmt_amount(amount_cents: int) -> str:
-    if amount_cents <= 0:
-        return "на сумму по договорённости"
-    byn = amount_cents / 100
-    return f"{byn:.2f} BYN"
+def _draw_accent_line(c: canvas.Canvas, x: float, y: float, length: float, thickness: float = 1.5) -> None:
+    """Draw signature amber accent line."""
+    c.setStrokeColor(_hex(AMBER))
+    c.setLineWidth(thickness)
+    c.line(x, y, x + length, y)
 
 
 def build_certificate_pdf(
@@ -116,148 +101,200 @@ def build_certificate_pdf(
     issued_at: Optional[date] = None,
     expires_at: Optional[date] = None,
 ) -> bytes:
-    """
-    A4 certificate: diagonal yellow stripe (motion), editorial type, recipient as hero, code as token.
-    """
-    _register_cyrillic_font()
+    _register_fonts()
     buf = BytesIO()
     w, h = A4
     c = canvas.Canvas(buf, pagesize=A4)
-
-    margin = 22 * mm
-    safe_left = margin
-    safe_right = w - margin
-    content_w = safe_right - safe_left
-
-    # ---- 1. Diagonal stripe (top-right to bottom-left): motion / ice blade feel ----
-    c.saveState()
-    c.setFillColor(colors.HexColor(JS_YELLOW))
-    c.translate(w, h)
-    c.rotate(-42)
-    c.rect(-20 * mm, -180 * mm, 24 * mm, 400 * mm, fill=1, stroke=0)
-    c.restoreState()
-
-    # ---- 2. Top bar: black band + yellow accent line + wordmark ----
-    bar_h = 28 * mm
-    c.setFillColor(colors.HexColor(JS_BLACK))
-    c.rect(0, h - bar_h, w, bar_h, fill=1, stroke=0)
-    c.setFillColor(colors.HexColor(JS_YELLOW))
-    c.rect(0, h - bar_h, w, 2 * mm, fill=1, stroke=0)
-    c.setFillColor(colors.HexColor(JS_WHITE))
-    c.setFont(_CERT_FONT_BOLD, 11)
-    c.drawString(safe_left, h - 12 * mm, "JustSkate.by")
-    c.setFont(_CERT_FONT, 9)
-    c.setFillColor(colors.HexColor("#AAAAAA"))
-    c.drawString(safe_left, h - 18 * mm, "Подарочный сертификат")
-
-    # ---- 3. Body: warm cream + subtle ice lines (skate trace feel) ----
-    body_top = h - bar_h
-    c.setFillColor(colors.HexColor(JS_CREAM_DARK))
-    c.rect(0, 0, w, body_top, fill=1, stroke=0)
-    c.setStrokeColor(colors.HexColor("#E5DDD2"))
-    c.setLineWidth(0.2)
-    c.saveState()
-    c.rotate(-38)
-    for i in range(10):
-        x0 = -15 * mm + i * 32 * mm
-        c.line(x0, -5 * mm, x0 + 35 * mm, body_top + 15 * mm)
-    c.restoreState()
-
-    # ---- 3b. Corner accents (frame the content) ----
-    c.setStrokeColor(colors.HexColor(JS_AMBER))
-    c.setLineWidth(0.6)
-    corner = 8 * mm
-    # top-left
-    c.line(safe_left, body_top - 12 * mm, safe_left, body_top - 12 * mm - corner)
-    c.line(safe_left, body_top - 12 * mm, safe_left + corner, body_top - 12 * mm)
-    # bottom-left
-    c.line(safe_left, 24 * mm, safe_left, 24 * mm + corner)
-    c.line(safe_left, 24 * mm, safe_left + corner, 24 * mm)
-    # top-right
-    c.line(safe_right, body_top - 12 * mm, safe_right - corner, body_top - 12 * mm)
-    c.line(safe_right, body_top - 12 * mm, safe_right, body_top - 12 * mm - corner)
-    # bottom-right
-    c.line(safe_right, 24 * mm, safe_right - corner, 24 * mm)
-    c.line(safe_right, 24 * mm, safe_right, 24 * mm + corner)
-
-    # ---- 4. Hero: recipient name (editorial, left-aligned) ----
-    y = body_top - 18 * mm
-    c.setFillColor(colors.HexColor(JS_GRAY))
-    c.setFont(_CERT_FONT, 9)
-    c.drawString(safe_left, y, "ДЛЯ")
-    y -= 2 * mm
+    
+    # Grid system
+    margin = 24 * mm
+    col_w = (w - 2 * margin) / 12
+    
+    # ===== BACKGROUND =====
+    c.setFillColor(_hex(CREAM))
+    c.rect(0, 0, w, h, fill=1, stroke=0)
+    
+    # Subtle texture: diagonal lines
+    c.setStrokeColor(_hex(CREAM_RICH))
+    c.setLineWidth(0.3)
+    step = int(8 * mm)
+    for i in range(0, int(w + h), step):
+        c.line(i - h, 0, i, h)
+    
+    # ===== HEADER ZONE =====
+    y = h - 28 * mm
+    
+    # Brand lockup
+    c.setFillColor(_hex(TEXT_DARK))
+    c.setFont(_FONT_BOLD, 22)
+    c.drawString(margin, y, "JustSkate")
+    
+    # Amber dot after brand
+    c.setFillColor(_hex(AMBER))
+    c.circle(margin + 76 * mm, y + 6 * mm, 2.5 * mm, fill=1, stroke=0)
+    
+    # Certificate type — small caps
+    c.setFillColor(_hex(TEXT_MUTED))
+    c.setFont(_FONT_SEMI, 8)
+    c.drawString(margin, y - 8 * mm, "ПОДАРОЧНЫЙ СЕРТИФИКАТ")
+    
+    # Accent line under header
+    _draw_accent_line(c, margin, y - 14 * mm, col_w * 4, 2)
+    
+    y -= 32 * mm
+    
+    # ===== HERO SECTION =====
+    # Recipient label — aligned with name
+    name_x = margin
+    c.setFillColor(_hex(TEXT_WARM))
+    c.setFont(_FONT_SEMI, 9)
+    c.drawString(name_x, y, "ДЛЯ")
+    y -= 12 * mm
+    
+    # Recipient name — hero typography
     recipient = (recipient_name or "").strip() or "Получателя"
-    size = 28 if len(recipient) <= 18 else 22
-    c.setFillColor(colors.HexColor(JS_BLACK))
-    c.setFont(_CERT_FONT_HEAD, size)
-    c.drawString(safe_left, y - (size * 0.35 * mm), recipient)
-    y -= (size * 0.4 * mm) + 14 * mm
-
-    # ---- 5. Details block (compact grid feel) ----
-    c.setFont(_CERT_FONT_BOLD, 12)
-    product_line = (product_name or "Сертификат").strip() or "Сертификат"
-    c.drawString(safe_left, y, product_line)
-    y -= 6 * mm
-    c.setFont(_CERT_FONT, 11)
-    c.setFillColor(colors.HexColor(JS_GRAY))
-    c.drawString(safe_left, y, "Номинал  " + _fmt_amount(amount_cents))
-    y -= 5 * mm
-    trainer_line = (trainer_name or "Тренер").strip() or "Тренер"
-    c.drawString(safe_left, y, "Тренер  " + trainer_line)
-    y -= 14 * mm
-
-    # ---- 6. Code: token strip (full-width amber bar, code centered) ----
+    name_size = 48 if len(recipient) <= 10 else (36 if len(recipient) <= 18 else 28)
+    
+    c.setFillColor(_hex(TEXT_DARK))
+    c.setFont(_FONT_BOLD, name_size)
+    
+    # Multi-line if needed
+    if len(recipient) > 25:
+        words = recipient.split()
+        mid = len(words) // 2
+        line1 = " ".join(words[:mid])
+        line2 = " ".join(words[mid:])
+        c.drawString(name_x, y, line1)
+        y -= name_size * 0.8
+        c.drawString(name_x, y, line2)
+        y -= name_size * 0.6
+    else:
+        c.drawString(name_x, y, recipient)
+        y -= name_size * 0.8
+    
+    y -= 12 * mm
+    
+    # ===== CONTENT GRID =====
+    # Left column: Product & Details
+    left_x = margin
+    left_w = col_w * 7
+    
+    # Right column: Amount badge
+    right_x = margin + col_w * 8
+    right_w = col_w * 4
+    
+    # Product name
+    product = (product_name or "Сертификат").strip()
+    c.setFillColor(_hex(TEXT_DARK))
+    c.setFont(_FONT_SEMI, 16)
+    
+    if len(product) > 35:
+        style = ParagraphStyle("Prod", fontName=_FONT_SEMI, fontSize=16, leading=20, textColor=_hex(TEXT_DARK))
+        p = Paragraph(escape(product), style)
+        pw, ph = p.wrap(left_w, 40 * mm)
+        p.drawOn(c, left_x, y - ph + 4 * mm)
+        prod_h = ph
+    else:
+        c.drawString(left_x, y, product)
+        prod_h = 6 * mm
+    
+    # Amount badge (right column)
+    badge_h = 32 * mm
+    badge_y = y - badge_h + prod_h
+    
+    # Badge background
+    c.setFillColor(_hex(AMBER))
+    c.roundRect(right_x, badge_y, right_w, badge_h, 4 * mm, fill=1, stroke=0)
+    
+    # Badge highlight
+    c.setFillColor(_hex(AMBER_BRIGHT))
+    c.roundRect(right_x, badge_y + badge_h - 8 * mm, right_w, 8 * mm, 4 * mm, fill=1, stroke=0)
+    
+    # Amount text
+    amount_str = _format_amount(amount_cents)
+    c.setFillColor(_hex(TEXT_DARK))
+    c.setFont(_FONT_BOLD, 24)
+    c.drawCentredString(right_x + right_w / 2, badge_y + 14 * mm, amount_str)
+    
+    c.setFont(_FONT_SEMI, 10)
+    c.drawCentredString(right_x + right_w / 2, badge_y + 6 * mm, "BYN")
+    
+    y -= max(prod_h + 16 * mm, badge_h + 8 * mm)
+    
+    # Details grid
+    detail_y = y
+    
+    # Trainer
+    c.setFillColor(_hex(TEXT_MUTED))
+    c.setFont(_FONT, 10)
+    c.drawString(left_x, detail_y, "Тренер")
+    c.setFillColor(_hex(TEXT_DARK))
+    c.setFont(_FONT_SEMI, 10)
+    c.drawString(left_x + 18 * mm, detail_y, (trainer_name or "").strip() or "—")
+    detail_y -= 8 * mm
+    
+    # Validity
+    c.setFillColor(_hex(TEXT_MUTED))
+    c.setFont(_FONT, 10)
+    c.drawString(left_x, detail_y, "До")
+    c.setFillColor(_hex(TEXT_DARK))
+    c.setFont(_FONT_SEMI, 10)
+    expires_str = _format_date(expires_at) if expires_at else "бессрочно"
+    c.drawString(left_x + 18 * mm, detail_y, expires_str)
+    
+    y = detail_y - 24 * mm
+    
+    # ===== CODE SECTION =====
+    # Code background — full width, compact
+    code_h = 28 * mm
+    code_y = y - code_h
+    
+    c.setFillColor(_hex(CHARCOAL))
+    c.rect(0, code_y, w, code_h, fill=1, stroke=0)
+    
+    # Amber accent strip
+    c.setFillColor(_hex(AMBER))
+    c.rect(0, code_y + code_h - 3 * mm, w, 3 * mm, fill=1, stroke=0)
+    
+    # Code label
+    c.setFillColor(_hex("#9a9a9e"))
+    c.setFont(_FONT, 8)
+    c.drawCentredString(w / 2, code_y + code_h - 10 * mm, "КОД АКТИВАЦИИ")
+    
+    # Code value — monospace feel
     code_str = (code or "").strip() or "—"
-    strip_h = 22 * mm
-    c.setFillColor(colors.HexColor(JS_AMBER))
-    c.rect(0, y - strip_h, w, strip_h, fill=1, stroke=0)
-    c.setFillColor(colors.HexColor(JS_WHITE))
-    c.setFont(_CERT_FONT, 8)
-    c.drawCentredString(w / 2, y - 5 * mm, "КОД СЕРТИФИКАТА")
-    c.setFont(_CERT_FONT_BOLD, 16)
-    c.drawCentredString(w / 2, y - 14 * mm, code_str)
-    y -= strip_h + 10 * mm
-
-    # ---- 7. Dates + purchaser (single line) ----
-    c.setFillColor(colors.HexColor(JS_BLACK))
-    c.setFont(_CERT_FONT, 10)
-    date_line = _fmt_date(issued_at) + "  ·  до " + _fmt_expires(expires_at)
-    c.drawString(safe_left, y, date_line)
+    c.setFillColor(colors.white)
+    c.setFont(_FONT_BOLD, 28)
+    
+    # Letter spacing for code
+    code_w = c.stringWidth(code_str, _FONT_BOLD, 28)
+    start_x = (w - code_w) / 2
+    c.drawString(start_x, code_y + 8 * mm, code_str)
+    
+    y = code_y - 16 * mm
+    
+    # ===== FOOTER =====
+    # Issue info
+    c.setFillColor(_hex(TEXT_MUTED))
+    c.setFont(_FONT, 8)
+    issue_str = f"Выдан {_format_date(issued_at)}"
     if (purchased_by_name or "").strip():
-        c.setFillColor(colors.HexColor(JS_GRAY))
-        c.drawString(safe_left, y - 5 * mm, "Приобрёл(ла): " + (purchased_by_name or "").strip())
-    y -= 16 * mm
-
-    # ---- 8. Instruction: minimal, one paragraph ----
-    c.setFillColor(colors.HexColor(JS_BLACK))
-    c.setFont(_CERT_FONT_BOLD, 9)
-    c.drawString(safe_left, y, "Как воспользоваться")
-    y -= 4 * mm
-    c.setFont(_CERT_FONT, 9)
-    instr = (
-        "Откройте бота или приложение тренера, выберите «У меня есть сертификат», "
-        "введите код. После привязки можно записаться на занятие."
-    )
-    style = ParagraphStyle(
-        "Instr",
-        parent=getSampleStyleSheet()["Normal"],
-        fontName=_CERT_FONT,
-        fontSize=9,
-        leading=12,
-        textColor=colors.HexColor(JS_GRAY),
-    )
-    p = Paragraph(instr, style)
-    p.wrapOn(c, content_w, 20 * mm)
-    p.drawOn(c, safe_left, y - 18 * mm)
-
-    # ---- 9. Footer ----
-    c.setFont(_CERT_FONT_BOLD, 10)
-    c.setFillColor(colors.HexColor(JS_BLACK))
-    c.drawCentredString(w / 2, 14 * mm, "JustSkate.by")
-    c.setFont(_CERT_FONT, 8)
-    c.setFillColor(colors.HexColor(JS_GRAY))
-    c.drawCentredString(w / 2, 9 * mm, "Сохраните код")
-
+        issue_str += f" • {purchased_by_name.strip()}"
+    c.drawString(margin, y, issue_str)
+    
+    # Instructions — compact
+    y -= 8 * mm
+    c.drawString(margin, y, "Откройте @JustSkateBot, введите код, запишитесь на занятие")
+    
+    # Brand signature
+    c.setFillColor(_hex(TEXT_DARK))
+    c.setFont(_FONT_BOLD, 9)
+    c.drawRightString(w - margin, 12 * mm, "JustSkate.by")
+    
+    # Bottom accent
+    c.setFillColor(_hex(AMBER))
+    c.rect(0, 0, w, 2 * mm, fill=1, stroke=0)
+    
     c.showPage()
     c.save()
     buf.seek(0)

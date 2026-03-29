@@ -564,7 +564,9 @@ async def get_client_session_state(
     telegram_id = _client_telegram_id(raw)
     row = await get_client_session(telegram_id, session)
     profile = await get_client_profile_basic(session, telegram_id)
-    client_phone = (profile.get("phone") or "").strip() or None
+    client_phone = (
+        ((profile.get("phone") or "").strip() or None) if profile else None
+    )
     city_id = row.get("city_id")
     service_id = row.get("selected_service_id")
     arena_id = row.get("selected_arena_id")
@@ -671,6 +673,7 @@ def _serialize_client_request(req: dict) -> dict:
                 "description": r.get("description"),
                 "session_duration_minutes": r.get("session_duration_minutes"),
                 "photo_key": r.get("photo_key"),
+                "services": r.get("services") or [],
             }
             for r in (req.get("responses") or [])
         ],

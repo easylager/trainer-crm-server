@@ -6,24 +6,53 @@
   <title>Мои клиенты</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <link rel="stylesheet" href="theme.css" />
+  <link rel="stylesheet" href="mini-app-components.css" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet" />
+  <script>
+    /** Same palette + Telegram lock as trainer-requests / schedule-editor.html */
+    (function () {
+      function isAppDark() {
+        var tg = window.Telegram && window.Telegram.WebApp;
+        if (tg && tg.colorScheme) return tg.colorScheme === 'dark';
+        return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+      }
+      function applyTrainerClientsTheme() {
+        var d = document.documentElement;
+        var dark = isAppDark();
+        d.style.setProperty('--tg-theme-button-color', '#f5a623', 'important');
+        d.style.setProperty('--tg-theme-button-text-color', '#1a1a1a', 'important');
+        d.style.setProperty('--tg-theme-bg-color', dark ? '#1a1a1a' : '#fffbeb', 'important');
+        d.style.setProperty('--tg-theme-text-color', dark ? '#f5f5f5' : '#1a1a1a', 'important');
+        d.style.setProperty('--tg-theme-secondary-bg-color', dark ? '#2a2a2a' : '#fff3cc', 'important');
+        d.style.setProperty('--tg-theme-hint-color', dark ? '#8e8e93' : '#666666', 'important');
+      }
+      applyTrainerClientsTheme();
+      if (window.matchMedia) {
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTrainerClientsTheme);
+      }
+      window.__applyTrainerClientsTheme = applyTrainerClientsTheme;
+    })();
+  </script>
   <style>
-    * { box-sizing: border-box; }
-    html { overflow-x: hidden; }
-    body {
-      margin: 0;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: var(--tg-theme-bg-color);
-      color: var(--tg-theme-text-color);
-      min-height: 100vh;
-      padding: 12px;
-      padding-bottom: env(safe-area-inset-bottom, 12px);
-    }
+    /* Shell: theme.css + mini-app-components.css */
     /* Palette from theme.css — same as schedule.html */
     body {
       background: var(--tg-theme-bg-color) !important;
+      color: var(--tg-theme-text-color) !important;
+    }
+    /* Surfaces on CRM tokens (Telegram themeParams often inject blue) */
+    .btn-close,
+    .search-input,
+    .client-card,
+    .state-panel,
+    .tc-stat,
+    .tc-rows,
+    .tc-row,
+    .tc-note,
+    .tc-history-wrap {
+      background: var(--tg-theme-secondary-bg-color) !important;
       color: var(--tg-theme-text-color) !important;
     }
     #detailSection,
@@ -110,20 +139,22 @@
       gap: 12px;
       padding: 14px 16px;
       margin-bottom: 8px;
-      border-radius: 14px;
+      border-radius: 12px;
       background: var(--tg-theme-secondary-bg-color);
-      border: 2px solid transparent;
+      border: 2px solid rgba(247, 166, 0, 0.45);
       cursor: pointer;
       width: 100%;
       font: inherit;
       color: inherit;
       text-align: left;
-      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+      box-shadow: 0 1px 0 rgba(0, 0, 0, 0.04);
       transition: transform 0.12s ease, border-color 0.15s ease, box-shadow 0.15s ease, opacity 0.12s ease;
     }
-    .client-card:hover {
-      border-color: rgba(245, 166, 35, 0.35);
-      box-shadow: 0 4px 18px rgba(0, 0, 0, 0.08);
+    @media (hover: hover) {
+      .client-card:hover {
+        border-color: rgba(247, 166, 0, 0.55);
+        box-shadow: 0 6px 22px rgba(0, 0, 0, 0.1);
+      }
     }
     .client-card:active {
       opacity: 0.92;
@@ -365,7 +396,7 @@
     .tc-tel {
       font-size: 15px;
       font-weight: 500;
-      color: var(--tg-theme-button-color);
+      color: #f5a623;
       text-decoration: none;
     }
     .tc-tel:active { opacity: 0.8; }
@@ -475,7 +506,8 @@
     }
     .tc-note textarea:focus {
       outline: none;
-      box-shadow: inset 0 0 0 2px var(--tg-theme-button-color);
+      /* fixed amber — not Telegram button color (may be blue) */
+      box-shadow: inset 0 0 0 2px rgba(247, 166, 0, 0.65);
     }
     .detail-note textarea::placeholder,
     .tc-note textarea::placeholder {
@@ -709,7 +741,34 @@
   <script>
     (function() {
       var tg = window.Telegram && window.Telegram.WebApp;
-      if (tg && tg.ready) tg.ready();
+      if (tg) {
+        if (typeof tg.ready === 'function') tg.ready();
+        if (typeof tg.expand === 'function') tg.expand();
+        if (typeof window.__applyTrainerClientsTheme === 'function') {
+          window.__applyTrainerClientsTheme();
+        }
+        try {
+          var darkUi = tg.colorScheme === 'dark' ||
+            (tg.colorScheme !== 'light' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          var bgHex = darkUi ? '#1a1a1a' : '#fffbeb';
+          if (typeof tg.setHeaderColor === 'function') tg.setHeaderColor(bgHex);
+          if (typeof tg.setBackgroundColor === 'function') tg.setBackgroundColor(bgHex);
+        } catch (e) { /* older clients */ }
+        if (tg.onEvent) {
+          tg.onEvent('themeChanged', function () {
+            if (typeof window.__applyTrainerClientsTheme === 'function') {
+              window.__applyTrainerClientsTheme();
+            }
+            try {
+              var du = tg.colorScheme === 'dark' ||
+                (tg.colorScheme !== 'light' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+              var bg = du ? '#1a1a1a' : '#fffbeb';
+              if (typeof tg.setHeaderColor === 'function') tg.setHeaderColor(bg);
+              if (typeof tg.setBackgroundColor === 'function') tg.setBackgroundColor(bg);
+            } catch (err) { /* ignore */ }
+          });
+        }
+      }
       var initData = tg && tg.initData ? tg.initData : '';
       var headerTitleEl = document.querySelector('.header-title');
       var defaultHeaderTitle = headerTitleEl ? headerTitleEl.textContent : '';

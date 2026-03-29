@@ -6,31 +6,12 @@
   <title>Расписание</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <link rel="stylesheet" href="theme.css" />
+  <link rel="stylesheet" href="mini-app-components.css" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet" />
   <style>
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: var(--tg-theme-bg-color);
-      color: var(--tg-theme-text-color);
-      min-height: 100vh;
-      padding: 12px;
-      padding-bottom: env(safe-area-inset-bottom, 12px);
-    }
-    .header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      font-size: 18px;
-      font-weight: 600;
-      margin-bottom: 16px;
-      padding-bottom: 8px;
-    }
-    .header-title { flex: 1; }
+    /* Base shell: theme.css + mini-app-components.css */
     .btn-close {
       flex-shrink: 0;
       padding: 8px 14px;
@@ -107,8 +88,7 @@
       cursor: pointer;
       text-align: center;
     }
-    .btn-primary { background: #F7A600 !important; color: #1a1a1a !important; }
-    .btn-secondary { background: #FFF3CC !important; color: #1a1a1a !important; }
+    /* .btn-primary / .btn-secondary — mini-app-components.css */
     .btn-outline {
       background: transparent !important;
       color: #F7A600 !important;

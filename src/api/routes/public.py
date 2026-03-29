@@ -158,7 +158,10 @@ async def get_one_active_trainer(
     availability = await get_trainer_booking_availability(session, trainer_id)
     trainer["can_book"] = availability["can_book"]
     trainer["booking_reason"] = availability["reason"]  # null if can_book, else 'crm_only'/'no_subscription'
-    
+
+    edu = await list_trainer_education(session, trainer_id, public_only=True)
+    trainer["education_entries"] = edu if edu is not None else []
+
     return trainer
 
 

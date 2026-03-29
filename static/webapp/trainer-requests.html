@@ -9,11 +9,12 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="theme.css" />
+  <link rel="stylesheet" href="mini-app-components.css" />
   <style>
-    * { box-sizing: border-box; }
-    /* Same tokens as schedule mini app (theme.css + #F7A600) */
+    /* Shell: theme.css + mini-app-components.css */
+    /* Amber accent fixed — never var(--tg-theme-button-color): Telegram injects blue after tg.ready() */
     :root {
-      --req-accent: var(--tg-theme-button-color);
+      --req-accent: #f5a623;
       --req-accent-deep: #e89400;
       --req-accent-soft: rgba(247, 166, 0, 0.2);
       --req-cream: var(--tg-theme-secondary-bg-color);
@@ -49,6 +50,26 @@
       padding: 12px;
       padding-bottom: max(12px, env(safe-area-inset-bottom));
       -webkit-font-smoothing: antialiased;
+    }
+    /* schedule.html — Telegram themeParams must not tint the WebView body blue */
+    body {
+      background: var(--tg-theme-bg-color) !important;
+      color: var(--tg-theme-text-color) !important;
+    }
+    .list-intro,
+    .request-card,
+    .btn-close,
+    .detail-hero-inner,
+    .detail-client-row,
+    .card-wrap,
+    .slot-card,
+    .week-nav,
+    .pagination button,
+    .empty-with-hint,
+    .success-screen-inner,
+    .detail-info-popover {
+      background: var(--tg-theme-secondary-bg-color) !important;
+      color: var(--tg-theme-text-color) !important;
     }
     .page-header {
       margin-bottom: 20px;
@@ -621,30 +642,36 @@
     }
     .pagination button:active { transform: scale(0.97); }
     .pagination span { font-size: 13px; color: var(--req-muted); font-weight: 500; }
-    /* Align with schedule.html: same forced bg/surfaces in WebView */
-    body { background: #FFFBEB !important; color: #1a1a1a !important; }
-    .request-card, .list-intro, .slot-card, .week-nav, .week-nav button,
-    .detail-client-row, .card-wrap, .empty-with-hint, .pagination button,
-    .detail-hero-inner, .btn-close, .detail-info-popover, .success-screen-inner {
-      background: #FFF3CC !important;
-      color: #1a1a1a !important;
-    }
-    @media (prefers-color-scheme: dark) {
-      body { background: #1a1a1a !important; color: #f5f5f5 !important; }
-      .request-card, .list-intro, .slot-card, .week-nav, .week-nav button,
-      .detail-client-row, .card-wrap, .empty-with-hint, .pagination button,
-      .detail-hero-inner, .btn-close, .detail-info-popover, .success-screen-inner {
-        background: #2a2a2a !important;
-        color: #f5f5f5 !important;
-      }
-      .detail-client-avatar { color: #1a1a1a !important; }
-    }
   </style>
+  <script>
+    (function () {
+      function isAppDark() {
+        var tg = window.Telegram && window.Telegram.WebApp;
+        if (tg && tg.colorScheme) return tg.colorScheme === 'dark';
+        return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+      }
+      function applyAppTheme() {
+        var d = document.documentElement;
+        var dark = isAppDark();
+        /* !important: Telegram reapplies themeParams after tg.ready() — without it, blue returns */
+        /* Dark surfaces: same hex as schedule-editor.html (not pure #000 vs #1c1c1e — avoids mismatch with «Расписание») */
+        d.style.setProperty('--tg-theme-button-color', '#f5a623', 'important');
+        d.style.setProperty('--tg-theme-button-text-color', '#1a1a1a', 'important');
+        d.style.setProperty('--tg-theme-bg-color', dark ? '#1a1a1a' : '#fffbeb', 'important');
+        d.style.setProperty('--tg-theme-text-color', dark ? '#f5f5f5' : '#1a1a1a', 'important');
+        d.style.setProperty('--tg-theme-secondary-bg-color', dark ? '#2a2a2a' : '#fff3cc', 'important');
+        d.style.setProperty('--tg-theme-hint-color', dark ? '#8e8e93' : '#666666', 'important');
+        d.style.setProperty('--req-accent', '#f5a623', 'important');
+      }
+      applyAppTheme();
+      if (window.matchMedia) {
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyAppTheme);
+      }
+      window.__applyRequestsTheme = applyAppTheme;
+    })();
+  </script>
 </head>
 <body>
-  <script>
-  (function(){var d=document.documentElement;d.style.setProperty('--tg-theme-button-color','#F7A600');d.style.setProperty('--tg-theme-button-text-color','#1a1a1a');d.style.setProperty('--tg-theme-bg-color',window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'#1a1a1a':'#FFFBEB');d.style.setProperty('--tg-theme-text-color',window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'#f5f5f5':'#1a1a1a');d.style.setProperty('--tg-theme-secondary-bg-color',window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'#2a2a2a':'#FFF3CC');})();
-  </script>
   <header class="page-header">
     <div class="page-header-kicker">Входящие</div>
     <div class="header">
@@ -743,7 +770,34 @@
     (function() {
       fetch('/api/webapp/trainer/requests/ping?step=script').catch(function() {});
       const tg = window.Telegram && window.Telegram.WebApp;
-      if (tg) { tg.ready(); tg.expand(); }
+      if (tg) {
+        tg.ready();
+        tg.expand();
+        if (typeof window.__applyRequestsTheme === 'function') {
+          window.__applyRequestsTheme();
+        }
+        try {
+          var darkUi = tg.colorScheme === 'dark' ||
+            (tg.colorScheme !== 'light' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          var bgHex = darkUi ? '#1a1a1a' : '#fffbeb';
+          if (typeof tg.setHeaderColor === 'function') tg.setHeaderColor(bgHex);
+          if (typeof tg.setBackgroundColor === 'function') tg.setBackgroundColor(bgHex);
+        } catch (e) { /* older clients */ }
+        if (tg.onEvent) {
+          tg.onEvent('themeChanged', function () {
+            if (typeof window.__applyRequestsTheme === 'function') {
+              window.__applyRequestsTheme();
+            }
+            try {
+              var du = tg.colorScheme === 'dark' ||
+                (tg.colorScheme !== 'light' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+              var bg = du ? '#1a1a1a' : '#fffbeb';
+              if (typeof tg.setHeaderColor === 'function') tg.setHeaderColor(bg);
+              if (typeof tg.setBackgroundColor === 'function') tg.setBackgroundColor(bg);
+            } catch (err) { /* ignore */ }
+          });
+        }
+      }
 
       const PER_PAGE = 10;
       const DAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];

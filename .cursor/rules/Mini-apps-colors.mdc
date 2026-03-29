@@ -2,7 +2,16 @@
 alwaysApply: true
 ---
 
-фон 
-#121212, акцент 
-#FFB800, крем 
-#FFF5D1, поверхности «уголь».
+## Mini App palette (trainer CRM)
+
+**Источник правды:** [`static/webapp/theme.css`](static/webapp/theme.css) — все `--tg-theme-*` и `--app-*`.
+
+**Компоненты и композиция:** [`static/webapp/mini-app-components.css`](static/webapp/mini-app-components.css) + эталон [`static/webapp/schedule.html`](static/webapp/schedule.html).
+
+**Жёсткая визуальная конституция (экран детали записи и всё, что должно с ним сочетаться):** [`docs/TRAINER_MINI_APP_VISUAL_CONSTITUTION.md`](../docs/TRAINER_MINI_APP_VISUAL_CONSTITUTION.md) — палитра, градиенты, типографика, классы `.bd-*`, чеклист. Следуй этому файлу при любых правках UI мини-приложения тренера.
+
+Светлая тема: кремовый фон (`--tg-theme-bg-color`, по умолчанию `#fffbec`), вторичные поверхности (`--tg-theme-secondary-bg-color`), акцент кнопок (`--tg-theme-button-color`, `#f5a623`).
+
+Тёмная тема: фон `#000000`, карточки/поверхности `#1c1c1e`, тот же янтарный акцент — см. `@media (prefers-color-scheme: dark)` в `theme.css`.
+
+Не вводить произвольные `#hex` на body/карточках; локальные градиенты/акценты — как в `mini-app-components.css` и `schedule.html`.

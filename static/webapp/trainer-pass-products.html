@@ -9,19 +9,41 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="theme.css" />
+  <link rel="stylesheet" href="mini-app-components.css" />
+  <script>
+    /** Lock palette to theme.css + schedule.html — Telegram themeParams often inject blue accent. */
+    (function () {
+      function isAppDark() {
+        var tg = window.Telegram && window.Telegram.WebApp;
+        if (tg && tg.colorScheme) return tg.colorScheme === 'dark';
+        return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+      }
+      function applyAppTheme() {
+        var d = document.documentElement;
+        var dark = isAppDark();
+        /* schedule-editor.html + block Telegram re-injecting blue */
+        d.style.setProperty('--tg-theme-button-color', '#f5a623', 'important');
+        d.style.setProperty('--tg-theme-button-text-color', '#1a1a1a', 'important');
+        d.style.setProperty('--tg-theme-bg-color', dark ? '#1a1a1a' : '#fffbeb', 'important');
+        d.style.setProperty('--tg-theme-text-color', dark ? '#f5f5f5' : '#1a1a1a', 'important');
+        d.style.setProperty('--tg-theme-secondary-bg-color', dark ? '#2a2a2a' : '#fff3cc', 'important');
+        d.style.setProperty('--tg-theme-hint-color', dark ? '#8e8e93' : '#666666', 'important');
+      }
+      applyAppTheme();
+      if (window.matchMedia) {
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyAppTheme);
+      }
+      window.__applyTrainerPassProductsTheme = applyAppTheme;
+    })();
+  </script>
   <style>
-    * { box-sizing: border-box; }
-    html { overflow-x: hidden; }
-    /* Surfaces: theme.css — light cream / dark #1C1C1E secondary */
+    /* Shell: theme.css + mini-app-components.css */
     body {
-      margin: 0;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: var(--tg-theme-bg-color);
-      color: var(--tg-theme-text-color);
-      min-height: 100vh;
-      padding: 12px;
       padding-bottom: calc(16px + env(safe-area-inset-bottom, 0));
+      background: var(--tg-theme-bg-color) !important;
+      color: var(--tg-theme-text-color) !important;
     }
+    /* Keep surfaces on CRM tokens, not Telegram’s blue-tinted themeParams */
     .pp-dm {
       font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     }
@@ -144,7 +166,7 @@
       width: 8px;
       height: 8px;
       border-radius: 50%;
-      background: var(--tg-theme-button-color);
+      background: #f5a623;
       animation: pp-dot 1.2s ease-in-out infinite;
     }
     .pp-loading-dots span:nth-child(2) { animation-delay: 0.15s; }
@@ -168,23 +190,23 @@
       gap: 12px;
       padding: 14px 16px;
       margin-bottom: 8px;
-      border-radius: 14px;
-      background: var(--tg-theme-secondary-bg-color);
-      border: 1px solid rgba(247, 166, 0, 0.2);
-      border-left: 3px solid var(--tg-theme-button-color);
+      border-radius: 12px;
+      background: var(--tg-theme-secondary-bg-color) !important;
+      color: var(--tg-theme-text-color) !important;
+      /* slot-card.slot-booked — amber border only, never theme button (may be blue from Telegram) */
+      border: 2px solid rgba(247, 166, 0, 0.45);
       width: 100%;
       font: inherit;
-      color: inherit;
       text-align: left;
       cursor: pointer;
-      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+      box-shadow: 0 1px 0 rgba(0, 0, 0, 0.04);
       transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
     }
     @media (hover: hover) {
       .product-card:hover,
       .cert-product-card:hover {
         box-shadow: 0 6px 22px rgba(0, 0, 0, 0.1);
-        border-color: rgba(247, 166, 0, 0.38);
+        border-color: rgba(247, 166, 0, 0.55);
       }
     }
     .product-card:active,
@@ -224,7 +246,7 @@
       border: none;
       font-size: 15px;
       font-weight: 600;
-      font-family: inherit;
+      font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
       cursor: pointer;
       box-sizing: border-box;
       transition: transform 0.12s ease, box-shadow 0.12s ease, opacity 0.12s ease;
@@ -259,8 +281,67 @@
     .pp-stack-btn:first-of-type { margin-top: 16px; }
     [data-screen] { display: none !important; width: 100%; }
     [data-screen].active { display: block !important; }
+    /* Catalog form — inset fields on panel (schedule detail spirit) */
+    #screenForm.active,
+    #screenCertForm.active {
+      animation: pp-form-screen-in 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+    @keyframes pp-form-screen-in {
+      from { opacity: 0; transform: translateY(12px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .pp-hero--form { margin-bottom: 14px; }
+    .pp-form-back {
+      margin-bottom: 10px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+    }
+    .pp-form-fields {
+      padding: 18px 16px 16px;
+      border-radius: 18px;
+      background: var(--tg-theme-secondary-bg-color);
+      border: 1px solid rgba(247, 166, 0, 0.16);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.14);
+    }
+    .pp-form-fields .form-actions {
+      margin-top: 22px;
+      padding-top: 18px;
+      border-top: 1px dashed rgba(247, 166, 0, 0.22);
+    }
+    .pp-form-fields .form-group input,
+    .pp-form-fields .form-group select {
+      background: var(--tg-theme-bg-color);
+      border: 1px solid rgba(247, 166, 0, 0.14);
+      box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.07);
+      font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+    .pp-form-fields .form-group select {
+      appearance: none;
+      -webkit-appearance: none;
+      -moz-appearance: none;
+      padding-right: 44px;
+      cursor: pointer;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%23f5a623' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 12px center;
+      background-color: var(--tg-theme-bg-color);
+    }
+    .pp-form-fields .form-group input:focus,
+    .pp-form-fields .form-group select:focus {
+      border-color: rgba(247, 166, 0, 0.5);
+      box-shadow: inset 0 0 0 1px rgba(247, 166, 0, 0.25), 0 0 0 3px rgba(247, 166, 0, 0.12);
+    }
+    .pp-form-fields .form-group label:has(input[type="checkbox"]) input[type="checkbox"],
+    .pp-form-fields .form-group-checkbox input[type="checkbox"],
+    .form-group-checkbox input[type="checkbox"] {
+      width: 22px;
+      height: 22px;
+      accent-color: #f5a623;
+      flex-shrink: 0;
+      cursor: pointer;
+    }
     .form-group { margin-bottom: 16px; }
-    .form-group label {
+    .form-group label:not(:has(input)) {
       display: block;
       font-size: 11px;
       font-weight: 600;
@@ -269,6 +350,18 @@
       color: var(--tg-theme-hint-color);
       margin-bottom: 8px;
       font-family: 'DM Sans', sans-serif;
+    }
+    .form-group label:has(input[type="checkbox"]) {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 15px;
+      font-weight: 500;
+      letter-spacing: normal;
+      text-transform: none;
+      color: var(--tg-theme-text-color);
+      margin-bottom: 0;
+      cursor: pointer;
     }
     .form-group input,
     .form-group select {
@@ -351,7 +444,7 @@
       gap: 6px;
       margin-bottom: 18px;
       padding: 6px;
-      background: var(--tg-theme-secondary-bg-color);
+      background: var(--tg-theme-secondary-bg-color) !important;
       border-radius: 16px;
       border: 1px solid rgba(128, 128, 128, 0.1);
       box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
@@ -370,15 +463,15 @@
       transition: background 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
     }
     .tabs .tab.active {
-      background: linear-gradient(180deg, rgba(255, 194, 61, 0.35) 0%, rgba(247, 166, 0, 0.2) 100%);
-      color: var(--tg-theme-text-color);
-      box-shadow: 0 2px 10px rgba(247, 166, 0, 0.2);
+      background: var(--tg-theme-button-color) !important;
+      color: var(--tg-theme-button-text-color) !important;
+      box-shadow: 0 2px 10px rgba(247, 166, 0, 0.25);
     }
     .tab-panel { display: none; }
     .tab-panel.active { display: block; }
     .form-group-checkbox { margin-bottom: 16px; }
     .form-group-checkbox label { display: flex; align-items: center; gap: 10px; font-size: 15px; cursor: pointer; text-transform: none; letter-spacing: normal; font-weight: 500; }
-    .form-group-checkbox input[type="checkbox"] { width: 20px; height: 20px; accent-color: var(--tg-theme-button-color); }
+    .form-group-checkbox input[type="checkbox"] { width: 22px; height: 22px; accent-color: #f5a623; flex-shrink: 0; cursor: pointer; }
     .cert-code-result {
       margin-top: 24px;
       padding: 22px 20px;
@@ -400,7 +493,16 @@
       background: radial-gradient(ellipse, rgba(247, 166, 0, 0.18) 0%, transparent 65%);
       pointer-events: none;
     }
-    .cert-code-result .detail-label { position: relative; z-index: 1; }
+    .cert-code-result .detail-label {
+      position: relative;
+      z-index: 1;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--tg-theme-hint-color);
+      font-family: 'DM Sans', sans-serif;
+    }
     .cert-code-result .code {
       position: relative;
       z-index: 1;
@@ -458,7 +560,7 @@
     .cert-issued-card .main { flex: 1; min-width: 0; }
     .cert-issued-card .code { font-weight: 600; font-size: 14px; }
     .cert-issued-card .meta { font-size: 12px; color: var(--tg-theme-hint-color); margin-top: 2px; }
-    .cert-issued-card .cert-download-link { font-size: 12px; white-space: nowrap; color: var(--tg-theme-button-color); text-decoration: none; font-weight: 600; }
+    .cert-issued-card .cert-download-link { font-size: 12px; white-space: nowrap; color: #f5a623; text-decoration: none; font-weight: 600; }
     .cert-issued-empty { font-size: 13px; color: var(--tg-theme-hint-color); padding: 12px 0; }
     .pass-issue-search { margin-bottom: 10px; }
     .pass-issue-search input {
@@ -508,7 +610,7 @@
     .pass-issue-selected strong { display: block; margin-bottom: 4px; font-family: 'DM Sans', sans-serif; }
     .pass-issue-change-client {
       font-size: 13px;
-      color: var(--tg-theme-button-color);
+      color: #f5a623;
       cursor: pointer;
       border: none;
       background: none;
@@ -555,6 +657,17 @@
     }
     @media (prefers-color-scheme: dark) {
       .pass-issue-client-card.selected { background: rgba(247, 166, 0, 0.12); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .pp-loading-dots span { animation: none; opacity: 0.55; }
+      #screenForm.active,
+      #screenCertForm.active { animation: none; }
+      .product-card:active,
+      .cert-product-card:active,
+      .pp-btn:active,
+      .btn-save:active,
+      .btn-cancel:active,
+      .btn-copy:active { transform: none; }
     }
   </style>
 </head>
@@ -633,7 +746,7 @@
       <button type="button" class="btn-save" id="btnSubmitCertIssue">Выдать</button>
     </div>
     <div id="certIssueResult" class="cert-code-result" style="display:none;">
-      <div class="detail-label" style="font-size:13px; color: var(--tg-theme-hint-color);">Код сертификата</div>
+      <div class="detail-label">Код сертификата</div>
       <div class="code" id="certIssueCode"></div>
       <button type="button" class="btn-copy" id="btnCopyCertCode">Скопировать код</button>
       <p id="certIssueEmailSent" style="display:none; margin-top:0.5rem; color:var(--tg-theme-hint-color, #666); font-size:13px;"></p>
@@ -708,71 +821,75 @@
   </div>
 
   <div id="screenForm" data-screen>
-    <a href="#" class="back-link" id="backFromForm"><svg class="back-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>К списку</a>
-    <div class="pp-hero" style="margin-bottom:16px;">
+    <a href="#" class="back-link pp-form-back" id="backFromForm"><svg class="back-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>К списку</a>
+    <div class="pp-hero pp-hero--form">
       <div class="pp-hero-inner">
         <p class="pp-hero-kicker">Каталог</p>
         <h1 class="pp-hero-title" id="formTitle">Новый абонемент</h1>
       </div>
     </div>
-    <div class="form-group">
-      <label for="inputName">Название</label>
-      <input type="text" id="inputName" placeholder="Например: 5 занятий" maxlength="128">
-    </div>
-    <div class="form-group">
-      <label for="inputSessions">Количество занятий</label>
-      <input type="number" id="inputSessions" min="1" max="999" placeholder="5">
-    </div>
-    <div class="form-group">
-      <label for="inputPrice">Цена, BYN</label>
-      <input type="number" id="inputPrice" min="0" step="1" placeholder="200" inputmode="numeric">
-    </div>
-    <div class="form-group">
-      <label for="inputServiceId">Услуга</label>
-      <select id="inputServiceId">
-        <option value="">Любая услуга</option>
-      </select>
-    </div>
-    <div class="form-group" id="groupActive" style="display: none;">
-      <label>
-        <input type="checkbox" id="inputActive" checked>
-        <span id="labelActive">Активен (клиенты видят в каталоге)</span>
-      </label>
-    </div>
-    <div class="form-actions">
-      <button type="button" class="btn-cancel" id="btnCancelForm">Отмена</button>
-      <button type="button" class="btn-save" id="btnSaveForm">Сохранить</button>
+    <div class="pp-form-fields">
+      <div class="form-group">
+        <label for="inputName">Название</label>
+        <input type="text" id="inputName" placeholder="Например: 5 занятий" maxlength="128" autocomplete="off">
+      </div>
+      <div class="form-group">
+        <label for="inputSessions">Количество занятий</label>
+        <input type="number" id="inputSessions" min="1" max="999" placeholder="5">
+      </div>
+      <div class="form-group">
+        <label for="inputPrice">Цена, BYN</label>
+        <input type="number" id="inputPrice" min="0" step="1" placeholder="200" inputmode="numeric">
+      </div>
+      <div class="form-group">
+        <label for="inputServiceId">Услуга</label>
+        <select id="inputServiceId">
+          <option value="">Любая услуга</option>
+        </select>
+      </div>
+      <div class="form-group" id="groupActive" style="display: none;">
+        <label>
+          <input type="checkbox" id="inputActive" checked>
+          <span id="labelActive">Активен (клиенты видят в каталоге)</span>
+        </label>
+      </div>
+      <div class="form-actions">
+        <button type="button" class="btn-cancel" id="btnCancelForm">Отмена</button>
+        <button type="button" class="btn-save" id="btnSaveForm">Сохранить</button>
+      </div>
     </div>
     <button type="button" class="btn-delete" id="btnDeleteProduct" style="display: none;">Удалить абонемент</button>
   </div>
 
   <div id="screenCertForm" data-screen>
-    <a href="#" class="back-link" id="backFromCertForm"><svg class="back-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>К списку</a>
-    <div class="pp-hero" style="margin-bottom:16px;">
+    <a href="#" class="back-link pp-form-back" id="backFromCertForm"><svg class="back-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>К списку</a>
+    <div class="pp-hero pp-hero--form">
       <div class="pp-hero-inner">
         <p class="pp-hero-kicker">Каталог</p>
         <h1 class="pp-hero-title" id="certFormTitle">Новый сертификат</h1>
       </div>
     </div>
-    <div class="form-group-checkbox">
-      <label>
-        <input type="checkbox" id="certAnyAmount" checked>
-        <span>Любая сумма (клиент и тренер договариваются)</span>
-      </label>
-    </div>
-    <div class="form-group" id="certAmountGroup" style="display: none;">
-      <label for="certAmountByn">Сумма, BYN</label>
-      <input type="number" id="certAmountByn" min="1" step="1" placeholder="100" inputmode="numeric">
-    </div>
-    <div class="form-group" id="certActiveGroup" style="display: none;">
-      <label>
-        <input type="checkbox" id="certActive" checked>
-        <span>Активен (клиенты видят в каталоге)</span>
-      </label>
-    </div>
-    <div class="form-actions">
-      <button type="button" class="btn-cancel" id="btnCancelCertForm">Отмена</button>
-      <button type="button" class="btn-save" id="btnSaveCertForm">Сохранить</button>
+    <div class="pp-form-fields">
+      <div class="form-group-checkbox">
+        <label>
+          <input type="checkbox" id="certAnyAmount" checked>
+          <span>Любая сумма (клиент и тренер договариваются)</span>
+        </label>
+      </div>
+      <div class="form-group" id="certAmountGroup" style="display: none;">
+        <label for="certAmountByn">Сумма, BYN</label>
+        <input type="number" id="certAmountByn" min="1" step="1" placeholder="100" inputmode="numeric">
+      </div>
+      <div class="form-group" id="certActiveGroup" style="display: none;">
+        <label>
+          <input type="checkbox" id="certActive" checked>
+          <span>Активен (клиенты видят в каталоге)</span>
+        </label>
+      </div>
+      <div class="form-actions">
+        <button type="button" class="btn-cancel" id="btnCancelCertForm">Отмена</button>
+        <button type="button" class="btn-save" id="btnSaveCertForm">Сохранить</button>
+      </div>
     </div>
     <button type="button" class="btn-delete" id="btnDeleteCert" style="display: none;">Удалить сертификат</button>
   </div>
@@ -780,7 +897,34 @@
   <script>
     (function() {
       var tg = window.Telegram && window.Telegram.WebApp;
-      if (tg) { tg.ready(); tg.expand(); }
+      if (tg) {
+        tg.ready();
+        tg.expand();
+        if (typeof window.__applyTrainerPassProductsTheme === 'function') {
+          window.__applyTrainerPassProductsTheme();
+        }
+        try {
+          var darkUi = tg.colorScheme === 'dark' ||
+            (tg.colorScheme !== 'light' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          var bgHex = darkUi ? '#1a1a1a' : '#fffbeb';
+          if (typeof tg.setHeaderColor === 'function') tg.setHeaderColor(bgHex);
+          if (typeof tg.setBackgroundColor === 'function') tg.setBackgroundColor(bgHex);
+        } catch (e) { /* ignore older clients */ }
+        if (tg.onEvent) {
+          tg.onEvent('themeChanged', function () {
+            if (typeof window.__applyTrainerPassProductsTheme === 'function') {
+              window.__applyTrainerPassProductsTheme();
+            }
+            try {
+              var du = tg.colorScheme === 'dark' ||
+                (tg.colorScheme !== 'light' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+              var bg = du ? '#1a1a1a' : '#fffbeb';
+              if (typeof tg.setHeaderColor === 'function') tg.setHeaderColor(bg);
+              if (typeof tg.setBackgroundColor === 'function') tg.setBackgroundColor(bg);
+            } catch (err) { /* ignore */ }
+          });
+        }
+      }
       var initData = tg ? tg.initData : '';
       function initDataParam() {
         return initData ? '?init_data=' + encodeURIComponent(initData) : '';

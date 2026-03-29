@@ -6,11 +6,42 @@
   <title>Тренеры и запись</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <link rel="stylesheet" href="theme.css" />
+  <link rel="stylesheet" href="mini-app-components.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet" />
+  <script>
+    /** Применяем правильную CRM палитру - графитово-темный фон в темной теме */
+    (function () {
+      function isAppDark() {
+        var tg = window.Telegram && window.Telegram.WebApp;
+        if (tg && tg.colorScheme) return tg.colorScheme === 'dark';
+        return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+      }
+      function applyAppTheme() {
+        var d = document.documentElement;
+        var dark = isAppDark();
+        d.style.setProperty('--tg-theme-button-color', '#f5a623');
+        d.style.setProperty('--tg-theme-button-text-color', '#1a1a1a');
+        /* Графитово-темный фон + карточки #2c2c2e (конституция CRM) */
+        d.style.setProperty('--tg-theme-bg-color', dark ? '#1c1c1c' : '#fffbec');
+        d.style.setProperty('--tg-theme-text-color', dark ? '#ffffff' : '#1a1a1a');
+        d.style.setProperty('--tg-theme-secondary-bg-color', dark ? '#2c2c2e' : '#fff5e1');
+        d.style.setProperty('--tg-theme-hint-color', dark ? '#8e8e93' : '#666666');
+        d.style.setProperty('--app-danger', '#ff3b30');
+      }
+      applyAppTheme();
+      if (window.matchMedia) {
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyAppTheme);
+      }
+      window.__applyCatalogTheme = applyAppTheme;
+    })();
+  </script>
   <style>
     * { box-sizing: border-box; }
     body {
       margin: 0;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       background: var(--tg-theme-bg-color);
       color: var(--tg-theme-text-color);
       min-height: 100vh;
@@ -18,16 +49,23 @@
       padding-bottom: env(safe-area-inset-bottom, 12px);
     }
     .header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      font-size: 18px;
-      font-weight: 600;
-      margin-bottom: 16px;
-      padding-bottom: 8px;
+      margin-bottom: 24px;
     }
-    .header-title { flex: 1; }
+    .bd-screen-head { margin-bottom: 8px; }
+    .bd-screen-title {
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--tg-theme-hint-color);
+    }
+    .header-title { 
+      font-size: 24px;
+      font-weight: 600;
+      line-height: 1.25;
+      letter-spacing: -0.02em;
+      color: var(--tg-theme-text-color);
+    }
     .btn-close {
       flex-shrink: 0;
       padding: 8px 14px;
@@ -39,30 +77,88 @@
       cursor: pointer;
     }
     .step-title {
-      font-size: 13px;
+      font-size: 11px;
       font-weight: 600;
       color: var(--tg-theme-hint-color);
-      margin-bottom: 12px;
+      margin: 4px 0 12px 4px;
       text-transform: uppercase;
-      letter-spacing: 0.5px;
+      letter-spacing: 0.1em;
     }
     .choice-card {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 14px 16px;
+      padding: 16px 18px;
       margin-bottom: 8px;
-      border-radius: 12px;
+      border-radius: 18px;
       background: var(--tg-theme-secondary-bg-color);
       cursor: pointer;
-      border: none;
+      border: 1px solid rgba(247, 166, 0, 0.28);
       width: 100%;
       font: inherit;
       color: inherit;
       text-align: left;
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+      transition: all 0.12s cubic-bezier(0.22, 1, 0.36, 1);
+      position: relative;
+      overflow: hidden;
     }
-    .choice-card:active { opacity: 0.9; }
-    .choice-card .arrow { color: var(--tg-theme-hint-color); font-size: 14px; }
+    .choice-card::before {
+      content: '';
+      position: absolute;
+      top: -40%;
+      right: -20%;
+      width: 55%;
+      height: 120%;
+      background: radial-gradient(ellipse, rgba(247, 166, 0, 0.08) 0%, transparent 70%);
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.12s ease;
+    }
+    @media (hover: hover) {
+      .choice-card:hover {
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+        border-color: rgba(247, 166, 0, 0.45);
+        transform: translateY(-1px);
+      }
+      .choice-card:hover::before {
+        opacity: 1;
+      }
+      .choice-card:hover .arrow {
+        opacity: 1;
+        transform: translateX(2px);
+      }
+    }
+    .choice-card:active { 
+      opacity: 0.92; 
+      transform: scale(0.985);
+    }
+    .choice-card .main { 
+      flex: 1; 
+      min-width: 0; 
+      position: relative; 
+      z-index: 1; 
+    }
+    .choice-card .label { 
+      font-size: 13px; 
+      color: var(--tg-theme-hint-color); 
+      font-weight: 500;
+      margin-bottom: 2px;
+    }
+    .choice-card .value { 
+      font-size: 17px; 
+      font-weight: 600; 
+      line-height: 1.25;
+      letter-spacing: -0.01em;
+    }
+    .choice-card .arrow { 
+      color: var(--tg-theme-button-color); 
+      font-size: 16px; 
+      position: relative; 
+      z-index: 1;
+      opacity: 0.8;
+      transition: opacity 0.12s ease, transform 0.12s ease;
+    }
     .trainer-list-card {
       display: flex;
       align-items: flex-start;
@@ -72,13 +168,42 @@
       border-radius: 18px;
       background: var(--tg-theme-secondary-bg-color);
       cursor: pointer;
-      border: none;
+      border: 1px solid rgba(247, 166, 0, 0.28);
       width: 100%;
       font: inherit;
       color: inherit;
       text-align: left;
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+      transition: all 0.12s cubic-bezier(0.22, 1, 0.36, 1);
+      position: relative;
+      overflow: hidden;
     }
-    .trainer-list-card:active { opacity: 0.9; }
+    .trainer-list-card::before {
+      content: '';
+      position: absolute;
+      top: -40%;
+      right: -20%;
+      width: 55%;
+      height: 120%;
+      background: radial-gradient(ellipse, rgba(247, 166, 0, 0.08) 0%, transparent 70%);
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.12s ease;
+    }
+    @media (hover: hover) {
+      .trainer-list-card:hover {
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+        border-color: rgba(247, 166, 0, 0.45);
+        transform: translateY(-1px);
+      }
+      .trainer-list-card:hover::before {
+        opacity: 1;
+      }
+    }
+    .trainer-list-card:active { 
+      opacity: 0.92; 
+      transform: scale(0.985);
+    }
     .trainer-list-card .trainer-card-photo-wrap {
       position: relative;
       width: 112px;
@@ -114,47 +239,66 @@
     .trainer-list-card .trainer-card-photo-wrap img.loaded {
       opacity: 1;
     }
-    .trainer-list-card .info { flex: 1; min-width: 0; }
+    .trainer-list-card .info { 
+      flex: 1; 
+      min-width: 0; 
+      position: relative; 
+      z-index: 1; 
+    }
     .trainer-list-card .name {
       font-weight: 600;
-      font-size: 17px;
-      margin-bottom: 4px;
+      font-size: 18px;
+      margin-bottom: 6px;
       line-height: 1.25;
+      letter-spacing: -0.01em;
     }
     .trainer-list-card .meta {
       font-size: 14px;
       color: var(--tg-theme-hint-color);
-      margin-top: 2px;
+      margin-top: 4px;
       white-space: normal;
+      line-height: 1.35;
       overflow: hidden;
     }
-    .trainer-list-card .arrow { color: var(--tg-theme-hint-color); font-size: 16px; }
-    /* 4:3 photo slot — industry standard; cover = no letterboxing, frame always full */
+    .trainer-list-card .arrow { 
+      color: var(--tg-theme-button-color); 
+      font-size: 16px; 
+      position: relative; 
+      z-index: 1;
+      opacity: 0.8;
+      transition: opacity 0.12s ease, transform 0.12s ease;
+    }
+    .trainer-list-card:hover .arrow {
+      opacity: 1;
+      transform: translateX(2px);
+    }
+    /* Современная карточка тренера - дизайнерский шедевр */
     .trainer-detail-photo-wrap {
       position: relative;
       width: 100%;
       aspect-ratio: 4/3;
-      min-height: 200px;
-      max-height: 280px;
-      border-radius: 12px;
+      min-height: 240px;
+      max-height: 320px;
+      border-radius: 20px;
       overflow: hidden;
-      margin-bottom: 12px;
-      background: var(--tg-theme-secondary-bg-color);
+      margin-bottom: 20px;
+      background: linear-gradient(135deg, var(--tg-theme-secondary-bg-color) 0%, rgba(245, 166, 35, 0.1) 100%);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
     }
     .trainer-detail-photo-wrap .trainer-detail-photo-placeholder {
       position: absolute;
       inset: 0;
-      background: var(--tg-theme-secondary-bg-color);
-      border-radius: 12px;
+      background: linear-gradient(135deg, var(--tg-theme-secondary-bg-color) 0%, rgba(245, 166, 35, 0.1) 100%);
+      border-radius: 20px;
     }
     .trainer-detail-photo-wrap .trainer-detail-photo-placeholder::after {
       content: '';
       position: absolute;
       inset: 0;
-      background: linear-gradient(105deg, transparent 0%, rgba(255,255,255,0.08) 50%, transparent 100%);
+      background: linear-gradient(105deg, transparent 0%, rgba(245, 166, 35, 0.15) 50%, transparent 100%);
       background-size: 200% 100%;
-      animation: photo-shimmer 1.2s ease-in-out infinite;
-      border-radius: 12px;
+      animation: photo-shimmer 1.5s ease-in-out infinite;
+      border-radius: 20px;
     }
     @keyframes photo-shimmer {
       0% { background-position: 200% 0; }
@@ -170,9 +314,9 @@
       height: 100%;
       object-fit: cover;
       object-position: center top;
-      border-radius: 12px;
+      border-radius: 20px;
       opacity: 0;
-      transition: opacity 0.2s ease;
+      transition: all 0.3s ease;
     }
     .trainer-detail-photo-wrap .trainer-detail-photo-base { z-index: 1; }
     .trainer-detail-photo-wrap .trainer-detail-photo-full { z-index: 2; }
@@ -180,20 +324,185 @@
     .trainer-detail-photo-wrap img.loaded {
       opacity: 1;
     }
-    .trainer-detail-name { font-size: 18px; font-weight: 600; margin-bottom: 8px; }
-    .trainer-detail-meta { font-size: 14px; color: var(--tg-theme-hint-color); margin-bottom: 4px; }
-    .trainer-detail-desc { font-size: 14px; line-height: 1.4; margin: 12px 0; }
+    .trainer-detail-header {
+      margin-bottom: 24px;
+    }
+    .trainer-detail-name { 
+      font-size: 28px; 
+      font-weight: 700; 
+      margin-bottom: 12px; 
+      line-height: 1.2;
+      letter-spacing: -0.02em;
+      color: var(--tg-theme-text-color);
+    }
+    .trainer-detail-rating {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      background: linear-gradient(135deg, rgba(245, 166, 35, 0.15) 0%, rgba(245, 166, 35, 0.05) 100%);
+      border-radius: 12px;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--tg-theme-button-color);
+      margin-bottom: 16px;
+    }
+    .trainer-detail-stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    .trainer-detail-stat {
+      padding: 12px;
+      background: var(--tg-theme-secondary-bg-color);
+      border-radius: 12px;
+      border: 2px solid transparent;
+      transition: all 0.2s ease;
+    }
+    .trainer-detail-stat:hover {
+      border-color: rgba(245, 166, 35, 0.3);
+    }
+    .trainer-detail-stat-label {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--tg-theme-hint-color);
+      margin-bottom: 4px;
+    }
+    .trainer-detail-stat-value {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--tg-theme-text-color);
+    }
+    .trainer-detail-services {
+      margin-bottom: 20px;
+    }
+    .trainer-detail-services-title {
+      font-size: 13px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--tg-theme-hint-color);
+      margin-bottom: 12px;
+    }
+    .trainer-detail-service {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 14px;
+      margin-bottom: 6px;
+      background: var(--tg-theme-secondary-bg-color);
+      border-radius: 10px;
+      font-size: 14px;
+    }
+    .trainer-detail-service-name {
+      font-weight: 500;
+      color: var(--tg-theme-text-color);
+    }
+    .trainer-detail-service-price {
+      font-weight: 600;
+      color: var(--tg-theme-button-color);
+    }
+    .trainer-detail-education {
+      margin-bottom: 20px;
+    }
+    .trainer-detail-education-title {
+      font-size: 13px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--tg-theme-hint-color);
+      margin-bottom: 12px;
+    }
+    .trainer-detail-education-item {
+      padding: 12px 14px;
+      margin-bottom: 8px;
+      background: var(--tg-theme-secondary-bg-color);
+      border-radius: 12px;
+      font-size: 14px;
+      line-height: 1.4;
+      border: 2px solid transparent;
+      transition: all 0.2s ease;
+    }
+    .trainer-detail-education-item:hover {
+      border-color: rgba(245, 166, 35, 0.3);
+    }
+    .trainer-detail-desc { 
+      font-size: 15px; 
+      line-height: 1.5; 
+      margin: 20px 0; 
+      padding: 16px;
+      background: var(--tg-theme-secondary-bg-color);
+      border-radius: 16px;
+      border-left: 4px solid var(--tg-theme-button-color);
+    }
+    .trainer-detail-actions,
+    #trainerDetailActions {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-top: 24px;
+    }
     .btn-primary {
       width: 100%;
-      padding: 14px;
-      border-radius: 12px;
+      padding: 16px 20px;
+      border-radius: 16px;
       border: none;
       font-size: 16px;
       font-weight: 600;
-      background: var(--tg-theme-button-color) !important;
-      color: var(--tg-theme-button-text-color) !important;
+      background: linear-gradient(135deg, #f5a623 0%, #e89400 100%);
+      color: #1a1a1a;
+      box-shadow: 0 8px 24px rgba(245, 166, 35, 0.4);
+      transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+      font-family: inherit;
       cursor: pointer;
-      margin-top: 12px;
+      position: relative;
+      overflow: hidden;
+    }
+    .btn-primary::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+      transition: left 0.5s ease;
+    }
+    .btn-primary:hover::before {
+      left: 100%;
+    }
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 12px 32px rgba(245, 166, 35, 0.5);
+    }
+    .btn-primary:active {
+      transform: translateY(0);
+      box-shadow: 0 4px 16px rgba(245, 166, 35, 0.3);
+    }
+    .btn-secondary {
+      width: 100%;
+      padding: 14px 20px;
+      border-radius: 16px;
+      border: 2px solid rgba(245, 166, 35, 0.3);
+      font-size: 16px;
+      font-weight: 600;
+      background: transparent;
+      color: var(--tg-theme-button-color);
+      transition: all 0.3s ease;
+      font-family: inherit;
+      cursor: pointer;
+    }
+    .btn-secondary:hover {
+      background: rgba(245, 166, 35, 0.1);
+      border-color: var(--tg-theme-button-color);
+      transform: translateY(-1px);
+    }
+    .btn-secondary:active {
+      transform: translateY(0);
+      opacity: 0.8;
     }
     .back-link {
       display: inline-flex;
@@ -211,6 +520,46 @@
     }
     .back-link .back-link-chevron { flex-shrink: 0; width: 16px; height: 16px; color: inherit; }
     .back-link:active { opacity: 0.7; }
+    
+    /* Анимации появления */
+    @keyframes card-enter {
+      from { 
+        opacity: 0; 
+        transform: translateY(10px); 
+      }
+      to { 
+        opacity: 1; 
+        transform: translateY(0); 
+      }
+    }
+    
+    @keyframes hero-enter {
+      from { 
+        opacity: 0; 
+        transform: translateY(20px) scale(0.98); 
+      }
+      to { 
+        opacity: 1; 
+        transform: translateY(0) scale(1); 
+      }
+    }
+    
+    .choice-card, .trainer-list-card {
+      animation: card-enter 0.38s cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+    
+    .choice-card:nth-child(1) { animation-delay: 0.05s; }
+    .choice-card:nth-child(2) { animation-delay: 0.1s; }
+    .choice-card:nth-child(3) { animation-delay: 0.15s; }
+    .choice-card:nth-child(4) { animation-delay: 0.2s; }
+    .choice-card:nth-child(5) { animation-delay: 0.25s; }
+    
+    .trainer-list-card:nth-child(1) { animation-delay: 0.05s; }
+    .trainer-list-card:nth-child(2) { animation-delay: 0.1s; }
+    .trainer-list-card:nth-child(3) { animation-delay: 0.15s; }
+    .trainer-list-card:nth-child(4) { animation-delay: 0.2s; }
+    .trainer-list-card:nth-child(5) { animation-delay: 0.25s; }
+    .trainer-list-card:nth-child(6) { animation-delay: 0.3s; }
     .pagination {
       display: flex;
       justify-content: center;
@@ -464,13 +813,164 @@
       gap: 12px;
     }
     .trainer-detail-secondary .back-link { margin-top: 0; }
+    .slot-pick-list .day-block { margin-bottom: 20px; }
+    .slot-pick-list .day-title {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--tg-theme-hint-color);
+      margin: 4px 0 12px 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
     .slot-pick-list .slot-card {
       display: flex; align-items: center; justify-content: space-between;
+      gap: 12px;
       padding: 14px 16px; margin-bottom: 8px; border-radius: 12px;
-      background: var(--tg-theme-secondary-bg-color); border: none; width: 100%; font: inherit; color: inherit; text-align: left; cursor: pointer;
+      background: var(--tg-theme-secondary-bg-color); 
+      border: 2px solid transparent; 
+      width: 100%; font: inherit; color: inherit; text-align: left; cursor: pointer;
+      transition: all 0.2s ease;
     }
-    .slot-pick-list .slot-card:active { opacity: 0.9; }
-    .slot-pick-list .slot-time { font-weight: 600; font-size: 16px; }
+    .slot-pick-list .slot-card:hover {
+      border-color: var(--tg-theme-button-color);
+      transform: translateY(-1px);
+    }
+    .slot-pick-list .slot-card:active { 
+      opacity: 0.8; 
+      transform: scale(0.98);
+    }
+    .slot-pick-list .slot-time { 
+      font-weight: 600; 
+      font-size: 16px; 
+      color: var(--tg-theme-text-color);
+    }
+    .slot-pick-list .slot-card span:last-child {
+      color: var(--tg-theme-button-color);
+      opacity: 0.7;
+      transition: opacity 0.2s ease;
+      flex-shrink: 0;
+    }
+    .slot-pick-list .slot-card:hover span:last-child {
+      opacity: 1;
+    }
+    
+    /* Дополнительные стили для темной темы */
+    @media (prefers-color-scheme: dark) {
+      .slot-pick-list .slot-card {
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+      }
+      .slot-pick-list .slot-card:hover {
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+      }
+      .trainer-card {
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+      }
+      .trainer-card:hover {
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+      }
+      .trainer-detail-photo-wrap {
+        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+      }
+      .trainer-detail-stat {
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+      }
+      .trainer-detail-service {
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+      }
+      .trainer-detail-desc {
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+      }
+    }
+    
+    /* Модальное окно отзывов */
+    .reviews-modal {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.5);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      padding: 20px;
+    }
+    .reviews-modal.show {
+      display: flex;
+    }
+    .reviews-modal-content {
+      background: var(--tg-theme-bg-color);
+      border-radius: 20px;
+      max-width: 500px;
+      width: 100%;
+      max-height: 80vh;
+      overflow-y: auto;
+      position: relative;
+    }
+    .reviews-modal-header {
+      padding: 20px 20px 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .reviews-modal-title {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--tg-theme-text-color);
+    }
+    .reviews-modal-close {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      border: none;
+      background: var(--tg-theme-secondary-bg-color);
+      color: var(--tg-theme-text-color);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+    }
+    .reviews-modal-body {
+      padding: 20px;
+    }
+    .review-item {
+      padding: 16px;
+      margin-bottom: 12px;
+      background: var(--tg-theme-secondary-bg-color);
+      border-radius: 12px;
+      border-left: 4px solid var(--tg-theme-button-color);
+    }
+    .review-rating {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--tg-theme-button-color);
+    }
+    .review-text {
+      font-size: 14px;
+      line-height: 1.5;
+      color: var(--tg-theme-text-color);
+    }
+    .review-date {
+      font-size: 12px;
+      color: var(--tg-theme-hint-color);
+      margin-top: 8px;
+    }
+    .reviews-loading {
+      text-align: center;
+      padding: 40px;
+      color: var(--tg-theme-hint-color);
+    }
+    .reviews-empty {
+      text-align: center;
+      padding: 40px;
+      color: var(--tg-theme-hint-color);
+    }
     .form-block { margin-bottom: 16px; }
     .form-block label { display: block; font-size: 13px; font-weight: 600; color: var(--tg-theme-hint-color); margin-bottom: 6px; }
     .form-block input, .form-block textarea {
@@ -526,7 +1026,10 @@
   (function(){var d=document.documentElement;d.style.setProperty('--tg-theme-button-color','#F7A600');d.style.setProperty('--tg-theme-button-text-color','#1a1a1a');d.style.setProperty('--tg-theme-bg-color',window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'#1a1a1a':'#FFFBEB');d.style.setProperty('--tg-theme-text-color',window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'#f5f5f5':'#1a1a1a');d.style.setProperty('--tg-theme-secondary-bg-color',window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'#2a2a2a':'#FFF3CC');})();
   </script>
   <div class="header">
-    <span class="header-title" id="headerTitle">Тренеры и запись</span>
+    <div class="bd-screen-head">
+      <div class="bd-screen-title">КАТАЛОГ</div>
+    </div>
+    <h1 class="header-title" id="headerTitle">Тренеры и запись</h1>
   </div>
 
   <div id="screenSummary" data-screen>
@@ -629,7 +1132,32 @@
   <script>
     (function() {
       const tg = window.Telegram && window.Telegram.WebApp;
-      if (tg) { tg.ready(); tg.expand(); }
+      if (tg) { 
+        tg.ready(); 
+        tg.expand(); 
+        if (typeof window.__applyCatalogTheme === 'function') {
+          window.__applyCatalogTheme();
+        }
+        function syncTelegramChromeColors() {
+          try {
+            var darkUi = tg.colorScheme === 'dark' ||
+              (tg.colorScheme !== 'light' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+            var bgHex = darkUi ? '#1c1c1c' : '#fffbec';
+            if (typeof tg.setHeaderColor === 'function') tg.setHeaderColor(bgHex);
+            if (typeof tg.setBackgroundColor === 'function') tg.setBackgroundColor(bgHex);
+            if (typeof tg.setBottomBarColor === 'function') tg.setBottomBarColor(bgHex);
+          } catch (e) { /* older clients */ }
+        }
+        syncTelegramChromeColors();
+        if (tg.onEvent) {
+          tg.onEvent('themeChanged', function () {
+            if (typeof window.__applyCatalogTheme === 'function') {
+              window.__applyCatalogTheme();
+            }
+            syncTelegramChromeColors();
+          });
+        }
+      }
 
       var state = {
         cityId: null,
@@ -651,7 +1179,9 @@
         requestForTrainer: null,
         requestFormOpenedFrom: null,
         activeTab: 'catalog',
-        openedFromMyTrainerTab: false
+        openedFromMyTrainerTab: false,
+        /** From GET /client/session — clients.phone for prefill in booking form */
+        clientPhone: ''
       };
       var prefetch = {
         firstPageKey: null,
@@ -830,6 +1360,52 @@
         return n || 'Тренер';
       }
 
+      /** One approved education row for catalog detail (matches /api/public/trainers/{id}/education). */
+      function formatCatalogEducationEntry(edu) {
+        if (!edu) return '';
+        var inst = (edu.institution_name || '').trim();
+        var prog = (edu.program_or_title || '').trim();
+        var deg = (edu.degree_level || '').trim();
+        var head = inst;
+        var sub = [prog, deg].filter(Boolean).join(', ');
+        var line = sub ? (head ? head + ' — ' + sub : sub) : head;
+        var y = '';
+        if (edu.is_in_progress) y = 'в процессе';
+        else {
+          var sy = edu.start_year;
+          var ey = edu.end_year;
+          if (sy != null && ey != null) y = sy + '–' + ey;
+          else if (ey != null) y = String(ey);
+          else if (sy != null) y = 'с ' + sy;
+        }
+        if (y) line = (line ? line + ' ' : '') + '(' + y + ')';
+        return (line || '').trim();
+      }
+
+      function openTrainerDetailFromTrainerObject(t, prefetchPhotos) {
+        if (!t || !t.id) return;
+        state.trainerId = t.id;
+        state.trainerName = trainerName(t);
+        persistTrainerSelection(t.id);
+        if (prefetchPhotos) {
+          var detailPhoto = t.photos && t.photos[0];
+          var pl = photoSrcList(detailPhoto);
+          var pf = photoSrcDetail(detailPhoto);
+          if (pl) { var iml = new Image(); iml.decoding = 'async'; iml.src = pl; }
+          if (pf && pf !== pl) { var imf = new Image(); imf.decoding = 'async'; imf.fetchPriority = 'high'; imf.src = pf; }
+        }
+        loadTrainerById(t.id).then(function(full) {
+          state.selectedTrainer = full || t;
+          state.trainerName = trainerName(state.selectedTrainer);
+          renderTrainerDetail();
+          showScreen('screenTrainerDetail');
+        }).catch(function() {
+          state.selectedTrainer = t;
+          renderTrainerDetail();
+          showScreen('screenTrainerDetail');
+        });
+      }
+
       function getJson(path, params) {
         var q = params ? '?' + Object.keys(params).map(function(k) { return k + '=' + encodeURIComponent(params[k]); }).join('&') : '';
         return fetch('/api/public' + path + q).then(function(r) { return r.json(); });
@@ -900,6 +1476,24 @@
         else { state.arenaId = null; state.arenaName = 'Любая'; }
         if (session.trainer_id) { state.trainerId = session.trainer_id; state.trainerName = session.trainer_name || ''; }
         else { state.trainerId = null; state.trainerName = ''; }
+        state.clientPhone =
+          session.client_phone != null && session.client_phone !== undefined
+            ? String(session.client_phone).trim()
+            : '';
+      }
+
+      /** Refresh client phone from API (e.g. before booking form) so DB updates are visible. */
+      function refreshClientPhoneForBookingForm(cb) {
+        getClientSession().then(function(session) {
+          applySessionToState(session);
+          if (cb) cb();
+        }).catch(function() { if (cb) cb(); });
+      }
+
+      function prefillBookingPhoneField() {
+        var el = document.getElementById('bookingPhone');
+        if (!el) return;
+        el.value = (state.clientPhone || '').trim();
       }
 
       function persistTrainerSelection(trainerId) {
@@ -988,7 +1582,7 @@
             return;
           }
           var html = items.map(function(c) {
-            return '<button type="button" class="choice-card" data-id="' + c.id + '" data-name="' + (c.name || '').replace(/"/g, '&quot;') + '">' + (c.name || '') + '<span class="arrow">→</span></button>';
+            return '<button type="button" class="choice-card" data-id="' + c.id + '" data-name="' + (c.name || '').replace(/"/g, '&quot;') + '"><div class="main"><div class="label">Город</div><div class="value">' + (c.name || '') + '</div></div><span class="arrow">→</span></button>';
           }).join('');
           document.getElementById('cityList').innerHTML = html;
           document.getElementById('backFromCityToSummary').style.display = state.returnToSummary ? 'block' : 'none';
@@ -1025,7 +1619,7 @@
             return;
           }
           var html = items.map(function(s) {
-            return '<button type="button" class="choice-card" data-id="' + s.id + '" data-name="' + (s.name || '').replace(/"/g, '&quot;') + '">' + (s.name || '') + '<span class="arrow">→</span></button>';
+            return '<button type="button" class="choice-card" data-id="' + s.id + '" data-name="' + (s.name || '').replace(/"/g, '&quot;') + '"><div class="main"><div class="label">Услуга</div><div class="value">' + (s.name || '') + '</div></div><span class="arrow">→</span></button>';
           }).join('');
           document.getElementById('serviceList').innerHTML = html;
           document.getElementById('backFromServiceToSummary').style.display = state.returnToSummary ? 'block' : 'none';
@@ -1056,9 +1650,9 @@
         document.getElementById('arenaList').innerHTML = '<div class="loading">Загрузка...</div>';
         getJson('/arenas', { city_id: state.cityId }).then(function(data) {
           var items = data.items || [];
-          var html = '<button type="button" class="choice-card" data-id="" data-name="Любая">Любая<span class="arrow">→</span></button>';
+          var html = '<button type="button" class="choice-card" data-id="" data-name="Любая"><div class="main"><div class="label">Арена</div><div class="value">Любая</div></div><span class="arrow">→</span></button>';
           html += items.map(function(a) {
-            return '<button type="button" class="choice-card" data-id="' + a.id + '" data-name="' + (a.name || '').replace(/"/g, '&quot;') + '">' + (a.name || '') + '<span class="arrow">→</span></button>';
+            return '<button type="button" class="choice-card" data-id="' + a.id + '" data-name="' + (a.name || '').replace(/"/g, '&quot;') + '"><div class="main"><div class="label">Арена</div><div class="value">' + (a.name || '') + '</div></div><span class="arrow">→</span></button>';
           }).join('');
           document.getElementById('arenaList').innerHTML = html;
           document.getElementById('backFromArenaToSummary').style.display = state.returnToSummary ? 'block' : 'none';
@@ -1227,17 +1821,7 @@
             btn.onclick = function() {
               var idx = parseInt(btn.dataset.index, 10);
               var t = state.trainers[idx];
-              state.selectedTrainer = t;
-              state.trainerId = t.id;
-              state.trainerName = trainerName(t);
-              persistTrainerSelection(t.id);
-              var detailPhoto = t.photos && t.photos[0];
-              var pl = photoSrcList(detailPhoto);
-              var pf = photoSrcDetail(detailPhoto);
-              if (pl) { var iml = new Image(); iml.decoding = 'async'; iml.src = pl; }
-              if (pf && pf !== pl) { var imf = new Image(); imf.decoding = 'async'; imf.fetchPriority = 'high'; imf.src = pf; }
-              renderTrainerDetail();
-              showScreen('screenTrainerDetail');
+              openTrainerDetailFromTrainerObject(t, true);
             };
           });
           var page = Math.floor(state.offset / state.limit) + 1;
@@ -1277,13 +1861,7 @@
             state.openTrainerIdAfterLoad = null;
             var idx = state.trainers.findIndex(function(t) { return t.id === wantId; });
             if (idx >= 0) {
-              var t = state.trainers[idx];
-              state.selectedTrainer = t;
-              state.trainerId = t.id;
-              state.trainerName = trainerName(t);
-              persistTrainerSelection(t.id);
-              renderTrainerDetail();
-              showScreen('screenTrainerDetail');
+              openTrainerDetailFromTrainerObject(state.trainers[idx], true);
             }
           }
         }).catch(function() {
@@ -1362,14 +1940,67 @@
           }
           html += '</div>';
         }
+        html += '<div class="trainer-detail-header">';
         html += '<div class="trainer-detail-name">' + name + '</div>';
-        html += '<div class="trainer-detail-meta">Рейтинг: ' + ratingStr + '</div>';
-        html += '<div class="trainer-detail-meta">Возраст: ' + ageStr + '</div>';
-        html += '<div class="trainer-detail-meta">Опыт: ' + expStr + '</div>';
-        html += '<div class="trainer-detail-meta">Занятие: ' + duration + ' мин</div>';
-        html += '<div class="trainer-detail-meta">Арены: ' + arenasStr + '</div>';
-        html += '<div class="trainer-detail-meta">Услуги: ' + servicesStr + '</div>';
-        html += '<div class="trainer-detail-desc">' + desc + '</div>';
+        if (ratingStr !== '—') {
+          html += '<div class="trainer-detail-rating" style="cursor: pointer;" onclick="showTrainerReviews(' + t.id + ')">⭐ ' + ratingStr + '</div>';
+        }
+        html += '</div>';
+        
+        html += '<div class="trainer-detail-stats">';
+        html += '<div class="trainer-detail-stat">';
+        html += '<div class="trainer-detail-stat-label">Возраст</div>';
+        html += '<div class="trainer-detail-stat-value">' + ageStr + '</div>';
+        html += '</div>';
+        html += '<div class="trainer-detail-stat">';
+        html += '<div class="trainer-detail-stat-label">Опыт</div>';
+        html += '<div class="trainer-detail-stat-value">' + (p.experience_years != null ? p.experience_years + ' лет' : '—') + '</div>';
+        html += '</div>';
+        html += '<div class="trainer-detail-stat">';
+        html += '<div class="trainer-detail-stat-label">Занятие</div>';
+        html += '<div class="trainer-detail-stat-value">' + duration + ' мин</div>';
+        html += '</div>';
+        html += '<div class="trainer-detail-stat">';
+        html += '<div class="trainer-detail-stat-label">Арены</div>';
+        html += '<div class="trainer-detail-stat-value">' + arenasStr + '</div>';
+        html += '</div>';
+        html += '</div>';
+        
+        if (services.length > 0) {
+          html += '<div class="trainer-detail-services">';
+          html += '<div class="trainer-detail-services-title">Услуги и цены</div>';
+          services.forEach(function(s) {
+            var serviceName = s.service_name || '—';
+            var priceText = s.price_byn != null ? (s.price_byn === Math.floor(s.price_byn) ? s.price_byn : s.price_byn.toFixed(2)) + ' BYN' : 'по запросу';
+            html += '<div class="trainer-detail-service">';
+            html += '<span class="trainer-detail-service-name">' + serviceName + '</span>';
+            html += '<span class="trainer-detail-service-price">' + priceText + '</span>';
+            html += '</div>';
+          });
+          html += '</div>';
+        }
+        
+        var eduRows = t.education_entries;
+        if (eduRows && eduRows.length > 0) {
+          html += '<div class="trainer-detail-education">';
+          html += '<div class="trainer-detail-education-title">Образование</div>';
+          eduRows.forEach(function(edu) {
+            var eduText = formatCatalogEducationEntry(edu);
+            if (eduText) {
+              html += '<div class="trainer-detail-education-item">' + escapeHtml(eduText) + '</div>';
+            }
+          });
+          html += '</div>';
+        } else if (p.education && typeof p.education === 'string' && p.education.trim()) {
+          html += '<div class="trainer-detail-education">';
+          html += '<div class="trainer-detail-education-title">Образование</div>';
+          html += '<div class="trainer-detail-education-item">' + escapeHtml(p.education.trim()).replace(/\n/g, '<br>') + '</div>';
+          html += '</div>';
+        }
+        
+        if (desc !== '—') {
+          html += '<div class="trainer-detail-desc">' + desc + '</div>';
+        }
         var photoSourceLabel = (detailPhoto && detailPhoto._source === 'cdn') ? 'Фото: через CDN' : (detailPhoto && detailPhoto._source === 'direct') ? 'Фото: напрямую с S3' : 'Фото: через сервер';
         html += '<div class="photo-source-hint trainer-detail-photo-source">' + photoSourceLabel + '</div>';
         document.getElementById('trainerDetailContent').innerHTML = html;
@@ -1389,7 +2020,7 @@
             phoneLine;
           state.slotsForTrainer = [];
           var actionsEl = document.getElementById('trainerDetailActions');
-          actionsEl.innerHTML = '<button type="button" class="btn-block btn-leave-request" data-action="leave-request">Оставить заявку</button>';
+          actionsEl.innerHTML = '<button type="button" class="btn-secondary" data-action="leave-request">Оставить заявку</button>';
           var secondaryEl = document.getElementById('trainerDetailSecondary');
           if (!state.openedFromMyTrainerTab) {
             secondaryEl.innerHTML = '<button type="button" class="back-link" data-action="back-to-list"><svg class="back-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>К списку тренеров</button>';
@@ -1424,20 +2055,24 @@
               var i = parseInt(btn.dataset.slotIndex, 10);
               state.selectedSlot = state.slotsForTrainer[i];
               document.getElementById('bookingFormSlotLabel').textContent = 'Выбрано: ' + formatSlotLabel(state.selectedSlot);
-              document.getElementById('bookingPhone').value = '';
               document.getElementById('bookingComment').value = '';
-              showScreen('screenBookingForm');
+              refreshClientPhoneForBookingForm(function() {
+                prefillBookingPhoneField();
+                showScreen('screenBookingForm');
+              });
             };
           });
           var btnMore = document.getElementById('btnShowAllSlots');
           if (btnMore) btnMore.onclick = function() { renderSlotPickList(); showScreen('screenSlotPick'); };
+          // Очищаем и добавляем кнопки с новым дизайном
+          actionsEl.innerHTML = '';
           if (slots.length > 0) {
-            actionsEl.innerHTML += '<button type="button" class="btn-block btn-primary" id="btnBookFromDetail">Записаться</button>';
+            actionsEl.innerHTML += '<button type="button" class="btn-primary" id="btnBookFromDetail">Записаться</button>';
           }
+          actionsEl.innerHTML += '<button type="button" class="btn-secondary" data-action="leave-request">Оставить заявку</button>';
           if (t.has_pass_products || t.has_certificate_products) {
-            actionsEl.innerHTML += '<button type="button" class="btn-block btn-pass-block" data-action="buy-pass">📦 Абонементы/Сертификаты</button>';
+            actionsEl.innerHTML += '<button type="button" class="btn-secondary" data-action="buy-pass" style="margin-top: 8px;">Абонементы/Сертификаты</button>';
           }
-          actionsEl.innerHTML += '<button type="button" class="btn-block btn-leave-request" data-action="leave-request">Оставить заявку</button>';
           var btnBook = document.getElementById('btnBookFromDetail');
           if (btnBook) btnBook.onclick = function() { renderSlotPickList(); showScreen('screenSlotPick'); };
           var secondaryEl = document.getElementById('trainerDetailSecondary');
@@ -1448,7 +2083,7 @@
           }
         }).catch(function() {
           document.getElementById('trainerDetailSlots').innerHTML = '<div class="slots-title">Ближайшие слоты</div><div class="slots-empty">Не удалось загрузить слоты</div>';
-          document.getElementById('trainerDetailActions').innerHTML = '<button type="button" class="btn-block btn-leave-request" data-action="leave-request">Оставить заявку</button>';
+          document.getElementById('trainerDetailActions').innerHTML = '<button type="button" class="btn-secondary" data-action="leave-request">Оставить заявку</button>';
           var secondaryEl = document.getElementById('trainerDetailSecondary');
           if (!state.openedFromMyTrainerTab) {
             secondaryEl.innerHTML = '<button type="button" class="back-link" data-action="back-to-list"><svg class="back-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>К списку тренеров</button>';
@@ -1461,20 +2096,61 @@
       function renderSlotPickList() {
         var list = document.getElementById('slotPickList');
         var slots = state.slotsForTrainer || [];
-        list.innerHTML = slots.length === 0
-          ? '<div class="slots-empty">Нет слотов</div>'
-          : slots.map(function(s, i) {
-              return '<button type="button" class="slot-card" data-slot-index="' + i + '">' +
-                '<span class="slot-time">' + formatSlotLabel(s) + '</span><span>→</span></button>';
-            }).join('');
+        
+        if (slots.length === 0) {
+          list.innerHTML = '<div class="slots-empty">Нет слотов</div>';
+          return;
+        }
+        
+        // Группируем слоты по дням
+        var byDay = {};
+        slots.forEach(function(s, i) {
+          var date = s.slot_date || '';
+          if (!byDay[date]) byDay[date] = [];
+          byDay[date].push({ slot: s, index: i });
+        });
+        
+        var days = Object.keys(byDay).sort();
+        var html = '';
+        
+        days.forEach(function(dateKey) {
+          var daySlots = byDay[dateKey].sort(function(a, b) { 
+            return (a.slot.start_time || '').localeCompare(b.slot.start_time || ''); 
+          });
+          
+          // Форматируем заголовок дня
+          var d = dateKey.split('-');
+          if (d.length === 3) {
+            var day = parseInt(d[2], 10);
+            var month = parseInt(d[1], 10) - 1;
+            var dateObj = new Date(d[0], month, day);
+            var dayName = SLOT_DAYS[dateObj.getDay()];
+            var dateStr = day + '.' + String(month + 1).padStart(2, '0') + ' (' + dayName + ')';
+            html += '<div class="day-block"><div class="day-title">' + dateStr + '</div>';
+          }
+          
+          daySlots.forEach(function(item) {
+            var s = item.slot;
+            var i = item.index;
+            html += '<button type="button" class="slot-card" data-slot-index="' + i + '">' +
+              '<span class="slot-time">' + (s.start_time || '') + '–' + (s.end_time || '') + '</span><span>→</span></button>';
+          });
+          
+          html += '</div>';
+        });
+        
+        list.innerHTML = html;
+        
         list.querySelectorAll('.slot-card').forEach(function(btn) {
           btn.onclick = function() {
             var i = parseInt(btn.dataset.slotIndex, 10);
             state.selectedSlot = state.slotsForTrainer[i];
             document.getElementById('bookingFormSlotLabel').textContent = 'Выбрано: ' + formatSlotLabel(state.selectedSlot);
-            document.getElementById('bookingPhone').value = '';
             document.getElementById('bookingComment').value = '';
-            showScreen('screenBookingForm');
+            refreshClientPhoneForBookingForm(function() {
+              prefillBookingPhoneField();
+              showScreen('screenBookingForm');
+            });
           };
         });
       }
@@ -1744,7 +2420,69 @@
           setTimeout(prefetchFirstPageIfNeeded, 0);
         }
       });
+      
+      // Функция для показа отзывов тренера
+      window.showTrainerReviews = function(trainerId) {
+        var modal = document.getElementById('reviewsModal');
+        var modalBody = document.getElementById('reviewsModalBody');
+        var modalTitle = document.getElementById('reviewsModalTitle');
+        
+        modalTitle.textContent = 'Отзывы о тренере';
+        modalBody.innerHTML = '<div class="reviews-loading">Загрузка отзывов...</div>';
+        modal.classList.add('show');
+        
+        // Загружаем отзывы
+        var initData = tg ? tg.initData : '';
+        var headers = {};
+        if (initData) headers['X-Telegram-Init-Data'] = initData;
+        
+        fetch('/api/webapp/trainer/' + trainerId + '/reviews', { headers: headers })
+          .then(function(res) { return res.json(); })
+          .then(function(data) {
+            var reviews = data.reviews || [];
+            if (reviews.length === 0) {
+              modalBody.innerHTML = '<div class="reviews-empty">У этого тренера пока нет отзывов</div>';
+              return;
+            }
+            
+            var html = '';
+            reviews.forEach(function(review) {
+              html += '<div class="review-item">';
+              html += '<div class="review-rating">⭐ ' + review.rating + '/5</div>';
+              if (review.comment) {
+                html += '<div class="review-text">' + escapeHtml(review.comment) + '</div>';
+              }
+              if (review.created_at) {
+                var date = new Date(review.created_at).toLocaleDateString('ru-RU');
+                html += '<div class="review-date">' + date + '</div>';
+              }
+              html += '</div>';
+            });
+            modalBody.innerHTML = html;
+          })
+          .catch(function() {
+            modalBody.innerHTML = '<div class="reviews-empty">Не удалось загрузить отзывы</div>';
+          });
+      };
+      
+      // Закрытие модального окна
+      window.closeReviewsModal = function() {
+        document.getElementById('reviewsModal').classList.remove('show');
+      };
     })();
   </script>
+  
+  <!-- Модальное окно отзывов -->
+  <div id="reviewsModal" class="reviews-modal" onclick="if(event.target === this) closeReviewsModal()">
+    <div class="reviews-modal-content">
+      <div class="reviews-modal-header">
+        <div id="reviewsModalTitle" class="reviews-modal-title">Отзывы</div>
+        <button type="button" class="reviews-modal-close" onclick="closeReviewsModal()">×</button>
+      </div>
+      <div id="reviewsModalBody" class="reviews-modal-body">
+        <!-- Контент отзывов -->
+      </div>
+    </div>
+  </div>
 </body>
 </html>

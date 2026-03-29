@@ -335,14 +335,6 @@ async def _send_trainer_invite_package(chat_message: Message, telegram_id: int) 
     await chat_message.answer(plain, parse_mode=None)
 
 
-@router.message(Command("invite"))
-async def cmd_invite(message: Message) -> None:
-    """Ready-made client message: bot deep link + catalog (HTTPS)."""
-    await _trainer_typing(message.bot, message.chat.id)
-    uid = message.from_user.id if message.from_user else 0
-    await _send_trainer_invite_package(message, uid)
-
-
 @router.message(Command("profile"))
 async def cmd_profile(message: Message) -> None:
     """Status card + single Web App entry to trainer-profile Mini App (HTTPS)."""
@@ -909,7 +901,7 @@ def _format_iso_date_ru(iso: str | None) -> str:
 
 @router.message(Command("subscription"))
 async def cmd_subscription(message: Message) -> None:
-    """Subscription status + Web App constructor (tier CRM / Online / Analytics) and optional legacy payment."""
+    """Краткий статус подписки + мини-приложение тарифов."""
     await _trainer_typing(message.bot, message.chat.id)
     telegram_id = message.from_user.id if message.from_user else 0
     async with async_session_factory() as session:
@@ -919,28 +911,21 @@ async def cmd_subscription(message: Message) -> None:
         return
     base = (Settings().webapp_base_url or "").rstrip("/")
     constructor_url = f"{base}/webapp/trainer-subscription" if base and base.startswith("https://") else None
-    pay_url = f"{base}/webapp/trainer-pay-subscription" if base and base.startswith("https://") else None
     async with async_session_factory() as session:
         tier_status = await get_trainer_subscription_status(session, trainer_id)
         eff = (tier_status.get("effective_tier") or "none").strip().lower()
-        hint = msg.TRAINER_SUBSCRIPTION_CONSTRUCTOR_HINT
         if eff != "none" and tier_status.get("is_active") and tier_status.get("expires_at"):
             expires_date = _format_iso_date_ru(tier_status.get("expires_at"))
             text = msg.TRAINER_SUBSCRIPTION_WITH_TIER.format(
                 tier_name=_subscription_tier_name_ru(eff),
                 expires_date=expires_date,
-                hint=hint,
             )
         else:
-            text = msg.TRAINER_SUBSCRIPTION_WITHOUT_TIER.format(hint=hint)
+            text = msg.TRAINER_SUBSCRIPTION_WITHOUT_TIER
         rows: list[list[InlineKeyboardButton]] = []
         if constructor_url:
             rows.append(
                 [InlineKeyboardButton(text=msg.TRAINER_BUTTON_SUBSCRIPTION_CONSTRUCTOR, web_app=WebAppInfo(url=constructor_url))]
-            )
-        if pay_url:
-            rows.append(
-                [InlineKeyboardButton(text=msg.TRAINER_BUTTON_PAY_SUBSCRIPTION, web_app=WebAppInfo(url=pay_url))]
             )
         kb = InlineKeyboardMarkup(inline_keyboard=rows) if rows else None
         await sync_trainer_menu_commands(message.bot, message.chat.id, trainer_id, session)

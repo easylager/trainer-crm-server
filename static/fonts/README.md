@@ -1,11 +1,23 @@
 # Шрифты для PDF-сертификатов
 
-Чтобы кириллица в сертификатах отображалась (а не квадратики), в PDF подставляется шрифт с поддержкой кириллицы.
+Для корректного отображения кириллицы в PDF-сертификатах используется шрифт **Inter** (SIL Open Font License).
 
-- **macOS:** используются системные шрифты (Arial Unicode, Arial Bold из `/System/Library/Fonts/Supplemental/`).
-- **Linux / Docker:** положите сюда:
-  - `DejaVuSans.ttf` и `DejaVuSans-Bold.ttf` — основной текст;
-  - `DejaVuSerif-Bold.ttf` — заголовок и имя получателя (более «подарочный» вид).
-  Скачать: https://dejavu-fonts.github.io/Download.html
+## Файлы в этом каталоге
 
-Без подходящего шрифта в PDF будет использоваться Helvetica — кириллица отобразится как квадраты.
+- `Inter-Regular.ttf` — основной текст
+- `Inter-Bold.ttf` — заголовки, код сертификата
+- `Inter-SemiBold.ttf` — промежуточные акценты
+
+Шрифты скачаны из [github.com/rsms/inter](https://github.com/rsms/inter/releases).
+
+## Fallback (Linux / Docker)
+
+Если Inter отсутствует, код попробует:
+- `DejaVuSans.ttf` / `DejaVuSans-Bold.ttf` из этого каталога или системных путей
+- Системные шрифты macOS (Arial Unicode)
+
+Скачать DejaVu: https://dejavu-fonts.github.io/Download.html
+
+## Устаревшие файлы
+
+- `DMSans-Regular.ttf` — можно удалить (variable font без кириллицы, не используется)

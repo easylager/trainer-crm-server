@@ -16,13 +16,12 @@ def trainer_command_list(include_stats: bool) -> list[BotCommand]:
     """Commands shown in Telegram menu (left of input). Stats only for Analytics tier."""
     cmds: list[BotCommand] = [
         BotCommand(command="guide", description="Помощь"),
-        BotCommand(command="invite", description="Пригласить клиента"),
         BotCommand(command="profile", description="Профиль"),
         BotCommand(command="editor", description="Расписание"),
         BotCommand(command="requests", description="Заявки клиентов"),
         BotCommand(command="clients", description="Мои клиенты"),
         BotCommand(command="passes", description="Абонементы/Сертификаты"),
-        BotCommand(command="subscription", description="Подписка — конструктор тарифа"),
+        BotCommand(command="subscription", description="Подписки"),
     ]
     if include_stats:
         cmds.append(BotCommand(command="stats", description="Статистика"))

@@ -7,69 +7,119 @@
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="theme.css" />
-  <style>
-    :root {
-      --card-bg: #242424;
-      --accent: var(--app-accent);
-      --accent-dim: rgba(247, 166, 0, 0.25);
-      --up: #22c55e;
-      --down: #ef4444;
-      --muted: #71717a;
-    }
-    @media (prefers-color-scheme: light) {
-      :root {
-        --card-bg: #fff;
-        --accent-dim: rgba(247, 166, 0, 0.35);
-        --muted: #555;
+  <link rel="stylesheet" href="mini-app-components.css" />
+  <script>
+    (function () {
+      function isAppDark() {
+        var tg = window.Telegram && window.Telegram.WebApp;
+        if (tg && tg.colorScheme) return tg.colorScheme === 'dark';
+        return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
       }
+      function applyAppTheme() {
+        var d = document.documentElement;
+        var dark = isAppDark();
+        d.style.setProperty('--tg-theme-button-color', '#f5a623');
+        d.style.setProperty('--tg-theme-button-text-color', '#1a1a1a');
+        d.style.setProperty('--tg-theme-bg-color', dark ? '#000000' : '#fffbec');
+        d.style.setProperty('--tg-theme-text-color', dark ? '#ffffff' : '#1a1a1a');
+        d.style.setProperty('--tg-theme-secondary-bg-color', dark ? '#1c1c1e' : '#fff5e1');
+        d.style.setProperty('--tg-theme-hint-color', dark ? '#8e8e93' : '#666666');
+      }
+      applyAppTheme();
+      if (window.matchMedia) {
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyAppTheme);
+      }
+      window.__applyStatsTheme = applyAppTheme;
+    })();
+  </script>
+  <style>
+    /* Shell: theme.css + mini-app-components.css */
+    :root {
+      --card-bg: var(--tg-theme-secondary-bg-color);
+      --accent: var(--tg-theme-button-color);
+      --accent-dim: rgba(247, 166, 0, 0.25);
+      --up: #34c759;
+      --down: #ff3b30;
+      --muted: var(--tg-theme-hint-color);
     }
-    * { box-sizing: border-box; }
     body {
-      margin: 0;
-      font-family: 'Manrope', -apple-system, BlinkMacSystemFont, sans-serif;
-      background: var(--tg-theme-bg-color);
-      color: var(--tg-theme-text-color);
-      min-height: 100vh;
-      padding: 16px;
+      font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       padding-bottom: calc(24px + env(safe-area-inset-bottom, 0));
     }
-    .header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 24px;
+    /* Hero — same as schedule.html .bd-hero */
+    .stats-hero {
+      position: relative;
+      border-radius: 20px;
+      padding: 20px 20px 22px;
+      margin-bottom: 18px;
+      overflow: hidden;
+      background: linear-gradient(155deg, rgba(247, 166, 0, 0.14) 0%, rgba(247, 166, 0, 0.04) 48%, transparent 100%);
+      border: 1px solid rgba(247, 166, 0, 0.28);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
     }
-    .header h1 {
+    .stats-hero::before {
+      content: '';
+      position: absolute;
+      top: -40%;
+      right: -20%;
+      width: 55%;
+      height: 120%;
+      background: radial-gradient(ellipse, rgba(247, 166, 0, 0.22) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .stats-hero-inner { position: relative; z-index: 1; }
+    .stats-hero-kicker {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--tg-theme-hint-color);
+      margin: 0 0 10px;
+    }
+    .stats-hero-title {
       margin: 0;
-      font-size: 24px;
+      font-size: clamp(22px, 5.5vw, 26px);
       font-weight: 700;
-      letter-spacing: -0.02em;
+      letter-spacing: -0.04em;
+      line-height: 1.15;
+      color: var(--tg-theme-text-color);
+    }
+    .stats-hero-sub {
+      margin: 10px 0 0;
+      font-size: 14px;
+      line-height: 1.45;
+      color: var(--tg-theme-hint-color);
+      font-weight: 500;
     }
     .loading, .error {
       text-align: center;
-      padding: 48px 24px;
+      padding: 36px 20px;
+      border-radius: 18px;
+      background: var(--tg-theme-secondary-bg-color);
+      border: 1px solid rgba(128, 128, 128, 0.12);
+      box-shadow: 0 2px 14px rgba(0, 0, 0, 0.06);
       color: var(--tg-theme-hint-color);
     }
-    .error { color: #ef4444; }
+    .error { color: var(--down); }
 
-    /* Hero KPIs */
-    .hero {
+    /* KPI Grid (top stats cards) */
+    .kpi-top-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 12px;
-      margin-bottom: 24px;
+      gap: 10px;
+      margin-bottom: 18px;
     }
-    .hero-card {
-      background: linear-gradient(145deg, var(--card-bg) 0%, var(--tg-theme-secondary-bg-color) 100%);
-      border-radius: 20px;
-      padding: 20px;
-      border: 1px solid rgba(255,255,255,0.06);
+    .kpi-top-card {
+      background: var(--tg-theme-secondary-bg-color);
+      border-radius: 16px;
+      padding: 16px 14px;
+      border: 1px solid rgba(128, 128, 128, 0.1);
       position: relative;
       overflow: hidden;
     }
-    .hero-card::before {
+    .kpi-top-card::before {
       content: '';
       position: absolute;
       top: 0;
@@ -77,60 +127,61 @@
       right: 0;
       height: 3px;
       background: linear-gradient(90deg, var(--accent), transparent);
-      opacity: 0.8;
+      opacity: 0.7;
     }
-    .hero-label {
-      font-size: 12px;
+    .kpi-top-label {
+      font-size: 11px;
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.06em;
       color: var(--tg-theme-hint-color);
-      margin-bottom: 4px;
+      margin-bottom: 6px;
     }
-    .hero-value-row {
+    .kpi-top-value-row {
       display: flex;
       flex-direction: column;
       align-items: flex-start;
-      gap: 6px;
+      gap: 4px;
     }
-    .hero-value {
-      font-size: 32px;
+    .kpi-top-value {
+      font-size: 28px;
       font-weight: 700;
       letter-spacing: -0.03em;
       line-height: 1.1;
+      color: var(--tg-theme-text-color);
     }
-    .hero-sub {
-      font-size: 13px;
-      color: var(--muted);
-      margin-top: 6px;
-    }
-    .hero-trend {
-      display: inline-block;
+    .kpi-top-sub {
       font-size: 12px;
-      font-weight: 600;
-      padding: 2px 8px;
-      border-radius: 6px;
-      margin-left: 0;
+      color: var(--tg-theme-hint-color);
+      margin-top: 4px;
     }
-    .hero-trend.up { background: rgba(34, 197, 94, 0.2); color: var(--up); }
-    .hero-trend.down { background: rgba(239, 68, 68, 0.2); color: var(--down); }
+    .kpi-top-trend {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 7px;
+      border-radius: 6px;
+    }
+    .kpi-top-trend.up { background: rgba(52, 199, 89, 0.18); color: var(--up); }
+    .kpi-top-trend.down { background: rgba(255, 59, 48, 0.18); color: var(--down); }
 
     /* Section */
     .section {
-      margin-bottom: 28px;
+      margin-bottom: 22px;
     }
     .section-title {
-      font-size: 15px;
+      font-size: 14px;
       font-weight: 700;
-      margin-bottom: 14px;
+      margin-bottom: 12px;
       color: var(--tg-theme-text-color);
+      letter-spacing: -0.01em;
     }
     .card {
-      background: var(--card-bg);
+      background: var(--tg-theme-secondary-bg-color);
       border-radius: 16px;
-      padding: 18px 20px;
-      border: 1px solid rgba(255,255,255,0.05);
-      margin-bottom: 12px;
+      padding: 16px 18px;
+      border: 1px solid rgba(128, 128, 128, 0.1);
+      margin-bottom: 10px;
     }
 
     /* Bar chart by day */
@@ -204,32 +255,33 @@
     .kpi-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 12px;
+      gap: 10px;
     }
     .kpi-card {
-      background: var(--card-bg);
+      background: var(--tg-theme-secondary-bg-color);
       border-radius: 14px;
-      padding: 16px;
-      border: 1px solid rgba(255,255,255,0.05);
+      padding: 14px;
+      border: 1px solid rgba(128, 128, 128, 0.1);
     }
     .kpi-label {
-      font-size: 11px;
+      font-size: 10px;
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.05em;
       color: var(--tg-theme-hint-color);
-      margin-bottom: 6px;
+      margin-bottom: 5px;
     }
     .kpi-value {
-      font-size: 22px;
+      font-size: 20px;
       font-weight: 700;
+      color: var(--tg-theme-text-color);
     }
-    .kpi-value.rating { font-size: 20px; }
+    .kpi-value.rating { font-size: 18px; }
     .stars {
-      color: #fbbf24;
+      color: #f5a623;
       letter-spacing: 2px;
     }
-    .kpi-sub { font-size: 12px; color: var(--muted); margin-top: 4px; }
+    .kpi-sub { font-size: 11px; color: var(--tg-theme-hint-color); margin-top: 3px; }
 
     /* Insights */
     .insight {
@@ -237,13 +289,13 @@
       align-items: flex-start;
       gap: 12px;
       padding: 14px 16px;
-      background: var(--accent-dim);
+      background: rgba(247, 166, 0, 0.12);
       border-radius: 12px;
       margin-bottom: 10px;
-      border: 1px solid rgba(99, 102, 241, 0.2);
+      border: 1px solid rgba(247, 166, 0, 0.22);
     }
-    .insight-icon { font-size: 20px; flex-shrink: 0; }
-    .insight-text { font-size: 14px; color: var(--tg-theme-text-color); line-height: 1.4; }
+    .insight-icon { font-size: 18px; flex-shrink: 0; }
+    .insight-text { font-size: 13px; color: var(--tg-theme-text-color); line-height: 1.45; }
     .finance-list {
       display: flex;
       flex-direction: column;
@@ -272,26 +324,16 @@
       color: var(--tg-theme-hint-color);
       font-size: 14px;
     }
-    /* JUSTSKATE.BY — перебиваем тему Telegram */
-    body { background: #1a1a1a !important; color: #f5f5f5 !important; }
-    .hero-card, .card, .kpi-card, .insight { background: #242424 !important; border-color: rgba(255,255,255,0.06) !important; }
-    .hero-card::before { background: linear-gradient(90deg, #F7A600, transparent) !important; }
-    .chart-bar { background: linear-gradient(180deg, #F7A600 0%, rgba(247,166,0,0.25) 100%) !important; }
-    .trend-bar.active { background: #F7A600 !important; }
-    @media (prefers-color-scheme: light) {
-      body { background: #FFFBEB !important; color: #1a1a1a !important; }
-      .hero-card, .card, .kpi-card { background: #fff !important; }
-      .insight { background: rgba(247,166,0,0.2) !important; }
-    }
   </style>
 </head>
 <body>
-  <script>
-  (function(){var d=document.documentElement;d.style.setProperty('--tg-theme-button-color','#F7A600');d.style.setProperty('--tg-theme-button-text-color','#1a1a1a');d.style.setProperty('--tg-theme-bg-color',window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'#1a1a1a':'#FFFBEB');d.style.setProperty('--tg-theme-text-color',window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'#f5f5f5':'#1a1a1a');d.style.setProperty('--tg-theme-secondary-bg-color',window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'#2a2a2a':'#FFF3CC');d.style.setProperty('--accent','#F7A600');})();
-  </script>
-  <div class="header">
-    <h1>📊 Статистика</h1>
-  </div>
+  <section class="stats-hero">
+    <div class="stats-hero-inner">
+      <p class="stats-hero-kicker">Аналитика</p>
+      <h1 class="stats-hero-title">Ваша статистика</h1>
+      <p class="stats-hero-sub">Тренировки, клиенты и доход за выбранный период</p>
+    </div>
+  </section>
 
   <div id="content">
     <div class="loading">Загрузка…</div>
@@ -338,7 +380,7 @@
         if (pct == null || pct === 0) return '';
         var cls = pct > 0 ? 'up' : 'down';
         var sign = pct > 0 ? '+' : '';
-        return '<span class="hero-trend ' + cls + '">' + sign + pct + '% к прошл. периоду</span>';
+        return '<span class="kpi-top-trend ' + cls + '">' + sign + pct + '%</span>';
       }
 
       function renderStars(avg) {
@@ -360,18 +402,18 @@
         var weekLabel = formatWeekRange(d.week_start_iso || d.week_start, d.week_end_iso || d.week_end);
         var html = '';
 
-        // Hero
-        html += '<div class="hero">';
-        html += '<div class="hero-card">';
-        html += '<div class="hero-label">Эта неделя</div>';
-        html += '<div class="hero-value-row"><div class="hero-value">' + (d.week_total || 0) + '</div>' + renderTrend(d.week_change_pct) + '</div>';
-        html += '<div class="hero-sub">' + weekLabel + '</div>';
-        html += '<div class="hero-sub">Проведено: ' + (d.week_completed || 0) + ', предстоит: ' + (d.week_upcoming || 0) + '</div>';
+        // Top KPI cards
+        html += '<div class="kpi-top-grid">';
+        html += '<div class="kpi-top-card">';
+        html += '<div class="kpi-top-label">Эта неделя</div>';
+        html += '<div class="kpi-top-value-row"><div class="kpi-top-value">' + (d.week_total || 0) + '</div>' + renderTrend(d.week_change_pct) + '</div>';
+        html += '<div class="kpi-top-sub">' + weekLabel + '</div>';
+        html += '<div class="kpi-top-sub">Проведено: ' + (d.week_completed || 0) + ', предстоит: ' + (d.week_upcoming || 0) + '</div>';
         html += '</div>';
-        html += '<div class="hero-card">';
-        html += '<div class="hero-label">Этот месяц</div>';
-        html += '<div class="hero-value-row"><div class="hero-value">' + (d.month_total || 0) + '</div>' + renderTrend(d.month_change_pct) + '</div>';
-        html += '<div class="hero-sub">Уникальных клиентов: ' + (d.unique_clients_month || 0) + '</div>';
+        html += '<div class="kpi-top-card">';
+        html += '<div class="kpi-top-label">Этот месяц</div>';
+        html += '<div class="kpi-top-value-row"><div class="kpi-top-value">' + (d.month_total || 0) + '</div>' + renderTrend(d.month_change_pct) + '</div>';
+        html += '<div class="kpi-top-sub">Уникальных клиентов: ' + (d.unique_clients_month || 0) + '</div>';
         html += '</div>';
         html += '</div>';
 
