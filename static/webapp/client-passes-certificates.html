@@ -6,16 +6,14 @@
   <title>Абонементы и сертификаты</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <link rel="stylesheet" href="theme.css" />
+  <link rel="stylesheet" href="mini-app-components.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet" />
+  <script src="client-mini-app-theme.js"></script>
   <style>
-    * { box-sizing: border-box; }
     body {
-      margin: 0;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: var(--tg-theme-bg-color);
-      color: var(--tg-theme-text-color);
-      min-height: 100vh;
-      padding: 12px;
-      padding-bottom: env(safe-area-inset-bottom, 12px);
+      font-family: var(--app-font-sans);
     }
     .header {
       display: flex;
@@ -62,7 +60,7 @@
     .panel { display: none; }
     .panel.active { display: block; }
     .loading, .error { text-align: center; padding: 32px 16px; color: var(--tg-theme-hint-color); }
-    .error { color: #ef4444; }
+    .error { color: var(--app-danger); }
     .empty { text-align: center; padding: 32px 16px; color: var(--tg-theme-hint-color); font-size: 15px; }
     .pass-card {
       display: flex;
@@ -119,16 +117,27 @@
     .cert-card .meta { font-size: 14px; color: var(--tg-theme-hint-color); }
     .cert-card .code { font-family: monospace; font-size: 15px; letter-spacing: 1px; margin-top: 8px; }
     .cert-card.redeemed { opacity: 0.8; }
-    body { background: #FFFBEB !important; color: #1a1a1a !important; }
-    @media (prefers-color-scheme: dark) {
-      body { background: #1a1a1a !important; color: #f5f5f5 !important; }
+    .cert-activate-row { display: flex; gap: 8px; align-items: stretch; }
+    .cert-code-input {
+      flex: 1;
+      padding: 8px 10px;
+      border-radius: 8px;
+      border: 1px solid rgba(128, 128, 128, 0.22);
+      font-size: 14px;
+      background: var(--tg-theme-secondary-bg-color);
+      color: var(--tg-theme-text-color);
+    }
+    .cert-code-input::placeholder { color: var(--tg-theme-hint-color); }
+    #cert-btnActivateCert.btn-primary {
+      flex-shrink: 0;
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
     }
   </style>
 </head>
 <body>
-  <script>
-  (function(){var d=document.documentElement;d.style.setProperty('--tg-theme-button-color','#F7A600');d.style.setProperty('--tg-theme-button-text-color','#1a1a1a');})();
-  </script>
   <div class="header">
     <span class="header-title" id="headerTitle">📦 Мои абонементы</span>
     <button type="button" class="btn-close" id="btnClose" aria-label="Закрыть">Закрыть</button>
@@ -155,13 +164,9 @@
       <label for="certCodeInput" style="display:block;font-size:14px;margin-bottom:6px;color:var(--tg-theme-hint-color);">
         Введите код подарочного сертификата:
       </label>
-      <div style="display:flex;gap:8px;">
-        <input id="certCodeInput" type="text" placeholder="Например, CERT-ABC123"
-               style="flex:1;padding:8px 10px;border-radius:8px;border:1px solid rgba(0,0,0,0.1);font-size:14px;">
-        <button type="button" id="cert-btnActivateCert"
-                style="flex-shrink:0;padding:8px 12px;border-radius:8px;border:none;font-size:14px;background:var(--tg-theme-button-color);color:var(--tg-theme-button-text-color);cursor:pointer;">
-          Активировать
-        </button>
+      <div class="cert-activate-row">
+        <input id="certCodeInput" class="cert-code-input" type="text" placeholder="Например, CERT-ABC123">
+        <button type="button" class="btn-primary" id="cert-btnActivateCert">Активировать</button>
       </div>
     </div>
     <div id="cert-listContent"></div>

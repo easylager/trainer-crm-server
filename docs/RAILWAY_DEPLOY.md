@@ -38,6 +38,12 @@
 
 Без **notification-service** боты и API работают, но не уходят фоновые уведомления (напоминания, «занятие завершено», отмены и т.п.) — см. [RUNNING_AND_DEPLOYMENT.md](RUNNING_AND_DEPLOYMENT.md).
 
+### Telegram: long polling и вебхуки (SEC-F2)
+
+- **Сейчас:** процессы `client-bot`, `trainer-bot`, `admin-bot` получают апдейты через **long polling** (`start_polling` в aiogram). **Вебхук Telegram не используется.** Не указывайте в BotFather URL вебхука на этот же стек (или отключите webhook), иначе при одновременном polling возможна **двойная обработка** одних и тех же апдейтов.
+- **HTTP-уведомления платёжки** (bePaid и т.д.) приходят на **API** (`POST /api/webhooks/...`), это отдельно от транспорта Telegram.
+- Если позже перейдёте на **Telegram webhook**: один процесс на бота, `set_webhook`, секрет в пути или заголовке, без параллельного long polling для того же токена.
+
 Как добавить сервисы:
 
 - В проекте → **Add Service** → **Empty Service** или снова **GitHub Repo** (тот же репо, та же ветка).
@@ -55,7 +61,7 @@
 | `TELEGRAM_BOT_TOKEN_CLIENT` | да | BotFather → клиентский бот. |
 | `TELEGRAM_BOT_TOKEN_TRAINER` | да | BotFather → тренерский бот. |
 | `TELEGRAM_BOT_TOKEN_ADMIN` | для админ-бота | BotFather → админ-бот. |
-| `ADMIN_TELEGRAM_IDS` | для админ-бота | Список Telegram ID через запятую, например `123456789,987654321`. |
+| `ADMIN_TELEGRAM_IDS` | для админ-бота | JSON-массив целых (Pydantic), например `[123456789,987654321]`. |
 | `API_BASE_URL` | желательно | Публичный URL API этого окружения, например `https://your-api.up.railway.app`. Нужен клиентскому боту. |
 | `TRAINER_LINK_TOKEN` | опционально | Токен для ссылки привязки тренера (с сайта). |
 

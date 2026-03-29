@@ -25,6 +25,7 @@ from src.api.schemas import (
 from src.api.routes.public import _enrich_trainer_photo_urls
 from src.application.trainer_link import get_trainer_id_linked_any_status
 from src.application.trainer_use_cases import (
+    TrainerPhotoFileKeyError,
     create_trainer_education,
     delete_trainer_education,
     get_trainer,
@@ -38,7 +39,7 @@ from src.application.trainer_profile_completeness import moderation_readiness_di
 from src.infrastructure import s3
 from src.shared.audit import ACTOR_API, audit_log
 from src.shared.config import Settings
-from src.shared.telegram_webapp import parse_user_id_from_init_data, validate_init_data
+from src.shared.telegram_webapp import InitDataAuthError, require_telegram_user_id
 
 logger = logging.getLogger(__name__)
 
@@ -46,12 +47,10 @@ router = APIRouter()
 
 
 def _trainer_telegram_id_from_init(init_data: str) -> int:
-    if not validate_init_data(init_data, Settings().telegram_bot_token_trainer):
-        raise HTTPException(status_code=401, detail="Invalid or expired init data")
-    telegram_id = parse_user_id_from_init_data(init_data)
-    if not telegram_id:
-        raise HTTPException(status_code=401, detail="User not found in init data")
-    return telegram_id
+    try:
+        return require_telegram_user_id(init_data, Settings().telegram_bot_token_trainer)
+    except InitDataAuthError:
+        raise HTTPException(status_code=401, detail="Invalid or expired init data") from None
 
 
 async def _require_linked_trainer_id(session: AsyncSession, init_raw: str | None) -> int:
@@ -245,7 +244,10 @@ async def webapp_trainer_photo_register(
     """Register photo after presigned upload; trainer_id from initData only."""
     raw = init_data or x_telegram_init_data
     trainer_id = await _require_linked_trainer_id(session, raw)
-    ok = await register_photo(session, trainer_id, body.file_key)
+    try:
+        ok = await register_photo(session, trainer_id, body.file_key)
+    except TrainerPhotoFileKeyError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
     if not ok:
         raise HTTPException(status_code=404, detail="Trainer not found")
     return {"file_key": body.file_key}

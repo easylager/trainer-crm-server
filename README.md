@@ -67,7 +67,7 @@ python -m src.bot.trainer_app  # тренерский бот (вход по сс
     - пароль: `trainer_crm_dev`
     - база: `trainer_crm`
     - порт: `5432`
-- **Переменные окружения** (`.env`):
+- **Переменные окружения** (`.env`): полный список и политика логов — **[docs/ENVIRONMENT.md](docs/ENVIRONMENT.md)**.
   - `TELEGRAM_BOT_TOKEN_CLIENT` — токен клиентского бота.
   - `TELEGRAM_BOT_TOKEN_TRAINER` — токен тренерского бота.
   - Опционально `TRAINER_LINK_TOKEN` — токен для ссылки привязки тренера (dev: по умолчанию `test`).
@@ -77,9 +77,11 @@ python -m src.bot.trainer_app  # тренерский бот (вход по сс
     - `postgresql://trainer_crm:trainer_crm_dev@localhost:5432/trainer_crm`
   - **Файлы (фото тренеров)** — хранятся в S3 (`S3_ENDPOINT`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_BUCKET`). В БД только метаданные: `trainer_photos.file_key`.
 
-**Загрузить фото с компьютера в S3 и привязать к тренеру (один запрос):** в `.env` настроены S3, запущен API (`uvicorn src.api.app:app --reload --port 8000`). Затем:
+**Загрузить фото с компьютера в S3 и привязать к тренеру (legacy, только dev):** в `.env` задайте `INTERNAL_UPLOAD_API_KEY` (и заголовок `X-Internal-Upload-Key` в запросе); без этого эндпоинт отключён — в продакшене загрузка идёт через Mini App с `initData`. При настроенных S3 и ключе:
 ```bash
-curl -X POST http://localhost:8000/api/upload/photo -F "trainer_id=1" -F "file=@/путь/к/фото.jpg"
+curl -X POST http://localhost:8000/api/upload/photo \
+  -H "X-Internal-Upload-Key: $INTERNAL_UPLOAD_API_KEY" \
+  -F "trainer_id=1" -F "file=@/путь/к/фото.jpg"
 ```
 Ответ `{"file_key":"trainers/1/....jpg"}` — файл в S3, запись в `trainer_photos` создана.
 

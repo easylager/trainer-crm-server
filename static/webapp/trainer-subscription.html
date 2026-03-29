@@ -19,7 +19,7 @@
     }
     body.subscription-page {
       margin: 0;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-family: var(--app-font-sans);
       background: var(--tg-theme-bg-color);
       color: var(--tg-theme-text-color);
       min-height: 100%;
@@ -33,13 +33,13 @@
       --tg-theme-bg-color: #FFFBEB;
       --tg-theme-text-color: #1a1a1a;
       --tg-theme-hint-color: #666666;
-      --tg-theme-secondary-bg-color: #FFF3CC;
+      --tg-theme-secondary-bg-color: #fff5e1;
       --sub-border-bronze: rgba(247, 166, 0, 0.25);
       --sub-border-bronze-strong: rgba(247, 166, 0, 0.45);
       --sub-price-accent: #F7A600;
       --sub-hero-glow: rgba(247, 166, 0, 0.12);
       --sub-bottom-tint: #FFFBEB;
-      --sub-btn-disabled-bg: #FFF3CC;
+      --sub-btn-disabled-bg: #fff5e1;
       --sub-btn-disabled-fg: #666666;
     }
     body.subscription-page.sub-theme-dark {
@@ -57,7 +57,7 @@
     }
 
     .sub-head {
-      font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-family: var(--app-font-sans);
     }
 
     /* Screens */
@@ -100,7 +100,7 @@
     }
     .sub-hero-inner { position: relative; z-index: 1; }
     .sub-hero-kicker {
-      font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-family: var(--app-font-sans);
       font-size: 11px;
       font-weight: 600;
       letter-spacing: 0.14em;
@@ -109,7 +109,7 @@
       margin: 0 0 10px;
     }
     .sub-hero-title {
-      font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-family: var(--app-font-sans);
       font-size: clamp(22px, 5.5vw, 28px);
       font-weight: 700;
       letter-spacing: -0.03em;
@@ -313,7 +313,7 @@
       position: absolute;
       top: -9px;
       right: 14px;
-      font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-family: var(--app-font-sans);
       background: linear-gradient(145deg, #ffc23d 0%, #f7a600 55%, #e89400 100%);
       color: #141414;
       font-size: 10px;
@@ -328,7 +328,7 @@
       position: absolute;
       top: -9px;
       left: 14px;
-      font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-family: var(--app-font-sans);
       background: linear-gradient(180deg, #3dd68c 0%, #34c759 100%);
       color: #0a2e16;
       font-size: 10px;
@@ -357,7 +357,7 @@
       gap: 12px;
     }
     .tier-name {
-      font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-family: var(--app-font-sans);
       font-size: 19px;
       font-weight: 700;
       letter-spacing: -0.02em;
@@ -371,7 +371,7 @@
       text-align: right;
     }
     .tier-price .amount {
-      font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-family: var(--app-font-sans);
       font-size: 22px;
       font-weight: 700;
       letter-spacing: -0.03em;
@@ -519,7 +519,7 @@
       align-items: center;
       margin-bottom: 10px;
       font-size: 14px;
-      font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-family: var(--app-font-sans);
     }
     .summary-row .label { color: var(--tg-theme-hint-color); font-weight: 500; }
     .summary-row .value { font-weight: 700; letter-spacing: -0.02em; }
@@ -532,7 +532,7 @@
       border: none;
       font-size: 16px;
       font-weight: 700;
-      font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-family: var(--app-font-sans);
       letter-spacing: -0.01em;
       background: linear-gradient(180deg, #ffc23d 0%, #f0a000 100%);
       color: #141414;
@@ -614,7 +614,7 @@
     .loading-text {
       position: relative;
       z-index: 1;
-      font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-family: var(--app-font-sans);
       font-size: 15px;
       font-weight: 600;
       color: var(--tg-theme-hint-color);
@@ -650,7 +650,7 @@
       filter: grayscale(0.15);
     }
     .error-title {
-      font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-family: var(--app-font-sans);
       font-size: 20px;
       font-weight: 700;
       letter-spacing: -0.02em;
@@ -670,7 +670,7 @@
       border: 1px solid rgba(247, 166, 0, 0.35);
       font-size: 15px;
       font-weight: 700;
-      font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-family: var(--app-font-sans);
       background: rgba(247, 166, 0, 0.12);
       color: var(--tg-theme-text-color);
       cursor: pointer;
@@ -737,7 +737,7 @@
       100% { transform: scale(1); opacity: 1; }
     }
     .success-title {
-      font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-family: var(--app-font-sans);
       font-size: 22px;
       font-weight: 700;
       letter-spacing: -0.03em;
@@ -801,7 +801,7 @@
       border: none;
       font-size: 16px;
       font-weight: 700;
-      font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-family: var(--app-font-sans);
       background: linear-gradient(180deg, #ffc23d 0%, #f0a000 100%);
       color: #141414;
       cursor: pointer;
@@ -889,10 +889,10 @@
       </button>
     </div>
 
-    <!-- Upgrade info -->
-    <div class="upgrade-info">
-      <h3>💡 Умный апгрейд</h3>
-      <p>При смене тарифа система автоматически пересчитает стоимость с учётом уже оплаченного периода</p>
+    <!-- Upgrade / renewal context (text set in JS) -->
+    <div class="upgrade-info" id="checkoutContext">
+      <h3 id="checkoutContextTitle">💡 Как работает оплата</h3>
+      <p id="checkoutContextBody">Новый срок добавляется к дате окончания текущей подписки (продление). Смена тарифа — отдельная покупка; действует максимальный уровень из активных периодов.</p>
     </div>
     
     <div id="tiersContainer" class="tiers-container"></div>
@@ -986,13 +986,6 @@
       var selectedTier = null;
       var selectedPeriod = 1; // 1, 3, or 12 months
 
-      // Period discounts
-      var periodDiscounts = {
-        1: 0,    // 1 month - no discount
-        3: 0.1,  // 3 months - 10% discount
-        12: 0.2  // 1 year - 20% discount
-      };
-
       // Format helpers
       function formatPrice(cents) {
         if (cents == null) return '—';
@@ -1003,6 +996,33 @@
         if (days >= 365) return Math.floor(days / 365) + ' год';
         if (days >= 30) return Math.round(days / 30) + ' мес.';
         return days + ' дн.';
+      }
+
+      function getTierPeriodCents(tier, months) {
+        var p = tier.prices_by_period || {};
+        var v = p[String(months)];
+        return v != null ? v : null;
+      }
+
+      function refreshPeriodBadges() {
+        var ref = catalog.find(function(t) {
+          return t.prices_by_period && t.prices_by_period['1'] != null;
+        });
+        if (!ref) return;
+        var p1 = ref.prices_by_period['1'];
+        document.querySelectorAll('.period-option').forEach(function(btn) {
+          var pm = parseInt(btn.dataset.period, 10);
+          var total = ref.prices_by_period[String(pm)];
+          if (total == null || p1 == null) return;
+          var naive = p1 * pm;
+          var hasDisc = pm > 1 && total < naive;
+          btn.classList.toggle('has-discount', hasDisc);
+          var dEl = btn.querySelector('.discount');
+          if (dEl && hasDisc) {
+            var pct = Math.round((1 - total / naive) * 100);
+            dEl.textContent = '−' + pct + '%';
+          }
+        });
       }
 
       // Tier icons for success screen
@@ -1016,6 +1036,8 @@
         online: 'Онлайн-запись клиентов',
         analytics: 'Аналитика и отчёты'
       };
+      /** Higher index = more features (for downgrade warning). */
+      var tierRank = { crm: 1, online: 2, analytics: 3 };
 
       // Load data
       function loadData() {
@@ -1039,12 +1061,58 @@
           status = statusData;
           renderTiers();
           initPeriodSelector();
+          refreshPeriodBadges();
           showScreen('screenMain');
         })
         .catch(function(err) {
           document.getElementById('errorMessage').textContent = err.message || 'Ошибка загрузки данных';
           showScreen('screenError');
         });
+      }
+
+      /** "Текущий" on a card = same tier AND same period tab as last paid segment (see billing_period_months). */
+      function isCurrentTierForPeriod(tierId) {
+        var currentTier = status && status.effective_tier;
+        if (!currentTier || currentTier === 'none' || tierId !== currentTier) return false;
+        var bpm = status.billing_period_months;
+        if (bpm == null) return false;
+        return Number(bpm) === selectedPeriod;
+      }
+
+      function refreshCheckoutContext() {
+        var titleEl = document.getElementById('checkoutContextTitle');
+        var bodyEl = document.getElementById('checkoutContextBody');
+        if (!titleEl || !bodyEl) return;
+        if (!selectedTier) {
+          titleEl.textContent = '💡 Выбор тарифа';
+          bodyEl.textContent = 'Нажмите на карточку, чтобы выбрать план; повторное нажатие снимает выбор. Сначала выберите период (1 / 3 / 12 мес.), затем тариф.';
+          return;
+        }
+        var eff = status && status.effective_tier;
+        var exp = status && status.expires_at;
+        if (!eff || eff === 'none') {
+          titleEl.textContent = '💡 Первый платёж';
+          bodyEl.textContent = 'После оплаты сразу откроется доступ по выбранному тарифу и периоду.';
+          return;
+        }
+        var expShort = exp ? exp.slice(0, 10) : '—';
+        if (selectedTier && tierRank[selectedTier] < tierRank[eff]) {
+          titleEl.textContent = '⚠️ Тариф ниже текущего';
+          bodyEl.textContent = 'Сейчас у вас более полный тариф («' + (tierLabels[eff] || eff) + '») до ' + expShort + '. Новая подписка на меньший тариф начнёт действовать после окончания текущего периода (или параллельно по датам — эффективный доступ остаётся по максимальному уровню до истечения высшего тарифа).';
+          return;
+        }
+        if (selectedTier === eff) {
+          titleEl.textContent = '💡 Продление того же тарифа';
+          bodyEl.textContent = 'Оплата добавит выбранный период к дате окончания (после ' + expShort + '), доступ не прерывается.';
+          return;
+        }
+        if (selectedTier && tierRank[selectedTier] > tierRank[eff]) {
+          titleEl.textContent = '💡 Апгрейд';
+          bodyEl.textContent = 'Новый уровень начнёт действовать сразу после оплаты; оставшееся время по текущему тарифу учитывается в цене на стороне оплаты (здесь — демо, сумма из каталога).';
+          return;
+        }
+        titleEl.textContent = '💡 Как работает оплата';
+        bodyEl.textContent = 'Новый срок добавляется к дате окончания текущей подписки (продление). Смена тарифа — отдельная покупка; действует максимальный уровень из активных периодов.';
       }
 
       // Render tiers
@@ -1056,7 +1124,12 @@
         var statusContainer = document.getElementById('currentStatus');
         if (currentTier && currentTier !== 'none') {
           var expiresText = status.expires_at ? ' до ' + status.expires_at.slice(0, 10) : '';
-          statusContainer.innerHTML = '<div class="status-badge active"><span class="dot"></span>Активна' + expiresText + '</div>';
+          var bpm = status.billing_period_months;
+          var periodHint = '';
+          if (bpm === 1) periodHint = ' · период 1 мес.';
+          else if (bpm === 3) periodHint = ' · период 3 мес.';
+          else if (bpm === 12) periodHint = ' · период 12 мес.';
+          statusContainer.innerHTML = '<div class="status-badge active"><span class="dot"></span>Активна' + expiresText + periodHint + '</div>';
         } else {
           statusContainer.innerHTML = '<div class="status-badge"><span class="dot"></span>Нет активной подписки</div>';
         }
@@ -1065,7 +1138,7 @@
         var html = '';
         catalog.forEach(function(tier, idx) {
           var isPopular = tier.tier === 'online';
-          var isCurrent = tier.tier === currentTier;
+          var isCurrent = isCurrentTierForPeriod(tier.tier);
           var isSelected = selectedTier === tier.tier;
           
           html += '<div class="tier-card' + (isSelected ? ' selected' : '') + (isCurrent ? ' current' : '') + '" data-tier="' + tier.tier + '">';
@@ -1079,17 +1152,18 @@
           html += '<div class="tier-header-inner">';
           html += '<h3 class="tier-name">' + tier.name_ru + '</h3>';
           
-          // Calculate price with period discount
-          var monthlyPrice = tier.price_cents / 100;
-          var discount = periodDiscounts[selectedPeriod] || 0;
-          var discountedMonthly = monthlyPrice * (1 - discount);
-          var totalPrice = discountedMonthly * selectedPeriod;
-          var savings = (monthlyPrice * selectedPeriod) - totalPrice;
+          var totalCents = getTierPeriodCents(tier, selectedPeriod);
+          var p1c = getTierPeriodCents(tier, 1);
+          var totalPrice = totalCents != null ? totalCents / 100 : null;
+          var perMonth = totalCents != null && selectedPeriod > 0 ? (totalCents / selectedPeriod) / 100 : null;
+          var savings = (p1c != null && totalCents != null && selectedPeriod > 1)
+            ? (p1c * selectedPeriod - totalCents) / 100
+            : 0;
           
           html += '<div class="tier-price">';
-          html += '<span class="amount">' + Math.round(discountedMonthly) + ' BYN</span>';
+          html += '<span class="amount">' + (perMonth != null ? Math.round(perMonth) : '—') + ' BYN</span>';
           html += '<div class="period">/ мес</div>';
-          if (selectedPeriod > 1) {
+          if (selectedPeriod > 1 && totalPrice != null) {
             html += '<div class="period">Итого: ' + Math.round(totalPrice) + ' BYN</div>';
           }
           if (savings > 0) {
@@ -1130,6 +1204,7 @@
             selectTier(card.dataset.tier);
           };
         });
+        refreshCheckoutContext();
       }
 
       // Period selector handlers
@@ -1152,42 +1227,52 @@
             
             // Update checkout button
             updateCheckoutButton();
+            refreshPeriodBadges();
+            refreshCheckoutContext();
             
             haptic('light');
           };
         });
       }
 
-      // Select tier
+      // Select tier (second tap on same card clears selection)
       function selectTier(tier) {
-        selectedTier = tier;
+        if (selectedTier === tier) {
+          selectedTier = null;
+        } else {
+          selectedTier = tier;
+        }
         
         // Update UI
         document.querySelectorAll('.tier-card').forEach(function(card) {
-          card.classList.toggle('selected', card.dataset.tier === tier);
+          card.classList.toggle('selected', selectedTier && card.dataset.tier === selectedTier);
         });
         
         updateCheckoutButton();
+        refreshCheckoutContext();
       }
 
       // Update checkout button and summary
       function updateCheckoutButton() {
-        var tierData = catalog.find(function(t) { return t.tier === selectedTier; });
-        if (tierData) {
-          // Calculate price with period discount
-          var monthlyPrice = tierData.price_cents / 100;
-          var discount = periodDiscounts[selectedPeriod] || 0;
-          var discountedMonthly = monthlyPrice * (1 - discount);
-          var totalPrice = discountedMonthly * selectedPeriod;
-          
-          document.getElementById('summaryTier').textContent = tierData.name_ru;
-          document.getElementById('summaryPrice').textContent = Math.round(totalPrice) + ' BYN';
-          document.getElementById('btnPay').disabled = false;
-          
-          // Update button text
-          var periodText = selectedPeriod === 1 ? 'мес' : selectedPeriod === 3 ? '3 мес' : 'год';
-          document.getElementById('btnPay').textContent = 'Оплатить ' + Math.round(totalPrice) + ' BYN (' + periodText + ')';
+        var tierData = selectedTier ? catalog.find(function(t) { return t.tier === selectedTier; }) : null;
+        if (!tierData) {
+          document.getElementById('summaryTier').textContent = '—';
+          document.getElementById('summaryPrice').textContent = '—';
+          document.getElementById('btnPay').disabled = true;
+          document.getElementById('btnPay').textContent = 'Выберите тариф';
+          return;
         }
+        var tc = getTierPeriodCents(tierData, selectedPeriod);
+        var totalPrice = tc != null ? tc / 100 : null;
+        
+        document.getElementById('summaryTier').textContent = tierData.name_ru;
+        document.getElementById('summaryPrice').textContent = totalPrice != null ? Math.round(totalPrice) + ' BYN' : '—';
+        document.getElementById('btnPay').disabled = totalPrice == null;
+        
+        var periodText = selectedPeriod === 1 ? 'мес' : selectedPeriod === 3 ? '3 мес' : 'год';
+        document.getElementById('btnPay').textContent = totalPrice != null
+          ? ('Оплатить ' + Math.round(totalPrice) + ' BYN (' + periodText + ')')
+          : 'Нет цены для периода';
       }
 
       // Mock checkout

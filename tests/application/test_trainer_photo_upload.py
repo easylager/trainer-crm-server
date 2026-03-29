@@ -40,16 +40,16 @@ async def test_upload_trainer_photo_not_image(db_session) -> None:
 
 @pytest.mark.asyncio
 async def test_upload_trainer_photo_not_found_trainer(db_session, monkeypatch) -> None:
-    tid = await create_trainer(
+    await create_trainer(
         db_session,
         profile={"first_name": "A", "last_name": "B", "age": 30},
     )
+    # trainers.id is int32 in DB; use an id that is not assigned to any row.
+    ghost_id = min(999_000_777, 2_147_000_000)
     monkeypatch.setattr(
         "src.application.trainer_use_cases.s3.upload_photo",
-        lambda _tid, _body, _ct: ("trainers/999/fake.jpg", None),
+        lambda tid, _body, _ct: (f"trainers/{tid}/fake.jpg", None),
     )
-    # trainers.id is int32 in DB; use an id that is not assigned to any row.
-    ghost_id = min(tid + 9_000_000, 2_147_000_000)
     ok, err, fk, fkl = await upload_trainer_photo_from_bytes(db_session, ghost_id, _tiny_jpeg(), "image/jpeg")
     assert ok is False
     assert err == "not_found"
@@ -79,12 +79,15 @@ async def test_upload_trainer_photo_success(db_session, monkeypatch) -> None:
     )
     monkeypatch.setattr(
         "src.application.trainer_use_cases.s3.upload_photo",
-        lambda tid, body, ct: ("trainers/1/abc.jpg", "trainers/1/abc_list.jpg"),
+        lambda tid, body, ct: (
+            f"trainers/{tid}/abc.jpg",
+            f"trainers/{tid}/abc_list.jpg",
+        ),
     )
     ok, err, fk, fkl = await upload_trainer_photo_from_bytes(db_session, tid, _tiny_jpeg(), "image/jpeg")
     assert ok and err == ""
-    assert fk == "trainers/1/abc.jpg"
-    assert fkl == "trainers/1/abc_list.jpg"
+    assert fk == f"trainers/{tid}/abc.jpg"
+    assert fkl == f"trainers/{tid}/abc_list.jpg"
 
     from sqlalchemy import text
 
@@ -94,5 +97,5 @@ async def test_upload_trainer_photo_success(db_session, monkeypatch) -> None:
     )
     rows = r.fetchall()
     assert len(rows) == 1
-    assert rows[0][0] == "trainers/1/abc.jpg"
-    assert rows[0][1] == "trainers/1/abc_list.jpg"
+    assert rows[0][0] == f"trainers/{tid}/abc.jpg"
+    assert rows[0][1] == f"trainers/{tid}/abc_list.jpg"

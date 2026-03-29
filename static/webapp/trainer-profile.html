@@ -386,7 +386,7 @@
     }
     .edu-err {
       font-size: 13px;
-      color: #ef4444;
+      color: var(--app-danger);
       margin: 10px 0 0;
       line-height: 1.4;
       padding: 8px 12px;
@@ -419,7 +419,7 @@
     .char-progress-bar.ok { background: #34c759; }
     .field-error {
       font-size: 13px;
-      color: #ef4444;
+      color: var(--app-danger);
       margin: 8px 0 0;
       line-height: 1.4;
       display: flex;
@@ -431,7 +431,7 @@
       flex-shrink: 0;
       width: 16px;
       height: 16px;
-      background: #ef4444;
+      background: var(--app-danger);
       color: #fff;
       border-radius: 50%;
       font-size: 11px;
@@ -869,11 +869,11 @@
     /* JUSTSKATE.BY — перебиваем тему Telegram, как в расписании */
     body { background: #FFFBEB !important; color: #1a1a1a !important; }
     .filter-btn, .btn-close, .card, .edu-readonly, .profile-hero {
-      background: #FFF3CC !important;
+      background: #fff5e1 !important;
       color: #1a1a1a !important;
     }
-    .filters { background: #FFF3CC !important; }
-    .profile-hero { background: linear-gradient(135deg, #FFF3CC 0%, rgba(247, 166, 0, 0.12) 100%) !important; }
+    .filters { background: #fff5e1 !important; }
+    .profile-hero { background: linear-gradient(135deg, #fff5e1 0%, rgba(245, 166, 35, 0.12) 100%) !important; }
     .field input, .field textarea, .field select {
       background: #FFFBEB !important;
       color: #1a1a1a !important;
@@ -2595,7 +2595,7 @@
           .then(parseJsonResponse)
           .then(function(o) {
             if (!o.ok) {
-              document.getElementById('skeleton').innerHTML = '<p style="color:#ef4444; padding: 20px; text-align: center;">' +
+              document.getElementById('skeleton').innerHTML = '<p style="color:var(--app-danger); padding: 20px; text-align: center;">' +
                 (o.data.detail || 'Ошибка загрузки профиля') + '</p>';
               return Promise.resolve();
             }
@@ -2619,7 +2619,7 @@
             });
           })
           .catch(function() {
-            document.getElementById('skeleton').innerHTML = '<p style="color:#ef4444; padding: 20px; text-align: center;">Ошибка сети. Проверьте подключение.</p>';
+            document.getElementById('skeleton').innerHTML = '<p style="color:var(--app-danger); padding: 20px; text-align: center;">Ошибка сети. Проверьте подключение.</p>';
             return Promise.resolve();
           });
       }

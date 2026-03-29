@@ -238,8 +238,24 @@
     .tier-summary {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
-      gap: 12px;
+      gap: 10px;
       text-align: center;
+    }
+    .tier-period-matrix {
+      margin-top: 12px;
+    }
+    .tier-period-matrix .matrix-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--tg-theme-hint-color);
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .period-matrix-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
     }
     .summary-item {
       padding: 10px;
@@ -391,12 +407,6 @@
       function formatPrice(cents) {
         return (cents / 100).toFixed(0) + ' BYN';
       }
-      function formatPeriod(days) {
-        if (days >= 365) return Math.floor(days / 365) + ' год';
-        if (days >= 30) return Math.round(days / 30) + ' мес.';
-        return days + ' дн.';
-      }
-
       // Load tiers
       function loadTiers() {
         showScreen('screenLoading');
@@ -450,12 +460,23 @@
         container.innerHTML = html;
       }
 
+      function periodCents(tier, months) {
+        var list = tier.period_prices || [];
+        for (var i = 0; i < list.length; i++) {
+          if (list[i].period_months === months) return list[i].price_cents;
+        }
+        return tier.price_cents || 0;
+      }
+
       function renderViewMode(tier) {
-        var html = '<div class="tier-summary">';
-        html += '<div class="summary-item"><div class="summary-value">' + formatPrice(tier.price_cents) + '</div><div class="summary-label">Цена</div></div>';
-        html += '<div class="summary-item"><div class="summary-value">' + formatPeriod(tier.period_days) + '</div><div class="summary-label">Период</div></div>';
-        html += '<div class="summary-item"><div class="summary-value">' + tier.display_order + '</div><div class="summary-label">Порядок</div></div>';
-        html += '</div>';
+        var html = '<div class="tier-period-matrix">';
+        html += '<div class="matrix-label">Цена за период (BYN)</div>';
+        html += '<div class="period-matrix-row">';
+        html += '<div class="summary-item"><div class="summary-value">' + formatPrice(periodCents(tier, 1)) + '</div><div class="summary-label">1 мес</div></div>';
+        html += '<div class="summary-item"><div class="summary-value">' + formatPrice(periodCents(tier, 3)) + '</div><div class="summary-label">3 мес</div></div>';
+        html += '<div class="summary-item"><div class="summary-value">' + formatPrice(periodCents(tier, 12)) + '</div><div class="summary-label">12 мес</div></div>';
+        html += '</div></div>';
+        html += '<div style="margin-top:10px;font-size:13px;color:var(--tg-theme-hint-color)">Порядок в каталоге: ' + tier.display_order + '</div>';
         if (tier.short_description_ru) {
           html += '<div class="tier-description">' + escapeHtml(tier.short_description_ru) + '</div>';
         }
@@ -476,16 +497,22 @@
         html += '</div>';
         html += '</div>';
 
-        html += '<div class="form-row">';
+        html += '<div class="tier-period-matrix">';
+        html += '<div class="matrix-label">Цены за период (BYN)</div>';
+        html += '<div class="form-row" style="grid-template-columns: repeat(3, 1fr);">';
         html += '<div class="form-group">';
-        html += '<label class="form-label">Цена (BYN)</label>';
-        html += '<input type="number" class="form-input" id="edit_price" value="' + (tier.price_cents / 100).toFixed(0) + '" step="1" min="0">';
+        html += '<label class="form-label">1 мес</label>';
+        html += '<input type="number" class="form-input" id="edit_price_1" value="' + (periodCents(tier, 1) / 100).toFixed(0) + '" step="1" min="0">';
         html += '</div>';
         html += '<div class="form-group">';
-        html += '<label class="form-label">Период (дней)</label>';
-        html += '<input type="number" class="form-input" id="edit_period_days" value="' + tier.period_days + '" min="1">';
+        html += '<label class="form-label">3 мес</label>';
+        html += '<input type="number" class="form-input" id="edit_price_3" value="' + (periodCents(tier, 3) / 100).toFixed(0) + '" step="1" min="0">';
         html += '</div>';
+        html += '<div class="form-group">';
+        html += '<label class="form-label">12 мес</label>';
+        html += '<input type="number" class="form-input" id="edit_price_12" value="' + (periodCents(tier, 12) / 100).toFixed(0) + '" step="1" min="0">';
         html += '</div>';
+        html += '</div></div>';
 
         html += '<div class="form-group">';
         html += '<label class="form-label">Краткое описание</label>';
@@ -539,9 +566,9 @@
         btn.disabled = true;
         btn.textContent = 'Сохранение…';
 
-        var priceInput = document.getElementById('edit_price').value;
-        var priceCents = Math.round(parseFloat(priceInput) * 100);
-        var periodDays = parseInt(document.getElementById('edit_period_days').value, 10);
+        var p1 = Math.round(parseFloat(document.getElementById('edit_price_1').value) * 100);
+        var p3 = Math.round(parseFloat(document.getElementById('edit_price_3').value) * 100);
+        var p12 = Math.round(parseFloat(document.getElementById('edit_price_12').value) * 100);
         var nameRu = document.getElementById('edit_name_ru').value.trim();
         var description = document.getElementById('edit_description').value.trim();
         var bulletsText = document.getElementById('edit_bullets').value.trim();
@@ -549,15 +576,8 @@
         var displayOrder = parseInt(document.getElementById('edit_display_order').value, 10);
         var isActive = document.getElementById('edit_is_active').checked;
 
-        // Validation
-        if (isNaN(priceCents) || priceCents < 0) {
+        if (isNaN(p1) || isNaN(p3) || isNaN(p12) || p1 < 0 || p3 < 0 || p12 < 0) {
           showToast('Некорректная цена', true);
-          btn.disabled = false;
-          btn.textContent = 'Сохранить';
-          return;
-        }
-        if (isNaN(periodDays) || periodDays <= 0) {
-          showToast('Период должен быть > 0', true);
           btn.disabled = false;
           btn.textContent = 'Сохранить';
           return;
@@ -570,8 +590,7 @@
         }
 
         var body = {
-          price_cents: priceCents,
-          period_days: periodDays,
+          period_prices: { '1': p1, '3': p3, '12': p12 },
           name_ru: nameRu,
           short_description_ru: description || null,
           bullets: bullets,
@@ -596,10 +615,7 @@
             var tierData = res.data.tier;
             for (var i = 0; i < tiers.length; i++) {
               if (tiers[i].tier === tier) {
-                tiers[i].price_cents = tierData.price_cents;
-                tiers[i].period_days = tierData.period_days;
                 tiers[i].name_ru = tierData.name_ru;
-                // Refresh from server for full data
                 loadTiers();
                 break;
               }

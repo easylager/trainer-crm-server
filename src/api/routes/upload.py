@@ -1,17 +1,42 @@
-"""Upload: presign URL, multipart upload, photo registration by file_key."""
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+"""Upload: presign URL, multipart upload, photo registration by file_key.
+
+Legacy routes require INTERNAL_UPLOAD_API_KEY (header X-Internal-Upload-Key) when set in env.
+Production: leave unset to disable; trainers use Mini App endpoints with initData instead.
+"""
+from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.deps import get_session
 from src.api.schemas import PhotoRegisterBody, PresignBody
-from src.application.trainer_use_cases import register_photo, upload_trainer_photo_from_bytes
+from src.application.trainer_use_cases import (
+    TrainerPhotoFileKeyError,
+    register_photo,
+    upload_trainer_photo_from_bytes,
+)
 from src.infrastructure import s3
+from src.shared.config import Settings
 
 router = APIRouter(prefix="/api", tags=["upload"])
 
 
+def _require_internal_upload_key(
+    x_internal_upload_api_key: str | None = Header(None, alias="X-Internal-Upload-Key"),
+) -> None:
+    expected = Settings().internal_upload_api_key
+    if not expected:
+        raise HTTPException(
+            status_code=403,
+            detail="Legacy upload API is disabled. Use Web App photo upload with Telegram initData.",
+        )
+    if not x_internal_upload_api_key or x_internal_upload_api_key != expected:
+        raise HTTPException(status_code=403, detail="Invalid or missing X-Internal-Upload-Key")
+
+
 @router.post("/upload/photo/presign")
-async def presign(body: PresignBody) -> dict[str, str]:
+async def presign(
+    body: PresignBody,
+    _auth: None = Depends(_require_internal_upload_key),
+) -> dict[str, str]:
     """Return presigned PUT URL for direct S3 upload. Fails if using local storage."""
     try:
         url, file_key = s3.presign_upload_url(body.trainer_id, content_type=body.content_type)
@@ -25,9 +50,13 @@ async def register_photo_by_key(
     trainer_id: int,
     body: PhotoRegisterBody,
     session: AsyncSession = Depends(get_session),
+    _auth: None = Depends(_require_internal_upload_key),
 ) -> dict[str, str]:
     """Register already-uploaded photo by file_key (e.g. after presigned upload)."""
-    ok = await register_photo(session, trainer_id, body.file_key)
+    try:
+        ok = await register_photo(session, trainer_id, body.file_key)
+    except TrainerPhotoFileKeyError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
     if not ok:
         raise HTTPException(status_code=404, detail="Trainer not found")
     return {"file_key": body.file_key}
@@ -38,6 +67,7 @@ async def upload_and_register(
     trainer_id: int = Form(...),
     file: UploadFile = File(...),
     session: AsyncSession = Depends(get_session),
+    _auth: None = Depends(_require_internal_upload_key),
 ) -> dict[str, str]:
     """Upload file to S3/local (resized), add to trainer_photos. Returns file_key (and file_key_list if thumb generated)."""
     content_type = file.content_type or "image/jpeg"

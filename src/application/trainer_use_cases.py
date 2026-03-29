@@ -31,6 +31,25 @@ logger = logging.getLogger(__name__)
 MAX_TRAINER_PHOTO_BYTES = 15 * 1024 * 1024
 
 
+class TrainerPhotoFileKeyError(ValueError):
+    """Raised when file_key / file_key_list are not under trainers/{trainer_id}/ in storage."""
+
+
+def photo_storage_keys_allowed_for_trainer(
+    trainer_id: int, file_key: str, file_key_list: str | None = None
+) -> bool:
+    """True if keys are non-empty, path-safe, and scoped to the trainer's namespace."""
+    if not file_key or ".." in file_key:
+        return False
+    prefix = f"trainers/{trainer_id}/"
+    if not file_key.startswith(prefix):
+        return False
+    if file_key_list:
+        if ".." in file_key_list or not file_key_list.startswith(prefix):
+            return False
+    return True
+
+
 def trainer_photo_bytes_look_like_image(body: bytes) -> bool:
     """True if PIL can load raster image bytes (sync; used before S3 put)."""
     if not body:
@@ -261,6 +280,9 @@ async def list_active_trainers_for_client(
     service_id: int | None = None,
     arena_id: int | None = None,
     order_by: str = "rating",
+    # Time-based filters
+    filter_days: list[int] | None = None,  # [1,2,3] for Mon,Tue,Wed (0=Sunday)
+    filter_time_slots: list[str] | None = None,  # ["09:00-12:00", "18:00-21:00"]
 ) -> tuple[list[dict[str, Any]], int]:
     """Active trainers; optional arena filter (trainers with slot in that arena). Returns (items, total)."""
     return await TrainerRepository(session).list_active_with_details(
@@ -270,6 +292,8 @@ async def list_active_trainers_for_client(
         service_id=service_id,
         arena_id=arena_id,
         order_by=order_by,
+        filter_days=filter_days,
+        filter_time_slots=filter_time_slots,
     )
 
 
@@ -476,7 +500,10 @@ async def register_photo(
     Attach photo to trainer (and optional list thumb).
     For now we enforce single-photo per trainer: new upload replaces any existing photos.
     Returns False if trainer not found.
+    Raises TrainerPhotoFileKeyError if storage keys do not belong to this trainer (IDOR guard).
     """
+    if not photo_storage_keys_allowed_for_trainer(trainer_id, file_key, file_key_list):
+        raise TrainerPhotoFileKeyError("file_key must be under trainers/{trainer_id}/")
     repo = TrainerRepository(session)
     if not await repo.exists(trainer_id):
         return False

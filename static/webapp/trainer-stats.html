@@ -3,131 +3,149 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-  <title>Статистика</title>
+  <title>Аналитика и бухгалтерия</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="client-mini-app-theme.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="theme.css" />
   <link rel="stylesheet" href="mini-app-components.css" />
-  <script>
-    (function () {
-      function isAppDark() {
-        var tg = window.Telegram && window.Telegram.WebApp;
-        if (tg && tg.colorScheme) return tg.colorScheme === 'dark';
-        return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-      }
-      function applyAppTheme() {
-        var d = document.documentElement;
-        var dark = isAppDark();
-        d.style.setProperty('--tg-theme-button-color', '#f5a623');
-        d.style.setProperty('--tg-theme-button-text-color', '#1a1a1a');
-        d.style.setProperty('--tg-theme-bg-color', dark ? '#000000' : '#fffbec');
-        d.style.setProperty('--tg-theme-text-color', dark ? '#ffffff' : '#1a1a1a');
-        d.style.setProperty('--tg-theme-secondary-bg-color', dark ? '#1c1c1e' : '#fff5e1');
-        d.style.setProperty('--tg-theme-hint-color', dark ? '#8e8e93' : '#666666');
-      }
-      applyAppTheme();
-      if (window.matchMedia) {
-        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyAppTheme);
-      }
-      window.__applyStatsTheme = applyAppTheme;
-    })();
-  </script>
   <style>
-    /* Shell: theme.css + mini-app-components.css */
     :root {
-      --card-bg: var(--tg-theme-secondary-bg-color);
       --accent: var(--tg-theme-button-color);
-      --accent-dim: rgba(247, 166, 0, 0.25);
-      --up: #34c759;
-      --down: #ff3b30;
+      --accent-dim: color-mix(in srgb, var(--tg-theme-button-color) 28%, transparent);
       --muted: var(--tg-theme-hint-color);
+      --surface-glow: color-mix(in srgb, var(--tg-theme-button-color) 8%, var(--tg-theme-secondary-bg-color));
     }
     body {
-      font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      padding-bottom: calc(24px + env(safe-area-inset-bottom, 0));
+      font-family: var(--app-font-sans);
+      padding-bottom: calc(28px + env(safe-area-inset-bottom, 0));
     }
-    /* Hero — same as schedule.html .bd-hero */
-    .stats-hero {
-      position: relative;
-      border-radius: 20px;
-      padding: 20px 20px 22px;
-      margin-bottom: 18px;
-      overflow: hidden;
-      background: linear-gradient(155deg, rgba(247, 166, 0, 0.14) 0%, rgba(247, 166, 0, 0.04) 48%, transparent 100%);
-      border: 1px solid rgba(247, 166, 0, 0.28);
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
-    }
-    .stats-hero::before {
-      content: '';
-      position: absolute;
-      top: -40%;
-      right: -20%;
-      width: 55%;
-      height: 120%;
-      background: radial-gradient(ellipse, rgba(247, 166, 0, 0.22) 0%, transparent 70%);
-      pointer-events: none;
-    }
-    .stats-hero-inner { position: relative; z-index: 1; }
-    .stats-hero-kicker {
-      font-size: 11px;
-      font-weight: 600;
-      letter-spacing: 0.14em;
-      text-transform: uppercase;
-      color: var(--tg-theme-hint-color);
-      margin: 0 0 10px;
-    }
+
     .stats-hero-title {
       margin: 0;
-      font-size: clamp(22px, 5.5vw, 26px);
+      font-size: clamp(22px, 5.5vw, 28px);
       font-weight: 700;
       letter-spacing: -0.04em;
-      line-height: 1.15;
+      line-height: 1.12;
       color: var(--tg-theme-text-color);
     }
-    .stats-hero-sub {
-      margin: 10px 0 0;
-      font-size: 14px;
-      line-height: 1.45;
-      color: var(--tg-theme-hint-color);
-      font-weight: 500;
+    .stats-hero-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+      margin-top: 12px;
     }
+    .pro-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      padding: 6px 12px;
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--tg-theme-button-color) 22%, transparent);
+      color: var(--tg-theme-text-color);
+      border: 1px solid color-mix(in srgb, var(--tg-theme-button-color) 35%, transparent);
+    }
+    .pro-pill svg { flex-shrink: 0; opacity: 0.9; }
+
+    /* Segmented tabs */
+    .stats-tabs {
+      display: flex;
+      gap: 6px;
+      padding: 4px;
+      margin: 0 0 18px;
+      border-radius: 16px;
+      background: var(--tg-theme-secondary-bg-color);
+      border: 1px solid rgba(128, 128, 128, 0.12);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    }
+    .stats-tab-btn {
+      flex: 1;
+      min-width: 0;
+      padding: 11px 8px;
+      border: none;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 700;
+      font-family: inherit;
+      letter-spacing: 0.02em;
+      cursor: pointer;
+      background: transparent;
+      color: var(--tg-theme-hint-color);
+      transition: background 0.2s ease, color 0.2s ease, transform 0.12s ease;
+    }
+    .stats-tab-btn:active { transform: scale(0.98); }
+    .stats-tab-btn[aria-selected="true"] {
+      background: var(--tg-theme-button-color);
+      color: var(--tg-theme-button-text-color);
+      box-shadow: 0 2px 10px color-mix(in srgb, var(--tg-theme-button-color) 35%, transparent);
+    }
+
+    .stats-tab-panel {
+      display: none;
+      animation: tabIn 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+    .stats-tab-panel.is-active { display: block; }
+    @keyframes tabIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
     .loading, .error {
       text-align: center;
-      padding: 36px 20px;
+      padding: 40px 20px;
       border-radius: 18px;
       background: var(--tg-theme-secondary-bg-color);
       border: 1px solid rgba(128, 128, 128, 0.12);
-      box-shadow: 0 2px 14px rgba(0, 0, 0, 0.06);
       color: var(--tg-theme-hint-color);
     }
-    .error { color: var(--down); }
+    .error { color: var(--app-danger); }
 
-    /* KPI Grid (top stats cards) */
+    .skeleton-block {
+      border-radius: 16px;
+      min-height: 120px;
+      background: linear-gradient(
+        110deg,
+        var(--tg-theme-secondary-bg-color) 0%,
+        color-mix(in srgb, var(--tg-theme-button-color) 12%, var(--tg-theme-secondary-bg-color)) 48%,
+        var(--tg-theme-secondary-bg-color) 100%
+      );
+      background-size: 200% 100%;
+      animation: sk 1.2s ease-in-out infinite;
+    }
+    @keyframes sk {
+      0% { background-position: 100% 0; }
+      100% { background-position: -100% 0; }
+    }
+
     .kpi-top-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 10px;
-      margin-bottom: 18px;
+      margin-bottom: 16px;
     }
     .kpi-top-card {
       background: var(--tg-theme-secondary-bg-color);
       border-radius: 16px;
       padding: 16px 14px;
-      border: 1px solid rgba(128, 128, 128, 0.1);
+      border: 1px solid rgba(128, 128, 128, 0.12);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
       position: relative;
       overflow: hidden;
     }
     .kpi-top-card::before {
       content: '';
       position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
+      top: 0; left: 0; right: 0;
       height: 3px;
       background: linear-gradient(90deg, var(--accent), transparent);
-      opacity: 0.7;
+      opacity: 0.75;
     }
     .kpi-top-label {
       font-size: 11px;
@@ -150,11 +168,7 @@
       line-height: 1.1;
       color: var(--tg-theme-text-color);
     }
-    .kpi-top-sub {
-      font-size: 12px;
-      color: var(--tg-theme-hint-color);
-      margin-top: 4px;
-    }
+    .kpi-top-sub { font-size: 12px; color: var(--tg-theme-hint-color); margin-top: 4px; }
     .kpi-top-trend {
       display: inline-block;
       font-size: 11px;
@@ -162,35 +176,50 @@
       padding: 2px 7px;
       border-radius: 6px;
     }
-    .kpi-top-trend.up { background: rgba(52, 199, 89, 0.18); color: var(--up); }
-    .kpi-top-trend.down { background: rgba(255, 59, 48, 0.18); color: var(--down); }
-
-    /* Section */
-    .section {
-      margin-bottom: 22px;
+    .kpi-top-trend.up {
+      background: color-mix(in srgb, var(--app-success) 18%, transparent);
+      color: var(--app-success);
     }
+    .kpi-top-trend.down {
+      background: color-mix(in srgb, var(--app-danger) 18%, transparent);
+      color: var(--app-danger);
+    }
+
+    .section { margin-bottom: 20px; }
     .section-title {
-      font-size: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
       font-weight: 700;
       margin-bottom: 12px;
-      color: var(--tg-theme-text-color);
-      letter-spacing: -0.01em;
+      color: var(--tg-theme-hint-color);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
     }
+    .section-title::before {
+      content: '';
+      flex: 0 0 3px;
+      height: 14px;
+      background: var(--tg-theme-button-color);
+      border-radius: 2px;
+    }
+
     .card {
       background: var(--tg-theme-secondary-bg-color);
       border-radius: 16px;
       padding: 16px 18px;
-      border: 1px solid rgba(128, 128, 128, 0.1);
+      border: 1px solid rgba(128, 128, 128, 0.12);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
       margin-bottom: 10px;
     }
 
-    /* Bar chart by day */
     .chart-bars {
       display: flex;
       align-items: flex-end;
       justify-content: space-between;
       gap: 6px;
-      height: 120px;
+      height: 128px;
       padding: 0 4px;
     }
     .chart-bar-wrap {
@@ -202,12 +231,13 @@
     }
     .chart-bar {
       width: 100%;
-      max-width: 36px;
+      max-width: 40px;
       min-height: 4px;
-      border-radius: 8px 8px 0 0;
+      border-radius: 10px 10px 0 0;
       background: linear-gradient(180deg, var(--accent) 0%, var(--accent-dim) 100%);
-      transition: height 0.3s ease;
+      transition: height 0.45s cubic-bezier(0.34, 1.2, 0.64, 1);
       margin: 0 auto;
+      box-shadow: 0 -2px 12px color-mix(in srgb, var(--tg-theme-button-color) 25%, transparent);
     }
     .chart-bar-label {
       font-size: 11px;
@@ -215,19 +245,15 @@
       color: var(--tg-theme-hint-color);
       margin-top: 8px;
     }
-    .chart-bar-value {
-      font-size: 10px;
-      color: var(--muted);
-      margin-top: 2px;
-    }
+    .chart-bar-value { font-size: 10px; color: var(--muted); margin-top: 2px; }
 
-    /* Weekly trend */
     .trend-bars {
       display: flex;
       align-items: flex-end;
       justify-content: space-between;
       gap: 4px;
-      height: 80px;
+      height: 100px;
+      padding: 0 2px;
     }
     .trend-bar-wrap {
       flex: 1;
@@ -237,21 +263,19 @@
     }
     .trend-bar {
       width: 100%;
-      max-width: 28px;
+      max-width: 32px;
       min-height: 4px;
-      border-radius: 6px 6px 0 0;
+      border-radius: 8px 8px 0 0;
       background: var(--accent-dim);
       margin: 0 auto;
-      transition: height 0.25s ease;
+      transition: height 0.35s ease;
     }
-    .trend-bar.active { background: var(--accent); }
-    .trend-bar-label {
-      font-size: 10px;
-      color: var(--muted);
-      margin-top: 6px;
+    .trend-bar.active {
+      background: linear-gradient(180deg, var(--accent) 0%, color-mix(in srgb, var(--accent) 55%, transparent) 100%);
+      box-shadow: 0 -4px 14px color-mix(in srgb, var(--tg-theme-button-color) 30%, transparent);
     }
+    .trend-bar-label { font-size: 10px; color: var(--muted); margin-top: 8px; font-weight: 600; }
 
-    /* KPI grid */
     .kpi-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -261,7 +285,8 @@
       background: var(--tg-theme-secondary-bg-color);
       border-radius: 14px;
       padding: 14px;
-      border: 1px solid rgba(128, 128, 128, 0.1);
+      border: 1px solid rgba(128, 128, 128, 0.12);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
     }
     .kpi-label {
       font-size: 10px;
@@ -276,68 +301,537 @@
       font-weight: 700;
       color: var(--tg-theme-text-color);
     }
-    .kpi-value.rating { font-size: 18px; }
-    .stars {
-      color: #f5a623;
-      letter-spacing: 2px;
-    }
+    .kpi-value.rating { font-size: 17px; }
+    .stars { color: var(--tg-theme-button-color); letter-spacing: 2px; }
     .kpi-sub { font-size: 11px; color: var(--tg-theme-hint-color); margin-top: 3px; }
 
-    /* Insights */
+    /* Money hero */
+    /* Бухгалтерия: премиальная сетка, DM Sans — не один «простынёй» блок */
+    .money-tab-root {
+      font-family: "DM Sans", var(--app-font-sans);
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .money-tab-root .section { margin-bottom: 0; }
+    .money-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .money-hero {
+      border-radius: 20px;
+      padding: 20px 20px 18px;
+      margin-bottom: 0;
+      position: relative;
+      overflow: hidden;
+      background: linear-gradient(155deg, rgba(247, 166, 0, 0.14) 0%, rgba(247, 166, 0, 0.04) 48%, transparent 100%);
+      border: 1px solid color-mix(in srgb, var(--tg-theme-button-color) 28%, transparent);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+    }
+    .money-hero::before {
+      content: '';
+      position: absolute;
+      top: -40%;
+      right: -20%;
+      width: 55%;
+      height: 120%;
+      background: radial-gradient(ellipse, rgba(247, 166, 0, 0.22) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .money-hero::after { display: none; }
+    .money-hero-inner { position: relative; z-index: 1; }
+    .money-hero-kicker {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--tg-theme-hint-color);
+      margin: 0 0 8px;
+    }
+    .money-hero-value {
+      font-size: clamp(30px, 8.5vw, 40px);
+      font-weight: 700;
+      letter-spacing: -0.04em;
+      color: var(--tg-theme-text-color);
+      line-height: 1.08;
+    }
+    .money-hero-sub {
+      margin: 10px 0 0;
+      font-size: 13px;
+      line-height: 1.4;
+      color: var(--tg-theme-hint-color);
+      font-weight: 500;
+    }
+
+    .money-section-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      font-weight: 700;
+      margin: 0 0 10px 2px;
+      color: var(--tg-theme-hint-color);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+    .money-section-title::before {
+      content: '';
+      flex: 0 0 3px;
+      height: 14px;
+      background: var(--tg-theme-button-color);
+      border-radius: 2px;
+    }
+
+    .money-card {
+      background: var(--tg-theme-secondary-bg-color);
+      border-radius: 16px;
+      padding: 16px 16px 14px;
+      border: 1px solid rgba(128, 128, 128, 0.12);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    }
+
+    .money-split-track {
+      display: flex;
+      height: 10px;
+      border-radius: 999px;
+      overflow: hidden;
+      gap: 3px;
+      margin-bottom: 14px;
+      background: color-mix(in srgb, var(--tg-theme-hint-color) 12%, transparent);
+    }
+    .money-split-seg {
+      min-width: 4px;
+      border-radius: 4px;
+      transition: flex 0.45s cubic-bezier(0.34, 1.2, 0.64, 1);
+    }
+    .money-split-seg--sessions {
+      background: linear-gradient(90deg, var(--tg-theme-button-color), color-mix(in srgb, var(--tg-theme-button-color) 72%, #fff));
+    }
+    .money-split-seg--pass {
+      background: linear-gradient(90deg, color-mix(in srgb, var(--tg-theme-button-color) 55%, var(--tg-theme-secondary-bg-color)), color-mix(in srgb, var(--tg-theme-button-color) 35%, transparent));
+    }
+    .money-split-seg--cert {
+      background: linear-gradient(90deg, color-mix(in srgb, var(--tg-theme-hint-color) 40%, var(--tg-theme-button-color)), color-mix(in srgb, var(--tg-theme-hint-color) 25%, transparent));
+    }
+
+    .money-legend {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .money-legend li {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--tg-theme-text-color);
+    }
+    .money-legend .lbl {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+      color: var(--tg-theme-hint-color);
+      font-size: 13px;
+    }
+    .money-legend .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .money-legend .dot--sessions { background: var(--tg-theme-button-color); }
+    .money-legend .dot--pass { background: color-mix(in srgb, var(--tg-theme-button-color) 55%, var(--tg-theme-secondary-bg-color)); }
+    .money-legend .dot--cert { background: color-mix(in srgb, var(--tg-theme-hint-color) 50%, var(--tg-theme-button-color)); }
+    .money-legend .amt { font-weight: 700; font-variant-numeric: tabular-nums; flex-shrink: 0; }
+
+    .money-kpi-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 8px;
+    }
+    .money-kpi-tile {
+      background: var(--tg-theme-secondary-bg-color);
+      border-radius: 14px;
+      padding: 12px 10px;
+      border: 1px solid rgba(128, 128, 128, 0.12);
+      text-align: center;
+    }
+    .money-kpi-tile-label {
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--tg-theme-hint-color);
+      line-height: 1.25;
+      margin-bottom: 6px;
+    }
+    .money-kpi-tile-value {
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: var(--tg-theme-text-color);
+      line-height: 1.2;
+    }
+
+    .money-stream-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    .money-stream-row:last-child { margin-bottom: 0; }
+    .money-stream-label {
+      font-size: 13px;
+      color: var(--tg-theme-hint-color);
+      font-weight: 500;
+    }
+    .money-stream-val {
+      font-size: 14px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      color: var(--tg-theme-text-color);
+    }
+    .money-stream-bar {
+      grid-column: 1 / -1;
+      height: 6px;
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--tg-theme-hint-color) 14%, transparent);
+      overflow: hidden;
+    }
+    .money-stream-bar > i {
+      display: block;
+      height: 100%;
+      border-radius: 999px;
+      background: linear-gradient(90deg, var(--tg-theme-button-color), color-mix(in srgb, var(--tg-theme-button-color) 65%, transparent));
+      min-width: 6%;
+      transition: width 0.45s cubic-bezier(0.34, 1.2, 0.64, 1);
+    }
+
+    .money-week-card {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 14px 16px;
+      border-radius: 16px;
+      background: color-mix(in srgb, var(--tg-theme-button-color) 10%, var(--tg-theme-secondary-bg-color));
+      border: 1px solid color-mix(in srgb, var(--tg-theme-button-color) 22%, transparent);
+    }
+    .money-week-card-main {
+      flex: 1;
+      min-width: 0;
+    }
+    .money-week-card-line {
+      font-size: 13px;
+      color: var(--tg-theme-text-color);
+      line-height: 1.45;
+    }
+    .money-week-card-line strong { font-weight: 700; }
+    .money-week-card-sub {
+      margin-top: 4px;
+      font-size: 12px;
+      color: var(--tg-theme-hint-color);
+    }
+    .money-week-badge-wrap { flex-shrink: 0; }
+    .money-week-flat {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--tg-theme-hint-color);
+    }
+
+    .money-hint-title {
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--tg-theme-hint-color);
+      margin-bottom: 8px;
+    }
+    .money-hint-body {
+      margin: 0;
+      font-size: 12px;
+      line-height: 1.5;
+      color: var(--tg-theme-hint-color);
+    }
+
+    @media (max-width: 380px) {
+      .money-kpi-row {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .money-break {
+      margin-top: 14px;
+      padding-top: 12px;
+      border-top: 1px solid rgba(128, 128, 128, 0.12);
+    }
+    .money-break-title {
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--tg-theme-hint-color);
+      margin-bottom: 8px;
+    }
+    .money-break-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 8px 0;
+      font-size: 13px;
+      border-bottom: 1px solid rgba(128, 128, 128, 0.06);
+    }
+    .money-break-row:last-child { border-bottom: none; }
+    .money-break-row span:first-child { color: var(--tg-theme-hint-color); }
+    .money-break-row strong { color: var(--tg-theme-text-color); font-weight: 700; }
+
+    /* Load ring */
+    .load-block {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      padding: 4px 0 8px;
+    }
+    .load-ring {
+      --pct: 0;
+      width: 96px;
+      height: 96px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      background: conic-gradient(
+        var(--tg-theme-button-color) calc(var(--pct) * 1%),
+        color-mix(in srgb, var(--tg-theme-hint-color) 22%, var(--tg-theme-secondary-bg-color)) 0
+      );
+      display: grid;
+      place-items: center;
+      box-shadow: 0 6px 24px color-mix(in srgb, var(--tg-theme-button-color) 22%, transparent);
+    }
+    .load-ring-inner {
+      width: 72px;
+      height: 72px;
+      border-radius: 50%;
+      background: var(--tg-theme-secondary-bg-color);
+      display: grid;
+      place-items: center;
+      font-size: 20px;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      color: var(--tg-theme-text-color);
+    }
+    .load-copy { flex: 1; min-width: 0; }
+    .load-copy .kpi-sub { margin-top: 6px; line-height: 1.4; }
+
     .insight {
       display: flex;
       align-items: flex-start;
       gap: 12px;
       padding: 14px 16px;
-      background: rgba(247, 166, 0, 0.12);
-      border-radius: 12px;
+      background: color-mix(in srgb, var(--tg-theme-button-color) 12%, transparent);
+      border-radius: 14px;
       margin-bottom: 10px;
-      border: 1px solid rgba(247, 166, 0, 0.22);
+      border: 1px solid color-mix(in srgb, var(--tg-theme-button-color) 22%, transparent);
     }
-    .insight-icon { font-size: 18px; flex-shrink: 0; }
+    .insight-icon { font-size: 18px; flex-shrink: 0; line-height: 1.2; }
     .insight-text { font-size: 13px; color: var(--tg-theme-text-color); line-height: 1.45; }
-    .finance-list {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-      margin-top: 8px;
-      font-size: 13px;
-    }
+
+    .finance-list { display: flex; flex-direction: column; gap: 0; margin-top: 6px; font-size: 14px; }
     .finance-row {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 8px;
-    }
-    .finance-row span:last-child {
-      font-weight: 600;
-    }
-    .empty-finance {
+      gap: 10px;
       padding: 12px 0;
-      font-size: 13px;
-      color: var(--muted);
+      border-bottom: 1px solid rgba(128, 128, 128, 0.08);
+    }
+    .finance-row:last-child { border-bottom: none; }
+    .finance-row span:first-child { min-width: 0; line-height: 1.35; }
+    .finance-row span:last-child { font-weight: 700; flex-shrink: 0; color: var(--tg-theme-text-color); }
+    .rank-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 26px;
+      height: 26px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 800;
+      margin-right: 10px;
+      flex-shrink: 0;
+      background: var(--tg-theme-secondary-bg-color);
+      border: 1px solid rgba(128, 128, 128, 0.14);
+      color: var(--tg-theme-hint-color);
+    }
+    .rank-badge.gold {
+      background: linear-gradient(145deg, #ffc23d 0%, #f7a600 55%, #e89400 100%);
+      color: #1a1a1a;
+      border-color: transparent;
+      box-shadow: 0 2px 10px color-mix(in srgb, var(--tg-theme-button-color) 35%, transparent);
+    }
+    .rank-badge.silver {
+      background: linear-gradient(145deg, #e8e8ea 0%, #c7c7cc 100%);
+      color: #1a1a1a;
+      border-color: transparent;
+    }
+    .rank-badge.bronze {
+      background: linear-gradient(145deg, #e0b088 0%, #b87333 100%);
+      color: #1a1a1a;
+      border-color: transparent;
+    }
+    .client-cell { display: flex; align-items: center; min-width: 0; }
+
+    .empty-finance { padding: 16px 0; font-size: 14px; color: var(--muted); text-align: center; }
+
+    .hint-footer {
+      margin-top: 8px;
+      padding: 14px 16px;
+      font-size: 12px;
+      line-height: 1.45;
+      color: var(--tg-theme-hint-color);
+      border-radius: 14px;
+      background: color-mix(in srgb, var(--tg-theme-hint-color) 8%, transparent);
+      border: 1px solid rgba(128, 128, 128, 0.1);
     }
 
-    .empty-state {
-      text-align: center;
-      padding: 32px 20px;
+    /* Pulse row — at-a-glance metrics */
+    .stat-chips {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding-bottom: 4px;
+      margin-bottom: 16px;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+    }
+    .stat-chips::-webkit-scrollbar { display: none; }
+    .stat-chip {
+      flex: 0 0 auto;
+      min-width: 108px;
+      padding: 12px 14px;
+      border-radius: 14px;
+      background: var(--tg-theme-secondary-bg-color);
+      border: 1px solid rgba(128, 128, 128, 0.12);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    }
+    .stat-chip-value {
+      font-size: 20px;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      color: var(--tg-theme-text-color);
+      line-height: 1.15;
+    }
+    .stat-chip-label {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
       color: var(--tg-theme-hint-color);
-      font-size: 14px;
+      margin-top: 4px;
+    }
+
+    .coach-card {
+      border-radius: 16px;
+      padding: 16px 16px 14px;
+      margin-bottom: 14px;
+      background: color-mix(in srgb, var(--app-success) 10%, var(--tg-theme-secondary-bg-color));
+      border: 1px solid color-mix(in srgb, var(--app-success) 22%, transparent);
+    }
+    .coach-card-title {
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--app-success);
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .coach-list { margin: 0; padding: 0; list-style: none; }
+    .coach-list li {
+      position: relative;
+      padding-left: 14px;
+      margin-bottom: 8px;
+      font-size: 13px;
+      line-height: 1.45;
+      color: var(--tg-theme-text-color);
+    }
+    .coach-list li:last-child { margin-bottom: 0; }
+    .coach-list li::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0.55em;
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: var(--app-success);
+    }
+
+    .cancel-strip {
+      margin-top: 10px;
+      height: 8px;
+      border-radius: 999px;
+      overflow: hidden;
+      background: color-mix(in srgb, var(--tg-theme-hint-color) 18%, transparent);
+      display: flex;
+    }
+    .cancel-strip-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--app-danger), color-mix(in srgb, var(--app-danger) 65%, var(--tg-theme-button-color)));
+      border-radius: 999px;
+      min-width: 0;
+      transition: width 0.5s cubic-bezier(0.34, 1.2, 0.64, 1);
+    }
+
+    .leads-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 4px;
+    }
+    .finance-row .col-money {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 2px;
+    }
+    .finance-row .sessions-n {
+      font-size: 15px;
+      font-weight: 800;
+    }
+    .finance-row .rev-n {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--tg-theme-button-color);
     }
   </style>
 </head>
 <body>
-  <section class="stats-hero">
-    <div class="stats-hero-inner">
-      <p class="stats-hero-kicker">Аналитика</p>
-      <h1 class="stats-hero-title">Ваша статистика</h1>
-      <p class="stats-hero-sub">Тренировки, клиенты и доход за выбранный период</p>
+  <section class="bd-hero" aria-labelledby="stats-hero-heading">
+    <div class="bd-hero-inner">
+      <p class="bd-hero-kicker">Аналитика</p>
+      <h1 id="stats-hero-heading" class="stats-hero-title">Ваша статистика</h1>
+      <p class="bd-hero-date">Занятия, доход и загрузка — в одном месте</p>
+      <div class="stats-hero-row">
+        <span class="pro-pill" title="Расширенная аналитика для вашего бизнеса">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l2.4 7.4H22l-6 4.6 2.3 7L12 17.8 5.7 21l2.3-7-6-4.6h7.6L12 2z"/></svg>
+          Pro
+        </span>
+      </div>
     </div>
   </section>
 
-  <div id="content">
-    <div class="loading">Загрузка…</div>
-  </div>
+  <div id="content"></div>
 
   <script>
     (function() {
@@ -383,6 +877,13 @@
         return '<span class="kpi-top-trend ' + cls + '">' + sign + pct + '%</span>';
       }
 
+      function renderRevenueTrend(pct) {
+        if (pct == null || pct === 0) return '';
+        var cls = pct > 0 ? 'up' : 'down';
+        var sign = pct > 0 ? '+' : '';
+        return ' <span class="kpi-top-trend ' + cls + '">' + sign + pct + '%</span>';
+      }
+
       function renderStars(avg) {
         if (avg == null) return '—';
         var full = Math.floor(avg);
@@ -398,27 +899,70 @@
         return v.toFixed(v % 1 === 0 ? 0 : 2) + ' BYN';
       }
 
-      function render(d) {
-        var weekLabel = formatWeekRange(d.week_start_iso || d.week_start, d.week_end_iso || d.week_end);
-        var html = '';
+      function rankClass(i) {
+        if (i === 0) return 'gold';
+        if (i === 1) return 'silver';
+        if (i === 2) return 'bronze';
+        return '';
+      }
 
-        // Top KPI cards
+      function buildCoachTips(d) {
+        var tips = [];
+        var load = d.load_pct;
+        var wst = d.week_slots_total || 0;
+        if (load != null && load < 36 && wst >= 4) {
+          tips.push('Загрузка слотов невысокая — напомните постоянным клиентам о свободных окнах или предложите разовую акцию.');
+        }
+        if (d.cancel_rate_30d != null && d.cancel_rate_30d >= 14) {
+          tips.push('Доля отмен за 30 дней заметна — зафиксируйте правила отмены в переписке и в описании услуги.');
+        }
+        if ((d.free_slots_week || 0) >= 4 && (d.week_upcoming || 0) <= 2 && wst >= 5) {
+          tips.push('Много свободных слотов при малом числе предстоящих занятий — хороший повод для поста или рассылки в Telegram.');
+        }
+        if ((d.client_requests_to_trainer_30d || 0) > 0 &&
+            (d.client_request_responses_30d || 0) < (d.client_requests_to_trainer_30d || 0)) {
+          tips.push('Есть входящие заявки — откройте раздел заявок и ответьте, чтобы не потерять лиды.');
+        }
+        if ((d.new_clients_30d || 0) > 0 && (d.repeat_clients_30d || 0) < Math.max(1, Math.floor((d.new_clients_30d || 0) / 2))) {
+          tips.push('Много новых клиентов — предложите абонемент или пакет занятий, чтобы закрепить их в практике.');
+        }
+        if (d.rating_avg != null && d.rating_avg >= 4.6 && (d.rating_count || 0) >= 3) {
+          tips.push('Сильный рейтинг — попросите довольных клиентов оставить отзыв в каталоге.');
+        }
+        return tips.slice(0, 5);
+      }
+
+      function renderCoachCard(d) {
+        var tips = buildCoachTips(d);
+        if (!tips.length) return '';
+        var html = '<div class="coach-card"><div class="coach-card-title">Советы по вашим цифрам</div><ul class="coach-list">';
+        tips.forEach(function(t) { html += '<li>' + t + '</li>'; });
+        html += '</ul></div>';
+        return html;
+      }
+
+      function renderOverview(d, weekLabel) {
+        var html = '';
+        html += '<div class="stat-chips">';
+        html += '<div class="stat-chip"><div class="stat-chip-value">' + (d.bookings_today != null ? d.bookings_today : 0) + '</div><div class="stat-chip-label">Сегодня</div></div>';
+        html += '<div class="stat-chip"><div class="stat-chip-value">' + (d.avg_check_cents_30d != null ? formatMoney(d.avg_check_cents_30d) : '—') + '</div><div class="stat-chip-label">Средний чек · 30 дн.</div></div>';
+        html += '<div class="stat-chip"><div class="stat-chip-value">' + (d.repeat_clients_30d != null ? d.repeat_clients_30d : 0) + '</div><div class="stat-chip-label">Повторных · 30 дн.</div></div>';
+        html += '</div>';
+
         html += '<div class="kpi-top-grid">';
         html += '<div class="kpi-top-card">';
-        html += '<div class="kpi-top-label">Эта неделя</div>';
+        html += '<div class="kpi-top-label">Неделя</div>';
         html += '<div class="kpi-top-value-row"><div class="kpi-top-value">' + (d.week_total || 0) + '</div>' + renderTrend(d.week_change_pct) + '</div>';
         html += '<div class="kpi-top-sub">' + weekLabel + '</div>';
-        html += '<div class="kpi-top-sub">Проведено: ' + (d.week_completed || 0) + ', предстоит: ' + (d.week_upcoming || 0) + '</div>';
+        html += '<div class="kpi-top-sub">Проведено ' + (d.week_completed || 0) + ' · впереди ' + (d.week_upcoming || 0) + '</div>';
         html += '</div>';
         html += '<div class="kpi-top-card">';
-        html += '<div class="kpi-top-label">Этот месяц</div>';
+        html += '<div class="kpi-top-label">Месяц</div>';
         html += '<div class="kpi-top-value-row"><div class="kpi-top-value">' + (d.month_total || 0) + '</div>' + renderTrend(d.month_change_pct) + '</div>';
         html += '<div class="kpi-top-sub">Уникальных клиентов: ' + (d.unique_clients_month || 0) + '</div>';
-        html += '</div>';
-        html += '</div>';
+        html += '</div></div>';
 
-        // Chart: by day
-        html += '<div class="section"><div class="section-title">Эта неделя по дням</div><div class="card">';
+        html += '<div class="section"><div class="section-title">Неделя по дням</div><div class="card">';
         html += '<div class="chart-bars">';
         (d.bookings_by_day || []).forEach(function(day) {
           var pct = Math.max(day.pct || 0, 5);
@@ -430,148 +974,268 @@
         });
         html += '</div></div></div>';
 
-        // Weekly trend
-        html += '<div class="section"><div class="section-title">Занятий по неделям</div><div class="card">';
+        html += renderCoachCard(d);
+
+        if (d.busiest_weekday || (d.week_change_pct != null && d.week_change_pct !== 0)) {
+          html += '<div class="section"><div class="section-title">Коротко</div>';
+          if (d.busiest_weekday) {
+            var busiestDisplay = d.busiest_date ? (formatDateShort(d.busiest_date) + ' · ' + d.busiest_weekday) : d.busiest_weekday;
+            html += '<div class="insight"><span class="insight-icon">📈</span><span class="insight-text">Чаще всего за месяц — <strong>' + busiestDisplay + '</strong></span></div>';
+          }
+          if (d.week_change_pct != null && d.week_change_pct !== 0) {
+            var weekText = d.week_change_pct > 0
+              ? 'К прошлой неделе: <strong>+' + d.week_change_pct + '%</strong> занятий'
+              : 'К прошлой неделе: <strong>' + d.week_change_pct + '%</strong> занятий';
+            html += '<div class="insight"><span class="insight-icon">📅</span><span class="insight-text">' + weekText + '</span></div>';
+          }
+          html += '</div>';
+        }
+
+        html += '<p class="hint-footer">В «Бухгалтерия» — выручка по неделям и топ с суммами. В «Динамика» — лиды CRM, тренд 6 недель и доля отмен.</p>';
+        return html;
+      }
+
+      function moneySplitWidths(s, p, c) {
+        var t = (s || 0) + (p || 0) + (c || 0);
+        if (t <= 0) return [34, 33, 33];
+        return [
+          Math.round(10000 * (s || 0) / t) / 100,
+          Math.round(10000 * (p || 0) / t) / 100,
+          Math.round(10000 * (c || 0) / t) / 100,
+        ];
+      }
+      function streamBarPct(part, total) {
+        if (!total || total <= 0) return 0;
+        if (!part || part <= 0) return 0;
+        return Math.max(5, Math.round((100 * part) / total));
+      }
+
+      function renderMoney(d) {
+        var html = '';
+        var rs7 = d.revenue_sessions_7d_cents != null ? d.revenue_sessions_7d_cents : 0;
+        var rp7 = d.revenue_pass_sales_7d_cents != null ? d.revenue_pass_sales_7d_cents : 0;
+        var rc7 = d.revenue_certificate_sales_7d_cents != null ? d.revenue_certificate_sales_7d_cents : 0;
+        var rs30 = d.revenue_sessions_30d_cents != null ? d.revenue_sessions_30d_cents : 0;
+        var rp30 = d.revenue_pass_sales_30d_cents != null ? d.revenue_pass_sales_30d_cents : 0;
+        var rc30 = d.revenue_certificate_sales_30d_cents != null ? d.revenue_certificate_sales_30d_cents : 0;
+        var w30 = moneySplitWidths(rs30, rp30, rc30);
+        var total7 = rs7 + rp7 + rc7;
+
+        html += '<div class="money-tab-root">';
+        html += '<div class="money-panel">';
+
+        html += '<div class="money-hero"><div class="money-hero-inner">';
+        html += '<p class="money-hero-kicker">Выручка · 30 дней</p>';
+        html += '<div class="money-hero-value">' + formatMoney(d.revenue_30d_cents) + '</div>';
+        html += '<p class="money-hero-sub">Разовые оплаты, продажи абонементов и сертификатов</p>';
+        html += '</div></div>';
+
+        html += '<div>';
+        html += '<h2 class="money-section-title">Структура за месяц</h2>';
+        html += '<div class="money-card">';
+        html += '<div class="money-split-track" role="img" aria-label="Доля выручки по потокам за 30 дней">';
+        html += '<div class="money-split-seg money-split-seg--sessions" style="width:' + w30[0] + '%"></div>';
+        html += '<div class="money-split-seg money-split-seg--pass" style="width:' + w30[1] + '%"></div>';
+        html += '<div class="money-split-seg money-split-seg--cert" style="width:' + w30[2] + '%"></div>';
+        html += '</div>';
+        html += '<ul class="money-legend">';
+        html += '<li><span class="lbl"><span class="dot dot--sessions"></span>Разовые занятия</span><span class="amt">' + formatMoney(rs30) + '</span></li>';
+        html += '<li><span class="lbl"><span class="dot dot--pass"></span>Абонементы</span><span class="amt">' + formatMoney(rp30) + '</span></li>';
+        html += '<li><span class="lbl"><span class="dot dot--cert"></span>Сертификаты</span><span class="amt">' + formatMoney(rc30) + '</span></li>';
+        html += '</ul>';
+        html += '</div></div>';
+
+        html += '<div>';
+        html += '<h2 class="money-section-title">Срез · 7 дней</h2>';
+        html += '<div class="money-kpi-row">';
+        html += '<div class="money-kpi-tile"><div class="money-kpi-tile-label">7 дней · всего</div><div class="money-kpi-tile-value">' + formatMoney(d.revenue_7d_cents) + '</div></div>';
+        html += '<div class="money-kpi-tile"><div class="money-kpi-tile-label">Средний чек · 30 дн.</div><div class="money-kpi-tile-value">' + (d.avg_check_cents_30d != null ? formatMoney(d.avg_check_cents_30d) : '—') + '</div></div>';
+        html += '<div class="money-kpi-tile"><div class="money-kpi-tile-label">Разовых оплат · 30 дн.</div><div class="money-kpi-tile-value">' + (d.paid_sessions_30d != null ? d.paid_sessions_30d : 0) + '</div></div>';
+        html += '</div></div>';
+
+        html += '<div>';
+        html += '<h2 class="money-section-title">Потоки · 7 дней</h2>';
+        html += '<div class="money-card">';
+        [
+          { label: 'Занятия', cents: rs7, pct: streamBarPct(rs7, total7) },
+          { label: 'Абонементы', cents: rp7, pct: streamBarPct(rp7, total7) },
+          { label: 'Сертификаты', cents: rc7, pct: streamBarPct(rc7, total7) },
+        ].forEach(function(row) {
+          html += '<div class="money-stream-row">';
+          html += '<span class="money-stream-label">' + row.label + '</span>';
+          html += '<span class="money-stream-val">' + formatMoney(row.cents) + '</span>';
+          html += '<div class="money-stream-bar"><i style="width:' + row.pct + '%"></i></div>';
+          html += '</div>';
+        });
+        html += '</div></div>';
+
+        html += '<div class="money-week-card">';
+        html += '<div class="money-week-card-main">';
+        html += '<div class="money-week-card-line">Неделя <strong>пн–вс</strong>: <strong>' + formatMoney(d.revenue_week_cents != null ? d.revenue_week_cents : 0) + '</strong></div>';
+        html += '<div class="money-week-card-sub">';
+        if (d.revenue_prev_week_cents != null) {
+          html += 'Прошлая неделя: ' + formatMoney(d.revenue_prev_week_cents);
+        } else {
+          html += 'Нет данных за прошлую неделю';
+        }
+        html += '</div></div>';
+        html += '<div class="money-week-badge-wrap">';
+        if (d.revenue_week_change_pct != null && d.revenue_week_change_pct !== 0) {
+          html += renderRevenueTrend(d.revenue_week_change_pct).trim();
+        } else {
+          html += '<span class="money-week-flat">к прошлой неделе</span>';
+        }
+        html += '</div></div>';
+
+        html += '</div>';
+
+        html += '<div class="section"><div class="section-title">Абонементы и сертификаты</div><div class="kpi-grid">';
+        html += '<div class="kpi-card"><div class="kpi-label">Активных абонементов</div><div class="kpi-value">' + (d.passes_active != null ? d.passes_active : 0) + '</div><div class="kpi-sub">С остатком у клиентов</div></div>';
+        html += '<div class="kpi-card"><div class="kpi-label">Абонементов за 30 дн.</div><div class="kpi-value">' + (d.passes_issued_30d || 0) + '</div><div class="kpi-sub">Новых продаж</div></div>';
+        html += '<div class="kpi-card"><div class="kpi-label">Сертификаты всего</div><div class="kpi-value">' + (d.certificates_issued_total || 0) + '</div><div class="kpi-sub">Выдано</div></div>';
+        html += '<div class="kpi-card"><div class="kpi-label">Остаток по сертиф.</div><div class="kpi-value">' + formatMoney(d.certificate_balance_cents) + '</div><div class="kpi-sub">' + (d.certificates_with_balance || 0) + ' шт. не погашено</div></div>';
+        html += '<div class="kpi-card"><div class="kpi-label">Погашено за 30 дн.</div><div class="kpi-value">' + (d.certificates_redeemed_30d || 0) + '</div><div class="kpi-sub">Сертификатов</div></div>';
+        html += '</div></div>';
+
+        html += '<div class="card money-top-clients-card">';
+        html += '<div class="section-title" style="margin-top:0;">Топ клиентов · 30 дней</div>';
+        var clients = d.top_clients || [];
+        if (!clients.length) {
+          html += '<div class="empty-finance">Пока нет занятий за период — данные появятся после тренировок.</div>';
+        } else {
+          html += '<div class="finance-list">';
+          clients.forEach(function(c, i) {
+            var name = c.name || 'Клиент';
+            var phone = c.phone || '';
+            var label = phone ? (name + ' · ' + phone) : name;
+            var rb = rankClass(i);
+            var rev = c.revenue_cents != null ? c.revenue_cents : 0;
+            html += '<div class="finance-row">';
+            html += '<span class="client-cell"><span class="rank-badge' + (rb ? ' ' + rb : '') + '">' + (i + 1) + '</span>' + label + '</span>';
+            html += '<span class="col-money"><span class="sessions-n">' + (c.sessions || 0) + ' зан.</span>';
+            html += '<span class="rev-n">' + (rev > 0 ? formatMoney(rev) : '—') + '</span></span>';
+            html += '</div>';
+          });
+          html += '</div>';
+        }
+        html += '</div>';
+
+        html += '<div class="hint-footer money-hint">';
+        html += '<div class="money-hint-title">Как считается доход</div>';
+        html += '<p class="money-hint-body">В выручку входят разовые оплаты по прайсу. Занятия по абонементу и по полностью покрывающему сертификату в день занятия не дублируются — они уже учтены в день продажи абонемента или сертификата. В топе — по числу занятий; сумма в колонке — только оплаты «за раз» по прайсу.</p>';
+        html += '</div>';
+        html += '</div>';
+        return html;
+      }
+
+      function renderGrowth(d) {
+        var html = '';
         var trendMax = d.trend_max || 1;
+        html += '<div class="section"><div class="section-title">Лиды CRM · 30 дней</div><div class="card">';
+        html += '<div class="leads-row">';
+        html += '<div class="kpi-card" style="margin:0;"><div class="kpi-label">Заявок вам</div><div class="kpi-value">' + (d.client_requests_to_trainer_30d != null ? d.client_requests_to_trainer_30d : 0) + '</div><div class="kpi-sub">Адресно тренеру</div></div>';
+        html += '<div class="kpi-card" style="margin:0;"><div class="kpi-label">Откликов</div><div class="kpi-value">' + (d.client_request_responses_30d != null ? d.client_request_responses_30d : 0) + '</div><div class="kpi-sub">Вы ответили</div></div>';
+        html += '</div></div></div>';
+
+        html += '<div class="section"><div class="section-title">6 недель · занятия</div><div class="card">';
         html += '<div class="trend-bars">';
         (d.weekly_trend || []).forEach(function(w, i) {
           var isLast = i === (d.weekly_trend.length - 1);
-          var h = trendMax > 0 ? Math.max(8, (w.count / trendMax) * 100) : 8;
+          var h = trendMax > 0 ? Math.max(10, (w.count / trendMax) * 100) : 10;
           html += '<div class="trend-bar-wrap">';
           html += '<div class="trend-bar' + (isLast ? ' active' : '') + '" style="height:' + h + '%"></div>';
           html += '<div class="trend-bar-label">' + (w.week_label || '') + '</div>';
           html += '</div>';
         });
-        html += '</div></div></div>';
+        html += '</div><p class="kpi-sub" style="margin-top:12px;text-align:center;">Последний столбец — текущая неделя</p></div></div>';
 
-        // KPI grid
-        html += '<div class="section"><div class="section-title">Показатели</div>';
-        html += '<div class="kpi-grid">';
-        var loadPct = d.load_pct != null ? d.load_pct : null;
-        html += '<div class="kpi-card">';
-        html += '<div class="kpi-label">Загрузка (неделя)</div>';
-        html += '<div class="kpi-value">' + (loadPct != null ? loadPct + '%' : '—') + '</div>';
-        html += '<div class="kpi-sub">' + (d.week_slots_booked || 0) + ' из ' + (d.week_slots_total || 0) + ' слотов</div>';
-        html += '</div>';
-        html += '<div class="kpi-card">';
-        html += '<div class="kpi-label">Новые клиенты (30 дн.)</div>';
-        html += '<div class="kpi-value">' + (d.new_clients_30d || 0) + '</div>';
-        html += '</div>';
-        html += '<div class="kpi-card">';
-        html += '<div class="kpi-label">Рейтинг</div>';
-        html += '<div class="kpi-value rating">' + renderStars(d.rating_avg) + '</div>';
-        html += '<div class="kpi-sub">' + (d.rating_count || 0) + ' отзывов</div>';
-        html += '</div>';
-        html += '<div class="kpi-card">';
-        html += '<div class="kpi-label">Клиентов в месяце</div>';
-        html += '<div class="kpi-value">' + (d.unique_clients_month || 0) + '</div>';
-        html += '</div>';
+        var loadPct = d.load_pct != null ? d.load_pct : 0;
+        html += '<div class="section"><div class="section-title">Загрузка слотов</div><div class="card">';
+        html += '<div class="load-block">';
+        html += '<div class="load-ring" style="--pct:' + loadPct + '"><div class="load-ring-inner">' + (d.load_pct != null ? loadPct + '%' : '—') + '</div></div>';
+        html += '<div class="load-copy">';
+        html += '<div class="kpi-label" style="margin-bottom:4px;">Эта неделя</div>';
+        html += '<div class="kpi-value" style="font-size:18px;">' + (d.week_slots_booked || 0) + ' из ' + (d.week_slots_total || 0) + '</div>';
+        html += '<div class="kpi-sub">Свободно слотов: <strong>' + (d.free_slots_week != null ? d.free_slots_week : '—') + '</strong></div>';
+        html += '</div></div></div></div>';
+
+        html += '<div class="section"><div class="section-title">Качество и поток</div><div class="kpi-grid">';
+        html += '<div class="kpi-card"><div class="kpi-label">Новые клиенты</div><div class="kpi-value">' + (d.new_clients_30d || 0) + '</div><div class="kpi-sub">За 30 дней</div></div>';
+        html += '<div class="kpi-card"><div class="kpi-label">Повторные · 30 дн.</div><div class="kpi-value">' + (d.repeat_clients_30d != null ? d.repeat_clients_30d : 0) + '</div><div class="kpi-sub">2+ занятий</div></div>';
+        html += '<div class="kpi-card"><div class="kpi-label">Отмены</div><div class="kpi-value">' + (d.cancellations_7d != null ? d.cancellations_7d : '0') + '</div><div class="kpi-sub">7 дн. · ' + (d.cancellations_30d != null ? d.cancellations_30d : 0) + ' за 30 дн.</div></div>';
+        html += '<div class="kpi-card"><div class="kpi-label">Доля отмен · 30 дн.</div><div class="kpi-value">' + (d.cancel_rate_30d != null ? d.cancel_rate_30d + '%' : '—') + '</div>';
+        html += '<div class="cancel-strip" aria-hidden="true"><div class="cancel-strip-fill" style="width:' + (d.cancel_rate_30d != null ? Math.min(100, d.cancel_rate_30d) : 0) + '%"></div></div>';
+        html += '<div class="kpi-sub">От всех исходов записи за период</div></div>';
+        html += '<div class="kpi-card"><div class="kpi-label">Рейтинг</div><div class="kpi-value rating">' + renderStars(d.rating_avg) + '</div><div class="kpi-sub">' + (d.rating_count || 0) + ' отзывов</div></div>';
+        html += '<div class="kpi-card"><div class="kpi-label">Клиентов в месяце</div><div class="kpi-value">' + (d.unique_clients_month || 0) + '</div><div class="kpi-sub">Уникальных</div></div>';
         html += '</div></div>';
 
-        // Finance section
-        html += '<div class="section"><div class="section-title">Финансы</div>';
-        html += '<div class="kpi-grid">';
-        html += '<div class="kpi-card">';
-        html += '<div class="kpi-label">Выручка за 7 дней</div>';
-        html += '<div class="kpi-value">' + formatMoney(d.revenue_7d_cents) + '</div>';
-        html += '<div class="kpi-sub">По фактическим ценам проведённых занятий</div>';
-        html += '</div>';
-        html += '<div class="kpi-card">';
-        html += '<div class="kpi-label">Выручка за 30 дней</div>';
-        html += '<div class="kpi-value">' + formatMoney(d.revenue_30d_cents) + '</div>';
-        html += '<div class="kpi-sub">По фактическим ценам проведённых занятий</div>';
-        html += '</div>';
-        html += '</div></div>';
-
-        // Useful for trainer: free slots, cancellations
-        html += '<div class="section"><div class="section-title">На этой неделе</div>';
-        html += '<div class="kpi-grid">';
-        html += '<div class="kpi-card">';
-        html += '<div class="kpi-label">Свободных слотов</div>';
-        html += '<div class="kpi-value">' + (d.free_slots_week != null ? d.free_slots_week : '—') + '</div>';
-        html += '<div class="kpi-sub">Можно ещё записать клиентов</div>';
-        html += '</div>';
-        html += '<div class="kpi-card">';
-        html += '<div class="kpi-label">Отмен за 7 дней</div>';
-        html += '<div class="kpi-value">' + (d.cancellations_7d != null ? d.cancellations_7d : '0') + '</div>';
-        html += '<div class="kpi-sub">За 30 дней: ' + (d.cancellations_30d != null ? d.cancellations_30d : 0) + '</div>';
-        html += '</div>';
-        html += '</div></div>';
-
-        // Абонементы и сертификаты
-        html += '<div class="section"><div class="section-title">📦 Абонементы и сертификаты</div>';
-        html += '<div class="kpi-grid">';
-        html += '<div class="kpi-card">';
-        html += '<div class="kpi-label">Абонементов активно</div>';
-        html += '<div class="kpi-value">' + (d.passes_active != null ? d.passes_active : 0) + '</div>';
-        html += '<div class="kpi-sub">С остатком занятий у клиентов</div>';
-        html += '</div>';
-        html += '<div class="kpi-card">';
-        html += '<div class="kpi-label">Выдано за 30 дней</div>';
-        html += '<div class="kpi-value">' + (d.passes_issued_30d != null ? d.passes_issued_30d : 0) + '</div>';
-        html += '<div class="kpi-sub">Новых абонементов</div>';
-        html += '</div>';
-        html += '<div class="kpi-card">';
-        html += '<div class="kpi-label">Сертификатов выдано</div>';
-        html += '<div class="kpi-value">' + (d.certificates_issued_total != null ? d.certificates_issued_total : 0) + '</div>';
-        html += '<div class="kpi-sub">Всего</div>';
-        html += '</div>';
-        html += '<div class="kpi-card">';
-        html += '<div class="kpi-label">С остатком (не погашены)</div>';
-        html += '<div class="kpi-value">' + (d.certificates_with_balance != null ? d.certificates_with_balance : 0) + '</div>';
-        html += '<div class="kpi-sub">На сумму ' + formatMoney(d.certificate_balance_cents) + '</div>';
-        html += '</div>';
-        html += '<div class="kpi-card">';
-        html += '<div class="kpi-label">Погашено за 30 дней</div>';
-        html += '<div class="kpi-value">' + (d.certificates_redeemed_30d != null ? d.certificates_redeemed_30d : 0) + '</div>';
-        html += '<div class="kpi-sub">Сертификатов</div>';
-        html += '</div>';
-        html += '</div></div>';
-
-        html += '<div class="card">';
-        html += '<div class="section-title" style="margin-top:0;">Топ клиентов (30 дней)</div>';
-        var clients = d.top_clients || [];
-        if (!clients.length) {
-          html += '<div class="empty-finance">Пока нет данных за последние 30 дней.</div>';
-        } else {
-          html += '<div class="finance-list">';
-          clients.forEach(function(c) {
-            var name = c.name || 'Клиент';
-            var phone = c.phone || '';
-            var label = phone ? (name + ' — ' + phone) : name;
-            html += '<div class="finance-row"><span>' + label + '</span><span>' + (c.sessions || 0) + ' зан.</span></div>';
-          });
-          html += '</div>';
-        }
-        html += '</div>';
-        html += '</div>';
-
-        // Insights
-        if (d.busiest_weekday || d.week_change_pct != null || d.month_change_pct != null) {
-          html += '<div class="section"><div class="section-title">Инсайты</div>';
-          if (d.busiest_weekday) {
-            var busiestDisplay = d.busiest_date ? (formatDateShort(d.busiest_date) + ' (' + d.busiest_weekday + ')') : d.busiest_weekday;
-            html += '<div class="insight"><span class="insight-icon">📈</span><span class="insight-text">Самый загруженный день за последний месяц — <strong>' + busiestDisplay + '</strong></span></div>';
-          }
-          if (d.week_change_pct != null && d.week_change_pct !== 0) {
-            var weekText = d.week_change_pct > 0 ? 'На ' + d.week_change_pct + '% больше занятий, чем на прошлой неделе' : 'На ' + (-d.week_change_pct) + '% меньше занятий, чем на прошлой неделе';
-            html += '<div class="insight"><span class="insight-icon">📅</span><span class="insight-text">' + weekText + '</span></div>';
-          }
-          if (d.month_change_pct != null && d.month_change_pct !== 0 && d.month_change_pct !== d.week_change_pct) {
-            var monthText = d.month_change_pct > 0 ? 'По сравнению с прошлым месяцем: +' + d.month_change_pct + '% занятий' : 'По сравнению с прошлым месяцем: ' + d.month_change_pct + '% занятий';
-            html += '<div class="insight"><span class="insight-icon">🎯</span><span class="insight-text">' + monthText + '</span></div>';
-          }
-          html += '</div>';
+        if (d.month_change_pct != null && d.month_change_pct !== 0 && d.month_change_pct !== d.week_change_pct) {
+          html += '<div class="section"><div class="section-title">Месяц к месяцу</div>';
+          var monthText = d.month_change_pct > 0
+            ? 'К прошлому месяцу: <strong>+' + d.month_change_pct + '%</strong> занятий'
+            : 'К прошлому месяцу: <strong>' + d.month_change_pct + '%</strong> занятий';
+          html += '<div class="insight"><span class="insight-icon">🎯</span><span class="insight-text">' + monthText + '</span></div></div>';
         }
 
         return html;
       }
 
+      function renderShell(d) {
+        var weekLabel = formatWeekRange(d.week_start_iso || d.week_start, d.week_end_iso || d.week_end);
+        return ''
+          + '<nav class="stats-tabs" role="tablist" aria-label="Разделы аналитики">'
+          +   '<button type="button" class="stats-tab-btn" role="tab" id="tab-overview" aria-selected="true" aria-controls="panel-overview" data-tab="overview">Обзор</button>'
+          +   '<button type="button" class="stats-tab-btn" role="tab" id="tab-money" aria-selected="false" aria-controls="panel-money" data-tab="money">Бухгалтерия</button>'
+          +   '<button type="button" class="stats-tab-btn" role="tab" id="tab-growth" aria-selected="false" aria-controls="panel-growth" data-tab="growth">Динамика</button>'
+          + '</nav>'
+          + '<div class="stats-tab-panel is-active" role="tabpanel" id="panel-overview" aria-labelledby="tab-overview">' + renderOverview(d, weekLabel) + '</div>'
+          + '<div class="stats-tab-panel" role="tabpanel" id="panel-money" aria-labelledby="tab-money" hidden>' + renderMoney(d) + '</div>'
+          + '<div class="stats-tab-panel" role="tabpanel" id="panel-growth" aria-labelledby="tab-growth" hidden>' + renderGrowth(d) + '</div>';
+      }
+
+      function wireTabs(root) {
+        var tabs = root.querySelectorAll('.stats-tab-btn');
+        var panels = root.querySelectorAll('.stats-tab-panel');
+        function hapticLight() {
+          if (tg && tg.HapticFeedback && typeof tg.HapticFeedback.impactOccurred === 'function') {
+            try { tg.HapticFeedback.impactOccurred('light'); } catch (e) { /* noop */ }
+          }
+        }
+        function activate(id) {
+          tabs.forEach(function(btn) {
+            var on = btn.getAttribute('data-tab') === id;
+            btn.setAttribute('aria-selected', on ? 'true' : 'false');
+          });
+          panels.forEach(function(p) {
+            var on = p.id === 'panel-' + id;
+            p.classList.toggle('is-active', on);
+            if (on) { p.removeAttribute('hidden'); } else { p.setAttribute('hidden', ''); }
+          });
+        }
+        tabs.forEach(function(btn) {
+          btn.addEventListener('click', function() {
+            hapticLight();
+            activate(btn.getAttribute('data-tab'));
+          });
+        });
+      }
+
+      function renderLoadingSkeleton() {
+        return '<div class="skeleton-block" style="height:52px;margin-bottom:12px;border-radius:16px;"></div>'
+          + '<div class="skeleton-block" style="height:140px;margin-bottom:12px;"></div>'
+          + '<div class="skeleton-block" style="height:200px;"></div>';
+      }
+
+      var contentEl = document.getElementById('content');
+      contentEl.innerHTML = '<div class="loading">' + renderLoadingSkeleton() + '</div>';
+
       getJson('/api/webapp/trainer/stats').then(function(data) {
-        document.getElementById('content').innerHTML = render(data);
+        contentEl.innerHTML = renderShell(data);
+        wireTabs(contentEl);
       }).catch(function(e) {
         var msg = (e && e.message) ? e.message : 'Ошибка сети или таймаут. Проверьте tunnel и откройте из бота снова.';
-        document.getElementById('content').innerHTML = '<div class="error">' + msg + '</div>';
+        contentEl.innerHTML = '<div class="error">' + msg + '</div>';
       });
     })();
   </script>

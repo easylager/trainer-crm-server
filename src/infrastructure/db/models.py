@@ -505,6 +505,20 @@ class PassRedemption(Base):
     redeemed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 
+class CertificateBookingCredit(Base):
+    """Certificate balance applied to a completed booking (trainer analytics; avoids double revenue)."""
+
+    __tablename__ = "certificate_booking_credits"
+
+    booking_id: Mapped[int] = mapped_column(
+        ForeignKey("bookings.id", ondelete="CASCADE"), nullable=False, primary_key=True
+    )
+    certificate_instance_id: Mapped[int] = mapped_column(
+        ForeignKey("certificate_instances.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    amount_cents: Mapped[int] = mapped_column(Integer(), nullable=False)
+
+
 class TrainerCertificateProduct(Base):
     """Trainer-defined certificate: fixed amount (e.g. 100 BYN) or 'any amount'. Info only for clients."""
     __tablename__ = "trainer_certificate_products"
@@ -622,6 +636,8 @@ class TrainerSubscription(Base):
         Enum(*SUBSCRIPTION_TIERS, name="subscription_tier_enum", create_constraint=False),
         nullable=True,
     )  # crm | online | analytics — determines feature access
+    # 1 / 3 / 12 — last paid billing period for tier mock checkout (UX: "current" on period tab)
+    billing_period_months: Mapped[Optional[int]] = mapped_column(Integer(), nullable=True)
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False)  # trial, active, past_due, cancelled

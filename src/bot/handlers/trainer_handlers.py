@@ -51,7 +51,7 @@ from src.application.trainer_access_state import TrainerAccessState, get_trainer
 from src.application.trainer_link import consume_link_token, get_trainer_id_by_telegram_id
 from src.application.trainer_use_cases import get_trainer
 from src.application.support_use_cases import create_support_message
-from src.infrastructure.db.models import SUBSCRIPTION_TIER_ANALYTICS, SUPPORT_FROM_TRAINER
+from src.infrastructure.db.models import SUBSCRIPTION_TIER_ANALYTICS, SUBSCRIPTION_TIER_CRM, SUPPORT_FROM_TRAINER
 from src.shared.audit import ACTOR_TRAINER_BOT, audit_log
 from src.shared.validation import MAX_COMMENT_LEN, MAX_REVIEW_LEN, safe_parse_id, truncate_text
 from src.application.trainer_schedule_use_cases import (
@@ -82,6 +82,13 @@ from src.bot.schedule_notifications import run_after_schedule_changed
 from src.infrastructure.db import async_session_factory
 
 router = Router(name="trainer")
+
+
+async def _trainer_has_crm_subscription(session, trainer_id: int) -> bool:
+    """True if trainer has an active paid tier at least CRM (schedule, clients, passes)."""
+    tier = await get_effective_subscription_tier(session, trainer_id)
+    return tier_satisfies(tier, SUBSCRIPTION_TIER_CRM)
+
 
 START_LINK_PREFIX = "link_"
 SCHEDULE_CALLBACK = "schedule"
@@ -501,9 +508,15 @@ async def cmd_editor(message: Message) -> None:
     telegram_id = message.from_user.id if message.from_user else 0
     async with async_session_factory() as session:
         trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
-    if not trainer_id:
-        await message.answer(msg.TRAINER_ONLY_VIA_SITE)
-        return
+        if not trainer_id:
+            await message.answer(msg.TRAINER_ONLY_VIA_SITE)
+            return
+        if not await _trainer_has_crm_subscription(session, trainer_id):
+            await message.answer(
+                msg.TRAINER_TIER_REQUIRED_CRM + "\n\n" + msg.TRAINER_TIER_CTA,
+                parse_mode=ParseMode.HTML,
+            )
+            return
     base = (Settings().webapp_base_url or "").rstrip("/")
     if base.startswith("https://"):
         url = f"{base}/webapp/schedule-editor"
@@ -721,9 +734,15 @@ async def cmd_bookings(message: Message) -> None:
     telegram_id = message.from_user.id if message.from_user else 0
     async with async_session_factory() as session:
         trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
-    if not trainer_id:
-        await message.answer(msg.TRAINER_ONLY_VIA_SITE)
-        return
+        if not trainer_id:
+            await message.answer(msg.TRAINER_ONLY_VIA_SITE)
+            return
+        if not await _trainer_has_crm_subscription(session, trainer_id):
+            await message.answer(
+                msg.TRAINER_TIER_REQUIRED_CRM + "\n\n" + msg.TRAINER_TIER_CTA,
+                parse_mode=ParseMode.HTML,
+            )
+            return
     base = (Settings().webapp_base_url or "").rstrip("/")
     if base.startswith("https://"):
         url = f"{base}/webapp/schedule-editor"
@@ -746,9 +765,15 @@ async def cmd_clients(message: Message) -> None:
     telegram_id = message.from_user.id if message.from_user else 0
     async with async_session_factory() as session:
         trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
-    if not trainer_id:
-        await message.answer(msg.TRAINER_ONLY_VIA_SITE)
-        return
+        if not trainer_id:
+            await message.answer(msg.TRAINER_ONLY_VIA_SITE)
+            return
+        if not await _trainer_has_crm_subscription(session, trainer_id):
+            await message.answer(
+                msg.TRAINER_TIER_REQUIRED_CRM + "\n\n" + msg.TRAINER_TIER_CTA,
+                parse_mode=ParseMode.HTML,
+            )
+            return
     base = (Settings().webapp_base_url or "").rstrip("/")
     if not base or not base.startswith("https://"):
         await message.answer(msg.TRAINER_CLIENTS_HTTPS_REQUIRED)
@@ -769,9 +794,15 @@ async def cmd_requests(message: Message) -> None:
     telegram_id = message.from_user.id if message.from_user else 0
     async with async_session_factory() as session:
         trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
-    if not trainer_id:
-        await message.answer(msg.TRAINER_ONLY_VIA_SITE)
-        return
+        if not trainer_id:
+            await message.answer(msg.TRAINER_ONLY_VIA_SITE)
+            return
+        if not await _trainer_has_crm_subscription(session, trainer_id):
+            await message.answer(
+                msg.TRAINER_TIER_REQUIRED_CRM + "\n\n" + msg.TRAINER_TIER_CTA,
+                parse_mode=ParseMode.HTML,
+            )
+            return
     base = (Settings().webapp_base_url or "").rstrip("/")
     if base.startswith("https://"):
         url = f"{base}/webapp/trainer-requests"
@@ -872,9 +903,15 @@ async def cmd_passes(message: Message) -> None:
     telegram_id = message.from_user.id if message.from_user else 0
     async with async_session_factory() as session:
         trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
-    if not trainer_id:
-        await message.answer(msg.TRAINER_ONLY_VIA_SITE)
-        return
+        if not trainer_id:
+            await message.answer(msg.TRAINER_ONLY_VIA_SITE)
+            return
+        if not await _trainer_has_crm_subscription(session, trainer_id):
+            await message.answer(
+                msg.TRAINER_TIER_REQUIRED_CRM + "\n\n" + msg.TRAINER_TIER_CTA,
+                parse_mode=ParseMode.HTML,
+            )
+            return
     base = (Settings().webapp_base_url or "").rstrip("/")
     if base.startswith("https://"):
         kb = InlineKeyboardMarkup(inline_keyboard=[
@@ -939,9 +976,15 @@ async def show_schedule(callback: CallbackQuery) -> None:
     telegram_id = callback.from_user.id if callback.from_user else 0
     async with async_session_factory() as session:
         trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
-    if not trainer_id:
-        await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
-        return
+        if not trainer_id:
+            await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
+            return
+        if not await _trainer_has_crm_subscription(session, trainer_id):
+            await callback.message.answer(
+                msg.TRAINER_TIER_REQUIRED_CRM + "\n\n" + msg.TRAINER_TIER_CTA,
+                parse_mode=ParseMode.HTML,
+            )
+            return
     text, keyboard = await _schedule_keyboard(trainer_id)
     await callback.message.edit_text(text, reply_markup=keyboard)
 
@@ -954,9 +997,15 @@ async def show_slots_from_schedule(callback: CallbackQuery) -> None:
     telegram_id = callback.from_user.id if callback.from_user else 0
     async with async_session_factory() as session:
         trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
-    if not trainer_id:
-        await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
-        return
+        if not trainer_id:
+            await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
+            return
+        if not await _trainer_has_crm_subscription(session, trainer_id):
+            await callback.message.answer(
+                msg.TRAINER_TIER_REQUIRED_CRM + "\n\n" + msg.TRAINER_TIER_CTA,
+                parse_mode=ParseMode.HTML,
+            )
+            return
     text, _ = await _slots_content(trainer_id)
     await callback.message.edit_text(
         text,
@@ -972,9 +1021,15 @@ async def schedule_create_booking_start(callback: CallbackQuery) -> None:
     telegram_id = callback.from_user.id if callback.from_user else 0
     async with async_session_factory() as session:
         trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
-    if not trainer_id:
-        await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
-        return
+        if not trainer_id:
+            await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
+            return
+        if not await _trainer_has_crm_subscription(session, trainer_id):
+            await callback.message.answer(
+                msg.TRAINER_TIER_REQUIRED_CRM + "\n\n" + msg.TRAINER_TIER_CTA,
+                parse_mode=ParseMode.HTML,
+            )
+            return
     now = datetime.now()
     cutoff = now + timedelta(hours=2)
     from_date = cutoff.date()
@@ -1132,9 +1187,15 @@ async def show_bookings(callback: CallbackQuery) -> None:
     telegram_id = callback.from_user.id if callback.from_user else 0
     async with async_session_factory() as session:
         trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
-    if not trainer_id:
-        await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
-        return
+        if not trainer_id:
+            await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
+            return
+        if not await _trainer_has_crm_subscription(session, trainer_id):
+            await callback.message.answer(
+                msg.TRAINER_TIER_REQUIRED_CRM + "\n\n" + msg.TRAINER_TIER_CTA,
+                parse_mode=ParseMode.HTML,
+            )
+            return
     text, keyboard = await _bookings_content(trainer_id, page=0)
     await callback.message.edit_text(text, reply_markup=keyboard)
 
@@ -1150,9 +1211,15 @@ async def show_bookings_page(callback: CallbackQuery) -> None:
     telegram_id = callback.from_user.id if callback.from_user else 0
     async with async_session_factory() as session:
         trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
-    if not trainer_id:
-        await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
-        return
+        if not trainer_id:
+            await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
+            return
+        if not await _trainer_has_crm_subscription(session, trainer_id):
+            await callback.message.answer(
+                msg.TRAINER_TIER_REQUIRED_CRM + "\n\n" + msg.TRAINER_TIER_CTA,
+                parse_mode=ParseMode.HTML,
+            )
+            return
     text, keyboard = await _bookings_content(trainer_id, page=page)
     await callback.message.edit_text(text, reply_markup=keyboard)
 
@@ -1544,9 +1611,15 @@ async def show_requests(callback: CallbackQuery) -> None:
     telegram_id = callback.from_user.id if callback.from_user else 0
     async with async_session_factory() as session:
         trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
-    if not trainer_id:
-        await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
-        return
+        if not trainer_id:
+            await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
+            return
+        if not await _trainer_has_crm_subscription(session, trainer_id):
+            await callback.message.answer(
+                msg.TRAINER_TIER_REQUIRED_CRM + "\n\n" + msg.TRAINER_TIER_CTA,
+                parse_mode=ParseMode.HTML,
+            )
+            return
     text, keyboard = await _requests_content(trainer_id)
     await callback.message.edit_text(text, reply_markup=keyboard)
 
@@ -1563,9 +1636,15 @@ async def show_requests_page(callback: CallbackQuery) -> None:
     telegram_id = callback.from_user.id if callback.from_user else 0
     async with async_session_factory() as session:
         trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
-    if not trainer_id:
-        await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
-        return
+        if not trainer_id:
+            await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
+            return
+        if not await _trainer_has_crm_subscription(session, trainer_id):
+            await callback.message.answer(
+                msg.TRAINER_TIER_REQUIRED_CRM + "\n\n" + msg.TRAINER_TIER_CTA,
+                parse_mode=ParseMode.HTML,
+            )
+            return
     text, keyboard = await _requests_content(trainer_id, offset=offset)
     await callback.message.edit_text(text, reply_markup=keyboard)
 

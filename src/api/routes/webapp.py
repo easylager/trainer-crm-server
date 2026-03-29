@@ -6,7 +6,7 @@ import html
 import logging
 import uuid
 from datetime import date, datetime, timedelta
-from typing import Any
+from typing import Any, Literal
 
 logger = logging.getLogger(__name__)
 
@@ -160,7 +160,7 @@ from src.bot import messages as msg
 from src.shared.ttl_cache import get_slots_cached, set_slots_cached
 from src.shared.config import Settings
 from src.shared.notification_hours import NOTIFICATION_TZ, working_hours_between
-from src.shared.telegram_webapp import parse_user_id_from_init_data, validate_init_data
+from src.shared.telegram_webapp import InitDataAuthError, require_telegram_user_id
 
 try:
     from zoneinfo import ZoneInfo
@@ -171,12 +171,10 @@ router = APIRouter(prefix="/api/webapp", tags=["webapp"])
 
 
 def _get_telegram_id_from_init_data(init_data: str, *, bot_token: str) -> int:
-    if not validate_init_data(init_data, bot_token):
-        raise HTTPException(status_code=401, detail="Invalid or expired init data")
-    telegram_id = parse_user_id_from_init_data(init_data)
-    if not telegram_id:
-        raise HTTPException(status_code=401, detail="User not found in init data")
-    return telegram_id
+    try:
+        return require_telegram_user_id(init_data, bot_token)
+    except InitDataAuthError:
+        raise HTTPException(status_code=401, detail="Invalid or expired init data") from None
 
 
 def _trainer_telegram_id(init_data: str) -> int:
@@ -1350,6 +1348,7 @@ async def get_trainer_subscription_tier_status(
 
 class SubscriptionTierMockCheckoutBody(BaseModel):
     tier: str
+    period_months: Literal[1, 3, 12]
 
 
 @router.post("/trainer/subscription/mock-checkout")
@@ -1362,7 +1361,7 @@ async def post_trainer_subscription_mock_checkout(
     """
     Mock checkout for subscription tier (demo payment).
     
-    Activates the tier subscription using pricing from subscription_tier_pricing.
+    Activates the tier subscription using pricing from subscription_tier_period_pricing.
     In production this would redirect to payment gateway.
     Auth: trainer initData.
     """
@@ -1380,7 +1379,9 @@ async def post_trainer_subscription_mock_checkout(
             detail=f"Invalid tier. Must be one of: {', '.join(SUBSCRIPTION_TIERS)}",
         )
     
-    result = await set_subscription_after_mock_payment(session, trainer_id, body.tier)
+    result = await set_subscription_after_mock_payment(
+        session, trainer_id, body.tier, body.period_months
+    )
     if not result:
         raise HTTPException(status_code=400, detail="Could not activate tier subscription")
     
@@ -1391,6 +1392,7 @@ async def post_trainer_subscription_mock_checkout(
         "price_cents": result["price_cents"],
         "currency": result["currency"],
         "period_days": result["period_days"],
+        "period_months": result["period_months"],
     }
 
 
@@ -1897,8 +1899,9 @@ async def get_admin_subscription_tiers(
 
 
 class SubscriptionTierPatchBody(BaseModel):
-    price_cents: int | None = None
-    period_days: int | None = None
+    """Metadata on subscription_tier_pricing; matrix prices in period_prices (cents, keys 1 / 3 / 12)."""
+
+    period_prices: dict[str, int] | None = None
     name_ru: str | None = None
     short_description_ru: str | None = None
     bullets: list[str] | None = None
@@ -1930,18 +1933,22 @@ async def patch_admin_subscription_tier(
             detail=f"Invalid tier. Must be one of: {', '.join(SUBSCRIPTION_TIERS)}",
         )
     
-    # Validation
-    if body.price_cents is not None and body.price_cents < 0:
-        raise HTTPException(status_code=400, detail="price_cents must be >= 0")
-    if body.period_days is not None and body.period_days <= 0:
-        raise HTTPException(status_code=400, detail="period_days must be > 0")
-    
+    if body.period_prices:
+        allowed = {"1", "3", "12"}
+        for k, v in body.period_prices.items():
+            if str(k) not in allowed:
+                raise HTTPException(
+                    status_code=400,
+                    detail="period_prices keys must be 1, 3, or 12 (months)",
+                )
+            if v < 0:
+                raise HTTPException(status_code=400, detail="period_prices values must be >= 0")
+
     result = await update_subscription_tier_pricing(
         session,
         tier,
         admin_tid,
-        price_cents=body.price_cents,
-        period_days=body.period_days,
+        period_prices=body.period_prices,
         name_ru=body.name_ru,
         short_description_ru=body.short_description_ru,
         bullets=body.bullets,
@@ -2165,6 +2172,11 @@ async def post_trainer_certificate_issue(
             except Exception:
                 expires_at = None
 
+        _s = Settings()
+        _code = (instance.get("code") or "").strip()
+        _un = (_s.client_bot_username or "").strip().lstrip("@")
+        _activation = f"https://t.me/{_un}?start=cert_{_code}" if _un and _code else None
+
         pdf_bytes = build_certificate_pdf(
             trainer_name=trainer_name,
             product_name=product_name,
@@ -2174,6 +2186,7 @@ async def post_trainer_certificate_issue(
             purchased_by_name=instance.get("purchased_by_name"),
             issued_at=issued_at,
             expires_at=expires_at,
+            activation_url=_activation,
         )
         file_key = upload_certificate_file(pdf_bytes, trainer_id, instance["id"])
         await update_certificate_file_url(session, instance["id"], trainer_id, file_key)

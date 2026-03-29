@@ -10,38 +10,12 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet" />
-  <script>
-    /** Применяем правильную CRM палитру - графитово-темный фон в темной теме */
-    (function () {
-      function isAppDark() {
-        var tg = window.Telegram && window.Telegram.WebApp;
-        if (tg && tg.colorScheme) return tg.colorScheme === 'dark';
-        return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-      }
-      function applyAppTheme() {
-        var d = document.documentElement;
-        var dark = isAppDark();
-        d.style.setProperty('--tg-theme-button-color', '#f5a623');
-        d.style.setProperty('--tg-theme-button-text-color', '#1a1a1a');
-        /* Графитово-темный фон + карточки #2c2c2e (конституция CRM) */
-        d.style.setProperty('--tg-theme-bg-color', dark ? '#1c1c1c' : '#fffbec');
-        d.style.setProperty('--tg-theme-text-color', dark ? '#ffffff' : '#1a1a1a');
-        d.style.setProperty('--tg-theme-secondary-bg-color', dark ? '#2c2c2e' : '#fff5e1');
-        d.style.setProperty('--tg-theme-hint-color', dark ? '#8e8e93' : '#666666');
-        d.style.setProperty('--app-danger', '#ff3b30');
-      }
-      applyAppTheme();
-      if (window.matchMedia) {
-        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyAppTheme);
-      }
-      window.__applyBookTheme = applyAppTheme;
-    })();
-  </script>
+  <script src="client-mini-app-theme.js"></script>
   <style>
     * { box-sizing: border-box; }
     body {
       margin: 0;
-      font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-family: var(--app-font-sans);
       background: var(--tg-theme-bg-color);
       color: var(--tg-theme-text-color);
       min-height: 100vh;

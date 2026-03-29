@@ -2492,8 +2492,15 @@ async def on_link_phone_message(message: Message) -> None:
             return
         code = "".join(random.choices(string.digits, k=4))
         _link_phone_state[telegram_id] = {"step": "code", "client_id": client["id"], "code": code}
-        # TODO: send real SMS; for now code in bot message + server log for dev
-        logger.info("Phone verification code for client_id=%s (dev): %s", client["id"], code)
+        # TODO: send real SMS; for now code in bot message. Never log the code unless DEBUG (secrets in logs policy).
+        if Settings().debug:
+            logger.info(
+                "Phone verification code for client_id=%s (debug only): %s",
+                client["id"],
+                code,
+            )
+        else:
+            logger.info("Phone verification code issued for client_id=%s", client["id"])
         dev_hint = msg.CLIENT_LINK_CODE_DEV.format(code=code)
         await message.answer(msg.CLIENT_LINK_CODE_SENT + dev_hint, parse_mode=ParseMode.HTML)
         return

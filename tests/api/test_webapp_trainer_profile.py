@@ -24,10 +24,7 @@ async def test_webapp_trainer_profile_get_401_without_init_data(app_use_test_db)
 @pytest.mark.asyncio
 async def test_webapp_trainer_profile_get_403_when_telegram_not_linked(app_use_test_db) -> None:
     tg = 880_000_111
-    with (
-        patch("src.api.routes.webapp_trainer_profile.validate_init_data", return_value=True),
-        patch("src.api.routes.webapp_trainer_profile.parse_user_id_from_init_data", return_value=tg),
-    ):
+    with patch("src.api.routes.webapp_trainer_profile.require_telegram_user_id", return_value=tg):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             resp = await client.get(
                 "/api/webapp/trainer/profile",
@@ -54,10 +51,7 @@ async def test_webapp_trainer_profile_get_returns_trainer_and_readiness(
     )
     await db_session.commit()
 
-    with (
-        patch("src.api.routes.webapp_trainer_profile.validate_init_data", return_value=True),
-        patch("src.api.routes.webapp_trainer_profile.parse_user_id_from_init_data", return_value=tg),
-    ):
+    with patch("src.api.routes.webapp_trainer_profile.require_telegram_user_id", return_value=tg):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             resp = await client.get(
                 "/api/webapp/trainer/profile",
@@ -91,10 +85,7 @@ async def test_webapp_trainer_profile_patch_updates_profile(
     )
     await db_session.commit()
 
-    with (
-        patch("src.api.routes.webapp_trainer_profile.validate_init_data", return_value=True),
-        patch("src.api.routes.webapp_trainer_profile.parse_user_id_from_init_data", return_value=tg),
-    ):
+    with patch("src.api.routes.webapp_trainer_profile.require_telegram_user_id", return_value=tg):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             patch_resp = await client.patch(
                 "/api/webapp/trainer/profile",
@@ -126,10 +117,7 @@ async def test_webapp_trainer_profile_patch_422_invalid_phone(
     )
     await db_session.commit()
 
-    with (
-        patch("src.api.routes.webapp_trainer_profile.validate_init_data", return_value=True),
-        patch("src.api.routes.webapp_trainer_profile.parse_user_id_from_init_data", return_value=tg),
-    ):
+    with patch("src.api.routes.webapp_trainer_profile.require_telegram_user_id", return_value=tg):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             patch_resp = await client.patch(
                 "/api/webapp/trainer/profile",
@@ -160,10 +148,7 @@ async def test_webapp_trainer_education_create_and_patch(
     )
     await db_session.commit()
 
-    with (
-        patch("src.api.routes.webapp_trainer_profile.validate_init_data", return_value=True),
-        patch("src.api.routes.webapp_trainer_profile.parse_user_id_from_init_data", return_value=tg),
-    ):
+    with patch("src.api.routes.webapp_trainer_profile.require_telegram_user_id", return_value=tg):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             post_resp = await client.post(
                 "/api/webapp/trainer/education",
@@ -211,10 +196,7 @@ async def test_webapp_trainer_education_delete(
     )
     await db_session.commit()
 
-    with (
-        patch("src.api.routes.webapp_trainer_profile.validate_init_data", return_value=True),
-        patch("src.api.routes.webapp_trainer_profile.parse_user_id_from_init_data", return_value=tg),
-    ):
+    with patch("src.api.routes.webapp_trainer_profile.require_telegram_user_id", return_value=tg):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             post_resp = await client.post(
                 "/api/webapp/trainer/education",

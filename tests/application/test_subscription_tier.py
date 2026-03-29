@@ -151,6 +151,7 @@ class TestGetTrainerSubscriptionStatus:
             expires_at,  # expires_at
             "active",  # status
             started_at,  # started_at
+            1,  # billing_period_months
         )
         
         mock_session.execute.side_effect = [mock_result1, mock_result2]
@@ -160,6 +161,7 @@ class TestGetTrainerSubscriptionStatus:
         assert status["is_active"] is True
         assert status["tier"] == SUBSCRIPTION_TIER_ONLINE
         assert status["effective_tier"] == SUBSCRIPTION_TIER_ONLINE
+        assert status["billing_period_months"] == 1
         assert SUBSCRIPTION_TIER_CRM in status["unlocked_features"]
         assert SUBSCRIPTION_TIER_ONLINE in status["unlocked_features"]
 
@@ -188,7 +190,7 @@ class TestMockCheckout:
         mock_session = AsyncMock()
         
         result = await set_subscription_after_mock_payment(
-            mock_session, trainer_id=1, tier="invalid_tier"
+            mock_session, trainer_id=1, tier="invalid_tier", period_months=1
         )
         assert result is None
 
@@ -199,11 +201,9 @@ class TestMockCheckout:
         now = datetime.now(timezone.utc)
         expires_at = now + timedelta(days=30)
         
-        # Mock pricing lookup
+        # Mock period pricing lookup (get_tier_period_pricing join)
         mock_pricing_result = MagicMock()
         mock_pricing_result.fetchone.return_value = (
-            1,  # id
-            SUBSCRIPTION_TIER_ONLINE,  # tier
             2900,  # price_cents
             "BYN",  # currency
             30,  # period_days
@@ -234,7 +234,7 @@ class TestMockCheckout:
         ]
 
         result = await set_subscription_after_mock_payment(
-            mock_session, trainer_id=1, tier=SUBSCRIPTION_TIER_ONLINE
+            mock_session, trainer_id=1, tier=SUBSCRIPTION_TIER_ONLINE, period_months=1
         )
         
         assert result is not None
@@ -243,6 +243,7 @@ class TestMockCheckout:
         assert result["price_cents"] == 2900
         assert result["currency"] == "BYN"
         assert result["period_days"] == 30
+        assert result["period_months"] == 1
         mock_session.commit.assert_called_once()
 
 
@@ -252,13 +253,25 @@ class TestTierCatalog:
     @pytest.mark.asyncio
     async def test_catalog_returns_all_active_tiers(self) -> None:
         mock_session = AsyncMock()
-        mock_result = MagicMock()
-        mock_result.fetchall.return_value = [
-            ("crm", 1900, "BYN", 30, "CRM", "Базовый функционал", ["Feature 1"], 1),
-            ("online", 2900, "BYN", 30, "Онлайн-запись", "Клиенты записываются", ["Feature 2"], 2),
-            ("analytics", 4900, "BYN", 30, "Аналитика", "Отчёты", ["Feature 3"], 3),
+        mock_tiers = MagicMock()
+        mock_tiers.fetchall.return_value = [
+            ("crm", "BYN", "CRM", "Базовый функционал", ["Feature 1"], 1),
+            ("online", "BYN", "Онлайн-запись", "Клиенты записываются", ["Feature 2"], 2),
+            ("analytics", "BYN", "Аналитика", "Отчёты", ["Feature 3"], 3),
         ]
-        mock_session.execute.return_value = mock_result
+        mock_periods = MagicMock()
+        mock_periods.fetchall.return_value = [
+            ("crm", 1, 1900, 30),
+            ("crm", 3, 5000, 90),
+            ("crm", 12, 18000, 365),
+            ("online", 1, 2900, 30),
+            ("online", 3, 7800, 90),
+            ("online", 12, 27000, 365),
+            ("analytics", 1, 4900, 30),
+            ("analytics", 3, 13000, 90),
+            ("analytics", 12, 45000, 365),
+        ]
+        mock_session.execute.side_effect = [mock_tiers, mock_periods]
 
         catalog = await get_subscription_tier_catalog(mock_session)
         
@@ -266,6 +279,8 @@ class TestTierCatalog:
         assert catalog[0]["tier"] == "crm"
         assert catalog[1]["tier"] == "online"
         assert catalog[2]["tier"] == "analytics"
+        assert catalog[0]["prices_by_period"]["1"] == 1900
+        assert catalog[1]["prices_by_period"]["3"] == 7800
         
         # Check includes_tiers is computed correctly
         assert catalog[0]["includes_tiers"] == [SUBSCRIPTION_TIER_CRM]

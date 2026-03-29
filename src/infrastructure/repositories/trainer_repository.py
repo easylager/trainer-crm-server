@@ -2,7 +2,7 @@
 Infrastructure: trainer persistence. All SQL here; no business rules.
 """
 from typing import Any
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -616,6 +616,9 @@ class TrainerRepository:
         service_id: int | None = None,
         arena_id: int | None = None,
         order_by: str = "rating",
+        # Time-based filters
+        filter_days: list[int] | None = None,  # [1,2,3] for Mon,Tue,Wed (0=Sunday)
+        filter_time_slots: list[str] | None = None,  # ["09:00-12:00", "18:00-21:00"]
     ) -> tuple[list[dict[str, Any]], int]:
         """
         Active trainers with profile, photos, service_ids; paginated.
@@ -646,6 +649,52 @@ class TrainerRepository:
         if arena_id is not None:
             base += " INNER JOIN trainer_arenas ta ON ta.trainer_id = t.id AND ta.arena_id = :arena_id"
             params["arena_id"] = arena_id
+
+        # Time filters: match real `slots` rows (available, next 14 days).
+        # Day chips: 0=Sun .. 6=Sat (same as PostgreSQL EXTRACT(DOW FROM date)).
+        # Time windows: interval overlap — slot [start,end) vs window [a,b): end > a AND start < b.
+        has_day = bool(filter_days)
+        time_overlaps: list[str] = []
+        if filter_time_slots:
+            tw_i = 0
+            for time_slot in filter_time_slots:
+                parts = time_slot.split("-", 1)
+                if len(parts) != 2:
+                    continue
+                w_start, w_end = parts[0].strip(), parts[1].strip()
+                if not w_start or not w_end:
+                    continue
+                try:
+                    t_a = datetime.strptime(w_start, "%H:%M").time()
+                    t_b = datetime.strptime(w_end, "%H:%M").time()
+                except ValueError:
+                    continue
+                # asyncpg expects Python time for TIME binds; strings raise DataError.
+                time_overlaps.append(
+                    f"(s.end_time > CAST(:slot_tw{tw_i}_a AS TIME) AND s.start_time < CAST(:slot_tw{tw_i}_b AS TIME))"
+                )
+                params[f"slot_tw{tw_i}_a"] = t_a
+                params[f"slot_tw{tw_i}_b"] = t_b
+                tw_i += 1
+        has_time = bool(time_overlaps)
+        if has_day or has_time:
+            slot_where: list[str] = [
+                "s.status = 'available'",
+                "s.slot_date >= CURRENT_DATE",
+                "s.slot_date <= CURRENT_DATE + INTERVAL '14 days'",
+            ]
+            if has_day:
+                d_ph = ", ".join(f":slot_dow{i}" for i in range(len(filter_days)))
+                for i, d in enumerate(filter_days):
+                    params[f"slot_dow{i}"] = d
+                slot_where.append(f"EXTRACT(DOW FROM s.slot_date) IN ({d_ph})")
+            if has_time:
+                slot_where.append("(" + " OR ".join(time_overlaps) + ")")
+            base += f""" INNER JOIN (
+                SELECT DISTINCT s.trainer_id
+                FROM slots s
+                WHERE {' AND '.join(slot_where)}
+            ) available_slots ON available_slots.trainer_id = t.id"""
 
         # Total count with same filters
         count_q = "SELECT COUNT(DISTINCT t.id) " + base + where
@@ -780,6 +829,7 @@ class TrainerRepository:
             id_params,
         )
         cert_trainer_ids: set[int] = {row[0] for row in r_cert.fetchall()}
+        
         out = []
         for row in rows:
             tid = row[0]

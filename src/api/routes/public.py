@@ -16,6 +16,7 @@ from src.application.trainer_use_cases import (
 )
 from src.infrastructure import s3
 from src.shared.config import Settings
+from src.shared.public_trainer_payload import sanitize_trainer_for_public_catalog
 
 router = APIRouter(prefix="/api/public", tags=["public"])
 
@@ -103,6 +104,9 @@ async def list_active_trainers(
     service_id: int | None = None,
     arena_id: int | None = None,
     order_by: str = "rating",
+    # Time-based filters
+    filter_days: str | None = None,  # comma-separated: "1,2,3" for Mon,Tue,Wed
+    filter_time_slots: str | None = None,  # comma-separated: "09:00-12:00,18:00-21:00"
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     """
@@ -111,6 +115,22 @@ async def list_active_trainers(
     Each trainer includes `can_book` flag: True if clients can self-book (tier >= online).
     Trainers are always visible in catalog if status=active, regardless of subscription tier.
     """
+    # Parse filter parameters
+    days_filter = None
+    if filter_days:
+        try:
+            days_filter = [int(d.strip()) for d in filter_days.split(',') if d.strip().isdigit()]
+        except ValueError:
+            days_filter = None
+    
+    time_slots_filter = None
+    if filter_time_slots:
+        time_slots_filter = [slot.strip() for slot in filter_time_slots.split(',') if slot.strip()]
+    if days_filter is not None and len(days_filter) == 0:
+        days_filter = None
+    if time_slots_filter is not None and len(time_slots_filter) == 0:
+        time_slots_filter = None
+
     items, total = await list_active_trainers_for_client(
         session,
         limit=limit,
@@ -119,9 +139,13 @@ async def list_active_trainers(
         service_id=service_id,
         arena_id=arena_id,
         order_by=order_by,
+        filter_days=days_filter,
+        filter_time_slots=time_slots_filter,
     )
-    # Enrich with booking availability and photo URLs
-    for t in items:
+    # Enrich with booking availability and photo URLs (strip internal ids from catalog payloads)
+    for i, t in enumerate(items):
+        t = sanitize_trainer_for_public_catalog(t)
+        items[i] = t
         _enrich_trainer_photo_urls(t)
         availability = await get_trainer_booking_availability(session, t["id"])
         t["can_book"] = availability["can_book"]
@@ -150,7 +174,8 @@ async def get_one_active_trainer(
     trainer = await get_trainer(session, trainer_id)
     if not trainer or (trainer.get("status") or "").strip().lower() != "active":
         raise HTTPException(status_code=404, detail="Trainer not found")
-    
+
+    trainer = sanitize_trainer_for_public_catalog(trainer)
     _enrich_trainer_photo_urls(trainer)
     trainer["_photo_source"] = (trainer.get("photos") or [{}])[0].get("_source", "proxy") if trainer.get("photos") else "proxy"
     
@@ -197,7 +222,10 @@ async def get_trainer_education_public(
 
 @router.get("/photos/{file_key:path}")
 async def serve_photo(file_key: str) -> Response:
-    """Serve photo from S3 or local storage. URL = API_BASE_URL + /api/public/photos/ + file_key."""
+    """
+    Serve catalog trainer photos from S3 or local storage. Only object keys under `trainers/`
+    are readable here (private prefixes like `legal/`, `certificates/` are rejected in s3.get_photo).
+    """
     result = s3.get_photo(file_key)
     if not result:
         raise HTTPException(status_code=404, detail="Not found")

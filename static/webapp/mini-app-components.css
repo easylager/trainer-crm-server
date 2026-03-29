@@ -7,7 +7,7 @@
 html { overflow-x: hidden; }
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: var(--app-font-sans);
   background: var(--tg-theme-bg-color);
   color: var(--tg-theme-text-color);
   min-height: 100vh;
@@ -43,6 +43,183 @@ body {
 .filter-btn.active {
   background: var(--tg-theme-button-color);
   color: var(--tg-theme-button-text-color);
+}
+
+/* Advanced Filter System */
+.filter-panel {
+  background: var(--tg-theme-secondary-bg-color);
+  border-radius: 16px;
+  margin-bottom: 16px;
+  overflow: hidden;
+  transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.filter-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  cursor: pointer;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.filter-header:hover {
+  background: rgba(0, 0, 0, 0.02);
+}
+
+.filter-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--tg-theme-text-color);
+}
+
+.filter-summary {
+  font-size: 13px;
+  color: var(--tg-theme-hint-color);
+  margin-top: 2px;
+}
+
+.filter-toggle {
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: none;
+  color: var(--tg-theme-hint-color);
+  font-size: 16px;
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.filter-panel.expanded .filter-toggle {
+  transform: rotate(180deg);
+}
+
+.filter-content {
+  padding: 0 16px;
+  max-height: 0;
+  overflow: hidden;
+  transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.filter-panel.expanded .filter-content {
+  max-height: 500px;
+  padding: 16px;
+}
+
+.filter-section {
+  margin-bottom: 20px;
+}
+
+.filter-section:last-child {
+  margin-bottom: 0;
+}
+
+.filter-section-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--tg-theme-hint-color);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.filter-chip {
+  padding: 6px 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  background: var(--tg-theme-bg-color);
+  color: var(--tg-theme-text-color);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.filter-chip:hover {
+  border-color: var(--tg-theme-button-color);
+  background: rgba(247, 166, 0, 0.08);
+}
+
+.filter-chip.selected {
+  background: var(--tg-theme-button-color);
+  color: var(--tg-theme-button-text-color);
+  border-color: var(--tg-theme-button-color);
+}
+
+.filter-range {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.filter-range input {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 8px;
+  background: var(--tg-theme-bg-color);
+  color: var(--tg-theme-text-color);
+  font-size: 14px;
+}
+
+.filter-range input:focus {
+  outline: none;
+  border-color: var(--tg-theme-button-color);
+}
+
+.filter-presets {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.filter-preset {
+  padding: 8px 14px;
+  border-radius: 20px;
+  border: none;
+  font-size: 13px;
+  background: linear-gradient(135deg, var(--tg-theme-button-color) 0%, #e6941f 100%);
+  color: var(--tg-theme-button-text-color);
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.15s ease;
+  box-shadow: 0 2px 8px rgba(247, 166, 0, 0.2);
+}
+
+.filter-preset:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(247, 166, 0, 0.3);
+}
+
+.filter-preset:active {
+  transform: translateY(0);
+}
+
+.filter-results-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 0;
+  margin-bottom: 12px;
+  font-size: 13px;
+  color: var(--tg-theme-hint-color);
+}
+
+.filter-clear {
+  background: none;
+  border: none;
+  color: var(--tg-theme-button-color);
+  font-size: 13px;
+  cursor: pointer;
+  text-decoration: underline;
 }
 .week-nav {
   display: flex;
@@ -164,7 +341,7 @@ body {
 .detail-value { font-size: 15px; }
 /* Booking detail — schedule slot (design layer) */
 #screenDetail {
-  font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: var(--app-font-sans);
 }
 .booking-detail { animation: bd-enter 0.38s cubic-bezier(0.22, 1, 0.36, 1) both; }
 @keyframes bd-enter {
@@ -391,13 +568,73 @@ body {
   display: inline-block;
   box-sizing: border-box;
 }
-/* Единый оранжевый CTA для детали записи, модалки отмены и экрана отклонения */
-.btn-primary { background: #F7A600 !important; color: #1a1a1a !important; }
-.btn-secondary { background: #FFF3CC !important; color: #1a1a1a !important; }
+/* Client catalog + заявки: тот же CTA, что в карточке тренера (градиент + вторичная с обводкой) */
+.btn-primary {
+  display: inline-block;
+  padding: 16px 20px;
+  border-radius: 16px;
+  border: none;
+  font-size: 16px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  text-align: center;
+  box-sizing: border-box;
+  text-decoration: none;
+  background: linear-gradient(135deg, var(--tg-theme-button-color) 0%, #e89400 100%);
+  color: var(--tg-theme-button-text-color);
+  box-shadow: 0 8px 24px rgba(245, 166, 35, 0.35);
+  transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.3s ease, opacity 0.2s ease;
+  position: relative;
+  overflow: hidden;
+}
+.btn-primary::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transition: left 0.5s ease;
+}
+.btn-primary:hover::before { left: 100%; }
+.btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 32px rgba(245, 166, 35, 0.45);
+}
+.btn-primary:active {
+  transform: translateY(0);
+  box-shadow: 0 4px 16px rgba(245, 166, 35, 0.28);
+}
+.btn-secondary {
+  display: inline-block;
+  padding: 14px 20px;
+  border-radius: 16px;
+  font-size: 16px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  text-align: center;
+  box-sizing: border-box;
+  background: transparent;
+  color: var(--tg-theme-button-color);
+  border: 2px solid rgba(245, 166, 35, 0.35);
+  transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease, opacity 0.2s ease;
+}
+.btn-secondary:hover {
+  background: rgba(245, 166, 35, 0.1);
+  border-color: var(--tg-theme-button-color);
+  transform: translateY(-1px);
+}
+.btn-secondary:active {
+  transform: translateY(0);
+  opacity: 0.85;
+}
 .btn-danger { background: rgba(255, 59, 48, 0.2); color: #ff3b30; }
 #modalCancel .modal .actions button {
-  background: #F7A600 !important;
-  color: #1a1a1a !important;
+  background: linear-gradient(135deg, var(--tg-theme-button-color) 0%, #e89400 100%);
+  color: var(--tg-theme-button-text-color);
 }
 .back-link {
   display: inline-flex;
@@ -412,7 +649,7 @@ body {
   border: none;
   background: none;
   font: inherit;
-  font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: var(--app-font-sans);
 }
 .back-link .back-link-chevron { flex-shrink: 0; width: 16px; height: 16px; color: inherit; }
 .back-link:active { opacity: 0.7; }

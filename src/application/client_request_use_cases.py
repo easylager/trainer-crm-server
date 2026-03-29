@@ -45,12 +45,16 @@ async def _trainer_services_with_prices_batch(
     out: dict[int, list[dict[str, Any]]] = {tid: [] for tid in trainer_ids}
     for row in rows:
         tid, sid, price_cents = row[0], row[1], row[2]
+        # Plain int/float for JSON (DB may return Decimal).
+        pc = int(price_cents) if price_cents is not None else None
+        price_byn = round(float(price_cents) / 100.0, 2) if price_cents is not None else None
+        sid_int = int(sid) if sid is not None else None
         out.setdefault(tid, []).append(
             {
-                "service_id": sid,
-                "service_name": service_names_by_id.get(sid, "—"),
-                "price_cents": price_cents,
-                "price_byn": round(price_cents / 100, 2) if price_cents is not None else None,
+                "service_id": sid_int,
+                "service_name": service_names_by_id.get(sid, "—") if sid is not None else "—",
+                "price_cents": pc,
+                "price_byn": price_byn,
             }
         )
     return out

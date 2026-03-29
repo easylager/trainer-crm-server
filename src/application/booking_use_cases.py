@@ -783,7 +783,10 @@ async def count_trainer_client_upcoming(
 
 
 async def get_bookings_pending_notification(session: AsyncSession) -> list[dict]:
-    """Bookings where notified_at is null (for trainer bot to send push). Includes client name, service from booking, city from request/session fallback, trainer arenas."""
+    """Bookings where notified_at is null and status is pending (client-initiated online booking).
+
+    Trainer-created bookings are inserted as confirmed and must not appear here — no confirm/decline push.
+    """
     r = await session.execute(
         text("""
             SELECT b.id, b.trainer_id, b.slot_id, c.telegram_id, c.phone, b.client_comment,
@@ -804,6 +807,7 @@ async def get_bookings_pending_notification(session: AsyncSession) -> list[dict]
             LEFT JOIN client_sessions cs ON cs.telegram_id = c.telegram_id
             LEFT JOIN cities ci2 ON ci2.id = cs.city_id
             WHERE b.notified_at IS NULL
+              AND b.status = 'pending'
             ORDER BY b.created_at ASC
         """),
     )

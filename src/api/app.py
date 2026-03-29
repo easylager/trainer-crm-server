@@ -21,9 +21,15 @@ from src.api.routes import (
 )
 from src.api.routes.webapp_trainer_profile import router as webapp_trainer_profile_router
 from src.infrastructure.db import async_session_factory
+from src.api.middleware.http_limits import ApiRateLimitMiddleware, MaxBodySizeMiddleware
 from src.shared.config import Settings
+from src.shared.logging_redact import sanitize_validation_errors_for_log
 
 app = FastAPI(title="Trainer CRM API")
+
+# Epic D: rate limit /api (except webhooks), body size when Content-Length is set (inner runs first on request).
+app.add_middleware(ApiRateLimitMiddleware)
+app.add_middleware(MaxBodySizeMiddleware)
 
 # Mini Apps open in Telegram WebView; origin may be tunnel URL or telegram.org. Allow all so fetch() works.
 app.add_middleware(
@@ -39,7 +45,7 @@ app.add_middleware(
 async def _validation_exception_handler(_request, exc: RequestValidationError):
     """Same shape as default FastAPI 422: detail = list of {loc, msg, type, ...} for clients (Mini App maps loc → fields)."""
     errs = exc.errors()
-    logger.warning("Request validation failed: %s", errs)
+    logger.warning("Request validation failed: %s", sanitize_validation_errors_for_log(errs))
     # ctx may hold Exception instances (e.g. ValueError from Pydantic) — not JSON-serializable raw.
     return JSONResponse(status_code=422, content=jsonable_encoder({"detail": errs}))
 
@@ -279,6 +285,19 @@ def webapp_components_css():
     if not path.is_file():
         raise HTTPException(status_code=404, detail="CSS file not found")
     return FileResponse(path, media_type="text/css")
+
+
+@app.get("/webapp/client-mini-app-theme.js")
+def webapp_client_mini_app_theme_js():
+    """Shared Telegram theme + CRM palette for client Mini Apps."""
+    path = _WEBAPP_DIR / "client-mini-app-theme.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_WEBAPP_NO_CACHE_HEADERS,
+    )
 
 
 @app.get("/health")

@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 
 async def setup_menu_and_commands(bot: Bot) -> None:
-    """Default command list (no /stats); per-chat list set when trainer is active (Analytics adds stats)."""
+    """Default command list (minimal); per-chat list set when trainer is active (CRM + Analytics add commands)."""
     await set_default_trainer_commands_without_stats(bot)
     await bot.set_chat_menu_button(menu_button=MenuButtonCommands())
     logger.info("Trainer bot: menu button and commands set")
@@ -55,6 +55,7 @@ async def main() -> None:
     trainer_router.message.middleware(TrainerGateMiddleware())
     trainer_router.message.middleware(TrainerMenuSyncMiddleware())
     trainer_router.callback_query.middleware(TrainerGateMiddleware())
+    trainer_router.callback_query.middleware(TrainerMenuSyncMiddleware())
     dp.include_router(trainer_router)
     logger.info("Trainer bot polling started (notifications run in notification_service)")
     try:
