@@ -1,141 +1,219 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="ru" data-client-requests>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Мои заявки</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="stylesheet" href="theme.css" />
+  <link rel="stylesheet" href="mini-app-components.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet" />
+  <script src="client-mini-app-theme.js"></script>
   <style>
-    /* JUSTSKATE.BY brand: black + yellow */
-    :root {
-      --tg-theme-bg-color: #FFFBEB;
-      --tg-theme-text-color: #1a1a1a;
-      --tg-theme-hint-color: #666;
-      --tg-theme-button-color: #F7A600;
-      --tg-theme-button-text-color: #1a1a1a;
-      --tg-theme-secondary-bg-color: #FFF3CC;
-    }
-    @media (prefers-color-scheme: dark) {
-      :root {
-        --tg-theme-bg-color: #1a1a1a;
-        --tg-theme-text-color: #f5f5f5;
-        --tg-theme-hint-color: #8e8e93;
-        --tg-theme-button-color: #F7A600;
-        --tg-theme-button-text-color: #1a1a1a;
-        --tg-theme-secondary-bg-color: #2a2a2a;
-      }
-    }
-    * { box-sizing: border-box; }
+    /* Client requests — aligned with theme.css + mini-app-components.bd-* (constitution) */
     body {
-      margin: 0;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: var(--tg-theme-bg-color);
-      color: var(--tg-theme-text-color);
-      min-height: 100vh;
-      padding: 12px;
-      padding-bottom: env(safe-area-inset-bottom, 12px);
+      font-family: var(--app-font-sans);
     }
-    .header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      font-size: 18px;
-      font-weight: 600;
-      margin-bottom: 16px;
-      padding-bottom: 8px;
-    }
-    .header-title { flex: 1; }
-    .btn-close {
-      flex-shrink: 0;
-      padding: 8px 14px;
-      border-radius: 8px;
-      border: none;
-      font-size: 14px;
-      background: var(--tg-theme-secondary-bg-color);
-      color: var(--tg-theme-text-color);
-      cursor: pointer;
-    }
+
     [data-screen] { display: none; }
     [data-screen].active { display: block; }
+
+    .cr-requests-header {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 0;
+    }
+    .cr-page-title {
+      margin: 0;
+      font-size: clamp(22px, 6vw, 28px);
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1.15;
+      color: var(--tg-theme-text-color);
+    }
+
+    /* List rows — same surface language as .bd-client */
     .request-card {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 16px 18px;
+      gap: 12px;
+      padding: 14px 16px;
       margin-bottom: 10px;
-      border-radius: 14px;
+      border-radius: 16px;
       background: var(--tg-theme-secondary-bg-color);
-      cursor: pointer;
-      border: none;
+      border: 1px solid rgba(128, 128, 128, 0.14);
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
       width: 100%;
+      text-align: left;
       font: inherit;
       color: inherit;
-      text-align: left;
+      cursor: pointer;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+      font-family: var(--app-font-sans);
     }
-    .request-card:active { opacity: 0.9; }
-    .request-card .main { flex: 1; min-width: 0; }
-    .request-card .title { font-weight: 600; font-size: 16px; margin-bottom: 4px; }
-    .request-card .meta { font-size: 14px; color: var(--tg-theme-hint-color); }
-    .request-card .arrow { color: var(--tg-theme-hint-color); font-size: 16px; }
-    .screen-title { font-size: 17px; font-weight: 600; margin-bottom: 8px; }
-    .screen-hint { font-size: 14px; color: var(--tg-theme-hint-color); margin-bottom: 16px; }
-    .detail-block { margin-bottom: 16px; }
-    .detail-value { font-size: 15px; }
-    .detail-header {
-      display: flex;
-      align-items: flex-start;
-      justify-content: space-between;
-      gap: 12px;
-      margin-bottom: 6px;
+    .request-card:hover {
+      border-color: rgba(247, 166, 0, 0.28);
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+      transform: translateY(-1px);
     }
-    .detail-header h1 { margin: 0; font-size: 18px; font-weight: 600; line-height: 1.35; flex: 1; min-width: 0; letter-spacing: -0.02em; }
-    .detail-actions-mini {
-      display: flex;
-      align-items: center;
-      gap: 4px;
+    .request-card:active {
+      opacity: 0.92;
+      transform: scale(0.992);
+    }
+    .request-card .main { 
+      flex: 1; 
+      min-width: 0; 
+    }
+    .request-card .title { 
+      font-weight: 600; 
+      font-size: 16px; 
+      margin-bottom: 4px; 
+      line-height: 1.3;
+      color: var(--tg-theme-text-color);
+    }
+    .request-card .meta { 
+      font-size: 13px; 
+      color: var(--tg-theme-hint-color);
+      font-weight: 500;
+    }
+    .request-card .arrow {
+      color: var(--tg-theme-button-color);
+      font-size: 14px;
+      opacity: 0.85;
+      transition: opacity 0.2s ease;
       flex-shrink: 0;
     }
-    .detail-actions-mini button {
-      width: 36px;
-      height: 36px;
-      border: none;
-      background: transparent;
-      color: var(--tg-theme-hint-color);
+    .request-card:hover .arrow {
+      opacity: 1;
+    }
+    .screen-title {
+      font-size: clamp(20px, 5vw, 24px);
+      font-weight: 700;
+      margin-bottom: 8px;
+      font-family: var(--app-font-sans);
+      letter-spacing: -0.02em;
+      color: var(--tg-theme-text-color);
+    }
+    .screen-hint { 
+      font-size: 14px; 
+      color: var(--tg-theme-hint-color); 
+      margin-bottom: 16px;
+      line-height: 1.5;
+    }
+    .detail-block { margin-bottom: 16px; }
+    .detail-value { font-size: 15px; }
+    #screenDetail {
+      font-family: var(--app-font-sans);
+    }
+    .cr-detail-screen {
+      animation: bd-enter 0.38s cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+    .cr-detail-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: flex-end;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .cr-detail-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+    .cr-detail-toolbar button {
+      width: 40px;
+      height: 40px;
+      border-radius: 12px;
+      border: 1px solid rgba(128, 128, 128, 0.14);
+      background: var(--tg-theme-secondary-bg-color);
+      color: var(--tg-theme-button-color);
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
       padding: 0;
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+      transition: transform 0.12s ease, opacity 0.12s ease;
     }
-    .detail-actions-mini button svg { width: 20px; height: 20px; }
-    .detail-actions-mini button:active { opacity: 0.5; }
-    .detail-actions-mini button.danger { color: #ff3b30; }
-    .detail-comment-wrap {
-      margin-top: 12px;
-      margin-bottom: 24px;
-      padding: 14px 16px;
+    .cr-detail-toolbar button:active { transform: scale(0.97); opacity: 0.85; }
+    .cr-detail-toolbar button svg { width: 20px; height: 20px; }
+    .cr-detail-toolbar button.danger {
+      color: var(--app-danger);
+      border-color: rgba(255, 59, 48, 0.28);
       background: var(--tg-theme-secondary-bg-color);
-      border-radius: 12px;
     }
-    .detail-comment { font-size: 14px; color: var(--tg-theme-hint-color); margin: 0; line-height: 1.5; }
-    .detail-section-title { font-size: 13px; font-weight: 600; color: var(--tg-theme-hint-color); margin-bottom: 12px; letter-spacing: 0.02em; }
+    .cr-detail-hero .bd-hero {
+      margin-bottom: 14px;
+    }
+    /* Same scale as .bd-hero-time — hero is the request title */
+    .cr-detail-title {
+      font-size: clamp(26px, 7vw, 32px);
+      font-weight: 700;
+      letter-spacing: -0.04em;
+      line-height: 1.1;
+      color: var(--tg-theme-text-color);
+      word-break: break-word;
+    }
+    .cr-comment-block {
+      margin-bottom: 18px;
+    }
     .responder-row {
       display: flex;
       align-items: center;
       gap: 12px;
       padding: 14px 16px;
-      margin-bottom: 8px;
-      border-radius: 14px;
+      margin-bottom: 10px;
+      border-radius: 16px;
       background: var(--tg-theme-secondary-bg-color);
-      cursor: pointer;
-      border: none;
+      border: 1px solid rgba(128, 128, 128, 0.14);
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
       width: 100%;
+      text-align: left;
       font: inherit;
       color: inherit;
-      text-align: left;
+      cursor: pointer;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+      font-family: var(--app-font-sans);
     }
-    .responder-row:active { opacity: 0.9; }
+    .responder-row:hover {
+      border-color: rgba(247, 166, 0, 0.28);
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+      transform: translateY(-1px);
+    }
+    .responder-row:active {
+      opacity: 0.92;
+      transform: scale(0.992);
+    }
+    
+    /* Анимация появления карточек */
+    @keyframes card-enter {
+      from { 
+        opacity: 0; 
+        transform: translateY(10px); 
+      }
+      to { 
+        opacity: 1; 
+        transform: translateY(0); 
+      }
+    }
+    
+    .request-card, .responder-row {
+      animation: card-enter 0.38s cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+    
+    .request-card:nth-child(1) { animation-delay: 0.05s; }
+    .request-card:nth-child(2) { animation-delay: 0.1s; }
+    .request-card:nth-child(3) { animation-delay: 0.15s; }
+    .request-card:nth-child(4) { animation-delay: 0.2s; }
+    .request-card:nth-child(5) { animation-delay: 0.25s; }
+    
+    .responder-row:nth-child(1) { animation-delay: 0.05s; }
+    .responder-row:nth-child(2) { animation-delay: 0.1s; }
+    .responder-row:nth-child(3) { animation-delay: 0.15s; }
     .responder-row .row-avatar-wrap {
       position: relative;
       width: 44px;
@@ -186,11 +264,33 @@
       0% { background-position: 200% 0; }
       100% { background-position: -200% 0; }
     }
-    .responder-row .row-main { flex: 1; min-width: 0; }
-    .responder-row .row-name { font-weight: 600; font-size: 15px; margin: 0 0 2px; }
-    .responder-row .row-comment { font-size: 13px; color: var(--tg-theme-hint-color); margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .responder-row .row-arrow { color: var(--tg-theme-hint-color); flex-shrink: 0; }
-    .responder-row .row-arrow svg { width: 18px; height: 18px; opacity: 0.8; }
+    .responder-row .row-main { flex: 1; min-width: 0; position: relative; z-index: 1; }
+    .responder-row .row-name { 
+      font-weight: 600; 
+      font-size: 16px; 
+      margin: 0 0 4px; 
+      line-height: 1.3;
+      color: var(--tg-theme-text-color);
+    }
+    .responder-row .row-comment { 
+      font-size: 13px; 
+      color: var(--tg-theme-hint-color); 
+      margin: 0; 
+      white-space: nowrap; 
+      overflow: hidden; 
+      text-overflow: ellipsis;
+      line-height: 1.4;
+    }
+    .responder-row .row-arrow { 
+      color: var(--tg-theme-button-color); 
+      flex-shrink: 0; 
+      opacity: 0.7;
+      transition: opacity 0.2s ease;
+    }
+    .responder-row .row-arrow svg { width: 16px; height: 16px; }
+    .responder-row:hover .row-arrow {
+      opacity: 1;
+    }
     .detail-back-wrap { margin-top: 28px; padding-top: 8px; }
     .back-link {
       display: inline-flex;
@@ -205,8 +305,14 @@
       background: none;
       font: inherit;
     }
-    .back-link .back-link-chevron { flex-shrink: 0; width: 16px; height: 16px; color: inherit; }
-    .back-link:active { opacity: 0.7; }
+    .back-link .back-link-chevron {
+      flex-shrink: 0;
+      width: 16px;
+      height: 16px;
+      color: var(--tg-theme-button-color);
+      opacity: 0.92;
+    }
+    .back-link:active { opacity: 0.75; }
     /* Full trainer card (from request response) */
     .trainer-card-full {
       padding-left: 16px;
@@ -214,33 +320,34 @@
       padding-bottom: env(safe-area-inset-bottom, 20px);
       text-align: left;
     }
-    /* 4:3 фото тренера — как в карточке тренера в каталоге */
+    /* Современная карточка тренера в откликах - дизайнерский шедевр */
     .trainer-card-full .tcf-photo-wrap {
       position: relative;
       width: calc(100% + 32px);
       margin-left: -16px;
       margin-right: -16px;
       aspect-ratio: 4/3;
-      min-height: 200px;
-      max-height: 280px;
-      border-radius: 0 0 16px 16px;
+      min-height: 240px;
+      max-height: 320px;
+      border-radius: 0 0 20px 20px;
       overflow: hidden;
-      background: var(--tg-theme-secondary-bg-color);
+      background: linear-gradient(135deg, var(--tg-theme-secondary-bg-color) 0%, rgba(247, 166, 0, 0.1) 100%);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
     }
     .trainer-card-full .tcf-photo-placeholder {
       position: absolute;
       inset: 0;
-      background: var(--tg-theme-secondary-bg-color);
-      border-radius: 0 0 16px 16px;
+      background: linear-gradient(135deg, var(--tg-theme-secondary-bg-color) 0%, rgba(247, 166, 0, 0.1) 100%);
+      border-radius: 0 0 20px 20px;
     }
     .trainer-card-full .tcf-photo-placeholder.tcf-photo-loading::after {
       content: '';
       position: absolute;
       inset: 0;
-      background: linear-gradient(105deg, transparent 0%, rgba(255,255,255,0.08) 50%, transparent 100%);
+      background: linear-gradient(105deg, transparent 0%, rgba(247, 166, 0, 0.15) 50%, transparent 100%);
       background-size: 200% 100%;
-      animation: photo-shimmer 1.2s ease-in-out infinite;
-      border-radius: 0 0 16px 16px;
+      animation: photo-shimmer 1.5s ease-in-out infinite;
+      border-radius: 0 0 20px 20px;
     }
     .trainer-card-full .tcf-photo {
       position: absolute;
@@ -249,68 +356,169 @@
       height: 100%;
       object-fit: cover;
       object-position: center top;
-      border-radius: 0 0 16px 16px;
+      border-radius: 0 0 20px 20px;
       background: rgba(128,128,128,0.2);
       opacity: 0;
-      transition: opacity 0.25s ease;
+      transition: all 0.3s ease;
     }
     .trainer-card-full .tcf-photo.loaded {
       opacity: 1;
     }
-    .trainer-card-full .tcf-body { padding: 16px 0 0; }
-    .trainer-card-full .tcf-name { font-size: 20px; font-weight: 600; margin: 0 0 12px; text-align: left; }
+    .trainer-card-full .tcf-body { padding: 20px 0 0; }
+    .trainer-card-full .tcf-header {
+      margin-bottom: 20px;
+    }
+    .trainer-card-full .tcf-name { 
+      font-size: 28px; 
+      font-weight: 700; 
+      margin: 0 0 12px; 
+      text-align: left; 
+      line-height: 1.2;
+      letter-spacing: -0.02em;
+      color: var(--tg-theme-text-color);
+    }
     .trainer-card-full .tcf-comment {
-      font-size: 14px;
-      color: var(--tg-theme-hint-color);
-      line-height: 1.45;
+      font-size: 15px;
+      color: var(--tg-theme-text-color);
+      line-height: 1.5;
+      margin-bottom: 20px;
+      padding: 16px 50px 16px 16px;
+      background: linear-gradient(135deg, rgba(247, 166, 0, 0.14) 0%, rgba(247, 166, 0, 0.04) 100%);
+      border-radius: 16px;
+      border-left: 4px solid var(--tg-theme-button-color);
+      text-align: left;
+      position: relative;
+    }
+    .trainer-card-full .tcf-comment::before {
+      content: '💬';
+      position: absolute;
+      top: 12px;
+      right: 16px;
+      font-size: 18px;
+      opacity: 0.6;
+    }
+    .trainer-card-full .tcf-stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
       margin-bottom: 16px;
+    }
+    .trainer-card-full .tcf-stat {
       padding: 12px;
       background: var(--tg-theme-secondary-bg-color);
       border-radius: 12px;
-      text-align: left;
+      border: 1px solid rgba(128, 128, 128, 0.12);
+      transition: border-color 0.2s ease;
     }
-    .trainer-card-full .tcf-meta { font-size: 14px; color: var(--tg-theme-hint-color); margin-bottom: 6px; text-align: left; }
-    .trainer-card-full .tcf-desc { font-size: 14px; line-height: 1.5; margin-top: 14px; white-space: pre-wrap; text-align: left; }
-    /* Единый стиль кнопок как в «Мои клиенты»: размер, цвета, без эмодзи */
+    .trainer-card-full .tcf-stat:hover {
+      border-color: rgba(247, 166, 0, 0.28);
+    }
+    .trainer-card-full .tcf-stat-label {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--tg-theme-hint-color);
+      margin-bottom: 4px;
+    }
+    .trainer-card-full .tcf-stat-value {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--tg-theme-text-color);
+    }
+    .trainer-card-full .tcf-rating {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      background: linear-gradient(135deg, rgba(247, 166, 0, 0.14) 0%, rgba(247, 166, 0, 0.04) 100%);
+      border-radius: 12px;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--tg-theme-button-color);
+      margin-bottom: 16px;
+    }
+    .trainer-card-full .tcf-services {
+      margin-bottom: 20px;
+    }
+    .trainer-card-full .tcf-services-title {
+      font-size: 13px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--tg-theme-hint-color);
+      margin-bottom: 12px;
+    }
+    .trainer-card-full .tcf-service {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 14px;
+      margin-bottom: 6px;
+      background: var(--tg-theme-secondary-bg-color);
+      border-radius: 10px;
+      font-size: 14px;
+    }
+    .trainer-card-full .tcf-service-name {
+      font-weight: 500;
+      color: var(--tg-theme-text-color);
+    }
+    .trainer-card-full .tcf-service-price {
+      font-weight: 600;
+      color: var(--tg-theme-button-color);
+    }
+    .trainer-card-full .tcf-education {
+      margin-bottom: 20px;
+    }
+    .trainer-card-full .tcf-education-title {
+      font-size: 13px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--tg-theme-hint-color);
+      margin-bottom: 12px;
+    }
+    .trainer-card-full .tcf-education-item {
+      padding: 12px 14px;
+      margin-bottom: 8px;
+      background: var(--tg-theme-secondary-bg-color);
+      border-radius: 12px;
+      font-size: 14px;
+      line-height: 1.4;
+    }
+    .trainer-card-full .tcf-desc { 
+      font-size: 15px; 
+      line-height: 1.5; 
+      margin: 20px 0; 
+      padding: 16px;
+      background: var(--tg-theme-secondary-bg-color);
+      border-radius: 16px;
+      white-space: pre-wrap; 
+      text-align: left; 
+    }
+    /* Как в каталоге: .btn-primary / .btn-secondary из mini-app-components.css */
     .trainer-card-full .tcf-actions {
       display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      margin-top: 16px;
+      flex-direction: column;
+      gap: 12px;
+      margin-top: 24px;
     }
-    .trainer-card-full .tcf-actions a,
-    .trainer-card-full .tcf-actions button.tcf-write {
-      flex: 1;
-      min-width: 120px;
+    .trainer-card-full .tcf-actions .btn-primary,
+    .trainer-card-full .tcf-actions .btn-secondary {
+      width: 100%;
+    }
+    .trainer-card-full .tcf-actions a.btn-primary {
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 10px 12px;
-      border-radius: 10px;
-      font-size: 14px;
-      font-weight: 600;
-      text-decoration: none;
-      text-align: center;
-      box-sizing: border-box;
-      border: none;
-      cursor: pointer;
-      font: inherit;
     }
-    .trainer-card-full .tcf-actions .tcf-write {
-      background: #F7A600 !important;
-      color: #1a1a1a !important;
-    }
-    .trainer-card-full .tcf-actions .tcf-book {
-      background: var(--tg-theme-secondary-bg-color) !important;
-      color: var(--tg-theme-text-color) !important;
-    }
-    .trainer-card-full .tcf-actions a.tcf-book:only-child,
-    .trainer-card-full .tcf-actions button.tcf-write:only-child { flex: 1 1 100%; }
     .trainer-card-full .tcf-back { margin-top: 24px; }
     .card-wrap {
       padding: 14px 16px;
-      border-radius: 12px;
+      border-radius: 16px;
+      border: 1px solid rgba(128, 128, 128, 0.12);
       background: var(--tg-theme-secondary-bg-color);
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
       margin-bottom: 16px;
     }
     .card-wrap textarea {
@@ -324,35 +532,203 @@
       resize: vertical;
     }
     .card-wrap textarea::placeholder { color: var(--tg-theme-hint-color); }
-    .loading, .error, .empty { text-align: center; padding: 24px; color: var(--tg-theme-hint-color); }
-    .error { color: #ff3b30; }
-    .pagination { display: flex; justify-content: center; gap: 12px; margin: 16px 0; }
+    .loading, .error, .empty { 
+      text-align: center; 
+      padding: 40px 20px; 
+      color: var(--tg-theme-hint-color); 
+      font-size: 15px;
+      line-height: 1.6;
+    }
+    .error { color: var(--app-danger); }
+    .pagination { 
+      display: flex; 
+      justify-content: center; 
+      align-items: center;
+      gap: 12px; 
+      margin: 20px 0; 
+    }
     .pagination button {
-      padding: 8px 16px;
-      border-radius: 8px;
-      border: none;
+      padding: 10px 16px;
+      border-radius: 12px;
+      border: 1px solid rgba(128, 128, 128, 0.14);
       background: var(--tg-theme-secondary-bg-color);
       color: var(--tg-theme-text-color);
       font-size: 14px;
+      font-weight: 600;
       cursor: pointer;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+    .pagination button:hover {
+      border-color: rgba(247, 166, 0, 0.28);
+    }
+    .pagination button:active {
+      transform: scale(0.96);
+      opacity: 0.8;
     }
     .pagination span { font-size: 14px; color: var(--tg-theme-hint-color); align-self: center; }
-    /* JUSTSKATE.BY — перебиваем тему Telegram */
-    body { background: #FFFBEB !important; color: #1a1a1a !important; }
-    .btn-close, .request-card, .card-wrap, .pagination button, .btn-secondary { background: #FFF3CC !important; color: #1a1a1a !important; }
-    .btn-primary { background: #F7A600 !important; color: #1a1a1a !important; }
+    .action-buttons { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
+    .btn-block {
+      width: 100%;
+      padding: 14px 18px;
+      border-radius: 14px;
+      border: none;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      box-sizing: border-box;
+    }
+    .btn-block.btn-primary {
+      /* градиент CTA — mini-app-components.css */
+      font-weight: 600;
+      transition: transform 0.2s ease, opacity 0.2s ease;
+    }
+    .btn-block.btn-primary:active { 
+      transform: scale(0.96); 
+      opacity: 0.8;
+    }
+    .btn-block.btn-danger {
+      background: transparent;
+      border: 1.5px solid rgba(255, 59, 48, 0.45);
+      color: var(--app-danger);
+      transition: transform 0.12s ease, box-shadow 0.12s ease, opacity 0.12s ease;
+    }
+    .btn-block.btn-danger:active {
+      transform: scale(0.985);
+      opacity: 0.92;
+    }
+    /* Мягкая кнопка (пустой список «Обновить») — не путать с .btn-secondary из mini-app-components */
+    .btn-soft {
+      padding: 12px 20px;
+      border-radius: 14px;
+      border: 1px solid rgba(128, 128, 128, 0.14);
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      background: var(--tg-theme-secondary-bg-color);
+      color: var(--tg-theme-text-color);
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+    .btn-soft:hover {
+      border-color: rgba(247, 166, 0, 0.28);
+    }
+    .btn-soft:active {
+      transform: scale(0.96);
+      opacity: 0.8;
+    }
     @media (prefers-color-scheme: dark) {
-      body { background: #1a1a1a !important; color: #f5f5f5 !important; }
-      .btn-close, .request-card, .card-wrap, .pagination button, .btn-secondary { background: #2a2a2a !important; color: #f5f5f5 !important; }
+      .request-card,
+      .responder-row {
+        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
+      }
+      .request-card:hover,
+      .responder-row:hover {
+        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+      }
+      .trainer-card-full .tcf-photo-wrap {
+        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+      }
+    }
+    
+    /* Модальное окно отзывов */
+    .reviews-modal {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.45);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      padding: 20px;
+    }
+    .reviews-modal.show {
+      display: flex;
+    }
+    .reviews-modal-content {
+      background: var(--tg-theme-bg-color);
+      border-radius: 20px;
+      border: 1px solid rgba(128, 128, 128, 0.14);
+      box-shadow: 0 16px 48px rgba(0, 0, 0, 0.35);
+      max-width: 500px;
+      width: 100%;
+      max-height: 80vh;
+      overflow-y: auto;
+      position: relative;
+    }
+    .reviews-modal-header {
+      padding: 20px 20px 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .reviews-modal-title {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--tg-theme-text-color);
+    }
+    .reviews-modal-close {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      border: none;
+      background: var(--tg-theme-secondary-bg-color);
+      color: var(--tg-theme-text-color);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+    }
+    .reviews-modal-body {
+      padding: 20px;
+    }
+    .review-item {
+      padding: 16px;
+      margin-bottom: 12px;
+      background: var(--tg-theme-secondary-bg-color);
+      border-radius: 12px;
+      border-left: 4px solid var(--tg-theme-button-color);
+    }
+    .review-rating {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--tg-theme-button-color);
+    }
+    .review-text {
+      font-size: 14px;
+      line-height: 1.5;
+      color: var(--tg-theme-text-color);
+    }
+    .review-date {
+      font-size: 12px;
+      color: var(--tg-theme-hint-color);
+      margin-top: 8px;
+    }
+    .reviews-loading {
+      text-align: center;
+      padding: 40px;
+      color: var(--tg-theme-hint-color);
+    }
+    .reviews-empty {
+      text-align: center;
+      padding: 40px;
+      color: var(--tg-theme-hint-color);
+    }
+    .action-buttons .btn-block {
+      font-family: var(--app-font-sans);
     }
   </style>
 </head>
 <body>
-  <script>
-  (function(){var d=document.documentElement;d.style.setProperty('--tg-theme-button-color','#F7A600');d.style.setProperty('--tg-theme-button-text-color','#1a1a1a');d.style.setProperty('--tg-theme-bg-color',window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'#1a1a1a':'#FFFBEB');d.style.setProperty('--tg-theme-text-color',window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'#f5f5f5':'#1a1a1a');d.style.setProperty('--tg-theme-secondary-bg-color',window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'#2a2a2a':'#FFF3CC');})();
-  </script>
-  <div class="header">
-    <span class="header-title" id="headerTitle">Мои заявки</span>
+  <div class="header cr-requests-header">
+    <h1 class="cr-page-title">Мои заявки</h1>
   </div>
 
   <div id="screenList" data-screen class="active">
@@ -361,27 +737,43 @@
     <div id="screenEmpty" class="empty" style="display: none;">
       <p>У вас пока нет заявок.</p>
       <p style="margin-top: 8px; font-size: 14px;">Оставьте заявку в «Тренеры и запись»: когда список тренеров пустой, внизу списка или в карточке тренера. После этого заявка появится здесь.</p>
-      <button type="button" class="btn-secondary" id="btnRefreshEmpty" style="margin-top: 16px;">Обновить</button>
+      <button type="button" class="btn-soft" id="btnRefreshEmpty" style="margin-top: 16px;">Обновить</button>
     </div>
   </div>
 
   <div id="screenDetail" data-screen>
-    <div class="detail-header">
-      <h1 id="detailTitle">—</h1>
-      <div class="detail-actions-mini">
-        <button type="button" id="btnEditRequest" title="Редактировать заявку" aria-label="Редактировать">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-        </button>
-        <button type="button" id="btnDeleteRequest" class="danger" title="Удалить заявку" aria-label="Удалить">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-        </button>
+    <div class="booking-detail cr-detail-screen">
+      <div class="cr-detail-top">
+        <div class="cr-detail-toolbar">
+          <button type="button" id="btnEditRequest" title="Редактировать заявку" aria-label="Редактировать">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          </button>
+          <button type="button" id="btnDeleteRequest" class="danger" title="Удалить заявку" aria-label="Удалить">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+          </button>
+        </div>
       </div>
-    </div>
-    <div class="detail-comment-wrap"><p class="detail-comment" id="detailComment"></p></div>
-    <div class="detail-section-title">Откликнулись</div>
-    <div id="detailResponses"></div>
-    <div class="detail-back-wrap">
-      <span class="back-link" id="backFromDetail"><svg class="back-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>К списку заявок</span>
+      <div class="cr-detail-hero">
+        <div class="bd-hero">
+          <div class="bd-hero-inner">
+            <div class="cr-detail-title" id="detailTitleMain">—</div>
+            <div class="bd-hero-date" id="detailDateLine"></div>
+          </div>
+        </div>
+      </div>
+      <div class="bd-rows cr-comment-block">
+        <div class="bd-row bd-comment">
+          <div class="bd-row-text">
+            <div class="bd-row-label">Комментарий</div>
+            <div class="bd-row-value" id="detailComment">—</div>
+          </div>
+        </div>
+      </div>
+      <div class="bd-section-label">Откликнулись</div>
+      <div id="detailResponses"></div>
+      <div class="detail-back-wrap">
+        <span class="back-link" id="backFromDetail"><svg class="back-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>К списку заявок</span>
+      </div>
     </div>
   </div>
 
@@ -399,8 +791,8 @@
       <textarea id="editComment" placeholder="Комментарий к заявке (необязательно)"></textarea>
     </div>
     <div class="action-buttons">
-      <button type="button" class="btn-block btn-primary" id="btnSaveComment">✅ Сохранить</button>
-      <button type="button" class="btn-block btn-danger" id="btnDeleteInEdit">🗑 Удалить заявку</button>
+      <button type="button" class="btn-block btn-primary" id="btnSaveComment">Сохранить</button>
+      <button type="button" class="btn-block btn-danger" id="btnDeleteInEdit">Удалить заявку</button>
       <span class="back-link" id="backFromEdit"><svg class="back-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>Назад</span>
     </div>
   </div>
@@ -408,7 +800,32 @@
   <script>
     (function() {
       const tg = window.Telegram && window.Telegram.WebApp;
-      if (tg) { tg.ready(); tg.expand(); }
+      if (tg) {
+        tg.ready();
+        tg.expand();
+        if (typeof window.__applyClientRequestsTheme === 'function') {
+          window.__applyClientRequestsTheme();
+        }
+        function syncTelegramChromeColors() {
+          try {
+            var darkUi = tg.colorScheme === 'dark' ||
+              (tg.colorScheme !== 'light' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+            var bgHex = darkUi ? '#1c1c1c' : '#fffbec';
+            if (typeof tg.setHeaderColor === 'function') tg.setHeaderColor(bgHex);
+            if (typeof tg.setBackgroundColor === 'function') tg.setBackgroundColor(bgHex);
+            if (typeof tg.setBottomBarColor === 'function') tg.setBottomBarColor(bgHex);
+          } catch (e) { /* older clients */ }
+        }
+        syncTelegramChromeColors();
+        if (tg.onEvent) {
+          tg.onEvent('themeChanged', function () {
+            if (typeof window.__applyClientRequestsTheme === 'function') {
+              window.__applyClientRequestsTheme();
+            }
+            syncTelegramChromeColors();
+          });
+        }
+      }
 
       const PER_PAGE = 10;
       let state = {
@@ -482,6 +899,15 @@
         return city + ', ' + service;
       }
 
+      function formatRequestCreatedAt(iso) {
+        if (!iso) return '';
+        try {
+          var d = new Date(iso);
+          if (isNaN(d.getTime())) return '';
+          return 'Создана ' + d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });
+        } catch (e) { return ''; }
+      }
+
       function renderList() {
         const listEl = document.getElementById('requestList');
         const emptyEl = document.getElementById('screenEmpty');
@@ -499,7 +925,7 @@
         const pageItems = state.items.slice(start, start + PER_PAGE);
         let html = '';
         pageItems.forEach(function(req) {
-          const count = (req.responses || []).length;
+          const count = (Array.isArray(req.responses) ? req.responses : []).length;
           let sub;
           if (count === 0) sub = 'Нет откликов';
           else if (count % 10 === 1 && count % 100 !== 11) sub = count + ' отклик';
@@ -538,10 +964,23 @@
       function renderDetail() {
         const req = state.currentRequest;
         if (!req) return;
-        document.getElementById('detailTitle').textContent = formatRequestLabel(req);
+        var titleEl = document.getElementById('detailTitleMain');
+        var dateLineEl = document.getElementById('detailDateLine');
+        if (titleEl) titleEl.textContent = formatRequestLabel(req);
+        if (dateLineEl) {
+          var meta = formatRequestCreatedAt(req.created_at);
+          dateLineEl.textContent = meta || '';
+          dateLineEl.style.display = meta ? 'block' : 'none';
+        }
         const comment = (req.comment || '').trim();
-        document.getElementById('detailComment').textContent = comment ? comment : 'Без комментария';
-        const responses = req.responses || [];
+        var cEl = document.getElementById('detailComment');
+        if (cEl) {
+          cEl.textContent = comment ? comment : 'Без комментария';
+          cEl.style.fontStyle = comment ? 'italic' : 'normal';
+          cEl.style.opacity = comment ? '0.92' : '0.65';
+        }
+        // API всегда отдаёт массив; на всякий случай нормализуем (не-массив ломает forEach).
+        var responses = Array.isArray(req.responses) ? req.responses : [];
         const wrap = document.getElementById('detailResponses');
         if (responses.length === 0) {
           wrap.innerHTML = '<div class="screen-hint">Пока никто не откликнулся. Тренеры по вашему городу и услуге увидят заявку и смогут написать.</div>';
@@ -556,7 +995,7 @@
             if (photo) {
               html += '<span class="row-avatar-wrap"><span class="row-avatar-loading"></span><img src="' + escapeHtml(photo) + '" alt="" class="row-avatar" loading="lazy"></span>';
             } else {
-              html += '<div class="row-avatar-placeholder">👤</div>';
+              html += '<div class="row-avatar-placeholder">?</div>';
             }
             html += '<div class="row-main"><p class="row-name">' + escapeHtml(name) + '</p><p class="row-comment">' + escapeHtml(commentShort) + '</p></div>';
             html += '<span class="row-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></span></button>';
@@ -602,18 +1041,67 @@
         }
         html += '</div>';
         html += '<div class="tcf-body">';
+        html += '<div class="tcf-header">';
         html += '<h1 class="tcf-name">' + escapeHtml(name) + '</h1>';
+        if (ratingStr) {
+          html += '<div class="tcf-rating" style="cursor: pointer;" onclick="showTrainerReviews(' + r.trainer_id + ')">⭐ ' + escapeHtml(ratingStr) + '</div>';
+        }
+        html += '</div>';
+        
+        // Комментарий тренера к заявке (особенность карточки в откликах)
         if (tc) html += '<div class="tcf-comment">' + escapeHtml(tc) + '</div>';
-        if (ratingStr) html += '<div class="tcf-meta">Рейтинг ' + escapeHtml(ratingStr) + '</div>';
-        if (expStr) html += '<div class="tcf-meta">' + escapeHtml(expStr) + '</div>';
-        html += '<div class="tcf-meta">Занятие ' + duration + ' мин</div>';
+        
+        html += '<div class="tcf-stats">';
+        if (expStr) {
+          html += '<div class="tcf-stat">';
+          html += '<div class="tcf-stat-label">Опыт</div>';
+          html += '<div class="tcf-stat-value">' + escapeHtml(expStr) + '</div>';
+          html += '</div>';
+        }
+        html += '<div class="tcf-stat">';
+        html += '<div class="tcf-stat-label">Занятие</div>';
+        html += '<div class="tcf-stat-value">' + duration + ' мин</div>';
+        html += '</div>';
+        html += '</div>';
+        
+        // Услуги и цены — тот же формат, что в каталоге (service_name + price_byn)
+        var servicesList = Array.isArray(r.services) ? r.services : [];
+        if (servicesList.length > 0) {
+          html += '<div class="tcf-services">';
+          html += '<div class="tcf-services-title">Услуги и цены</div>';
+          servicesList.forEach(function(s) {
+            var serviceName = s.service_name || '—';
+            var priceText = s.price_byn != null ? (s.price_byn === Math.floor(s.price_byn) ? s.price_byn : s.price_byn.toFixed(2)) + ' BYN' : 'по запросу';
+            html += '<div class="tcf-service">';
+            html += '<span class="tcf-service-name">' + escapeHtml(serviceName) + '</span>';
+            html += '<span class="tcf-service-price">' + escapeHtml(priceText) + '</span>';
+            html += '</div>';
+          });
+          html += '</div>';
+        }
+        
+        // Добавляем образование, если оно есть
+        if (r.education && Array.isArray(r.education) && r.education.length > 0) {
+          html += '<div class="tcf-education">';
+          html += '<div class="tcf-education-title">Образование</div>';
+          r.education.forEach(function(edu) {
+            var eduText = edu.institution || '';
+            if (edu.degree) eduText += (eduText ? ', ' : '') + edu.degree;
+            if (edu.year) eduText += (eduText ? ' (' : '(') + edu.year + ')';
+            if (eduText) {
+              html += '<div class="tcf-education-item">' + escapeHtml(eduText) + '</div>';
+            }
+          });
+          html += '</div>';
+        }
+        
         if (desc) html += '<div class="tcf-desc">' + escapeHtml(desc) + '</div>';
         html += '<div class="tcf-actions">';
+        html += '<a href="' + escapeHtml(bookUrl) + '" class="btn-primary tcf-book">Записаться</a>';
         // В Mini App tg:// не открывается; только https://t.me/username через tg.openLink
         if (r.telegram_username) {
-          html += '<button type="button" class="tcf-write" data-tg-username="' + escapeHtml(r.telegram_username) + '">Написать</button>';
+          html += '<button type="button" class="btn-secondary tcf-write" data-tg-username="' + escapeHtml(r.telegram_username) + '">Написать</button>';
         }
-        html += '<a href="' + escapeHtml(bookUrl) + '" class="tcf-book">Записаться</a>';
         html += '</div></div>';
         document.getElementById('responderDetailContent').innerHTML = html;
         var tcfImg = document.querySelector('#responderDetailContent .tcf-photo');
@@ -635,6 +1123,7 @@
 
       document.getElementById('backFromResponderDetail').onclick = function() {
         state.selectedResponder = null;
+        if (state.currentRequest) renderDetail();
         showScreen('screenDetail');
       };
 
@@ -647,7 +1136,7 @@
       document.getElementById('btnEditRequest').onclick = function() {
         const req = state.currentRequest;
         if (!req) return;
-        const hasResponses = (req.responses || []).length > 0;
+        const hasResponses = (Array.isArray(req.responses) ? req.responses : []).length > 0;
         if (hasResponses && !confirm('При редактировании заявки все текущие отклики тренеров будут удалены — вы больше не увидите их в этой заявке. Продолжить?')) return;
         document.getElementById('editCityService').textContent = 'Город: ' + (req.city_name || '—') + ', Услуга: ' + (req.service_name || '—');
         document.getElementById('editComment').value = (req.comment || '').trim();
@@ -744,7 +1233,70 @@
       };
 
       loadList();
+      
+      // Функция для показа отзывов тренера
+      window.showTrainerReviews = function(trainerId) {
+        var modal = document.getElementById('reviewsModal');
+        var modalBody = document.getElementById('reviewsModalBody');
+        var modalTitle = document.getElementById('reviewsModalTitle');
+        
+        modalTitle.textContent = 'Отзывы о тренере';
+        modalBody.innerHTML = '<div class="reviews-loading">Загрузка отзывов...</div>';
+        modal.classList.add('show');
+        
+        fetch('/api/public/trainers/' + encodeURIComponent(trainerId) + '/reviews')
+          .then(function(res) {
+            return res.json().then(function(data) {
+              if (!res.ok) throw new Error((data && data.detail) || res.statusText);
+              return data;
+            });
+          })
+          .then(function(data) {
+            var reviews = data.items || [];
+            if (reviews.length === 0) {
+              modalBody.innerHTML = '<div class="reviews-empty">У этого тренера пока нет отзывов</div>';
+              return;
+            }
+            
+            var html = '';
+            reviews.forEach(function(review) {
+              html += '<div class="review-item">';
+              html += '<div class="review-rating">⭐ ' + review.rating + '/5</div>';
+              var text = review.review_text || review.comment;
+              if (text) {
+                html += '<div class="review-text">' + escapeHtml(text) + '</div>';
+              }
+              if (review.created_at) {
+                var date = new Date(review.created_at).toLocaleDateString('ru-RU');
+                html += '<div class="review-date">' + date + '</div>';
+              }
+              html += '</div>';
+            });
+            modalBody.innerHTML = html;
+          })
+          .catch(function() {
+            modalBody.innerHTML = '<div class="reviews-empty">Не удалось загрузить отзывы</div>';
+          });
+      };
+      
+      // Закрытие модального окна
+      window.closeReviewsModal = function() {
+        document.getElementById('reviewsModal').classList.remove('show');
+      };
     })();
   </script>
+  
+  <!-- Модальное окно отзывов -->
+  <div id="reviewsModal" class="reviews-modal" onclick="if(event.target === this) closeReviewsModal()">
+    <div class="reviews-modal-content">
+      <div class="reviews-modal-header">
+        <div id="reviewsModalTitle" class="reviews-modal-title">Отзывы</div>
+        <button type="button" class="reviews-modal-close" onclick="closeReviewsModal()">×</button>
+      </div>
+      <div id="reviewsModalBody" class="reviews-modal-body">
+        <!-- Контент отзывов -->
+      </div>
+    </div>
+  </div>
 </body>
 </html>

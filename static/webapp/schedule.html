@@ -5,182 +5,71 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Моё расписание</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <style>
-    /* JUSTSKATE.BY brand: black + yellow */
-    :root {
-      --tg-theme-bg-color: #FFFBEB;
-      --tg-theme-text-color: #1a1a1a;
-      --tg-theme-hint-color: #666;
-      --tg-theme-button-color: #F7A600;
-      --tg-theme-button-text-color: #1a1a1a;
-      --tg-theme-secondary-bg-color: #FFF3CC;
-    }
-    @media (prefers-color-scheme: dark) {
-      :root {
-        --tg-theme-bg-color: #1a1a1a;
-        --tg-theme-text-color: #f5f5f5;
-        --tg-theme-hint-color: #8e8e93;
-        --tg-theme-button-color: #F7A600;
-        --tg-theme-button-text-color: #1a1a1a;
-        --tg-theme-secondary-bg-color: #2a2a2a;
-      }
-    }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: var(--tg-theme-bg-color);
-      color: var(--tg-theme-text-color);
-      min-height: 100vh;
-      padding: 12px;
-      padding-bottom: env(safe-area-inset-bottom, 12px);
-    }
-    .header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      font-size: 18px;
-      font-weight: 600;
-      margin-bottom: 16px;
-      padding-bottom: 8px;
-    }
-    .header-title { flex: 1; }
-    .btn-close {
-      flex-shrink: 0;
-      padding: 8px 14px;
-      border-radius: 8px;
-      border: none;
-      font-size: 14px;
-      background: var(--tg-theme-secondary-bg-color);
-      color: var(--tg-theme-text-color);
-      cursor: pointer;
-    }
-    .filters {
-      display: flex;
-      gap: 8px;
-      margin-bottom: 16px;
-      flex-wrap: wrap;
-    }
-    .filter-btn {
-      padding: 8px 14px;
-      border-radius: 20px;
-      border: none;
-      font-size: 14px;
-      background: var(--tg-theme-secondary-bg-color);
-      color: var(--tg-theme-text-color);
-      cursor: pointer;
-    }
-    .filter-btn.active {
-      background: #F7A600;
-      color: #1a1a1a;
-    }
-    .week-nav {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 12px;
-    }
-    .week-nav span {
-      font-weight: 600;
-      font-size: 15px;
-    }
-    .week-nav button {
-      width: 36px;
-      height: 36px;
-      border-radius: 50%;
-      border: none;
-      background: var(--tg-theme-secondary-bg-color);
-      color: var(--tg-theme-text-color);
-      font-size: 18px;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-    .day-block {
-      margin-bottom: 20px;
-    }
-    .day-title {
-      font-size: 13px;
-      font-weight: 600;
-      color: var(--tg-theme-hint-color);
-      margin-bottom: 8px;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
-    .slot-card {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 12px 14px;
-      margin-bottom: 6px;
-      border-radius: 12px;
-      background: var(--tg-theme-secondary-bg-color);
-    }
-    .slot-time {
-      font-weight: 600;
-      font-size: 15px;
-    }
-    .slot-status {
-      font-size: 13px;
-      padding: 4px 10px;
-      border-radius: 8px;
-    }
-    .slot-status.available {
-      background: rgba(52, 199, 89, 0.2);
-      color: #34c759;
-    }
-    .slot-status.booked {
-      background: rgba(255, 149, 0, 0.2);
-      color: #ff9500;
-    }
-    .slot-status.cancelled {
-      background: rgba(142, 142, 147, 0.2);
-      color: var(--tg-theme-hint-color);
-    }
-    .loading, .error {
-      text-align: center;
-      padding: 24px;
-      color: var(--tg-theme-hint-color);
-    }
-    .error { color: #ff3b30; }
-    .empty {
-      text-align: center;
-      padding: 32px 16px;
-      color: var(--tg-theme-hint-color);
-      font-size: 15px;
-    }
-    /* JUSTSKATE.BY — жёстко перебиваем тему Telegram */
-    body { background: #FFFBEB !important; color: #1a1a1a !important; }
-    .btn-close, .filter-btn, .week-nav button, .slot-card { background: #FFF3CC !important; color: #1a1a1a !important; }
-    .filter-btn.active { background: #F7A600 !important; color: #1a1a1a !important; }
-    @media (prefers-color-scheme: dark) {
-      body { background: #1a1a1a !important; color: #f5f5f5 !important; }
-      .btn-close, .filter-btn, .week-nav button, .slot-card { background: #2a2a2a !important; color: #f5f5f5 !important; }
-    }
-  </style>
+  <link rel="stylesheet" href="theme.css" />
+  <link rel="stylesheet" href="mini-app-components.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet" />
 </head>
 <body>
-  <script>
-  (function(){var d=document.documentElement;d.style.setProperty('--tg-theme-button-color','#F7A600');d.style.setProperty('--tg-theme-button-text-color','#1a1a1a');d.style.setProperty('--tg-theme-bg-color',window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'#1a1a1a':'#FFFBEB');d.style.setProperty('--tg-theme-text-color',window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'#f5f5f5':'#1a1a1a');d.style.setProperty('--tg-theme-secondary-bg-color',window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'#2a2a2a':'#FFF3CC');})();
-  </script>
-  <div class="header">
-    <span class="header-title">📋 Применённое расписание</span>
+
+  <div id="screenSchedule" data-screen class="active">
+    <div class="header">
+      <span class="header-title">Моё расписание</span>
+    </div>
+    <p style="font-size:13px;color:var(--tg-theme-hint-color);margin:-8px 0 10px;line-height:1.45;">
+      Здесь — применённое расписание и записи. Тап по <b>занятому</b> слоту: детали и действия.
+      <a href="/webapp/schedule-editor" style="color:var(--tg-theme-button-color);display:block;margin-top:8px;">Редактор расписания</a> — календарь слотов и шаблон недели (другой экран).
+    </p>
+    <div class="filters">
+      <button type="button" class="filter-btn active" data-filter="all">Все</button>
+      <button type="button" class="filter-btn" data-filter="available">Свободны</button>
+      <button type="button" class="filter-btn" data-filter="booked">Заняты</button>
+    </div>
+    <div class="week-nav">
+      <button type="button" id="prevWeek" aria-label="Назад">‹</button>
+      <span id="weekLabel">—</span>
+      <button type="button" id="nextWeek" aria-label="Вперёд">›</button>
+    </div>
+    <div id="scheduleContent">
+      <div class="loading">Загрузка...</div>
+    </div>
   </div>
-  <p style="font-size:13px;color:var(--tg-theme-hint-color);margin:-8px 0 8px;"><a href="/webapp/schedule-editor" style="color:var(--tg-theme-button-color);">📅 Расписание</a> — редактировать шаблон и слоты</p>
-  <div class="filters">
-    <button type="button" class="filter-btn active" data-filter="all">Все</button>
-    <button type="button" class="filter-btn" data-filter="available">Свободны</button>
-    <button type="button" class="filter-btn" data-filter="booked">Заняты</button>
+
+  <div id="screenDetail" data-screen>
+    <div id="detailContent"></div>
+    <div class="bd-actions-wrap" id="detailActions"></div>
+    <button type="button" class="back-link" id="backToSchedule">
+      <svg class="back-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+      К расписанию
+    </button>
   </div>
-  <div class="week-nav">
-    <button type="button" id="prevWeek" aria-label="Назад">‹</button>
-    <span id="weekLabel">—</span>
-    <button type="button" id="nextWeek" aria-label="Вперёд">›</button>
+
+  <div id="screenDecline" data-screen class="decline-screen">
+    <div class="screen-title">Отклонить запись</div>
+    <div class="screen-hint">Клиент увидит причину в уведомлении. Напишите коротко.</div>
+    <div class="card-wrap">
+      <div class="form-block">
+        <label class="form-label" for="declineComment">Причина отклонения</label>
+        <textarea id="declineComment" placeholder="Например: нет свободного времени в этот день"></textarea>
+      </div>
+    </div>
+    <button type="button" class="btn-primary" id="btnDeclineSubmit">Отклонить запись</button>
+    <button type="button" class="back-link" id="backFromDecline">
+      <svg class="back-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+      Назад к записи
+    </button>
   </div>
-  <div id="content">
-    <div class="loading">Загрузка...</div>
+
+  <div id="modalCancel" class="modal-overlay" style="display:none;">
+    <div class="modal">
+      <h3>Отменить запись?</h3>
+      <p style="margin:0 0 8px;font-size:14px;color:var(--tg-theme-hint-color);">Предупредите клиента (звонок или сообщение).</p>
+      <div class="actions">
+        <button type="button" class="btn-primary" id="modalCancelNo">Нет</button>
+        <button type="button" class="btn-primary" id="modalCancelYes">Да, отменить</button>
+      </div>
+    </div>
   </div>
 
   <script>
@@ -188,19 +77,34 @@
       const DAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
       const MONTHS = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
 
-      const tg = window.Telegram?.WebApp;
-      if (tg) {
-        tg.ready();
-        tg.expand();
-      }
-      var btnClose = document.getElementById("btnClose");
-      if (btnClose) btnClose.onclick = function() {
-        if (tg) tg.close(); else window.close();
+      const BD_ICONS = {
+        service: '<svg class="bd-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><path d="M3.27 6.96L12 12.01l8.73-5.05"/></svg>',
+        session: '<svg class="bd-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/></svg>',
+        comment: '<svg class="bd-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>',
+        send: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>'
       };
 
-      let allSlots = [];
-      let currentWeekStart = getMonday(new Date());
-      let currentFilter = 'all';
+      function bookingInitials(displayName) {
+        var s = (displayName || '').trim();
+        if (!s) return '?';
+        var parts = s.split(/\s+/).filter(Boolean);
+        if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+        if (parts[0].length >= 2) return parts[0].slice(0, 2).toUpperCase();
+        return parts[0][0].toUpperCase();
+      }
+
+      const tg = window.Telegram && window.Telegram.WebApp;
+      if (tg) { tg.ready(); tg.expand(); }
+
+      const state = {
+        allSlots: [],
+        currentWeekStart: getMonday(new Date()),
+        currentFilter: 'all',
+        initData: tg ? tg.initData : '',
+        selectedBooking: null,
+      };
+      /** After confirm/decline/cancel we pop history; popstate refreshes the list. */
+      var pendingReloadAfterPop = false;
 
       function getMonday(d) {
         const date = new Date(d);
@@ -212,7 +116,7 @@
       function formatWeekLabel(start) {
         const end = new Date(start);
         end.setDate(end.getDate() + 6);
-        const fmt = d => d.getDate() + ' ' + MONTHS[d.getMonth()];
+        const fmt = function(d) { return d.getDate() + ' ' + MONTHS[d.getMonth()]; };
         return fmt(start) + ' – ' + fmt(end);
       }
 
@@ -225,18 +129,124 @@
         return status === 'available' ? 'свободен' : status === 'booked' ? 'занят' : 'отменён';
       }
 
+      function authQuery() { return state.initData ? 'init_data=' + encodeURIComponent(state.initData) : ''; }
+      function authHeader() { return state.initData ? { 'X-Telegram-Init-Data': state.initData } : {}; }
+
+      function showScreen(id) {
+        document.querySelectorAll('[data-screen]').forEach(function(el) { el.classList.remove('active'); });
+        const el = document.getElementById(id);
+        if (el) el.classList.add('active');
+        if (tg && tg.BackButton) {
+          if (id === 'screenDetail' || id === 'screenDecline') {
+            tg.BackButton.show();
+          } else {
+            tg.BackButton.hide();
+          }
+        }
+      }
+
+      /** Return to list UI (after popstate or if History API unavailable). */
+      function syncListAfterPop() {
+        showScreen('screenSchedule');
+        window.scrollTo(0, 0);
+        if (pendingReloadAfterPop) {
+          pendingReloadAfterPop = false;
+          loadSchedule();
+          return;
+        }
+        if (state.allSlots && state.allSlots.length) {
+          document.getElementById('weekLabel').textContent = formatWeekLabel(state.currentWeekStart);
+          renderSchedule();
+        } else {
+          loadSchedule();
+        }
+      }
+
+      function goBackFromDetail() {
+        if (history.state && history.state.ui === 'sched-detail') {
+          history.back();
+        } else {
+          syncListAfterPop();
+        }
+      }
+
+      function handleTelegramBack() {
+        var modal = document.getElementById('modalCancel');
+        if (modal && modal.style.display === 'flex') {
+          modal.style.display = 'none';
+          return;
+        }
+        if (document.getElementById('screenDecline').classList.contains('active')) {
+          showScreen('screenDetail');
+          return;
+        }
+        if (document.getElementById('screenDetail').classList.contains('active')) {
+          goBackFromDetail();
+        }
+      }
+
+      window.addEventListener('popstate', function() {
+        var modal = document.getElementById('modalCancel');
+        if (modal && modal.style.display === 'flex') {
+          modal.style.display = 'none';
+        }
+        if (document.getElementById('screenDecline').classList.contains('active')) {
+          showScreen('screenDetail');
+          return;
+        }
+        syncListAfterPop();
+      });
+
+      function getJson(url) {
+        const q = authQuery();
+        const u = url + (q ? (url.indexOf('?') >= 0 ? '&' : '?') + q : '');
+        return fetch(u, { headers: authHeader() }).then(function(r) {
+          if (!r.ok) throw new Error(r.statusText);
+          return r.json();
+        });
+      }
+
+      function postJson(url, body) {
+        const q = authQuery();
+        const u = url + (q ? (url.indexOf('?') >= 0 ? '&' : '?') + q : '');
+        return fetch(u, {
+          method: 'POST',
+          headers: Object.assign({ 'Content-Type': 'application/json' }, authHeader()),
+          body: body ? JSON.stringify(body) : undefined
+        }).then(function(r) {
+          return r.json().then(function(j) {
+            if (!r.ok) throw new Error((j && j.detail) || 'Request failed');
+            return j;
+          });
+        });
+      }
+
+      function escapeHtml(str) {
+        if (!str) return '';
+        return String(str)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;');
+      }
+
+      function formatDate(slotDate) {
+        if (!slotDate) return '—';
+        const s = String(slotDate);
+        const parts = s.split('-');
+        if (parts.length >= 3) return parts[2] + '.' + parts[1] + '.' + parts[0];
+        return s;
+      }
+
       async function fetchSchedule(fromDate, toDate) {
         const from = fromDate.toISOString().slice(0, 10);
         const to = toDate.toISOString().slice(0, 10);
-        const initData = tg?.initData || '';
         const url = '/api/webapp/schedule?from_date=' + encodeURIComponent(from) + '&to_date=' + encodeURIComponent(to);
-        const headers = {};
-        if (initData) headers['X-Telegram-Init-Data'] = initData;
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 15000);
+        const timeoutId = setTimeout(function() { controller.abort(); }, 15000);
         let res;
         try {
-          res = await fetch(url, { headers: headers, signal: controller.signal });
+          res = await fetch(url, { headers: authHeader(), signal: controller.signal });
         } catch (e) {
           clearTimeout(timeoutId);
           if (e.name === 'AbortError') throw new Error('Превышено время ожидания. Проверьте интернет и откройте снова.');
@@ -244,82 +254,293 @@
         }
         clearTimeout(timeoutId);
         if (!res.ok) {
-          const err = await res.json().catch(() => ({ detail: res.statusText }));
+          const err = await res.json().catch(function() { return { detail: res.statusText }; });
           throw new Error(err.detail || res.statusText);
         }
         return res.json();
       }
 
       function filterSlots(slots) {
-        if (currentFilter === 'all') return slots;
-        return slots.filter(s => s.status === currentFilter);
+        if (state.currentFilter === 'all') return slots;
+        return slots.filter(function(s) { return s.status === state.currentFilter; });
       }
 
-      function render(slots) {
+      function venueLine(s) {
+        if (s.status !== 'booked') return '';
+        const v = s.venue_label;
+        const text = (v && String(v).trim()) ? escapeHtml(String(v).trim()) : '<span class="venue-muted">не указано</span>';
+        return '<div class="slot-venue">📍 ' + text + '</div>';
+      }
+
+      function renderSchedule() {
         const todayStr = new Date().toISOString().slice(0, 10);
-        const filtered = filterSlots(slots).filter(s => s.slot_date >= todayStr);
+        const filtered = filterSlots(state.allSlots).filter(function(s) { return s.slot_date >= todayStr; });
         const byDay = {};
-        filtered.forEach(s => {
-            const key = s.slot_date;
-            if (!byDay[key]) byDay[key] = [];
-            byDay[key].push(s);
-          });
+        filtered.forEach(function(s) {
+          const key = s.slot_date;
+          if (!byDay[key]) byDay[key] = [];
+          byDay[key].push(s);
+        });
         const days = Object.keys(byDay).sort();
 
+        const el = document.getElementById('scheduleContent');
         if (days.length === 0) {
-          document.getElementById('content').innerHTML = '<div class="empty">Нет слотов на эту неделю</div>';
+          el.innerHTML = '<div class="empty">Нет слотов на эту неделю</div>';
           return;
         }
 
         let html = '';
-        days.forEach(dateKey => {
-          const daySlots = byDay[dateKey].sort((a, b) => (a.start_time || '').localeCompare(b.start_time || ''));
+        days.forEach(function(dateKey) {
+          const daySlots = byDay[dateKey].sort(function(a, b) { return (a.start_time || '').localeCompare(b.start_time || ''); });
           html += '<div class="day-block"><div class="day-title">' + formatDateKey(dateKey) + '</div>';
-          daySlots.forEach(s => {
-            html += '<div class="slot-card">';
-            html += '<span class="slot-time">' + (s.start_time || '') + '–' + (s.end_time || '') + '</span>';
-            html += '<span class="slot-status ' + (s.status || 'available') + '">' + statusLabel(s.status) + '</span>';
+          daySlots.forEach(function(s) {
+            const st = s.status || 'available';
+            const booked = st === 'booked';
+            const hasBooking = booked && s.booking_id;
+            const cardClass = 'slot-card ' + (booked ? 'slot-booked' + (hasBooking ? '' : ' slot-booked-noaction') : st === 'available' ? 'slot-free' : 'slot-cancelled');
+            const clientHint = booked && s.client_preview
+              ? '<div class="slot-client-hint">' + escapeHtml(s.client_preview) + '</div>'
+              : '';
+            const tag = hasBooking ? 'button' : 'div';
+            const openAttr = hasBooking ? ' type="button" data-booking-id="' + s.booking_id + '" tabindex="0" role="button" aria-label="Детали записи"' : '';
+            html += '<' + tag + ' class="' + cardClass + '"' + openAttr + '>';
+            html += '<div class="slot-main">';
+            html += '<div class="slot-time">' + (s.start_time || '') + '–' + (s.end_time || '') + '</div>';
+            html += venueLine(s);
+            html += clientHint;
             html += '</div>';
+            html += '<span class="slot-status ' + st + '">' + statusLabel(st) + '</span>';
+            html += '</' + tag + '>';
           });
           html += '</div>';
         });
-        document.getElementById('content').innerHTML = html;
+        el.innerHTML = html;
+
+        el.querySelectorAll('.slot-card[data-booking-id]').forEach(function(btn) {
+          function go() {
+            openDetail(parseInt(btn.getAttribute('data-booking-id'), 10));
+          }
+          btn.onclick = go;
+          btn.onkeydown = function(e) {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); }
+          };
+        });
       }
 
-      async function load() {
-        const content = document.getElementById('content');
-        content.innerHTML = '<div class="loading">Загрузка...</div>';
-        const weekEnd = new Date(currentWeekStart);
+      async function loadSchedule(opts) {
+        opts = opts || {};
+        const el = document.getElementById('scheduleContent');
+        if (!opts.silent) {
+          el.innerHTML = '<div class="loading">Загрузка...</div>';
+        }
+        const weekEnd = new Date(state.currentWeekStart);
         weekEnd.setDate(weekEnd.getDate() + 6);
         try {
-          const data = await fetchSchedule(currentWeekStart, weekEnd);
-          allSlots = data.slots || [];
-          document.getElementById('weekLabel').textContent = formatWeekLabel(currentWeekStart);
-          render(allSlots);
+          const data = await fetchSchedule(state.currentWeekStart, weekEnd);
+          state.allSlots = data.slots || [];
+          document.getElementById('weekLabel').textContent = formatWeekLabel(state.currentWeekStart);
+          renderSchedule();
         } catch (e) {
-          content.innerHTML = '<div class="error">' + (e.message || 'Ошибка загрузки') + '</div>';
+          el.innerHTML = '<div class="error">' + escapeHtml(e.message || 'Ошибка загрузки') + '</div>';
         }
       }
 
-      document.getElementById('prevWeek').onclick = () => {
-        currentWeekStart.setDate(currentWeekStart.getDate() - 7);
-        load();
+      function prefetchScheduleInBackground() {
+        const weekEnd = new Date(state.currentWeekStart);
+        weekEnd.setDate(weekEnd.getDate() + 6);
+        return fetchSchedule(state.currentWeekStart, weekEnd).then(function(data) {
+          state.allSlots = data.slots || [];
+          document.getElementById('weekLabel').textContent = formatWeekLabel(state.currentWeekStart);
+        }).catch(function() { /* list loads on back if still empty */ });
+      }
+
+      function openDetail(bookingId) {
+        state.selectedBooking = null;
+        getJson('/api/webapp/trainer/bookings/' + bookingId).then(function(b) {
+          state.selectedBooking = b;
+          const client = [b.client_first_name, b.client_last_name].filter(Boolean).join(' ') || b.client_phone || 'Клиент';
+          const dateStr = formatDate(b.slot_date);
+          const initials = bookingInitials(client);
+          let html = '';
+          html += '<div class="booking-detail">';
+          html += '<div class="bd-screen-head"><div class="bd-screen-title">Запись</div></div>';
+          html += '<div class="bd-hero"><div class="bd-hero-inner">';
+          html += '<div class="bd-hero-kicker">Дата и время</div>';
+          html += '<div class="bd-hero-time">' + escapeHtml(b.start_time || '—') + ' – ' + escapeHtml(b.end_time || '—') + '</div>';
+          html += '<div class="bd-hero-date">' + escapeHtml(dateStr) + ' · ' + escapeHtml(b.day_label || '') + '</div>';
+          html += '</div></div>';
+          html += '<div class="bd-client">';
+          html += '<div class="bd-avatar" aria-hidden="true">' + escapeHtml(initials) + '</div>';
+          html += '<div class="bd-client-body">';
+          html += '<div class="bd-client-name">' + escapeHtml(client) + (b.client_has_telegram === false ? ' <span class="no-bot">Без бота</span>' : '') + '</div>';
+          if (b.client_phone) {
+            var telRaw = String(b.client_phone).replace(/\s+/g, '');
+            html += '<a class="bd-tel" href="tel:' + escapeHtml(telRaw) + '">' + escapeHtml(b.client_phone) + '</a>';
+          }
+          html += '</div></div>';
+          html += '<div class="bd-section-label">Подробности</div>';
+          html += '<div class="bd-rows">';
+          html += '<div class="bd-row">' + BD_ICONS.service + '<div class="bd-row-text"><div class="bd-row-label">Услуга · арена</div><div class="bd-row-value">' + escapeHtml(b.services_str || '—') + ' · ' + escapeHtml(b.arenas_str || '—') + '</div></div></div>';
+          html += '<div class="bd-row">' + BD_ICONS.session + '<div class="bd-row-text"><div class="bd-row-label">Занятие</div><div class="bd-row-value">' + (b.session_num || 1) + '-е занятие</div></div></div>';
+          if (b.client_comment) {
+            html += '<div class="bd-row bd-comment">' + BD_ICONS.comment + '<div class="bd-row-text"><div class="bd-row-label">Комментарий</div><div class="bd-row-value">' + escapeHtml(b.client_comment) + '</div></div></div>';
+          }
+          html += '</div></div>';
+          document.getElementById('detailContent').innerHTML = html;
+
+          const actions = document.getElementById('detailActions');
+          actions.innerHTML = '';
+          const pending = (b.status || '') === 'pending';
+          const tid = b.client_telegram_id;
+
+          if (pending) {
+            actions.innerHTML += '<button type="button" class="bd-btn bd-btn--confirm" data-action="confirm">Подтвердить</button>';
+            actions.innerHTML += '<button type="button" class="bd-btn bd-btn--decline" data-action="decline">Отклонить</button>';
+          } else {
+            actions.innerHTML += '<button type="button" class="bd-btn bd-btn--outline-danger" data-action="cancel">Отменить запись</button>';
+          }
+          if (tid && b.client_has_telegram !== false) {
+            actions.innerHTML += '<a class="bd-btn bd-btn--message" href="tg://user?id=' + encodeURIComponent(String(tid)) + '">' + BD_ICONS.send + ' Написать клиенту</a>';
+          }
+          if (b.recurring_id) {
+            actions.innerHTML += '<button type="button" class="bd-btn bd-btn--soft" data-action="remove_recurring" data-recurring-id="' + b.recurring_id + '">Снять регулярность</button>';
+          } else {
+            actions.innerHTML += '<button type="button" class="bd-btn bd-btn--soft" data-action="make_regular">Сделать постоянным клиентом</button>';
+          }
+
+          actions.querySelectorAll('button[data-action]').forEach(function(btn) {
+            btn.onclick = function() {
+              const act = btn.getAttribute('data-action');
+              if (act === 'confirm') doConfirm(b.id);
+              else if (act === 'decline') { showScreen('screenDecline'); document.getElementById('declineComment').value = ''; }
+              else if (act === 'cancel') document.getElementById('modalCancel').style.display = 'flex';
+              else if (act === 'make_regular') doMakeRegular(b.id);
+              else if (act === 'remove_recurring') {
+                const rid = parseInt(btn.getAttribute('data-recurring-id') || '0', 10);
+                doRemoveRegular(rid);
+              }
+            };
+          });
+
+          showScreen('screenDetail');
+          try {
+            history.pushState({ ui: 'sched-detail' }, '', window.location.pathname);
+          } catch (e) { /* ignore */ }
+        }).catch(function() {
+          alert('Ошибка загрузки');
+          showScreen('screenSchedule');
+          loadSchedule();
+        });
+      }
+
+      function doConfirm(bookingId) {
+        postJson('/api/webapp/trainer/bookings/' + bookingId + '/confirm', null).then(function() {
+          if (history.state && history.state.ui === 'sched-detail') {
+            pendingReloadAfterPop = true;
+            history.back();
+          } else {
+            showScreen('screenSchedule');
+            loadSchedule();
+          }
+        }).catch(function() { alert('Ошибка'); });
+      }
+
+      function doMakeRegular(bookingId) {
+        postJson('/api/webapp/trainer/bookings/' + bookingId + '/make_regular', null).then(function(res) {
+          if (res && res.recurring_id) {
+            openDetail(bookingId);
+          } else {
+            alert('Не удалось создать регулярность: возможно, она уже есть на это время.');
+            openDetail(bookingId);
+          }
+        }).catch(function() { alert('Ошибка'); });
+      }
+
+      function doRemoveRegular(recurringId) {
+        if (!recurringId) return;
+        postJson('/api/webapp/trainer/recurring/' + recurringId + '/remove', null).then(function() {
+          var id = state.selectedBooking && state.selectedBooking.id;
+          if (id) openDetail(id);
+        }).catch(function() { alert('Ошибка'); });
+      }
+
+      document.getElementById('btnDeclineSubmit').onclick = function() {
+        const comment = (document.getElementById('declineComment').value || '').trim();
+        if (!comment) { alert('Напишите причину отклонения для клиента.'); return; }
+        const id = state.selectedBooking && state.selectedBooking.id;
+        if (!id) return;
+        postJson('/api/webapp/trainer/bookings/' + id + '/decline', { comment: comment }).then(function() {
+          if (history.state && history.state.ui === 'sched-detail') {
+            pendingReloadAfterPop = true;
+            history.back();
+          } else {
+            showScreen('screenSchedule');
+            loadSchedule();
+          }
+        }).catch(function() { alert('Ошибка'); });
       };
-      document.getElementById('nextWeek').onclick = () => {
-        currentWeekStart.setDate(currentWeekStart.getDate() + 7);
-        load();
+      document.getElementById('backFromDecline').onclick = function() { showScreen('screenDetail'); };
+
+      document.getElementById('modalCancelYes').onclick = function() {
+        document.getElementById('modalCancel').style.display = 'none';
+        const id = state.selectedBooking && state.selectedBooking.id;
+        if (!id) return;
+        postJson('/api/webapp/trainer/bookings/' + id + '/cancel', null).then(function() {
+          if (history.state && history.state.ui === 'sched-detail') {
+            pendingReloadAfterPop = true;
+            history.back();
+          } else {
+            showScreen('screenSchedule');
+            loadSchedule();
+          }
+        }).catch(function() { alert('Ошибка'); });
+      };
+      document.getElementById('modalCancelNo').onclick = function() { document.getElementById('modalCancel').style.display = 'none'; };
+
+      document.getElementById('backToSchedule').onclick = function() { goBackFromDetail(); };
+
+      if (tg && tg.BackButton) {
+        tg.BackButton.onClick(handleTelegramBack);
+        tg.BackButton.hide();
+      }
+
+      document.getElementById('prevWeek').onclick = function() {
+        state.currentWeekStart.setDate(state.currentWeekStart.getDate() - 7);
+        loadSchedule();
+      };
+      document.getElementById('nextWeek').onclick = function() {
+        state.currentWeekStart.setDate(state.currentWeekStart.getDate() + 7);
+        loadSchedule();
       };
 
-      document.querySelectorAll('.filter-btn').forEach(btn => {
-        btn.onclick = () => {
-          document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.filter-btn').forEach(function(btn) {
+        btn.onclick = function() {
+          document.querySelectorAll('.filter-btn').forEach(function(b) { b.classList.remove('active'); });
           btn.classList.add('active');
-          currentFilter = btn.dataset.filter;
-          render(allSlots);
+          state.currentFilter = btn.getAttribute('data-filter');
+          renderSchedule();
         };
       });
 
-      load();
+      (function init() {
+        var p = new URLSearchParams(window.location.search);
+        var ob = p.get('open_booking');
+        if (ob) {
+          var bid = parseInt(ob, 10);
+          if (bid) {
+            try {
+              history.replaceState({}, '', window.location.pathname);
+            } catch (e) { /* ignore */ }
+            document.getElementById('detailContent').innerHTML = '<div class="loading">Загрузка...</div>';
+            document.getElementById('detailActions').innerHTML = '';
+            showScreen('screenDetail');
+            openDetail(bid);
+            prefetchScheduleInBackground();
+            return;
+          }
+        }
+        loadSchedule();
+      })();
     })();
   </script>
 </body>

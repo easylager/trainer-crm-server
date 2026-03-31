@@ -13,6 +13,7 @@ Production-ready конфигурация для AI-ассистента в Curs
 | `postgres` | **Только read-only** SQL и схемы таблиц (`@modelcontextprotocol/server-postgres`) |
 | `github` | Issues, PR, содержимое файлов в GitHub (нужен PAT) |
 | `playwright` | Браузерная автоматизация / E2E (`@playwright/mcp`) |
+| `notion` | Поиск и страницы Notion через API (`@notionhq/notion-mcp-server`); нужен секрет интеграции |
 
 ## Зависимости на машине
 
@@ -28,8 +29,16 @@ Production-ready конфигурация для AI-ассистента в Curs
 |------------|----------|
 | `POSTGRES_MCP_URL` | Обычный URL PostgreSQL **без** префикса драйвера SQLAlchemy: `postgresql://user:pass@host:5432/dbname`. Должен совпадать с локальной БД из [`.env.example`](../.env.example). |
 | `GITHUB_PERSONAL_ACCESS_TOKEN` | Fine-grained или classic PAT GitHub с нужными scope (repo, pull requests, issues — по задачам). Пакет читает `process.env.GITHUB_PERSONAL_ACCESS_TOKEN`. |
+| `NOTION_TOKEN` | Секрет **internal integration** в Notion ([My integrations](https://www.notion.so/profile/integrations)). Удобнее всего положить в **`.env`** в корне репо: сервер `notion` запускается через [`scripts/mcp-notion.sh`](../scripts/mcp-notion.sh) и подставляет токен без ручного `export` перед Cursor. В интеграции выдать доступ к нужным страницам (Share / Connections). |
 
 Скопируйте значения в `.env` и экспортируйте в shell перед запуском Cursor **или** пропишите переменные в системных настройках / в UI Cursor, если поддерживается.
+
+### Notion MCP: если в логе «API token is invalid» (401)
+
+1. В Notion создайте интеграцию или откройте существующую и **скопируйте** Internal Integration Secret.
+2. Добавьте в **`.env`** в корне репозитория строку `NOTION_TOKEN=…` (без кавычек или в кавычках — как в [`.env.example`](../.env.example)); перезапустите Cursor, чтобы поднялся [`scripts/mcp-notion.sh`](../scripts/mcp-notion.sh).
+3. Альтернатива: `export NOTION_TOKEN='…'` в shell **до** запуска Cursor — если когда‑нибудь вернёте в `mcp.json` прямой `npx` с `${env:NOTION_TOKEN}`.
+4. Убедитесь, что к целевым страницам/базам интеграция **приглашена** (Share / Connections).
 
 ## Ограничения (важно)
 

@@ -1,9 +1,10 @@
 """
 Booking use cases: create booking (slot + client_id, comment), list for trainer, pending notifications.
 """
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.certificate_use_cases import redeem_certificate_for_booking, redeem_certificate_balance_for_booking
@@ -14,6 +15,22 @@ try:
     from zoneinfo import ZoneInfo
 except ImportError:
     from backports.zoneinfo import ZoneInfo  # type: ignore[no-redef]
+
+# Correlated subquery for trainer-facing "Арена" text (alias `b` = bookings row).
+# There is no per-booking or per-slot venue FK; we aggregate all arena names linked via trainer_arenas
+# (same rule as catalog). Keeps schedule slot line and booking detail identical.
+SQL_BOOKING_TRAINER_ARENAS_STR = """(
+    SELECT string_agg(a.name, ', ' ORDER BY a.name)
+    FROM trainer_arenas ta
+    JOIN arenas a ON a.id = ta.arena_id
+    WHERE ta.trainer_id = b.trainer_id
+)"""
+
+
+def _normalize_trainer_arenas_display(raw: str | None) -> str | None:
+    """Single normalization for arenas_str / venue_label (matches list_bookings_for_trainer output)."""
+    s = (raw or "").strip()
+    return s if s else None
 
 
 async def get_first_service_id_for_trainer(session: AsyncSession, trainer_id: int) -> int | None:
@@ -74,11 +91,17 @@ async def create_booking(
     to avoid duplicate notification.
 
     Returns booking id or None if slot not available / wrong trainer / service not offered by trainer.
+
+    Concurrency: two parallel bookings on the same slot are serialized with FOR UPDATE on the slot row
+    (pessimistic lock until commit). The second transaction waits, then sees status != 'available' and
+    returns None — no reliance on unique constraint errors for the happy path. (Unique on slot_id remains
+    defense in depth.)
     """
     r = await session.execute(
         text("""
             SELECT id FROM slots
             WHERE id = :sid AND trainer_id = :tid AND status = 'available'
+            FOR UPDATE
         """),
         {"sid": slot_id, "tid": trainer_id},
     )
@@ -93,23 +116,28 @@ async def create_booking(
     )
     if not r.fetchone():
         return None
-    r = await session.execute(
-        text("""
-            INSERT INTO bookings (slot_id, trainer_id, client_id, service_id, client_comment, client_request_id, status)
-            VALUES (:sid, :tid, :cid, :svc_id, :comment, :req_id, :status)
-            RETURNING id
-        """),
-        {
-            "sid": slot_id,
-            "tid": trainer_id,
-            "cid": client_id,
-            "svc_id": service_id,
-            "comment": (client_comment or "").strip() or None,
-            "req_id": client_request_id,
-            "status": "confirmed" if created_by_trainer else "pending",
-        },
-    )
-    (booking_id,) = r.fetchone()
+    try:
+        r = await session.execute(
+            text("""
+                INSERT INTO bookings (slot_id, trainer_id, client_id, service_id, client_comment, client_request_id, status)
+                VALUES (:sid, :tid, :cid, :svc_id, :comment, :req_id, :status)
+                RETURNING id
+            """),
+            {
+                "sid": slot_id,
+                "tid": trainer_id,
+                "cid": client_id,
+                "svc_id": service_id,
+                "comment": (client_comment or "").strip() or None,
+                "req_id": client_request_id,
+                "status": "confirmed" if created_by_trainer else "pending",
+            },
+        )
+        (booking_id,) = r.fetchone()
+    except IntegrityError:
+        # Rare: unique(slot_id) if lock was bypassed; keep API predictable (no 500 on race).
+        await session.rollback()
+        return None
     await session.execute(
         text("UPDATE slots SET status = 'booked' WHERE id = :id"),
         {"id": slot_id},
@@ -379,10 +407,9 @@ async def list_bookings_for_trainer(
                        ) AS session_num,
                        COALESCE(b.status, 'confirmed') AS status,
                        srv.name AS services_str,
-                       (SELECT string_agg(a.name, ', ' ORDER BY a.name)
-                        FROM trainer_arenas ta
-                        JOIN arenas a ON a.id = ta.arena_id
-                        WHERE ta.trainer_id = b.trainer_id) AS arenas_str
+                       """
+            + SQL_BOOKING_TRAINER_ARENAS_STR
+            + """ AS arenas_str
                 FROM bookings b
                 JOIN clients c ON c.id = b.client_id
                 JOIN slots s ON s.id = b.slot_id
@@ -415,11 +442,60 @@ async def list_bookings_for_trainer(
             "end_time": row[10],
             "session_num": row[11],
             "services_str": (row[12] or "").strip() or None,
-            "arenas_str": (row[13] or "").strip() or None,
+            "arenas_str": _normalize_trainer_arenas_display(row[13] if len(row) > 13 else None),
             "status": (row[14] or "confirmed").strip() if len(row) > 14 else "confirmed",
         }
         for row in rows
     ]
+
+
+async def active_booking_summaries_by_slot_for_trainer_range(
+    session: AsyncSession,
+    trainer_id: int,
+    from_date: date,
+    to_date: date,
+) -> dict[int, dict]:
+    """
+    For booked slots in a date range: slot_id -> display fields for schedule UI.
+    Uses SQL_BOOKING_TRAINER_ARENAS_STR so venue_label matches booking detail arenas_str.
+    """
+    r = await session.execute(
+        text(
+            """
+            SELECT b.slot_id, b.id,
+                   COALESCE(b.status, 'confirmed') AS status,
+                   srv.name AS services_str,
+                   """
+            + SQL_BOOKING_TRAINER_ARENAS_STR
+            + """ AS arenas_str,
+                   c.first_name AS client_first_name, c.last_name AS client_last_name, c.phone AS client_phone
+            FROM bookings b
+            JOIN slots s ON s.id = b.slot_id
+            JOIN clients c ON c.id = b.client_id
+            JOIN services srv ON srv.id = b.service_id
+            WHERE b.trainer_id = :tid
+              AND s.slot_date >= :from_d AND s.slot_date <= :to_d
+              AND s.status = 'booked'
+              AND b.status IN ('pending', 'confirmed')
+        """),
+        {"tid": trainer_id, "from_d": from_date, "to_d": to_date},
+    )
+    out: dict[int, dict] = {}
+    for row in r.fetchall():
+        slot_id = int(row[0])
+        first = (row[5] or "").strip() if row[5] else ""
+        last = (row[6] or "").strip() if row[6] else ""
+        phone = (row[7] or "").strip() if row[7] else ""
+        name = " ".join(p for p in (first, last) if p).strip()
+        client_preview = name or phone or "Клиент"
+        out[slot_id] = {
+            "booking_id": int(row[1]),
+            "status": (row[2] or "confirmed").strip(),
+            "services_str": ((row[3] or "").strip() or None),
+            "venue_label": _normalize_trainer_arenas_display(row[4]),
+            "client_preview": client_preview,
+        }
+    return out
 
 
 async def list_trainer_clients(
@@ -719,7 +795,10 @@ async def count_trainer_client_upcoming(
 
 
 async def get_bookings_pending_notification(session: AsyncSession) -> list[dict]:
-    """Bookings where notified_at is null (for trainer bot to send push). Includes client name, service from booking, city from request/session fallback, trainer arenas."""
+    """Bookings where notified_at is null and status is pending (client-initiated online booking).
+
+    Trainer-created bookings are inserted as confirmed and must not appear here — no confirm/decline push.
+    """
     r = await session.execute(
         text("""
             SELECT b.id, b.trainer_id, b.slot_id, c.telegram_id, c.phone, b.client_comment,
@@ -740,6 +819,7 @@ async def get_bookings_pending_notification(session: AsyncSession) -> list[dict]
             LEFT JOIN client_sessions cs ON cs.telegram_id = c.telegram_id
             LEFT JOIN cities ci2 ON ci2.id = cs.city_id
             WHERE b.notified_at IS NULL
+              AND b.status = 'pending'
             ORDER BY b.created_at ASC
         """),
     )

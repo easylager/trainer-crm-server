@@ -752,6 +752,19 @@ async def redeem_certificate_balance_for_booking(
             ),
             {"new_remaining": new_remaining, "id": cert_id},
         )
+    # Ledger for trainer analytics: do not double-count session list price when cert balance was used.
+    await session.execute(
+        text(
+            """
+            INSERT INTO certificate_booking_credits (booking_id, certificate_instance_id, amount_cents)
+            VALUES (:bid, :cert_id, :covered)
+            ON CONFLICT (booking_id) DO UPDATE SET
+                certificate_instance_id = EXCLUDED.certificate_instance_id,
+                amount_cents = EXCLUDED.amount_cents
+            """
+        ),
+        {"bid": booking_id, "cert_id": cert_id, "covered": covered},
+    )
     # Caller controls commit
     return True
 

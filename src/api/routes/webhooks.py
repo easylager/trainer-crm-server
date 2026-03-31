@@ -1,14 +1,18 @@
 """
-Webhooks from external services (payment gateway, etc.). No user auth — verify by payload/signature.
+Webhooks from external services (payment gateway, etc.).
+
+bePaid: HTTP Basic (shop id + secret) when credentials are configured; idempotent invoice handling
+in subscription use cases.
 """
 import logging
-from typing import Any
 
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.api.bepaid_webhook_auth import verify_bepaid_webhook_http_basic
 from src.api.deps import get_session
 from src.application.subscription_use_cases import confirm_subscription_invoice_after_payment
+from src.shared.config import Settings
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +24,8 @@ router = APIRouter(prefix="/api/webhooks", tags=["webhooks"])
 @router.post("/bepaid")
 async def bepaid_webhook(request: Request, session: AsyncSession = Depends(get_session)):
     """bePaid notification: transaction status updates for trainer subscription invoices."""
+    settings = Settings()
+    verify_bepaid_webhook_http_basic(request, settings.bepaid_shop_id, settings.bepaid_secret_key)
     try:
         body = await request.json()
     except Exception as e:

@@ -5,155 +5,266 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Абонементы</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="stylesheet" href="theme.css" />
+  <link rel="stylesheet" href="mini-app-components.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet" />
+  <script src="client-mini-app-theme.js"></script>
   <style>
-    :root {
-      --tg-theme-bg-color: #FFFBEB;
-      --tg-theme-text-color: #1a1a1a;
-      --tg-theme-hint-color: #666;
-      --tg-theme-button-color: #F7A600;
-      --tg-theme-button-text-color: #1a1a1a;
-      --tg-theme-secondary-bg-color: #FFF3CC;
+    /* Page-specific layout only; tokens & bd-* from theme + mini-app-components */
+    #screenChoose {
+      font-family: var(--app-font-sans);
+      animation: bd-enter 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
     }
-    @media (prefers-color-scheme: dark) {
-      :root {
-        --tg-theme-bg-color: #1a1a1a;
-        --tg-theme-text-color: #f5f5f5;
-        --tg-theme-hint-color: #8e8e93;
-        --tg-theme-button-color: #F7A600;
-        --tg-theme-secondary-bg-color: #2a2a2a;
-      }
-    }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: var(--tg-theme-bg-color);
-      color: var(--tg-theme-text-color);
-      min-height: 100vh;
-      padding: 12px;
-      padding-bottom: env(safe-area-inset-bottom, 12px);
-    }
-    .header {
+    .bp-top {
       display: flex;
       align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      font-size: 18px;
-      font-weight: 600;
-      margin-bottom: 16px;
+      gap: 10px;
+      margin-bottom: 14px;
     }
-    .header-title { flex: 1; }
-    .btn-back-header {
+    .bp-back {
       flex-shrink: 0;
-      padding: 8px 14px;
-      border-radius: 8px;
-      border: none;
+      width: auto;
+      min-height: 44px;
+      padding: 10px 16px;
       font-size: 14px;
-      font-weight: 600;
-      background: var(--tg-theme-secondary-bg-color);
-      color: var(--tg-theme-button-color);
-      cursor: pointer;
     }
-    .loading, .error { text-align: center; padding: 32px 16px; color: var(--tg-theme-hint-color); }
-    .error { color: #ef4444; }
-    .empty { text-align: center; padding: 32px 16px; color: var(--tg-theme-hint-color); }
-    .info-block {
-      background: var(--tg-theme-secondary-bg-color);
-      border-radius: 14px;
-      padding: 16px 18px;
-      margin-bottom: 20px;
+    .bp-hero .bp-hero-name {
+      font-size: clamp(22px, 6vw, 28px);
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1.15;
+      color: var(--tg-theme-text-color);
+      margin: 0;
+    }
+    .bp-hero .bp-hero-sub {
+      margin-top: 8px;
       font-size: 14px;
-      line-height: 1.5;
+      font-weight: 500;
+      color: var(--tg-theme-hint-color);
+      line-height: 1.4;
+    }
+    .bp-intro {
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+      padding: 16px 18px;
+      border-radius: 18px;
+      margin-bottom: 20px;
+      background: var(--tg-theme-secondary-bg-color);
+      border: 1px solid rgba(128, 128, 128, 0.14);
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+    }
+    .bp-intro-icon {
+      flex-shrink: 0;
+      width: 48px;
+      height: 48px;
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(145deg, #ffc23d 0%, #f7a600 55%, #e89400 100%);
+      box-shadow: 0 4px 14px rgba(247, 166, 0, 0.35);
+      color: #1a1a1a;
+    }
+    .bp-intro-icon svg { width: 24px; height: 24px; }
+    .bp-intro-body { min-width: 0; }
+    .bp-intro-title {
+      font-size: 16px;
+      font-weight: 600;
+      margin: 0 0 6px;
       color: var(--tg-theme-text-color);
     }
-    .info-block .info-title { font-weight: 600; margin-bottom: 8px; font-size: 15px; }
-    .info-block .info-text { color: var(--tg-theme-hint-color); }
-    .savings-badge {
-      display: inline-block;
-      margin-top: 6px;
-      padding: 4px 10px;
-      border-radius: 8px;
-      font-size: 13px;
-      font-weight: 600;
-      background: rgba(52, 199, 89, 0.2);
-      color: #34c759;
+    .bp-intro-text {
+      margin: 0;
+      font-size: 14px;
+      line-height: 1.5;
+      color: var(--tg-theme-hint-color);
     }
-    .product-card {
+    .bp-section { margin-bottom: 8px; }
+    .bp-section + .bp-section { margin-top: 22px; }
+    .loading, .error { text-align: center; padding: 32px 16px; color: var(--tg-theme-hint-color); }
+    .error { color: var(--app-danger); }
+    .empty {
+      text-align: center;
+      padding: 36px 20px;
+      border-radius: 18px;
+      border: 1px dashed rgba(128, 128, 128, 0.28);
+      color: var(--tg-theme-hint-color);
+      font-size: 15px;
+      line-height: 1.5;
+    }
+    .bp-pass-card {
+      --bp-delay: 0s;
       display: block;
       width: 100%;
-      padding: 16px 18px;
-      margin-bottom: 10px;
-      border-radius: 14px;
+      margin-bottom: 12px;
+      padding: 0;
+      border: 1px solid rgba(128, 128, 128, 0.14);
+      border-radius: 18px;
       background: var(--tg-theme-secondary-bg-color);
-      border: none;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
       font: inherit;
       color: inherit;
       text-align: left;
-      cursor: pointer;
+      overflow: hidden;
+      position: relative;
+      animation: bd-enter 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+      animation-delay: var(--bp-delay);
     }
-    .product-card:active { opacity: 0.9; }
-    .product-card.selected { outline: 2px solid var(--tg-theme-button-color); outline-offset: 2px; }
-    .product-card .title { font-weight: 600; font-size: 16px; margin-bottom: 4px; }
-    .product-card .meta { font-size: 14px; color: var(--tg-theme-hint-color); }
-    .btn-pay {
-      display: block;
-      width: 100%;
-      padding: 14px 18px;
-      margin-top: 20px;
-      border-radius: 14px;
-      border: none;
-      font-size: 16px;
+    .bp-pass-card--best {
+      border-color: rgba(247, 166, 0, 0.35);
+      box-shadow: 0 6px 24px rgba(0, 0, 0, 0.08);
+    }
+    .bp-pass-card--best::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: linear-gradient(90deg, #ffc23d, #f7a600, #e89400);
+      pointer-events: none;
+    }
+    .bp-pass-inner {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 16px 16px 14px;
+    }
+    .bp-pass-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      margin-left: auto;
+      padding: 4px 8px;
+      border-radius: 8px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      background: rgba(247, 166, 0, 0.18);
+      color: var(--tg-theme-button-color);
+      flex-shrink: 0;
+    }
+    .bp-pass-ico {
+      flex-shrink: 0;
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(247, 166, 0, 0.12);
+      border: 1px solid rgba(247, 166, 0, 0.2);
+      color: #f7a600;
+    }
+    .bp-pass-ico svg { width: 22px; height: 22px; opacity: 0.95; }
+    .bp-pass-body { flex: 1; min-width: 0; }
+    .bp-pass-title {
       font-weight: 600;
-      background: var(--tg-theme-button-color);
-      color: var(--tg-theme-button-text-color);
-      cursor: pointer;
+      font-size: 16px;
+      line-height: 1.25;
+      margin: 0 0 6px;
+      color: var(--tg-theme-text-color);
     }
-    .btn-pay:disabled { opacity: 0.5; cursor: not-allowed; }
-    .btn-pay:active:not(:disabled) { opacity: 0.9; }
+    .bp-pass-meta {
+      font-size: 13px;
+      line-height: 1.45;
+      color: var(--tg-theme-hint-color);
+    }
+    .bp-nudge {
+      margin: -8px 0 20px;
+      padding-left: 12px;
+      border-left: 2px solid rgba(247, 166, 0, 0.28);
+      font-size: 13px;
+      line-height: 1.45;
+      color: var(--tg-theme-hint-color);
+    }
+    .bp-savings {
+      margin: 0 16px 14px;
+      padding: 8px 12px;
+      border-radius: 10px;
+      font-size: 12px;
+      font-weight: 600;
+      line-height: 1.4;
+      color: var(--app-success);
+      border: 1px solid color-mix(in srgb, var(--app-success) 32%, transparent);
+      background: color-mix(in srgb, var(--app-success) 10%, transparent);
+    }
+    @supports not (background: color-mix(in srgb, red, blue)) {
+      .bp-savings {
+        border: 1px solid rgba(52, 199, 89, 0.35);
+        background: rgba(52, 199, 89, 0.1);
+      }
+    }
+    .bp-cert-card {
+      margin-bottom: 12px;
+      padding: 16px 18px;
+      border-radius: 18px;
+      background: var(--tg-theme-secondary-bg-color);
+      border: 1px solid rgba(128, 128, 128, 0.12);
+      border-left: 4px solid var(--tg-theme-button-color);
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+      animation: bd-enter 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+      animation-delay: var(--bp-delay, 0s);
+    }
+    .bp-cert-inner {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+    }
+    .bp-cert-ico {
+      flex-shrink: 0;
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(247, 166, 0, 0.1);
+      color: #f7a600;
+    }
+    .bp-cert-ico svg { width: 22px; height: 22px; }
+    .bp-cert-title { font-weight: 600; font-size: 16px; margin: 0 0 6px; }
+    .bp-cert-meta { font-size: 13px; color: var(--tg-theme-hint-color); line-height: 1.45; margin: 0; }
     [data-screen] { display: none; }
     [data-screen].active { display: block; }
-    .success-title { font-size: 20px; font-weight: 600; margin-bottom: 12px; }
-    .success-hint { font-size: 15px; color: var(--tg-theme-hint-color); margin-bottom: 20px; }
-    .btn-my-passes {
-      display: block;
-      width: 100%;
-      padding: 14px 18px;
-      border-radius: 14px;
-      border: none;
-      font-size: 16px;
-      font-weight: 600;
-      background: var(--tg-theme-button-color);
-      color: var(--tg-theme-button-text-color);
-      cursor: pointer;
-      text-align: center;
-      text-decoration: none;
-    }
-    body { background: #FFFBEB !important; color: #1a1a1a !important; }
-    @media (prefers-color-scheme: dark) {
-      body { background: #1a1a1a !important; color: #f5f5f5 !important; }
-    }
   </style>
 </head>
 <body>
-  <script>
-  (function(){var d=document.documentElement;d.style.setProperty('--tg-theme-button-color','#F7A600');d.style.setProperty('--tg-theme-button-text-color','#1a1a1a');})();
-  </script>
   <div id="screenChoose" data-screen class="active">
-    <div class="header">
-      <span class="header-title">📦 Абонементы и сертификаты</span>
-      <button type="button" class="btn-back-header" id="btnBack" aria-label="Назад">← Назад</button>
+    <div class="bp-top">
+      <button type="button" class="bd-btn bd-btn--soft bp-back" id="btnBack" aria-label="Назад">← Назад</button>
     </div>
-    <p id="trainerLabel" class="meta" style="margin-bottom:12px;font-size:14px;color:var(--tg-theme-hint-color);"></p>
-    <div class="info-block">
-      <div class="info-title">Абонементы и сертификаты тренера</div>
-      <div class="info-text">Ниже — абонементы (N занятий за цену) и сертификаты (номинал на сумму). Покупка и оплата только напрямую у тренера.</div>
+
+    <section class="bd-hero bp-hero" aria-labelledby="heroTrainerName">
+      <div class="bd-hero-inner">
+        <p class="bd-hero-kicker">Абонементы и сертификаты</p>
+        <h1 class="bp-hero-name" id="heroTrainerName">Тренер</h1>
+        <p class="bp-hero-sub" id="trainerLabel">Загрузка…</p>
+      </div>
+    </section>
+
+    <div class="bp-intro">
+      <div class="bp-intro-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+      </div>
+      <div class="bp-intro-body">
+        <p class="bp-intro-title">Как это устроено</p>
+        <p class="bp-intro-text">Абонемент — пакет занятий за фиксированную цену. Сертификат — номинал на сумму. Здесь только справочно; как оформить и оплатить — по договорённости с тренером.</p>
+      </div>
     </div>
-    <div id="passSection" style="display:none;">
-      <div class="section-title" style="font-size:13px;font-weight:600;color:var(--tg-theme-hint-color);margin-bottom:10px;text-transform:uppercase;">Абонементы</div>
+
+    <p class="bp-nudge" id="bpNudge">Если что-то заинтересовало — напишите тренеру или обсудите на занятии: так обычно удобнее всего договориться о покупке.</p>
+
+    <div id="passSection" class="bp-section" style="display:none;">
+      <div class="bd-section-label">Абонементы</div>
       <div id="listContent"></div>
     </div>
-    <div id="certSection" style="display:none;">
-      <div class="section-title" style="font-size:13px;font-weight:600;color:var(--tg-theme-hint-color);margin-bottom:10px;margin-top:20px;text-transform:uppercase;">Сертификаты</div>
+    <div id="certSection" class="bp-section" style="display:none;">
+      <div class="bd-section-label">Сертификаты</div>
       <div id="certListContent"></div>
     </div>
     <div id="emptyAll" class="empty" style="display:none;">У этого тренера пока нет абонементов и сертификатов.</div>
@@ -163,24 +274,13 @@
       var tg = window.Telegram && window.Telegram.WebApp;
       if (tg) { tg.ready(); tg.expand(); }
       function initData() { return (tg && tg.initData) ? tg.initData : ''; }
-      function apiUrl(path, extra) {
-        var base = '/api/webapp';
-        var q = id ? 'init_data=' + encodeURIComponent(id) : '';
-        var id = initData();
-        if (extra) q = (q ? q + '&' : '') + extra;
-        return base + path + (q ? '?' + q : '');
-      }
       function headers() {
         var h = { 'Content-Type': 'application/json' };
         var id = initData();
         if (id) h['X-Telegram-Init-Data'] = id;
         return h;
       }
-      function postUrl(path) {
-        var id = initData();
-        return path + (id ? '?init_data=' + encodeURIComponent(id) : '');
-      }
-      var state = { trainerId: null, trainerName: '', items: [], certItems: [], selectedId: null, returnContext: {} };
+      var state = { trainerId: null, trainerName: '', items: [], certItems: [], returnContext: {} };
       function getTrainerFromUrl() {
         var p = new URLSearchParams(window.location.search || '');
         var id = p.get('trainer_id');
@@ -192,11 +292,6 @@
         state.returnContext.arena_id = p.get('arena_id');
         state.returnContext.offset = p.get('offset');
         return state.trainerId;
-      }
-      function showScreen(id) {
-        document.querySelectorAll('[data-screen]').forEach(function(el) { el.classList.remove('active'); });
-        var el = document.getElementById(id);
-        if (el) el.classList.add('active');
       }
       function closeApp() { if (tg) tg.close(); else window.close(); }
       function goBack() {
@@ -229,12 +324,21 @@
         if (c.amount_cents == null) return 'Любая сумма';
         return (c.amount_cents / 100) + ' BYN';
       }
+      var ICON_PASS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6.7 11.4l2.5 2.5c.4.4 1 .4 1.4 0l7.6-7.6"/><path d="M21 12V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h7"/><circle cx="16" cy="8" r="2"/><path d="M12 18h.01"/></svg>';
+      var ICON_CERT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5" rx="1"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg>';
       function loadProducts() {
         if (!state.trainerId) {
+          document.getElementById('heroTrainerName').textContent = state.trainerName;
+          document.getElementById('trainerLabel').textContent = 'Нужен корректный параметр trainer_id в ссылке';
+          var nudge = document.getElementById('bpNudge');
+          if (nudge) nudge.style.display = 'none';
           document.getElementById('listContent').innerHTML = '<div class="error">Укажите тренера (trainer_id в ссылке).</div>';
           return;
         }
-        document.getElementById('trainerLabel').textContent = 'Абонементы и сертификаты: ' + escapeHtml(state.trainerName);
+        var nudgeEl = document.getElementById('bpNudge');
+        if (nudgeEl) nudgeEl.style.display = '';
+        document.getElementById('heroTrainerName').textContent = state.trainerName;
+        document.getElementById('trainerLabel').textContent = 'Справочные цены · оформление у тренера';
         document.getElementById('listContent').innerHTML = '<div class="loading">Загрузка…</div>';
         document.getElementById('certListContent').innerHTML = '';
         document.getElementById('passSection').style.display = 'block';
@@ -251,10 +355,19 @@
           var hasCerts = state.certItems.length > 0;
           document.getElementById('passSection').style.display = hasPasses ? 'block' : 'none';
           document.getElementById('certSection').style.display = hasCerts ? 'block' : 'none';
-          document.getElementById('emptyAll').style.display = !hasPasses && !hasCerts ? 'block' : 'none';
+          var emptyAll = !hasPasses && !hasCerts;
+          document.getElementById('emptyAll').style.display = emptyAll ? 'block' : 'none';
+          var nudgeLine = document.getElementById('bpNudge');
+          if (nudgeLine) nudgeLine.style.display = emptyAll ? 'none' : '';
+          var bestIdx = -1;
+          var bestSav = -1;
+          state.items.forEach(function(p, idx) {
+            var t = p.savings_total_cents != null ? Number(p.savings_total_cents) : 0;
+            if (t > bestSav) { bestSav = t; bestIdx = idx; }
+          });
           if (hasPasses) {
             var html = '';
-            state.items.forEach(function(p) {
+            state.items.forEach(function(p, idx) {
               var passPerSession = p.pass_price_per_session_cents != null ? (p.pass_price_per_session_cents / 100) : null;
               var meta = p.sessions_total + ' занятий · ' + formatPrice(p.price_cents);
               if (passPerSession != null) {
@@ -266,32 +379,38 @@
               if (savPer > 0) {
                 var perSession = savPer / 100;
                 var totalSav = savTotal / 100;
-                savingsHtml = '<div class="savings-badge">Экономия ' + (perSession % 1 === 0 ? perSession : perSession.toFixed(2)) + ' BYN за занятие';
+                savingsHtml = '<div class="bp-savings">Экономия ' + (perSession % 1 === 0 ? perSession : perSession.toFixed(2)) + ' BYN за занятие';
                 if (totalSav > perSession) savingsHtml += ' · ' + (totalSav % 1 === 0 ? totalSav : totalSav.toFixed(2)) + ' BYN с абонемента';
                 savingsHtml += '</div>';
               }
-              html += '<button type="button" class="product-card" data-id="' + p.id + '">';
-              html += '<div class="title">' + escapeHtml(p.name) + '</div>';
-              html += '<div class="meta">' + meta + '</div>' + savingsHtml + '</button>';
+              var extraClass = '';
+              if (bestIdx === idx && bestSav > 0) extraClass = ' bp-pass-card--best';
+              var bestTag = (bestIdx === idx && bestSav > 0)
+                ? '<span class="bp-pass-badge">Выгодно</span>'
+                : '';
+              html += '<article class="bp-pass-card' + extraClass + '" style="--bp-delay:' + (idx * 0.05) + 's">';
+              html += '<div class="bp-pass-inner">';
+              html += '<div class="bp-pass-ico">' + ICON_PASS + '</div>';
+              html += '<div class="bp-pass-body">';
+              html += '<div class="bp-pass-title">' + escapeHtml(p.name) + '</div>';
+              html += '<div class="bp-pass-meta">' + meta + '</div>';
+              html += '</div>' + bestTag;
+              html += '</div>';
+              html += savingsHtml;
+              html += '</article>';
             });
             document.getElementById('listContent').innerHTML = html;
-            document.querySelectorAll('.product-card').forEach(function(btn) {
-              btn.onclick = function() {
-                state.selectedId = parseInt(btn.dataset.id, 10);
-                document.querySelectorAll('.product-card').forEach(function(b) { b.classList.remove('selected'); });
-                btn.classList.add('selected');
-                var payBtn = document.getElementById('btnPay');
-                if (payBtn) payBtn.disabled = false;
-              };
-            });
           }
           if (hasCerts) {
             var certHtml = '';
-            state.certItems.forEach(function(c) {
-              certHtml += '<div class="product-card" style="cursor:default;">';
-              certHtml += '<div class="title">' + escapeHtml(formatCertAmount(c)) + '</div>';
-              certHtml += '<div class="meta">Сертификат на занятия у тренера. Сумму и условия уточняйте у тренера.</div>';
-              certHtml += '</div>';
+            state.certItems.forEach(function(c, cidx) {
+              certHtml += '<div class="bp-cert-card" style="--bp-delay:' + (cidx * 0.05) + 's">';
+              certHtml += '<div class="bp-cert-inner">';
+              certHtml += '<div class="bp-cert-ico">' + ICON_CERT + '</div>';
+              certHtml += '<div>';
+              certHtml += '<div class="bp-cert-title">' + escapeHtml(formatCertAmount(c)) + '</div>';
+              certHtml += '<p class="bp-cert-meta">Подарочный номинал. Как приобрести — по договорённости с тренером.</p>';
+              certHtml += '</div></div></div>';
             });
             document.getElementById('certListContent').innerHTML = certHtml;
           }
@@ -299,7 +418,6 @@
           document.getElementById('listContent').innerHTML = '<div class="error">Не удалось загрузить. Откройте из бота.</div>';
         });
       }
-      // No online payment: абонементы показываются только для информации, оплату вы обсуждаете с тренером напрямую.
       getTrainerFromUrl();
       loadProducts();
     })();

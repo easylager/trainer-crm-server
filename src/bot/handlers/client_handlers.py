@@ -26,6 +26,7 @@ from aiogram.types import (
 )
 
 from src.application.booking_use_cases import get_trainer_default_city_and_service
+from src.application.subscription_tier_use_cases import trainer_allows_online_booking
 from src.application.certificate_use_cases import activate_certificate_by_code
 from src.application.client_use_cases import (
     apply_certificate_recipient_to_client,
@@ -142,6 +143,14 @@ REQUEST_DELETE_PREFIX = "request_delete:"
 BOOK_FROM_REQUEST_PREFIX = "book_from_req:"
 CATALOG_PAGE_PREFIX = "catalog_page:"
 PICK_RESPONDER_PREFIX = "pick_responder:"
+
+
+def client_passes_certificates_webapp_url(base: str, *, certificates_tab: bool = False) -> str:
+    """Combined client Mini App (tabs); optional deep link to certificates."""
+    url = f"{base.rstrip('/')}/webapp/client-passes-certificates"
+    if certificates_tab:
+        url += "?tab=certificates"
+    return url
 RESPONDER_PROFILE_PREFIX = "responder_profile:"
 CLIENT_DAYS = ("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс")
 
@@ -394,7 +403,10 @@ async def cmd_start(message: Message) -> None:
                 if bound:
                     base = (Settings().webapp_base_url or "").rstrip("/")
                     keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                        [InlineKeyboardButton(text=msg.CLIENT_BUTTON_MY_CERTIFICATES, web_app=WebAppInfo(url=f"{base}/webapp/client-certificates"))],
+                        [InlineKeyboardButton(
+                            text=msg.CLIENT_BUTTON_MY_PASSES_AND_CERTIFICATES,
+                            web_app=WebAppInfo(url=client_passes_certificates_webapp_url(base, certificates_tab=True)),
+                        )],
                         [InlineKeyboardButton(text=msg.CLIENT_BUTTON_BOOK, callback_data="book")],
                     ])
                     await message.answer(msg.CLIENT_CERT_BOUND, reply_markup=keyboard)
@@ -451,7 +463,10 @@ async def cmd_start(message: Message) -> None:
                 await set_selected_trainer(telegram_id, trainer_id, db_session)
             base = (Settings().webapp_base_url or "").rstrip("/")
             keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text=msg.CLIENT_BUTTON_MY_CERTIFICATES, web_app=WebAppInfo(url=f"{base}/webapp/client-certificates"))],
+                [InlineKeyboardButton(
+                    text=msg.CLIENT_BUTTON_MY_PASSES_AND_CERTIFICATES,
+                    web_app=WebAppInfo(url=client_passes_certificates_webapp_url(base, certificates_tab=True)),
+                )],
                 [InlineKeyboardButton(text=msg.CLIENT_BUTTON_BOOK, callback_data="book")],
             ])
             await message.answer(msg.CLIENT_CERT_BOUND, reply_markup=keyboard)
@@ -669,32 +684,31 @@ async def show_my_bookings(callback: CallbackQuery) -> None:
 
 @router.message(Command("my_passes"))
 async def cmd_my_passes(message: Message) -> None:
-    """Open Mini App «Мои абонементы» (client-passes)."""
-    base = (Settings().webapp_base_url or "").rstrip("/")
-    if not base or not base.startswith("https://"):
-        await message.answer(msg.CLIENT_MY_PASSES_INTRO + "\n\n(Mini App временно недоступен — проверьте настройки.)")
-        return
-    kb = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text=msg.CLIENT_BUTTON_MY_PASSES, web_app=WebAppInfo(url=f"{base}/webapp/client-passes"))],
-        ]
-    )
-    await message.answer(msg.CLIENT_MY_PASSES_INTRO, reply_markup=kb)
+    """Open combined Mini App (passes + certificates); default tab — абонементы."""
+    await _send_passes_certificates_webapp(message, certificates_tab=False)
 
 
 @router.message(Command("my_certificates"))
 async def cmd_my_certificates(message: Message) -> None:
-    """Open Mini App «Мои сертификаты» (client-certificates)."""
+    """Legacy command: same Mini App, вкладка «Сертификаты»."""
+    await _send_passes_certificates_webapp(message, certificates_tab=True)
+
+
+async def _send_passes_certificates_webapp(message: Message, *, certificates_tab: bool) -> None:
     base = (Settings().webapp_base_url or "").rstrip("/")
     if not base or not base.startswith("https://"):
-        await message.answer(msg.CLIENT_MY_CERTIFICATES_INTRO + "\n\n(Mini App временно недоступен — проверьте настройки.)")
+        await message.answer(
+            msg.CLIENT_MY_PASSES_AND_CERTIFICATES_INTRO
+            + "\n\n(Mini App временно недоступен — проверьте настройки.)"
+        )
         return
+    url = client_passes_certificates_webapp_url(base, certificates_tab=certificates_tab)
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text=msg.CLIENT_BUTTON_MY_CERTIFICATES, web_app=WebAppInfo(url=f"{base}/webapp/client-certificates"))],
+            [InlineKeyboardButton(text=msg.CLIENT_BUTTON_MY_PASSES_AND_CERTIFICATES, web_app=WebAppInfo(url=url))],
         ]
     )
-    await message.answer(msg.CLIENT_MY_CERTIFICATES_INTRO, reply_markup=kb)
+    await message.answer(msg.CLIENT_MY_PASSES_AND_CERTIFICATES_INTRO, reply_markup=kb)
 
 
 def _guide_keyboard() -> InlineKeyboardMarkup:
@@ -755,6 +769,7 @@ async def cmd_book(message: Message) -> None:
         await message.answer(msg.CLIENT_MENU_BOOKING_MOVED, reply_markup=kb)
         return
 
+    await message.bot.send_chat_action(chat_id=message.chat.id, action=ChatAction.TYPING)
     text, keyboard = await _client_slots_content(trainer_id)
     if keyboard is None:
         back_kb = InlineKeyboardMarkup(inline_keyboard=[
@@ -826,7 +841,18 @@ async def on_select_trainer(callback: CallbackQuery, bot: Bot) -> None:
     async with async_session_factory() as db_session:
         await set_selected_trainer(telegram_id, trainer_id, db_session)
         trainer = await get_trainer(db_session, trainer_id)
+        allows_online = await trainer_allows_online_booking(db_session, trainer_id)
     name = _trainer_name(trainer) if trainer else "Тренер"
+    if not allows_online:
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text=msg.CLIENT_BUTTON_LEAVE_REQUEST, callback_data=REQUEST_CALLBACK)],
+            [InlineKeyboardButton(text=msg.CLIENT_BUTTON_ANOTHER_TRAINER, callback_data=CATALOG_CALLBACK)],
+        ])
+        await callback.message.answer(
+            msg.CLIENT_TRAINER_SELECTED_NO_SELF_BOOK.format(name=name),
+            reply_markup=keyboard,
+        )
+        return
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text=msg.CLIENT_BUTTON_BOOK, callback_data="book")],
         [InlineKeyboardButton(text=msg.CLIENT_BUTTON_ANOTHER_TRAINER, callback_data=CATALOG_CALLBACK)],
@@ -918,12 +944,25 @@ async def on_book(callback: CallbackQuery) -> None:
     if not trainer_id:
         await callback.message.answer(msg.CLIENT_BOOK_NO_TRAINER)
         return
+    async with async_session_factory() as db_session:
+        if not await trainer_allows_online_booking(db_session, trainer_id):
+            await callback.message.answer(
+                msg.CLIENT_BOOK_NO_ONLINE_TIER,
+                reply_markup=InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [InlineKeyboardButton(text=msg.CLIENT_BUTTON_ANOTHER_TRAINER, callback_data=CATALOG_CALLBACK)],
+                    ]
+                ),
+            )
+            return
     # No client yet: offer link-by-phone (trainer may have added them by phone)
     if client_id is None:
         _link_phone_state[telegram_id] = {"step": "phone"}
         await callback.message.answer(msg.CLIENT_LINK_PHONE_PROMPT)
         return
 
+    chat_id = callback.message.chat.id if callback.message.chat else 0
+    await callback.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
     text, keyboard = await _client_slots_content(trainer_id)
     base = (Settings().webapp_base_url or "").rstrip("/")
     if base.startswith("https://") and keyboard is not None:
@@ -932,7 +971,10 @@ async def on_book(callback: CallbackQuery) -> None:
             [InlineKeyboardButton(text=msg.CLIENT_BUTTON_BOOK, web_app=WebAppInfo(url=book_url))],
             [InlineKeyboardButton(text=msg.CLIENT_BOOK_BUTTON_BACK, callback_data=CATALOG_CALLBACK)],
         ])
-        await callback.message.answer(msg.CLIENT_BOOK_CHOOSE_SLOT, reply_markup=kb)
+        await callback.message.answer(
+            msg.CLIENT_BOOK_CHOOSE_SLOT + msg.CLIENT_BOOK_WEBAPP_FOOTER,
+            reply_markup=kb,
+        )
         return
 
     if keyboard is None:
@@ -965,7 +1007,7 @@ async def on_book_slot(callback: CallbackQuery) -> None:
         trainer_id = (session_data or {}).get("selected_trainer_id") if session_data else None
         profile = await get_client_profile_basic(db_session, telegram_id)
     if not trainer_id:
-        await callback.message.answer(msg.CLIENT_BOOK_NO_TRAINER)
+        await callback.message.answer(msg.CLIENT_BOOK_SESSION_EXPIRED)
         return
     state: dict = {"slot_id": slot_id, "trainer_id": trainer_id}
     first_name_existing = (profile.get("first_name") or "").strip() if profile else ""
@@ -1027,7 +1069,7 @@ async def on_booking_use_tg_name(callback: CallbackQuery) -> None:
     telegram_id = callback.from_user.id if callback.from_user else 0
     state = _booking_state.get(telegram_id)
     if not state or not state.get("need_name"):
-        await callback.message.answer(msg.CLIENT_BOOK_NO_TRAINER)
+        await callback.message.answer(msg.CLIENT_BOOK_SESSION_EXPIRED)
         return
     from_user = callback.from_user
     state["override_first_name"] = (from_user.first_name or "").strip() if from_user else ""
@@ -1063,7 +1105,7 @@ async def on_booking_enter_manual(callback: CallbackQuery) -> None:
     await callback.answer()
     telegram_id = callback.from_user.id if callback.from_user else 0
     if telegram_id not in _booking_state:
-        await callback.message.answer(msg.CLIENT_BOOK_NO_TRAINER)
+        await callback.message.answer(msg.CLIENT_BOOK_SESSION_EXPIRED)
         return
     await callback.message.answer(msg.CLIENT_PROFILE_ENTER_NAME, reply_markup=ReplyKeyboardRemove())
 
@@ -1075,7 +1117,7 @@ async def on_booking_skip_comment(callback: CallbackQuery) -> None:
     telegram_id = callback.from_user.id if callback.from_user else 0
     state = _booking_state.pop(telegram_id, None)
     if not state or "phone" not in state:
-        await callback.message.answer(msg.CLIENT_BOOK_NO_TRAINER)
+        await callback.message.answer(msg.CLIENT_BOOK_SESSION_EXPIRED)
         return
     await _finish_booking(
         callback.message,
@@ -2450,8 +2492,15 @@ async def on_link_phone_message(message: Message) -> None:
             return
         code = "".join(random.choices(string.digits, k=4))
         _link_phone_state[telegram_id] = {"step": "code", "client_id": client["id"], "code": code}
-        # TODO: send real SMS; for now code in bot message + server log for dev
-        logger.info("Phone verification code for client_id=%s (dev): %s", client["id"], code)
+        # TODO: send real SMS; for now code in bot message. Never log the code unless DEBUG (secrets in logs policy).
+        if Settings().debug:
+            logger.info(
+                "Phone verification code for client_id=%s (debug only): %s",
+                client["id"],
+                code,
+            )
+        else:
+            logger.info("Phone verification code issued for client_id=%s", client["id"])
         dev_hint = msg.CLIENT_LINK_CODE_DEV.format(code=code)
         await message.answer(msg.CLIENT_LINK_CODE_SENT + dev_hint, parse_mode=ParseMode.HTML)
         return

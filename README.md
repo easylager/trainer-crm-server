@@ -11,8 +11,12 @@ CRM-платформа для тренеров в Беларуси. Два Teleg
 
 ## Cursor: MCP (AI + локальная разработка)
 
-В репозитории есть [`.cursor/mcp.json`](.cursor/mcp.json): filesystem, fetch, PostgreSQL (read-only), GitHub, Playwright.  
-Подстановка секретов через переменные окружения (`POSTGRES_MCP_URL`, `GITHUB_PERSONAL_ACCESS_TOKEN`). Подробности и чеклист после правок — **[docs/CURSOR_MCP.md](docs/CURSOR_MCP.md)**.
+Локально в **`.cursor/`** (каталог в `.gitignore`) можно положить `mcp.json`: filesystem, fetch, PostgreSQL (read-only), GitHub, Playwright и др.  
+Подстановка секретов через переменные окружения (`POSTGRES_MCP_URL`, `GITHUB_PERSONAL_ACCESS_TOKEN`, `NOTION_TOKEN` для Notion). Подробности — **[docs/CURSOR_MCP.md](docs/CURSOR_MCP.md)**. Продуктовый хаб для Notion — **[docs/NOTION_PRODUCT_HUB.md](docs/NOTION_PRODUCT_HUB.md)**.
+
+## Cursor: Spec Kit (spec-driven фичи)
+
+**[GitHub Spec Kit](https://github.com/github/spec-kit)** — slash-команды вроде `/speckit.specify`, `/speckit.plan`, `/speckit.implement` подключаются локально через **`.cursor/`** и **`.specify/`** (игнорируются Git’ом). Кратко — **[docs/SPEC_KIT.md](docs/SPEC_KIT.md)**; черновики фич — в **`specs/`**.
 
 ## Деплой и CI/CD
 
@@ -63,7 +67,7 @@ python -m src.bot.trainer_app  # тренерский бот (вход по сс
     - пароль: `trainer_crm_dev`
     - база: `trainer_crm`
     - порт: `5432`
-- **Переменные окружения** (`.env`):
+- **Переменные окружения** (`.env`): полный список и политика логов — **[docs/ENVIRONMENT.md](docs/ENVIRONMENT.md)**.
   - `TELEGRAM_BOT_TOKEN_CLIENT` — токен клиентского бота.
   - `TELEGRAM_BOT_TOKEN_TRAINER` — токен тренерского бота.
   - Опционально `TRAINER_LINK_TOKEN` — токен для ссылки привязки тренера (dev: по умолчанию `test`).
@@ -73,9 +77,11 @@ python -m src.bot.trainer_app  # тренерский бот (вход по сс
     - `postgresql://trainer_crm:trainer_crm_dev@localhost:5432/trainer_crm`
   - **Файлы (фото тренеров)** — хранятся в S3 (`S3_ENDPOINT`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_BUCKET`). В БД только метаданные: `trainer_photos.file_key`.
 
-**Загрузить фото с компьютера в S3 и привязать к тренеру (один запрос):** в `.env` настроены S3, запущен API (`uvicorn src.api.app:app --reload --port 8000`). Затем:
+**Загрузить фото с компьютера в S3 и привязать к тренеру (legacy, только dev):** в `.env` задайте `INTERNAL_UPLOAD_API_KEY` (и заголовок `X-Internal-Upload-Key` в запросе); без этого эндпоинт отключён — в продакшене загрузка идёт через Mini App с `initData`. При настроенных S3 и ключе:
 ```bash
-curl -X POST http://localhost:8000/api/upload/photo -F "trainer_id=1" -F "file=@/путь/к/фото.jpg"
+curl -X POST http://localhost:8000/api/upload/photo \
+  -H "X-Internal-Upload-Key: $INTERNAL_UPLOAD_API_KEY" \
+  -F "trainer_id=1" -F "file=@/путь/к/фото.jpg"
 ```
 Ответ `{"file_key":"trainers/1/....jpg"}` — файл в S3, запись в `trainer_photos` создана.
 
@@ -84,6 +90,7 @@ curl -X POST http://localhost:8000/api/upload/photo -F "trainer_id=1" -F "file=@
 - **GET /api/trainers/{id}** — тренер целиком: профиль, фото (file_key), service_ids.
 - **PATCH /api/trainers/{id}/profile** — частичное обновление профиля и/или `service_ids`.
 - **GET /api/trainers** — список тренеров (limit, offset).
+- **GET /api/trainers/education-options** — варианты образования для select при заполнении профиля тренера.
 
 Профиль: имя, фамилия, возраст (обязательные), стаж в годах (опционально), описание, телефон, контакты, образование. После миграции 0005: `alembic upgrade head`. Заполнить пару профилей для теста: `python scripts/seed_trainer_profiles.py` (нужны услуги: сначала `python scripts/seed_services.py`).
 
@@ -105,6 +112,8 @@ HTTP‑сервис ещё не реализован. План health‑эндп
 - Telegram‑бот запускается без ошибок и отвечает в чате.
 
 ## Telegram: два бота
+
+Правила единообразия Mini App: **[docs/TRAINER_MINI_APP_VISUAL_CONSTITUTION.md](docs/TRAINER_MINI_APP_VISUAL_CONSTITUTION.md)** и правила Cursor в **`.cursor/rules/`** (локально); боты — тексты и клавиатуры в `src/bot/messages.py` и связанных хендлерах.
 
 - Создать **двух** ботов в @BotFather (например: «Запись к тренеру» — клиентский, «Trainer CRM» — тренерский).
 - В `.env` прописать `TELEGRAM_BOT_TOKEN_CLIENT` и `TELEGRAM_BOT_TOKEN_TRAINER`.

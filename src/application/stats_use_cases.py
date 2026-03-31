@@ -5,9 +5,11 @@ Read-only aggregates; no side effects.
 from datetime import date, timedelta
 
 from sqlalchemy import text
+from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.trainer_schedule_use_cases import this_week_monday
+from src.infrastructure.db.models import SUBSCRIPTION_STATUS_ACTIVE, SUBSCRIPTION_STATUS_TRIAL
 
 # Short day names for charts (Mon–Sun)
 STATS_DAY_NAMES = ("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс")
@@ -21,6 +23,70 @@ def _month_end(d: date) -> date:
     if d.month == 12:
         return d.replace(day=31)
     return (d.replace(month=d.month + 1, day=1)) - timedelta(days=1)
+
+
+async def _trainer_calendar_revenue_total(
+    session: AsyncSession, trainer_id: int, d_start: date, d_end: date
+) -> int:
+    """
+    Total accrual revenue in [d_start, d_end]: session cash (after pass/cert overlap),
+    pass sales issued in range (excluding passes created from a certificate),
+    certificate sales issued in range.
+    """
+    r = await session.execute(
+        text(
+            """
+            SELECT COALESCE(SUM(
+                CASE WHEN pr.booking_id IS NOT NULL THEN 0
+                     ELSE GREATEST(0, COALESCE(ts.price_cents, 0) - COALESCE(cbc.amount_cents, 0))
+                END
+            ), 0)::bigint
+            FROM bookings b
+            JOIN slots s ON s.id = b.slot_id
+            LEFT JOIN trainer_services ts ON ts.trainer_id = b.trainer_id AND ts.service_id = b.service_id
+            LEFT JOIN pass_redemptions pr ON pr.booking_id = b.id
+            LEFT JOIN certificate_booking_credits cbc ON cbc.booking_id = b.id
+            WHERE b.trainer_id = :tid AND b.status != 'cancelled'
+              AND s.status = 'booked'
+              AND s.slot_date >= :ds AND s.slot_date <= :de
+            """
+        ),
+        {"tid": trainer_id, "ds": d_start, "de": d_end},
+    )
+    session_cents = int(r.scalar() or 0)
+
+    r = await session.execute(
+        text(
+            """
+            SELECT COALESCE(SUM(tpp.price_cents), 0)::bigint
+            FROM pass_instances pi
+            JOIN trainer_pass_products tpp ON tpp.id = pi.pass_product_id
+            WHERE tpp.trainer_id = :tid
+              AND pi.status != 'cancelled'
+              AND pi.source_certificate_instance_id IS NULL
+              AND DATE((pi.issued_at AT TIME ZONE 'UTC')) >= CAST(:ds AS DATE)
+              AND DATE((pi.issued_at AT TIME ZONE 'UTC')) <= CAST(:de AS DATE)
+            """
+        ),
+        {"tid": trainer_id, "ds": d_start, "de": d_end},
+    )
+    pass_cents = int(r.scalar() or 0)
+
+    r = await session.execute(
+        text(
+            """
+            SELECT COALESCE(SUM(ci.amount_cents), 0)::bigint
+            FROM certificate_instances ci
+            WHERE ci.trainer_id = :tid
+              AND ci.status != 'cancelled'
+              AND DATE((ci.issued_at AT TIME ZONE 'UTC')) >= CAST(:ds AS DATE)
+              AND DATE((ci.issued_at AT TIME ZONE 'UTC')) <= CAST(:de AS DATE)
+            """
+        ),
+        {"tid": trainer_id, "ds": d_start, "de": d_end},
+    )
+    cert_cents = int(r.scalar() or 0)
+    return session_cents + pass_cents + cert_cents
 
 
 async def get_trainer_stats(session: AsyncSession, trainer_id: int) -> dict:
@@ -169,8 +235,9 @@ async def get_trainer_stats(session: AsyncSession, trainer_id: int) -> dict:
 
 async def get_trainer_stats_dashboard(session: AsyncSession, trainer_id: int) -> dict:
     """
-    Rich stats for trainer Mini App dashboard: base stats + trends, by-day, by-week,
-    insights (busiest day, comparison to last period). All dates/times in server TZ.
+    Rich stats for trainer Mini App: base + trends, revenue (rolling + calendar week),
+    avg check, repeat clients, cancel rate, leads (requests/responses), top clients with revenue.
+    All dates/times in server TZ.
     """
     base = await get_trainer_stats(session, trainer_id)
     today = date.today()
@@ -305,28 +372,199 @@ async def get_trainer_stats_dashboard(session: AsyncSession, trainer_id: int) ->
     if last_month_total and base["month_total"] != last_month_total:
         month_change_pct = round(100 * (base["month_total"] - last_month_total) / last_month_total, 0)
 
-    # Revenue from actual booking prices: join bookings with trainer_services on (trainer_id, service_id).
+    # Revenue: session cash (exclude pass-covered; subtract cert balance applied) + pass/cert sales at issue.
     r = await session.execute(
         text(
             """
+            WITH line AS (
+                SELECT s.slot_date,
+                    CASE WHEN pr.booking_id IS NOT NULL THEN 0
+                         ELSE GREATEST(0, COALESCE(ts.price_cents, 0) - COALESCE(cbc.amount_cents, 0))
+                    END AS session_rev
+                FROM bookings b
+                JOIN slots s ON s.id = b.slot_id
+                LEFT JOIN trainer_services ts ON ts.trainer_id = b.trainer_id AND ts.service_id = b.service_id
+                LEFT JOIN pass_redemptions pr ON pr.booking_id = b.id
+                LEFT JOIN certificate_booking_credits cbc ON cbc.booking_id = b.id
+                WHERE b.trainer_id = :tid AND b.status != 'cancelled'
+                  AND s.status = 'booked'
+                  AND s.slot_date >= CURRENT_DATE - INTERVAL '30 days'
+            )
             SELECT
-                COUNT(*) FILTER (WHERE s.slot_date >= CURRENT_DATE - INTERVAL '7 days') AS cnt_7d,
-                COUNT(*) FILTER (WHERE s.slot_date >= CURRENT_DATE - INTERVAL '30 days') AS cnt_30d,
-                COALESCE(SUM(ts.price_cents) FILTER (WHERE s.slot_date >= CURRENT_DATE - INTERVAL '7 days'), 0) AS rev_7d,
-                COALESCE(SUM(ts.price_cents) FILTER (WHERE s.slot_date >= CURRENT_DATE - INTERVAL '30 days'), 0) AS rev_30d
-            FROM bookings b
-            JOIN slots s ON s.id = b.slot_id
-            JOIN trainer_services ts ON ts.trainer_id = b.trainer_id AND ts.service_id = b.service_id
-            WHERE b.trainer_id = :tid AND b.status != 'cancelled'
-              AND s.status = 'booked'
-              AND s.slot_date >= CURRENT_DATE - INTERVAL '30 days'
+                COALESCE(SUM(session_rev) FILTER (WHERE slot_date >= CURRENT_DATE - INTERVAL '7 days'), 0)::bigint,
+                COALESCE(SUM(session_rev) FILTER (WHERE slot_date >= CURRENT_DATE - INTERVAL '30 days'), 0)::bigint,
+                COUNT(*) FILTER (
+                    WHERE slot_date >= CURRENT_DATE - INTERVAL '7 days' AND session_rev > 0
+                )::int,
+                COUNT(*) FILTER (
+                    WHERE slot_date >= CURRENT_DATE - INTERVAL '30 days' AND session_rev > 0
+                )::int
+            FROM line
             """
         ),
         {"tid": trainer_id},
     )
     row = r.fetchone() or (0, 0, 0, 0)
-    revenue_7d_cents = row[2] or 0
-    revenue_30d_cents = row[3] or 0
+    revenue_sessions_7d_cents = int(row[0] or 0)
+    revenue_sessions_30d_cents = int(row[1] or 0)
+    paid_sessions_7d = int(row[2] or 0)
+    paid_sessions_30d = int(row[3] or 0)
+
+    r = await session.execute(
+        text(
+            """
+            SELECT
+                COALESCE(SUM(tpp.price_cents) FILTER (
+                    WHERE pi.issued_at >= CURRENT_TIMESTAMP - INTERVAL '7 days'
+                ), 0)::bigint,
+                COALESCE(SUM(tpp.price_cents) FILTER (
+                    WHERE pi.issued_at >= CURRENT_TIMESTAMP - INTERVAL '30 days'
+                ), 0)::bigint
+            FROM pass_instances pi
+            JOIN trainer_pass_products tpp ON tpp.id = pi.pass_product_id
+            WHERE tpp.trainer_id = :tid
+              AND pi.status != 'cancelled'
+              AND pi.source_certificate_instance_id IS NULL
+              AND pi.issued_at >= CURRENT_TIMESTAMP - INTERVAL '30 days'
+            """
+        ),
+        {"tid": trainer_id},
+    )
+    pr = r.fetchone() or (0, 0)
+    revenue_pass_sales_7d_cents = int(pr[0] or 0)
+    revenue_pass_sales_30d_cents = int(pr[1] or 0)
+
+    r = await session.execute(
+        text(
+            """
+            SELECT
+                COALESCE(SUM(ci.amount_cents) FILTER (
+                    WHERE ci.issued_at >= CURRENT_TIMESTAMP - INTERVAL '7 days'
+                ), 0)::bigint,
+                COALESCE(SUM(ci.amount_cents) FILTER (
+                    WHERE ci.issued_at >= CURRENT_TIMESTAMP - INTERVAL '30 days'
+                ), 0)::bigint
+            FROM certificate_instances ci
+            WHERE ci.trainer_id = :tid
+              AND ci.status != 'cancelled'
+              AND ci.issued_at >= CURRENT_TIMESTAMP - INTERVAL '30 days'
+            """
+        ),
+        {"tid": trainer_id},
+    )
+    cr = r.fetchone() or (0, 0)
+    revenue_certificate_sales_7d_cents = int(cr[0] or 0)
+    revenue_certificate_sales_30d_cents = int(cr[1] or 0)
+
+    revenue_7d_cents = (
+        revenue_sessions_7d_cents
+        + revenue_pass_sales_7d_cents
+        + revenue_certificate_sales_7d_cents
+    )
+    revenue_30d_cents = (
+        revenue_sessions_30d_cents
+        + revenue_pass_sales_30d_cents
+        + revenue_certificate_sales_30d_cents
+    )
+    avg_check_cents_30d = (
+        int(revenue_sessions_30d_cents // paid_sessions_30d) if paid_sessions_30d else None
+    )
+
+    # Revenue this calendar week vs previous (Mon–Sun) — full accrual model.
+    revenue_week_cents = await _trainer_calendar_revenue_total(session, trainer_id, week_start, week_end)
+    revenue_prev_week_cents = await _trainer_calendar_revenue_total(
+        session, trainer_id, last_week_start, last_week_end
+    )
+    revenue_week_change_pct: int | None = None
+    if revenue_prev_week_cents > 0:
+        revenue_week_change_pct = round(
+            100 * (revenue_week_cents - revenue_prev_week_cents) / revenue_prev_week_cents,
+            0,
+        )
+    elif revenue_week_cents > 0:
+        revenue_week_change_pct = None  # growth from zero — UI may show "новый поток"
+
+    # Bookings scheduled for today (non-cancelled).
+    r = await session.execute(
+        text(
+            """
+            SELECT COUNT(*)
+            FROM bookings b
+            JOIN slots s ON s.id = b.slot_id
+            WHERE b.trainer_id = :tid AND b.status != 'cancelled'
+              AND s.slot_date = CURRENT_DATE
+            """
+        ),
+        {"tid": trainer_id},
+    )
+    bookings_today = (r.fetchone() or (0,))[0]
+
+    # Repeat clients in last 30 days (2+ sessions).
+    r = await session.execute(
+        text(
+            """
+            SELECT COUNT(*) FROM (
+                SELECT b.client_id
+                FROM bookings b
+                JOIN slots s ON s.id = b.slot_id
+                WHERE b.trainer_id = :tid AND b.status != 'cancelled'
+                  AND s.slot_date >= CURRENT_DATE - INTERVAL '30 days'
+                GROUP BY b.client_id
+                HAVING COUNT(*) >= 2
+            ) subq
+            """
+        ),
+        {"tid": trainer_id},
+    )
+    repeat_clients_30d = (r.fetchone() or (0,))[0]
+
+    # Cancellation share of all booking outcomes in 30d (by slot date).
+    r = await session.execute(
+        text(
+            """
+            SELECT
+                COUNT(*) FILTER (WHERE b.status != 'cancelled') AS ok_cnt,
+                COUNT(*) FILTER (WHERE b.status = 'cancelled') AS cx_cnt
+            FROM bookings b
+            JOIN slots s ON s.id = b.slot_id
+            WHERE b.trainer_id = :tid
+              AND s.slot_date >= CURRENT_DATE - INTERVAL '30 days'
+            """
+        ),
+        {"tid": trainer_id},
+    )
+    cr = r.fetchone() or (0, 0)
+    ok_cnt = cr[0] or 0
+    cx_cnt = cr[1] or 0
+    denom = ok_cnt + cx_cnt
+    cancel_rate_30d = round(100 * cx_cnt / denom, 0) if denom else None
+
+    # Leads: requests addressed to this trainer + responses sent (30d).
+    r = await session.execute(
+        text(
+            """
+            SELECT COUNT(*)
+            FROM client_requests
+            WHERE trainer_id = :tid
+              AND created_at >= CURRENT_TIMESTAMP - INTERVAL '30 days'
+            """
+        ),
+        {"tid": trainer_id},
+    )
+    client_requests_to_trainer_30d = (r.fetchone() or (0,))[0]
+
+    r = await session.execute(
+        text(
+            """
+            SELECT COUNT(*)
+            FROM client_request_responses
+            WHERE trainer_id = :tid
+              AND created_at >= CURRENT_TIMESTAMP - INTERVAL '30 days'
+            """
+        ),
+        {"tid": trainer_id},
+    )
+    client_request_responses_30d = (r.fetchone() or (0,))[0]
 
     # Cancellations: count of cancelled bookings in period (by slot date).
     r = await session.execute(
@@ -349,7 +587,7 @@ async def get_trainer_stats_dashboard(session: AsyncSession, trainer_id: int) ->
 
     free_slots_week = max(0, (base["week_slots_total"] or 0) - (base["week_slots_booked"] or 0))
 
-    # Top clients: by count of non-cancelled bookings in last 30 days.
+    # Top clients: session cash only (same rules as revenue_sessions_*).
     r = await session.execute(
         text(
             """
@@ -357,12 +595,21 @@ async def get_trainer_stats_dashboard(session: AsyncSession, trainer_id: int) ->
                 c.id,
                 COALESCE(TRIM(c.first_name || ' ' || c.last_name), 'Клиент') AS name,
                 COALESCE(c.phone, '') AS phone,
-                COUNT(*) AS cnt
+                COUNT(*) AS cnt,
+                COALESCE(SUM(
+                    CASE WHEN pr.booking_id IS NOT NULL THEN 0
+                         ELSE GREATEST(0, COALESCE(ts.price_cents, 0) - COALESCE(cbc.amount_cents, 0))
+                    END
+                ), 0)::bigint AS revenue_cents
             FROM bookings b
             JOIN clients c ON c.id = b.client_id
             JOIN slots s ON s.id = b.slot_id
+            LEFT JOIN trainer_services ts ON ts.trainer_id = b.trainer_id AND ts.service_id = b.service_id
+            LEFT JOIN pass_redemptions pr ON pr.booking_id = b.id
+            LEFT JOIN certificate_booking_credits cbc ON cbc.booking_id = b.id
             WHERE b.trainer_id = :tid
               AND b.status != 'cancelled'
+              AND s.status = 'booked'
               AND s.slot_date >= CURRENT_DATE - INTERVAL '30 days'
             GROUP BY c.id, name, phone
             ORDER BY cnt DESC, name
@@ -372,7 +619,13 @@ async def get_trainer_stats_dashboard(session: AsyncSession, trainer_id: int) ->
         {"tid": trainer_id},
     )
     top_clients = [
-        {"client_id": row[0], "name": row[1], "phone": row[2], "sessions": row[3]}
+        {
+            "client_id": row[0],
+            "name": row[1],
+            "phone": row[2],
+            "sessions": row[3],
+            "revenue_cents": int(row[4] or 0),
+        }
         for row in r.fetchall()
     ]
 
@@ -392,6 +645,23 @@ async def get_trainer_stats_dashboard(session: AsyncSession, trainer_id: int) ->
         "week_end_iso": week_end.isoformat(),
         "revenue_7d_cents": revenue_7d_cents,
         "revenue_30d_cents": revenue_30d_cents,
+        "revenue_sessions_7d_cents": revenue_sessions_7d_cents,
+        "revenue_sessions_30d_cents": revenue_sessions_30d_cents,
+        "revenue_pass_sales_7d_cents": revenue_pass_sales_7d_cents,
+        "revenue_pass_sales_30d_cents": revenue_pass_sales_30d_cents,
+        "revenue_certificate_sales_7d_cents": revenue_certificate_sales_7d_cents,
+        "revenue_certificate_sales_30d_cents": revenue_certificate_sales_30d_cents,
+        "paid_sessions_7d": paid_sessions_7d,
+        "paid_sessions_30d": paid_sessions_30d,
+        "avg_check_cents_30d": avg_check_cents_30d,
+        "revenue_week_cents": revenue_week_cents,
+        "revenue_prev_week_cents": revenue_prev_week_cents,
+        "revenue_week_change_pct": revenue_week_change_pct,
+        "bookings_today": bookings_today,
+        "repeat_clients_30d": repeat_clients_30d,
+        "cancel_rate_30d": cancel_rate_30d,
+        "client_requests_to_trainer_30d": client_requests_to_trainer_30d,
+        "client_request_responses_30d": client_request_responses_30d,
         "cancellations_7d": cancellations_7d,
         "cancellations_30d": cancellations_30d,
         "free_slots_week": free_slots_week,
@@ -609,6 +879,77 @@ async def get_platform_stats(session: AsyncSession) -> dict:
     if cancel_rate_30d is not None and bookings_30d >= 10 and cancel_rate_30d >= 30:
         alerts.append({"type": "cancellations_high_30d", "title": "Много отмен (30 дней)", "description": f"Отменено {cancelled_30d} занятий за 30 дней ({int(cancel_rate_30d)}%)"})
 
+    # --- Platform subscriptions (tier CRM / Online / Analytics) — optional until migration 0066 ---
+    subscription_tier_crm = 0
+    subscription_tier_online = 0
+    subscription_tier_analytics = 0
+    subscription_trainers_with_tier = 0
+    subscription_expiring_7d = 0
+    subscription_active_trainers_no_tier = 0
+    try:
+        r = await session.execute(
+            text("""
+                WITH ranked AS (
+                    SELECT trainer_id, tier,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY trainer_id
+                            ORDER BY
+                                CASE tier::text
+                                    WHEN 'analytics' THEN 3
+                                    WHEN 'online' THEN 2
+                                    WHEN 'crm' THEN 1
+                                    ELSE 0
+                                END DESC,
+                                expires_at DESC
+                        ) AS rn
+                    FROM trainer_subscriptions
+                    WHERE expires_at > CURRENT_TIMESTAMP
+                      AND status IN (:s1, :s2)
+                      AND tier IS NOT NULL
+                )
+                SELECT tier::text, COUNT(*)::int FROM ranked WHERE rn = 1 GROUP BY tier
+            """),
+            {"s1": SUBSCRIPTION_STATUS_TRIAL, "s2": SUBSCRIPTION_STATUS_ACTIVE},
+        )
+        for row in r.fetchall():
+            tname, cnt = row[0], row[1]
+            if tname == "crm":
+                subscription_tier_crm = cnt
+            elif tname == "online":
+                subscription_tier_online = cnt
+            elif tname == "analytics":
+                subscription_tier_analytics = cnt
+        subscription_trainers_with_tier = (
+            subscription_tier_crm + subscription_tier_online + subscription_tier_analytics
+        )
+        r2 = await session.execute(
+            text("""
+                SELECT COUNT(DISTINCT trainer_id) FROM trainer_subscriptions
+                WHERE expires_at > CURRENT_TIMESTAMP
+                  AND expires_at <= CURRENT_TIMESTAMP + INTERVAL '7 days'
+                  AND status IN (:s1, :s2)
+            """),
+            {"s1": SUBSCRIPTION_STATUS_TRIAL, "s2": SUBSCRIPTION_STATUS_ACTIVE},
+        )
+        subscription_expiring_7d = (r2.fetchone() or (0,))[0]
+        r3 = await session.execute(
+            text("""
+                SELECT COUNT(*) FROM trainers t
+                WHERE t.status = 'active'
+                  AND NOT EXISTS (
+                    SELECT 1 FROM trainer_subscriptions ts
+                    WHERE ts.trainer_id = t.id
+                      AND ts.expires_at > CURRENT_TIMESTAMP
+                      AND ts.status IN (:s1, :s2)
+                      AND ts.tier IS NOT NULL
+                  )
+            """),
+            {"s1": SUBSCRIPTION_STATUS_TRIAL, "s2": SUBSCRIPTION_STATUS_ACTIVE},
+        )
+        subscription_active_trainers_no_tier = (r3.fetchone() or (0,))[0]
+    except ProgrammingError:
+        pass
+
     return {
         "trainers_by_status": trainers_by_status,
         "trainers_total": trainers_total,
@@ -643,4 +984,10 @@ async def get_platform_stats(session: AsyncSession) -> dict:
         "certs_with_balance_total": certs_with_balance_total,
         "cert_balance_cents_total": cert_balance_cents_total,
         "certs_redeemed_30d_total": certs_redeemed_30d_total,
+        "subscription_tier_crm": subscription_tier_crm,
+        "subscription_tier_online": subscription_tier_online,
+        "subscription_tier_analytics": subscription_tier_analytics,
+        "subscription_trainers_with_tier": subscription_trainers_with_tier,
+        "subscription_expiring_7d": subscription_expiring_7d,
+        "subscription_active_trainers_no_tier": subscription_active_trainers_no_tier,
     }

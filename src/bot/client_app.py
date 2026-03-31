@@ -14,6 +14,7 @@ from aiogram.enums import ParseMode
 from aiogram.types import BotCommand, MenuButtonCommands
 
 from src.shared.config import Settings
+from src.bot import messages as msg
 from src.bot.handlers.client_handlers import router as client_router
 from src.bot.middlewares.rate_limit_middleware import RateLimitMiddleware
 from src.shared.rate_limit import RateLimiter
@@ -30,8 +31,7 @@ async def setup_menu_and_commands(bot: Bot) -> None:
             BotCommand(command="settings", description="Тренеры и запись"),
             BotCommand(command="my_requests", description="Мои заявки и отклики"),
             BotCommand(command="my_bookings", description="Мои записи"),
-            BotCommand(command="my_passes", description="Мои абонементы"),
-            BotCommand(command="my_certificates", description="Мои сертификаты"),
+            BotCommand(command="my_passes", description=msg.CLIENT_MENU_PASSES_CERTIFICATES_DESC),
         ]
     )
     await bot.set_chat_menu_button(menu_button=MenuButtonCommands())

@@ -2,6 +2,7 @@
 Admin bot: moderation of trainers (approve / reject), platform stats Mini App, support inbox.
 """
 import html
+import logging
 
 from aiogram import Bot, Router
 from aiogram.filters import Command, CommandStart
@@ -15,11 +16,18 @@ from src.application.support_use_cases import (
 )
 from src.application.trainer_use_cases import (
     get_trainer,
+    list_trainer_education,
     list_trainers,
+    moderate_trainer_education_for_profile,
     set_trainer_moderation_feedback,
     update_trainer_status,
 )
 from src.bot import messages as msg
+from src.bot.admin_moderation_card import (
+    fetch_city_name,
+    format_admin_trainer_moderation_caption,
+    split_photo_caption_if_needed,
+)
 from src.bot.client_api import build_photo_url, fetch_photo_bytes
 from src.infrastructure.db import async_session_factory
 from src.infrastructure.db.models import TRAINER_STATUS_ACTIVE, TRAINER_STATUS_DEACTIVATED, TRAINER_STATUS_PENDING_PROFILE
@@ -29,6 +37,8 @@ from src.shared.validation import safe_parse_id
 
 
 router = Router(name="admin")
+
+logger = logging.getLogger(__name__)
 
 ADMIN_APPROVE_PREFIX = "admin:approve:"
 ADMIN_REJECT_PREFIX = "admin:reject:"
@@ -58,30 +68,47 @@ def _is_admin(user_id: int | None) -> bool:
     return user_id in ids
 
 
-def _format_admin_trainer_caption(trainer: dict) -> str:
-    profile = trainer.get("profile") or {}
-    name = ((profile.get("first_name") or "") + " " + (profile.get("last_name") or "")).strip() or "—"
-    age = profile.get("age")
-    age_str = str(age) if age is not None else "—"
-    exp = profile.get("experience_years")
-    exp_str = f"{exp} лет" if exp is not None else "не указан"
-    desc = (profile.get("description") or "").strip() or "—"
-    return msg.ADMIN_TRAINER_CARD.format(
-        id=trainer["id"],
-        name=name,
-        age=age_str,
-        experience=exp_str,
-        description=desc,
-    )
+async def _notify_trainer_education_moderation(
+    trainer: dict | None,
+    *,
+    decision: str,
+    reason: str | None = None,
+) -> None:
+    """Notify trainer in Telegram about education moderation result."""
+    if not trainer:
+        return
+    telegram_id = trainer.get("telegram_id")
+    if not telegram_id:
+        return
+    settings = Settings()
+    if not settings.telegram_bot_token_trainer:
+        return
+    bot = Bot(token=settings.telegram_bot_token_trainer)
+    try:
+        if decision == "approved":
+            text = msg.TRAINER_EDUCATION_MODERATION_APPROVED
+        else:
+            text = msg.TRAINER_EDUCATION_MODERATION_REJECTED.format(reason=html.escape((reason or "").strip() or "Причина не указана"))
+        await bot.send_message(chat_id=telegram_id, text=text)
+    except Exception:
+        pass
+    finally:
+        await bot.session.close()
 
 
 async def _send_trainer_for_moderation(message: Message, trainer_id: int) -> None:
     async with async_session_factory() as session:
         trainer = await get_trainer(session, trainer_id)
+        education_items = await list_trainer_education(session, trainer_id, public_only=False)
+        city_name = None
+        if trainer:
+            city_name = await fetch_city_name(session, (trainer.get("profile") or {}).get("city_id"))
     if not trainer:
         await message.answer(f"Тренер #{trainer_id} не найден.")
         return
-    caption = _format_admin_trainer_caption(trainer)
+    caption = format_admin_trainer_moderation_caption(trainer, education_items or [], city_name=city_name)
+    profile = trainer.get("profile") or {}
+    name_plain = ((profile.get("first_name") or "") + " " + (profile.get("last_name") or "")).strip() or "—"
     photos = trainer.get("photos") or []
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [
@@ -106,19 +133,49 @@ async def _send_trainer_for_moderation(message: Message, trainer_id: int) -> Non
     file_key = photos[0]["file_key"] if photos else None
     if file_key:
         url = build_photo_url(file_key)
-        if url:
+        if not url:
+            logger.warning(
+                "admin moderation: build_photo_url returned None file_key=%s trainer_id=%s",
+                file_key,
+                trainer_id,
+            )
+        else:
             body = await fetch_photo_bytes(url)
+            if not body:
+                logger.warning(
+                    "admin moderation: fetch_photo_bytes empty trainer_id=%s url=%s",
+                    trainer_id,
+                    url,
+                )
             if body:
+                photo_caption, continuation = split_photo_caption_if_needed(
+                    caption, trainer_id=trainer_id, name_plain=name_plain
+                )
                 try:
-                    await message.answer_photo(
-                        BufferedInputFile(body, filename="photo.jpg"),
-                        caption=caption,
-                        reply_markup=keyboard,
-                    )
+                    if continuation:
+                        await message.answer_photo(
+                            BufferedInputFile(body, filename="photo.jpg"),
+                            caption=photo_caption,
+                        )
+                        await message.answer(continuation, reply_markup=keyboard)
+                    else:
+                        await message.answer_photo(
+                            BufferedInputFile(body, filename="photo.jpg"),
+                            caption=photo_caption,
+                            reply_markup=keyboard,
+                        )
                     return
-                except Exception:
-                    pass
-    await message.answer(caption, reply_markup=keyboard)
+                except Exception as e:
+                    logger.warning(
+                        "admin moderation photo send failed trainer_id=%s: %s",
+                        trainer_id,
+                        e,
+                    )
+    # Text-only or photo path failed
+    text_out = caption
+    if len(text_out) > 4090:
+        text_out = text_out[:4070] + "\n\n<i>…сообщение обрезано (лимит Telegram)</i>"
+    await message.answer(text_out, reply_markup=keyboard)
 
 
 @router.message(CommandStart())
@@ -188,6 +245,17 @@ def _admin_stats_message(s: dict) -> str:
         msg.ADMIN_STATS_ROW.format(label=msg.ADMIN_STATS_CERTS_REDEEMED_30D, value=s.get("certs_redeemed_30d_total", 0)),
     ]
     parts.append(msg.ADMIN_STATS_SECTION_PASSES_CERTS.format(lines="\n".join(pass_cert_lines)))
+
+    # Section: Подписки (tier)
+    sub_lines = [
+        msg.ADMIN_STATS_ROW.format(label=msg.ADMIN_STATS_SUB_TIER_CRM, value=s.get("subscription_tier_crm", 0)),
+        msg.ADMIN_STATS_ROW.format(label=msg.ADMIN_STATS_SUB_TIER_ONLINE, value=s.get("subscription_tier_online", 0)),
+        msg.ADMIN_STATS_ROW.format(label=msg.ADMIN_STATS_SUB_TIER_ANALYTICS, value=s.get("subscription_tier_analytics", 0)),
+        msg.ADMIN_STATS_ROW.format(label=msg.ADMIN_STATS_SUB_TOTAL_WITH_TIER, value=s.get("subscription_trainers_with_tier", 0)),
+        msg.ADMIN_STATS_ROW.format(label=msg.ADMIN_STATS_SUB_EXPIRING_7D, value=s.get("subscription_expiring_7d", 0)),
+        msg.ADMIN_STATS_ROW.format(label=msg.ADMIN_STATS_SUB_ACTIVE_NO_TIER, value=s.get("subscription_active_trainers_no_tier", 0)),
+    ]
+    parts.append(msg.ADMIN_STATS_SECTION_SUBSCRIPTIONS.format(lines="\n".join(sub_lines)))
 
     # Section: Сигналы (что проверить)
     signal_lines = []
@@ -298,16 +366,18 @@ async def cmd_stats(message: Message) -> None:
         return
     base = Settings().webapp_base_url or ""
     url = f"{base.rstrip('/')}/webapp/admin-stats" if base else ""
+    tiers_url = f"{base.rstrip('/')}/webapp/admin-subscription-tiers" if base else ""
     if not url:
         async with async_session_factory() as session:
             s = await get_platform_stats(session)
         await message.answer(_admin_stats_message(s))
         return
+    stats_kb = [[InlineKeyboardButton(text="Открыть дашборд", web_app=WebAppInfo(url=url))]]
+    if tiers_url:
+        stats_kb.append([InlineKeyboardButton(text="Тарифы подписки", web_app=WebAppInfo(url=tiers_url))])
     await message.answer(
         "📊 Статистика платформы",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="Открыть дашборд", web_app=WebAppInfo(url=url))],
-        ]),
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=stats_kb),
     )
 
 
@@ -326,6 +396,25 @@ async def cmd_dicts(message: Message) -> None:
         "🏙 Города и арены",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="Открыть справочники", web_app=WebAppInfo(url=url))],
+        ]),
+    )
+
+
+@router.message(Command("subscription_tiers"))
+async def cmd_subscription_tiers(message: Message) -> None:
+    """Open admin Mini App to edit subscription tier pricing."""
+    if not _is_admin(message.from_user.id if message.from_user else 0):
+        await message.answer(msg.ADMIN_NO_ACCESS)
+        return
+    base = Settings().webapp_base_url or ""
+    url = f"{base.rstrip('/')}/webapp/admin-subscription-tiers" if base else ""
+    if not url:
+        await message.answer("Не настроен webapp_base_url. Укажите в .env.")
+        return
+    await message.answer(
+        f"{msg.ADMIN_SUBSCRIPTION_TIERS_TITLE}\n\n{msg.ADMIN_SUBSCRIPTION_TIERS_HINT}",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="Открыть тарифы", web_app=WebAppInfo(url=url))],
         ]),
     )
 
@@ -355,13 +444,24 @@ async def on_approve(callback: CallbackQuery) -> None:
     if trainer_id is None:
         await callback.answer()
         return
+    approved_education = 0
+    trainer: dict | None = None
     async with async_session_factory() as session:
         await set_trainer_moderation_feedback(session, trainer_id, None)
         ok = await update_trainer_status(session, trainer_id, TRAINER_STATUS_ACTIVE)
+        trainer = await get_trainer(session, trainer_id)
+        approved_education = await moderate_trainer_education_for_profile(
+            session,
+            trainer_id,
+            decision="approved",
+            admin_id=user_id,
+        )
     if ok:
         audit_log("trainer.approved", ACTOR_ADMIN_BOT, user_id, {"trainer_id": trainer_id})
         await callback.message.edit_reply_markup(reply_markup=None)
         await callback.message.answer(msg.ADMIN_APPROVED)
+        if approved_education > 0:
+            await _notify_trainer_education_moderation(trainer, decision="approved")
     else:
         await callback.message.answer(f"Не удалось одобрить тренера #{trainer_id}.")
     await callback.answer()
@@ -444,9 +544,28 @@ async def on_admin_message(message: Message) -> None:
     trainer_id = _admin_awaiting_feedback.pop(user_id, None)
     if trainer_id is None:
         return
+    rejected_education = 0
+    trainer: dict | None = None
     async with async_session_factory() as session:
         await set_trainer_moderation_feedback(session, trainer_id, text or None)
         await update_trainer_status(session, trainer_id, TRAINER_STATUS_PENDING_PROFILE)
+        trainer = await get_trainer(session, trainer_id)
+        try:
+            rejected_education = await moderate_trainer_education_for_profile(
+                session,
+                trainer_id,
+                decision="rejected",
+                admin_id=user_id,
+                reason=text or "",
+            )
+        except ValueError:
+            rejected_education = 0
     audit_log("trainer.needs_edit", ACTOR_ADMIN_BOT, user_id, {"trainer_id": trainer_id})
     await message.answer(msg.ADMIN_NEEDS_EDIT_DONE)
+    if rejected_education > 0:
+        await _notify_trainer_education_moderation(
+            trainer,
+            decision="rejected",
+            reason=text or "",
+        )
 

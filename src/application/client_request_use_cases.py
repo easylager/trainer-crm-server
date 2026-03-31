@@ -1,8 +1,63 @@
 """
 Client request use cases: create request, list for trainer (matching city+service), respond, list for client with responses.
 """
+from typing import Any
+
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
+
+
+async def _trainer_services_with_prices_batch(
+    session: AsyncSession,
+    trainer_ids: list[int],
+) -> dict[int, list[dict[str, Any]]]:
+    """
+    Same shape as catalog / TrainerRepository: service_id, service_name, price_cents, price_byn.
+    """
+    if not trainer_ids:
+        return {}
+    placeholders = ", ".join(f":id{i}" for i in range(len(trainer_ids)))
+    params: dict[str, Any] = {f"id{i}": v for i, v in enumerate(trainer_ids)}
+    rsv = await session.execute(
+        text(
+            f"""
+            SELECT trainer_id, service_id, price_cents
+            FROM trainer_services
+            WHERE trainer_id IN ({placeholders})
+            ORDER BY trainer_id, service_id
+            """
+        ),
+        params,
+    )
+    rows = rsv.fetchall()
+    if not rows:
+        return {tid: [] for tid in trainer_ids}
+    all_sids = {r[1] for r in rows}
+    service_names_by_id: dict[int, str] = {}
+    if all_sids:
+        s_placeholders = ", ".join(f":s{i}" for i in range(len(all_sids)))
+        s_params = {f"s{i}": v for i, v in enumerate(all_sids)}
+        r_sn = await session.execute(
+            text(f"SELECT id, name FROM services WHERE id IN ({s_placeholders})"),
+            s_params,
+        )
+        service_names_by_id = {r[0]: (r[1] or "") for r in r_sn.fetchall()}
+    out: dict[int, list[dict[str, Any]]] = {tid: [] for tid in trainer_ids}
+    for row in rows:
+        tid, sid, price_cents = row[0], row[1], row[2]
+        # Plain int/float for JSON (DB may return Decimal).
+        pc = int(price_cents) if price_cents is not None else None
+        price_byn = round(float(price_cents) / 100.0, 2) if price_cents is not None else None
+        sid_int = int(sid) if sid is not None else None
+        out.setdefault(tid, []).append(
+            {
+                "service_id": sid_int,
+                "service_name": service_names_by_id.get(sid, "—") if sid is not None else "—",
+                "price_cents": pc,
+                "price_byn": price_byn,
+            }
+        )
+    return out
 
 
 async def create_client_request(
@@ -434,13 +489,17 @@ async def list_my_requests_with_responses(
             """),
             {"rid": req_id},
         )
+        resp_rows = resp_r.fetchall()
+        trainer_ids = [tr[0] for tr in resp_rows]
+        services_by_trainer = await _trainer_services_with_prices_batch(session, trainer_ids)
         responders = []
-        for tr in resp_r.fetchall():
+        for tr in resp_rows:
             first_name = (tr[1] or "").strip()
             last_name = (tr[2] or "").strip()
             name = f"{first_name} {last_name}".strip() or "Тренер"
+            tid = tr[0]
             responders.append({
-                "trainer_id": tr[0],
+                "trainer_id": tid,
                 "name": name,
                 "telegram_id": tr[3],
                 "telegram_username": (tr[4] or "").strip() or None,
@@ -451,6 +510,7 @@ async def list_my_requests_with_responses(
                 "description": (tr[9] or "").strip() or None,
                 "session_duration_minutes": tr[10],
                 "photo_key": tr[11],
+                "services": services_by_trainer.get(tid, []),
             })
         out.append({
             "id": req_id,

@@ -44,6 +44,25 @@ async def consume_link_token(
     return trainer_id
 
 
+async def get_trainer_row_by_telegram_id(session: AsyncSession, telegram_id: int) -> dict | None:
+    """Linked trainer row (any status). Used for onboarding / gate before active."""
+    r = await session.execute(
+        text(
+            """
+            SELECT id, status, moderation_feedback
+            FROM trainers
+            WHERE telegram_id = :tid
+            LIMIT 1
+            """
+        ),
+        {"tid": telegram_id},
+    )
+    row = r.fetchone()
+    if not row:
+        return None
+    return {"id": row[0], "status": row[1], "moderation_feedback": row[2]}
+
+
 async def get_trainer_by_telegram_id(session: AsyncSession, telegram_id: int) -> bool:
     """True if this telegram_id is linked to an active trainer (bot access allowed)."""
     r = await session.execute(
@@ -57,6 +76,16 @@ async def get_trainer_id_by_telegram_id(session: AsyncSession, telegram_id: int)
     """Return trainer id if linked and status=active (bot access allowed), else None."""
     r = await session.execute(
         text("SELECT id FROM trainers WHERE telegram_id = :tid AND status = 'active' LIMIT 1"),
+        {"tid": telegram_id},
+    )
+    row = r.fetchone()
+    return row[0] if row else None
+
+
+async def get_trainer_id_linked_any_status(session: AsyncSession, telegram_id: int) -> int | None:
+    """Trainer id for linked Telegram user regardless of status (onboarding Mini App, etc.)."""
+    r = await session.execute(
+        text("SELECT id FROM trainers WHERE telegram_id = :tid LIMIT 1"),
         {"tid": telegram_id},
     )
     row = r.fetchone()

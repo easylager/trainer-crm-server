@@ -2,10 +2,11 @@
 import logging
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 
 logger = logging.getLogger(__name__)
 
@@ -18,10 +19,17 @@ from src.api.routes import (
     webapp_router,
     webhooks_router,
 )
+from src.api.routes.webapp_trainer_profile import router as webapp_trainer_profile_router
 from src.infrastructure.db import async_session_factory
+from src.api.middleware.http_limits import ApiRateLimitMiddleware, MaxBodySizeMiddleware
 from src.shared.config import Settings
+from src.shared.logging_redact import sanitize_validation_errors_for_log
 
 app = FastAPI(title="Trainer CRM API")
+
+# Epic D: rate limit /api (except webhooks), body size when Content-Length is set (inner runs first on request).
+app.add_middleware(ApiRateLimitMiddleware)
+app.add_middleware(MaxBodySizeMiddleware)
 
 # Mini Apps open in Telegram WebView; origin may be tunnel URL or telegram.org. Allow all so fetch() works.
 app.add_middleware(
@@ -35,17 +43,11 @@ app.add_middleware(
 
 @app.exception_handler(RequestValidationError)
 async def _validation_exception_handler(_request, exc: RequestValidationError):
-    """Return first validation error as readable detail; log full errors for debugging."""
-    errs = getattr(exc, "errors", ()) or []
-    logger.warning("Request validation failed: %s", errs)
-    detail = "Validation error"
-    if errs:
-        e = errs[0]
-        loc = e.get("loc", ())
-        msg = e.get("msg", "Validation error")
-        loc_str = ".".join(str(x) for x in loc if x != "body")
-        detail = f"{loc_str}: {msg}" if loc_str else msg
-    return JSONResponse(status_code=422, content={"detail": detail})
+    """Same shape as default FastAPI 422: detail = list of {loc, msg, type, ...} for clients (Mini App maps loc → fields)."""
+    errs = exc.errors()
+    logger.warning("Request validation failed: %s", sanitize_validation_errors_for_log(errs))
+    # ctx may hold Exception instances (e.g. ValueError from Pydantic) — not JSON-serializable raw.
+    return JSONResponse(status_code=422, content=jsonable_encoder({"detail": errs}))
 
 
 # Telegram Web App: trainer schedule (Mini App)
@@ -69,12 +71,11 @@ def _webapp_file_response(path: Path):
 
 
 @app.get("/webapp/schedule")
-def webapp_schedule_page():
-    """Serve the trainer schedule Mini App (HTML)."""
-    path = _WEBAPP_DIR / "schedule.html"
-    if not path.is_file():
-        raise HTTPException(status_code=404, detail="Web App not found")
-    return _webapp_file_response(path)
+def webapp_schedule_page(request: Request):
+    """Legacy URL: единый экран расписания — редактор (вкладки + записи)."""
+    q = request.url.query
+    target = "/webapp/schedule-editor" + (f"?{q}" if q else "")
+    return RedirectResponse(url=target, status_code=302)
 
 
 @app.get("/webapp/book")
@@ -96,12 +97,11 @@ def webapp_catalog_page():
 
 
 @app.get("/webapp/trainer-bookings")
-def webapp_trainer_bookings_page():
-    """Serve the trainer bookings Mini App (list, detail, confirm/decline/cancel/recurring)."""
-    path = _WEBAPP_DIR / "trainer-bookings.html"
-    if not path.is_file():
-        raise HTTPException(status_code=404, detail="Web App not found")
-    return _webapp_file_response(path)
+def webapp_trainer_bookings_page(request: Request):
+    """Legacy URL: bookings merged into schedule editor Mini App."""
+    q = request.url.query
+    target = "/webapp/schedule-editor" + (f"?{q}" if q else "")
+    return RedirectResponse(url=target, status_code=302)
 
 
 @app.get("/webapp/client-requests")
@@ -167,6 +167,15 @@ def webapp_admin_dicts_page():
     return _webapp_file_response(path)
 
 
+@app.get("/webapp/admin-subscription-tiers")
+def webapp_admin_subscription_tiers_page():
+    """Serve the admin subscription tiers Mini App (pricing for CRM/Online/Analytics)."""
+    path = _WEBAPP_DIR / "admin-subscription-tiers.html"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Web App not found")
+    return _webapp_file_response(path)
+
+
 @app.get("/webapp/trainer-pass-products")
 def webapp_trainer_pass_products_page():
     """Serve the trainer pass products Mini App (subscription products for sale)."""
@@ -183,6 +192,36 @@ def webapp_trainer_pay_subscription_page():
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Web App not found")
     return _webapp_file_response(path)
+
+
+@app.get("/webapp/trainer-subscription")
+def webapp_trainer_subscription_page():
+    """Serve the trainer 'Subscription tiers' Mini App: CRM/Online/Analytics tier selection."""
+    path = _WEBAPP_DIR / "trainer-subscription.html"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Web App not found")
+    return _webapp_file_response(path)
+
+
+@app.get("/webapp/trainer-profile")
+def webapp_trainer_profile_page():
+    """Trainer profile editor (single Mini App): анкета, фото, услуги, модерация."""
+    path = _WEBAPP_DIR / "trainer-profile.html"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Web App not found")
+    return _webapp_file_response(path)
+
+
+@app.get("/webapp/trainer-profile.html")
+def webapp_trainer_profile_html_alias():
+    """Bookmark/typo alias: canonical URL has no .html (same file as /webapp/trainer-profile)."""
+    return RedirectResponse(url="/webapp/trainer-profile", status_code=302)
+
+
+@app.get("/webapp/trainer-profile-readiness")
+def webapp_trainer_profile_readiness_legacy():
+    """Legacy URL: same Mini App, anchor to блоку модерации (was separate HTML + meta refresh)."""
+    return RedirectResponse(url="/webapp/trainer-profile#moderation", status_code=302)
 
 
 @app.get("/webapp/trainer-clients")
@@ -221,6 +260,46 @@ def webapp_client_certificates_page():
     return _webapp_file_response(path)
 
 
+@app.get("/webapp/client-passes-certificates")
+def webapp_client_passes_certificates_page():
+    """Serve combined client Mini App: passes + certificates (tabbed)."""
+    path = _WEBAPP_DIR / "client-passes-certificates.html"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Web App not found")
+    return _webapp_file_response(path)
+
+
+@app.get("/webapp/theme.css")
+def webapp_theme_css():
+    """Serve theme.css for Mini Apps."""
+    path = _WEBAPP_DIR / "theme.css"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="CSS file not found")
+    return FileResponse(path, media_type="text/css")
+
+
+@app.get("/webapp/mini-app-components.css")
+def webapp_components_css():
+    """Serve mini-app-components.css for Mini Apps."""
+    path = _WEBAPP_DIR / "mini-app-components.css"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="CSS file not found")
+    return FileResponse(path, media_type="text/css")
+
+
+@app.get("/webapp/client-mini-app-theme.js")
+def webapp_client_mini_app_theme_js():
+    """Shared Telegram theme + CRM palette for client Mini Apps."""
+    path = _WEBAPP_DIR / "client-mini-app-theme.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_WEBAPP_NO_CACHE_HEADERS,
+    )
+
+
 @app.get("/health")
 async def health() -> dict[str, str]:
     """
@@ -256,5 +335,6 @@ async def health() -> dict[str, str]:
 app.include_router(public_router)
 app.include_router(trainers_router)
 app.include_router(upload_router)
+webapp_router.include_router(webapp_trainer_profile_router)
 app.include_router(webapp_router)
 app.include_router(webhooks_router)

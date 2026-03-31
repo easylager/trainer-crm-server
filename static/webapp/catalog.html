@@ -5,30 +5,17 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Тренеры и запись</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="stylesheet" href="theme.css" />
+  <link rel="stylesheet" href="mini-app-components.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet" />
+  <script src="client-mini-app-theme.js"></script>
   <style>
-    /* JUSTSKATE.BY brand: black + yellow */
-    :root {
-      --tg-theme-bg-color: #FFFBEB;
-      --tg-theme-text-color: #1a1a1a;
-      --tg-theme-hint-color: #666;
-      --tg-theme-button-color: #F7A600;
-      --tg-theme-button-text-color: #1a1a1a;
-      --tg-theme-secondary-bg-color: #FFF3CC;
-    }
-    @media (prefers-color-scheme: dark) {
-      :root {
-        --tg-theme-bg-color: #1a1a1a;
-        --tg-theme-text-color: #f5f5f5;
-        --tg-theme-hint-color: #8e8e93;
-        --tg-theme-button-color: #F7A600;
-        --tg-theme-button-text-color: #1a1a1a;
-        --tg-theme-secondary-bg-color: #2a2a2a;
-      }
-    }
     * { box-sizing: border-box; }
     body {
       margin: 0;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-family: var(--app-font-sans);
       background: var(--tg-theme-bg-color);
       color: var(--tg-theme-text-color);
       min-height: 100vh;
@@ -36,16 +23,15 @@
       padding-bottom: env(safe-area-inset-bottom, 12px);
     }
     .header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      font-size: 18px;
-      font-weight: 600;
-      margin-bottom: 16px;
-      padding-bottom: 8px;
+      margin-bottom: 24px;
     }
-    .header-title { flex: 1; }
+    .header-title { 
+      font-size: 24px;
+      font-weight: 600;
+      line-height: 1.25;
+      letter-spacing: -0.02em;
+      color: var(--tg-theme-text-color);
+    }
     .btn-close {
       flex-shrink: 0;
       padding: 8px 14px;
@@ -57,30 +43,88 @@
       cursor: pointer;
     }
     .step-title {
-      font-size: 13px;
+      font-size: 11px;
       font-weight: 600;
       color: var(--tg-theme-hint-color);
-      margin-bottom: 12px;
+      margin: 4px 0 12px 4px;
       text-transform: uppercase;
-      letter-spacing: 0.5px;
+      letter-spacing: 0.1em;
     }
     .choice-card {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 14px 16px;
+      padding: 16px 18px;
       margin-bottom: 8px;
-      border-radius: 12px;
+      border-radius: 18px;
       background: var(--tg-theme-secondary-bg-color);
       cursor: pointer;
-      border: none;
+      border: 1px solid rgba(247, 166, 0, 0.28);
       width: 100%;
       font: inherit;
       color: inherit;
       text-align: left;
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+      transition: all 0.12s cubic-bezier(0.22, 1, 0.36, 1);
+      position: relative;
+      overflow: hidden;
     }
-    .choice-card:active { opacity: 0.9; }
-    .choice-card .arrow { color: var(--tg-theme-hint-color); font-size: 14px; }
+    .choice-card::before {
+      content: '';
+      position: absolute;
+      top: -40%;
+      right: -20%;
+      width: 55%;
+      height: 120%;
+      background: radial-gradient(ellipse, rgba(247, 166, 0, 0.08) 0%, transparent 70%);
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.12s ease;
+    }
+    @media (hover: hover) {
+      .choice-card:hover {
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+        border-color: rgba(247, 166, 0, 0.45);
+        transform: translateY(-1px);
+      }
+      .choice-card:hover::before {
+        opacity: 1;
+      }
+      .choice-card:hover .arrow {
+        opacity: 1;
+        transform: translateX(2px);
+      }
+    }
+    .choice-card:active { 
+      opacity: 0.92; 
+      transform: scale(0.985);
+    }
+    .choice-card .main { 
+      flex: 1; 
+      min-width: 0; 
+      position: relative; 
+      z-index: 1; 
+    }
+    .choice-card .label { 
+      font-size: 13px; 
+      color: var(--tg-theme-hint-color); 
+      font-weight: 500;
+      margin-bottom: 2px;
+    }
+    .choice-card .value { 
+      font-size: 17px; 
+      font-weight: 600; 
+      line-height: 1.25;
+      letter-spacing: -0.01em;
+    }
+    .choice-card .arrow { 
+      color: var(--tg-theme-button-color); 
+      font-size: 16px; 
+      position: relative; 
+      z-index: 1;
+      opacity: 0.8;
+      transition: opacity 0.12s ease, transform 0.12s ease;
+    }
     .trainer-list-card {
       display: flex;
       align-items: flex-start;
@@ -90,13 +134,42 @@
       border-radius: 18px;
       background: var(--tg-theme-secondary-bg-color);
       cursor: pointer;
-      border: none;
+      border: 1px solid rgba(247, 166, 0, 0.28);
       width: 100%;
       font: inherit;
       color: inherit;
       text-align: left;
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+      transition: all 0.12s cubic-bezier(0.22, 1, 0.36, 1);
+      position: relative;
+      overflow: hidden;
     }
-    .trainer-list-card:active { opacity: 0.9; }
+    .trainer-list-card::before {
+      content: '';
+      position: absolute;
+      top: -40%;
+      right: -20%;
+      width: 55%;
+      height: 120%;
+      background: radial-gradient(ellipse, rgba(247, 166, 0, 0.08) 0%, transparent 70%);
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.12s ease;
+    }
+    @media (hover: hover) {
+      .trainer-list-card:hover {
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+        border-color: rgba(247, 166, 0, 0.45);
+        transform: translateY(-1px);
+      }
+      .trainer-list-card:hover::before {
+        opacity: 1;
+      }
+    }
+    .trainer-list-card:active { 
+      opacity: 0.92; 
+      transform: scale(0.985);
+    }
     .trainer-list-card .trainer-card-photo-wrap {
       position: relative;
       width: 112px;
@@ -132,81 +205,220 @@
     .trainer-list-card .trainer-card-photo-wrap img.loaded {
       opacity: 1;
     }
-    .trainer-list-card .info { flex: 1; min-width: 0; }
+    .trainer-list-card .info { 
+      flex: 1; 
+      min-width: 0; 
+      position: relative; 
+      z-index: 1; 
+    }
     .trainer-list-card .name {
       font-weight: 600;
-      font-size: 17px;
-      margin-bottom: 4px;
+      font-size: 18px;
+      margin-bottom: 6px;
       line-height: 1.25;
+      letter-spacing: -0.01em;
     }
     .trainer-list-card .meta {
       font-size: 14px;
       color: var(--tg-theme-hint-color);
-      margin-top: 2px;
+      margin-top: 4px;
       white-space: normal;
+      line-height: 1.35;
       overflow: hidden;
     }
-    .trainer-list-card .arrow { color: var(--tg-theme-hint-color); font-size: 16px; }
-    /* 4:3 photo slot — industry standard; cover = no letterboxing, frame always full */
+    .trainer-list-card .arrow { 
+      color: var(--tg-theme-button-color); 
+      font-size: 16px; 
+      position: relative; 
+      z-index: 1;
+      opacity: 0.8;
+      transition: opacity 0.12s ease, transform 0.12s ease;
+    }
+    .trainer-list-card:hover .arrow {
+      opacity: 1;
+      transform: translateX(2px);
+    }
+    /* Современная карточка тренера - дизайнерский шедевр */
     .trainer-detail-photo-wrap {
       position: relative;
       width: 100%;
       aspect-ratio: 4/3;
-      min-height: 200px;
-      max-height: 280px;
-      border-radius: 12px;
+      min-height: 240px;
+      max-height: 320px;
+      border-radius: 20px;
       overflow: hidden;
-      margin-bottom: 12px;
-      background: var(--tg-theme-secondary-bg-color);
+      margin-bottom: 20px;
+      background: linear-gradient(135deg, var(--tg-theme-secondary-bg-color) 0%, rgba(245, 166, 35, 0.1) 100%);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
     }
     .trainer-detail-photo-wrap .trainer-detail-photo-placeholder {
       position: absolute;
       inset: 0;
-      background: var(--tg-theme-secondary-bg-color);
-      border-radius: 12px;
+      background: linear-gradient(135deg, var(--tg-theme-secondary-bg-color) 0%, rgba(245, 166, 35, 0.1) 100%);
+      border-radius: 20px;
     }
     .trainer-detail-photo-wrap .trainer-detail-photo-placeholder::after {
       content: '';
       position: absolute;
       inset: 0;
-      background: linear-gradient(105deg, transparent 0%, rgba(255,255,255,0.08) 50%, transparent 100%);
+      background: linear-gradient(105deg, transparent 0%, rgba(245, 166, 35, 0.15) 50%, transparent 100%);
       background-size: 200% 100%;
-      animation: photo-shimmer 1.2s ease-in-out infinite;
-      border-radius: 12px;
+      animation: photo-shimmer 1.5s ease-in-out infinite;
+      border-radius: 20px;
     }
     @keyframes photo-shimmer {
       0% { background-position: 200% 0; }
       100% { background-position: -200% 0; }
     }
-    .trainer-detail-photo-wrap img {
+    /* Base = list thumb (already in cache from catalog row); full = main image on top */
+    .trainer-detail-photo-wrap .trainer-detail-photo-base,
+    .trainer-detail-photo-wrap .trainer-detail-photo-full,
+    .trainer-detail-photo-wrap .trainer-detail-photo {
       position: absolute;
       inset: 0;
       width: 100%;
       height: 100%;
       object-fit: cover;
       object-position: center top;
-      border-radius: 12px;
+      border-radius: 20px;
       opacity: 0;
-      transition: opacity 0.2s ease;
+      transition: all 0.3s ease;
     }
+    .trainer-detail-photo-wrap .trainer-detail-photo-base { z-index: 1; }
+    .trainer-detail-photo-wrap .trainer-detail-photo-full { z-index: 2; }
+    .trainer-detail-photo-wrap .trainer-detail-photo { z-index: 3; }
     .trainer-detail-photo-wrap img.loaded {
       opacity: 1;
     }
-    .trainer-detail-name { font-size: 18px; font-weight: 600; margin-bottom: 8px; }
-    .trainer-detail-meta { font-size: 14px; color: var(--tg-theme-hint-color); margin-bottom: 4px; }
-    .trainer-detail-desc { font-size: 14px; line-height: 1.4; margin: 12px 0; }
-    .btn-primary {
-      width: 100%;
-      padding: 14px;
-      border-radius: 12px;
-      border: none;
-      font-size: 16px;
-      font-weight: 600;
-      background: #F7A600 !important;
-      color: #1a1a1a !important;
-      cursor: pointer;
-      margin-top: 12px;
+    .trainer-detail-header {
+      margin-bottom: 24px;
     }
+    .trainer-detail-name { 
+      font-size: 28px; 
+      font-weight: 700; 
+      margin-bottom: 12px; 
+      line-height: 1.2;
+      letter-spacing: -0.02em;
+      color: var(--tg-theme-text-color);
+    }
+    .trainer-detail-rating {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      background: linear-gradient(135deg, rgba(245, 166, 35, 0.15) 0%, rgba(245, 166, 35, 0.05) 100%);
+      border-radius: 12px;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--tg-theme-button-color);
+      margin-bottom: 16px;
+    }
+    .trainer-detail-stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    .trainer-detail-stat {
+      padding: 12px;
+      background: var(--tg-theme-secondary-bg-color);
+      border-radius: 12px;
+      border: 2px solid transparent;
+      transition: all 0.2s ease;
+    }
+    .trainer-detail-stat:hover {
+      border-color: rgba(245, 166, 35, 0.3);
+    }
+    .trainer-detail-stat-label {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--tg-theme-hint-color);
+      margin-bottom: 4px;
+    }
+    .trainer-detail-stat-value {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--tg-theme-text-color);
+    }
+    .trainer-detail-services {
+      margin-bottom: 20px;
+    }
+    .trainer-detail-services-title {
+      font-size: 13px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--tg-theme-hint-color);
+      margin-bottom: 12px;
+    }
+    .trainer-detail-service {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 14px;
+      margin-bottom: 6px;
+      background: var(--tg-theme-secondary-bg-color);
+      border-radius: 10px;
+      font-size: 14px;
+    }
+    .trainer-detail-service-name {
+      font-weight: 500;
+      color: var(--tg-theme-text-color);
+    }
+    .trainer-detail-service-price {
+      font-weight: 600;
+      color: var(--tg-theme-button-color);
+    }
+    .trainer-detail-education {
+      margin-bottom: 20px;
+    }
+    .trainer-detail-education-title {
+      font-size: 13px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--tg-theme-hint-color);
+      margin-bottom: 12px;
+    }
+    .trainer-detail-education-item {
+      padding: 12px 14px;
+      margin-bottom: 8px;
+      background: var(--tg-theme-secondary-bg-color);
+      border-radius: 12px;
+      font-size: 14px;
+      line-height: 1.4;
+      border: 2px solid transparent;
+      transition: all 0.2s ease;
+    }
+    .trainer-detail-education-item:hover {
+      border-color: rgba(245, 166, 35, 0.3);
+    }
+    .trainer-detail-desc { 
+      font-size: 15px; 
+      line-height: 1.5; 
+      margin: 20px 0; 
+      padding: 16px;
+      background: var(--tg-theme-secondary-bg-color);
+      border-radius: 16px;
+      border-left: 4px solid var(--tg-theme-button-color);
+    }
+    .trainer-detail-actions,
+    #trainerDetailActions {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-top: 24px;
+    }
+    /* .btn-primary / .btn-secondary — mini-app-components.css (единый CTA) */
+    .trainer-detail-actions .btn-primary,
+    .trainer-detail-actions .btn-secondary,
+    .btn-block.btn-primary {
+      width: 100%;
+    }
+    .btn-block.btn-primary { display: block; }
+    #screenSuccess .btn-primary { width: 100%; }
     .back-link {
       display: inline-flex;
       align-items: center;
@@ -223,6 +435,46 @@
     }
     .back-link .back-link-chevron { flex-shrink: 0; width: 16px; height: 16px; color: inherit; }
     .back-link:active { opacity: 0.7; }
+    
+    /* Анимации появления */
+    @keyframes card-enter {
+      from { 
+        opacity: 0; 
+        transform: translateY(10px); 
+      }
+      to { 
+        opacity: 1; 
+        transform: translateY(0); 
+      }
+    }
+    
+    @keyframes hero-enter {
+      from { 
+        opacity: 0; 
+        transform: translateY(20px) scale(0.98); 
+      }
+      to { 
+        opacity: 1; 
+        transform: translateY(0) scale(1); 
+      }
+    }
+    
+    .choice-card, .trainer-list-card {
+      animation: card-enter 0.38s cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+    
+    .choice-card:nth-child(1) { animation-delay: 0.05s; }
+    .choice-card:nth-child(2) { animation-delay: 0.1s; }
+    .choice-card:nth-child(3) { animation-delay: 0.15s; }
+    .choice-card:nth-child(4) { animation-delay: 0.2s; }
+    .choice-card:nth-child(5) { animation-delay: 0.25s; }
+    
+    .trainer-list-card:nth-child(1) { animation-delay: 0.05s; }
+    .trainer-list-card:nth-child(2) { animation-delay: 0.1s; }
+    .trainer-list-card:nth-child(3) { animation-delay: 0.15s; }
+    .trainer-list-card:nth-child(4) { animation-delay: 0.2s; }
+    .trainer-list-card:nth-child(5) { animation-delay: 0.25s; }
+    .trainer-list-card:nth-child(6) { animation-delay: 0.3s; }
     .pagination {
       display: flex;
       justify-content: center;
@@ -240,7 +492,7 @@
     }
     .pagination span { font-size: 14px; color: var(--tg-theme-hint-color); align-self: center; }
     .loading, .error { text-align: center; padding: 24px; color: var(--tg-theme-hint-color); }
-    .error { color: #ff3b30; }
+    .error { color: var(--app-danger); }
     .empty { text-align: center; padding: 32px 16px; color: var(--tg-theme-hint-color); font-size: 15px; }
     .success-msg {
       text-align: center;
@@ -341,10 +593,6 @@
       line-height: 1.5;
     }
     .my-trainer-empty .btn-trainer-list { margin-top: 16px; }
-    .btn-secondary {
-      background: var(--tg-theme-secondary-bg-color);
-      color: var(--tg-theme-text-color);
-    }
     .btn-pass-block {
       width: 100%;
       padding: 14px 18px;
@@ -355,8 +603,8 @@
       cursor: pointer;
       text-align: center;
       box-sizing: border-box;
-      background: #F7A600 !important;
-      color: #1a1a1a !important;
+      background: #f5a623 !important;
+      color: #1c1c1c !important;
       margin-top: 8px;
     }
     .btn-pass-block:active { opacity: 0.9; }
@@ -370,7 +618,7 @@
       cursor: pointer;
       text-align: center;
       box-sizing: border-box;
-      background: #34c759;
+      background: var(--app-success);
       color: #fff;
       margin-top: 8px;
     }
@@ -386,8 +634,8 @@
       border: none;
       font-size: 15px;
       font-weight: 600;
-      background: #F7A600 !important;
-      color: #000 !important;
+      background: var(--tg-theme-button-color) !important;
+      color: var(--tg-theme-button-text-color) !important;
       cursor: pointer;
     }
     .btn-trainer-list:active { opacity: 0.9; }
@@ -470,13 +718,164 @@
       gap: 12px;
     }
     .trainer-detail-secondary .back-link { margin-top: 0; }
+    .slot-pick-list .day-block { margin-bottom: 20px; }
+    .slot-pick-list .day-title {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--tg-theme-hint-color);
+      margin: 4px 0 12px 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
     .slot-pick-list .slot-card {
       display: flex; align-items: center; justify-content: space-between;
+      gap: 12px;
       padding: 14px 16px; margin-bottom: 8px; border-radius: 12px;
-      background: var(--tg-theme-secondary-bg-color); border: none; width: 100%; font: inherit; color: inherit; text-align: left; cursor: pointer;
+      background: var(--tg-theme-secondary-bg-color); 
+      border: 2px solid transparent; 
+      width: 100%; font: inherit; color: inherit; text-align: left; cursor: pointer;
+      transition: all 0.2s ease;
     }
-    .slot-pick-list .slot-card:active { opacity: 0.9; }
-    .slot-pick-list .slot-time { font-weight: 600; font-size: 16px; }
+    .slot-pick-list .slot-card:hover {
+      border-color: var(--tg-theme-button-color);
+      transform: translateY(-1px);
+    }
+    .slot-pick-list .slot-card:active { 
+      opacity: 0.8; 
+      transform: scale(0.98);
+    }
+    .slot-pick-list .slot-time { 
+      font-weight: 600; 
+      font-size: 16px; 
+      color: var(--tg-theme-text-color);
+    }
+    .slot-pick-list .slot-card span:last-child {
+      color: var(--tg-theme-button-color);
+      opacity: 0.7;
+      transition: opacity 0.2s ease;
+      flex-shrink: 0;
+    }
+    .slot-pick-list .slot-card:hover span:last-child {
+      opacity: 1;
+    }
+    
+    /* Дополнительные стили для темной темы */
+    @media (prefers-color-scheme: dark) {
+      .slot-pick-list .slot-card {
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+      }
+      .slot-pick-list .slot-card:hover {
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+      }
+      .trainer-card {
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+      }
+      .trainer-card:hover {
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+      }
+      .trainer-detail-photo-wrap {
+        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+      }
+      .trainer-detail-stat {
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+      }
+      .trainer-detail-service {
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+      }
+      .trainer-detail-desc {
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+      }
+    }
+    
+    /* Модальное окно отзывов */
+    .reviews-modal {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.5);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      padding: 20px;
+    }
+    .reviews-modal.show {
+      display: flex;
+    }
+    .reviews-modal-content {
+      background: var(--tg-theme-bg-color);
+      border-radius: 20px;
+      max-width: 500px;
+      width: 100%;
+      max-height: 80vh;
+      overflow-y: auto;
+      position: relative;
+    }
+    .reviews-modal-header {
+      padding: 20px 20px 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .reviews-modal-title {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--tg-theme-text-color);
+    }
+    .reviews-modal-close {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      border: none;
+      background: var(--tg-theme-secondary-bg-color);
+      color: var(--tg-theme-text-color);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+    }
+    .reviews-modal-body {
+      padding: 20px;
+    }
+    .review-item {
+      padding: 16px;
+      margin-bottom: 12px;
+      background: var(--tg-theme-secondary-bg-color);
+      border-radius: 12px;
+      border-left: 4px solid var(--tg-theme-button-color);
+    }
+    .review-rating {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--tg-theme-button-color);
+    }
+    .review-text {
+      font-size: 14px;
+      line-height: 1.5;
+      color: var(--tg-theme-text-color);
+    }
+    .review-date {
+      font-size: 12px;
+      color: var(--tg-theme-hint-color);
+      margin-top: 8px;
+    }
+    .reviews-loading {
+      text-align: center;
+      padding: 40px;
+      color: var(--tg-theme-hint-color);
+    }
+    .reviews-empty {
+      text-align: center;
+      padding: 40px;
+      color: var(--tg-theme-hint-color);
+    }
     .form-block { margin-bottom: 16px; }
     .form-block label { display: block; font-size: 13px; font-weight: 600; color: var(--tg-theme-hint-color); margin-bottom: 6px; }
     .form-block input, .form-block textarea {
@@ -511,28 +910,11 @@
       text-align: center;
     }
     .empty-state-request .empty-state-text { font-size: 15px; color: var(--tg-theme-hint-color); margin-bottom: 14px; }
-    @media (prefers-color-scheme: dark) {
-      .btn-leave-request {
-        background: #30d158;
-        color: #fff;
-      }
-    }
-    /* JUSTSKATE.BY — перебиваем тему Telegram */
-    body { background: #FFFBEB !important; color: #1a1a1a !important; }
-    .btn-close, .choice-card, .slot-pick-list .slot-card, .btn-secondary, .summary-card, .trainer-card, .trainer-list-footer .btn-block { background: #FFF3CC !important; color: #1a1a1a !important; }
-    .trainer-list-footer .link { color: #F7A600 !important; }
-    @media (prefers-color-scheme: dark) {
-      body { background: #1a1a1a !important; color: #f5f5f5 !important; }
-      .btn-close, .choice-card, .slot-pick-list .slot-card, .btn-secondary, .summary-card, .trainer-card { background: #2a2a2a !important; color: #f5f5f5 !important; }
-    }
   </style>
 </head>
 <body>
-  <script>
-  (function(){var d=document.documentElement;d.style.setProperty('--tg-theme-button-color','#F7A600');d.style.setProperty('--tg-theme-button-text-color','#1a1a1a');d.style.setProperty('--tg-theme-bg-color',window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'#1a1a1a':'#FFFBEB');d.style.setProperty('--tg-theme-text-color',window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'#f5f5f5':'#1a1a1a');d.style.setProperty('--tg-theme-secondary-bg-color',window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'#2a2a2a':'#FFF3CC');})();
-  </script>
   <div class="header">
-    <span class="header-title" id="headerTitle">Тренеры и запись</span>
+    <h1 class="header-title" id="headerTitle">Тренеры и запись</h1>
   </div>
 
   <div id="screenSummary" data-screen>
@@ -584,6 +966,51 @@
   <div id="screenTrainers" data-screen>
     <div class="back-link" id="backFromTrainers" style="margin-bottom:8px;"><svg class="back-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>Назад</div>
     <div class="step-title">Тренеры</div>
+    
+    <!-- Time Filters Panel -->
+    <div class="filter-panel expanded" id="timeFilters">
+      <div class="filter-header">
+        <div>
+          <div class="filter-title">Фильтр по времени</div>
+          <div class="filter-summary" id="filterSummary">Все временные промежутки</div>
+        </div>
+      </div>
+      <div class="filter-content">
+        <!-- Days of Week -->
+        <div class="filter-section">
+          <div class="filter-section-title">Дни недели</div>
+          <div class="filter-chips" id="dayFilters">
+            <div class="filter-chip" data-day="1">Пн</div>
+            <div class="filter-chip" data-day="2">Вт</div>
+            <div class="filter-chip" data-day="3">Ср</div>
+            <div class="filter-chip" data-day="4">Чт</div>
+            <div class="filter-chip" data-day="5">Пт</div>
+            <div class="filter-chip" data-day="6">Сб</div>
+            <div class="filter-chip" data-day="0">Вс</div>
+          </div>
+        </div>
+
+        <!-- Time Slots -->
+        <div class="filter-section">
+          <div class="filter-section-title">Время дня</div>
+          <div class="filter-chips" id="timeSlotFilters">
+            <div class="filter-chip" data-time="06:00-09:00">Раннее утро (6-9)</div>
+            <div class="filter-chip" data-time="09:00-12:00">Утро (9-12)</div>
+            <div class="filter-chip" data-time="12:00-15:00">День (12-15)</div>
+            <div class="filter-chip" data-time="15:00-18:00">После обеда (15-18)</div>
+            <div class="filter-chip" data-time="18:00-21:00">Вечер (18-21)</div>
+            <div class="filter-chip" data-time="21:00-23:00">Поздний вечер (21-23)</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Results Info -->
+    <div class="filter-results-info" id="resultsInfo">
+      <span id="resultsCount">Загрузка...</span>
+      <button type="button" class="filter-clear" id="clearFilters" style="display: none;">Сбросить фильтры</button>
+    </div>
+
     <div id="trainerList"></div>
     <div class="pagination" id="pagination"></div>
     <div id="trainerListFooter" class="trainer-list-footer"></div>
@@ -635,7 +1062,32 @@
   <script>
     (function() {
       const tg = window.Telegram && window.Telegram.WebApp;
-      if (tg) { tg.ready(); tg.expand(); }
+      if (tg) { 
+        tg.ready(); 
+        tg.expand(); 
+        if (typeof window.__applyCatalogTheme === 'function') {
+          window.__applyCatalogTheme();
+        }
+        function syncTelegramChromeColors() {
+          try {
+            var darkUi = tg.colorScheme === 'dark' ||
+              (tg.colorScheme !== 'light' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+            var bgHex = darkUi ? '#1c1c1c' : '#fffbec';
+            if (typeof tg.setHeaderColor === 'function') tg.setHeaderColor(bgHex);
+            if (typeof tg.setBackgroundColor === 'function') tg.setBackgroundColor(bgHex);
+            if (typeof tg.setBottomBarColor === 'function') tg.setBottomBarColor(bgHex);
+          } catch (e) { /* older clients */ }
+        }
+        syncTelegramChromeColors();
+        if (tg.onEvent) {
+          tg.onEvent('themeChanged', function () {
+            if (typeof window.__applyCatalogTheme === 'function') {
+              window.__applyCatalogTheme();
+            }
+            syncTelegramChromeColors();
+          });
+        }
+      }
 
       var state = {
         cityId: null,
@@ -657,8 +1109,45 @@
         requestForTrainer: null,
         requestFormOpenedFrom: null,
         activeTab: 'catalog',
-        openedFromMyTrainerTab: false
+        openedFromMyTrainerTab: false,
+        /** From GET /client/session — clients.phone for prefill in booking form */
+        clientPhone: '',
+        // Time-based filters
+        filters: {
+          days: [], // [1,2,3,4,5,6,0] for Mon-Sun
+          timeSlots: [] // ['06:00-09:00', '09:00-12:00', etc.]
+        }
       };
+      var prefetch = {
+        firstPageKey: null,
+        firstPageData: null,
+        inflightByKey: {}
+      };
+      // Persist first catalog page across Mini App reopens in the same browser session.
+      var CATALOG_CACHE_PREFIX = 'tcb_catalog_trainers_v1_';
+      var CATALOG_CACHE_TTL_MS = 10 * 60 * 1000;
+      function readCatalogFirstPageFromStorage(listKey) {
+        try {
+          var raw = sessionStorage.getItem(CATALOG_CACHE_PREFIX + listKey);
+          if (!raw) return null;
+          var parsed = JSON.parse(raw);
+          if (!parsed || !parsed.ts || !parsed.data) return null;
+          if (Date.now() - parsed.ts > CATALOG_CACHE_TTL_MS) {
+            sessionStorage.removeItem(CATALOG_CACHE_PREFIX + listKey);
+            return null;
+          }
+          return parsed.data;
+        } catch (e) {
+          return null;
+        }
+      }
+      function writeCatalogFirstPageToStorage(listKey, data) {
+        try {
+          sessionStorage.setItem(CATALOG_CACHE_PREFIX + listKey, JSON.stringify({ ts: Date.now(), data: data }));
+        } catch (e) {
+          // QuotaExceeded: ignore; in-memory prefetch still helps.
+        }
+      }
 
       function closeApp() {
         if (tg) tg.close(); else window.close();
@@ -698,12 +1187,289 @@
         if (photo.list_url) return photo.list_url;
         return photo.file_key ? photoUrl(photo.file_key) : null;
       }
+      function warmupImageUrls(urls) {
+        // Warm up browser cache for first visible cards.
+        (urls || []).forEach(function(src) {
+          if (!src) return;
+          var img = new Image();
+          img.decoding = 'async';
+          img.src = src;
+        });
+      }
+      /** Prefetch list + detail URLs for catalog rows (detail may differ from list thumb). */
+      function warmupCatalogImagesFromItems(items, maxRows) {
+        var n = maxRows != null ? maxRows : 16;
+        var slice = (items || []).slice(0, n);
+        warmupImageUrls(slice.map(function(t) {
+          var p0 = t.photos && t.photos[0];
+          return photoSrcList(p0);
+        }));
+        warmupImageUrls(slice.map(function(t) {
+          var p0 = t.photos && t.photos[0];
+          var a = photoSrcDetail(p0);
+          var b = photoSrcList(p0);
+          return a && b && a !== b ? a : null;
+        }));
+      }
+      function photoProxyListFallback(photo) {
+        if (!photo) return '';
+        var fk = photo.file_key_list || photo.file_key;
+        return fk ? photoUrl(fk) : '';
+      }
+      function photoProxyFullFallback(photo) {
+        if (!photo || !photo.file_key) return '';
+        return photoUrl(photo.file_key);
+      }
+      function bindTrainerDetailPhotoWrap() {
+        var wrap = document.querySelector('#trainerDetailContent .trainer-detail-photo-wrap');
+        if (!wrap) return;
+        var ph = wrap.querySelector('.trainer-detail-photo-placeholder');
+        function hidePh() { if (ph) ph.style.display = 'none'; }
+        var single = wrap.querySelector('img.trainer-detail-photo-single');
+        var base = wrap.querySelector('img.trainer-detail-photo-base');
+        var full = wrap.querySelector('img.trainer-detail-photo-full');
+        if (single) {
+          single.onload = function() { single.classList.add('loaded'); hidePh(); };
+          single.onerror = function() {
+            var fb = single.dataset.fallback;
+            if (fb) { single.onerror = null; single.src = fb; }
+          };
+          if (single.complete && single.naturalWidth) { single.classList.add('loaded'); hidePh(); }
+          return;
+        }
+        if (base) {
+          base.onload = function() { base.classList.add('loaded'); hidePh(); };
+          base.onerror = function() {
+            var fb = base.dataset.fallbackBase;
+            if (fb) { base.onerror = null; base.src = fb; }
+          };
+          if (base.complete && base.naturalWidth) { base.classList.add('loaded'); hidePh(); }
+        }
+        if (full) {
+          full.onload = function() { full.classList.add('loaded'); hidePh(); };
+          full.onerror = function() {
+            var fb = full.dataset.fallbackFull;
+            if (fb) { full.onerror = null; full.src = fb; }
+          };
+          if (full.complete && full.naturalWidth) { full.classList.add('loaded'); hidePh(); }
+        }
+      }
+      function makeTrainerListParams(offset) {
+        var params = { limit: state.limit, offset: offset, city_id: state.cityId, service_id: state.serviceId, order_by: 'rating' };
+        if (state.arenaId) params.arena_id = state.arenaId;
+        var f = state.filters;
+        if (f.days.length > 0) {
+          params.filter_days = f.days.join(',');
+        }
+        if (f.timeSlots.length > 0) {
+          params.filter_time_slots = f.timeSlots.join(',');
+        }
+        return params;
+      }
+      function makeFirstPageKey() {
+        var f = state.filters;
+        var dayPart = f.days.length ? f.days.slice().sort(function(a, b) { return a - b; }).join('-') : '';
+        var timePart = f.timeSlots.length ? f.timeSlots.slice().sort().join('|') : '';
+        return [state.cityId || 0, state.serviceId || 0, state.arenaId || 0, state.limit || 10, dayPart, timePart].join(':');
+      }
+
+      function toggleFilterPanel() {
+        var panel = document.getElementById('timeFilters');
+        if (panel) panel.classList.toggle('expanded');
+      }
+
+      function updateFilterSummary() {
+        var summary = [];
+        var f = state.filters;
+        
+        if (f.days.length > 0 && f.days.length < 7) {
+          var dayNames = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
+          summary.push(f.days.map(d => dayNames[d]).join(', '));
+        }
+        if (f.timeSlots.length > 0) {
+          var timeLabels = f.timeSlots.map(function(slot) {
+            var parts = slot.split('-');
+            return parts[0] + '-' + parts[1];
+          });
+          summary.push(timeLabels.join(', '));
+        }
+
+        var summaryEl = document.getElementById('filterSummary');
+        var clearBtn = document.getElementById('clearFilters');
+        
+        if (summary.length === 0) {
+          summaryEl.textContent = 'Все временные промежутки';
+          if (clearBtn) clearBtn.style.display = 'none';
+        } else {
+          summaryEl.textContent = summary.join(' · ');
+          if (clearBtn) clearBtn.style.display = 'inline';
+        }
+      }
+
+      function clearAllFilters() {
+        state.filters = {
+          days: [],
+          timeSlots: []
+        };
+        
+        // Clear UI
+        document.querySelectorAll('.filter-chip.selected').forEach(chip => {
+          chip.classList.remove('selected');
+        });
+        
+        updateFilterSummary();
+        applyFiltersAndReload();
+      }
+
+
+      function applyFiltersAndReload() {
+        state.offset = 0;
+        prefetch.firstPageKey = null;
+        prefetch.firstPageData = null;
+        loadTrainers();
+      }
+
+      var filterHandlersInitialized = false;
+      function initializeFilterHandlers() {
+        if (filterHandlersInitialized) return;
+        filterHandlersInitialized = true;
+        
+        // Day filters
+        document.querySelectorAll('#dayFilters .filter-chip').forEach(function(chip) {
+          chip.addEventListener('click', function() {
+            var day = parseInt(chip.dataset.day);
+            var index = state.filters.days.indexOf(day);
+            if (index === -1) {
+              state.filters.days.push(day);
+              chip.classList.add('selected');
+            } else {
+              state.filters.days.splice(index, 1);
+              chip.classList.remove('selected');
+            }
+            updateFilterSummary();
+            applyFiltersAndReload();
+          });
+        });
+
+        // Time slot filters
+        document.querySelectorAll('#timeSlotFilters .filter-chip').forEach(function(chip) {
+          chip.addEventListener('click', function() {
+            var timeSlot = chip.dataset.time;
+            var index = state.filters.timeSlots.indexOf(timeSlot);
+            if (index === -1) {
+              state.filters.timeSlots.push(timeSlot);
+              chip.classList.add('selected');
+            } else {
+              state.filters.timeSlots.splice(index, 1);
+              chip.classList.remove('selected');
+            }
+            updateFilterSummary();
+            applyFiltersAndReload();
+          });
+        });
+
+        // Clear filters button
+        var clearBtn = document.getElementById('clearFilters');
+        if (clearBtn) {
+          clearBtn.addEventListener('click', clearAllFilters);
+        }
+      }
+
+      /** Russian pluralization for trainer count (найден N тренер/тренера/тренеров). */
+      function formatTrainerCountMessage(n) {
+        n = n | 0;
+        var mod10 = n % 10;
+        var mod100 = n % 100;
+        if (mod10 === 1 && mod100 !== 11) {
+          return 'Найден ' + n + ' тренер';
+        }
+        if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) {
+          return 'Найдено ' + n + ' тренера';
+        }
+        return 'Найдено ' + n + ' тренеров';
+      }
+
+      function updateResultsCount(count) {
+        var resultsEl = document.getElementById('resultsCount');
+        if (resultsEl) resultsEl.textContent = formatTrainerCountMessage(count);
+      }
+      function prefetchFirstPageIfNeeded() {
+        if (!state.cityId || !state.serviceId) return;
+        var key = makeFirstPageKey();
+        if (prefetch.firstPageKey === key && prefetch.firstPageData) return;
+        var cached = readCatalogFirstPageFromStorage(key);
+        if (cached) {
+          prefetch.firstPageKey = key;
+          prefetch.firstPageData = cached;
+          warmupCatalogImagesFromItems(cached.items || [], 16);
+          return;
+        }
+        if (prefetch.inflightByKey[key]) return;
+        prefetch.inflightByKey[key] = true;
+        getJson('/trainers', makeTrainerListParams(0)).then(function(data) {
+          prefetch.firstPageKey = key;
+          prefetch.firstPageData = data;
+          writeCatalogFirstPageToStorage(key, data);
+          var items = data && data.items ? data.items : [];
+          warmupCatalogImagesFromItems(items, 16);
+        }).catch(function() {
+          // ignore prefetch failures: must never block UX
+        }).finally(function() {
+          delete prefetch.inflightByKey[key];
+        });
+      }
 
       function trainerName(t) {
         var p = t && t.profile;
         if (!p) return 'Тренер';
         var n = ((p.first_name || '') + ' ' + (p.last_name || '')).trim();
         return n || 'Тренер';
+      }
+
+      /** One approved education row for catalog detail (matches /api/public/trainers/{id}/education). */
+      function formatCatalogEducationEntry(edu) {
+        if (!edu) return '';
+        var inst = (edu.institution_name || '').trim();
+        var prog = (edu.program_or_title || '').trim();
+        var deg = (edu.degree_level || '').trim();
+        var head = inst;
+        var sub = [prog, deg].filter(Boolean).join(', ');
+        var line = sub ? (head ? head + ' — ' + sub : sub) : head;
+        var y = '';
+        if (edu.is_in_progress) y = 'в процессе';
+        else {
+          var sy = edu.start_year;
+          var ey = edu.end_year;
+          if (sy != null && ey != null) y = sy + '–' + ey;
+          else if (ey != null) y = String(ey);
+          else if (sy != null) y = 'с ' + sy;
+        }
+        if (y) line = (line ? line + ' ' : '') + '(' + y + ')';
+        return (line || '').trim();
+      }
+
+      function openTrainerDetailFromTrainerObject(t, prefetchPhotos) {
+        if (!t || !t.id) return;
+        state.trainerId = t.id;
+        state.trainerName = trainerName(t);
+        persistTrainerSelection(t.id);
+        if (prefetchPhotos) {
+          var detailPhoto = t.photos && t.photos[0];
+          var pl = photoSrcList(detailPhoto);
+          var pf = photoSrcDetail(detailPhoto);
+          if (pl) { var iml = new Image(); iml.decoding = 'async'; iml.src = pl; }
+          if (pf && pf !== pl) { var imf = new Image(); imf.decoding = 'async'; imf.fetchPriority = 'high'; imf.src = pf; }
+        }
+        loadTrainerById(t.id).then(function(full) {
+          state.selectedTrainer = full || t;
+          state.trainerName = trainerName(state.selectedTrainer);
+          renderTrainerDetail();
+          showScreen('screenTrainerDetail');
+        }).catch(function() {
+          state.selectedTrainer = t;
+          renderTrainerDetail();
+          showScreen('screenTrainerDetail');
+        });
       }
 
       function getJson(path, params) {
@@ -776,6 +1542,24 @@
         else { state.arenaId = null; state.arenaName = 'Любая'; }
         if (session.trainer_id) { state.trainerId = session.trainer_id; state.trainerName = session.trainer_name || ''; }
         else { state.trainerId = null; state.trainerName = ''; }
+        state.clientPhone =
+          session.client_phone != null && session.client_phone !== undefined
+            ? String(session.client_phone).trim()
+            : '';
+      }
+
+      /** Refresh client phone from API (e.g. before booking form) so DB updates are visible. */
+      function refreshClientPhoneForBookingForm(cb) {
+        getClientSession().then(function(session) {
+          applySessionToState(session);
+          if (cb) cb();
+        }).catch(function() { if (cb) cb(); });
+      }
+
+      function prefillBookingPhoneField() {
+        var el = document.getElementById('bookingPhone');
+        if (!el) return;
+        el.value = (state.clientPhone || '').trim();
       }
 
       function persistTrainerSelection(trainerId) {
@@ -795,6 +1579,10 @@
       function escapeHtml(s) {
         if (s == null || s === undefined) return '';
         return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+      }
+      function escapeAttr(s) {
+        if (s == null || s === undefined) return '';
+        return String(s).replace(/"/g, '&quot;');
       }
       function renderSummary() {
         var rows = [
@@ -860,7 +1648,7 @@
             return;
           }
           var html = items.map(function(c) {
-            return '<button type="button" class="choice-card" data-id="' + c.id + '" data-name="' + (c.name || '').replace(/"/g, '&quot;') + '">' + (c.name || '') + '<span class="arrow">→</span></button>';
+            return '<button type="button" class="choice-card" data-id="' + c.id + '" data-name="' + (c.name || '').replace(/"/g, '&quot;') + '"><div class="main"><div class="label">Город</div><div class="value">' + (c.name || '') + '</div></div><span class="arrow">→</span></button>';
           }).join('');
           document.getElementById('cityList').innerHTML = html;
           document.getElementById('backFromCityToSummary').style.display = state.returnToSummary ? 'block' : 'none';
@@ -880,6 +1668,7 @@
                 loadServices();
                 showScreen('screenService');
               }
+              prefetchFirstPageIfNeeded();
             };
           });
         }).catch(function() {
@@ -896,7 +1685,7 @@
             return;
           }
           var html = items.map(function(s) {
-            return '<button type="button" class="choice-card" data-id="' + s.id + '" data-name="' + (s.name || '').replace(/"/g, '&quot;') + '">' + (s.name || '') + '<span class="arrow">→</span></button>';
+            return '<button type="button" class="choice-card" data-id="' + s.id + '" data-name="' + (s.name || '').replace(/"/g, '&quot;') + '"><div class="main"><div class="label">Услуга</div><div class="value">' + (s.name || '') + '</div></div><span class="arrow">→</span></button>';
           }).join('');
           document.getElementById('serviceList').innerHTML = html;
           document.getElementById('backFromServiceToSummary').style.display = state.returnToSummary ? 'block' : 'none';
@@ -915,6 +1704,7 @@
                 loadArenas();
                 showScreen('screenArena');
               }
+              prefetchFirstPageIfNeeded();
             };
           });
         }).catch(function() {
@@ -926,9 +1716,9 @@
         document.getElementById('arenaList').innerHTML = '<div class="loading">Загрузка...</div>';
         getJson('/arenas', { city_id: state.cityId }).then(function(data) {
           var items = data.items || [];
-          var html = '<button type="button" class="choice-card" data-id="" data-name="Любая">Любая<span class="arrow">→</span></button>';
+          var html = '<button type="button" class="choice-card" data-id="" data-name="Любая"><div class="main"><div class="label">Арена</div><div class="value">Любая</div></div><span class="arrow">→</span></button>';
           html += items.map(function(a) {
-            return '<button type="button" class="choice-card" data-id="' + a.id + '" data-name="' + (a.name || '').replace(/"/g, '&quot;') + '">' + (a.name || '') + '<span class="arrow">→</span></button>';
+            return '<button type="button" class="choice-card" data-id="' + a.id + '" data-name="' + (a.name || '').replace(/"/g, '&quot;') + '"><div class="main"><div class="label">Арена</div><div class="value">' + (a.name || '') + '</div></div><span class="arrow">→</span></button>';
           }).join('');
           document.getElementById('arenaList').innerHTML = html;
           document.getElementById('backFromArenaToSummary').style.display = state.returnToSummary ? 'block' : 'none';
@@ -947,6 +1737,7 @@
                 loadTrainers();
                 showScreen('screenTrainers');
               }
+              prefetchFirstPageIfNeeded();
             };
           });
         }).catch(function() {
@@ -957,15 +1748,35 @@
       function loadTrainers() {
         document.getElementById('trainerList').innerHTML = '<div class="loading">Загрузка...</div>';
         document.getElementById('pagination').innerHTML = '';
+        
+        // Initialize filter handlers if not already done
+        initializeFilterHandlers();
+        
         // Only city/service/arena — never trainer_id, so list shows all matching trainers (selected trainer is on "Мой тренер" tab).
-        var params = { limit: state.limit, offset: state.offset, city_id: state.cityId, service_id: state.serviceId, order_by: 'rating' };
-        if (state.arenaId) params.arena_id = state.arenaId;
-        getJson('/trainers', params).then(function(data) {
+        var params = makeTrainerListParams(state.offset);
+        var request;
+        var firstPageKey = makeFirstPageKey();
+        if (state.offset === 0) {
+          if (!(prefetch.firstPageKey === firstPageKey && prefetch.firstPageData)) {
+            var fromDisk = readCatalogFirstPageFromStorage(firstPageKey);
+            if (fromDisk) {
+              prefetch.firstPageKey = firstPageKey;
+              prefetch.firstPageData = fromDisk;
+            }
+          }
+        }
+        if (state.offset === 0 && prefetch.firstPageKey === firstPageKey && prefetch.firstPageData) {
+          request = Promise.resolve(prefetch.firstPageData);
+        } else {
+          request = getJson('/trainers', params);
+        }
+        request.then(function(data) {
           var items = data.items || [];
-          var total = data.total || items.length;
+          var total = data.total != null ? data.total : items.length;
           state.trainers = items;
           state.total = total;
           state.photoSource = data._photo_source || 'proxy';
+          updateResultsCount(items.length);
           if (!items.length) {
             document.getElementById('trainerList').innerHTML =
               '<div class="empty">Тренеров по вашему запросу пока нет.</div>' +
@@ -980,18 +1791,43 @@
             document.getElementById('trainerListFooter').style.display = 'none';
             return;
           }
-          var firstPhotoSrc = photoSrcList(items[0].photos && items[0].photos[0]);
-          if (firstPhotoSrc) {
-            var preload = document.createElement('link');
-            preload.rel = 'preload';
-            preload.as = 'image';
-            preload.href = firstPhotoSrc;
-            document.head.appendChild(preload);
+          if (state.offset === 0) {
+            writeCatalogFirstPageToStorage(firstPageKey, data);
+            prefetch.firstPageKey = firstPageKey;
+            prefetch.firstPageData = data;
           }
+          document.querySelectorAll('link[data-tcb-catalog-preload]').forEach(function(el) { el.remove(); });
+          for (var pi = 0; pi < Math.min(3, items.length); pi++) {
+            var p0p = items[pi].photos && items[pi].photos[0];
+            var ls = photoSrcList(p0p);
+            if (ls) {
+              var lk = document.createElement('link');
+              lk.rel = 'preload';
+              lk.as = 'image';
+              lk.href = ls;
+              lk.setAttribute('data-tcb-catalog-preload', '1');
+              document.head.appendChild(lk);
+            }
+            var ds = photoSrcDetail(p0p);
+            if (ds && ds !== ls) {
+              var dk = document.createElement('link');
+              dk.rel = 'preload';
+              dk.as = 'image';
+              dk.href = ds;
+              dk.setAttribute('data-tcb-catalog-preload', '1');
+              document.head.appendChild(dk);
+            }
+          }
+          warmupCatalogImagesFromItems(items, 16);
+          var runIdle = window.requestIdleCallback || function(cb) { return setTimeout(function() { cb({}); }, 400); };
+          runIdle(function() {
+            warmupCatalogImagesFromItems(items, 50);
+          }, { timeout: 2500 });
           var html = items.map(function(t, idx) {
             var photo = t.photos && t.photos[0];
             var src = photoSrcList(photo);
             var proxyFallback = photo ? photoUrl(photo.file_key_list || photo.file_key) : '';
+            var isPriority = idx < 3;
             var p = t.profile || {};
 
             var metaTop = [];
@@ -1032,7 +1868,7 @@
             infoHtml += '</div>';
 
             var photoHtml = src
-              ? '<div class="trainer-card-photo-wrap"><div class="trainer-card-photo-placeholder"></div><img src="' + src + '" alt="" loading="lazy" class="trainer-card-img"' + (proxyFallback ? ' data-fallback="' + proxyFallback.replace(/"/g, '&quot;') + '"' : '') + '></div>'
+              ? '<div class="trainer-card-photo-wrap"><div class="trainer-card-photo-placeholder"></div><img src="' + src + '" alt="" loading="' + (isPriority ? 'eager' : 'lazy') + '" fetchpriority="' + (isPriority ? 'high' : 'auto') + '" decoding="async" class="trainer-card-img"' + (proxyFallback ? ' data-fallback="' + proxyFallback.replace(/"/g, '&quot;') + '"' : '') + '></div>'
               : '<div class="trainer-card-photo-wrap"><div class="trainer-card-photo-placeholder"></div></div>';
             return '<button type="button" class="trainer-list-card" data-index="' + idx + '">' +
               photoHtml +
@@ -1056,15 +1892,7 @@
             btn.onclick = function() {
               var idx = parseInt(btn.dataset.index, 10);
               var t = state.trainers[idx];
-              state.selectedTrainer = t;
-              state.trainerId = t.id;
-              state.trainerName = trainerName(t);
-              persistTrainerSelection(t.id);
-              var detailPhoto = t.photos && t.photos[0];
-              var preloadSrc = photoSrcList(detailPhoto) || photoSrcDetail(detailPhoto);
-              if (preloadSrc) { var preload = new Image(); preload.src = preloadSrc; }
-              renderTrainerDetail();
-              showScreen('screenTrainerDetail');
+              openTrainerDetailFromTrainerObject(t, true);
             };
           });
           var page = Math.floor(state.offset / state.limit) + 1;
@@ -1089,18 +1917,22 @@
           document.getElementById('trainerListFooter').style.display = 'block';
           var linkReq = document.getElementById('linkGeneralRequestFromList');
           if (linkReq) linkReq.onclick = openGeneralRequestForm;
+          if (state.offset === 0) {
+            // Preload second page data and lead images while user browses first page.
+            var nextPageParams = makeTrainerListParams(state.limit);
+            getJson('/trainers', nextPageParams).then(function(nextData) {
+              var nextItems = nextData && nextData.items ? nextData.items : [];
+              warmupImageUrls(nextItems.slice(0, 6).map(function(t) {
+                return photoSrcList(t.photos && t.photos[0]) || photoSrcDetail(t.photos && t.photos[0]);
+              }));
+            }).catch(function() { /* no-op */ });
+          }
           if (state.openTrainerIdAfterLoad) {
             var wantId = state.openTrainerIdAfterLoad;
             state.openTrainerIdAfterLoad = null;
             var idx = state.trainers.findIndex(function(t) { return t.id === wantId; });
             if (idx >= 0) {
-              var t = state.trainers[idx];
-              state.selectedTrainer = t;
-              state.trainerId = t.id;
-              state.trainerName = trainerName(t);
-              persistTrainerSelection(t.id);
-              renderTrainerDetail();
-              showScreen('screenTrainerDetail');
+              openTrainerDetailFromTrainerObject(state.trainers[idx], true);
             }
           }
         }).catch(function() {
@@ -1156,44 +1988,118 @@
         }).join(', ') : '—';
         var desc = (p.description || '').trim() || '—';
         var detailPhoto = t.photos && t.photos[0];
-        var detailSrc = photoSrcList(detailPhoto) || photoSrcDetail(detailPhoto);
-        var detailProxy = detailPhoto ? photoUrl(detailPhoto.file_key) : '';
+        var listSrc = photoSrcList(detailPhoto);
+        var fullSrc = photoSrcDetail(detailPhoto);
+        var fbList = photoProxyListFallback(detailPhoto);
+        var fbFull = photoProxyFullFallback(detailPhoto);
         var html = '';
-        if (detailSrc) {
+        if (listSrc || fullSrc) {
           html += '<div class="trainer-detail-photo-wrap">';
           html += '<div class="trainer-detail-photo-placeholder"></div>';
-          html += '<img src="' + detailSrc + '" alt="" class="trainer-detail-photo"';
-          if (detailProxy) html += ' data-fallback="' + detailProxy.replace(/"/g, '&quot;') + '"';
-          html += '>';
+          if (listSrc && fullSrc && listSrc !== fullSrc) {
+            html += '<img src="' + listSrc + '" alt="" loading="eager" fetchpriority="high" decoding="async" class="trainer-detail-photo-base"';
+            if (fbList) html += ' data-fallback-base="' + escapeAttr(fbList) + '"';
+            html += '>';
+            html += '<img src="' + fullSrc + '" alt="" loading="eager" fetchpriority="high" decoding="async" class="trainer-detail-photo-full"';
+            if (fbFull) html += ' data-fallback-full="' + escapeAttr(fbFull) + '"';
+            html += '>';
+          } else {
+            var oneSrc = fullSrc || listSrc;
+            html += '<img src="' + oneSrc + '" alt="" loading="eager" fetchpriority="high" decoding="async" class="trainer-detail-photo trainer-detail-photo-single"';
+            if (fbFull || fbList) html += ' data-fallback="' + escapeAttr(fbFull || fbList) + '"';
+            html += '>';
+          }
           html += '</div>';
         }
+        html += '<div class="trainer-detail-header">';
         html += '<div class="trainer-detail-name">' + name + '</div>';
-        html += '<div class="trainer-detail-meta">Рейтинг: ' + ratingStr + '</div>';
-        html += '<div class="trainer-detail-meta">Возраст: ' + ageStr + '</div>';
-        html += '<div class="trainer-detail-meta">Опыт: ' + expStr + '</div>';
-        html += '<div class="trainer-detail-meta">Занятие: ' + duration + ' мин</div>';
-        html += '<div class="trainer-detail-meta">Арены: ' + arenasStr + '</div>';
-        html += '<div class="trainer-detail-meta">Услуги: ' + servicesStr + '</div>';
-        html += '<div class="trainer-detail-desc">' + desc + '</div>';
+        if (ratingStr !== '—') {
+          html += '<div class="trainer-detail-rating" style="cursor: pointer;" onclick="showTrainerReviews(' + t.id + ')">⭐ ' + ratingStr + '</div>';
+        }
+        html += '</div>';
+        
+        html += '<div class="trainer-detail-stats">';
+        html += '<div class="trainer-detail-stat">';
+        html += '<div class="trainer-detail-stat-label">Возраст</div>';
+        html += '<div class="trainer-detail-stat-value">' + ageStr + '</div>';
+        html += '</div>';
+        html += '<div class="trainer-detail-stat">';
+        html += '<div class="trainer-detail-stat-label">Опыт</div>';
+        html += '<div class="trainer-detail-stat-value">' + (p.experience_years != null ? p.experience_years + ' лет' : '—') + '</div>';
+        html += '</div>';
+        html += '<div class="trainer-detail-stat">';
+        html += '<div class="trainer-detail-stat-label">Занятие</div>';
+        html += '<div class="trainer-detail-stat-value">' + duration + ' мин</div>';
+        html += '</div>';
+        html += '<div class="trainer-detail-stat">';
+        html += '<div class="trainer-detail-stat-label">Арены</div>';
+        html += '<div class="trainer-detail-stat-value">' + arenasStr + '</div>';
+        html += '</div>';
+        html += '</div>';
+        
+        if (services.length > 0) {
+          html += '<div class="trainer-detail-services">';
+          html += '<div class="trainer-detail-services-title">Услуги и цены</div>';
+          services.forEach(function(s) {
+            var serviceName = s.service_name || '—';
+            var priceText = s.price_byn != null ? (s.price_byn === Math.floor(s.price_byn) ? s.price_byn : s.price_byn.toFixed(2)) + ' BYN' : 'по запросу';
+            html += '<div class="trainer-detail-service">';
+            html += '<span class="trainer-detail-service-name">' + serviceName + '</span>';
+            html += '<span class="trainer-detail-service-price">' + priceText + '</span>';
+            html += '</div>';
+          });
+          html += '</div>';
+        }
+        
+        var eduRows = t.education_entries;
+        if (eduRows && eduRows.length > 0) {
+          html += '<div class="trainer-detail-education">';
+          html += '<div class="trainer-detail-education-title">Образование</div>';
+          eduRows.forEach(function(edu) {
+            var eduText = formatCatalogEducationEntry(edu);
+            if (eduText) {
+              html += '<div class="trainer-detail-education-item">' + escapeHtml(eduText) + '</div>';
+            }
+          });
+          html += '</div>';
+        } else if (p.education && typeof p.education === 'string' && p.education.trim()) {
+          html += '<div class="trainer-detail-education">';
+          html += '<div class="trainer-detail-education-title">Образование</div>';
+          html += '<div class="trainer-detail-education-item">' + escapeHtml(p.education.trim()).replace(/\n/g, '<br>') + '</div>';
+          html += '</div>';
+        }
+        
+        if (desc !== '—') {
+          html += '<div class="trainer-detail-desc">' + desc + '</div>';
+        }
         var photoSourceLabel = (detailPhoto && detailPhoto._source === 'cdn') ? 'Фото: через CDN' : (detailPhoto && detailPhoto._source === 'direct') ? 'Фото: напрямую с S3' : 'Фото: через сервер';
         html += '<div class="photo-source-hint trainer-detail-photo-source">' + photoSourceLabel + '</div>';
         document.getElementById('trainerDetailContent').innerHTML = html;
-        var detailImg = document.querySelector('#trainerDetailContent .trainer-detail-photo');
-        if (detailImg) {
-          function showLoaded() {
-            detailImg.classList.add('loaded');
-            var ph = detailImg.previousElementSibling;
-            if (ph) ph.style.display = 'none';
-          }
-          detailImg.onload = showLoaded;
-          detailImg.onerror = function() {
-            var fb = detailImg.dataset.fallback;
-            if (fb) { detailImg.onerror = null; detailImg.src = fb; }
-          };
-          if (detailImg.complete) showLoaded();
-        }
+        bindTrainerDetailPhotoWrap();
         document.getElementById('trainerDetailSlots').innerHTML = '<div class="slots-empty">Загрузка слотов…</div>';
         document.getElementById('trainerDetailActions').innerHTML = '';
+        var canBook = t.can_book === true;
+        if (!canBook) {
+          var phoneLine = '';
+          var ph = (p.phone || '').trim();
+          var ct = (p.contacts || '').trim();
+          if (ph) phoneLine += '<div class="slots-empty slots-contact"><strong>Телефон:</strong> <a href="tel:' + ph.replace(/[^\d+]/g, '') + '">' + escapeHtml(ph) + '</a></div>';
+          if (ct) phoneLine += '<div class="slots-empty slots-contact"><strong>Контакты:</strong> ' + escapeHtml(ct) + '</div>';
+          document.getElementById('trainerDetailSlots').innerHTML =
+            '<div class="slots-title">Онлайн-запись</div>' +
+            '<div class="slots-empty">У этого тренера нет самозаписи через каталог. Свяжитесь напрямую — тренер в каталоге, как и раньше.</div>' +
+            phoneLine;
+          state.slotsForTrainer = [];
+          var actionsEl = document.getElementById('trainerDetailActions');
+          actionsEl.innerHTML = '<button type="button" class="btn-secondary" data-action="leave-request">Оставить заявку</button>';
+          var secondaryEl = document.getElementById('trainerDetailSecondary');
+          if (!state.openedFromMyTrainerTab) {
+            secondaryEl.innerHTML = '<button type="button" class="back-link" data-action="back-to-list"><svg class="back-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>К списку тренеров</button>';
+          } else {
+            secondaryEl.innerHTML = '';
+          }
+          return;
+        }
         loadSlotsForTrainer(t.id, t).then(function(data) {
           state.slotsForTrainer = data.slots || [];
           var slotsEl = document.getElementById('trainerDetailSlots');
@@ -1220,20 +2126,24 @@
               var i = parseInt(btn.dataset.slotIndex, 10);
               state.selectedSlot = state.slotsForTrainer[i];
               document.getElementById('bookingFormSlotLabel').textContent = 'Выбрано: ' + formatSlotLabel(state.selectedSlot);
-              document.getElementById('bookingPhone').value = '';
               document.getElementById('bookingComment').value = '';
-              showScreen('screenBookingForm');
+              refreshClientPhoneForBookingForm(function() {
+                prefillBookingPhoneField();
+                showScreen('screenBookingForm');
+              });
             };
           });
           var btnMore = document.getElementById('btnShowAllSlots');
           if (btnMore) btnMore.onclick = function() { renderSlotPickList(); showScreen('screenSlotPick'); };
+          // Очищаем и добавляем кнопки с новым дизайном
+          actionsEl.innerHTML = '';
           if (slots.length > 0) {
-            actionsEl.innerHTML += '<button type="button" class="btn-block btn-primary" id="btnBookFromDetail">Записаться</button>';
+            actionsEl.innerHTML += '<button type="button" class="btn-primary" id="btnBookFromDetail">Записаться</button>';
           }
+          actionsEl.innerHTML += '<button type="button" class="btn-secondary" data-action="leave-request">Оставить заявку</button>';
           if (t.has_pass_products || t.has_certificate_products) {
-            actionsEl.innerHTML += '<button type="button" class="btn-block btn-pass-block" data-action="buy-pass">📦 Абонементы/Сертификаты</button>';
+            actionsEl.innerHTML += '<button type="button" class="btn-secondary" data-action="buy-pass" style="margin-top: 8px;">Абонементы/Сертификаты</button>';
           }
-          actionsEl.innerHTML += '<button type="button" class="btn-block btn-leave-request" data-action="leave-request">Оставить заявку</button>';
           var btnBook = document.getElementById('btnBookFromDetail');
           if (btnBook) btnBook.onclick = function() { renderSlotPickList(); showScreen('screenSlotPick'); };
           var secondaryEl = document.getElementById('trainerDetailSecondary');
@@ -1244,7 +2154,7 @@
           }
         }).catch(function() {
           document.getElementById('trainerDetailSlots').innerHTML = '<div class="slots-title">Ближайшие слоты</div><div class="slots-empty">Не удалось загрузить слоты</div>';
-          document.getElementById('trainerDetailActions').innerHTML = '<button type="button" class="btn-block btn-leave-request" data-action="leave-request">Оставить заявку</button>';
+          document.getElementById('trainerDetailActions').innerHTML = '<button type="button" class="btn-secondary" data-action="leave-request">Оставить заявку</button>';
           var secondaryEl = document.getElementById('trainerDetailSecondary');
           if (!state.openedFromMyTrainerTab) {
             secondaryEl.innerHTML = '<button type="button" class="back-link" data-action="back-to-list"><svg class="back-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>К списку тренеров</button>';
@@ -1257,20 +2167,61 @@
       function renderSlotPickList() {
         var list = document.getElementById('slotPickList');
         var slots = state.slotsForTrainer || [];
-        list.innerHTML = slots.length === 0
-          ? '<div class="slots-empty">Нет слотов</div>'
-          : slots.map(function(s, i) {
-              return '<button type="button" class="slot-card" data-slot-index="' + i + '">' +
-                '<span class="slot-time">' + formatSlotLabel(s) + '</span><span>→</span></button>';
-            }).join('');
+        
+        if (slots.length === 0) {
+          list.innerHTML = '<div class="slots-empty">Нет слотов</div>';
+          return;
+        }
+        
+        // Группируем слоты по дням
+        var byDay = {};
+        slots.forEach(function(s, i) {
+          var date = s.slot_date || '';
+          if (!byDay[date]) byDay[date] = [];
+          byDay[date].push({ slot: s, index: i });
+        });
+        
+        var days = Object.keys(byDay).sort();
+        var html = '';
+        
+        days.forEach(function(dateKey) {
+          var daySlots = byDay[dateKey].sort(function(a, b) { 
+            return (a.slot.start_time || '').localeCompare(b.slot.start_time || ''); 
+          });
+          
+          // Форматируем заголовок дня
+          var d = dateKey.split('-');
+          if (d.length === 3) {
+            var day = parseInt(d[2], 10);
+            var month = parseInt(d[1], 10) - 1;
+            var dateObj = new Date(d[0], month, day);
+            var dayName = SLOT_DAYS[dateObj.getDay()];
+            var dateStr = day + '.' + String(month + 1).padStart(2, '0') + ' (' + dayName + ')';
+            html += '<div class="day-block"><div class="day-title">' + dateStr + '</div>';
+          }
+          
+          daySlots.forEach(function(item) {
+            var s = item.slot;
+            var i = item.index;
+            html += '<button type="button" class="slot-card" data-slot-index="' + i + '">' +
+              '<span class="slot-time">' + (s.start_time || '') + '–' + (s.end_time || '') + '</span><span>→</span></button>';
+          });
+          
+          html += '</div>';
+        });
+        
+        list.innerHTML = html;
+        
         list.querySelectorAll('.slot-card').forEach(function(btn) {
           btn.onclick = function() {
             var i = parseInt(btn.dataset.slotIndex, 10);
             state.selectedSlot = state.slotsForTrainer[i];
             document.getElementById('bookingFormSlotLabel').textContent = 'Выбрано: ' + formatSlotLabel(state.selectedSlot);
-            document.getElementById('bookingPhone').value = '';
             document.getElementById('bookingComment').value = '';
-            showScreen('screenBookingForm');
+            refreshClientPhoneForBookingForm(function() {
+              prefillBookingPhoneField();
+              showScreen('screenBookingForm');
+            });
           };
         });
       }
@@ -1496,6 +2447,7 @@
           }
           function showInitialScreen() {
             if (state.cityId && state.serviceId) {
+              prefetchFirstPageIfNeeded();
               renderSummary();
               showScreen('screenSummary');
               switchTab(state.activeTab);
@@ -1531,7 +2483,84 @@
           loadCities();
           showScreen('screenCity');
         });
+
+      // Keep first-page prefetch hot while user is on summary and updates filters.
+      document.addEventListener('click', function(e) {
+        var actionBtn = e.target && e.target.closest && e.target.closest('#summaryRows .summary-row-clickable, #tabCatalog, #tabMyTrainer');
+        if (actionBtn) {
+          setTimeout(prefetchFirstPageIfNeeded, 0);
+        }
+      });
+      
+      // Функция для показа отзывов тренера
+      window.showTrainerReviews = function(trainerId) {
+        var modal = document.getElementById('reviewsModal');
+        var modalBody = document.getElementById('reviewsModalBody');
+        var modalTitle = document.getElementById('reviewsModalTitle');
+        
+        modalTitle.textContent = 'Отзывы о тренере';
+        modalBody.innerHTML = '<div class="reviews-loading">Загрузка отзывов...</div>';
+        modal.classList.add('show');
+        
+        // Публичный список отзывов (см. GET /api/public/trainers/{id}/reviews — items, review_text)
+        fetch('/api/public/trainers/' + encodeURIComponent(trainerId) + '/reviews')
+          .then(function(res) {
+            return res.json().then(function(data) {
+              if (!res.ok) throw new Error((data && data.detail) || res.statusText);
+              return data;
+            });
+          })
+          .then(function(data) {
+            var reviews = data.items || [];
+            if (reviews.length === 0) {
+              modalBody.innerHTML = '<div class="reviews-empty">У этого тренера пока нет отзывов</div>';
+              return;
+            }
+            
+            var html = '';
+            reviews.forEach(function(review) {
+              html += '<div class="review-item">';
+              html += '<div class="review-rating">⭐ ' + review.rating + '/5</div>';
+              var text = review.review_text || review.comment;
+              if (text) {
+                html += '<div class="review-text">' + escapeHtml(text) + '</div>';
+              }
+              if (review.created_at) {
+                var date = new Date(review.created_at).toLocaleDateString('ru-RU');
+                html += '<div class="review-date">' + date + '</div>';
+              }
+              html += '</div>';
+            });
+            modalBody.innerHTML = html;
+          })
+          .catch(function() {
+            modalBody.innerHTML = '<div class="reviews-empty">Не удалось загрузить отзывы</div>';
+          });
+      };
+      
+      // Закрытие модального окна
+      window.closeReviewsModal = function() {
+        document.getElementById('reviewsModal').classList.remove('show');
+      };
     })();
+  </script>
+  
+  <!-- Модальное окно отзывов -->
+  <div id="reviewsModal" class="reviews-modal" onclick="if(event.target === this) closeReviewsModal()">
+    <div class="reviews-modal-content">
+      <div class="reviews-modal-header">
+        <div id="reviewsModalTitle" class="reviews-modal-title">Отзывы</div>
+        <button type="button" class="reviews-modal-close" onclick="closeReviewsModal()">×</button>
+      </div>
+      <div id="reviewsModalBody" class="reviews-modal-body">
+        <!-- Контент отзывов -->
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Filter handlers are now initialized in initializeFilterHandlers() function
+    // which is called when trainers screen loads
   </script>
 </body>
 </html>

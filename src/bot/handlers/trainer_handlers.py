@@ -6,9 +6,9 @@ import asyncio
 from datetime import date, datetime, time, timedelta
 from itertools import groupby
 
-from aiogram import Bot, Router
+from aiogram import Bot, F, Router
 from aiogram.client.default import DefaultBotProperties
-from aiogram.enums import ParseMode
+from aiogram.enums import ChatAction, ParseMode
 from aiogram.filters import Command, CommandStart
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message, WebAppInfo
 
@@ -21,10 +21,12 @@ from src.application.booking_use_cases import (
     get_booking_for_trainer_feedback,
     get_booking_with_slot,
     get_first_service_id_for_trainer,
+    get_trainer_default_city_and_service,
     list_bookings_for_trainer,
     list_trainer_clients,
     set_booking_trainer_review,
 )
+from src.application.trainer_invite_links import build_trainer_invite_links
 from src.application.recurring_use_cases import (
     apply_recurring_bookings_for_week,
     cancel_recurring_client_slot,
@@ -40,11 +42,16 @@ from src.application.client_request_use_cases import (
     list_requests_for_trainer,
 )
 from src.application.stats_use_cases import get_trainer_stats
-from src.application.subscription_use_cases import get_active_subscription
-from src.application.trainer_link import consume_link_token, get_trainer_by_telegram_id, get_trainer_id_by_telegram_id
+from src.application.subscription_tier_use_cases import (
+    get_effective_subscription_tier,
+    get_trainer_subscription_status,
+    tier_satisfies,
+)
+from src.application.trainer_access_state import TrainerAccessState, get_trainer_access_state
+from src.application.trainer_link import consume_link_token, get_trainer_id_by_telegram_id
 from src.application.trainer_use_cases import get_trainer
 from src.application.support_use_cases import create_support_message
-from src.infrastructure.db.models import SUPPORT_FROM_TRAINER
+from src.infrastructure.db.models import SUBSCRIPTION_TIER_ANALYTICS, SUBSCRIPTION_TIER_CRM, SUPPORT_FROM_TRAINER
 from src.shared.audit import ACTOR_TRAINER_BOT, audit_log
 from src.shared.validation import MAX_COMMENT_LEN, MAX_REVIEW_LEN, safe_parse_id, truncate_text
 from src.application.trainer_schedule_use_cases import (
@@ -61,6 +68,9 @@ from src.application.trainer_schedule_use_cases import (
     this_week_monday,
 )
 from src.bot import messages as msg
+from src.bot.trainer_bot_state import trainer_support_awaiting
+from src.bot.trainer_gate_text import trainer_gate_message
+from src.bot.trainer_menu_commands import sync_trainer_menu_commands
 from src.shared.config import Settings
 from src.shared.notification_hours import NOTIFICATION_TZ
 
@@ -70,9 +80,15 @@ except ImportError:
     from backports.zoneinfo import ZoneInfo  # type: ignore[no-redef]
 from src.bot.schedule_notifications import run_after_schedule_changed
 from src.infrastructure.db import async_session_factory
-from src.shared.config import Settings
 
 router = Router(name="trainer")
+
+
+async def _trainer_has_crm_subscription(session, trainer_id: int) -> bool:
+    """True if trainer has an active paid tier at least CRM (schedule, clients, passes)."""
+    tier = await get_effective_subscription_tier(session, trainer_id)
+    return tier_satisfies(tier, SUBSCRIPTION_TIER_CRM)
+
 
 START_LINK_PREFIX = "link_"
 SCHEDULE_CALLBACK = "schedule"
@@ -117,7 +133,46 @@ REQUEST_BOOK_SLOT_PREFIX = "request_book_slot:"
 FEEDBACK_BOOKING_TRAINER_PREFIX = "feedback_booking_trainer:"
 GUIDE_CALLBACK = "guide"
 TRAINER_SUPPORT_CALLBACK = "trainer:support"
-_trainer_support_awaiting: set[int] = set()
+TRAINER_INVITE_CALLBACK = "trainer:invite"
+
+# Human-readable trainer.status (aligned with admin TRAINER_STATUS_LABELS)
+_TRAINER_STATUS_LABELS = {
+    "pending_profile": "На модерации / черновик",
+    "pending_contract": "Ожидает договор",
+    "pending_payment": "Ожидает оплату",
+    "active": "Активен",
+    "deactivated": "Деактивирован",
+}
+
+
+def _trainer_profile_webapp_url() -> str | None:
+    base = (Settings().webapp_base_url or "").rstrip("/")
+    if base.lower().startswith("https://"):
+        return f"{base}/webapp/trainer-profile"
+    return None
+
+
+def _trainer_profile_keyboard() -> InlineKeyboardMarkup | None:
+    url = _trainer_profile_webapp_url()
+    if not url:
+        return None
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=msg.TRAINER_PROFILE_BTN_MINI_APP, web_app=WebAppInfo(url=url))],
+        ]
+    )
+
+
+def _trainer_profile_footer_hint() -> str:
+    """Extra copy under status card: HTTPS Mini App hint, or HTTPS missing + optional site URL."""
+    base = (Settings().webapp_base_url or "").rstrip("/")
+    if base.lower().startswith("https://"):
+        return "\n\n" + msg.TRAINER_PROFILE_MINI_APP_HINT
+    lines = ["\n\n" + msg.TRAINER_PROFILE_HTTPS_REQUIRED]
+    if base:
+        lines.append("\n" + msg.TRAINER_PROFILE_SITE_HINT.format(url=base))
+    return "".join(lines)
+
 
 # Add state: telegram_id -> { week_start?: str (YYYY-MM-DD), day: int, hours: set[int] }. No week_start = template.
 _schedule_add_state: dict[int, dict] = {}
@@ -127,6 +182,11 @@ _trainer_feedback_state: dict[int, dict] = {}
 _request_respond_state: dict[int, int] = {}
 # Trainer declining booking: telegram_id -> booking_id (awaiting required comment)
 _booking_decline_state: dict[int, int] = {}
+
+
+async def _trainer_typing(bot: Bot, chat_id: int) -> None:
+    """Typing indicator while DB or heavy work runs (constitution § VII)."""
+    await bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
 
 
 def _format_time(t) -> str:
@@ -172,7 +232,7 @@ async def _schedule_keyboard(trainer_id: int) -> tuple[str, InlineKeyboardMarkup
 
     base = (Settings().webapp_base_url or "").rstrip("/")
     if base and base.lower().startswith("https://"):
-        schedule_row = [InlineKeyboardButton(text=msg.TRAINER_BUTTON_MY_SLOTS, web_app=WebAppInfo(url=f"{base}/webapp/schedule"))]
+        schedule_row = [InlineKeyboardButton(text=msg.TRAINER_BUTTON_MY_SLOTS, web_app=WebAppInfo(url=f"{base}/webapp/schedule-editor"))]
     else:
         schedule_row = [InlineKeyboardButton(text=msg.TRAINER_BUTTON_MY_SLOTS, callback_data=SLOTS_CALLBACK)]
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
@@ -187,6 +247,7 @@ async def _schedule_keyboard(trainer_id: int) -> tuple[str, InlineKeyboardMarkup
 
 @router.message(CommandStart())
 async def cmd_start(message: Message) -> None:
+    await _trainer_typing(message.bot, message.chat.id)
     user_id = message.from_user.id if message.from_user else 0
     text = message.text or ""
     args = text.split(maxsplit=1)
@@ -197,32 +258,146 @@ async def cmd_start(message: Message) -> None:
             trainer_id = await consume_link_token(session, token, user_id, telegram_username=username)
             if trainer_id is not None:
                 audit_log("trainer.linked", ACTOR_TRAINER_BOT, user_id, {"trainer_id": trainer_id})
-                await message.answer(msg.TRAINER_LINK_SUCCESS)
+                state, trainer = await get_trainer_access_state(session, user_id)
+                if state == TrainerAccessState.ACTIVE:
+                    await message.answer(msg.TRAINER_LINK_SUCCESS_ACTIVE)
+                else:
+                    await message.answer(msg.TRAINER_LINK_SUCCESS)
+                    await message.answer(trainer_gate_message(state, trainer))
+                if state == TrainerAccessState.ACTIVE:
+                    await sync_trainer_menu_commands(message.bot, message.chat.id, trainer_id, session)
             else:
                 await message.answer(msg.TRAINER_LINK_INVALID)
             return
-        is_trainer = await get_trainer_by_telegram_id(session, user_id)
-    if not is_trainer:
+        state, trainer = await get_trainer_access_state(session, user_id)
+    if state == TrainerAccessState.NOT_LINKED:
         await message.answer(msg.TRAINER_ONLY_VIA_SITE)
         return
-    await message.answer(msg.TRAINER_START_WELCOME)
+    if state == TrainerAccessState.ACTIVE:
+        await message.answer(msg.TRAINER_START_WELCOME)
+        async with async_session_factory() as session:
+            tid = await get_trainer_id_by_telegram_id(session, user_id)
+            if tid:
+                await sync_trainer_menu_commands(message.bot, message.chat.id, tid, session)
+        return
+    await message.answer(trainer_gate_message(state, trainer))
 
 
 def _trainer_guide_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="💬 Написать в поддержку", callback_data=TRAINER_SUPPORT_CALLBACK)],
-    ])
+    rows: list[list[InlineKeyboardButton]] = []
+    profile_url = _trainer_profile_webapp_url()
+    if profile_url:
+        rows.append(
+            [InlineKeyboardButton(text=msg.TRAINER_PROFILE_BTN_MINI_APP, web_app=WebAppInfo(url=profile_url))]
+        )
+    rows.append([InlineKeyboardButton(text=msg.TRAINER_INVITE_BUTTON, callback_data=TRAINER_INVITE_CALLBACK)])
+    rows.append([InlineKeyboardButton(text="💬 Написать в поддержку", callback_data=TRAINER_SUPPORT_CALLBACK)])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 @router.message(Command("guide"))
 async def cmd_guide(message: Message) -> None:
     """Show help (Помощь) and support button."""
+    await _trainer_typing(message.bot, message.chat.id)
+    uid = message.from_user.id if message.from_user else 0
     async with async_session_factory() as session:
-        trainer_id = await get_trainer_id_by_telegram_id(session, message.from_user.id if message.from_user else 0)
-    if not trainer_id:
+        state, _ = await get_trainer_access_state(session, uid)
+    if state == TrainerAccessState.NOT_LINKED:
         await message.answer(msg.TRAINER_ONLY_VIA_SITE)
         return
     await message.answer(msg.TRAINER_GUIDE, reply_markup=_trainer_guide_keyboard())
+
+
+async def _send_trainer_invite_package(chat_message: Message, telegram_id: int) -> None:
+    """Two messages: HTML intro + plain text block the trainer can forward to clients."""
+    settings = Settings()
+    async with async_session_factory() as session:
+        trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+        if not trainer_id:
+            await chat_message.answer(msg.TRAINER_ONLY_VIA_SITE)
+            return
+        city_id, service_id = await get_trainer_default_city_and_service(session, trainer_id)
+    links, err = build_trainer_invite_links(
+        webapp_base_url=settings.webapp_base_url,
+        client_bot_username=settings.client_bot_username,
+        city_id=city_id,
+        service_id=service_id,
+        trainer_id=trainer_id,
+    )
+    if err == "missing_username":
+        await chat_message.answer(msg.TRAINER_INVITE_ERR_NO_CLIENT_BOT_USERNAME)
+        return
+    if err == "missing_city_or_service":
+        await chat_message.answer(msg.TRAINER_INVITE_ERR_PROFILE_INCOMPLETE)
+        return
+    assert links is not None
+    if links.catalog_page_url:
+        plain = msg.TRAINER_INVITE_PLAIN_CLIENT_WITH_CATALOG.format(
+            deep_link=links.client_bot_deep_link,
+            catalog_url=links.catalog_page_url,
+        )
+    else:
+        plain = msg.TRAINER_INVITE_PLAIN_CLIENT_NO_CATALOG.format(deep_link=links.client_bot_deep_link)
+    await chat_message.answer(msg.TRAINER_INVITE_INTRO_HTML)
+    await chat_message.answer(plain, parse_mode=None)
+
+
+@router.message(Command("profile"))
+async def cmd_profile(message: Message) -> None:
+    """Status card + single Web App entry to trainer-profile Mini App (HTTPS)."""
+    await _trainer_typing(message.bot, message.chat.id)
+    uid = message.from_user.id if message.from_user else 0
+    async with async_session_factory() as session:
+        state, trainer = await get_trainer_access_state(session, uid)
+    if state == TrainerAccessState.NOT_LINKED or not trainer:
+        await message.answer(msg.TRAINER_ONLY_VIA_SITE)
+        return
+    tid = trainer["id"]
+    raw_status = (trainer.get("status") or "").strip()
+    status_label = _TRAINER_STATUS_LABELS.get(raw_status, raw_status or "—")
+    if state == TrainerAccessState.ACTIVE:
+        gate_hint = msg.TRAINER_PROFILE_ACTIVE_HINT
+    else:
+        gate_hint = trainer_gate_message(state, trainer)
+    text = msg.TRAINER_PROFILE_CARD.format(
+        trainer_id=tid,
+        status_label=status_label,
+        gate_hint=gate_hint + _trainer_profile_footer_hint(),
+    )
+    await message.answer(text, reply_markup=_trainer_profile_keyboard())
+
+
+@router.message(Command("myprofile"))
+async def cmd_myprofile(message: Message) -> None:
+    """Alias for profile entry: Mini App button (no FSM wizard)."""
+    await _trainer_typing(message.bot, message.chat.id)
+    uid = message.from_user.id if message.from_user else 0
+    async with async_session_factory() as session:
+        state, trainer = await get_trainer_access_state(session, uid)
+    if state == TrainerAccessState.NOT_LINKED or not trainer:
+        await message.answer(msg.TRAINER_ONLY_VIA_SITE)
+        return
+    kb = _trainer_profile_keyboard()
+    if kb:
+        await message.answer(msg.TRAINER_MYPROFILE_INTRO, reply_markup=kb)
+        return
+    base = (Settings().webapp_base_url or "").rstrip("/")
+    extra = "\n\n" + msg.TRAINER_PROFILE_SITE_HINT.format(url=base) if base else ""
+    await message.answer(msg.TRAINER_PROFILE_HTTPS_REQUIRED + extra)
+
+
+@router.callback_query(F.data.startswith("profwiz:"))
+async def on_profwiz_deprecated(callback: CallbackQuery) -> None:
+    """Legacy inline buttons from old chat wizard → point to Mini App."""
+    await callback.answer()
+    if not callback.message:
+        return
+    await _trainer_typing(callback.bot, callback.message.chat.id)
+    kb = _trainer_profile_keyboard()
+    if kb:
+        await callback.message.answer(msg.TRAINER_PROFILE_WIZARD_DEPRECATED, reply_markup=kb)
+    else:
+        await callback.message.answer(msg.TRAINER_PROFILE_HTTPS_REQUIRED)
 
 
 def _format_slot_time(st, et) -> str:
@@ -251,7 +426,7 @@ def _schedule_webapp_keyboard(
 ) -> InlineKeyboardMarkup:
     """Keyboard with Web App 'Open schedule' button; optionally Create booking and Back rows. Web App only if HTTPS (Telegram requirement)."""
     base = (Settings().webapp_base_url or "").rstrip("/")
-    url = f"{base}/webapp/schedule" if base else ""
+    url = f"{base}/webapp/schedule-editor" if base else ""
     rows = []
     if url and base.lower().startswith("https://"):
         rows.append([
@@ -329,12 +504,19 @@ async def _slots_content(trainer_id: int) -> tuple[str, InlineKeyboardMarkup | N
 @router.message(Command("editor"))
 async def cmd_editor(message: Message) -> None:
     """Open schedule editor: Mini App (HTTPS) or chat keyboard with template + add/apply."""
+    await _trainer_typing(message.bot, message.chat.id)
     telegram_id = message.from_user.id if message.from_user else 0
     async with async_session_factory() as session:
         trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
-    if not trainer_id:
-        await message.answer(msg.TRAINER_ONLY_VIA_SITE)
-        return
+        if not trainer_id:
+            await message.answer(msg.TRAINER_ONLY_VIA_SITE)
+            return
+        if not await _trainer_has_crm_subscription(session, trainer_id):
+            await message.answer(
+                msg.TRAINER_TIER_REQUIRED_CRM + "\n\n" + msg.TRAINER_TIER_CTA,
+                parse_mode=ParseMode.HTML,
+            )
+            return
     base = (Settings().webapp_base_url or "").rstrip("/")
     if base.startswith("https://"):
         url = f"{base}/webapp/schedule-editor"
@@ -342,7 +524,7 @@ async def cmd_editor(message: Message) -> None:
             [InlineKeyboardButton(text=msg.TRAINER_BUTTON_SCHEDULE, web_app=WebAppInfo(url=url))],
         ])
         await message.answer(
-            "Откройте расписание — шаблон недели, календарь слотов и применение на неделю. По клику на свободный слот можно записать клиента.",
+            msg.TRAINER_EDITOR_OPEN_HINT,
             reply_markup=kb,
         )
         return
@@ -547,37 +729,54 @@ async def _requests_content(
 
 @router.message(Command("bookings"))
 async def cmd_bookings(message: Message) -> None:
-    """Open 'Мои записи' from menu: Mini App (HTTPS) or chat list."""
+    """Legacy /bookings: same Mini App as «Моё расписание» (HTTPS) or inline list without Web App."""
+    await _trainer_typing(message.bot, message.chat.id)
     telegram_id = message.from_user.id if message.from_user else 0
     async with async_session_factory() as session:
         trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
-    if not trainer_id:
-        await message.answer(msg.TRAINER_ONLY_VIA_SITE)
-        return
+        if not trainer_id:
+            await message.answer(msg.TRAINER_ONLY_VIA_SITE)
+            return
+        if not await _trainer_has_crm_subscription(session, trainer_id):
+            await message.answer(
+                msg.TRAINER_TIER_REQUIRED_CRM + "\n\n" + msg.TRAINER_TIER_CTA,
+                parse_mode=ParseMode.HTML,
+            )
+            return
     base = (Settings().webapp_base_url or "").rstrip("/")
     if base.startswith("https://"):
-        url = f"{base}/webapp/trainer-bookings"
+        url = f"{base}/webapp/schedule-editor"
         kb = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text=msg.TRAINER_BUTTON_MY_BOOKINGS, web_app=WebAppInfo(url=url))],
         ])
-        await message.answer("Откройте список записей — там можно подтверждать, отменять и писать клиентам.", reply_markup=kb)
+        await message.answer(msg.TRAINER_BOOKINGS_OPEN_WEBAPP, reply_markup=kb)
         return
     text, keyboard = await _bookings_content(trainer_id)
-    await message.answer(text, reply_markup=keyboard)
+    await message.answer(
+        msg.TRAINER_BOOKINGS_CHAT_MODE_INTRO + "\n\n" + text,
+        reply_markup=keyboard,
+    )
 
 
 @router.message(Command("clients"))
 async def cmd_clients(message: Message) -> None:
     """Open 'Мои клиенты' Mini App for trainer (HTTPS only)."""
+    await _trainer_typing(message.bot, message.chat.id)
     telegram_id = message.from_user.id if message.from_user else 0
     async with async_session_factory() as session:
         trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
-    if not trainer_id:
-        await message.answer(msg.TRAINER_ONLY_VIA_SITE)
-        return
+        if not trainer_id:
+            await message.answer(msg.TRAINER_ONLY_VIA_SITE)
+            return
+        if not await _trainer_has_crm_subscription(session, trainer_id):
+            await message.answer(
+                msg.TRAINER_TIER_REQUIRED_CRM + "\n\n" + msg.TRAINER_TIER_CTA,
+                parse_mode=ParseMode.HTML,
+            )
+            return
     base = (Settings().webapp_base_url or "").rstrip("/")
     if not base or not base.startswith("https://"):
-        await message.answer("Раздел «Мои клиенты» доступен в продакшене по HTTPS (нужен WEBAPP_BASE_URL).")
+        await message.answer(msg.TRAINER_CLIENTS_HTTPS_REQUIRED)
         return
     url = f"{base}/webapp/trainer-clients"
     kb = InlineKeyboardMarkup(
@@ -585,18 +784,25 @@ async def cmd_clients(message: Message) -> None:
             [InlineKeyboardButton(text=msg.TRAINER_BUTTON_CLIENTS, web_app=WebAppInfo(url=url))],
         ]
     )
-    await message.answer("Откройте список клиентов с записями: там видно телефон и последнее занятие.", reply_markup=kb)
+    await message.answer(msg.TRAINER_CLIENTS_OPEN_WEBAPP, reply_markup=kb)
 
 
 @router.message(Command("requests"))
 async def cmd_requests(message: Message) -> None:
     """Open 'Заявки клиентов' from menu: Mini App (HTTPS) or chat list."""
+    await _trainer_typing(message.bot, message.chat.id)
     telegram_id = message.from_user.id if message.from_user else 0
     async with async_session_factory() as session:
         trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
-    if not trainer_id:
-        await message.answer(msg.TRAINER_ONLY_VIA_SITE)
-        return
+        if not trainer_id:
+            await message.answer(msg.TRAINER_ONLY_VIA_SITE)
+            return
+        if not await _trainer_has_crm_subscription(session, trainer_id):
+            await message.answer(
+                msg.TRAINER_TIER_REQUIRED_CRM + "\n\n" + msg.TRAINER_TIER_CTA,
+                parse_mode=ParseMode.HTML,
+            )
+            return
     base = (Settings().webapp_base_url or "").rstrip("/")
     if base.startswith("https://"):
         url = f"{base}/webapp/trainer-requests"
@@ -604,7 +810,7 @@ async def cmd_requests(message: Message) -> None:
             [InlineKeyboardButton(text=msg.TRAINER_BUTTON_REQUESTS, web_app=WebAppInfo(url=url))],
         ])
         await message.answer(
-            "Откройте «Заявки клиентов» — там можно откликнуться, записать клиента на слот или отклонить заявку.",
+            msg.TRAINER_REQUESTS_OPEN_WEBAPP,
             reply_markup=kb,
         )
         return
@@ -619,20 +825,27 @@ def _format_stats_date(d: date) -> str:
 @router.message(Command("stats"))
 async def cmd_stats(message: Message) -> None:
     """Open stats Mini App (HTTPS) or show text statistics."""
+    await _trainer_typing(message.bot, message.chat.id)
     telegram_id = message.from_user.id if message.from_user else 0
+    base = (Settings().webapp_base_url or "").rstrip("/")
     async with async_session_factory() as session:
         trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
-    if not trainer_id:
-        await message.answer(msg.TRAINER_ONLY_VIA_SITE)
-        return
-    base = (Settings().webapp_base_url or "").rstrip("/")
-    if base.startswith("https://"):
-        kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text=msg.TRAINER_BUTTON_STATS_APP, web_app=WebAppInfo(url=f"{base}/webapp/trainer-stats"))],
-        ])
-        await message.answer(msg.TRAINER_STATS_OPEN_APP, reply_markup=kb)
-        return
-    async with async_session_factory() as session:
+        if not trainer_id:
+            await message.answer(msg.TRAINER_ONLY_VIA_SITE)
+            return
+        tier = await get_effective_subscription_tier(session, trainer_id)
+        if not tier_satisfies(tier, SUBSCRIPTION_TIER_ANALYTICS):
+            await message.answer(
+                msg.TRAINER_TIER_REQUIRED_ANALYTICS + "\n\n" + msg.TRAINER_TIER_CTA,
+                parse_mode=ParseMode.HTML,
+            )
+            return
+        if base.startswith("https://"):
+            kb = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text=msg.TRAINER_BUTTON_STATS_APP, web_app=WebAppInfo(url=f"{base}/webapp/trainer-stats"))],
+            ])
+            await message.answer(msg.TRAINER_STATS_OPEN_APP, reply_markup=kb)
+            return
         s = await get_trainer_stats(session, trainer_id)
     parts = [msg.TRAINER_STATS_TITLE]
     parts.append(
@@ -686,28 +899,47 @@ async def cmd_stats(message: Message) -> None:
 @router.message(Command("passes"))
 async def cmd_passes(message: Message) -> None:
     """Open pass products Mini App (HTTPS) or hint to use app."""
+    await _trainer_typing(message.bot, message.chat.id)
     telegram_id = message.from_user.id if message.from_user else 0
     async with async_session_factory() as session:
         trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
-    if not trainer_id:
-        await message.answer(msg.TRAINER_ONLY_VIA_SITE)
-        return
+        if not trainer_id:
+            await message.answer(msg.TRAINER_ONLY_VIA_SITE)
+            return
+        if not await _trainer_has_crm_subscription(session, trainer_id):
+            await message.answer(
+                msg.TRAINER_TIER_REQUIRED_CRM + "\n\n" + msg.TRAINER_TIER_CTA,
+                parse_mode=ParseMode.HTML,
+            )
+            return
     base = (Settings().webapp_base_url or "").rstrip("/")
     if base.startswith("https://"):
         kb = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text=msg.TRAINER_BUTTON_PASSES, web_app=WebAppInfo(url=f"{base}/webapp/trainer-pass-products"))],
         ])
         await message.answer(
-            "Настройте абонементы (N занятий за цену) и сертификаты (номинал на сумму или «любая сумма»). Клиенты видят это в карточке тренера.",
+            msg.TRAINER_PASSES_INTRO_WEBAPP,
             reply_markup=kb,
         )
         return
-    await message.answer("Откройте приложение по ссылке с HTTPS (например, в продакшене) для настройки абонементов.")
+    await message.answer(msg.TRAINER_PASSES_HTTPS_REQUIRED)
+
+
+def _subscription_tier_name_ru(tier: str) -> str:
+    return {"crm": "CRM", "online": "Онлайн-запись", "analytics": "Аналитика"}.get(tier, tier)
+
+
+def _format_iso_date_ru(iso: str | None) -> str:
+    if not iso or len(iso) < 10:
+        return "—"
+    y, m, d = iso[:10].split("-")
+    return f"{d}.{m}.{y}"
 
 
 @router.message(Command("subscription"))
 async def cmd_subscription(message: Message) -> None:
-    """Show subscription status and 'Оплатить подписку' button (Web App to payment flow)."""
+    """Краткий статус подписки + мини-приложение тарифов."""
+    await _trainer_typing(message.bot, message.chat.id)
     telegram_id = message.from_user.id if message.from_user else 0
     async with async_session_factory() as session:
         trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
@@ -715,38 +947,44 @@ async def cmd_subscription(message: Message) -> None:
         await message.answer(msg.TRAINER_ONLY_VIA_SITE)
         return
     base = (Settings().webapp_base_url or "").rstrip("/")
-    pay_url = f"{base}/webapp/trainer-pay-subscription" if base and base.startswith("https://") else None
+    constructor_url = f"{base}/webapp/trainer-subscription" if base and base.startswith("https://") else None
     async with async_session_factory() as session:
-        sub = await get_active_subscription(session, trainer_id)
-    if sub:
-        expires_at = sub.get("expires_at") or ""
-        if isinstance(expires_at, str) and len(expires_at) >= 10:
-            y, m, d = expires_at[:10].split("-")
-            expires_date = f"{d}.{m}.{y}"
-        elif hasattr(expires_at, "strftime"):
-            expires_date = expires_at.strftime("%d.%m.%Y")
+        tier_status = await get_trainer_subscription_status(session, trainer_id)
+        eff = (tier_status.get("effective_tier") or "none").strip().lower()
+        if eff != "none" and tier_status.get("is_active") and tier_status.get("expires_at"):
+            expires_date = _format_iso_date_ru(tier_status.get("expires_at"))
+            text = msg.TRAINER_SUBSCRIPTION_WITH_TIER.format(
+                tier_name=_subscription_tier_name_ru(eff),
+                expires_date=expires_date,
+            )
         else:
-            expires_date = str(expires_at)[:10]
-        text = msg.TRAINER_SUBSCRIPTION_ACTIVE.format(expires_date=expires_date)
-    else:
-        text = msg.TRAINER_SUBSCRIPTION_EXPIRED
-    kb = None
-    if pay_url:
-        kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text=msg.TRAINER_BUTTON_PAY_SUBSCRIPTION, web_app=WebAppInfo(url=pay_url))],
-        ])
+            text = msg.TRAINER_SUBSCRIPTION_WITHOUT_TIER
+        rows: list[list[InlineKeyboardButton]] = []
+        if constructor_url:
+            rows.append(
+                [InlineKeyboardButton(text=msg.TRAINER_BUTTON_SUBSCRIPTION_CONSTRUCTOR, web_app=WebAppInfo(url=constructor_url))]
+            )
+        kb = InlineKeyboardMarkup(inline_keyboard=rows) if rows else None
+        await sync_trainer_menu_commands(message.bot, message.chat.id, trainer_id, session)
     await message.answer(text, reply_markup=kb, parse_mode=ParseMode.HTML)
 
 
 @router.callback_query(lambda c: c.data == SCHEDULE_CALLBACK)
 async def show_schedule(callback: CallbackQuery) -> None:
     await callback.answer()
+    await _trainer_typing(callback.bot, callback.message.chat.id)
     telegram_id = callback.from_user.id if callback.from_user else 0
     async with async_session_factory() as session:
         trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
-    if not trainer_id:
-        await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
-        return
+        if not trainer_id:
+            await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
+            return
+        if not await _trainer_has_crm_subscription(session, trainer_id):
+            await callback.message.answer(
+                msg.TRAINER_TIER_REQUIRED_CRM + "\n\n" + msg.TRAINER_TIER_CTA,
+                parse_mode=ParseMode.HTML,
+            )
+            return
     text, keyboard = await _schedule_keyboard(trainer_id)
     await callback.message.edit_text(text, reply_markup=keyboard)
 
@@ -755,12 +993,19 @@ async def show_schedule(callback: CallbackQuery) -> None:
 async def show_slots_from_schedule(callback: CallbackQuery) -> None:
     """Open applied-slots view from schedule screen; add Back to schedule."""
     await callback.answer()
+    await _trainer_typing(callback.bot, callback.message.chat.id)
     telegram_id = callback.from_user.id if callback.from_user else 0
     async with async_session_factory() as session:
         trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
-    if not trainer_id:
-        await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
-        return
+        if not trainer_id:
+            await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
+            return
+        if not await _trainer_has_crm_subscription(session, trainer_id):
+            await callback.message.answer(
+                msg.TRAINER_TIER_REQUIRED_CRM + "\n\n" + msg.TRAINER_TIER_CTA,
+                parse_mode=ParseMode.HTML,
+            )
+            return
     text, _ = await _slots_content(trainer_id)
     await callback.message.edit_text(
         text,
@@ -772,12 +1017,19 @@ async def show_slots_from_schedule(callback: CallbackQuery) -> None:
 async def schedule_create_booking_start(callback: CallbackQuery) -> None:
     """Trainer wants to create a booking from schedule: choose future free slot first."""
     await callback.answer()
+    await _trainer_typing(callback.bot, callback.message.chat.id)
     telegram_id = callback.from_user.id if callback.from_user else 0
     async with async_session_factory() as session:
         trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
-    if not trainer_id:
-        await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
-        return
+        if not trainer_id:
+            await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
+            return
+        if not await _trainer_has_crm_subscription(session, trainer_id):
+            await callback.message.answer(
+                msg.TRAINER_TIER_REQUIRED_CRM + "\n\n" + msg.TRAINER_TIER_CTA,
+                parse_mode=ParseMode.HTML,
+            )
+            return
     now = datetime.now()
     cutoff = now + timedelta(hours=2)
     from_date = cutoff.date()
@@ -894,7 +1146,7 @@ async def schedule_create_booking_finalize(callback: CallbackQuery) -> None:
     async with async_session_factory() as session:
         service_id = await get_first_service_id_for_trainer(session, trainer_id)
         if not service_id:
-            await callback.message.answer("У вас не указана ни одна услуга. Добавьте услугу в профиле.")
+            await callback.message.answer(msg.TRAINER_ERROR_NO_SERVICES)
             return
         booking_id = await create_booking(
             session,
@@ -931,12 +1183,19 @@ async def schedule_create_booking_finalize(callback: CallbackQuery) -> None:
 async def show_bookings(callback: CallbackQuery) -> None:
     """List = buttons: one per booking (page 0)."""
     await callback.answer()
+    await _trainer_typing(callback.bot, callback.message.chat.id)
     telegram_id = callback.from_user.id if callback.from_user else 0
     async with async_session_factory() as session:
         trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
-    if not trainer_id:
-        await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
-        return
+        if not trainer_id:
+            await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
+            return
+        if not await _trainer_has_crm_subscription(session, trainer_id):
+            await callback.message.answer(
+                msg.TRAINER_TIER_REQUIRED_CRM + "\n\n" + msg.TRAINER_TIER_CTA,
+                parse_mode=ParseMode.HTML,
+            )
+            return
     text, keyboard = await _bookings_content(trainer_id, page=0)
     await callback.message.edit_text(text, reply_markup=keyboard)
 
@@ -945,15 +1204,22 @@ async def show_bookings(callback: CallbackQuery) -> None:
 async def show_bookings_page(callback: CallbackQuery) -> None:
     """Pagination: show bookings list for given page."""
     await callback.answer()
+    await _trainer_typing(callback.bot, callback.message.chat.id)
     page = safe_parse_id(callback.data[len(BOOKINGS_PAGE_PREFIX):])
     if page is None or page < 0:
         page = 0
     telegram_id = callback.from_user.id if callback.from_user else 0
     async with async_session_factory() as session:
         trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
-    if not trainer_id:
-        await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
-        return
+        if not trainer_id:
+            await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
+            return
+        if not await _trainer_has_crm_subscription(session, trainer_id):
+            await callback.message.answer(
+                msg.TRAINER_TIER_REQUIRED_CRM + "\n\n" + msg.TRAINER_TIER_CTA,
+                parse_mode=ParseMode.HTML,
+            )
+            return
     text, keyboard = await _bookings_content(trainer_id, page=page)
     await callback.message.edit_text(text, reply_markup=keyboard)
 
@@ -1341,12 +1607,19 @@ async def on_request_respond_comment_message(message: Message) -> None:
 async def show_requests(callback: CallbackQuery) -> None:
     """Open requests list: Новые / В работе, page 0."""
     await callback.answer()
+    await _trainer_typing(callback.bot, callback.message.chat.id)
     telegram_id = callback.from_user.id if callback.from_user else 0
     async with async_session_factory() as session:
         trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
-    if not trainer_id:
-        await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
-        return
+        if not trainer_id:
+            await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
+            return
+        if not await _trainer_has_crm_subscription(session, trainer_id):
+            await callback.message.answer(
+                msg.TRAINER_TIER_REQUIRED_CRM + "\n\n" + msg.TRAINER_TIER_CTA,
+                parse_mode=ParseMode.HTML,
+            )
+            return
     text, keyboard = await _requests_content(trainer_id)
     await callback.message.edit_text(text, reply_markup=keyboard)
 
@@ -1355,6 +1628,7 @@ async def show_requests(callback: CallbackQuery) -> None:
 async def show_requests_page(callback: CallbackQuery) -> None:
     """Pagination: callback_data = requests_page:offset."""
     await callback.answer()
+    await _trainer_typing(callback.bot, callback.message.chat.id)
     suffix = callback.data[len(REQUESTS_PAGE_PREFIX):].strip()
     offset = safe_parse_id(suffix) if suffix else 0
     if offset is None or offset < 0:
@@ -1362,9 +1636,15 @@ async def show_requests_page(callback: CallbackQuery) -> None:
     telegram_id = callback.from_user.id if callback.from_user else 0
     async with async_session_factory() as session:
         trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
-    if not trainer_id:
-        await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
-        return
+        if not trainer_id:
+            await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
+            return
+        if not await _trainer_has_crm_subscription(session, trainer_id):
+            await callback.message.answer(
+                msg.TRAINER_TIER_REQUIRED_CRM + "\n\n" + msg.TRAINER_TIER_CTA,
+                parse_mode=ParseMode.HTML,
+            )
+            return
     text, keyboard = await _requests_content(trainer_id, offset=offset)
     await callback.message.edit_text(text, reply_markup=keyboard)
 
@@ -1373,6 +1653,7 @@ async def show_requests_page(callback: CallbackQuery) -> None:
 async def show_request_detail(callback: CallbackQuery) -> None:
     """Tap-to-expand: one request detail + Готов взять / Вы откликнулись + К списку."""
     await callback.answer()
+    await _trainer_typing(callback.bot, callback.message.chat.id)
     raw = callback.data[len(REQUEST_DETAIL_PREFIX):]
     request_id = safe_parse_id(raw)
     if request_id is None:
@@ -1387,7 +1668,7 @@ async def show_request_detail(callback: CallbackQuery) -> None:
         requests_list = await list_requests_for_trainer(session, trainer_id)
     req = next((r for r in requests_list if r["id"] == request_id), None)
     if not req:
-        await callback.message.answer("Заявка не найдена или уже закрыта.")
+        await callback.message.answer(msg.TRAINER_ERROR_REQUEST_GONE)
         return
     text = _request_detail_text(req)
     if req.get("has_responded"):
@@ -1511,6 +1792,7 @@ async def on_request_remind_slots(callback: CallbackQuery) -> None:
 async def on_request_book_client(callback: CallbackQuery) -> None:
     """Trainer taps 'Записать клиента': show available slots for next 2 weeks, link to request."""
     await callback.answer()
+    await _trainer_typing(callback.bot, callback.message.chat.id)
     request_id = safe_parse_id(callback.data[len(REQUEST_BOOK_CLIENT_PREFIX):])
     if request_id is None:
         return
@@ -1523,7 +1805,7 @@ async def on_request_book_client(callback: CallbackQuery) -> None:
     async with async_session_factory() as session:
         client_info = await get_request_client_for_trainer_booking(session, request_id, trainer_id)
     if not client_info:
-        await callback.message.answer("Заявка не найдена или уже закрыта.")
+        await callback.message.answer(msg.TRAINER_ERROR_REQUEST_GONE)
         return
     today = date.today()
     to_date = today + timedelta(days=14)
@@ -1531,7 +1813,7 @@ async def on_request_book_client(callback: CallbackQuery) -> None:
         slots = await list_slots(session, trainer_id, today, to_date)
     available = [s for s in slots if (s.get("status") or "") == "available"]
     if not available:
-        await callback.message.answer("Нет свободных слотов на ближайшие 2 недели. Добавьте слоты в разделе «Расписание».")
+        await callback.message.answer(msg.TRAINER_REQUEST_BOOK_NO_SLOTS_TWO_WEEKS)
         return
     rows = []
     for s in available:
@@ -1556,12 +1838,12 @@ async def on_request_book_slot(callback: CallbackQuery) -> None:
     payload = callback.data[len(REQUEST_BOOK_SLOT_PREFIX):].strip()
     parts = payload.split(":")
     if len(parts) != 2:
-        await callback.message.answer("Ошибка. Попробуйте снова из списка заявок.")
+        await callback.message.answer(msg.TRAINER_ERROR_REQUEST_BOOK_PAYLOAD)
         return
     slot_id = safe_parse_id(parts[0])
     request_id = safe_parse_id(parts[1])
     if slot_id is None or request_id is None:
-        await callback.message.answer("Ошибка. Попробуйте снова.")
+        await callback.message.answer(msg.TRAINER_ERROR_REQUEST_BOOK_PAYLOAD_SHORT)
         return
     telegram_id = callback.from_user.id if callback.from_user else 0
     async with async_session_factory() as session:
@@ -1572,7 +1854,7 @@ async def on_request_book_slot(callback: CallbackQuery) -> None:
     async with async_session_factory() as session:
         client_info = await get_request_client_for_trainer_booking(session, request_id, trainer_id)
     if not client_info:
-        await callback.message.answer("Заявка не найдена или уже закрыта.")
+        await callback.message.answer(msg.TRAINER_ERROR_REQUEST_GONE)
         return
     async with async_session_factory() as session:
         booking_id = await create_booking(
@@ -1586,7 +1868,7 @@ async def on_request_book_slot(callback: CallbackQuery) -> None:
             created_by_trainer=True,
         )
     if not booking_id:
-        await callback.message.answer("Слот недоступен. Выберите другой слот из списка заявок.")
+        await callback.message.answer(msg.TRAINER_ERROR_SLOT_TAKEN_FOR_REQUEST)
         return
     async with async_session_factory() as session:
         await clear_trainer_pending_request_booking(session, trainer_id, request_id)
@@ -1605,7 +1887,7 @@ async def schedule_add_start(callback: CallbackQuery) -> None:
     s1, e1 = _week_range(this_m)
     s2, e2 = _week_range(next_m)
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="В шаблон (для быстрого применения)", callback_data=SCHEDULE_ADD_TEMPLATE)],
+        [InlineKeyboardButton(text=msg.TRAINER_SCHEDULE_ADD_TO_TEMPLATE_BUTTON, callback_data=SCHEDULE_ADD_TEMPLATE)],
         [InlineKeyboardButton(text=msg.TRAINER_SCHEDULE_THIS_WEEK.format(start=s1, end=e1), callback_data=f"{SCHEDULE_WEEK_PREFIX}{this_m.isoformat()}")],
         [InlineKeyboardButton(text=msg.TRAINER_SCHEDULE_NEXT_WEEK.format(start=s2, end=e2), callback_data=f"{SCHEDULE_WEEK_PREFIX}{next_m.isoformat()}")],
     ])
@@ -1933,28 +2215,44 @@ async def slot_delete(callback: CallbackQuery) -> None:
 async def on_guide_callback(callback: CallbackQuery) -> None:
     """Inline 'Помощь' button: show same as /guide with support button."""
     await callback.answer()
+    uid = callback.from_user.id if callback.from_user else 0
     async with async_session_factory() as session:
-        trainer_id = await get_trainer_id_by_telegram_id(session, callback.from_user.id if callback.from_user else 0)
-    if not trainer_id:
+        state, _ = await get_trainer_access_state(session, uid)
+    if state == TrainerAccessState.NOT_LINKED:
         await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
         return
     await callback.message.answer(msg.TRAINER_GUIDE, reply_markup=_trainer_guide_keyboard())
+
+
+@router.callback_query(lambda c: c.data == TRAINER_INVITE_CALLBACK)
+async def on_trainer_invite_callback(callback: CallbackQuery) -> None:
+    await callback.answer()
+    if not callback.message:
+        return
+    await _trainer_typing(callback.bot, callback.message.chat.id)
+    tid = callback.from_user.id if callback.from_user else 0
+    await _send_trainer_invite_package(callback.message, tid)
 
 
 @router.callback_query(lambda c: c.data == TRAINER_SUPPORT_CALLBACK)
 async def on_trainer_support_callback(callback: CallbackQuery) -> None:
     await callback.answer()
     tid = callback.from_user.id if callback.from_user else 0
-    _trainer_support_awaiting.add(tid)
+    trainer_support_awaiting.add(tid)
     await callback.message.answer(msg.TRAINER_SUPPORT_PROMPT)
+
+
+@router.message(Command("cancel"))
+async def cmd_cancel_idle(message: Message) -> None:
+    await message.answer(msg.TRAINER_CANCEL_IDLE)
 
 
 @router.message()
 async def fallback(message: Message) -> None:
     """Any other message: handle support state or direct to main menu."""
     telegram_id = message.from_user.id if message.from_user else 0
-    if telegram_id in _trainer_support_awaiting:
-        _trainer_support_awaiting.discard(telegram_id)
+    if telegram_id in trainer_support_awaiting:
+        trainer_support_awaiting.discard(telegram_id)
         text = (message.text or "").strip()[: 4000]
         if not text:
             await message.answer(msg.TRAINER_SUPPORT_PROMPT)
@@ -1964,8 +2262,11 @@ async def fallback(message: Message) -> None:
         await message.answer(msg.TRAINER_SUPPORT_SENT)
         return
     async with async_session_factory() as session:
-        is_trainer = await get_trainer_by_telegram_id(session, telegram_id)
-    if not is_trainer:
+        state, trainer = await get_trainer_access_state(session, telegram_id)
+    if state == TrainerAccessState.NOT_LINKED:
         await message.answer(msg.TRAINER_ONLY_VIA_SITE)
+        return
+    if state != TrainerAccessState.ACTIVE:
+        await message.answer(trainer_gate_message(state, trainer))
         return
     await message.answer(msg.TRAINER_FALLBACK)

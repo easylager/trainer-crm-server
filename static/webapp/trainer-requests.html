@@ -5,290 +5,695 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Заявки клиентов</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="theme.css" />
+  <link rel="stylesheet" href="mini-app-components.css" />
   <style>
-    /* JUSTSKATE.BY brand: black + yellow */
+    /* Shell: theme.css + mini-app-components.css */
+    /* Amber accent fixed — never var(--tg-theme-button-color): Telegram injects blue after tg.ready() */
     :root {
-      --tg-theme-bg-color: #FFFBEB;
-      --tg-theme-text-color: #1a1a1a;
-      --tg-theme-hint-color: #666;
-      --tg-theme-button-color: #F7A600;
-      --tg-theme-button-text-color: #1a1a1a;
-      --tg-theme-secondary-bg-color: #FFF3CC;
+      --req-accent: #f5a623;
+      --req-accent-deep: #e89400;
+      --req-accent-soft: rgba(247, 166, 0, 0.2);
+      --req-cream: var(--tg-theme-secondary-bg-color);
+      --req-surface: var(--tg-theme-secondary-bg-color);
+      --req-text: var(--tg-theme-text-color);
+      --req-muted: var(--tg-theme-hint-color);
+      --req-shadow: 0 4px 24px rgba(18, 18, 18, 0.08);
+      --req-shadow-hover: 0 8px 32px rgba(247, 166, 0, 0.18);
+      --req-radius: 18px;
+      --req-radius-sm: 14px;
+      /* Light: readable chips on cream */
+      --req-chip-success-bg: rgba(22, 101, 52, 0.14);
+      --req-chip-success-fg: #14532d;
+      --req-chip-warn-bg: rgba(154, 52, 18, 0.14);
+      --req-chip-warn-fg: #9a3412;
     }
     @media (prefers-color-scheme: dark) {
       :root {
-        --tg-theme-bg-color: #1a1a1a;
-        --tg-theme-text-color: #f5f5f5;
-        --tg-theme-hint-color: #8e8e93;
-        --tg-theme-button-color: #F7A600;
-        --tg-theme-button-text-color: #1a1a1a;
-        --tg-theme-secondary-bg-color: #2a2a2a;
+        --req-shadow: 0 4px 28px rgba(0, 0, 0, 0.45);
+        --req-shadow-hover: 0 8px 36px rgba(247, 166, 0, 0.15);
+        --req-chip-success-bg: rgba(20, 83, 45, 0.55);
+        --req-chip-success-fg: #6ee7b7;
+        --req-chip-warn-bg: rgba(120, 53, 15, 0.55);
+        --req-chip-warn-fg: #fdba74;
       }
     }
-    * { box-sizing: border-box; }
     body {
       margin: 0;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-family: var(--app-font-sans);
       background: var(--tg-theme-bg-color);
       color: var(--tg-theme-text-color);
       min-height: 100vh;
       padding: 12px;
-      padding-bottom: env(safe-area-inset-bottom, 12px);
+      padding-bottom: max(12px, env(safe-area-inset-bottom));
+      -webkit-font-smoothing: antialiased;
+    }
+    /* schedule.html — Telegram themeParams must not tint the WebView body blue */
+    body {
+      background: var(--tg-theme-bg-color) !important;
+      color: var(--tg-theme-text-color) !important;
+    }
+    .list-intro,
+    .request-card,
+    .btn-close,
+    .detail-hero-inner,
+    .detail-client-row,
+    .card-wrap,
+    .slot-card,
+    .week-nav,
+    .pagination button,
+    .empty-with-hint,
+    .success-screen-inner,
+    .detail-info-popover {
+      background: var(--tg-theme-secondary-bg-color) !important;
+      color: var(--tg-theme-text-color) !important;
+    }
+    .page-header {
+      margin-bottom: 20px;
+      padding: 4px 0 2px;
+    }
+    .page-header-kicker {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--req-accent);
+      margin-bottom: 6px;
     }
     .header {
       display: flex;
-      align-items: center;
+      align-items: flex-end;
       justify-content: space-between;
       gap: 12px;
-      font-size: 18px;
-      font-weight: 600;
-      margin-bottom: 16px;
-      padding-bottom: 8px;
     }
-    .header-title { flex: 1; }
+    .header-title {
+      flex: 1;
+      font-size: 26px;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1.15;
+      color: var(--req-text);
+    }
+    .header-deco {
+      width: 48px;
+      height: 48px;
+      border-radius: 16px;
+      background: linear-gradient(145deg, #ffc23d 0%, var(--req-accent) 45%, var(--req-accent-deep) 100%);
+      box-shadow: 0 6px 22px rgba(247, 166, 0, 0.38);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+      flex-shrink: 0;
+    }
     .btn-close {
       flex-shrink: 0;
       padding: 8px 14px;
-      border-radius: 8px;
+      border-radius: var(--app-radius-sm);
       border: none;
       font-size: 14px;
-      background: var(--tg-theme-secondary-bg-color);
-      color: var(--tg-theme-text-color);
+      background: var(--req-surface);
+      color: var(--req-text);
       cursor: pointer;
+      box-shadow: var(--req-shadow);
     }
     [data-screen] { display: none; }
-    [data-screen].active { display: block; }
+    [data-screen].active {
+      display: block;
+      animation: reqScreenIn 0.38s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    @keyframes reqScreenIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .list-intro {
+      font-size: 14px;
+      line-height: 1.5;
+      color: var(--req-muted);
+      margin-bottom: 22px;
+      padding: 14px 16px;
+      border-radius: var(--req-radius-sm);
+      background: var(--req-surface);
+      border: 1px solid rgba(247, 166, 0, 0.18);
+      box-shadow: var(--req-shadow);
+    }
     .section-title {
-      font-size: 13px;
-      font-weight: 600;
-      color: var(--tg-theme-hint-color);
-      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--req-muted);
+      margin: 22px 0 12px;
       text-transform: uppercase;
-      letter-spacing: 0.5px;
+      letter-spacing: 0.08em;
+    }
+    .section-title:first-of-type { margin-top: 0; }
+    .section-title::before {
+      content: '';
+      flex: 0 0 4px;
+      height: 16px;
+      background: var(--req-accent);
+      border-radius: 3px;
+      box-shadow: 0 2px 8px rgba(247, 166, 0, 0.35);
     }
     .request-card {
       display: flex;
-      align-items: center;
+      align-items: stretch;
       justify-content: space-between;
-      padding: 16px 18px;
-      margin-bottom: 10px;
-      border-radius: 14px;
-      background: var(--tg-theme-secondary-bg-color);
+      gap: 10px;
+      padding: 0;
+      margin-bottom: 12px;
+      border-radius: var(--req-radius);
+      background: var(--req-surface);
       cursor: pointer;
-      border: none;
+      border: 1px solid rgba(247, 166, 0, 0.1);
       width: 100%;
       font: inherit;
       color: inherit;
       text-align: left;
+      box-shadow: var(--req-shadow);
+      overflow: hidden;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
     }
-    .request-card:active { opacity: 0.9; }
-    .request-card .main { flex: 1; min-width: 0; }
-    .request-card .title { font-weight: 600; font-size: 16px; margin-bottom: 4px; }
-    .request-card .meta { font-size: 14px; color: var(--tg-theme-hint-color); }
-    .request-card .badge {
-      font-size: 12px;
-      padding: 4px 8px;
-      border-radius: 8px;
+    .request-card:active {
+      transform: scale(0.985);
+      box-shadow: var(--req-shadow-hover);
+    }
+    .request-card__stripe {
+      width: 5px;
       flex-shrink: 0;
-      margin-left: 8px;
+      background: linear-gradient(180deg, #22c55e 0%, #15803d 100%);
     }
-    .request-card .badge.new { background: rgba(52, 199, 89, 0.2); color: #34c759; }
-    .request-card .badge.done { background: rgba(142, 142, 147, 0.25); color: var(--tg-theme-hint-color); }
+    .request-card--progress .request-card__stripe {
+      background: linear-gradient(180deg, #d97706 0%, #92400e 100%);
+    }
+    .request-card__body {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 16px 14px 16px 12px;
+    }
+    .request-card .main { flex: 1; min-width: 0; }
+    .request-card .title {
+      font-weight: 600;
+      font-size: 16px;
+      margin-bottom: 6px;
+      letter-spacing: -0.02em;
+      line-height: 1.3;
+    }
+    .request-card .meta {
+      font-size: 13px;
+      color: var(--req-muted);
+      line-height: 1.4;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .request-card .badges-row {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+    .request-card .badge,
+    .badge.personalized {
+      font-size: 11px;
+      padding: 5px 10px;
+      border-radius: 999px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      white-space: nowrap;
+    }
+    .request-card .badge.new {
+      background: var(--req-chip-success-bg);
+      color: var(--req-chip-success-fg);
+    }
+    .request-card .badge.done {
+      background: var(--req-chip-warn-bg);
+      color: var(--req-chip-warn-fg);
+    }
     .request-card .badge.personalized,
     .badge.personalized {
-      background: rgba(0, 122, 255, 0.2);
-      color: #0a84ff;
-      font-size: 12px;
-      padding: 4px 8px;
-      border-radius: 8px;
-      font-weight: 500;
+      background: var(--tg-theme-secondary-bg-color);
+      color: #1a1a1a;
     }
-    .request-card .arrow { color: var(--tg-theme-hint-color); font-size: 16px; }
-    .screen-title { font-size: 17px; font-weight: 600; margin-bottom: 8px; }
-    .screen-hint { font-size: 14px; color: var(--tg-theme-hint-color); margin-bottom: 16px; }
-    .detail-block { margin-bottom: 16px; }
-    .detail-label { font-size: 12px; color: var(--tg-theme-hint-color); margin-bottom: 4px; text-transform: uppercase; }
-    .detail-value { font-size: 15px; }
-    .detail-success-banner {
-      padding: 10px 14px; margin-bottom: 16px; border-radius: 10px;
-      background: rgba(52, 199, 89, 0.15); color: #34c759; font-size: 14px; font-weight: 500;
+    @media (prefers-color-scheme: light) {
+      .badge.personalized {
+        background: rgba(247, 166, 0, 0.22);
+        color: #7c2d12;
+      }
     }
+    .request-card .arrow-wrap {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 36px;
+      border-radius: 12px;
+      background: rgba(247, 166, 0, 0.12);
+      color: var(--req-accent);
+      font-size: 18px;
+      font-weight: 600;
+    }
+    .screen-title {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      margin-bottom: 8px;
+      line-height: 1.25;
+    }
+    .screen-hint {
+      font-size: 14px;
+      color: var(--req-muted);
+      margin-bottom: 18px;
+      line-height: 1.5;
+    }
+    .detail-hero {
+      border-radius: var(--req-radius);
+      padding: 1px;
+      margin-bottom: 16px;
+      background: linear-gradient(135deg, rgba(247, 166, 0, 0.5) 0%, rgba(247, 166, 0, 0.1) 45%, var(--req-surface) 100%);
+      box-shadow: var(--req-shadow);
+    }
+    .detail-hero-inner {
+      border-radius: calc(var(--req-radius) - 1px);
+      background: var(--req-surface);
+      padding: 18px 18px 16px;
+    }
+    .detail-kicker {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--req-accent);
+      margin-bottom: 8px;
+    }
+    .detail-title-line {
+      font-size: 19px;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1.35;
+      margin-bottom: 10px;
+    }
+    .detail-title-badges { display: inline; }
     .detail-badge-in-progress {
-      display: inline-block; font-size: 12px; padding: 4px 8px; border-radius: 8px; margin-left: 8px;
-      background: rgba(142, 142, 147, 0.25); color: var(--tg-theme-hint-color); font-weight: 500;
+      display: inline-block;
+      font-size: 11px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      margin-left: 8px;
+      vertical-align: middle;
+      background: var(--req-chip-warn-bg);
+      color: var(--req-chip-warn-fg);
+      font-weight: 600;
+    }
+    .detail-comment-wrap {
+      display: none;
+      margin-top: 14px;
+      padding-top: 14px;
+      border-top: 1px dashed rgba(247, 166, 0, 0.25);
+    }
+    .detail-comment-label {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--req-muted);
+      margin-bottom: 8px;
+    }
+    .detail-comment-text {
+      margin: 0;
+      font-size: 15px;
+      line-height: 1.55;
+      color: var(--req-text);
+    }
+    .detail-client-row {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 16px 18px;
+      border-radius: var(--req-radius-sm);
+      background: var(--req-surface);
+      border: 1px solid rgba(247, 166, 0, 0.1);
+      margin-bottom: 18px;
+      box-shadow: var(--req-shadow);
+    }
+    .detail-client-avatar {
+      width: 52px;
+      height: 52px;
+      border-radius: 16px;
+      background: linear-gradient(145deg, #ffc23d 0%, var(--req-accent) 50%, var(--req-accent-deep) 100%);
+      color: #1a1a1a;
+      font-size: 18px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      box-shadow: 0 4px 16px rgba(247, 166, 0, 0.4);
+    }
+    .detail-client-meta .detail-label {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--req-muted);
+      margin-bottom: 4px;
+    }
+    .detail-client-meta .detail-value { font-size: 17px; font-weight: 600; letter-spacing: -0.02em; }
+    .detail-success-banner {
+      padding: 12px 16px;
+      margin-bottom: 14px;
+      border-radius: var(--req-radius-sm);
+      background: var(--req-chip-success-bg);
+      color: var(--req-chip-success-fg);
+      font-size: 14px;
+      font-weight: 600;
+      border: 1px solid rgba(34, 197, 94, 0.25);
+      animation: bannerPop 0.45s ease;
+    }
+    @keyframes bannerPop {
+      from { opacity: 0; transform: translateY(-6px); }
+      to { opacity: 1; transform: translateY(0); }
     }
     .detail-actions-hint {
-      display: flex; align-items: center; gap: 6px; margin-bottom: 12px;
-      font-size: 13px; color: var(--tg-theme-hint-color);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 12px;
+      font-size: 13px;
+      color: var(--req-muted);
     }
     .detail-info-icon {
-      display: inline-flex; align-items: center; justify-content: center;
-      width: 18px; height: 18px; border-radius: 50%;
-      border: 1px solid var(--tg-theme-hint-color); color: var(--tg-theme-hint-color);
-      font-size: 12px; font-weight: 600; cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      border: 1.5px solid rgba(247, 166, 0, 0.5);
+      color: var(--req-accent);
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      background: rgba(247, 166, 0, 0.08);
     }
-    .detail-info-icon:active { opacity: 0.7; }
+    .detail-info-icon:active { transform: scale(0.92); }
     .detail-info-popover {
-      padding: 12px 14px; margin-bottom: 16px; border-radius: 10px;
-      background: var(--tg-theme-secondary-bg-color); font-size: 13px; line-height: 1.45;
-      color: var(--tg-theme-text-color);
+      padding: 14px 16px;
+      margin-bottom: 16px;
+      border-radius: var(--req-radius-sm);
+      background: var(--req-surface);
+      font-size: 13px;
+      line-height: 1.55;
+      color: var(--req-text);
+      border: 1px solid rgba(247, 166, 0, 0.18);
+      box-shadow: var(--req-shadow);
     }
-    .detail-info-popover strong { display: block; margin-top: 8px; }
+    .detail-info-popover strong { display: block; margin-top: 10px; color: var(--req-accent); font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; }
     .detail-info-popover strong:first-child { margin-top: 0; }
-    .action-buttons { margin-top: 20px; }
+    .action-buttons { margin-top: 8px; }
     .action-buttons .btn-block {
       display: block;
       width: 100%;
-      padding: 14px 18px;
+      padding: 15px 20px;
       margin-bottom: 10px;
-      border-radius: 12px;
+      border-radius: var(--req-radius-sm);
       border: none;
       font-size: 15px;
       font-weight: 600;
+      font-family: inherit;
       cursor: pointer;
       text-align: center;
       box-sizing: border-box;
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
     }
+    .action-buttons .btn-block:active { transform: scale(0.98); }
     .action-buttons .btn-block:last-of-type { margin-bottom: 0; }
-    .btn-primary { background: var(--tg-theme-button-color); color: var(--tg-theme-button-text-color); }
-    .btn-secondary { background: var(--tg-theme-secondary-bg-color); color: var(--tg-theme-text-color); }
-    .btn-danger { background: rgba(255, 59, 48, 0.2); color: #ff3b30; }
+    .btn-primary {
+      background: linear-gradient(145deg, #ffc23d 0%, #f7a600 55%, #e89400 100%);
+      color: #1a1a1a;
+      box-shadow: 0 4px 16px rgba(247, 166, 0, 0.4);
+    }
+    .btn-secondary {
+      background: var(--req-surface);
+      color: var(--req-text);
+      border: 1px solid rgba(247, 166, 0, 0.22);
+      box-shadow: var(--req-shadow);
+    }
+    @media (prefers-color-scheme: dark) {
+      .btn-secondary {
+        background: var(--tg-theme-secondary-bg-color);
+        color: var(--tg-theme-text-color);
+        border-color: rgba(247, 166, 0, 0.22);
+      }
+    }
+    .btn-danger {
+      background: rgba(255, 59, 48, 0.12);
+      color: #ff3b30;
+      border: 1px solid rgba(255, 59, 48, 0.2);
+    }
     .btn-ghost {
       background: transparent;
-      color: var(--tg-theme-hint-color);
+      color: var(--req-muted);
       font-weight: 500;
     }
     .btn-ghost:active { opacity: 0.7; }
     .back-link {
       display: inline-flex;
       align-items: center;
-      gap: 6px;
-      margin-top: 20px;
-      padding: 10px 0;
+      gap: 8px;
+      margin-top: 22px;
+      padding: 12px 4px;
       font-size: 14px;
-      font-weight: 500;
-      color: var(--tg-theme-hint-color);
+      font-weight: 600;
+      color: var(--req-muted);
       cursor: pointer;
       border: none;
       background: none;
-      font: inherit;
+      font-family: inherit;
     }
-    .back-link .back-link-chevron { flex-shrink: 0; width: 16px; height: 16px; color: inherit; }
-    .back-link:active { opacity: 0.7; }
-    .back-link.btn-ghost-block { width: 100%; justify-content: flex-start; margin-top: 16px; }
+    .back-link .back-link-chevron { flex-shrink: 0; width: 18px; height: 18px; color: var(--req-accent); }
+    .back-link:active { opacity: 0.75; }
+    .back-link.btn-ghost-block { width: 100%; justify-content: flex-start; margin-top: 12px; }
     .slot-card {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 14px 16px;
-      margin-bottom: 8px;
-      border-radius: 12px;
-      background: #FFF3CC !important;
+      padding: 15px 17px;
+      margin-bottom: 10px;
+      border-radius: var(--req-radius-sm);
+      background: var(--req-surface);
       cursor: pointer;
-      border: none;
+      border: 1px solid rgba(247, 166, 0, 0.18);
       width: 100%;
       font: inherit;
       color: inherit;
       text-align: left;
+      box-shadow: var(--req-shadow);
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
     }
-    .slot-card:active { opacity: 0.9; }
-    .slot-card .slot-time { font-weight: 600; font-size: 15px; }
-    .slot-card .slot-date { font-size: 14px; color: var(--tg-theme-hint-color); }
-    .slot-card .slot-arrow { color: var(--tg-theme-hint-color); font-size: 16px; }
+    .slot-card:active {
+      transform: scale(0.99);
+      box-shadow: var(--req-shadow-hover);
+    }
+    .slot-card .slot-time { font-weight: 700; font-size: 16px; letter-spacing: -0.02em; }
+    .slot-card .slot-arrow {
+      width: 34px;
+      height: 34px;
+      border-radius: 10px;
+      background: rgba(247, 166, 0, 0.14);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--req-accent);
+      font-size: 16px;
+    }
     .week-nav {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      margin-bottom: 12px;
+      margin-bottom: 16px;
+      padding: 10px 12px;
+      border-radius: var(--req-radius-sm);
+      background: var(--req-surface);
+      border: 1px solid rgba(247, 166, 0, 0.18);
+      box-shadow: var(--req-shadow);
     }
-    .week-nav span { font-weight: 600; font-size: 15px; }
+    .week-nav span { font-weight: 700; font-size: 14px; letter-spacing: -0.02em; }
     .week-nav button {
-      width: 36px;
-      height: 36px;
-      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      border-radius: 14px;
       border: none;
-      background: var(--tg-theme-secondary-bg-color);
-      color: var(--tg-theme-text-color);
-      font-size: 18px;
+      background: rgba(247, 166, 0, 0.14);
+      color: var(--req-text);
+      font-size: 20px;
+      font-weight: 600;
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
+      transition: background 0.15s ease;
     }
-    .week-nav button:disabled { opacity: 0.5; cursor: not-allowed; }
-    .day-block { margin-bottom: 18px; }
+    .week-nav button:not(:disabled):active { background: rgba(247, 166, 0, 0.28); }
+    .week-nav button:disabled { opacity: 0.35; cursor: not-allowed; }
+    .day-block { margin-bottom: 20px; }
     .day-title {
-      font-size: 13px;
-      font-weight: 600;
-      color: var(--tg-theme-hint-color);
-      margin-bottom: 8px;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--req-muted);
+      margin-bottom: 10px;
       text-transform: uppercase;
-      letter-spacing: 0.5px;
+      letter-spacing: 0.08em;
     }
     .card-wrap {
-      padding: 14px 16px;
-      border-radius: 12px;
-      background: #FFF3CC !important;
-      margin-bottom: 16px;
+      padding: 16px 18px;
+      border-radius: var(--req-radius);
+      background: var(--req-surface);
+      border: 1px solid rgba(247, 166, 0, 0.18);
+      margin-bottom: 18px;
+      box-shadow: var(--req-shadow);
     }
     .card-wrap textarea {
       width: 100%;
-      min-height: 100px;
+      min-height: 110px;
       border: none;
       background: transparent;
-      color: var(--tg-theme-text-color);
+      color: var(--req-text);
       font: inherit;
       font-size: 15px;
+      line-height: 1.5;
       resize: vertical;
     }
-    .card-wrap textarea::placeholder { color: var(--tg-theme-hint-color); }
-    .loading, .error, .empty { text-align: center; padding: 24px; color: var(--tg-theme-hint-color); }
+    .card-wrap textarea::placeholder { color: var(--req-muted); }
+    .loading, .error, .empty { text-align: center; padding: 28px 16px; color: var(--req-muted); font-size: 15px; line-height: 1.5; }
     .error { color: #ff3b30; }
-    .auth-error-block { color: var(--tg-theme-text-color); }
-    .auth-error-block .auth-error-hint { margin-top: 12px; font-size: 14px; color: var(--tg-theme-hint-color); }
-    .empty-with-hint .empty-state-hint { margin-top: 12px; font-size: 13px; color: var(--tg-theme-hint-color); line-height: 1.4; }
-    .success-msg { text-align: center; padding: 24px 16px; font-size: 16px; line-height: 1.4; }
-    .pagination { display: flex; justify-content: center; gap: 12px; margin: 16px 0; }
+    .auth-error-block { color: var(--req-text); }
+    .auth-error-block .auth-error-hint { margin-top: 12px; font-size: 14px; color: var(--req-muted); }
+    .empty-with-hint {
+      border-radius: var(--req-radius);
+      padding: 36px 24px;
+      background: var(--req-surface);
+      border: 1px dashed rgba(247, 166, 0, 0.25);
+      box-shadow: var(--req-shadow);
+    }
+    .empty-visual {
+      width: 72px;
+      height: 72px;
+      margin: 0 auto 18px;
+      border-radius: 24px;
+      background: linear-gradient(145deg, rgba(247, 166, 0, 0.2) 0%, rgba(247, 166, 0, 0.05) 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 32px;
+    }
+    .empty-with-hint .empty-state-hint { margin-top: 12px; font-size: 14px; color: var(--req-muted); line-height: 1.55; }
+    .success-screen-inner {
+      text-align: center;
+      padding: 40px 24px 32px;
+      border-radius: var(--req-radius);
+      background: var(--req-surface);
+      border: 1px solid rgba(52, 199, 89, 0.2);
+      box-shadow: var(--req-shadow);
+    }
+    .success-screen-icon {
+      width: 80px;
+      height: 80px;
+      margin: 0 auto 20px;
+      border-radius: 50%;
+      background: rgba(52, 199, 89, 0.15);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 40px;
+    }
+    .success-msg { font-size: 17px; font-weight: 600; line-height: 1.5; margin: 0; letter-spacing: -0.02em; }
+    .pagination {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin: 22px 0 8px;
+    }
     .pagination button {
-      padding: 8px 16px;
-      border-radius: 8px;
+      padding: 10px 18px;
+      border-radius: 999px;
       border: none;
-      background: var(--tg-theme-secondary-bg-color);
-      color: var(--tg-theme-text-color);
+      background: var(--req-surface);
+      color: var(--req-text);
       font-size: 14px;
+      font-weight: 600;
+      font-family: inherit;
       cursor: pointer;
+      box-shadow: var(--req-shadow);
+      border: 1px solid rgba(247, 166, 0, 0.18);
     }
-    .pagination span { font-size: 14px; color: var(--tg-theme-hint-color); align-self: center; }
-    /* JUSTSKATE.BY — перебиваем тему Telegram */
-    body { background: #FFFBEB !important; color: #1a1a1a !important; }
-    .btn-close, .request-card, .slot-card, .week-nav button, .card-wrap, .btn-secondary { background: #FFF3CC !important; color: #1a1a1a !important; }
-    @media (prefers-color-scheme: dark) {
-      body { background: #1a1a1a !important; color: #f5f5f5 !important; }
-      .btn-close, .request-card, .slot-card, .week-nav button, .card-wrap, .btn-secondary { background: #2a2a2a !important; color: #f5f5f5 !important; }
-    }
+    .pagination button:active { transform: scale(0.97); }
+    .pagination span { font-size: 13px; color: var(--req-muted); font-weight: 500; }
   </style>
+  <script>
+    (function () {
+      function isAppDark() {
+        var tg = window.Telegram && window.Telegram.WebApp;
+        if (tg && tg.colorScheme) return tg.colorScheme === 'dark';
+        return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+      }
+      function applyAppTheme() {
+        var d = document.documentElement;
+        var dark = isAppDark();
+        /* !important: Telegram reapplies themeParams after tg.ready() — without it, blue returns */
+        /* Dark surfaces: same hex as schedule-editor.html (not pure #000 vs #1c1c1e — avoids mismatch with «Расписание») */
+        d.style.setProperty('--tg-theme-button-color', '#f5a623', 'important');
+        d.style.setProperty('--tg-theme-button-text-color', '#1a1a1a', 'important');
+        d.style.setProperty('--tg-theme-bg-color', dark ? '#1a1a1a' : '#fffbeb', 'important');
+        d.style.setProperty('--tg-theme-text-color', dark ? '#f5f5f5' : '#1a1a1a', 'important');
+        d.style.setProperty('--tg-theme-secondary-bg-color', dark ? '#2a2a2a' : '#fff3cc', 'important');
+        d.style.setProperty('--tg-theme-hint-color', dark ? '#8e8e93' : '#666666', 'important');
+        d.style.setProperty('--req-accent', '#f5a623', 'important');
+      }
+      applyAppTheme();
+      if (window.matchMedia) {
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyAppTheme);
+      }
+      window.__applyRequestsTheme = applyAppTheme;
+    })();
+  </script>
 </head>
 <body>
-  <script>
-  (function(){var d=document.documentElement;d.style.setProperty('--tg-theme-button-color','#F7A600');d.style.setProperty('--tg-theme-button-text-color','#1a1a1a');d.style.setProperty('--tg-theme-bg-color',window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'#1a1a1a':'#FFFBEB');d.style.setProperty('--tg-theme-text-color',window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'#f5f5f5':'#1a1a1a');d.style.setProperty('--tg-theme-secondary-bg-color',window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'#2a2a2a':'#FFF3CC');})();
-  </script>
-  <div class="header">
-    <span class="header-title" id="headerTitle">📋 Заявки клиентов</span>
-  </div>
+  <header class="page-header">
+    <div class="page-header-kicker">Входящие</div>
+    <div class="header">
+      <h1 class="header-title" id="headerTitle">Заявки клиентов</h1>
+      <div class="header-deco" aria-hidden="true">📋</div>
+    </div>
+  </header>
 
   <!-- Diagnostic: triggers GET /api/webapp/trainer/requests/ping?step=img when page loads (no JS). -->
   <img src="/api/webapp/trainer/requests/ping?step=img" alt="" width="0" height="0" style="position:absolute;visibility:hidden" referrerpolicy="no-referrer">
   <div id="screenList" data-screen class="active">
-    <div class="screen-hint" id="listHint">По вашему городу и услугам из профиля. Один список (сначала новые, затем в работе) — по 10 заявок на странице.</div>
+    <p class="list-intro" id="listHint">По вашему городу и услугам из профиля. Сначала новые заявки, затем в работе — по 10 на странице.</p>
     <div id="sectionNew" style="display: none;">
-      <div class="section-title">📥 Новые</div>
+      <div class="section-title">Новые</div>
       <div id="requestListNew"></div>
     </div>
     <div id="sectionInProgress" style="display: none;">
-      <div class="section-title">✓ В работе</div>
+      <div class="section-title">В работе</div>
       <div id="requestListInProgress"></div>
     </div>
     <div id="screenEmpty" class="empty empty-with-hint" style="display: none;">
+      <div class="empty-visual" aria-hidden="true">✉️</div>
       <p id="emptyStateText">Пока нет заявок по вашему профилю (город + услуги).</p>
       <p id="emptyStateHint" class="empty-state-hint">Заявки показываются только если в вашем профиле тренера указаны те же город и услуга, что в заявке. Заполните профиль на сайте или подождите заявки по вашим направлениям.</p>
     </div>
@@ -301,11 +706,22 @@
 
   <div id="screenDetail" data-screen>
     <div id="detailSuccessBanner" class="detail-success-banner" style="display: none;"></div>
-    <div class="screen-title" id="detailTitle">—</div>
-    <div class="screen-hint" id="detailComment"></div>
-    <div class="detail-block">
-      <div class="detail-label">Клиент</div>
-      <div class="detail-value" id="detailClient">—</div>
+    <div class="detail-hero">
+      <div class="detail-hero-inner">
+        <div class="detail-kicker">Заявка</div>
+        <div class="detail-title-line" id="detailTitle">—</div>
+        <div id="detailCommentWrap" class="detail-comment-wrap">
+          <div class="detail-comment-label">Комментарий клиента</div>
+          <p id="detailComment" class="detail-comment-text"></p>
+        </div>
+      </div>
+    </div>
+    <div class="detail-client-row">
+      <div class="detail-client-avatar" id="detailClientAvatar">—</div>
+      <div class="detail-client-meta">
+        <div class="detail-label">Клиент</div>
+        <div class="detail-value" id="detailClient">—</div>
+      </div>
     </div>
     <div id="detailActionsWrap">
       <div id="detailInfoRow" class="detail-actions-hint" style="display: none;">
@@ -344,14 +760,44 @@
   </div>
 
   <div id="screenSuccess" data-screen>
-    <div class="success-msg">Клиент записан. Заявка закрыта, клиенту отправлено уведомление.</div>
+    <div class="success-screen-inner">
+      <div class="success-screen-icon" aria-hidden="true">✓</div>
+      <p class="success-msg">Клиент записан. Заявка закрыта, клиенту отправлено уведомление.</p>
+    </div>
   </div>
 
   <script>
     (function() {
       fetch('/api/webapp/trainer/requests/ping?step=script').catch(function() {});
       const tg = window.Telegram && window.Telegram.WebApp;
-      if (tg) { tg.ready(); tg.expand(); }
+      if (tg) {
+        tg.ready();
+        tg.expand();
+        if (typeof window.__applyRequestsTheme === 'function') {
+          window.__applyRequestsTheme();
+        }
+        try {
+          var darkUi = tg.colorScheme === 'dark' ||
+            (tg.colorScheme !== 'light' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          var bgHex = darkUi ? '#1a1a1a' : '#fffbeb';
+          if (typeof tg.setHeaderColor === 'function') tg.setHeaderColor(bgHex);
+          if (typeof tg.setBackgroundColor === 'function') tg.setBackgroundColor(bgHex);
+        } catch (e) { /* older clients */ }
+        if (tg.onEvent) {
+          tg.onEvent('themeChanged', function () {
+            if (typeof window.__applyRequestsTheme === 'function') {
+              window.__applyRequestsTheme();
+            }
+            try {
+              var du = tg.colorScheme === 'dark' ||
+                (tg.colorScheme !== 'light' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+              var bg = du ? '#1a1a1a' : '#fffbeb';
+              if (typeof tg.setHeaderColor === 'function') tg.setHeaderColor(bg);
+              if (typeof tg.setBackgroundColor === 'function') tg.setBackgroundColor(bg);
+            } catch (err) { /* ignore */ }
+          });
+        }
+      }
 
       const PER_PAGE = 10;
       const DAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
@@ -396,6 +842,13 @@
         return t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
       }
 
+      function clientInitials(fullName) {
+        var parts = String(fullName || '').trim().split(/\s+/).filter(Boolean);
+        if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+        if (parts.length === 1 && parts[0].length) return parts[0].slice(0, 2).toUpperCase();
+        return '—';
+      }
+
       function clientPreview(req) {
         const first = (req.client_first_name || '').trim();
         const last = (req.client_last_name || '').trim();
@@ -437,9 +890,12 @@
           const title = (r.city_name || '—') + ' · ' + (r.service_name || '—');
           const meta = (r.comment || '').trim() ? (r.comment.replace(/\n/g, ' ').slice(0, 50) + ((r.comment || '').length > 50 ? '…' : '')) : clientPreview(r);
           const personalBadge = r.is_personalized ? '<span class="badge personalized">Для вас</span>' : '';
-          return '<button type="button" class="request-card" data-request-id="' + r.id + '">' +
+          return '<button type="button" class="request-card request-card--new" data-request-id="' + r.id + '">' +
+            '<span class="request-card__stripe" aria-hidden="true"></span>' +
+            '<div class="request-card__body">' +
             '<div class="main"><div class="title">' + escapeHtml(title) + '</div><div class="meta">' + escapeHtml(meta) + '</div></div>' +
-            personalBadge + '<span class="badge new">Новая</span><span class="arrow">→</span></button>';
+            '<div class="badges-row">' + personalBadge + '<span class="badge new">Новая</span></div>' +
+            '<span class="arrow-wrap" aria-hidden="true">→</span></div></button>';
         }).join('');
 
         sectionInProgress.style.display = pageInProgress.length ? 'block' : 'none';
@@ -447,9 +903,12 @@
           const title = (r.city_name || '—') + ' · ' + (r.service_name || '—');
           const meta = (r.comment || '').trim() ? (r.comment.replace(/\n/g, ' ').slice(0, 50) + ((r.comment || '').length > 50 ? '…' : '')) : clientPreview(r);
           const personalBadge = r.is_personalized ? '<span class="badge personalized">Для вас</span>' : '';
-          return '<button type="button" class="request-card" data-request-id="' + r.id + '">' +
+          return '<button type="button" class="request-card request-card--progress" data-request-id="' + r.id + '">' +
+            '<span class="request-card__stripe" aria-hidden="true"></span>' +
+            '<div class="request-card__body">' +
             '<div class="main"><div class="title">' + escapeHtml(title) + '</div><div class="meta">' + escapeHtml(meta) + '</div></div>' +
-            personalBadge + '<span class="badge done">В работе</span><span class="arrow">→</span></button>';
+            '<div class="badges-row">' + personalBadge + '<span class="badge done">В работе</span></div>' +
+            '<span class="arrow-wrap" aria-hidden="true">→</span></div></button>';
         }).join('');
 
         document.querySelectorAll('.request-card').forEach(function(btn) {
@@ -478,12 +937,12 @@
       function renderDetail() {
         const req = state.currentRequest;
         if (!req) return;
-        const titleBase = (req.city_name || '—') + '  ·  ' + (req.service_name || '—');
+        const titleBase = escapeHtml((req.city_name || '—') + '  ·  ' + (req.service_name || '—'));
         const titleEl = document.getElementById('detailTitle');
         var titleBadges = [];
         if (req.is_personalized) titleBadges.push('<span class="badge personalized">Заявка для вас</span>');
         if (req.has_responded) titleBadges.push('<span class="detail-badge-in-progress">В работе</span>');
-        titleEl.innerHTML = titleBase + (titleBadges.length ? ' ' + titleBadges.join(' ') : '');
+        titleEl.innerHTML = titleBase + (titleBadges.length ? '<span class="detail-title-badges"> ' + titleBadges.join(' ') + '</span>' : '');
 
         var bannerEl = document.getElementById('detailSuccessBanner');
         if (state.justResponded) {
@@ -496,9 +955,18 @@
         }
 
         const comment = (req.comment || '').trim();
-        document.getElementById('detailComment').textContent = comment ? '💬 ' + comment : '';
+        var commentWrap = document.getElementById('detailCommentWrap');
+        var commentEl = document.getElementById('detailComment');
+        if (comment) {
+          commentEl.textContent = comment;
+          commentWrap.style.display = 'block';
+        } else {
+          commentWrap.style.display = 'none';
+          commentEl.textContent = '';
+        }
         const clientName = [req.client_first_name, req.client_last_name].filter(Boolean).join(' ').trim() || 'Клиент';
         document.getElementById('detailClient').textContent = clientName;
+        document.getElementById('detailClientAvatar').textContent = clientInitials(clientName);
 
         var infoRow = document.getElementById('detailInfoRow');
         var infoPopover = document.getElementById('detailInfoPopover');

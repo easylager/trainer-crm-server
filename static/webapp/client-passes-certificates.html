@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Абонементы и сертификаты</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="stylesheet" href="theme.css" />
+  <link rel="stylesheet" href="mini-app-components.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet" />
+  <script src="client-mini-app-theme.js"></script>
+  <style>
+    body {
+      font-family: var(--app-font-sans);
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 12px;
+    }
+    .header-title { flex: 1; }
+    .btn-close {
+      flex-shrink: 0;
+      padding: 8px 14px;
+      border-radius: 8px;
+      border: none;
+      font-size: 14px;
+      background: var(--tg-theme-secondary-bg-color);
+      color: var(--tg-theme-text-color);
+      cursor: pointer;
+    }
+    .tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+    .tab {
+      flex: 1;
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: none;
+      font-size: 15px;
+      font-weight: 600;
+      background: var(--tg-theme-secondary-bg-color);
+      color: var(--tg-theme-text-color);
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .tab.active {
+      background: var(--tg-theme-button-color);
+      color: var(--tg-theme-button-text-color);
+    }
+    .tab:active { opacity: 0.9; }
+    .panel { display: none; }
+    .panel.active { display: block; }
+    .loading, .error { text-align: center; padding: 32px 16px; color: var(--tg-theme-hint-color); }
+    .error { color: var(--app-danger); }
+    .empty { text-align: center; padding: 32px 16px; color: var(--tg-theme-hint-color); font-size: 15px; }
+    .pass-card {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 18px;
+      margin-bottom: 10px;
+      border-radius: 14px;
+      background: var(--tg-theme-secondary-bg-color);
+      border: none;
+      width: 100%;
+      font: inherit;
+      color: inherit;
+      text-align: left;
+      cursor: pointer;
+    }
+    .pass-card:active { opacity: 0.9; }
+    .pass-card .main { flex: 1; min-width: 0; }
+    .pass-card .title { font-weight: 600; font-size: 16px; margin-bottom: 4px; }
+    .pass-card .meta { font-size: 14px; color: var(--tg-theme-hint-color); }
+    .pass-card .arrow { color: var(--tg-theme-hint-color); font-size: 16px; }
+    [data-pass-screen] { display: none; }
+    [data-pass-screen].active { display: block; }
+    .btn-back {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 20px;
+      padding: 10px 0;
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--tg-theme-button-color);
+      cursor: pointer;
+      border: none;
+      background: none;
+      font-family: inherit;
+    }
+    .btn-back:active { opacity: 0.8; }
+    .detail-title { font-size: 18px; font-weight: 600; margin-bottom: 8px; }
+    .detail-meta { font-size: 15px; color: var(--tg-theme-hint-color); margin-bottom: 20px; }
+    .detail-hint {
+      font-size: 14px;
+      color: var(--tg-theme-hint-color);
+      margin-bottom: 16px;
+    }
+    .cert-card {
+      padding: 16px 18px;
+      margin-bottom: 10px;
+      border-radius: 14px;
+      background: var(--tg-theme-secondary-bg-color);
+      border-left: 4px solid var(--tg-theme-button-color);
+    }
+    .cert-card .title { font-weight: 600; font-size: 16px; margin-bottom: 4px; }
+    .cert-card .meta { font-size: 14px; color: var(--tg-theme-hint-color); }
+    .cert-card .code { font-family: monospace; font-size: 15px; letter-spacing: 1px; margin-top: 8px; }
+    .cert-card.redeemed { opacity: 0.8; }
+    .cert-activate-row { display: flex; gap: 8px; align-items: stretch; }
+    .cert-code-input {
+      flex: 1;
+      padding: 8px 10px;
+      border-radius: 8px;
+      border: 1px solid rgba(128, 128, 128, 0.22);
+      font-size: 14px;
+      background: var(--tg-theme-secondary-bg-color);
+      color: var(--tg-theme-text-color);
+    }
+    .cert-code-input::placeholder { color: var(--tg-theme-hint-color); }
+    #cert-btnActivateCert.btn-primary {
+      flex-shrink: 0;
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <span class="header-title" id="headerTitle">📦 Мои абонементы</span>
+    <button type="button" class="btn-close" id="btnClose" aria-label="Закрыть">Закрыть</button>
+  </div>
+  <div class="tabs" role="tablist">
+    <button type="button" class="tab active" id="tabPasses" data-tab="passes" role="tab" aria-selected="true">Абонементы</button>
+    <button type="button" class="tab" id="tabCerts" data-tab="certs" role="tab" aria-selected="false">Сертификаты</button>
+  </div>
+
+  <div id="panelPasses" class="panel active" role="tabpanel">
+    <div id="pass-screenList" data-pass-screen class="active">
+      <div id="pass-listContent"></div>
+    </div>
+    <div id="pass-screenDetail" data-pass-screen>
+      <button type="button" class="btn-back" id="pass-backFromDetail">← Назад к абонементам</button>
+      <p class="detail-title" id="pass-detailTitle"></p>
+      <p class="detail-meta" id="pass-detailMeta"></p>
+      <p class="detail-hint">*Занятия списываются с абонемента автоматически.</p>
+    </div>
+  </div>
+
+  <div id="panelCerts" class="panel" role="tabpanel">
+    <div id="cert-activateBlock" style="margin-bottom: 16px;">
+      <label for="certCodeInput" style="display:block;font-size:14px;margin-bottom:6px;color:var(--tg-theme-hint-color);">
+        Введите код подарочного сертификата:
+      </label>
+      <div class="cert-activate-row">
+        <input id="certCodeInput" class="cert-code-input" type="text" placeholder="Например, CERT-ABC123">
+        <button type="button" class="btn-primary" id="cert-btnActivateCert">Активировать</button>
+      </div>
+    </div>
+    <div id="cert-listContent"></div>
+  </div>
+
+  <script>
+    (function() {
+      var tg = window.Telegram && window.Telegram.WebApp;
+      if (tg) { tg.ready(); tg.expand(); }
+      function initData() { return (tg && tg.initData) ? tg.initData : ''; }
+      function headers() {
+        var h = { 'Content-Type': 'application/json' };
+        var id = initData();
+        if (id) h['X-Telegram-Init-Data'] = id;
+        return h;
+      }
+      function closeApp() { if (tg) tg.close(); else window.close(); }
+      document.getElementById('btnClose').onclick = closeApp;
+
+      function escapeHtml(s) {
+        if (s == null) return '';
+        var d = document.createElement('div');
+        d.textContent = s;
+        return d.innerHTML;
+      }
+
+      function getInitialTab() {
+        var p = new URLSearchParams(window.location.search || '');
+        var t = (p.get('tab') || '').toLowerCase();
+        if (t === 'certificates' || t === 'certs' || t === 'certificate') return 'certs';
+        return 'passes';
+      }
+
+      var headerTitle = document.getElementById('headerTitle');
+      var tabPasses = document.getElementById('tabPasses');
+      var tabCerts = document.getElementById('tabCerts');
+      var panelPasses = document.getElementById('panelPasses');
+      var panelCerts = document.getElementById('panelCerts');
+
+      function setTab(tab) {
+        var isPasses = tab === 'passes';
+        tabPasses.classList.toggle('active', isPasses);
+        tabCerts.classList.toggle('active', !isPasses);
+        tabPasses.setAttribute('aria-selected', isPasses ? 'true' : 'false');
+        tabCerts.setAttribute('aria-selected', !isPasses ? 'true' : 'false');
+        panelPasses.classList.toggle('active', isPasses);
+        panelCerts.classList.toggle('active', !isPasses);
+        headerTitle.textContent = isPasses ? '📦 Мои абонементы' : '🎁 Мои сертификаты';
+      }
+
+      tabPasses.onclick = function() { setTab('passes'); };
+      tabCerts.onclick = function() { setTab('certs'); };
+      setTab(getInitialTab());
+
+      // --- Passes (same logic as client-passes.html) ---
+      var passState = { items: [], current: null };
+      function showPassScreen(id) {
+        document.querySelectorAll('[data-pass-screen]').forEach(function(el) { el.classList.remove('active'); });
+        var el = document.getElementById(id);
+        if (el) el.classList.add('active');
+      }
+      function loadPassesList() {
+        document.getElementById('pass-listContent').innerHTML = '<div class="loading">Загрузка…</div>';
+        var url = '/api/webapp/client/passes' + (initData() ? '?init_data=' + encodeURIComponent(initData()) : '');
+        fetch(url, { headers: headers() })
+          .then(function(r) { return r.json(); })
+          .then(function(data) {
+            passState.items = data.items || [];
+            if (passState.items.length === 0) {
+              document.getElementById('pass-listContent').innerHTML = '<div class="empty">Пока нет абонементов.</div>';
+              return;
+            }
+            function formatPrice(cents) {
+              if (cents == null || cents === 0) return '';
+              return (cents / 100).toFixed(2).replace(/\.?0+$/, '') + ' BYN/занятие';
+            }
+            function formatExpires(iso) {
+              if (!iso) return '';
+              try {
+                var d = new Date(iso);
+                return 'До ' + ('0' + d.getDate()).slice(-2) + '.' + ('0' + (d.getMonth() + 1)).slice(-2) + '.' + d.getFullYear();
+              } catch (e) { return ''; }
+            }
+            var html = '';
+            passState.items.forEach(function(p) {
+              var rem = p.sessions_remaining != null ? p.sessions_remaining : 0;
+              var total = p.sessions_total != null ? p.sessions_total : 0;
+              var metaParts = [p.trainer_name, (p.service_name && p.service_name !== '—' ? p.service_name : null), rem + ' из ' + total + ' занятий', 'осталось ' + rem];
+              var priceStr = formatPrice(p.price_per_session_cents);
+              if (priceStr) metaParts.push(priceStr);
+              var expStr = formatExpires(p.expires_at);
+              if (expStr) metaParts.push(expStr);
+              var meta = metaParts.filter(Boolean).join(' · ');
+              html += '<button type="button" class="pass-card" data-id="' + p.id + '">';
+              html += '<div class="main">';
+              html += '<div class="title">' + escapeHtml(p.product_name) + '</div>';
+              html += '<div class="meta">' + escapeHtml(meta) + '</div></div>';
+              html += '<span class="arrow">→</span></button>';
+            });
+            document.getElementById('pass-listContent').innerHTML = html;
+            document.querySelectorAll('#panelPasses .pass-card').forEach(function(btn) {
+              btn.onclick = function() {
+                var id = parseInt(btn.dataset.id, 10);
+                var p = passState.items.find(function(x) { return x.id === id; });
+                if (p) {
+                  passState.current = p;
+                  var rem = p.sessions_remaining != null ? p.sessions_remaining : 0;
+                  document.getElementById('pass-detailTitle').textContent = p.product_name;
+                  document.getElementById('pass-detailMeta').textContent = p.trainer_name + ' · осталось ' + rem + ' из ' + (p.sessions_total || 0);
+                  showPassScreen('pass-screenDetail');
+                }
+              };
+            });
+          })
+          .catch(function() {
+            document.getElementById('pass-listContent').innerHTML = '<div class="error">Не удалось загрузить. Откройте из бота.</div>';
+          });
+      }
+      document.getElementById('pass-backFromDetail').onclick = function() {
+        showPassScreen('pass-screenList');
+      };
+      loadPassesList();
+
+      // --- Certificates (same logic as client-certificates.html) ---
+      function formatAmount(cents) {
+        if (cents == null || cents === 0) return 'Любая сумма';
+        return (cents / 100).toFixed(0) + ' BYN';
+      }
+      function formatDate(iso) {
+        if (!iso) return '';
+        try {
+          var d = new Date(iso);
+          return ('0' + d.getDate()).slice(-2) + '.' + ('0' + (d.getMonth() + 1)).slice(-2) + '.' + d.getFullYear();
+        } catch (e) { return ''; }
+      }
+      function statusLabel(status) {
+        if (status === 'redeemed') return 'Погашен';
+        if (status === 'activated') return 'Активирован';
+        if (status === 'issued') return 'Выдан (ожидает активации)';
+        if (status === 'expired') return 'Истёк';
+        if (status === 'cancelled') return 'Отменён';
+        return status || 'Активен';
+      }
+      function loadCertsList() {
+        var url = '/api/webapp/client/certificates' + (initData() ? '?init_data=' + encodeURIComponent(initData()) : '');
+        document.getElementById('cert-listContent').innerHTML = '<div class="loading">Загрузка…</div>';
+        fetch(url, { headers: headers() })
+          .then(function(r) { return r.json(); })
+          .then(function(data) {
+            var items = data.items || [];
+            if (items.length === 0) {
+              document.getElementById('cert-listContent').innerHTML = '<div class="empty">Пока нет сертификатов.</div>';
+              return;
+            }
+            var html = '';
+            items.forEach(function(c) {
+              var cardClass = 'cert-card';
+              if (c.status === 'redeemed' || c.status === 'expired' || c.status === 'cancelled') cardClass += ' redeemed';
+              var meta = escapeHtml(c.trainer_name) + ' · ' + formatAmount(c.amount_cents) + ' · ' + statusLabel(c.status);
+              if (c.issued_at) meta += ' · выдано ' + formatDate(c.issued_at);
+              html += '<div class="' + cardClass + '">';
+              html += '<div class="title">' + escapeHtml(c.code) + '</div>';
+              html += '<div class="meta">' + meta + '</div>';
+              html += '</div>';
+            });
+            document.getElementById('cert-listContent').innerHTML = html;
+          })
+          .catch(function() {
+            document.getElementById('cert-listContent').innerHTML = '<div class="error">Не удалось загрузить. Откройте из бота.</div>';
+          });
+      }
+
+      function activateCertificate() {
+        var codeInput = document.getElementById('certCodeInput');
+        var code = (codeInput.value || '').trim();
+        if (!code) {
+          alert('Введите код сертификата');
+          return;
+        }
+        var url = '/api/webapp/client/certificates/activate' + (initData() ? '?init_data=' + encodeURIComponent(initData()) : '');
+        fetch(url, {
+          method: 'POST',
+          headers: headers(),
+          body: JSON.stringify({ code: code })
+        })
+          .then(function(r) {
+            return r.json().then(function(d) { return { ok: r.ok, data: d }; });
+          })
+          .then(function(o) {
+            if (o.ok) {
+              var d = o.data;
+              var cityId = d && d.city_id;
+              var serviceId = d && d.service_id;
+              var trainerId = d && d.trainer_id;
+              if (cityId != null && serviceId != null && trainerId != null) {
+                fetch('/api/webapp/client/session' + (initData() ? '?init_data=' + encodeURIComponent(initData()) : ''), {
+                  method: 'POST',
+                  headers: headers(),
+                  body: JSON.stringify({ city_id: cityId, service_id: serviceId, arena_id: null, trainer_id: trainerId })
+                }).then(function() {
+                  alert('Сертификат активирован. Тренер и город подставлены — можете записаться на занятие.');
+                }).catch(function() {
+                  alert('Сертификат активирован. Выберите тренера в каталоге и запишитесь на занятие.');
+                });
+              } else {
+                alert('Сертификат активирован. Выберите тренера в каталоге и запишитесь на занятие.');
+              }
+              codeInput.value = '';
+              loadCertsList();
+            } else {
+              var detail = o.data && (o.data.detail || o.data.message);
+              alert(detail || 'Код не найден или уже использован. Проверьте код или обратитесь к тренеру.');
+            }
+          })
+          .catch(function() {
+            alert('Ошибка сети. Попробуйте ещё раз.');
+          });
+      }
+
+      document.getElementById('cert-btnActivateCert').onclick = activateCertificate;
+      document.getElementById('certCodeInput').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          activateCertificate();
+        }
+      });
+
+      loadCertsList();
+    })();
+  </script>
+</body>
+</html>

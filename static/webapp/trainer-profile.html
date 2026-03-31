@@ -1,0 +1,2925 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Профиль тренера</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="stylesheet" href="theme.css" />
+  <link rel="stylesheet" href="mini-app-components.css" />
+  <style>
+    /* Shell: theme.css + mini-app-components.css */
+    /* No native stepper arrows — trainers type values manually. */
+    input[type="number"] {
+      -moz-appearance: textfield;
+      appearance: textfield;
+    }
+    input[type="number"]::-webkit-outer-spin-button,
+    input[type="number"]::-webkit-inner-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
+    body {
+      -webkit-font-smoothing: antialiased;
+    }
+    .filters {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+      background: var(--tg-theme-secondary-bg-color);
+      padding: 4px;
+      border-radius: 14px;
+    }
+    .filter-btn {
+      flex: 1;
+      min-width: 0;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: none;
+      font-size: 13px;
+      font-weight: 500;
+      background: transparent;
+      color: var(--tg-theme-hint-color);
+      cursor: pointer;
+      transition: all 0.2s ease;
+      white-space: nowrap;
+    }
+    .filter-btn:active { transform: scale(0.97); }
+    .filter-btn.active {
+      background: #F7A600 !important;
+      color: #1a1a1a !important;
+      font-weight: 600;
+      box-shadow: 0 2px 8px rgba(247, 166, 0, 0.3);
+    }
+    .tab-pane { display: none; animation: fadeIn 0.25s ease; }
+    .tab-pane.active { display: block; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+    .btn-close {
+      flex-shrink: 0;
+      padding: 8px 14px;
+      border-radius: var(--app-radius-sm);
+      border: none;
+      font-size: 14px;
+      background: var(--tg-theme-secondary-bg-color);
+      color: var(--tg-theme-text-color);
+      cursor: pointer;
+      transition: transform 0.15s;
+    }
+    .btn-close:active { transform: scale(0.95); }
+    .section-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--tg-theme-hint-color);
+      margin: 24px 0 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+    }
+    .section-title:first-of-type { margin-top: 0; }
+    .section-title::before {
+      content: '';
+      flex: 0 0 3px;
+      height: 14px;
+      background: #F7A600;
+      border-radius: 2px;
+    }
+    .card {
+      background: var(--tg-theme-secondary-bg-color);
+      border-radius: 16px;
+      padding: 16px;
+      margin-bottom: 12px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+      transition: box-shadow 0.2s;
+    }
+    .card:focus-within {
+      box-shadow: 0 2px 12px rgba(247, 166, 0, 0.12);
+    }
+    .field { margin-bottom: 16px; position: relative; }
+    .field:last-child { margin-bottom: 0; }
+    .field label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--tg-theme-hint-color);
+      margin-bottom: 8px;
+    }
+    .field label .required-dot {
+      width: 5px;
+      height: 5px;
+      background: #F7A600;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .field input, .field select, .field textarea {
+      width: 100%;
+      padding: 14px 16px;
+      border-radius: 12px;
+      border: 2px solid transparent;
+      font-size: 16px;
+      background: var(--tg-theme-bg-color);
+      color: var(--tg-theme-text-color);
+      transition: border-color 0.2s, box-shadow 0.2s;
+      outline: none;
+    }
+    .field input:focus, .field select:focus, .field textarea:focus {
+      border-color: rgba(247, 166, 0, 0.5);
+      box-shadow: 0 0 0 3px rgba(247, 166, 0, 0.1);
+    }
+    .field input.field-valid {
+      border-color: rgba(52, 199, 89, 0.5);
+    }
+    .field textarea { min-height: 100px; resize: vertical; line-height: 1.5; }
+    .field select {
+      appearance: none;
+      -webkit-appearance: none;
+      padding-right: 46px;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23666' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+      background-position: calc(100% - 16px) center;
+      background-repeat: no-repeat;
+      cursor: pointer;
+    }
+    .field-hint {
+      font-size: 12px;
+      color: var(--tg-theme-hint-color);
+      margin-top: 6px;
+      line-height: 1.4;
+      opacity: 0.8;
+    }
+    .photo-column { min-width: 0; }
+    .photo-upload-controls {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      padding: 20px;
+      border-radius: 16px;
+      background: var(--tg-theme-bg-color);
+      border: 2px dashed rgba(247, 166, 0, 0.3);
+      transition: border-color 0.2s, background 0.2s;
+    }
+    .photo-upload-controls:hover {
+      border-color: rgba(247, 166, 0, 0.6);
+      background: rgba(247, 166, 0, 0.04);
+    }
+    .photo-upload-label {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0;
+      cursor: pointer;
+    }
+    .photo-input-visually-hidden {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+    .photo-upload-btn-text {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 20px;
+      border-radius: 12px;
+      background: #F7A600;
+      color: #1a1a1a;
+      font-size: 14px;
+      font-weight: 600;
+      line-height: 1.2;
+      transition: transform 0.15s, box-shadow 0.15s;
+    }
+    .photo-upload-btn-text:active { transform: scale(0.97); }
+    .photo-upload-btn-text::before {
+      content: '';
+      width: 18px;
+      height: 18px;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='%231a1a1a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'%3E%3C/path%3E%3Cpolyline points='17 8 12 3 7 8'%3E%3C/polyline%3E%3Cline x1='12' y1='3' x2='12' y2='15'%3E%3C/line%3E%3C/svg%3E");
+      background-size: contain;
+    }
+    .photo-file-name {
+      font-size: 13px;
+      line-height: 1.4;
+      color: var(--tg-theme-hint-color);
+      word-break: break-word;
+      text-align: center;
+    }
+    .service-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      margin-bottom: 12px;
+      padding: 12px;
+      border-radius: 12px;
+      background: var(--tg-theme-bg-color);
+      transition: background 0.2s;
+      min-width: 0;
+    }
+    .service-row:last-child { margin-bottom: 0; }
+    .service-row.service-active {
+      background: rgba(247, 166, 0, 0.08);
+    }
+    .service-row input[type="checkbox"] {
+      width: 22px;
+      height: 22px;
+      flex-shrink: 0;
+      margin-top: 2px;
+      accent-color: #F7A600;
+      cursor: pointer;
+    }
+    /* flex: 1 1 0 + min-width: 0 so long names wrap instead of overlapping the price column */
+    .service-row .svc-name {
+      flex: 1 1 0;
+      min-width: 0;
+      max-width: 100%;
+      font-size: 15px;
+      font-weight: 500;
+      line-height: 1.35;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+      hyphens: auto;
+      padding-right: 6px;
+    }
+    .service-row-price {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+      margin-left: auto;
+    }
+    .service-row input[type="number"] {
+      width: 92px;
+      min-width: 92px;
+      max-width: 92px;
+      flex-shrink: 0;
+      box-sizing: border-box;
+      padding: 10px 8px;
+      border-radius: 10px;
+      font-size: 15px;
+      font-weight: 600;
+      text-align: right;
+      border: 2px solid transparent;
+      transition: border-color 0.2s, opacity 0.2s;
+    }
+    .service-row input[type="number"]:disabled {
+      opacity: 0.4;
+    }
+    .service-row .price-suffix {
+      font-size: 13px;
+      color: var(--tg-theme-hint-color);
+      font-weight: 500;
+      flex-shrink: 0;
+      white-space: nowrap;
+      min-width: 2.2em;
+    }
+    .arena-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 12px;
+      margin-bottom: 6px;
+      border-radius: 10px;
+      background: var(--tg-theme-bg-color);
+      transition: background 0.2s;
+    }
+    .arena-row:last-child { margin-bottom: 0; }
+    .arena-row.arena-active {
+      background: rgba(247, 166, 0, 0.08);
+    }
+    .arena-row input {
+      width: 22px;
+      height: 22px;
+      accent-color: #F7A600;
+      cursor: pointer;
+    }
+    .arena-row label {
+      font-size: 15px;
+      cursor: pointer;
+    }
+    .hint {
+      font-size: 13px;
+      color: var(--tg-theme-hint-color);
+      line-height: 1.5;
+      margin: 0 0 12px;
+    }
+    .edu-card {
+      margin-bottom: 14px;
+      padding: 16px;
+      border-radius: 14px;
+      background: var(--tg-theme-bg-color);
+      border: 1px solid rgba(128, 128, 128, 0.1);
+    }
+    .edu-card:last-child { margin-bottom: 0; }
+    .edu-card-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    .edu-card-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--tg-theme-hint-color);
+      padding-top: 4px;
+    }
+    .edu-delete {
+      flex-shrink: 0;
+      width: 36px;
+      height: 36px;
+      margin: 0;
+      padding: 0;
+      border: none;
+      border-radius: 10px;
+      font-size: 24px;
+      line-height: 1;
+      cursor: pointer;
+      background: rgba(239, 68, 68, 0.12);
+      color: #dc2626;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.15s, transform 0.12s;
+    }
+    .edu-delete:active { transform: scale(0.94); }
+    .edu-delete:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+    .edu-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      margin-top: 14px;
+      padding-top: 14px;
+      border-top: 1px solid rgba(128, 128, 128, 0.1);
+    }
+    .btn-edu-save {
+      padding: 12px 20px;
+      border-radius: 10px;
+      border: none;
+      font-size: 14px;
+      font-weight: 600;
+      background: #F7A600;
+      color: #1a1a1a;
+      cursor: pointer;
+      transition: transform 0.15s;
+    }
+    .btn-edu-save:active { transform: scale(0.97); }
+    .btn-edu-save:disabled { opacity: 0.5; cursor: not-allowed; }
+    .edu-mod {
+      font-size: 12px;
+      color: var(--tg-theme-hint-color);
+      padding: 4px 10px;
+      background: rgba(128, 128, 128, 0.1);
+      border-radius: 6px;
+    }
+    .edu-err {
+      font-size: 13px;
+      color: var(--app-danger);
+      margin: 10px 0 0;
+      line-height: 1.4;
+      padding: 8px 12px;
+      background: rgba(239, 68, 68, 0.08);
+      border-radius: 8px;
+    }
+    .edu-err:empty { display: none; }
+    #descriptionMeta {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    #descriptionMeta.description-warn { color: #f59e0b; }
+    #descriptionMeta.description-ok { color: #34c759; }
+    .char-progress {
+      flex: 1;
+      height: 4px;
+      background: rgba(128, 128, 128, 0.2);
+      border-radius: 2px;
+      overflow: hidden;
+      max-width: 80px;
+    }
+    .char-progress-bar {
+      height: 100%;
+      background: var(--tg-theme-hint-color);
+      border-radius: 2px;
+      transition: width 0.2s, background 0.2s;
+    }
+    .char-progress-bar.warn { background: #f59e0b; }
+    .char-progress-bar.ok { background: #34c759; }
+    .field-error {
+      font-size: 13px;
+      color: var(--app-danger);
+      margin: 8px 0 0;
+      line-height: 1.4;
+      display: flex;
+      align-items: flex-start;
+      gap: 6px;
+    }
+    .field-error::before {
+      content: '!';
+      flex-shrink: 0;
+      width: 16px;
+      height: 16px;
+      background: var(--app-danger);
+      color: #fff;
+      border-radius: 50%;
+      font-size: 11px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .field-error[hidden] { display: none; }
+    .save-bar-error {
+      margin: 0 0 10px !important;
+      text-align: center;
+      justify-content: center;
+    }
+    .field input.field-invalid,
+    .field textarea.field-invalid,
+    .field select.field-invalid {
+      border-color: rgba(239, 68, 68, 0.6);
+      background: rgba(239, 68, 68, 0.04);
+    }
+    #profileIntroHint {
+      max-width: 100%;
+      box-sizing: border-box;
+      word-break: break-word;
+      white-space: normal;
+    }
+    #profileIntroHint.profile-intro--warn {
+      margin: 0 0 16px;
+      padding: 14px 16px;
+      border-radius: 14px;
+      text-align: left;
+      line-height: 1.5;
+      background: rgba(247, 166, 0, 0.1) !important;
+      color: #1a1a1a !important;
+      border: 1px solid rgba(247, 166, 0, 0.3);
+      font-size: 14px;
+    }
+    .missing-list { margin: 0; padding-left: 20px; font-size: 14px; line-height: 1.6; }
+    .missing-list li { margin-bottom: 4px; }
+    #modHint:empty { display: none !important; }
+    .how-it-works { margin-bottom: 14px; }
+    .how-it-works-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--tg-theme-text-color);
+      margin: 0 0 10px;
+      letter-spacing: 0.02em;
+    }
+    .how-it-works-ol {
+      margin: 0;
+      padding-left: 18px;
+      font-size: 13px;
+      line-height: 1.55;
+      color: var(--tg-theme-hint-color);
+    }
+    .how-it-works-ol li { margin-bottom: 8px; }
+    .how-it-works-ol li:last-child { margin-bottom: 0; }
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+      background: var(--tg-theme-secondary-bg-color);
+      color: var(--tg-theme-hint-color);
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+    .status-pill::before {
+      content: '';
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+    .status-pill.ok {
+      background: rgba(52, 199, 89, 0.15) !important;
+      color: #22c55e !important;
+    }
+    .status-pill.warn {
+      background: rgba(247, 166, 0, 0.15) !important;
+      color: #F7A600 !important;
+    }
+    .status-pill.pending {
+      background: rgba(255, 149, 0, 0.15) !important;
+      color: #f97316 !important;
+    }
+    .profile-hero {
+      margin-bottom: 20px;
+      padding: 20px 16px 16px;
+      border-radius: 20px;
+      background: linear-gradient(135deg, var(--tg-theme-secondary-bg-color) 0%, rgba(247, 166, 0, 0.08) 100%) !important;
+      border: 1px solid rgba(247, 166, 0, 0.15);
+      position: relative;
+      overflow: hidden;
+    }
+    .profile-hero::before {
+      content: '';
+      position: absolute;
+      top: -50%;
+      right: -30%;
+      width: 200px;
+      height: 200px;
+      background: radial-gradient(circle, rgba(247, 166, 0, 0.1) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .hero-photo-wrap {
+      display: flex;
+      justify-content: center;
+      margin-bottom: 16px;
+      position: relative;
+    }
+    .hero-photo {
+      width: clamp(120px, 36vw, 150px);
+      height: clamp(120px, 36vw, 150px);
+      border-radius: 24px;
+      background: var(--tg-theme-bg-color);
+      object-fit: cover;
+      flex-shrink: 0;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+      border: 3px solid rgba(247, 166, 0, 0.2);
+    }
+    .hero-photo.placeholder {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--tg-theme-hint-color);
+      text-align: center;
+      padding: 12px;
+    }
+    .hero-photo.placeholder::before {
+      content: '';
+      width: 32px;
+      height: 32px;
+      opacity: 0.4;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 24 24' fill='none' stroke='%23666' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2'%3E%3C/path%3E%3Ccircle cx='12' cy='7' r='4'%3E%3C/circle%3E%3C/svg%3E");
+      background-size: contain;
+    }
+    .hero-body {
+      text-align: center;
+      min-width: 0;
+      position: relative;
+    }
+    .hero-name-row {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+    .hero-name {
+      font-size: 22px;
+      font-weight: 700;
+      line-height: 1.2;
+      margin: 0;
+      letter-spacing: -0.02em;
+      width: 100%;
+      word-break: break-word;
+    }
+    .hero-sub {
+      font-size: 14px;
+      color: var(--tg-theme-hint-color);
+      line-height: 1.4;
+      margin: 0 0 12px;
+    }
+    .hero-stats {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 0;
+      justify-content: center;
+    }
+    .hero-stat {
+      font-size: 12px;
+      font-weight: 500;
+      padding: 8px 12px;
+      border-radius: 10px;
+      background: var(--tg-theme-bg-color);
+      color: var(--tg-theme-text-color);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+      white-space: nowrap;
+    }
+    .progress-ring {
+      margin: 16px auto 0;
+      padding: 12px 16px;
+      background: var(--tg-theme-bg-color);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .progress-ring-visual {
+      position: relative;
+      width: 44px;
+      height: 44px;
+      flex-shrink: 0;
+    }
+    .progress-ring-bg, .progress-ring-fill {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+    }
+    .progress-ring-bg circle, .progress-ring-fill circle {
+      fill: none;
+      stroke-width: 4;
+      cx: 22;
+      cy: 22;
+      r: 18;
+    }
+    .progress-ring-bg circle { stroke: rgba(128, 128, 128, 0.15); }
+    .progress-ring-fill circle {
+      stroke: #F7A600;
+      stroke-linecap: round;
+      transform: rotate(-90deg);
+      transform-origin: center;
+      transition: stroke-dashoffset 0.5s ease;
+    }
+    .progress-ring-fill.complete circle { stroke: #34c759; }
+    .progress-ring-percent {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--tg-theme-text-color);
+    }
+    .progress-ring-info { flex: 1; min-width: 0; }
+    .progress-ring-title {
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 2px;
+    }
+    .progress-ring-subtitle {
+      font-size: 12px;
+      color: var(--tg-theme-hint-color);
+      line-height: 1.3;
+    }
+    .edu-readonly {
+      font-size: 13px;
+      padding: 12px 14px;
+      border-radius: 12px;
+      background: var(--tg-theme-bg-color);
+      margin-bottom: 8px;
+      line-height: 1.5;
+    }
+    .save-toast {
+      position: fixed;
+      left: 50%;
+      bottom: calc(80px + env(safe-area-inset-bottom, 0px));
+      z-index: 20;
+      max-width: calc(100vw - 32px);
+      min-width: 280px;
+      padding: 0;
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.98);
+      color: #0f172a;
+      border: 1px solid rgba(34, 197, 94, 0.2);
+      box-shadow:
+        0 16px 48px rgba(15, 23, 42, 0.15),
+        0 6px 16px rgba(15, 23, 42, 0.08);
+      opacity: 0;
+      transform: translateX(-50%) translateY(20px) scale(0.95);
+      pointer-events: none;
+      transition: all 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    .save-toast.visible {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0) scale(1);
+    }
+    .save-toast-inner {
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+      padding: 16px 18px;
+      text-align: left;
+    }
+    .save-toast-mark {
+      flex-shrink: 0;
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, rgba(34, 197, 94, 0.2) 0%, rgba(34, 197, 94, 0.1) 100%);
+      color: #16a34a;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      font-weight: 700;
+      line-height: 1;
+      animation: checkPop 0.4s ease 0.1s both;
+    }
+    @keyframes checkPop {
+      0% { transform: scale(0); }
+      50% { transform: scale(1.2); }
+      100% { transform: scale(1); }
+    }
+    .save-toast-copy { min-width: 0; }
+    .save-toast-title {
+      display: block;
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      line-height: 1.3;
+      color: #0f172a;
+    }
+    .save-toast-desc {
+      display: block;
+      font-size: 13px;
+      font-weight: 400;
+      color: #64748b;
+      margin-top: 4px;
+      line-height: 1.4;
+    }
+    .save-bar {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      padding: 12px 16px;
+      padding-bottom: calc(12px + env(safe-area-inset-bottom, 0));
+      background: linear-gradient(to top, var(--tg-theme-bg-color) 85%, transparent);
+      z-index: 10;
+    }
+    .btn-save {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      width: 100%;
+      padding: 16px 20px;
+      border-radius: 14px;
+      border: none;
+      font-size: 16px;
+      font-weight: 600;
+      background: linear-gradient(135deg, #F7A600 0%, #e69500 100%) !important;
+      color: #1a1a1a !important;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      box-shadow: 0 4px 12px rgba(247, 166, 0, 0.3);
+    }
+    .btn-save:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+    .btn-save:not(:disabled):hover {
+      box-shadow: 0 6px 20px rgba(247, 166, 0, 0.4);
+    }
+    .btn-save:not(:disabled):active {
+      transform: scale(0.98);
+      box-shadow: 0 2px 8px rgba(247, 166, 0, 0.3);
+    }
+    .btn-save.saving {
+      pointer-events: none;
+    }
+    .btn-save .spinner {
+      width: 18px;
+      height: 18px;
+      border: 2px solid rgba(26, 26, 26, 0.2);
+      border-top-color: #1a1a1a;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      display: none;
+    }
+    .btn-save.saving .spinner { display: block; }
+    .btn-save.saving .btn-save-text { display: none; }
+    .btn-save .btn-save-saving { display: none; }
+    .btn-save.saving .btn-save-saving { display: block; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .error { color: var(--app-danger); font-size: 14px; margin-top: 8px; }
+    .ok { color: var(--app-success); font-size: 14px; margin-top: 8px; }
+    #mainContent { opacity: 0; transition: opacity 0.3s ease; padding-bottom: 100px; }
+    #mainContent.visible { opacity: 1; }
+    .skeleton-wrap { padding: 4px 0; }
+    .skeleton-hero {
+      height: 280px;
+      border-radius: 20px;
+      background: linear-gradient(90deg, var(--tg-theme-secondary-bg-color) 25%, rgba(247, 166, 0, 0.08) 50%, var(--tg-theme-secondary-bg-color) 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s infinite;
+      margin-bottom: 16px;
+    }
+    .skeleton-line {
+      height: 16px;
+      border-radius: 8px;
+      background: linear-gradient(90deg, var(--tg-theme-secondary-bg-color) 25%, rgba(247, 166, 0, 0.08) 50%, var(--tg-theme-secondary-bg-color) 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s infinite;
+      margin-bottom: 12px;
+    }
+    .skeleton-line.short { width: 60%; }
+    @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+    @media (prefers-reduced-motion: reduce) {
+      .btn-save:not(:disabled):active { transform: none; }
+      #mainContent { transition: none; }
+      .skeleton-line, .skeleton-hero { animation: none; opacity: 0.7; }
+      .tab-pane { animation: none; }
+      .save-toast { transition: opacity 0.2s; }
+    }
+    input[type="file"] { font-size: 14px; max-width: 100%; }
+    .phone-input-wrap {
+      position: relative;
+    }
+    .phone-input-wrap .phone-prefix {
+      position: absolute;
+      left: 16px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 16px;
+      color: var(--tg-theme-hint-color);
+      pointer-events: none;
+      font-weight: 500;
+    }
+    .phone-input-wrap input {
+      padding-left: 58px;
+    }
+    .quick-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 16px;
+    }
+    .quick-action-btn {
+      flex: 1;
+      padding: 12px;
+      border-radius: 12px;
+      border: none;
+      font-size: 13px;
+      font-weight: 500;
+      background: var(--tg-theme-bg-color);
+      color: var(--tg-theme-text-color);
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+    }
+    .quick-action-btn:active { transform: scale(0.97); }
+    .quick-action-btn .qa-icon {
+      width: 24px;
+      height: 24px;
+      opacity: 0.7;
+    }
+
+    /* JUSTSKATE.BY — перебиваем тему Telegram, как в расписании */
+    body { background: #FFFBEB !important; color: #1a1a1a !important; }
+    .filter-btn, .btn-close, .card, .edu-readonly, .profile-hero {
+      background: #fff5e1 !important;
+      color: #1a1a1a !important;
+    }
+    .filters { background: #fff5e1 !important; }
+    .profile-hero { background: linear-gradient(135deg, #fff5e1 0%, rgba(245, 166, 35, 0.12) 100%) !important; }
+    .field input, .field textarea, .field select {
+      background: #FFFBEB !important;
+      color: #1a1a1a !important;
+    }
+    .service-row, .arena-row, .progress-ring, .edu-card {
+      background: #FFFBEB !important;
+    }
+    .service-row.service-active, .arena-row.arena-active {
+      background: rgba(247, 166, 0, 0.12) !important;
+    }
+    .service-row input[type="number"] {
+      background: #fff !important;
+      color: #1a1a1a !important;
+      border: 1px solid rgba(247, 166, 0, 0.4) !important;
+    }
+    .service-row input[type="number"].field-invalid {
+      border-color: rgba(239, 68, 68, 0.6) !important;
+      background: rgba(239, 68, 68, 0.04) !important;
+    }
+    @media (prefers-color-scheme: dark) {
+      body { background: #1a1a1a !important; color: #f5f5f5 !important; }
+      .filter-btn, .btn-close, .card, .edu-readonly {
+        background: #2a2a2a !important;
+        color: #f5f5f5 !important;
+      }
+      .filters { background: #252525 !important; }
+      .profile-hero {
+        background: linear-gradient(135deg, #2a2a2a 0%, rgba(247, 166, 0, 0.1) 100%) !important;
+        color: #f5f5f5 !important;
+      }
+      .field input, .field textarea, .field select {
+        background: #1a1a1a !important;
+        color: #f5f5f5 !important;
+      }
+      .service-row, .arena-row, .progress-ring, .edu-card {
+        background: #222 !important;
+      }
+      .service-row.service-active, .arena-row.arena-active {
+        background: rgba(247, 166, 0, 0.15) !important;
+      }
+      .service-row input[type="number"] {
+        background: #1a1a1a !important;
+        color: #F7A600 !important;
+        border: 1px solid rgba(247, 166, 0, 0.5) !important;
+      }
+      .save-toast {
+        background: rgba(42, 42, 42, 0.98) !important;
+        border-color: rgba(34, 197, 94, 0.3) !important;
+        box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5), 0 6px 16px rgba(0, 0, 0, 0.3) !important;
+      }
+      .save-toast-title { color: #f8fafc !important; }
+      .save-toast-desc { color: #94a3b8 !important; }
+      .save-toast-mark { background: rgba(34, 197, 94, 0.2) !important; color: #4ade80 !important; }
+      .hero-photo { box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4); }
+      #profileIntroHint.profile-intro--warn {
+        background: rgba(247, 166, 0, 0.1) !important;
+        color: #f5f5f5 !important;
+        border-color: rgba(247, 166, 0, 0.35);
+      }
+      .quick-action-btn { background: #252525 !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="header-title">Профиль</div>
+    <button type="button" class="btn-close" id="btnClose">Закрыть</button>
+  </div>
+
+  <div id="skeleton" class="skeleton-wrap">
+    <div class="skeleton-hero"></div>
+    <div class="skeleton-line"></div>
+    <div class="skeleton-line short"></div>
+    <div class="skeleton-line"></div>
+  </div>
+
+  <div id="mainContent" style="display:none;">
+    <div class="profile-hero" id="profileHero">
+      <div class="hero-photo-wrap">
+        <img id="heroPhoto" class="hero-photo" alt="" style="display:none;" />
+        <div id="heroPhotoPlaceholder" class="hero-photo placeholder" style="display:flex;">Добавьте фото</div>
+      </div>
+      <div class="hero-body">
+        <div class="hero-name-row">
+          <h2 class="hero-name" id="heroName">—</h2>
+          <div id="heroStatusPill" class="status-pill" style="display:none;"></div>
+        </div>
+        <div class="hero-sub" id="heroSub">—</div>
+        <div class="hero-stats" id="heroStats"></div>
+      </div>
+      <div class="progress-ring" id="progressRing">
+        <div class="progress-ring-visual">
+          <svg class="progress-ring-bg" viewBox="0 0 44 44"><circle></circle></svg>
+          <svg class="progress-ring-fill" viewBox="0 0 44 44"><circle stroke-dasharray="113.1" stroke-dashoffset="113.1"></circle></svg>
+          <span class="progress-ring-percent" id="progressPercent">0%</span>
+        </div>
+        <div class="progress-ring-info">
+          <div class="progress-ring-title" id="progressTitle">Заполнение профиля</div>
+          <div class="progress-ring-subtitle" id="progressSubtitle">Критерии готовности к модерации (как в админ-боте)</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card how-it-works" id="howItWorksBlock" aria-labelledby="howItWorksTitle">
+      <div class="how-it-works-title" id="howItWorksTitle">Как это работает</div>
+      <ol class="how-it-works-ol">
+        <li>Изменения в анкете применяются после нажатия «Сохранить» внизу экрана.</li>
+        <li>Когда все обязательные поля заполнены, следующее успешное сохранение ставит профиль в очередь на проверку в админ-боте. Отдельной кнопки «отправить на модерацию» нет.</li>
+        <li>Подробные записи об образовании и фото профиля сохраняются своими кнопками в соответствующих разделах.</li>
+      </ol>
+    </div>
+
+    <p class="hint" id="profileIntroHint"></p>
+
+    <div class="filters" id="profileFilters">
+      <button type="button" class="filter-btn active" data-tab="form">Анкета</button>
+      <button type="button" class="filter-btn" data-tab="photo">Фото</button>
+      <button type="button" class="filter-btn" data-tab="moderation">Статус</button>
+    </div>
+
+    <div id="tab-photo" class="tab-pane">
+      <div class="section-title">Фото профиля</div>
+      <div class="card">
+        <p class="hint" style="margin:0 0 16px;">Фото отображается в шапке профиля и в каталоге тренеров. Выберите качественное фото, где вас хорошо видно.</p>
+        <div class="photo-column">
+          <div class="photo-upload-controls" id="photoDropZone">
+            <label class="photo-upload-label" for="photoInput">
+              <input type="file" id="photoInput" class="photo-input-visually-hidden" accept="image/jpeg,image/png,image/webp" />
+              <span class="photo-upload-btn-text">Загрузить фото</span>
+            </label>
+            <span class="photo-file-name" id="photoFileName">Перетащите файл или нажмите кнопку</span>
+          </div>
+        </div>
+        <div class="field-hint" style="margin-top: 12px; text-align: center;">
+          Форматы: JPEG, PNG, WebP · Размер: до 15 МБ
+        </div>
+      </div>
+    </div>
+
+    <div id="tab-form" class="tab-pane active">
+      <div class="section-title">Основное</div>
+      <div class="card">
+        <div class="field">
+          <label for="first_name"><span class="required-dot"></span>Имя</label>
+          <input id="first_name" type="text" autocomplete="given-name" maxlength="64" placeholder="Как вас зовут" />
+        </div>
+        <div class="field">
+          <label for="last_name"><span class="required-dot"></span>Фамилия</label>
+          <input id="last_name" type="text" autocomplete="family-name" maxlength="64" placeholder="Ваша фамилия" />
+        </div>
+        <div class="field">
+          <label for="age"><span class="required-dot"></span>Возраст</label>
+          <input id="age" type="number" min="1" max="120" inputmode="numeric" placeholder="Полных лет" />
+          <div class="field-hint">От 1 до 120 лет</div>
+        </div>
+        <div class="field">
+          <label for="city_id"><span class="required-dot"></span>Город</label>
+          <select id="city_id"><option value="">Выберите город</option></select>
+        </div>
+      </div>
+
+      <div class="section-title">Контакты</div>
+      <div class="card">
+        <div class="field">
+          <label for="phone"><span class="required-dot"></span>Телефон</label>
+          <div class="phone-input-wrap">
+            <span class="phone-prefix">+375</span>
+            <input id="phone" type="tel" autocomplete="tel" maxlength="32" placeholder="29 123 45 67" inputmode="tel" />
+          </div>
+          <div class="field-hint">Белорусский номер в формате +375 XX XXX XX XX</div>
+        </div>
+        <div class="field">
+          <label for="contacts">Другие контакты</label>
+          <input id="contacts" type="text" placeholder="Telegram, Instagram, email…" maxlength="5000" />
+          <div class="field-hint">Необязательно — дополнительные способы связи</div>
+        </div>
+      </div>
+
+      <div class="section-title">О себе</div>
+      <div class="card">
+        <div class="field">
+          <label for="description"><span class="required-dot"></span>Описание</label>
+          <textarea id="description" placeholder="Расскажите о себе, своём опыте и подходе к тренировкам…" maxlength="5000"></textarea>
+          <div class="field-hint" id="descriptionMeta">
+            <span id="descCharCount">0</span> / 5000
+            <div class="char-progress"><div class="char-progress-bar" id="descProgressBar" style="width: 0%;"></div></div>
+            <span id="descMinHint">мин. 25 символов</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="section-title">Опыт и квалификация</div>
+      <div class="card">
+        <div class="field">
+          <label for="experience_years"><span class="required-dot"></span>Опыт работы (лет)</label>
+          <input id="experience_years" type="number" min="0" max="80" inputmode="numeric" placeholder="Сколько лет тренируете" />
+          <div class="field-hint">От 0 до 80 лет</div>
+        </div>
+        <div class="field">
+          <label for="education"><span class="required-dot"></span>Образование</label>
+          <select id="education"><option value="">Выберите категорию</option></select>
+          <div class="field-hint">Для проверки анкеты достаточно выбрать категорию здесь <strong>или</strong> добавить хотя бы одну подробную запись в блоке ниже (можно и то и другое).</div>
+        </div>
+      </div>
+
+      <div class="section-title">Формат занятий</div>
+      <div class="card">
+        <div class="field">
+          <label for="session_duration_minutes"><span class="required-dot"></span>Длительность занятия</label>
+          <input id="session_duration_minutes" type="number" min="15" max="240" step="1" placeholder="Минут" inputmode="numeric" />
+          <div class="field-hint">От 15 до 240 минут</div>
+        </div>
+        <div class="field">
+          <label for="min_hours_before_booking"><span class="required-dot"></span>За сколько часов до занятия клиент может записаться</label>
+          <input id="min_hours_before_booking" type="number" min="0" max="168" step="1" placeholder="Например 12 или 24" inputmode="numeric" />
+          <div class="field-hint">Считаются только часы в интервале <strong>8:00–22:00</strong> по <strong>Минску</strong> между текущим моментом и началом занятия (ночь и раннее утро в расчёт не входят — это не просто «сутки × N»).</div>
+        </div>
+      </div>
+
+      <div class="section-title">Подробное образование</div>
+      <div class="card" id="educationEntriesWrap">
+        <p class="hint" id="educationEntriesEmpty">Если категория в блоке «Опыт и квалификация» уже выбрана, подробные записи необязательны. Если категорию не выбирали — добавьте сюда хотя бы одну запись. Дополнительно записи усиливают доверие.</p>
+        <div id="educationEntries"></div>
+        <div id="educationNewWrap" style="display:none; margin-top:14px; padding-top:14px; border-top:1px solid rgba(128,128,128,0.15);"></div>
+        <button type="button" class="filter-btn" id="btnEducationAdd" style="margin-top:14px; width: 100%; justify-content: center;">+ Добавить запись</button>
+      </div>
+
+      <div class="section-title">Услуги и цены</div>
+      <div class="card">
+        <p class="hint" style="margin: 0 0 14px;">Выберите услуги и укажите цену в белорусских рублях (BYN)</p>
+        <div id="servicesWrap"></div>
+        <p class="field-error" id="err_services" role="status" hidden style="margin:14px 0 0;"></p>
+      </div>
+
+      <div class="section-title">Арены</div>
+      <div class="card">
+        <p class="hint" id="arenaHint">Выберите город — появится список доступных арен.</p>
+        <div id="arenasWrap"></div>
+      </div>
+    </div>
+
+    <div id="tab-moderation" class="tab-pane">
+      <div class="section-title" id="moderation">Статус профиля</div>
+      <div class="card">
+        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 14px;">
+          <div id="modStatusPill" class="status-pill" style="display:none;"></div>
+        </div>
+        <p class="hint" id="modHint" style="margin-bottom: 0;"></p>
+        <div id="modMissingTitle" style="display:none; font-weight:600; margin: 16px 0 10px; font-size: 14px;">Осталось заполнить:</div>
+        <ul class="missing-list" id="modMissingList"></ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="save-bar">
+    <p class="field-error save-bar-error" id="err_general" role="status" hidden></p>
+    <button type="button" class="btn-save" id="btnSave" disabled>
+      <span class="spinner"></span>
+      <span class="btn-save-text">Сохранить изменения</span>
+      <span class="btn-save-saving">Сохраняем…</span>
+    </button>
+  </div>
+  <div id="saveToast" class="save-toast" role="status" aria-live="polite" aria-atomic="true" hidden>
+    <div class="save-toast-inner">
+      <span class="save-toast-mark" aria-hidden="true">✓</span>
+      <div class="save-toast-copy">
+        <strong class="save-toast-title" id="saveToastTitle">Сохранено</strong>
+        <span class="save-toast-desc" id="saveToastDesc" style="display:none;"></span>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function() {
+      var tg = window.Telegram && window.Telegram.WebApp;
+      if (tg) { tg.ready(); tg.expand(); }
+
+      function initData() { return (tg && tg.initData) ? tg.initData : ''; }
+      function headersJson() {
+        var h = { 'Accept': 'application/json', 'Content-Type': 'application/json' };
+        if (initData()) h['X-Telegram-Init-Data'] = initData();
+        return h;
+      }
+      function headers() {
+        var h = { 'Accept': 'application/json' };
+        if (initData()) h['X-Telegram-Init-Data'] = initData();
+        return h;
+      }
+      function apiUrl(path) {
+        var q = initData() ? ('?init_data=' + encodeURIComponent(initData())) : '';
+        return '/api/webapp' + path + q;
+      }
+      function haptic(kind) {
+        try {
+          if (tg && tg.HapticFeedback && typeof tg.HapticFeedback.notificationOccurred === 'function') {
+            tg.HapticFeedback.notificationOccurred(kind || 'success');
+          }
+        } catch (e) {}
+      }
+
+      var saveToastTimer = null;
+      /** Visible confirmation — title + short subtitle for clarity in WebView. */
+      function showSaveToast(title, description) {
+        var el = document.getElementById('saveToast');
+        var tEl = document.getElementById('saveToastTitle');
+        var dEl = document.getElementById('saveToastDesc');
+        if (!el || !tEl || !dEl) return;
+        tEl.textContent = title || 'Готово';
+        if (description) {
+          dEl.textContent = description;
+          dEl.style.display = 'block';
+        } else {
+          dEl.textContent = '';
+          dEl.style.display = 'none';
+        }
+        el.hidden = false;
+        el.classList.add('visible');
+        if (saveToastTimer) clearTimeout(saveToastTimer);
+        saveToastTimer = setTimeout(function() {
+          el.classList.remove('visible');
+          saveToastTimer = setTimeout(function() {
+            el.hidden = true;
+          }, 320);
+        }, 3200);
+      }
+
+      var state = {
+        trainer: null,
+        moderation_readiness: null,
+        education_entries: [],
+        education_create_in_flight: false,
+        cities: [],
+        servicesCatalog: [],
+        arenasList: [],
+        snapshot: null,
+      };
+
+      /** Базовые подписи по enum (без pending_profile — см. heroStatusLabelRu). */
+      function trainerStatusLabelRu(st) {
+        var map = {
+          pending_contract: 'Договор',
+          pending_payment: 'Оплата',
+          active: 'Одобрено',
+          deactivated: 'Отключён'
+        };
+        var k = (st || '').trim();
+        return map[k] || (k || '—');
+      }
+
+      /** Статус в шапке: для черновика учитываем полноту и факт отправки на модерацию. */
+      function heroStatusLabelRu(st, d) {
+        st = (st || '').trim();
+        d = d || {};
+        if (st === 'pending_profile') {
+          if (!d.complete) return 'Не заполнен';
+          if (d.already_submitted_for_moderation) return 'На модерации';
+          return 'Черновик';
+        }
+        return trainerStatusLabelRu(st);
+      }
+
+      function pillClassForTrainerStatus(st, d) {
+        st = (st || '').trim();
+        d = d || {};
+        if (st === 'active') return 'ok';
+        if (st === 'deactivated') return 'warn';
+        if (st === 'pending_contract' || st === 'pending_payment') return 'pending';
+        if (st === 'pending_profile') {
+          if (d.already_submitted_for_moderation) return 'pending';
+          if (!d.complete) return 'warn';
+          return 'pending';
+        }
+        return 'warn';
+      }
+
+      /** Третий чип: короткие подсказки. Для черновика модерация только через «Сохранить» — без лишнего чипа. */
+      function moderationHeroChipText(st, d) {
+        st = (st || '').trim();
+        if (st === 'active') return null;
+        if (st === 'deactivated') return 'Не в каталоге';
+        if (st === 'pending_contract') return 'Следующий шаг: договор';
+        if (st === 'pending_payment') return 'Следующий шаг: оплата';
+        if (st === 'pending_profile') return null;
+        return null;
+      }
+
+      function parseJsonResponse(r) {
+        return r.text().then(function(text) {
+          var d = {};
+          if (text) {
+            try {
+              d = JSON.parse(text);
+            } catch (e) {
+              d = { detail: text || 'Некорректный ответ сервера' };
+            }
+          }
+          return { ok: r.ok, status: r.status, data: d };
+        });
+      }
+
+      var PROFILE_FIELD_IDS = [
+        'first_name', 'last_name', 'age', 'city_id', 'phone', 'contacts', 'description',
+        'experience_years', 'education', 'session_duration_minutes', 'min_hours_before_booking',
+      ];
+      var PHONE_MAX_LEN = 32;
+      /** Aligned with server: Belarus E.164 `+375` + 9 digits after country code. */
+      var PHONE_BY_RE = /^\+375\d{9}$/;
+      var PHONE_BY_ERR = 'Укажите корректный номер телефона.';
+      var MIN_DESCRIPTION_CHARS = 25;
+      var MAX_DESCRIPTION_CHARS = 5000;
+      /** Fallback if API omits field; must match MODERATION_CRITERIA_TOTAL on the server. */
+      var MODERATION_CRITERIA_TOTAL_FALLBACK = 12;
+
+      /** Russian plural for "остался N критерий" (criteria, not form fields). */
+      function ruCriteriaWord(n) {
+        n = Math.floor(Math.abs(n));
+        var n100 = n % 100;
+        var n10 = n % 10;
+        if (n100 >= 11 && n100 <= 14) return 'критериев';
+        if (n10 === 1) return 'критерий';
+        if (n10 >= 2 && n10 <= 4) return 'критерия';
+        return 'критериев';
+      }
+
+      function ruOstalosCriteria(n) {
+        n = Math.floor(Math.abs(n));
+        if (n <= 0) return '';
+        if (n === 1) return 'Остался 1 критерий';
+        return 'Осталось ' + n + ' ' + ruCriteriaWord(n);
+      }
+
+      function friendlyApiMsg(msg) {
+        if (!msg) return 'Проверьте поля формы.';
+        var s = String(msg);
+        if (s.indexOf('Value error, ') === 0) return s.slice('Value error, '.length);
+        return s;
+      }
+
+      function ensureErrorEl(fieldId) {
+        if (fieldId === 'general') return document.getElementById('err_general');
+        var id = 'err_' + fieldId;
+        var existing = document.getElementById(id);
+        if (existing) return existing;
+        var input = document.getElementById(fieldId);
+        if (!input) return null;
+        var wrap = input.closest('.field');
+        if (!wrap) return null;
+        var p = document.createElement('p');
+        p.className = 'field-error';
+        p.id = id;
+        p.setAttribute('role', 'status');
+        p.hidden = true;
+        wrap.appendChild(p);
+        return p;
+      }
+
+      function setFieldInvalid(fieldId, invalid) {
+        var inp = document.getElementById(fieldId);
+        if (inp) inp.classList.toggle('field-invalid', !!invalid);
+      }
+
+      function clearFormErrors() {
+        PROFILE_FIELD_IDS.forEach(function(fid) {
+          var el = document.getElementById('err_' + fid);
+          if (!el) el = ensureErrorEl(fid);
+          if (el) {
+            el.textContent = '';
+            el.hidden = true;
+          }
+          setFieldInvalid(fid, false);
+        });
+        var gen = document.getElementById('err_general');
+        if (gen) {
+          gen.textContent = '';
+          gen.hidden = true;
+        }
+        var es = document.getElementById('err_services');
+        if (es) {
+          es.textContent = '';
+          es.hidden = true;
+        }
+      }
+
+      function showFieldError(fieldId, message) {
+        var el = fieldId === 'general' ? document.getElementById('err_general') : ensureErrorEl(fieldId);
+        if (!el) return;
+        el.textContent = message;
+        el.hidden = !message;
+        if (fieldId !== 'general') setFieldInvalid(fieldId, !!message);
+      }
+
+      /** Map FastAPI/Pydantic loc to form field id (profile.*) or 'general'. */
+      function locToProfileFieldId(loc) {
+        if (!loc || !loc.length) return 'general';
+        var j = -1;
+        for (var i = 0; i < loc.length; i++) {
+          if (loc[i] === 'profile') {
+            j = i;
+            break;
+          }
+        }
+        if (j < 0) return 'general';
+        var key = loc[j + 1];
+        if (key == null) return 'general';
+        var s = String(key);
+        if (PROFILE_FIELD_IDS.indexOf(s) >= 0) return s;
+        return 'general';
+      }
+
+      function applyValidationDetail(detail) {
+        clearFormErrors();
+        if (detail == null) return;
+        if (typeof detail === 'string') {
+          showFieldError('general', detail);
+          return;
+        }
+        if (!Array.isArray(detail)) {
+          showFieldError('general', 'Не удалось сохранить. Проверьте данные.');
+          return;
+        }
+        var byField = {};
+        detail.forEach(function(item) {
+          var loc = item.loc || [];
+          var fid = locToProfileFieldId(loc);
+          var msg = friendlyApiMsg(item.msg || '');
+          if (!msg) return;
+          if (byField[fid]) byField[fid] += ' ' + msg;
+          else byField[fid] = msg;
+        });
+        Object.keys(byField).forEach(function(fid) {
+          showFieldError(fid, byField[fid]);
+        });
+      }
+
+      /** Mirrors `src.shared.profile_phone.normalize_phone_input`. */
+      function normalizePhoneClient(s) {
+        var raw = String(s || '').trim();
+        if (!raw) return '';
+        var d = raw.replace(/\D/g, '');
+        if (!d) return raw.slice(0, PHONE_MAX_LEN);
+        if (d.length === 12 && d.indexOf('375') === 0) return '+' + d;
+        if (d.length === 11 && d.indexOf('80') === 0) return '+375' + d.slice(2);
+        if (d.length === 9) return '+375' + d;
+        return raw.replace(/\s+/g, '').replace(/-/g, '').replace(/\(/g, '').replace(/\)/g, '').replace(/\./g, '').slice(0, PHONE_MAX_LEN);
+      }
+
+      /** Mirrors `src.shared.profile_phone.validate_phone_non_empty`. */
+      function validatePhoneMessage(normalized) {
+        var t = normalized;
+        if (!t) return null;
+        if (t.length > PHONE_MAX_LEN) return 'Телефон: не длиннее 32 символов.';
+        if (!PHONE_BY_RE.test(t)) return PHONE_BY_ERR;
+        return null;
+      }
+
+      function updateDescriptionMeta() {
+        var el = document.getElementById('description');
+        var meta = document.getElementById('descriptionMeta');
+        var charCount = document.getElementById('descCharCount');
+        var progressBar = document.getElementById('descProgressBar');
+        var minHint = document.getElementById('descMinHint');
+        if (!el || !meta) return;
+        var raw = el.value || '';
+        var t = raw.trim();
+        var len = raw.length;
+        var trimLen = t.length;
+        
+        if (charCount) charCount.textContent = len;
+        
+        var progress = Math.min(100, (trimLen / MIN_DESCRIPTION_CHARS) * 100);
+        if (progressBar) {
+          progressBar.style.width = progress + '%';
+          progressBar.classList.remove('warn', 'ok');
+          if (trimLen >= MIN_DESCRIPTION_CHARS) {
+            progressBar.classList.add('ok');
+          } else if (trimLen > 0) {
+            progressBar.classList.add('warn');
+          }
+        }
+        
+        if (minHint) {
+          if (trimLen >= MIN_DESCRIPTION_CHARS) {
+            minHint.textContent = '✓ достаточно';
+            minHint.style.color = '#34c759';
+          } else if (trimLen > 0) {
+            minHint.textContent = 'ещё ' + (MIN_DESCRIPTION_CHARS - trimLen) + ' симв.';
+            minHint.style.color = '#f59e0b';
+          } else {
+            minHint.textContent = 'мин. ' + MIN_DESCRIPTION_CHARS + ' символов';
+            minHint.style.color = '';
+          }
+        }
+        
+        meta.classList.remove('description-warn', 'description-ok');
+        if (trimLen >= MIN_DESCRIPTION_CHARS) {
+          meta.classList.add('description-ok');
+        } else if (trimLen > 0) {
+          meta.classList.add('description-warn');
+        }
+      }
+
+      /**
+       * Per-field validation while typing (same bounds as API / ProfilePatch).
+       * Returns true if this field has no blocking error.
+       */
+      function validateFieldRealtime(fieldId) {
+        var el = document.getElementById(fieldId);
+        if (!el) return true;
+        var msg = null;
+        if (fieldId === 'phone') {
+          var digits = el.value.replace(/\D/g, '');
+          if (digits.length > 0) {
+            var fullPhone = '+375' + digits;
+            msg = validatePhoneMessage(fullPhone);
+          }
+        } else if (fieldId === 'first_name') {
+          if (!(el.value || '').trim()) msg = 'Укажите имя.';
+        } else if (fieldId === 'last_name') {
+          if (!(el.value || '').trim()) msg = 'Укажите фамилию.';
+        } else if (fieldId === 'age') {
+          var av = el.value;
+          if (av === '' || av === null) msg = 'Укажите возраст.';
+          else {
+            var an = Number(av);
+            if (isNaN(an) || an < 1 || an > 120) msg = 'Возраст: от 1 до 120 лет.';
+          }
+        } else if (fieldId === 'city_id') {
+          if (!el.value) msg = 'Выберите город из списка.';
+        } else if (fieldId === 'contacts') {
+          if ((el.value || '').length > MAX_DESCRIPTION_CHARS) {
+            msg = 'Текст контактов не длиннее ' + MAX_DESCRIPTION_CHARS + ' символов.';
+          }
+        } else if (fieldId === 'description') {
+          var dl = (el.value || '').length;
+          if (dl > MAX_DESCRIPTION_CHARS) msg = 'Описание не длиннее ' + MAX_DESCRIPTION_CHARS + ' символов.';
+          updateDescriptionMeta();
+        } else if (fieldId === 'experience_years') {
+          var ev = el.value;
+          if (ev !== '' && ev != null) {
+            var en = Number(ev);
+            if (isNaN(en) || en < 0 || en > 80) msg = 'Опыт: от 0 до 80 лет.';
+          }
+        } else if (fieldId === 'session_duration_minutes') {
+          var sv = el.value;
+          if (sv !== '' && sv != null) {
+            var sn = Number(sv);
+            if (isNaN(sn) || sn < 15 || sn > 240) msg = 'Длительность: от 15 до 240 минут.';
+          }
+        } else if (fieldId === 'min_hours_before_booking') {
+          var mv = el.value;
+          if (mv !== '' && mv != null) {
+            var mn = Number(mv);
+            if (isNaN(mn) || mn < 0 || mn > 168) msg = 'От 0 до 168 часов.';
+          }
+        }
+        if (msg) showFieldError(fieldId, msg);
+        else clearOneFieldError(fieldId);
+        return !msg;
+      }
+
+      /** Same rules as PATCH / ProfilePatch; no side effects. */
+      function collectProfileFieldErrors(parsed) {
+        var pr = parsed.profile;
+        var errs = [];
+        if (!pr.first_name || !String(pr.first_name).trim()) errs.push(['first_name', 'Укажите имя.']);
+        if (!pr.last_name || !String(pr.last_name).trim()) errs.push(['last_name', 'Укажите фамилию.']);
+        if (pr.age == null || pr.age === '') errs.push(['age', 'Укажите возраст.']);
+        else if (pr.age < 1 || pr.age > 120) errs.push(['age', 'Возраст: от 1 до 120 лет.']);
+        if (pr.city_id == null || pr.city_id === '' || Number(pr.city_id) < 1) errs.push(['city_id', 'Выберите город из списка.']);
+        var ph = normalizePhoneClient(pr.phone);
+        var pmsg = validatePhoneMessage(ph);
+        if (pmsg) errs.push(['phone', pmsg]);
+        if ((pr.contacts && String(pr.contacts).length) > MAX_DESCRIPTION_CHARS) {
+          errs.push(['contacts', 'Текст контактов не длиннее ' + MAX_DESCRIPTION_CHARS + ' символов.']);
+        }
+        var desc = pr.description != null ? String(pr.description) : '';
+        if (desc.length > MAX_DESCRIPTION_CHARS) {
+          errs.push(['description', 'Описание не длиннее ' + MAX_DESCRIPTION_CHARS + ' символов.']);
+        }
+        if (pr.experience_years != null && (pr.experience_years < 0 || pr.experience_years > 80)) {
+          errs.push(['experience_years', 'Опыт: от 0 до 80 лет.']);
+        }
+        if (pr.session_duration_minutes != null && (pr.session_duration_minutes < 15 || pr.session_duration_minutes > 240)) {
+          errs.push(['session_duration_minutes', 'Длительность: от 15 до 240 минут.']);
+        }
+        if (pr.min_hours_before_booking != null && (pr.min_hours_before_booking < 0 || pr.min_hours_before_booking > 168)) {
+          errs.push(['min_hours_before_booking', 'От 0 до 168 часов.']);
+        }
+        return errs;
+      }
+
+      function servicesPricesValid(parsed) {
+        var services = parsed.services || [];
+        var i;
+        for (i = 0; i < services.length; i++) {
+          var pb = services[i].price_byn;
+          if (pb == null || pb === '') return false;
+          if (typeof pb === 'number' && (isNaN(pb) || pb < 0)) return false;
+        }
+        return true;
+      }
+
+      function syncServicesValidationUi() {
+        var parsed;
+        try {
+          parsed = JSON.parse(readFormSnapshot());
+        } catch (e) {
+          return;
+        }
+        var svcOk = servicesPricesValid(parsed);
+        state.servicesCatalog.forEach(function(s) {
+          var cb = document.getElementById('svc_' + s.id);
+          var priceEl = document.getElementById('price_' + s.id);
+          if (!cb || !priceEl) return;
+          var invalid = false;
+          if (cb.checked) {
+            var pv = priceEl.value.trim();
+            if (pv === '') invalid = true;
+            else {
+              var n = Number(pv);
+              if (isNaN(n) || n < 0) invalid = true;
+            }
+          }
+          priceEl.classList.toggle('field-invalid', invalid);
+        });
+        var errEl = document.getElementById('err_services');
+        if (errEl) {
+          if (!svcOk && (parsed.services || []).length > 0) {
+            errEl.textContent = 'Укажите цену (BYN) для каждой выбранной услуги.';
+            errEl.hidden = false;
+          } else {
+            errEl.textContent = '';
+            errEl.hidden = true;
+          }
+        }
+      }
+
+      function isFormValidForSave() {
+        try {
+          var parsed = JSON.parse(readFormSnapshot());
+        } catch (e) {
+          return false;
+        }
+        if (collectProfileFieldErrors(parsed).length) return false;
+        if (!servicesPricesValid(parsed)) return false;
+        return true;
+      }
+
+      /** Client-side checks (mirror server rules) before PATCH. */
+      function clientValidateProfile(parsed) {
+        var errs = collectProfileFieldErrors(parsed);
+        if (!servicesPricesValid(parsed)) {
+          errs.push(['services', 'Укажите цену (BYN) для каждой выбранной услуги.']);
+        }
+        if (!errs.length) return true;
+        errs.forEach(function(pair) {
+          if (pair[0] === 'services') {
+            var es = document.getElementById('err_services');
+            if (es) {
+              es.textContent = pair[1];
+              es.hidden = false;
+            }
+          } else {
+            showFieldError(pair[0], pair[1]);
+          }
+        });
+        return false;
+      }
+
+      /**
+       * После каждого успешного «Сохранить» (и после загрузки фото): синхронизировали state с сервером —
+       * если статус черновик и анкета полная и ещё не в очереди на проверку, отправляем в админ-бот.
+       * Тренер отдельно модерацию не запускает.
+       */
+      function maybeAutoSubmitForModeration() {
+        var t = state.trainer;
+        var d = state.moderation_readiness || {};
+        var st = (t && t.status) ? String(t.status).trim() : '';
+        if (st !== 'pending_profile' || !d.complete || d.already_submitted_for_moderation) {
+          return Promise.resolve();
+        }
+        return fetch(apiUrl('/trainer/onboarding/submit-for-moderation'), {
+          method: 'POST',
+          headers: Object.assign(headers(), { 'Content-Type': 'application/json' }),
+          body: '{}',
+        })
+          .then(parseJsonResponse)
+          .then(function(sub) {
+            if (!sub.ok) return Promise.resolve();
+            if (sub.data && sub.data.noop) return Promise.resolve();
+            return loadProfile();
+          })
+          .catch(function() { return Promise.resolve(); });
+      }
+
+      function normSnapshot() {
+        var p = state.trainer && state.trainer.profile ? state.trainer.profile : {};
+        var services = (state.trainer && state.trainer.services) ? state.trainer.services : [];
+        var svc = services.map(function(s) {
+          return { service_id: s.service_id, price_byn: s.price_byn == null ? null : Number(s.price_byn) };
+        }).sort(function(a, b) { return a.service_id - b.service_id; });
+        var arena_ids = (state.trainer && state.trainer.arena_ids) ? state.trainer.arena_ids.slice().sort(function(a,b){ return a-b; }) : [];
+        return JSON.stringify({
+          profile: {
+            first_name: p.first_name || '',
+            last_name: p.last_name || '',
+            age: p.age != null ? Number(p.age) : null,
+            city_id: p.city_id != null ? Number(p.city_id) : null,
+            phone: p.phone || '',
+            contacts: p.contacts || '',
+            description: p.description || '',
+            experience_years: p.experience_years != null ? Number(p.experience_years) : null,
+            education: p.education || null,
+            session_duration_minutes: p.session_duration_minutes != null ? Number(p.session_duration_minutes) : null,
+            min_hours_before_booking: p.min_hours_before_booking != null ? Number(p.min_hours_before_booking) : null,
+          },
+          services: svc,
+          arena_ids: arena_ids,
+        });
+      }
+
+      function readFormSnapshot() {
+        function num(id, emptyNull) {
+          var el = document.getElementById(id);
+          if (!el) return emptyNull ? null : undefined;
+          var v = el.value;
+          if (v === '' || v === null) return emptyNull ? null : undefined;
+          var n = Number(v);
+          return isNaN(n) ? null : n;
+        }
+        function str(id) {
+          var el = document.getElementById(id);
+          var v = el ? el.value.trim() : '';
+          if ((id === 'first_name' || id === 'last_name') && v === '/invite') return '';
+          return v;
+        }
+        function phoneStr() {
+          var el = document.getElementById('phone');
+          if (!el) return '';
+          var digits = el.value.replace(/\D/g, '');
+          if (!digits) return '';
+          return '+375' + digits;
+        }
+        var cityEl = document.getElementById('city_id');
+        var cityVal = cityEl && cityEl.value !== '' ? Number(cityEl.value) : null;
+        var services = [];
+        state.servicesCatalog.forEach(function(s) {
+          var cb = document.getElementById('svc_' + s.id);
+          var priceEl = document.getElementById('price_' + s.id);
+          if (cb && cb.checked) {
+            var pb = priceEl && priceEl.value !== '' ? Number(priceEl.value) : null;
+            services.push({ service_id: s.id, price_byn: pb });
+          }
+        });
+        services.sort(function(a, b) { return a.service_id - b.service_id; });
+        var arena_ids = [];
+        state.arenasList.forEach(function(a) {
+          var cb = document.getElementById('arena_' + a.id);
+          if (cb && cb.checked) arena_ids.push(a.id);
+        });
+        arena_ids.sort(function(a, b) { return a - b; });
+        var eduSel = document.getElementById('education');
+        var eduVal = eduSel && eduSel.value ? eduSel.value : '';
+        return JSON.stringify({
+          profile: {
+            first_name: str('first_name'),
+            last_name: str('last_name'),
+            age: num('age', true),
+            city_id: cityVal,
+            phone: phoneStr(),
+            contacts: str('contacts'),
+            description: str('description'),
+            experience_years: num('experience_years', true),
+            education: eduVal ? eduVal : null,
+            session_duration_minutes: num('session_duration_minutes', true),
+            min_hours_before_booking: num('min_hours_before_booking', true),
+          },
+          services: services,
+          arena_ids: arena_ids,
+        });
+      }
+
+      function setDirty() {
+        var dirty = state.snapshot !== null && readFormSnapshot() !== state.snapshot;
+        var btn = document.getElementById('btnSave');
+        if (!btn) return;
+        syncServicesValidationUi();
+        btn.disabled = !dirty || !isFormValidForSave();
+      }
+
+      function showMain() {
+        document.getElementById('skeleton').style.display = 'none';
+        var m = document.getElementById('mainContent');
+        m.style.display = 'block';
+        requestAnimationFrame(function() { m.classList.add('visible'); });
+      }
+
+      function setTab(tab) {
+        // Inline JS UI state: keep existing business logic untouched.
+        var formPane = document.getElementById('tab-form');
+        var photoPane = document.getElementById('tab-photo');
+        var moderationPane = document.getElementById('tab-moderation');
+        // Keep tabs consistent: "Фото" отдельный экран, как переключение категорий в расписании.
+        if (formPane) formPane.classList.toggle('active', tab === 'form');
+        if (photoPane) photoPane.classList.toggle('active', tab === 'photo');
+        if (moderationPane) moderationPane.classList.toggle('active', tab === 'moderation');
+
+        var btns = document.querySelectorAll('#profileFilters .filter-btn');
+        btns.forEach(function(b) {
+          var bt = b.getAttribute('data-tab');
+          b.classList.toggle('active', bt === tab);
+        });
+
+        // Sync hash so redirect/deep-link into moderation works,
+        // but "save" won't unexpectedly jump back if user changed tab.
+        try {
+          if (tab === 'moderation') {
+            if (window.location.hash !== '#moderation') {
+              history.replaceState(null, '', window.location.pathname + window.location.search + '#moderation');
+            }
+          } else {
+            if (window.location.hash === '#moderation') {
+              history.replaceState(null, '', window.location.pathname + window.location.search);
+            }
+          }
+        } catch (e) {}
+      }
+
+      (function initTabs() {
+        var buttons = document.querySelectorAll('#profileFilters .filter-btn');
+        buttons.forEach(function(btn) {
+          btn.addEventListener('click', function() {
+            var tab = btn.getAttribute('data-tab');
+            setTab(tab);
+          });
+        });
+        if (window.location.hash === '#moderation') setTab('moderation');
+        else setTab('form');
+      })();
+
+      function fillFormFromTrainer() {
+        var t = state.trainer;
+        if (!t) return Promise.resolve();
+        var p = t.profile || {};
+        function setv(id, v) {
+          var el = document.getElementById(id);
+          if (!el) return;
+          if (
+            (id === 'first_name' || id === 'last_name') &&
+            typeof v === 'string' &&
+            v.trim() === '/invite'
+          ) v = '';
+          if (v === null || v === undefined) el.value = '';
+          else el.value = v;
+        }
+        function setPhone(phone) {
+          var el = document.getElementById('phone');
+          if (!el) return;
+          if (!phone) { el.value = ''; return; }
+          var digits = String(phone).replace(/\D/g, '');
+          if (digits.startsWith('375')) digits = digits.slice(3);
+          else if (digits.startsWith('80')) digits = digits.slice(2);
+          if (digits.length > 9) digits = digits.slice(0, 9);
+          var formatted = '';
+          if (digits.length > 0) formatted += digits.slice(0, 2);
+          if (digits.length > 2) formatted += ' ' + digits.slice(2, 5);
+          if (digits.length > 5) formatted += ' ' + digits.slice(5, 7);
+          if (digits.length > 7) formatted += ' ' + digits.slice(7, 9);
+          el.value = formatted;
+        }
+        setv('first_name', p.first_name);
+        setv('last_name', p.last_name);
+        setv('age', p.age);
+        setPhone(p.phone);
+        setv('contacts', p.contacts);
+        setv('description', p.description);
+        updateDescriptionMeta();
+        setv('experience_years', p.experience_years);
+        setv('session_duration_minutes', p.session_duration_minutes);
+        setv('min_hours_before_booking', p.min_hours_before_booking);
+        var citySel = document.getElementById('city_id');
+        if (citySel) citySel.value = p.city_id != null ? String(p.city_id) : '';
+        var eduSel = document.getElementById('education');
+        if (eduSel) eduSel.value = p.education || '';
+
+        var photos = t.photos || [];
+        var first = photos[0];
+        var pfn = document.getElementById('photoFileName');
+        if (pfn) pfn.textContent = first && first.file_key ? 'Перетащите новый файл или нажмите кнопку' : 'Перетащите файл или нажмите кнопку';
+
+        renderServices();
+        return loadArenasForCity(p.city_id).then(function() {
+          renderArenas();
+          renderHeroSummary();
+        });
+      }
+
+      function renderModeration() {
+        var d = state.moderation_readiness || {};
+        var st = (state.trainer && state.trainer.status) ? String(state.trainer.status).trim() : '';
+        var missList = document.getElementById('modMissingList');
+        missList.innerHTML = '';
+        var pill = document.getElementById('modStatusPill');
+        if (st) {
+          pill.style.display = 'inline-block';
+          pill.textContent = heroStatusLabelRu(st, d);
+          pill.classList.remove('ok', 'warn', 'pending');
+          pill.classList.add(pillClassForTrainerStatus(st, d));
+        } else { pill.style.display = 'none'; }
+        var hint = document.getElementById('modHint');
+        var missTitle = document.getElementById('modMissingTitle');
+
+        if (st === 'active') {
+          missTitle.style.display = 'none';
+          hint.textContent = 'Вы в каталоге — клиенты могут вас найти и записаться.';
+        } else if (st === 'deactivated') {
+          missTitle.style.display = 'none';
+          hint.textContent = 'Каталог недоступен. Восстановление — через поддержку.';
+        } else if (st === 'pending_contract') {
+          missTitle.style.display = 'none';
+          hint.textContent = 'Следующий шаг — договор с менеджером.';
+        } else if (st === 'pending_payment') {
+          missTitle.style.display = 'none';
+          hint.textContent = 'Следующий шаг — оплата подписки.';
+        } else if (st === 'pending_profile') {
+          if (d.already_submitted_for_moderation) {
+            missTitle.style.display = 'none';
+            hint.textContent = 'Ожидается проверка в админ-боте.';
+          } else if (d.complete) {
+            missTitle.style.display = 'none';
+            hint.textContent = 'Все критерии для очереди на проверку выполнены.';
+          } else {
+            missTitle.style.display = 'block';
+            hint.textContent = '';
+            (d.missing_labels_ru || []).forEach(function(label) {
+              var li = document.createElement('li');
+              li.textContent = label;
+              missList.appendChild(li);
+            });
+          }
+        } else {
+          missTitle.style.display = 'none';
+          hint.textContent = trainerStatusLabelRu(st) + '.';
+        }
+      }
+
+      function renderHeroSummary() {
+        var t = state.trainer || {};
+        var p = t.profile || {};
+        var d = state.moderation_readiness || {};
+        var st = t.status ? String(t.status) : '';
+
+        var firstName = (p.first_name || '').toString().trim();
+        var lastName = (p.last_name || '').toString().trim();
+        // Same sanitization as in form: Telegram command token may leak into name fields.
+        if (firstName === '/invite') firstName = '';
+        if (lastName === '/invite') lastName = '';
+        var fullName = (firstName + ' ' + lastName).trim() || '—';
+
+        var heroName = document.getElementById('heroName');
+        if (heroName) heroName.textContent = fullName;
+
+        var cityName = '—';
+        if (p.city_id != null) {
+          var cid = Number(p.city_id);
+          var c = (state.cities || []).find(function(x) { return Number(x.id) === cid; });
+          if (c && c.name) cityName = c.name;
+        }
+
+        var servicesCount = (t.services || []).length || 0;
+        var arenasCount = (t.arena_ids || []).length || 0;
+
+        var age = p.age != null && p.age !== '' ? String(p.age) : '';
+        var exp = p.experience_years != null && p.experience_years !== '' ? String(p.experience_years) : '';
+
+        var subParts = [];
+        if (cityName && cityName !== '—') subParts.push('Город: ' + cityName);
+        if (age) subParts.push('Возраст: ' + age);
+        if (exp) subParts.push('Опыт: ' + exp + ' лет');
+        if (!subParts.length) subParts.push('—');
+
+        var heroSub = document.getElementById('heroSub');
+        if (heroSub) heroSub.textContent = subParts.join(' · ');
+
+        var heroStats = document.getElementById('heroStats');
+        if (heroStats) {
+          heroStats.innerHTML = '';
+
+          var stat1 = document.createElement('div');
+          stat1.className = 'hero-stat';
+          stat1.textContent = 'Услуги: ' + servicesCount;
+          heroStats.appendChild(stat1);
+
+          var stat2 = document.createElement('div');
+          stat2.className = 'hero-stat';
+          stat2.textContent = 'Арены: ' + arenasCount;
+          heroStats.appendChild(stat2);
+
+          var chipExtra = moderationHeroChipText(st, d);
+          if (chipExtra != null && chipExtra !== '') {
+            var stat3 = document.createElement('div');
+            stat3.className = 'hero-stat';
+            stat3.textContent = chipExtra;
+            heroStats.appendChild(stat3);
+          }
+        }
+
+        var heroStatusPill = document.getElementById('heroStatusPill');
+        if (heroStatusPill) {
+          heroStatusPill.style.display = st ? 'inline-block' : 'none';
+          if (st) {
+            heroStatusPill.textContent = heroStatusLabelRu(st, d);
+            heroStatusPill.classList.remove('ok', 'warn', 'pending');
+            heroStatusPill.classList.add(pillClassForTrainerStatus(st, d));
+          }
+        }
+
+        // Photo: keep hero independent from the "Фото" tab content.
+        var photos = t.photos || [];
+        var first = photos[0];
+        var heroPhoto = document.getElementById('heroPhoto');
+        var heroPlaceholder = document.getElementById('heroPhotoPlaceholder');
+        if (heroPhoto && heroPlaceholder) {
+          heroPhoto.style.display = 'none';
+          heroPlaceholder.style.display = 'flex';
+
+          // Prefer same-origin proxy by file_key to avoid broken/cross-origin images.
+          if (first && first.file_key) {
+            heroPhoto.src = '/api/public/photos/' + encodeURIComponent(first.file_key);
+            heroPhoto.style.display = 'block';
+            heroPlaceholder.style.display = 'none';
+          } else if (first && (first.url || first.list_url)) {
+            heroPhoto.src = first.url || first.list_url;
+            heroPhoto.style.display = 'block';
+            heroPlaceholder.style.display = 'none';
+          }
+
+          heroPhoto.onerror = function() {
+            heroPhoto.style.display = 'none';
+            heroPlaceholder.style.display = 'flex';
+          };
+        }
+
+        var hBlock = document.getElementById('howItWorksBlock');
+        if (hBlock) {
+          /* Onboarding-only copy: moderation queue rules do not apply after approval. */
+          hBlock.style.display = (st || '').trim() === 'pending_profile' ? '' : 'none';
+        }
+
+        var intro = document.getElementById('profileIntroHint');
+        if (intro) {
+          intro.classList.remove('profile-intro--warn');
+          var s = (st || '').trim();
+          /* Short status cue only — full pipeline is in #howItWorksBlock */
+          if (s === 'active') {
+            intro.textContent = 'Профиль в каталоге. Правки — «Сохранить» внизу.';
+          } else if (s === 'pending_profile') {
+            var rd = state.moderation_readiness || {};
+            if (rd.already_submitted_for_moderation) {
+              intro.textContent = 'На проверке в админ-боте. После правок снова сохраните анкету.';
+            } else if (!rd.complete) {
+              intro.classList.add('profile-intro--warn');
+              intro.textContent = 'Анкета неполная — подсказки на вкладке «Статус».';
+            } else {
+              intro.textContent = 'Все обязательные поля заполнены. Сохраните анкету внизу.';
+            }
+          } else if (s === 'pending_contract' || s === 'pending_payment') {
+            intro.textContent = 'Этап: ' + trainerStatusLabelRu(s) + '.';
+          } else if (s === 'deactivated') {
+            intro.textContent = 'Профиль скрыт из каталога.';
+          } else {
+            intro.textContent = 'Этап: ' + trainerStatusLabelRu(s) + '.';
+          }
+        }
+      }
+
+      function updateProgressRing() {
+        var d = state.moderation_readiness || {};
+        var missing = d.missing_fields || [];
+        var totalCriteria =
+          d.moderation_criteria_total != null && !isNaN(Number(d.moderation_criteria_total))
+            ? Math.max(1, Math.floor(Number(d.moderation_criteria_total)))
+            : MODERATION_CRITERIA_TOTAL_FALLBACK;
+        var filledCriteria = Math.max(0, totalCriteria - missing.length);
+        var percent = Math.round((filledCriteria / totalCriteria) * 100);
+        
+        var percentEl = document.getElementById('progressPercent');
+        var titleEl = document.getElementById('progressTitle');
+        var subtitleEl = document.getElementById('progressSubtitle');
+        var ringFill = document.querySelector('.progress-ring-fill');
+        var ringCircle = document.querySelector('.progress-ring-fill circle');
+        
+        if (percentEl) percentEl.textContent = percent + '%';
+        
+        if (ringCircle) {
+          var circumference = 2 * Math.PI * 18;
+          var offset = circumference - (percent / 100) * circumference;
+          ringCircle.style.strokeDashoffset = offset;
+        }
+        
+        if (ringFill) {
+          ringFill.classList.toggle('complete', percent === 100);
+        }
+        
+        if (titleEl && subtitleEl) {
+          if (percent === 100) {
+            titleEl.textContent = 'Профиль готов!';
+            subtitleEl.textContent = 'Все ' + totalCriteria + ' критериев готовности выполнены';
+          } else if (percent >= 75) {
+            titleEl.textContent = 'Почти готово';
+            subtitleEl.textContent = ruOstalosCriteria(missing.length);
+          } else if (percent >= 50) {
+            titleEl.textContent = 'Хороший прогресс';
+            subtitleEl.textContent = 'Готово ' + filledCriteria + ' из ' + totalCriteria + ' критериев';
+          } else {
+            titleEl.textContent = 'Заполнение профиля';
+            subtitleEl.textContent =
+              'Нужно закрыть до ' + totalCriteria + ' критериев (как в модерации) — см. вкладку «Статус»';
+          }
+        }
+      }
+
+      function eduModLabelRu(st) {
+        var m = {
+          pending_moderation: 'на модерации',
+          approved: 'в анкете',
+          rejected: 'отклонено',
+        };
+        return m[st] || (st || '');
+      }
+
+      function optionalStr(v) {
+        var t = (v == null ? '' : String(v)).trim();
+        return t === '' ? null : t;
+      }
+
+      function collectEducationPayload(card) {
+        var typeEl = card.querySelector('.edu-type');
+        var get = function(sel) {
+          var n = card.querySelector(sel);
+          return n ? n.value : '';
+        };
+        var body = {
+          education_type: typeEl ? typeEl.value : 'formal_education',
+          institution_name: get('.edu-inst').trim(),
+          program_or_title: get('.edu-prog').trim(),
+          degree_level: optionalStr(get('.edu-degree')),
+          country: optionalStr(get('.edu-country')),
+          city: optionalStr(get('.edu-city')),
+          document_url: optionalStr(get('.edu-doc')),
+          is_in_progress: !!(card.querySelector('.edu-inprog') && card.querySelector('.edu-inprog').checked),
+        };
+        var sy = get('.edu-sy').trim();
+        var ey = get('.edu-ey').trim();
+        body.start_year = sy === '' ? null : Number(sy);
+        body.end_year = ey === '' ? null : Number(ey);
+        if (sy !== '' && isNaN(body.start_year)) body.start_year = NaN;
+        if (ey !== '' && isNaN(body.end_year)) body.end_year = NaN;
+        return body;
+      }
+
+      function validateEducationPayload(body, errEl) {
+        if (!errEl) return false;
+        errEl.textContent = '';
+        if ((body.institution_name || '').length < 2) {
+          errEl.textContent = 'Укажите учебное заведение (не меньше 2 символов).';
+          return false;
+        }
+        if ((body.program_or_title || '').length < 2) {
+          errEl.textContent = 'Укажите программу или специализацию (не меньше 2 символов).';
+          return false;
+        }
+        if (body.start_year != null && (isNaN(body.start_year) || body.start_year < 1950 || body.start_year > 2100)) {
+          errEl.textContent = 'Год начала: 1950–2100.';
+          return false;
+        }
+        if (body.end_year != null && (isNaN(body.end_year) || body.end_year < 1950 || body.end_year > 2100)) {
+          errEl.textContent = 'Год окончания: 1950–2100.';
+          return false;
+        }
+        if (
+          body.start_year != null && !isNaN(body.start_year) &&
+          body.end_year != null && !isNaN(body.end_year) &&
+          body.start_year > body.end_year
+        ) {
+          errEl.textContent = 'Год начала не должен быть больше года окончания.';
+          return false;
+        }
+        return true;
+      }
+
+      function makeEducationCard(e) {
+        var card = document.createElement('div');
+        card.className = 'edu-card';
+        card.setAttribute('data-edu-id', String(e.id));
+
+        var eduIdPersisted =
+          e.id != null &&
+          e.id !== 'new' &&
+          String(e.id) !== 'new' &&
+          String(e.id).trim() !== '' &&
+          !isNaN(parseInt(String(e.id), 10));
+        if (eduIdPersisted) {
+          var head = document.createElement('div');
+          head.className = 'edu-card-header';
+          var titleEl = document.createElement('span');
+          titleEl.className = 'edu-card-title';
+          titleEl.textContent = 'Запись об образовании';
+          var delBtn = document.createElement('button');
+          delBtn.type = 'button';
+          delBtn.className = 'edu-delete';
+          delBtn.setAttribute('aria-label', 'Удалить запись');
+          delBtn.textContent = '\u00D7';
+          delBtn.addEventListener('click', function() {
+            if (delBtn.disabled) return;
+            if (!confirm('\u0423\u0434\u0430\u043b\u0438\u0442\u044c \u044d\u0442\u0443 \u0437\u0430\u043f\u0438\u0441\u044c \u043e\u0431 \u043e\u0431\u0440\u0430\u0437\u043e\u0432\u0430\u043d\u0438\u0438?')) return;
+            var eduId = parseInt(card.getAttribute('data-edu-id'), 10);
+            if (isNaN(eduId)) return;
+            delBtn.disabled = true;
+            fetch(apiUrl('/trainer/education/' + encodeURIComponent(eduId)), {
+              method: 'DELETE',
+              headers: headers(),
+            })
+              .then(parseJsonResponse)
+              .then(function(o) {
+                if (o.ok) {
+                  haptic('success');
+                  return loadProfile().then(function() {
+                    showSaveToast('Запись удалена', 'Список образования обновлён.');
+                  }).then(function() { return maybeAutoSubmitForModeration(); });
+                }
+                haptic('error');
+                var msg = (o.data && o.data.detail) ? String(o.data.detail) : '\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u0443\u0434\u0430\u043b\u0438\u0442\u044c.';
+                alert(msg);
+              })
+              .catch(function() {
+                haptic('error');
+                alert('\u041e\u0448\u0438\u0431\u043a\u0430 \u0441\u0435\u0442\u0438.');
+              })
+              .finally(function() {
+                delBtn.disabled = false;
+              });
+          });
+          head.appendChild(titleEl);
+          head.appendChild(delBtn);
+          card.appendChild(head);
+        }
+
+        function addField(label, input) {
+          var row = document.createElement('div');
+          row.className = 'field';
+          var lab = document.createElement('label');
+          lab.textContent = label;
+          row.appendChild(lab);
+          row.appendChild(input);
+          card.appendChild(row);
+        }
+
+        var sel = document.createElement('select');
+        sel.className = 'edu-type';
+        [['formal_education', 'Вуз / колледж / ССО'], ['course_or_certificate', 'Курсы / сертификат']].forEach(function(opt) {
+          var o = document.createElement('option');
+          o.value = opt[0];
+          o.textContent = opt[1];
+          sel.appendChild(o);
+        });
+        sel.value = e.education_type || 'formal_education';
+        addField('Тип', sel);
+
+        var inst = document.createElement('input');
+        inst.type = 'text';
+        inst.className = 'edu-inst';
+        inst.maxLength = 160;
+        inst.value = e.institution_name || '';
+        addField('Учебное заведение', inst);
+
+        var prog = document.createElement('input');
+        prog.type = 'text';
+        prog.className = 'edu-prog';
+        prog.maxLength = 180;
+        prog.value = e.program_or_title || '';
+        addField('Программа / специализация', prog);
+
+        var deg = document.createElement('input');
+        deg.type = 'text';
+        deg.className = 'edu-degree';
+        deg.maxLength = 64;
+        deg.value = e.degree_level || '';
+        addField('Степень / квалификация (необязательно)', deg);
+
+        var ctry = document.createElement('input');
+        ctry.type = 'text';
+        ctry.className = 'edu-country';
+        ctry.maxLength = 64;
+        ctry.value = e.country || '';
+        addField('Страна', ctry);
+
+        var city = document.createElement('input');
+        city.type = 'text';
+        city.className = 'edu-city';
+        city.maxLength = 64;
+        city.value = e.city || '';
+        addField('Город', city);
+
+        var sy = document.createElement('input');
+        sy.type = 'number';
+        sy.className = 'edu-sy';
+        sy.min = 1950;
+        sy.max = 2100;
+        sy.placeholder = 'Год';
+        sy.inputMode = 'numeric';
+        if (e.start_year != null) sy.value = String(e.start_year);
+        addField('Год начала', sy);
+
+        var ey = document.createElement('input');
+        ey.type = 'number';
+        ey.className = 'edu-ey';
+        ey.min = 1950;
+        ey.max = 2100;
+        ey.placeholder = 'Год';
+        ey.inputMode = 'numeric';
+        if (e.end_year != null) ey.value = String(e.end_year);
+        addField('Год окончания', ey);
+
+        var inprog = document.createElement('input');
+        inprog.type = 'checkbox';
+        inprog.className = 'edu-inprog';
+        inprog.id = 'edu_inprog_' + String(e.id) + '_' + Math.random().toString(36).slice(2, 8);
+        if (e.is_in_progress) inprog.checked = true;
+        var inprogRow = document.createElement('div');
+        inprogRow.className = 'arena-row';
+        inprogRow.appendChild(inprog);
+        var inprogLab = document.createElement('label');
+        inprogLab.htmlFor = inprog.id;
+        inprogLab.textContent = 'Обучаюсь сейчас';
+        inprogLab.style.fontSize = '15px';
+        inprogRow.appendChild(inprogLab);
+        card.appendChild(inprogRow);
+
+        var doc = document.createElement('input');
+        doc.type = 'url';
+        doc.className = 'edu-doc';
+        doc.maxLength = 512;
+        doc.placeholder = 'https://…';
+        doc.value = e.document_url || '';
+        addField('Ссылка на документ (необязательно)', doc);
+
+        var err = document.createElement('p');
+        err.className = 'edu-err';
+        err.setAttribute('role', 'status');
+        card.appendChild(err);
+
+        var actions = document.createElement('div');
+        actions.className = 'edu-actions';
+        var mod = document.createElement('span');
+        mod.className = 'edu-mod';
+        mod.textContent = e.moderation_status ? ('Статус: ' + eduModLabelRu(e.moderation_status)) : '';
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn-edu-save';
+        btn.textContent = 'Сохранить запись';
+        btn.addEventListener('click', function() {
+          if (btn.disabled) return;
+          var payload = collectEducationPayload(card);
+          if (!validateEducationPayload(payload, err)) {
+            haptic('error');
+            return;
+          }
+          btn.disabled = true;
+          var btnLabel = btn.textContent;
+          btn.textContent = 'Сохраняем...';
+          var eduId = parseInt(card.getAttribute('data-edu-id'), 10);
+          fetch(apiUrl('/trainer/education/' + encodeURIComponent(eduId)), {
+            method: 'PATCH',
+            headers: headersJson(),
+            body: JSON.stringify(payload),
+          })
+            .then(parseJsonResponse)
+            .then(function(o) {
+              if (o.ok) {
+                haptic('success');
+                return loadProfile().then(function() {
+                  showSaveToast('Данные сохранены', 'Сведения об образовании обновлены на сервере.');
+                });
+              }
+              haptic('error');
+              if (o.status === 422 && o.data && o.data.detail) {
+                err.textContent = typeof o.data.detail === 'string' ? o.data.detail : 'Проверьте поля.';
+              } else {
+                err.textContent = (o.data && o.data.detail) ? String(o.data.detail) : 'Не удалось сохранить.';
+              }
+            })
+            .catch(function() {
+              haptic('error');
+              err.textContent = 'Ошибка сети.';
+            })
+            .finally(function() {
+              btn.disabled = false;
+              btn.textContent = btnLabel;
+            });
+        });
+        actions.appendChild(btn);
+        actions.appendChild(mod);
+        card.appendChild(actions);
+
+        [sel, inst, prog, deg, ctry, city, sy, ey, inprog, doc].forEach(function(inp) {
+          inp.addEventListener('input', function() {
+            err.textContent = '';
+          });
+          inp.addEventListener('change', function() {
+            err.textContent = '';
+          });
+        });
+
+        return card;
+      }
+
+      function renderEducationNewForm() {
+        var holder = document.getElementById('educationNewWrap');
+        if (!holder) return;
+        holder.innerHTML = '';
+        var blank = {
+          id: 'new',
+          education_type: 'formal_education',
+          institution_name: '',
+          program_or_title: '',
+          degree_level: null,
+          country: null,
+          city: null,
+          start_year: null,
+          end_year: null,
+          is_in_progress: false,
+          document_url: null,
+          moderation_status: null,
+        };
+        var card = makeEducationCard(blank);
+        card.removeAttribute('data-edu-id');
+        var btnRow = card.querySelector('.edu-actions');
+        if (btnRow) btnRow.remove();
+        var err = card.querySelector('.edu-err');
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn-edu-save';
+        btn.textContent = 'Создать запись';
+        btn.addEventListener('click', function() {
+          if (state.education_create_in_flight) return;
+          var payload = collectEducationPayload(card);
+          if (!validateEducationPayload(payload, err)) {
+            haptic('error');
+            return;
+          }
+          state.education_create_in_flight = true;
+          btn.disabled = true;
+          var btnLabel = btn.textContent;
+          btn.textContent = 'Сохраняем...';
+          fetch(apiUrl('/trainer/education'), {
+            method: 'POST',
+            headers: headersJson(),
+            body: JSON.stringify(payload),
+          })
+            .then(parseJsonResponse)
+            .then(function(o) {
+              if (o.ok) {
+                haptic('success');
+                holder.style.display = 'none';
+                var addBtn = document.getElementById('btnEducationAdd');
+                if (addBtn) addBtn.textContent = '+ Добавить запись';
+                return loadProfile().then(function() {
+                  showSaveToast('Запись добавлена', 'Сведения об образовании отправлены на сервер.');
+                });
+              }
+              haptic('error');
+              err.textContent = (o.data && o.data.detail) ? String(o.data.detail) : 'Не удалось создать.';
+            })
+            .catch(function() {
+              haptic('error');
+              err.textContent = 'Ошибка сети.';
+            })
+            .finally(function() {
+              state.education_create_in_flight = false;
+              btn.disabled = false;
+              btn.textContent = btnLabel;
+            });
+        });
+        var act = document.createElement('div');
+        act.className = 'edu-actions';
+        act.appendChild(btn);
+        card.appendChild(act);
+        holder.appendChild(card);
+      }
+
+      function renderEducationEntries() {
+        var wrap = document.getElementById('educationEntries');
+        var empty = document.getElementById('educationEntriesEmpty');
+        var newWrap = document.getElementById('educationNewWrap');
+        wrap.innerHTML = '';
+        var items = state.education_entries || [];
+        if (!items.length) {
+          empty.style.display = 'block';
+        } else {
+          empty.style.display = 'none';
+          items.forEach(function(e) {
+            wrap.appendChild(makeEducationCard(e));
+          });
+        }
+        if (newWrap && newWrap.style.display !== 'none') {
+          renderEducationNewForm();
+        }
+      }
+
+      function renderServices() {
+        var wrap = document.getElementById('servicesWrap');
+        wrap.innerHTML = '';
+        var selected = {};
+        (state.trainer.services || []).forEach(function(s) {
+          selected[s.service_id] = s.price_byn;
+        });
+        state.servicesCatalog.forEach(function(s) {
+          var row = document.createElement('div');
+          row.className = 'service-row';
+          var id = s.id;
+          var isSelected = !!selected[id];
+          if (isSelected) row.classList.add('service-active');
+          
+          var chk = document.createElement('input');
+          chk.type = 'checkbox';
+          chk.id = 'svc_' + id;
+          chk.checked = isSelected;
+          
+          var span = document.createElement('span');
+          span.className = 'svc-name';
+          span.textContent = s.name || ('Услуга #' + id);
+          
+          var price = document.createElement('input');
+          price.type = 'number';
+          price.step = '0.01';
+          price.min = '0';
+          price.placeholder = '0.00';
+          price.id = 'price_' + id;
+          price.disabled = !isSelected;
+          if (selected[id] != null) price.value = String(selected[id]);
+          
+          var suffix = document.createElement('span');
+          suffix.className = 'price-suffix';
+          suffix.textContent = 'BYN';
+          var priceBlock = document.createElement('div');
+          priceBlock.className = 'service-row-price';
+          priceBlock.appendChild(price);
+          priceBlock.appendChild(suffix);
+          
+          chk.addEventListener('change', function() {
+            row.classList.toggle('service-active', chk.checked);
+            price.disabled = !chk.checked;
+            if (!chk.checked) {
+              price.value = '';
+              price.classList.remove('field-invalid');
+            } else {
+              price.focus();
+            }
+            setDirty();
+          });
+          price.addEventListener('input', setDirty);
+          price.addEventListener('change', setDirty);
+          
+          row.appendChild(chk);
+          row.appendChild(span);
+          row.appendChild(priceBlock);
+          wrap.appendChild(row);
+        });
+      }
+
+      function renderArenas() {
+        var wrap = document.getElementById('arenasWrap');
+        var hint = document.getElementById('arenaHint');
+        wrap.innerHTML = '';
+        var selected = {};
+        (state.trainer.arena_ids || []).forEach(function(id) { selected[id] = true; });
+        if (!state.arenasList.length) {
+          hint.style.display = 'block';
+          hint.textContent = state.trainer.profile && state.trainer.profile.city_id
+            ? 'Нет арен для выбранного города.'
+            : 'Выберите город — появится список доступных арен.';
+          return;
+        }
+        hint.style.display = 'none';
+        state.arenasList.forEach(function(a) {
+          var row = document.createElement('div');
+          row.className = 'arena-row';
+          var isSelected = !!selected[a.id];
+          if (isSelected) row.classList.add('arena-active');
+          
+          var cb = document.createElement('input');
+          cb.type = 'checkbox';
+          cb.id = 'arena_' + a.id;
+          cb.checked = isSelected;
+          cb.addEventListener('change', function() {
+            row.classList.toggle('arena-active', cb.checked);
+            setDirty();
+          });
+          
+          var lab = document.createElement('label');
+          lab.htmlFor = 'arena_' + a.id;
+          lab.textContent = a.name || ('Арена #' + a.id);
+          
+          row.appendChild(cb);
+          row.appendChild(lab);
+          wrap.appendChild(row);
+        });
+      }
+
+      function loadArenasForCity(cityId) {
+        state.arenasList = [];
+        if (!cityId) return Promise.resolve();
+        return fetch('/api/public/arenas?city_id=' + encodeURIComponent(cityId))
+          .then(function(r) { return r.json(); })
+          .then(function(data) {
+            state.arenasList = data.items || [];
+          })
+          .catch(function() { state.arenasList = []; });
+      }
+
+      function loadRefs() {
+        return Promise.all([
+          fetch('/api/public/cities').then(function(r) { return r.json(); }),
+          fetch('/api/public/services').then(function(r) { return r.json(); }),
+          fetch('/api/trainers/education-options').then(function(r) { return r.json(); }),
+        ]).then(function(all) {
+          state.cities = all[0].items || [];
+          state.servicesCatalog = all[1].items || [];
+          var eduOpts = all[2].items || [];
+          var eduSel = document.getElementById('education');
+          eduSel.innerHTML = '<option value="">—</option>';
+          eduOpts.forEach(function(opt) {
+            var o = document.createElement('option');
+            o.value = opt;
+            o.textContent = opt;
+            eduSel.appendChild(o);
+          });
+          var citySel = document.getElementById('city_id');
+          citySel.innerHTML = '<option value="">—</option>';
+          state.cities.forEach(function(c) {
+            var o = document.createElement('option');
+            o.value = String(c.id);
+            o.textContent = c.name || ('Город #' + c.id);
+            citySel.appendChild(o);
+          });
+          citySel.onchange = function() {
+            var cid = citySel.value ? Number(citySel.value) : null;
+            loadArenasForCity(cid).then(function() {
+              state.trainer.arena_ids = [];
+              renderArenas();
+              setDirty();
+            });
+          };
+        });
+      }
+
+      function loadProfile() {
+        return fetch(apiUrl('/trainer/profile'), { headers: headers() })
+          .then(parseJsonResponse)
+          .then(function(o) {
+            if (!o.ok) {
+              document.getElementById('skeleton').innerHTML = '<p style="color:var(--app-danger); padding: 20px; text-align: center;">' +
+                (o.data.detail || 'Ошибка загрузки профиля') + '</p>';
+              return Promise.resolve();
+            }
+            state.trainer = o.data.trainer;
+            state.moderation_readiness = o.data.moderation_readiness;
+            state.education_entries = o.data.education_entries || [];
+            renderEducationEntries();
+            renderModeration();
+            updateProgressRing();
+            return fillFormFromTrainer().then(function() {
+              state.snapshot = normSnapshot();
+              setDirty();
+              showMain();
+              if (window.location.hash === '#moderation') {
+                setTab('moderation');
+                setTimeout(function() {
+                  var el = document.getElementById('moderation');
+                  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }, 300);
+              }
+            });
+          })
+          .catch(function() {
+            document.getElementById('skeleton').innerHTML = '<p style="color:var(--app-danger); padding: 20px; text-align: center;">Ошибка сети. Проверьте подключение.</p>';
+            return Promise.resolve();
+          });
+      }
+
+      function save() {
+        var btn = document.getElementById('btnSave');
+        if (btn && btn.disabled) return;
+        var parsed;
+        try {
+          parsed = JSON.parse(readFormSnapshot());
+        } catch (e) {
+          haptic('error');
+          alert('Ошибка формы. Обновите страницу.');
+          return;
+        }
+        clearFormErrors();
+        if (!clientValidateProfile(parsed)) {
+          haptic('error');
+          setTab('form');
+          syncServicesValidationUi();
+          var inv = document.querySelector('#tab-form .field-invalid');
+          if (inv) inv.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          else {
+            var es = document.getElementById('err_services');
+            if (es && !es.hidden) es.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+          return;
+        }
+        btn.disabled = true;
+        btn.classList.add('saving');
+        var pr = parsed.profile;
+        var body = {
+          profile: {
+            first_name: pr.first_name,
+            last_name: pr.last_name,
+            age: pr.age,
+            city_id: pr.city_id,
+            phone: pr.phone || '',
+            contacts: pr.contacts || '',
+            description: pr.description || '',
+            experience_years: pr.experience_years,
+            education: pr.education,
+            session_duration_minutes: pr.session_duration_minutes,
+            min_hours_before_booking: pr.min_hours_before_booking,
+          },
+          services: parsed.services,
+          arena_ids: parsed.arena_ids,
+        };
+
+        fetch(apiUrl('/trainer/profile'), {
+          method: 'PATCH',
+          headers: headersJson(),
+          body: JSON.stringify(body),
+        })
+          .then(parseJsonResponse)
+          .then(function(o) {
+            if (o.ok) {
+              haptic('success');
+              clearFormErrors();
+              return loadProfile().then(function() {
+                showSaveToast('Сохранено', 'Изменения успешно применены');
+                return maybeAutoSubmitForModeration();
+              });
+            }
+            haptic('error');
+            if (o.status === 422 && o.data && o.data.detail) {
+              applyValidationDetail(o.data.detail);
+              setTab('form');
+              var firstErr = document.querySelector('#tab-form .field-error:not([hidden])');
+              if (firstErr) firstErr.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              return Promise.resolve();
+            }
+            var msg = (o.data && o.data.detail) ? o.data.detail : 'Ошибка сохранения';
+            if (typeof msg === 'object') msg = JSON.stringify(msg);
+            showFieldError('general', String(msg));
+            return Promise.resolve();
+          })
+          .catch(function(err) {
+            haptic('error');
+            console.error(err);
+            showFieldError('general', 'Ошибка сети. Проверьте подключение и попробуйте снова.');
+          })
+          .finally(function() {
+            btn.classList.remove('saving');
+            setDirty();
+          });
+      }
+
+      function uploadPhoto(file) {
+        if (!file) return;
+        var nameEl = document.getElementById('photoFileName');
+        var dropZone = document.getElementById('photoDropZone');
+        
+        if (nameEl) nameEl.textContent = 'Загружаем ' + file.name + '…';
+        if (dropZone) dropZone.style.opacity = '0.6';
+        
+        var fd = new FormData();
+        fd.append('file', file);
+        var h = {};
+        if (initData()) h['X-Telegram-Init-Data'] = initData();
+        fetch('/api/webapp/trainer/photos', { method: 'POST', headers: h, body: fd })
+          .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
+          .then(function(o) {
+            if (o.ok) {
+              haptic('success');
+              return loadProfile().then(function() {
+                showSaveToast('Фото загружено', 'Новое изображение отображается в профиле');
+                return maybeAutoSubmitForModeration();
+              });
+            }
+            haptic('error');
+            var errMsg = 'Не удалось загрузить фото';
+            if (o.data && o.data.detail) {
+              if (o.data.detail === 'File too large') errMsg = 'Файл слишком большой (макс. 15 МБ)';
+              else if (o.data.detail === 'Not a valid image') errMsg = 'Неверный формат изображения';
+              else errMsg = o.data.detail;
+            }
+            if (nameEl) nameEl.textContent = errMsg;
+          })
+          .catch(function() {
+            haptic('error');
+            if (nameEl) nameEl.textContent = 'Ошибка сети. Попробуйте снова.';
+          })
+          .finally(function() {
+            if (dropZone) dropZone.style.opacity = '1';
+          });
+      }
+
+      document.getElementById('btnClose').onclick = function() {
+        if (tg) tg.close(); else window.close();
+      };
+      document.getElementById('btnSave').onclick = save;
+      
+      var photoInput = document.getElementById('photoInput');
+      var photoDropZone = document.getElementById('photoDropZone');
+      
+      photoInput.onchange = function(ev) {
+        var f = ev.target.files && ev.target.files[0];
+        uploadPhoto(f);
+        ev.target.value = '';
+      };
+      
+      if (photoDropZone) {
+        photoDropZone.addEventListener('dragover', function(e) {
+          e.preventDefault();
+          photoDropZone.style.borderColor = 'rgba(247, 166, 0, 0.8)';
+          photoDropZone.style.background = 'rgba(247, 166, 0, 0.08)';
+        });
+        photoDropZone.addEventListener('dragleave', function(e) {
+          e.preventDefault();
+          photoDropZone.style.borderColor = '';
+          photoDropZone.style.background = '';
+        });
+        photoDropZone.addEventListener('drop', function(e) {
+          e.preventDefault();
+          photoDropZone.style.borderColor = '';
+          photoDropZone.style.background = '';
+          var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+          if (f && f.type.startsWith('image/')) {
+            uploadPhoto(f);
+          }
+        });
+      }
+
+      // Hero-cta buttons were removed; keep tab navigation exclusively under header.
+
+      function clearOneFieldError(id) {
+        var e = document.getElementById('err_' + id);
+        if (!e) e = ensureErrorEl(id);
+        if (e) {
+          e.textContent = '';
+          e.hidden = true;
+        }
+        setFieldInvalid(id, false);
+      }
+      PROFILE_FIELD_IDS.forEach(function(id) {
+        var el = document.getElementById(id);
+        if (!el) return;
+        el.addEventListener('input', function() {
+          if (id === 'phone') {
+            formatPhoneInput(el);
+          }
+          validateFieldRealtime(id);
+          setDirty();
+          markFieldValid(id);
+        });
+        el.addEventListener('change', function() {
+          validateFieldRealtime(id);
+          setDirty();
+          markFieldValid(id);
+        });
+        el.addEventListener('focus', function() {
+          el.parentElement.classList.add('field-focused');
+        });
+        el.addEventListener('blur', function() {
+          el.parentElement.classList.remove('field-focused');
+        });
+      });
+      
+      function formatPhoneInput(el) {
+        var val = el.value.replace(/\D/g, '');
+        if (val.startsWith('375')) val = val.slice(3);
+        else if (val.startsWith('80')) val = val.slice(2);
+        if (val.length > 9) val = val.slice(0, 9);
+        
+        var formatted = '';
+        if (val.length > 0) formatted += val.slice(0, 2);
+        if (val.length > 2) formatted += ' ' + val.slice(2, 5);
+        if (val.length > 5) formatted += ' ' + val.slice(5, 7);
+        if (val.length > 7) formatted += ' ' + val.slice(7, 9);
+        
+        el.value = formatted;
+      }
+      
+      function markFieldValid(id) {
+        var el = document.getElementById(id);
+        var errEl = document.getElementById('err_' + id);
+        if (!el) return;
+        var hasValue = (el.value || '').trim().length > 0;
+        var hasError = errEl && !errEl.hidden && errEl.textContent;
+        el.classList.toggle('field-valid', hasValue && !hasError);
+      }
+
+      var btnEduAdd = document.getElementById('btnEducationAdd');
+      if (btnEduAdd) {
+        btnEduAdd.addEventListener('click', function() {
+          var w = document.getElementById('educationNewWrap');
+          if (!w) return;
+          if (w.style.display === 'none' || !w.style.display) {
+            w.style.display = 'block';
+            btnEduAdd.textContent = 'Скрыть форму';
+            renderEducationNewForm();
+          } else {
+            w.style.display = 'none';
+            btnEduAdd.textContent = '+ Добавить запись';
+          }
+        });
+      }
+
+      loadRefs().then(function() { return loadProfile(); });
+    })();
+  </script>
+</body>
+</html>
