@@ -10,7 +10,7 @@ import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import date, datetime, timedelta, time, timezone
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -449,14 +449,16 @@ async def test_apply_week_creates_slots_from_template(
     async def _noop_notify(*_a, **_kw):
         return None
 
+    # Bot(...) validates token at import time; CI has no real TELEGRAM_BOT_TOKEN_TRAINER.
     with patch_trainer_webapp_init(tg):
         with patch("src.api.routes.webapp.run_after_schedule_changed", _noop_notify):
-            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-                resp = await client.post(
-                    "/api/webapp/schedule/apply-week",
-                    headers={"X-Telegram-Init-Data": "mock", "Content-Type": "application/json"},
-                    json={"week_start": mon.isoformat()},
-                )
+            with patch("src.api.routes.webapp.Bot", return_value=MagicMock()):
+                async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                    resp = await client.post(
+                        "/api/webapp/schedule/apply-week",
+                        headers={"X-Telegram-Init-Data": "mock", "Content-Type": "application/json"},
+                        json={"week_start": mon.isoformat()},
+                    )
     assert resp.status_code == 200
     body = resp.json()
     assert body.get("ok") is True

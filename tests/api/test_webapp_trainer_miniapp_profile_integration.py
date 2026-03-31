@@ -551,13 +551,21 @@ async def test_photo_multipart_upload_accepts_tiny_jpeg(
     await db_session.commit()
     body = _tiny_jpeg_bytes()
 
+    def _fake_upload_photo(tid: int, _body: bytes, _content_type: str) -> tuple[str, None]:
+        """CI has no S3/local storage; assert API + DB path, not object storage."""
+        return (f"trainers/{tid}/ci-test.jpg", None)
+
     with patch_trainer_init_auth(tg):
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-            resp = await client.post(
-                "/api/webapp/trainer/photos",
-                headers={"X-Telegram-Init-Data": "mock"},
-                files={"file": ("tiny.jpg", body, "image/jpeg")},
-            )
+        with patch(
+            "src.application.trainer_use_cases.s3.upload_photo",
+            side_effect=_fake_upload_photo,
+        ):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                resp = await client.post(
+                    "/api/webapp/trainer/photos",
+                    headers={"X-Telegram-Init-Data": "mock"},
+                    files={"file": ("tiny.jpg", body, "image/jpeg")},
+                )
     assert resp.status_code == 200
     data = resp.json()
     assert data.get("file_key")
