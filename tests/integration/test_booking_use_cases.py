@@ -1,6 +1,7 @@
 """
 Integration tests for booking use cases. Require test DB (alembic upgrade head).
 """
+import asyncio
 from datetime import date, datetime, timedelta, time, timezone
 
 import pytest
@@ -18,6 +19,7 @@ from src.application.booking_use_cases import (
     mark_booking_completed_and_notify,
     mark_reminder_sent,
 )
+from src.infrastructure.db.session import async_session_factory
 
 
 async def _create_trainer_and_slot(
@@ -137,6 +139,33 @@ async def test_create_booking_same_slot_twice_second_fails(db_session: AsyncSess
         db_session, slot_id, trainer_id, client_id_2, service_id=service_id
     )
     assert second is None
+
+
+@pytest.mark.asyncio
+async def test_create_booking_concurrent_same_slot_two_sessions_one_wins(
+    db_session: AsyncSession,
+) -> None:
+    """Два параллельных create_booking на один слот: блокировка строки слота, один успех."""
+    tomorrow = date.today() + timedelta(days=1)
+    trainer_id, slot_id, service_id = await _create_trainer_and_slot(
+        db_session, tomorrow, time(10, 0), time(11, 0)
+    )
+    client_id_1 = await _create_client(db_session, unique_test_telegram_id())
+    client_id_2 = await _create_client(db_session, unique_test_telegram_id())
+
+    async def _attempt(client_id: int) -> int | None:
+        async with async_session_factory() as session:
+            return await create_booking(
+                session,
+                slot_id,
+                trainer_id,
+                client_id,
+                service_id=service_id,
+            )
+
+    results = await asyncio.gather(_attempt(client_id_1), _attempt(client_id_2))
+    successes = [r for r in results if r is not None]
+    assert len(successes) == 1
 
 
 @pytest.mark.asyncio

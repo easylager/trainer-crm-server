@@ -471,6 +471,24 @@
     }
     .missing-list { margin: 0; padding-left: 20px; font-size: 14px; line-height: 1.6; }
     .missing-list li { margin-bottom: 4px; }
+    #modHint:empty { display: none !important; }
+    .how-it-works { margin-bottom: 14px; }
+    .how-it-works-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--tg-theme-text-color);
+      margin: 0 0 10px;
+      letter-spacing: 0.02em;
+    }
+    .how-it-works-ol {
+      margin: 0;
+      padding-left: 18px;
+      font-size: 13px;
+      line-height: 1.55;
+      color: var(--tg-theme-hint-color);
+    }
+    .how-it-works-ol li { margin-bottom: 8px; }
+    .how-it-works-ol li:last-child { margin-bottom: 0; }
     .status-pill {
       display: inline-flex;
       align-items: center;
@@ -972,12 +990,21 @@
         </div>
         <div class="progress-ring-info">
           <div class="progress-ring-title" id="progressTitle">Заполнение профиля</div>
-          <div class="progress-ring-subtitle" id="progressSubtitle">Заполните все поля для модерации</div>
+          <div class="progress-ring-subtitle" id="progressSubtitle">Критерии готовности к модерации (как в админ-боте)</div>
         </div>
       </div>
     </div>
 
-    <p class="hint" id="profileIntroHint">Редактируйте анкету и нажимайте «Сохранить» внизу. Если все обязательные поля заполнены, анкета автоматически уходит в админ-бот на проверку — отдельно ничего включать не нужно.</p>
+    <div class="card how-it-works" id="howItWorksBlock" aria-labelledby="howItWorksTitle">
+      <div class="how-it-works-title" id="howItWorksTitle">Как это работает</div>
+      <ol class="how-it-works-ol">
+        <li>Изменения в анкете применяются после нажатия «Сохранить» внизу экрана.</li>
+        <li>Когда все обязательные поля заполнены, следующее успешное сохранение ставит профиль в очередь на проверку в админ-боте. Отдельной кнопки «отправить на модерацию» нет.</li>
+        <li>Подробные записи об образовании и фото профиля сохраняются своими кнопками в соответствующих разделах.</li>
+      </ol>
+    </div>
+
+    <p class="hint" id="profileIntroHint"></p>
 
     <div class="filters" id="profileFilters">
       <button type="button" class="filter-btn active" data-tab="form">Анкета</button>
@@ -1066,7 +1093,7 @@
         <div class="field">
           <label for="education"><span class="required-dot"></span>Образование</label>
           <select id="education"><option value="">Выберите категорию</option></select>
-          <div class="field-hint">Ниже можно добавить подробные записи: вуз, курсы, сертификаты</div>
+          <div class="field-hint">Для проверки анкеты достаточно выбрать категорию здесь <strong>или</strong> добавить хотя бы одну подробную запись в блоке ниже (можно и то и другое).</div>
         </div>
       </div>
 
@@ -1080,12 +1107,13 @@
         <div class="field">
           <label for="min_hours_before_booking"><span class="required-dot"></span>За сколько часов до занятия клиент может записаться</label>
           <input id="min_hours_before_booking" type="number" min="0" max="168" step="1" placeholder="Например 12 или 24" inputmode="numeric" />
+          <div class="field-hint">Считаются только часы в интервале <strong>8:00–22:00</strong> по <strong>Минску</strong> между текущим моментом и началом занятия (ночь и раннее утро в расчёт не входят — это не просто «сутки × N»).</div>
         </div>
       </div>
 
       <div class="section-title">Подробное образование</div>
       <div class="card" id="educationEntriesWrap">
-        <p class="hint" id="educationEntriesEmpty">Добавьте записи о вузе, курсах или сертификатах — это повысит доверие клиентов.</p>
+        <p class="hint" id="educationEntriesEmpty">Если категория в блоке «Опыт и квалификация» уже выбрана, подробные записи необязательны. Если категорию не выбирали — добавьте сюда хотя бы одну запись. Дополнительно записи усиливают доверие.</p>
         <div id="educationEntries"></div>
         <div id="educationNewWrap" style="display:none; margin-top:14px; padding-top:14px; border-top:1px solid rgba(128,128,128,0.15);"></div>
         <button type="button" class="filter-btn" id="btnEducationAdd" style="margin-top:14px; width: 100%; justify-content: center;">+ Добавить запись</button>
@@ -1274,6 +1302,26 @@
       var PHONE_BY_ERR = 'Укажите корректный номер телефона.';
       var MIN_DESCRIPTION_CHARS = 25;
       var MAX_DESCRIPTION_CHARS = 5000;
+      /** Fallback if API omits field; must match MODERATION_CRITERIA_TOTAL on the server. */
+      var MODERATION_CRITERIA_TOTAL_FALLBACK = 12;
+
+      /** Russian plural for "остался N критерий" (criteria, not form fields). */
+      function ruCriteriaWord(n) {
+        n = Math.floor(Math.abs(n));
+        var n100 = n % 100;
+        var n10 = n % 10;
+        if (n100 >= 11 && n100 <= 14) return 'критериев';
+        if (n10 === 1) return 'критерий';
+        if (n10 >= 2 && n10 <= 4) return 'критерия';
+        return 'критериев';
+      }
+
+      function ruOstalosCriteria(n) {
+        n = Math.floor(Math.abs(n));
+        if (n <= 0) return '';
+        if (n === 1) return 'Остался 1 критерий';
+        return 'Осталось ' + n + ' ' + ruCriteriaWord(n);
+      }
 
       function friendlyApiMsg(msg) {
         if (!msg) return 'Проверьте поля формы.';
@@ -1858,26 +1906,26 @@
 
         if (st === 'active') {
           missTitle.style.display = 'none';
-          hint.textContent = 'Анкета одобрена: вы в каталоге и видны клиентам. Данные можно менять — при необходимости мы перепроверим правки.';
+          hint.textContent = 'Вы в каталоге — клиенты могут вас найти и записаться.';
         } else if (st === 'deactivated') {
           missTitle.style.display = 'none';
-          hint.textContent = 'Профиль отключён: клиенты не видят вас в каталоге. Восстановление — через поддержку.';
+          hint.textContent = 'Каталог недоступен. Восстановление — через поддержку.';
         } else if (st === 'pending_contract') {
           missTitle.style.display = 'none';
-          hint.textContent = 'Проверка анкеты пройдена. Следующий шаг — оформление договора (с менеджером).';
+          hint.textContent = 'Следующий шаг — договор с менеджером.';
         } else if (st === 'pending_payment') {
           missTitle.style.display = 'none';
-          hint.textContent = 'Проверка анкеты пройдена. Следующий шаг — оплата подписки.';
+          hint.textContent = 'Следующий шаг — оплата подписки.';
         } else if (st === 'pending_profile') {
           if (d.already_submitted_for_moderation) {
             missTitle.style.display = 'none';
-            hint.textContent = 'Анкета на проверке в админ-боте. После правок снова нажмите «Сохранить» — при полной анкете она снова автоматически уйдёт модераторам.';
+            hint.textContent = 'Ожидается проверка в админ-боте.';
           } else if (d.complete) {
             missTitle.style.display = 'none';
-            hint.textContent = 'Анкета полная. Нажмите «Сохранить» внизу — после сохранения мы сами отправим профиль целиком в админ-бот на проверку (отдельных действий не нужно).';
+            hint.textContent = 'Все критерии для очереди на проверку выполнены.';
           } else {
             missTitle.style.display = 'block';
-            hint.textContent = 'Заполните обязательные поля в анкете. После каждого «Сохранить» мы проверяем полноту; когда всё готово — отправка в админ-бот выполнится сама.';
+            hint.textContent = '';
             (d.missing_labels_ru || []).forEach(function(label) {
               var li = document.createElement('li');
               li.textContent = label;
@@ -1987,28 +2035,35 @@
           };
         }
 
+        var hBlock = document.getElementById('howItWorksBlock');
+        if (hBlock) {
+          /* Onboarding-only copy: moderation queue rules do not apply after approval. */
+          hBlock.style.display = (st || '').trim() === 'pending_profile' ? '' : 'none';
+        }
+
         var intro = document.getElementById('profileIntroHint');
         if (intro) {
           intro.classList.remove('profile-intro--warn');
           var s = (st || '').trim();
+          /* Short status cue only — full pipeline is in #howItWorksBlock */
           if (s === 'active') {
-            intro.textContent = 'Профиль в каталоге. Меняйте данные и сохраняйте — при необходимости мы перепроверим правки.';
+            intro.textContent = 'Профиль в каталоге. Правки — «Сохранить» внизу.';
           } else if (s === 'pending_profile') {
             var rd = state.moderation_readiness || {};
             if (rd.already_submitted_for_moderation) {
-              intro.textContent = 'На проверке в админ-боте. Правки — «Сохранить» внизу; при полной анкете после сохранения она снова автоматически уйдёт модераторам.';
+              intro.textContent = 'На проверке в админ-боте. После правок снова сохраните анкету.';
             } else if (!rd.complete) {
               intro.classList.add('profile-intro--warn');
-              intro.textContent = 'Анкета неполная. Дозаполните поля и нажмите «Сохранить». Когда всё обязательное будет заполнено, следующее сохранение само отправит профиль в админ-бот.';
+              intro.textContent = 'Анкета неполная — подсказки на вкладке «Статус».';
             } else {
-              intro.textContent = 'Все обязательные поля заполнены. Нажмите «Сохранить» — профиль целиком уйдёт в админ-бот на проверку автоматически.';
+              intro.textContent = 'Все обязательные поля заполнены. Сохраните анкету внизу.';
             }
           } else if (s === 'pending_contract' || s === 'pending_payment') {
-            intro.textContent = 'Анкета проверена. Сохраняйте правки кнопкой внизу. Текущий этап: ' + trainerStatusLabelRu(s) + '.';
+            intro.textContent = 'Этап: ' + trainerStatusLabelRu(s) + '.';
           } else if (s === 'deactivated') {
-            intro.textContent = 'Профиль отключён от каталога. Данные можно править и сохранять — публикация недоступна до смены статуса.';
+            intro.textContent = 'Профиль скрыт из каталога.';
           } else {
-            intro.textContent = 'Редактируйте анкету и сохраняйте кнопкой внизу. Этап: ' + trainerStatusLabelRu(s) + '.';
+            intro.textContent = 'Этап: ' + trainerStatusLabelRu(s) + '.';
           }
         }
       }
@@ -2016,9 +2071,12 @@
       function updateProgressRing() {
         var d = state.moderation_readiness || {};
         var missing = d.missing_fields || [];
-        var totalFields = 12;
-        var filledFields = totalFields - missing.length;
-        var percent = Math.round((filledFields / totalFields) * 100);
+        var totalCriteria =
+          d.moderation_criteria_total != null && !isNaN(Number(d.moderation_criteria_total))
+            ? Math.max(1, Math.floor(Number(d.moderation_criteria_total)))
+            : MODERATION_CRITERIA_TOTAL_FALLBACK;
+        var filledCriteria = Math.max(0, totalCriteria - missing.length);
+        var percent = Math.round((filledCriteria / totalCriteria) * 100);
         
         var percentEl = document.getElementById('progressPercent');
         var titleEl = document.getElementById('progressTitle');
@@ -2041,16 +2099,17 @@
         if (titleEl && subtitleEl) {
           if (percent === 100) {
             titleEl.textContent = 'Профиль готов!';
-            subtitleEl.textContent = 'Все обязательные поля заполнены';
+            subtitleEl.textContent = 'Все ' + totalCriteria + ' критериев готовности выполнены';
           } else if (percent >= 75) {
             titleEl.textContent = 'Почти готово';
-            subtitleEl.textContent = 'Осталось заполнить ' + missing.length + ' поля';
+            subtitleEl.textContent = ruOstalosCriteria(missing.length);
           } else if (percent >= 50) {
             titleEl.textContent = 'Хороший прогресс';
-            subtitleEl.textContent = 'Заполнено ' + filledFields + ' из ' + totalFields + ' полей';
+            subtitleEl.textContent = 'Готово ' + filledCriteria + ' из ' + totalCriteria + ' критериев';
           } else {
             titleEl.textContent = 'Заполнение профиля';
-            subtitleEl.textContent = 'Заполните все поля для модерации';
+            subtitleEl.textContent =
+              'Нужно закрыть до ' + totalCriteria + ' критериев (как в модерации) — см. вкладку «Статус»';
           }
         }
       }

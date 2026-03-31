@@ -6,7 +6,7 @@ Admin and authenticated webapp routes keep full payloads from get_trainer / repo
 from __future__ import annotations
 
 # Moderation and linkage ids are not needed for catalog UX and reduce unnecessary exposure.
-_PUBLIC_TRAINER_DROP_KEYS = frozenset(
+PUBLIC_CATALOG_TRAINER_DROP_KEYS = frozenset(
     {
         "telegram_id",
         "moderation_feedback",
@@ -18,4 +18,4 @@ _PUBLIC_TRAINER_DROP_KEYS = frozenset(
 
 def sanitize_trainer_for_public_catalog(trainer: dict) -> dict:
     """Return a shallow copy without internal-only top-level keys."""
-    return {k: v for k, v in trainer.items() if k not in _PUBLIC_TRAINER_DROP_KEYS}
+    return {k: v for k, v in trainer.items() if k not in PUBLIC_CATALOG_TRAINER_DROP_KEYS}

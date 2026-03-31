@@ -234,39 +234,67 @@ class TrainerRepository:
         public_only: bool = False,
     ) -> list[dict[str, Any]]:
         """List trainer education entries; public_only returns approved snapshot only."""
-        q = """
-            SELECT id, education_type, institution_name, program_or_title, degree_level,
-                   country, city, start_year, end_year, is_in_progress, document_url,
-                   moderation_status, moderation_comment, approved_at, updated_at
-            FROM trainer_education
-            WHERE trainer_id = :tid
-        """
         params: dict[str, Any] = {"tid": trainer_id}
         if public_only:
-            q += " AND moderation_status = 'approved' AND approved_snapshot = true"
-        q += " ORDER BY updated_at DESC, id DESC"
+            q = """
+                SELECT id, education_type, institution_name, program_or_title, degree_level,
+                       country, city, start_year, end_year, is_in_progress, document_url,
+                       approved_at, updated_at
+                FROM trainer_education
+                WHERE trainer_id = :tid
+                  AND moderation_status = 'approved' AND approved_snapshot = true
+                ORDER BY updated_at DESC, id DESC
+            """
+        else:
+            q = """
+                SELECT id, education_type, institution_name, program_or_title, degree_level,
+                       country, city, start_year, end_year, is_in_progress, document_url,
+                       moderation_status, moderation_comment, approved_at, updated_at
+                FROM trainer_education
+                WHERE trainer_id = :tid
+                ORDER BY updated_at DESC, id DESC
+            """
         r = await self._session.execute(text(q), params)
         out: list[dict[str, Any]] = []
         for row in r.fetchall():
-            out.append(
-                {
-                    "id": row[0],
-                    "education_type": row[1],
-                    "institution_name": row[2],
-                    "program_or_title": row[3],
-                    "degree_level": row[4],
-                    "country": row[5],
-                    "city": row[6],
-                    "start_year": row[7],
-                    "end_year": row[8],
-                    "is_in_progress": bool(row[9]),
-                    "document_url": row[10],
-                    "moderation_status": row[11],
-                    "moderation_comment": row[12],
-                    "approved_at": row[13].isoformat() if row[13] else None,
-                    "updated_at": row[14].isoformat() if row[14] else None,
-                }
-            )
+            if public_only:
+                out.append(
+                    {
+                        "id": row[0],
+                        "education_type": row[1],
+                        "institution_name": row[2],
+                        "program_or_title": row[3],
+                        "degree_level": row[4],
+                        "country": row[5],
+                        "city": row[6],
+                        "start_year": row[7],
+                        "end_year": row[8],
+                        "is_in_progress": bool(row[9]),
+                        "document_url": row[10],
+                        "approved_at": row[11].isoformat() if row[11] else None,
+                        "updated_at": row[12].isoformat() if row[12] else None,
+                    }
+                )
+            else:
+                out.append(
+                    {
+                        "id": row[0],
+                        "education_type": row[1],
+                        "institution_name": row[2],
+                        "program_or_title": row[3],
+                        "degree_level": row[4],
+                        "country": row[5],
+                        "city": row[6],
+                        "start_year": row[7],
+                        "end_year": row[8],
+                        "is_in_progress": bool(row[9]),
+                        "document_url": row[10],
+                        "moderation_status": row[11],
+                        "moderation_comment": row[12],
+                        "approved_at": row[13].isoformat() if row[13] else None,
+                        "updated_at": row[14].isoformat() if row[14] else None,
+                    }
+                )
         return out
 
     async def create_education_entry(

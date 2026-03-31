@@ -3,9 +3,11 @@ import pytest
 
 from src.application.trainer_profile_completeness import (
     MIN_DESCRIPTION_CHARS,
+    MODERATION_CRITERIA_TOTAL,
     analyze_moderation_profile_completeness,
     is_profile_complete_for_moderation,
     missing_labels_ru,
+    moderation_readiness_dict,
 )
 
 
@@ -116,3 +118,8 @@ def test_missing_labels_order() -> None:
     labels = missing_labels_ru(missing)
     assert len(labels) == len(missing)
     assert all(isinstance(x, str) for x in labels)
+
+
+def test_moderation_readiness_includes_criteria_total(trainer_aggregate_complete: dict) -> None:
+    d = moderation_readiness_dict(trainer_aggregate_complete, trainer_status="pending_profile")
+    assert d.get("moderation_criteria_total") == MODERATION_CRITERIA_TOTAL

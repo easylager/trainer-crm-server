@@ -28,6 +28,9 @@ from src.infrastructure.db.models import TRAINER_STATUS_PENDING_PROFILE
 # Minimum visible "about me" text for moderation (characters after strip).
 MIN_DESCRIPTION_CHARS = 25
 
+# Distinct checks in analyze_moderation_profile_completeness (progress ring / copy must stay in sync).
+MODERATION_CRITERIA_TOTAL = 12
+
 # Stable keys for API, tests, and i18n.
 MISSING_FIELD_LABELS_RU: dict[str, str] = {
     "full_name": "имя и фамилия",
@@ -148,6 +151,7 @@ def moderation_readiness_dict(trainer: dict[str, Any], *, trainer_status: str | 
         "complete": complete,
         "missing_fields": missing,
         "missing_labels_ru": missing_labels_ru(missing),
+        "moderation_criteria_total": MODERATION_CRITERIA_TOTAL,
     }
     if trainer_status is not None:
         out["trainer_status"] = trainer_status

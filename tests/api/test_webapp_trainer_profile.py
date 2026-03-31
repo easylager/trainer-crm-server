@@ -63,6 +63,7 @@ async def test_webapp_trainer_profile_get_returns_trainer_and_readiness(
     assert data["trainer"]["id"] == trainer_id
     assert "moderation_readiness" in data
     assert "complete" in data["moderation_readiness"]
+    assert data["moderation_readiness"].get("moderation_criteria_total") == 12
     assert "education_entries" in data
     assert isinstance(data["education_entries"], list)
 

@@ -11,12 +11,12 @@ CRM-платформа для тренеров в Беларуси. Два Teleg
 
 ## Cursor: MCP (AI + локальная разработка)
 
-В репозитории есть [`.cursor/mcp.json`](.cursor/mcp.json): filesystem, fetch, PostgreSQL (read-only), GitHub, Playwright, опционально Notion и др.  
-Подстановка секретов через переменные окружения (`POSTGRES_MCP_URL`, `GITHUB_PERSONAL_ACCESS_TOKEN`, `NOTION_TOKEN` для Notion). Подробности и чеклист после правок — **[docs/CURSOR_MCP.md](docs/CURSOR_MCP.md)**. Продуктовый хаб для Notion (копирование в рабочее пространство) — **[docs/NOTION_PRODUCT_HUB.md](docs/NOTION_PRODUCT_HUB.md)**.
+Локально в **`.cursor/`** (каталог в `.gitignore`) можно положить `mcp.json`: filesystem, fetch, PostgreSQL (read-only), GitHub, Playwright и др.  
+Подстановка секретов через переменные окружения (`POSTGRES_MCP_URL`, `GITHUB_PERSONAL_ACCESS_TOKEN`, `NOTION_TOKEN` для Notion). Подробности — **[docs/CURSOR_MCP.md](docs/CURSOR_MCP.md)**. Продуктовый хаб для Notion — **[docs/NOTION_PRODUCT_HUB.md](docs/NOTION_PRODUCT_HUB.md)**.
 
 ## Cursor: Spec Kit (spec-driven фичи)
 
-В репозитории настроен **[GitHub Spec Kit](https://github.com/github/spec-kit)** для Cursor: slash-команды **`/speckit.constitution`**, **`/speckit.specify`**, **`/speckit.plan`**, **`/speckit.tasks`**, **`/speckit.implement`** и др. в [`.cursor/commands/`](.cursor/commands/). Кратко — **[docs/SPEC_KIT.md](docs/SPEC_KIT.md)**.
+**[GitHub Spec Kit](https://github.com/github/spec-kit)** — slash-команды вроде `/speckit.specify`, `/speckit.plan`, `/speckit.implement` подключаются локально через **`.cursor/`** и **`.specify/`** (игнорируются Git’ом). Кратко — **[docs/SPEC_KIT.md](docs/SPEC_KIT.md)**; черновики фич — в **`specs/`**.
 
 ## Деплой и CI/CD
 
@@ -113,7 +113,7 @@ HTTP‑сервис ещё не реализован. План health‑эндп
 
 ## Telegram: два бота
 
-Правила единообразия: [.specify/memory/constitution.md](.specify/memory/constitution.md) — **§ VII** (боты: тексты, клавиатуры, разметка), **§ VIII** (Mini App в `static/webapp/`: цвета, типографика, общие UI-токены).
+Правила единообразия Mini App: **[docs/TRAINER_MINI_APP_VISUAL_CONSTITUTION.md](docs/TRAINER_MINI_APP_VISUAL_CONSTITUTION.md)** и правила Cursor в **`.cursor/rules/`** (локально); боты — тексты и клавиатуры в `src/bot/messages.py` и связанных хендлерах.
 
 - Создать **двух** ботов в @BotFather (например: «Запись к тренеру» — клиентский, «Trainer CRM» — тренерский).
 - В `.env` прописать `TELEGRAM_BOT_TOKEN_CLIENT` и `TELEGRAM_BOT_TOKEN_TRAINER`.

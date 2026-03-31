@@ -4,6 +4,7 @@ Booking use cases: create booking (slot + client_id, comment), list for trainer,
 from datetime import date, datetime, timedelta, timezone
 
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.certificate_use_cases import redeem_certificate_for_booking, redeem_certificate_balance_for_booking
@@ -90,11 +91,17 @@ async def create_booking(
     to avoid duplicate notification.
 
     Returns booking id or None if slot not available / wrong trainer / service not offered by trainer.
+
+    Concurrency: two parallel bookings on the same slot are serialized with FOR UPDATE on the slot row
+    (pessimistic lock until commit). The second transaction waits, then sees status != 'available' and
+    returns None — no reliance on unique constraint errors for the happy path. (Unique on slot_id remains
+    defense in depth.)
     """
     r = await session.execute(
         text("""
             SELECT id FROM slots
             WHERE id = :sid AND trainer_id = :tid AND status = 'available'
+            FOR UPDATE
         """),
         {"sid": slot_id, "tid": trainer_id},
     )
@@ -109,23 +116,28 @@ async def create_booking(
     )
     if not r.fetchone():
         return None
-    r = await session.execute(
-        text("""
-            INSERT INTO bookings (slot_id, trainer_id, client_id, service_id, client_comment, client_request_id, status)
-            VALUES (:sid, :tid, :cid, :svc_id, :comment, :req_id, :status)
-            RETURNING id
-        """),
-        {
-            "sid": slot_id,
-            "tid": trainer_id,
-            "cid": client_id,
-            "svc_id": service_id,
-            "comment": (client_comment or "").strip() or None,
-            "req_id": client_request_id,
-            "status": "confirmed" if created_by_trainer else "pending",
-        },
-    )
-    (booking_id,) = r.fetchone()
+    try:
+        r = await session.execute(
+            text("""
+                INSERT INTO bookings (slot_id, trainer_id, client_id, service_id, client_comment, client_request_id, status)
+                VALUES (:sid, :tid, :cid, :svc_id, :comment, :req_id, :status)
+                RETURNING id
+            """),
+            {
+                "sid": slot_id,
+                "tid": trainer_id,
+                "cid": client_id,
+                "svc_id": service_id,
+                "comment": (client_comment or "").strip() or None,
+                "req_id": client_request_id,
+                "status": "confirmed" if created_by_trainer else "pending",
+            },
+        )
+        (booking_id,) = r.fetchone()
+    except IntegrityError:
+        # Rare: unique(slot_id) if lock was bypassed; keep API predictable (no 500 on race).
+        await session.rollback()
+        return None
     await session.execute(
         text("UPDATE slots SET status = 'booked' WHERE id = :id"),
         {"id": slot_id},

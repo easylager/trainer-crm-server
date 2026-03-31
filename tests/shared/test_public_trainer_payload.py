@@ -1,4 +1,7 @@
-from src.shared.public_trainer_payload import sanitize_trainer_for_public_catalog
+from src.shared.public_trainer_payload import (
+    PUBLIC_CATALOG_TRAINER_DROP_KEYS,
+    sanitize_trainer_for_public_catalog,
+)
 
 
 def test_sanitize_drops_internal_fields() -> None:
@@ -12,6 +15,7 @@ def test_sanitize_drops_internal_fields() -> None:
         "profile": {"first_name": "A"},
     }
     out = sanitize_trainer_for_public_catalog(t)
+    assert not (PUBLIC_CATALOG_TRAINER_DROP_KEYS & set(out.keys()))
     assert out["id"] == 1
     assert "telegram_id" not in out
     assert "moderation_feedback" not in out

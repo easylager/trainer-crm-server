@@ -31,8 +31,9 @@ env/
 .env.local
 .env.*.local
 
-# Spec Kit: which feature folder to use while on develop/main (see docs/SPEC_KIT.md)
-.specify/active-feature
+# Cursor IDE + Spec Kit (локальные шаблоны и команды; не коммитим)
+.cursor/
+.specify/
 
 # IDE
 .idea/
@@ -65,3 +66,5 @@ secrets/
 # OS
 .DS_Store
 Thumbs.db
+
+
