@@ -1,0 +1,1261 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Заявки клиентов</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="theme.css" />
+  <link rel="stylesheet" href="mini-app-components.css" />
+  <style>
+    /* Shell: theme.css + mini-app-components.css */
+    /* Amber accent fixed — never var(--tg-theme-button-color): Telegram injects blue after tg.ready() */
+    :root {
+      --req-accent: #f5a623;
+      --req-accent-deep: #e89400;
+      --req-accent-soft: rgba(247, 166, 0, 0.2);
+      --req-cream: var(--tg-theme-secondary-bg-color);
+      --req-surface: var(--tg-theme-secondary-bg-color);
+      --req-text: var(--tg-theme-text-color);
+      --req-muted: var(--tg-theme-hint-color);
+      --req-shadow: 0 4px 24px rgba(18, 18, 18, 0.08);
+      --req-shadow-hover: 0 8px 32px rgba(247, 166, 0, 0.18);
+      --req-radius: 18px;
+      --req-radius-sm: 14px;
+      /* Light: readable chips on cream */
+      --req-chip-success-bg: rgba(22, 101, 52, 0.14);
+      --req-chip-success-fg: #14532d;
+      --req-chip-warn-bg: rgba(154, 52, 18, 0.14);
+      --req-chip-warn-fg: #9a3412;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --req-shadow: 0 4px 28px rgba(0, 0, 0, 0.45);
+        --req-shadow-hover: 0 8px 36px rgba(247, 166, 0, 0.15);
+        --req-chip-success-bg: rgba(20, 83, 45, 0.55);
+        --req-chip-success-fg: #6ee7b7;
+        --req-chip-warn-bg: rgba(120, 53, 15, 0.55);
+        --req-chip-warn-fg: #fdba74;
+      }
+    }
+    body {
+      margin: 0;
+      font-family: var(--app-font-sans);
+      background: var(--tg-theme-bg-color);
+      color: var(--tg-theme-text-color);
+      min-height: 100vh;
+      padding: 12px;
+      padding-bottom: max(12px, env(safe-area-inset-bottom));
+      -webkit-font-smoothing: antialiased;
+    }
+    /* schedule.html — Telegram themeParams must not tint the WebView body blue */
+    body {
+      background: var(--tg-theme-bg-color) !important;
+      color: var(--tg-theme-text-color) !important;
+    }
+    .list-intro,
+    .request-card,
+    .btn-close,
+    .detail-hero-inner,
+    .detail-client-row,
+    .card-wrap,
+    .slot-card,
+    .week-nav,
+    .pagination button,
+    .empty-with-hint,
+    .success-screen-inner,
+    .detail-info-popover {
+      background: var(--tg-theme-secondary-bg-color) !important;
+      color: var(--tg-theme-text-color) !important;
+    }
+    .page-header {
+      margin-bottom: 20px;
+      padding: 4px 0 2px;
+    }
+    .page-header-kicker {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--req-accent);
+      margin-bottom: 6px;
+    }
+    .header {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .header-title {
+      flex: 1;
+      font-size: 26px;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1.15;
+      color: var(--req-text);
+    }
+    .header-deco {
+      width: 48px;
+      height: 48px;
+      border-radius: 16px;
+      background: linear-gradient(145deg, #ffc23d 0%, var(--req-accent) 45%, var(--req-accent-deep) 100%);
+      box-shadow: 0 6px 22px rgba(247, 166, 0, 0.38);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+      flex-shrink: 0;
+    }
+    .btn-close {
+      flex-shrink: 0;
+      padding: 8px 14px;
+      border-radius: var(--app-radius-sm);
+      border: none;
+      font-size: 14px;
+      background: var(--req-surface);
+      color: var(--req-text);
+      cursor: pointer;
+      box-shadow: var(--req-shadow);
+    }
+    [data-screen] { display: none; }
+    [data-screen].active {
+      display: block;
+      animation: reqScreenIn 0.38s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    @keyframes reqScreenIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .list-intro {
+      font-size: 14px;
+      line-height: 1.5;
+      color: var(--req-muted);
+      margin-bottom: 22px;
+      padding: 14px 16px;
+      border-radius: var(--req-radius-sm);
+      background: var(--req-surface);
+      border: 1px solid rgba(247, 166, 0, 0.18);
+      box-shadow: var(--req-shadow);
+    }
+    .section-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--req-muted);
+      margin: 22px 0 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+    .section-title:first-of-type { margin-top: 0; }
+    .section-title::before {
+      content: '';
+      flex: 0 0 4px;
+      height: 16px;
+      background: var(--req-accent);
+      border-radius: 3px;
+      box-shadow: 0 2px 8px rgba(247, 166, 0, 0.35);
+    }
+    .request-card {
+      display: flex;
+      align-items: stretch;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 0;
+      margin-bottom: 12px;
+      border-radius: var(--req-radius);
+      background: var(--req-surface);
+      cursor: pointer;
+      border: 1px solid rgba(247, 166, 0, 0.1);
+      width: 100%;
+      font: inherit;
+      color: inherit;
+      text-align: left;
+      box-shadow: var(--req-shadow);
+      overflow: hidden;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .request-card:active {
+      transform: scale(0.985);
+      box-shadow: var(--req-shadow-hover);
+    }
+    .request-card__stripe {
+      width: 5px;
+      flex-shrink: 0;
+      background: linear-gradient(180deg, #22c55e 0%, #15803d 100%);
+    }
+    .request-card--progress .request-card__stripe {
+      background: linear-gradient(180deg, #d97706 0%, #92400e 100%);
+    }
+    .request-card__body {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 16px 14px 16px 12px;
+    }
+    .request-card .main { flex: 1; min-width: 0; }
+    .request-card .title {
+      font-weight: 600;
+      font-size: 16px;
+      margin-bottom: 6px;
+      letter-spacing: -0.02em;
+      line-height: 1.3;
+    }
+    .request-card .meta {
+      font-size: 13px;
+      color: var(--req-muted);
+      line-height: 1.4;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .request-card .badges-row {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+    .request-card .badge,
+    .badge.personalized {
+      font-size: 11px;
+      padding: 5px 10px;
+      border-radius: 999px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      white-space: nowrap;
+    }
+    .request-card .badge.new {
+      background: var(--req-chip-success-bg);
+      color: var(--req-chip-success-fg);
+    }
+    .request-card .badge.done {
+      background: var(--req-chip-warn-bg);
+      color: var(--req-chip-warn-fg);
+    }
+    .request-card .badge.personalized,
+    .badge.personalized {
+      background: var(--tg-theme-secondary-bg-color);
+      color: #1a1a1a;
+    }
+    @media (prefers-color-scheme: light) {
+      .badge.personalized {
+        background: rgba(247, 166, 0, 0.22);
+        color: #7c2d12;
+      }
+    }
+    .request-card .arrow-wrap {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 36px;
+      border-radius: 12px;
+      background: rgba(247, 166, 0, 0.12);
+      color: var(--req-accent);
+      font-size: 18px;
+      font-weight: 600;
+    }
+    .screen-title {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      margin-bottom: 8px;
+      line-height: 1.25;
+    }
+    .screen-hint {
+      font-size: 14px;
+      color: var(--req-muted);
+      margin-bottom: 18px;
+      line-height: 1.5;
+    }
+    .detail-hero {
+      border-radius: var(--req-radius);
+      padding: 1px;
+      margin-bottom: 16px;
+      background: linear-gradient(135deg, rgba(247, 166, 0, 0.5) 0%, rgba(247, 166, 0, 0.1) 45%, var(--req-surface) 100%);
+      box-shadow: var(--req-shadow);
+    }
+    .detail-hero-inner {
+      border-radius: calc(var(--req-radius) - 1px);
+      background: var(--req-surface);
+      padding: 18px 18px 16px;
+    }
+    .detail-kicker {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--req-accent);
+      margin-bottom: 8px;
+    }
+    .detail-title-line {
+      font-size: 19px;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1.35;
+      margin-bottom: 10px;
+    }
+    .detail-title-badges { display: inline; }
+    .detail-badge-in-progress {
+      display: inline-block;
+      font-size: 11px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      margin-left: 8px;
+      vertical-align: middle;
+      background: var(--req-chip-warn-bg);
+      color: var(--req-chip-warn-fg);
+      font-weight: 600;
+    }
+    .detail-comment-wrap {
+      display: none;
+      margin-top: 14px;
+      padding-top: 14px;
+      border-top: 1px dashed rgba(247, 166, 0, 0.25);
+    }
+    .detail-comment-label {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--req-muted);
+      margin-bottom: 8px;
+    }
+    .detail-comment-text {
+      margin: 0;
+      font-size: 15px;
+      line-height: 1.55;
+      color: var(--req-text);
+    }
+    .detail-client-row {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 16px 18px;
+      border-radius: var(--req-radius-sm);
+      background: var(--req-surface);
+      border: 1px solid rgba(247, 166, 0, 0.1);
+      margin-bottom: 18px;
+      box-shadow: var(--req-shadow);
+    }
+    .detail-client-avatar {
+      width: 52px;
+      height: 52px;
+      border-radius: 16px;
+      background: linear-gradient(145deg, #ffc23d 0%, var(--req-accent) 50%, var(--req-accent-deep) 100%);
+      color: #1a1a1a;
+      font-size: 18px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      box-shadow: 0 4px 16px rgba(247, 166, 0, 0.4);
+    }
+    .detail-client-meta .detail-label {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--req-muted);
+      margin-bottom: 4px;
+    }
+    .detail-client-meta .detail-value { font-size: 17px; font-weight: 600; letter-spacing: -0.02em; }
+    .detail-success-banner {
+      padding: 12px 16px;
+      margin-bottom: 14px;
+      border-radius: var(--req-radius-sm);
+      background: var(--req-chip-success-bg);
+      color: var(--req-chip-success-fg);
+      font-size: 14px;
+      font-weight: 600;
+      border: 1px solid rgba(34, 197, 94, 0.25);
+      animation: bannerPop 0.45s ease;
+    }
+    @keyframes bannerPop {
+      from { opacity: 0; transform: translateY(-6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .detail-actions-hint {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 12px;
+      font-size: 13px;
+      color: var(--req-muted);
+    }
+    .detail-info-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      border: 1.5px solid rgba(247, 166, 0, 0.5);
+      color: var(--req-accent);
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      background: rgba(247, 166, 0, 0.08);
+    }
+    .detail-info-icon:active { transform: scale(0.92); }
+    .detail-info-popover {
+      padding: 14px 16px;
+      margin-bottom: 16px;
+      border-radius: var(--req-radius-sm);
+      background: var(--req-surface);
+      font-size: 13px;
+      line-height: 1.55;
+      color: var(--req-text);
+      border: 1px solid rgba(247, 166, 0, 0.18);
+      box-shadow: var(--req-shadow);
+    }
+    .detail-info-popover strong { display: block; margin-top: 10px; color: var(--req-accent); font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; }
+    .detail-info-popover strong:first-child { margin-top: 0; }
+    .action-buttons { margin-top: 8px; }
+    .action-buttons .btn-block {
+      display: block;
+      width: 100%;
+      padding: 15px 20px;
+      margin-bottom: 10px;
+      border-radius: var(--req-radius-sm);
+      border: none;
+      font-size: 15px;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      text-align: center;
+      box-sizing: border-box;
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+    .action-buttons .btn-block:active { transform: scale(0.98); }
+    .action-buttons .btn-block:last-of-type { margin-bottom: 0; }
+    .btn-primary {
+      background: linear-gradient(145deg, #ffc23d 0%, #f7a600 55%, #e89400 100%);
+      color: #1a1a1a;
+      box-shadow: 0 4px 16px rgba(247, 166, 0, 0.4);
+    }
+    .btn-secondary {
+      background: var(--req-surface);
+      color: var(--req-text);
+      border: 1px solid rgba(247, 166, 0, 0.22);
+      box-shadow: var(--req-shadow);
+    }
+    @media (prefers-color-scheme: dark) {
+      .btn-secondary {
+        background: var(--tg-theme-secondary-bg-color);
+        color: var(--tg-theme-text-color);
+        border-color: rgba(247, 166, 0, 0.22);
+      }
+    }
+    .btn-danger {
+      background: rgba(255, 59, 48, 0.12);
+      color: #ff3b30;
+      border: 1px solid rgba(255, 59, 48, 0.2);
+    }
+    .btn-ghost {
+      background: transparent;
+      color: var(--req-muted);
+      font-weight: 500;
+    }
+    .btn-ghost:active { opacity: 0.7; }
+    .back-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 22px;
+      padding: 12px 4px;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--req-muted);
+      cursor: pointer;
+      border: none;
+      background: none;
+      font-family: inherit;
+    }
+    .back-link .back-link-chevron { flex-shrink: 0; width: 18px; height: 18px; color: var(--req-accent); }
+    .back-link:active { opacity: 0.75; }
+    .back-link.btn-ghost-block { width: 100%; justify-content: flex-start; margin-top: 12px; }
+    .slot-card {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 15px 17px;
+      margin-bottom: 10px;
+      border-radius: var(--req-radius-sm);
+      background: var(--req-surface);
+      cursor: pointer;
+      border: 1px solid rgba(247, 166, 0, 0.18);
+      width: 100%;
+      font: inherit;
+      color: inherit;
+      text-align: left;
+      box-shadow: var(--req-shadow);
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+    .slot-card:active {
+      transform: scale(0.99);
+      box-shadow: var(--req-shadow-hover);
+    }
+    .slot-card .slot-time { font-weight: 700; font-size: 16px; letter-spacing: -0.02em; }
+    .slot-card .slot-arrow {
+      width: 34px;
+      height: 34px;
+      border-radius: 10px;
+      background: rgba(247, 166, 0, 0.14);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--req-accent);
+      font-size: 16px;
+    }
+    .week-nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+      padding: 10px 12px;
+      border-radius: var(--req-radius-sm);
+      background: var(--req-surface);
+      border: 1px solid rgba(247, 166, 0, 0.18);
+      box-shadow: var(--req-shadow);
+    }
+    .week-nav span { font-weight: 700; font-size: 14px; letter-spacing: -0.02em; }
+    .week-nav button {
+      width: 40px;
+      height: 40px;
+      border-radius: 14px;
+      border: none;
+      background: rgba(247, 166, 0, 0.14);
+      color: var(--req-text);
+      font-size: 20px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.15s ease;
+    }
+    .week-nav button:not(:disabled):active { background: rgba(247, 166, 0, 0.28); }
+    .week-nav button:disabled { opacity: 0.35; cursor: not-allowed; }
+    .day-block { margin-bottom: 20px; }
+    .day-title {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--req-muted);
+      margin-bottom: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+    .card-wrap {
+      padding: 16px 18px;
+      border-radius: var(--req-radius);
+      background: var(--req-surface);
+      border: 1px solid rgba(247, 166, 0, 0.18);
+      margin-bottom: 18px;
+      box-shadow: var(--req-shadow);
+    }
+    .card-wrap textarea {
+      width: 100%;
+      min-height: 110px;
+      border: none;
+      background: transparent;
+      color: var(--req-text);
+      font: inherit;
+      font-size: 15px;
+      line-height: 1.5;
+      resize: vertical;
+    }
+    .card-wrap textarea::placeholder { color: var(--req-muted); }
+    .loading, .error, .empty { text-align: center; padding: 28px 16px; color: var(--req-muted); font-size: 15px; line-height: 1.5; }
+    .error { color: #ff3b30; }
+    .auth-error-block { color: var(--req-text); }
+    .auth-error-block .auth-error-hint { margin-top: 12px; font-size: 14px; color: var(--req-muted); }
+    .empty-with-hint {
+      border-radius: var(--req-radius);
+      padding: 36px 24px;
+      background: var(--req-surface);
+      border: 1px dashed rgba(247, 166, 0, 0.25);
+      box-shadow: var(--req-shadow);
+    }
+    .empty-visual {
+      width: 72px;
+      height: 72px;
+      margin: 0 auto 18px;
+      border-radius: 24px;
+      background: linear-gradient(145deg, rgba(247, 166, 0, 0.2) 0%, rgba(247, 166, 0, 0.05) 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 32px;
+    }
+    .empty-with-hint .empty-state-hint { margin-top: 12px; font-size: 14px; color: var(--req-muted); line-height: 1.55; }
+    .success-screen-inner {
+      text-align: center;
+      padding: 40px 24px 32px;
+      border-radius: var(--req-radius);
+      background: var(--req-surface);
+      border: 1px solid rgba(52, 199, 89, 0.2);
+      box-shadow: var(--req-shadow);
+    }
+    .success-screen-icon {
+      width: 80px;
+      height: 80px;
+      margin: 0 auto 20px;
+      border-radius: 50%;
+      background: rgba(52, 199, 89, 0.15);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 40px;
+    }
+    .success-msg { font-size: 17px; font-weight: 600; line-height: 1.5; margin: 0; letter-spacing: -0.02em; }
+    .pagination {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin: 22px 0 8px;
+    }
+    .pagination button {
+      padding: 10px 18px;
+      border-radius: 999px;
+      border: none;
+      background: var(--req-surface);
+      color: var(--req-text);
+      font-size: 14px;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      box-shadow: var(--req-shadow);
+      border: 1px solid rgba(247, 166, 0, 0.18);
+    }
+    .pagination button:active { transform: scale(0.97); }
+    .pagination span { font-size: 13px; color: var(--req-muted); font-weight: 500; }
+  </style>
+  <script>
+    (function () {
+      function isAppDark() {
+        var tg = window.Telegram && window.Telegram.WebApp;
+        if (tg && tg.colorScheme) return tg.colorScheme === 'dark';
+        return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+      }
+      function applyAppTheme() {
+        var d = document.documentElement;
+        var dark = isAppDark();
+        /* !important: Telegram reapplies themeParams after tg.ready() — without it, blue returns */
+        /* Dark surfaces: same hex as schedule-editor.html (not pure #000 vs #1c1c1e — avoids mismatch with «Расписание») */
+        d.style.setProperty('--tg-theme-button-color', '#f5a623', 'important');
+        d.style.setProperty('--tg-theme-button-text-color', '#1a1a1a', 'important');
+        d.style.setProperty('--tg-theme-bg-color', dark ? '#1a1a1a' : '#fffbeb', 'important');
+        d.style.setProperty('--tg-theme-text-color', dark ? '#f5f5f5' : '#1a1a1a', 'important');
+        d.style.setProperty('--tg-theme-secondary-bg-color', dark ? '#2a2a2a' : '#fff3cc', 'important');
+        d.style.setProperty('--tg-theme-hint-color', dark ? '#8e8e93' : '#666666', 'important');
+        d.style.setProperty('--req-accent', '#f5a623', 'important');
+      }
+      applyAppTheme();
+      if (window.matchMedia) {
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyAppTheme);
+      }
+      window.__applyRequestsTheme = applyAppTheme;
+    })();
+  </script>
+</head>
+<body>
+  <header class="page-header">
+    <div class="page-header-kicker">Входящие</div>
+    <div class="header">
+      <h1 class="header-title" id="headerTitle">Заявки клиентов</h1>
+      <div class="header-deco" aria-hidden="true">📋</div>
+    </div>
+  </header>
+
+  <!-- Diagnostic: triggers GET /api/webapp/trainer/requests/ping?step=img when page loads (no JS). -->
+  <img src="/api/webapp/trainer/requests/ping?step=img" alt="" width="0" height="0" style="position:absolute;visibility:hidden" referrerpolicy="no-referrer">
+  <div id="screenList" data-screen class="active">
+    <p class="list-intro" id="listHint">По вашему городу и услугам из профиля. Сначала новые заявки, затем в работе — по 10 на странице.</p>
+    <div id="sectionNew" style="display: none;">
+      <div class="section-title">Новые</div>
+      <div id="requestListNew"></div>
+    </div>
+    <div id="sectionInProgress" style="display: none;">
+      <div class="section-title">В работе</div>
+      <div id="requestListInProgress"></div>
+    </div>
+    <div id="screenEmpty" class="empty empty-with-hint" style="display: none;">
+      <div class="empty-visual" aria-hidden="true">✉️</div>
+      <p id="emptyStateText">Пока нет заявок по вашему профилю (город + услуги).</p>
+      <p id="emptyStateHint" class="empty-state-hint">Заявки показываются только если в вашем профиле тренера указаны те же город и услуга, что в заявке. Заполните профиль на сайте или подождите заявки по вашим направлениям.</p>
+    </div>
+    <div id="screenAuthError" class="empty auth-error-block" style="display: none;">
+      <p id="authErrorText"></p>
+      <p class="auth-error-hint">Закройте приложение (кнопка «Закрыть») и откройте снова из меню бота — заявки появятся.</p>
+    </div>
+    <div id="pagination" class="pagination"></div>
+  </div>
+
+  <div id="screenDetail" data-screen>
+    <div id="detailSuccessBanner" class="detail-success-banner" style="display: none;"></div>
+    <div class="detail-hero">
+      <div class="detail-hero-inner">
+        <div class="detail-kicker">Заявка</div>
+        <div class="detail-title-line" id="detailTitle">—</div>
+        <div id="detailCommentWrap" class="detail-comment-wrap">
+          <div class="detail-comment-label">Комментарий клиента</div>
+          <p id="detailComment" class="detail-comment-text"></p>
+        </div>
+      </div>
+    </div>
+    <div class="detail-client-row">
+      <div class="detail-client-avatar" id="detailClientAvatar">—</div>
+      <div class="detail-client-meta">
+        <div class="detail-label">Клиент</div>
+        <div class="detail-value" id="detailClient">—</div>
+      </div>
+    </div>
+    <div id="detailActionsWrap">
+      <div id="detailInfoRow" class="detail-actions-hint" style="display: none;">
+        <span>Что делают кнопки ниже?</span>
+        <span class="detail-info-icon" id="detailInfoTrigger" title="Подсказка">i</span>
+      </div>
+      <div id="detailInfoPopover" class="detail-info-popover" style="display: none;"></div>
+      <div class="action-buttons" id="detailActions"></div>
+    </div>
+    <span class="back-link" id="backFromDetail"><svg class="back-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>К списку заявок</span>
+  </div>
+
+  <div id="screenRespond" data-screen>
+    <div class="screen-title">Комментарий к отклику</div>
+    <div class="screen-hint">Напишите клиенту короткое сообщение (необязательно).</div>
+    <div class="card-wrap">
+      <textarea id="respondComment" placeholder="Например: готов провести занятие в удобное для вас время"></textarea>
+    </div>
+    <div class="action-buttons">
+      <button type="button" class="btn-block btn-primary" id="btnSendRespond">Отправить отклик</button>
+      <button type="button" class="btn-block btn-secondary" id="btnRespondSkip">Без комментариев</button>
+      <button type="button" class="back-link btn-ghost-block" id="backFromRespond"><svg class="back-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>Назад</button>
+    </div>
+  </div>
+
+  <div id="screenSlots" data-screen>
+    <div class="screen-title">Выберите слот для записи клиента</div>
+    <div class="screen-hint" id="slotsHint">Свободные слоты по дням</div>
+    <div class="week-nav" id="slotsWeekNav" style="display: none;">
+      <button type="button" id="slotsPrevWeek" aria-label="Пред. неделя">‹</button>
+      <span id="slotsWeekLabel">—</span>
+      <button type="button" id="slotsNextWeek" aria-label="След. неделя">›</button>
+    </div>
+    <div id="slotList"></div>
+    <span class="back-link" id="backFromSlots"><svg class="back-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>Назад</span>
+  </div>
+
+  <div id="screenSuccess" data-screen>
+    <div class="success-screen-inner">
+      <div class="success-screen-icon" aria-hidden="true">✓</div>
+      <p class="success-msg">Клиент записан. Заявка закрыта, клиенту отправлено уведомление.</p>
+    </div>
+  </div>
+
+  <script>
+    (function() {
+      fetch('/api/webapp/trainer/requests/ping?step=script').catch(function() {});
+      const tg = window.Telegram && window.Telegram.WebApp;
+      if (tg) {
+        tg.ready();
+        tg.expand();
+        if (typeof window.__applyRequestsTheme === 'function') {
+          window.__applyRequestsTheme();
+        }
+        try {
+          var darkUi = tg.colorScheme === 'dark' ||
+            (tg.colorScheme !== 'light' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          var bgHex = darkUi ? '#1a1a1a' : '#fffbeb';
+          if (typeof tg.setHeaderColor === 'function') tg.setHeaderColor(bgHex);
+          if (typeof tg.setBackgroundColor === 'function') tg.setBackgroundColor(bgHex);
+        } catch (e) { /* older clients */ }
+        if (tg.onEvent) {
+          tg.onEvent('themeChanged', function () {
+            if (typeof window.__applyRequestsTheme === 'function') {
+              window.__applyRequestsTheme();
+            }
+            try {
+              var du = tg.colorScheme === 'dark' ||
+                (tg.colorScheme !== 'light' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+              var bg = du ? '#1a1a1a' : '#fffbeb';
+              if (typeof tg.setHeaderColor === 'function') tg.setHeaderColor(bg);
+              if (typeof tg.setBackgroundColor === 'function') tg.setBackgroundColor(bg);
+            } catch (err) { /* ignore */ }
+          });
+        }
+      }
+
+      const PER_PAGE = 10;
+      const DAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+      const MONTHS = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
+      let state = { items: [], page: 0, currentRequest: null, slots: [], slotsWeekStarts: [], slotsWeekIndex: 0, justResponded: false };
+
+      function initData() {
+        if (tg && tg.initData && tg.initData.length >= 10) return tg.initData;
+        try {
+          var hash = window.location.hash.slice(1);
+          if (hash) {
+            var params = new URLSearchParams(hash);
+            var fromHash = params.get('tgWebAppData');
+            if (fromHash && fromHash.length >= 10) return fromHash;
+          }
+        } catch (e) {}
+        return '';
+      }
+      function headers() {
+        const h = { 'Content-Type': 'application/json' };
+        const id = initData();
+        if (id) h['X-Telegram-Init-Data'] = id;
+        return h;
+      }
+      function apiUrl(path) { return '/api/webapp' + path; }
+
+      function showScreen(id) {
+        document.querySelectorAll('[data-screen]').forEach(function(el) { el.classList.remove('active'); });
+        const el = document.getElementById(id);
+        if (el) el.classList.add('active');
+      }
+
+      function closeApp() { if (tg) tg.close(); else window.close(); }
+      var btnClose = document.getElementById('btnClose');
+      if (btnClose) btnClose.onclick = closeApp;
+      var btnCloseSuccess = document.getElementById('btnCloseSuccess');
+      if (btnCloseSuccess) btnCloseSuccess.onclick = closeApp;
+
+      function escapeHtml(s) {
+        if (s == null || s === undefined) return '';
+        const t = String(s);
+        return t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+      }
+
+      function clientInitials(fullName) {
+        var parts = String(fullName || '').trim().split(/\s+/).filter(Boolean);
+        if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+        if (parts.length === 1 && parts[0].length) return parts[0].slice(0, 2).toUpperCase();
+        return '—';
+      }
+
+      function clientPreview(req) {
+        const first = (req.client_first_name || '').trim();
+        const last = (req.client_last_name || '').trim();
+        if (last) return (first ? first + ' ' + last[0] + '.' : last[0] + '.');
+        return first || 'Клиент';
+      }
+
+      function renderList() {
+        const items = state.items || [];
+        const newList = items.filter(function(r) { return !r.has_responded; });
+        const inProgressList = items.filter(function(r) { return r.has_responded; });
+        const combined = newList.concat(inProgressList);
+        const total = combined.length;
+        const start = state.page * PER_PAGE;
+        const pageItems = combined.slice(start, start + PER_PAGE);
+
+        const emptyEl = document.getElementById('screenEmpty');
+        const sectionNew = document.getElementById('sectionNew');
+        const sectionInProgress = document.getElementById('sectionInProgress');
+        const pagEl = document.getElementById('pagination');
+
+        document.getElementById('screenAuthError').style.display = 'none';
+        if (total === 0) {
+          document.getElementById('emptyStateText').textContent = 'Пока нет заявок по вашему профилю (город + услуги).';
+          document.getElementById('emptyStateHint').textContent = 'Заявки показываются только если в вашем профиле тренера указаны те же город и услуга, что в заявке. Заполните профиль на сайте или подождите заявки по вашим направлениям.';
+          emptyEl.style.display = 'block';
+          sectionNew.style.display = 'none';
+          sectionInProgress.style.display = 'none';
+          pagEl.innerHTML = '';
+          return;
+        }
+        emptyEl.style.display = 'none';
+
+        const pageNew = pageItems.filter(function(r) { return !r.has_responded; });
+        const pageInProgress = pageItems.filter(function(r) { return r.has_responded; });
+
+        sectionNew.style.display = pageNew.length ? 'block' : 'none';
+        document.getElementById('requestListNew').innerHTML = pageNew.map(function(r) {
+          const title = (r.city_name || '—') + ' · ' + (r.service_name || '—');
+          const meta = (r.comment || '').trim() ? (r.comment.replace(/\n/g, ' ').slice(0, 50) + ((r.comment || '').length > 50 ? '…' : '')) : clientPreview(r);
+          const personalBadge = r.is_personalized ? '<span class="badge personalized">Для вас</span>' : '';
+          return '<button type="button" class="request-card request-card--new" data-request-id="' + r.id + '">' +
+            '<span class="request-card__stripe" aria-hidden="true"></span>' +
+            '<div class="request-card__body">' +
+            '<div class="main"><div class="title">' + escapeHtml(title) + '</div><div class="meta">' + escapeHtml(meta) + '</div></div>' +
+            '<div class="badges-row">' + personalBadge + '<span class="badge new">Новая</span></div>' +
+            '<span class="arrow-wrap" aria-hidden="true">→</span></div></button>';
+        }).join('');
+
+        sectionInProgress.style.display = pageInProgress.length ? 'block' : 'none';
+        document.getElementById('requestListInProgress').innerHTML = pageInProgress.map(function(r) {
+          const title = (r.city_name || '—') + ' · ' + (r.service_name || '—');
+          const meta = (r.comment || '').trim() ? (r.comment.replace(/\n/g, ' ').slice(0, 50) + ((r.comment || '').length > 50 ? '…' : '')) : clientPreview(r);
+          const personalBadge = r.is_personalized ? '<span class="badge personalized">Для вас</span>' : '';
+          return '<button type="button" class="request-card request-card--progress" data-request-id="' + r.id + '">' +
+            '<span class="request-card__stripe" aria-hidden="true"></span>' +
+            '<div class="request-card__body">' +
+            '<div class="main"><div class="title">' + escapeHtml(title) + '</div><div class="meta">' + escapeHtml(meta) + '</div></div>' +
+            '<div class="badges-row">' + personalBadge + '<span class="badge done">В работе</span></div>' +
+            '<span class="arrow-wrap" aria-hidden="true">→</span></div></button>';
+        }).join('');
+
+        document.querySelectorAll('.request-card').forEach(function(btn) {
+          btn.onclick = function() {
+            const id = parseInt(btn.dataset.requestId, 10);
+            const req = state.items.find(function(r) { return r.id === id; });
+            if (req) { state.currentRequest = req; renderDetail(); showScreen('screenDetail'); }
+          };
+        });
+
+        const totalPages = Math.max(1, Math.ceil(total / PER_PAGE));
+        var pagHtml = '';
+        if (state.page > 0) pagHtml += '<button type="button" id="pagePrev">◀ Назад</button>';
+        pagHtml += '<span>Стр. ' + (state.page + 1) + ' из ' + totalPages + '</span>';
+        if (start + PER_PAGE < total) pagHtml += '<button type="button" id="pageNext">Вперёд ▶</button>';
+        pagEl.innerHTML = pagHtml;
+        var prevBtn = document.getElementById('pagePrev');
+        if (prevBtn) prevBtn.onclick = function() { state.page--; renderList(); };
+        var nextBtn = document.getElementById('pageNext');
+        if (nextBtn) nextBtn.onclick = function() { state.page++; renderList(); };
+      }
+
+      var DETAIL_HINT_HTML = '<strong>Записать клиента</strong> — выберите свободный слот и оформите запись, если знаете удобное для клиента время; клиент получит подтверждение в боте.<br>' +
+        '<strong>Напомнить когда появятся слоты</strong> — вы получите уведомление в боте, когда добавите слоты в расписание. Удобно, если пока нет свободного окна.';
+
+      function renderDetail() {
+        const req = state.currentRequest;
+        if (!req) return;
+        const titleBase = escapeHtml((req.city_name || '—') + '  ·  ' + (req.service_name || '—'));
+        const titleEl = document.getElementById('detailTitle');
+        var titleBadges = [];
+        if (req.is_personalized) titleBadges.push('<span class="badge personalized">Заявка для вас</span>');
+        if (req.has_responded) titleBadges.push('<span class="detail-badge-in-progress">В работе</span>');
+        titleEl.innerHTML = titleBase + (titleBadges.length ? '<span class="detail-title-badges"> ' + titleBadges.join(' ') + '</span>' : '');
+
+        var bannerEl = document.getElementById('detailSuccessBanner');
+        if (state.justResponded) {
+          bannerEl.textContent = '✓ Отклик отправлен. Заявка в работе.';
+          bannerEl.style.display = 'block';
+          state.justResponded = false;
+          setTimeout(function() { bannerEl.style.display = 'none'; }, 4000);
+        } else {
+          bannerEl.style.display = 'none';
+        }
+
+        const comment = (req.comment || '').trim();
+        var commentWrap = document.getElementById('detailCommentWrap');
+        var commentEl = document.getElementById('detailComment');
+        if (comment) {
+          commentEl.textContent = comment;
+          commentWrap.style.display = 'block';
+        } else {
+          commentWrap.style.display = 'none';
+          commentEl.textContent = '';
+        }
+        const clientName = [req.client_first_name, req.client_last_name].filter(Boolean).join(' ').trim() || 'Клиент';
+        document.getElementById('detailClient').textContent = clientName;
+        document.getElementById('detailClientAvatar').textContent = clientInitials(clientName);
+
+        var infoRow = document.getElementById('detailInfoRow');
+        var infoPopover = document.getElementById('detailInfoPopover');
+        if (req.has_responded) {
+          infoRow.style.display = 'flex';
+          infoPopover.innerHTML = DETAIL_HINT_HTML;
+          infoPopover.style.display = 'none';
+          var trigger = document.getElementById('detailInfoTrigger');
+          trigger.onclick = function() {
+            infoPopover.style.display = infoPopover.style.display === 'none' ? 'block' : 'none';
+          };
+        } else {
+          infoRow.style.display = 'none';
+          infoPopover.style.display = 'none';
+        }
+
+        const actions = document.getElementById('detailActions');
+        actions.innerHTML = '';
+        if (!req.has_responded) {
+          actions.innerHTML += '<button type="button" class="btn-block btn-primary" id="btnRespond">✅ Готов взять</button>';
+          actions.innerHTML += '<button type="button" class="btn-block btn-danger" id="btnDecline">Отклонить</button>';
+        } else {
+          actions.innerHTML += '<button type="button" class="btn-block btn-primary" id="btnBookClient">Записать клиента</button>';
+          actions.innerHTML += '<button type="button" class="btn-block btn-secondary" id="btnRemindSlots">Напомнить когда появятся слоты</button>';
+        }
+
+        document.getElementById('backFromDetail').onclick = function() { state.currentRequest = null; loadList(); showScreen('screenList'); };
+
+        var btnRespond = document.getElementById('btnRespond');
+        if (btnRespond) btnRespond.onclick = function() { showScreen('screenRespond'); };
+        var btnDecline = document.getElementById('btnDecline');
+        if (btnDecline) btnDecline.onclick = function() {
+          if (!confirm('Отклонить заявку? Она исчезнет из вашего списка.')) return;
+          fetch(apiUrl('/trainer/requests/' + req.id + '/decline'), { method: 'POST', headers: headers() })
+            .then(function(res) { return res.json().then(function(data) { return { ok: res.ok, data: data }; }); })
+            .then(function(o) {
+              if (o.ok && o.data.success) {
+                state.items = state.items.filter(function(r) { return r.id !== req.id; });
+                state.currentRequest = null;
+                renderList();
+                showScreen('screenList');
+              } else { alert(o.data.detail || 'Ошибка'); }
+            }).catch(function() { alert('Ошибка сети'); });
+        };
+        var btnBookClient = document.getElementById('btnBookClient');
+        if (btnBookClient) btnBookClient.onclick = function() { loadSlots(req); };
+        var btnRemindSlots = document.getElementById('btnRemindSlots');
+        if (btnRemindSlots) btnRemindSlots.onclick = function() {
+          fetch(apiUrl('/trainer/requests/' + req.id + '/remind-slots'), { method: 'POST', headers: headers() })
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+              if (data.success) alert('Напомним, когда появятся свободные слоты.');
+            }).catch(function() { alert('Ошибка сети'); });
+        };
+      }
+
+      document.getElementById('backFromRespond').onclick = function() { showScreen('screenDetail'); };
+      document.getElementById('btnSendRespond').onclick = function() {
+        var req = state.currentRequest;
+        if (!req) return;
+        var comment = (document.getElementById('respondComment').value || '').trim() || null;
+        fetch(apiUrl('/trainer/requests/' + req.id + '/respond'), {
+          method: 'POST',
+          headers: headers(),
+          body: JSON.stringify({ trainer_comment: comment })
+        }).then(function(res) { return res.json().then(function(data) { return { ok: res.ok, data: data }; }); })
+          .then(function(o) {
+            if (o.ok && o.data.success) {
+              req.has_responded = true;
+              state.currentRequest = req;
+              state.justResponded = true;
+              var idx = state.items.findIndex(function(r) { return r.id === req.id; });
+              if (idx >= 0) state.items[idx] = req;
+              document.getElementById('respondComment').value = '';
+              renderDetail();
+              showScreen('screenDetail');
+            } else { alert(o.data.detail || 'Ошибка'); }
+          }).catch(function() { alert('Ошибка сети'); });
+      };
+      document.getElementById('btnRespondSkip').onclick = function() {
+        var req = state.currentRequest;
+        if (!req) return;
+        fetch(apiUrl('/trainer/requests/' + req.id + '/respond'), {
+          method: 'POST',
+          headers: headers(),
+          body: JSON.stringify({ trainer_comment: null })
+        }).then(function(res) { return res.json().then(function(data) { return { ok: res.ok, data: data }; }); })
+          .then(function(o) {
+            if (o.ok && o.data.success) {
+              req.has_responded = true;
+              var idx = state.items.findIndex(function(r) { return r.id === req.id; });
+              if (idx >= 0) state.items[idx] = req;
+              state.currentRequest = req;
+              state.justResponded = true;
+              renderDetail();
+              showScreen('screenDetail');
+            } else { alert(o.data.detail || 'Ошибка'); }
+          }).catch(function() { alert('Ошибка сети'); });
+      };
+
+      function getMondayOfDateStr(dateStr) {
+        var d = new Date(dateStr + 'T12:00:00');
+        var day = d.getDay();
+        var diff = day === 0 ? 6 : day - 1;
+        d.setDate(d.getDate() - diff);
+        return d.toISOString().slice(0, 10);
+      }
+      function formatWeekLabel(weekStartStr) {
+        var start = new Date(weekStartStr + 'T12:00:00');
+        var end = new Date(start);
+        end.setDate(end.getDate() + 6);
+        var fmt = function(d) { return d.getDate() + ' ' + MONTHS[d.getMonth()]; };
+        return fmt(start) + ' – ' + fmt(end);
+      }
+      /** Actual date range of slots shown in current week view (min–max slot_date). */
+      function formatSlotsRangeLabel(weekStartStr, slotsInWeek) {
+        if (!slotsInWeek || slotsInWeek.length === 0) return formatWeekLabel(weekStartStr);
+        var dates = slotsInWeek.map(function(s) { return s.slot_date; }).filter(Boolean);
+        if (dates.length === 0) return formatWeekLabel(weekStartStr);
+        dates.sort();
+        var first = dates[0];
+        var last = dates[dates.length - 1];
+        var dFirst = new Date(first + 'T12:00:00');
+        var dLast = new Date(last + 'T12:00:00');
+        var fmt = function(d) { return d.getDate() + ' ' + MONTHS[d.getMonth()]; };
+        if (first === last) return fmt(dFirst);
+        return fmt(dFirst) + ' – ' + fmt(dLast);
+      }
+      function formatDateKey(dateStr) {
+        var d = new Date(dateStr + 'T12:00:00');
+        var wd = d.getDay();
+        return d.getDate() + '.' + String(d.getMonth() + 1).padStart(2, '0') + ' (' + DAYS[wd === 0 ? 6 : wd - 1] + ')';
+      }
+      function renderSlots() {
+        var listEl = document.getElementById('slotList');
+        var navEl = document.getElementById('slotsWeekNav');
+        var weekStarts = state.slotsWeekStarts || [];
+        var idx = state.slotsWeekIndex || 0;
+        var weekStart = weekStarts[idx];
+        if (!weekStart) {
+          listEl.innerHTML = '<div class="empty">Нет свободных слотов.</div>';
+          return;
+        }
+        var weekEnd = new Date(weekStart + 'T12:00:00');
+        weekEnd.setDate(weekEnd.getDate() + 7);
+        var weekEndStr = weekEnd.toISOString().slice(0, 10);
+        var slotsInWeek = (state.slots || []).filter(function(s) {
+          return s.slot_date >= weekStart && s.slot_date < weekEndStr;
+        });
+        if (weekStarts.length > 1) {
+          navEl.style.display = 'flex';
+          document.getElementById('slotsWeekLabel').textContent = formatSlotsRangeLabel(weekStart, slotsInWeek);
+          document.getElementById('slotsPrevWeek').disabled = idx <= 0;
+          document.getElementById('slotsNextWeek').disabled = idx >= weekStarts.length - 1;
+        } else {
+          navEl.style.display = 'flex';
+          document.getElementById('slotsWeekLabel').textContent = formatSlotsRangeLabel(weekStart, slotsInWeek);
+          document.getElementById('slotsPrevWeek').disabled = true;
+          document.getElementById('slotsNextWeek').disabled = true;
+        }
+        var byDay = {};
+        slotsInWeek.forEach(function(s) {
+          if (!byDay[s.slot_date]) byDay[s.slot_date] = [];
+          byDay[s.slot_date].push(s);
+        });
+        var days = Object.keys(byDay).sort();
+        if (days.length === 0) {
+          listEl.innerHTML = '<div class="empty">На эту неделю слотов нет.</div>';
+          return;
+        }
+        var html = '';
+        days.forEach(function(dateKey) {
+          var daySlots = byDay[dateKey].sort(function(a, b) { return (a.start_time || '').localeCompare(b.start_time || ''); });
+          html += '<div class="day-block"><div class="day-title">' + escapeHtml(formatDateKey(dateKey)) + '</div>';
+          daySlots.forEach(function(s) {
+            html += '<button type="button" class="slot-card" data-slot-id="' + s.id + '">';
+            html += '<span class="slot-time">' + escapeHtml(s.start_time || '') + '–' + escapeHtml(s.end_time || '') + '</span>';
+            html += '<span class="slot-arrow">→</span>';
+            html += '</button>';
+          });
+          html += '</div>';
+        });
+        listEl.innerHTML = html;
+        document.querySelectorAll('#slotList .slot-card').forEach(function(btn) {
+          btn.onclick = function() {
+            var slotId = parseInt(btn.dataset.slotId, 10);
+            var req = state.currentRequest;
+            if (!req) return;
+            if (!confirm('Записать клиента на выбранное время?')) return;
+            fetch(apiUrl('/trainer/requests/' + req.id + '/book'), {
+              method: 'POST',
+              headers: headers(),
+              body: JSON.stringify({ slot_id: slotId })
+            }).then(function(res) { return res.json(); })
+              .then(function(data) {
+                if (data.success) {
+                  state.items = state.items.filter(function(r) { return r.id !== req.id; });
+                  state.currentRequest = null;
+                  showScreen('screenSuccess');
+                } else { alert(data.detail || 'Ошибка'); }
+              }).catch(function() { alert('Ошибка сети'); });
+          };
+        });
+      }
+      function loadSlots(req) {
+        state.currentRequest = req;
+        state.slots = [];
+        state.slotsWeekStarts = [];
+        state.slotsWeekIndex = 0;
+        document.getElementById('slotList').innerHTML = '<div class="loading">Загрузка слотов...</div>';
+        document.getElementById('slotsWeekNav').style.display = 'none';
+        showScreen('screenSlots');
+        fetch(apiUrl('/trainer/requests/' + req.id + '/slots'), { headers: headers() })
+          .then(function(res) { return res.json(); })
+          .then(function(data) {
+            var slots = data.slots || [];
+            if (slots.length === 0) {
+              document.getElementById('slotList').innerHTML = '<div class="empty">Нет свободных слотов на ближайшие 2 недели. Добавьте слоты в разделе «Расписание».</div>';
+              return;
+            }
+            state.slots = slots;
+            var weekSet = {};
+            slots.forEach(function(s) {
+              var mon = getMondayOfDateStr(s.slot_date);
+              weekSet[mon] = true;
+            });
+            state.slotsWeekStarts = Object.keys(weekSet).sort();
+            state.slotsWeekIndex = 0;
+            renderSlots();
+          }).catch(function() {
+            document.getElementById('slotList').innerHTML = '<div class="error">Ошибка загрузки слотов</div>';
+          });
+      }
+      document.getElementById('slotsPrevWeek').onclick = function() {
+        if (state.slotsWeekIndex > 0) { state.slotsWeekIndex--; renderSlots(); }
+      };
+      document.getElementById('slotsNextWeek').onclick = function() {
+        if (state.slotsWeekIndex < (state.slotsWeekStarts.length - 1)) { state.slotsWeekIndex++; renderSlots(); }
+      };
+
+      document.getElementById('backFromSlots').onclick = function() { showScreen('screenDetail'); };
+
+      function showAuthError(message) {
+        document.getElementById('sectionNew').style.display = 'none';
+        document.getElementById('sectionInProgress').style.display = 'none';
+        document.getElementById('screenEmpty').style.display = 'none';
+        document.getElementById('screenAuthError').style.display = 'block';
+        document.getElementById('authErrorText').textContent = message || 'Не удалось загрузить заявки.';
+      }
+
+      function loadList() {
+        fetch('/api/webapp/trainer/requests/ping?step=loadList').catch(function() {});
+        document.getElementById('requestListNew').innerHTML = '';
+        document.getElementById('requestListInProgress').innerHTML = '';
+        document.getElementById('screenEmpty').style.display = 'none';
+        document.getElementById('screenAuthError').style.display = 'none';
+        document.getElementById('sectionNew').style.display = 'none';
+        document.getElementById('sectionInProgress').style.display = 'none';
+        fetch(apiUrl('/trainer/requests'), { headers: headers() })
+          .then(function(res) {
+            return res.json().then(function(data) {
+              if (!res.ok) {
+                var msg = (data && data.detail) ? data.detail : res.statusText;
+                if (res.status === 401 || res.status === 403 || (msg && (msg.toLowerCase().indexOf('init') >= 0 || msg.toLowerCase().indexOf('auth') >= 0)))
+                  throw new Error('SESSION');
+                throw new Error(msg);
+              }
+              return data;
+            });
+          })
+          .then(function(data) {
+            state.items = Array.isArray(data.items) ? data.items : [];
+            state.page = 0;
+            renderList();
+          })
+          .catch(function(e) {
+            if (e.message === 'SESSION') {
+              showAuthError('Сессия истекла или приложение было перезагружено.');
+            } else {
+              document.getElementById('screenAuthError').style.display = 'none';
+              document.getElementById('emptyStateText').textContent = e.message || 'Ошибка загрузки';
+              document.getElementById('emptyStateHint').textContent = 'Закройте приложение и откройте снова из меню бота для тренеров.';
+              document.getElementById('screenEmpty').style.display = 'block';
+            }
+          });
+      }
+
+      loadList();
+    })();
+  </script>
+</body>
+</html>

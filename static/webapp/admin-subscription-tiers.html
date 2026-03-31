@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Тарифы подписки</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="stylesheet" href="theme.css" />
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: var(--app-font-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif);
+      background: var(--tg-theme-bg-color);
+      color: var(--tg-theme-text-color);
+      min-height: 100vh;
+      padding: 16px;
+      padding-bottom: calc(env(safe-area-inset-bottom, 16px) + 80px);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Header */
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+    .header h1 {
+      margin: 0;
+      font-size: 20px;
+      font-weight: 700;
+    }
+    .pill {
+      font-size: 11px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: rgba(247, 166, 0, 0.15);
+      color: var(--tg-theme-button-color);
+      font-weight: 600;
+    }
+
+    /* Screens */
+    .screen { display: none; animation: fadeIn 0.25s ease; }
+    .screen.active { display: block; }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+    /* Loading/Error */
+    .center-message {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 50vh;
+      text-align: center;
+    }
+    .spinner {
+      width: 40px;
+      height: 40px;
+      border: 3px solid var(--tg-theme-secondary-bg-color);
+      border-top-color: var(--tg-theme-button-color);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin-bottom: 12px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .error-text { color: var(--app-danger, #ff3b30); margin-bottom: 16px; }
+    .btn {
+      padding: 10px 20px;
+      border-radius: 10px;
+      border: none;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      background: var(--tg-theme-button-color);
+      color: var(--tg-theme-button-text-color);
+    }
+
+    /* Tier cards */
+    .tier-list {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .tier-card {
+      background: var(--tg-theme-secondary-bg-color);
+      border-radius: 16px;
+      padding: 16px;
+      border: 2px solid transparent;
+      transition: all 0.2s ease;
+    }
+    .tier-card.editing {
+      border-color: var(--tg-theme-button-color);
+      box-shadow: 0 4px 16px rgba(247, 166, 0, 0.15);
+    }
+    .tier-card.inactive {
+      opacity: 0.6;
+    }
+
+    /* Tier header */
+    .tier-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    .tier-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .tier-name {
+      font-size: 18px;
+      font-weight: 700;
+      margin: 0;
+    }
+    .tier-badge {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      padding: 3px 8px;
+      border-radius: 6px;
+      background: rgba(142, 142, 147, 0.2);
+      color: var(--tg-theme-hint-color);
+    }
+    .tier-badge.active {
+      background: rgba(52, 199, 89, 0.15);
+      color: #34c759;
+    }
+    .btn-edit {
+      padding: 6px 12px;
+      border-radius: 8px;
+      border: none;
+      font-size: 13px;
+      font-weight: 600;
+      background: rgba(247, 166, 0, 0.15);
+      color: var(--tg-theme-button-color);
+      cursor: pointer;
+    }
+
+    /* Form fields */
+    .form-group {
+      margin-bottom: 14px;
+    }
+    .form-group:last-child {
+      margin-bottom: 0;
+    }
+    .form-label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--tg-theme-hint-color);
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .form-input {
+      width: 100%;
+      padding: 12px 14px;
+      border-radius: 10px;
+      border: 2px solid transparent;
+      font-size: 15px;
+      background: var(--tg-theme-bg-color);
+      color: var(--tg-theme-text-color);
+      transition: border-color 0.2s;
+      outline: none;
+    }
+    .form-input:focus {
+      border-color: rgba(247, 166, 0, 0.5);
+    }
+    .form-input:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+    .form-textarea {
+      resize: vertical;
+      min-height: 60px;
+    }
+
+    /* Row layout */
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    /* Toggle */
+    .form-toggle {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .toggle-switch {
+      position: relative;
+      width: 50px;
+      height: 28px;
+    }
+    .toggle-switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+    .toggle-slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(142, 142, 147, 0.3);
+      border-radius: 28px;
+      transition: 0.3s;
+    }
+    .toggle-slider:before {
+      position: absolute;
+      content: "";
+      height: 22px;
+      width: 22px;
+      left: 3px;
+      bottom: 3px;
+      background: white;
+      border-radius: 50%;
+      transition: 0.3s;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    }
+    .toggle-switch input:checked + .toggle-slider {
+      background: #34c759;
+    }
+    .toggle-switch input:checked + .toggle-slider:before {
+      transform: translateX(22px);
+    }
+    .toggle-label {
+      font-size: 14px;
+      font-weight: 500;
+    }
+
+    /* View mode */
+    .tier-summary {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      text-align: center;
+    }
+    .tier-period-matrix {
+      margin-top: 12px;
+    }
+    .tier-period-matrix .matrix-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--tg-theme-hint-color);
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .period-matrix-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+    }
+    .summary-item {
+      padding: 10px;
+      background: var(--tg-theme-bg-color);
+      border-radius: 10px;
+    }
+    .summary-value {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--tg-theme-button-color);
+    }
+    .summary-label {
+      font-size: 11px;
+      color: var(--tg-theme-hint-color);
+      margin-top: 2px;
+    }
+    .tier-description {
+      font-size: 13px;
+      color: var(--tg-theme-hint-color);
+      margin-top: 12px;
+      line-height: 1.4;
+    }
+
+    /* Action buttons */
+    .tier-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 16px;
+    }
+    .btn-save {
+      flex: 1;
+      padding: 12px;
+      border-radius: 10px;
+      border: none;
+      font-size: 15px;
+      font-weight: 600;
+      background: var(--tg-theme-button-color);
+      color: var(--tg-theme-button-text-color);
+      cursor: pointer;
+    }
+    .btn-save:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .btn-cancel {
+      padding: 12px 20px;
+      border-radius: 10px;
+      border: none;
+      font-size: 15px;
+      font-weight: 600;
+      background: rgba(142, 142, 147, 0.2);
+      color: var(--tg-theme-text-color);
+      cursor: pointer;
+    }
+
+    /* Toast */
+    .toast {
+      position: fixed;
+      bottom: 100px;
+      left: 50%;
+      transform: translateX(-50%) translateY(100px);
+      padding: 12px 20px;
+      background: #34c759;
+      color: white;
+      border-radius: 12px;
+      font-size: 14px;
+      font-weight: 600;
+      opacity: 0;
+      transition: all 0.3s ease;
+      z-index: 1000;
+    }
+    .toast.show {
+      transform: translateX(-50%) translateY(0);
+      opacity: 1;
+    }
+    .toast.error {
+      background: var(--app-danger, #ff3b30);
+    }
+  </style>
+</head>
+<body>
+  <!-- Loading -->
+  <div id="screenLoading" class="screen active">
+    <div class="center-message">
+      <div class="spinner"></div>
+      <div>Загрузка тарифов…</div>
+    </div>
+  </div>
+
+  <!-- Error -->
+  <div id="screenError" class="screen">
+    <div class="center-message">
+      <div class="error-text" id="errorText">Ошибка загрузки</div>
+      <button class="btn" id="btnRetry">Повторить</button>
+    </div>
+  </div>
+
+  <!-- Main -->
+  <div id="screenMain" class="screen">
+    <div class="header">
+      <h1>Тарифы подписки</h1>
+      <span class="pill">Админ</span>
+    </div>
+    <div id="tierList" class="tier-list"></div>
+  </div>
+
+  <!-- Toast notification -->
+  <div id="toast" class="toast"></div>
+
+  <script>
+    (function() {
+      'use strict';
+      var tg = window.Telegram && window.Telegram.WebApp;
+      if (tg) { tg.ready(); tg.expand(); }
+
+      function initData() { return (tg && tg.initData) ? tg.initData : ''; }
+      function headers() {
+        var h = { 'Accept': 'application/json' };
+        if (initData()) h['X-Telegram-Init-Data'] = initData();
+        return h;
+      }
+      function haptic(type) {
+        if (tg && tg.HapticFeedback) {
+          if (type === 'success') tg.HapticFeedback.notificationOccurred('success');
+          else if (type === 'error') tg.HapticFeedback.notificationOccurred('error');
+          else if (type === 'light') tg.HapticFeedback.impactOccurred('light');
+        }
+      }
+
+      function showScreen(id) {
+        document.querySelectorAll('.screen').forEach(function(el) { el.classList.remove('active'); });
+        var el = document.getElementById(id);
+        if (el) el.classList.add('active');
+      }
+
+      function showToast(message, isError) {
+        var toast = document.getElementById('toast');
+        toast.textContent = message;
+        toast.className = 'toast' + (isError ? ' error' : '');
+        toast.classList.add('show');
+        setTimeout(function() { toast.classList.remove('show'); }, 3000);
+      }
+
+      // State
+      var tiers = [];
+      var editingTier = null;
+
+      // Format helpers
+      function formatPrice(cents) {
+        return (cents / 100).toFixed(0) + ' BYN';
+      }
+      // Load tiers
+      function loadTiers() {
+        showScreen('screenLoading');
+        var url = '/api/webapp/admin/subscription-tiers' + (initData() ? '?init_data=' + encodeURIComponent(initData()) : '');
+        
+        fetch(url, { headers: headers() })
+          .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
+          .then(function(res) {
+            if (!res.ok || !res.data.tiers) {
+              throw new Error(res.data.detail || 'Ошибка загрузки');
+            }
+            tiers = res.data.tiers;
+            renderTiers();
+            showScreen('screenMain');
+          })
+          .catch(function(err) {
+            document.getElementById('errorText').textContent = err.message || 'Ошибка загрузки';
+            showScreen('screenError');
+          });
+      }
+
+      // Render tiers
+      function renderTiers() {
+        var container = document.getElementById('tierList');
+        var html = '';
+
+        tiers.forEach(function(tier) {
+          var isEditing = editingTier === tier.tier;
+          var cardClass = 'tier-card' + (isEditing ? ' editing' : '') + (!tier.is_active ? ' inactive' : '');
+          
+          html += '<div class="' + cardClass + '" data-tier="' + tier.tier + '">';
+          html += '<div class="tier-header">';
+          html += '<div class="tier-title">';
+          html += '<h3 class="tier-name">' + escapeHtml(tier.name_ru) + '</h3>';
+          html += '<span class="tier-badge ' + (tier.is_active ? 'active' : '') + '">' + (tier.is_active ? 'Активен' : 'Скрыт') + '</span>';
+          html += '</div>';
+          if (!isEditing) {
+            html += '<button class="btn-edit" onclick="startEdit(\'' + tier.tier + '\')">Изменить</button>';
+          }
+          html += '</div>';
+
+          if (isEditing) {
+            html += renderEditForm(tier);
+          } else {
+            html += renderViewMode(tier);
+          }
+
+          html += '</div>';
+        });
+
+        container.innerHTML = html;
+      }
+
+      function periodCents(tier, months) {
+        var list = tier.period_prices || [];
+        for (var i = 0; i < list.length; i++) {
+          if (list[i].period_months === months) return list[i].price_cents;
+        }
+        return tier.price_cents || 0;
+      }
+
+      function renderViewMode(tier) {
+        var html = '<div class="tier-period-matrix">';
+        html += '<div class="matrix-label">Цена за период (BYN)</div>';
+        html += '<div class="period-matrix-row">';
+        html += '<div class="summary-item"><div class="summary-value">' + formatPrice(periodCents(tier, 1)) + '</div><div class="summary-label">1 мес</div></div>';
+        html += '<div class="summary-item"><div class="summary-value">' + formatPrice(periodCents(tier, 3)) + '</div><div class="summary-label">3 мес</div></div>';
+        html += '<div class="summary-item"><div class="summary-value">' + formatPrice(periodCents(tier, 12)) + '</div><div class="summary-label">12 мес</div></div>';
+        html += '</div></div>';
+        html += '<div style="margin-top:10px;font-size:13px;color:var(--tg-theme-hint-color)">Порядок в каталоге: ' + tier.display_order + '</div>';
+        if (tier.short_description_ru) {
+          html += '<div class="tier-description">' + escapeHtml(tier.short_description_ru) + '</div>';
+        }
+        return html;
+      }
+
+      function renderEditForm(tier) {
+        var html = '<div class="edit-form">';
+        
+        html += '<div class="form-row">';
+        html += '<div class="form-group">';
+        html += '<label class="form-label">Название</label>';
+        html += '<input type="text" class="form-input" id="edit_name_ru" value="' + escapeHtml(tier.name_ru || '') + '">';
+        html += '</div>';
+        html += '<div class="form-group">';
+        html += '<label class="form-label">Порядок</label>';
+        html += '<input type="number" class="form-input" id="edit_display_order" value="' + tier.display_order + '">';
+        html += '</div>';
+        html += '</div>';
+
+        html += '<div class="tier-period-matrix">';
+        html += '<div class="matrix-label">Цены за период (BYN)</div>';
+        html += '<div class="form-row" style="grid-template-columns: repeat(3, 1fr);">';
+        html += '<div class="form-group">';
+        html += '<label class="form-label">1 мес</label>';
+        html += '<input type="number" class="form-input" id="edit_price_1" value="' + (periodCents(tier, 1) / 100).toFixed(0) + '" step="1" min="0">';
+        html += '</div>';
+        html += '<div class="form-group">';
+        html += '<label class="form-label">3 мес</label>';
+        html += '<input type="number" class="form-input" id="edit_price_3" value="' + (periodCents(tier, 3) / 100).toFixed(0) + '" step="1" min="0">';
+        html += '</div>';
+        html += '<div class="form-group">';
+        html += '<label class="form-label">12 мес</label>';
+        html += '<input type="number" class="form-input" id="edit_price_12" value="' + (periodCents(tier, 12) / 100).toFixed(0) + '" step="1" min="0">';
+        html += '</div>';
+        html += '</div></div>';
+
+        html += '<div class="form-group">';
+        html += '<label class="form-label">Краткое описание</label>';
+        html += '<textarea class="form-input form-textarea" id="edit_description">' + escapeHtml(tier.short_description_ru || '') + '</textarea>';
+        html += '</div>';
+
+        html += '<div class="form-group">';
+        html += '<label class="form-label">Возможности (по одной на строку)</label>';
+        html += '<textarea class="form-input form-textarea" id="edit_bullets" rows="4">' + (tier.bullets || []).join('\n') + '</textarea>';
+        html += '</div>';
+
+        html += '<div class="form-group">';
+        html += '<div class="form-toggle">';
+        html += '<label class="toggle-switch">';
+        html += '<input type="checkbox" id="edit_is_active" ' + (tier.is_active ? 'checked' : '') + '>';
+        html += '<span class="toggle-slider"></span>';
+        html += '</label>';
+        html += '<span class="toggle-label">Активен (виден тренерам)</span>';
+        html += '</div>';
+        html += '</div>';
+
+        html += '<div class="tier-actions">';
+        html += '<button class="btn-cancel" onclick="cancelEdit()">Отмена</button>';
+        html += '<button class="btn-save" id="btnSave" onclick="saveEdit(\'' + tier.tier + '\')">Сохранить</button>';
+        html += '</div>';
+
+        html += '</div>';
+        return html;
+      }
+
+      function escapeHtml(str) {
+        if (!str) return '';
+        return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+      }
+
+      // Edit functions
+      window.startEdit = function(tier) {
+        haptic('light');
+        editingTier = tier;
+        renderTiers();
+      };
+
+      window.cancelEdit = function() {
+        haptic('light');
+        editingTier = null;
+        renderTiers();
+      };
+
+      window.saveEdit = function(tier) {
+        var btn = document.getElementById('btnSave');
+        btn.disabled = true;
+        btn.textContent = 'Сохранение…';
+
+        var p1 = Math.round(parseFloat(document.getElementById('edit_price_1').value) * 100);
+        var p3 = Math.round(parseFloat(document.getElementById('edit_price_3').value) * 100);
+        var p12 = Math.round(parseFloat(document.getElementById('edit_price_12').value) * 100);
+        var nameRu = document.getElementById('edit_name_ru').value.trim();
+        var description = document.getElementById('edit_description').value.trim();
+        var bulletsText = document.getElementById('edit_bullets').value.trim();
+        var bullets = bulletsText ? bulletsText.split('\n').map(function(s) { return s.trim(); }).filter(function(s) { return s; }) : [];
+        var displayOrder = parseInt(document.getElementById('edit_display_order').value, 10);
+        var isActive = document.getElementById('edit_is_active').checked;
+
+        if (isNaN(p1) || isNaN(p3) || isNaN(p12) || p1 < 0 || p3 < 0 || p12 < 0) {
+          showToast('Некорректная цена', true);
+          btn.disabled = false;
+          btn.textContent = 'Сохранить';
+          return;
+        }
+        if (!nameRu) {
+          showToast('Название обязательно', true);
+          btn.disabled = false;
+          btn.textContent = 'Сохранить';
+          return;
+        }
+
+        var body = {
+          period_prices: { '1': p1, '3': p3, '12': p12 },
+          name_ru: nameRu,
+          short_description_ru: description || null,
+          bullets: bullets,
+          display_order: isNaN(displayOrder) ? 0 : displayOrder,
+          is_active: isActive
+        };
+
+        var url = '/api/webapp/admin/subscription-tiers/' + tier + (initData() ? '?init_data=' + encodeURIComponent(initData()) : '');
+
+        fetch(url, {
+          method: 'PATCH',
+          headers: Object.assign(headers(), { 'Content-Type': 'application/json' }),
+          body: JSON.stringify(body)
+        })
+        .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
+        .then(function(res) {
+          if (res.ok && res.data.ok) {
+            haptic('success');
+            showToast('Сохранено!', false);
+            editingTier = null;
+            // Update local data
+            var tierData = res.data.tier;
+            for (var i = 0; i < tiers.length; i++) {
+              if (tiers[i].tier === tier) {
+                tiers[i].name_ru = tierData.name_ru;
+                loadTiers();
+                break;
+              }
+            }
+          } else {
+            haptic('error');
+            showToast(res.data.detail || 'Ошибка сохранения', true);
+            btn.disabled = false;
+            btn.textContent = 'Сохранить';
+          }
+        })
+        .catch(function(err) {
+          haptic('error');
+          showToast('Ошибка сети', true);
+          btn.disabled = false;
+          btn.textContent = 'Сохранить';
+        });
+      };
+
+      // Init
+      document.getElementById('btnRetry').onclick = loadTiers;
+      loadTiers();
+    })();
+  </script>
+</body>
+</html>

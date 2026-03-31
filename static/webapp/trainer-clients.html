@@ -1,0 +1,1271 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Мои клиенты</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="stylesheet" href="theme.css" />
+  <link rel="stylesheet" href="mini-app-components.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet" />
+  <script>
+    /** Same palette + Telegram lock as trainer-requests / schedule-editor.html */
+    (function () {
+      function isAppDark() {
+        var tg = window.Telegram && window.Telegram.WebApp;
+        if (tg && tg.colorScheme) return tg.colorScheme === 'dark';
+        return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+      }
+      function applyTrainerClientsTheme() {
+        var d = document.documentElement;
+        var dark = isAppDark();
+        d.style.setProperty('--tg-theme-button-color', '#f5a623', 'important');
+        d.style.setProperty('--tg-theme-button-text-color', '#1a1a1a', 'important');
+        d.style.setProperty('--tg-theme-bg-color', dark ? '#1a1a1a' : '#fffbeb', 'important');
+        d.style.setProperty('--tg-theme-text-color', dark ? '#f5f5f5' : '#1a1a1a', 'important');
+        d.style.setProperty('--tg-theme-secondary-bg-color', dark ? '#2a2a2a' : '#fff3cc', 'important');
+        d.style.setProperty('--tg-theme-hint-color', dark ? '#8e8e93' : '#666666', 'important');
+      }
+      applyTrainerClientsTheme();
+      if (window.matchMedia) {
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTrainerClientsTheme);
+      }
+      window.__applyTrainerClientsTheme = applyTrainerClientsTheme;
+    })();
+  </script>
+  <style>
+    /* Shell: theme.css + mini-app-components.css */
+    /* Palette from theme.css — same as schedule.html */
+    body {
+      background: var(--tg-theme-bg-color) !important;
+      color: var(--tg-theme-text-color) !important;
+    }
+    /* Surfaces on CRM tokens (Telegram themeParams often inject blue) */
+    .btn-close,
+    .search-input,
+    .client-card,
+    .state-panel,
+    .tc-stat,
+    .tc-rows,
+    .tc-row,
+    .tc-note,
+    .tc-history-wrap {
+      background: var(--tg-theme-secondary-bg-color) !important;
+      color: var(--tg-theme-text-color) !important;
+    }
+    #detailSection,
+    .tc-detail {
+      font-family: var(--app-font-sans);
+    }
+    .page-head { margin-bottom: 4px; }
+    .page-kicker {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--tg-theme-hint-color);
+      margin: 0 0 10px;
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      font-size: 18px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      margin-bottom: 14px;
+      padding-bottom: 8px;
+      font-family: var(--app-font-sans);
+    }
+    .header-title { flex: 1; line-height: 1.2; }
+    .btn-close {
+      flex-shrink: 0;
+      padding: 8px 14px;
+      border-radius: 20px;
+      border: 1px solid rgba(245, 166, 35, 0.22);
+      font-size: 14px;
+      font-weight: 600;
+      background: var(--tg-theme-secondary-bg-color);
+      color: var(--tg-theme-text-color);
+      cursor: pointer;
+      transition: transform 0.12s ease, box-shadow 0.12s ease, opacity 0.12s ease;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
+    }
+    .btn-close:hover {
+      border-color: rgba(245, 166, 35, 0.4);
+    }
+    .btn-close:active {
+      transform: scale(0.98);
+      opacity: 0.9;
+    }
+    .search-box {
+      margin-bottom: 14px;
+    }
+    .search-input {
+      width: 100%;
+      padding: 14px 16px;
+      border-radius: 14px;
+      border: 1px solid rgba(245, 166, 35, 0.2);
+      background: var(--tg-theme-secondary-bg-color);
+      color: var(--tg-theme-text-color);
+      font: inherit;
+      font-size: 15px;
+      box-shadow: 0 2px 14px rgba(0, 0, 0, 0.06);
+      transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+    .search-input::placeholder {
+      color: var(--tg-theme-hint-color);
+    }
+    .search-input:focus {
+      outline: none;
+      border-color: rgba(245, 166, 35, 0.45);
+      box-shadow: 0 0 0 3px rgba(245, 166, 35, 0.18);
+    }
+    .section-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--tg-theme-hint-color);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin: 12px 0 8px;
+    }
+    .client-card {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 14px 16px;
+      margin-bottom: 8px;
+      border-radius: 12px;
+      background: var(--tg-theme-secondary-bg-color);
+      border: 2px solid rgba(247, 166, 0, 0.45);
+      cursor: pointer;
+      width: 100%;
+      font: inherit;
+      color: inherit;
+      text-align: left;
+      box-shadow: 0 1px 0 rgba(0, 0, 0, 0.04);
+      transition: transform 0.12s ease, border-color 0.15s ease, box-shadow 0.15s ease, opacity 0.12s ease;
+    }
+    @media (hover: hover) {
+      .client-card:hover {
+        border-color: rgba(247, 166, 0, 0.55);
+        box-shadow: 0 6px 22px rgba(0, 0, 0, 0.1);
+      }
+    }
+    .client-card:active {
+      opacity: 0.92;
+      transform: scale(0.992);
+    }
+    .client-avatar {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      font-family: var(--app-font-sans);
+      color: var(--tg-theme-button-text-color);
+      background: linear-gradient(145deg, #ffc23d 0%, #f7a600 55%, #e89400 100%);
+      box-shadow: 0 4px 16px rgba(245, 166, 35, 0.38);
+    }
+    .client-main {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      flex: 1;
+      min-width: 0;
+    }
+    .client-name {
+      font-size: 16px;
+      font-weight: 600;
+      font-family: var(--app-font-sans);
+      letter-spacing: -0.02em;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      overflow: hidden;
+    }
+    .client-meta {
+      font-size: 13px;
+      color: var(--tg-theme-hint-color);
+      line-height: 1.35;
+    }
+    .client-arrow {
+      flex-shrink: 0;
+      margin-left: 4px;
+      color: var(--tg-theme-hint-color);
+      font-size: 18px;
+      font-weight: 300;
+      opacity: 0.85;
+    }
+    /* Empty / loading / error — same spirit as schedule empty + bd-hero wash */
+    .empty {
+      text-align: center;
+      padding: 32px 20px;
+      font-size: 15px;
+      line-height: 1.5;
+      color: var(--tg-theme-hint-color);
+      border-radius: 18px;
+      background: linear-gradient(155deg, rgba(245, 166, 35, 0.1) 0%, var(--tg-theme-secondary-bg-color) 55%);
+      border: 1px solid rgba(245, 166, 35, 0.22);
+      box-shadow: 0 6px 24px rgba(0, 0, 0, 0.08);
+      position: relative;
+      overflow: hidden;
+    }
+    .empty::before {
+      content: '';
+      position: absolute;
+      top: -50%;
+      right: -15%;
+      width: 50%;
+      height: 140%;
+      background: radial-gradient(ellipse, rgba(245, 166, 35, 0.16) 0%, transparent 68%);
+      pointer-events: none;
+    }
+    .empty-inner {
+      position: relative;
+      z-index: 1;
+      max-width: 280px;
+      margin: 0 auto;
+    }
+    .empty-title {
+      font-family: var(--app-font-sans);
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--tg-theme-text-color);
+      margin: 0 0 8px;
+      letter-spacing: -0.02em;
+    }
+    .state-panel {
+      text-align: center;
+      padding: 28px 20px;
+      border-radius: 18px;
+      border: 1px solid rgba(245, 166, 35, 0.2);
+      background: var(--tg-theme-secondary-bg-color);
+      box-shadow: 0 6px 22px rgba(0, 0, 0, 0.07);
+      position: relative;
+      overflow: hidden;
+    }
+    .state-panel::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(155deg, rgba(245, 166, 35, 0.08) 0%, transparent 55%);
+      pointer-events: none;
+    }
+    .state-panel-inner {
+      position: relative;
+      z-index: 1;
+      font-size: 15px;
+      line-height: 1.45;
+    }
+    .loading .state-panel-inner { color: var(--tg-theme-hint-color); }
+    .error .state-panel-inner { color: var(--app-danger, #ff3b30); }
+    .loading,
+    .error {
+      color: var(--tg-theme-hint-color);
+    }
+    .error { color: var(--app-danger, #ff3b30); }
+    #stateMessage.loading,
+    #stateMessage.error {
+      margin-bottom: 12px;
+    }
+    .tc-detail { animation: tc-enter 0.38s cubic-bezier(0.22, 1, 0.36, 1) both; }
+    @keyframes tc-enter {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .tc-hero {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 20px 20px 22px;
+      border-radius: 20px;
+      margin-bottom: 16px;
+      overflow: hidden;
+      background: linear-gradient(155deg, rgba(245, 166, 35, 0.14) 0%, rgba(245, 166, 35, 0.04) 48%, transparent 100%);
+      border: 1px solid rgba(245, 166, 35, 0.28);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+    }
+    .tc-hero::before {
+      content: '';
+      position: absolute;
+      top: -40%;
+      right: -20%;
+      width: 55%;
+      height: 120%;
+      background: radial-gradient(ellipse, rgba(245, 166, 35, 0.22) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .tc-hero > * {
+      position: relative;
+      z-index: 1;
+    }
+    .tc-avatar {
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      color: var(--tg-theme-button-text-color);
+      background: linear-gradient(145deg, #ffc23d 0%, #f7a600 55%, #e89400 100%);
+      box-shadow: 0 4px 16px rgba(245, 166, 35, 0.4);
+    }
+    .tc-hero-text { flex: 1; min-width: 0; }
+    .tc-name {
+      font-size: clamp(20px, 5vw, 24px);
+      font-weight: 700;
+      margin: 0;
+      letter-spacing: -0.035em;
+      line-height: 1.15;
+      word-break: break-word;
+    }
+    .tc-since {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--tg-theme-hint-color);
+      margin: 8px 0 0;
+    }
+    .tc-stats {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+    .tc-stat {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      min-width: 92px;
+      padding: 12px 14px;
+      border-radius: 14px;
+      background: var(--tg-theme-secondary-bg-color);
+      border: 1px solid rgba(128, 128, 128, 0.12);
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+    }
+    .tc-stat-label {
+      display: block;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--tg-theme-hint-color);
+      margin-bottom: 6px;
+    }
+    .tc-stat strong {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--tg-theme-text-color);
+      line-height: 1.4;
+    }
+    .tc-section-label {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--tg-theme-hint-color);
+      margin: 4px 0 10px 4px;
+    }
+    .tc-rows {
+      border-radius: 16px;
+      overflow: hidden;
+      border: 1px solid rgba(128, 128, 128, 0.12);
+      margin-bottom: 8px;
+    }
+    .tc-row {
+      padding: 14px 16px;
+      background: var(--tg-theme-secondary-bg-color);
+      border-bottom: 1px solid rgba(128, 128, 128, 0.08);
+      font-size: 14px;
+    }
+    .tc-row:last-child { border-bottom: none; }
+    .tc-tel {
+      font-size: 15px;
+      font-weight: 500;
+      color: #f5a623;
+      text-decoration: none;
+    }
+    .tc-tel:active { opacity: 0.8; }
+    .detail-row {
+      margin-bottom: 10px;
+      font-size: 14px;
+    }
+    .tc-detail .detail-row { margin-bottom: 0; }
+    .detail-label {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      color: var(--tg-theme-hint-color);
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+    .detail-value {
+      font-size: 15px;
+      line-height: 1.45;
+      word-break: break-word;
+    }
+    .detail-contact-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 4px;
+    }
+    .detail-actions,
+    .tc-actions {
+      margin-top: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .detail-actions a.btn,
+    .tc-actions .tc-btn {
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-sizing: border-box;
+      width: 100%;
+    }
+    .tc-btn {
+      padding: 14px 18px;
+      border-radius: 14px;
+      border: none;
+      font-size: 15px;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      transition: transform 0.12s ease, box-shadow 0.12s ease, opacity 0.12s ease;
+    }
+    .tc-btn:active {
+      transform: scale(0.985);
+      opacity: 0.92;
+    }
+    .tc-btn--primary {
+      background: linear-gradient(180deg, #ffc23d 0%, #f0a000 100%);
+      color: #141414;
+      box-shadow: 0 6px 20px rgba(245, 166, 35, 0.38);
+    }
+    .tc-btn--primary:active {
+      box-shadow: 0 3px 12px rgba(245, 166, 35, 0.28);
+    }
+    .tc-btn--soft {
+      background: rgba(245, 166, 35, 0.12);
+      color: var(--tg-theme-text-color);
+      border: 1px solid rgba(245, 166, 35, 0.22);
+    }
+    .tc-btn--message {
+      background: linear-gradient(180deg, #2d2d2d 0%, #1a1a1a 100%);
+      color: #f5f5f5;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+    }
+    @media (prefers-color-scheme: light) {
+      .tc-btn--message {
+        background: linear-gradient(180deg, #2a2a2a 0%, #1f1f1f 100%);
+        color: #fafafa;
+      }
+    }
+    .detail-note,
+    .tc-note {
+      margin-top: 18px;
+      padding: 16px 18px;
+      border-radius: 16px;
+      background: var(--tg-theme-secondary-bg-color);
+      border: 1px solid rgba(128, 128, 128, 0.12);
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
+    }
+    .detail-note textarea,
+    .tc-note textarea {
+      width: 100%;
+      min-height: 88px;
+      border-radius: 12px;
+      border: none;
+      padding: 14px 16px;
+      font: inherit;
+      font-size: 14px;
+      line-height: 1.45;
+      background: var(--tg-theme-bg-color);
+      color: var(--tg-theme-text-color);
+      resize: vertical;
+      box-shadow: inset 0 0 0 1px rgba(245, 166, 35, 0.25);
+    }
+    .tc-note textarea:focus {
+      outline: none;
+      /* fixed amber — not Telegram button color (may be blue) */
+      box-shadow: inset 0 0 0 2px rgba(247, 166, 0, 0.65);
+    }
+    .detail-note textarea::placeholder,
+    .tc-note textarea::placeholder {
+      color: var(--tg-theme-hint-color);
+    }
+    .tc-note .detail-note-footer .tc-btn {
+      width: auto;
+      display: inline-flex;
+      min-width: 140px;
+    }
+    .detail-note-footer {
+      margin-top: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .detail-note-status {
+      font-size: 12px;
+      color: var(--tg-theme-hint-color);
+      text-align: center;
+      margin-top: 8px;
+    }
+    .history-section-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--tg-theme-hint-color);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin: 0 0 10px;
+    }
+    .history-list {
+      font-size: 13px;
+      line-height: 1.55;
+    }
+    .history-item {
+      margin-bottom: 8px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid rgba(128, 128, 128, 0.1);
+    }
+    .history-item:last-child {
+      margin-bottom: 0;
+      padding-bottom: 0;
+      border-bottom: none;
+    }
+    .history-item-service {
+      font-size: 12px;
+      color: var(--tg-theme-hint-color);
+      margin-top: 4px;
+    }
+    .history-toggle {
+      margin-top: 12px;
+      text-align: right;
+    }
+    .history-toggle-button {
+      border: none;
+      padding: 8px 14px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      background: var(--app-chip-bg, var(--tg-theme-secondary-bg-color));
+      color: var(--app-chip-text, var(--tg-theme-text-color));
+      border: 1px solid rgba(245, 166, 35, 0.2);
+      transition: transform 0.12s ease, opacity 0.12s ease;
+    }
+    .history-toggle-button:active {
+      transform: scale(0.98);
+      opacity: 0.9;
+    }
+    .tc-history-wrap {
+      margin-top: 16px;
+      padding: 16px 18px;
+      border-radius: 16px;
+      border: 1px solid rgba(128, 128, 128, 0.12);
+      background: var(--tg-theme-secondary-bg-color);
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
+    }
+    .btn {
+      flex: 1;
+      min-width: 120px;
+      padding: 12px 16px;
+      border-radius: 14px;
+      border: none;
+      font-size: 14px;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      transition: transform 0.12s ease, opacity 0.12s ease;
+    }
+    .btn:active {
+      transform: scale(0.985);
+      opacity: 0.92;
+    }
+    .btn-primary {
+      background: linear-gradient(180deg, #ffc23d 0%, #f0a000 100%);
+      color: #141414;
+      box-shadow: 0 4px 16px rgba(245, 166, 35, 0.35);
+    }
+    .btn-secondary {
+      background: rgba(245, 166, 35, 0.12);
+      color: var(--tg-theme-text-color);
+      border: 1px solid rgba(245, 166, 35, 0.22);
+    }
+    .invite-card {
+      margin-top: 20px;
+      margin-bottom: 8px;
+      padding: 18px 18px 20px;
+      border-radius: 18px;
+      position: relative;
+      overflow: hidden;
+      background: linear-gradient(155deg, rgba(245, 166, 35, 0.12) 0%, var(--tg-theme-secondary-bg-color) 52%);
+      border: 1px solid rgba(245, 166, 35, 0.24);
+      box-shadow: 0 8px 28px rgba(0, 0, 0, 0.08);
+    }
+    .invite-card::before {
+      content: '';
+      position: absolute;
+      top: -30%;
+      right: -25%;
+      width: 55%;
+      height: 100%;
+      background: radial-gradient(ellipse, rgba(245, 166, 35, 0.18) 0%, transparent 65%);
+      pointer-events: none;
+    }
+    .invite-card > * {
+      position: relative;
+      z-index: 1;
+    }
+    .invite-card .btn {
+      width: 100%;
+      display: block;
+      box-sizing: border-box;
+    }
+    .invite-card .section-title { margin-top: 0; margin-bottom: 6px; }
+    .invite-card #btnShowInviteLink {
+      margin-bottom: 0;
+    }
+    .invite-link-block {
+      margin-top: 12px;
+    }
+    .invite-hint {
+      font-size: 13px;
+      color: var(--tg-theme-hint-color);
+      margin: 4px 0 12px;
+      line-height: 1.5;
+    }
+    .invite-link-label {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--tg-theme-hint-color);
+      margin-bottom: 6px;
+    }
+    .invite-link-url {
+      word-break: break-all;
+      font-size: 12px;
+      line-height: 1.45;
+      padding: 10px 12px;
+      border-radius: 10px;
+      background: var(--tg-theme-bg-color);
+      border: 1px solid rgba(245, 166, 35, 0.15);
+      margin-bottom: 10px;
+      color: var(--tg-theme-text-color);
+    }
+    .tc-back {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 14px;
+      margin-top: 4px;
+      padding: 10px 0;
+      border: none;
+      background: none;
+      font: inherit;
+      font-size: 14px;
+      font-weight: 500;
+      font-family: var(--app-font-sans);
+      color: var(--tg-theme-hint-color);
+      cursor: pointer;
+    }
+    .tc-back .tc-back-chevron {
+      flex-shrink: 0;
+      width: 16px;
+      height: 16px;
+      color: inherit;
+    }
+    .tc-back:active {
+      opacity: 0.7;
+    }
+  </style>
+</head>
+<body>
+  <div class="page-head">
+    <p class="page-kicker">База клиентов</p>
+    <div class="header">
+      <div class="header-title">Мои клиенты</div>
+      <button type="button" class="btn-close" id="btnClose">Закрыть</button>
+    </div>
+  </div>
+  <div class="search-box">
+    <input id="searchInput" class="search-input" type="search" placeholder="Поиск по имени или телефону">
+  </div>
+  <div id="clientsSection">
+    <div class="section-title">Клиенты</div>
+    <div id="clientsList"></div>
+    <div class="invite-link-section invite-card">
+      <div class="section-title">Пригласить клиента (вне системы)</div>
+      <p class="invite-hint">Отправьте ссылку человеку — он перейдёт в бота с вами выбранным (город и услуга подставятся). Ссылка одноразовая.</p>
+      <button type="button" class="btn btn-secondary" id="btnShowInviteLink">Получить пригласительную ссылку</button>
+      <div id="inviteLinkBlock" class="invite-link-block" style="display:none;">
+        <div class="invite-link-label">Ссылка</div>
+        <div id="inviteLinkUrl" class="invite-link-url"></div>
+        <button type="button" class="btn btn-secondary" id="btnCopyInviteLink">Скопировать ссылку</button>
+      </div>
+    </div>
+  </div>
+  <div id="detailSection" style="display:none;">
+    <button type="button" class="tc-back" id="btnBackToList">
+      <svg class="tc-back-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+      К списку
+    </button>
+    <div class="section-title">Карточка клиента</div>
+    <div id="clientDetail"></div>
+  </div>
+  <div id="stateMessage" class="loading state-panel" style="display:none;" role="status" aria-live="polite">
+    <div class="state-panel-inner"></div>
+  </div>
+
+  <script>
+    (function() {
+      var tg = window.Telegram && window.Telegram.WebApp;
+      if (tg) {
+        if (typeof tg.ready === 'function') tg.ready();
+        if (typeof tg.expand === 'function') tg.expand();
+        if (typeof window.__applyTrainerClientsTheme === 'function') {
+          window.__applyTrainerClientsTheme();
+        }
+        try {
+          var darkUi = tg.colorScheme === 'dark' ||
+            (tg.colorScheme !== 'light' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          var bgHex = darkUi ? '#1a1a1a' : '#fffbeb';
+          if (typeof tg.setHeaderColor === 'function') tg.setHeaderColor(bgHex);
+          if (typeof tg.setBackgroundColor === 'function') tg.setBackgroundColor(bgHex);
+        } catch (e) { /* older clients */ }
+        if (tg.onEvent) {
+          tg.onEvent('themeChanged', function () {
+            if (typeof window.__applyTrainerClientsTheme === 'function') {
+              window.__applyTrainerClientsTheme();
+            }
+            try {
+              var du = tg.colorScheme === 'dark' ||
+                (tg.colorScheme !== 'light' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+              var bg = du ? '#1a1a1a' : '#fffbeb';
+              if (typeof tg.setHeaderColor === 'function') tg.setHeaderColor(bg);
+              if (typeof tg.setBackgroundColor === 'function') tg.setBackgroundColor(bg);
+            } catch (err) { /* ignore */ }
+          });
+        }
+      }
+      var initData = tg && tg.initData ? tg.initData : '';
+      var headerTitleEl = document.querySelector('.header-title');
+      var defaultHeaderTitle = headerTitleEl ? headerTitleEl.textContent : '';
+
+      function withInit(url) {
+        if (!initData) return url;
+        return url + (url.indexOf('?') === -1 ? '?' : '&') + 'init_data=' + encodeURIComponent(initData);
+      }
+
+      var state = {
+        allClients: [],
+        filteredClients: [],
+        selectedClientId: null,
+      };
+
+      function setStateMessage(text, kind) {
+        var el = document.getElementById('stateMessage');
+        var inner = el && el.querySelector('.state-panel-inner');
+        if (!text) {
+          el.style.display = 'none';
+          if (inner) inner.textContent = '';
+          el.className = 'loading state-panel';
+          return;
+        }
+        if (inner) inner.textContent = text;
+        el.className = (kind === 'error' ? 'error' : 'loading') + ' state-panel';
+        el.style.display = 'block';
+      }
+
+      function formatDate(d) {
+        if (!d) return '—';
+        var dt = new Date(d);
+        if (isNaN(dt.getTime())) return d.toString().slice(0, 10);
+        var day = String(dt.getDate()).padStart(2, '0');
+        var month = String(dt.getMonth() + 1).padStart(2, '0');
+        var year = dt.getFullYear();
+        return day + '.' + month + '.' + year;
+      }
+
+      function formatTime(t) {
+        if (!t) return '';
+        // backend likely returns \"HH:MM:SS\" or \"HH:MM\"
+        return t.toString().slice(0, 5);
+      }
+
+      function escapeHtml(s) {
+        if (s == null) return '';
+        return String(s)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/\"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+      }
+
+      function applyFilter() {
+        var q = (document.getElementById('searchInput').value || '').trim();
+        if (!q) {
+          state.filteredClients = state.allClients.slice();
+        } else {
+          var qLower = q.toLowerCase();
+          var digits = q.replace(/\\D/g, '');
+          state.filteredClients = state.allClients.filter(function(c) {
+            var name = ((c.first_name || '') + ' ' + (c.last_name || '')).trim().toLowerCase();
+            var phone = (c.phone || '').toLowerCase();
+            var phoneDigits = (c.phone || '').replace(/\\D/g, '');
+            return name.indexOf(qLower) !== -1
+              || phone.indexOf(qLower) !== -1
+              || (digits && phoneDigits.indexOf(digits) !== -1);
+          });
+        }
+        renderList();
+      }
+
+      function clientInitials(displayName) {
+        var s = (displayName || '').trim();
+        if (!s) return '?';
+        var parts = s.split(/\s+/).filter(Boolean);
+        if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+        if (parts[0].length >= 2) return parts[0].slice(0, 2).toUpperCase();
+        return parts[0][0].toUpperCase();
+      }
+
+      function renderList() {
+        var listEl = document.getElementById('clientsList');
+        listEl.innerHTML = '';
+        if (!state.filteredClients.length) {
+          listEl.innerHTML = '<div class=\"empty\"><div class=\"empty-inner\"><div class=\"empty-title\">Пока пусто</div>Пока нет клиентов с записями. Как только клиенты начнут записываться, они появятся здесь.</div></div>';
+          return;
+        }
+        var html = state.filteredClients.map(function(c) {
+          var name = ((c.first_name || '') + ' ' + (c.last_name || '')).trim() || 'Клиент';
+          var initials = clientInitials(name);
+          var phone = c.phone || 'Телефон не указан';
+          var lastLabel = c.last_date
+            ? ('Последнее занятие: ' + formatDate(c.last_date) + (c.last_start ? ' ' + formatTime(c.last_start) : ''))
+            : 'Был(а) на занятии ранее';
+          return (
+            '<button type=\"button\" class=\"client-card\" data-id=\"' + c.id + '\">' +
+              '<div class=\"client-avatar\" aria-hidden=\"true\">' + escapeHtml(initials) + '</div>' +
+              '<div class=\"client-main\">' +
+                '<div class=\"client-name\">' + escapeHtml(name) + '</div>' +
+                '<div class=\"client-meta\">' + escapeHtml(phone) + '</div>' +
+                '<div class=\"client-meta\">' + escapeHtml(lastLabel) + '</div>' +
+              '</div>' +
+              '<span class=\"client-arrow\">→</span>' +
+            '</button>'
+          );
+        }).join('');
+        listEl.innerHTML = html;
+        listEl.querySelectorAll('.client-card').forEach(function(btn) {
+          btn.onclick = function() {
+            var id = parseInt(btn.dataset.id, 10);
+            openClientDetail(id);
+          };
+        });
+      }
+
+      function loadClientHistory(id) {
+        var detailContainer = document.getElementById('clientDetail');
+        var loadingBlock = document.createElement('div');
+        loadingBlock.className = 'tc-history-wrap';
+        loadingBlock.innerHTML = '<div class="history-section-title">История занятий</div><div class="history-list">Загрузка…</div>';
+        detailContainer.appendChild(loadingBlock);
+        var url = '/api/webapp/trainer/clients/' + encodeURIComponent(id) + '/history?limit=10';
+        url = withInit(url);
+        fetch(url).then(function(r) {
+          return r.json().then(function(data) {
+            if (!r.ok) throw new Error(data.detail || r.statusText);
+            return data;
+          });
+        }).then(function(data) {
+          var items = data.items || [];
+          var total = typeof data.total === 'number' ? data.total : items.length;
+          var totalWrap = document.getElementById('clientTotalWrap');
+          var totalCount = document.getElementById('clientTotalCount');
+          if (totalWrap && totalCount) {
+            totalCount.textContent = String(total);
+            totalWrap.style.display = 'flex';
+          }
+          var html = '';
+          html += '<div class="tc-history-wrap"><div class="history-section-title">История занятий' + (total > 0 ? ' (' + total + ')' : '') + '</div>';
+          if (!items.length) {
+            html += '<div class="history-list">Пока нет занятий с этим клиентом.</div></div>';
+          } else {
+            var first = items.slice(0, 5);
+            var rest = items.slice(5);
+            var renderItem = function(it) {
+              var dateStr = formatDate(it.slot_date);
+              var timeStr = it.start_time ? formatTime(it.start_time) : '';
+              var place = it.arena_name ? it.arena_name : '—';
+              var status = (it.status || '').toLowerCase();
+              var statusLabel = status === 'completed' ? 'прошло' : status === 'pending' ? 'ожидает' : status === 'confirmed' ? 'подтверждено' : status || '—';
+              var serviceName = (it.service_name || '').trim() || '—';
+              var line1 = dateStr + (timeStr ? ' ' + timeStr : '') + ' · ' + place + ' · ' + statusLabel;
+              return '<div class="history-item">' + escapeHtml(line1) + '<div class="history-item-service">' + escapeHtml(serviceName) + '</div></div>';
+            };
+            html += '<div class="history-list">';
+            first.forEach(function(it) { html += renderItem(it); });
+            if (rest.length) {
+              html += '<div id="historyMore" style="display:none;">';
+              rest.forEach(function(it) { html += renderItem(it); });
+              html += '</div>';
+            }
+            html += '</div>';
+            if (rest.length) {
+              html += '<div class="history-toggle"><button type="button" class="history-toggle-button" id="btnHistoryToggle">Показать все (' + items.length + ')</button></div>';
+            }
+            html += '</div>';
+          }
+          detailContainer.removeChild(loadingBlock);
+          detailContainer.insertAdjacentHTML('beforeend', html);
+          var toggle = document.getElementById('btnHistoryToggle');
+          if (toggle) {
+            toggle.onclick = function() {
+              var more = document.getElementById('historyMore');
+              if (!more) return;
+              var isHidden = more.style.display === 'none';
+              more.style.display = isHidden ? 'block' : 'none';
+              toggle.textContent = isHidden ? 'Свернуть' : 'Показать все занятия';
+            };
+          }
+        }).catch(function() {
+          detailContainer.removeChild(loadingBlock);
+          detailContainer.insertAdjacentHTML(
+            'beforeend',
+            '<div class="tc-history-wrap"><div class="detail-label">История занятий</div><div class="detail-value">Не удалось загрузить историю.</div></div>'
+          );
+        });
+      }
+
+      function openClientDetail(id) {
+        var client = state.allClients.find(function(c) { return c.id === id; });
+        if (!client) return;
+        state.selectedClientId = id;
+        var name = ((client.first_name || '') + ' ' + (client.last_name || '')).trim() || 'Клиент';
+        var phone = client.phone || '—';
+        var lastLabel = client.last_date
+          ? (formatDate(client.last_date) + (client.last_start ? ' ' + formatTime(client.last_start) : ''))
+          : '—';
+        var firstDateLabel = client.first_date ? ('Клиент с ' + formatDate(client.first_date)) : '';
+        var initials = clientInitials(name);
+        var phoneDisplay = phone !== '—'
+          ? '<a class=\"tc-tel\" href=\"tel:' + escapeHtml(String(phone).replace(/\\s+/g, '')) + '\">' + escapeHtml(phone) + '</a>'
+          : escapeHtml(phone);
+        var detail = '' +
+          '<div class=\"tc-detail\">' +
+          '<div class=\"tc-hero\">' +
+            '<div class=\"tc-avatar\" aria-hidden=\"true\">' + escapeHtml(initials) + '</div>' +
+            '<div class=\"tc-hero-text\">' +
+              '<h1 class=\"tc-name\">' + escapeHtml(name) + '</h1>' +
+              (firstDateLabel ? '<p class=\"tc-since\">' + escapeHtml(firstDateLabel) + '</p>' : '') +
+            '</div>' +
+          '</div>' +
+          '<div class=\"tc-stats\">' +
+            '<span class=\"tc-stat\"><span class=\"tc-stat-label\">Последнее</span><strong id=\"clientLastLabel\">' + escapeHtml(lastLabel) + '</strong></span>' +
+            '<span class=\"tc-stat\"><span class=\"tc-stat-label\">Следующее</span><strong id=\"clientNextBooking\">…</strong></span>' +
+            '<span class=\"tc-stat\" id=\"clientTotalWrap\" style=\"display:none;\"><span class=\"tc-stat-label\">Всего занятий</span><strong id=\"clientTotalCount\">0</strong></span>' +
+          '</div>' +
+          '<div class=\"tc-section-label\">Контакты и абонементы</div>' +
+          '<div class=\"tc-rows\">' +
+            '<div class=\"tc-row\"><div class=\"detail-label\">Телефон</div><div class=\"detail-value\">' + phoneDisplay + '</div></div>' +
+            '<div class=\"tc-row\" id=\"clientPassesCertsBlock\">' +
+              '<div class=\"detail-label\">Абонементы и сертификаты</div>' +
+              '<div class=\"detail-value\" id=\"clientPassesCertsContent\">Загрузка…</div>' +
+            '</div>' +
+          '</div>' +
+          '<div class=\"tc-note\">' +
+            '<div class=\"detail-label\">Заметка тренера</div>' +
+            '<textarea id=\"clientNoteInput\" placeholder=\"Цели, уровень, травмы, предпочтения по времени. Только вам — не теряйте важное в чатах и блокнотах.\"></textarea>' +
+            '<div class=\"detail-note-footer\">' +
+              '<button type=\"button\" class=\"tc-btn tc-btn--soft\" id=\"btnSaveNote\">Сохранить</button>' +
+            '</div>' +
+            '<div class=\"detail-note-status\" id=\"clientNoteStatus\"></div>' +
+          '</div>' +
+          '<div class=\"tc-actions\">' +
+            '<a href=\"#\" class=\"tc-btn tc-btn--primary\" id=\"btnBookClient\">Записать на занятие</a>' +
+            '<button type=\"button\" class=\"tc-btn tc-btn--soft\" id=\"btnIssuePass\">Выдать абонемент</button>';
+        if (phone && phone !== '—') {
+          detail += '<button type=\"button\" class=\"tc-btn tc-btn--soft\" id=\"btnCopyPhone\">Скопировать телефон</button>';
+        }
+        detail += '<button type=\"button\" class=\"tc-btn tc-btn--message\" id=\"btnWriteClient\">Написать в TG</button>';
+        detail += '</div></div>';
+        document.getElementById('clientDetail').innerHTML = detail;
+        document.getElementById('clientsSection').style.display = 'none';
+        document.querySelector('.search-box').style.display = 'none';
+        document.getElementById('detailSection').style.display = 'block';
+        if (headerTitleEl) headerTitleEl.textContent = 'Карточка клиента';
+        var backBtn = document.getElementById('btnBackToList');
+        if (backBtn) {
+          backBtn.onclick = function() {
+            document.getElementById('clientsSection').style.display = 'block';
+            document.querySelector('.search-box').style.display = 'block';
+            document.getElementById('detailSection').style.display = 'none';
+            state.selectedClientId = null;
+            if (headerTitleEl) headerTitleEl.textContent = defaultHeaderTitle || 'Мои клиенты';
+          };
+        }
+        var copyBtn = document.getElementById('btnCopyPhone');
+        if (copyBtn && phone && phone !== '—') {
+          copyBtn.onclick = async function() {
+            var noteStatus = document.getElementById('clientNoteStatus');
+            try {
+              if (navigator.clipboard && navigator.clipboard.writeText) {
+                await navigator.clipboard.writeText(phone);
+                if (noteStatus) noteStatus.textContent = 'Телефон скопирован.';
+              } else {
+                if (noteStatus) noteStatus.textContent = 'Скопируйте телефон вручную: ' + phone;
+              }
+            } catch (err) {
+              if (noteStatus) noteStatus.textContent = 'Не удалось скопировать телефон.';
+            }
+          };
+        }
+        var writeBtn = document.getElementById('btnWriteClient');
+        var username = client && client.telegram_username;
+        if (writeBtn && username) {
+          writeBtn.onclick = function() {
+            var url = 'https://t.me/' + encodeURIComponent(username);
+            if (tg && tg.openLink) {
+              tg.openLink(url);
+            } else {
+              window.location.href = url;
+            }
+          };
+        } else if (writeBtn) {
+          writeBtn.style.display = 'none';
+        }
+        // load note
+        var noteInput = document.getElementById('clientNoteInput');
+        var noteStatus = document.getElementById('clientNoteStatus');
+        var saveBtn = document.getElementById('btnSaveNote');
+        // Initially hide save button until there is a change
+        if (saveBtn) saveBtn.style.display = 'none';
+        var noteUrl = withInit('/api/webapp/trainer/clients/' + encodeURIComponent(id) + '/note');
+        fetch(noteUrl).then(function(r) {
+          return r.json().then(function(data) {
+            if (!r.ok) throw new Error(data.detail || r.statusText);
+            return data;
+          });
+        }).then(function(data) {
+          var existing = data.note || '';
+          noteInput.value = existing;
+          noteInput.dataset.originalValue = existing;
+          noteStatus.textContent = existing ? 'Заметка сохранена' : 'Напишите важное о клиенте (цели, уровень, особенности).';
+          // Show button only when user changes text
+          noteInput.addEventListener('input', function() {
+            if (saveBtn) {
+              saveBtn.style.display = noteInput.value !== (noteInput.dataset.originalValue || '') ? 'flex' : 'none';
+            }
+            noteStatus.textContent = '';
+          });
+        }).catch(function() {
+          noteStatus.textContent = 'Не удалось загрузить заметку';
+        });
+        if (saveBtn) {
+          saveBtn.onclick = function() {
+            noteStatus.textContent = 'Сохранение…';
+            var saveUrl = withInit('/api/webapp/trainer/clients/' + encodeURIComponent(id) + '/note');
+            fetch(saveUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ note: noteInput.value || '' }),
+            }).then(function(r) {
+              return r.json().then(function(data) {
+                if (!r.ok) throw new Error(data.detail || r.statusText);
+                return data;
+              });
+            }).then(function(data) {
+              var saved = data.note || '';
+              noteInput.value = saved;
+              noteInput.dataset.originalValue = saved;
+              noteStatus.textContent = 'Спасибо, заметка сохранена.';
+              // Hide button after successful save until next change
+              if (saveBtn) saveBtn.style.display = 'none';
+            }).catch(function() {
+              noteStatus.textContent = 'Ошибка при сохранении';
+            });
+          };
+        }
+        loadClientHistory(id);
+        (function loadPassesAndCerts() {
+          var contentEl = document.getElementById('clientPassesCertsContent');
+          if (!contentEl) return;
+          var passesUrl = withInit('/api/webapp/trainer/clients/' + encodeURIComponent(id) + '/passes');
+          var certsUrl = withInit('/api/webapp/trainer/clients/' + encodeURIComponent(id) + '/certificates');
+          Promise.all([
+            fetch(passesUrl).then(function(r) { return r.json().then(function(d) { if (!r.ok) throw new Error(d.detail || r.statusText); return d; }); }),
+            fetch(certsUrl).then(function(r) { return r.json().then(function(d) { if (!r.ok) throw new Error(d.detail || r.statusText); return d; }); }),
+          ]).then(function(results) {
+            var passes = (results[0] && results[0].items) ? results[0].items : [];
+            var certs = (results[1] && results[1].items) ? results[1].items : [];
+            var activePasses = passes.filter(function(p) { return (p.status || '') === 'active'; });
+            var activeCerts = certs.filter(function(c) { return (c.status || '') === 'active'; });
+            var parts = [];
+            if (activePasses.length) {
+              var lines = activePasses.map(function(p) {
+                var total = typeof p.sessions_total === 'number' ? p.sessions_total : 0;
+                var left = typeof p.sessions_remaining === 'number' ? p.sessions_remaining : 0;
+                var name = (p.product_name || '').trim() || 'Абонемент';
+                return name + ': ' + left + ' из ' + total;
+              });
+              parts.push('Абонементы: ' + lines.join('; '));
+            } else if (passes.length) {
+              parts.push('Абонементы: нет активных');
+            }
+            if (activeCerts.length) {
+              var certLines = activeCerts.map(function(c) {
+                var amount = typeof c.amount_cents === 'number' ? (c.amount_cents / 100) + ' BYN' : '—';
+                return amount;
+              });
+              parts.push('Сертификаты: ' + activeCerts.length + ' активных (' + certLines.join(', ') + ')');
+            } else if (certs.length) {
+              parts.push('Сертификаты: нет активных');
+            }
+            if (!parts.length) parts.push('Нет активных абонементов и сертификатов');
+            contentEl.textContent = parts.join(' · ');
+          }).catch(function() {
+            contentEl.textContent = 'Не удалось загрузить';
+          });
+        })();
+        fetch(withInit('/api/webapp/trainer/clients/' + encodeURIComponent(id) + '/next-booking'))
+          .then(function(r) { return r.json(); })
+          .then(function(data) {
+            var nextEl = document.getElementById('clientNextBooking');
+            if (!nextEl) return;
+            var nb = data.next_booking;
+            var upcomingCount = typeof data.upcoming_count === 'number' ? data.upcoming_count : 0;
+            if (nb && nb.slot_date) {
+              var t = formatDate(nb.slot_date) + (nb.start_time ? ' ' + formatTime(nb.start_time) : '');
+              if (nb.arena_name) t += ' · ' + nb.arena_name;
+              if (upcomingCount > 1) t += ' (+' + (upcomingCount - 1) + ' ещё)';
+              nextEl.textContent = t;
+            } else {
+              nextEl.textContent = '—';
+            }
+          })
+          .catch(function() {
+            var nextEl = document.getElementById('clientNextBooking');
+            if (nextEl) nextEl.textContent = '—';
+          });
+        var bookBtn = document.getElementById('btnBookClient');
+        if (bookBtn) {
+          var path = (window.location.pathname || '').replace(/[^/]+$/, '') || '/webapp/';
+          var bookHref = path + 'schedule-editor?client_id=' + encodeURIComponent(id);
+          if (initData) bookHref += '&init_data=' + encodeURIComponent(initData);
+          bookBtn.href = bookHref;
+          bookBtn.onclick = function(e) {
+            e.preventDefault();
+            window.location.href = bookBtn.href;
+          };
+        }
+        var issuePassBtn = document.getElementById('btnIssuePass');
+        if (issuePassBtn) {
+          issuePassBtn.onclick = function() {
+            var path = (window.location.pathname || '').replace(/[^/]+$/, '') || '/webapp/';
+            var passUrl = path + 'trainer-pass-products?client_id=' + encodeURIComponent(id);
+            window.location.href = passUrl;
+          };
+        }
+      }
+
+      function loadClients() {
+        setStateMessage('Загрузка клиентов…', 'loading');
+        var base = '/api/webapp/trainer/clients';
+        var url = withInit(base);
+        fetch(url, {
+          headers: {}
+        }).then(function(r) {
+          return r.json().then(function(data) {
+            if (!r.ok) {
+              throw new Error(data.detail || r.statusText);
+            }
+            return data;
+          });
+        }).then(function(data) {
+          state.allClients = data.clients || [];
+          state.filteredClients = state.allClients.slice();
+          setStateMessage('');
+          renderList();
+        }).catch(function(err) {
+          console.error(err);
+          setStateMessage('Не удалось загрузить клиентов. Попробуйте ещё раз.', 'error');
+        });
+      }
+
+      document.getElementById('btnClose').onclick = function() {
+        if (tg && tg.close) tg.close();
+        else window.close();
+      };
+      document.getElementById('searchInput').addEventListener('input', function() {
+        applyFilter();
+      });
+
+      document.getElementById('btnShowInviteLink').onclick = function() {
+        var block = document.getElementById('inviteLinkBlock');
+        var urlEl = document.getElementById('inviteLinkUrl');
+        if (block.style.display === 'block' && urlEl.textContent) return;
+        var btn = this;
+        btn.disabled = true;
+        fetch(withInit('/api/webapp/trainer/welcome-link'), { headers: { 'Content-Type': 'application/json' } })
+          .then(function(r) { return r.json(); })
+          .then(function(o) {
+            var link = o.welcome_link;
+            if (link) {
+              urlEl.textContent = link;
+              block.style.display = 'block';
+            } else {
+              setStateMessage('Пригласительная ссылка недоступна. Откройте из бота тренера.', 'error');
+            }
+          })
+          .catch(function() { setStateMessage('Ошибка загрузки ссылки.', 'error'); })
+          .finally(function() { btn.disabled = false; });
+      };
+      document.getElementById('btnCopyInviteLink').onclick = function() {
+        var link = document.getElementById('inviteLinkUrl').textContent;
+        if (!link) return;
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(link).then(function() { alert('Ссылка скопирована'); }).catch(function() { alert(link); });
+        } else { alert(link); }
+      };
+
+      // Tap outside "Заметка тренера" → blur and dismiss keyboard (important in Telegram WebView)
+      var detailSectionEl = document.getElementById('detailSection');
+      if (detailSectionEl) {
+        detailSectionEl.addEventListener('click', function(e) {
+          var noteInput = document.getElementById('clientNoteInput');
+          if (!noteInput) return;
+          if (e.target !== noteInput && !noteInput.contains(e.target)) {
+            noteInput.blur();
+          }
+        });
+      }
+
+      loadClients();
+    })();
+  </script>
+</body>
+</html>
+

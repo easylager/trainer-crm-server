@@ -3,6 +3,7 @@ Storage: S3 (presigned or proxy) or local dir when S3 not configured.
 Photos resized on upload: main 800px, list thumb 320px (JPEG 82%/80%) for faster catalog.
 """
 import io
+import posixpath
 import uuid
 from pathlib import Path
 
@@ -12,6 +13,7 @@ PHOTO_MAIN_MAX_SIZE = 800
 PHOTO_LIST_MAX_SIZE = 320
 PHOTO_MAIN_QUALITY = 82
 PHOTO_LIST_QUALITY = 80
+PHOTO_CACHE_CONTROL = "public, max-age=31536000, immutable"
 
 
 def _use_local() -> bool:
@@ -79,10 +81,94 @@ def upload_photo(trainer_id: int, body: bytes, content_type: str) -> tuple[str, 
             (root / file_key_list).write_bytes(list_bytes)
         return file_key, file_key_list
     client = _get_client()
-    client.put_object(Bucket=settings.s3_bucket, Key=file_key, Body=main_bytes, ContentType=ct)
+    client.put_object(
+        Bucket=settings.s3_bucket,
+        Key=file_key,
+        Body=main_bytes,
+        ContentType=ct,
+        CacheControl=PHOTO_CACHE_CONTROL,
+    )
     if file_key_list and list_bytes:
-        client.put_object(Bucket=settings.s3_bucket, Key=file_key_list, Body=list_bytes, ContentType=ct)
+        client.put_object(
+            Bucket=settings.s3_bucket,
+            Key=file_key_list,
+            Body=list_bytes,
+            ContentType=ct,
+            CacheControl=PHOTO_CACHE_CONTROL,
+        )
     return file_key, file_key_list
+
+
+def upload_legal_document(body: bytes, content_type: str | None = None) -> str:
+    """Upload legal document file to S3/local under legal/ prefix. Returns file_key."""
+    settings = Settings()
+    ext = ""
+    ct = content_type or "application/octet-stream"
+    # simple mapping for common types; others leave without extension
+    c = ct.lower()
+    if "html" in c:
+        ext = ".html"
+    elif "pdf" in c:
+        ext = ".pdf"
+    elif "plain" in c or "text" in c:
+        ext = ".txt"
+    file_key = f"legal/{uuid.uuid4().hex}{ext}"
+    if _use_local():
+        root = Path(settings.local_storage_path).resolve()
+        path = root / file_key
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(body)
+        return file_key
+    client = _get_client()
+    client.put_object(Bucket=settings.s3_bucket, Key=file_key, Body=body, ContentType=ct)
+    return file_key
+
+
+def upload_certificate_file(body: bytes, trainer_id: int, certificate_id: int) -> str:
+    """Upload certificate PDF to S3/local under certificates/{trainer_id}/{certificate_id}.pdf. Returns file_key."""
+    file_key = f"certificates/{trainer_id}/{certificate_id}.pdf"
+    ct = "application/pdf"
+    settings = Settings()
+    if _use_local():
+        root = Path(settings.local_storage_path).resolve()
+        path = root / file_key
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(body)
+        return file_key
+    client = _get_client()
+    client.put_object(Bucket=settings.s3_bucket, Key=file_key, Body=body, ContentType=ct)
+    return file_key
+
+
+def resolve_object_key_under_prefixes(
+    file_key: str | None,
+    allowed_prefixes: tuple[str, ...],
+) -> str | None:
+    """
+    Normalize object key and ensure it stays under one of allowed_prefixes after path
+    normalization (blocks e.g. trainers/../legal/doc or certificates/../trainers/x).
+    """
+    if not file_key or not isinstance(file_key, str):
+        return None
+    if "\x00" in file_key:
+        return None
+    s = file_key.replace("\\", "/")
+    # Reject alternate spellings like certificates/../trainers/... (normpath would collapse to public key).
+    if ".." in s:
+        return None
+    if s.startswith("/"):
+        return None
+    norm = posixpath.normpath(s)
+    if norm in (".", "..") or norm.startswith("../"):
+        return None
+    if not norm or norm == ".":
+        return None
+    if ".." in norm.split("/"):
+        return None
+    for p in allowed_prefixes:
+        if p and norm.startswith(p):
+            return norm
+    return None
 
 
 def _get_client():
@@ -105,29 +191,66 @@ def _get_client():
     )
 
 
+def get_file(file_key: str, allowed_prefixes: tuple[str, ...] = ("trainers/",)) -> tuple[bytes, str] | None:
+    """
+    Read file by file_key from S3 or local storage. Returns (body, content_type) or None.
+    allowed_prefixes: e.g. ("trainers/", "certificates/", "legal/") to restrict keys.
+    """
+    norm_key = resolve_object_key_under_prefixes(file_key, allowed_prefixes)
+    if not norm_key:
+        return None
+    settings = Settings()
+    if _use_local():
+        root = Path(settings.local_storage_path).resolve()
+        path = root / norm_key
+        if not path.is_file():
+            return None
+        body = path.read_bytes()
+        ext = path.suffix.lower()
+        content_type = {
+            ".pdf": "application/pdf", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+            ".png": "image/png", ".html": "text/html", ".txt": "text/plain",
+        }.get(ext, "application/octet-stream")
+        return body, content_type
+    client = _get_client()
+    try:
+        resp = client.get_object(Bucket=settings.s3_bucket, Key=norm_key)
+        body = resp["Body"].read()
+        content_type = resp.get("ContentType") or "application/octet-stream"
+        return body, content_type
+    except Exception:
+        return None
+
+
 def get_photo(file_key: str) -> tuple[bytes, str] | None:
     """
     Read photo by file_key from S3 or local storage. Returns (body, content_type) or None.
     Only keys under trainers/ are allowed (no path traversal).
     """
-    if not file_key.startswith("trainers/") or ".." in file_key:
+    return get_file(file_key, allowed_prefixes=("trainers/",))
+
+
+def presign_get_url(file_key: str, expires_in: int | None = None) -> str | None:
+    """
+    Presigned GET URL for direct client download. Returns None when using local storage or on error.
+    Only keys under trainers/ are allowed.
+    """
+    norm_key = resolve_object_key_under_prefixes(file_key, ("trainers/",))
+    if not norm_key:
+        return None
+    if _use_local():
         return None
     settings = Settings()
-    if _use_local():
-        root = Path(settings.local_storage_path).resolve()
-        path = root / file_key
-        if not path.is_file():
-            return None
-        body = path.read_bytes()
-        ext = path.suffix.lower()
-        content_type = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp", ".gif": "image/gif"}.get(ext, "image/jpeg")
-        return body, content_type
-    client = _get_client()
+    if expires_in is None:
+        expires_in = settings.photo_presigned_expires_sec
     try:
-        resp = client.get_object(Bucket=settings.s3_bucket, Key=file_key)
-        body = resp["Body"].read()
-        content_type = resp.get("ContentType") or "image/jpeg"
-        return body, content_type
+        client = _get_client()
+        url = client.generate_presigned_url(
+            "get_object",
+            Params={"Bucket": settings.s3_bucket, "Key": norm_key},
+            ExpiresIn=expires_in,
+        )
+        return url
     except Exception:
         return None
 
@@ -135,15 +258,18 @@ def get_photo(file_key: str) -> tuple[bytes, str] | None:
 def presign_upload_url(
     trainer_id: int,
     content_type: str = "image/jpeg",
-    expires_in: int = 3600,
+    expires_in: int | None = None,
 ) -> tuple[str, str]:
     """
     Presigned PUT URL for direct upload to S3. Not supported when using local storage.
+    Key is always trainers/{trainer_id}/<uuid>.<ext> — no cross-trainer overwrite via URL alone.
     Returns (upload_url, file_key).
     """
     if _use_local():
         raise RuntimeError("Presign only with S3. Use POST /api/upload/photo for local storage.")
     settings = Settings()
+    if expires_in is None:
+        expires_in = settings.photo_upload_presign_expires_sec
     ext = _ext_from_content_type(content_type) or ".jpg"
     file_key = f"trainers/{trainer_id}/{uuid.uuid4().hex}{ext}"
     client = _get_client()

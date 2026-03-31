@@ -1,0 +1,18 @@
+<!--
+  Legacy: trainer bookings UI merged into schedule-editor (GET /webapp/schedule-editor).
+  HTTP route: src/api/app.py redirects /webapp/trainer-bookings -> /webapp/schedule-editor (302).
+  This file kept for static hosting / bookmarks; no app logic here.
+-->
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="refresh" content="0;url=/webapp/schedule-editor">
+  <title>Перенаправление</title>
+</head>
+<body style="font-family:var(--app-font-sans);padding:16px;">
+  <p>Записи открываются в <strong>«Моё расписание»</strong>.</p>
+  <p><a href="/webapp/schedule-editor">Перейти к расписанию</a></p>
+</body>
+</html>

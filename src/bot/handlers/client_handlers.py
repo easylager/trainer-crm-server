@@ -4,10 +4,13 @@ Client bot handlers: /start and catalog. Public entry; no auth.
 import asyncio
 import html
 import logging
+import random
+import string
+import uuid
 from collections import defaultdict
 from datetime import date, datetime, timedelta
 
-from aiogram import Bot, Router
+from aiogram import Bot, F, Router
 from aiogram.enums import ChatAction, ParseMode
 from aiogram.filters import Command, CommandStart
 from aiogram.types import (
@@ -19,9 +22,20 @@ from aiogram.types import (
     Message,
     ReplyKeyboardMarkup,
     ReplyKeyboardRemove,
+    WebAppInfo,
 )
 
-from src.application.client_use_cases import get_or_create_client
+from src.application.booking_use_cases import get_trainer_default_city_and_service
+from src.application.subscription_tier_use_cases import trainer_allows_online_booking
+from src.application.certificate_use_cases import activate_certificate_by_code
+from src.application.client_use_cases import (
+    apply_certificate_recipient_to_client,
+    attach_telegram_id_to_client,
+    get_client_by_phone,
+    get_client_id_by_telegram_id,
+    get_or_create_client,
+    get_client_profile_basic,
+)
 from src.application.client_session_use_cases import (
     clear_choices,
     clear_pending_request_id,
@@ -36,6 +50,7 @@ from src.application.client_session_use_cases import (
 from src.application.client_request_use_cases import (
     create_client_request,
     delete_client_request,
+    get_client_request_for_booking,
     list_my_requests_with_responses,
     replace_client_request_with_new,
 )
@@ -44,6 +59,7 @@ from src.application.booking_use_cases import (
     generate_reminders_for_booking,
     get_booking_for_client_feedback,
     get_completed_booking_for_repeat,
+    get_first_service_id_for_trainer,
     list_bookings_for_client,
 )
 from src.application.recurring_use_cases import (
@@ -61,7 +77,17 @@ from src.application.trainer_schedule_use_cases import (
     this_week_monday,
 )
 from src.application.trainer_use_cases import add_trainer_rating, get_trainer
+from src.application.support_use_cases import create_support_message
+from src.application.welcome_link_use_cases import (
+    WELCOME_TOKEN_TYPE_CERT,
+    WELCOME_TOKEN_TYPE_GENERIC,
+    WELCOME_TOKEN_TYPE_PASS,
+    consume_welcome_link_token,
+)
+from src.infrastructure.db.models import SUPPORT_FROM_CLIENT
 from src.bot import messages as msg
+from src.shared.config import Settings
+from src.shared.notification_hours import NOTIFICATION_TZ, working_hours_between
 from src.shared.audit import ACTOR_CLIENT_BOT, audit_log
 from src.bot.client_api import (
     build_photo_url,
@@ -73,6 +99,11 @@ from src.bot.client_api import (
 )
 from src.infrastructure.db import async_session_factory
 from src.shared.map_links import build_yandex_by_map_url, build_yandex_by_map_url_all_arenas
+
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:
+    from backports.zoneinfo import ZoneInfo  # type: ignore[no-redef]
 from src.shared.validation import MAX_COMMENT_LEN, safe_parse_id, truncate_text
 
 logger = logging.getLogger(__name__)
@@ -83,6 +114,8 @@ _catalog_load_locks: dict[int, asyncio.Lock] = defaultdict(asyncio.Lock)
 
 CATALOG_CALLBACK = "catalog"
 GUIDE_CALLBACK = "guide"
+CLIENT_SUPPORT_CALLBACK = "client:support"
+_client_support_awaiting: set[int] = set()
 REQUEST_CALLBACK = "request"
 SETTINGS_CALLBACK = "settings"
 SETTINGS_CITY_PREFIX = "settings_city:"
@@ -94,8 +127,11 @@ SERVICE_PREFIX = "service:"
 
 # Deep link from site: t.me/Bot?start=client_{city_id}_{service_id}_{trainer_id} — prefill session and show "Записаться".
 CLIENT_START_PREFIX = "client_"
+CERT_START_PREFIX = "cert_"
 BOOK_SLOT_PREFIX = "book_slot:"
 BOOKING_SKIP_COMMENT = "booking_skip_comment"
+BOOKING_USE_TG_NAME = "booking_use_tg_name"
+BOOKING_ENTER_MANUAL = "booking_enter_manual"
 MY_REQUESTS_CALLBACK = "my_requests"
 MY_REQUESTS_PAGE_PREFIX = "my_requests_page:"
 MY_REQUESTS_PER_PAGE = 8
@@ -107,11 +143,22 @@ REQUEST_DELETE_PREFIX = "request_delete:"
 BOOK_FROM_REQUEST_PREFIX = "book_from_req:"
 CATALOG_PAGE_PREFIX = "catalog_page:"
 PICK_RESPONDER_PREFIX = "pick_responder:"
+
+
+def client_passes_certificates_webapp_url(base: str, *, certificates_tab: bool = False) -> str:
+    """Combined client Mini App (tabs); optional deep link to certificates."""
+    url = f"{base.rstrip('/')}/webapp/client-passes-certificates"
+    if certificates_tab:
+        url += "?tab=certificates"
+    return url
 RESPONDER_PROFILE_PREFIX = "responder_profile:"
 CLIENT_DAYS = ("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс")
 
 # Booking flow state: telegram_id -> { slot_id, trainer_id, phone?, comment? }
 _booking_state: dict[int, dict] = {}
+
+# Link-by-phone: trainer added client without Telegram; user attaches telegram_id after code verification.
+_link_phone_state: dict[int, dict] = {}  # telegram_id -> { "step": "phone"|"code", "client_id": int, "code": str }
 
 # Request (leave demand) flow: telegram_id -> { city_id, service_id }; next step = comment or skip
 _request_state: dict[int, dict] = {}
@@ -252,12 +299,229 @@ def _trainer_caption(trainer: dict) -> str:
     )
 
 
+def _parse_cert_start(payload: str) -> tuple[str, int | None]:
+    """Parse cert_<CODE> or cert_<CODE>_ref_<trainer_id>. Returns (code, ref_trainer_id or None)."""
+    if not payload or not payload.startswith(CERT_START_PREFIX):
+        return ("", None)
+    rest = payload[len(CERT_START_PREFIX) :].strip()
+    if "_ref_" in rest:
+        code_part, _, ref_part = rest.partition("_ref_")
+        code = code_part.strip()
+        try:
+            ref_id = int(ref_part.strip())
+            return (code, ref_id if ref_id > 0 else None)
+        except ValueError:
+            return (code, None)
+    return (rest, None)
+
+
+WELCOME_REF_PREFIX = "welcome_ref_"
+WELCOME_T_PREFIX = "welcome_t_"
+PASS_START_PREFIX = "pass_"
+
+
+def _parse_welcome_t_token(payload: str) -> uuid.UUID | None:
+    """Parse welcome_t_<uuid>. Returns UUID or None."""
+    if not payload or not payload.startswith(WELCOME_T_PREFIX):
+        return None
+    rest = payload[len(WELCOME_T_PREFIX) :].strip()
+    try:
+        return uuid.UUID(rest)
+    except (ValueError, TypeError):
+        return None
+
+
+def _parse_welcome_ref(payload: str) -> int | None:
+    """Parse welcome_ref_<trainer_id>. Returns trainer_id or None."""
+    if not payload or not payload.startswith(WELCOME_REF_PREFIX):
+        return None
+    try:
+        tid = int(payload[len(WELCOME_REF_PREFIX) :].strip())
+        return tid if tid > 0 else None
+    except ValueError:
+        return None
+
+
+def _parse_pass_start(payload: str) -> tuple[int | None, int | None]:
+    """Parse pass_<product_id>_ref_<trainer_id>. Returns (pass_product_id, trainer_id) or (None, None)."""
+    if not payload or not payload.startswith(PASS_START_PREFIX):
+        return (None, None)
+    rest = payload[len(PASS_START_PREFIX) :].strip()
+    if "_ref_" not in rest:
+        return (None, None)
+    product_part, _, ref_part = rest.partition("_ref_")
+    try:
+        product_id = int(product_part.strip())
+        trainer_id = int(ref_part.strip())
+        return (product_id if product_id > 0 else None, trainer_id if trainer_id > 0 else None)
+    except ValueError:
+        return (None, None)
+
+
 @router.message(CommandStart())
 async def cmd_start(message: Message) -> None:
-    """Welcome and catalog; or from site deep link: /start client_C_S_T → prefill session, show Записаться."""
+    """Welcome and catalog; or deep link: /start client_C_S_T or /start cert_<CODE> (bind certificate, set trainer)."""
     telegram_id = message.from_user.id if message.from_user else 0
     parts = (message.text or "").strip().split(maxsplit=1)
     payload = (parts[1].strip() if len(parts) > 1 else "") or ""
+
+    # One-time token: welcome_t_<uuid> — burn token, then run cert/pass/generic flow
+    token_uuid = _parse_welcome_t_token(payload)
+    if token_uuid is not None:
+        async with async_session_factory() as db_session:
+            payload_data = await consume_welcome_link_token(db_session, token_uuid)
+        if not payload_data:
+            await message.answer(msg.CLIENT_WELCOME_LINK_USED)
+            return
+        token_type = payload_data.get("type") or ""
+        trainer_id = payload_data.get("trainer_id")
+        if not trainer_id:
+            await message.answer(msg.CLIENT_WELCOME_LINK_USED)
+            return
+        async with async_session_factory() as db_session:
+            await get_or_create_client(db_session, telegram_id)
+            await db_session.commit()
+        async with async_session_factory() as db_session:
+            city_id, service_id = await get_trainer_default_city_and_service(db_session, trainer_id)
+            if city_id is not None:
+                await set_city(telegram_id, city_id, db_session)
+            if service_id is not None:
+                await set_service(telegram_id, service_id, db_session)
+            await set_selected_trainer(telegram_id, trainer_id, db_session)
+        if token_type == WELCOME_TOKEN_TYPE_CERT:
+            cert_code = payload_data.get("cert_code")
+            if cert_code:
+                async with async_session_factory() as db_session:
+                    client_id = await get_client_id_by_telegram_id(db_session, telegram_id)
+                    bound = await activate_certificate_by_code(db_session, client_id, cert_code) if client_id else None
+                    if bound:
+                        await apply_certificate_recipient_to_client(
+                            db_session, client_id,
+                            bound.get("recipient_name"), bound.get("recipient_phone"),
+                        )
+                        await db_session.commit()
+                if bound:
+                    base = (Settings().webapp_base_url or "").rstrip("/")
+                    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                        [InlineKeyboardButton(
+                            text=msg.CLIENT_BUTTON_MY_PASSES_AND_CERTIFICATES,
+                            web_app=WebAppInfo(url=client_passes_certificates_webapp_url(base, certificates_tab=True)),
+                        )],
+                        [InlineKeyboardButton(text=msg.CLIENT_BUTTON_BOOK, callback_data="book")],
+                    ])
+                    await message.answer(msg.CLIENT_CERT_BOUND, reply_markup=keyboard)
+                else:
+                    await message.answer(msg.CLIENT_CERT_CODE_INVALID)
+            else:
+                keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text=msg.CLIENT_BUTTON_BOOK, callback_data="book")],
+                    [InlineKeyboardButton(text=msg.CLIENT_BUTTON_ANOTHER_TRAINER, callback_data=CATALOG_CALLBACK)],
+                ])
+                await message.answer(msg.CLIENT_WELCOME_REF, reply_markup=keyboard)
+        elif token_type == WELCOME_TOKEN_TYPE_PASS:
+            async with async_session_factory() as db_session:
+                trainer = await get_trainer(db_session, trainer_id)
+            name = _trainer_name(trainer) if trainer else "Тренер"
+            base = (Settings().webapp_base_url or "").rstrip("/")
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text=msg.CLIENT_BUTTON_BOOK, callback_data="book")],
+                [InlineKeyboardButton(text=msg.CLIENT_BUTTON_BUY_PASS, web_app=WebAppInfo(url=f"{base}/webapp/client-buy-pass"))],
+                [InlineKeyboardButton(text=msg.CLIENT_BUTTON_ANOTHER_TRAINER, callback_data=CATALOG_CALLBACK)],
+            ])
+            await message.answer(msg.CLIENT_PASS_WELCOME.format(name=name), reply_markup=keyboard)
+        else:
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text=msg.CLIENT_BUTTON_BOOK, callback_data="book")],
+                [InlineKeyboardButton(text=msg.CLIENT_BUTTON_ANOTHER_TRAINER, callback_data=CATALOG_CALLBACK)],
+            ])
+            await message.answer(msg.CLIENT_WELCOME_REF, reply_markup=keyboard)
+        return
+
+    # Certificate link: cert_<CODE> or cert_<CODE>_ref_<trainer_id>
+    cert_code, ref_trainer_id = _parse_cert_start(payload)
+    if cert_code:
+        async with async_session_factory() as db_session:
+            client_id = await get_or_create_client(db_session, telegram_id)
+            await db_session.commit()
+            bound = await activate_certificate_by_code(db_session, client_id, cert_code)
+            if bound:
+                await apply_certificate_recipient_to_client(
+                    db_session,
+                    client_id,
+                    bound.get("recipient_name"),
+                    bound.get("recipient_phone"),
+                )
+                await db_session.commit()
+        if bound:
+            trainer_id = bound["trainer_id"]
+            async with async_session_factory() as db_session:
+                city_id, service_id = await get_trainer_default_city_and_service(db_session, trainer_id)
+                if city_id is not None:
+                    await set_city(telegram_id, city_id, db_session)
+                if service_id is not None:
+                    await set_service(telegram_id, service_id, db_session)
+                await set_selected_trainer(telegram_id, trainer_id, db_session)
+            base = (Settings().webapp_base_url or "").rstrip("/")
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(
+                    text=msg.CLIENT_BUTTON_MY_PASSES_AND_CERTIFICATES,
+                    web_app=WebAppInfo(url=client_passes_certificates_webapp_url(base, certificates_tab=True)),
+                )],
+                [InlineKeyboardButton(text=msg.CLIENT_BUTTON_BOOK, callback_data="book")],
+            ])
+            await message.answer(msg.CLIENT_CERT_BOUND, reply_markup=keyboard)
+        else:
+            # Optional: preselected trainer from link (ref) so user can still book
+            if ref_trainer_id:
+                async with async_session_factory() as db_session:
+                    await set_selected_trainer(telegram_id, ref_trainer_id, db_session)
+            await message.answer(msg.CLIENT_CERT_CODE_INVALID)
+        return
+
+    # Generic invite: welcome_ref_<trainer_id> — no cert/pass, just set trainer and city/service
+    trainer_id_ref = _parse_welcome_ref(payload)
+    if trainer_id_ref is not None:
+        async with async_session_factory() as db_session:
+            await get_or_create_client(db_session, telegram_id)
+            await db_session.commit()
+        async with async_session_factory() as db_session:
+            city_id, service_id = await get_trainer_default_city_and_service(db_session, trainer_id_ref)
+            if city_id is not None:
+                await set_city(telegram_id, city_id, db_session)
+            if service_id is not None:
+                await set_service(telegram_id, service_id, db_session)
+            await set_selected_trainer(telegram_id, trainer_id_ref, db_session)
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text=msg.CLIENT_BUTTON_BOOK, callback_data="book")],
+            [InlineKeyboardButton(text=msg.CLIENT_BUTTON_ANOTHER_TRAINER, callback_data=CATALOG_CALLBACK)],
+        ])
+        await message.answer(msg.CLIENT_WELCOME_REF, reply_markup=keyboard)
+        return
+
+    # Pass invite: pass_<product_id>_ref_<trainer_id> — set trainer, offer book + buy pass
+    pass_product_id, pass_trainer_id = _parse_pass_start(payload)
+    if pass_product_id is not None and pass_trainer_id is not None:
+        async with async_session_factory() as db_session:
+            await get_or_create_client(db_session, telegram_id)
+            await db_session.commit()
+        async with async_session_factory() as db_session:
+            city_id, service_id = await get_trainer_default_city_and_service(db_session, pass_trainer_id)
+            if city_id is not None:
+                await set_city(telegram_id, city_id, db_session)
+            if service_id is not None:
+                await set_service(telegram_id, service_id, db_session)
+            await set_selected_trainer(telegram_id, pass_trainer_id, db_session)
+            trainer = await get_trainer(db_session, pass_trainer_id)
+        name = _trainer_name(trainer) if trainer else "Тренер"
+        base = (Settings().webapp_base_url or "").rstrip("/")
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text=msg.CLIENT_BUTTON_BOOK, callback_data="book")],
+            [InlineKeyboardButton(text=msg.CLIENT_BUTTON_BUY_PASS, web_app=WebAppInfo(url=f"{base}/webapp/client-buy-pass"))],
+            [InlineKeyboardButton(text=msg.CLIENT_BUTTON_ANOTHER_TRAINER, callback_data=CATALOG_CALLBACK)],
+        ])
+        await message.answer(msg.CLIENT_PASS_WELCOME.format(name=name), reply_markup=keyboard)
+        return
+
     parsed = _parse_client_start(payload)
     if parsed:
         city_id, service_id, trainer_id = parsed
@@ -281,7 +545,18 @@ async def cmd_start(message: Message) -> None:
 
 @router.message(Command("settings"))
 async def cmd_settings(message: Message) -> None:
-    """Open settings from menu button or /settings. Same screen as callback Settings."""
+    """Menu 'Тренеры и запись': open catalog Mini App (HTTPS) or show settings screen."""
+    base = (Settings().webapp_base_url or "").rstrip("/")
+    if base.startswith("https://"):
+        catalog_url = f"{base}/webapp/catalog"
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="Тренеры и запись", web_app=WebAppInfo(url=catalog_url))],
+        ])
+        await message.answer(
+            "Выберите город, услугу, арену и тренера. Нажмите кнопку ниже.",
+            reply_markup=kb,
+        )
+        return
     telegram_id = message.from_user.id if message.from_user else 0
     text, keyboard = await _get_settings_content(telegram_id)
     await message.answer(text, reply_markup=keyboard)
@@ -289,29 +564,34 @@ async def cmd_settings(message: Message) -> None:
 
 @router.message(Command("request"))
 async def cmd_request(message: Message) -> None:
-    """Start 'Оставить заявку' from menu (left of attachment). Same flow as callback request."""
-    telegram_id = message.from_user.id if message.from_user else 0
-    async with async_session_factory() as db_session:
-        session = await get_session(telegram_id, db_session)
-    city_id = session.get("city_id") if session else None
-    service_id = session.get("selected_service_id") if session else None
-    if not city_id or not service_id:
-        back_kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text=msg.CLIENT_REQUEST_BACK, callback_data=SETTINGS_CALLBACK)],
+    """Legacy command: request is created from catalog context (list footer or trainer card)."""
+    base = (Settings().webapp_base_url or "").rstrip("/")
+    if base.startswith("https://"):
+        catalog_url = f"{base}/webapp/catalog"
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="Тренеры и запись", web_app=WebAppInfo(url=catalog_url))],
         ])
-        await message.answer(msg.CLIENT_REQUEST_NEED_CITY_SERVICE, reply_markup=back_kb)
+        await message.answer(msg.CLIENT_MENU_REQUEST_MOVED, reply_markup=kb)
         return
-    _request_state[telegram_id] = {"city_id": city_id, "service_id": service_id}
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=msg.CLIENT_REQUEST_SKIP, callback_data="request_skip")],
-        [InlineKeyboardButton(text=msg.CLIENT_REQUEST_BACK, callback_data="request_back")],
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="Тренеры и запись", callback_data=CATALOG_CALLBACK)],
     ])
-    await message.answer(msg.CLIENT_REQUEST_PROMPT_COMMENT, reply_markup=keyboard)
+    await message.answer(msg.CLIENT_MENU_REQUEST_MOVED, reply_markup=kb)
 
 
 @router.message(Command("my_requests"))
 async def cmd_my_requests(message: Message) -> None:
-    """Open 'Мои заявки и отклики' from menu. List = one button per request."""
+    """Open 'Мои заявки и отклики': Mini App (HTTPS) or inline list."""
+    base = (Settings().webapp_base_url or "").rstrip("/")
+    if base.startswith("https://"):
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text=msg.CLIENT_BUTTON_MY_REQUESTS, web_app=WebAppInfo(url=base + "/webapp/client-requests"))],
+        ])
+        await message.answer(
+            "Ваши заявки и отклики тренеров. Нажмите кнопку ниже.",
+            reply_markup=kb,
+        )
+        return
     telegram_id = message.from_user.id if message.from_user else 0
     text, keyboard = await _my_requests_content(telegram_id)
     await message.answer(text, reply_markup=keyboard)
@@ -330,12 +610,10 @@ def _trainer_display_for_booking(b: dict, client_telegram_id: int) -> str:
 
 
 async def _my_bookings_content(telegram_id: int) -> tuple[str, InlineKeyboardMarkup]:
-    """Build client's bookings list text and back button. Returns (text, keyboard)."""
+    """Build client's bookings list text. No back button — user navigates via menu."""
     async with async_session_factory() as db_session:
         bookings = await list_bookings_for_client(db_session, telegram_id)
-    back_kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=msg.CLIENT_BUTTON_BACK_FROM_BOOKINGS, callback_data=GUIDE_CALLBACK)],
-    ])
+    back_kb = InlineKeyboardMarkup(inline_keyboard=[])
     if not bookings:
         return msg.CLIENT_MY_BOOKINGS_TITLE + "\n\n" + msg.CLIENT_MY_BOOKINGS_EMPTY, back_kb
     lines = [
@@ -351,20 +629,38 @@ async def _my_bookings_content(telegram_id: int) -> tuple[str, InlineKeyboardMar
         st = b["start_time"]
         time_str = st.strftime("%H:%M") if hasattr(st, "strftime") else str(st)[:5]
         duration = b.get("duration_minutes") or 45
-        lines.append(msg.CLIENT_MY_BOOKINGS_ROW.format(
-            index=i,
-            date=date_str,
-            day=day_str,
-            time=time_str,
-            duration=duration,
-            trainer_display=_trainer_display_for_booking(b, telegram_id),
-        ))
+        raw_status = (b.get("status") or "").strip()
+        if raw_status == "pending":
+            status_label = msg.CLIENT_MY_BOOKINGS_STATUS_PENDING
+        elif raw_status == "confirmed":
+            status_label = msg.CLIENT_MY_BOOKINGS_STATUS_CONFIRMED
+        else:
+            status_label = raw_status or "—"
+        lines.append(
+            msg.CLIENT_MY_BOOKINGS_ROW.format(
+                index=i,
+                date=date_str,
+                day=day_str,
+                time=time_str,
+                duration=duration,
+                trainer_display=_trainer_display_for_booking(b, telegram_id),
+                place=b.get("place_display") or "Уточните у тренера",
+                status=status_label,
+            )
+        )
     return "\n".join(lines), back_kb
 
 
 @router.message(Command("my_bookings"))
 async def cmd_my_bookings(message: Message) -> None:
-    """Open 'Мои записи' from menu. Same as callback MY_BOOKINGS_CALLBACK."""
+    """Open 'Мои записи': Mini App (HTTPS) or inline list."""
+    base = (Settings().webapp_base_url or "").rstrip("/")
+    if base.startswith("https://"):
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text=msg.CLIENT_BUTTON_MY_BOOKINGS, web_app=WebAppInfo(url=base + "/webapp/client-bookings"))],
+        ])
+        await message.answer(msg.CLIENT_MY_BOOKINGS_WEBAPP_INTRO, reply_markup=kb)
+        return
     telegram_id = message.from_user.id if message.from_user else 0
     text, keyboard = await _my_bookings_content(telegram_id)
     await message.answer(text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
@@ -372,29 +668,79 @@ async def cmd_my_bookings(message: Message) -> None:
 
 @router.callback_query(lambda c: c.data == MY_BOOKINGS_CALLBACK)
 async def show_my_bookings(callback: CallbackQuery) -> None:
-    """List client's bookings (date, time, trainer)."""
+    """List client's bookings: open Mini App or inline list."""
     await callback.answer()
+    base = (Settings().webapp_base_url or "").rstrip("/")
+    if base.startswith("https://"):
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text=msg.CLIENT_BUTTON_MY_BOOKINGS, web_app=WebAppInfo(url=base + "/webapp/client-bookings"))],
+        ])
+        await callback.message.answer(msg.CLIENT_MY_BOOKINGS_WEBAPP_INTRO, reply_markup=kb)
+        return
     telegram_id = callback.from_user.id if callback.from_user else 0
     text, keyboard = await _my_bookings_content(telegram_id)
     await callback.message.answer(text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
 
 
+@router.message(Command("my_passes"))
+async def cmd_my_passes(message: Message) -> None:
+    """Open combined Mini App (passes + certificates); default tab — абонементы."""
+    await _send_passes_certificates_webapp(message, certificates_tab=False)
+
+
+@router.message(Command("my_certificates"))
+async def cmd_my_certificates(message: Message) -> None:
+    """Legacy command: same Mini App, вкладка «Сертификаты»."""
+    await _send_passes_certificates_webapp(message, certificates_tab=True)
+
+
+async def _send_passes_certificates_webapp(message: Message, *, certificates_tab: bool) -> None:
+    base = (Settings().webapp_base_url or "").rstrip("/")
+    if not base or not base.startswith("https://"):
+        await message.answer(
+            msg.CLIENT_MY_PASSES_AND_CERTIFICATES_INTRO
+            + "\n\n(Mini App временно недоступен — проверьте настройки.)"
+        )
+        return
+    url = client_passes_certificates_webapp_url(base, certificates_tab=certificates_tab)
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=msg.CLIENT_BUTTON_MY_PASSES_AND_CERTIFICATES, web_app=WebAppInfo(url=url))],
+        ]
+    )
+    await message.answer(msg.CLIENT_MY_PASSES_AND_CERTIFICATES_INTRO, reply_markup=kb)
+
+
+def _guide_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="💬 Написать в поддержку", callback_data=CLIENT_SUPPORT_CALLBACK)],
+    ])
+
+
 @router.message(Command("guide"))
 async def cmd_guide(message: Message) -> None:
-    """Show instruction only; no buttons — user uses main menu (left of input)."""
-    await message.answer(msg.CLIENT_GUIDE)
+    """Show help (Помощь) and support button."""
+    await message.answer(msg.CLIENT_GUIDE, reply_markup=_guide_keyboard())
 
 
 @router.callback_query(lambda c: c.data == GUIDE_CALLBACK)
 async def on_guide_callback(callback: CallbackQuery) -> None:
-    """Inline 'Инструкция' button: show same as /guide (no buttons)."""
+    """Inline 'Помощь' button: show same as /guide with support button."""
     await callback.answer()
-    await callback.message.answer(msg.CLIENT_GUIDE)
+    await callback.message.answer(msg.CLIENT_GUIDE, reply_markup=_guide_keyboard())
+
+
+@router.callback_query(lambda c: c.data == CLIENT_SUPPORT_CALLBACK)
+async def on_client_support_callback(callback: CallbackQuery) -> None:
+    await callback.answer()
+    tid = callback.from_user.id if callback.from_user else 0
+    _client_support_awaiting.add(tid)
+    await callback.message.answer(msg.CLIENT_SUPPORT_PROMPT)
 
 
 @router.message(Command("book"))
 async def cmd_book(message: Message) -> None:
-    """From menu: show slots for selected trainer or ask to choose one."""
+    """Legacy command: booking is done from catalog Mini App (trainer card → slots)."""
     telegram_id = message.from_user.id if message.from_user else 0
     async with async_session_factory() as db_session:
         session_data = await get_session(telegram_id, db_session)
@@ -402,10 +748,32 @@ async def cmd_book(message: Message) -> None:
     if not trainer_id:
         await message.answer(msg.CLIENT_BOOK_NO_TRAINER)
         return
+
+    base = (Settings().webapp_base_url or "").rstrip("/")
+    if base.startswith("https://"):
+        city_id = (session_data or {}).get("city_id") if session_data else None
+        service_id = (session_data or {}).get("selected_service_id") if session_data else None
+        arena_id = (session_data or {}).get("selected_arena_id") if session_data else None
+        q = f"trainer_id={int(trainer_id)}"
+        if city_id is not None:
+            q += f"&city_id={int(city_id)}"
+        if service_id is not None:
+            q += f"&service_id={int(service_id)}"
+        if arena_id is not None:
+            q += f"&arena_id={int(arena_id)}"
+        catalog_url = f"{base}/webapp/catalog?{q}"
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text=msg.CLIENT_BUTTON_BOOK, web_app=WebAppInfo(url=catalog_url))],
+            [InlineKeyboardButton(text=msg.CLIENT_BUTTON_ANOTHER_TRAINER, web_app=WebAppInfo(url=f"{base}/webapp/catalog"))],
+        ])
+        await message.answer(msg.CLIENT_MENU_BOOKING_MOVED, reply_markup=kb)
+        return
+
+    await message.bot.send_chat_action(chat_id=message.chat.id, action=ChatAction.TYPING)
     text, keyboard = await _client_slots_content(trainer_id)
     if keyboard is None:
         back_kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="Выбор тренера", callback_data=CATALOG_CALLBACK)],
+            [InlineKeyboardButton(text=msg.CLIENT_BUTTON_ANOTHER_TRAINER, callback_data=CATALOG_CALLBACK)],
         ])
         await message.answer(text, reply_markup=back_kb)
         return
@@ -473,7 +841,18 @@ async def on_select_trainer(callback: CallbackQuery, bot: Bot) -> None:
     async with async_session_factory() as db_session:
         await set_selected_trainer(telegram_id, trainer_id, db_session)
         trainer = await get_trainer(db_session, trainer_id)
+        allows_online = await trainer_allows_online_booking(db_session, trainer_id)
     name = _trainer_name(trainer) if trainer else "Тренер"
+    if not allows_online:
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text=msg.CLIENT_BUTTON_LEAVE_REQUEST, callback_data=REQUEST_CALLBACK)],
+            [InlineKeyboardButton(text=msg.CLIENT_BUTTON_ANOTHER_TRAINER, callback_data=CATALOG_CALLBACK)],
+        ])
+        await callback.message.answer(
+            msg.CLIENT_TRAINER_SELECTED_NO_SELF_BOOK.format(name=name),
+            reply_markup=keyboard,
+        )
+        return
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text=msg.CLIENT_BUTTON_BOOK, callback_data="book")],
         [InlineKeyboardButton(text=msg.CLIENT_BUTTON_ANOTHER_TRAINER, callback_data=CATALOG_CALLBACK)],
@@ -506,13 +885,22 @@ def _slot_duration_minutes(start_time, end_time) -> int:
 
 
 async def _client_slots_content(trainer_id: int) -> tuple[str, InlineKeyboardMarkup | None]:
-    """Available slots for trainer (this + next week). Text with blank line between days; buttons = short labels."""
+    """Available slots for trainer (this + next week). Excludes slots within trainer's min working hours before booking."""
     this_m = this_week_monday()
     next_m = next_week_monday()
     to_date = next_m + timedelta(days=6)
     async with async_session_factory() as db_session:
         slots = await list_slots(db_session, trainer_id, this_m, to_date)
+        trainer = await get_trainer(db_session, trainer_id)
+    min_hours = 3
+    if trainer and trainer.get("profile"):
+        min_hours = trainer["profile"].get("min_hours_before_booking", 3) or 3
     available = [s for s in slots if (s.get("status") or "available") == "available"]
+    now_minsk = datetime.now(ZoneInfo(NOTIFICATION_TZ))
+    available = [
+        s for s in available
+        if working_hours_between(now_minsk, s["slot_date"], s["start_time"]) >= min_hours
+    ]
     if not available:
         return msg.CLIENT_BOOK_NO_SLOTS, None
     lines = [msg.CLIENT_BOOK_CHOOSE_SLOT]
@@ -546,16 +934,49 @@ async def _client_slots_content(trainer_id: int) -> tuple[str, InlineKeyboardMar
 
 @router.callback_query(lambda c: c.data == "book")
 async def on_book(callback: CallbackQuery) -> None:
-    """Show available slots for selected trainer; user picks one to book."""
+    """Show available slots for selected trainer; or open Mini App to book (if HTTPS)."""
     await callback.answer()
     telegram_id = callback.from_user.id if callback.from_user else 0
     async with async_session_factory() as db_session:
         session_data = await get_session(telegram_id, db_session)
+        client_id = await get_client_id_by_telegram_id(db_session, telegram_id)
     trainer_id = (session_data or {}).get("selected_trainer_id") if session_data else None
     if not trainer_id:
         await callback.message.answer(msg.CLIENT_BOOK_NO_TRAINER)
         return
+    async with async_session_factory() as db_session:
+        if not await trainer_allows_online_booking(db_session, trainer_id):
+            await callback.message.answer(
+                msg.CLIENT_BOOK_NO_ONLINE_TIER,
+                reply_markup=InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [InlineKeyboardButton(text=msg.CLIENT_BUTTON_ANOTHER_TRAINER, callback_data=CATALOG_CALLBACK)],
+                    ]
+                ),
+            )
+            return
+    # No client yet: offer link-by-phone (trainer may have added them by phone)
+    if client_id is None:
+        _link_phone_state[telegram_id] = {"step": "phone"}
+        await callback.message.answer(msg.CLIENT_LINK_PHONE_PROMPT)
+        return
+
+    chat_id = callback.message.chat.id if callback.message.chat else 0
+    await callback.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
     text, keyboard = await _client_slots_content(trainer_id)
+    base = (Settings().webapp_base_url or "").rstrip("/")
+    if base.startswith("https://") and keyboard is not None:
+        book_url = f"{base}/webapp/book?trainer_id={trainer_id}"
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text=msg.CLIENT_BUTTON_BOOK, web_app=WebAppInfo(url=book_url))],
+            [InlineKeyboardButton(text=msg.CLIENT_BOOK_BUTTON_BACK, callback_data=CATALOG_CALLBACK)],
+        ])
+        await callback.message.answer(
+            msg.CLIENT_BOOK_CHOOSE_SLOT + msg.CLIENT_BOOK_WEBAPP_FOOTER,
+            reply_markup=kb,
+        )
+        return
+
     if keyboard is None:
         back_kb = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text=msg.CLIENT_BUTTON_ANOTHER_TRAINER, callback_data=CATALOG_CALLBACK)],
@@ -584,16 +1005,109 @@ async def on_book_slot(callback: CallbackQuery) -> None:
     async with async_session_factory() as db_session:
         session_data = await get_session(telegram_id, db_session)
         trainer_id = (session_data or {}).get("selected_trainer_id") if session_data else None
+        profile = await get_client_profile_basic(db_session, telegram_id)
     if not trainer_id:
-        await callback.message.answer(msg.CLIENT_BOOK_NO_TRAINER)
+        await callback.message.answer(msg.CLIENT_BOOK_SESSION_EXPIRED)
         return
-    _booking_state[telegram_id] = {"slot_id": slot_id, "trainer_id": trainer_id}
+    state: dict = {"slot_id": slot_id, "trainer_id": trainer_id}
+    first_name_existing = (profile.get("first_name") or "").strip() if profile else ""
+    last_name_existing = (profile.get("last_name") or "").strip() if profile else ""
+    phone_existing = (profile.get("phone") or "").strip() if profile else ""
+    need_name = not (first_name_existing and last_name_existing)
+    has_phone = bool(phone_existing)
+    state["has_phone"] = has_phone
+    # 1) Нет имени/фамилии — предложить из Telegram или ввести вручную
+    if need_name:
+        from_user = callback.from_user
+        tg_first = (from_user.first_name or "").strip() if from_user else ""
+        tg_last = (from_user.last_name or "").strip() if from_user else ""
+        if tg_first and tg_last:
+            state["need_name"] = True
+            _booking_state[telegram_id] = state
+            name_display = f"{tg_first} {tg_last}"
+            kb = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text=msg.CLIENT_BUTTON_USE_TG_NAME, callback_data=BOOKING_USE_TG_NAME)],
+                [InlineKeyboardButton(text=msg.CLIENT_BUTTON_ENTER_MANUAL, callback_data=BOOKING_ENTER_MANUAL)],
+            ])
+            await callback.message.answer(
+                msg.CLIENT_PROFILE_USE_TELEGRAM_NAME.format(name=name_display),
+                reply_markup=ReplyKeyboardRemove(),
+            )
+            await callback.message.answer("Выберите:", reply_markup=kb)
+            return
+        state["need_name"] = True
+        _booking_state[telegram_id] = state
+        await callback.message.answer(msg.CLIENT_PROFILE_ENTER_NAME, reply_markup=ReplyKeyboardRemove())
+        return
+    # 2) Есть имя/фамилия и уже сохранён телефон — сразу переходим к комментарию
+    if has_phone:
+        state["phone"] = phone_existing
+        _booking_state[telegram_id] = state
+        skip_kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text=msg.CLIENT_BOOK_SKIP_COMMENT, callback_data=BOOKING_SKIP_COMMENT)],
+        ])
+        await callback.message.answer(
+            msg.CLIENT_BOOK_ENTER_COMMENT,
+            reply_markup=ReplyKeyboardRemove(),
+        )
+        await callback.message.answer(msg.CLIENT_BOOK_COMMENT_OR_BUTTON, reply_markup=skip_kb)
+        return
+    # 3) Имя/фамилия есть, телефона нет — просим телефон как раньше
+    _booking_state[telegram_id] = state
     keyboard = ReplyKeyboardMarkup(
         keyboard=[[KeyboardButton(text=msg.CLIENT_BOOK_BUTTON_SEND_CONTACT, request_contact=True)]],
         resize_keyboard=True,
         one_time_keyboard=True,
     )
     await callback.message.answer(msg.CLIENT_BOOK_ENTER_PHONE, reply_markup=keyboard)
+
+
+@router.callback_query(lambda c: c.data == BOOKING_USE_TG_NAME)
+async def on_booking_use_tg_name(callback: CallbackQuery) -> None:
+    """Apply Telegram name and continue to phone or comment step."""
+    await callback.answer()
+    telegram_id = callback.from_user.id if callback.from_user else 0
+    state = _booking_state.get(telegram_id)
+    if not state or not state.get("need_name"):
+        await callback.message.answer(msg.CLIENT_BOOK_SESSION_EXPIRED)
+        return
+    from_user = callback.from_user
+    state["override_first_name"] = (from_user.first_name or "").strip() if from_user else ""
+    state["override_last_name"] = (from_user.last_name or "").strip() if from_user else ""
+    state.pop("need_name", None)
+    _booking_state[telegram_id] = state
+    if state.get("has_phone"):
+        state["phone"] = (await _get_phone_from_profile(telegram_id)) or ""
+        skip_kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text=msg.CLIENT_BOOK_SKIP_COMMENT, callback_data=BOOKING_SKIP_COMMENT)],
+        ])
+        await callback.message.answer(msg.CLIENT_BOOK_ENTER_COMMENT, reply_markup=ReplyKeyboardRemove())
+        await callback.message.answer(msg.CLIENT_BOOK_COMMENT_OR_BUTTON, reply_markup=skip_kb)
+        return
+    keyboard = ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text=msg.CLIENT_BOOK_BUTTON_SEND_CONTACT, request_contact=True)]],
+        resize_keyboard=True,
+        one_time_keyboard=True,
+    )
+    await callback.message.answer(msg.CLIENT_BOOK_ENTER_PHONE, reply_markup=keyboard)
+
+
+async def _get_phone_from_profile(telegram_id: int) -> str | None:
+    """Return saved phone for client; used when continuing booking flow from callback (no session)."""
+    async with async_session_factory() as db_session:
+        profile = await get_client_profile_basic(db_session, telegram_id)
+    return (profile.get("phone") or "").strip() or None
+
+
+@router.callback_query(lambda c: c.data == BOOKING_ENTER_MANUAL)
+async def on_booking_enter_manual(callback: CallbackQuery) -> None:
+    """User chose to enter name manually — show text prompt."""
+    await callback.answer()
+    telegram_id = callback.from_user.id if callback.from_user else 0
+    if telegram_id not in _booking_state:
+        await callback.message.answer(msg.CLIENT_BOOK_SESSION_EXPIRED)
+        return
+    await callback.message.answer(msg.CLIENT_PROFILE_ENTER_NAME, reply_markup=ReplyKeyboardRemove())
 
 
 @router.callback_query(lambda c: c.data == BOOKING_SKIP_COMMENT)
@@ -603,26 +1117,63 @@ async def on_booking_skip_comment(callback: CallbackQuery) -> None:
     telegram_id = callback.from_user.id if callback.from_user else 0
     state = _booking_state.pop(telegram_id, None)
     if not state or "phone" not in state:
-        await callback.message.answer(msg.CLIENT_BOOK_NO_TRAINER)
+        await callback.message.answer(msg.CLIENT_BOOK_SESSION_EXPIRED)
         return
-    await _finish_booking(callback.message, telegram_id, state["slot_id"], state["trainer_id"], state["phone"], None)
+    await _finish_booking(
+        callback.message,
+        telegram_id,
+        state["slot_id"],
+        state["trainer_id"],
+        state["phone"],
+        None,
+        override_first_name=state.get("override_first_name"),
+        override_last_name=state.get("override_last_name"),
+    )
 
 
-async def _finish_booking(message: Message, telegram_id: int, slot_id: int, trainer_id: int, phone: str, comment: str | None) -> None:
+async def _finish_booking(
+    message: Message,
+    telegram_id: int,
+    slot_id: int,
+    trainer_id: int,
+    phone: str,
+    comment: str | None,
+    *,
+    override_first_name: str | None = None,
+    override_last_name: str | None = None,
+) -> None:
     """Create booking, show success, remove keyboard. If session has pending_request_id, link and archive that request."""
     client_request_id: int | None = None
     from_user = message.from_user
-    first_name = from_user.first_name if from_user else None
-    last_name = from_user.last_name if from_user else None
+    first_name = override_first_name if override_first_name is not None else (from_user.first_name if from_user else None)
+    last_name = override_last_name if override_last_name is not None else (from_user.last_name if from_user else None)
     async with async_session_factory() as db_session:
         session = await get_session(telegram_id, db_session)
         if session and isinstance(session.get("payload"), dict):
             client_request_id = session["payload"].get("pending_request_id")
+        service_id: int | None = None
+        if client_request_id:
+            req = await get_client_request_for_booking(db_session, client_request_id, telegram_id)
+            if req:
+                service_id = req.get("service_id")
+        if service_id is None and session:
+            service_id = session.get("selected_service_id")
+        if service_id is None:
+            service_id = await get_first_service_id_for_trainer(db_session, trainer_id)
+        if service_id is None:
+            await message.answer("Не удалось определить услугу. Выберите услугу в каталоге и попробуйте снова.", reply_markup=ReplyKeyboardRemove())
+            return
+        username = from_user.username if from_user else None
         client_id = await get_or_create_client(
-            db_session, telegram_id, phone=phone, first_name=first_name, last_name=last_name,
+            db_session,
+            telegram_id,
+            phone=phone,
+            first_name=first_name,
+            last_name=last_name,
+            telegram_username=username,
         )
         booking_id = await create_booking(
-            db_session, slot_id, trainer_id, client_id, client_comment=comment,
+            db_session, slot_id, trainer_id, client_id, service_id=service_id, client_comment=comment,
             client_request_id=client_request_id,
         )
         if booking_id:
@@ -647,18 +1198,36 @@ async def _finish_booking(message: Message, telegram_id: int, slot_id: int, trai
     duration = _slot_duration_minutes(slot["start_time"], slot["end_time"])
     text = msg.CLIENT_BOOK_SUCCESS.format(date=date_str, day=dow, time=time_range, duration=duration)
     await message.answer(text, reply_markup=ReplyKeyboardRemove())
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=msg.CLIENT_BUTTON_ANOTHER_TRAINER, callback_data=CATALOG_CALLBACK)],
-    ])
-    await message.answer(msg.CLIENT_BOOK_WHAT_NEXT, reply_markup=keyboard)
+    await message.answer(msg.CLIENT_BOOK_WHAT_NEXT)
+    await message.answer(msg.CLIENT_BOOK_SUCCESS_HINT)
 
 
 @router.message(lambda m: m.from_user and m.from_user.id in _booking_state)
 async def on_booking_message(message: Message) -> None:
-    """Handle phone or comment in booking flow."""
+    """Handle name (first time), then phone or comment in booking flow."""
     telegram_id = message.from_user.id if message.from_user else 0
     state = _booking_state.get(telegram_id)
     if not state:
+        return
+    # Name step for new clients
+    if state.get("need_name"):
+        full = (message.text or "").strip()
+        parts = full.split()
+        if len(parts) < 2:
+            await message.answer(msg.CLIENT_PROFILE_NAME_INVALID)
+            return
+        first_name = parts[0]
+        last_name = " ".join(parts[1:])
+        state.pop("need_name", None)
+        state["override_first_name"] = first_name
+        state["override_last_name"] = last_name
+        _booking_state[telegram_id] = state
+        keyboard = ReplyKeyboardMarkup(
+            keyboard=[[KeyboardButton(text=msg.CLIENT_BOOK_BUTTON_SEND_CONTACT, request_contact=True)]],
+            resize_keyboard=True,
+            one_time_keyboard=True,
+        )
+        await message.answer(msg.CLIENT_BOOK_ENTER_PHONE, reply_markup=keyboard)
         return
     # Phone step
     if "phone" not in state:
@@ -686,8 +1255,19 @@ async def on_booking_message(message: Message) -> None:
     slot_id = state["slot_id"]
     trainer_id = state["trainer_id"]
     phone = state["phone"]
+    override_first_name = state.get("override_first_name")
+    override_last_name = state.get("override_last_name")
     _booking_state.pop(telegram_id, None)
-    await _finish_booking(message, telegram_id, slot_id, trainer_id, phone, comment)
+    await _finish_booking(
+        message,
+        telegram_id,
+        slot_id,
+        trainer_id,
+        phone,
+        comment,
+        override_first_name=override_first_name,
+        override_last_name=override_last_name,
+    )
 
 
 # --- Feedback after completed booking: rating 1–5 + optional review ---
@@ -826,20 +1406,25 @@ async def on_repeat_booking(callback: CallbackQuery) -> None:
     async with async_session_factory() as db_session:
         status, slot_info = await get_slot_status_next_week(db_session, trainer_id, day_of_week, start_time)
     if status == "available" and slot_info:
-        async with async_session_factory() as db_session:
-            new_booking_id = await create_booking(
-                db_session, slot_info["slot_id"], trainer_id, client_id, client_comment=None
-            )
-        if new_booking_id:
+        service_id = booking.get("service_id")
+        if not service_id:
             async with async_session_factory() as db_session:
-                await generate_reminders_for_booking(db_session, new_booking_id)
-            date_str = slot_info["slot_date"].strftime("%d.%m") if hasattr(slot_info["slot_date"], "strftime") else str(slot_info["slot_date"])
-            day_str = msg.TRAINER_DAYS[slot_info["slot_date"].weekday()] if hasattr(slot_info["slot_date"], "weekday") else ""
-            time_str = start_time.strftime("%H:%M") if hasattr(start_time, "strftime") else ""
-            await callback.message.answer(
-                msg.CLIENT_REPEAT_BOOKED.format(date=date_str, day=day_str, time=time_str)
-            )
-            return
+                service_id = await get_first_service_id_for_trainer(db_session, trainer_id)
+        if service_id:
+            async with async_session_factory() as db_session:
+                new_booking_id = await create_booking(
+                    db_session, slot_info["slot_id"], trainer_id, client_id, service_id=service_id, client_comment=None
+                )
+            if new_booking_id:
+                async with async_session_factory() as db_session:
+                    await generate_reminders_for_booking(db_session, new_booking_id)
+                date_str = slot_info["slot_date"].strftime("%d.%m") if hasattr(slot_info["slot_date"], "strftime") else str(slot_info["slot_date"])
+                day_str = msg.TRAINER_DAYS[slot_info["slot_date"].weekday()] if hasattr(slot_info["slot_date"], "weekday") else ""
+                time_str = start_time.strftime("%H:%M") if hasattr(start_time, "strftime") else ""
+                await callback.message.answer(
+                    msg.CLIENT_REPEAT_BOOKED.format(date=date_str, day=day_str, time=time_str)
+                )
+                return
     if status == "booked":
         async with async_session_factory() as db_session:
             taken_by_regular = await has_other_active_recurring(
@@ -907,12 +1492,16 @@ async def on_make_recurring(callback: CallbackQuery) -> None:
         return
     day_str = msg.TRAINER_DAYS[day_of_week]
     time_str = start_time.strftime("%H:%M") if hasattr(start_time, "strftime") else ""
+    service_id = booking.get("service_id")
+    if not service_id:
+        async with async_session_factory() as db_session:
+            service_id = await get_first_service_id_for_trainer(db_session, trainer_id)
     async with async_session_factory() as db_session:
         slot_info = await find_available_slot_next_week(db_session, trainer_id, day_of_week, start_time)
-    if slot_info:
+    if slot_info and service_id:
         async with async_session_factory() as db_session:
             new_booking_id = await create_booking(
-                db_session, slot_info["slot_id"], trainer_id, client_id, client_comment=None
+                db_session, slot_info["slot_id"], trainer_id, client_id, service_id=service_id, client_comment=None
             )
         if new_booking_id:
             async with async_session_factory() as db_session:
@@ -937,14 +1526,19 @@ async def on_book_available_slot(callback: CallbackQuery) -> None:
         return
     telegram_id = callback.from_user.id if callback.from_user else 0
     async with async_session_factory() as db_session:
-        client_id = await get_or_create_client(db_session, telegram_id)
+        username = callback.from_user.username if callback.from_user else None
+        client_id = await get_or_create_client(db_session, telegram_id, telegram_username=username)
         slot = await get_slot(db_session, slot_id)
         if not slot or slot.get("status") != "available":
             await callback.message.answer(msg.CLIENT_ERROR_BOOKING_UNAVAILABLE)
             return
         trainer_id = slot["trainer_id"]
+        service_id = await get_first_service_id_for_trainer(db_session, trainer_id)
+        if not service_id:
+            await callback.message.answer(msg.CLIENT_ERROR_BOOKING_UNAVAILABLE)
+            return
         new_booking_id = await create_booking(
-            db_session, slot_id, trainer_id, client_id, client_comment=None
+            db_session, slot_id, trainer_id, client_id, service_id=service_id, client_comment=None
         )
     if not new_booking_id:
         await callback.message.answer(msg.CLIENT_ERROR_BOOKING_UNAVAILABLE)
@@ -1319,7 +1913,14 @@ async def on_request_skip_comment(callback: CallbackQuery) -> None:
     first_name = from_user.first_name if from_user else None
     last_name = from_user.last_name if from_user else None
     async with async_session_factory() as db_session:
-        client_id = await get_or_create_client(db_session, telegram_id, first_name=first_name, last_name=last_name)
+        username = callback.from_user.username if callback.from_user else None
+        client_id = await get_or_create_client(
+            db_session,
+            telegram_id,
+            first_name=first_name,
+            last_name=last_name,
+            telegram_username=username,
+        )
         request_id = await create_client_request(
             db_session, client_id,
             state["city_id"], state["service_id"],
@@ -1351,7 +1952,14 @@ async def on_request_comment_message(message: Message) -> None:
     first_name = from_user.first_name if from_user else None
     last_name = from_user.last_name if from_user else None
     async with async_session_factory() as db_session:
-        client_id = await get_or_create_client(db_session, telegram_id, first_name=first_name, last_name=last_name)
+        username = message.from_user.username if message.from_user else None
+        client_id = await get_or_create_client(
+            db_session,
+            telegram_id,
+            first_name=first_name,
+            last_name=last_name,
+            telegram_username=username,
+        )
         request_id = await create_client_request(
             db_session, client_id,
             state["city_id"], state["service_id"],
@@ -1756,7 +2364,179 @@ async def on_select_service(callback: CallbackQuery, bot: Bot) -> None:
     await _load_and_show_trainers(bot, chat_id, callback.message, city_id, service_id, arena_id=arena_id)
 
 
+@router.message(lambda m: getattr(m, "web_app_data", None) is not None)
+async def on_catalog_web_app_data(message: Message) -> None:
+    """Mini App closed with sendData: trainer_selected -> confirmation; leave_request -> start request flow."""
+    import json
+    try:
+        payload = json.loads(message.web_app_data.data)
+    except (TypeError, ValueError):
+        await message.answer(msg.CLIENT_ERROR_TRY_AGAIN)
+        return
+
+    action = payload.get("action")
+
+    if action == "submit_request":
+        # Mini App sent full form: city, service, optional comment, optional trainer_id (personalized)
+        try:
+            telegram_id = message.from_user.id if message.from_user else 0
+            city_id = payload.get("city_id")
+            service_id = payload.get("service_id")
+            if not city_id or not service_id:
+                await message.answer(msg.CLIENT_REQUEST_NEED_CITY_SERVICE)
+                return
+            city_id = int(city_id)
+            service_id = int(service_id)
+            trainer_id = payload.get("trainer_id")
+            trainer_id = int(trainer_id) if trainer_id is not None else None
+            raw_comment = payload.get("comment")
+            comment = truncate_text(str(raw_comment) if raw_comment is not None else None, MAX_COMMENT_LEN)
+        except (TypeError, ValueError):
+            await message.answer(msg.CLIENT_ERROR_TRY_AGAIN)
+            return
+        except Exception as e:
+            logging.exception("submit_request web_app_data: %s", e)
+            await message.answer(msg.CLIENT_ERROR_TRY_AGAIN)
+            return
+        from_user = message.from_user
+        first_name = from_user.first_name if from_user else None
+        last_name = from_user.last_name if from_user else None
+        async with async_session_factory() as db_session:
+            username = message.from_user.username if message.from_user else None
+            client_id = await get_or_create_client(
+                db_session,
+                telegram_id,
+                first_name=first_name,
+                last_name=last_name,
+                telegram_username=username,
+            )
+            request_id = await create_client_request(
+                db_session, client_id, city_id, service_id, comment=comment, trainer_id=trainer_id
+            )
+        audit_log("client_request.created", ACTOR_CLIENT_BOT, telegram_id, {"request_id": request_id, "city_id": city_id, "service_id": service_id, "trainer_id": trainer_id})
+        await message.answer(msg.CLIENT_REQUEST_SUCCESS)
+        return
+
+    if action == "leave_request":
+        try:
+            telegram_id = message.from_user.id if message.from_user else 0
+            city_id = payload.get("city_id")
+            service_id = payload.get("service_id")
+            if not city_id or not service_id:
+                async with async_session_factory() as db_session:
+                    session = await get_or_create_session(telegram_id, db_session)
+                city_id = city_id or session.get("city_id")
+                service_id = service_id or session.get("selected_service_id")
+            if not city_id or not service_id:
+                await message.answer(msg.CLIENT_REQUEST_NEED_CITY_SERVICE)
+                return
+            city_id = int(city_id)
+            service_id = int(service_id)
+        except (TypeError, ValueError):
+            await message.answer(msg.CLIENT_ERROR_TRY_AGAIN)
+            return
+        except Exception as e:
+            logging.exception("leave_request web_app_data: %s", e)
+            await message.answer(msg.CLIENT_ERROR_TRY_AGAIN)
+            return
+        _request_state[telegram_id] = {"city_id": city_id, "service_id": service_id}
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text=msg.CLIENT_REQUEST_SKIP, callback_data="request_skip")],
+            [InlineKeyboardButton(text=msg.CLIENT_REQUEST_BACK, callback_data="request_back")],
+        ])
+        await message.answer(msg.CLIENT_REQUEST_PROMPT_COMMENT, reply_markup=keyboard)
+        return
+
+    if action != "trainer_selected":
+        return
+    trainer_id = payload.get("trainer_id")
+    if not trainer_id:
+        return
+    async with async_session_factory() as db_session:
+        trainer = await get_trainer(db_session, int(trainer_id))
+    name = _trainer_name(trainer) if trainer else "Тренер"
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=msg.CLIENT_BUTTON_BOOK, callback_data="book")],
+        [InlineKeyboardButton(text=msg.CLIENT_BUTTON_ANOTHER_TRAINER, callback_data=CATALOG_CALLBACK)],
+    ])
+    await message.answer(
+        msg.CLIENT_TRAINER_SELECTED.format(name=name),
+        reply_markup=keyboard,
+    )
+
+
+def _has_link_phone_state(message: Message) -> bool:
+    tid = message.from_user.id if message.from_user else 0
+    return tid in _link_phone_state
+
+
+@router.message(F.text, _has_link_phone_state)
+async def on_link_phone_message(message: Message) -> None:
+    """Handle phone or verification code when user is in link-by-phone flow."""
+    telegram_id = message.from_user.id if message.from_user else 0
+    state = _link_phone_state.get(telegram_id)
+    if not state:
+        return
+    text = (message.text or "").strip()
+    if not text:
+        return
+
+    if state.get("step") == "phone":
+        async with async_session_factory() as db_session:
+            client = await get_client_by_phone(db_session, text)
+        if not client:
+            await message.answer(msg.CLIENT_LINK_PHONE_NOT_FOUND)
+            return
+        if client.get("telegram_id") is not None:
+            await message.answer(msg.CLIENT_LINK_PHONE_ALREADY_LINKED)
+            return
+        code = "".join(random.choices(string.digits, k=4))
+        _link_phone_state[telegram_id] = {"step": "code", "client_id": client["id"], "code": code}
+        # TODO: send real SMS; for now code in bot message. Never log the code unless DEBUG (secrets in logs policy).
+        if Settings().debug:
+            logger.info(
+                "Phone verification code for client_id=%s (debug only): %s",
+                client["id"],
+                code,
+            )
+        else:
+            logger.info("Phone verification code issued for client_id=%s", client["id"])
+        dev_hint = msg.CLIENT_LINK_CODE_DEV.format(code=code)
+        await message.answer(msg.CLIENT_LINK_CODE_SENT + dev_hint, parse_mode=ParseMode.HTML)
+        return
+
+    if state.get("step") == "code":
+        if text != state.get("code"):
+            await message.answer(msg.CLIENT_LINK_CODE_WRONG)
+            return
+        client_id = state.get("client_id")
+        if not client_id:
+            _link_phone_state.pop(telegram_id, None)
+            await message.answer(msg.CLIENT_ERROR_TRY_AGAIN)
+            return
+        async with async_session_factory() as db_session:
+            ok = await attach_telegram_id_to_client(db_session, client_id, telegram_id)
+            await db_session.commit()
+        _link_phone_state.pop(telegram_id, None)
+        if not ok:
+            await message.answer(msg.CLIENT_ERROR_TRY_AGAIN)
+            return
+        await message.answer(msg.CLIENT_LINK_SUCCESS)
+        return
+
+
 @router.message()
 async def fallback(message: Message) -> None:
-    """Any other message: direct to main menu and /guide; no buttons."""
+    """Any other message: handle support state or direct to main menu."""
+    telegram_id = message.from_user.id if message.from_user else 0
+    if telegram_id in _client_support_awaiting:
+        _client_support_awaiting.discard(telegram_id)
+        text = (message.text or "").strip()[: 4000]
+        if not text:
+            await message.answer(msg.CLIENT_SUPPORT_PROMPT)
+            return
+        async with async_session_factory() as session:
+            await create_support_message(session, telegram_id, SUPPORT_FROM_CLIENT, text)
+        await message.answer(msg.CLIENT_SUPPORT_SENT)
+        return
     await message.answer(msg.CLIENT_FALLBACK)

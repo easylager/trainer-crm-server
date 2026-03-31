@@ -1,0 +1,2566 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Тренеры и запись</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="stylesheet" href="theme.css" />
+  <link rel="stylesheet" href="mini-app-components.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet" />
+  <script src="client-mini-app-theme.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: var(--app-font-sans);
+      background: var(--tg-theme-bg-color);
+      color: var(--tg-theme-text-color);
+      min-height: 100vh;
+      padding: 12px;
+      padding-bottom: env(safe-area-inset-bottom, 12px);
+    }
+    .header {
+      margin-bottom: 24px;
+    }
+    .header-title { 
+      font-size: 24px;
+      font-weight: 600;
+      line-height: 1.25;
+      letter-spacing: -0.02em;
+      color: var(--tg-theme-text-color);
+    }
+    .btn-close {
+      flex-shrink: 0;
+      padding: 8px 14px;
+      border-radius: 8px;
+      border: none;
+      font-size: 14px;
+      background: var(--tg-theme-secondary-bg-color);
+      color: var(--tg-theme-text-color);
+      cursor: pointer;
+    }
+    .step-title {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--tg-theme-hint-color);
+      margin: 4px 0 12px 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+    .choice-card {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 18px;
+      margin-bottom: 8px;
+      border-radius: 18px;
+      background: var(--tg-theme-secondary-bg-color);
+      cursor: pointer;
+      border: 1px solid rgba(247, 166, 0, 0.28);
+      width: 100%;
+      font: inherit;
+      color: inherit;
+      text-align: left;
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+      transition: all 0.12s cubic-bezier(0.22, 1, 0.36, 1);
+      position: relative;
+      overflow: hidden;
+    }
+    .choice-card::before {
+      content: '';
+      position: absolute;
+      top: -40%;
+      right: -20%;
+      width: 55%;
+      height: 120%;
+      background: radial-gradient(ellipse, rgba(247, 166, 0, 0.08) 0%, transparent 70%);
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.12s ease;
+    }
+    @media (hover: hover) {
+      .choice-card:hover {
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+        border-color: rgba(247, 166, 0, 0.45);
+        transform: translateY(-1px);
+      }
+      .choice-card:hover::before {
+        opacity: 1;
+      }
+      .choice-card:hover .arrow {
+        opacity: 1;
+        transform: translateX(2px);
+      }
+    }
+    .choice-card:active { 
+      opacity: 0.92; 
+      transform: scale(0.985);
+    }
+    .choice-card .main { 
+      flex: 1; 
+      min-width: 0; 
+      position: relative; 
+      z-index: 1; 
+    }
+    .choice-card .label { 
+      font-size: 13px; 
+      color: var(--tg-theme-hint-color); 
+      font-weight: 500;
+      margin-bottom: 2px;
+    }
+    .choice-card .value { 
+      font-size: 17px; 
+      font-weight: 600; 
+      line-height: 1.25;
+      letter-spacing: -0.01em;
+    }
+    .choice-card .arrow { 
+      color: var(--tg-theme-button-color); 
+      font-size: 16px; 
+      position: relative; 
+      z-index: 1;
+      opacity: 0.8;
+      transition: opacity 0.12s ease, transform 0.12s ease;
+    }
+    .trainer-list-card {
+      display: flex;
+      align-items: flex-start;
+      gap: 18px;
+      padding: 18px 20px;
+      margin-bottom: 14px;
+      border-radius: 18px;
+      background: var(--tg-theme-secondary-bg-color);
+      cursor: pointer;
+      border: 1px solid rgba(247, 166, 0, 0.28);
+      width: 100%;
+      font: inherit;
+      color: inherit;
+      text-align: left;
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+      transition: all 0.12s cubic-bezier(0.22, 1, 0.36, 1);
+      position: relative;
+      overflow: hidden;
+    }
+    .trainer-list-card::before {
+      content: '';
+      position: absolute;
+      top: -40%;
+      right: -20%;
+      width: 55%;
+      height: 120%;
+      background: radial-gradient(ellipse, rgba(247, 166, 0, 0.08) 0%, transparent 70%);
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.12s ease;
+    }
+    @media (hover: hover) {
+      .trainer-list-card:hover {
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+        border-color: rgba(247, 166, 0, 0.45);
+        transform: translateY(-1px);
+      }
+      .trainer-list-card:hover::before {
+        opacity: 1;
+      }
+    }
+    .trainer-list-card:active { 
+      opacity: 0.92; 
+      transform: scale(0.985);
+    }
+    .trainer-list-card .trainer-card-photo-wrap {
+      position: relative;
+      width: 112px;
+      height: 112px;
+      flex-shrink: 0;
+    }
+    .trainer-list-card .trainer-card-photo-placeholder {
+      position: absolute;
+      inset: 0;
+      background: var(--tg-theme-secondary-bg-color);
+      border-radius: 18px;
+    }
+    .trainer-list-card .trainer-card-photo-placeholder::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(105deg, transparent 0%, rgba(255,255,255,0.08) 50%, transparent 100%);
+      background-size: 200% 100%;
+      animation: photo-shimmer 1.2s ease-in-out infinite;
+      border-radius: 18px;
+    }
+    .trainer-list-card .trainer-card-photo-wrap img {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: center top;
+      border-radius: 18px;
+      opacity: 0;
+      transition: opacity 0.2s ease;
+    }
+    .trainer-list-card .trainer-card-photo-wrap img.loaded {
+      opacity: 1;
+    }
+    .trainer-list-card .info { 
+      flex: 1; 
+      min-width: 0; 
+      position: relative; 
+      z-index: 1; 
+    }
+    .trainer-list-card .name {
+      font-weight: 600;
+      font-size: 18px;
+      margin-bottom: 6px;
+      line-height: 1.25;
+      letter-spacing: -0.01em;
+    }
+    .trainer-list-card .meta {
+      font-size: 14px;
+      color: var(--tg-theme-hint-color);
+      margin-top: 4px;
+      white-space: normal;
+      line-height: 1.35;
+      overflow: hidden;
+    }
+    .trainer-list-card .arrow { 
+      color: var(--tg-theme-button-color); 
+      font-size: 16px; 
+      position: relative; 
+      z-index: 1;
+      opacity: 0.8;
+      transition: opacity 0.12s ease, transform 0.12s ease;
+    }
+    .trainer-list-card:hover .arrow {
+      opacity: 1;
+      transform: translateX(2px);
+    }
+    /* Современная карточка тренера - дизайнерский шедевр */
+    .trainer-detail-photo-wrap {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 4/3;
+      min-height: 240px;
+      max-height: 320px;
+      border-radius: 20px;
+      overflow: hidden;
+      margin-bottom: 20px;
+      background: linear-gradient(135deg, var(--tg-theme-secondary-bg-color) 0%, rgba(245, 166, 35, 0.1) 100%);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+    }
+    .trainer-detail-photo-wrap .trainer-detail-photo-placeholder {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, var(--tg-theme-secondary-bg-color) 0%, rgba(245, 166, 35, 0.1) 100%);
+      border-radius: 20px;
+    }
+    .trainer-detail-photo-wrap .trainer-detail-photo-placeholder::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(105deg, transparent 0%, rgba(245, 166, 35, 0.15) 50%, transparent 100%);
+      background-size: 200% 100%;
+      animation: photo-shimmer 1.5s ease-in-out infinite;
+      border-radius: 20px;
+    }
+    @keyframes photo-shimmer {
+      0% { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+    /* Base = list thumb (already in cache from catalog row); full = main image on top */
+    .trainer-detail-photo-wrap .trainer-detail-photo-base,
+    .trainer-detail-photo-wrap .trainer-detail-photo-full,
+    .trainer-detail-photo-wrap .trainer-detail-photo {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: center top;
+      border-radius: 20px;
+      opacity: 0;
+      transition: all 0.3s ease;
+    }
+    .trainer-detail-photo-wrap .trainer-detail-photo-base { z-index: 1; }
+    .trainer-detail-photo-wrap .trainer-detail-photo-full { z-index: 2; }
+    .trainer-detail-photo-wrap .trainer-detail-photo { z-index: 3; }
+    .trainer-detail-photo-wrap img.loaded {
+      opacity: 1;
+    }
+    .trainer-detail-header {
+      margin-bottom: 24px;
+    }
+    .trainer-detail-name { 
+      font-size: 28px; 
+      font-weight: 700; 
+      margin-bottom: 12px; 
+      line-height: 1.2;
+      letter-spacing: -0.02em;
+      color: var(--tg-theme-text-color);
+    }
+    .trainer-detail-rating {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      background: linear-gradient(135deg, rgba(245, 166, 35, 0.15) 0%, rgba(245, 166, 35, 0.05) 100%);
+      border-radius: 12px;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--tg-theme-button-color);
+      margin-bottom: 16px;
+    }
+    .trainer-detail-stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    .trainer-detail-stat {
+      padding: 12px;
+      background: var(--tg-theme-secondary-bg-color);
+      border-radius: 12px;
+      border: 2px solid transparent;
+      transition: all 0.2s ease;
+    }
+    .trainer-detail-stat:hover {
+      border-color: rgba(245, 166, 35, 0.3);
+    }
+    .trainer-detail-stat-label {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--tg-theme-hint-color);
+      margin-bottom: 4px;
+    }
+    .trainer-detail-stat-value {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--tg-theme-text-color);
+    }
+    .trainer-detail-services {
+      margin-bottom: 20px;
+    }
+    .trainer-detail-services-title {
+      font-size: 13px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--tg-theme-hint-color);
+      margin-bottom: 12px;
+    }
+    .trainer-detail-service {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 14px;
+      margin-bottom: 6px;
+      background: var(--tg-theme-secondary-bg-color);
+      border-radius: 10px;
+      font-size: 14px;
+    }
+    .trainer-detail-service-name {
+      font-weight: 500;
+      color: var(--tg-theme-text-color);
+    }
+    .trainer-detail-service-price {
+      font-weight: 600;
+      color: var(--tg-theme-button-color);
+    }
+    .trainer-detail-education {
+      margin-bottom: 20px;
+    }
+    .trainer-detail-education-title {
+      font-size: 13px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--tg-theme-hint-color);
+      margin-bottom: 12px;
+    }
+    .trainer-detail-education-item {
+      padding: 12px 14px;
+      margin-bottom: 8px;
+      background: var(--tg-theme-secondary-bg-color);
+      border-radius: 12px;
+      font-size: 14px;
+      line-height: 1.4;
+      border: 2px solid transparent;
+      transition: all 0.2s ease;
+    }
+    .trainer-detail-education-item:hover {
+      border-color: rgba(245, 166, 35, 0.3);
+    }
+    .trainer-detail-desc { 
+      font-size: 15px; 
+      line-height: 1.5; 
+      margin: 20px 0; 
+      padding: 16px;
+      background: var(--tg-theme-secondary-bg-color);
+      border-radius: 16px;
+      border-left: 4px solid var(--tg-theme-button-color);
+    }
+    .trainer-detail-actions,
+    #trainerDetailActions {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-top: 24px;
+    }
+    /* .btn-primary / .btn-secondary — mini-app-components.css (единый CTA) */
+    .trainer-detail-actions .btn-primary,
+    .trainer-detail-actions .btn-secondary,
+    .btn-block.btn-primary {
+      width: 100%;
+    }
+    .btn-block.btn-primary { display: block; }
+    #screenSuccess .btn-primary { width: 100%; }
+    .back-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 12px;
+      padding: 10px 0;
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--tg-theme-hint-color);
+      cursor: pointer;
+      border: none;
+      background: none;
+      font: inherit;
+    }
+    .back-link .back-link-chevron { flex-shrink: 0; width: 16px; height: 16px; color: inherit; }
+    .back-link:active { opacity: 0.7; }
+    
+    /* Анимации появления */
+    @keyframes card-enter {
+      from { 
+        opacity: 0; 
+        transform: translateY(10px); 
+      }
+      to { 
+        opacity: 1; 
+        transform: translateY(0); 
+      }
+    }
+    
+    @keyframes hero-enter {
+      from { 
+        opacity: 0; 
+        transform: translateY(20px) scale(0.98); 
+      }
+      to { 
+        opacity: 1; 
+        transform: translateY(0) scale(1); 
+      }
+    }
+    
+    .choice-card, .trainer-list-card {
+      animation: card-enter 0.38s cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+    
+    .choice-card:nth-child(1) { animation-delay: 0.05s; }
+    .choice-card:nth-child(2) { animation-delay: 0.1s; }
+    .choice-card:nth-child(3) { animation-delay: 0.15s; }
+    .choice-card:nth-child(4) { animation-delay: 0.2s; }
+    .choice-card:nth-child(5) { animation-delay: 0.25s; }
+    
+    .trainer-list-card:nth-child(1) { animation-delay: 0.05s; }
+    .trainer-list-card:nth-child(2) { animation-delay: 0.1s; }
+    .trainer-list-card:nth-child(3) { animation-delay: 0.15s; }
+    .trainer-list-card:nth-child(4) { animation-delay: 0.2s; }
+    .trainer-list-card:nth-child(5) { animation-delay: 0.25s; }
+    .trainer-list-card:nth-child(6) { animation-delay: 0.3s; }
+    .pagination {
+      display: flex;
+      justify-content: center;
+      gap: 12px;
+      margin: 16px 0;
+    }
+    .pagination button {
+      padding: 8px 16px;
+      border-radius: 8px;
+      border: none;
+      background: var(--tg-theme-secondary-bg-color);
+      color: var(--tg-theme-text-color);
+      font-size: 14px;
+      cursor: pointer;
+    }
+    .pagination span { font-size: 14px; color: var(--tg-theme-hint-color); align-self: center; }
+    .loading, .error { text-align: center; padding: 24px; color: var(--tg-theme-hint-color); }
+    .error { color: var(--app-danger); }
+    .empty { text-align: center; padding: 32px 16px; color: var(--tg-theme-hint-color); font-size: 15px; }
+    .success-msg {
+      text-align: center;
+      padding: 24px 16px;
+      font-size: 16px;
+      line-height: 1.5;
+    }
+    .success-msg .name { font-weight: 600; }
+    [data-screen] { display: none; }
+    [data-screen].active { display: block; }
+    .summary-card {
+      background: var(--tg-theme-secondary-bg-color);
+      border-radius: 16px;
+      padding: 18px 20px;
+      margin-bottom: 20px;
+    }
+    .summary-card .summary-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--tg-theme-hint-color);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 14px;
+    }
+    .summary-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 10px 0;
+      border-bottom: 1px solid rgba(128,128,128,0.12);
+      font-size: 15px;
+    }
+    .summary-row:last-child { border-bottom: none; }
+    .summary-row .label { color: var(--tg-theme-hint-color); flex-shrink: 0; }
+    .summary-row .value {
+      font-weight: 500;
+      min-width: 0;
+      word-break: break-word;
+      text-align: right;
+    }
+    .summary-row .value.muted { font-weight: 400; color: var(--tg-theme-hint-color); }
+    .summary-row-clickable {
+      cursor: pointer;
+      transition: background 0.15s ease;
+      border: none;
+      width: 100%;
+      margin: 0;
+      font: inherit;
+      color: inherit;
+      text-align: left;
+      background: transparent;
+      padding: 10px 0;
+    }
+    .summary-row-clickable:hover { background: rgba(128,128,128,0.08); }
+    .summary-row-clickable:active { opacity: 0.9; }
+    .summary-row .row-arrow { color: var(--tg-theme-hint-color); font-size: 14px; margin-left: 8px; }
+    .summary-actions { margin-top: 20px; display: flex; flex-direction: column; gap: 12px; }
+    .summary-actions .btn-block { margin: 0; }
+    .summary-actions .summary-hint {
+      font-size: 14px;
+      color: var(--tg-theme-hint-color);
+      line-height: 1.4;
+      margin: 4px 0 0;
+    }
+    .catalog-tabs {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 16px;
+      padding: 4px;
+      background: var(--tg-theme-secondary-bg-color);
+      border-radius: 12px;
+    }
+    .catalog-tabs .tab-btn {
+      flex: 1;
+      padding: 10px 14px;
+      border: none;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 600;
+      background: transparent;
+      color: var(--tg-theme-hint-color);
+      cursor: pointer;
+      transition: background 0.2s, color 0.2s;
+    }
+    .catalog-tabs .tab-btn.active {
+      background: var(--tg-theme-bg-color);
+      color: var(--tg-theme-text-color);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+    .catalog-tab-panel { display: none; }
+    .catalog-tab-panel.active { display: block; }
+    .my-trainer-empty {
+      text-align: center;
+      padding: 32px 20px;
+      color: var(--tg-theme-hint-color);
+      font-size: 15px;
+      line-height: 1.5;
+    }
+    .my-trainer-empty .btn-trainer-list { margin-top: 16px; }
+    .btn-pass-block {
+      width: 100%;
+      padding: 14px 18px;
+      border-radius: 12px;
+      border: none;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      text-align: center;
+      box-sizing: border-box;
+      background: #f5a623 !important;
+      color: #1c1c1c !important;
+      margin-top: 8px;
+    }
+    .btn-pass-block:active { opacity: 0.9; }
+    .btn-leave-request {
+      width: 100%;
+      padding: 14px 18px;
+      border-radius: 12px;
+      border: none;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      text-align: center;
+      box-sizing: border-box;
+      background: var(--app-success);
+      color: #fff;
+      margin-top: 8px;
+    }
+    .btn-leave-request:active { opacity: 0.9; }
+    .btn-trainer-list {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: 100%;
+      padding: 14px 18px;
+      border-radius: 12px;
+      border: none;
+      font-size: 15px;
+      font-weight: 600;
+      background: var(--tg-theme-button-color) !important;
+      color: var(--tg-theme-button-text-color) !important;
+      cursor: pointer;
+    }
+    .btn-trainer-list:active { opacity: 0.9; }
+    .request-form-hint {
+      font-size: 14px;
+      color: var(--tg-theme-hint-color);
+      line-height: 1.4;
+      margin: 0 0 12px;
+    }
+    .request-comment-input {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 12px 14px;
+      border-radius: 12px;
+      border: none;
+      background: var(--tg-theme-secondary-bg-color);
+      color: var(--tg-theme-text-color);
+      font: inherit;
+      font-size: 16px;
+      margin-bottom: 16px;
+      resize: vertical;
+      min-height: 80px;
+    }
+    .request-comment-input::placeholder { color: var(--tg-theme-hint-color); }
+    .request-form-actions { display: flex; flex-direction: column; gap: 10px; }
+    .summary-leave-secondary {
+      margin-top: 10px;
+      text-align: center;
+      font-size: 14px;
+    }
+    .summary-leave-secondary .link {
+      color: var(--tg-theme-button-color);
+      cursor: pointer;
+      text-decoration: none;
+    }
+    .summary-leave-secondary .link:active { opacity: 0.8; }
+    .request-form-context {
+      padding: 12px 14px;
+      border-radius: 12px;
+      background: var(--tg-theme-secondary-bg-color);
+      font-size: 14px;
+      color: var(--tg-theme-text-color);
+      margin-bottom: 16px;
+    }
+    .request-form-context .context-line { margin-bottom: 6px; }
+    .request-form-context .context-line:last-child { margin-bottom: 0; }
+    .request-form-context .context-links { margin-top: 8px; }
+    .request-form-context .context-links .link {
+      color: var(--tg-theme-button-color);
+      cursor: pointer;
+      text-decoration: none;
+      font-size: 14px;
+    }
+    .request-form-context .context-links .link:active { opacity: 0.8; }
+    .request-form-context .context-links .sep { color: var(--tg-theme-hint-color); margin: 0 6px; }
+    .trainer-detail-slots {
+      margin-top: 16px;
+      padding: 14px;
+      border-radius: 12px;
+      background: var(--tg-theme-secondary-bg-color);
+    }
+    .trainer-detail-slots .slots-title { font-size: 13px; font-weight: 600; color: var(--tg-theme-hint-color); margin-bottom: 10px; text-transform: uppercase; }
+    .trainer-detail-slots .slot-row {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 0; border-bottom: 1px solid rgba(128,128,128,0.1);
+      font-size: 15px; cursor: pointer; border: none; width: 100%; text-align: left; background: transparent; color: inherit; font: inherit;
+    }
+    .trainer-detail-slots .slot-row:last-child { border-bottom: none; }
+    .trainer-detail-slots .slot-row:active { opacity: 0.85; }
+    .trainer-detail-slots .slots-empty { font-size: 14px; color: var(--tg-theme-hint-color); padding: 8px 0; }
+    .trainer-detail-slots .slots-empty-hint { padding-top: 0; margin-top: -4px; }
+    .trainer-detail-actions { margin-top: 16px; display: flex; flex-direction: column; gap: 10px; }
+    .trainer-detail-secondary {
+      margin-top: 24px;
+      padding-top: 16px;
+      border-top: 1px solid rgba(128,128,128,0.12);
+      padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .trainer-detail-secondary .back-link { margin-top: 0; }
+    .slot-pick-list .day-block { margin-bottom: 20px; }
+    .slot-pick-list .day-title {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--tg-theme-hint-color);
+      margin: 4px 0 12px 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+    .slot-pick-list .slot-card {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 12px;
+      padding: 14px 16px; margin-bottom: 8px; border-radius: 12px;
+      background: var(--tg-theme-secondary-bg-color); 
+      border: 2px solid transparent; 
+      width: 100%; font: inherit; color: inherit; text-align: left; cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .slot-pick-list .slot-card:hover {
+      border-color: var(--tg-theme-button-color);
+      transform: translateY(-1px);
+    }
+    .slot-pick-list .slot-card:active { 
+      opacity: 0.8; 
+      transform: scale(0.98);
+    }
+    .slot-pick-list .slot-time { 
+      font-weight: 600; 
+      font-size: 16px; 
+      color: var(--tg-theme-text-color);
+    }
+    .slot-pick-list .slot-card span:last-child {
+      color: var(--tg-theme-button-color);
+      opacity: 0.7;
+      transition: opacity 0.2s ease;
+      flex-shrink: 0;
+    }
+    .slot-pick-list .slot-card:hover span:last-child {
+      opacity: 1;
+    }
+    
+    /* Дополнительные стили для темной темы */
+    @media (prefers-color-scheme: dark) {
+      .slot-pick-list .slot-card {
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+      }
+      .slot-pick-list .slot-card:hover {
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+      }
+      .trainer-card {
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+      }
+      .trainer-card:hover {
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+      }
+      .trainer-detail-photo-wrap {
+        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+      }
+      .trainer-detail-stat {
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+      }
+      .trainer-detail-service {
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+      }
+      .trainer-detail-desc {
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+      }
+    }
+    
+    /* Модальное окно отзывов */
+    .reviews-modal {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.5);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      padding: 20px;
+    }
+    .reviews-modal.show {
+      display: flex;
+    }
+    .reviews-modal-content {
+      background: var(--tg-theme-bg-color);
+      border-radius: 20px;
+      max-width: 500px;
+      width: 100%;
+      max-height: 80vh;
+      overflow-y: auto;
+      position: relative;
+    }
+    .reviews-modal-header {
+      padding: 20px 20px 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .reviews-modal-title {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--tg-theme-text-color);
+    }
+    .reviews-modal-close {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      border: none;
+      background: var(--tg-theme-secondary-bg-color);
+      color: var(--tg-theme-text-color);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+    }
+    .reviews-modal-body {
+      padding: 20px;
+    }
+    .review-item {
+      padding: 16px;
+      margin-bottom: 12px;
+      background: var(--tg-theme-secondary-bg-color);
+      border-radius: 12px;
+      border-left: 4px solid var(--tg-theme-button-color);
+    }
+    .review-rating {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--tg-theme-button-color);
+    }
+    .review-text {
+      font-size: 14px;
+      line-height: 1.5;
+      color: var(--tg-theme-text-color);
+    }
+    .review-date {
+      font-size: 12px;
+      color: var(--tg-theme-hint-color);
+      margin-top: 8px;
+    }
+    .reviews-loading {
+      text-align: center;
+      padding: 40px;
+      color: var(--tg-theme-hint-color);
+    }
+    .reviews-empty {
+      text-align: center;
+      padding: 40px;
+      color: var(--tg-theme-hint-color);
+    }
+    .form-block { margin-bottom: 16px; }
+    .form-block label { display: block; font-size: 13px; font-weight: 600; color: var(--tg-theme-hint-color); margin-bottom: 6px; }
+    .form-block input, .form-block textarea {
+      width: 100%; box-sizing: border-box; padding: 12px 14px; border-radius: 12px; border: none;
+      background: var(--tg-theme-secondary-bg-color); color: var(--tg-theme-text-color); font-size: 16px;
+    }
+    .form-block textarea { min-height: 60px; resize: vertical; }
+    .booking-slot-label { font-size: 15px; margin-bottom: 16px; color: var(--tg-theme-hint-color); }
+    .trainer-list-footer {
+      margin-top: 20px;
+      padding-top: 16px;
+      padding-bottom: calc(28px + env(safe-area-inset-bottom, 0px));
+      border-top: 1px solid rgba(128,128,128,0.15);
+      text-align: center;
+      font-size: 14px;
+      color: var(--tg-theme-hint-color);
+    }
+    .trainer-list-footer .link { color: var(--tg-theme-button-color); cursor: pointer; }
+    .trainer-list-footer .link:active { opacity: 0.8; }
+    .photo-source-hint {
+      margin-top: 8px;
+      font-size: 11px;
+      color: var(--tg-theme-hint-color);
+      opacity: 0.85;
+    }
+    .trainer-detail-photo-source { margin-top: 10px; margin-bottom: 0; }
+    .empty-state-request {
+      margin-top: 20px;
+      padding: 20px;
+      border-radius: 12px;
+      background: var(--tg-theme-secondary-bg-color);
+      text-align: center;
+    }
+    .empty-state-request .empty-state-text { font-size: 15px; color: var(--tg-theme-hint-color); margin-bottom: 14px; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1 class="header-title" id="headerTitle">Тренеры и запись</h1>
+  </div>
+
+  <div id="screenSummary" data-screen>
+    <div class="catalog-tabs" id="catalogTabs">
+      <button type="button" class="tab-btn active" id="tabCatalog" data-tab="catalog">Каталог</button>
+      <button type="button" class="tab-btn" id="tabMyTrainer" data-tab="my_trainer">Мой тренер</button>
+    </div>
+    <div id="catalogTabPanel" class="catalog-tab-panel active">
+      <div class="summary-card">
+        <div class="summary-title">Ваш выбор</div>
+        <div id="summaryRows"></div>
+      </div>
+      <div class="summary-actions">
+        <button type="button" class="btn-trainer-list" id="btnPickTrainer">Показать тренеров →</button>
+        <p class="summary-hint" id="summaryHint">Нажмите на строку, чтобы изменить город, услугу или арену.</p>
+      </div>
+    </div>
+    <div id="myTrainerTabPanel" class="catalog-tab-panel">
+      <div id="myTrainerEmpty" class="my-trainer-empty">
+        <p>Выберите тренера в каталоге — здесь появится его карточка с записью и заявкой.</p>
+        <button type="button" class="btn-trainer-list" id="btnMyTrainerPick">Показать тренеров →</button>
+      </div>
+      <div id="myTrainerCardShort" class="summary-card" style="display:none;">
+        <div class="summary-title">Ваш тренер</div>
+        <p id="myTrainerShortName" style="margin:0 0 12px; font-size:17px; font-weight:600;"></p>
+        <button type="button" class="btn-block btn-primary" id="btnOpenMyTrainerCard">Открыть карточку — запись, заявка, абонементы</button>
+      </div>
+      <div id="myTrainerLoading" class="my-trainer-empty" style="display:none;">Загрузка карточки…</div>
+    </div>
+  </div>
+
+  <div id="screenCity" data-screen>
+    <div class="back-link" id="backFromCityToSummary" style="display:none; margin-bottom:8px;"><svg class="back-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>К выбору</div>
+    <div class="step-title">Выбери город</div>
+    <div id="cityList"></div>
+  </div>
+  <div id="screenService" data-screen>
+    <div class="back-link" id="backFromServiceToSummary" style="display:none; margin-bottom:8px;"><svg class="back-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>К выбору</div>
+    <button type="button" class="back-link" id="backToCity" style="margin-bottom:8px;"><svg class="back-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>Другой город</button>
+    <div class="step-title">Выбери услугу</div>
+    <div id="serviceList"></div>
+  </div>
+  <div id="screenArena" data-screen>
+    <div class="back-link" id="backFromArenaToSummary" style="display:none; margin-bottom:8px;"><svg class="back-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>К выбору</div>
+    <button type="button" class="back-link" id="backToService" style="margin-bottom:8px;"><svg class="back-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>Другая услуга</button>
+    <div class="step-title">Арена (необязательно)</div>
+    <div id="arenaList"></div>
+  </div>
+  <div id="screenTrainers" data-screen>
+    <div class="back-link" id="backFromTrainers" style="margin-bottom:8px;"><svg class="back-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>Назад</div>
+    <div class="step-title">Тренеры</div>
+    
+    <!-- Time Filters Panel -->
+    <div class="filter-panel expanded" id="timeFilters">
+      <div class="filter-header">
+        <div>
+          <div class="filter-title">Фильтр по времени</div>
+          <div class="filter-summary" id="filterSummary">Все временные промежутки</div>
+        </div>
+      </div>
+      <div class="filter-content">
+        <!-- Days of Week -->
+        <div class="filter-section">
+          <div class="filter-section-title">Дни недели</div>
+          <div class="filter-chips" id="dayFilters">
+            <div class="filter-chip" data-day="1">Пн</div>
+            <div class="filter-chip" data-day="2">Вт</div>
+            <div class="filter-chip" data-day="3">Ср</div>
+            <div class="filter-chip" data-day="4">Чт</div>
+            <div class="filter-chip" data-day="5">Пт</div>
+            <div class="filter-chip" data-day="6">Сб</div>
+            <div class="filter-chip" data-day="0">Вс</div>
+          </div>
+        </div>
+
+        <!-- Time Slots -->
+        <div class="filter-section">
+          <div class="filter-section-title">Время дня</div>
+          <div class="filter-chips" id="timeSlotFilters">
+            <div class="filter-chip" data-time="06:00-09:00">Раннее утро (6-9)</div>
+            <div class="filter-chip" data-time="09:00-12:00">Утро (9-12)</div>
+            <div class="filter-chip" data-time="12:00-15:00">День (12-15)</div>
+            <div class="filter-chip" data-time="15:00-18:00">После обеда (15-18)</div>
+            <div class="filter-chip" data-time="18:00-21:00">Вечер (18-21)</div>
+            <div class="filter-chip" data-time="21:00-23:00">Поздний вечер (21-23)</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Results Info -->
+    <div class="filter-results-info" id="resultsInfo">
+      <span id="resultsCount">Загрузка...</span>
+      <button type="button" class="filter-clear" id="clearFilters" style="display: none;">Сбросить фильтры</button>
+    </div>
+
+    <div id="trainerList"></div>
+    <div class="pagination" id="pagination"></div>
+    <div id="trainerListFooter" class="trainer-list-footer"></div>
+  </div>
+  <div id="screenTrainerDetail" data-screen>
+    <div class="catalog-tabs catalog-tabs-on-detail" id="catalogTabsOnDetail">
+      <button type="button" class="tab-btn" id="tabCatalogFromDetail" data-tab="catalog">Каталог</button>
+      <button type="button" class="tab-btn active" id="tabMyTrainerFromDetail" data-tab="my_trainer">Мой тренер</button>
+    </div>
+    <div id="trainerDetailContent"></div>
+    <div id="trainerDetailSlots" class="trainer-detail-slots"></div>
+    <div id="trainerDetailActions" class="trainer-detail-actions"></div>
+    <div class="trainer-detail-secondary" id="trainerDetailSecondary"></div>
+  </div>
+  <div id="screenSlotPick" data-screen>
+    <button type="button" class="back-link" id="backFromSlotPick" style="margin-bottom:8px;"><svg class="back-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>К тренеру</button>
+    <div class="step-title">Выберите время</div>
+    <div id="slotPickList" class="slot-pick-list"></div>
+  </div>
+  <div id="screenBookingForm" data-screen>
+    <button type="button" class="back-link" id="backFromBookingForm" style="margin-bottom:8px;"><svg class="back-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>Другое время</button>
+    <p id="bookingFormSlotLabel" class="booking-slot-label"></p>
+    <div class="form-block">
+      <label for="bookingPhone">Телефон *</label>
+      <input type="tel" id="bookingPhone" placeholder="+375291234567" inputmode="tel" />
+    </div>
+    <div class="form-block">
+      <label for="bookingComment">Комментарий (необязательно)</label>
+      <textarea id="bookingComment" rows="2" placeholder="Напишите тренеру, если нужно"></textarea>
+    </div>
+    <button type="button" class="btn-block btn-primary" id="btnSubmitBooking">Отправить заявку на запись</button>
+  </div>
+  <div id="screenSuccess" data-screen>
+    <div class="success-msg" id="successText"></div>
+    <button type="button" class="btn-primary" id="btnCloseSuccess">Закрыть</button>
+  </div>
+
+  <div id="screenRequestForm" data-screen>
+    <button type="button" class="back-link" id="backFromRequestForm" style="margin-bottom:8px;"><svg class="back-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>К выбору</button>
+    <div id="requestFormTitle" class="step-title">Комментарий к заявке</div>
+    <div id="requestFormContext" class="request-form-context"></div>
+    <p class="request-form-hint">Напишите, что важно для тренера: удобные день и время, возраст, цели.</p>
+    <textarea id="requestComment" class="request-comment-input" rows="4" maxlength="2000" placeholder="Например: Пн и Ср после 18:00, ребёнку 8 лет, хочу научить кататься с нуля"></textarea>
+    <div class="request-form-actions">
+      <button type="button" class="btn-block btn-primary" id="btnSubmitRequestWithComment">Отправить заявку</button>
+    </div>
+  </div>
+
+  <script>
+    (function() {
+      const tg = window.Telegram && window.Telegram.WebApp;
+      if (tg) { 
+        tg.ready(); 
+        tg.expand(); 
+        if (typeof window.__applyCatalogTheme === 'function') {
+          window.__applyCatalogTheme();
+        }
+        function syncTelegramChromeColors() {
+          try {
+            var darkUi = tg.colorScheme === 'dark' ||
+              (tg.colorScheme !== 'light' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+            var bgHex = darkUi ? '#1c1c1c' : '#fffbec';
+            if (typeof tg.setHeaderColor === 'function') tg.setHeaderColor(bgHex);
+            if (typeof tg.setBackgroundColor === 'function') tg.setBackgroundColor(bgHex);
+            if (typeof tg.setBottomBarColor === 'function') tg.setBottomBarColor(bgHex);
+          } catch (e) { /* older clients */ }
+        }
+        syncTelegramChromeColors();
+        if (tg.onEvent) {
+          tg.onEvent('themeChanged', function () {
+            if (typeof window.__applyCatalogTheme === 'function') {
+              window.__applyCatalogTheme();
+            }
+            syncTelegramChromeColors();
+          });
+        }
+      }
+
+      var state = {
+        cityId: null,
+        cityName: '',
+        serviceId: null,
+        serviceName: '',
+        arenaId: null,
+        arenaName: 'Любая',
+        trainerId: null,
+        trainerName: '',
+        trainers: [],
+        total: 0,
+        offset: 0,
+        limit: 10,
+        selectedTrainer: null,
+        slotsForTrainer: [],
+        selectedSlot: null,
+        returnToSummary: false,
+        requestForTrainer: null,
+        requestFormOpenedFrom: null,
+        activeTab: 'catalog',
+        openedFromMyTrainerTab: false,
+        /** From GET /client/session — clients.phone for prefill in booking form */
+        clientPhone: '',
+        // Time-based filters
+        filters: {
+          days: [], // [1,2,3,4,5,6,0] for Mon-Sun
+          timeSlots: [] // ['06:00-09:00', '09:00-12:00', etc.]
+        }
+      };
+      var prefetch = {
+        firstPageKey: null,
+        firstPageData: null,
+        inflightByKey: {}
+      };
+      // Persist first catalog page across Mini App reopens in the same browser session.
+      var CATALOG_CACHE_PREFIX = 'tcb_catalog_trainers_v1_';
+      var CATALOG_CACHE_TTL_MS = 10 * 60 * 1000;
+      function readCatalogFirstPageFromStorage(listKey) {
+        try {
+          var raw = sessionStorage.getItem(CATALOG_CACHE_PREFIX + listKey);
+          if (!raw) return null;
+          var parsed = JSON.parse(raw);
+          if (!parsed || !parsed.ts || !parsed.data) return null;
+          if (Date.now() - parsed.ts > CATALOG_CACHE_TTL_MS) {
+            sessionStorage.removeItem(CATALOG_CACHE_PREFIX + listKey);
+            return null;
+          }
+          return parsed.data;
+        } catch (e) {
+          return null;
+        }
+      }
+      function writeCatalogFirstPageToStorage(listKey, data) {
+        try {
+          sessionStorage.setItem(CATALOG_CACHE_PREFIX + listKey, JSON.stringify({ ts: Date.now(), data: data }));
+        } catch (e) {
+          // QuotaExceeded: ignore; in-memory prefetch still helps.
+        }
+      }
+
+      function closeApp() {
+        if (tg) tg.close(); else window.close();
+      }
+      var btnClose = document.getElementById("btnClose");
+      if (btnClose) btnClose.onclick = closeApp;
+
+      function showScreen(id) {
+        document.querySelectorAll('[data-screen]').forEach(function(el) { el.classList.remove('active'); });
+        var el = document.getElementById(id);
+        if (el) el.classList.add('active');
+        if (id === 'screenTrainerDetail') {
+          document.querySelectorAll('#catalogTabsOnDetail .tab-btn').forEach(function(btn) {
+            btn.classList.toggle('active', btn.dataset.tab === 'my_trainer');
+          });
+        }
+        if (id === 'screenSummary') {
+          renderSummary();
+          switchTab(state.activeTab);
+        }
+      }
+
+      function photoUrl(fileKey) {
+        if (!fileKey) return null;
+        return '/api/public/photos/' + encodeURIComponent(fileKey);
+      }
+      function photoSrcList(photo) {
+        if (!photo) return null;
+        if (photo.list_url) return photo.list_url;
+        if (photo.url) return photo.url;
+        var fk = photo.file_key_list || photo.file_key;
+        return fk ? photoUrl(fk) : null;
+      }
+      function photoSrcDetail(photo) {
+        if (!photo) return null;
+        if (photo.url) return photo.url;
+        if (photo.list_url) return photo.list_url;
+        return photo.file_key ? photoUrl(photo.file_key) : null;
+      }
+      function warmupImageUrls(urls) {
+        // Warm up browser cache for first visible cards.
+        (urls || []).forEach(function(src) {
+          if (!src) return;
+          var img = new Image();
+          img.decoding = 'async';
+          img.src = src;
+        });
+      }
+      /** Prefetch list + detail URLs for catalog rows (detail may differ from list thumb). */
+      function warmupCatalogImagesFromItems(items, maxRows) {
+        var n = maxRows != null ? maxRows : 16;
+        var slice = (items || []).slice(0, n);
+        warmupImageUrls(slice.map(function(t) {
+          var p0 = t.photos && t.photos[0];
+          return photoSrcList(p0);
+        }));
+        warmupImageUrls(slice.map(function(t) {
+          var p0 = t.photos && t.photos[0];
+          var a = photoSrcDetail(p0);
+          var b = photoSrcList(p0);
+          return a && b && a !== b ? a : null;
+        }));
+      }
+      function photoProxyListFallback(photo) {
+        if (!photo) return '';
+        var fk = photo.file_key_list || photo.file_key;
+        return fk ? photoUrl(fk) : '';
+      }
+      function photoProxyFullFallback(photo) {
+        if (!photo || !photo.file_key) return '';
+        return photoUrl(photo.file_key);
+      }
+      function bindTrainerDetailPhotoWrap() {
+        var wrap = document.querySelector('#trainerDetailContent .trainer-detail-photo-wrap');
+        if (!wrap) return;
+        var ph = wrap.querySelector('.trainer-detail-photo-placeholder');
+        function hidePh() { if (ph) ph.style.display = 'none'; }
+        var single = wrap.querySelector('img.trainer-detail-photo-single');
+        var base = wrap.querySelector('img.trainer-detail-photo-base');
+        var full = wrap.querySelector('img.trainer-detail-photo-full');
+        if (single) {
+          single.onload = function() { single.classList.add('loaded'); hidePh(); };
+          single.onerror = function() {
+            var fb = single.dataset.fallback;
+            if (fb) { single.onerror = null; single.src = fb; }
+          };
+          if (single.complete && single.naturalWidth) { single.classList.add('loaded'); hidePh(); }
+          return;
+        }
+        if (base) {
+          base.onload = function() { base.classList.add('loaded'); hidePh(); };
+          base.onerror = function() {
+            var fb = base.dataset.fallbackBase;
+            if (fb) { base.onerror = null; base.src = fb; }
+          };
+          if (base.complete && base.naturalWidth) { base.classList.add('loaded'); hidePh(); }
+        }
+        if (full) {
+          full.onload = function() { full.classList.add('loaded'); hidePh(); };
+          full.onerror = function() {
+            var fb = full.dataset.fallbackFull;
+            if (fb) { full.onerror = null; full.src = fb; }
+          };
+          if (full.complete && full.naturalWidth) { full.classList.add('loaded'); hidePh(); }
+        }
+      }
+      function makeTrainerListParams(offset) {
+        var params = { limit: state.limit, offset: offset, city_id: state.cityId, service_id: state.serviceId, order_by: 'rating' };
+        if (state.arenaId) params.arena_id = state.arenaId;
+        var f = state.filters;
+        if (f.days.length > 0) {
+          params.filter_days = f.days.join(',');
+        }
+        if (f.timeSlots.length > 0) {
+          params.filter_time_slots = f.timeSlots.join(',');
+        }
+        return params;
+      }
+      function makeFirstPageKey() {
+        var f = state.filters;
+        var dayPart = f.days.length ? f.days.slice().sort(function(a, b) { return a - b; }).join('-') : '';
+        var timePart = f.timeSlots.length ? f.timeSlots.slice().sort().join('|') : '';
+        return [state.cityId || 0, state.serviceId || 0, state.arenaId || 0, state.limit || 10, dayPart, timePart].join(':');
+      }
+
+      function toggleFilterPanel() {
+        var panel = document.getElementById('timeFilters');
+        if (panel) panel.classList.toggle('expanded');
+      }
+
+      function updateFilterSummary() {
+        var summary = [];
+        var f = state.filters;
+        
+        if (f.days.length > 0 && f.days.length < 7) {
+          var dayNames = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
+          summary.push(f.days.map(d => dayNames[d]).join(', '));
+        }
+        if (f.timeSlots.length > 0) {
+          var timeLabels = f.timeSlots.map(function(slot) {
+            var parts = slot.split('-');
+            return parts[0] + '-' + parts[1];
+          });
+          summary.push(timeLabels.join(', '));
+        }
+
+        var summaryEl = document.getElementById('filterSummary');
+        var clearBtn = document.getElementById('clearFilters');
+        
+        if (summary.length === 0) {
+          summaryEl.textContent = 'Все временные промежутки';
+          if (clearBtn) clearBtn.style.display = 'none';
+        } else {
+          summaryEl.textContent = summary.join(' · ');
+          if (clearBtn) clearBtn.style.display = 'inline';
+        }
+      }
+
+      function clearAllFilters() {
+        state.filters = {
+          days: [],
+          timeSlots: []
+        };
+        
+        // Clear UI
+        document.querySelectorAll('.filter-chip.selected').forEach(chip => {
+          chip.classList.remove('selected');
+        });
+        
+        updateFilterSummary();
+        applyFiltersAndReload();
+      }
+
+
+      function applyFiltersAndReload() {
+        state.offset = 0;
+        prefetch.firstPageKey = null;
+        prefetch.firstPageData = null;
+        loadTrainers();
+      }
+
+      var filterHandlersInitialized = false;
+      function initializeFilterHandlers() {
+        if (filterHandlersInitialized) return;
+        filterHandlersInitialized = true;
+        
+        // Day filters
+        document.querySelectorAll('#dayFilters .filter-chip').forEach(function(chip) {
+          chip.addEventListener('click', function() {
+            var day = parseInt(chip.dataset.day);
+            var index = state.filters.days.indexOf(day);
+            if (index === -1) {
+              state.filters.days.push(day);
+              chip.classList.add('selected');
+            } else {
+              state.filters.days.splice(index, 1);
+              chip.classList.remove('selected');
+            }
+            updateFilterSummary();
+            applyFiltersAndReload();
+          });
+        });
+
+        // Time slot filters
+        document.querySelectorAll('#timeSlotFilters .filter-chip').forEach(function(chip) {
+          chip.addEventListener('click', function() {
+            var timeSlot = chip.dataset.time;
+            var index = state.filters.timeSlots.indexOf(timeSlot);
+            if (index === -1) {
+              state.filters.timeSlots.push(timeSlot);
+              chip.classList.add('selected');
+            } else {
+              state.filters.timeSlots.splice(index, 1);
+              chip.classList.remove('selected');
+            }
+            updateFilterSummary();
+            applyFiltersAndReload();
+          });
+        });
+
+        // Clear filters button
+        var clearBtn = document.getElementById('clearFilters');
+        if (clearBtn) {
+          clearBtn.addEventListener('click', clearAllFilters);
+        }
+      }
+
+      /** Russian pluralization for trainer count (найден N тренер/тренера/тренеров). */
+      function formatTrainerCountMessage(n) {
+        n = n | 0;
+        var mod10 = n % 10;
+        var mod100 = n % 100;
+        if (mod10 === 1 && mod100 !== 11) {
+          return 'Найден ' + n + ' тренер';
+        }
+        if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) {
+          return 'Найдено ' + n + ' тренера';
+        }
+        return 'Найдено ' + n + ' тренеров';
+      }
+
+      function updateResultsCount(count) {
+        var resultsEl = document.getElementById('resultsCount');
+        if (resultsEl) resultsEl.textContent = formatTrainerCountMessage(count);
+      }
+      function prefetchFirstPageIfNeeded() {
+        if (!state.cityId || !state.serviceId) return;
+        var key = makeFirstPageKey();
+        if (prefetch.firstPageKey === key && prefetch.firstPageData) return;
+        var cached = readCatalogFirstPageFromStorage(key);
+        if (cached) {
+          prefetch.firstPageKey = key;
+          prefetch.firstPageData = cached;
+          warmupCatalogImagesFromItems(cached.items || [], 16);
+          return;
+        }
+        if (prefetch.inflightByKey[key]) return;
+        prefetch.inflightByKey[key] = true;
+        getJson('/trainers', makeTrainerListParams(0)).then(function(data) {
+          prefetch.firstPageKey = key;
+          prefetch.firstPageData = data;
+          writeCatalogFirstPageToStorage(key, data);
+          var items = data && data.items ? data.items : [];
+          warmupCatalogImagesFromItems(items, 16);
+        }).catch(function() {
+          // ignore prefetch failures: must never block UX
+        }).finally(function() {
+          delete prefetch.inflightByKey[key];
+        });
+      }
+
+      function trainerName(t) {
+        var p = t && t.profile;
+        if (!p) return 'Тренер';
+        var n = ((p.first_name || '') + ' ' + (p.last_name || '')).trim();
+        return n || 'Тренер';
+      }
+
+      /** One approved education row for catalog detail (matches /api/public/trainers/{id}/education). */
+      function formatCatalogEducationEntry(edu) {
+        if (!edu) return '';
+        var inst = (edu.institution_name || '').trim();
+        var prog = (edu.program_or_title || '').trim();
+        var deg = (edu.degree_level || '').trim();
+        var head = inst;
+        var sub = [prog, deg].filter(Boolean).join(', ');
+        var line = sub ? (head ? head + ' — ' + sub : sub) : head;
+        var y = '';
+        if (edu.is_in_progress) y = 'в процессе';
+        else {
+          var sy = edu.start_year;
+          var ey = edu.end_year;
+          if (sy != null && ey != null) y = sy + '–' + ey;
+          else if (ey != null) y = String(ey);
+          else if (sy != null) y = 'с ' + sy;
+        }
+        if (y) line = (line ? line + ' ' : '') + '(' + y + ')';
+        return (line || '').trim();
+      }
+
+      function openTrainerDetailFromTrainerObject(t, prefetchPhotos) {
+        if (!t || !t.id) return;
+        state.trainerId = t.id;
+        state.trainerName = trainerName(t);
+        persistTrainerSelection(t.id);
+        if (prefetchPhotos) {
+          var detailPhoto = t.photos && t.photos[0];
+          var pl = photoSrcList(detailPhoto);
+          var pf = photoSrcDetail(detailPhoto);
+          if (pl) { var iml = new Image(); iml.decoding = 'async'; iml.src = pl; }
+          if (pf && pf !== pl) { var imf = new Image(); imf.decoding = 'async'; imf.fetchPriority = 'high'; imf.src = pf; }
+        }
+        loadTrainerById(t.id).then(function(full) {
+          state.selectedTrainer = full || t;
+          state.trainerName = trainerName(state.selectedTrainer);
+          renderTrainerDetail();
+          showScreen('screenTrainerDetail');
+        }).catch(function() {
+          state.selectedTrainer = t;
+          renderTrainerDetail();
+          showScreen('screenTrainerDetail');
+        });
+      }
+
+      function getJson(path, params) {
+        var q = params ? '?' + Object.keys(params).map(function(k) { return k + '=' + encodeURIComponent(params[k]); }).join('&') : '';
+        return fetch('/api/public' + path + q).then(function(r) { return r.json(); });
+      }
+      function loadTrainerById(trainerId) {
+        return fetch('/api/public/trainers/' + encodeURIComponent(trainerId))
+          .then(function(r) {
+            if (r.status === 404) return null;
+            if (!r.ok) throw new Error(r.statusText);
+            return r.json();
+          });
+      }
+      function switchTab(tab) {
+        state.activeTab = tab;
+        document.querySelectorAll('.catalog-tabs .tab-btn').forEach(function(btn) {
+          btn.classList.toggle('active', btn.dataset.tab === tab);
+        });
+        document.getElementById('catalogTabPanel').classList.toggle('active', tab === 'catalog');
+        document.getElementById('myTrainerTabPanel').classList.toggle('active', tab === 'my_trainer');
+        document.getElementById('myTrainerLoading').style.display = 'none';
+        if (tab === 'my_trainer') {
+          if (state.trainerId && state.trainerName) {
+            openMyTrainerCard();
+            return;
+          }
+          document.getElementById('myTrainerEmpty').style.display = 'block';
+          document.getElementById('myTrainerCardShort').style.display = 'none';
+        }
+      }
+      function openMyTrainerCard() {
+        if (!state.trainerId) return;
+        document.getElementById('myTrainerLoading').style.display = 'block';
+        document.getElementById('myTrainerCardShort').style.display = 'none';
+        state.openedFromMyTrainerTab = true;
+        loadTrainerById(state.trainerId).then(function(t) {
+          document.getElementById('myTrainerLoading').style.display = 'none';
+          if (!t) {
+            state.trainerId = null;
+            state.trainerName = '';
+            document.getElementById('myTrainerCardShort').style.display = 'none';
+            document.getElementById('myTrainerEmpty').style.display = 'block';
+            return;
+          }
+          state.selectedTrainer = t;
+          state.trainerName = trainerName(t);
+          renderTrainerDetail();
+          showScreen('screenTrainerDetail');
+        }).catch(function() {
+          document.getElementById('myTrainerLoading').style.display = 'none';
+          document.getElementById('myTrainerCardShort').style.display = 'block';
+        });
+      }
+
+      function getClientSession() {
+        var initData = tg && tg.initData ? tg.initData : '';
+        var headers = { 'Content-Type': 'application/json' };
+        if (initData) headers['X-Telegram-Init-Data'] = initData;
+        return fetch('/api/webapp/client/session', { headers: headers }).then(function(r) {
+          if (!r.ok) throw new Error(r.statusText);
+          return r.json();
+        });
+      }
+
+      function applySessionToState(session) {
+        if (session.city_id) { state.cityId = session.city_id; state.cityName = session.city_name || ''; }
+        if (session.service_id) { state.serviceId = session.service_id; state.serviceName = session.service_name || ''; }
+        if (session.arena_id != null) { state.arenaId = session.arena_id; state.arenaName = session.arena_name || 'Любая'; }
+        else { state.arenaId = null; state.arenaName = 'Любая'; }
+        if (session.trainer_id) { state.trainerId = session.trainer_id; state.trainerName = session.trainer_name || ''; }
+        else { state.trainerId = null; state.trainerName = ''; }
+        state.clientPhone =
+          session.client_phone != null && session.client_phone !== undefined
+            ? String(session.client_phone).trim()
+            : '';
+      }
+
+      /** Refresh client phone from API (e.g. before booking form) so DB updates are visible. */
+      function refreshClientPhoneForBookingForm(cb) {
+        getClientSession().then(function(session) {
+          applySessionToState(session);
+          if (cb) cb();
+        }).catch(function() { if (cb) cb(); });
+      }
+
+      function prefillBookingPhoneField() {
+        var el = document.getElementById('bookingPhone');
+        if (!el) return;
+        el.value = (state.clientPhone || '').trim();
+      }
+
+      function persistTrainerSelection(trainerId) {
+        // Persist trainer choice so the next open starts from the same context (city/service/arena/trainer).
+        if (!trainerId || !state.cityId || !state.serviceId) return;
+        var initData = tg && tg.initData ? tg.initData : '';
+        if (!initData) return;
+        var headers = { 'Content-Type': 'application/json', 'X-Telegram-Init-Data': initData };
+        var url = '/api/webapp/client/session?init_data=' + encodeURIComponent(initData);
+        fetch(url, {
+          method: 'POST',
+          headers: headers,
+          body: JSON.stringify({ city_id: state.cityId, service_id: state.serviceId, arena_id: state.arenaId, trainer_id: trainerId })
+        }).catch(function() { /* no UX impact */ });
+      }
+
+      function escapeHtml(s) {
+        if (s == null || s === undefined) return '';
+        return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+      }
+      function escapeAttr(s) {
+        if (s == null || s === undefined) return '';
+        return String(s).replace(/"/g, '&quot;');
+      }
+      function renderSummary() {
+        var rows = [
+          { key: 'city', label: 'Город', value: state.cityName || '—', cls: '' },
+          { key: 'service', label: 'Услуга', value: state.serviceName || '—', cls: '' },
+          { key: 'arena', label: 'Арена', value: state.arenaName || '—', cls: '' },
+          { key: 'trainer', label: 'Тренер', value: state.trainerName || 'Не выбран', cls: state.trainerName ? '' : 'muted' }
+        ];
+        document.getElementById('summaryRows').innerHTML = rows.map(function(r) {
+          return '<button type="button" class="summary-row summary-row-clickable" data-action="' + r.key + '">' +
+            '<span class="label">' + r.label + '</span>' +
+            '<span class="value ' + (r.cls || '') + '">' + escapeHtml(r.value || '—') + '</span><span class="row-arrow">→</span></button>';
+        }).join('');
+        document.querySelectorAll('#summaryRows .summary-row-clickable').forEach(function(btn) {
+          btn.onclick = function() {
+            var action = btn.dataset.action;
+            if (action === 'city') {
+              state.returnToSummary = true;
+              document.getElementById('backFromCityToSummary').style.display = 'block';
+              loadCities();
+              showScreen('screenCity');
+            } else if (action === 'service') {
+              if (!state.cityId) {
+                state.returnToSummary = true;
+                document.getElementById('backFromCityToSummary').style.display = 'block';
+                loadCities();
+                showScreen('screenCity');
+              } else {
+                state.returnToSummary = true;
+                document.getElementById('backFromServiceToSummary').style.display = 'block';
+                loadServices();
+                showScreen('screenService');
+              }
+            } else if (action === 'arena') {
+              if (!state.cityId) {
+                state.returnToSummary = true;
+                document.getElementById('backFromCityToSummary').style.display = 'block';
+                loadCities();
+                showScreen('screenCity');
+              } else {
+                state.returnToSummary = true;
+                document.getElementById('backFromArenaToSummary').style.display = 'block';
+                loadArenas();
+                showScreen('screenArena');
+              }
+            } else if (action === 'trainer') {
+              if (!state.cityId || !state.serviceId) return;
+              state.returnToSummary = true;
+              state.offset = 0;
+              loadTrainers();
+              showScreen('screenTrainers');
+            }
+          };
+        });
+      }
+
+      function loadCities() {
+        document.getElementById('cityList').innerHTML = '<div class="loading">Загрузка...</div>';
+        getJson('/cities').then(function(data) {
+          var items = data.items || [];
+          if (!items.length) {
+            document.getElementById('cityList').innerHTML = '<div class="empty">Нет городов</div>';
+            return;
+          }
+          var html = items.map(function(c) {
+            return '<button type="button" class="choice-card" data-id="' + c.id + '" data-name="' + (c.name || '').replace(/"/g, '&quot;') + '"><div class="main"><div class="label">Город</div><div class="value">' + (c.name || '') + '</div></div><span class="arrow">→</span></button>';
+          }).join('');
+          document.getElementById('cityList').innerHTML = html;
+          document.getElementById('backFromCityToSummary').style.display = state.returnToSummary ? 'block' : 'none';
+          document.querySelectorAll('#cityList .choice-card').forEach(function(btn) {
+            btn.onclick = function() {
+              state.cityId = parseInt(btn.dataset.id, 10);
+              state.cityName = btn.dataset.name || '';
+              if (state.returnToSummary) {
+                state.returnToSummary = false;
+                state.serviceId = null; state.serviceName = '';
+                state.arenaId = null; state.arenaName = 'Любая';
+                state.trainerId = null; state.trainerName = '';
+                document.getElementById('backFromCityToSummary').style.display = 'none';
+                renderSummary();
+                showScreen('screenSummary');
+              } else {
+                loadServices();
+                showScreen('screenService');
+              }
+              prefetchFirstPageIfNeeded();
+            };
+          });
+        }).catch(function() {
+          document.getElementById('cityList').innerHTML = '<div class="error">Ошибка загрузки</div>';
+        });
+      }
+
+      function loadServices() {
+        document.getElementById('serviceList').innerHTML = '<div class="loading">Загрузка...</div>';
+        getJson('/services').then(function(data) {
+          var items = data.items || [];
+          if (!items.length) {
+            document.getElementById('serviceList').innerHTML = '<div class="empty">Нет услуг</div>';
+            return;
+          }
+          var html = items.map(function(s) {
+            return '<button type="button" class="choice-card" data-id="' + s.id + '" data-name="' + (s.name || '').replace(/"/g, '&quot;') + '"><div class="main"><div class="label">Услуга</div><div class="value">' + (s.name || '') + '</div></div><span class="arrow">→</span></button>';
+          }).join('');
+          document.getElementById('serviceList').innerHTML = html;
+          document.getElementById('backFromServiceToSummary').style.display = state.returnToSummary ? 'block' : 'none';
+          document.querySelectorAll('#serviceList .choice-card').forEach(function(btn) {
+            btn.onclick = function() {
+              state.serviceId = parseInt(btn.dataset.id, 10);
+              state.serviceName = btn.dataset.name || '';
+              if (state.returnToSummary) {
+                state.returnToSummary = false;
+                state.arenaId = null; state.arenaName = 'Любая';
+                state.trainerId = null; state.trainerName = '';
+                document.getElementById('backFromServiceToSummary').style.display = 'none';
+                renderSummary();
+                showScreen('screenSummary');
+              } else {
+                loadArenas();
+                showScreen('screenArena');
+              }
+              prefetchFirstPageIfNeeded();
+            };
+          });
+        }).catch(function() {
+          document.getElementById('serviceList').innerHTML = '<div class="error">Ошибка загрузки</div>';
+        });
+      }
+
+      function loadArenas() {
+        document.getElementById('arenaList').innerHTML = '<div class="loading">Загрузка...</div>';
+        getJson('/arenas', { city_id: state.cityId }).then(function(data) {
+          var items = data.items || [];
+          var html = '<button type="button" class="choice-card" data-id="" data-name="Любая"><div class="main"><div class="label">Арена</div><div class="value">Любая</div></div><span class="arrow">→</span></button>';
+          html += items.map(function(a) {
+            return '<button type="button" class="choice-card" data-id="' + a.id + '" data-name="' + (a.name || '').replace(/"/g, '&quot;') + '"><div class="main"><div class="label">Арена</div><div class="value">' + (a.name || '') + '</div></div><span class="arrow">→</span></button>';
+          }).join('');
+          document.getElementById('arenaList').innerHTML = html;
+          document.getElementById('backFromArenaToSummary').style.display = state.returnToSummary ? 'block' : 'none';
+          document.querySelectorAll('#arenaList .choice-card').forEach(function(btn) {
+            btn.onclick = function() {
+              state.arenaId = btn.dataset.id ? parseInt(btn.dataset.id, 10) : null;
+              state.arenaName = btn.dataset.name || 'Любая';
+              state.offset = 0;
+              if (state.returnToSummary) {
+                state.returnToSummary = false;
+                state.trainerId = null; state.trainerName = '';
+                document.getElementById('backFromArenaToSummary').style.display = 'none';
+                renderSummary();
+                showScreen('screenSummary');
+              } else {
+                loadTrainers();
+                showScreen('screenTrainers');
+              }
+              prefetchFirstPageIfNeeded();
+            };
+          });
+        }).catch(function() {
+          document.getElementById('arenaList').innerHTML = '<div class="error">Ошибка загрузки</div>';
+        });
+      }
+
+      function loadTrainers() {
+        document.getElementById('trainerList').innerHTML = '<div class="loading">Загрузка...</div>';
+        document.getElementById('pagination').innerHTML = '';
+        
+        // Initialize filter handlers if not already done
+        initializeFilterHandlers();
+        
+        // Only city/service/arena — never trainer_id, so list shows all matching trainers (selected trainer is on "Мой тренер" tab).
+        var params = makeTrainerListParams(state.offset);
+        var request;
+        var firstPageKey = makeFirstPageKey();
+        if (state.offset === 0) {
+          if (!(prefetch.firstPageKey === firstPageKey && prefetch.firstPageData)) {
+            var fromDisk = readCatalogFirstPageFromStorage(firstPageKey);
+            if (fromDisk) {
+              prefetch.firstPageKey = firstPageKey;
+              prefetch.firstPageData = fromDisk;
+            }
+          }
+        }
+        if (state.offset === 0 && prefetch.firstPageKey === firstPageKey && prefetch.firstPageData) {
+          request = Promise.resolve(prefetch.firstPageData);
+        } else {
+          request = getJson('/trainers', params);
+        }
+        request.then(function(data) {
+          var items = data.items || [];
+          var total = data.total != null ? data.total : items.length;
+          state.trainers = items;
+          state.total = total;
+          state.photoSource = data._photo_source || 'proxy';
+          updateResultsCount(items.length);
+          if (!items.length) {
+            document.getElementById('trainerList').innerHTML =
+              '<div class="empty">Тренеров по вашему запросу пока нет.</div>' +
+              '<div class="empty-state-request">' +
+              '<p class="empty-state-text">Оставьте заявку — подберём вариант и напишем в боте.</p>' +
+              '<button type="button" class="btn-block btn-leave-request" id="btnEmptyStateRequest">Оставить заявку</button>' +
+              '</div>';
+            document.getElementById('pagination').innerHTML = '';
+            var btnEmpty = document.getElementById('btnEmptyStateRequest');
+            if (btnEmpty) btnEmpty.onclick = openGeneralRequestForm;
+            document.getElementById('trainerListFooter').innerHTML = '';
+            document.getElementById('trainerListFooter').style.display = 'none';
+            return;
+          }
+          if (state.offset === 0) {
+            writeCatalogFirstPageToStorage(firstPageKey, data);
+            prefetch.firstPageKey = firstPageKey;
+            prefetch.firstPageData = data;
+          }
+          document.querySelectorAll('link[data-tcb-catalog-preload]').forEach(function(el) { el.remove(); });
+          for (var pi = 0; pi < Math.min(3, items.length); pi++) {
+            var p0p = items[pi].photos && items[pi].photos[0];
+            var ls = photoSrcList(p0p);
+            if (ls) {
+              var lk = document.createElement('link');
+              lk.rel = 'preload';
+              lk.as = 'image';
+              lk.href = ls;
+              lk.setAttribute('data-tcb-catalog-preload', '1');
+              document.head.appendChild(lk);
+            }
+            var ds = photoSrcDetail(p0p);
+            if (ds && ds !== ls) {
+              var dk = document.createElement('link');
+              dk.rel = 'preload';
+              dk.as = 'image';
+              dk.href = ds;
+              dk.setAttribute('data-tcb-catalog-preload', '1');
+              document.head.appendChild(dk);
+            }
+          }
+          warmupCatalogImagesFromItems(items, 16);
+          var runIdle = window.requestIdleCallback || function(cb) { return setTimeout(function() { cb({}); }, 400); };
+          runIdle(function() {
+            warmupCatalogImagesFromItems(items, 50);
+          }, { timeout: 2500 });
+          var html = items.map(function(t, idx) {
+            var photo = t.photos && t.photos[0];
+            var src = photoSrcList(photo);
+            var proxyFallback = photo ? photoUrl(photo.file_key_list || photo.file_key) : '';
+            var isPriority = idx < 3;
+            var p = t.profile || {};
+
+            var metaTop = [];
+            if (p && (p.rating_avg != null) && (p.rating_count || 0) > 0) {
+              metaTop.push(p.rating_avg.toFixed(1) + ' ★ (' + p.rating_count + ')');
+            }
+            if (p && p.experience_years != null) {
+              metaTop.push(p.experience_years + ' лет опыта');
+            }
+
+            var metaBottom = [];
+            if (typeof t.free_slots_14d === 'number') {
+              metaBottom.push('Свободных слотов: ' + t.free_slots_14d);
+            }
+            var services = t.services || [];
+            if (services.length) {
+              var s0 = services[0];
+              var priceStr = '';
+              if (s0.price_byn != null) {
+                var priceVal = s0.price_byn;
+                priceStr = (priceVal === Math.floor(priceVal) ? priceVal : priceVal.toFixed(2)) + ' BYN';
+              } else {
+                priceStr = 'по запросу';
+              }
+              metaBottom.push((s0.service_name || 'Услуга') + ': ' + priceStr);
+            }
+            if (t.arena_names && t.arena_names.length) {
+              metaBottom.push(t.arena_names.slice(0, 2).join(', '));
+            }
+
+            var infoHtml = '<div class="info"><div class="name">' + trainerName(t) + '</div>';
+            if (metaTop.length) {
+              infoHtml += '<div class="meta">' + metaTop.join(' · ') + '</div>';
+            }
+            if (metaBottom.length) {
+              infoHtml += '<div class="meta">' + metaBottom.join(' · ') + '</div>';
+            }
+            infoHtml += '</div>';
+
+            var photoHtml = src
+              ? '<div class="trainer-card-photo-wrap"><div class="trainer-card-photo-placeholder"></div><img src="' + src + '" alt="" loading="' + (isPriority ? 'eager' : 'lazy') + '" fetchpriority="' + (isPriority ? 'high' : 'auto') + '" decoding="async" class="trainer-card-img"' + (proxyFallback ? ' data-fallback="' + proxyFallback.replace(/"/g, '&quot;') + '"' : '') + '></div>'
+              : '<div class="trainer-card-photo-wrap"><div class="trainer-card-photo-placeholder"></div></div>';
+            return '<button type="button" class="trainer-list-card" data-index="' + idx + '">' +
+              photoHtml +
+              infoHtml + '<span class="arrow">→</span></button>';
+          }).join('');
+          document.getElementById('trainerList').innerHTML = html;
+          document.querySelectorAll('#trainerList .trainer-card-img').forEach(function(img) {
+            function showLoaded() {
+              img.classList.add('loaded');
+              var ph = img.previousElementSibling;
+              if (ph) ph.style.display = 'none';
+            }
+            img.onload = showLoaded;
+            img.onerror = function() {
+              var fb = img.dataset.fallback;
+              if (fb) { img.onerror = null; img.src = fb; }
+            };
+            if (img.complete) showLoaded();
+          });
+          document.querySelectorAll('#trainerList .trainer-list-card').forEach(function(btn) {
+            btn.onclick = function() {
+              var idx = parseInt(btn.dataset.index, 10);
+              var t = state.trainers[idx];
+              openTrainerDetailFromTrainerObject(t, true);
+            };
+          });
+          var page = Math.floor(state.offset / state.limit) + 1;
+          var totalPages = Math.max(1, Math.ceil(total / state.limit));
+          var pagHtml = '';
+          if (state.offset > 0) {
+            pagHtml += '<button type="button" id="pagePrev">◀ Назад</button>';
+          }
+          pagHtml += '<span>Стр. ' + page + ' из ' + totalPages + '</span>';
+          if (state.offset + items.length < total) {
+            pagHtml += '<button type="button" id="pageNext">Вперёд ▶</button>';
+          }
+          document.getElementById('pagination').innerHTML = pagHtml;
+          var prevBtn = document.getElementById('pagePrev');
+          if (prevBtn) prevBtn.onclick = function() { state.offset -= state.limit; loadTrainers(); };
+          var nextBtn = document.getElementById('pageNext');
+          if (nextBtn) nextBtn.onclick = function() { state.offset += state.limit; loadTrainers(); };
+          var footerHtml = 'Не нашли подходящего? <span class="link" id="linkGeneralRequestFromList">Оставить заявку</span>';
+          var photoSourceLabel = state.photoSource === 'cdn' ? 'через CDN' : (state.photoSource === 'direct' ? 'напрямую с S3' : 'через сервер');
+          footerHtml += '<div class="photo-source-hint">Фото: ' + photoSourceLabel + '</div>';
+          document.getElementById('trainerListFooter').innerHTML = footerHtml;
+          document.getElementById('trainerListFooter').style.display = 'block';
+          var linkReq = document.getElementById('linkGeneralRequestFromList');
+          if (linkReq) linkReq.onclick = openGeneralRequestForm;
+          if (state.offset === 0) {
+            // Preload second page data and lead images while user browses first page.
+            var nextPageParams = makeTrainerListParams(state.limit);
+            getJson('/trainers', nextPageParams).then(function(nextData) {
+              var nextItems = nextData && nextData.items ? nextData.items : [];
+              warmupImageUrls(nextItems.slice(0, 6).map(function(t) {
+                return photoSrcList(t.photos && t.photos[0]) || photoSrcDetail(t.photos && t.photos[0]);
+              }));
+            }).catch(function() { /* no-op */ });
+          }
+          if (state.openTrainerIdAfterLoad) {
+            var wantId = state.openTrainerIdAfterLoad;
+            state.openTrainerIdAfterLoad = null;
+            var idx = state.trainers.findIndex(function(t) { return t.id === wantId; });
+            if (idx >= 0) {
+              openTrainerDetailFromTrainerObject(state.trainers[idx], true);
+            }
+          }
+        }).catch(function() {
+          document.getElementById('trainerList').innerHTML = '<div class="error">Ошибка загрузки</div>';
+        });
+      }
+
+      var SLOT_DAYS = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
+      var SLOT_MONTHS = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
+      function formatSlotLabel(s) {
+        var d = (s.slot_date || '').split('-');
+        if (d.length !== 3) return (s.start_time || '') + '–' + (s.end_time || '');
+        var day = parseInt(d[2], 10); var month = parseInt(d[1], 10) - 1;
+        var dateObj = new Date(d[0], month, day);
+        var dayName = SLOT_DAYS[dateObj.getDay()];
+        var dateStr = day + ' ' + SLOT_MONTHS[month];
+        return dateStr + ' (' + dayName + '), ' + (s.start_time || '') + '–' + (s.end_time || '');
+      }
+
+      function loadSlotsForTrainer(trainerId, trainerFromList) {
+        var initData = tg ? tg.initData : '';
+        var q = 'trainer_id=' + encodeURIComponent(trainerId);
+        if (trainerFromList && trainerFromList.profile) {
+          var mh = trainerFromList.profile.min_hours_before_booking;
+          if (mh != null) q += '&min_hours=' + encodeURIComponent(mh);
+          var tn = trainerName(trainerFromList);
+          if (tn) q += '&trainer_name=' + encodeURIComponent(tn);
+        }
+        if (initData) q += '&init_data=' + encodeURIComponent(initData);
+        var headers = {};
+        if (initData) headers['X-Telegram-Init-Data'] = initData;
+        return fetch('/api/webapp/client/slots?' + q, { headers: headers }).then(function(r) {
+          return r.json().then(function(data) {
+            if (!r.ok) throw new Error(data.detail || r.statusText);
+            return data;
+          });
+        });
+      }
+
+      function renderTrainerDetail() {
+        var t = state.selectedTrainer;
+        if (!t) return;
+        var p = t.profile || {};
+        var name = trainerName(t);
+        var ratingStr = (p.rating_avg != null && (p.rating_count || 0) > 0) ? (p.rating_avg.toFixed(1) + ' ★ (' + p.rating_count + ')') : '—';
+        var ageStr = p.age != null ? p.age + ' лет' : '—';
+        var expStr = p.experience_years != null ? p.experience_years + ' лет' : 'Опыт: не указан';
+        var duration = p.session_duration_minutes || 45;
+        var arenasStr = (t.arena_names && t.arena_names.length) ? t.arena_names.join(', ') : '—';
+        var services = t.services || [];
+        var servicesStr = services.length ? services.map(function(s) {
+          return (s.service_name || '—') + (s.price_byn != null ? ': ' + (s.price_byn === Math.floor(s.price_byn) ? s.price_byn : s.price_byn.toFixed(2)) + ' BYN' : ': по запросу');
+        }).join(', ') : '—';
+        var desc = (p.description || '').trim() || '—';
+        var detailPhoto = t.photos && t.photos[0];
+        var listSrc = photoSrcList(detailPhoto);
+        var fullSrc = photoSrcDetail(detailPhoto);
+        var fbList = photoProxyListFallback(detailPhoto);
+        var fbFull = photoProxyFullFallback(detailPhoto);
+        var html = '';
+        if (listSrc || fullSrc) {
+          html += '<div class="trainer-detail-photo-wrap">';
+          html += '<div class="trainer-detail-photo-placeholder"></div>';
+          if (listSrc && fullSrc && listSrc !== fullSrc) {
+            html += '<img src="' + listSrc + '" alt="" loading="eager" fetchpriority="high" decoding="async" class="trainer-detail-photo-base"';
+            if (fbList) html += ' data-fallback-base="' + escapeAttr(fbList) + '"';
+            html += '>';
+            html += '<img src="' + fullSrc + '" alt="" loading="eager" fetchpriority="high" decoding="async" class="trainer-detail-photo-full"';
+            if (fbFull) html += ' data-fallback-full="' + escapeAttr(fbFull) + '"';
+            html += '>';
+          } else {
+            var oneSrc = fullSrc || listSrc;
+            html += '<img src="' + oneSrc + '" alt="" loading="eager" fetchpriority="high" decoding="async" class="trainer-detail-photo trainer-detail-photo-single"';
+            if (fbFull || fbList) html += ' data-fallback="' + escapeAttr(fbFull || fbList) + '"';
+            html += '>';
+          }
+          html += '</div>';
+        }
+        html += '<div class="trainer-detail-header">';
+        html += '<div class="trainer-detail-name">' + name + '</div>';
+        if (ratingStr !== '—') {
+          html += '<div class="trainer-detail-rating" style="cursor: pointer;" onclick="showTrainerReviews(' + t.id + ')">⭐ ' + ratingStr + '</div>';
+        }
+        html += '</div>';
+        
+        html += '<div class="trainer-detail-stats">';
+        html += '<div class="trainer-detail-stat">';
+        html += '<div class="trainer-detail-stat-label">Возраст</div>';
+        html += '<div class="trainer-detail-stat-value">' + ageStr + '</div>';
+        html += '</div>';
+        html += '<div class="trainer-detail-stat">';
+        html += '<div class="trainer-detail-stat-label">Опыт</div>';
+        html += '<div class="trainer-detail-stat-value">' + (p.experience_years != null ? p.experience_years + ' лет' : '—') + '</div>';
+        html += '</div>';
+        html += '<div class="trainer-detail-stat">';
+        html += '<div class="trainer-detail-stat-label">Занятие</div>';
+        html += '<div class="trainer-detail-stat-value">' + duration + ' мин</div>';
+        html += '</div>';
+        html += '<div class="trainer-detail-stat">';
+        html += '<div class="trainer-detail-stat-label">Арены</div>';
+        html += '<div class="trainer-detail-stat-value">' + arenasStr + '</div>';
+        html += '</div>';
+        html += '</div>';
+        
+        if (services.length > 0) {
+          html += '<div class="trainer-detail-services">';
+          html += '<div class="trainer-detail-services-title">Услуги и цены</div>';
+          services.forEach(function(s) {
+            var serviceName = s.service_name || '—';
+            var priceText = s.price_byn != null ? (s.price_byn === Math.floor(s.price_byn) ? s.price_byn : s.price_byn.toFixed(2)) + ' BYN' : 'по запросу';
+            html += '<div class="trainer-detail-service">';
+            html += '<span class="trainer-detail-service-name">' + serviceName + '</span>';
+            html += '<span class="trainer-detail-service-price">' + priceText + '</span>';
+            html += '</div>';
+          });
+          html += '</div>';
+        }
+        
+        var eduRows = t.education_entries;
+        if (eduRows && eduRows.length > 0) {
+          html += '<div class="trainer-detail-education">';
+          html += '<div class="trainer-detail-education-title">Образование</div>';
+          eduRows.forEach(function(edu) {
+            var eduText = formatCatalogEducationEntry(edu);
+            if (eduText) {
+              html += '<div class="trainer-detail-education-item">' + escapeHtml(eduText) + '</div>';
+            }
+          });
+          html += '</div>';
+        } else if (p.education && typeof p.education === 'string' && p.education.trim()) {
+          html += '<div class="trainer-detail-education">';
+          html += '<div class="trainer-detail-education-title">Образование</div>';
+          html += '<div class="trainer-detail-education-item">' + escapeHtml(p.education.trim()).replace(/\n/g, '<br>') + '</div>';
+          html += '</div>';
+        }
+        
+        if (desc !== '—') {
+          html += '<div class="trainer-detail-desc">' + desc + '</div>';
+        }
+        var photoSourceLabel = (detailPhoto && detailPhoto._source === 'cdn') ? 'Фото: через CDN' : (detailPhoto && detailPhoto._source === 'direct') ? 'Фото: напрямую с S3' : 'Фото: через сервер';
+        html += '<div class="photo-source-hint trainer-detail-photo-source">' + photoSourceLabel + '</div>';
+        document.getElementById('trainerDetailContent').innerHTML = html;
+        bindTrainerDetailPhotoWrap();
+        document.getElementById('trainerDetailSlots').innerHTML = '<div class="slots-empty">Загрузка слотов…</div>';
+        document.getElementById('trainerDetailActions').innerHTML = '';
+        var canBook = t.can_book === true;
+        if (!canBook) {
+          var phoneLine = '';
+          var ph = (p.phone || '').trim();
+          var ct = (p.contacts || '').trim();
+          if (ph) phoneLine += '<div class="slots-empty slots-contact"><strong>Телефон:</strong> <a href="tel:' + ph.replace(/[^\d+]/g, '') + '">' + escapeHtml(ph) + '</a></div>';
+          if (ct) phoneLine += '<div class="slots-empty slots-contact"><strong>Контакты:</strong> ' + escapeHtml(ct) + '</div>';
+          document.getElementById('trainerDetailSlots').innerHTML =
+            '<div class="slots-title">Онлайн-запись</div>' +
+            '<div class="slots-empty">У этого тренера нет самозаписи через каталог. Свяжитесь напрямую — тренер в каталоге, как и раньше.</div>' +
+            phoneLine;
+          state.slotsForTrainer = [];
+          var actionsEl = document.getElementById('trainerDetailActions');
+          actionsEl.innerHTML = '<button type="button" class="btn-secondary" data-action="leave-request">Оставить заявку</button>';
+          var secondaryEl = document.getElementById('trainerDetailSecondary');
+          if (!state.openedFromMyTrainerTab) {
+            secondaryEl.innerHTML = '<button type="button" class="back-link" data-action="back-to-list"><svg class="back-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>К списку тренеров</button>';
+          } else {
+            secondaryEl.innerHTML = '';
+          }
+          return;
+        }
+        loadSlotsForTrainer(t.id, t).then(function(data) {
+          state.slotsForTrainer = data.slots || [];
+          var slotsEl = document.getElementById('trainerDetailSlots');
+          var actionsEl = document.getElementById('trainerDetailActions');
+          var slots = state.slotsForTrainer;
+          var slotsHtml = '<div class="slots-title">Ближайшие слоты</div>';
+          if (slots.length === 0) {
+            slotsHtml += '<div class="slots-empty">Сейчас нет свободных слотов.</div>';
+            slotsHtml += '<div class="slots-empty slots-empty-hint">Оставьте заявку — тренер предложит удобное время.</div>';
+          } else {
+            var showCount = Math.min(slots.length, 6);
+            for (var i = 0; i < showCount; i++) {
+              var s = slots[i];
+              slotsHtml += '<button type="button" class="slot-row" data-slot-index="' + i + '">' +
+                '<span>' + formatSlotLabel(s) + '</span><span>→</span></button>';
+            }
+            if (slots.length > showCount) {
+              slotsHtml += '<button type="button" class="slot-row slot-row-more" id="btnShowAllSlots">Ещё слоты (' + (slots.length - showCount) + ') →</button>';
+            }
+          }
+          slotsEl.innerHTML = slotsHtml;
+          slotsEl.querySelectorAll('.slot-row[data-slot-index]').forEach(function(btn) {
+            btn.onclick = function() {
+              var i = parseInt(btn.dataset.slotIndex, 10);
+              state.selectedSlot = state.slotsForTrainer[i];
+              document.getElementById('bookingFormSlotLabel').textContent = 'Выбрано: ' + formatSlotLabel(state.selectedSlot);
+              document.getElementById('bookingComment').value = '';
+              refreshClientPhoneForBookingForm(function() {
+                prefillBookingPhoneField();
+                showScreen('screenBookingForm');
+              });
+            };
+          });
+          var btnMore = document.getElementById('btnShowAllSlots');
+          if (btnMore) btnMore.onclick = function() { renderSlotPickList(); showScreen('screenSlotPick'); };
+          // Очищаем и добавляем кнопки с новым дизайном
+          actionsEl.innerHTML = '';
+          if (slots.length > 0) {
+            actionsEl.innerHTML += '<button type="button" class="btn-primary" id="btnBookFromDetail">Записаться</button>';
+          }
+          actionsEl.innerHTML += '<button type="button" class="btn-secondary" data-action="leave-request">Оставить заявку</button>';
+          if (t.has_pass_products || t.has_certificate_products) {
+            actionsEl.innerHTML += '<button type="button" class="btn-secondary" data-action="buy-pass" style="margin-top: 8px;">Абонементы/Сертификаты</button>';
+          }
+          var btnBook = document.getElementById('btnBookFromDetail');
+          if (btnBook) btnBook.onclick = function() { renderSlotPickList(); showScreen('screenSlotPick'); };
+          var secondaryEl = document.getElementById('trainerDetailSecondary');
+          if (!state.openedFromMyTrainerTab) {
+            secondaryEl.innerHTML = '<button type="button" class="back-link" data-action="back-to-list"><svg class="back-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>К списку тренеров</button>';
+          } else {
+            secondaryEl.innerHTML = '';
+          }
+        }).catch(function() {
+          document.getElementById('trainerDetailSlots').innerHTML = '<div class="slots-title">Ближайшие слоты</div><div class="slots-empty">Не удалось загрузить слоты</div>';
+          document.getElementById('trainerDetailActions').innerHTML = '<button type="button" class="btn-secondary" data-action="leave-request">Оставить заявку</button>';
+          var secondaryEl = document.getElementById('trainerDetailSecondary');
+          if (!state.openedFromMyTrainerTab) {
+            secondaryEl.innerHTML = '<button type="button" class="back-link" data-action="back-to-list"><svg class="back-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>К списку тренеров</button>';
+          } else {
+            secondaryEl.innerHTML = '';
+          }
+        });
+      }
+
+      function renderSlotPickList() {
+        var list = document.getElementById('slotPickList');
+        var slots = state.slotsForTrainer || [];
+        
+        if (slots.length === 0) {
+          list.innerHTML = '<div class="slots-empty">Нет слотов</div>';
+          return;
+        }
+        
+        // Группируем слоты по дням
+        var byDay = {};
+        slots.forEach(function(s, i) {
+          var date = s.slot_date || '';
+          if (!byDay[date]) byDay[date] = [];
+          byDay[date].push({ slot: s, index: i });
+        });
+        
+        var days = Object.keys(byDay).sort();
+        var html = '';
+        
+        days.forEach(function(dateKey) {
+          var daySlots = byDay[dateKey].sort(function(a, b) { 
+            return (a.slot.start_time || '').localeCompare(b.slot.start_time || ''); 
+          });
+          
+          // Форматируем заголовок дня
+          var d = dateKey.split('-');
+          if (d.length === 3) {
+            var day = parseInt(d[2], 10);
+            var month = parseInt(d[1], 10) - 1;
+            var dateObj = new Date(d[0], month, day);
+            var dayName = SLOT_DAYS[dateObj.getDay()];
+            var dateStr = day + '.' + String(month + 1).padStart(2, '0') + ' (' + dayName + ')';
+            html += '<div class="day-block"><div class="day-title">' + dateStr + '</div>';
+          }
+          
+          daySlots.forEach(function(item) {
+            var s = item.slot;
+            var i = item.index;
+            html += '<button type="button" class="slot-card" data-slot-index="' + i + '">' +
+              '<span class="slot-time">' + (s.start_time || '') + '–' + (s.end_time || '') + '</span><span>→</span></button>';
+          });
+          
+          html += '</div>';
+        });
+        
+        list.innerHTML = html;
+        
+        list.querySelectorAll('.slot-card').forEach(function(btn) {
+          btn.onclick = function() {
+            var i = parseInt(btn.dataset.slotIndex, 10);
+            state.selectedSlot = state.slotsForTrainer[i];
+            document.getElementById('bookingFormSlotLabel').textContent = 'Выбрано: ' + formatSlotLabel(state.selectedSlot);
+            document.getElementById('bookingComment').value = '';
+            refreshClientPhoneForBookingForm(function() {
+              prefillBookingPhoneField();
+              showScreen('screenBookingForm');
+            });
+          };
+        });
+      }
+
+      document.getElementById('backFromSlotPick').onclick = function() { showScreen('screenTrainerDetail'); };
+      document.getElementById('backFromBookingForm').onclick = function() { showScreen('screenSlotPick'); };
+
+      document.getElementById('btnSubmitBooking').onclick = function() {
+        var slot = state.selectedSlot;
+        if (!slot || !state.selectedTrainer) return;
+        var phone = (document.getElementById('bookingPhone').value || '').trim();
+        if (!phone || (phone.replace(/\D/g, '').length < 10)) {
+          alert('Введите корректный телефон');
+          return;
+        }
+        var btn = document.getElementById('btnSubmitBooking');
+        btn.disabled = true;
+        var initData = tg ? tg.initData : '';
+        var headers = { 'Content-Type': 'application/json' };
+        if (initData) headers['X-Telegram-Init-Data'] = initData;
+        var body = { slot_id: slot.id, phone: phone, comment: (document.getElementById('bookingComment').value || '').trim() || null };
+        if (state.serviceId != null) body.service_id = state.serviceId;
+        fetch('/api/webapp/client/booking', {
+          method: 'POST',
+          headers: headers,
+          body: JSON.stringify(body)
+        }).then(function(r) {
+          return r.json().then(function(data) {
+            if (r.ok && data.success) {
+              document.getElementById('successText').innerHTML = '✅ <b>Вы записаны</b>.<br><br>Ожидайте подтверждения от тренера в боте.';
+              showScreen('screenSuccess');
+            } else { alert(data.detail || 'Не удалось записаться'); }
+            btn.disabled = false;
+          });
+        }).catch(function() {
+          alert('Ошибка сети');
+          btn.disabled = false;
+        });
+      };
+
+
+      document.getElementById('btnCloseSuccess').onclick = closeApp;
+
+      document.getElementById('backToCity').onclick = function() { showScreen('screenCity'); };
+      document.getElementById('backToService').onclick = function() { showScreen('screenService'); };
+
+      function updateRequestFormContext() {
+        var titleEl = document.getElementById('requestFormTitle');
+        var ctxEl = document.getElementById('requestFormContext');
+        if (state.requestForTrainer) {
+          titleEl.textContent = 'Заявка для ' + state.requestForTrainer.name;
+          ctxEl.innerHTML = '<div class="context-line">Заявка придёт <strong>только этому тренеру</strong>.</div>';
+        } else {
+          titleEl.textContent = 'Общая заявка';
+          ctxEl.innerHTML = '<div class="context-line">Любой тренер по вашему городу и услуге увидит заявку.</div>';
+        }
+      }
+
+      function openLeaveRequestFromDetail() {
+        var t = state.selectedTrainer;
+        if (!t) return;
+        var name = trainerName(t);
+        state.requestForTrainer = { id: t.id, name: name };
+        state.requestFormOpenedFrom = 'trainerDetail';
+        document.getElementById('requestComment').value = '';
+        updateRequestFormContext();
+        showScreen('screenRequestForm');
+      }
+
+      document.getElementById('trainerDetailActions').addEventListener('click', function(e) {
+        var action = e.target.closest('[data-action]');
+        if (action && action.dataset.action === 'leave-request') {
+          openLeaveRequestFromDetail();
+          return;
+        }
+        if (action && action.dataset.action === 'buy-pass') {
+          var t = state.selectedTrainer;
+          if (!t) return;
+          var name = trainerName(t);
+          var base = window.location.pathname.replace(/[^/]+$/, '');
+          var q = 'trainer_id=' + encodeURIComponent(t.id) + '&trainer_name=' + encodeURIComponent(name);
+          if (state.cityId != null) q += '&city_id=' + encodeURIComponent(state.cityId);
+          if (state.serviceId != null) q += '&service_id=' + encodeURIComponent(state.serviceId);
+          if (state.arenaId != null) q += '&arena_id=' + encodeURIComponent(state.arenaId);
+          if (state.offset != null) q += '&offset=' + encodeURIComponent(state.offset);
+          window.location.href = base + 'client-buy-pass?' + q;
+        }
+      });
+      document.getElementById('trainerDetailSecondary').addEventListener('click', function(e) {
+        var action = e.target.closest('[data-action]');
+        if (!action) return;
+        if (action.dataset.action === 'back-to-list') {
+          state.openedFromMyTrainerTab = false;
+          showScreen('screenTrainers');
+          return;
+        }
+        if (action.dataset.action === 'back-to-choice') {
+          state.openedFromMyTrainerTab = false;
+          renderSummary();
+          switchTab('my_trainer');
+          showScreen('screenSummary');
+          return;
+        }
+      });
+
+      function openGeneralRequestForm() {
+        state.requestForTrainer = null;
+        state.requestFormOpenedFrom = 'trainerList';
+        document.getElementById('requestComment').value = '';
+        updateRequestFormContext();
+        showScreen('screenRequestForm');
+      }
+
+      document.getElementById('backFromRequestForm').onclick = function() {
+        if (state.requestFormOpenedFrom === 'trainerDetail') {
+          showScreen('screenTrainerDetail');
+        } else {
+          showScreen('screenTrainers');
+        }
+      };
+
+      function submitRequestFromForm(comment) {
+        var btn = document.getElementById('btnSubmitRequestWithComment');
+        btn.disabled = true;
+        var initData = tg && tg.initData ? tg.initData : '';
+        var headers = { 'Content-Type': 'application/json' };
+        if (initData) headers['X-Telegram-Init-Data'] = initData;
+        var body = {
+          city_id: state.cityId,
+          service_id: state.serviceId
+        };
+        if (state.requestForTrainer && state.requestForTrainer.id) body.trainer_id = state.requestForTrainer.id;
+        var commentStr = comment != null && String(comment).trim() ? String(comment).trim() : null;
+        if (commentStr) body.comment = commentStr;
+        fetch('/api/webapp/client/request', {
+          method: 'POST',
+          headers: headers,
+          body: JSON.stringify(body)
+        }).then(function(r) {
+          return r.json().then(function(data) {
+            if (r.ok && data.success) {
+              document.getElementById('successText').innerHTML =
+                '✅ <b>Заявка отправлена</b>.<br><br>Когда появится подходящий тренер — напишем вам в боте.';
+              showScreen('screenSuccess');
+            } else {
+              alert(data.detail || 'Не удалось отправить заявку. Попробуйте ещё раз.');
+            }
+            btn.disabled = false;
+          });
+        }).catch(function() {
+          alert('Ошибка сети. Проверьте интернет и попробуйте снова.');
+          btn.disabled = false;
+        });
+      }
+      document.getElementById('btnSubmitRequestWithComment').onclick = function() {
+        var text = document.getElementById('requestComment').value;
+        submitRequestFromForm(text);
+      };
+      document.getElementById('btnPickTrainer').onclick = function() {
+        if (!state.cityId || !state.serviceId) return;
+        state.returnToSummary = true;
+        state.offset = 0;
+        loadTrainers();
+        showScreen('screenTrainers');
+      };
+      document.getElementById('tabCatalog').onclick = function() { switchTab('catalog'); };
+      document.getElementById('tabMyTrainer').onclick = function() { switchTab('my_trainer'); };
+      document.getElementById('btnOpenMyTrainerCard').onclick = openMyTrainerCard;
+      document.getElementById('btnMyTrainerPick').onclick = function() {
+        if (state.cityId && state.serviceId) {
+          state.returnToSummary = true;
+          state.offset = 0;
+          loadTrainers();
+          showScreen('screenTrainers');
+        } else {
+          switchTab('catalog');
+        }
+      };
+      document.getElementById('tabCatalogFromDetail').onclick = function() {
+        renderSummary();
+        switchTab('catalog');
+        showScreen('screenSummary');
+      };
+      document.getElementById('tabMyTrainerFromDetail').onclick = function() { /* already on my trainer card */ };
+
+      document.getElementById('backFromTrainers').onclick = function() {
+        if (state.returnToSummary) {
+          goBackToSummary();
+        } else {
+          showScreen('screenArena');
+        }
+      };
+
+      function goBackToSummary() {
+        state.returnToSummary = false;
+        document.getElementById('backFromCityToSummary').style.display = 'none';
+        document.getElementById('backFromServiceToSummary').style.display = 'none';
+        document.getElementById('backFromArenaToSummary').style.display = 'none';
+        renderSummary();
+        showScreen('screenSummary');
+      }
+      document.getElementById('backFromCityToSummary').onclick = goBackToSummary;
+      document.getElementById('backFromServiceToSummary').onclick = goBackToSummary;
+      document.getElementById('backFromArenaToSummary').onclick = goBackToSummary;
+
+      getClientSession()
+        .then(function(session) {
+          applySessionToState(session);
+          var returnCtx = (function() {
+            var p = new URLSearchParams(window.location.search || '');
+            var tid = p.get('trainer_id');
+            if (!tid) return null;
+            var id = parseInt(tid, 10);
+            if (!id) return null;
+            return { trainer_id: id, city_id: p.get('city_id'), service_id: p.get('service_id'), arena_id: p.get('arena_id'), offset: p.get('offset') };
+          })();
+          if (returnCtx) {
+            if (returnCtx.city_id != null) state.cityId = parseInt(returnCtx.city_id, 10) || null;
+            if (returnCtx.service_id != null) state.serviceId = parseInt(returnCtx.service_id, 10) || null;
+            if (returnCtx.arena_id != null) state.arenaId = returnCtx.arena_id === '' ? null : (parseInt(returnCtx.arena_id, 10) || null);
+            if (returnCtx.offset != null) state.offset = Math.max(0, parseInt(returnCtx.offset, 10) || 0);
+            state.openTrainerIdAfterLoad = returnCtx.trainer_id;
+          }
+          function showInitialScreen() {
+            if (state.cityId && state.serviceId) {
+              prefetchFirstPageIfNeeded();
+              renderSummary();
+              showScreen('screenSummary');
+              switchTab(state.activeTab);
+              if (state.openTrainerIdAfterLoad) loadTrainers();
+            } else {
+              loadCities();
+              showScreen('screenCity');
+            }
+          }
+          if (state.trainerId) {
+            state.openedFromMyTrainerTab = true;
+            loadTrainerById(state.trainerId).then(function(t) {
+              if (t) {
+                state.selectedTrainer = t;
+                state.trainerName = trainerName(t);
+                renderTrainerDetail();
+                showScreen('screenTrainerDetail');
+              } else {
+                state.trainerId = null;
+                state.trainerName = '';
+                showInitialScreen();
+              }
+            }).catch(function() {
+              state.trainerId = null;
+              state.trainerName = '';
+              showInitialScreen();
+            });
+            return;
+          }
+          showInitialScreen();
+        })
+        .catch(function() {
+          loadCities();
+          showScreen('screenCity');
+        });
+
+      // Keep first-page prefetch hot while user is on summary and updates filters.
+      document.addEventListener('click', function(e) {
+        var actionBtn = e.target && e.target.closest && e.target.closest('#summaryRows .summary-row-clickable, #tabCatalog, #tabMyTrainer');
+        if (actionBtn) {
+          setTimeout(prefetchFirstPageIfNeeded, 0);
+        }
+      });
+      
+      // Функция для показа отзывов тренера
+      window.showTrainerReviews = function(trainerId) {
+        var modal = document.getElementById('reviewsModal');
+        var modalBody = document.getElementById('reviewsModalBody');
+        var modalTitle = document.getElementById('reviewsModalTitle');
+        
+        modalTitle.textContent = 'Отзывы о тренере';
+        modalBody.innerHTML = '<div class="reviews-loading">Загрузка отзывов...</div>';
+        modal.classList.add('show');
+        
+        // Публичный список отзывов (см. GET /api/public/trainers/{id}/reviews — items, review_text)
+        fetch('/api/public/trainers/' + encodeURIComponent(trainerId) + '/reviews')
+          .then(function(res) {
+            return res.json().then(function(data) {
+              if (!res.ok) throw new Error((data && data.detail) || res.statusText);
+              return data;
+            });
+          })
+          .then(function(data) {
+            var reviews = data.items || [];
+            if (reviews.length === 0) {
+              modalBody.innerHTML = '<div class="reviews-empty">У этого тренера пока нет отзывов</div>';
+              return;
+            }
+            
+            var html = '';
+            reviews.forEach(function(review) {
+              html += '<div class="review-item">';
+              html += '<div class="review-rating">⭐ ' + review.rating + '/5</div>';
+              var text = review.review_text || review.comment;
+              if (text) {
+                html += '<div class="review-text">' + escapeHtml(text) + '</div>';
+              }
+              if (review.created_at) {
+                var date = new Date(review.created_at).toLocaleDateString('ru-RU');
+                html += '<div class="review-date">' + date + '</div>';
+              }
+              html += '</div>';
+            });
+            modalBody.innerHTML = html;
+          })
+          .catch(function() {
+            modalBody.innerHTML = '<div class="reviews-empty">Не удалось загрузить отзывы</div>';
+          });
+      };
+      
+      // Закрытие модального окна
+      window.closeReviewsModal = function() {
+        document.getElementById('reviewsModal').classList.remove('show');
+      };
+    })();
+  </script>
+  
+  <!-- Модальное окно отзывов -->
+  <div id="reviewsModal" class="reviews-modal" onclick="if(event.target === this) closeReviewsModal()">
+    <div class="reviews-modal-content">
+      <div class="reviews-modal-header">
+        <div id="reviewsModalTitle" class="reviews-modal-title">Отзывы</div>
+        <button type="button" class="reviews-modal-close" onclick="closeReviewsModal()">×</button>
+      </div>
+      <div id="reviewsModalBody" class="reviews-modal-body">
+        <!-- Контент отзывов -->
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Filter handlers are now initialized in initializeFilterHandlers() function
+    // which is called when trainers screen loads
+  </script>
+</body>
+</html>

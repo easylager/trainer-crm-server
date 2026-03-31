@@ -8,9 +8,16 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
-async def consume_link_token(session: AsyncSession, token: str, telegram_id: int) -> int | None:
+async def consume_link_token(
+    session: AsyncSession,
+    token: str,
+    telegram_id: int,
+    *,
+    telegram_username: str | None = None,
+) -> int | None:
     """
-    Find valid token, set trainer.telegram_id, mark token used. Returns trainer_id if linked, else None.
+    Find valid token, set trainer.telegram_id and telegram_username, mark token used.
+    Returns trainer_id if linked, else None.
     """
     now = datetime.now(timezone.utc)
     r = await session.execute(
@@ -24,9 +31,10 @@ async def consume_link_token(session: AsyncSession, token: str, telegram_id: int
     if not row:
         return None
     trainer_id = row[0]
+    username_val = (telegram_username or "").strip()[:64] or None
     await session.execute(
-        text("UPDATE trainers SET telegram_id = :tid WHERE id = :id"),
-        {"tid": telegram_id, "id": trainer_id},
+        text("UPDATE trainers SET telegram_id = :tid, telegram_username = :tuname WHERE id = :id"),
+        {"tid": telegram_id, "tuname": username_val, "id": trainer_id},
     )
     await session.execute(
         text("UPDATE trainer_link_tokens SET used_at = :now WHERE token = :token"),
@@ -34,6 +42,25 @@ async def consume_link_token(session: AsyncSession, token: str, telegram_id: int
     )
     await session.commit()
     return trainer_id
+
+
+async def get_trainer_row_by_telegram_id(session: AsyncSession, telegram_id: int) -> dict | None:
+    """Linked trainer row (any status). Used for onboarding / gate before active."""
+    r = await session.execute(
+        text(
+            """
+            SELECT id, status, moderation_feedback
+            FROM trainers
+            WHERE telegram_id = :tid
+            LIMIT 1
+            """
+        ),
+        {"tid": telegram_id},
+    )
+    row = r.fetchone()
+    if not row:
+        return None
+    return {"id": row[0], "status": row[1], "moderation_feedback": row[2]}
 
 
 async def get_trainer_by_telegram_id(session: AsyncSession, telegram_id: int) -> bool:
@@ -49,6 +76,16 @@ async def get_trainer_id_by_telegram_id(session: AsyncSession, telegram_id: int)
     """Return trainer id if linked and status=active (bot access allowed), else None."""
     r = await session.execute(
         text("SELECT id FROM trainers WHERE telegram_id = :tid AND status = 'active' LIMIT 1"),
+        {"tid": telegram_id},
+    )
+    row = r.fetchone()
+    return row[0] if row else None
+
+
+async def get_trainer_id_linked_any_status(session: AsyncSession, telegram_id: int) -> int | None:
+    """Trainer id for linked Telegram user regardless of status (onboarding Mini App, etc.)."""
+    r = await session.execute(
+        text("SELECT id FROM trainers WHERE telegram_id = :tid LIMIT 1"),
         {"tid": telegram_id},
     )
     row = r.fetchone()

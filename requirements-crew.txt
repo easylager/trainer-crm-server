@@ -1,0 +1,7 @@
+# Local dev only: multi-agent orchestration (CrewAI). Not used by FastAPI/bots runtime.
+# Install: pip install -r requirements-crew.txt
+# Env: OPENAI_API_KEY (default). Optional: CREW_MODEL=gpt-4o-mini
+
+crewai>=0.86.0,<2.0.0
+langchain-openai>=0.2.14,<0.4.0
+# langchain-core is pulled transitively by crewai/langchain-openai; pin only if resolver conflicts

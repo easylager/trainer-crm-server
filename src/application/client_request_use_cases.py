@@ -1,8 +1,63 @@
 """
 Client request use cases: create request, list for trainer (matching city+service), respond, list for client with responses.
 """
+from typing import Any
+
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
+
+
+async def _trainer_services_with_prices_batch(
+    session: AsyncSession,
+    trainer_ids: list[int],
+) -> dict[int, list[dict[str, Any]]]:
+    """
+    Same shape as catalog / TrainerRepository: service_id, service_name, price_cents, price_byn.
+    """
+    if not trainer_ids:
+        return {}
+    placeholders = ", ".join(f":id{i}" for i in range(len(trainer_ids)))
+    params: dict[str, Any] = {f"id{i}": v for i, v in enumerate(trainer_ids)}
+    rsv = await session.execute(
+        text(
+            f"""
+            SELECT trainer_id, service_id, price_cents
+            FROM trainer_services
+            WHERE trainer_id IN ({placeholders})
+            ORDER BY trainer_id, service_id
+            """
+        ),
+        params,
+    )
+    rows = rsv.fetchall()
+    if not rows:
+        return {tid: [] for tid in trainer_ids}
+    all_sids = {r[1] for r in rows}
+    service_names_by_id: dict[int, str] = {}
+    if all_sids:
+        s_placeholders = ", ".join(f":s{i}" for i in range(len(all_sids)))
+        s_params = {f"s{i}": v for i, v in enumerate(all_sids)}
+        r_sn = await session.execute(
+            text(f"SELECT id, name FROM services WHERE id IN ({s_placeholders})"),
+            s_params,
+        )
+        service_names_by_id = {r[0]: (r[1] or "") for r in r_sn.fetchall()}
+    out: dict[int, list[dict[str, Any]]] = {tid: [] for tid in trainer_ids}
+    for row in rows:
+        tid, sid, price_cents = row[0], row[1], row[2]
+        # Plain int/float for JSON (DB may return Decimal).
+        pc = int(price_cents) if price_cents is not None else None
+        price_byn = round(float(price_cents) / 100.0, 2) if price_cents is not None else None
+        sid_int = int(sid) if sid is not None else None
+        out.setdefault(tid, []).append(
+            {
+                "service_id": sid_int,
+                "service_name": service_names_by_id.get(sid, "—") if sid is not None else "—",
+                "price_cents": pc,
+                "price_byn": price_byn,
+            }
+        )
+    return out
 
 
 async def create_client_request(
@@ -11,12 +66,13 @@ async def create_client_request(
     city_id: int,
     service_id: int,
     comment: str | None = None,
+    trainer_id: int | None = None,
 ) -> int:
-    """Insert client_requests row. Returns new id."""
+    """Insert client_requests row. trainer_id = personalized request for that trainer. Returns new id."""
     r = await session.execute(
         text("""
-            INSERT INTO client_requests (client_id, city_id, service_id, comment, status)
-            VALUES (:cid, :city_id, :sid, :comment, 'new')
+            INSERT INTO client_requests (client_id, city_id, service_id, comment, status, trainer_id)
+            VALUES (:cid, :city_id, :sid, :comment, 'new', :trainer_id)
             RETURNING id
         """),
         {
@@ -24,6 +80,7 @@ async def create_client_request(
             "city_id": city_id,
             "sid": service_id,
             "comment": (comment or "").strip() or None,
+            "trainer_id": trainer_id,
         },
     )
     (pk,) = r.fetchone()
@@ -88,7 +145,7 @@ async def replace_client_request_with_new(
     """
     r = await session.execute(
         text("""
-            SELECT r.client_id, r.city_id, r.service_id
+            SELECT r.client_id, r.city_id, r.service_id, r.trainer_id
             FROM client_requests r
             INNER JOIN clients cl ON cl.id = r.client_id AND cl.telegram_id = :tid
             WHERE r.id = :rid
@@ -98,15 +155,15 @@ async def replace_client_request_with_new(
     row = r.fetchone()
     if not row:
         return None
-    client_id, city_id, service_id = row
+    client_id, city_id, service_id, old_trainer_id = row
     await session.execute(
         text("DELETE FROM client_requests WHERE id = :rid"),
         {"rid": old_request_id},
     )
     r2 = await session.execute(
         text("""
-            INSERT INTO client_requests (client_id, city_id, service_id, comment, status)
-            VALUES (:cid, :city_id, :sid, :comment, 'new')
+            INSERT INTO client_requests (client_id, city_id, service_id, comment, status, trainer_id)
+            VALUES (:cid, :city_id, :sid, :comment, 'new', :trainer_id)
             RETURNING id
         """),
         {
@@ -114,6 +171,7 @@ async def replace_client_request_with_new(
             "city_id": city_id,
             "sid": service_id,
             "comment": (new_comment or "").strip() or None,
+            "trainer_id": old_trainer_id,
         },
     )
     (new_id,) = r2.fetchone()
@@ -130,12 +188,17 @@ async def create_request_decline(
     Trainer declines request. Hidden from their list; client is not notified.
     Returns True if recorded; False if already responded/declined or request doesn't match.
     """
+    # Allow decline for: personalized (r.trainer_id = this trainer) or general (city+service match)
     check = await session.execute(
         text("""
             SELECT r.id FROM client_requests r
-            INNER JOIN trainer_profiles p ON p.trainer_id = :tid AND p.city_id = r.city_id
-            INNER JOIN trainer_services ts ON ts.trainer_id = :tid AND ts.service_id = r.service_id
             WHERE r.id = :rid AND r.status = 'new'
+              AND (
+                r.trainer_id = :tid
+                OR (r.trainer_id IS NULL
+                    AND EXISTS (SELECT 1 FROM trainer_profiles p WHERE p.trainer_id = :tid AND p.city_id = r.city_id)
+                    AND EXISTS (SELECT 1 FROM trainer_services ts WHERE ts.trainer_id = :tid AND ts.service_id = r.service_id))
+              )
         """),
         {"tid": trainer_id, "rid": client_request_id},
     )
@@ -176,15 +239,16 @@ async def list_requests_for_trainer(
     limit: int = 50,
 ) -> list[dict]:
     """
-    Requests visible to this trainer: status=new, same city+service.
+    Requests visible to this trainer: personalized (r.trainer_id = tid) or general (city+service match).
     Includes both not-yet-responded and already-responded ("in progress"); excludes declined.
-    Returns client_id, client_telegram_id for "write to client" and "book client" flows.
+    Returns is_personalized, client_id, client_telegram_id for "write to client" and "book client" flows.
     """
     r = await session.execute(
         text("""
             SELECT r.id, r.city_id, r.service_id, r.comment, r.created_at,
                    c.name AS city_name,
                    s.name AS service_name,
+                   (r.trainer_id = :tid) AS is_personalized,
                    (SELECT 1 FROM client_request_responses resp
                     WHERE resp.client_request_id = r.id AND resp.trainer_id = :tid) IS NOT NULL AS has_responded,
                    r.client_id,
@@ -195,11 +259,15 @@ async def list_requests_for_trainer(
             INNER JOIN clients cl ON cl.id = r.client_id
             INNER JOIN cities c ON c.id = r.city_id
             INNER JOIN services s ON s.id = r.service_id
-            INNER JOIN trainer_profiles p ON p.trainer_id = :tid AND p.city_id = r.city_id
-            INNER JOIN trainer_services ts ON ts.trainer_id = :tid AND ts.service_id = r.service_id
             WHERE r.status = 'new'
               AND NOT EXISTS (SELECT 1 FROM client_request_declines d
                               WHERE d.client_request_id = r.id AND d.trainer_id = :tid)
+              AND (
+                r.trainer_id = :tid
+                OR (r.trainer_id IS NULL
+                    AND EXISTS (SELECT 1 FROM trainer_profiles p WHERE p.trainer_id = :tid AND p.city_id = r.city_id)
+                    AND EXISTS (SELECT 1 FROM trainer_services ts WHERE ts.trainer_id = :tid AND ts.service_id = r.service_id))
+              )
             ORDER BY (SELECT 1 FROM client_request_responses resp
                       WHERE resp.client_request_id = r.id AND resp.trainer_id = :tid) IS NOT NULL DESC,
                      r.created_at DESC
@@ -217,11 +285,12 @@ async def list_requests_for_trainer(
             "created_at": row[4],
             "city_name": row[5],
             "service_name": row[6],
-            "has_responded": bool(row[7]),
-            "client_id": row[8],
-            "client_telegram_id": row[9],
-            "client_first_name": (row[10] or "").strip() or None,
-            "client_last_name": (row[11] or "").strip() or None,
+            "is_personalized": bool(row[7]),
+            "has_responded": bool(row[8]),
+            "client_id": row[9],
+            "client_telegram_id": row[10],
+            "client_first_name": (row[11] or "").strip() or None,
+            "client_last_name": (row[12] or "").strip() or None,
         }
         for row in rows
     ]
@@ -231,12 +300,12 @@ async def get_request_client_for_trainer_booking(
     session: AsyncSession, request_id: int, trainer_id: int
 ) -> dict | None:
     """
-    For trainer "book client" flow: ensure trainer responded to this request and return client_id.
-    Returns { client_id } or None if request not found / trainer didn't respond / request archived.
+    For trainer "book client" flow: ensure trainer responded to this request and return client_id, service_id.
+    Returns { client_id, service_id } or None if request not found / trainer didn't respond / request archived.
     """
     r = await session.execute(
         text("""
-            SELECT r.client_id
+            SELECT r.client_id, r.service_id
             FROM client_requests r
             INNER JOIN client_request_responses resp ON resp.client_request_id = r.id AND resp.trainer_id = :tid
             WHERE r.id = :rid AND r.status = 'new'
@@ -246,7 +315,7 @@ async def get_request_client_for_trainer_booking(
     row = r.fetchone()
     if not row:
         return None
-    return {"client_id": row[0]}
+    return {"client_id": row[0], "service_id": row[1]}
 
 
 async def add_trainer_pending_request_booking(
@@ -342,12 +411,17 @@ async def create_request_response(
     Trainer responds to request. Optional trainer_comment shown to client (e.g. when slot appears).
     Returns response id if created; None if request not found, doesn't match, or already responded.
     """
+    # Allow response for: personalized (r.trainer_id = this trainer) or general (city+service match)
     check = await session.execute(
         text("""
             SELECT r.id FROM client_requests r
-            INNER JOIN trainer_profiles p ON p.trainer_id = :tid AND p.city_id = r.city_id
-            INNER JOIN trainer_services ts ON ts.trainer_id = :tid AND ts.service_id = r.service_id
             WHERE r.id = :rid AND r.status = 'new'
+              AND (
+                r.trainer_id = :tid
+                OR (r.trainer_id IS NULL
+                    AND EXISTS (SELECT 1 FROM trainer_profiles p WHERE p.trainer_id = :tid AND p.city_id = r.city_id)
+                    AND EXISTS (SELECT 1 FROM trainer_services ts WHERE ts.trainer_id = :tid AND ts.service_id = r.service_id))
+              )
         """),
         {"tid": trainer_id, "rid": client_request_id},
     )
@@ -404,7 +478,9 @@ async def list_my_requests_with_responses(
         req_id, city_id, service_id, comment, created_at, status, city_name, service_name = row
         resp_r = await session.execute(
             text("""
-                SELECT resp.trainer_id, tp.first_name, tp.last_name, t.telegram_id, resp.trainer_comment
+                SELECT resp.trainer_id, tp.first_name, tp.last_name, t.telegram_id, t.telegram_username, resp.trainer_comment,
+                       tp.rating_avg, tp.rating_count, tp.experience_years, tp.description, tp.session_duration_minutes,
+                       (SELECT ph.file_key FROM trainer_photos ph WHERE ph.trainer_id = resp.trainer_id ORDER BY ph.sort_order NULLS LAST, ph.id LIMIT 1) AS photo_key
                 FROM client_request_responses resp
                 INNER JOIN trainers t ON t.id = resp.trainer_id
                 LEFT JOIN trainer_profiles tp ON tp.trainer_id = t.id
@@ -413,16 +489,28 @@ async def list_my_requests_with_responses(
             """),
             {"rid": req_id},
         )
+        resp_rows = resp_r.fetchall()
+        trainer_ids = [tr[0] for tr in resp_rows]
+        services_by_trainer = await _trainer_services_with_prices_batch(session, trainer_ids)
         responders = []
-        for tr in resp_r.fetchall():
+        for tr in resp_rows:
             first_name = (tr[1] or "").strip()
             last_name = (tr[2] or "").strip()
             name = f"{first_name} {last_name}".strip() or "Тренер"
+            tid = tr[0]
             responders.append({
-                "trainer_id": tr[0],
+                "trainer_id": tid,
                 "name": name,
                 "telegram_id": tr[3],
-                "trainer_comment": (tr[4] or "").strip() or None,
+                "telegram_username": (tr[4] or "").strip() or None,
+                "trainer_comment": (tr[5] or "").strip() or None,
+                "rating_avg": float(tr[6]) if tr[6] is not None else None,
+                "rating_count": (tr[7] or 0) if tr[7] is not None else 0,
+                "experience_years": tr[8],
+                "description": (tr[9] or "").strip() or None,
+                "session_duration_minutes": tr[10],
+                "photo_key": tr[11],
+                "services": services_by_trainer.get(tid, []),
             })
         out.append({
             "id": req_id,
@@ -438,16 +526,65 @@ async def list_my_requests_with_responses(
     return out
 
 
+async def get_client_request_for_booking(
+    session: AsyncSession,
+    request_id: int,
+    client_telegram_id: int,
+) -> dict | None:
+    """
+    Single request by id if owned by client (for linking booking from Mini App).
+    Returns { "id", "service_id", "responses": [{"trainer_id"}, ...] } or None.
+    """
+    r = await session.execute(
+        text("""
+            SELECT r.id, r.service_id
+            FROM client_requests r
+            INNER JOIN clients cl ON cl.id = r.client_id
+            WHERE r.id = :rid AND cl.telegram_id = :tid AND r.status != 'archived'
+        """),
+        {"rid": request_id, "tid": client_telegram_id},
+    )
+    row = r.fetchone()
+    if not row:
+        return None
+    resp_r = await session.execute(
+        text("""
+            SELECT trainer_id FROM client_request_responses
+            WHERE client_request_id = :rid
+        """),
+        {"rid": request_id},
+    )
+    return {
+        "id": row[0],
+        "service_id": row[1],
+        "responses": [{"trainer_id": tr[0]} for tr in resp_r.fetchall()],
+    }
+
+
 # --- Notifications: trainer about new request, client about new response ---
 
 
 async def get_pending_request_notifications(session: AsyncSession, limit: int = 50) -> list[dict]:
     """
-    Pairs (request, trainer) where request is new, trainer matches city+service, not yet notified.
+    Pairs (request, trainer) where request is new, not yet notified.
+    - Personal (r.trainer_id set): only that trainer gets the row.
+    - General (r.trainer_id NULL): all trainers matching city+service.
     Returns list of dicts: request_id, trainer_id, trainer_telegram_id, city_name, service_name, comment.
     """
     r = await session.execute(
         text("""
+            (
+            SELECT r.id, t.id AS trainer_id, t.telegram_id,
+                   c.name AS city_name, s.name AS service_name, r.comment
+            FROM client_requests r
+            INNER JOIN cities c ON c.id = r.city_id
+            INNER JOIN services s ON s.id = r.service_id
+            INNER JOIN trainers t ON t.id = r.trainer_id AND t.telegram_id IS NOT NULL
+            LEFT JOIN client_request_notifications n ON n.client_request_id = r.id AND n.trainer_id = t.id
+            WHERE r.status = 'new' AND r.trainer_id IS NOT NULL AND n.id IS NULL
+            )
+            UNION ALL
+            (
             SELECT r.id, t.id AS trainer_id, t.telegram_id,
                    c.name AS city_name, s.name AS service_name, r.comment
             FROM client_requests r
@@ -457,7 +594,8 @@ async def get_pending_request_notifications(session: AsyncSession, limit: int = 
             INNER JOIN trainer_services ts ON ts.trainer_id = p.trainer_id AND ts.service_id = r.service_id
             INNER JOIN trainers t ON t.id = p.trainer_id AND t.telegram_id IS NOT NULL
             LEFT JOIN client_request_notifications n ON n.client_request_id = r.id AND n.trainer_id = t.id
-            WHERE r.status = 'new' AND n.id IS NULL
+            WHERE r.status = 'new' AND r.trainer_id IS NULL AND n.id IS NULL
+            )
             LIMIT :lim
         """),
         {"lim": limit},
@@ -607,7 +745,7 @@ async def get_pending_no_response_reminders(session: AsyncSession, limit: int = 
             FROM client_requests req
             INNER JOIN clients cl ON cl.id = req.client_id
             LEFT JOIN client_request_responses resp ON resp.client_request_id = req.id
-            WHERE req.created_at <= NOW() - INTERVAL '2 minutes'  /* TODO: revert to 2 days for prod */
+            WHERE req.created_at <= NOW() - INTERVAL '2 days'
               AND req.no_response_reminder_sent_at IS NULL
               AND req.status = 'new'
             GROUP BY req.id, cl.telegram_id

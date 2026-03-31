@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Панель админа</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="stylesheet" href="theme.css" />
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: var(--app-font-sans);
+      background: var(--tg-theme-bg-color, #1a1a1a);
+      color: var(--tg-theme-text-color, #f5f5f5);
+      min-height: 100vh;
+      padding: 16px;
+      padding-bottom: calc(24px + env(safe-area-inset-bottom, 0));
+    }
+    .header { margin-bottom: 20px; }
+    .header h1 { margin: 0; font-size: 22px; font-weight: 700; }
+    .loading, .error { text-align: center; padding: 32px 16px; color: var(--tg-theme-hint-color); }
+    .error { color: var(--app-danger); }
+    .section { margin-bottom: 20px; }
+    .section-title { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--tg-theme-hint-color); margin-bottom: 10px; }
+    .card {
+      background: var(--tg-theme-secondary-bg-color, #2a2a2a);
+      border-radius: 14px;
+      padding: 16px;
+      margin-bottom: 10px;
+      border: 1px solid rgba(255,255,255,0.06);
+    }
+    .kpi-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .kpi-card {
+      background: var(--tg-theme-secondary-bg-color, #2a2a2a);
+      border-radius: 12px;
+      padding: 14px;
+      border: 1px solid rgba(255,255,255,0.06);
+    }
+    .kpi-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--tg-theme-hint-color); margin-bottom: 4px; }
+    .kpi-value { font-size: 24px; font-weight: 700; }
+    .kpi-sub { font-size: 12px; color: var(--tg-theme-hint-color); margin-top: 4px; }
+    .alert-card {
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid rgba(239, 68, 68, 0.4);
+      border-radius: 12px;
+      padding: 14px 16px;
+      margin-bottom: 10px;
+    }
+    .alert-card.support { background: rgba(247, 166, 0, 0.2); border-color: rgba(247, 166, 0, 0.5); }
+    .alert-title { font-weight: 700; font-size: 14px; margin-bottom: 4px; }
+    .alert-desc { font-size: 13px; color: var(--tg-theme-hint-color); }
+    .alerts-empty { font-size: 13px; color: var(--tg-theme-hint-color); padding: 12px 0; }
+    .row-list { display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+    .row-list span:first-child { color: var(--tg-theme-hint-color); }
+    .row-list span:last-child { font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>📊 Панель админа</h1>
+  </div>
+  <div id="content">
+    <div class="loading">Загрузка…</div>
+  </div>
+  <script>
+    (function() {
+      var tg = window.Telegram && window.Telegram.WebApp;
+      if (tg) { tg.ready(); tg.expand(); }
+      var initData = tg ? tg.initData : '';
+      function apiUrl(path) {
+        if (path.indexOf('/api') === 0) return path;
+        return ((tg && tg.initData) ? '' : '/api/webapp') + path;
+      }
+      function fetchWithTimeout(url, opts, ms) {
+        ms = ms || 15000;
+        var c = new AbortController();
+        var t = setTimeout(function() { c.abort(); }, ms);
+        return fetch(url, Object.assign({}, opts, { signal: c.signal }))
+          .then(function(r) { clearTimeout(t); return r; })
+          .catch(function(e) { clearTimeout(t); throw e; });
+      }
+      function getJson(path) {
+        var url = apiUrl(path);
+        var sep = url.indexOf('?') >= 0 ? '&' : '?';
+        if (initData) url += sep + 'init_data=' + encodeURIComponent(initData);
+        return fetchWithTimeout(url).then(function(r) {
+          if (!r.ok) throw new Error(r.statusText);
+          return r.json();
+        });
+      }
+      function render(d) {
+        var html = '';
+        html += '<div class="section"><div class="section-title">Сейчас</div>';
+        html += '<div class="kpi-grid">';
+        html += '<div class="kpi-card"><div class="kpi-label">Записей сегодня</div><div class="kpi-value">' + (d.bookings_today || 0) + '</div></div>';
+        html += '<div class="kpi-card"><div class="kpi-label">На эту неделю</div><div class="kpi-value">' + (d.bookings_upcoming_week || 0) + '</div></div>';
+        html += '<div class="kpi-card"><div class="kpi-label">Заявок открыто</div><div class="kpi-value">' + (d.requests_open_now || 0) + '</div></div>';
+        html += '<div class="kpi-card"><div class="kpi-label">На модерации</div><div class="kpi-value">' + (d.trainers_pending_moderation || 0) + '</div></div>';
+        html += '</div></div>';
+        html += '<div class="section"><div class="section-title">За 7 и 30 дней</div>';
+        html += '<div class="card">';
+        html += '<div class="row-list">';
+        html += '<div><span>Записей (7д / 30д):</span> <span>' + (d.bookings_7d || 0) + ' / ' + (d.bookings_30d || 0) + '</span></div>';
+        html += '<div><span>Отмен (7д / 30д):</span> <span>' + (d.cancelled_7d || 0) + ' / ' + (d.cancelled_30d || 0) + '</span></div>';
+        html += '<div><span>Заявок (7д / 30д):</span> <span>' + (d.requests_7d || 0) + ' / ' + (d.requests_30d || 0) + '</span></div>';
+        html += '<div><span>Откликов (7д / 30д):</span> <span>' + (d.responses_7d || 0) + ' / ' + (d.responses_30d || 0) + '</span></div>';
+        html += '<div><span>Конверсия заявок (30д):</span> <span>' + (d.conversion_pct != null ? d.conversion_pct + '%' : '—') + '</span></div>';
+        html += '<div><span>Новых тренеров (7д / 30д):</span> <span>' + (d.trainers_created_7d || 0) + ' / ' + (d.trainers_created_30d || 0) + '</span></div>';
+        html += '</div></div>';
+        html += '<div class="section"><div class="section-title">Тренеры</div>';
+        html += '<div class="card">';
+        html += '<div class="row-list">';
+        var byStatus = d.trainers_by_status || {};
+        Object.keys(byStatus).sort().forEach(function(k) {
+          var label = k === 'pending_profile' ? 'На модерации' : k === 'active' ? 'Активные' : k;
+          html += '<div><span>' + label + ':</span> <span>' + byStatus[k] + '</span></div>';
+        });
+        html += '<div><span>Всего / с Telegram:</span> <span>' + (d.trainers_total || 0) + ' / ' + (d.trainers_with_telegram || 0) + '</span></div>';
+        html += '</div></div>';
+        html += '<div class="section"><div class="section-title">💳 Подписки (тарифы)</div>';
+        html += '<div class="card">';
+        html += '<div class="row-list">';
+        html += '<div><span>Тир CRM:</span> <span>' + (d.subscription_tier_crm || 0) + '</span></div>';
+        html += '<div><span>Онлайн-запись:</span> <span>' + (d.subscription_tier_online || 0) + '</span></div>';
+        html += '<div><span>Аналитика:</span> <span>' + (d.subscription_tier_analytics || 0) + '</span></div>';
+        html += '<div><span>Всего с тиром:</span> <span>' + (d.subscription_trainers_with_tier || 0) + '</span></div>';
+        html += '<div><span>Истекает ≤7 дн.:</span> <span>' + (d.subscription_expiring_7d || 0) + '</span></div>';
+        html += '<div><span>Активных без tier:</span> <span>' + (d.subscription_active_trainers_no_tier || 0) + '</span></div>';
+        html += '</div></div></div>';
+        html += '<div class="section"><div class="section-title">📦 Абонементы и сертификаты</div>';
+        html += '<div class="card">';
+        html += '<div class="row-list">';
+        html += '<div><span>Абонементов активно:</span> <span>' + (d.passes_active_total || 0) + '</span></div>';
+        html += '<div><span>Абонементов выдано (30 дн.):</span> <span>' + (d.passes_issued_30d_total || 0) + '</span></div>';
+        html += '<div><span>Сертификатов выдано:</span> <span>' + (d.certs_issued_total || 0) + '</span></div>';
+        html += '<div><span>Сертификатов с остатком:</span> <span>' + (d.certs_with_balance_total || 0) + '</span></div>';
+        var certByn = (d.cert_balance_cents_total || 0) / 100;
+        html += '<div><span>Остаток по сертификатам:</span> <span>' + (certByn % 1 === 0 ? certByn.toFixed(0) : certByn.toFixed(2)) + ' BYN</span></div>';
+        html += '<div><span>Сертификатов погашено (30 дн.):</span> <span>' + (d.certs_redeemed_30d_total || 0) + '</span></div>';
+        html += '</div></div></div>';
+        html += '<div class="section"><div class="section-title">⚠️ Тревожные звоночки</div>';
+        var alerts = d.alerts || [];
+        if (alerts.length === 0) {
+          html += '<div class="alerts-empty">Всё спокойно. Поводов для действий нет.</div>';
+        } else {
+          alerts.forEach(function(a) {
+            var cls = a.type === 'support' ? 'alert-card support' : 'alert-card';
+            html += '<div class="' + cls + '"><div class="alert-title">' + (a.title || '') + '</div><div class="alert-desc">' + (a.description || '') + '</div></div>';
+          });
+        }
+        html += '</div>';
+        html += '<div class="section"><div class="section-title">Поддержка</div>';
+        html += '<div class="card">';
+        html += '<div class="kpi-value">' + (d.support_new_count || 0) + '</div>';
+        html += '<div class="kpi-sub">новых обращений. Ответы — в боте (команда /support).</div>';
+        html += '</div></div>';
+        return html;
+      }
+      getJson('/api/webapp/admin/stats').then(function(data) {
+        document.getElementById('content').innerHTML = render(data);
+      }).catch(function(e) {
+        var msg = (e && e.message) ? e.message : 'Ошибка сети или таймаут. Проверьте tunnel и откройте из бота снова.';
+        document.getElementById('content').innerHTML = '<div class="error">' + msg + '</div>';
+      });
+    })();
+  </script>
+</body>
+</html>

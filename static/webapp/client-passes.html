@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Мои абонементы</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="stylesheet" href="theme.css" />
+  <link rel="stylesheet" href="mini-app-components.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet" />
+  <script src="client-mini-app-theme.js"></script>
+  <style>
+    body {
+      font-family: var(--app-font-sans);
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 16px;
+    }
+    .header-title { flex: 1; }
+    .btn-close {
+      flex-shrink: 0;
+      padding: 8px 14px;
+      border-radius: 8px;
+      border: none;
+      font-size: 14px;
+      background: var(--tg-theme-secondary-bg-color);
+      color: var(--tg-theme-text-color);
+      cursor: pointer;
+    }
+    .loading, .error { text-align: center; padding: 32px 16px; color: var(--tg-theme-hint-color); }
+    .error { color: var(--app-danger); }
+    .empty { text-align: center; padding: 32px 16px; color: var(--tg-theme-hint-color); font-size: 15px; }
+    .pass-card {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 18px;
+      margin-bottom: 10px;
+      border-radius: 14px;
+      background: var(--tg-theme-secondary-bg-color);
+      border: none;
+      width: 100%;
+      font: inherit;
+      color: inherit;
+      text-align: left;
+      cursor: pointer;
+    }
+    .pass-card:active { opacity: 0.9; }
+    .pass-card .main { flex: 1; min-width: 0; }
+    .pass-card .title { font-weight: 600; font-size: 16px; margin-bottom: 4px; }
+    .pass-card .meta { font-size: 14px; color: var(--tg-theme-hint-color); }
+    .pass-card .arrow { color: var(--tg-theme-hint-color); font-size: 16px; }
+    [data-screen] { display: none; }
+    [data-screen].active { display: block; }
+    .back-link {
+      display: inline-block;
+      margin-bottom: 16px;
+      font-size: 15px;
+      color: var(--tg-theme-button-color);
+      text-decoration: none;
+    }
+    .btn-back {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 20px;
+      padding: 10px 0;
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--tg-theme-button-color);
+      cursor: pointer;
+      border: none;
+      background: none;
+      font: inherit;
+    }
+    .btn-back:active { opacity: 0.8; }
+    .detail-title { font-size: 18px; font-weight: 600; margin-bottom: 8px; }
+    .detail-meta { font-size: 15px; color: var(--tg-theme-hint-color); margin-bottom: 20px; }
+    .detail-hint {
+      font-size: 14px;
+      color: var(--tg-theme-hint-color);
+      margin-bottom: 16px;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <span class="header-title">📦 Мои абонементы</span>
+    <button type="button" class="btn-close" id="btnClose" aria-label="Закрыть">Закрыть</button>
+  </div>
+  <div id="screenList" data-screen class="active">
+    <div id="listContent"></div>
+  </div>
+  <div id="screenDetail" data-screen>
+    <button type="button" class="btn-back" id="backFromDetail">← Назад к абонементам</button>
+    <p class="detail-title" id="detailTitle"></p>
+    <p class="detail-meta" id="detailMeta"></p>
+    <p class="detail-hint">*Занятия списываются с абонемента автоматически.</p>
+  </div>
+  <script>
+    (function() {
+      var tg = window.Telegram && window.Telegram.WebApp;
+      if (tg) { tg.ready(); tg.expand(); }
+      function initData() { return (tg && tg.initData) ? tg.initData : ''; }
+      function headers() {
+        var h = { 'Content-Type': 'application/json' };
+        var id = initData();
+        if (id) h['X-Telegram-Init-Data'] = id;
+        return h;
+      }
+      var state = { items: [], current: null };
+      function showScreen(id) {
+        document.querySelectorAll('[data-screen]').forEach(function(el) { el.classList.remove('active'); });
+        var el = document.getElementById(id);
+        if (el) el.classList.add('active');
+      }
+      function closeApp() { if (tg) tg.close(); else window.close(); }
+      document.getElementById('btnClose').onclick = closeApp;
+      function escapeHtml(s) {
+        if (s == null) return '';
+        var d = document.createElement('div');
+        d.textContent = s;
+        return d.innerHTML;
+      }
+      function loadList() {
+        document.getElementById('listContent').innerHTML = '<div class="loading">Загрузка…</div>';
+        var url = '/api/webapp/client/passes' + (initData() ? '?init_data=' + encodeURIComponent(initData()) : '');
+        fetch(url, { headers: headers() })
+          .then(function(r) { return r.json(); })
+          .then(function(data) {
+            state.items = data.items || [];
+            if (state.items.length === 0) {
+              document.getElementById('listContent').innerHTML = '<div class="empty">Пока нет абонементов.</div>';
+              return;
+            }
+            function formatPrice(cents) {
+              if (cents == null || cents === 0) return '';
+              return (cents / 100).toFixed(2).replace(/\.?0+$/, '') + ' BYN/занятие';
+            }
+            function formatExpires(iso) {
+              if (!iso) return '';
+              try {
+                var d = new Date(iso);
+                return 'До ' + ('0' + d.getDate()).slice(-2) + '.' + ('0' + (d.getMonth() + 1)).slice(-2) + '.' + d.getFullYear();
+              } catch (e) { return ''; }
+            }
+            var html = '';
+            state.items.forEach(function(p) {
+              var rem = p.sessions_remaining != null ? p.sessions_remaining : 0;
+              var total = p.sessions_total != null ? p.sessions_total : 0;
+              var metaParts = [p.trainer_name, (p.service_name && p.service_name !== '—' ? p.service_name : null), rem + ' из ' + total + ' занятий', 'осталось ' + rem];
+              var priceStr = formatPrice(p.price_per_session_cents);
+              if (priceStr) metaParts.push(priceStr);
+              var expStr = formatExpires(p.expires_at);
+              if (expStr) metaParts.push(expStr);
+              var meta = metaParts.filter(Boolean).join(' · ');
+              html += '<button type="button" class="pass-card" data-id="' + p.id + '">';
+              html += '<div class="main">';
+              html += '<div class="title">' + escapeHtml(p.product_name) + '</div>';
+              html += '<div class="meta">' + escapeHtml(meta) + '</div></div>';
+              html += '<span class="arrow">→</span></button>';
+            });
+            document.getElementById('listContent').innerHTML = html;
+            document.querySelectorAll('.pass-card').forEach(function(btn) {
+              btn.onclick = function() {
+                var id = parseInt(btn.dataset.id, 10);
+                var p = state.items.find(function(x) { return x.id === id; });
+                if (p) {
+                  state.current = p;
+                  var rem = p.sessions_remaining != null ? p.sessions_remaining : 0;
+                  document.getElementById('detailTitle').textContent = p.product_name;
+                  document.getElementById('detailMeta').textContent = p.trainer_name + ' · осталось ' + rem + ' из ' + (p.sessions_total || 0);
+                  showScreen('screenDetail');
+                }
+              };
+            });
+          })
+          .catch(function() {
+            document.getElementById('listContent').innerHTML = '<div class="error">Не удалось загрузить. Откройте из бота.</div>';
+          });
+      }
+      document.getElementById('backFromDetail').onclick = function() {
+        showScreen('screenList');
+      };
+      loadList();
+    })();
+  </script>
+</body>
+</html>

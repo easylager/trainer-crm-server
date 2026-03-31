@@ -7,7 +7,7 @@ from datetime import date, time, timedelta
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.application.booking_use_cases import create_booking
+from src.application.booking_use_cases import create_booking, get_first_service_id_for_trainer
 from src.application.trainer_schedule_use_cases import next_week_monday
 
 RECURRING_STATUS_ACTIVE = "active"
@@ -242,6 +242,9 @@ async def apply_recurring_bookings_for_week(
     For each active recurring (trainer, client, day, time), if there is an available slot that week, create booking.
     Returns number of bookings created.
     """
+    service_id = await get_first_service_id_for_trainer(session, trainer_id)
+    if not service_id:
+        return 0
     created = 0
     for rec in await list_active_recurring_for_trainer_week(session, trainer_id, week_start):
         slot_id = await find_available_slot_in_week(
@@ -250,7 +253,7 @@ async def apply_recurring_bookings_for_week(
         if not slot_id:
             continue
         bid = await create_booking(
-            session, slot_id, trainer_id, rec["client_id"], client_comment=None, client_request_id=None
+            session, slot_id, trainer_id, rec["client_id"], service_id=service_id, client_comment=None, client_request_id=None
         )
         if bid:
             created += 1

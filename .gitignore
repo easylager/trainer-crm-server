@@ -31,6 +31,10 @@ env/
 .env.local
 .env.*.local
 
+# Cursor IDE + Spec Kit (локальные шаблоны и команды; не коммитим)
+.cursor/
+.specify/
+
 # IDE
 .idea/
 .vscode/
@@ -53,6 +57,7 @@ logs/
 # Database
 *.db
 *.sqlite3
+*.dump
 
 # Secrets
 *.pem
@@ -61,3 +66,5 @@ secrets/
 # OS
 .DS_Store
 Thumbs.db
+
+
