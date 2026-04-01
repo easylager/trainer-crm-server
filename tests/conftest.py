@@ -12,8 +12,10 @@ Each test runs inside one DB connection + outer transaction that is **rolled bac
 (unless PYTEST_DISABLE_TRANSACTION_ROLLBACK=1). Application code may call session.commit(); changes stay
 inside the outer transaction and never persist — see SQLAlchemy «join external transaction» / savepoints.
 
-Engine and session are created per test (function scope) in the same event loop that runs the test,
-so asyncpg never sees "another operation in progress" or "Future attached to a different loop".
+One engine + one outer transaction + one sessionmaker per test. API routes, raw ``db_session`` SQL,
+and modules that did ``from src.infrastructure.db import async_session_factory`` (cached reference)
+all see the same factory — otherwise HTTP writes are invisible to test SQL and ``notification_loops``
+would use a stale factory / wrong connection.
 """
 import os
 import uuid
@@ -102,6 +104,42 @@ def pytest_sessionstart(session: pytest.Session) -> None:
     _assert_test_database_url_allowed()
 
 
+def _apply_test_session_factory(factory):
+    """
+    Replace async_session_factory everywhere tests might resolve it.
+    ``from pkg import async_session_factory`` binds the object at import time; patching only
+    ``session`` module leaves ``db`` package and ``notification_loops`` pointing at the old maker.
+    """
+    import src.api.app as app_mod
+    import src.bot.notification_loops as nl_mod
+    import src.infrastructure.db as db_pkg
+    import src.infrastructure.db.session as session_mod
+
+    old = {
+        "session": session_mod.async_session_factory,
+        "db": db_pkg.async_session_factory,
+        "app": app_mod.async_session_factory,
+        "nl": nl_mod.async_session_factory,
+    }
+    session_mod.async_session_factory = factory
+    db_pkg.async_session_factory = factory
+    app_mod.async_session_factory = factory
+    nl_mod.async_session_factory = factory
+    return old
+
+
+def _restore_test_session_factory(old: dict) -> None:
+    import src.api.app as app_mod
+    import src.bot.notification_loops as nl_mod
+    import src.infrastructure.db as db_pkg
+    import src.infrastructure.db.session as session_mod
+
+    session_mod.async_session_factory = old["session"]
+    db_pkg.async_session_factory = old["db"]
+    app_mod.async_session_factory = old["app"]
+    nl_mod.async_session_factory = old["nl"]
+
+
 def _make_session_factory_with_rollback(conn):
     """
     Savepoints (join_transaction_mode) so application code can commit() inside tests;
@@ -137,8 +175,11 @@ def unique_test_telegram_id() -> int:
 
 
 @pytest.fixture
-async def db_session() -> AsyncGenerator[AsyncSession, None]:
-    """Yield a session; default: all writes rolled back (no rows left in DB after test)."""
+async def _test_db_core() -> AsyncGenerator[dict, None]:
+    """
+    Single connection + sessionmaker + one open Session for the test body.
+    Patches all async_session_factory bindings so ASGI handlers and notification_loops match db_session.
+    """
     settings = Settings()
     engine = create_async_engine(
         settings.database_url,
@@ -150,10 +191,12 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
             class_=AsyncSession,
             expire_on_commit=False,
         )
+        old = _apply_test_session_factory(factory)
         try:
             async with factory() as session:
-                yield session
+                yield {"session": session, "factory": factory, "engine": engine}
         finally:
+            _restore_test_session_factory(old)
             await engine.dispose()
         return
 
@@ -162,66 +205,28 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
         factory = _make_session_factory_with_rollback(conn)
         if factory is None:
             await trans.rollback()
+            await engine.dispose()
             raise pytest.UsageError(
                 "This SQLAlchemy build has no join_transaction_mode=create_savepoint on async_sessionmaker. "
                 "Upgrade sqlalchemy>=2.0.26 or set PYTEST_DISABLE_TRANSACTION_ROLLBACK=1 (writes will persist)."
             )
+        old = _apply_test_session_factory(factory)
         try:
             async with factory() as session:
-                yield session
+                yield {"session": session, "factory": factory, "engine": engine, "trans": trans}
         finally:
+            _restore_test_session_factory(old)
             await trans.rollback()
     await engine.dispose()
 
 
 @pytest.fixture
-async def app_use_test_db() -> AsyncGenerator[None, None]:
-    """
-    Patch app and infra to use a session factory created in the test's event loop.
-    Use this fixture in API tests so /health and routes using get_session see the same loop.
-    Same outer-transaction rollback as db_session unless PYTEST_DISABLE_TRANSACTION_ROLLBACK=1.
-    """
-    settings = Settings()
-    engine = create_async_engine(
-        settings.database_url,
-        echo=settings.debug,
-    )
-    session_module = __import__("src.infrastructure.db.session", fromlist=["async_session_factory"])
-    app_module = __import__("src.api.app", fromlist=["async_session_factory"])
-    old_session_factory = session_module.async_session_factory
-    old_app_factory = app_module.async_session_factory
+async def db_session(_test_db_core) -> AsyncGenerator[AsyncSession, None]:
+    """Same DB transaction as patched FastAPI + notification_loops (see _test_db_core)."""
+    yield _test_db_core["session"]
 
-    if os.environ.get("PYTEST_DISABLE_TRANSACTION_ROLLBACK", "").strip() == "1":
-        factory = async_sessionmaker(
-            engine,
-            class_=AsyncSession,
-            expire_on_commit=False,
-        )
-        session_module.async_session_factory = factory
-        app_module.async_session_factory = factory
-        try:
-            yield
-        finally:
-            session_module.async_session_factory = old_session_factory
-            app_module.async_session_factory = old_app_factory
-            await engine.dispose()
-        return
 
-    async with engine.connect() as conn:
-        trans = await conn.begin()
-        factory = _make_session_factory_with_rollback(conn)
-        if factory is None:
-            await trans.rollback()
-            raise pytest.UsageError(
-                "This SQLAlchemy build has no join_transaction_mode=create_savepoint on async_sessionmaker. "
-                "Upgrade sqlalchemy>=2.0.26 or set PYTEST_DISABLE_TRANSACTION_ROLLBACK=1 (writes will persist)."
-            )
-        session_module.async_session_factory = factory
-        app_module.async_session_factory = factory
-        try:
-            yield
-        finally:
-            await trans.rollback()
-            session_module.async_session_factory = old_session_factory
-            app_module.async_session_factory = old_app_factory
-    await engine.dispose()
+@pytest.fixture
+async def app_use_test_db(_test_db_core) -> AsyncGenerator[None, None]:
+    """Depends on _test_db_core; use with API tests that also need db_session for setup SQL."""
+    yield
