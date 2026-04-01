@@ -16,6 +16,10 @@ One engine + one outer transaction + one sessionmaker per test. API routes, raw 
 and modules that did ``from src.infrastructure.db import async_session_factory`` (cached reference)
 all see the same factory — otherwise HTTP writes are invisible to test SQL and ``notification_loops``
 would use a stale factory / wrong connection.
+
+``app.dependency_overrides[get_session]`` yields the same ``AsyncSession`` as ``db_session`` so
+HTTP handlers never open a second session on the same asyncpg connection (asyncpg is strictly
+single-flight per connection).
 """
 import os
 import uuid
@@ -25,6 +29,8 @@ from urllib.parse import urlparse
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+from src.api.app import app
+from src.api.deps import get_session
 from src.shared.config import Settings
 
 _TEST_DB_NAME = "trainer_crm_test"
@@ -179,6 +185,9 @@ async def _test_db_core() -> AsyncGenerator[dict, None]:
     """
     Single connection + sessionmaker + one open Session for the test body.
     Patches all async_session_factory bindings so ASGI handlers and notification_loops match db_session.
+
+    FastAPI routes must use the same AsyncSession as tests: a second session from the same
+    asyncpg connection causes «another operation is in progress» and teardown failures.
     """
     settings = Settings()
     engine = create_async_engine(
@@ -194,7 +203,15 @@ async def _test_db_core() -> AsyncGenerator[dict, None]:
         old = _apply_test_session_factory(factory)
         try:
             async with factory() as session:
-                yield {"session": session, "factory": factory, "engine": engine}
+
+                async def _override_get_session():
+                    yield session
+
+                app.dependency_overrides[get_session] = _override_get_session
+                try:
+                    yield {"session": session, "factory": factory, "engine": engine}
+                finally:
+                    app.dependency_overrides.pop(get_session, None)
         finally:
             _restore_test_session_factory(old)
             await engine.dispose()
@@ -213,7 +230,15 @@ async def _test_db_core() -> AsyncGenerator[dict, None]:
         old = _apply_test_session_factory(factory)
         try:
             async with factory() as session:
-                yield {"session": session, "factory": factory, "engine": engine, "trans": trans}
+
+                async def _override_get_session():
+                    yield session
+
+                app.dependency_overrides[get_session] = _override_get_session
+                try:
+                    yield {"session": session, "factory": factory, "engine": engine, "trans": trans}
+                finally:
+                    app.dependency_overrides.pop(get_session, None)
         finally:
             _restore_test_session_factory(old)
             await trans.rollback()
