@@ -7,6 +7,10 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.platform_settings_use_cases import (
+    WELCOME_TRIAL_PERIOD_DAYS_KEY,
+    get_platform_int,
+)
 from src.shared.config import Settings
 from src.infrastructure.db.models import (
     INVOICE_STATUS_OVERDUE,
@@ -15,6 +19,7 @@ from src.infrastructure.db.models import (
     SUBSCRIPTION_STATUS_ACTIVE,
     SUBSCRIPTION_STATUS_PAST_DUE,
     SUBSCRIPTION_STATUS_TRIAL,
+    SUBSCRIPTION_TIER_ANALYTICS,
 )
 
 
@@ -78,6 +83,27 @@ async def get_trial_plan_id(session: AsyncSession) -> int | None:
     return row[0] if row else None
 
 
+async def get_resolved_welcome_trial_days_for_display(session: AsyncSession) -> int:
+    """Resolved trial length (env → DB → plan) for admin UI."""
+    r = await session.execute(
+        text("SELECT period_days FROM subscription_plans WHERE is_trial = true LIMIT 1")
+    )
+    row = r.fetchone()
+    plan_days = int(row[0]) if row else 21
+    return await resolve_trial_period_days(session, plan_days)
+
+
+async def resolve_trial_period_days(session: AsyncSession, plan_default_days: int) -> int:
+    """Trial length: TRIAL_PERIOD_DAYS env, else platform_settings, else plan row."""
+    env_days = Settings().trial_period_days
+    if env_days is not None and env_days > 0:
+        return int(env_days)
+    db_days = await get_platform_int(session, WELCOME_TRIAL_PERIOD_DAYS_KEY)
+    if db_days is not None and db_days > 0:
+        return int(db_days)
+    return max(1, int(plan_default_days))
+
+
 async def trainer_has_used_trial(session: AsyncSession, trainer_id: int) -> bool:
     """True if trainer already had a subscription with trial plan (one trial per trainer)."""
     r = await session.execute(
@@ -109,20 +135,20 @@ async def create_trial_subscription(session: AsyncSession, trainer_id: int) -> d
     row = r.fetchone()
     if not row:
         return None
-    # Env TRIAL_PERIOD_DAYS overrides plan's period_days (for tuning without DB change)
-    period_days = Settings().trial_period_days if Settings().trial_period_days is not None else row[0]
+    period_days = await resolve_trial_period_days(session, int(row[0]))
     now = datetime.now(timezone.utc)
     started_at = now
     expires_at = now + timedelta(days=period_days)
     r = await session.execute(
         text("""
-            INSERT INTO trainer_subscriptions (trainer_id, plan_id, started_at, expires_at, status)
-            VALUES (:tid, :pid, :started_at, :expires_at, :status)
+            INSERT INTO trainer_subscriptions (trainer_id, plan_id, tier, started_at, expires_at, status)
+            VALUES (:tid, :pid, :tier, :started_at, :expires_at, :status)
             RETURNING id, started_at, expires_at
         """),
         {
             "tid": trainer_id,
             "pid": plan_id,
+            "tier": SUBSCRIPTION_TIER_ANALYTICS,
             "started_at": started_at,
             "expires_at": expires_at,
             "status": SUBSCRIPTION_STATUS_TRIAL,
@@ -138,6 +164,37 @@ async def create_trial_subscription(session: AsyncSession, trainer_id: int) -> d
         "expires_at": row[2].isoformat() if hasattr(row[2], "isoformat") else str(row[2]),
         "status": SUBSCRIPTION_STATUS_TRIAL,
     }
+
+
+async def ensure_trainer_welcome_trial(session: AsyncSession, trainer_id: int) -> None:
+    """
+    After first Telegram link: create max-tier trial if missing, or backfill tier on legacy trial rows.
+    """
+    created = await create_trial_subscription(session, trainer_id)
+    if created is not None:
+        return
+    now = datetime.now(timezone.utc)
+    await session.execute(
+        text("""
+            UPDATE trainer_subscriptions AS ts
+            SET tier = :tier
+            FROM subscription_plans sp
+            WHERE ts.trainer_id = :tid
+              AND ts.plan_id = sp.id
+              AND sp.is_trial = true
+              AND ts.tier IS NULL
+              AND ts.status IN (:s1, :s2)
+              AND ts.expires_at > :now
+        """),
+        {
+            "tid": trainer_id,
+            "tier": SUBSCRIPTION_TIER_ANALYTICS,
+            "s1": SUBSCRIPTION_STATUS_TRIAL,
+            "s2": SUBSCRIPTION_STATUS_ACTIVE,
+            "now": now,
+        },
+    )
+    await session.commit()
 
 
 async def expire_subscriptions_to_past_due(session: AsyncSession) -> int:
@@ -170,7 +227,7 @@ async def get_subscriptions_reminder_due(session: AsyncSession, days_ahead: int 
     end = now + timedelta(days=days_ahead)
     r = await session.execute(
         text("""
-            SELECT ts.id, ts.trainer_id, ts.expires_at, t.telegram_id
+            SELECT ts.id, ts.trainer_id, ts.expires_at, t.telegram_id, ts.status
             FROM trainer_subscriptions ts
             JOIN trainers t ON t.id = ts.trainer_id
             WHERE ts.expires_at > :now
@@ -193,6 +250,7 @@ async def get_subscriptions_reminder_due(session: AsyncSession, days_ahead: int 
             "trainer_id": row[1],
             "expires_at": row[2],
             "trainer_telegram_id": row[3],
+            "status": row[4],
         }
         for row in rows
     ]

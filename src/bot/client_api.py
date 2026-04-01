@@ -94,3 +94,23 @@ async def fetch_photo_bytes(photo_url: str) -> bytes | None:
     except Exception as e:
         logger.warning("Failed to fetch photo %s: %s", photo_url, e)
         return None
+
+
+async def resolve_trainer_photo_bytes(file_key: str | None) -> bytes | None:
+    """
+    Bytes for Telegram send_photo: read from S3/local (same as GET /api/public/photos/{key}),
+    then HTTP fallback. Admin bot often runs in a separate process where api_base_url is not
+    reachable — direct storage read fixes missing photos on moderation cards.
+    """
+    if not file_key or not str(file_key).strip():
+        return None
+    key = str(file_key).strip()
+    from src.infrastructure import s3
+
+    result = s3.get_photo(key)
+    if result:
+        return result[0]
+    url = build_photo_url(key)
+    if url:
+        return await fetch_photo_bytes(url)
+    return None

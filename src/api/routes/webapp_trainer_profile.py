@@ -24,6 +24,11 @@ from src.api.schemas import (
 )
 from src.api.routes.public import _enrich_trainer_photo_urls
 from src.application.trainer_link import get_trainer_id_linked_any_status
+from src.application.trainer_profile_pending import (
+    merge_profile_pending_for_editor,
+    trainer_has_pending_text_revision,
+    trainer_has_photo_pending_revision,
+)
 from src.application.trainer_use_cases import (
     TrainerPhotoFileKeyError,
     create_trainer_education,
@@ -88,16 +93,40 @@ async def get_trainer_profile_for_webapp(
     trainer = await get_trainer(session, trainer_id)
     if not trainer:
         raise HTTPException(status_code=404, detail="Trainer not found")
-    _enrich_trainer_photo_urls(trainer)
+    pub = trainer.get("profile") if isinstance(trainer.get("profile"), dict) else {}
+    pen = trainer.get("profile_pending") if isinstance(trainer.get("profile_pending"), dict) else None
+    merged_profile = merge_profile_pending_for_editor(pub, pen)
+    trainer_for_editor = dict(trainer)
+    if merged_profile is not None:
+        trainer_for_editor["profile"] = merged_profile
+    photos_catalog_published = [dict(p) for p in (trainer.get("photos") or [])]
+    _enrich_trainer_photo_urls({"photos": photos_catalog_published})
+    pp = trainer.get("photo_pending") if isinstance(trainer.get("photo_pending"), dict) else None
+    fk_p = (pp.get("file_key") or "").strip() if pp else ""
+    if fk_p:
+        trainer_for_editor["photos"] = [
+            {
+                "file_key": fk_p,
+                "file_key_list": (pp.get("file_key_list") or "").strip() or None,
+                "sort_order": 0,
+            }
+        ]
+    else:
+        trainer_for_editor["photos"] = list(trainer.get("photos") or [])
+    _enrich_trainer_photo_urls(trainer_for_editor)
     readiness = moderation_readiness_dict(
-        trainer,
+        trainer_for_editor,
         trainer_status=(trainer.get("status") or "").strip() or None,
     )
     education_entries = await list_trainer_education(session, trainer_id, public_only=False)
     if education_entries is None:
         education_entries = []
     return {
-        "trainer": trainer,
+        "trainer": trainer_for_editor,
+        "profile_catalog_published": pub,
+        "photos_catalog_published": photos_catalog_published,
+        "has_pending_profile_revision": trainer_has_pending_text_revision(trainer),
+        "has_pending_photo_revision": trainer_has_photo_pending_revision(trainer),
         "moderation_readiness": readiness,
         "education_entries": education_entries,
     }
@@ -119,14 +148,20 @@ async def patch_trainer_profile_for_webapp(
     trainer_id = await _require_linked_trainer_id(session, raw)
     profile = body.profile.model_dump(exclude_unset=True) if body.profile else {}
     services_payload = [s.model_dump() for s in body.services] if body.services is not None else None
-    ok = await update_trainer_profile(
-        session,
-        trainer_id,
-        profile=profile,
-        service_ids=body.service_ids if services_payload is None else None,
-        services=services_payload,
-        arena_ids=body.arena_ids,
-    )
+    primary_set = "primary_arena_id" in body.model_fields_set
+    try:
+        ok = await update_trainer_profile(
+            session,
+            trainer_id,
+            profile=profile,
+            service_ids=body.service_ids if services_payload is None else None,
+            services=services_payload,
+            arena_ids=body.arena_ids,
+            primary_arena_id=body.primary_arena_id,
+            primary_arena_id_set=primary_set,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     if not ok:
         raise HTTPException(status_code=404, detail="Trainer not found")
     audit_log("trainer.profile_updated", ACTOR_API, "webapp_trainer_profile", {"trainer_id": trainer_id})

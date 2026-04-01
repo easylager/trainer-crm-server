@@ -2,6 +2,7 @@
 Stats for trainers (subscription value) and platform (admin).
 Read-only aggregates; no side effects.
 """
+from calendar import monthrange
 from datetime import date, timedelta
 
 from sqlalchemy import text
@@ -235,9 +236,9 @@ async def get_trainer_stats(session: AsyncSession, trainer_id: int) -> dict:
 
 async def get_trainer_stats_dashboard(session: AsyncSession, trainer_id: int) -> dict:
     """
-    Rich stats for trainer Mini App: base + trends, revenue (rolling + calendar week),
-    avg check, repeat clients, cancel rate, leads (requests/responses), top clients with revenue.
-    All dates/times in server TZ.
+    Rich stats for trainer Mini App: base + trends, revenue (rolling + calendar week/month),
+    avg check, repeat clients, cancel rate, leads (requests/responses + response rate),
+    pass redemptions, top clients with revenue. All dates/times in server TZ.
     """
     base = await get_trainer_stats(session, trainer_id)
     today = date.today()
@@ -518,6 +519,40 @@ async def get_trainer_stats_dashboard(session: AsyncSession, trainer_id: int) ->
     )
     repeat_clients_30d = (r.fetchone() or (0,))[0]
 
+    # Distinct clients with at least one non-cancelled booking in rolling 30d (by slot date).
+    r = await session.execute(
+        text(
+            """
+            SELECT COUNT(DISTINCT b.client_id)
+            FROM bookings b
+            JOIN slots s ON s.id = b.slot_id
+            WHERE b.trainer_id = :tid AND b.status != 'cancelled'
+              AND s.slot_date >= CURRENT_DATE - INTERVAL '30 days'
+            """
+        ),
+        {"tid": trainer_id},
+    )
+    unique_clients_30d = (r.fetchone() or (0,))[0]
+    repeat_share_30d_pct: int | None = None
+    if unique_clients_30d > 0:
+        repeat_share_30d_pct = round(100 * repeat_clients_30d / unique_clients_30d, 0)
+
+    # Pass redemptions in rolling 30d (abonement actually used for a slot).
+    r = await session.execute(
+        text(
+            """
+            SELECT COUNT(*)
+            FROM pass_redemptions pr
+            JOIN bookings b ON b.id = pr.booking_id
+            JOIN slots s ON s.id = b.slot_id
+            WHERE b.trainer_id = :tid
+              AND s.slot_date >= CURRENT_DATE - INTERVAL '30 days'
+            """
+        ),
+        {"tid": trainer_id},
+    )
+    pass_redemptions_30d = (r.fetchone() or (0,))[0]
+
     # Cancellation share of all booking outcomes in 30d (by slot date).
     r = await session.execute(
         text(
@@ -565,6 +600,12 @@ async def get_trainer_stats_dashboard(session: AsyncSession, trainer_id: int) ->
         {"tid": trainer_id},
     )
     client_request_responses_30d = (r.fetchone() or (0,))[0]
+    lead_response_rate_30d: int | None = None
+    if client_requests_to_trainer_30d > 0:
+        lead_response_rate_30d = round(
+            100 * client_request_responses_30d / client_requests_to_trainer_30d,
+            0,
+        )
 
     # Cancellations: count of cancelled bookings in period (by slot date).
     r = await session.execute(
@@ -586,6 +627,28 @@ async def get_trainer_stats_dashboard(session: AsyncSession, trainer_id: int) ->
     cancellations_30d = cancel_row[1] or 0
 
     free_slots_week = max(0, (base["week_slots_total"] or 0) - (base["week_slots_booked"] or 0))
+
+    # Calendar-month accrual revenue (full model) vs previous month — aligns with «бухгалтерия».
+    revenue_calendar_month_cents = await _trainer_calendar_revenue_total(
+        session, trainer_id, month_start, month_end
+    )
+    revenue_prev_calendar_month_cents = await _trainer_calendar_revenue_total(
+        session, trainer_id, last_month_start, last_month_end
+    )
+    revenue_month_change_pct: int | None = None
+    if revenue_prev_calendar_month_cents > 0:
+        revenue_month_change_pct = round(
+            100
+            * (revenue_calendar_month_cents - revenue_prev_calendar_month_cents)
+            / revenue_prev_calendar_month_cents,
+            0,
+        )
+    _, days_in_month = monthrange(today.year, today.month)
+    revenue_month_run_rate_cents: int | None = None
+    if days_in_month and today.day >= 1 and revenue_calendar_month_cents >= 0:
+        revenue_month_run_rate_cents = int(
+            (revenue_calendar_month_cents * days_in_month) / max(1, today.day)
+        )
 
     # Top clients: session cash only (same rules as revenue_sessions_*).
     r = await session.execute(
@@ -666,6 +729,15 @@ async def get_trainer_stats_dashboard(session: AsyncSession, trainer_id: int) ->
         "cancellations_30d": cancellations_30d,
         "free_slots_week": free_slots_week,
         "top_clients": top_clients,
+        "unique_clients_30d": unique_clients_30d,
+        "repeat_share_30d_pct": repeat_share_30d_pct,
+        "pass_redemptions_30d": pass_redemptions_30d,
+        "bookings_held_30d": ok_cnt,
+        "lead_response_rate_30d": lead_response_rate_30d,
+        "revenue_calendar_month_cents": revenue_calendar_month_cents,
+        "revenue_prev_calendar_month_cents": revenue_prev_calendar_month_cents,
+        "revenue_month_change_pct": revenue_month_change_pct,
+        "revenue_month_run_rate_cents": revenue_month_run_rate_cents,
     }
 
 

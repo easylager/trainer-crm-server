@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-  <title>Записаться</title>
+  <title>Запись</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <link rel="stylesheet" href="theme.css" />
   <link rel="stylesheet" href="mini-app-components.css" />
@@ -24,14 +24,6 @@
     }
     .header {
       margin-bottom: 24px;
-    }
-    .bd-screen-head { margin-bottom: 8px; }
-    .bd-screen-title {
-      font-size: 13px;
-      font-weight: 600;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      color: var(--tg-theme-hint-color);
     }
     .header-title { 
       font-size: 24px;
@@ -209,35 +201,10 @@
       min-height: 100px;
       resize: vertical;
     }
-    .btn-primary {
+    /* .btn-primary — mini-app-components.css + theme tokens */
+    #screenForm .btn-primary {
       width: 100%;
-      padding: 16px 18px;
-      border-radius: 14px;
-      border: none;
-      font-size: 16px;
-      font-weight: 600;
-      background: linear-gradient(180deg, #ffc23d 0%, #f0a000 100%);
-      color: #141414;
-      cursor: pointer;
       margin-top: 12px;
-      box-shadow: 0 6px 20px rgba(247, 166, 0, 0.38);
-      transition: transform 0.12s ease, box-shadow 0.12s ease, opacity 0.12s ease;
-      font-family: inherit;
-    }
-    .btn-primary:hover {
-      transform: translateY(-1px);
-      box-shadow: 0 8px 25px rgba(247, 166, 0, 0.45);
-    }
-    .btn-primary:active {
-      transform: scale(0.985);
-      box-shadow: 0 3px 12px rgba(247, 166, 0, 0.28);
-      opacity: 0.92;
-    }
-    .btn-primary:disabled { 
-      opacity: 0.6; 
-      cursor: not-allowed;
-      transform: none;
-      box-shadow: 0 3px 12px rgba(247, 166, 0, 0.2);
     }
     .success-msg {
       text-align: center;
@@ -327,10 +294,7 @@
 </head>
 <body>
   <div class="header">
-    <div class="bd-screen-head">
-      <div class="bd-screen-title">ЗАПИСЬ</div>
-    </div>
-    <h1 class="header-title" id="headerTitle">📅 Записаться</h1>
+    <h1 class="header-title" id="headerTitle">📅 Запись</h1>
   </div>
   <div id="screenSlots">
     <div class="week-nav">
@@ -352,14 +316,11 @@
       <label for="comment">Комментарий (необязательно)</label>
       <textarea id="comment" placeholder="Напишите тренеру, если нужно"></textarea>
     </div>
-    <button type="button" class="btn-primary" id="btnSubmit">Отправить заявку</button>
+    <button type="button" class="btn-primary" id="btnSubmit">Записаться</button>
     <button type="button" class="back-link" id="btnBackForm"><svg class="back-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>Выбрать другое время</button>
   </div>
   <div id="screenSuccess" style="display: none;">
-    <div class="success-msg">
-      ✅ Заявка отправлена. Дождитесь подтверждения от тренера — мы сообщим в боте.<br>
-      <span style="color: var(--tg-theme-hint-color); font-size: 14px;">Детали, адрес и отмена — в «Мои записи» в меню бота.</span>
-    </div>
+    <div class="success-msg" id="successMsgBody"></div>
     <button type="button" class="btn-primary" id="btnCloseSuccess">Закрыть</button>
   </div>
 
@@ -448,12 +409,14 @@
         const initData = tg?.initData || '';
         if (!initData) return;
         try {
-          const headers = { Accept: 'application/json' };
-          headers['X-Telegram-Init-Data'] = initData;
-          const res = await fetch(
-            '/api/webapp/client/session?init_data=' + encodeURIComponent(initData),
-            { headers }
-          );
+          // Prefer header-only auth (same as catalog): long init_data in query can be truncated by proxies.
+          const res = await fetch('/api/webapp/client/session', {
+            headers: {
+              Accept: 'application/json',
+              'X-Telegram-Init-Data': initData,
+            },
+            cache: 'no-store',
+          });
           if (res.ok) {
             const data = await res.json();
             const raw = data.client_phone;
@@ -575,6 +538,15 @@
         }).then(function(res) {
           return res.json().then(function(data) {
             if (res.ok && data.success) {
+              var successMain = '✅ <b>Вы записаны</b>.<br><br>Ожидайте подтверждения от тренера в боте.';
+              var successCtx = '';
+              if (requestId) {
+                successCtx = '<br><span style="color: var(--tg-theme-hint-color); font-size: 14px; display: inline-block; margin-top: 10px;">Запись связана с вашей заявкой и откликом тренера.</span>';
+              } else if (data.used_primary_venue_for_online_booking) {
+                successCtx = '<br><span style="color: var(--tg-theme-hint-color); font-size: 14px; display: inline-block; margin-top: 10px;">Запись на <strong>основную площадку</strong>. Для занятий на другой арене из фильтра используйте заявку — тренер запишет вас вручную.</span>';
+              }
+              var successFoot = '<br><span style="color: var(--tg-theme-hint-color); font-size: 14px; display: inline-block; margin-top: 10px;">Детали, адрес и отмена — в «Мои записи» в меню бота.</span>';
+              document.getElementById('successMsgBody').innerHTML = successMain + successCtx + successFoot;
               document.getElementById('screenForm').style.display = 'none';
               document.getElementById('screenSuccess').style.display = 'block';
             } else {
@@ -590,7 +562,7 @@
         try {
           const data = await fetchSlots();
           trainerName = data.trainer_name || trainerName;
-          document.getElementById('headerTitle').textContent = '📅 Записаться к ' + trainerName;
+          document.getElementById('headerTitle').textContent = '📅 Запись: ' + trainerName;
           if (data.online_booking_available === false) {
             document.getElementById('prevWeek').style.display = 'none';
             document.getElementById('nextWeek').style.display = 'none';

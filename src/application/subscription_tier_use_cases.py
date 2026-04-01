@@ -198,17 +198,29 @@ async def get_trainer_subscription_status(session: AsyncSession, trainer_id: int
     if row:
         row_tier = row[1] or tier
         expires_at = row[2]
+        sub_status = row[3]
         started_at = row[4]
         stored_pm = row[5]
         billing_pm: int | None = int(stored_pm) if stored_pm is not None else None
         if billing_pm is None and row_tier and expires_at and started_at:
             billing_pm = await _infer_billing_period_months(session, row_tier, started_at, expires_at)
+        tier_name_ru: str | None = None
+        if row_tier:
+            nr = await session.execute(
+                text("SELECT name_ru FROM subscription_tier_pricing WHERE tier = :t LIMIT 1"),
+                {"t": row_tier},
+            )
+            nrow = nr.fetchone()
+            tier_name_ru = nrow[0] if nrow else None
+        is_trial = sub_status == SUBSCRIPTION_STATUS_TRIAL
         return {
             "subscription_id": row[0],
             "tier": row_tier,
             "effective_tier": tier,
             "expires_at": expires_at.isoformat() if expires_at else None,
-            "status": row[3],
+            "status": sub_status,
+            "is_trial": is_trial,
+            "tier_name_ru": tier_name_ru,
             "started_at": started_at.isoformat() if started_at else None,
             "billing_period_months": billing_pm,
             "is_active": True,
@@ -221,6 +233,8 @@ async def get_trainer_subscription_status(session: AsyncSession, trainer_id: int
         "effective_tier": SUBSCRIPTION_TIER_NONE,
         "expires_at": None,
         "status": None,
+        "is_trial": False,
+        "tier_name_ru": None,
         "started_at": None,
         "billing_period_months": None,
         "is_active": False,

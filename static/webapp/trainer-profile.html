@@ -7,6 +7,8 @@
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <link rel="stylesheet" href="theme.css" />
   <link rel="stylesheet" href="mini-app-components.css" />
+  <script src="mini-app-confirm.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.css" />
   <style>
     /* Shell: theme.css + mini-app-components.css */
     /* No native stepper arrows — trainers type values manually. */
@@ -452,23 +454,6 @@
       border-color: rgba(239, 68, 68, 0.6);
       background: rgba(239, 68, 68, 0.04);
     }
-    #profileIntroHint {
-      max-width: 100%;
-      box-sizing: border-box;
-      word-break: break-word;
-      white-space: normal;
-    }
-    #profileIntroHint.profile-intro--warn {
-      margin: 0 0 16px;
-      padding: 14px 16px;
-      border-radius: 14px;
-      text-align: left;
-      line-height: 1.5;
-      background: rgba(247, 166, 0, 0.1) !important;
-      color: #1a1a1a !important;
-      border: 1px solid rgba(247, 166, 0, 0.3);
-      font-size: 14px;
-    }
     .missing-list { margin: 0; padding-left: 20px; font-size: 14px; line-height: 1.6; }
     .missing-list li { margin-bottom: 4px; }
     #modHint:empty { display: none !important; }
@@ -489,6 +474,142 @@
     }
     .how-it-works-ol li { margin-bottom: 8px; }
     .how-it-works-ol li:last-child { margin-bottom: 0; }
+    .mod-feedback-banner {
+      margin-bottom: 14px;
+      border-radius: 14px;
+      border: 1px solid rgba(247, 166, 0, 0.45);
+      background: rgba(247, 166, 0, 0.1);
+      padding: 14px 16px;
+      box-sizing: border-box;
+    }
+    .mod-feedback-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--tg-theme-text-color);
+      margin: 0 0 8px;
+      letter-spacing: 0.02em;
+    }
+    .mod-feedback-body {
+      margin: 0;
+      font-size: 14px;
+      line-height: 1.5;
+      color: var(--tg-theme-text-color);
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    /* Photo crop modal: 4:3 как большое фото в каталоге (эффекты — янтарь, маска, кнопки) */
+    .photo-crop-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 10000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 12px;
+      padding-bottom: max(12px, env(safe-area-inset-bottom));
+      box-sizing: border-box;
+    }
+    .photo-crop-modal[hidden] { display: none !important; }
+    .photo-crop-backdrop {
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.55);
+      backdrop-filter: blur(4px);
+    }
+    .photo-crop-dialog {
+      position: relative;
+      z-index: 1;
+      width: 100%;
+      max-width: 420px;
+      max-height: min(92vh, 640px);
+      display: flex;
+      flex-direction: column;
+      background: var(--tg-theme-secondary-bg-color);
+      border-radius: 16px;
+      border: 1px solid rgba(247, 166, 0, 0.25);
+      box-shadow: 0 16px 48px rgba(0, 0, 0, 0.25);
+      overflow: hidden;
+    }
+    .photo-crop-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--tg-theme-text-color);
+      padding: 14px 16px 6px;
+    }
+    .photo-crop-hint {
+      font-size: 13px;
+      color: var(--tg-theme-hint-color);
+      line-height: 1.45;
+      margin: 0 16px 10px;
+    }
+    .photo-crop-stage {
+      flex: 1;
+      min-height: 200px;
+      max-height: min(52vh, 360px);
+      background: #111;
+    }
+    .photo-crop-stage .cropper-container,
+    .photo-crop-stage .cropper-wrap-box,
+    .photo-crop-stage .cropper-canvas {
+      max-height: min(52vh, 360px) !important;
+    }
+    .photo-crop-stage img {
+      display: block;
+      max-width: 100%;
+    }
+    .photo-crop-actions {
+      display: flex;
+      gap: 10px;
+      padding: 12px 16px 16px;
+      justify-content: flex-end;
+    }
+    .photo-crop-actions button {
+      padding: 12px 18px;
+      border-radius: 12px;
+      font-size: 15px;
+      font-weight: 600;
+      border: none;
+      cursor: pointer;
+    }
+    .photo-crop-cancel {
+      background: transparent;
+      color: var(--tg-theme-hint-color);
+    }
+    .photo-crop-confirm {
+      background: var(--app-cta-fill, #f5a623);
+      color: var(--app-cta-text, #1a1a1a);
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+    }
+    .photo-crop-confirm:active {
+      opacity: 0.94;
+    }
+    /* Cropper.js defaults to Telegram-blue handles; brand amber for trainer CRM */
+    .photo-crop-stage .cropper-view-box {
+      outline: 2px solid var(--app-cta-fill, #f5a623) !important;
+      outline-offset: -1px;
+    }
+    .photo-crop-stage .cropper-point {
+      background-color: var(--app-cta-fill, #f5a623) !important;
+      border: 1px solid rgba(26, 26, 26, 0.35) !important;
+      opacity: 1 !important;
+    }
+    .photo-crop-stage .cropper-line {
+      background-color: rgba(245, 166, 35, 0.45) !important;
+    }
+    
+    /* Визуальная подсказка для позиционирования лица */
+    .photo-crop-stage .cropper-crop-box::after {
+      content: '👤';
+      position: absolute;
+      top: 35%;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 24px;
+      opacity: 0.6;
+      pointer-events: none;
+      z-index: 100;
+      text-shadow: 0 0 4px rgba(0, 0, 0, 0.5);
+    }
     .status-pill {
       display: inline-flex;
       align-items: center;
@@ -946,11 +1067,6 @@
       .save-toast-desc { color: #94a3b8 !important; }
       .save-toast-mark { background: rgba(34, 197, 94, 0.2) !important; color: #4ade80 !important; }
       .hero-photo { box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4); }
-      #profileIntroHint.profile-intro--warn {
-        background: rgba(247, 166, 0, 0.1) !important;
-        color: #f5f5f5 !important;
-        border-color: rgba(247, 166, 0, 0.35);
-      }
       .quick-action-btn { background: #252525 !important; }
     }
   </style>
@@ -995,16 +1111,10 @@
       </div>
     </div>
 
-    <div class="card how-it-works" id="howItWorksBlock" aria-labelledby="howItWorksTitle">
-      <div class="how-it-works-title" id="howItWorksTitle">Как это работает</div>
-      <ol class="how-it-works-ol">
-        <li>Изменения в анкете применяются после нажатия «Сохранить» внизу экрана.</li>
-        <li>Когда все обязательные поля заполнены, следующее успешное сохранение ставит профиль в очередь на проверку в админ-боте. Отдельной кнопки «отправить на модерацию» нет.</li>
-        <li>Подробные записи об образовании и фото профиля сохраняются своими кнопками в соответствующих разделах.</li>
-      </ol>
+    <div id="moderatorFeedbackBanner" class="card mod-feedback-banner" hidden role="alert">
+      <div class="mod-feedback-title">Комментарий модератора</div>
+      <p id="moderatorFeedbackText" class="mod-feedback-body"></p>
     </div>
-
-    <p class="hint" id="profileIntroHint"></p>
 
     <div class="filters" id="profileFilters">
       <button type="button" class="filter-btn active" data-tab="form">Анкета</button>
@@ -1015,7 +1125,7 @@
     <div id="tab-photo" class="tab-pane">
       <div class="section-title">Фото профиля</div>
       <div class="card">
-        <p class="hint" style="margin:0 0 16px;">Фото отображается в шапке профиля и в каталоге тренеров. Выберите качественное фото, где вас хорошо видно.</p>
+        <p class="hint" style="margin:0 0 16px;">Фото в каталоге: в списке — круглый аватар, на странице тренера — область 4:3 (как в обрезке). После выбора файла откроется кроп в том же соотношении.</p>
         <div class="photo-column">
           <div class="photo-upload-controls" id="photoDropZone">
             <label class="photo-upload-label" for="photoInput">
@@ -1044,8 +1154,7 @@
         </div>
         <div class="field">
           <label for="age"><span class="required-dot"></span>Возраст</label>
-          <input id="age" type="number" min="1" max="120" inputmode="numeric" placeholder="Полных лет" />
-          <div class="field-hint">От 1 до 120 лет</div>
+          <input id="age" type="number" step="1" inputmode="numeric" placeholder="Полных лет" />
         </div>
         <div class="field">
           <label for="city_id"><span class="required-dot"></span>Город</label>
@@ -1061,7 +1170,7 @@
             <span class="phone-prefix">+375</span>
             <input id="phone" type="tel" autocomplete="tel" maxlength="32" placeholder="29 123 45 67" inputmode="tel" />
           </div>
-          <div class="field-hint">Белорусский номер в формате +375 XX XXX XX XX</div>
+          <div class="field-hint">Номер в формате +375 XX XXX XX XX</div>
         </div>
         <div class="field">
           <label for="contacts">Другие контакты</label>
@@ -1107,13 +1216,11 @@
         <div class="field">
           <label for="min_hours_before_booking"><span class="required-dot"></span>За сколько часов до занятия клиент может записаться</label>
           <input id="min_hours_before_booking" type="number" min="0" max="168" step="1" placeholder="Например 12 или 24" inputmode="numeric" />
-          <div class="field-hint">Считаются только часы в интервале <strong>8:00–22:00</strong> по <strong>Минску</strong> между текущим моментом и началом занятия (ночь и раннее утро в расчёт не входят — это не просто «сутки × N»).</div>
         </div>
       </div>
 
       <div class="section-title">Подробное образование</div>
       <div class="card" id="educationEntriesWrap">
-        <p class="hint" id="educationEntriesEmpty">Если категория в блоке «Опыт и квалификация» уже выбрана, подробные записи необязательны. Если категорию не выбирали — добавьте сюда хотя бы одну запись. Дополнительно записи усиливают доверие.</p>
         <div id="educationEntries"></div>
         <div id="educationNewWrap" style="display:none; margin-top:14px; padding-top:14px; border-top:1px solid rgba(128,128,128,0.15);"></div>
         <button type="button" class="filter-btn" id="btnEducationAdd" style="margin-top:14px; width: 100%; justify-content: center;">+ Добавить запись</button>
@@ -1130,6 +1237,8 @@
       <div class="card">
         <p class="hint" id="arenaHint">Выберите город — появится список доступных арен.</p>
         <div id="arenasWrap"></div>
+        <div id="primaryArenaWrap" style="display:none; margin-top:12px;"></div>
+        <p class="field-error" id="err_primary_arena" role="status" hidden style="margin-top:8px;"></p>
       </div>
     </div>
 
@@ -1164,6 +1273,22 @@
     </div>
   </div>
 
+  <div id="photoCropModal" class="photo-crop-modal" hidden aria-hidden="true">
+    <div class="photo-crop-backdrop" id="photoCropBackdrop"></div>
+    <div class="photo-crop-dialog" role="dialog" aria-modal="true" aria-labelledby="photoCropTitle">
+      <div class="photo-crop-title" id="photoCropTitle">Обрезка фото</div>
+      <p class="photo-crop-hint">Соотношение 4:3 — как большое фото на странице тренера в каталоге. Перемещайте и меняйте рамку, затем «Готово».</p>
+      <div class="photo-crop-stage">
+        <img id="photoCropImg" alt="" />
+      </div>
+      <div class="photo-crop-actions">
+        <button type="button" class="photo-crop-cancel" id="photoCropCancel">Отмена</button>
+        <button type="button" class="photo-crop-confirm" id="photoCropConfirm">Готово</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.js"></script>
   <script>
     (function() {
       var tg = window.Telegram && window.Telegram.WebApp;
@@ -1222,7 +1347,6 @@
         trainer: null,
         moderation_readiness: null,
         education_entries: [],
-        education_create_in_flight: false,
         cities: [],
         servicesCatalog: [],
         arenasList: [],
@@ -1373,6 +1497,11 @@
           es.textContent = '';
           es.hidden = true;
         }
+        var epa = document.getElementById('err_primary_arena');
+        if (epa) {
+          epa.textContent = '';
+          epa.hidden = true;
+        }
       }
 
       function showFieldError(fieldId, message) {
@@ -1516,7 +1645,7 @@
           if (av === '' || av === null) msg = 'Укажите возраст.';
           else {
             var an = Number(av);
-            if (isNaN(an) || an < 1 || an > 120) msg = 'Возраст: от 1 до 120 лет.';
+            if (isNaN(an) || !Number.isInteger(an)) msg = 'Укажите целое число.';
           }
         } else if (fieldId === 'city_id') {
           if (!el.value) msg = 'Выберите город из списка.';
@@ -1559,7 +1688,10 @@
         if (!pr.first_name || !String(pr.first_name).trim()) errs.push(['first_name', 'Укажите имя.']);
         if (!pr.last_name || !String(pr.last_name).trim()) errs.push(['last_name', 'Укажите фамилию.']);
         if (pr.age == null || pr.age === '') errs.push(['age', 'Укажите возраст.']);
-        else if (pr.age < 1 || pr.age > 120) errs.push(['age', 'Возраст: от 1 до 120 лет.']);
+        else {
+          var ageN = Number(pr.age);
+          if (isNaN(ageN) || !Number.isInteger(ageN)) errs.push(['age', 'Укажите целое число.']);
+        }
         if (pr.city_id == null || pr.city_id === '' || Number(pr.city_id) < 1) errs.push(['city_id', 'Выберите город из списка.']);
         var ph = normalizePhoneClient(pr.phone);
         var pmsg = validatePhoneMessage(ph);
@@ -1637,6 +1769,9 @@
         }
         if (collectProfileFieldErrors(parsed).length) return false;
         if (!servicesPricesValid(parsed)) return false;
+        if (parsed.arena_ids && parsed.arena_ids.length >= 2) {
+          if (!parsed.primary_arena_id || parsed.arena_ids.indexOf(parsed.primary_arena_id) < 0) return false;
+        }
         return true;
       }
 
@@ -1646,6 +1781,11 @@
         if (!servicesPricesValid(parsed)) {
           errs.push(['services', 'Укажите цену (BYN) для каждой выбранной услуги.']);
         }
+        if (parsed.arena_ids && parsed.arena_ids.length >= 2) {
+          if (!parsed.primary_arena_id || parsed.arena_ids.indexOf(parsed.primary_arena_id) < 0) {
+            errs.push(['primary_arena', 'Выберите основную площадку для онлайн-записи.']);
+          }
+        }
         if (!errs.length) return true;
         errs.forEach(function(pair) {
           if (pair[0] === 'services') {
@@ -1653,6 +1793,12 @@
             if (es) {
               es.textContent = pair[1];
               es.hidden = false;
+            }
+          } else if (pair[0] === 'primary_arena') {
+            var ep = document.getElementById('err_primary_arena');
+            if (ep) {
+              ep.textContent = pair[1];
+              ep.hidden = false;
             }
           } else {
             showFieldError(pair[0], pair[1]);
@@ -1694,6 +1840,7 @@
           return { service_id: s.service_id, price_byn: s.price_byn == null ? null : Number(s.price_byn) };
         }).sort(function(a, b) { return a.service_id - b.service_id; });
         var arena_ids = (state.trainer && state.trainer.arena_ids) ? state.trainer.arena_ids.slice().sort(function(a,b){ return a-b; }) : [];
+        var primary_arena_id = (state.trainer && state.trainer.primary_arena_id != null) ? Number(state.trainer.primary_arena_id) : null;
         return JSON.stringify({
           profile: {
             first_name: p.first_name || '',
@@ -1710,6 +1857,8 @@
           },
           services: svc,
           arena_ids: arena_ids,
+          primary_arena_id: primary_arena_id,
+          education: buildEducationSnapshotFromState(),
         });
       }
 
@@ -1753,6 +1902,13 @@
           if (cb && cb.checked) arena_ids.push(a.id);
         });
         arena_ids.sort(function(a, b) { return a - b; });
+        var primary_arena_id = null;
+        if (arena_ids.length >= 2) {
+          var pr = document.querySelector('input[name="primary_arena"]:checked');
+          primary_arena_id = pr ? parseInt(pr.value, 10) : null;
+        } else if (arena_ids.length === 1) {
+          primary_arena_id = arena_ids[0];
+        }
         var eduSel = document.getElementById('education');
         var eduVal = eduSel && eduSel.value ? eduSel.value : '';
         return JSON.stringify({
@@ -1771,6 +1927,8 @@
           },
           services: services,
           arena_ids: arena_ids,
+          primary_arena_id: primary_arena_id,
+          education: buildEducationSnapshotFromDom(),
         });
       }
 
@@ -1889,6 +2047,21 @@
         });
       }
 
+      function renderModeratorFeedbackBanner() {
+        var banner = document.getElementById('moderatorFeedbackBanner');
+        var txt = document.getElementById('moderatorFeedbackText');
+        if (!banner || !txt) return;
+        var fb = state.trainer && state.trainer.moderation_feedback;
+        var s = (fb != null && String(fb).trim()) ? String(fb).trim() : '';
+        if (s) {
+          txt.textContent = s;
+          banner.hidden = false;
+        } else {
+          txt.textContent = '';
+          banner.hidden = true;
+        }
+      }
+
       function renderModeration() {
         var d = state.moderation_readiness || {};
         var st = (state.trainer && state.trainer.status) ? String(state.trainer.status).trim() : '';
@@ -1917,7 +2090,12 @@
           missTitle.style.display = 'none';
           hint.textContent = 'Следующий шаг — оплата подписки.';
         } else if (st === 'pending_profile') {
-          if (d.already_submitted_for_moderation) {
+          var fbRaw = state.trainer && state.trainer.moderation_feedback;
+          var fbTrim = (fbRaw != null && String(fbRaw).trim()) ? String(fbRaw).trim() : '';
+          if (fbTrim) {
+            missTitle.style.display = 'none';
+            hint.textContent = 'Модератор оставил комментарий — см. жёлтый блок выше. Внесите правки и снова сохраните анкету.';
+          } else if (d.already_submitted_for_moderation) {
             missTitle.style.display = 'none';
             hint.textContent = 'Ожидается проверка в админ-боте.';
           } else if (d.complete) {
@@ -2035,37 +2213,6 @@
           };
         }
 
-        var hBlock = document.getElementById('howItWorksBlock');
-        if (hBlock) {
-          /* Onboarding-only copy: moderation queue rules do not apply after approval. */
-          hBlock.style.display = (st || '').trim() === 'pending_profile' ? '' : 'none';
-        }
-
-        var intro = document.getElementById('profileIntroHint');
-        if (intro) {
-          intro.classList.remove('profile-intro--warn');
-          var s = (st || '').trim();
-          /* Short status cue only — full pipeline is in #howItWorksBlock */
-          if (s === 'active') {
-            intro.textContent = 'Профиль в каталоге. Правки — «Сохранить» внизу.';
-          } else if (s === 'pending_profile') {
-            var rd = state.moderation_readiness || {};
-            if (rd.already_submitted_for_moderation) {
-              intro.textContent = 'На проверке в админ-боте. После правок снова сохраните анкету.';
-            } else if (!rd.complete) {
-              intro.classList.add('profile-intro--warn');
-              intro.textContent = 'Анкета неполная — подсказки на вкладке «Статус».';
-            } else {
-              intro.textContent = 'Все обязательные поля заполнены. Сохраните анкету внизу.';
-            }
-          } else if (s === 'pending_contract' || s === 'pending_payment') {
-            intro.textContent = 'Этап: ' + trainerStatusLabelRu(s) + '.';
-          } else if (s === 'deactivated') {
-            intro.textContent = 'Профиль скрыт из каталога.';
-          } else {
-            intro.textContent = 'Этап: ' + trainerStatusLabelRu(s) + '.';
-          }
-        }
       }
 
       function updateProgressRing() {
@@ -2183,6 +2330,51 @@
         return true;
       }
 
+      function educationPayloadFromEntry(e) {
+        return {
+          education_type: e.education_type || 'formal_education',
+          institution_name: (e.institution_name || '').trim(),
+          program_or_title: (e.program_or_title || '').trim(),
+          degree_level: optionalStr(e.degree_level),
+          country: optionalStr(e.country),
+          city: optionalStr(e.city),
+          document_url: optionalStr(e.document_url),
+          is_in_progress: !!e.is_in_progress,
+          start_year: e.start_year != null ? Number(e.start_year) : null,
+          end_year: e.end_year != null ? Number(e.end_year) : null,
+        };
+      }
+
+      function buildEducationSnapshotFromState() {
+        var items = (state.education_entries || []).map(function(e) {
+          return { id: e.id, body: educationPayloadFromEntry(e) };
+        });
+        items.sort(function(a, b) { return Number(a.id) - Number(b.id); });
+        var newWrap = document.getElementById('educationNewWrap');
+        var newCard = newWrap && newWrap.style.display !== 'none' ? newWrap.querySelector('.edu-card') : null;
+        var newDraft = null;
+        if (newCard) {
+          newDraft = { id: 'new', body: collectEducationPayload(newCard) };
+        }
+        return JSON.stringify({ items: items, newDraft: newDraft });
+      }
+
+      function buildEducationSnapshotFromDom() {
+        var items = [];
+        document.querySelectorAll('#educationEntries .edu-card').forEach(function(card) {
+          var id = parseInt(card.getAttribute('data-edu-id'), 10);
+          if (!isNaN(id)) items.push({ id: id, body: collectEducationPayload(card) });
+        });
+        items.sort(function(a, b) { return Number(a.id) - Number(b.id); });
+        var newWrap = document.getElementById('educationNewWrap');
+        var newCard = newWrap && newWrap.style.display !== 'none' ? newWrap.querySelector('.edu-card') : null;
+        var newDraft = null;
+        if (newCard) {
+          newDraft = { id: 'new', body: collectEducationPayload(newCard) };
+        }
+        return JSON.stringify({ items: items, newDraft: newDraft });
+      }
+
       function makeEducationCard(e) {
         var card = document.createElement('div');
         card.className = 'edu-card';
@@ -2207,7 +2399,8 @@
           delBtn.textContent = '\u00D7';
           delBtn.addEventListener('click', function() {
             if (delBtn.disabled) return;
-            if (!confirm('\u0423\u0434\u0430\u043b\u0438\u0442\u044c \u044d\u0442\u0443 \u0437\u0430\u043f\u0438\u0441\u044c \u043e\u0431 \u043e\u0431\u0440\u0430\u0437\u043e\u0432\u0430\u043d\u0438\u0438?')) return;
+            showAppConfirm('\u0423\u0434\u0430\u043b\u0438\u0442\u044c \u044d\u0442\u0443 \u0437\u0430\u043f\u0438\u0441\u044c \u043e\u0431 \u043e\u0431\u0440\u0430\u0437\u043e\u0432\u0430\u043d\u0438\u0438?', { okText: '\u0423\u0434\u0430\u043b\u0438\u0442\u044c', cancelText: '\u041e\u0442\u043c\u0435\u043d\u0430' }).then(function (ok) {
+            if (!ok) return;
             var eduId = parseInt(card.getAttribute('data-edu-id'), 10);
             if (isNaN(eduId)) return;
             delBtn.disabled = true;
@@ -2234,6 +2427,7 @@
               .finally(function() {
                 delBtn.disabled = false;
               });
+            });
           });
           head.appendChild(titleEl);
           head.appendChild(delBtn);
@@ -2349,60 +2543,17 @@
         var mod = document.createElement('span');
         mod.className = 'edu-mod';
         mod.textContent = e.moderation_status ? ('Статус: ' + eduModLabelRu(e.moderation_status)) : '';
-        var btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'btn-edu-save';
-        btn.textContent = 'Сохранить запись';
-        btn.addEventListener('click', function() {
-          if (btn.disabled) return;
-          var payload = collectEducationPayload(card);
-          if (!validateEducationPayload(payload, err)) {
-            haptic('error');
-            return;
-          }
-          btn.disabled = true;
-          var btnLabel = btn.textContent;
-          btn.textContent = 'Сохраняем...';
-          var eduId = parseInt(card.getAttribute('data-edu-id'), 10);
-          fetch(apiUrl('/trainer/education/' + encodeURIComponent(eduId)), {
-            method: 'PATCH',
-            headers: headersJson(),
-            body: JSON.stringify(payload),
-          })
-            .then(parseJsonResponse)
-            .then(function(o) {
-              if (o.ok) {
-                haptic('success');
-                return loadProfile().then(function() {
-                  showSaveToast('Данные сохранены', 'Сведения об образовании обновлены на сервере.');
-                });
-              }
-              haptic('error');
-              if (o.status === 422 && o.data && o.data.detail) {
-                err.textContent = typeof o.data.detail === 'string' ? o.data.detail : 'Проверьте поля.';
-              } else {
-                err.textContent = (o.data && o.data.detail) ? String(o.data.detail) : 'Не удалось сохранить.';
-              }
-            })
-            .catch(function() {
-              haptic('error');
-              err.textContent = 'Ошибка сети.';
-            })
-            .finally(function() {
-              btn.disabled = false;
-              btn.textContent = btnLabel;
-            });
-        });
-        actions.appendChild(btn);
         actions.appendChild(mod);
         card.appendChild(actions);
 
         [sel, inst, prog, deg, ctry, city, sy, ey, inprog, doc].forEach(function(inp) {
           inp.addEventListener('input', function() {
             err.textContent = '';
+            setDirty();
           });
           inp.addEventListener('change', function() {
             err.textContent = '';
+            setDirty();
           });
         });
 
@@ -2429,70 +2580,20 @@
         };
         var card = makeEducationCard(blank);
         card.removeAttribute('data-edu-id');
-        var btnRow = card.querySelector('.edu-actions');
-        if (btnRow) btnRow.remove();
-        var err = card.querySelector('.edu-err');
-        var btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'btn-edu-save';
-        btn.textContent = 'Создать запись';
-        btn.addEventListener('click', function() {
-          if (state.education_create_in_flight) return;
-          var payload = collectEducationPayload(card);
-          if (!validateEducationPayload(payload, err)) {
-            haptic('error');
-            return;
-          }
-          state.education_create_in_flight = true;
-          btn.disabled = true;
-          var btnLabel = btn.textContent;
-          btn.textContent = 'Сохраняем...';
-          fetch(apiUrl('/trainer/education'), {
-            method: 'POST',
-            headers: headersJson(),
-            body: JSON.stringify(payload),
-          })
-            .then(parseJsonResponse)
-            .then(function(o) {
-              if (o.ok) {
-                haptic('success');
-                holder.style.display = 'none';
-                var addBtn = document.getElementById('btnEducationAdd');
-                if (addBtn) addBtn.textContent = '+ Добавить запись';
-                return loadProfile().then(function() {
-                  showSaveToast('Запись добавлена', 'Сведения об образовании отправлены на сервер.');
-                });
-              }
-              haptic('error');
-              err.textContent = (o.data && o.data.detail) ? String(o.data.detail) : 'Не удалось создать.';
-            })
-            .catch(function() {
-              haptic('error');
-              err.textContent = 'Ошибка сети.';
-            })
-            .finally(function() {
-              state.education_create_in_flight = false;
-              btn.disabled = false;
-              btn.textContent = btnLabel;
-            });
-        });
-        var act = document.createElement('div');
-        act.className = 'edu-actions';
-        act.appendChild(btn);
-        card.appendChild(act);
+        var hint = document.createElement('p');
+        hint.className = 'field-hint';
+        hint.style.marginTop = '10px';
+        hint.textContent = 'Новая запись сохранится вместе с анкетой — нажмите «Сохранить изменения» внизу экрана.';
         holder.appendChild(card);
+        holder.appendChild(hint);
       }
 
       function renderEducationEntries() {
         var wrap = document.getElementById('educationEntries');
-        var empty = document.getElementById('educationEntriesEmpty');
         var newWrap = document.getElementById('educationNewWrap');
         wrap.innerHTML = '';
         var items = state.education_entries || [];
-        if (!items.length) {
-          empty.style.display = 'block';
-        } else {
-          empty.style.display = 'none';
+        if (items.length) {
           items.forEach(function(e) {
             wrap.appendChild(makeEducationCard(e));
           });
@@ -2563,6 +2664,38 @@
         });
       }
 
+      function updatePrimaryArenaUi() {
+        var wrap = document.getElementById('primaryArenaWrap');
+        if (!wrap) return;
+        var selected = [];
+        state.arenasList.forEach(function(a) {
+          var cb = document.getElementById('arena_' + a.id);
+          if (cb && cb.checked) selected.push(a);
+        });
+        if (selected.length < 2) {
+          wrap.style.display = 'none';
+          wrap.innerHTML = '';
+          return;
+        }
+        wrap.style.display = 'block';
+        var cur = state.trainer.primary_arena_id != null ? Number(state.trainer.primary_arena_id) : null;
+        var selIds = selected.map(function(x) { return x.id; });
+        if (!cur || selIds.indexOf(cur) < 0) {
+          cur = selected[0].id;
+        }
+        var html = '<p class="hint" style="margin:0 0 10px;">Основная площадка для онлайн-записи, когда клиент выбирает «Любая арена» в каталоге</p>';
+        selected.forEach(function(a) {
+          var id = 'primary_arena_' + a.id;
+          html += '<div class="arena-row arena-active" style="margin-bottom:8px;"><label style="display:flex;align-items:center;gap:10px;cursor:pointer;">';
+          html += '<input type="radio" name="primary_arena" id="' + id + '" value="' + a.id + '"' + (a.id === cur ? ' checked' : '') + ' />';
+          html += '<span>' + (a.name || ('Арена #' + a.id)) + '</span></label></div>';
+        });
+        wrap.innerHTML = html;
+        wrap.querySelectorAll('input[name="primary_arena"]').forEach(function(inp) {
+          inp.addEventListener('change', function() { setDirty(); });
+        });
+      }
+
       function renderArenas() {
         var wrap = document.getElementById('arenasWrap');
         var hint = document.getElementById('arenaHint');
@@ -2574,6 +2707,11 @@
           hint.textContent = state.trainer.profile && state.trainer.profile.city_id
             ? 'Нет арен для выбранного города.'
             : 'Выберите город — появится список доступных арен.';
+          var pwrap = document.getElementById('primaryArenaWrap');
+          if (pwrap) {
+            pwrap.innerHTML = '';
+            pwrap.style.display = 'none';
+          }
           return;
         }
         hint.style.display = 'none';
@@ -2589,6 +2727,7 @@
           cb.checked = isSelected;
           cb.addEventListener('change', function() {
             row.classList.toggle('arena-active', cb.checked);
+            updatePrimaryArenaUi();
             setDirty();
           });
           
@@ -2600,6 +2739,7 @@
           row.appendChild(lab);
           wrap.appendChild(row);
         });
+        updatePrimaryArenaUi();
       }
 
       function loadArenasForCity(cityId) {
@@ -2663,6 +2803,7 @@
             state.education_entries = o.data.education_entries || [];
             renderEducationEntries();
             renderModeration();
+            renderModeratorFeedbackBanner();
             updateProgressRing();
             return fillFormFromTrainer().then(function() {
               state.snapshot = normSnapshot();
@@ -2681,6 +2822,64 @@
             document.getElementById('skeleton').innerHTML = '<p style="color:var(--app-danger); padding: 20px; text-align: center;">Ошибка сети. Проверьте подключение.</p>';
             return Promise.resolve();
           });
+      }
+
+      function saveEducationFromDom() {
+        var cards = Array.prototype.slice.call(document.querySelectorAll('#educationEntries .edu-card'));
+        var newWrap = document.getElementById('educationNewWrap');
+        var newCard = newWrap && newWrap.style.display !== 'none' ? newWrap.querySelector('.edu-card') : null;
+
+        function patchOne(card) {
+          var err = card.querySelector('.edu-err');
+          var payload = collectEducationPayload(card);
+          if (!validateEducationPayload(payload, err)) {
+            return Promise.reject({ kind: 'edu_validation', card: card });
+          }
+          var eduId = parseInt(card.getAttribute('data-edu-id'), 10);
+          if (isNaN(eduId)) return Promise.resolve();
+          return fetch(apiUrl('/trainer/education/' + encodeURIComponent(eduId)), {
+            method: 'PATCH',
+            headers: headersJson(),
+            body: JSON.stringify(payload),
+          }).then(parseJsonResponse).then(function(o) {
+            if (!o.ok) {
+              var msg = (o.data && o.data.detail) ? String(o.data.detail) : 'Не удалось сохранить образование.';
+              return Promise.reject({ kind: 'edu_server', message: msg, card: card });
+            }
+            return undefined;
+          });
+        }
+
+        function postNewIfFilled() {
+          if (!newCard) return Promise.resolve();
+          var errNew = newCard.querySelector('.edu-err');
+          var payload = collectEducationPayload(newCard);
+          var inst = (payload.institution_name || '').trim();
+          var prog = (payload.program_or_title || '').trim();
+          if (inst.length < 2 && prog.length < 2) {
+            return Promise.resolve();
+          }
+          if (!validateEducationPayload(payload, errNew)) {
+            return Promise.reject({ kind: 'edu_validation', card: newCard });
+          }
+          return fetch(apiUrl('/trainer/education'), {
+            method: 'POST',
+            headers: headersJson(),
+            body: JSON.stringify(payload),
+          }).then(parseJsonResponse).then(function(o) {
+            if (!o.ok) {
+              var msg = (o.data && o.data.detail) ? String(o.data.detail) : 'Не удалось создать запись об образовании.';
+              return Promise.reject({ kind: 'edu_server', message: msg, card: newCard });
+            }
+            return undefined;
+          });
+        }
+
+        var p = Promise.resolve();
+        cards.forEach(function(card) {
+          p = p.then(function() { return patchOne(card); });
+        });
+        return p.then(function() { return postNewIfFilled(); });
       }
 
       function save() {
@@ -2727,6 +2926,9 @@
           services: parsed.services,
           arena_ids: parsed.arena_ids,
         };
+        if (parsed.primary_arena_id != null) {
+          body.primary_arena_id = parsed.primary_arena_id;
+        }
 
         fetch(apiUrl('/trainer/profile'), {
           method: 'PATCH',
@@ -2738,9 +2940,24 @@
             if (o.ok) {
               haptic('success');
               clearFormErrors();
-              return loadProfile().then(function() {
-                showSaveToast('Сохранено', 'Изменения успешно применены');
-                return maybeAutoSubmitForModeration();
+              return saveEducationFromDom().then(function() {
+                return loadProfile().then(function() {
+                  showSaveToast('Сохранено', 'Изменения успешно применены');
+                  return maybeAutoSubmitForModeration();
+                });
+              }).catch(function(eduErr) {
+                if (eduErr && eduErr.kind === 'edu_validation' && eduErr.card) {
+                  haptic('error');
+                  setTab('form');
+                  eduErr.card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  return Promise.resolve();
+                }
+                haptic('error');
+                var m = (eduErr && eduErr.message) ? String(eduErr.message) : String(eduErr || 'Ошибка сохранения образования');
+                showFieldError('general', m);
+                setTab('form');
+                if (eduErr && eduErr.card) eduErr.card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                return Promise.resolve();
               });
             }
             haptic('error');
@@ -2767,16 +2984,82 @@
           });
       }
 
-      function uploadPhoto(file) {
-        if (!file) return;
+      var MAX_TRAINER_PHOTO_BYTES = 15 * 1024 * 1024;
+      /** catalog.html .trainer-detail-photo-wrap — 4:3; список — круглый thumb (cover). */
+      var CATALOG_PHOTO_ASPECT = 4 / 3;
+      var photoCropper = null;
+      var photoCropObjectUrl = null;
+
+      function closePhotoCropModal() {
+        if (photoCropper) {
+          try { photoCropper.destroy(); } catch (e) {}
+          photoCropper = null;
+        }
+        if (photoCropObjectUrl) {
+          URL.revokeObjectURL(photoCropObjectUrl);
+          photoCropObjectUrl = null;
+        }
+        var img = document.getElementById('photoCropImg');
+        if (img) img.src = '';
+        var modal = document.getElementById('photoCropModal');
+        if (modal) {
+          modal.hidden = true;
+          modal.setAttribute('aria-hidden', 'true');
+        }
+      }
+
+      function openPhotoCropModal(file) {
+        if (typeof Cropper === 'undefined') {
+          uploadPhotoBlob(file, file.name || 'photo.jpg');
+          return;
+        }
+        closePhotoCropModal();
+        photoCropObjectUrl = URL.createObjectURL(file);
+        var img = document.getElementById('photoCropImg');
+        var modal = document.getElementById('photoCropModal');
+        if (!img || !modal) {
+          if (photoCropObjectUrl) URL.revokeObjectURL(photoCropObjectUrl);
+          photoCropObjectUrl = null;
+          uploadPhotoBlob(file, file.name || 'photo.jpg');
+          return;
+        }
+        img.src = photoCropObjectUrl;
+        modal.hidden = false;
+        modal.setAttribute('aria-hidden', 'false');
+        img.onerror = function() {
+          img.onerror = null;
+          closePhotoCropModal();
+          haptic('error');
+          var ne = document.getElementById('photoFileName');
+          if (ne) ne.textContent = 'Не удалось открыть файл';
+        };
+        img.onload = function() {
+          img.onload = null;
+          img.onerror = null;
+          photoCropper = new Cropper(img, {
+            aspectRatio: CATALOG_PHOTO_ASPECT,
+            viewMode: 1,
+            dragMode: 'move',
+            autoCropArea: 0.85,
+            responsive: true,
+            restore: false,
+            guides: true,
+            center: true,
+            highlight: true,
+            cropBoxMovable: true,
+            cropBoxResizable: true,
+            toggleDragModeOnDblclick: false,
+          });
+        };
+      }
+
+      function uploadPhotoBlob(blobOrFile, filenameForLog) {
         var nameEl = document.getElementById('photoFileName');
         var dropZone = document.getElementById('photoDropZone');
-        
-        if (nameEl) nameEl.textContent = 'Загружаем ' + file.name + '…';
+        if (nameEl) nameEl.textContent = 'Загружаем' + (filenameForLog ? '…' : '…');
         if (dropZone) dropZone.style.opacity = '0.6';
-        
         var fd = new FormData();
-        fd.append('file', file);
+        fd.append('file', blobOrFile, filenameForLog || 'photo.jpg');
         var h = {};
         if (initData()) h['X-Telegram-Init-Data'] = initData();
         fetch('/api/webapp/trainer/photos', { method: 'POST', headers: h, body: fd })
@@ -2805,6 +3088,23 @@
           .finally(function() {
             if (dropZone) dropZone.style.opacity = '1';
           });
+      }
+
+      function uploadPhoto(file) {
+        if (!file) return;
+        if (!file.type || !file.type.startsWith('image/')) {
+          haptic('error');
+          var ne = document.getElementById('photoFileName');
+          if (ne) ne.textContent = 'Выберите изображение';
+          return;
+        }
+        if (file.size > MAX_TRAINER_PHOTO_BYTES) {
+          haptic('error');
+          var ne2 = document.getElementById('photoFileName');
+          if (ne2) ne2.textContent = 'Файл слишком большой (макс. 15 МБ)';
+          return;
+        }
+        openPhotoCropModal(file);
       }
 
       document.getElementById('btnClose').onclick = function() {
@@ -2842,6 +3142,30 @@
           }
         });
       }
+
+      (function wirePhotoCropModal() {
+        var c = document.getElementById('photoCropCancel');
+        var ok = document.getElementById('photoCropConfirm');
+        var bd = document.getElementById('photoCropBackdrop');
+        if (c) c.onclick = function() { closePhotoCropModal(); };
+        if (bd) bd.onclick = function() { closePhotoCropModal(); };
+        if (ok) ok.onclick = function() {
+          if (!photoCropper) return;
+          var canvas = photoCropper.getCroppedCanvas({
+            maxWidth: 2048,
+            maxHeight: 1536,
+            imageSmoothingQuality: 'high',
+          });
+          if (!canvas) {
+            haptic('error');
+            return;
+          }
+          canvas.toBlob(function(blob) {
+            closePhotoCropModal();
+            if (blob) uploadPhotoBlob(blob, 'photo.jpg');
+          }, 'image/jpeg', 0.92);
+        };
+      })();
 
       // Hero-cta buttons were removed; keep tab navigation exclusively under header.
 
@@ -2915,6 +3239,7 @@
             w.style.display = 'none';
             btnEduAdd.textContent = '+ Добавить запись';
           }
+          setDirty();
         });
       }
 

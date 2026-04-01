@@ -44,7 +44,7 @@ def validate_age_line(value: str) -> tuple[int | None, str | None]:
     try:
         ProfilePatch(age=int(t))
     except (ValueError, ValidationError):
-        return None, "Возраст — целое число от 1 до 120."
+        return None, "Возраст укажите целым числом."
     return int(t), None
 
 

@@ -11,6 +11,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet" />
   <script src="client-mini-app-theme.js"></script>
+  <script src="mini-app-confirm.js"></script>
   <style>
     /* Client requests — aligned with theme.css + mini-app-components.bd-* (constitution) */
     body {
@@ -111,55 +112,87 @@
     .cr-detail-screen {
       animation: bd-enter 0.38s cubic-bezier(0.22, 1, 0.36, 1) both;
     }
-    .cr-detail-top {
+    /* Деталь заявки: одна поверхность с карточками списка (.request-card / .bd-client), без «hero» градиента как у слота времени */
+    .cr-detail-summary {
+      border-radius: 18px;
+      padding: 16px 18px;
+      margin-bottom: 12px;
+      background: var(--tg-theme-secondary-bg-color);
+      border: 1px solid rgba(128, 128, 128, 0.14);
+      box-shadow: var(--app-btn-shadow-surface);
+    }
+    .cr-detail-summary__head {
       display: flex;
       align-items: flex-start;
-      justify-content: flex-end;
+      justify-content: space-between;
       gap: 12px;
-      margin-bottom: 12px;
+      margin-bottom: 10px;
+    }
+    .cr-detail-summary__head .bd-screen-title {
+      margin-bottom: 0;
+      padding-top: 2px;
     }
     .cr-detail-toolbar {
       display: flex;
       align-items: center;
-      gap: 6px;
+      gap: 8px;
       flex-shrink: 0;
     }
     .cr-detail-toolbar button {
-      width: 40px;
-      height: 40px;
-      border-radius: 12px;
+      width: 44px;
+      height: 44px;
+      border-radius: 14px;
       border: 1px solid rgba(128, 128, 128, 0.14);
-      background: var(--tg-theme-secondary-bg-color);
+      background: var(--tg-theme-bg-color);
       color: var(--tg-theme-button-color);
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
       padding: 0;
-      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
-      transition: transform 0.12s ease, opacity 0.12s ease;
+      box-shadow: var(--app-btn-shadow-surface);
+      transition: transform 0.12s ease, opacity 0.12s ease, border-color 0.15s ease;
     }
-    .cr-detail-toolbar button:active { transform: scale(0.97); opacity: 0.85; }
-    .cr-detail-toolbar button svg { width: 20px; height: 20px; }
+    .cr-detail-toolbar button:active { transform: scale(0.98); opacity: 0.9; }
+    .cr-detail-toolbar button:focus-visible {
+      outline: 2px solid rgba(245, 166, 35, 0.45);
+      outline-offset: 2px;
+    }
+    .cr-detail-toolbar button svg {
+      width: 20px;
+      height: 20px;
+      pointer-events: none;
+    }
     .cr-detail-toolbar button.danger {
       color: var(--app-danger);
-      border-color: rgba(255, 59, 48, 0.28);
-      background: var(--tg-theme-secondary-bg-color);
+      border-color: rgba(255, 59, 48, 0.35);
+      background: var(--tg-theme-bg-color);
     }
-    .cr-detail-hero .bd-hero {
-      margin-bottom: 14px;
-    }
-    /* Same scale as .bd-hero-time — hero is the request title */
     .cr-detail-title {
-      font-size: clamp(26px, 7vw, 32px);
+      font-size: clamp(20px, 5.5vw, 24px);
       font-weight: 700;
-      letter-spacing: -0.04em;
-      line-height: 1.1;
+      letter-spacing: -0.03em;
+      line-height: 1.2;
       color: var(--tg-theme-text-color);
       word-break: break-word;
     }
+    .cr-detail-date {
+      margin-top: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--tg-theme-hint-color);
+    }
     .cr-comment-block {
-      margin-bottom: 18px;
+      margin-bottom: 16px;
+    }
+    .cr-responses-empty {
+      padding: 14px 16px;
+      border-radius: 16px;
+      background: var(--tg-theme-secondary-bg-color);
+      border: 1px solid rgba(128, 128, 128, 0.12);
+      font-size: 14px;
+      line-height: 1.5;
+      color: var(--tg-theme-hint-color);
     }
     .responder-row {
       display: flex;
@@ -292,6 +325,7 @@
       opacity: 1;
     }
     .detail-back-wrap { margin-top: 28px; padding-top: 8px; }
+    /* Как в catalog.html: вторичная навигация — hint, не CTA */
     .back-link {
       display: inline-flex;
       align-items: center;
@@ -309,10 +343,9 @@
       flex-shrink: 0;
       width: 16px;
       height: 16px;
-      color: var(--tg-theme-button-color);
-      opacity: 0.92;
+      color: inherit;
     }
-    .back-link:active { opacity: 0.75; }
+    .back-link:active { opacity: 0.7; }
     /* Full trainer card (from request response) */
     .trainer-card-full {
       padding-left: 16px;
@@ -355,8 +388,8 @@
       width: 100%;
       height: 100%;
       object-fit: cover;
-      object-position: center top;
-      border-radius: 0 0 20px 20px;
+      object-position: center center;
+      border-radius: 0 0 24px 24px;
       background: rgba(128,128,128,0.2);
       opacity: 0;
       transition: all 0.3s ease;
@@ -364,7 +397,15 @@
     .trainer-card-full .tcf-photo.loaded {
       opacity: 1;
     }
-    .trainer-card-full .tcf-body { padding: 20px 0 0; }
+    /* Full-bleed like .tcf-photo-wrap; no extra horizontal padding here — otherwise blocks look narrower than the photo */
+    .trainer-card-full .tcf-body {
+      width: calc(100% + 32px);
+      margin-left: -16px;
+      margin-right: -16px;
+      padding: 20px 0 0;
+      box-sizing: border-box;
+      min-width: 0;
+    }
     .trainer-card-full .tcf-header {
       margin-bottom: 20px;
     }
@@ -376,6 +417,8 @@
       line-height: 1.2;
       letter-spacing: -0.02em;
       color: var(--tg-theme-text-color);
+      overflow-wrap: anywhere;
+      word-break: break-word;
     }
     .trainer-card-full .tcf-comment {
       font-size: 15px;
@@ -388,6 +431,10 @@
       border-left: 4px solid var(--tg-theme-button-color);
       text-align: left;
       position: relative;
+      max-width: 100%;
+      min-width: 0;
+      overflow-wrap: anywhere;
+      word-break: break-word;
     }
     .trainer-card-full .tcf-comment::before {
       content: '💬';
@@ -426,6 +473,11 @@
       font-weight: 600;
       color: var(--tg-theme-text-color);
     }
+    .trainer-card-full .tcf-stat-value--arenas {
+      overflow-wrap: anywhere;
+      word-break: break-word;
+      line-height: 1.35;
+    }
     .trainer-card-full .tcf-rating {
       display: inline-flex;
       align-items: center;
@@ -453,19 +505,27 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
+      gap: 10px;
       padding: 10px 14px;
       margin-bottom: 6px;
       background: var(--tg-theme-secondary-bg-color);
       border-radius: 10px;
       font-size: 14px;
+      min-width: 0;
     }
     .trainer-card-full .tcf-service-name {
       font-weight: 500;
       color: var(--tg-theme-text-color);
+      flex: 1;
+      min-width: 0;
+      overflow-wrap: anywhere;
+      word-break: break-word;
     }
     .trainer-card-full .tcf-service-price {
       font-weight: 600;
       color: var(--tg-theme-button-color);
+      flex-shrink: 0;
+      text-align: right;
     }
     .trainer-card-full .tcf-education {
       margin-bottom: 20px;
@@ -478,14 +538,21 @@
       color: var(--tg-theme-hint-color);
       margin-bottom: 12px;
     }
+    /* Plain cards like .tcf-stat — no left accent */
     .trainer-card-full .tcf-education-item {
       padding: 12px 14px;
       margin-bottom: 8px;
       background: var(--tg-theme-secondary-bg-color);
       border-radius: 12px;
+      border: 1px solid rgba(128, 128, 128, 0.12);
       font-size: 14px;
       line-height: 1.4;
+      max-width: 100%;
+      min-width: 0;
+      overflow-wrap: anywhere;
+      word-break: break-word;
     }
+    /* Left accent only — same surface as stats/services (no orange fill) */
     .trainer-card-full .tcf-desc { 
       font-size: 15px; 
       line-height: 1.5; 
@@ -493,8 +560,14 @@
       padding: 16px;
       background: var(--tg-theme-secondary-bg-color);
       border-radius: 16px;
-      white-space: pre-wrap; 
-      text-align: left; 
+      border-left: 4px solid var(--tg-theme-button-color);
+      text-align: left;
+      position: relative;
+      max-width: 100%;
+      min-width: 0;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+      white-space: normal;
     }
     /* Как в каталоге: .btn-primary / .btn-secondary из mini-app-components.css */
     .trainer-card-full .tcf-actions {
@@ -566,55 +639,11 @@
       opacity: 0.8;
     }
     .pagination span { font-size: 14px; color: var(--tg-theme-hint-color); align-self: center; }
-    .action-buttons { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
-    .btn-block {
-      width: 100%;
-      padding: 14px 18px;
-      border-radius: 14px;
-      border: none;
-      font-size: 15px;
-      font-weight: 600;
-      cursor: pointer;
-      box-sizing: border-box;
-    }
-    .btn-block.btn-primary {
-      /* градиент CTA — mini-app-components.css */
-      font-weight: 600;
-      transition: transform 0.2s ease, opacity 0.2s ease;
-    }
-    .btn-block.btn-primary:active { 
-      transform: scale(0.96); 
-      opacity: 0.8;
-    }
-    .btn-block.btn-danger {
-      background: transparent;
-      border: 1.5px solid rgba(255, 59, 48, 0.45);
-      color: var(--app-danger);
-      transition: transform 0.12s ease, box-shadow 0.12s ease, opacity 0.12s ease;
-    }
-    .btn-block.btn-danger:active {
-      transform: scale(0.985);
-      opacity: 0.92;
-    }
-    /* Мягкая кнопка (пустой список «Обновить») — не путать с .btn-secondary из mini-app-components */
-    .btn-soft {
-      padding: 12px 20px;
-      border-radius: 14px;
-      border: 1px solid rgba(128, 128, 128, 0.14);
-      font-size: 15px;
-      font-weight: 600;
-      cursor: pointer;
-      background: var(--tg-theme-secondary-bg-color);
-      color: var(--tg-theme-text-color);
-      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
-      transition: border-color 0.2s ease, box-shadow 0.2s ease;
-    }
-    .btn-soft:hover {
-      border-color: rgba(247, 166, 0, 0.28);
-    }
-    .btn-soft:active {
-      transform: scale(0.96);
-      opacity: 0.8;
+    .action-buttons {
+      display: flex;
+      flex-direction: column;
+      gap: var(--app-btn-stack-gap);
+      margin-top: 8px;
     }
     @media (prefers-color-scheme: dark) {
       .request-card,
@@ -728,7 +757,7 @@
 </head>
 <body>
   <div class="header cr-requests-header">
-    <h1 class="cr-page-title">Мои заявки</h1>
+    <h1 class="cr-page-title" id="crHeaderTitle">Мои заявки</h1>
   </div>
 
   <div id="screenList" data-screen class="active">
@@ -737,29 +766,26 @@
     <div id="screenEmpty" class="empty" style="display: none;">
       <p>У вас пока нет заявок.</p>
       <p style="margin-top: 8px; font-size: 14px;">Оставьте заявку в «Тренеры и запись»: когда список тренеров пустой, внизу списка или в карточке тренера. После этого заявка появится здесь.</p>
-      <button type="button" class="btn-soft" id="btnRefreshEmpty" style="margin-top: 16px;">Обновить</button>
+      <button type="button" class="btn-neutral btn-block" id="btnRefreshEmpty" style="margin-top: 16px;">Обновить</button>
     </div>
   </div>
 
   <div id="screenDetail" data-screen>
     <div class="booking-detail cr-detail-screen">
-      <div class="cr-detail-top">
-        <div class="cr-detail-toolbar">
-          <button type="button" id="btnEditRequest" title="Редактировать заявку" aria-label="Редактировать">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-          </button>
-          <button type="button" id="btnDeleteRequest" class="danger" title="Удалить заявку" aria-label="Удалить">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-          </button>
-        </div>
-      </div>
-      <div class="cr-detail-hero">
-        <div class="bd-hero">
-          <div class="bd-hero-inner">
-            <div class="cr-detail-title" id="detailTitleMain">—</div>
-            <div class="bd-hero-date" id="detailDateLine"></div>
+      <div class="cr-detail-summary">
+        <div class="cr-detail-summary__head">
+          <div class="bd-screen-title">Заявка</div>
+          <div class="cr-detail-toolbar">
+            <button type="button" id="btnEditRequest" title="Редактировать заявку" aria-label="Редактировать">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            </button>
+            <button type="button" id="btnDeleteRequest" class="danger" title="Удалить заявку" aria-label="Удалить">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            </button>
           </div>
         </div>
+        <div class="cr-detail-title" id="detailTitleMain">—</div>
+        <div class="cr-detail-date" id="detailDateLine"></div>
       </div>
       <div class="bd-rows cr-comment-block">
         <div class="bd-row bd-comment">
@@ -792,7 +818,7 @@
     </div>
     <div class="action-buttons">
       <button type="button" class="btn-block btn-primary" id="btnSaveComment">Сохранить</button>
-      <button type="button" class="btn-block btn-danger" id="btnDeleteInEdit">Удалить заявку</button>
+      <button type="button" class="btn-block btn-outline-danger" id="btnDeleteInEdit">Удалить заявку</button>
       <span class="back-link" id="backFromEdit"><svg class="back-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>Назад</span>
     </div>
   </div>
@@ -860,6 +886,13 @@
         document.querySelectorAll('[data-screen]').forEach(function(el) { el.classList.remove('active'); });
         const el = document.getElementById(id);
         if (el) el.classList.add('active');
+        var ht = document.getElementById('crHeaderTitle');
+        if (ht) {
+          if (id === 'screenList') ht.textContent = 'Мои заявки';
+          else if (id === 'screenDetail') ht.textContent = 'Заявка';
+          else if (id === 'screenResponderDetail') ht.textContent = 'Тренер';
+          else if (id === 'screenEdit') ht.textContent = 'Редактирование';
+        }
       }
 
       function closeApp() {
@@ -888,6 +921,29 @@
         const t = String(s);
         return t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
       }
+
+      /** One approved education row — same rules as catalog `formatCatalogEducationEntry`. */
+      function formatResponderEducationEntry(edu) {
+        if (!edu) return '';
+        var inst = (edu.institution_name || '').trim();
+        var prog = (edu.program_or_title || '').trim();
+        var deg = (edu.degree_level || '').trim();
+        var head = inst;
+        var sub = [prog, deg].filter(Boolean).join(', ');
+        var line = sub ? (head ? head + ' — ' + sub : sub) : head;
+        var y = '';
+        if (edu.is_in_progress) y = 'в процессе';
+        else {
+          var sy = edu.start_year;
+          var ey = edu.end_year;
+          if (sy != null && ey != null) y = sy + '–' + ey;
+          else if (ey != null) y = String(ey);
+          else if (sy != null) y = 'с ' + sy;
+        }
+        if (y) line = (line ? line + ' ' : '') + '(' + y + ')';
+        return (line || '').trim();
+      }
+
       function photoUrl(fileKey) {
         if (!fileKey) return '';
         return '/api/public/photos/' + encodeURIComponent(fileKey);
@@ -983,7 +1039,7 @@
         var responses = Array.isArray(req.responses) ? req.responses : [];
         const wrap = document.getElementById('detailResponses');
         if (responses.length === 0) {
-          wrap.innerHTML = '<div class="screen-hint">Пока никто не откликнулся. Тренеры по вашему городу и услуге увидят заявку и смогут написать.</div>';
+          wrap.innerHTML = '<div class="cr-responses-empty" role="status">Пока никто не откликнулся. Тренеры по вашему городу и услуге увидят заявку и смогут написать.</div>';
         } else {
           let html = '';
           responses.forEach(function(r, idx) {
@@ -1027,8 +1083,10 @@
         var name = (r.name || 'Тренер').trim() || 'Тренер';
         var tc = (r.trainer_comment || '').trim();
         var ratingStr = (r.rating_avg != null && (r.rating_count || 0) > 0) ? (r.rating_avg.toFixed(1) + ' ★ (' + r.rating_count + ')') : null;
-        var expStr = r.experience_years != null ? r.experience_years + ' лет опыта' : null;
         var duration = r.session_duration_minutes != null ? r.session_duration_minutes : 45;
+        var expDisplay = (r.experience_years != null) ? (r.experience_years + ' лет опыта') : '—';
+        var arenasList = Array.isArray(r.arena_names) ? r.arena_names : [];
+        var arenasDisplay = arenasList.length ? arenasList.join(', ') : '—';
         var desc = (r.description || '').trim();
         var photo = photoUrl(r.photo_key);
         var bookUrl = state.bookBaseUrl + '?trainer_id=' + encodeURIComponent(r.trainer_id) + '&request_id=' + encodeURIComponent(req.id);
@@ -1052,15 +1110,17 @@
         if (tc) html += '<div class="tcf-comment">' + escapeHtml(tc) + '</div>';
         
         html += '<div class="tcf-stats">';
-        if (expStr) {
-          html += '<div class="tcf-stat">';
-          html += '<div class="tcf-stat-label">Опыт</div>';
-          html += '<div class="tcf-stat-value">' + escapeHtml(expStr) + '</div>';
-          html += '</div>';
-        }
+        html += '<div class="tcf-stat">';
+        html += '<div class="tcf-stat-label">Опыт</div>';
+        html += '<div class="tcf-stat-value">' + escapeHtml(expDisplay) + '</div>';
+        html += '</div>';
         html += '<div class="tcf-stat">';
         html += '<div class="tcf-stat-label">Занятие</div>';
         html += '<div class="tcf-stat-value">' + duration + ' мин</div>';
+        html += '</div>';
+        html += '<div class="tcf-stat">';
+        html += '<div class="tcf-stat-label">Арены</div>';
+        html += '<div class="tcf-stat-value tcf-stat-value--arenas">' + escapeHtml(arenasDisplay) + '</div>';
         html += '</div>';
         html += '</div>';
         
@@ -1080,22 +1140,27 @@
           html += '</div>';
         }
         
-        // Добавляем образование, если оно есть
-        if (r.education && Array.isArray(r.education) && r.education.length > 0) {
+        // Образование: education_entries из API или категория из профиля (tp.education)
+        var eduRows = Array.isArray(r.education_entries) ? r.education_entries : [];
+        var eduCategory = (typeof r.education === 'string' && r.education.trim()) ? r.education.trim() : '';
+        if (eduRows.length > 0) {
           html += '<div class="tcf-education">';
           html += '<div class="tcf-education-title">Образование</div>';
-          r.education.forEach(function(edu) {
-            var eduText = edu.institution || '';
-            if (edu.degree) eduText += (eduText ? ', ' : '') + edu.degree;
-            if (edu.year) eduText += (eduText ? ' (' : '(') + edu.year + ')';
+          eduRows.forEach(function(edu) {
+            var eduText = formatResponderEducationEntry(edu);
             if (eduText) {
               html += '<div class="tcf-education-item">' + escapeHtml(eduText) + '</div>';
             }
           });
           html += '</div>';
+        } else if (eduCategory) {
+          html += '<div class="tcf-education">';
+          html += '<div class="tcf-education-title">Образование</div>';
+          html += '<div class="tcf-education-item">' + escapeHtml(eduCategory) + '</div>';
+          html += '</div>';
         }
         
-        if (desc) html += '<div class="tcf-desc">' + escapeHtml(desc) + '</div>';
+        if (desc) html += '<div class="tcf-desc">' + escapeHtml(desc).replace(/\n/g, '<br>') + '</div>';
         html += '<div class="tcf-actions">';
         html += '<a href="' + escapeHtml(bookUrl) + '" class="btn-primary tcf-book">Записаться</a>';
         // В Mini App tg:// не открывается; только https://t.me/username через tg.openLink
@@ -1137,10 +1202,21 @@
         const req = state.currentRequest;
         if (!req) return;
         const hasResponses = (Array.isArray(req.responses) ? req.responses : []).length > 0;
-        if (hasResponses && !confirm('При редактировании заявки все текущие отклики тренеров будут удалены — вы больше не увидите их в этой заявке. Продолжить?')) return;
-        document.getElementById('editCityService').textContent = 'Город: ' + (req.city_name || '—') + ', Услуга: ' + (req.service_name || '—');
-        document.getElementById('editComment').value = (req.comment || '').trim();
-        showScreen('screenEdit');
+        function openEdit() {
+          document.getElementById('editCityService').textContent = 'Город: ' + (req.city_name || '—') + ', Услуга: ' + (req.service_name || '—');
+          document.getElementById('editComment').value = (req.comment || '').trim();
+          showScreen('screenEdit');
+        }
+        if (hasResponses) {
+          showAppConfirm(
+            'При редактировании заявки все текущие отклики тренеров будут удалены — вы больше не увидите их в этой заявке. Продолжить?',
+            { okText: 'Продолжить', cancelText: 'Отмена' }
+          ).then(function (ok) {
+            if (ok) openEdit();
+          });
+          return;
+        }
+        openEdit();
       };
 
       document.getElementById('backFromEdit').onclick = function() {
@@ -1182,16 +1258,45 @@
         }).catch(function() { alert('Ошибка сети'); });
       }
 
-      document.getElementById('btnDeleteRequest').onclick = function() {
+      function runDeleteConfirm() {
         const req = state.currentRequest;
-        if (!req || !confirm('Удалить эту заявку?')) return;
-        doDelete(req.id, function() { renderList(); showScreen('screenList'); });
+        if (!req) return;
+        var run = function (ok) {
+          if (!ok) return;
+          doDelete(req.id, function() { renderList(); showScreen('screenList'); });
+        };
+        if (typeof showAppConfirm === 'function') {
+          showAppConfirm('Удалить эту заявку?', { okText: 'Удалить', cancelText: 'Отмена' }).then(run);
+        } else if (typeof window.confirm === 'function' && window.confirm('Удалить эту заявку?')) {
+          run(true);
+        }
+      }
+
+      /* Capture on screen: Telegram/iOS WebView often drops button.onclick when the tap hits SVG/path */
+      (function bindDetailDeleteCapture() {
+        var sd = document.getElementById('screenDetail');
+        if (!sd || sd.dataset.crDeleteCapture === '1') return;
+        sd.dataset.crDeleteCapture = '1';
+        sd.addEventListener(
+          'click',
+          function (ev) {
+            var t = ev.target;
+            if (!t || typeof t.closest !== 'function') return;
+            if (!t.closest('#btnDeleteRequest')) return;
+            ev.preventDefault();
+            ev.stopPropagation();
+            runDeleteConfirm();
+          },
+          true
+        );
+      })();
+
+      document.getElementById('btnDeleteRequest').onclick = function () {
+        runDeleteConfirm();
       };
 
-      document.getElementById('btnDeleteInEdit').onclick = function() {
-        const req = state.currentRequest;
-        if (!req || !confirm('Удалить эту заявку?')) return;
-        doDelete(req.id, function() { renderList(); showScreen('screenList'); });
+      document.getElementById('btnDeleteInEdit').onclick = function () {
+        runDeleteConfirm();
       };
 
       function getRequestIdFromUrl() {

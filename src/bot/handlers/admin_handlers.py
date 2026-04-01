@@ -5,6 +5,8 @@ import html
 import logging
 
 from aiogram import Bot, Router
+from aiogram.client.default import DefaultBotProperties
+from aiogram.enums import ParseMode
 from aiogram.filters import Command, CommandStart
 from aiogram.types import BufferedInputFile, CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message, WebAppInfo
 
@@ -14,10 +16,29 @@ from src.application.support_use_cases import (
     list_support_messages,
     reply_support_message,
 )
+from src.application.trainer_profile_completeness import is_profile_complete_for_moderation
+from src.application.platform_settings_use_cases import (
+    WELCOME_TRIAL_PERIOD_DAYS_KEY,
+    set_platform_int,
+)
+from src.application.subscription_use_cases import get_resolved_welcome_trial_days_for_display
+from src.application.trainer_link_token_use_cases import (
+    DEFAULT_TRAINER_LINK_EXPIRE_DAYS,
+    create_trainer_and_issue_welcome_link_token,
+    issue_trainer_welcome_link_token,
+)
+from src.application.trainer_profile_pending import (
+    build_trainer_profile_for_moderation_card,
+    trainer_has_pending_text_revision,
+    trainer_has_photo_pending_revision,
+    trainer_photo_file_key_for_moderation_ui,
+)
 from src.application.trainer_use_cases import (
+    apply_photo_pending_to_published,
+    apply_trainer_profile_pending_to_published,
+    discard_active_trainer_text_revision_with_feedback,
     get_trainer,
     list_trainer_education,
-    list_trainers,
     moderate_trainer_education_for_profile,
     set_trainer_moderation_feedback,
     update_trainer_status,
@@ -28,8 +49,12 @@ from src.bot.admin_moderation_card import (
     format_admin_trainer_moderation_caption,
     split_photo_caption_if_needed,
 )
-from src.bot.client_api import build_photo_url, fetch_photo_bytes
+from src.bot.client_api import resolve_trainer_photo_bytes
+from src.bot.handlers.trainer_handlers import _trainer_profile_footer_hint, _trainer_profile_keyboard
+from sqlalchemy import text
+
 from src.infrastructure.db import async_session_factory
+from src.infrastructure.repositories import TrainerRepository
 from src.infrastructure.db.models import TRAINER_STATUS_ACTIVE, TRAINER_STATUS_DEACTIVATED, TRAINER_STATUS_PENDING_PROFILE
 from src.shared.audit import ACTOR_ADMIN_BOT, audit_log
 from src.shared.config import Settings
@@ -96,6 +121,62 @@ async def _notify_trainer_education_moderation(
         await bot.session.close()
 
 
+async def _trainer_bot_send_html_with_profile_button(telegram_id: int, html_body: str) -> None:
+    """Send HTML to trainer bot with the same «Профиль» Web App button as /profile (no raw URL links)."""
+    settings = Settings()
+    if not settings.telegram_bot_token_trainer:
+        return
+    kb = _trainer_profile_keyboard()
+    if kb is None:
+        html_body = html_body + _trainer_profile_footer_hint()
+    bot = Bot(token=settings.telegram_bot_token_trainer, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+    try:
+        await bot.send_message(chat_id=telegram_id, text=html_body, reply_markup=kb)
+    except Exception:
+        pass
+    finally:
+        await bot.session.close()
+
+
+async def _notify_trainer_profile_moderation_feedback(trainer: dict | None, feedback_text: str) -> None:
+    """Notify trainer in Telegram when admin leaves profile moderation comment (needs edit)."""
+    if not trainer:
+        return
+    text = (feedback_text or "").strip()
+    if not text:
+        return
+    telegram_id = trainer.get("telegram_id")
+    if not telegram_id:
+        return
+    safe_feedback = html.escape(text)
+    body = msg.TRAINER_PROFILE_MODERATION_FEEDBACK_PUSH.format(feedback=safe_feedback)
+    body += msg.TRAINER_PROFILE_MODERATION_FEEDBACK_PUSH_FOOTER
+    await _trainer_bot_send_html_with_profile_button(int(telegram_id), body)
+
+
+async def _notify_trainer_moderation_approved(trainer: dict | None, *, education_also_approved: bool) -> None:
+    """Notify trainer that the profile passed moderation (catalog visible)."""
+    if not trainer:
+        return
+    telegram_id = trainer.get("telegram_id")
+    if not telegram_id:
+        return
+    body = msg.TRAINER_MODERATION_PROFILE_APPROVED
+    if education_also_approved:
+        body += msg.TRAINER_MODERATION_PROFILE_APPROVED_EDU_EXTRA
+    await _trainer_bot_send_html_with_profile_button(int(telegram_id), body)
+
+
+async def _notify_trainer_moderation_rejected(trainer: dict | None) -> None:
+    """Notify trainer that the profile was rejected (deactivated / not in catalog)."""
+    if not trainer:
+        return
+    telegram_id = trainer.get("telegram_id")
+    if not telegram_id:
+        return
+    await _trainer_bot_send_html_with_profile_button(int(telegram_id), msg.TRAINER_MODERATION_PROFILE_REJECTED)
+
+
 async def _send_trainer_for_moderation(message: Message, trainer_id: int) -> None:
     async with async_session_factory() as session:
         trainer = await get_trainer(session, trainer_id)
@@ -107,9 +188,9 @@ async def _send_trainer_for_moderation(message: Message, trainer_id: int) -> Non
         await message.answer(f"Тренер #{trainer_id} не найден.")
         return
     caption = format_admin_trainer_moderation_caption(trainer, education_items or [], city_name=city_name)
-    profile = trainer.get("profile") or {}
+    trainer_named = build_trainer_profile_for_moderation_card(dict(trainer))
+    profile = trainer_named.get("profile") or {}
     name_plain = ((profile.get("first_name") or "") + " " + (profile.get("last_name") or "")).strip() or "—"
-    photos = trainer.get("photos") or []
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [
             InlineKeyboardButton(
@@ -129,48 +210,39 @@ async def _send_trainer_for_moderation(message: Message, trainer_id: int) -> Non
         ],
     ])
 
-    # Trainer has at most one photo (new upload replaces previous)
-    file_key = photos[0]["file_key"] if photos else None
-    if file_key:
-        url = build_photo_url(file_key)
-        if not url:
+    # Staged photo (active) or published trainer_photos
+    file_key = trainer_photo_file_key_for_moderation_ui(trainer)
+    body = await resolve_trainer_photo_bytes(file_key) if file_key else None
+    if not body and file_key:
+        logger.warning(
+            "admin moderation: resolve_trainer_photo_bytes empty trainer_id=%s file_key=%s",
+            trainer_id,
+            file_key,
+        )
+    if body:
+        photo_caption, continuation = split_photo_caption_if_needed(
+            caption, trainer_id=trainer_id, name_plain=name_plain
+        )
+        try:
+            if continuation:
+                await message.answer_photo(
+                    BufferedInputFile(body, filename="photo.jpg"),
+                    caption=photo_caption,
+                )
+                await message.answer(continuation, reply_markup=keyboard)
+            else:
+                await message.answer_photo(
+                    BufferedInputFile(body, filename="photo.jpg"),
+                    caption=photo_caption,
+                    reply_markup=keyboard,
+                )
+            return
+        except Exception as e:
             logger.warning(
-                "admin moderation: build_photo_url returned None file_key=%s trainer_id=%s",
-                file_key,
+                "admin moderation photo send failed trainer_id=%s: %s",
                 trainer_id,
+                e,
             )
-        else:
-            body = await fetch_photo_bytes(url)
-            if not body:
-                logger.warning(
-                    "admin moderation: fetch_photo_bytes empty trainer_id=%s url=%s",
-                    trainer_id,
-                    url,
-                )
-            if body:
-                photo_caption, continuation = split_photo_caption_if_needed(
-                    caption, trainer_id=trainer_id, name_plain=name_plain
-                )
-                try:
-                    if continuation:
-                        await message.answer_photo(
-                            BufferedInputFile(body, filename="photo.jpg"),
-                            caption=photo_caption,
-                        )
-                        await message.answer(continuation, reply_markup=keyboard)
-                    else:
-                        await message.answer_photo(
-                            BufferedInputFile(body, filename="photo.jpg"),
-                            caption=photo_caption,
-                            reply_markup=keyboard,
-                        )
-                    return
-                except Exception as e:
-                    logger.warning(
-                        "admin moderation photo send failed trainer_id=%s: %s",
-                        trainer_id,
-                        e,
-                    )
     # Text-only or photo path failed
     text_out = caption
     if len(text_out) > 4090:
@@ -419,6 +491,134 @@ async def cmd_subscription_tiers(message: Message) -> None:
     )
 
 
+@router.message(Command("welcome_trial_days"))
+async def cmd_welcome_trial_days(message: Message) -> None:
+    """Show or set welcome-link trial length (days, max tier). Env TRIAL_PERIOD_DAYS overrides."""
+    user_id = message.from_user.id if message.from_user else 0
+    if not _is_admin(user_id):
+        await message.answer(msg.ADMIN_NO_ACCESS)
+        return
+    parts = (message.text or "").split()
+    if len(parts) < 2:
+        async with async_session_factory() as session:
+            days = await get_resolved_welcome_trial_days_for_display(session)
+        await message.answer(
+            msg.ADMIN_WELCOME_TRIAL_DAYS_CURRENT.format(days=days),
+            parse_mode=ParseMode.HTML,
+        )
+        return
+    try:
+        d = int(parts[1].strip())
+    except ValueError:
+        await message.answer(msg.ADMIN_WELCOME_TRIAL_DAYS_INVALID, parse_mode=ParseMode.HTML)
+        return
+    if d < 1 or d > 365:
+        await message.answer(msg.ADMIN_WELCOME_TRIAL_DAYS_INVALID, parse_mode=ParseMode.HTML)
+        return
+    async with async_session_factory() as session:
+        await set_platform_int(session, WELCOME_TRIAL_PERIOD_DAYS_KEY, d)
+    await message.answer(
+        msg.ADMIN_WELCOME_TRIAL_DAYS_SET.format(days=d),
+        parse_mode=ParseMode.HTML,
+    )
+
+
+@router.message(Command("trainer_welcome_link"))
+async def cmd_trainer_welcome_link(message: Message) -> None:
+    """Issue a one-time trainer bot deep link; without args creates a new trainer draft + link."""
+    user_id = message.from_user.id if message.from_user else 0
+    if not _is_admin(user_id):
+        await message.answer(msg.ADMIN_NO_ACCESS)
+        return
+    parts = (message.text or "").split()
+    if len(parts) >= 2 and parts[1].lower() in ("help", "?", "помощь"):
+        await message.answer(msg.ADMIN_TRAINER_WELCOME_LINK_HELP, parse_mode=ParseMode.HTML)
+        return
+
+    expire_days = DEFAULT_TRAINER_LINK_EXPIRE_DAYS
+    trainer_id: int | None = None
+    new_trainer_flow = False
+
+    if len(parts) == 1:
+        new_trainer_flow = True
+    elif len(parts) >= 2 and parts[1].lower() == "new":
+        new_trainer_flow = True
+        if len(parts) >= 3:
+            try:
+                expire_days = int(parts[2].strip())
+            except ValueError:
+                await message.answer(msg.ADMIN_TRAINER_WELCOME_LINK_BAD_ARGS, parse_mode=ParseMode.HTML)
+                return
+            if expire_days < 1 or expire_days > 365:
+                await message.answer(msg.ADMIN_TRAINER_WELCOME_LINK_BAD_ARGS, parse_mode=ParseMode.HTML)
+                return
+    else:
+        try:
+            trainer_id = int(parts[1].strip())
+        except ValueError:
+            await message.answer(msg.ADMIN_TRAINER_WELCOME_LINK_BAD_ARGS, parse_mode=ParseMode.HTML)
+            return
+        if trainer_id < 1:
+            await message.answer(msg.ADMIN_TRAINER_WELCOME_LINK_BAD_ARGS, parse_mode=ParseMode.HTML)
+            return
+        if len(parts) >= 3:
+            try:
+                expire_days = int(parts[2].strip())
+            except ValueError:
+                await message.answer(msg.ADMIN_TRAINER_WELCOME_LINK_BAD_ARGS, parse_mode=ParseMode.HTML)
+                return
+            if expire_days < 1 or expire_days > 365:
+                await message.answer(msg.ADMIN_TRAINER_WELCOME_LINK_BAD_ARGS, parse_mode=ParseMode.HTML)
+                return
+
+    async with async_session_factory() as session:
+        if new_trainer_flow:
+            result = await create_trainer_and_issue_welcome_link_token(session, expire_days=expire_days)
+        else:
+            assert trainer_id is not None
+            result = await issue_trainer_welcome_link_token(session, trainer_id, expire_days=expire_days)
+            if result is None:
+                await message.answer(msg.ADMIN_TRAINER_WELCOME_LINK_NO_TRAINER)
+                return
+
+    tid = int(result["trainer_id"])
+    audit_log(
+        "admin.trainer_welcome_link_issued",
+        ACTOR_ADMIN_BOT,
+        user_id,
+        {
+            "trainer_id": tid,
+            "expire_days": expire_days,
+            "new_trainer": bool(result.get("created_new_trainer")),
+        },
+    )
+    exp = result["expires_at"]
+    expires_str = exp.strftime("%d.%m.%Y %H:%M UTC") if hasattr(exp, "strftime") else str(exp)
+    dl = result.get("deep_link")
+    if dl:
+        link_block = (
+            f'<a href="{html.escape(dl)}">Открыть в Telegram</a>\n\n'
+            f"<code>{html.escape(dl)}</code>"
+        )
+    else:
+        link_block = msg.ADMIN_TRAINER_WELCOME_LINK_BLOCK_NO_USERNAME.format(
+            start_payload=html.escape(result["start_payload"]),
+        )
+    intro = ""
+    if result.get("created_new_trainer"):
+        intro = msg.ADMIN_TRAINER_WELCOME_LINK_NEW_INTRO.format(trainer_id=tid)
+    await message.answer(
+        intro
+        + msg.ADMIN_TRAINER_WELCOME_LINK_ISSUED.format(
+            trainer_id=tid,
+            expires=expires_str,
+            link_block=link_block,
+        ),
+        parse_mode=ParseMode.HTML,
+        disable_web_page_preview=True,
+    )
+
+
 @router.message(Command("pending"))
 async def cmd_pending(message: Message) -> None:
     user_id = message.from_user.id if message.from_user else 0
@@ -426,12 +626,28 @@ async def cmd_pending(message: Message) -> None:
         await message.answer(msg.ADMIN_NO_ACCESS)
         return
     async with async_session_factory() as session:
-        trainers = await list_trainers(session, limit=20, offset=0, status=TRAINER_STATUS_PENDING_PROFILE)
-    if not trainers:
+        repo = TrainerRepository(session)
+        queue_ids = await repo.list_trainer_ids_for_moderation_queue()
+        eligible_ids: list[int] = []
+        for tid in queue_ids:
+            full = await get_trainer(session, tid)
+            if not full:
+                continue
+            st = (full.get("status") or "").strip()
+            if st == TRAINER_STATUS_ACTIVE:
+                sub_at = full.get("moderation_submitted_at")
+                has_queue = bool(sub_at) and (
+                    trainer_has_pending_text_revision(full) or trainer_has_photo_pending_revision(full)
+                )
+                if has_queue:
+                    eligible_ids.append(int(tid))
+            elif st == TRAINER_STATUS_PENDING_PROFILE and is_profile_complete_for_moderation(full):
+                eligible_ids.append(int(tid))
+    if not eligible_ids:
         await message.answer(msg.ADMIN_PENDING_EMPTY)
         return
-    for t in trainers:
-        await _send_trainer_for_moderation(message, t["id"])
+    for tid in eligible_ids:
+        await _send_trainer_for_moderation(message, tid)
 
 
 @router.callback_query(lambda c: c.data and c.data.startswith(ADMIN_APPROVE_PREFIX))
@@ -446,22 +662,46 @@ async def on_approve(callback: CallbackQuery) -> None:
         return
     approved_education = 0
     trainer: dict | None = None
+    ok = False
     async with async_session_factory() as session:
-        await set_trainer_moderation_feedback(session, trainer_id, None)
-        ok = await update_trainer_status(session, trainer_id, TRAINER_STATUS_ACTIVE)
-        trainer = await get_trainer(session, trainer_id)
-        approved_education = await moderate_trainer_education_for_profile(
-            session,
-            trainer_id,
-            decision="approved",
-            admin_id=user_id,
-        )
+        t0 = await get_trainer(session, trainer_id)
+        st = (t0.get("status") or "").strip() if t0 else ""
+        if st == TRAINER_STATUS_ACTIVE:
+            await session.execute(
+                text("UPDATE trainers SET moderation_feedback = NULL WHERE id = :id"),
+                {"id": trainer_id},
+            )
+            ok = await apply_trainer_profile_pending_to_published(session, trainer_id)
+            ok_photo = await apply_photo_pending_to_published(session, trainer_id)
+            ok = ok and ok_photo
+            repo_ap = TrainerRepository(session)
+            await repo_ap.clear_moderation_submitted_at(trainer_id)
+            await session.flush()
+            approved_education = await moderate_trainer_education_for_profile(
+                session,
+                trainer_id,
+                decision="approved",
+                admin_id=user_id,
+            )
+            trainer = await get_trainer(session, trainer_id)
+        else:
+            await set_trainer_moderation_feedback(session, trainer_id, None)
+            ok = await update_trainer_status(session, trainer_id, TRAINER_STATUS_ACTIVE)
+            trainer = await get_trainer(session, trainer_id)
+            approved_education = await moderate_trainer_education_for_profile(
+                session,
+                trainer_id,
+                decision="approved",
+                admin_id=user_id,
+            )
     if ok:
         audit_log("trainer.approved", ACTOR_ADMIN_BOT, user_id, {"trainer_id": trainer_id})
         await callback.message.edit_reply_markup(reply_markup=None)
         await callback.message.answer(msg.ADMIN_APPROVED)
-        if approved_education > 0:
-            await _notify_trainer_education_moderation(trainer, decision="approved")
+        await _notify_trainer_moderation_approved(
+            trainer,
+            education_also_approved=approved_education > 0,
+        )
     else:
         await callback.message.answer(f"Не удалось одобрить тренера #{trainer_id}.")
     await callback.answer()
@@ -474,11 +714,20 @@ async def on_reject(callback: CallbackQuery) -> None:
         await callback.answer("Нет доступа", show_alert=True)
         return
     trainer_id = int(callback.data[len(ADMIN_REJECT_PREFIX) :])
+    trainer: dict | None = None
     async with async_session_factory() as session:
+        trainer = await get_trainer(session, trainer_id)
+        if trainer and (trainer.get("status") or "").strip() == TRAINER_STATUS_ACTIVE:
+            await callback.answer(
+                "Для активного тренера не деактивируйте профиль — используйте «Нужны правки».",
+                show_alert=True,
+            )
+            return
         ok = await update_trainer_status(session, trainer_id, TRAINER_STATUS_DEACTIVATED)
     if ok:
         await callback.message.edit_reply_markup(reply_markup=None)
         await callback.message.answer(msg.ADMIN_REJECTED)
+        await _notify_trainer_moderation_rejected(trainer)
     else:
         await callback.message.answer(f"Не удалось отклонить тренера #{trainer_id}.")
     await callback.answer()
@@ -547,22 +796,42 @@ async def on_admin_message(message: Message) -> None:
     rejected_education = 0
     trainer: dict | None = None
     async with async_session_factory() as session:
-        await set_trainer_moderation_feedback(session, trainer_id, text or None)
-        await update_trainer_status(session, trainer_id, TRAINER_STATUS_PENDING_PROFILE)
-        trainer = await get_trainer(session, trainer_id)
-        try:
-            rejected_education = await moderate_trainer_education_for_profile(
-                session,
-                trainer_id,
-                decision="rejected",
-                admin_id=user_id,
-                reason=text or "",
-            )
-        except ValueError:
-            rejected_education = 0
+        t0 = await get_trainer(session, trainer_id)
+        st = (t0.get("status") or "").strip() if t0 else ""
+        if st == TRAINER_STATUS_ACTIVE:
+            await discard_active_trainer_text_revision_with_feedback(session, trainer_id, text or None)
+            trainer = await get_trainer(session, trainer_id)
+            try:
+                rejected_education = await moderate_trainer_education_for_profile(
+                    session,
+                    trainer_id,
+                    decision="rejected",
+                    admin_id=user_id,
+                    reason=text or "",
+                )
+            except ValueError:
+                rejected_education = 0
+        else:
+            await set_trainer_moderation_feedback(session, trainer_id, text or None)
+            await update_trainer_status(session, trainer_id, TRAINER_STATUS_PENDING_PROFILE)
+            trainer = await get_trainer(session, trainer_id)
+            try:
+                rejected_education = await moderate_trainer_education_for_profile(
+                    session,
+                    trainer_id,
+                    decision="rejected",
+                    admin_id=user_id,
+                    reason=text or "",
+                )
+            except ValueError:
+                rejected_education = 0
     audit_log("trainer.needs_edit", ACTOR_ADMIN_BOT, user_id, {"trainer_id": trainer_id})
     await message.answer(msg.ADMIN_NEEDS_EDIT_DONE)
-    if rejected_education > 0:
+    feedback_stripped = (text or "").strip()
+    if feedback_stripped:
+        await _notify_trainer_profile_moderation_feedback(trainer, feedback_stripped)
+    elif rejected_education > 0:
+        # No general comment text — still notify about education rows if any were rejected.
         await _notify_trainer_education_moderation(
             trainer,
             decision="rejected",

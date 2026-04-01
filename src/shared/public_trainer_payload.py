@@ -12,6 +12,8 @@ PUBLIC_CATALOG_TRAINER_DROP_KEYS = frozenset(
         "moderation_feedback",
         "moderation_submitted_at",
         "created_at",
+        "profile_pending",
+        "photo_pending",
     }
 )
 

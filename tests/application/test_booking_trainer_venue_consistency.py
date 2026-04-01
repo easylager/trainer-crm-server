@@ -13,42 +13,32 @@ from src.application.booking_use_cases import (
 )
 
 from tests.conftest import belarus_test_phone, unique_test_telegram_id
+from tests.db_catalog_helpers import require_seed_arena_city_name, require_seed_service_id
 
 
 @pytest.mark.asyncio
 async def test_venue_label_matches_booking_arenas_str(db_session) -> None:
     """One booking: schedule summary venue_label == list_bookings_for_trainer arenas_str."""
     tomorrow = date.today() + timedelta(days=1)
-    r = await db_session.execute(text("INSERT INTO cities (name, sort_order) VALUES ('T', 0) RETURNING id"))
-    (city_id,) = r.fetchone()
+    arena_id, city_id, arena_name = await require_seed_arena_city_name(db_session)
+    service_id = await require_seed_service_id(db_session)
     r = await db_session.execute(
         text("INSERT INTO trainers (status) VALUES ('active') RETURNING id")
     )
     (trainer_id,) = r.fetchone()
     await db_session.execute(
         text(
-            "INSERT INTO trainer_profiles (trainer_id, first_name, last_name, age) VALUES (:tid, 'T', 'R', 25)"
+            """
+            INSERT INTO trainer_profiles (trainer_id, first_name, last_name, age, city_id)
+            VALUES (:tid, 'Test', 'Trainer', 25, :cid)
+            """
         ),
-        {"tid": trainer_id},
+        {"tid": trainer_id, "cid": city_id},
     )
-    r = await db_session.execute(
-        text("INSERT INTO services (name, sort_order) VALUES ('Svc', 0) RETURNING id")
-    )
-    (service_id,) = r.fetchone()
     await db_session.execute(
         text("INSERT INTO trainer_services (trainer_id, service_id, price_cents) VALUES (:tid, :sid, 1000)"),
         {"tid": trainer_id, "sid": service_id},
     )
-    r = await db_session.execute(
-        text(
-            """
-            INSERT INTO arenas (city_id, name, sort_order)
-            VALUES (:cid, 'Ice Park Alpha', 0) RETURNING id
-            """
-        ),
-        {"cid": city_id},
-    )
-    (arena_id,) = r.fetchone()
     await db_session.execute(
         text("INSERT INTO trainer_arenas (trainer_id, arena_id) VALUES (:tid, :aid)"),
         {"tid": trainer_id, "aid": arena_id},
@@ -92,4 +82,4 @@ async def test_venue_label_matches_booking_arenas_str(db_session) -> None:
     assert slot_id in summaries
     venue_label = summaries[slot_id]["venue_label"]
 
-    assert venue_label == arenas_str == "Ice Park Alpha"
+    assert venue_label == arenas_str == arena_name

@@ -64,3 +64,11 @@ async def set_default_trainer_commands_without_stats(bot: Bot) -> None:
         trainer_command_list(include_crm_features=False, include_stats=False),
         scope=BotCommandScopeDefault(),
     )
+
+
+async def reset_trainer_menu_to_minimal(bot: Bot, chat_id: int) -> None:
+    """Reset per-chat menu to minimal (onboarding) commands when trainer loses active status."""
+    await bot.set_my_commands(
+        trainer_command_list(include_crm_features=False, include_stats=False),
+        scope=BotCommandScopeChat(chat_id=chat_id),
+    )

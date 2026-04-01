@@ -139,6 +139,10 @@ PYTHONPATH=. python scripts/create_trainer_link.py --bot-username YourTrainerBot
 - [PROJECT_PLAN.md](./PROJECT_PLAN.md) — полный план задач и этапов.
 - [docs/PRODUCTION_PLAN.md](./docs/PRODUCTION_PLAN.md) — **боевой план**: CI, деплой, откат, мониторинг, runbook для продакшена.
 
+## Локальные тесты и БД
+
+`pytest` **не** должен смотреть на staging/production: в [`tests/conftest.py`](tests/conftest.py) при старте проверяется `DATABASE_URL` (локальный хост и имя базы `trainer_crm_test`). Railway/Supabase и т.п. без `PYTEST_ALLOW_REMOTE_DB=1` отклоняются. Создайте БД `trainer_crm_test`, выполните `alembic upgrade head`, в `.env` укажите URL на неё для тестов — отдельно от URL приложения.
+
 ## CI
 
 На каждый push и pull request в `master`/`main` запускается [GitHub Actions](.github/workflows/tests.yml): поднимается PostgreSQL 16, накатываются миграции, выполняется `pytest tests/`. Токены ботов в CI задаются заглушками.

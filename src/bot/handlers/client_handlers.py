@@ -133,8 +133,8 @@ BOOKING_SKIP_COMMENT = "booking_skip_comment"
 BOOKING_USE_TG_NAME = "booking_use_tg_name"
 BOOKING_ENTER_MANUAL = "booking_enter_manual"
 MY_REQUESTS_CALLBACK = "my_requests"
-MY_REQUESTS_PAGE_PREFIX = "my_requests_page:"
-MY_REQUESTS_PER_PAGE = 8
+# Telegram Bot API: max 100 rows per inline keyboard — no chat pagination (full UX in Mini App).
+MAX_INLINE_MY_REQUESTS = 100
 MY_BOOKINGS_CALLBACK = "my_bookings"
 MY_REQUEST_PREFIX = "my_request:"
 REQUEST_EDIT_PREFIX = "request_edit:"
@@ -198,6 +198,42 @@ def _trainer_name(trainer: dict) -> str:
     return name.strip() or "Тренер"
 
 
+def _trainer_book_rows(base: str, trainer_id: int) -> list[list[InlineKeyboardButton]]:
+    """Primary booking CTA: Mini App when HTTPS is configured, else legacy callback."""
+    b = (base or "").rstrip("/")
+    if b.startswith("https://"):
+        url = f"{b}/webapp/book?trainer_id={trainer_id}"
+        return [[InlineKeyboardButton(text=msg.CLIENT_BUTTON_BOOK, web_app=WebAppInfo(url=url))]]
+    return [[InlineKeyboardButton(text=msg.CLIENT_BUTTON_BOOK, callback_data="book")]]
+
+
+def _trainer_book_markup(
+    base: str,
+    trainer_id: int,
+    *,
+    include_catalog_alternative: bool = False,
+) -> InlineKeyboardMarkup:
+    """Inline keyboard: book (+ optional «другой тренер» for catalog flows)."""
+    rows = _trainer_book_rows(base, trainer_id)
+    if include_catalog_alternative:
+        rows = rows + [
+            [InlineKeyboardButton(text=msg.CLIENT_BUTTON_ANOTHER_TRAINER, callback_data=CATALOG_CALLBACK)],
+        ]
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def _invite_welcome_text(trainer: dict | None, base: str) -> str:
+    """Welcome copy for invite/deep-link: one screen, name + CTA matched to Web App vs inline."""
+    name = html.escape(_trainer_name(trainer) if trainer else "Тренер")
+    b = (base or "").rstrip("/")
+    cta = (
+        msg.CLIENT_WELCOME_INVITE_CTA_WEBAPP
+        if b.startswith("https://")
+        else msg.CLIENT_WELCOME_INVITE_CTA_INLINE
+    )
+    return msg.CLIENT_WELCOME_INVITE.format(name=name, cta=cta)
+
+
 def _request_list_button_label(req: dict) -> str:
     """Label for one request in list: city, service only. Telegram button 64 bytes max."""
     city = (req.get("city_name") or "").strip()
@@ -211,8 +247,8 @@ def _request_list_button_label(req: dict) -> str:
     return "…"
 
 
-async def _my_requests_content(telegram_id: int, page: int = 0) -> tuple[str, InlineKeyboardMarkup]:
-    """List = buttons only (one per request). Pagination by page. Back to settings."""
+async def _my_requests_content(telegram_id: int) -> tuple[str, InlineKeyboardMarkup]:
+    """Legacy chat list: one button per request, single screen (capped at Telegram row limit)."""
     async with async_session_factory() as db_session:
         requests_list = await list_my_requests_with_responses(db_session, telegram_id)
     if not requests_list:
@@ -222,30 +258,19 @@ async def _my_requests_content(telegram_id: int, page: int = 0) -> tuple[str, In
         text = msg.CLIENT_MY_REQUESTS_TITLE + "\n\n" + msg.CLIENT_MY_REQUESTS_EMPTY
         return text, back_kb
     total = len(requests_list)
-    page = max(0, min(page, (total - 1) // MY_REQUESTS_PER_PAGE))
-    start = page * MY_REQUESTS_PER_PAGE
-    page_requests = requests_list[start : start + MY_REQUESTS_PER_PAGE]
+    truncated = total > MAX_INLINE_MY_REQUESTS
+    display = requests_list[:MAX_INLINE_MY_REQUESTS] if truncated else requests_list
     text = msg.CLIENT_MY_REQUESTS_TITLE + "\n\n" + msg.CLIENT_MY_REQUESTS_LIST_HINT
+    if truncated:
+        text += msg.CLIENT_MY_REQUESTS_TRUNCATED_NOTE.format(
+            shown=MAX_INLINE_MY_REQUESTS, total=total
+        )
     button_rows = []
-    for req in page_requests:
+    for req in display:
         button_rows.append([InlineKeyboardButton(
             text=_request_list_button_label(req),
             callback_data=f"{MY_REQUEST_PREFIX}{req['id']}",
         )])
-    if total > MY_REQUESTS_PER_PAGE:
-        nav = []
-        if page > 0:
-            nav.append(InlineKeyboardButton(
-                text=msg.CLIENT_MY_REQUESTS_PAGE_PREV,
-                callback_data=f"{MY_REQUESTS_PAGE_PREFIX}{page - 1}",
-            ))
-        if start + MY_REQUESTS_PER_PAGE < total:
-            nav.append(InlineKeyboardButton(
-                text=msg.CLIENT_MY_REQUESTS_PAGE_NEXT,
-                callback_data=f"{MY_REQUESTS_PAGE_PREFIX}{page + 1}",
-            ))
-        if nav:
-            button_rows.append(nav)
     button_rows.append([InlineKeyboardButton(text=msg.CLIENT_REQUEST_BACK, callback_data=SETTINGS_CALLBACK)])
     keyboard = InlineKeyboardMarkup(inline_keyboard=button_rows)
     return text, keyboard
@@ -407,34 +432,37 @@ async def cmd_start(message: Message) -> None:
                             text=msg.CLIENT_BUTTON_MY_PASSES_AND_CERTIFICATES,
                             web_app=WebAppInfo(url=client_passes_certificates_webapp_url(base, certificates_tab=True)),
                         )],
-                        [InlineKeyboardButton(text=msg.CLIENT_BUTTON_BOOK, callback_data="book")],
-                    ])
+                    ] + _trainer_book_rows(base, trainer_id))
                     await message.answer(msg.CLIENT_CERT_BOUND, reply_markup=keyboard)
                 else:
                     await message.answer(msg.CLIENT_CERT_CODE_INVALID)
             else:
-                keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(text=msg.CLIENT_BUTTON_BOOK, callback_data="book")],
-                    [InlineKeyboardButton(text=msg.CLIENT_BUTTON_ANOTHER_TRAINER, callback_data=CATALOG_CALLBACK)],
-                ])
-                await message.answer(msg.CLIENT_WELCOME_REF, reply_markup=keyboard)
+                async with async_session_factory() as db_session:
+                    trainer = await get_trainer(db_session, trainer_id)
+                base = (Settings().webapp_base_url or "").rstrip("/")
+                text = _invite_welcome_text(trainer, base)
+                await message.answer(
+                    text,
+                    reply_markup=_trainer_book_markup(base, trainer_id, include_catalog_alternative=False),
+                )
         elif token_type == WELCOME_TOKEN_TYPE_PASS:
             async with async_session_factory() as db_session:
                 trainer = await get_trainer(db_session, trainer_id)
-            name = _trainer_name(trainer) if trainer else "Тренер"
+            name = html.escape(_trainer_name(trainer) if trainer else "Тренер")
             base = (Settings().webapp_base_url or "").rstrip("/")
-            keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text=msg.CLIENT_BUTTON_BOOK, callback_data="book")],
+            keyboard = InlineKeyboardMarkup(inline_keyboard=_trainer_book_rows(base, trainer_id) + [
                 [InlineKeyboardButton(text=msg.CLIENT_BUTTON_BUY_PASS, web_app=WebAppInfo(url=f"{base}/webapp/client-buy-pass"))],
-                [InlineKeyboardButton(text=msg.CLIENT_BUTTON_ANOTHER_TRAINER, callback_data=CATALOG_CALLBACK)],
             ])
             await message.answer(msg.CLIENT_PASS_WELCOME.format(name=name), reply_markup=keyboard)
         else:
-            keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text=msg.CLIENT_BUTTON_BOOK, callback_data="book")],
-                [InlineKeyboardButton(text=msg.CLIENT_BUTTON_ANOTHER_TRAINER, callback_data=CATALOG_CALLBACK)],
-            ])
-            await message.answer(msg.CLIENT_WELCOME_REF, reply_markup=keyboard)
+            async with async_session_factory() as db_session:
+                trainer = await get_trainer(db_session, trainer_id)
+            base = (Settings().webapp_base_url or "").rstrip("/")
+            text = _invite_welcome_text(trainer, base)
+            await message.answer(
+                text,
+                reply_markup=_trainer_book_markup(base, trainer_id, include_catalog_alternative=False),
+            )
         return
 
     # Certificate link: cert_<CODE> or cert_<CODE>_ref_<trainer_id>
@@ -467,8 +495,7 @@ async def cmd_start(message: Message) -> None:
                     text=msg.CLIENT_BUTTON_MY_PASSES_AND_CERTIFICATES,
                     web_app=WebAppInfo(url=client_passes_certificates_webapp_url(base, certificates_tab=True)),
                 )],
-                [InlineKeyboardButton(text=msg.CLIENT_BUTTON_BOOK, callback_data="book")],
-            ])
+            ] + _trainer_book_rows(base, trainer_id))
             await message.answer(msg.CLIENT_CERT_BOUND, reply_markup=keyboard)
         else:
             # Optional: preselected trainer from link (ref) so user can still book
@@ -491,11 +518,13 @@ async def cmd_start(message: Message) -> None:
             if service_id is not None:
                 await set_service(telegram_id, service_id, db_session)
             await set_selected_trainer(telegram_id, trainer_id_ref, db_session)
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text=msg.CLIENT_BUTTON_BOOK, callback_data="book")],
-            [InlineKeyboardButton(text=msg.CLIENT_BUTTON_ANOTHER_TRAINER, callback_data=CATALOG_CALLBACK)],
-        ])
-        await message.answer(msg.CLIENT_WELCOME_REF, reply_markup=keyboard)
+            trainer = await get_trainer(db_session, trainer_id_ref)
+        base = (Settings().webapp_base_url or "").rstrip("/")
+        text = _invite_welcome_text(trainer, base)
+        await message.answer(
+            text,
+            reply_markup=_trainer_book_markup(base, trainer_id_ref, include_catalog_alternative=False),
+        )
         return
 
     # Pass invite: pass_<product_id>_ref_<trainer_id> — set trainer, offer book + buy pass
@@ -512,12 +541,10 @@ async def cmd_start(message: Message) -> None:
                 await set_service(telegram_id, service_id, db_session)
             await set_selected_trainer(telegram_id, pass_trainer_id, db_session)
             trainer = await get_trainer(db_session, pass_trainer_id)
-        name = _trainer_name(trainer) if trainer else "Тренер"
+        name = html.escape(_trainer_name(trainer) if trainer else "Тренер")
         base = (Settings().webapp_base_url or "").rstrip("/")
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text=msg.CLIENT_BUTTON_BOOK, callback_data="book")],
+        keyboard = InlineKeyboardMarkup(inline_keyboard=_trainer_book_rows(base, pass_trainer_id) + [
             [InlineKeyboardButton(text=msg.CLIENT_BUTTON_BUY_PASS, web_app=WebAppInfo(url=f"{base}/webapp/client-buy-pass"))],
-            [InlineKeyboardButton(text=msg.CLIENT_BUTTON_ANOTHER_TRAINER, callback_data=CATALOG_CALLBACK)],
         ])
         await message.answer(msg.CLIENT_PASS_WELCOME.format(name=name), reply_markup=keyboard)
         return
@@ -530,14 +557,11 @@ async def cmd_start(message: Message) -> None:
             await set_service(telegram_id, service_id, db_session)
             await set_selected_trainer(telegram_id, trainer_id, db_session)
             trainer = await get_trainer(db_session, trainer_id)
-        name = _trainer_name(trainer) if trainer else "Тренер"
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text=msg.CLIENT_BUTTON_BOOK, callback_data="book")],
-            [InlineKeyboardButton(text=msg.CLIENT_BUTTON_ANOTHER_TRAINER, callback_data=CATALOG_CALLBACK)],
-        ])
+        name = html.escape(_trainer_name(trainer) if trainer else "Тренер")
+        base = (Settings().webapp_base_url or "").rstrip("/")
         await message.answer(
             msg.CLIENT_TRAINER_SELECTED.format(name=name),
-            reply_markup=keyboard,
+            reply_markup=_trainer_book_markup(base, trainer_id, include_catalog_alternative=True),
         )
         return
     await message.answer(msg.CLIENT_START_WELCOME)
@@ -553,7 +577,7 @@ async def cmd_settings(message: Message) -> None:
             [InlineKeyboardButton(text="Тренеры и запись", web_app=WebAppInfo(url=catalog_url))],
         ])
         await message.answer(
-            "Выберите город, услугу, арену и тренера. Нажмите кнопку ниже.",
+            msg.CLIENT_SETTINGS_CATALOG_INTRO,
             reply_markup=kb,
         )
         return
@@ -588,13 +612,13 @@ async def cmd_my_requests(message: Message) -> None:
             [InlineKeyboardButton(text=msg.CLIENT_BUTTON_MY_REQUESTS, web_app=WebAppInfo(url=base + "/webapp/client-requests"))],
         ])
         await message.answer(
-            "Ваши заявки и отклики тренеров. Нажмите кнопку ниже.",
+            msg.CLIENT_MY_REQUESTS_WEBAPP_INTRO,
             reply_markup=kb,
         )
         return
     telegram_id = message.from_user.id if message.from_user else 0
     text, keyboard = await _my_requests_content(telegram_id)
-    await message.answer(text, reply_markup=keyboard)
+    await message.answer(text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
 
 
 def _trainer_display_for_booking(b: dict, client_telegram_id: int) -> str:
@@ -842,7 +866,8 @@ async def on_select_trainer(callback: CallbackQuery, bot: Bot) -> None:
         await set_selected_trainer(telegram_id, trainer_id, db_session)
         trainer = await get_trainer(db_session, trainer_id)
         allows_online = await trainer_allows_online_booking(db_session, trainer_id)
-    name = _trainer_name(trainer) if trainer else "Тренер"
+    name = html.escape(_trainer_name(trainer) if trainer else "Тренер")
+    base = (Settings().webapp_base_url or "").rstrip("/")
     if not allows_online:
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text=msg.CLIENT_BUTTON_LEAVE_REQUEST, callback_data=REQUEST_CALLBACK)],
@@ -853,13 +878,9 @@ async def on_select_trainer(callback: CallbackQuery, bot: Bot) -> None:
             reply_markup=keyboard,
         )
         return
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=msg.CLIENT_BUTTON_BOOK, callback_data="book")],
-        [InlineKeyboardButton(text=msg.CLIENT_BUTTON_ANOTHER_TRAINER, callback_data=CATALOG_CALLBACK)],
-    ])
     await callback.message.answer(
         msg.CLIENT_TRAINER_SELECTED.format(name=name),
-        reply_markup=keyboard,
+        reply_markup=_trainer_book_markup(base, trainer_id, include_catalog_alternative=True),
     )
 
 
@@ -1161,7 +1182,7 @@ async def _finish_booking(
         if service_id is None:
             service_id = await get_first_service_id_for_trainer(db_session, trainer_id)
         if service_id is None:
-            await message.answer("Не удалось определить услугу. Выберите услугу в каталоге и попробуйте снова.", reply_markup=ReplyKeyboardRemove())
+            await message.answer(msg.CLIENT_ERROR_SERVICE_UNKNOWN_FOR_BOOKING, reply_markup=ReplyKeyboardRemove())
             return
         username = from_user.username if from_user else None
         client_id = await get_or_create_client(
@@ -1971,24 +1992,11 @@ async def on_request_comment_message(message: Message) -> None:
 
 @router.callback_query(lambda c: c.data == MY_REQUESTS_CALLBACK)
 async def show_my_requests(callback: CallbackQuery) -> None:
-    """List = one button per request (page 0)."""
+    """List = one button per request (full list, capped by Telegram)."""
     await callback.answer()
     telegram_id = callback.from_user.id if callback.from_user else 0
     text, keyboard = await _my_requests_content(telegram_id)
-    await callback.message.edit_text(text, reply_markup=keyboard)
-
-
-@router.callback_query(lambda c: c.data and c.data.startswith(MY_REQUESTS_PAGE_PREFIX))
-async def show_my_requests_page(callback: CallbackQuery) -> None:
-    """Pagination for My requests list."""
-    await callback.answer()
-    try:
-        page = int(callback.data[len(MY_REQUESTS_PAGE_PREFIX):])
-    except ValueError:
-        page = 0
-    telegram_id = callback.from_user.id if callback.from_user else 0
-    text, keyboard = await _my_requests_content(telegram_id, page=page)
-    await callback.message.edit_text(text, reply_markup=keyboard)
+    await callback.message.edit_text(text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
 
 
 def _format_request_responses_keyboard(req: dict) -> InlineKeyboardMarkup:
@@ -2140,7 +2148,11 @@ async def delete_request(callback: CallbackQuery) -> None:
         return
     await callback.answer(msg.CLIENT_REQUEST_DELETED)
     text, keyboard = await _my_requests_content(telegram_id)
-    await callback.message.edit_text(msg.CLIENT_REQUEST_DELETED + "\n\n" + text, reply_markup=keyboard)
+    await callback.message.edit_text(
+        msg.CLIENT_REQUEST_DELETED + "\n\n" + text,
+        reply_markup=keyboard,
+        parse_mode=ParseMode.HTML,
+    )
 
 
 @router.message(lambda m: m.text and m.from_user and m.from_user.id in _request_edit_state)
@@ -2454,14 +2466,11 @@ async def on_catalog_web_app_data(message: Message) -> None:
         return
     async with async_session_factory() as db_session:
         trainer = await get_trainer(db_session, int(trainer_id))
-    name = _trainer_name(trainer) if trainer else "Тренер"
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=msg.CLIENT_BUTTON_BOOK, callback_data="book")],
-        [InlineKeyboardButton(text=msg.CLIENT_BUTTON_ANOTHER_TRAINER, callback_data=CATALOG_CALLBACK)],
-    ])
+    name = html.escape(_trainer_name(trainer) if trainer else "Тренер")
+    base = (Settings().webapp_base_url or "").rstrip("/")
     await message.answer(
         msg.CLIENT_TRAINER_SELECTED.format(name=name),
-        reply_markup=keyboard,
+        reply_markup=_trainer_book_markup(base, int(trainer_id), include_catalog_alternative=True),
     )
 
 

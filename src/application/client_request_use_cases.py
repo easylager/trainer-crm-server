@@ -60,6 +60,77 @@ async def _trainer_services_with_prices_batch(
     return out
 
 
+async def _public_education_entries_by_trainer_ids(
+    session: AsyncSession,
+    trainer_ids: list[int],
+) -> dict[int, list[dict[str, Any]]]:
+    """Approved education rows per trainer (same fields as catalog / public trainer detail)."""
+    if not trainer_ids:
+        return {}
+    placeholders = ", ".join(f":e{i}" for i in range(len(trainer_ids)))
+    params: dict[str, Any] = {f"e{i}": v for i, v in enumerate(trainer_ids)}
+    r = await session.execute(
+        text(
+            f"""
+            SELECT trainer_id, institution_name, program_or_title, degree_level,
+                   city, country, start_year, end_year, is_in_progress
+            FROM trainer_education
+            WHERE trainer_id IN ({placeholders})
+              AND moderation_status = 'approved' AND approved_snapshot = true
+            ORDER BY trainer_id, updated_at DESC, id DESC
+            """
+        ),
+        params,
+    )
+    out: dict[int, list[dict[str, Any]]] = {int(tid): [] for tid in trainer_ids}
+    for row in r.fetchall():
+        tid = row[0]
+        if tid not in out:
+            continue
+        out[tid].append(
+            {
+                "institution_name": row[1],
+                "program_or_title": row[2],
+                "degree_level": row[3],
+                "city": row[4],
+                "country": row[5],
+                "start_year": row[6],
+                "end_year": row[7],
+                "is_in_progress": bool(row[8]),
+            }
+        )
+    return out
+
+
+async def _trainer_arena_names_batch(
+    session: AsyncSession,
+    trainer_ids: list[int],
+) -> dict[int, list[str]]:
+    """Arena display names per trainer (same link as catalog `arena_names`)."""
+    if not trainer_ids:
+        return {}
+    placeholders = ", ".join(f":an{i}" for i in range(len(trainer_ids)))
+    params: dict[str, Any] = {f"an{i}": v for i, v in enumerate(trainer_ids)}
+    r = await session.execute(
+        text(
+            f"""
+            SELECT ta.trainer_id, a.name
+            FROM trainer_arenas ta
+            INNER JOIN arenas a ON a.id = ta.arena_id
+            WHERE ta.trainer_id IN ({placeholders})
+            ORDER BY ta.trainer_id, ta.arena_id
+            """
+        ),
+        params,
+    )
+    out: dict[int, list[str]] = {int(tid): [] for tid in trainer_ids}
+    for row in r.fetchall():
+        tid, nm = row[0], (row[1] or "").strip()
+        if tid in out and nm:
+            out[tid].append(nm)
+    return out
+
+
 async def create_client_request(
     session: AsyncSession,
     client_id: int,
@@ -479,7 +550,7 @@ async def list_my_requests_with_responses(
         resp_r = await session.execute(
             text("""
                 SELECT resp.trainer_id, tp.first_name, tp.last_name, t.telegram_id, t.telegram_username, resp.trainer_comment,
-                       tp.rating_avg, tp.rating_count, tp.experience_years, tp.description, tp.session_duration_minutes,
+                       tp.rating_avg, tp.rating_count, tp.experience_years, tp.description, tp.education, tp.session_duration_minutes,
                        (SELECT ph.file_key FROM trainer_photos ph WHERE ph.trainer_id = resp.trainer_id ORDER BY ph.sort_order NULLS LAST, ph.id LIMIT 1) AS photo_key
                 FROM client_request_responses resp
                 INNER JOIN trainers t ON t.id = resp.trainer_id
@@ -492,6 +563,8 @@ async def list_my_requests_with_responses(
         resp_rows = resp_r.fetchall()
         trainer_ids = [tr[0] for tr in resp_rows]
         services_by_trainer = await _trainer_services_with_prices_batch(session, trainer_ids)
+        edu_by_tid = await _public_education_entries_by_trainer_ids(session, trainer_ids)
+        arenas_by_tid = await _trainer_arena_names_batch(session, trainer_ids)
         responders = []
         for tr in resp_rows:
             first_name = (tr[1] or "").strip()
@@ -508,9 +581,12 @@ async def list_my_requests_with_responses(
                 "rating_count": (tr[7] or 0) if tr[7] is not None else 0,
                 "experience_years": tr[8],
                 "description": (tr[9] or "").strip() or None,
-                "session_duration_minutes": tr[10],
-                "photo_key": tr[11],
+                "education": (tr[10] or "").strip() or None,
+                "session_duration_minutes": tr[11],
+                "photo_key": tr[12],
                 "services": services_by_trainer.get(tid, []),
+                "education_entries": edu_by_tid.get(tid, []),
+                "arena_names": arenas_by_tid.get(tid, []),
             })
         out.append({
             "id": req_id,

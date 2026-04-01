@@ -10,6 +10,7 @@
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="theme.css" />
   <link rel="stylesheet" href="mini-app-components.css" />
+  <script src="mini-app-confirm.js"></script>
   <style>
     /* Shell: theme.css + mini-app-components.css */
     /* Amber accent fixed — never var(--tg-theme-button-color): Telegram injects blue after tg.ready() */
@@ -423,45 +424,13 @@
     .detail-info-popover strong:first-child { margin-top: 0; }
     .action-buttons { margin-top: 8px; }
     .action-buttons .btn-block {
-      display: block;
+      display: flex;
       width: 100%;
-      padding: 15px 20px;
-      margin-bottom: 10px;
-      border-radius: var(--req-radius-sm);
-      border: none;
-      font-size: 15px;
-      font-weight: 600;
-      font-family: inherit;
-      cursor: pointer;
-      text-align: center;
+      margin-bottom: var(--app-btn-stack-gap, 10px);
       box-sizing: border-box;
-      transition: transform 0.15s ease, box-shadow 0.15s ease;
     }
-    .action-buttons .btn-block:active { transform: scale(0.98); }
     .action-buttons .btn-block:last-of-type { margin-bottom: 0; }
-    .btn-primary {
-      background: linear-gradient(145deg, #ffc23d 0%, #f7a600 55%, #e89400 100%);
-      color: #1a1a1a;
-      box-shadow: 0 4px 16px rgba(247, 166, 0, 0.4);
-    }
-    .btn-secondary {
-      background: var(--req-surface);
-      color: var(--req-text);
-      border: 1px solid rgba(247, 166, 0, 0.22);
-      box-shadow: var(--req-shadow);
-    }
-    @media (prefers-color-scheme: dark) {
-      .btn-secondary {
-        background: var(--tg-theme-secondary-bg-color);
-        color: var(--tg-theme-text-color);
-        border-color: rgba(247, 166, 0, 0.22);
-      }
-    }
-    .btn-danger {
-      background: rgba(255, 59, 48, 0.12);
-      color: #ff3b30;
-      border: 1px solid rgba(255, 59, 48, 0.2);
-    }
+    .action-buttons .btn-block:active { transform: scale(0.985); }
     .btn-ghost {
       background: transparent;
       color: var(--req-muted);
@@ -482,7 +451,7 @@
       background: none;
       font-family: inherit;
     }
-    .back-link .back-link-chevron { flex-shrink: 0; width: 18px; height: 18px; color: var(--req-accent); }
+    .back-link .back-link-chevron { flex-shrink: 0; width: 18px; height: 18px; color: currentColor; }
     .back-link:active { opacity: 0.75; }
     .back-link.btn-ghost-block { width: 100%; justify-content: flex-start; margin-top: 12px; }
     .slot-card {
@@ -999,7 +968,8 @@
         if (btnRespond) btnRespond.onclick = function() { showScreen('screenRespond'); };
         var btnDecline = document.getElementById('btnDecline');
         if (btnDecline) btnDecline.onclick = function() {
-          if (!confirm('Отклонить заявку? Она исчезнет из вашего списка.')) return;
+          showAppConfirm('Отклонить заявку? Она исчезнет из вашего списка.', { okText: 'Отклонить', cancelText: 'Отмена' }).then(function (ok) {
+            if (!ok) return;
           fetch(apiUrl('/trainer/requests/' + req.id + '/decline'), { method: 'POST', headers: headers() })
             .then(function(res) { return res.json().then(function(data) { return { ok: res.ok, data: data }; }); })
             .then(function(o) {
@@ -1010,6 +980,7 @@
                 showScreen('screenList');
               } else { alert(o.data.detail || 'Ошибка'); }
             }).catch(function() { alert('Ошибка сети'); });
+          });
         };
         var btnBookClient = document.getElementById('btnBookClient');
         if (btnBookClient) btnBookClient.onclick = function() { loadSlots(req); };
@@ -1155,19 +1126,21 @@
             var slotId = parseInt(btn.dataset.slotId, 10);
             var req = state.currentRequest;
             if (!req) return;
-            if (!confirm('Записать клиента на выбранное время?')) return;
-            fetch(apiUrl('/trainer/requests/' + req.id + '/book'), {
-              method: 'POST',
-              headers: headers(),
-              body: JSON.stringify({ slot_id: slotId })
-            }).then(function(res) { return res.json(); })
-              .then(function(data) {
-                if (data.success) {
-                  state.items = state.items.filter(function(r) { return r.id !== req.id; });
-                  state.currentRequest = null;
-                  showScreen('screenSuccess');
-                } else { alert(data.detail || 'Ошибка'); }
-              }).catch(function() { alert('Ошибка сети'); });
+            showAppConfirm('Записать клиента на выбранное время?', { okText: 'Записать', cancelText: 'Отмена' }).then(function (ok) {
+              if (!ok) return;
+              fetch(apiUrl('/trainer/requests/' + req.id + '/book'), {
+                method: 'POST',
+                headers: headers(),
+                body: JSON.stringify({ slot_id: slotId })
+              }).then(function(res) { return res.json(); })
+                .then(function(data) {
+                  if (data.success) {
+                    state.items = state.items.filter(function(r) { return r.id !== req.id; });
+                    state.currentRequest = null;
+                    showScreen('screenSuccess');
+                  } else { alert(data.detail || 'Ошибка'); }
+                }).catch(function() { alert('Ошибка сети'); });
+            });
           };
         });
       }

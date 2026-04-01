@@ -17,13 +17,15 @@ except ImportError:
     from backports.zoneinfo import ZoneInfo  # type: ignore[no-redef]
 
 # Correlated subquery for trainer-facing "Арена" text (alias `b` = bookings row).
-# There is no per-booking or per-slot venue FK; we aggregate all arena names linked via trainer_arenas
-# (same rule as catalog). Keeps schedule slot line and booking detail identical.
-SQL_BOOKING_TRAINER_ARENAS_STR = """(
-    SELECT string_agg(a.name, ', ' ORDER BY a.name)
-    FROM trainer_arenas ta
-    JOIN arenas a ON a.id = ta.arena_id
-    WHERE ta.trainer_id = b.trainer_id
+# Prefer booking.arena_id when set; otherwise aggregate trainer_arenas (legacy rows).
+SQL_BOOKING_ARENA_DISPLAY = """COALESCE(
+    (SELECT a.name FROM arenas a WHERE a.id = b.arena_id),
+    (
+        SELECT string_agg(a.name, ', ' ORDER BY a.name)
+        FROM trainer_arenas ta
+        JOIN arenas a ON a.id = ta.arena_id
+        WHERE ta.trainer_id = b.trainer_id
+    )
 )"""
 
 
@@ -78,6 +80,7 @@ async def create_booking(
     client_comment: str | None = None,
     client_request_id: int | None = None,
     created_by_trainer: bool = False,
+    arena_id: int | None = None,
 ) -> int | None:
     """
     Create booking: insert row and set slot status to 'booked'. service_id required (must be in trainer_services).
@@ -116,11 +119,32 @@ async def create_booking(
     )
     if not r.fetchone():
         return None
+    resolved_arena: int | None = arena_id
+    if resolved_arena is None:
+        rpa = await session.execute(
+            text("SELECT primary_arena_id FROM trainers WHERE id = :tid"),
+            {"tid": trainer_id},
+        )
+        row_pa = rpa.fetchone()
+        resolved_arena = row_pa[0] if row_pa else None
+        if resolved_arena is None:
+            rmin = await session.execute(
+                text("SELECT MIN(arena_id) FROM trainer_arenas WHERE trainer_id = :tid"),
+                {"tid": trainer_id},
+            )
+            resolved_arena = rmin.scalar()
+    else:
+        rchk = await session.execute(
+            text("SELECT 1 FROM trainer_arenas WHERE trainer_id = :tid AND arena_id = :aid"),
+            {"tid": trainer_id, "aid": resolved_arena},
+        )
+        if not rchk.fetchone():
+            return None
     try:
         r = await session.execute(
             text("""
-                INSERT INTO bookings (slot_id, trainer_id, client_id, service_id, client_comment, client_request_id, status)
-                VALUES (:sid, :tid, :cid, :svc_id, :comment, :req_id, :status)
+                INSERT INTO bookings (slot_id, trainer_id, client_id, service_id, client_comment, client_request_id, status, arena_id)
+                VALUES (:sid, :tid, :cid, :svc_id, :comment, :req_id, :status, :arena_id)
                 RETURNING id
             """),
             {
@@ -131,6 +155,7 @@ async def create_booking(
                 "comment": (client_comment or "").strip() or None,
                 "req_id": client_request_id,
                 "status": "confirmed" if created_by_trainer else "pending",
+                "arena_id": resolved_arena,
             },
         )
         (booking_id,) = r.fetchone()
@@ -154,6 +179,53 @@ async def create_booking(
         )
     await session.commit()
     return booking_id
+
+
+async def get_trainer_primary_arena_resolved(session: AsyncSession, trainer_id: int) -> int | None:
+    """primary_arena_id from trainers, or MIN(arena_id) from trainer_arenas as fallback."""
+    r = await session.execute(
+        text("SELECT primary_arena_id FROM trainers WHERE id = :tid"),
+        {"tid": trainer_id},
+    )
+    row = r.fetchone()
+    primary = row[0] if row else None
+    if primary is not None:
+        return primary
+    r2 = await session.execute(
+        text("SELECT MIN(arena_id) FROM trainer_arenas WHERE trainer_id = :tid"),
+        {"tid": trainer_id},
+    )
+    return r2.scalar()
+
+
+async def resolve_arena_for_client_self_booking(
+    session: AsyncSession,
+    trainer_id: int,
+    session_arena_id: int | None,
+) -> tuple[int | None, str | None, bool]:
+    """
+    Self-booking from catalog: online slot always resolves to the trainer's primary venue.
+    - «Любая арена» or null session → primary.
+    - Filter by primary → primary.
+    - Filter by another trainer's arena (secondary): still book on primary; third flag True so UI
+      can explain that non-primary venues require a client request, not self-booking.
+
+    Returns (arena_id, error_code, used_primary_despite_non_primary_filter).
+    error_code: no_venue | invalid_arena | None.
+    """
+    primary = await get_trainer_primary_arena_resolved(session, trainer_id)
+    if primary is None:
+        return None, "no_venue", False
+    if session_arena_id is not None:
+        r = await session.execute(
+            text("SELECT 1 FROM trainer_arenas WHERE trainer_id = :tid AND arena_id = :aid"),
+            {"tid": trainer_id, "aid": session_arena_id},
+        )
+        if not r.fetchone():
+            return None, "invalid_arena", False
+        if session_arena_id != primary:
+            return primary, None, True
+    return primary, None, False
 
 
 async def generate_reminders_for_booking(session: AsyncSession, booking_id: int) -> None:
@@ -408,7 +480,7 @@ async def list_bookings_for_trainer(
                        COALESCE(b.status, 'confirmed') AS status,
                        srv.name AS services_str,
                        """
-            + SQL_BOOKING_TRAINER_ARENAS_STR
+            + SQL_BOOKING_ARENA_DISPLAY
             + """ AS arenas_str
                 FROM bookings b
                 JOIN clients c ON c.id = b.client_id
@@ -457,7 +529,7 @@ async def active_booking_summaries_by_slot_for_trainer_range(
 ) -> dict[int, dict]:
     """
     For booked slots in a date range: slot_id -> display fields for schedule UI.
-    Uses SQL_BOOKING_TRAINER_ARENAS_STR so venue_label matches booking detail arenas_str.
+    Uses SQL_BOOKING_ARENA_DISPLAY so venue_label matches booking detail arenas_str.
     """
     r = await session.execute(
         text(
@@ -466,7 +538,7 @@ async def active_booking_summaries_by_slot_for_trainer_range(
                    COALESCE(b.status, 'confirmed') AS status,
                    srv.name AS services_str,
                    """
-            + SQL_BOOKING_TRAINER_ARENAS_STR
+            + SQL_BOOKING_ARENA_DISPLAY
             + """ AS arenas_str,
                    c.first_name AS client_first_name, c.last_name AS client_last_name, c.phone AS client_phone
             FROM bookings b
@@ -580,6 +652,8 @@ async def list_bookings_for_client(
                    (EXTRACT(EPOCH FROM (s.end_time - s.start_time)) / 60)::int AS duration_minutes,
                    COALESCE(TRIM(p.first_name || ' ' || p.last_name), 'Тренер') AS trainer_name,
                    t.telegram_id AS trainer_telegram_id,
+                   NULLIF(TRIM(COALESCE(t.telegram_username, '')), '') AS trainer_telegram_username,
+                   NULLIF(TRIM(COALESCE(p.phone, '')), '') AS trainer_phone,
                    srv.name AS service_name,
                    a.name AS arena_name,
                    a.address AS arena_address,
@@ -609,9 +683,9 @@ async def list_bookings_for_client(
     rows = r.fetchall()
     out = []
     for row in rows:
-        arena_name = (row[13] or "").strip() if row[13] else ""
-        arena_address = (row[14] or "").strip() if row[14] else ""
-        lat, lon = row[15], row[16]
+        arena_name = (row[15] or "").strip() if row[15] else ""
+        arena_address = (row[16] or "").strip() if row[16] else ""
+        lat, lon = row[17], row[18]
         if lat is not None and lon is not None:
             map_link = f"https://yandex.ru/maps/?pt={lon},{lat}&z=16"
         else:
@@ -625,7 +699,7 @@ async def list_bookings_for_client(
             "slot_id": row[1],
             "trainer_id": row[2],
             "service_id": row[3],
-            "service_name": (row[12] or "").strip() or "—",
+            "service_name": (row[14] or "").strip() or "—",
             "client_comment": row[4],
             "status": row[5],
             "slot_date": row[6],
@@ -634,6 +708,8 @@ async def list_bookings_for_client(
             "duration_minutes": row[9] if row[9] is not None else 45,
             "trainer_name": (row[10] or "").strip() or "Тренер",
             "trainer_telegram_id": row[11],
+            "trainer_telegram_username": (row[12] or "").strip() or None,
+            "trainer_phone": (row[13] or "").strip() or None,
             "place_display": place_display,
             "arena_name": arena_name or None,
             "arena_address": arena_address or None,
@@ -1230,6 +1306,55 @@ async def list_bookings_to_complete(session: AsyncSession, limit: int = 50) -> l
         }
         for row in rows
     ]
+
+
+async def list_bookings_pending_client_completion_push(
+    session: AsyncSession, limit: int = 50
+) -> list[dict]:
+    """
+    Completed bookings where the client «занятие завершено» Telegram push was not yet acknowledged.
+    Used to retry after a failed send (outbox-style without a separate table).
+    """
+    r = await session.execute(
+        text("""
+            SELECT b.id, c.telegram_id, b.trainer_id,
+                   s.slot_date, s.start_time, s.end_time
+            FROM bookings b
+            JOIN clients c ON c.id = b.client_id
+            JOIN slots s ON s.id = b.slot_id
+            WHERE b.status = 'completed'
+              AND b.client_booking_completed_push_sent_at IS NULL
+              AND c.telegram_id IS NOT NULL
+            ORDER BY b.id
+            LIMIT :lim
+        """),
+        {"lim": limit},
+    )
+    rows = r.fetchall()
+    return [
+        {
+            "id": row[0],
+            "client_telegram_id": row[1],
+            "trainer_id": row[2],
+            "slot_date": row[3],
+            "start_time": row[4],
+            "end_time": row[5],
+        }
+        for row in rows
+    ]
+
+
+async def mark_client_booking_completion_push_sent(
+    session: AsyncSession, booking_id: int
+) -> None:
+    await session.execute(
+        text(
+            "UPDATE bookings SET client_booking_completed_push_sent_at = CURRENT_TIMESTAMP "
+            "WHERE id = :bid"
+        ),
+        {"bid": booking_id},
+    )
+    await session.commit()
 
 
 async def mark_booking_completed_and_notify(

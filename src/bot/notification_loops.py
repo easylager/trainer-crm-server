@@ -7,6 +7,7 @@ import logging
 from datetime import date, datetime, timedelta
 
 from aiogram import Bot
+from sqlalchemy.ext.asyncio import AsyncSession
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 
 from src.application.booking_use_cases import (
@@ -19,9 +20,11 @@ from src.application.booking_use_cases import (
     get_trainer_telegram_id,
     INACTIVE_KIND_10_DAYS,
     INACTIVE_KIND_30_DAYS,
+    list_bookings_pending_client_completion_push,
     list_bookings_pending_confirm_reminder,
     list_bookings_to_complete,
     list_pending_reminders,
+    mark_client_booking_completion_push_sent,
     mark_booking_cancel_notification_sent,
     mark_booking_completed_and_notify,
     mark_booking_notified,
@@ -101,6 +104,288 @@ def _requests_word(n: int) -> str:
     return "заявок"
 
 
+async def _send_client_booking_completed_push(
+    client_bot: Bot,
+    session: AsyncSession,
+    b: dict,
+) -> None:
+    """
+    Send CLIENT_BOOKING_COMPLETED; mark client_booking_completed_push_sent_at only after Telegram OK.
+    No telegram_id: mark sent so we do not spin on retries.
+    """
+    chat_id = b.get("client_telegram_id")
+    booking_id = b["id"]
+    if not chat_id:
+        await mark_client_booking_completion_push_sent(session, booking_id)
+        return
+    date_str, day_str, time_str = _slot_display_strings(
+        b.get("slot_date"), b.get("start_time")
+    )
+    text = msg.CLIENT_BOOKING_COMPLETED.format(
+        date=date_str, day=day_str, time=time_str
+    )
+    slot_date_val = b["slot_date"]
+    target_date = (
+        slot_date_val.date() if hasattr(slot_date_val, "date") else slot_date_val
+    ) + timedelta(days=7)
+    async with async_session_factory() as check_session:
+        status_next, _ = await get_slot_status_on_date(
+            check_session, b["trainer_id"], target_date, b["start_time"]
+        )
+    rows = [
+        [
+            InlineKeyboardButton(
+                text=msg.CLIENT_BUTTON_LEAVE_FEEDBACK,
+                callback_data=f"feedback_booking:{booking_id}",
+            )
+        ],
+    ]
+    if status_next != "booked":
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=msg.CLIENT_BUTTON_REPEAT_SAME_TIME,
+                    callback_data=f"repeat_booking:{booking_id}",
+                ),
+                InlineKeyboardButton(
+                    text=msg.CLIENT_BUTTON_BECOME_REGULAR,
+                    callback_data=f"make_recurring:{booking_id}",
+                ),
+            ]
+        )
+    kb = InlineKeyboardMarkup(inline_keyboard=rows)
+    try:
+        await client_bot.send_message(chat_id=chat_id, text=text, reply_markup=kb)
+        await mark_client_booking_completion_push_sent(session, booking_id)
+    except Exception as e:
+        logger.warning(
+            "Completed notifier send to client %s (booking_id=%s): %s",
+            chat_id,
+            booking_id,
+            e,
+        )
+
+
+async def process_booking_complete_round(client_bot: Bot, trainer_bot: Bot) -> None:
+    """
+    One pass: retry failed client completion pushes, then auto-complete past slots and notify.
+    Exposed for integration tests (notification_service worker runs this in a loop).
+    """
+    async with async_session_factory() as session:
+        pending_retry = await list_bookings_pending_client_completion_push(session)
+        for b in pending_retry:
+            await _send_client_booking_completed_push(client_bot, session, b)
+
+        to_complete = await list_bookings_to_complete(session)
+        if to_complete:
+            logger.info(
+                "booking_complete_loop: %s booking(s) to complete",
+                len(to_complete),
+            )
+        for b in to_complete:
+            pass_redeemed = await mark_booking_completed_and_notify(session, b["id"])
+            if not pass_redeemed:
+                no_pass_payload = await get_booking_no_pass_notify_payload(session, b["id"])
+                if no_pass_payload and no_pass_payload.get("trainer_telegram_id"):
+                    try:
+                        text = msg.TRAINER_NO_PASS_FOR_SERVICE.format(
+                            client_name=no_pass_payload["client_name"],
+                            date=no_pass_payload["date"],
+                            time=no_pass_payload["time"],
+                            service_name=no_pass_payload["service_name"],
+                        )
+                        await trainer_bot.send_message(
+                            chat_id=no_pass_payload["trainer_telegram_id"],
+                            text=text,
+                        )
+                    except Exception as e:
+                        logger.warning(
+                            "No-pass notify to trainer %s: %s",
+                            no_pass_payload.get("trainer_telegram_id"),
+                            e,
+                        )
+            await _send_client_booking_completed_push(client_bot, session, b)
+
+
+async def process_cancel_notifications_batch(client_bot: Bot, session: AsyncSession) -> None:
+    pending = await get_pending_booking_cancel_notifications(session)
+    for p in pending:
+        chat_id = p.get("client_telegram_id")
+        if not chat_id:
+            continue
+        slot_date = p.get("slot_date")
+        start_time = p.get("start_time")
+        date_str = (
+            slot_date.strftime("%d.%m")
+            if slot_date and hasattr(slot_date, "strftime")
+            else "—"
+        )
+        day_str = (
+            msg.TRAINER_DAYS[slot_date.weekday()]
+            if slot_date and hasattr(slot_date, "weekday")
+            else ""
+        )
+        time_str = (
+            start_time.strftime("%H:%M")
+            if start_time and hasattr(start_time, "strftime")
+            else "—"
+        )
+        text = msg.CLIENT_BOOKING_CANCELLED_BY_TRAINER.format(
+            date=date_str, day=day_str, time=time_str
+        )
+        try:
+            await client_bot.send_message(chat_id=chat_id, text=text)
+            await mark_booking_cancel_notification_sent(session, p["id"])
+        except Exception as e:
+            logger.warning("Cancel notifier send to client %s: %s", chat_id, e)
+
+
+async def process_response_notifications_batch(client_bot: Bot, session: AsyncSession) -> None:
+    pending = await get_pending_response_notifications(session)
+    for p in pending:
+        client_tid = p.get("client_telegram_id")
+        if not client_tid:
+            continue
+        if p.get("trainer_comment"):
+            text = msg.CLIENT_RESPONSE_NOTIFICATION_WITH_COMMENT.format(
+                responder_name=p.get("responder_name") or "Тренер",
+                comment=p.get("trainer_comment"),
+            )
+        else:
+            text = msg.CLIENT_RESPONSE_NOTIFICATION
+        request_id = p.get("request_id")
+        kb = None
+        if request_id is not None:
+            base = (Settings().webapp_base_url or "").rstrip("/")
+            if base.startswith("https://"):
+                url = f"{base}/webapp/client-requests?request_id={request_id}"
+                kb = InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [
+                            InlineKeyboardButton(
+                                text=msg.CLIENT_RESPONSE_BUTTON_VIEW,
+                                web_app=WebAppInfo(url=url),
+                            )
+                        ],
+                    ]
+                )
+            else:
+                kb = InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [
+                            InlineKeyboardButton(
+                                text=msg.CLIENT_RESPONSE_BUTTON_VIEW,
+                                callback_data=f"my_request:{request_id}",
+                            )
+                        ],
+                    ]
+                )
+        try:
+            await client_bot.send_message(
+                chat_id=client_tid, text=text, reply_markup=kb
+            )
+            await mark_response_notified(session, p["response_id"])
+        except Exception as e:
+            logger.warning(
+                "Response notifier send to client %s: %s", client_tid, e
+            )
+
+
+async def process_request_notifications_batch(
+    trainer_bot: Bot, session: AsyncSession
+) -> None:
+    pending = await get_pending_request_notifications(session)
+    for p in pending:
+        tid = p.get("trainer_telegram_id")
+        if not tid:
+            continue
+        comment = (p.get("comment") or "").strip()
+        if comment:
+            text = msg.TRAINER_REQUEST_NOTIFICATION.format(
+                city=p["city_name"],
+                service=p["service_name"],
+                comment=comment,
+            )
+        else:
+            text = msg.TRAINER_REQUEST_NOTIFICATION_NO_COMMENT.format(
+                city=p["city_name"],
+                service=p["service_name"],
+            )
+        kb = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text=msg.TRAINER_BUTTON_RESPOND,
+                        callback_data=f"{REQUEST_RESPOND_PREFIX}{p['request_id']}",
+                    ),
+                    InlineKeyboardButton(
+                        text=msg.TRAINER_BUTTON_DECLINE,
+                        callback_data=f"{REQUEST_DECLINE_PREFIX}{p['request_id']}",
+                    ),
+                ],
+            ]
+        )
+        try:
+            await trainer_bot.send_message(chat_id=tid, text=text, reply_markup=kb)
+            await mark_request_trainer_notified(
+                session, p["request_id"], p["trainer_id"]
+            )
+        except Exception as e:
+            logger.warning("Request notifier send to %s: %s", tid, e)
+
+
+async def process_completed_feedback_batch(
+    trainer_bot: Bot, session: AsyncSession
+) -> None:
+    pending = await get_pending_completed_for_trainer(session)
+    for p in pending:
+        trainer_tid = await get_trainer_telegram_id(session, p["trainer_id"])
+        if not trainer_tid:
+            await mark_trainer_completed_sent(session, p["id"])
+            continue
+        slot_date = p.get("slot_date")
+        start_time = p.get("start_time")
+        date_str = (
+            slot_date.strftime("%d.%m")
+            if slot_date and hasattr(slot_date, "strftime")
+            else "—"
+        )
+        day_str = (
+            msg.TRAINER_DAYS[slot_date.weekday()]
+            if slot_date and hasattr(slot_date, "weekday")
+            else ""
+        )
+        time_str = (
+            start_time.strftime("%H:%M")
+            if start_time and hasattr(start_time, "strftime")
+            else "—"
+        )
+        text = msg.TRAINER_BOOKING_COMPLETED.format(
+            date=date_str, day=day_str, time=time_str
+        )
+        kb = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text=msg.TRAINER_BUTTON_LEAVE_FEEDBACK,
+                        callback_data=f"feedback_booking_trainer:{p['booking_id']}",
+                    )
+                ],
+            ]
+        )
+        try:
+            await trainer_bot.send_message(
+                chat_id=trainer_tid, text=text, reply_markup=kb
+            )
+            await mark_trainer_completed_sent(session, p["id"])
+        except Exception as e:
+            logger.warning(
+                "Completed feedback send to trainer %s: %s",
+                trainer_tid,
+                e,
+            )
+
+
 # --- Client loops (use client_bot) ---
 
 
@@ -148,77 +433,7 @@ async def run_booking_complete_loop(client_bot: Bot, trainer_bot: Bot) -> None:
             await asyncio.sleep(BOOKING_COMPLETE_INTERVAL_SEC)
             if not is_within_notification_hours():
                 continue
-            async with async_session_factory() as session:
-                to_complete = await list_bookings_to_complete(session)
-                if to_complete:
-                    logger.info("booking_complete_loop: %s booking(s) to complete", len(to_complete))
-                for b in to_complete:
-                    pass_redeemed = await mark_booking_completed_and_notify(session, b["id"])
-                    if not pass_redeemed:
-                        no_pass_payload = await get_booking_no_pass_notify_payload(session, b["id"])
-                        if no_pass_payload and no_pass_payload.get("trainer_telegram_id"):
-                            try:
-                                text = msg.TRAINER_NO_PASS_FOR_SERVICE.format(
-                                    client_name=no_pass_payload["client_name"],
-                                    date=no_pass_payload["date"],
-                                    time=no_pass_payload["time"],
-                                    service_name=no_pass_payload["service_name"],
-                                )
-                                await trainer_bot.send_message(
-                                    chat_id=no_pass_payload["trainer_telegram_id"],
-                                    text=text,
-                                )
-                            except Exception as e:
-                                logger.warning(
-                                    "No-pass notify to trainer %s: %s",
-                                    no_pass_payload.get("trainer_telegram_id"),
-                                    e,
-                                )
-                    chat_id = b.get("client_telegram_id")
-                    if not chat_id:
-                        continue
-                    date_str, day_str, time_str = _slot_display_strings(
-                        b.get("slot_date"), b.get("start_time")
-                    )
-                    text = msg.CLIENT_BOOKING_COMPLETED.format(
-                        date=date_str, day=day_str, time=time_str
-                    )
-                    slot_date_val = b["slot_date"]
-                    target_date = (
-                        slot_date_val.date() if hasattr(slot_date_val, "date") else slot_date_val
-                    ) + timedelta(days=7)
-                    async with async_session_factory() as check_session:
-                        status_next, _ = await get_slot_status_on_date(
-                            check_session, b["trainer_id"], target_date, b["start_time"]
-                        )
-                    rows = [
-                        [
-                            InlineKeyboardButton(
-                                text=msg.CLIENT_BUTTON_LEAVE_FEEDBACK,
-                                callback_data=f"feedback_booking:{b['id']}",
-                            )
-                        ],
-                    ]
-                    if status_next != "booked":
-                        rows.append([
-                            InlineKeyboardButton(
-                                text=msg.CLIENT_BUTTON_REPEAT_SAME_TIME,
-                                callback_data=f"repeat_booking:{b['id']}",
-                            ),
-                            InlineKeyboardButton(
-                                text=msg.CLIENT_BUTTON_BECOME_REGULAR,
-                                callback_data=f"make_recurring:{b['id']}",
-                            ),
-                        ])
-                    kb = InlineKeyboardMarkup(inline_keyboard=rows)
-                    try:
-                        await client_bot.send_message(
-                            chat_id=chat_id, text=text, reply_markup=kb
-                        )
-                    except Exception as e:
-                        logger.warning(
-                            "Completed notifier send to client %s: %s", chat_id, e
-                        )
+            await process_booking_complete_round(client_bot, trainer_bot)
         except asyncio.CancelledError:
             logger.info("[booking_complete_loop] cancelled")
             break
@@ -233,36 +448,7 @@ async def run_cancel_notifier_loop(client_bot: Bot) -> None:
             if not is_within_notification_hours():
                 continue
             async with async_session_factory() as session:
-                pending = await get_pending_booking_cancel_notifications(session)
-                for p in pending:
-                    chat_id = p.get("client_telegram_id")
-                    if not chat_id:
-                        continue
-                    slot_date = p.get("slot_date")
-                    start_time = p.get("start_time")
-                    date_str = (
-                        slot_date.strftime("%d.%m")
-                        if slot_date and hasattr(slot_date, "strftime")
-                        else "—"
-                    )
-                    day_str = (
-                        msg.TRAINER_DAYS[slot_date.weekday()]
-                        if slot_date and hasattr(slot_date, "weekday")
-                        else ""
-                    )
-                    time_str = (
-                        start_time.strftime("%H:%M")
-                        if start_time and hasattr(start_time, "strftime")
-                        else "—"
-                    )
-                    try:
-                        text = msg.CLIENT_BOOKING_CANCELLED_BY_TRAINER.format(
-                            date=date_str, day=day_str, time=time_str
-                        )
-                        await client_bot.send_message(chat_id=chat_id, text=text)
-                    except Exception as e:
-                        logger.warning("Cancel notifier send to client %s: %s", chat_id, e)
-                    await mark_booking_cancel_notification_sent(session, p["id"])
+                await process_cancel_notifications_batch(client_bot, session)
         except asyncio.CancelledError:
             break
         except Exception as e:
@@ -276,50 +462,7 @@ async def run_response_notifier_loop(client_bot: Bot) -> None:
             if not is_within_notification_hours():
                 continue
             async with async_session_factory() as session:
-                pending = await get_pending_response_notifications(session)
-                for p in pending:
-                    client_tid = p.get("client_telegram_id")
-                    if not client_tid:
-                        continue
-                    if p.get("trainer_comment"):
-                        text = msg.CLIENT_RESPONSE_NOTIFICATION_WITH_COMMENT.format(
-                            responder_name=p.get("responder_name") or "Тренер",
-                            comment=p.get("trainer_comment"),
-                        )
-                    else:
-                        text = msg.CLIENT_RESPONSE_NOTIFICATION
-                    request_id = p.get("request_id")
-                    kb = None
-                    if request_id is not None:
-                        base = (Settings().webapp_base_url or "").rstrip("/")
-                        if base.startswith("https://"):
-                            url = f"{base}/webapp/client-requests?request_id={request_id}"
-                            kb = InlineKeyboardMarkup(inline_keyboard=[
-                                [
-                                    InlineKeyboardButton(
-                                        text=msg.CLIENT_RESPONSE_BUTTON_VIEW,
-                                        web_app=WebAppInfo(url=url),
-                                    )
-                                ],
-                            ])
-                        else:
-                            kb = InlineKeyboardMarkup(inline_keyboard=[
-                                [
-                                    InlineKeyboardButton(
-                                        text=msg.CLIENT_RESPONSE_BUTTON_VIEW,
-                                        callback_data=f"my_request:{request_id}",
-                                    )
-                                ],
-                            ])
-                    try:
-                        await client_bot.send_message(
-                            chat_id=client_tid, text=text, reply_markup=kb
-                        )
-                    except Exception as e:
-                        logger.warning(
-                            "Response notifier send to client %s: %s", client_tid, e
-                        )
-                    await mark_response_notified(session, p["response_id"])
+                await process_response_notifications_batch(client_bot, session)
         except asyncio.CancelledError:
             break
         except Exception as e:
@@ -523,10 +666,18 @@ async def run_booking_notifier_loop(trainer_bot: Bot) -> None:
                             ],
                         ]
                     )
-                    await trainer_bot.send_message(
-                        chat_id=trainer_tid, text=text, reply_markup=kb
-                    )
-                    await mark_booking_notified(session, b["id"])
+                    try:
+                        await trainer_bot.send_message(
+                            chat_id=trainer_tid, text=text, reply_markup=kb
+                        )
+                        await mark_booking_notified(session, b["id"])
+                    except Exception as e:
+                        logger.warning(
+                            "Booking notifier send to trainer %s (booking_id=%s): %s",
+                            trainer_tid,
+                            b.get("id"),
+                            e,
+                        )
 
                 remind_candidates = await list_bookings_pending_confirm_reminder(session)
                 for r in remind_candidates:
@@ -566,10 +717,18 @@ async def run_booking_notifier_loop(trainer_bot: Bot) -> None:
                             ],
                         ]
                     )
-                    await trainer_bot.send_message(
-                        chat_id=trainer_tid, text=text2, reply_markup=kb2
-                    )
-                    await mark_confirm_reminder_sent(session, r["booking_id"])
+                    try:
+                        await trainer_bot.send_message(
+                            chat_id=trainer_tid, text=text2, reply_markup=kb2
+                        )
+                        await mark_confirm_reminder_sent(session, r["booking_id"])
+                    except Exception as e:
+                        logger.warning(
+                            "Confirm reminder send to trainer %s (booking_id=%s): %s",
+                            trainer_tid,
+                            r.get("booking_id"),
+                            e,
+                        )
         except asyncio.CancelledError:
             break
         except Exception as e:
@@ -583,48 +742,7 @@ async def run_request_notifier_loop(trainer_bot: Bot) -> None:
             if not is_within_notification_hours():
                 continue
             async with async_session_factory() as session:
-                pending = await get_pending_request_notifications(session)
-                for p in pending:
-                    tid = p.get("trainer_telegram_id")
-                    if not tid:
-                        continue
-                    comment = (p.get("comment") or "").strip()
-                    if comment:
-                        text = msg.TRAINER_REQUEST_NOTIFICATION.format(
-                            city=p["city_name"],
-                            service=p["service_name"],
-                            comment=comment,
-                        )
-                    else:
-                        text = msg.TRAINER_REQUEST_NOTIFICATION_NO_COMMENT.format(
-                            city=p["city_name"],
-                            service=p["service_name"],
-                        )
-                    kb = InlineKeyboardMarkup(
-                        inline_keyboard=[
-                            [
-                                InlineKeyboardButton(
-                                    text=msg.TRAINER_BUTTON_RESPOND,
-                                    callback_data=f"{REQUEST_RESPOND_PREFIX}{p['request_id']}",
-                                ),
-                                InlineKeyboardButton(
-                                    text=msg.TRAINER_BUTTON_DECLINE,
-                                    callback_data=f"{REQUEST_DECLINE_PREFIX}{p['request_id']}",
-                                ),
-                            ],
-                        ]
-                    )
-                    try:
-                        await trainer_bot.send_message(
-                            chat_id=tid, text=text, reply_markup=kb
-                        )
-                    except Exception as e:
-                        logger.warning(
-                            "Request notifier send to %s: %s", tid, e
-                        )
-                    await mark_request_trainer_notified(
-                        session, p["request_id"], p["trainer_id"]
-                    )
+                await process_request_notifications_batch(trainer_bot, session)
         except asyncio.CancelledError:
             break
         except Exception as e:
@@ -638,55 +756,7 @@ async def run_completed_feedback_loop(trainer_bot: Bot) -> None:
             if not is_within_notification_hours():
                 continue
             async with async_session_factory() as session:
-                pending = await get_pending_completed_for_trainer(session)
-                for p in pending:
-                    trainer_tid = await get_trainer_telegram_id(
-                        session, p["trainer_id"]
-                    )
-                    if not trainer_tid:
-                        await mark_trainer_completed_sent(session, p["id"])
-                        continue
-                    slot_date = p.get("slot_date")
-                    start_time = p.get("start_time")
-                    date_str = (
-                        slot_date.strftime("%d.%m")
-                        if slot_date and hasattr(slot_date, "strftime")
-                        else "—"
-                    )
-                    day_str = (
-                        msg.TRAINER_DAYS[slot_date.weekday()]
-                        if slot_date and hasattr(slot_date, "weekday")
-                        else ""
-                    )
-                    time_str = (
-                        start_time.strftime("%H:%M")
-                        if start_time and hasattr(start_time, "strftime")
-                        else "—"
-                    )
-                    text = msg.TRAINER_BOOKING_COMPLETED.format(
-                        date=date_str, day=day_str, time=time_str
-                    )
-                    kb = InlineKeyboardMarkup(
-                        inline_keyboard=[
-                            [
-                                InlineKeyboardButton(
-                                    text=msg.TRAINER_BUTTON_LEAVE_FEEDBACK,
-                                    callback_data=f"feedback_booking_trainer:{p['booking_id']}",
-                                )
-                            ],
-                        ]
-                    )
-                    try:
-                        await trainer_bot.send_message(
-                            chat_id=trainer_tid, text=text, reply_markup=kb
-                        )
-                    except Exception as e:
-                        logger.warning(
-                            "Completed feedback send to trainer %s: %s",
-                            trainer_tid,
-                            e,
-                        )
-                    await mark_trainer_completed_sent(session, p["id"])
+                await process_completed_feedback_batch(trainer_bot, session)
         except asyncio.CancelledError:
             break
         except Exception as e:
@@ -757,7 +827,10 @@ async def run_subscription_expire_and_reminder_loop(trainer_bot: Bot) -> None:
                         continue
                     expires_at = sub.get("expires_at")
                     expires_date = expires_at.strftime("%d.%m.%Y") if hasattr(expires_at, "strftime") else str(expires_at)[:10]
-                    text = msg.TRAINER_SUBSCRIPTION_REMINDER.format(expires_date=expires_date)
+                    if sub.get("status") == "trial":
+                        text = msg.TRAINER_SUBSCRIPTION_REMINDER_TRIAL.format(expires_date=expires_date)
+                    else:
+                        text = msg.TRAINER_SUBSCRIPTION_REMINDER.format(expires_date=expires_date)
                     kb = None
                     if pay_url:
                         kb = InlineKeyboardMarkup(inline_keyboard=[

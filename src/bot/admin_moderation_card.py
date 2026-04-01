@@ -10,6 +10,8 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy import text
 
+from src.application.trainer_profile_pending import build_trainer_profile_for_moderation_card
+
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -66,6 +68,7 @@ def format_admin_trainer_moderation_caption(
     city_name: str | None = None,
 ) -> str:
     """Full HTML body for one moderation card (photo caption or text message)."""
+    trainer = build_trainer_profile_for_moderation_card(trainer)
     profile = trainer.get("profile") or {}
     tid = int(trainer["id"])
     first = (profile.get("first_name") or "").strip()
