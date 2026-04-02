@@ -77,6 +77,14 @@ class Trainer(Base):
     moderation_submitted_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # Active trainers: text edits queued here until admin approves; catalog reads trainer_profiles only.
+    profile_pending: Mapped[Optional[dict]] = mapped_column(JSONB(), nullable=True)
+    # Active trainers: new photo keys here until approve; catalog uses trainer_photos only.
+    photo_pending: Mapped[Optional[dict]] = mapped_column(JSONB(), nullable=True)
+    # Default venue for online booking when client did not pick a specific arena ("any").
+    primary_arena_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("arenas.id", ondelete="SET NULL"), nullable=True, index=True
+    )
 
     link_tokens: Mapped[list["TrainerLinkToken"]] = relationship(back_populates="trainer", lazy="raise")
     profile: Mapped[Optional["TrainerProfile"]] = relationship(back_populates="trainer", uselist=False, lazy="raise")
@@ -364,7 +372,14 @@ class Booking(Base):
     trainer_confirm_reminder_sent_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    client_booking_completed_push_sent_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     client_cancel_comment: Mapped[Optional[str]] = mapped_column(Text(), nullable=True)
+    # Resolved venue for this booking (primary when client chose "any arena", or explicit primary filter).
+    arena_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("arenas.id", ondelete="SET NULL"), nullable=True, index=True
+    )
 
     client: Mapped["Client"] = relationship(back_populates="bookings", lazy="raise")
 

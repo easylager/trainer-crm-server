@@ -270,3 +270,33 @@ async def get_client_profile_basic(
         "last_name": row[2] or "",
         "phone": (row[3] or "").strip(),
     }
+
+
+async def get_client_phone_for_webapp(session: AsyncSession, telegram_id: int) -> str | None:
+    """
+    Phone for Mini App prefill: row linked to telegram_id, or sibling row with same phone_normalized
+    (trainer-added duplicate before merge).
+    """
+    r = await session.execute(
+        text("""
+            SELECT COALESCE(
+                NULLIF(TRIM(COALESCE(c.phone, '')), ''),
+                (SELECT TRIM(COALESCE(o.phone, '')) FROM clients o
+                 WHERE o.phone_normalized IS NOT NULL
+                   AND c.phone_normalized IS NOT NULL
+                   AND o.phone_normalized = c.phone_normalized
+                   AND o.id IS DISTINCT FROM c.id
+                   AND TRIM(COALESCE(o.phone, '')) <> ''
+                 LIMIT 1)
+            ) AS phone
+            FROM clients c
+            WHERE c.telegram_id = :tid
+            LIMIT 1
+        """),
+        {"tid": telegram_id},
+    )
+    row = r.fetchone()
+    if not row or row[0] is None:
+        return None
+    out = str(row[0]).strip()
+    return out or None

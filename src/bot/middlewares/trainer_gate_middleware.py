@@ -1,6 +1,6 @@
 """
 Blocks trainer bot work features until profile is complete and trainer is active (moderation approved).
-Allows: /start, /guide, /profile, /myprofile, /cancel, support flow, guide/support callbacks, profwiz:* (legacy inline buttons → Mini App stub).
+Allows: /start, /guide, /profile, /myprofile, /cancel, support flow, guide/support/faq callbacks, profwiz:* (legacy inline buttons → Mini App stub).
 Other callbacks (e.g. trainer:invite) require ACTIVE — same as non-allowlisted commands.
 """
 from collections.abc import Awaitable, Callable
@@ -35,6 +35,7 @@ def _is_allowed_command(text: str | None) -> bool:
 _ALLOWED_CALLBACK_PREFIXES: tuple[str, ...] = (
     "guide",
     "trainer:support",
+    "trainer:faq",
 )
 
 

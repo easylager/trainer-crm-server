@@ -3,6 +3,7 @@ Trainer bot: entry only via paid link from site (t.me/bot?start=link_<token>).
 Schedule: by calendar week (this/next). Template for quick apply; add slots to a specific week.
 """
 import asyncio
+import html
 from datetime import date, datetime, time, timedelta
 from itertools import groupby
 
@@ -42,6 +43,7 @@ from src.application.client_request_use_cases import (
     list_requests_for_trainer,
 )
 from src.application.stats_use_cases import get_trainer_stats
+from src.application.subscription_use_cases import ensure_trainer_welcome_trial
 from src.application.subscription_tier_use_cases import (
     get_effective_subscription_tier,
     get_trainer_subscription_status,
@@ -69,7 +71,7 @@ from src.application.trainer_schedule_use_cases import (
 )
 from src.bot import messages as msg
 from src.bot.trainer_bot_state import trainer_support_awaiting
-from src.bot.trainer_gate_text import trainer_gate_message
+from src.bot.trainer_gate_text import trainer_first_link_onboarding_html, trainer_gate_message
 from src.bot.trainer_menu_commands import sync_trainer_menu_commands
 from src.shared.config import Settings
 from src.shared.notification_hours import NOTIFICATION_TZ
@@ -82,6 +84,19 @@ from src.bot.schedule_notifications import run_after_schedule_changed
 from src.infrastructure.db import async_session_factory
 
 router = Router(name="trainer")
+
+
+def _format_expires_ru_from_iso(iso_dt: str | None) -> str:
+    """DD.MM.YYYY for subscription API timestamps (UTC ISO)."""
+    if not iso_dt or not str(iso_dt).strip():
+        return "—"
+    s = str(iso_dt).strip()
+    day = s[:10]
+    try:
+        y, m, d = day.split("-")
+        return f"{d}.{m}.{y}"
+    except Exception:
+        return day
 
 
 async def _trainer_has_crm_subscription(session, trainer_id: int) -> bool:
@@ -133,6 +148,7 @@ REQUEST_BOOK_SLOT_PREFIX = "request_book_slot:"
 FEEDBACK_BOOKING_TRAINER_PREFIX = "feedback_booking_trainer:"
 GUIDE_CALLBACK = "guide"
 TRAINER_SUPPORT_CALLBACK = "trainer:support"
+TRAINER_FAQ_CALLBACK = "trainer:faq"
 TRAINER_INVITE_CALLBACK = "trainer:invite"
 
 # Human-readable trainer.status (aligned with admin TRAINER_STATUS_LABELS)
@@ -152,6 +168,13 @@ def _trainer_profile_webapp_url() -> str | None:
     return None
 
 
+def _trainer_faq_webapp_url() -> str | None:
+    base = (Settings().webapp_base_url or "").rstrip("/")
+    if base.lower().startswith("https://"):
+        return f"{base}/webapp/trainer-faq"
+    return None
+
+
 def _trainer_profile_keyboard() -> InlineKeyboardMarkup | None:
     url = _trainer_profile_webapp_url()
     if not url:
@@ -161,6 +184,32 @@ def _trainer_profile_keyboard() -> InlineKeyboardMarkup | None:
             [InlineKeyboardButton(text=msg.TRAINER_PROFILE_BTN_MINI_APP, web_app=WebAppInfo(url=url))],
         ]
     )
+
+
+def _post_welcome_link_keyboard(*, for_active_menu: bool) -> InlineKeyboardMarkup:
+    """
+    After /start with link_: profile (+ subscription when fully active), then guide callback.
+    """
+    rows: list[list[InlineKeyboardButton]] = []
+    profile_url = _trainer_profile_webapp_url()
+    if profile_url:
+        rows.append(
+            [InlineKeyboardButton(text=msg.TRAINER_PROFILE_BTN_MINI_APP, web_app=WebAppInfo(url=profile_url))]
+        )
+    base = (Settings().webapp_base_url or "").rstrip("/")
+    if for_active_menu and base.lower().startswith("https://"):
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=msg.TRAINER_BUTTON_SUBSCRIPTION_CONSTRUCTOR,
+                    web_app=WebAppInfo(url=f"{base}/webapp/trainer-subscription"),
+                )
+            ]
+        )
+    rows.append(
+        [InlineKeyboardButton(text="❓ Как пользоваться ботом", callback_data=GUIDE_CALLBACK)]
+    )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def _trainer_profile_footer_hint() -> str:
@@ -260,10 +309,38 @@ async def cmd_start(message: Message) -> None:
                 audit_log("trainer.linked", ACTOR_TRAINER_BOT, user_id, {"trainer_id": trainer_id})
                 state, trainer = await get_trainer_access_state(session, user_id)
                 if state == TrainerAccessState.ACTIVE:
-                    await message.answer(msg.TRAINER_LINK_SUCCESS_ACTIVE)
+                    async with async_session_factory() as s2:
+                        await ensure_trainer_welcome_trial(s2, trainer_id)
+                        sub_st = await get_trainer_subscription_status(s2, trainer_id)
+                    if (
+                        sub_st.get("is_active")
+                        and sub_st.get("is_trial")
+                        and (sub_st.get("effective_tier") or "none") != "none"
+                    ):
+                        tier_label = html.escape(
+                            (sub_st.get("tier_name_ru") or "Аналитика").strip() or "Аналитика"
+                        )
+                        exp_fmt = _format_expires_ru_from_iso(sub_st.get("expires_at"))
+                        await message.answer(
+                            msg.TRAINER_WELCOME_TRIAL_ACTIVATED.format(
+                                tier_name=tier_label,
+                                expires_date=html.escape(exp_fmt),
+                            ),
+                            parse_mode=ParseMode.HTML,
+                            reply_markup=_post_welcome_link_keyboard(for_active_menu=True),
+                        )
+                    else:
+                        await message.answer(
+                            msg.TRAINER_LINK_SUCCESS_ACTIVE,
+                            parse_mode=ParseMode.HTML,
+                            reply_markup=_post_welcome_link_keyboard(for_active_menu=True),
+                        )
                 else:
-                    await message.answer(msg.TRAINER_LINK_SUCCESS)
-                    await message.answer(trainer_gate_message(state, trainer))
+                    await message.answer(
+                        trainer_first_link_onboarding_html(state, trainer),
+                        parse_mode=ParseMode.HTML,
+                        reply_markup=_post_welcome_link_keyboard(for_active_menu=False),
+                    )
                 if state == TrainerAccessState.ACTIVE:
                     await sync_trainer_menu_commands(message.bot, message.chat.id, trainer_id, session)
             else:
@@ -284,14 +361,15 @@ async def cmd_start(message: Message) -> None:
 
 
 def _trainer_guide_keyboard() -> InlineKeyboardMarkup:
-    rows: list[list[InlineKeyboardButton]] = []
-    profile_url = _trainer_profile_webapp_url()
-    if profile_url:
-        rows.append(
-            [InlineKeyboardButton(text=msg.TRAINER_PROFILE_BTN_MINI_APP, web_app=WebAppInfo(url=profile_url))]
-        )
-    rows.append([InlineKeyboardButton(text=msg.TRAINER_INVITE_BUTTON, callback_data=TRAINER_INVITE_CALLBACK)])
-    rows.append([InlineKeyboardButton(text="💬 Написать в поддержку", callback_data=TRAINER_SUPPORT_CALLBACK)])
+    """Support + FAQ Mini App (HTTPS); без HTTPS — callback-заглушка."""
+    rows: list[list[InlineKeyboardButton]] = [
+        [InlineKeyboardButton(text="💬 Написать в поддержку", callback_data=TRAINER_SUPPORT_CALLBACK)],
+    ]
+    faq_url = _trainer_faq_webapp_url()
+    if faq_url:
+        rows.append([InlineKeyboardButton(text="FAQ", web_app=WebAppInfo(url=faq_url))])
+    else:
+        rows.append([InlineKeyboardButton(text="FAQ", callback_data=TRAINER_FAQ_CALLBACK)])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -305,7 +383,11 @@ async def cmd_guide(message: Message) -> None:
     if state == TrainerAccessState.NOT_LINKED:
         await message.answer(msg.TRAINER_ONLY_VIA_SITE)
         return
-    await message.answer(msg.TRAINER_GUIDE, reply_markup=_trainer_guide_keyboard())
+    await message.answer(
+        msg.TRAINER_GUIDE,
+        parse_mode=ParseMode.HTML,
+        reply_markup=_trainer_guide_keyboard(),
+    )
 
 
 async def _send_trainer_invite_package(chat_message: Message, telegram_id: int) -> None:
@@ -2221,7 +2303,11 @@ async def on_guide_callback(callback: CallbackQuery) -> None:
     if state == TrainerAccessState.NOT_LINKED:
         await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
         return
-    await callback.message.answer(msg.TRAINER_GUIDE, reply_markup=_trainer_guide_keyboard())
+    await callback.message.answer(
+        msg.TRAINER_GUIDE,
+        parse_mode=ParseMode.HTML,
+        reply_markup=_trainer_guide_keyboard(),
+    )
 
 
 @router.callback_query(lambda c: c.data == TRAINER_INVITE_CALLBACK)
@@ -2240,6 +2326,19 @@ async def on_trainer_support_callback(callback: CallbackQuery) -> None:
     tid = callback.from_user.id if callback.from_user else 0
     trainer_support_awaiting.add(tid)
     await callback.message.answer(msg.TRAINER_SUPPORT_PROMPT)
+
+
+@router.callback_query(lambda c: c.data == TRAINER_FAQ_CALLBACK)
+async def on_trainer_faq_callback(callback: CallbackQuery) -> None:
+    """Placeholder until FAQ opens a dedicated Mini App (web_app URL on the button)."""
+    await callback.answer()
+    uid = callback.from_user.id if callback.from_user else 0
+    async with async_session_factory() as session:
+        state, _ = await get_trainer_access_state(session, uid)
+    if state == TrainerAccessState.NOT_LINKED:
+        await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
+        return
+    await callback.message.answer(msg.TRAINER_FAQ_COMING_SOON)
 
 
 @router.message(Command("cancel"))

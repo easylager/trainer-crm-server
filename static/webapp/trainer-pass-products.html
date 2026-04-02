@@ -10,6 +10,7 @@
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="theme.css" />
   <link rel="stylesheet" href="mini-app-components.css" />
+  <script src="mini-app-confirm.js"></script>
   <script>
     /** Lock palette to theme.css + schedule.html — Telegram themeParams often inject blue accent. */
     (function () {
@@ -308,26 +309,13 @@
       padding-top: 18px;
       border-top: 1px dashed rgba(247, 166, 0, 0.22);
     }
-    .pp-form-fields .form-group input,
-    .pp-form-fields .form-group select {
+    .pp-form-fields .form-group input {
       background: var(--tg-theme-bg-color);
       border: 1px solid rgba(247, 166, 0, 0.14);
       box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.07);
       font-family: var(--app-font-sans);
     }
-    .pp-form-fields .form-group select {
-      appearance: none;
-      -webkit-appearance: none;
-      -moz-appearance: none;
-      padding-right: 44px;
-      cursor: pointer;
-      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%23f5a623' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
-      background-repeat: no-repeat;
-      background-position: right 12px center;
-      background-color: var(--tg-theme-bg-color);
-    }
-    .pp-form-fields .form-group input:focus,
-    .pp-form-fields .form-group select:focus {
+    .pp-form-fields .form-group input:focus {
       border-color: rgba(247, 166, 0, 0.5);
       box-shadow: inset 0 0 0 1px rgba(247, 166, 0, 0.25), 0 0 0 3px rgba(247, 166, 0, 0.12);
     }
@@ -363,8 +351,7 @@
       margin-bottom: 0;
       cursor: pointer;
     }
-    .form-group input,
-    .form-group select {
+    .form-group input {
       width: 100%;
       padding: 14px 16px;
       border-radius: 12px;
@@ -373,10 +360,33 @@
       color: var(--tg-theme-text-color);
       font-size: 16px;
     }
-    .form-group input:focus,
-    .form-group select:focus {
+    .form-group input:focus {
       border-color: rgba(247, 166, 0, 0.45);
       outline: none;
+    }
+    /* Select: как в блоке редактирования (.pp-form-fields) — без нативного «глянца» WebView */
+    .form-group select {
+      width: 100%;
+      padding: 14px 44px 14px 16px;
+      border-radius: 12px;
+      border: 1px solid rgba(247, 166, 0, 0.14);
+      background-color: var(--tg-theme-bg-color);
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%23f5a623' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 12px center;
+      color: var(--tg-theme-text-color);
+      font-size: 16px;
+      font-family: var(--app-font-sans);
+      appearance: none;
+      -webkit-appearance: none;
+      -moz-appearance: none;
+      cursor: pointer;
+      box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.07);
+    }
+    .form-group select:focus {
+      border-color: rgba(247, 166, 0, 0.5);
+      outline: none;
+      box-shadow: inset 0 0 0 1px rgba(247, 166, 0, 0.25), 0 0 0 3px rgba(247, 166, 0, 0.12);
     }
     .form-actions {
       display: flex;
@@ -950,7 +960,7 @@
         });
       }
 
-      var state = { items: [], editingId: null, certItems: [], editingCertId: null, activeTab: 'passes', clients: [], services: [], prefillClientIdForPassIssue: null, passIssueFilteredClients: [], passIssueSelectedClientId: null, passIssueSelectedClient: null, certIssueSubmitting: false, certIssueIdempotencyKey: null };
+      var state = { items: [], editingId: null, certItems: [], editingCertId: null, editingCert: null, activeTab: 'passes', clients: [], services: [], prefillClientIdForPassIssue: null, passIssueFilteredClients: [], passIssueSelectedClientId: null, passIssueSelectedClient: null, certIssueSubmitting: false, certIssueIdempotencyKey: null };
 
       function formatPrice(cents) {
         if (cents == null) return '—';
@@ -1285,6 +1295,7 @@
         document.getElementById('certActiveGroup').style.display = cert ? 'block' : 'none';
         document.getElementById('btnDeleteCert').style.display = cert ? 'block' : 'none';
         state.editingCertId = cert ? cert.id : null;
+        state.editingCert = cert || null;
       }
       document.getElementById('btnAddCert').onclick = function() {
         state.editingCertId = null;
@@ -1546,9 +1557,13 @@
         setTab('certs');
         loadCertList();
       };
+      /** Display name for catalog (no separate title field on this screen — was reading missing #certName and crashed). */
+      function buildCertProductName(anyAmount, amountCents) {
+        if (anyAmount) return 'Подарочный сертификат';
+        var byn = amountCents != null ? Math.round(amountCents / 100) : 0;
+        return byn > 0 ? ('Сертификат ' + byn + ' BYN') : 'Подарочный сертификат';
+      }
       document.getElementById('btnSaveCertForm').onclick = function() {
-        var name = (document.getElementById('certName').value || '').trim();
-        if (!name) { alert('Укажите название сертификата'); return; }
         var anyAmount = document.getElementById('certAnyAmount').checked;
         var amountCents = null;
         if (!anyAmount) {
@@ -1556,6 +1571,7 @@
           if (isNaN(byn) || byn < 1) { alert('Укажите сумму в BYN'); return; }
           amountCents = byn * 100;
         }
+        var name = buildCertProductName(anyAmount, amountCents);
         var expiresDaysInput = document.getElementById('certExpiresDays');
         var expiresInDays = null;
         if (expiresDaysInput && expiresDaysInput.value) {
@@ -1600,17 +1616,20 @@
         }
       };
       document.getElementById('btnDeleteCert').onclick = function() {
-        if (!state.editingCertId || !confirm('Удалить этот сертификат?')) return;
-        fetch(apiUrl('/trainer/certificate-products/' + state.editingCertId), {
-          method: 'DELETE',
-          headers: headers()
-        })
-          .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
-          .then(function(o) {
-            if (o.ok) { showScreen('screenList'); setTab('certs'); loadCertList(); }
-            else { alert(o.data.detail || 'Ошибка удаления'); }
+        if (!state.editingCertId) return;
+        showAppConfirm('Удалить этот сертификат?', { okText: 'Удалить', cancelText: 'Отмена' }).then(function (ok) {
+          if (!ok) return;
+          fetch(apiUrl('/trainer/certificate-products/' + state.editingCertId), {
+            method: 'DELETE',
+            headers: headers()
           })
-          .catch(function() { alert('Ошибка сети'); });
+            .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
+            .then(function(o) {
+              if (o.ok) { showScreen('screenList'); setTab('certs'); loadCertList(); }
+              else { alert(o.data.detail || 'Ошибка удаления'); }
+            })
+            .catch(function() { alert('Ошибка сети'); });
+        });
       };
 
       document.getElementById('btnAdd').onclick = function() {
@@ -1670,17 +1689,20 @@
       };
 
       document.getElementById('btnDeleteProduct').onclick = function() {
-        if (!state.editingId || !confirm('Удалить этот абонемент? Удаление возможно только если по нему не было покупок.')) return;
-        fetch(apiUrl('/trainer/pass-products/' + state.editingId), {
-          method: 'DELETE',
-          headers: headers()
-        })
-          .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
-          .then(function(o) {
-            if (o.ok) { showScreen('screenList'); loadList(); }
-            else { alert(o.data.detail || 'Не удалось удалить. Возможно, по абонементу уже были покупки — тогда деактивируйте его (снимите галочку «Активен»).'); }
+        if (!state.editingId) return;
+        showAppConfirm('Удалить этот абонемент? Удаление возможно только если по нему не было покупок.', { okText: 'Удалить', cancelText: 'Отмена' }).then(function (ok) {
+          if (!ok) return;
+          fetch(apiUrl('/trainer/pass-products/' + state.editingId), {
+            method: 'DELETE',
+            headers: headers()
           })
-          .catch(function() { alert('Ошибка сети'); });
+            .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
+            .then(function(o) {
+              if (o.ok) { showScreen('screenList'); loadList(); }
+              else { alert(o.data.detail || 'Не удалось удалить. Возможно, по абонементу уже были покупки — тогда деактивируйте его (снимите галочку «Активен»).'); }
+            })
+            .catch(function() { alert('Ошибка сети'); });
+        });
       };
 
       loadList();

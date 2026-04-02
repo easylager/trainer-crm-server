@@ -175,14 +175,20 @@ async def patch_profile(
     """Partial update of profile and/or service_ids."""
     profile = body.profile.model_dump(exclude_unset=True) if body.profile else {}
     services_payload = [s.model_dump() for s in body.services] if body.services is not None else None
-    ok = await update_trainer_profile(
-        session,
-        trainer_id,
-        profile=profile,
-        service_ids=body.service_ids if services_payload is None else None,
-        services=services_payload,
-        arena_ids=body.arena_ids,
-    )
+    primary_set = "primary_arena_id" in body.model_fields_set
+    try:
+        ok = await update_trainer_profile(
+            session,
+            trainer_id,
+            profile=profile,
+            service_ids=body.service_ids if services_payload is None else None,
+            services=services_payload,
+            arena_ids=body.arena_ids,
+            primary_arena_id=body.primary_arena_id,
+            primary_arena_id_set=primary_set,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     if not ok:
         raise _NOT_FOUND
     audit_log("trainer.profile_updated", ACTOR_API, "api", {"trainer_id": trainer_id})

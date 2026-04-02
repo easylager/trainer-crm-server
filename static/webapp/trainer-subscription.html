@@ -181,29 +181,6 @@
       transform: translateY(0);
     }
 
-    /* Upgrade info */
-    .upgrade-info {
-      background: linear-gradient(135deg, rgba(247, 166, 0, 0.1) 0%, rgba(247, 166, 0, 0.05) 100%);
-      border: 1px solid rgba(247, 166, 0, 0.2);
-      border-radius: 12px;
-      padding: 16px;
-      margin-bottom: 20px;
-      font-size: 14px;
-      line-height: 1.4;
-    }
-
-    .upgrade-info h3 {
-      margin: 0 0 8px;
-      font-size: 16px;
-      font-weight: 600;
-      color: var(--tg-theme-text-color);
-    }
-
-    .upgrade-info p {
-      margin: 0;
-      color: var(--tg-theme-hint-color);
-    }
-
     /* Price savings indicator */
     .price-savings {
       display: inline-flex;
@@ -220,6 +197,41 @@
 
     /* Current status — chip like schedule filters / slot-status */
     #currentStatus { margin-bottom: 16px; }
+    #trialStrip { margin-bottom: 14px; }
+    .trial-strip {
+      border-radius: 16px;
+      padding: 14px 16px;
+      border: 1px solid rgba(247, 166, 0, 0.28);
+      background: linear-gradient(135deg, rgba(247, 166, 0, 0.14) 0%, rgba(247, 166, 0, 0.04) 100%);
+      box-shadow: 0 4px 18px rgba(0, 0, 0, 0.06);
+    }
+    body.subscription-page.sub-theme-dark .trial-strip {
+      border-color: var(--sub-border-bronze, rgba(77, 64, 48, 0.55));
+      background: linear-gradient(145deg, rgba(247, 166, 0, 0.1) 0%, rgba(20, 22, 26, 0.92) 100%);
+      box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+    }
+    .trial-strip-title {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--tg-theme-hint-color);
+      margin: 0 0 6px;
+    }
+    .trial-strip-body {
+      font-size: 14px;
+      font-weight: 600;
+      line-height: 1.45;
+      color: var(--tg-theme-text-color);
+      margin: 0;
+    }
+    .trial-strip-hint {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--tg-theme-hint-color);
+      margin: 8px 0 0;
+      line-height: 1.4;
+    }
     .status-badge {
       display: inline-flex;
       align-items: center;
@@ -524,37 +536,11 @@
     .summary-row .label { color: var(--tg-theme-hint-color); font-weight: 500; }
     .summary-row .value { font-weight: 700; letter-spacing: -0.02em; }
 
-    /* Primary CTA — schedule .bd-btn--primary */
-    .btn-primary {
+    .subscription-page .btn-primary {
       width: 100%;
-      padding: 15px 22px;
-      border-radius: 14px;
-      border: none;
-      font-size: 16px;
       font-weight: 700;
-      font-family: var(--app-font-sans);
       letter-spacing: -0.01em;
-      background: linear-gradient(180deg, #ffc23d 0%, #f0a000 100%);
-      color: #141414;
-      cursor: pointer;
-      box-shadow: 0 6px 20px rgba(247, 166, 0, 0.38);
-      transition: transform 0.12s ease, box-shadow 0.12s ease, opacity 0.12s ease;
-      -webkit-tap-highlight-color: transparent;
-    }
-    .btn-primary:hover:not(:disabled) {
-      box-shadow: 0 8px 26px rgba(247, 166, 0, 0.45);
-    }
-    .btn-primary:active:not(:disabled) {
-      transform: scale(0.985);
-      box-shadow: 0 3px 12px rgba(247, 166, 0, 0.28);
-      opacity: 0.95;
-    }
-    .btn-primary:disabled {
-      background: var(--tg-theme-secondary-bg-color);
-      color: var(--tg-theme-hint-color);
-      box-shadow: none;
-      opacity: 0.65;
-      cursor: not-allowed;
+      font-family: var(--app-font-sans);
     }
     body.subscription-page.sub-theme-dark .btn-primary:disabled {
       background: var(--sub-btn-disabled-bg, #252f3a);
@@ -872,6 +858,7 @@
       </div>
     </div>
 
+    <div id="trialStrip"></div>
     <div id="currentStatus"></div>
     
     <!-- Period selector -->
@@ -889,12 +876,6 @@
       </button>
     </div>
 
-    <!-- Upgrade / renewal context (text set in JS) -->
-    <div class="upgrade-info" id="checkoutContext">
-      <h3 id="checkoutContextTitle">💡 Как работает оплата</h3>
-      <p id="checkoutContextBody">Новый срок добавляется к дате окончания текущей подписки (продление). Смена тарифа — отдельная покупка; действует максимальный уровень из активных периодов.</p>
-    </div>
-    
     <div id="tiersContainer" class="tiers-container"></div>
   </div>
 
@@ -1074,51 +1055,35 @@
       function isCurrentTierForPeriod(tierId) {
         var currentTier = status && status.effective_tier;
         if (!currentTier || currentTier === 'none' || tierId !== currentTier) return false;
+        if (status.is_trial) return true;
         var bpm = status.billing_period_months;
         if (bpm == null) return false;
         return Number(bpm) === selectedPeriod;
-      }
-
-      function refreshCheckoutContext() {
-        var titleEl = document.getElementById('checkoutContextTitle');
-        var bodyEl = document.getElementById('checkoutContextBody');
-        if (!titleEl || !bodyEl) return;
-        if (!selectedTier) {
-          titleEl.textContent = '💡 Выбор тарифа';
-          bodyEl.textContent = 'Нажмите на карточку, чтобы выбрать план; повторное нажатие снимает выбор. Сначала выберите период (1 / 3 / 12 мес.), затем тариф.';
-          return;
-        }
-        var eff = status && status.effective_tier;
-        var exp = status && status.expires_at;
-        if (!eff || eff === 'none') {
-          titleEl.textContent = '💡 Первый платёж';
-          bodyEl.textContent = 'После оплаты сразу откроется доступ по выбранному тарифу и периоду.';
-          return;
-        }
-        var expShort = exp ? exp.slice(0, 10) : '—';
-        if (selectedTier && tierRank[selectedTier] < tierRank[eff]) {
-          titleEl.textContent = '⚠️ Тариф ниже текущего';
-          bodyEl.textContent = 'Сейчас у вас более полный тариф («' + (tierLabels[eff] || eff) + '») до ' + expShort + '. Новая подписка на меньший тариф начнёт действовать после окончания текущего периода (или параллельно по датам — эффективный доступ остаётся по максимальному уровню до истечения высшего тарифа).';
-          return;
-        }
-        if (selectedTier === eff) {
-          titleEl.textContent = '💡 Продление того же тарифа';
-          bodyEl.textContent = 'Оплата добавит выбранный период к дате окончания (после ' + expShort + '), доступ не прерывается.';
-          return;
-        }
-        if (selectedTier && tierRank[selectedTier] > tierRank[eff]) {
-          titleEl.textContent = '💡 Апгрейд';
-          bodyEl.textContent = 'Новый уровень начнёт действовать сразу после оплаты; оставшееся время по текущему тарифу учитывается в цене на стороне оплаты (здесь — демо, сумма из каталога).';
-          return;
-        }
-        titleEl.textContent = '💡 Как работает оплата';
-        bodyEl.textContent = 'Новый срок добавляется к дате окончания текущей подписки (продление). Смена тарифа — отдельная покупка; действует максимальный уровень из активных периодов.';
       }
 
       // Render tiers
       function renderTiers() {
         var container = document.getElementById('tiersContainer');
         var currentTier = status && status.effective_tier;
+
+        var trialStripEl = document.getElementById('trialStrip');
+        if (trialStripEl) {
+          if (status && status.is_trial && currentTier && currentTier !== 'none') {
+            var tn = (status.tier_name_ru || 'Максимальный тариф').replace(/</g, '&lt;');
+            var expRaw = status.expires_at ? String(status.expires_at).slice(0, 10) : '';
+            var expRu = expRaw ? expRaw.split('-').reverse().join('.') : '—';
+            trialStripEl.innerHTML =
+              '<div class="trial-strip">' +
+              '<p class="trial-strip-title">Пробный период</p>' +
+              '<p class="trial-strip-body">Тариф «' + tn + '» · до ' + expRu + '</p>' +
+              '<p class="trial-strip-hint">Полный доступ ко всем функциям. После окончания выберите платный план ниже.</p>' +
+              '</div>';
+            trialStripEl.style.display = 'block';
+          } else {
+            trialStripEl.innerHTML = '';
+            trialStripEl.style.display = 'none';
+          }
+        }
         
         // Render current status
         var statusContainer = document.getElementById('currentStatus');
@@ -1126,10 +1091,15 @@
           var expiresText = status.expires_at ? ' до ' + status.expires_at.slice(0, 10) : '';
           var bpm = status.billing_period_months;
           var periodHint = '';
-          if (bpm === 1) periodHint = ' · период 1 мес.';
-          else if (bpm === 3) periodHint = ' · период 3 мес.';
-          else if (bpm === 12) periodHint = ' · период 12 мес.';
-          statusContainer.innerHTML = '<div class="status-badge active"><span class="dot"></span>Активна' + expiresText + periodHint + '</div>';
+          if (status.is_trial) {
+            periodHint = ' · пробный доступ';
+          } else {
+            if (bpm === 1) periodHint = ' · период 1 мес.';
+            else if (bpm === 3) periodHint = ' · период 3 мес.';
+            else if (bpm === 12) periodHint = ' · период 12 мес.';
+          }
+          var label = (status.is_trial ? 'Пробный период' : 'Активна');
+          statusContainer.innerHTML = '<div class="status-badge active"><span class="dot"></span>' + label + expiresText + periodHint + '</div>';
         } else {
           statusContainer.innerHTML = '<div class="status-badge"><span class="dot"></span>Нет активной подписки</div>';
         }
@@ -1204,7 +1174,6 @@
             selectTier(card.dataset.tier);
           };
         });
-        refreshCheckoutContext();
       }
 
       // Period selector handlers
@@ -1228,7 +1197,6 @@
             // Update checkout button
             updateCheckoutButton();
             refreshPeriodBadges();
-            refreshCheckoutContext();
             
             haptic('light');
           };
@@ -1249,7 +1217,6 @@
         });
         
         updateCheckoutButton();
-        refreshCheckoutContext();
       }
 
       // Update checkout button and summary

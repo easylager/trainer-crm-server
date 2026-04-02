@@ -14,6 +14,9 @@
   <style>
     body {
       font-family: var(--app-font-sans);
+      background: var(--tg-theme-bg-color);
+      color: var(--tg-theme-text-color);
+      padding-bottom: env(safe-area-inset-bottom, 12px);
     }
     .header {
       display: flex;
@@ -38,6 +41,10 @@
     .tabs {
       display: flex;
       gap: 8px;
+      padding: 4px;
+      border-radius: 16px;
+      background: var(--tg-theme-secondary-bg-color);
+      border: 1px solid rgba(128, 128, 128, 0.12);
       margin-bottom: 16px;
     }
     .tab {
@@ -47,14 +54,16 @@
       border: none;
       font-size: 15px;
       font-weight: 600;
-      background: var(--tg-theme-secondary-bg-color);
-      color: var(--tg-theme-text-color);
+      background: transparent;
+      color: var(--tg-theme-hint-color);
       cursor: pointer;
       font-family: inherit;
+      transition: background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
     }
     .tab.active {
       background: var(--tg-theme-button-color);
       color: var(--tg-theme-button-text-color);
+      box-shadow: 0 2px 10px rgba(247, 166, 0, 0.22);
     }
     .tab:active { opacity: 0.9; }
     .panel { display: none; }
@@ -68,16 +77,18 @@
       justify-content: space-between;
       padding: 16px 18px;
       margin-bottom: 10px;
-      border-radius: 14px;
+      border-radius: 16px;
       background: var(--tg-theme-secondary-bg-color);
-      border: none;
+      border: 1px solid rgba(128, 128, 128, 0.12);
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
       width: 100%;
       font: inherit;
       color: inherit;
       text-align: left;
       cursor: pointer;
+      transition: transform 0.12s ease, box-shadow 0.12s ease;
     }
-    .pass-card:active { opacity: 0.9; }
+    .pass-card:active { transform: scale(0.99); opacity: 0.95; }
     .pass-card .main { flex: 1; min-width: 0; }
     .pass-card .title { font-weight: 600; font-size: 16px; margin-bottom: 4px; }
     .pass-card .meta { font-size: 14px; color: var(--tg-theme-hint-color); }
@@ -88,30 +99,147 @@
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      margin-bottom: 20px;
+      margin-bottom: 14px;
       padding: 10px 0;
-      font-size: 15px;
-      font-weight: 600;
-      color: var(--tg-theme-button-color);
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--tg-theme-hint-color);
       cursor: pointer;
       border: none;
       background: none;
       font-family: inherit;
     }
-    .btn-back:active { opacity: 0.8; }
-    .detail-title { font-size: 18px; font-weight: 600; margin-bottom: 8px; }
-    .detail-meta { font-size: 15px; color: var(--tg-theme-hint-color); margin-bottom: 20px; }
-    .detail-hint {
-      font-size: 14px;
+    .btn-back .back-link-chevron { width: 16px; height: 16px; flex-shrink: 0; color: inherit; }
+    .btn-back:active { opacity: 0.75; }
+    /* Деталь абонемента — тот же язык, что bd-hero + карточки в schedule / bookings */
+    #pass-screenDetail {
+      animation: pass-detail-in 0.38s cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+    @keyframes pass-detail-in {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .pass-detail-hero {
+      position: relative;
+      border-radius: 20px;
+      padding: 20px 20px 22px;
+      margin-bottom: 14px;
+      overflow: hidden;
+      background: linear-gradient(155deg, rgba(247, 166, 0, 0.14) 0%, rgba(247, 166, 0, 0.04) 48%, transparent 100%);
+      border: 1px solid rgba(247, 166, 0, 0.28);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+    }
+    .pass-detail-hero::before {
+      content: '';
+      position: absolute;
+      top: -40%;
+      right: -20%;
+      width: 55%;
+      height: 120%;
+      background: radial-gradient(ellipse, rgba(247, 166, 0, 0.22) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .pass-detail-hero-inner { position: relative; z-index: 1; }
+    .pass-detail-product {
+      margin: 0;
+      font-size: clamp(20px, 5vw, 24px);
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1.2;
+      color: var(--tg-theme-text-color);
+    }
+    .pass-detail-trainer {
+      margin: 10px 0 0;
+      font-size: 15px;
+      font-weight: 500;
       color: var(--tg-theme-hint-color);
+    }
+    .pass-detail-stat-card {
+      border-radius: 18px;
+      padding: 18px 16px;
       margin-bottom: 16px;
+      background: var(--tg-theme-secondary-bg-color);
+      border: 1px solid rgba(128, 128, 128, 0.14);
+      box-shadow: 0 2px 14px rgba(0, 0, 0, 0.06);
+    }
+    .pass-detail-stat-row {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .pass-detail-stat-label-top {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--tg-theme-hint-color);
+    }
+    .pass-detail-stat-numbers {
+      line-height: 1.15;
+    }
+    .pass-detail-stat-numbers .pass-detail-num {
+      font-size: 28px;
+      font-weight: 700;
+      letter-spacing: -0.04em;
+      color: var(--tg-theme-text-color);
+    }
+    .pass-detail-stat-numbers .pass-detail-sep {
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--tg-theme-hint-color);
+      margin: 0 2px;
+    }
+    .pass-detail-progress-track {
+      height: 8px;
+      border-radius: 999px;
+      background: rgba(128, 128, 128, 0.14);
+      overflow: hidden;
+    }
+    .pass-detail-progress-fill {
+      height: 100%;
+      border-radius: 999px;
+      background: linear-gradient(90deg, #ffc23d 0%, #f5a623 100%);
+      width: 0%;
+      transition: width 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    .pass-detail-footnote {
+      margin-top: 16px;
+      padding: 14px 16px;
+      border-radius: 14px;
+      font-size: 13px;
+      line-height: 1.45;
+      color: var(--tg-theme-hint-color);
+      background: color-mix(in srgb, var(--tg-theme-secondary-bg-color) 85%, var(--tg-theme-bg-color));
+      border: 1px solid rgba(128, 128, 128, 0.1);
+    }
+    #pass-screenDetail .bd-rows { font-family: var(--app-font-sans); }
+    #cert-activateBlock {
+      padding: 16px;
+      border-radius: 16px;
+      margin-bottom: 16px;
+      background: var(--tg-theme-secondary-bg-color);
+      border: 1px solid rgba(128, 128, 128, 0.12);
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+    }
+    #cert-activateBlock label {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--tg-theme-hint-color);
     }
     .cert-card {
       padding: 16px 18px;
       margin-bottom: 10px;
-      border-radius: 14px;
+      border-radius: 16px;
       background: var(--tg-theme-secondary-bg-color);
-      border-left: 4px solid var(--tg-theme-button-color);
+      border: 1px solid rgba(128, 128, 128, 0.12);
+      border-left: 4px solid var(--app-cta-fill, var(--tg-theme-button-color));
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
     }
     .cert-card .title { font-weight: 600; font-size: 16px; margin-bottom: 4px; }
     .cert-card .meta { font-size: 14px; color: var(--tg-theme-hint-color); }
@@ -152,18 +280,35 @@
       <div id="pass-listContent"></div>
     </div>
     <div id="pass-screenDetail" data-pass-screen>
-      <button type="button" class="btn-back" id="pass-backFromDetail">← Назад к абонементам</button>
-      <p class="detail-title" id="pass-detailTitle"></p>
-      <p class="detail-meta" id="pass-detailMeta"></p>
-      <p class="detail-hint">*Занятия списываются с абонемента автоматически.</p>
+      <button type="button" class="btn-back" id="pass-backFromDetail">
+        <svg class="back-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+        К списку абонементов
+      </button>
+      <div class="pass-detail-hero">
+        <div class="pass-detail-hero-inner">
+          <p class="bd-hero-kicker" style="margin:0 0 10px;">Абонемент</p>
+          <h1 class="pass-detail-product" id="pass-detailTitle">—</h1>
+          <p class="pass-detail-trainer" id="pass-detailTrainer">—</p>
+        </div>
+      </div>
+      <div class="pass-detail-stat-card">
+        <div class="pass-detail-stat-row">
+          <span class="pass-detail-stat-label-top">Осталось занятий</span>
+        </div>
+        <div class="pass-detail-stat-numbers"><span class="pass-detail-num" id="pass-detailRem">0</span><span class="pass-detail-sep"> из </span><span class="pass-detail-num" id="pass-detailTotal">0</span></div>
+        <div class="pass-detail-progress-track" style="margin-top:12px;">
+          <div class="pass-detail-progress-fill" id="pass-detailProgress"></div>
+        </div>
+      </div>
+      <div class="bd-section-label" id="pass-detailSectionLabel">Подробности</div>
+      <div class="bd-rows" id="pass-detailRows"></div>
+      <div class="pass-detail-footnote">Занятия списываются с абонемента автоматически, когда запись становится проведённой.</div>
     </div>
   </div>
 
   <div id="panelCerts" class="panel" role="tabpanel">
-    <div id="cert-activateBlock" style="margin-bottom: 16px;">
-      <label for="certCodeInput" style="display:block;font-size:14px;margin-bottom:6px;color:var(--tg-theme-hint-color);">
-        Введите код подарочного сертификата:
-      </label>
+    <div id="cert-activateBlock">
+      <label for="certCodeInput">Введите код подарочного сертификата</label>
       <div class="cert-activate-row">
         <input id="certCodeInput" class="cert-code-input" type="text" placeholder="Например, CERT-ABC123">
         <button type="button" class="btn-primary" id="cert-btnActivateCert">Активировать</button>
@@ -191,6 +336,54 @@
         var d = document.createElement('div');
         d.textContent = s;
         return d.innerHTML;
+      }
+
+      function formatPassPrice(cents) {
+        if (cents == null || cents === 0) return '';
+        return (cents / 100).toFixed(2).replace(/\.?0+$/, '') + ' BYN за занятие';
+      }
+      function formatPassExpires(iso) {
+        if (!iso) return '';
+        try {
+          var d = new Date(iso);
+          return 'до ' + ('0' + d.getDate()).slice(-2) + '.' + ('0' + (d.getMonth() + 1)).slice(-2) + '.' + d.getFullYear();
+        } catch (e) { return ''; }
+      }
+      function renderPassDetailScreen(p) {
+        var rem = p.sessions_remaining != null ? p.sessions_remaining : 0;
+        var total = p.sessions_total != null ? p.sessions_total : 0;
+        document.getElementById('pass-detailTitle').textContent = p.product_name || '—';
+        document.getElementById('pass-detailTrainer').textContent = p.trainer_name || '—';
+        document.getElementById('pass-detailRem').textContent = String(rem);
+        document.getElementById('pass-detailTotal').textContent = String(total);
+        var pct = total > 0 ? Math.round((rem / total) * 100) : 0;
+        document.getElementById('pass-detailProgress').style.width = pct + '%';
+
+        var iconService = '<svg class="bd-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><path d="M3.27 6.96L12 12.01l8.73-5.05"/></svg>';
+        var iconClock = '<svg class="bd-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><circle cx="12" cy="12" r="10"/><polyline points="12,6 12,12 16,14"/></svg>';
+        var iconTag = '<svg class="bd-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>';
+
+        var rows = '';
+        if (p.service_name && p.service_name !== '—') {
+          rows += '<div class="bd-row">' + iconService + '<div class="bd-row-text"><div class="bd-row-label">Услуга</div><div class="bd-row-value">' + escapeHtml(p.service_name) + '</div></div></div>';
+        }
+        var exp = formatPassExpires(p.expires_at);
+        if (exp) {
+          rows += '<div class="bd-row">' + iconClock + '<div class="bd-row-text"><div class="bd-row-label">Срок действия</div><div class="bd-row-value">' + escapeHtml(exp) + '</div></div></div>';
+        }
+        var priceStr = formatPassPrice(p.price_per_session_cents);
+        if (priceStr) {
+          rows += '<div class="bd-row">' + iconTag + '<div class="bd-row-text"><div class="bd-row-label">Оплата</div><div class="bd-row-value">' + escapeHtml(priceStr) + '</div></div></div>';
+        }
+        var sec = document.getElementById('pass-detailSectionLabel');
+        var rowsEl = document.getElementById('pass-detailRows');
+        if (!rows) {
+          sec.style.display = 'none';
+          rowsEl.innerHTML = '';
+        } else {
+          sec.style.display = '';
+          rowsEl.innerHTML = rows;
+        }
       }
 
       function getInitialTab() {
@@ -273,9 +466,7 @@
                 var p = passState.items.find(function(x) { return x.id === id; });
                 if (p) {
                   passState.current = p;
-                  var rem = p.sessions_remaining != null ? p.sessions_remaining : 0;
-                  document.getElementById('pass-detailTitle').textContent = p.product_name;
-                  document.getElementById('pass-detailMeta').textContent = p.trainer_name + ' · осталось ' + rem + ' из ' + (p.sessions_total || 0);
+                  renderPassDetailScreen(p);
                   showPassScreen('pass-screenDetail');
                 }
               };

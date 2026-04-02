@@ -61,6 +61,24 @@ def validate_phone_non_empty(normalized: str) -> tuple[str | None, str | None]:
     return t, None
 
 
+def coerce_required_belarus_phone(value: object) -> str:
+    """
+    Required Belarus E.164 for trainer-created client (schedule API).
+    Raises ValueError with Russian message (aligned with FastAPI/Pydantic).
+    """
+    if not isinstance(value, str):
+        raise ValueError("Телефон укажите текстом.")
+    if not (value or "").strip():
+        raise ValueError("Укажите номер телефона.")
+    t = normalize_phone_input(value)
+    ok, err = validate_phone_non_empty(t)
+    if err:
+        raise ValueError(err)
+    if not ok:
+        raise ValueError(_ERR_BY)
+    return ok
+
+
 def coerce_optional_phone_for_profile(value: object) -> str | None:
     """
     API / Pydantic: None or blank -> None; otherwise normalized string or ValueError (Russian message).

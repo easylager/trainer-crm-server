@@ -11,8 +11,16 @@ from src.infrastructure import s3
 
 from src.application.admin_moderation_notify import notify_admins_trainer_queued_for_moderation
 from src.application.subscription_use_cases import create_trial_subscription
+from src.application.trainer_profile_pending import (
+    PROFILE_KEYS_FOR_PUBLISHED_UPDATE,
+    active_trainer_revision_diff,
+    merge_pending_dict,
+    merge_profile_pending_for_editor,
+    split_active_trainer_profile_patch,
+)
 from src.application.trainer_profile_completeness import (
     analyze_moderation_profile_completeness,
+    is_profile_complete_for_moderation,
     missing_labels_ru,
     moderation_readiness_dict,
 )
@@ -94,6 +102,29 @@ def _services_to_tuples(services: list[dict[str, Any]]) -> list[tuple[int, int |
     return result
 
 
+async def _demote_status_if_profile_incomplete(session: AsyncSession, trainer_id: int) -> bool:
+    """
+    Check profile completeness; demote to pending_profile if incomplete and currently active/contract/payment.
+    Returns True if status was demoted.
+    """
+    repo = TrainerRepository(session)
+    trainer = await get_trainer(session, trainer_id)
+    if not trainer:
+        return False
+    st = (trainer.get("status") or "").strip()
+    complete, _ = analyze_moderation_profile_completeness(trainer)
+    if not complete and st in (
+        TRAINER_STATUS_ACTIVE,
+        TRAINER_STATUS_PENDING_CONTRACT,
+        TRAINER_STATUS_PENDING_PAYMENT,
+    ):
+        await repo.update_status(trainer_id, TRAINER_STATUS_PENDING_PROFILE)
+        await session.commit()
+        logger.info("Trainer %d demoted to pending_profile (profile incomplete)", trainer_id)
+        return True
+    return False
+
+
 async def create_trainer(
     session: AsyncSession,
     *,
@@ -113,6 +144,7 @@ async def create_trainer(
         await repo.set_trainer_services(trainer_id, [(sid, None) for sid in service_ids])
     if arena_ids:
         await repo.set_trainer_arenas(trainer_id, arena_ids)
+        await repo.reconcile_primary_arena(trainer_id)
     await session.commit()
     return trainer_id
 
@@ -135,6 +167,105 @@ async def ensure_trainer_profile_row(session: AsyncSession, trainer_id: int) -> 
     return True
 
 
+async def reconcile_trainer_moderation_queue_if_incomplete(session: AsyncSession, trainer_id: int) -> None:
+    """
+    Invariant: moderation_feedback + moderation_submitted_at only apply when the aggregate is
+    complete enough for moderation. If the profile is incomplete and status is pending_profile,
+    clear both so partial drafts never look «in moderation» or retain stale moderator comments.
+    """
+    trainer = await get_trainer(session, trainer_id)
+    if not trainer:
+        return
+    if is_profile_complete_for_moderation(trainer):
+        return
+    st = (trainer.get("status") or "").strip()
+    if st != TRAINER_STATUS_PENDING_PROFILE:
+        return
+    fb = trainer.get("moderation_feedback")
+    sub_at = trainer.get("moderation_submitted_at")
+    fb_empty = fb is None or (isinstance(fb, str) and not str(fb).strip())
+    if fb_empty and sub_at is None:
+        return
+    repo = TrainerRepository(session)
+    await repo.clear_moderation_feedback_and_submitted_at(trainer_id)
+    await session.commit()
+
+
+async def apply_trainer_profile_pending_to_published(session: AsyncSession, trainer_id: int) -> bool:
+    """Merge profile_pending into trainer_profiles and clear pending + queue stamp. No-op if no pending."""
+    repo = TrainerRepository(session)
+    trainer = await get_trainer(session, trainer_id)
+    if not trainer:
+        return False
+    pending = trainer.get("profile_pending")
+    if not isinstance(pending, dict) or not pending:
+        return True
+    await repo.ensure_trainer_profile_row(trainer_id)
+    kw = {
+        k: v
+        for k, v in pending.items()
+        if v is not None and k in PROFILE_KEYS_FOR_PUBLISHED_UPDATE
+    }
+    unknown = set(pending.keys()) - PROFILE_KEYS_FOR_PUBLISHED_UPDATE
+    if unknown:
+        logger.warning(
+            "profile_pending had unknown keys (ignored on publish) trainer_id=%s keys=%s",
+            trainer_id,
+            sorted(unknown),
+        )
+    if kw:
+        await repo.update_profile(trainer_id, **kw)
+        logger.info("published profile_pending fields trainer_id=%s keys=%s", trainer_id, sorted(kw.keys()))
+    elif pending:
+        logger.warning(
+            "profile_pending non-empty but no publishable keys after filter trainer_id=%s", trainer_id
+        )
+    await repo.set_profile_pending(trainer_id, None)
+    await session.flush()
+    return True
+
+
+async def apply_photo_pending_to_published(session: AsyncSession, trainer_id: int) -> bool:
+    """Promote photo_pending into trainer_photos; clear staging. No-op if no pending photo."""
+    repo = TrainerRepository(session)
+    trainer = await get_trainer(session, trainer_id)
+    if not trainer:
+        return False
+    pp = trainer.get("photo_pending")
+    if not isinstance(pp, dict):
+        return True
+    file_key = (pp.get("file_key") or "").strip()
+    if not file_key:
+        await repo.set_photo_pending(trainer_id, None)
+        await session.flush()
+        return True
+    file_key_list = (pp.get("file_key_list") or "").strip() or None
+    await repo.clear_photos(trainer_id)
+    await repo.add_photo(trainer_id, file_key, 0, file_key_list=file_key_list)
+    await repo.set_photo_pending(trainer_id, None)
+    await session.flush()
+    logger.info("published photo_pending trainer_id=%s", trainer_id)
+    return True
+
+
+async def discard_active_trainer_text_revision_with_feedback(
+    session: AsyncSession, trainer_id: int, feedback: str | None
+) -> bool:
+    """
+    Active trainer: drop queued text revision (profile_pending), clear submit stamp, set moderator comment.
+    Catalog keeps published trainer_profiles; trainer stays active.
+    """
+    repo = TrainerRepository(session)
+    if not await repo.exists(trainer_id):
+        return False
+    await repo.set_profile_pending(trainer_id, None)
+    await repo.set_photo_pending(trainer_id, None)
+    await repo.clear_moderation_submitted_at(trainer_id)
+    await repo.set_moderation_feedback(trainer_id, feedback)
+    await session.commit()
+    return True
+
+
 async def update_trainer_profile(
     session: AsyncSession,
     trainer_id: int,
@@ -143,13 +274,67 @@ async def update_trainer_profile(
     service_ids: list[int] | None = None,
     services: list[dict[str, Any]] | None = None,
     arena_ids: list[int] | None = None,
+    primary_arena_id: int | None = None,
+    primary_arena_id_set: bool = False,
 ) -> bool:
-    """Patch profile and/or services (with prices) and/or arena_ids. Returns False if trainer not found."""
+    """
+    Patch profile and/or services (with prices) and/or arena_ids. Returns False if trainer not found.
+
+    Active trainers: only first_name, last_name, description, experience_years queue into
+    ``profile_pending`` (catalog keeps prior values until approved). Other profile columns
+    (age, phone, city, session rules, etc.) update ``trainer_profiles`` immediately.
+    Services/arenas update immediately and do not affect the moderation queue.
+    Revision fields are ignored for moderation if unchanged vs current published+pending (same save as services).
+    """
     repo = TrainerRepository(session)
     if not await repo.exists(trainer_id):
         return False
+    trainer = await get_trainer(session, trainer_id)
+    st = (trainer.get("status") or "").strip()
     updates = {k: v for k, v in profile.items() if v is not None}
+    revision_patch, direct_patch = split_active_trainer_profile_patch(updates)
+    services_dirty = services is not None or service_ids is not None or arena_ids is not None
+
+    if st == TRAINER_STATUS_ACTIVE:
+        revision_patch = active_trainer_revision_diff(trainer, revision_patch)
+        if direct_patch:
+            await repo.ensure_trainer_profile_row(trainer_id)
+            await repo.update_profile(trainer_id, **direct_patch)
+        if revision_patch:
+            await repo.ensure_trainer_profile_row(trainer_id)
+            new_pending = merge_pending_dict(
+                trainer.get("profile_pending") if isinstance(trainer.get("profile_pending"), dict) else None,
+                revision_patch,
+            )
+            await repo.set_profile_pending(trainer_id, new_pending)
+            await repo.mark_queued_for_moderation_review(trainer_id)
+        if services is not None:
+            await repo.set_trainer_services(trainer_id, _services_to_tuples(services))
+        elif service_ids is not None:
+            await repo.set_trainer_services(trainer_id, [(sid, None) for sid in service_ids])
+        if arena_ids is not None:
+            await repo.set_trainer_arenas(trainer_id, arena_ids)
+            await repo.reconcile_primary_arena(trainer_id)
+        if primary_arena_id_set:
+            if primary_arena_id is None:
+                await repo.reconcile_primary_arena(trainer_id)
+            else:
+                aids = await repo.list_trainer_arena_ids(trainer_id)
+                if primary_arena_id not in aids:
+                    raise ValueError("primary_arena_id must be among trainer arenas")
+                await repo.set_trainer_primary_arena(trainer_id, primary_arena_id)
+        await session.commit()
+        if revision_patch:
+            try:
+                await notify_admins_trainer_queued_for_moderation(trainer_id)
+            except Exception:  # noqa: BLE001
+                logger.exception("notify admins after active profile pending failed trainer_id=%s", trainer_id)
+        await _demote_status_if_profile_incomplete(session, trainer_id)
+        await reconcile_trainer_moderation_queue_if_incomplete(session, trainer_id)
+        return True
+
     if updates:
+        await repo.ensure_trainer_profile_row(trainer_id)
         await repo.update_profile(trainer_id, **updates)
     if services is not None:
         await repo.set_trainer_services(trainer_id, _services_to_tuples(services))
@@ -157,22 +342,21 @@ async def update_trainer_profile(
         await repo.set_trainer_services(trainer_id, [(sid, None) for sid in service_ids])
     if arena_ids is not None:
         await repo.set_trainer_arenas(trainer_id, arena_ids)
-    dirty = bool(updates) or services is not None or service_ids is not None or arena_ids is not None
+        await repo.reconcile_primary_arena(trainer_id)
+    if primary_arena_id_set:
+        if primary_arena_id is None:
+            await repo.reconcile_primary_arena(trainer_id)
+        else:
+            aids = await repo.list_trainer_arena_ids(trainer_id)
+            if primary_arena_id not in aids:
+                raise ValueError("primary_arena_id must be among trainer arenas")
+            await repo.set_trainer_primary_arena(trainer_id, primary_arena_id)
+    dirty = bool(updates) or services is not None or service_ids is not None or arena_ids is not None or primary_arena_id_set
     if dirty:
         await repo.clear_moderation_submitted_at(trainer_id)
     await session.commit()
-    # If profile no longer meets moderation completeness, pull back from published / contract stages.
-    t2 = await get_trainer(session, trainer_id)
-    if t2:
-        st = (t2.get("status") or "").strip()
-        complete, _ = analyze_moderation_profile_completeness(t2)
-        if not complete and st in (
-            TRAINER_STATUS_ACTIVE,
-            TRAINER_STATUS_PENDING_CONTRACT,
-            TRAINER_STATUS_PENDING_PAYMENT,
-        ):
-            await repo.update_status(trainer_id, TRAINER_STATUS_PENDING_PROFILE)
-            await session.commit()
+    await _demote_status_if_profile_incomplete(session, trainer_id)
+    await reconcile_trainer_moderation_queue_if_incomplete(session, trainer_id)
     return True
 
 
@@ -238,6 +422,13 @@ async def try_submit_trainer_for_moderation_review(
             "missing_labels_ru": missing_labels_ru(missing),
         }
     st = (trainer.get("status") or "").strip()
+    if st == TRAINER_STATUS_ACTIVE:
+        # Revisions are auto-queued on PATCH; manual submit is a no-op if nothing pending.
+        pending = trainer.get("profile_pending")
+        if not isinstance(pending, dict) or not pending:
+            return {"ok": True, "noop": True, "reason": "no_pending_text_revision", "trainer_status": st}
+        return {"ok": True, "noop": True, "reason": "active_revision_auto_queued", "trainer_status": st}
+
     if st != TRAINER_STATUS_PENDING_PROFILE:
         return {"ok": True, "noop": True, "reason": "wrong_status", "trainer_status": st}
 
@@ -269,7 +460,14 @@ async def get_trainer_moderation_readiness(session: AsyncSession, trainer_id: in
     trainer = await get_trainer(session, trainer_id)
     if not trainer:
         return None
-    return moderation_readiness_dict(trainer, trainer_status=(trainer.get("status") or "").strip() or None)
+    for_editor = dict(trainer)
+    merged = merge_profile_pending_for_editor(
+        trainer.get("profile") if isinstance(trainer.get("profile"), dict) else {},
+        trainer.get("profile_pending") if isinstance(trainer.get("profile_pending"), dict) else None,
+    )
+    if merged is not None:
+        for_editor["profile"] = merged
+    return moderation_readiness_dict(for_editor, trainer_status=(trainer.get("status") or "").strip() or None)
 
 
 async def list_active_trainers_for_client(
@@ -384,6 +582,7 @@ async def create_trainer_education(
     )
     await repo.clear_moderation_submitted_at(trainer_id)
     await session.commit()
+    await reconcile_trainer_moderation_queue_if_incomplete(session, trainer_id)
     return {"id": entry_id, "moderation_status": "pending_moderation"}
 
 
@@ -407,12 +606,14 @@ async def update_trainer_education(
         new_id = await repo.create_education_revision(trainer_id, education_id, payload=merged)
         await repo.clear_moderation_submitted_at(trainer_id)
         await session.commit()
+        await reconcile_trainer_moderation_queue_if_incomplete(session, trainer_id)
         return {"id": new_id, "moderation_status": "pending_moderation", "revision_created": True}
     ok = await repo.update_education_entry_in_place(trainer_id, education_id, updates=merged)
     if not ok:
         return None
     await repo.clear_moderation_submitted_at(trainer_id)
     await session.commit()
+    await reconcile_trainer_moderation_queue_if_incomplete(session, trainer_id)
     return {"id": education_id, "moderation_status": "pending_moderation", "revision_created": False}
 
 
@@ -434,6 +635,8 @@ async def delete_trainer_education(
         return False
     await repo.clear_moderation_submitted_at(trainer_id)
     await session.commit()
+    await _demote_status_if_profile_incomplete(session, trainer_id)
+    await reconcile_trainer_moderation_queue_if_incomplete(session, trainer_id)
     return True
 
 
@@ -498,7 +701,8 @@ async def register_photo(
 ) -> bool:
     """
     Attach photo to trainer (and optional list thumb).
-    For now we enforce single-photo per trainer: new upload replaces any existing photos.
+    Active trainers: stage new keys in photo_pending; catalog keeps trainer_photos until moderation approves.
+    Other statuses: single-photo policy replaces trainer_photos immediately.
     Returns False if trainer not found.
     Raises TrainerPhotoFileKeyError if storage keys do not belong to this trainer (IDOR guard).
     """
@@ -507,9 +711,24 @@ async def register_photo(
     repo = TrainerRepository(session)
     if not await repo.exists(trainer_id):
         return False
-    # Single-photo policy: drop previous photos for this trainer.
+    trainer = await get_trainer(session, trainer_id)
+    st = (trainer.get("status") or "").strip() if trainer else ""
+    if st == TRAINER_STATUS_ACTIVE:
+        await repo.set_photo_pending(
+            trainer_id,
+            {"file_key": file_key, "file_key_list": file_key_list},
+        )
+        await repo.mark_queued_for_moderation_review(trainer_id)
+        await session.commit()
+        await reconcile_trainer_moderation_queue_if_incomplete(session, trainer_id)
+        try:
+            await notify_admins_trainer_queued_for_moderation(trainer_id)
+        except Exception:  # noqa: BLE001
+            logger.exception("notify admins after active photo pending failed trainer_id=%s", trainer_id)
+        return True
     await repo.clear_photos(trainer_id)
     await repo.clear_moderation_submitted_at(trainer_id)
     await repo.add_photo(trainer_id, file_key, sort_order, file_key_list=file_key_list)
     await session.commit()
+    await reconcile_trainer_moderation_queue_if_incomplete(session, trainer_id)
     return True

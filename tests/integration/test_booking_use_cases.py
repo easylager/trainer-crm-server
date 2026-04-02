@@ -9,6 +9,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from tests.conftest import belarus_test_phone, unique_test_telegram_id
+from tests.db_catalog_helpers import require_seed_service_id
 
 from src.application.booking_use_cases import (
     create_booking,
@@ -29,7 +30,8 @@ async def _create_trainer_and_slot(
     end_time: time,
     status: str = "available",
 ) -> tuple[int, int, int]:
-    """Insert trainer + profile + service + trainer_services + slot. Returns (trainer_id, slot_id, service_id)."""
+    """Insert trainer + profile + trainer_services + slot. Uses seeded `services` row (no junk names)."""
+    service_id = await require_seed_service_id(session)
     r = await session.execute(
         text("INSERT INTO trainers (status) VALUES ('active') RETURNING id")
     )
@@ -40,10 +42,6 @@ async def _create_trainer_and_slot(
         ),
         {"tid": trainer_id},
     )
-    r = await session.execute(
-        text("INSERT INTO services (name, sort_order) VALUES ('Test Service', 0) RETURNING id")
-    )
-    (service_id,) = r.fetchone()
     await session.execute(
         text("INSERT INTO trainer_services (trainer_id, service_id, price_cents) VALUES (:tid, :sid, 5000)"),
         {"tid": trainer_id, "sid": service_id},
@@ -142,16 +140,21 @@ async def test_create_booking_same_slot_twice_second_fails(db_session: AsyncSess
 
 
 @pytest.mark.asyncio
-async def test_create_booking_concurrent_same_slot_two_sessions_one_wins(
-    db_session: AsyncSession,
-) -> None:
-    """Два параллельных create_booking на один слот: блокировка строки слота, один успех."""
+@pytest.mark.usefixtures("app_use_test_db")
+async def test_create_booking_concurrent_same_slot_two_sessions_one_wins() -> None:
+    """Два параллельных create_booking на один слот: блокировка строки слота, один успех.
+
+    Setup must use the same ``async_session_factory`` as concurrent attempts (patched by
+    ``app_use_test_db``). Using ``db_session`` for setup and the global factory for attempts
+    crosses connections and uncommitted test data is invisible to the attempts.
+    """
     tomorrow = date.today() + timedelta(days=1)
-    trainer_id, slot_id, service_id = await _create_trainer_and_slot(
-        db_session, tomorrow, time(10, 0), time(11, 0)
-    )
-    client_id_1 = await _create_client(db_session, unique_test_telegram_id())
-    client_id_2 = await _create_client(db_session, unique_test_telegram_id())
+    async with async_session_factory() as session:
+        trainer_id, slot_id, service_id = await _create_trainer_and_slot(
+            session, tomorrow, time(10, 0), time(11, 0)
+        )
+        client_id_1 = await _create_client(session, unique_test_telegram_id())
+        client_id_2 = await _create_client(session, unique_test_telegram_id())
 
     async def _attempt(client_id: int) -> int | None:
         async with async_session_factory() as session:

@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Справка</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="client-mini-app-theme.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="theme.css" />
+  <link rel="stylesheet" href="mini-app-components.css" />
+  <style>
+    /* FAQ shell: tokens from theme.css + patterns from constitution (hero, surfaces) */
+    #faqApp {
+      font-family: var(--app-font-sans);
+      max-width: 520px;
+      margin: 0 auto;
+      padding-bottom: calc(24px + env(safe-area-inset-bottom, 0));
+      -webkit-font-smoothing: antialiased;
+    }
+    .faq-hero-title {
+      margin: 0;
+      font-size: clamp(22px, 5.5vw, 28px);
+      font-weight: 700;
+      letter-spacing: -0.04em;
+      line-height: 1.12;
+      color: var(--tg-theme-text-color);
+    }
+    .faq-hero-lead {
+      margin: 12px 0 0;
+      font-size: 14px;
+      font-weight: 500;
+      line-height: 1.45;
+      color: var(--tg-theme-hint-color);
+    }
+    .faq-chips-scroll {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding: 2px 2px 12px;
+      margin: 0 -2px 4px;
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+    }
+    .faq-chips-scroll::-webkit-scrollbar { display: none; }
+    .faq-chip {
+      flex: 0 0 auto;
+      padding: 10px 16px;
+      border-radius: 999px;
+      border: 1px solid color-mix(in srgb, var(--tg-theme-button-color) 38%, transparent);
+      background: color-mix(in srgb, var(--tg-theme-button-color) 14%, var(--tg-theme-bg-color));
+      color: var(--tg-theme-text-color);
+      font-size: 13px;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      transition: transform 0.12s ease, box-shadow 0.12s ease;
+    }
+    .faq-chip:active { transform: scale(0.97); }
+    .faq-chip:focus-visible {
+      outline: 2px solid var(--app-cta-fill);
+      outline-offset: 2px;
+    }
+    .faq-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .faq-item {
+      border-radius: 16px;
+      overflow: hidden;
+      border: 1px solid rgba(128, 128, 128, 0.12);
+      background: var(--tg-theme-secondary-bg-color);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+      animation: faq-enter 0.38s cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+    .faq-item[data-popular="1"] {
+      border-color: color-mix(in srgb, var(--tg-theme-button-color) 28%, rgba(128, 128, 128, 0.12));
+    }
+    @keyframes faq-enter {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .faq-q {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      width: 100%;
+      padding: 14px 16px;
+      border: none;
+      background: transparent;
+      color: var(--tg-theme-text-color);
+      font-size: 15px;
+      font-weight: 600;
+      line-height: 1.35;
+      text-align: left;
+      font-family: inherit;
+      cursor: pointer;
+      transition: background 0.15s ease;
+    }
+    .faq-q:hover { background: color-mix(in srgb, var(--tg-theme-button-color) 6%, transparent); }
+    .faq-q-text { flex: 1; min-width: 0; }
+    .faq-badge {
+      flex-shrink: 0;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      padding: 4px 8px;
+      border-radius: 8px;
+      background: color-mix(in srgb, var(--tg-theme-button-color) 22%, transparent);
+      color: var(--tg-theme-text-color);
+      border: 1px solid color-mix(in srgb, var(--tg-theme-button-color) 35%, transparent);
+    }
+    .faq-chevron {
+      flex-shrink: 0;
+      width: 22px;
+      height: 22px;
+      margin-top: 1px;
+      color: var(--tg-theme-button-color);
+      transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    .faq-item.is-open .faq-chevron { transform: rotate(180deg); }
+    .faq-a {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    .faq-a-inner {
+      padding: 0 16px 16px;
+      font-size: 15px;
+      line-height: 1.5;
+      color: var(--tg-theme-text-color);
+      border-top: 1px solid rgba(128, 128, 128, 0.08);
+    }
+    .faq-a-inner p { margin: 0 0 10px; }
+    .faq-a-inner p:last-child { margin-bottom: 0; }
+    .faq-more-hint {
+      margin-top: 20px;
+      padding: 14px 16px;
+      border-radius: 14px;
+      font-size: 13px;
+      line-height: 1.45;
+      color: var(--tg-theme-hint-color);
+      background: color-mix(in srgb, var(--tg-theme-secondary-bg-color) 80%, var(--tg-theme-bg-color));
+      border: 1px solid rgba(128, 128, 128, 0.1);
+    }
+  </style>
+</head>
+<body>
+  <div id="faqApp">
+    <div class="header" style="margin-bottom: 12px;">
+      <span class="header-title">Справка</span>
+    </div>
+
+    <div class="bd-hero" id="faqHero">
+      <div class="bd-hero-inner">
+        <div class="bd-hero-kicker">Частые вопросы</div>
+        <h1 class="faq-hero-title">Ответы для тренеров</h1>
+        <p class="faq-hero-lead">Сначала — сценарии работы с расписанием и клиентами. Ниже — абонементы, сертификаты и как закрывается занятие по времени.</p>
+      </div>
+    </div>
+
+    <div class="bd-section-label" style="margin-top: 4px;">Быстрый переход</div>
+    <div class="faq-chips-scroll" id="faqChips" role="tablist" aria-label="Популярные темы"></div>
+
+    <div class="bd-section-label" style="margin-top: 6px;">Популярное</div>
+    <div class="faq-list" id="faqPopular"></div>
+
+    <div class="bd-section-label" style="margin-top: 18px;" id="faqMoreTitle">Ещё вопросы</div>
+    <div class="faq-list" id="faqRest"></div>
+
+    <p class="faq-more-hint" id="faqFooterHint">
+      Индивидуальные вопросы по тарифу и учёту — через <b>/guide</b> в боте → «Написать в поддержку».
+    </p>
+  </div>
+
+  <script>
+    (function () {
+      var tg = window.Telegram && window.Telegram.WebApp;
+      if (tg) {
+        tg.ready();
+        tg.expand();
+      }
+
+      /** @type {{ id: string, q: string, a: string, popular?: boolean, chip?: string }[]} */
+      var FAQ_ITEMS = [
+        {
+          id: 'regular_client',
+          popular: true,
+          chip: 'Постоянный клиент',
+          q: 'Как сделать клиента постоянным и что это значит?',
+          a: '<p><b>Постоянный клиент</b> закреплён за <b>одним днём недели и временем</b>. После закрепления при каждом <b>применении шаблона на неделю</b> на это время <b>сама появляется запись</b>, если место <b>свободно</b>.</p><p>Закрепить можно в <b>карточке записи</b> («Сделать постоянным клиентом»); клиент — у себя в боте. На одно и то же время у вас — <b>только один</b> постоянный клиент.</p>'
+        },
+        {
+          id: 'weekly_template',
+          popular: true,
+          chip: 'Шаблон на неделю',
+          q: 'Как не набирать расписание с нуля каждую неделю?',
+          a: '<p>Один раз задайте <b>шаблон недели</b> в редакторе расписания. Дальше — <b>«Применить шаблон на эту неделю»</b> или <b>«на следующую»</b>: <b>свободные</b> слоты заменяются шаблоном, <b>занятые записи сохраняются</b>. Затем подставляются записи <b>постоянных</b> клиентов.</p>'
+        },
+        {
+          id: 'client_requests',
+          popular: true,
+          chip: 'Заявки',
+          q: 'Как обрабатывать заявки клиентов?',
+          a: '<p><b>Откликнитесь</b> — заявка остаётся у вас в работе. Дальше: <b>«Записать клиента»</b> и выбор <b>свободного слота</b> (клиент получит подтверждение в боте) <b>или</b> <b>«Напомнить, когда появятся слоты»</b> — вы получите сообщение, когда появятся окна в расписании.</p>'
+        },
+        {
+          id: 'invite_pass',
+          popular: true,
+          chip: 'Приглашение',
+          q: 'Как пригласить клиента в бота и сразу выдать абонемент?',
+          a: '<p>В разделе <b>абонементов</b> в мини-приложении можно сделать <b>ссылку-приглашение с абонементом</b>: клиент переходит по ней один раз — подставляются город, услуга и вы как тренер, а по выбранному варианту ему сразу выдаётся <b>готовый абонемент</b>. Можно пригласить и <b>без автоматической выдачи</b> — просто зайти в бота к вам.</p>'
+        },
+        {
+          id: 'passes',
+          q: 'Как работают абонементы и когда списываются занятия?',
+          a: '<p>Вы настраиваете <b>варианты абонементов</b> (сколько занятий, на какую услугу). Когда запись становится <b>«проведённой»</b>, с подходящего абонемента клиента у вас <b>автоматически списывается одно занятие</b> — по услуге записи или по общему абонементу, если вы так задали.</p>'
+        },
+        {
+          id: 'certificates',
+          q: 'Как работают подарочные сертификаты?',
+          a: '<p>Вы выдаёте сертификат с <b>номиналом</b>; при выдаче можно отправить клиенту <b>PDF на электронную почту</b>. Клиент <b>активирует код</b> в своём боте — на балансе появляются средства. Когда занятие становится <b>проведённым</b>, с баланса сертификата <b>списывается</b> стоимость (полностью или частично — по цене услуги и остатку).</p>'
+        },
+        {
+          id: 'auto_completed',
+          q: 'Когда запись сама становится «проведённой»?',
+          a: '<p>Когда <b>по расписанию уже прошло время окончания занятия</b>, запись сама переводится в <b>«проведено»</b> (если она была подтверждена или ждала подтверждения). Сразу после этого <b>списывается одно занятие с абонемента</b>, если он подходит; если подходящего абонемента нет — <b>снимается сумма с подарочного сертификата</b>, если он есть и на него хватает средств.</p><p>Пока занятие по времени <b>ещё идёт</b>, вы можете в <b>«Моём расписании»</b> сами подтвердить запись, отменить её или отметить, что занятие уже состоялось.</p>'
+        },
+        {
+          id: 'no_show',
+          q: 'Что если клиент не пришёл: списание и «бухгалтерия»?',
+          a: '<p>Сейчас <b>отдельной отметки «клиент не пришёл» нет</b>: когда по времени занятие уже должно было закончиться, запись всё равно <b>считается проведённой</b>, и при наличии абонемента или денег на сертификате может произойти <b>списание</b>. Если подходящего абонемента <b>нет</b>, вам может прийти сообщение, что занятие закрыто <b>без списания с абонемента</b>.</p><p><b>Отдельно отмечать неявку и по-разному вести оплату</b> мы <b>ещё дорабатываем</b>. Если вам нужен особый порядок — обсудите с поддержкой.</p>'
+        },
+        {
+          id: 'profile_gate',
+          q: 'Профиль и почему раздел «закрыт»?',
+          a: '<p>Анкета, фото и модерация — в мини-приложении <b>«Профиль»</b>. Пока анкета на проверке или аккаунт не активирован, часть функций недоступна — <b>статус</b> виден в профиле и в подсказках бота.</p>'
+        }
+      ];
+
+      var popular = FAQ_ITEMS.filter(function (x) { return x.popular; });
+      var rest = FAQ_ITEMS.filter(function (x) { return !x.popular; });
+
+      var chipsEl = document.getElementById('faqChips');
+      var popularEl = document.getElementById('faqPopular');
+      var restEl = document.getElementById('faqRest');
+      var moreTitle = document.getElementById('faqMoreTitle');
+
+      popular.forEach(function (item) {
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'faq-chip';
+        b.setAttribute('role', 'tab');
+        b.textContent = item.chip || item.q;
+        b.addEventListener('click', function () {
+          var el = document.getElementById('faq-' + item.id);
+          if (!el) return;
+          openOnly(item.id);
+          el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        });
+        chipsEl.appendChild(b);
+      });
+
+      function buildItem(item, showBadge) {
+        var wrap = document.createElement('article');
+        wrap.className = 'faq-item';
+        wrap.id = 'faq-' + item.id;
+        wrap.setAttribute('data-popular', item.popular ? '1' : '0');
+
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'faq-q';
+        btn.setAttribute('aria-expanded', 'false');
+        btn.setAttribute('aria-controls', 'faq-panel-' + item.id);
+        var span = document.createElement('span');
+        span.className = 'faq-q-text';
+        span.textContent = item.q;
+        btn.appendChild(span);
+        if (showBadge) {
+          var badge = document.createElement('span');
+          badge.className = 'faq-badge';
+          badge.textContent = 'Часто';
+          btn.appendChild(badge);
+        }
+        var chev = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        chev.setAttribute('class', 'faq-chevron');
+        chev.setAttribute('viewBox', '0 0 24 24');
+        chev.setAttribute('fill', 'none');
+        chev.setAttribute('stroke', 'currentColor');
+        chev.setAttribute('stroke-width', '2');
+        chev.setAttribute('aria-hidden', 'true');
+        var pth = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        pth.setAttribute('d', 'M6 9l6 6 6-6');
+        chev.appendChild(pth);
+        btn.appendChild(chev);
+
+        var panel = document.createElement('div');
+        panel.className = 'faq-a';
+        panel.id = 'faq-panel-' + item.id;
+        var inner = document.createElement('div');
+        inner.className = 'faq-a-inner';
+        inner.innerHTML = item.a;
+        panel.appendChild(inner);
+
+        btn.addEventListener('click', function () {
+          toggle(item.id);
+        });
+
+        wrap.appendChild(btn);
+        wrap.appendChild(panel);
+        return wrap;
+      }
+
+      var openId = null;
+
+      function measurePanel(id) {
+        var inner = document.querySelector('#faq-panel-' + id + ' .faq-a-inner');
+        if (!inner) return 0;
+        return inner.scrollHeight;
+      }
+
+      function setOpen(id, open) {
+        var wrap = document.getElementById('faq-' + id);
+        if (!wrap) return;
+        var btn = wrap.querySelector('.faq-q');
+        var panel = wrap.querySelector('.faq-a');
+        if (!btn || !panel) return;
+        btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+        wrap.classList.toggle('is-open', open);
+        panel.style.maxHeight = open ? measurePanel(id) + 'px' : '0';
+      }
+
+      function toggle(id) {
+        if (openId === id) {
+          setOpen(id, false);
+          openId = null;
+          return;
+        }
+        if (openId) setOpen(openId, false);
+        openId = id;
+        setOpen(id, true);
+      }
+
+      function openOnly(id) {
+        if (openId && openId !== id) setOpen(openId, false);
+        openId = id;
+        setOpen(id, true);
+      }
+
+      popular.forEach(function (item, i) {
+        popularEl.appendChild(buildItem(item, true));
+      });
+
+      if (rest.length === 0) {
+        moreTitle.style.display = 'none';
+      } else {
+        rest.forEach(function (item) {
+          restEl.appendChild(buildItem(item, false));
+        });
+      }
+
+      window.addEventListener('resize', function () {
+        if (openId) setOpen(openId, true);
+      });
+
+      // First popular block open by default — pleasant entry
+      if (popular.length) {
+        openOnly(popular[0].id);
+      }
+    })();
+  </script>
+</body>
+</html>

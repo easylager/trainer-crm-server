@@ -11,9 +11,10 @@ from typing import Any, Literal
 logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
-from fastapi.responses import Response
-from pydantic import BaseModel
+from fastapi.responses import JSONResponse, Response
+from pydantic import BaseModel, field_validator
 
+from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -23,6 +24,7 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 
 from src.api.deps import get_session
+from src.shared.profile_phone import coerce_required_belarus_phone
 from src.application.booking_use_cases import (
     active_booking_summaries_by_slot_for_trainer_range,
     cancel_booking,
@@ -42,10 +44,12 @@ from src.application.booking_use_cases import (
     list_bookings_for_trainer,
     list_trainer_clients,
     list_trainer_client_history,
+    resolve_arena_for_client_self_booking,
+    get_trainer_primary_arena_resolved,
 )
 from src.application.client_use_cases import (
     get_client_id_by_telegram_id,
-    get_client_profile_basic,
+    get_client_phone_for_webapp,
     get_client_telegram_id,
     get_or_create_client,
     get_or_create_client_by_phone,
@@ -533,6 +537,24 @@ async def post_client_booking(
         service_id = body.service_id
 
     client_id = await get_or_create_client(session, telegram_id, phone=phone)
+
+    arena_for_booking: int | None = None
+    used_primary_despite_filter = False
+    if client_request_id is None:
+        sess_row = await get_client_session(telegram_id, session)
+        sess_arena = sess_row.get("selected_arena_id") if sess_row else None
+        resolved, err, used_primary_despite_filter = await resolve_arena_for_client_self_booking(
+            session, trainer_id, sess_arena
+        )
+        if err == "no_venue":
+            raise HTTPException(
+                status_code=400,
+                detail="У тренера не настроена основная площадка — запись через каталог недоступна.",
+            )
+        if err == "invalid_arena":
+            raise HTTPException(status_code=400, detail="Выбранная арена недоступна для этого тренера.")
+        arena_for_booking = resolved
+
     booking_id = await create_booking(
         session,
         body.slot_id,
@@ -542,11 +564,15 @@ async def post_client_booking(
         client_comment=body.comment,
         client_request_id=client_request_id,
         created_by_trainer=False,
+        arena_id=arena_for_booking,
     )
     if not booking_id:
         raise HTTPException(status_code=400, detail="Slot not available")
     await generate_reminders_for_booking(session, booking_id)
-    return {"success": True, "booking_id": booking_id}
+    out: dict[str, object] = {"success": True, "booking_id": booking_id}
+    if client_request_id is None and used_primary_despite_filter:
+        out["used_primary_venue_for_online_booking"] = True
+    return out
 
 
 @router.get("/client/session")
@@ -560,11 +586,10 @@ async def get_client_session_state(
     if not raw:
         raise HTTPException(status_code=401, detail="Missing init data")
     telegram_id = _client_telegram_id(raw)
+    # Ensure clients row exists (same as /start) so phone lookup is consistent.
+    await get_or_create_client(session, telegram_id)
     row = await get_client_session(telegram_id, session)
-    profile = await get_client_profile_basic(session, telegram_id)
-    client_phone = (
-        ((profile.get("phone") or "").strip() or None) if profile else None
-    )
+    client_phone = await get_client_phone_for_webapp(session, telegram_id)
     city_id = row.get("city_id")
     service_id = row.get("selected_service_id")
     arena_id = row.get("selected_arena_id")
@@ -601,7 +626,7 @@ async def get_client_session_state(
             last = (p.get("last_name") or "").strip()
             trainer_name = (first + " " + last).strip() or "Тренер"
 
-    return {
+    payload = {
         "city_id": city_id,
         "city_name": city_name,
         "service_id": service_id,
@@ -612,6 +637,10 @@ async def get_client_session_state(
         "trainer_name": trainer_name,
         "client_phone": client_phone,
     }
+    return JSONResponse(
+        content=payload,
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
+    )
 
 
 class ClientSessionBody(BaseModel):
@@ -669,9 +698,12 @@ def _serialize_client_request(req: dict) -> dict:
                 "rating_count": r.get("rating_count") or 0,
                 "experience_years": r.get("experience_years"),
                 "description": r.get("description"),
+                "education": r.get("education"),
+                "education_entries": r.get("education_entries") or [],
                 "session_duration_minutes": r.get("session_duration_minutes"),
                 "photo_key": r.get("photo_key"),
                 "services": r.get("services") or [],
+                "arena_names": r.get("arena_names") or [],
             }
             for r in (req.get("responses") or [])
         ],
@@ -789,6 +821,8 @@ def _serialize_client_booking(b: dict) -> dict:
         "trainer_id": b.get("trainer_id"),
         "trainer_name": (b.get("trainer_name") or "Тренер").strip(),
         "trainer_telegram_id": b.get("trainer_telegram_id"),
+        "trainer_telegram_username": (b.get("trainer_telegram_username") or "").strip() or None,
+        "trainer_phone": (b.get("trainer_phone") or "").strip() or None,
         "slot_date": slot_date.isoformat() if hasattr(slot_date, "isoformat") else str(slot_date),
         "start_time": start_time.strftime("%H:%M") if hasattr(start_time, "strftime") else str(start_time)[:5],
         "end_time": end_time.strftime("%H:%M") if hasattr(end_time, "strftime") else str(end_time)[:5],
@@ -2658,10 +2692,11 @@ async def post_trainer_booking_complete(
 
 
 class TrainerCreateBookingBody(BaseModel):
-    """Create booking from schedule: trainer picks slot + client + service."""
+    """Create booking from schedule: trainer picks slot + client + service; optional venue (non-primary)."""
     slot_id: int
     client_id: int
     service_id: int
+    arena_id: int | None = None
 
 
 class TrainerCreateClientBody(BaseModel):
@@ -2669,6 +2704,11 @@ class TrainerCreateClientBody(BaseModel):
     phone: str
     first_name: str | None = None
     last_name: str | None = None
+
+    @field_validator("phone", mode="before")
+    @classmethod
+    def _phone_belarus_by(cls, v: object) -> str:
+        return coerce_required_belarus_phone(v)
 
 
 @router.get("/trainer/my-services")
@@ -2685,7 +2725,6 @@ async def get_trainer_my_services(
     trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
-    from sqlalchemy import text
     r = await session.execute(
         text("""
             SELECT s.id, s.name
@@ -2697,7 +2736,33 @@ async def get_trainer_my_services(
         {"tid": trainer_id},
     )
     rows = r.fetchall()
-    return {"services": [{"id": row[0], "name": (row[1] or "").strip() or "—"} for row in rows]}
+    services = [{"id": row[0], "name": (row[1] or "").strip() or "—"} for row in rows]
+
+    primary_aid = await get_trainer_primary_arena_resolved(session, trainer_id)
+    r2 = await session.execute(
+        text(
+            """
+            SELECT a.id, a.name
+            FROM trainer_arenas ta
+            JOIN arenas a ON a.id = ta.arena_id
+            WHERE ta.trainer_id = :tid
+            ORDER BY
+              CASE WHEN a.id = :primary_id THEN 0 ELSE 1 END,
+              a.name
+            """
+        ),
+        {"tid": trainer_id, "primary_id": primary_aid if primary_aid is not None else -1},
+    )
+    arena_rows = r2.fetchall()
+    arenas = [
+        {
+            "id": row[0],
+            "name": (row[1] or "").strip() or "—",
+            "is_primary": primary_aid is not None and row[0] == primary_aid,
+        }
+        for row in arena_rows
+    ]
+    return {"services": services, "arenas": arenas}
 
 
 @router.get("/trainer/clients")
@@ -2969,6 +3034,14 @@ async def post_trainer_booking(
     slot = await get_slot(session, body.slot_id)
     if not slot or slot.get("trainer_id") != trainer_id or (slot.get("status") or "").strip() != "available":
         raise HTTPException(status_code=400, detail="Slot not found or not available")
+    arena_id: int | None = body.arena_id
+    if arena_id is not None:
+        rchk = await session.execute(
+            text("SELECT 1 FROM trainer_arenas WHERE trainer_id = :tid AND arena_id = :aid"),
+            {"tid": trainer_id, "aid": arena_id},
+        )
+        if not rchk.fetchone():
+            raise HTTPException(status_code=400, detail="Площадка не привязана к вашему профилю")
     booking_id = await create_booking(
         session,
         slot_id=body.slot_id,
@@ -2978,6 +3051,7 @@ async def post_trainer_booking(
         client_comment=None,
         client_request_id=None,
         created_by_trainer=True,
+        arena_id=arena_id,
     )
     if not booking_id:
         raise HTTPException(status_code=400, detail="Slot not available")

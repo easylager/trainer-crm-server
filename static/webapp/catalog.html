@@ -170,26 +170,31 @@
       opacity: 0.92; 
       transform: scale(0.985);
     }
+    /* Список: круглые аватары как LinkedIn — элегантнее квадратов */
     .trainer-list-card .trainer-card-photo-wrap {
       position: relative;
-      width: 112px;
-      height: 112px;
+      width: 72px;
+      height: 72px;
+      border-radius: 50%;
+      overflow: hidden;
       flex-shrink: 0;
+      border: 3px solid var(--tg-theme-secondary-bg-color);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
     }
     .trainer-list-card .trainer-card-photo-placeholder {
       position: absolute;
       inset: 0;
-      background: var(--tg-theme-secondary-bg-color);
-      border-radius: 18px;
+      background: linear-gradient(135deg, var(--tg-theme-secondary-bg-color) 0%, rgba(245, 166, 35, 0.1) 100%);
+      border-radius: 50%;
     }
     .trainer-list-card .trainer-card-photo-placeholder::after {
       content: '';
       position: absolute;
       inset: 0;
-      background: linear-gradient(105deg, transparent 0%, rgba(255,255,255,0.08) 50%, transparent 100%);
+      background: linear-gradient(105deg, transparent 0%, rgba(245, 166, 35, 0.15) 50%, transparent 100%);
       background-size: 200% 100%;
-      animation: photo-shimmer 1.2s ease-in-out infinite;
-      border-radius: 18px;
+      animation: photo-shimmer 1.5s ease-in-out infinite;
+      border-radius: 50%;
     }
     .trainer-list-card .trainer-card-photo-wrap img {
       position: absolute;
@@ -197,10 +202,10 @@
       width: 100%;
       height: 100%;
       object-fit: cover;
-      object-position: center top;
-      border-radius: 18px;
+      object-position: center center;
+      border-radius: 50%;
       opacity: 0;
-      transition: opacity 0.2s ease;
+      transition: all 0.3s ease;
     }
     .trainer-list-card .trainer-card-photo-wrap img.loaded {
       opacity: 1;
@@ -210,6 +215,11 @@
       min-width: 0; 
       position: relative; 
       z-index: 1; 
+    }
+    
+    /* Hover эффект для списка — subtle zoom аватара */
+    .trainer-list-card:hover .trainer-card-photo-wrap img {
+      transform: scale(1.1);
     }
     .trainer-list-card .name {
       font-weight: 600;
@@ -238,24 +248,48 @@
       opacity: 1;
       transform: translateX(2px);
     }
-    /* Современная карточка тренера - дизайнерский шедевр */
+    /* Современная карточка тренера — кроп загрузки 4:3 как в редакторе фото */
     .trainer-detail-photo-wrap {
       position: relative;
       width: 100%;
       aspect-ratio: 4/3;
       min-height: 240px;
       max-height: 320px;
-      border-radius: 20px;
+      border-radius: 24px;
       overflow: hidden;
       margin-bottom: 20px;
       background: linear-gradient(135deg, var(--tg-theme-secondary-bg-color) 0%, rgba(245, 166, 35, 0.1) 100%);
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
     }
     .trainer-detail-photo-wrap .trainer-detail-photo-placeholder {
       position: absolute;
       inset: 0;
       background: linear-gradient(135deg, var(--tg-theme-secondary-bg-color) 0%, rgba(245, 166, 35, 0.1) 100%);
-      border-radius: 20px;
+      border-radius: 24px;
+    }
+    
+    /* Элегантная градиентная маска снизу для возможного текста поверх */
+    .trainer-detail-photo-wrap::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 30%;
+      background: linear-gradient(to top, rgba(0, 0, 0, 0.4) 0%, transparent 100%);
+      border-radius: 0 0 24px 24px;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+    
+    .trainer-detail-photo-wrap:hover::after {
+      opacity: 1;
+    }
+    
+    /* Subtle zoom эффект для главного фото */
+    .trainer-detail-photo-wrap:hover img {
+      transform: scale(1.05);
     }
     .trainer-detail-photo-wrap .trainer-detail-photo-placeholder::after {
       content: '';
@@ -264,7 +298,7 @@
       background: linear-gradient(105deg, transparent 0%, rgba(245, 166, 35, 0.15) 50%, transparent 100%);
       background-size: 200% 100%;
       animation: photo-shimmer 1.5s ease-in-out infinite;
-      border-radius: 20px;
+      border-radius: 24px;
     }
     @keyframes photo-shimmer {
       0% { background-position: 200% 0; }
@@ -279,8 +313,8 @@
       width: 100%;
       height: 100%;
       object-fit: cover;
-      object-position: center top;
-      border-radius: 20px;
+      object-position: center center;
+      border-radius: 24px;
       opacity: 0;
       transition: all 0.3s ease;
     }
@@ -341,6 +375,61 @@
       font-size: 15px;
       font-weight: 600;
       color: var(--tg-theme-text-color);
+    }
+    /* Arenas: primary vs secondary + client hint (catalog self-booking = primary only) */
+    .trainer-detail-stat--arenas {
+      grid-column: 1 / -1;
+    }
+    .trainer-detail-arena-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .trainer-detail-arena-primary-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+    }
+    .trainer-detail-arena-primary-name {
+      font-size: 15px;
+      font-weight: 600;
+      line-height: 1.35;
+      color: var(--tg-theme-text-color);
+    }
+    .trainer-detail-arena-pill {
+      flex-shrink: 0;
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--tg-theme-button-color);
+      background: linear-gradient(135deg, rgba(245, 166, 35, 0.14) 0%, rgba(245, 166, 35, 0.06) 100%);
+      padding: 3px 7px;
+      border-radius: 8px;
+      border: 1px solid rgba(245, 166, 35, 0.28);
+    }
+    .trainer-detail-arena-others {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      margin-top: 2px;
+      padding-left: 10px;
+      border-left: 2px solid rgba(128, 128, 128, 0.22);
+    }
+    .trainer-detail-arena-secondary {
+      font-size: 13px;
+      font-weight: 500;
+      line-height: 1.35;
+      color: var(--tg-theme-hint-color);
+    }
+    .trainer-detail-arena-hint {
+      font-size: 12px;
+      line-height: 1.45;
+      color: var(--tg-theme-hint-color);
+      margin: 10px 0 0;
+      padding-top: 10px;
+      border-top: 1px solid rgba(128, 128, 128, 0.18);
     }
     .trainer-detail-services {
       margin-bottom: 20px;
@@ -403,6 +492,11 @@
       background: var(--tg-theme-secondary-bg-color);
       border-radius: 16px;
       border-left: 4px solid var(--tg-theme-button-color);
+      min-width: 0;
+      max-width: 100%;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+      white-space: normal;
     }
     .trainer-detail-actions,
     #trainerDetailActions {
@@ -550,7 +644,7 @@
     .summary-row-clickable:hover { background: rgba(128,128,128,0.08); }
     .summary-row-clickable:active { opacity: 0.9; }
     .summary-row .row-arrow { color: var(--tg-theme-hint-color); font-size: 14px; margin-left: 8px; }
-    .summary-actions { margin-top: 20px; display: flex; flex-direction: column; gap: 12px; }
+    .summary-actions { margin-top: 20px; display: flex; flex-direction: column; gap: var(--app-btn-stack-gap); }
     .summary-actions .btn-block { margin: 0; }
     .summary-actions .summary-hint {
       font-size: 14px;
@@ -787,6 +881,19 @@
       }
     }
     
+    /* Адаптивность для мобильных устройств */
+    @media (max-width: 640px) {
+      /* На мобильном аватары чуть крупнее для удобства */
+      .trainer-list-card .trainer-card-photo-wrap {
+        width: 80px;
+        height: 80px;
+      }
+      
+      .trainer-detail-photo-wrap {
+        max-height: min(48vh, 300px);
+      }
+    }
+    
     /* Модальное окно отзывов */
     .reviews-modal {
       position: fixed;
@@ -884,6 +991,17 @@
     }
     .form-block textarea { min-height: 60px; resize: vertical; }
     .booking-slot-label { font-size: 15px; margin-bottom: 16px; color: var(--tg-theme-hint-color); }
+    .booking-venue-hint {
+      font-size: 14px; margin-bottom: 14px; line-height: 1.35;
+      color: var(--tg-theme-text-color);
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: var(--tg-theme-secondary-bg-color);
+    }
+    .booking-venue-hint--alert {
+      border: 1px solid color-mix(in srgb, var(--tg-theme-button-color) 35%, transparent);
+      background: color-mix(in srgb, var(--tg-theme-button-color) 10%, var(--tg-theme-secondary-bg-color));
+    }
     .trainer-list-footer {
       margin-top: 20px;
       padding-top: 16px;
@@ -1033,6 +1151,7 @@
   <div id="screenBookingForm" data-screen>
     <button type="button" class="back-link" id="backFromBookingForm" style="margin-bottom:8px;"><svg class="back-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>Другое время</button>
     <p id="bookingFormSlotLabel" class="booking-slot-label"></p>
+    <p id="bookingVenueHint" class="booking-venue-hint" style="display:none;"></p>
     <div class="form-block">
       <label for="bookingPhone">Телефон *</label>
       <input type="tel" id="bookingPhone" placeholder="+375291234567" inputmode="tel" />
@@ -1118,15 +1237,55 @@
           timeSlots: [] // ['06:00-09:00', '09:00-12:00', etc.]
         }
       };
+
+      function primaryVenueLabel(t) {
+        if (!t) return '';
+        if (t.primary_arena_name && String(t.primary_arena_name).trim()) return String(t.primary_arena_name).trim();
+        var ids = t.arena_ids || [];
+        var names = t.arena_names || [];
+        var idx = ids.indexOf(t.primary_arena_id);
+        if (idx >= 0 && names[idx]) return names[idx];
+        return '';
+      }
+      function isNonPrimaryArenaFilter() {
+        if (state.arenaId == null) return false;
+        var t = state.selectedTrainer;
+        if (!t || t.primary_arena_id == null) return false;
+        return state.arenaId !== t.primary_arena_id;
+      }
+      function updateBookingVenueHint() {
+        var el = document.getElementById('bookingVenueHint');
+        if (!el) return;
+        var label = primaryVenueLabel(state.selectedTrainer);
+        var nonPrimary = isNonPrimaryArenaFilter();
+        el.className = 'booking-venue-hint' + (nonPrimary ? ' booking-venue-hint--alert' : '');
+        if (!label && !nonPrimary) {
+          el.style.display = 'none';
+          el.textContent = '';
+          return;
+        }
+        el.style.display = 'block';
+        if (nonPrimary && label) {
+          var filterName = (state.arenaName && state.arenaName !== 'Любая') ? state.arenaName : 'другой арене';
+          el.innerHTML = 'Вы смотрите тренера по фильтру «' + escapeHtml(filterName) + '». <strong>Онлайн-запись оформляется на основную площадку: ' + escapeHtml(label) + '.</strong> Чтобы заниматься на площадке из фильтра — оставьте заявку: тренер согласует место и запишет вас сам.';
+        } else if (label) {
+          el.textContent = 'Площадка онлайн-записи: ' + label;
+        } else {
+          el.textContent = '';
+          el.style.display = 'none';
+        }
+      }
+
       var prefetch = {
         firstPageKey: null,
         firstPageData: null,
         inflightByKey: {}
       };
-      // Persist first catalog page across Mini App reopens in the same browser session.
+      // First-page list cache disabled: after moderation, names/photos must refresh immediately.
       var CATALOG_CACHE_PREFIX = 'tcb_catalog_trainers_v1_';
-      var CATALOG_CACHE_TTL_MS = 10 * 60 * 1000;
+      var CATALOG_CACHE_TTL_MS = 0;
       function readCatalogFirstPageFromStorage(listKey) {
+        if (!CATALOG_CACHE_TTL_MS) return null;
         try {
           var raw = sessionStorage.getItem(CATALOG_CACHE_PREFIX + listKey);
           if (!raw) return null;
@@ -1142,6 +1301,7 @@
         }
       }
       function writeCatalogFirstPageToStorage(listKey, data) {
+        if (!CATALOG_CACHE_TTL_MS) return;
         try {
           sessionStorage.setItem(CATALOG_CACHE_PREFIX + listKey, JSON.stringify({ ts: Date.now(), data: data }));
         } catch (e) {
@@ -1389,6 +1549,25 @@
         return 'Найдено ' + n + ' тренеров';
       }
 
+      /** Склонение числительного с «год» (1 год, 2 года, 5 лет, 11 лет, 32 года). */
+      function ruYearsWord(n) {
+        if (n == null || !isFinite(Number(n))) return 'лет';
+        n = Math.floor(Math.abs(Number(n)));
+        var mod100 = n % 100;
+        var mod10 = n % 10;
+        if (mod100 >= 11 && mod100 <= 14) return 'лет';
+        if (mod10 === 1) return 'год';
+        if (mod10 >= 2 && mod10 <= 4) return 'года';
+        return 'лет';
+      }
+
+      /** Строка для списка: «32 года опыта». */
+      function formatExperienceCatalogLine(years) {
+        if (years == null || !isFinite(Number(years))) return null;
+        var y = Number(years);
+        return y + ' ' + ruYearsWord(y) + ' опыта';
+      }
+
       function updateResultsCount(count) {
         var resultsEl = document.getElementById('resultsCount');
         if (resultsEl) resultsEl.textContent = formatTrainerCountMessage(count);
@@ -1474,10 +1653,10 @@
 
       function getJson(path, params) {
         var q = params ? '?' + Object.keys(params).map(function(k) { return k + '=' + encodeURIComponent(params[k]); }).join('&') : '';
-        return fetch('/api/public' + path + q).then(function(r) { return r.json(); });
+        return fetch('/api/public' + path + q, { cache: 'no-store' }).then(function(r) { return r.json(); });
       }
       function loadTrainerById(trainerId) {
-        return fetch('/api/public/trainers/' + encodeURIComponent(trainerId))
+        return fetch('/api/public/trainers/' + encodeURIComponent(trainerId), { cache: 'no-store' })
           .then(function(r) {
             if (r.status === 404) return null;
             if (!r.ok) throw new Error(r.statusText);
@@ -1682,6 +1861,8 @@
           var items = data.items || [];
           if (!items.length) {
             document.getElementById('serviceList').innerHTML = '<div class="empty">Нет услуг</div>';
+            var backCityEmpty = document.getElementById('backToCity');
+            if (backCityEmpty) backCityEmpty.style.display = state.returnToSummary ? 'none' : 'block';
             return;
           }
           var html = items.map(function(s) {
@@ -1689,6 +1870,8 @@
           }).join('');
           document.getElementById('serviceList').innerHTML = html;
           document.getElementById('backFromServiceToSummary').style.display = state.returnToSummary ? 'block' : 'none';
+          var backCity = document.getElementById('backToCity');
+          if (backCity) backCity.style.display = state.returnToSummary ? 'none' : 'block';
           document.querySelectorAll('#serviceList .choice-card').forEach(function(btn) {
             btn.onclick = function() {
               state.serviceId = parseInt(btn.dataset.id, 10);
@@ -1709,6 +1892,8 @@
           });
         }).catch(function() {
           document.getElementById('serviceList').innerHTML = '<div class="error">Ошибка загрузки</div>';
+          var backCityErr = document.getElementById('backToCity');
+          if (backCityErr) backCityErr.style.display = state.returnToSummary ? 'none' : 'block';
         });
       }
 
@@ -1722,6 +1907,9 @@
           }).join('');
           document.getElementById('arenaList').innerHTML = html;
           document.getElementById('backFromArenaToSummary').style.display = state.returnToSummary ? 'block' : 'none';
+          // From summary: only "К выбору" — "Другая услуга" duplicates back affordance and skips loadServices (broken screen).
+          var backSvc = document.getElementById('backToService');
+          if (backSvc) backSvc.style.display = state.returnToSummary ? 'none' : 'block';
           document.querySelectorAll('#arenaList .choice-card').forEach(function(btn) {
             btn.onclick = function() {
               state.arenaId = btn.dataset.id ? parseInt(btn.dataset.id, 10) : null;
@@ -1742,6 +1930,8 @@
           });
         }).catch(function() {
           document.getElementById('arenaList').innerHTML = '<div class="error">Ошибка загрузки</div>';
+          var backSvc = document.getElementById('backToService');
+          if (backSvc) backSvc.style.display = state.returnToSummary ? 'none' : 'block';
         });
       }
 
@@ -1835,7 +2025,8 @@
               metaTop.push(p.rating_avg.toFixed(1) + ' ★ (' + p.rating_count + ')');
             }
             if (p && p.experience_years != null) {
-              metaTop.push(p.experience_years + ' лет опыта');
+              var expLine = formatExperienceCatalogLine(p.experience_years);
+              if (expLine) metaTop.push(expLine);
             }
 
             var metaBottom = [];
@@ -1972,16 +2163,63 @@
         });
       }
 
+      /**
+       * Multiple arenas: show primary + muted secondaries and a short client hint (request for other venues).
+       */
+      function buildTrainerArenasBlock(t) {
+        var ids = t.arena_ids || [];
+        var names = t.arena_names || [];
+        var n = ids.length;
+        if (n <= 1) {
+          return '<div class="trainer-detail-stat-value">' + escapeHtml((names[0] && names[0].trim()) ? names[0] : '—') + '</div>';
+        }
+        var primaryId = t.primary_arena_id;
+        var primaryIdx = 0;
+        if (primaryId != null) {
+          var pi = ids.indexOf(primaryId);
+          if (pi >= 0) primaryIdx = pi;
+        }
+        var primaryName = (names[primaryIdx] || '—').trim();
+        var others = [];
+        for (var i = 0; i < n; i++) {
+          if (i === primaryIdx) continue;
+          others.push((names[i] || '—').trim());
+        }
+        var html = '<div class="trainer-detail-arena-stack">';
+        html += '<div class="trainer-detail-arena-primary-row">';
+        html += '<span class="trainer-detail-arena-primary-name">' + escapeHtml(primaryName) + '</span>';
+        html += '<span class="trainer-detail-arena-pill">основная</span>';
+        html += '</div>';
+        if (others.length) {
+          html += '<div class="trainer-detail-arena-others">';
+          others.forEach(function(nm) {
+            html += '<div class="trainer-detail-arena-secondary">' + escapeHtml(nm) + '</div>';
+          });
+          html += '</div>';
+        }
+        html += '<p class="trainer-detail-arena-hint">Запись в каталоге — на основную площадку. Нужна другая? Оставьте заявку — тренер согласует.</p>';
+        html += '</div>';
+        return html;
+      }
+
       function renderTrainerDetail() {
         var t = state.selectedTrainer;
         if (!t) return;
         var p = t.profile || {};
         var name = trainerName(t);
         var ratingStr = (p.rating_avg != null && (p.rating_count || 0) > 0) ? (p.rating_avg.toFixed(1) + ' ★ (' + p.rating_count + ')') : '—';
-        var ageStr = p.age != null ? p.age + ' лет' : '—';
-        var expStr = p.experience_years != null ? p.experience_years + ' лет' : 'Опыт: не указан';
         var duration = p.session_duration_minutes || 45;
-        var arenasStr = (t.arena_names && t.arena_names.length) ? t.arena_names.join(', ') : '—';
+        var arenaIds = t.arena_ids || [];
+        var arenaStatClass = 'trainer-detail-stat';
+        var arenaInnerHtml;
+        if (arenaIds.length > 1) {
+          arenaStatClass += ' trainer-detail-stat--arenas';
+          arenaInnerHtml = buildTrainerArenasBlock(t);
+        } else if (arenaIds.length === 1) {
+          arenaInnerHtml = '<div class="trainer-detail-stat-value">' + escapeHtml((t.arena_names && t.arena_names[0]) ? t.arena_names[0] : '—') + '</div>';
+        } else {
+          arenaInnerHtml = '<div class="trainer-detail-stat-value">—</div>';
+        }
         var services = t.services || [];
         var servicesStr = services.length ? services.map(function(s) {
           return (s.service_name || '—') + (s.price_byn != null ? ': ' + (s.price_byn === Math.floor(s.price_byn) ? s.price_byn : s.price_byn.toFixed(2)) + ' BYN' : ': по запросу');
@@ -2020,20 +2258,16 @@
         
         html += '<div class="trainer-detail-stats">';
         html += '<div class="trainer-detail-stat">';
-        html += '<div class="trainer-detail-stat-label">Возраст</div>';
-        html += '<div class="trainer-detail-stat-value">' + ageStr + '</div>';
-        html += '</div>';
-        html += '<div class="trainer-detail-stat">';
         html += '<div class="trainer-detail-stat-label">Опыт</div>';
-        html += '<div class="trainer-detail-stat-value">' + (p.experience_years != null ? p.experience_years + ' лет' : '—') + '</div>';
+        html += '<div class="trainer-detail-stat-value">' + (p.experience_years != null ? (p.experience_years + ' ' + ruYearsWord(p.experience_years)) : '—') + '</div>';
         html += '</div>';
         html += '<div class="trainer-detail-stat">';
         html += '<div class="trainer-detail-stat-label">Занятие</div>';
         html += '<div class="trainer-detail-stat-value">' + duration + ' мин</div>';
         html += '</div>';
-        html += '<div class="trainer-detail-stat">';
+        html += '<div class="' + arenaStatClass + '">';
         html += '<div class="trainer-detail-stat-label">Арены</div>';
-        html += '<div class="trainer-detail-stat-value">' + arenasStr + '</div>';
+        html += arenaInnerHtml;
         html += '</div>';
         html += '</div>';
         
@@ -2070,7 +2304,7 @@
         }
         
         if (desc !== '—') {
-          html += '<div class="trainer-detail-desc">' + desc + '</div>';
+          html += '<div class="trainer-detail-desc">' + escapeHtml(desc).replace(/\n/g, '<br>') + '</div>';
         }
         var photoSourceLabel = (detailPhoto && detailPhoto._source === 'cdn') ? 'Фото: через CDN' : (detailPhoto && detailPhoto._source === 'direct') ? 'Фото: напрямую с S3' : 'Фото: через сервер';
         html += '<div class="photo-source-hint trainer-detail-photo-source">' + photoSourceLabel + '</div>';
@@ -2091,7 +2325,7 @@
             phoneLine;
           state.slotsForTrainer = [];
           var actionsEl = document.getElementById('trainerDetailActions');
-          actionsEl.innerHTML = '<button type="button" class="btn-secondary" data-action="leave-request">Оставить заявку</button>';
+          actionsEl.innerHTML = '<button type="button" class="btn-secondary btn-block" data-action="leave-request">Оставить заявку</button>';
           var secondaryEl = document.getElementById('trainerDetailSecondary');
           if (!state.openedFromMyTrainerTab) {
             secondaryEl.innerHTML = '<button type="button" class="back-link" data-action="back-to-list"><svg class="back-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>К списку тренеров</button>';
@@ -2106,6 +2340,22 @@
           var actionsEl = document.getElementById('trainerDetailActions');
           var slots = state.slotsForTrainer;
           var slotsHtml = '<div class="slots-title">Ближайшие слоты</div>';
+          if (isNonPrimaryArenaFilter()) {
+            slotsEl.innerHTML = slotsHtml +
+              '<div class="slots-empty">Онлайн-запись только на основную площадку тренера. Чтобы заниматься на другой арене, оставьте заявку — тренер согласует место и время.</div>';
+            actionsEl.innerHTML = '';
+            actionsEl.innerHTML += '<button type="button" class="btn-secondary btn-block" data-action="leave-request">Оставить заявку</button>';
+            if (t.has_pass_products || t.has_certificate_products) {
+              actionsEl.innerHTML += '<button type="button" class="btn-secondary btn-block" data-action="buy-pass">Абонементы/Сертификаты</button>';
+            }
+            var secondaryElNp = document.getElementById('trainerDetailSecondary');
+            if (!state.openedFromMyTrainerTab) {
+              secondaryElNp.innerHTML = '<button type="button" class="back-link" data-action="back-to-list"><svg class="back-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>К списку тренеров</button>';
+            } else {
+              secondaryElNp.innerHTML = '';
+            }
+            return;
+          }
           if (slots.length === 0) {
             slotsHtml += '<div class="slots-empty">Сейчас нет свободных слотов.</div>';
             slotsHtml += '<div class="slots-empty slots-empty-hint">Оставьте заявку — тренер предложит удобное время.</div>';
@@ -2129,6 +2379,7 @@
               document.getElementById('bookingComment').value = '';
               refreshClientPhoneForBookingForm(function() {
                 prefillBookingPhoneField();
+                updateBookingVenueHint();
                 showScreen('screenBookingForm');
               });
             };
@@ -2138,11 +2389,11 @@
           // Очищаем и добавляем кнопки с новым дизайном
           actionsEl.innerHTML = '';
           if (slots.length > 0) {
-            actionsEl.innerHTML += '<button type="button" class="btn-primary" id="btnBookFromDetail">Записаться</button>';
+            actionsEl.innerHTML += '<button type="button" class="btn-primary btn-block" id="btnBookFromDetail">Записаться</button>';
           }
-          actionsEl.innerHTML += '<button type="button" class="btn-secondary" data-action="leave-request">Оставить заявку</button>';
+          actionsEl.innerHTML += '<button type="button" class="btn-secondary btn-block" data-action="leave-request">Оставить заявку</button>';
           if (t.has_pass_products || t.has_certificate_products) {
-            actionsEl.innerHTML += '<button type="button" class="btn-secondary" data-action="buy-pass" style="margin-top: 8px;">Абонементы/Сертификаты</button>';
+            actionsEl.innerHTML += '<button type="button" class="btn-secondary btn-block" data-action="buy-pass">Абонементы/Сертификаты</button>';
           }
           var btnBook = document.getElementById('btnBookFromDetail');
           if (btnBook) btnBook.onclick = function() { renderSlotPickList(); showScreen('screenSlotPick'); };
@@ -2154,7 +2405,7 @@
           }
         }).catch(function() {
           document.getElementById('trainerDetailSlots').innerHTML = '<div class="slots-title">Ближайшие слоты</div><div class="slots-empty">Не удалось загрузить слоты</div>';
-          document.getElementById('trainerDetailActions').innerHTML = '<button type="button" class="btn-secondary" data-action="leave-request">Оставить заявку</button>';
+          document.getElementById('trainerDetailActions').innerHTML = '<button type="button" class="btn-secondary btn-block" data-action="leave-request">Оставить заявку</button>';
           var secondaryEl = document.getElementById('trainerDetailSecondary');
           if (!state.openedFromMyTrainerTab) {
             secondaryEl.innerHTML = '<button type="button" class="back-link" data-action="back-to-list"><svg class="back-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>К списку тренеров</button>';
@@ -2220,6 +2471,7 @@
             document.getElementById('bookingComment').value = '';
             refreshClientPhoneForBookingForm(function() {
               prefillBookingPhoneField();
+              updateBookingVenueHint();
               showScreen('screenBookingForm');
             });
           };
@@ -2251,7 +2503,11 @@
         }).then(function(r) {
           return r.json().then(function(data) {
             if (r.ok && data.success) {
-              document.getElementById('successText').innerHTML = '✅ <b>Вы записаны</b>.<br><br>Ожидайте подтверждения от тренера в боте.';
+              var okMsg = '✅ <b>Вы записаны</b>.<br><br>Ожидайте подтверждения от тренера в боте.';
+              if (data.used_primary_venue_for_online_booking) {
+                okMsg += '<br><span style="color: var(--tg-theme-hint-color); font-size: 14px; display: inline-block; margin-top: 10px;">Запись создана на <strong>основную площадку</strong> тренера. Чтобы заниматься на площадке из вашего фильтра — оставьте заявку, тренер согласует место.</span>';
+              }
+              document.getElementById('successText').innerHTML = okMsg;
               showScreen('screenSuccess');
             } else { alert(data.detail || 'Не удалось записаться'); }
             btn.disabled = false;
@@ -2420,6 +2676,12 @@
         document.getElementById('backFromCityToSummary').style.display = 'none';
         document.getElementById('backFromServiceToSummary').style.display = 'none';
         document.getElementById('backFromArenaToSummary').style.display = 'none';
+        var backSvc = document.getElementById('backToService');
+        if (backSvc) backSvc.style.display = 'block';
+        var backCity = document.getElementById('backToCity');
+        if (backCity) backCity.style.display = 'block';
+        // showScreen('screenSummary') runs switchTab(state.activeTab); my_trainer would call openMyTrainerCard() and leave the summary empty.
+        state.activeTab = 'catalog';
         renderSummary();
         showScreen('screenSummary');
       }
@@ -2503,7 +2765,7 @@
         modal.classList.add('show');
         
         // Публичный список отзывов (см. GET /api/public/trainers/{id}/reviews — items, review_text)
-        fetch('/api/public/trainers/' + encodeURIComponent(trainerId) + '/reviews')
+        fetch('/api/public/trainers/' + encodeURIComponent(trainerId) + '/reviews', { cache: 'no-store' })
           .then(function(res) {
             return res.json().then(function(data) {
               if (!res.ok) throw new Error((data && data.detail) || res.statusText);

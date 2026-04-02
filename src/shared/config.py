@@ -88,13 +88,15 @@ class Settings(BaseSettings):
     payment_sandbox: bool = True
 
     # Trainer subscription: trial and reminders
-    # Trial: if set, overrides subscription_plans.period_days for the trial plan when creating trial
+    # Trial: if set, overrides DB platform_settings.welcome_trial_period_days and subscription_plans.period_days
     trial_period_days: int | None = None
     # Reminder: send "subscription ending soon" this many days before expires_at (default 3)
     subscription_reminder_days_ahead: int = 3
 
     # Client bot: username for deep links (e.g. t.me/<username>?start=cert_XXX). Required for certificate email links.
     client_bot_username: str | None = None
+    # Trainer bot: username for deep links (t.me/<username>?start=link_<token>). Used by admin /trainer_welcome_link.
+    trainer_bot_username: str | None = None
     # SMTP for sending certificate link emails. When any is missing, email sending is disabled.
     smtp_host: str | None = None
     smtp_port: int = 587

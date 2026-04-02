@@ -22,6 +22,47 @@
       font-family: var(--app-font-sans);
       padding-bottom: calc(28px + env(safe-area-inset-bottom, 0));
     }
+    /* Premium shell: контент в «рамке дашборда», не как обычная страница настроек */
+    .stats-pro-shell {
+      margin-top: 4px;
+      border-radius: 22px;
+      padding: 1px;
+      background: linear-gradient(
+        145deg,
+        color-mix(in srgb, var(--tg-theme-button-color) 42%, transparent) 0%,
+        rgba(128, 128, 128, 0.12) 45%,
+        color-mix(in srgb, var(--tg-theme-button-color) 28%, transparent) 100%
+      );
+      box-shadow:
+        0 4px 24px rgba(0, 0, 0, 0.08),
+        0 0 0 1px color-mix(in srgb, var(--tg-theme-button-color) 12%, transparent);
+    }
+    @media (prefers-color-scheme: dark) {
+      .stats-pro-shell {
+        box-shadow:
+          0 8px 36px rgba(0, 0, 0, 0.5),
+          0 0 0 1px color-mix(in srgb, var(--tg-theme-button-color) 18%, transparent);
+      }
+    }
+    .stats-pro-shell-inner {
+      border-radius: 21px;
+      background: var(--tg-theme-bg-color);
+      padding: 14px 10px 22px;
+    }
+
+    .stats-pro-footnote {
+      margin: 18px 4px 0;
+      padding: 12px 14px;
+      font-size: 11px;
+      line-height: 1.45;
+      font-weight: 500;
+      letter-spacing: 0.02em;
+      color: var(--tg-theme-hint-color);
+      text-align: center;
+      border-radius: 14px;
+      background: color-mix(in srgb, var(--tg-theme-button-color) 8%, var(--tg-theme-secondary-bg-color));
+      border: 1px solid color-mix(in srgb, var(--tg-theme-button-color) 16%, transparent);
+    }
 
     .stats-hero-title {
       margin: 0;
@@ -42,49 +83,77 @@
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      font-size: 11px;
-      font-weight: 700;
-      letter-spacing: 0.06em;
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0.1em;
       text-transform: uppercase;
-      padding: 6px 12px;
+      padding: 7px 14px;
       border-radius: 999px;
-      background: color-mix(in srgb, var(--tg-theme-button-color) 22%, transparent);
+      background: linear-gradient(
+        145deg,
+        color-mix(in srgb, var(--tg-theme-button-color) 32%, var(--tg-theme-secondary-bg-color)) 0%,
+        color-mix(in srgb, var(--tg-theme-button-color) 14%, var(--tg-theme-secondary-bg-color)) 100%
+      );
       color: var(--tg-theme-text-color);
-      border: 1px solid color-mix(in srgb, var(--tg-theme-button-color) 35%, transparent);
+      border: 1px solid color-mix(in srgb, var(--tg-theme-button-color) 40%, transparent);
+      box-shadow: 0 2px 12px color-mix(in srgb, var(--tg-theme-button-color) 22%, transparent);
     }
-    .pro-pill svg { flex-shrink: 0; opacity: 0.9; }
+    .pro-pill svg { flex-shrink: 0; opacity: 0.95; }
 
-    /* Segmented tabs */
+    .stats-pro-kicker-line {
+      margin: 10px 0 0;
+      font-size: 12px;
+      font-weight: 500;
+      line-height: 1.4;
+      color: var(--tg-theme-hint-color);
+      max-width: 28em;
+    }
+
+    /* Segmented tabs — тяжелее «пульт», как в платных дашбордах */
     .stats-tabs {
       display: flex;
-      gap: 6px;
-      padding: 4px;
+      gap: 5px;
+      padding: 5px;
       margin: 0 0 18px;
-      border-radius: 16px;
-      background: var(--tg-theme-secondary-bg-color);
-      border: 1px solid rgba(128, 128, 128, 0.12);
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+      border-radius: 18px;
+      background: linear-gradient(
+        180deg,
+        var(--tg-theme-secondary-bg-color) 0%,
+        color-mix(in srgb, var(--tg-theme-secondary-bg-color) 88%, var(--tg-theme-bg-color)) 100%
+      );
+      border: 1px solid color-mix(in srgb, var(--tg-theme-button-color) 18%, transparent);
+      box-shadow:
+        inset 0 1px 0 color-mix(in srgb, #fff 8%, transparent),
+        0 4px 16px rgba(0, 0, 0, 0.06);
+    }
+    @media (prefers-color-scheme: dark) {
+      .stats-tabs {
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 6px 20px rgba(0, 0, 0, 0.35);
+      }
     }
     .stats-tab-btn {
       flex: 1;
       min-width: 0;
-      padding: 11px 8px;
+      padding: 12px 6px;
       border: none;
-      border-radius: 12px;
-      font-size: 12px;
-      font-weight: 700;
+      border-radius: 14px;
+      font-size: 11px;
+      font-weight: 800;
       font-family: inherit;
-      letter-spacing: 0.02em;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
       cursor: pointer;
       background: transparent;
       color: var(--tg-theme-hint-color);
-      transition: background 0.2s ease, color 0.2s ease, transform 0.12s ease;
+      transition: background 0.2s ease, color 0.2s ease, transform 0.12s ease, box-shadow 0.2s ease;
     }
     .stats-tab-btn:active { transform: scale(0.98); }
     .stats-tab-btn[aria-selected="true"] {
       background: var(--tg-theme-button-color);
       color: var(--tg-theme-button-text-color);
-      box-shadow: 0 2px 10px color-mix(in srgb, var(--tg-theme-button-color) 35%, transparent);
+      box-shadow:
+        0 3px 14px color-mix(in srgb, var(--tg-theme-button-color) 40%, transparent),
+        inset 0 -1px 0 color-mix(in srgb, #000 12%, transparent);
     }
 
     .stats-tab-panel {
@@ -134,8 +203,10 @@
       background: var(--tg-theme-secondary-bg-color);
       border-radius: 16px;
       padding: 16px 14px;
-      border: 1px solid rgba(128, 128, 128, 0.12);
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+      border: 1px solid color-mix(in srgb, var(--tg-theme-button-color) 14%, rgba(128, 128, 128, 0.12));
+      box-shadow:
+        0 2px 12px rgba(0, 0, 0, 0.05),
+        inset 0 1px 0 color-mix(in srgb, #fff 6%, transparent);
       position: relative;
       overflow: hidden;
     }
@@ -738,6 +809,77 @@
       margin-top: 4px;
     }
 
+    .stats-period-banner {
+      margin: 0 0 14px;
+      padding: 10px 12px;
+      font-size: 12px;
+      font-weight: 500;
+      line-height: 1.4;
+      color: var(--tg-theme-hint-color);
+      border-radius: 14px;
+      background: color-mix(in srgb, var(--tg-theme-hint-color) 6%, transparent);
+      border: 1px solid rgba(128, 128, 128, 0.1);
+    }
+    .stats-period-banner strong { color: var(--tg-theme-text-color); font-weight: 600; }
+
+    .empty-chart-msg {
+      text-align: center;
+      padding: 20px 12px;
+      font-size: 13px;
+      color: var(--tg-theme-hint-color);
+      line-height: 1.45;
+    }
+
+    .money-month-block {
+      border-radius: 18px;
+      padding: 16px 16px 14px;
+      background: var(--tg-theme-secondary-bg-color);
+      border: 1px solid rgba(128, 128, 128, 0.12);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    }
+    .money-month-kicker {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--tg-theme-hint-color);
+      margin: 0 0 6px;
+    }
+    .money-month-value-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 8px 12px;
+    }
+    .money-month-value {
+      font-size: clamp(22px, 6vw, 28px);
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      color: var(--tg-theme-text-color);
+    }
+    .money-month-sub {
+      margin: 10px 0 0;
+      font-size: 12px;
+      line-height: 1.45;
+      color: var(--tg-theme-hint-color);
+    }
+    .money-month-sub strong { color: var(--tg-theme-text-color); }
+
+    .lead-rate-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 36px;
+      padding: 8px 12px;
+      border-radius: 12px;
+      font-size: 18px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      background: color-mix(in srgb, var(--tg-theme-button-color) 14%, var(--tg-theme-secondary-bg-color));
+      border: 1px solid color-mix(in srgb, var(--tg-theme-button-color) 28%, transparent);
+      color: var(--tg-theme-text-color);
+    }
+
     .coach-card {
       border-radius: 16px;
       padding: 16px 16px 14px;
@@ -819,19 +961,25 @@
 <body>
   <section class="bd-hero" aria-labelledby="stats-hero-heading">
     <div class="bd-hero-inner">
-      <p class="bd-hero-kicker">Аналитика</p>
-      <h1 id="stats-hero-heading" class="stats-hero-title">Ваша статистика</h1>
-      <p class="bd-hero-date">Занятия, доход и загрузка — в одном месте</p>
+      <p class="bd-hero-kicker">Аналитика CRM</p>
+      <h1 id="stats-hero-heading" class="stats-hero-title">Статистика и выручка</h1>
+      <p class="bd-hero-date">Занятия, бухгалтерия и динамика в одном экране</p>
       <div class="stats-hero-row">
-        <span class="pro-pill" title="Расширенная аналитика для вашего бизнеса">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l2.4 7.4H22l-6 4.6 2.3 7L12 17.8 5.7 21l2.3-7-6-4.6h7.6L12 2z"/></svg>
-          Pro
+        <span class="pro-pill" title="Расширенная аналитика по вашей подписке">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 2l2.4 7.4H22l-6 4.6 2.3 7L12 17.8 5.7 21l2.3-7-6-4.6h7.6L12 2z"/></svg>
+          Аналитика Pro
         </span>
       </div>
+      <p class="stats-pro-kicker-line">Записи, выручка, лиды и загрузка — с понятными периодами и подсказками по вашим метрикам.</p>
     </div>
   </section>
 
-  <div id="content"></div>
+  <div class="stats-pro-shell">
+    <div class="stats-pro-shell-inner">
+      <div id="content"></div>
+    </div>
+  </div>
+  <p class="stats-pro-footnote">Цифры на момент открытия. Скользящие 30 дней и календарный месяц считаются по-разному — смотрите подписи к блокам. Аналитика доступна на тарифе с расширенной подпиской.</p>
 
   <script>
     (function() {
@@ -868,6 +1016,16 @@
         var p = String(isoStr).split('-');
         if (p.length >= 3) return p[2] + '.' + p[1];
         return isoStr;
+      }
+
+      function formatMonthTitle(isoStr) {
+        if (!isoStr) return '—';
+        var p = String(isoStr).split('-');
+        if (p.length < 2) return isoStr;
+        var months = ['январь', 'февраль', 'март', 'апрель', 'май', 'июнь', 'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь'];
+        var mi = parseInt(p[1], 10) - 1;
+        if (mi < 0 || mi > 11) return isoStr;
+        return months[mi] + ' ' + p[0];
       }
 
       function renderTrend(pct) {
@@ -923,6 +1081,12 @@
             (d.client_request_responses_30d || 0) < (d.client_requests_to_trainer_30d || 0)) {
           tips.push('Есть входящие заявки — откройте раздел заявок и ответьте, чтобы не потерять лиды.');
         }
+        if (d.lead_response_rate_30d != null && d.lead_response_rate_30d < 70 && (d.client_requests_to_trainer_30d || 0) >= 2) {
+          tips.push('Не все заявки получили ответ — быстрый отклик повышает шанс записаться.');
+        }
+        if (d.repeat_share_30d_pct != null && d.repeat_share_30d_pct < 30 && (d.unique_clients_30d || 0) >= 4) {
+          tips.push('Низкая доля повторных клиентов — напомните о следующем визите в конце занятия.');
+        }
         if ((d.new_clients_30d || 0) > 0 && (d.repeat_clients_30d || 0) < Math.max(1, Math.floor((d.new_clients_30d || 0) / 2))) {
           tips.push('Много новых клиентов — предложите абонемент или пакет занятий, чтобы закрепить их в практике.');
         }
@@ -947,6 +1111,14 @@
         html += '<div class="stat-chip"><div class="stat-chip-value">' + (d.bookings_today != null ? d.bookings_today : 0) + '</div><div class="stat-chip-label">Сегодня</div></div>';
         html += '<div class="stat-chip"><div class="stat-chip-value">' + (d.avg_check_cents_30d != null ? formatMoney(d.avg_check_cents_30d) : '—') + '</div><div class="stat-chip-label">Средний чек · 30 дн.</div></div>';
         html += '<div class="stat-chip"><div class="stat-chip-value">' + (d.repeat_clients_30d != null ? d.repeat_clients_30d : 0) + '</div><div class="stat-chip-label">Повторных · 30 дн.</div></div>';
+        if (d.repeat_share_30d_pct != null) {
+          html += '<div class="stat-chip"><div class="stat-chip-value">' + d.repeat_share_30d_pct + '%</div><div class="stat-chip-label">Повторы от аудитории</div></div>';
+        } else {
+          html += '<div class="stat-chip"><div class="stat-chip-value">' + (d.unique_clients_30d != null ? d.unique_clients_30d : 0) + '</div><div class="stat-chip-label">Уникальных · 30 дн.</div></div>';
+        }
+        if ((d.client_requests_to_trainer_30d || 0) > 0 && d.lead_response_rate_30d != null) {
+          html += '<div class="stat-chip"><div class="stat-chip-value">' + d.lead_response_rate_30d + '%</div><div class="stat-chip-label">Ответы на заявки</div></div>';
+        }
         html += '</div>';
 
         html += '<div class="kpi-top-grid">';
@@ -959,20 +1131,32 @@
         html += '<div class="kpi-top-card">';
         html += '<div class="kpi-top-label">Месяц</div>';
         html += '<div class="kpi-top-value-row"><div class="kpi-top-value">' + (d.month_total || 0) + '</div>' + renderTrend(d.month_change_pct) + '</div>';
-        html += '<div class="kpi-top-sub">Уникальных клиентов: ' + (d.unique_clients_month || 0) + '</div>';
+        html += '<div class="kpi-top-sub">Уникальных в месяце: ' + (d.unique_clients_month || 0);
+        if (d.unique_clients_30d != null) {
+          html += ' · за 30 дн.: ' + d.unique_clients_30d;
+        }
+        html += '</div>';
         html += '</div></div>';
 
         html += '<div class="section"><div class="section-title">Неделя по дням</div><div class="card">';
-        html += '<div class="chart-bars">';
-        (d.bookings_by_day || []).forEach(function(day) {
-          var pct = Math.max(day.pct || 0, 5);
-          html += '<div class="chart-bar-wrap">';
-          html += '<div class="chart-bar" style="height:' + pct + '%"></div>';
-          html += '<div class="chart-bar-label">' + (day.day_label || '') + '</div>';
-          html += '<div class="chart-bar-value">' + (day.count || 0) + '</div>';
+        var dayRows = d.bookings_by_day || [];
+        var maxDay = 0;
+        dayRows.forEach(function(day) { maxDay = Math.max(maxDay, day.count || 0); });
+        if (!dayRows.length || maxDay === 0) {
+          html += '<div class="empty-chart-msg">Пока нет записей на эту неделю — график заполнится, когда появятся бронирования.</div>';
+        } else {
+          html += '<div class="chart-bars">';
+          dayRows.forEach(function(day) {
+            var pct = Math.max(day.pct || 0, 5);
+            html += '<div class="chart-bar-wrap">';
+            html += '<div class="chart-bar" style="height:' + pct + '%"></div>';
+            html += '<div class="chart-bar-label">' + (day.day_label || '') + '</div>';
+            html += '<div class="chart-bar-value">' + (day.count || 0) + '</div>';
+            html += '</div>';
+          });
           html += '</div>';
-        });
-        html += '</div></div></div>';
+        }
+        html += '</div></div>';
 
         html += renderCoachCard(d);
 
@@ -991,7 +1175,7 @@
           html += '</div>';
         }
 
-        html += '<p class="hint-footer">В «Бухгалтерия» — выручка по неделям и топ с суммами. В «Динамика» — лиды CRM, тренд 6 недель и доля отмен.</p>';
+        html += '<p class="hint-footer">«Бухгалтерия» — календарная выручка и топ. «Динамика» — лиды, тренд 6 недель, загрузка слотов.</p>';
         return html;
       }
 
@@ -1025,13 +1209,33 @@
         html += '<div class="money-panel">';
 
         html += '<div class="money-hero"><div class="money-hero-inner">';
-        html += '<p class="money-hero-kicker">Выручка · 30 дней</p>';
+        html += '<p class="money-hero-kicker">Выручка · скользящие 30 дней</p>';
         html += '<div class="money-hero-value">' + formatMoney(d.revenue_30d_cents) + '</div>';
-        html += '<p class="money-hero-sub">Разовые оплаты, продажи абонементов и сертификатов</p>';
+        html += '<p class="money-hero-sub">Разовые оплаты, продажи абонементов и сертификатов (по дате начисления)</p>';
         html += '</div></div>';
 
+        html += '<div class="money-month-block">';
+        html += '<p class="money-month-kicker">Текущий календарный месяц</p>';
+        html += '<div class="money-month-value-row">';
+        html += '<span class="money-month-value">' + formatMoney(d.revenue_calendar_month_cents != null ? d.revenue_calendar_month_cents : 0) + '</span>';
+        if (d.revenue_month_change_pct != null && d.revenue_month_change_pct !== 0) {
+          html += renderRevenueTrend(d.revenue_month_change_pct).trim();
+        }
+        html += '</div>';
+        html += '<p class="money-month-sub">' + formatMonthTitle(d.month_start) + ' · к прошлому месяцу: ';
+        if (d.revenue_prev_calendar_month_cents != null && d.revenue_prev_calendar_month_cents > 0) {
+          html += '<strong>' + formatMoney(d.revenue_prev_calendar_month_cents) + '</strong>';
+        } else {
+          html += 'нет данных';
+        }
+        html += '</p>';
+        if (d.revenue_month_run_rate_cents != null && d.revenue_month_run_rate_cents > 0) {
+          html += '<p class="money-month-sub">Прогноз к концу месяца при текущем темпе: <strong>' + formatMoney(d.revenue_month_run_rate_cents) + '</strong></p>';
+        }
+        html += '</div>';
+
         html += '<div>';
-        html += '<h2 class="money-section-title">Структура за месяц</h2>';
+        html += '<h2 class="money-section-title">Структура за 30 дней</h2>';
         html += '<div class="money-card">';
         html += '<div class="money-split-track" role="img" aria-label="Доля выручки по потокам за 30 дней">';
         html += '<div class="money-split-seg money-split-seg--sessions" style="width:' + w30[0] + '%"></div>';
@@ -1135,7 +1339,12 @@
         html += '<div class="leads-row">';
         html += '<div class="kpi-card" style="margin:0;"><div class="kpi-label">Заявок вам</div><div class="kpi-value">' + (d.client_requests_to_trainer_30d != null ? d.client_requests_to_trainer_30d : 0) + '</div><div class="kpi-sub">Адресно тренеру</div></div>';
         html += '<div class="kpi-card" style="margin:0;"><div class="kpi-label">Откликов</div><div class="kpi-value">' + (d.client_request_responses_30d != null ? d.client_request_responses_30d : 0) + '</div><div class="kpi-sub">Вы ответили</div></div>';
-        html += '</div></div></div>';
+        html += '</div>';
+        if ((d.client_requests_to_trainer_30d || 0) > 0 && d.lead_response_rate_30d != null) {
+          html += '<div style="margin-top:14px;text-align:center;"><span class="lead-rate-badge">' + d.lead_response_rate_30d + '% ответов</span>';
+          html += '<p class="kpi-sub" style="margin-top:10px;">Доля заявок, по которым был отправлен ответ в CRM</p></div>';
+        }
+        html += '</div></div>';
 
         html += '<div class="section"><div class="section-title">6 недель · занятия</div><div class="card">';
         html += '<div class="trend-bars">';
@@ -1162,6 +1371,11 @@
         html += '<div class="section"><div class="section-title">Качество и поток</div><div class="kpi-grid">';
         html += '<div class="kpi-card"><div class="kpi-label">Новые клиенты</div><div class="kpi-value">' + (d.new_clients_30d || 0) + '</div><div class="kpi-sub">За 30 дней</div></div>';
         html += '<div class="kpi-card"><div class="kpi-label">Повторные · 30 дн.</div><div class="kpi-value">' + (d.repeat_clients_30d != null ? d.repeat_clients_30d : 0) + '</div><div class="kpi-sub">2+ занятий</div></div>';
+        if (d.repeat_share_30d_pct != null) {
+          html += '<div class="kpi-card"><div class="kpi-label">Доля повторных</div><div class="kpi-value">' + d.repeat_share_30d_pct + '%</div><div class="kpi-sub">От уникальных за 30 дн.</div></div>';
+        }
+        html += '<div class="kpi-card"><div class="kpi-label">Занятий · 30 дн.</div><div class="kpi-value">' + (d.bookings_held_30d != null ? d.bookings_held_30d : 0) + '</div><div class="kpi-sub">Без отмен</div></div>';
+        html += '<div class="kpi-card"><div class="kpi-label">Списаний абонемента</div><div class="kpi-value">' + (d.pass_redemptions_30d != null ? d.pass_redemptions_30d : 0) + '</div><div class="kpi-sub">Визиты по абонементу</div></div>';
         html += '<div class="kpi-card"><div class="kpi-label">Отмены</div><div class="kpi-value">' + (d.cancellations_7d != null ? d.cancellations_7d : '0') + '</div><div class="kpi-sub">7 дн. · ' + (d.cancellations_30d != null ? d.cancellations_30d : 0) + ' за 30 дн.</div></div>';
         html += '<div class="kpi-card"><div class="kpi-label">Доля отмен · 30 дн.</div><div class="kpi-value">' + (d.cancel_rate_30d != null ? d.cancel_rate_30d + '%' : '—') + '</div>';
         html += '<div class="cancel-strip" aria-hidden="true"><div class="cancel-strip-fill" style="width:' + (d.cancel_rate_30d != null ? Math.min(100, d.cancel_rate_30d) : 0) + '%"></div></div>';
@@ -1183,7 +1397,10 @@
 
       function renderShell(d) {
         var weekLabel = formatWeekRange(d.week_start_iso || d.week_start, d.week_end_iso || d.week_end);
+        var monthTitle = formatMonthTitle(d.month_start);
+        var periodLine = 'Неделя <strong>' + weekLabel + '</strong> · отчётный месяц: <strong>' + monthTitle + '</strong>';
         return ''
+          + '<p class="stats-period-banner">' + periodLine + '</p>'
           + '<nav class="stats-tabs" role="tablist" aria-label="Разделы аналитики">'
           +   '<button type="button" class="stats-tab-btn" role="tab" id="tab-overview" aria-selected="true" aria-controls="panel-overview" data-tab="overview">Обзор</button>'
           +   '<button type="button" class="stats-tab-btn" role="tab" id="tab-money" aria-selected="false" aria-controls="panel-money" data-tab="money">Бухгалтерия</button>'
@@ -1212,6 +1429,10 @@
             p.classList.toggle('is-active', on);
             if (on) { p.removeAttribute('hidden'); } else { p.setAttribute('hidden', ''); }
           });
+          try {
+            var base = location.pathname + (location.search || '');
+            history.replaceState(null, '', base + (id === 'overview' ? '' : '#' + id));
+          } catch (e) { /* noop */ }
         }
         tabs.forEach(function(btn) {
           btn.addEventListener('click', function() {
@@ -1219,6 +1440,8 @@
             activate(btn.getAttribute('data-tab'));
           });
         });
+        var hash = (typeof location !== 'undefined' && location.hash) ? String(location.hash).replace(/^#/, '') : '';
+        if (hash === 'money' || hash === 'growth') activate(hash);
       }
 
       function renderLoadingSkeleton() {

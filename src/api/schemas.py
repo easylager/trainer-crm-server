@@ -46,7 +46,7 @@ TrainerEducation = Literal[
 class ProfileCreate(BaseModel):
     first_name: str = Field(default="", max_length=LEN_FIRST_LAST)
     last_name: str = Field(default="", max_length=LEN_FIRST_LAST)
-    age: int = Field(default=0, ge=0, le=120)
+    age: int = Field(default=0)
     city_id: int | None = Field(default=None, ge=0)
     experience_years: int | None = Field(default=None, ge=0, le=80)
     description: str | None = Field(default=None, max_length=LEN_DESCRIPTION)
@@ -116,8 +116,6 @@ class ProfilePatch(BaseModel):
             iv = int(v)
         except (TypeError, ValueError):
             raise ValueError("Возраст укажите целым числом.")
-        if iv < 1 or iv > 120:
-            raise ValueError("Возраст: от 1 до 120 лет.")
         return iv
 
     @field_validator("city_id", mode="before")
@@ -184,6 +182,11 @@ class TrainerProfilePatchBody(BaseModel):
     service_ids: list[int] | None = None  # legacy; use services for prices
     services: list[TrainerServiceItem] | None = None
     arena_ids: list[int] | None = None
+    primary_arena_id: int | None = Field(
+        default=None,
+        ge=1,
+        description="Основная площадка для онлайн-записи при выборе «Любая арена» в каталоге.",
+    )
 
 
 class PhotoRegisterBody(BaseModel):

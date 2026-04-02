@@ -153,12 +153,17 @@ class TestGetTrainerSubscriptionStatus:
             started_at,  # started_at
             1,  # billing_period_months
         )
-        
-        mock_session.execute.side_effect = [mock_result1, mock_result2]
+
+        mock_result3 = MagicMock()
+        mock_result3.fetchone.return_value = ("Онлайн-запись",)
+
+        mock_session.execute.side_effect = [mock_result1, mock_result2, mock_result3]
 
         status = await get_trainer_subscription_status(mock_session, trainer_id=1)
         
         assert status["is_active"] is True
+        assert status["is_trial"] is False
+        assert status["tier_name_ru"] == "Онлайн-запись"
         assert status["tier"] == SUBSCRIPTION_TIER_ONLINE
         assert status["effective_tier"] == SUBSCRIPTION_TIER_ONLINE
         assert status["billing_period_months"] == 1

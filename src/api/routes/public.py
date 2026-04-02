@@ -1,7 +1,7 @@
 """Public API (no auth): catalog (cities, services, trainers) and photo serving for client/bot."""
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -98,6 +98,7 @@ async def get_arenas(
 
 @router.get("/trainers")
 async def list_active_trainers(
+    response: Response,
     limit: int = 10,
     offset: int = 0,
     city_id: int | None = None,
@@ -131,6 +132,9 @@ async def list_active_trainers(
     if time_slots_filter is not None and len(time_slots_filter) == 0:
         time_slots_filter = None
 
+    # Trainer names/photos change after moderation — must not be served from browser HTTP cache.
+    response.headers["Cache-Control"] = "no-store"
+
     items, total = await list_active_trainers_for_client(
         session,
         limit=limit,
@@ -163,6 +167,7 @@ async def list_active_trainers(
 @router.get("/trainers/{trainer_id:int}")
 async def get_one_active_trainer(
     trainer_id: int,
+    response: Response,
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     """
@@ -171,6 +176,7 @@ async def get_one_active_trainer(
     Returns `can_book` flag: True if clients can self-book (tier >= online).
     Without online tier, trainer is visible but clients must contact directly.
     """
+    response.headers["Cache-Control"] = "no-store"
     trainer = await get_trainer(session, trainer_id)
     if not trainer or (trainer.get("status") or "").strip().lower() != "active":
         raise HTTPException(status_code=404, detail="Trainer not found")

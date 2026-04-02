@@ -12,8 +12,10 @@
   function applyClientMiniAppTheme() {
     var d = document.documentElement;
     var dark = isAppDark();
-    d.style.setProperty('--tg-theme-button-color', '#f5a623');
-    d.style.setProperty('--tg-theme-button-text-color', '#1a1a1a');
+    d.style.setProperty('--app-cta-fill', '#f5a623', 'important');
+    d.style.setProperty('--app-cta-text', '#1a1a1a', 'important');
+    d.style.setProperty('--tg-theme-button-color', '#f5a623', 'important');
+    d.style.setProperty('--tg-theme-button-text-color', '#1a1a1a', 'important');
     d.style.setProperty('--tg-theme-bg-color', dark ? '#1c1c1c' : '#fffbec');
     d.style.setProperty('--tg-theme-text-color', dark ? '#ffffff' : '#1a1a1a');
     d.style.setProperty('--tg-theme-secondary-bg-color', dark ? '#2c2c2e' : '#fff5e1');

@@ -41,8 +41,8 @@ body {
   cursor: pointer;
 }
 .filter-btn.active {
-  background: var(--tg-theme-button-color);
-  color: var(--tg-theme-button-text-color);
+  background: var(--app-cta-fill);
+  color: var(--app-cta-text);
 }
 
 /* Advanced Filter System */
@@ -142,14 +142,14 @@ body {
 }
 
 .filter-chip:hover {
-  border-color: var(--tg-theme-button-color);
+  border-color: var(--app-cta-fill);
   background: rgba(247, 166, 0, 0.08);
 }
 
 .filter-chip.selected {
-  background: var(--tg-theme-button-color);
-  color: var(--tg-theme-button-text-color);
-  border-color: var(--tg-theme-button-color);
+  background: var(--app-cta-fill);
+  color: var(--app-cta-text);
+  border-color: var(--app-cta-fill);
 }
 
 .filter-range {
@@ -171,7 +171,7 @@ body {
 
 .filter-range input:focus {
   outline: none;
-  border-color: var(--tg-theme-button-color);
+  border-color: var(--app-cta-fill);
 }
 
 .filter-presets {
@@ -186,17 +186,17 @@ body {
   border-radius: 20px;
   border: none;
   font-size: 13px;
-  background: linear-gradient(135deg, var(--tg-theme-button-color) 0%, #e6941f 100%);
-  color: var(--tg-theme-button-text-color);
+  background: var(--app-cta-fill);
+  color: var(--app-cta-text);
   cursor: pointer;
   font-weight: 500;
   transition: all 0.15s ease;
-  box-shadow: 0 2px 8px rgba(247, 166, 0, 0.2);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .filter-preset:hover {
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(247, 166, 0, 0.3);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.14);
 }
 
 .filter-preset:active {
@@ -216,7 +216,7 @@ body {
 .filter-clear {
   background: none;
   border: none;
-  color: var(--tg-theme-button-color);
+  color: var(--app-cta-fill);
   font-size: 13px;
   cursor: pointer;
   text-decoration: underline;
@@ -420,9 +420,9 @@ body {
   font-size: 17px;
   font-weight: 700;
   letter-spacing: 0.02em;
-  color: #1a1a1a;
-  background: linear-gradient(145deg, #ffc23d 0%, #f7a600 55%, #e89400 100%);
-  box-shadow: 0 4px 16px rgba(247, 166, 0, 0.4);
+  color: var(--app-cta-text);
+  background: var(--app-cta-fill);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
 }
 .bd-client-body { flex: 1; min-width: 0; }
 .bd-client-name {
@@ -436,7 +436,7 @@ body {
   margin-top: 6px;
   font-size: 15px;
   font-weight: 500;
-  color: var(--tg-theme-button-color);
+  color: var(--app-cta-fill);
   text-decoration: none;
   letter-spacing: 0.02em;
 }
@@ -469,7 +469,7 @@ body {
   height: 22px;
   flex-shrink: 0;
   margin-top: 1px;
-  color: #f7a600;
+  color: var(--app-cta-fill);
   opacity: 0.92;
 }
 .bd-row-text { flex: 1; min-width: 0; }
@@ -499,13 +499,13 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
+  gap: var(--app-btn-icon-gap);
   width: 100%;
-  padding: 14px 18px;
-  border-radius: 14px;
+  padding: var(--app-btn-padding);
+  border-radius: var(--app-btn-radius);
   border: none;
-  font-size: 15px;
-  font-weight: 600;
+  font-size: var(--app-btn-font-size);
+  font-weight: var(--app-btn-font-weight);
   font-family: inherit;
   cursor: pointer;
   text-align: center;
@@ -515,43 +515,52 @@ body {
 }
 .bd-btn:active { transform: scale(0.985); opacity: 0.92; }
 .bd-btn svg { width: 20px; height: 20px; flex-shrink: 0; }
+/* Primary: янтарная заливка, одна нейтральная тень */
 .bd-btn--primary {
-  background: linear-gradient(180deg, #ffc23d 0%, #f0a000 100%);
-  color: #141414;
-  box-shadow: 0 6px 20px rgba(247, 166, 0, 0.38);
+  background: var(--app-cta-fill);
+  color: var(--app-cta-text);
+  box-shadow: var(--app-btn-shadow-cta);
 }
-.bd-btn--primary:active { box-shadow: 0 3px 12px rgba(247, 166, 0, 0.28); }
+.bd-btn--primary:active { box-shadow: var(--app-btn-shadow-surface); }
+/* Secondary: контур, без тени */
+.bd-btn--secondary {
+  background: transparent;
+  color: var(--app-cta-fill);
+  border: 2px solid rgba(245, 166, 35, 0.42);
+  box-shadow: none;
+}
+.bd-btn--secondary:active { opacity: 0.92; }
+/* Tertiary / surface: карта, копировать, «написать» — одна поверхность */
+.bd-btn--surface,
 .bd-btn--message {
-  background: linear-gradient(180deg, #2d2d2d 0%, #1a1a1a 100%);
-  color: #f5f5f5;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
-}
-@media (prefers-color-scheme: light) {
-  .bd-btn--message {
-    background: linear-gradient(180deg, #2a2a2a 0%, #1f1f1f 100%);
-    color: #fafafa;
-  }
+  background: var(--tg-theme-secondary-bg-color);
+  color: var(--tg-theme-text-color);
+  border: 1px solid rgba(128, 128, 128, 0.14);
+  box-shadow: var(--app-btn-shadow-surface);
 }
 .bd-btn--outline-danger {
   background: transparent;
   border: 1.5px solid rgba(255, 59, 48, 0.5);
   color: #ff453a;
+  box-shadow: none;
 }
+/* Мягкий акцент (регулярность и т.п.): тот же объём, что у surface */
 .bd-btn--soft {
-  background: rgba(247, 166, 0, 0.12);
+  background: rgba(247, 166, 0, 0.1);
   color: var(--tg-theme-text-color);
   border: 1px solid rgba(247, 166, 0, 0.22);
+  box-shadow: var(--app-btn-shadow-surface);
 }
 .bd-btn--confirm {
   background: linear-gradient(180deg, #3dd68c 0%, #34c759 100%);
   color: #0a2e16;
-  box-shadow: 0 6px 20px rgba(52, 199, 89, 0.35);
+  box-shadow: var(--app-btn-shadow-cta);
 }
 .bd-btn--decline {
   background: transparent;
   border: 1.5px solid rgba(255, 59, 48, 0.45);
   color: #ff453a;
+  box-shadow: none;
 }
 .btn-row { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
 .btn-row button, .btn-row a.btn-tg {
@@ -568,73 +577,232 @@ body {
   display: inline-block;
   box-sizing: border-box;
 }
-/* Client catalog + заявки: тот же CTA, что в карточке тренера (градиент + вторичная с обводкой) */
+
+/*
+ * Единая система больших кнопок (мини-приложения):
+ * 1) .btn-primary — главное действие (заливка янтарь, --app-cta-fill)
+ * 2) .btn-secondary — контур янтарь («Оставить заявку», вторичный CTA)
+ * 3) .btn-outline-danger — деструктивное outline; .btn-danger — мягкая заливка (модалки/мелкие)
+ * 4) .btn-message / .bd-btn--surface — третичные (карта, копировать, написать); .btn-soft — мягкий акцент; .btn-neutral — нейтральная
+ * Вертикальный стек: .btn-stack или gap: var(--app-btn-stack-gap). На всю ширину: .btn-block.
+ * Деталь записи: алиасы .bd-btn--* — см. ниже.
+ */
+.btn-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-btn-stack-gap);
+  width: 100%;
+}
+button.btn-primary,
+button.btn-secondary,
+button.btn-soft,
+button.btn-neutral,
+button.btn-message,
+button.btn-outline-danger,
+button.btn-danger,
+a.btn-primary,
+a.btn-secondary {
+  -webkit-tap-highlight-color: transparent;
+}
+.btn-block {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--app-btn-icon-gap);
+  box-sizing: border-box;
+}
+/* Primary CTA: solid brand (без многоступенчатого градиента — конституция) */
 .btn-primary {
-  display: inline-block;
-  padding: 16px 20px;
-  border-radius: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--app-btn-icon-gap);
+  padding: var(--app-btn-padding);
+  border-radius: var(--app-btn-radius);
   border: none;
-  font-size: 16px;
-  font-weight: 600;
+  font-size: var(--app-btn-font-size);
+  font-weight: var(--app-btn-font-weight);
   font-family: inherit;
   cursor: pointer;
   text-align: center;
   box-sizing: border-box;
   text-decoration: none;
-  background: linear-gradient(135deg, var(--tg-theme-button-color) 0%, #e89400 100%);
-  color: var(--tg-theme-button-text-color);
-  box-shadow: 0 8px 24px rgba(245, 166, 35, 0.35);
-  transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.3s ease, opacity 0.2s ease;
-  position: relative;
-  overflow: hidden;
+  background: var(--app-cta-fill);
+  color: var(--app-cta-text);
+  box-shadow: var(--app-btn-shadow-cta);
+  transition: transform 0.12s ease, box-shadow 0.12s ease, opacity 0.12s ease;
 }
-.btn-primary::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: -100%;
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
-  transition: left 0.5s ease;
-}
-.btn-primary:hover::before { left: 100%; }
 .btn-primary:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 12px 32px rgba(245, 166, 35, 0.45);
+  opacity: 0.97;
 }
 .btn-primary:active {
-  transform: translateY(0);
-  box-shadow: 0 4px 16px rgba(245, 166, 35, 0.28);
+  transform: scale(0.985);
+  box-shadow: var(--app-btn-shadow-surface);
+  opacity: 1;
 }
+.btn-primary:disabled {
+  background: var(--tg-theme-secondary-bg-color);
+  color: var(--tg-theme-hint-color);
+  box-shadow: none;
+  opacity: 0.65;
+  cursor: not-allowed;
+  transform: none;
+}
+.btn-primary svg { width: 20px; height: 20px; flex-shrink: 0; }
+/* Secondary: outline accent (как «Оставить заявку» в каталоге) */
 .btn-secondary {
-  display: inline-block;
-  padding: 14px 20px;
-  border-radius: 16px;
-  font-size: 16px;
-  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--app-btn-icon-gap);
+  padding: var(--app-btn-padding);
+  border-radius: var(--app-btn-radius);
+  font-size: var(--app-btn-font-size);
+  font-weight: var(--app-btn-font-weight);
+  font-family: inherit;
+  cursor: pointer;
+  text-align: center;
+  box-sizing: border-box;
+  text-decoration: none;
+  background: transparent;
+  color: var(--app-cta-fill);
+  border: 2px solid rgba(245, 166, 35, 0.42);
+  box-shadow: none;
+  transition: background 0.12s ease, border-color 0.12s ease, transform 0.12s ease, opacity 0.12s ease;
+}
+.btn-secondary:hover {
+  background: rgba(245, 166, 35, 0.08);
+  border-color: var(--app-cta-fill);
+}
+.btn-secondary:active {
+  transform: scale(0.985);
+  opacity: 0.9;
+}
+.btn-secondary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+}
+.btn-secondary svg { width: 20px; height: 20px; flex-shrink: 0; }
+/* Soft: спокойная янтарная подложка (второй акцент без контура) */
+.btn-soft {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--app-btn-icon-gap);
+  padding: var(--app-btn-padding);
+  border-radius: var(--app-btn-radius);
+  font-size: var(--app-btn-font-size);
+  font-weight: var(--app-btn-font-weight);
+  font-family: inherit;
+  cursor: pointer;
+  text-align: center;
+  box-sizing: border-box;
+  border: 1px solid rgba(247, 166, 0, 0.22);
+  background: rgba(247, 166, 0, 0.1);
+  color: var(--tg-theme-text-color);
+  box-shadow: var(--app-btn-shadow-surface);
+  transition: transform 0.12s ease, opacity 0.12s ease;
+}
+.btn-soft:active { transform: scale(0.985); opacity: 0.92; }
+/* Message — тот же tertiary, что .bd-btn--surface */
+.btn-message {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--app-btn-icon-gap);
+  width: 100%;
+  padding: var(--app-btn-padding);
+  border-radius: var(--app-btn-radius);
+  font-size: var(--app-btn-font-size);
+  font-weight: var(--app-btn-font-weight);
+  font-family: inherit;
+  cursor: pointer;
+  text-align: center;
+  text-decoration: none;
+  box-sizing: border-box;
+  background: var(--tg-theme-secondary-bg-color);
+  color: var(--tg-theme-text-color);
+  border: 1px solid rgba(128, 128, 128, 0.14);
+  box-shadow: var(--app-btn-shadow-surface);
+  transition: transform 0.12s ease, opacity 0.12s ease;
+}
+.btn-message:active { transform: scale(0.985); opacity: 0.92; }
+/* Destructive: outline (отмена) */
+.btn-outline-danger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--app-btn-icon-gap);
+  padding: var(--app-btn-padding);
+  border-radius: var(--app-btn-radius);
+  font-size: var(--app-btn-font-size);
+  font-weight: var(--app-btn-font-weight);
   font-family: inherit;
   cursor: pointer;
   text-align: center;
   box-sizing: border-box;
   background: transparent;
-  color: var(--tg-theme-button-color);
-  border: 2px solid rgba(245, 166, 35, 0.35);
-  transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease, opacity 0.2s ease;
+  border: 1.5px solid rgba(255, 59, 48, 0.5);
+  color: #ff453a;
+  box-shadow: none;
+  transition: transform 0.12s ease, opacity 0.12s ease;
 }
-.btn-secondary:hover {
-  background: rgba(245, 166, 35, 0.1);
-  border-color: var(--tg-theme-button-color);
-  transform: translateY(-1px);
+.btn-outline-danger:active { transform: scale(0.985); opacity: 0.92; }
+.btn-block.btn-outline-danger { width: 100%; }
+/* Destructive: мягкая заливка (например «Отклонить» в заявках) */
+.btn-danger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--app-btn-icon-gap);
+  font-family: inherit;
+  font-weight: var(--app-btn-font-weight);
+  cursor: pointer;
+  box-sizing: border-box;
+  background: rgba(255, 59, 48, 0.14);
+  color: var(--app-danger);
+  border: 1px solid rgba(255, 59, 48, 0.28);
+  transition: transform 0.12s ease, opacity 0.12s ease;
 }
-.btn-secondary:active {
-  transform: translateY(0);
-  opacity: 0.85;
+.btn-danger.btn-block {
+  width: 100%;
+  padding: var(--app-btn-padding);
+  border-radius: var(--app-btn-radius);
+  font-size: var(--app-btn-font-size);
 }
-.btn-danger { background: rgba(255, 59, 48, 0.2); color: #ff3b30; }
-#modalCancel .modal .actions button {
-  background: linear-gradient(135deg, var(--tg-theme-button-color) 0%, #e89400 100%);
-  color: var(--tg-theme-button-text-color);
+.btn-danger:not(.btn-block) {
+  padding: 12px;
+  border-radius: 10px;
+  font-size: 14px;
+}
+.btn-danger:active { transform: scale(0.985); opacity: 0.92; }
+/* Нейтральная кнопка — тот же surface, что и tertiary CTA */
+.btn-neutral {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--app-btn-icon-gap);
+  padding: var(--app-btn-padding);
+  border-radius: var(--app-btn-radius);
+  font-size: var(--app-btn-font-size);
+  font-weight: var(--app-btn-font-weight);
+  font-family: inherit;
+  cursor: pointer;
+  background: var(--tg-theme-secondary-bg-color);
+  color: var(--tg-theme-text-color);
+  border: 1px solid rgba(128, 128, 128, 0.14);
+  box-shadow: var(--app-btn-shadow-surface);
+  transition: border-color 0.15s ease, transform 0.12s ease, opacity 0.12s ease;
+}
+.btn-neutral svg { width: 20px; height: 20px; flex-shrink: 0; }
+.btn-neutral:hover { border-color: rgba(247, 166, 0, 0.22); }
+.btn-neutral:active { transform: scale(0.985); opacity: 0.92; }
+.modal .actions .btn-primary {
+  background: var(--app-cta-fill);
+  color: var(--app-cta-text);
+  border: none;
 }
 .back-link {
   display: inline-flex;
@@ -672,7 +840,7 @@ body {
 .decline-screen .screen-title { font-size: 18px; font-weight: 600; margin-bottom: 8px; }
 .decline-screen .screen-hint { font-size: 14px; color: var(--tg-theme-hint-color); margin-bottom: 16px; }
 .decline-screen .card-wrap { background: #FFF3CC !important; border-radius: 12px; padding: 16px; margin-bottom: 20px; }
-.decline-screen .btn-primary { width: 100%; padding: 14px; border-radius: 12px; font-size: 16px; margin-bottom: 12px; border: none; cursor: pointer; font-weight: 600; }
+.decline-screen .btn-primary { width: 100%; margin-bottom: 12px; }
 .modal-overlay {
   position: fixed;
   inset: 0;
@@ -695,6 +863,50 @@ body {
 .modal h3 { margin: 0 0 12px; font-size: 17px; }
 .modal .actions { display: flex; gap: 8px; margin-top: 16px; }
 .modal .actions button { flex: 1; padding: 12px; border-radius: 10px; border: none; font-weight: 600; cursor: pointer; }
+
+/* showAppConfirm (mini-app-confirm.js) — native confirm() is unthemable (system blue OK) */
+.modal-overlay.app-confirm-overlay {
+  align-items: center;
+  justify-content: center;
+  z-index: 10050;
+}
+.app-confirm-modal .app-confirm-message {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.45;
+  color: var(--tg-theme-text-color);
+}
+.app-confirm-modal .app-confirm-title:not([hidden]) {
+  display: block;
+  margin: 0 0 10px;
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--tg-theme-text-color);
+}
+.app-confirm-modal .app-confirm-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 20px;
+}
+.app-confirm-modal .app-confirm-actions .btn-block {
+  flex: 1;
+  min-width: 0;
+}
+/*
+ * Lock brand CTA on OK — Telegram themeParams often re-inject blue on .btn-primary.
+ * Native window.confirm() cannot be themed; only this in-app dialog.
+ */
+.app-confirm-modal .app-confirm-actions .app-confirm-ok {
+  background: var(--app-cta-fill) !important;
+  color: var(--app-cta-text) !important;
+  border: none !important;
+  box-shadow: var(--app-btn-shadow-cta) !important;
+}
+.app-confirm-modal .app-confirm-actions .btn-secondary {
+  background: transparent !important;
+  color: var(--app-cta-fill) !important;
+  border: 2px solid rgba(245, 166, 35, 0.42) !important;
+}
 /* Single visible screen — avoids layout “tearing” when toggling views in WebView */
 [data-screen] { display: none !important; width: 100%; }
 [data-screen].active { display: block !important; }
@@ -702,5 +914,5 @@ body {
 /* Палитра из theme.css — не дублируйте hex здесь */
 body { background: var(--tg-theme-bg-color) !important; color: var(--tg-theme-text-color) !important; }
 .filter-btn, .week-nav button, .slot-card { background: var(--tg-theme-secondary-bg-color) !important; color: var(--tg-theme-text-color) !important; }
-.filter-btn.active { background: var(--tg-theme-button-color) !important; color: var(--tg-theme-button-text-color) !important; }
+.filter-btn.active { background: var(--app-cta-fill) !important; color: var(--app-cta-text) !important; }
   

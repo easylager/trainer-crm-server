@@ -20,12 +20,16 @@
   --tg-theme-button-text-color: #1a1a1a;
   --tg-theme-secondary-bg-color: #fff5e1;
 
+  /* Brand CTA (янтарь) — не подменяется themeParams Telegram; кнопки/ссылки/фокус в мини-приложении */
+  --app-cta-fill: #f5a623;
+  --app-cta-text: #1a1a1a;
+
   --app-bg: var(--tg-theme-bg-color);
   --app-text: var(--tg-theme-text-color);
   --app-surface: var(--tg-theme-secondary-bg-color);
   --app-muted: var(--tg-theme-hint-color);
-  --app-accent: var(--tg-theme-button-color);
-  --app-accent-text: var(--tg-theme-button-text-color);
+  --app-accent: var(--app-cta-fill);
+  --app-accent-text: var(--app-cta-text);
   --app-danger: #ff3b30;
   --app-success: #34c759;
   /* Неактивные чипы / вторичные плашки (как «Свободны» / «Заняты» в расписании) */
@@ -33,8 +37,19 @@
   --app-chip-text: var(--tg-theme-text-color);
   --app-radius-sm: 8px;
   --app-radius-md: 12px;
+  /* Full-width CTA (мини-приложения): один размер для .btn-* и .bd-btn */
+  --app-btn-radius: 14px;
+  --app-btn-padding: 14px 18px;
+  --app-btn-font-size: 16px;
+  --app-btn-font-weight: 600;
+  --app-btn-icon-gap: 10px;
+  --app-btn-stack-gap: 10px;
+  /* CTA: одна нейтральная «подъёмность», без цветного ореола */
+  --app-btn-shadow-cta: 0 2px 10px rgba(0, 0, 0, 0.1);
+  /* Поверхностные действия (карта, копировать, написать): та же логика тени везде */
+  --app-btn-shadow-surface: 0 1px 3px rgba(0, 0, 0, 0.06);
   --app-font-sans: 'DM Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  accent-color: var(--tg-theme-button-color);
+  accent-color: var(--app-cta-fill);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -49,6 +64,8 @@
 
     --app-chip-bg: #3c3c3e;
     --app-chip-text: #f5f5f5;
+    --app-btn-shadow-cta: 0 2px 14px rgba(0, 0, 0, 0.4);
+    --app-btn-shadow-surface: 0 1px 4px rgba(0, 0, 0, 0.28);
   }
 }
 
@@ -63,20 +80,20 @@ html {
 }
 
 :focus-visible {
-  outline: 2px solid var(--tg-theme-button-color);
+  outline: 2px solid var(--app-cta-fill);
   outline-offset: 2px;
 }
 
 a {
-  color: var(--tg-theme-button-color);
+  color: var(--app-cta-fill);
 }
 
 a:visited {
-  color: var(--tg-theme-button-color);
+  color: var(--app-cta-fill);
 }
 
 input,
 textarea,
 select {
-  caret-color: var(--tg-theme-button-color);
+  caret-color: var(--app-cta-fill);
 }

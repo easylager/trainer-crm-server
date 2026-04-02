@@ -212,6 +212,15 @@ def webapp_trainer_profile_page():
     return _webapp_file_response(path)
 
 
+@app.get("/webapp/trainer-faq")
+def webapp_trainer_faq_page():
+    """Trainer FAQ Mini App: частые вопросы и ответы в едином визуальном стиле CRM."""
+    path = _WEBAPP_DIR / "trainer-faq.html"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Web App not found")
+    return _webapp_file_response(path)
+
+
 @app.get("/webapp/trainer-profile.html")
 def webapp_trainer_profile_html_alias():
     """Bookmark/typo alias: canonical URL has no .html (same file as /webapp/trainer-profile)."""

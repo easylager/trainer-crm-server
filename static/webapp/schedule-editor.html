@@ -7,6 +7,7 @@
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <link rel="stylesheet" href="theme.css" />
   <link rel="stylesheet" href="mini-app-components.css" />
+  <script src="mini-app-confirm.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet" />
@@ -91,8 +92,8 @@
     /* .btn-primary / .btn-secondary — mini-app-components.css */
     .btn-outline {
       background: transparent !important;
-      color: #F7A600 !important;
-      border: 2px solid #F7A600 !important;
+      color: var(--app-cta-fill) !important;
+      border: 2px solid var(--app-cta-fill) !important;
     }
     .day-block { margin-bottom: 20px; }
     .day-title {
@@ -123,6 +124,13 @@
       cursor: pointer;
       border-color: rgba(247, 166, 0, 0.45);
     }
+    /* Booking lifecycle: pending = needs trainer confirm; confirmed = settled (scan green vs amber) */
+    .slot-row.slot-booked-click.slot-booking-pending {
+      border-color: rgba(255, 159, 10, 0.55);
+    }
+    .slot-row.slot-booked-click.slot-booking-confirmed {
+      border-color: rgba(52, 199, 89, 0.45);
+    }
     .slot-row.slot-booked-click:active { opacity: 0.92; }
     .slot-row .slot-meta { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
     .slot-status {
@@ -132,6 +140,14 @@
     }
     .slot-status.available { background: rgba(52, 199, 89, 0.2); color: #34c759; }
     .slot-status.booked { background: rgba(255, 149, 0, 0.2); color: #ff9500; }
+    .slot-status.booked-confirmed {
+      background: rgba(52, 199, 89, 0.2);
+      color: #34c759;
+    }
+    .slot-status.booked-pending {
+      background: rgba(255, 159, 10, 0.22);
+      color: #ff9500;
+    }
     .slot-status.cancelled { background: rgba(142, 142, 147, 0.2); color: var(--tg-theme-hint-color); }
     .btn-slot-del {
       width: 32px;
@@ -418,14 +434,16 @@
     }
     .book-new-client .input:last-of-type { margin-bottom: 14px; }
     .book-new-client .input::placeholder { color: var(--tg-theme-hint-color); opacity: 0.9; }
+    .book-phone-hint {
+      font-size: 12px;
+      line-height: 1.35;
+      color: var(--tg-theme-hint-color);
+      margin: -2px 0 10px;
+    }
     .book-new-client .btn-primary {
       margin-top: 4px !important;
-      padding: 15px 16px !important;
-      border-radius: 16px !important;
-      font-size: 15px !important;
       font-weight: 700 !important;
       letter-spacing: -0.01em;
-      box-shadow: 0 4px 14px -4px rgba(247, 166, 0, 0.65);
     }
     .book-confirm-title {
       position: relative;
@@ -493,9 +511,9 @@
       min-width: 52px;
     }
     .hour-chip.selected {
-      border-color: #F7A600 !important;
-      background: rgba(247, 166, 0, 0.2) !important;
-      color: #F7A600 !important;
+      border-color: var(--app-cta-fill) !important;
+      background: color-mix(in srgb, var(--app-cta-fill) 22%, transparent) !important;
+      color: var(--app-cta-fill) !important;
     }
     .hour-chip.locked { opacity: 0.7; cursor: not-allowed; }
     .edit-actions { display: flex; gap: 10px; margin-top: 8px; }
@@ -629,7 +647,7 @@
       color: #1a1a1a !important;
       cursor: pointer;
     }
-    .filter-btn.active { background: #F7A600 !important; color: #1a1a1a !important; }
+    .filter-btn.active { background: var(--app-cta-fill) !important; color: var(--app-cta-text) !important; }
     .detail-block { margin-bottom: 16px; }
     .detail-label { font-size: 12px; color: var(--tg-theme-hint-color); margin-bottom: 4px; text-transform: uppercase; }
     .detail-value { font-size: 15px; }
@@ -714,9 +732,9 @@
       font-size: 17px;
       font-weight: 700;
       letter-spacing: 0.02em;
-      color: #1a1a1a;
-      background: linear-gradient(145deg, #ffc23d 0%, #f7a600 55%, #e89400 100%);
-      box-shadow: 0 4px 16px rgba(247, 166, 0, 0.4);
+      color: var(--app-cta-text);
+      background: var(--app-cta-fill);
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
     }
     .bd-client-body { flex: 1; min-width: 0; }
     .bd-client-name {
@@ -730,7 +748,7 @@
       margin-top: 6px;
       font-size: 15px;
       font-weight: 500;
-      color: var(--tg-theme-button-color);
+      color: var(--app-cta-fill);
       text-decoration: none;
       letter-spacing: 0.02em;
     }
@@ -763,7 +781,7 @@
       height: 22px;
       flex-shrink: 0;
       margin-top: 1px;
-      color: #f7a600;
+      color: var(--app-cta-fill);
       opacity: 0.92;
     }
     .bd-row-text { flex: 1; min-width: 0; }
@@ -785,61 +803,9 @@
     .bd-actions-wrap {
       display: flex;
       flex-direction: column;
-      gap: 10px;
+      gap: var(--app-btn-stack-gap);
       margin-top: 18px;
       margin-bottom: 6px;
-    }
-    .bd-btn {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 10px;
-      width: 100%;
-      padding: 14px 18px;
-      border-radius: 14px;
-      border: none;
-      font-size: 15px;
-      font-weight: 600;
-      font-family: inherit;
-      cursor: pointer;
-      text-align: center;
-      text-decoration: none;
-      box-sizing: border-box;
-      transition: transform 0.12s ease, box-shadow 0.12s ease, opacity 0.12s ease;
-    }
-    .bd-btn:active { transform: scale(0.985); opacity: 0.92; }
-    .bd-btn svg { width: 20px; height: 20px; flex-shrink: 0; }
-    .bd-btn--message {
-      background: linear-gradient(180deg, #2d2d2d 0%, #1a1a1a 100%);
-      color: #f5f5f5;
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
-    }
-    @media (prefers-color-scheme: light) {
-      .bd-btn--message {
-        background: linear-gradient(180deg, #2a2a2a 0%, #1f1f1f 100%);
-        color: #fafafa;
-      }
-    }
-    .bd-btn--outline-danger {
-      background: transparent;
-      border: 1.5px solid rgba(255, 59, 48, 0.5);
-      color: #ff453a;
-    }
-    .bd-btn--soft {
-      background: rgba(247, 166, 0, 0.12);
-      color: var(--tg-theme-text-color);
-      border: 1px solid rgba(247, 166, 0, 0.22);
-    }
-    .bd-btn--confirm {
-      background: linear-gradient(180deg, #3dd68c 0%, #34c759 100%);
-      color: #0a2e16;
-      box-shadow: 0 6px 20px rgba(52, 199, 89, 0.35);
-    }
-    .bd-btn--decline {
-      background: transparent;
-      border: 1.5px solid rgba(255, 59, 48, 0.45);
-      color: #ff453a;
     }
     .btn-row { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
     .btn-row button, .btn-row a.btn-tg {
@@ -876,13 +842,28 @@
       box-sizing: border-box;
     }
     #modalBookingCancel .modal .actions { display: flex; gap: 8px; margin-top: 16px; }
-    #modalBookingCancel .modal .actions button { flex: 1; padding: 12px; border-radius: 10px; border: none; font-weight: 600; cursor: pointer; background: #F7A600 !important; color: #1a1a1a !important; }
+    #modalBookingCancel .modal .actions button { flex: 1; padding: 12px; border-radius: 10px; border: none; font-weight: 600; cursor: pointer; background: var(--app-cta-fill) !important; color: var(--app-cta-text) !important; }
     .no-bot { font-size: 11px; color: var(--tg-theme-hint-color, #666); font-style: italic; margin-left: 4px; }
   </style>
 </head>
 <body>
   <script>
-  (function(){var d=document.documentElement;d.style.setProperty('--tg-theme-button-color','#F7A600');d.style.setProperty('--tg-theme-button-text-color','#1a1a1a');d.style.setProperty('--tg-theme-bg-color',window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'#1a1a1a':'#FFFBEB');d.style.setProperty('--tg-theme-text-color',window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'#f5f5f5':'#1a1a1a');d.style.setProperty('--tg-theme-secondary-bg-color',window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'#2a2a2a':'#FFF3CC');})();
+  (function(){
+    window.__applyScheduleEditorTheme = function() {
+      var d = document.documentElement;
+      var tg = window.Telegram && window.Telegram.WebApp;
+      var dark = tg && tg.colorScheme ? tg.colorScheme === 'dark' : (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+      d.style.setProperty('--app-cta-fill', '#f5a623', 'important');
+      d.style.setProperty('--app-cta-text', '#1a1a1a', 'important');
+      d.style.setProperty('--tg-theme-button-color', '#f5a623', 'important');
+      d.style.setProperty('--tg-theme-button-text-color', '#1a1a1a', 'important');
+      d.style.setProperty('--tg-theme-bg-color', dark ? '#1a1a1a' : '#fffbec', 'important');
+      d.style.setProperty('--tg-theme-text-color', dark ? '#f5f5f5' : '#1a1a1a', 'important');
+      d.style.setProperty('--tg-theme-secondary-bg-color', dark ? '#2a2a2a' : '#fff3cc', 'important');
+      d.style.setProperty('--tg-theme-hint-color', dark ? '#8e8e93' : '#666666', 'important');
+    };
+    window.__applyScheduleEditorTheme();
+  })();
   </script>
   <div id="screenMain" data-screen class="active">
   <div class="header">
@@ -907,7 +888,6 @@
     <div class="action-bar">
       <button type="button" class="btn-block btn-outline" id="btnAddSlots">➕ Добавить слоты на день</button>
     </div>
-    <p style="font-size:12px;color:var(--tg-theme-hint-color);margin:-4px 0 10px;line-height:1.4;">Применённое расписание и записи. Тап по занятому слоту — детали и действия.</p>
     <div id="calendarContent"></div>
   </div>
 
@@ -939,7 +919,7 @@
         <textarea id="declineCommentBooking" placeholder="Например: нет свободного времени в этот день"></textarea>
       </div>
     </div>
-    <button type="button" class="btn-primary" id="btnDeclineSubmitBooking">Отклонить запись</button>
+    <button type="button" class="btn-block btn-primary" id="btnDeclineSubmitBooking">Отклонить запись</button>
     <button type="button" class="back-link" id="backFromDeclineBooking">
       <svg class="back-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
       Назад к записи
@@ -1020,6 +1000,11 @@
           <label class="book-field-label" for="bookServiceSelect">Услуга</label>
           <select id="bookServiceSelect" class="input book-service-select"></select>
         </div>
+        <div class="book-field-stack" id="bookArenaWrap" style="display:none;">
+          <label class="book-field-label" for="bookArenaSelect">Площадка</label>
+          <select id="bookArenaSelect" class="input book-service-select"></select>
+          <p class="book-phone-hint" id="bookArenaTrainerHint" style="display:none;">Онлайн-запись клиента в каталоге — только на основную площадку; здесь вы можете указать любую площадку из профиля.</p>
+        </div>
         <div class="book-field-stack">
           <label class="book-field-label" for="bookClientSearch">Поиск по имени или телефону</label>
           <input type="text" id="bookClientSearch" class="input book-search-input" placeholder="Имя или телефон...">
@@ -1035,10 +1020,15 @@
           <label class="book-field-label" for="bookServiceSelectNew">Услуга</label>
           <select id="bookServiceSelectNew" class="input book-service-select"></select>
         </div>
+        <div class="book-field-stack" id="bookArenaWrapNew" style="display:none;">
+          <label class="book-field-label" for="bookArenaSelectNew">Площадка</label>
+          <select id="bookArenaSelectNew" class="input book-service-select"></select>
+        </div>
         <div class="book-modal-divider">
           <div class="label">Новый клиент</div>
           <div class="book-new-client">
-            <input type="tel" id="bookNewPhone" class="input" placeholder="Телефон *" autocomplete="tel">
+            <input type="tel" id="bookNewPhone" class="input" placeholder="+375 29 123 45 67" autocomplete="tel" inputmode="tel" maxlength="32">
+            <p class="book-phone-hint">Номер в формате +375 XX XXX XX XX</p>
             <input type="text" id="bookNewFirstName" class="input" placeholder="Имя" autocomplete="given-name">
             <input type="text" id="bookNewLastName" class="input" placeholder="Фамилия" autocomplete="family-name">
             <button type="button" class="btn-block btn-primary" id="bookNewSubmit">Добавить и записать</button>
@@ -1065,6 +1055,10 @@
     (function() {
       const tg = window.Telegram && window.Telegram.WebApp;
       if (tg) { tg.ready(); tg.expand(); }
+      if (typeof window.__applyScheduleEditorTheme === 'function') window.__applyScheduleEditorTheme();
+      if (tg && typeof tg.onEvent === 'function') {
+        try { tg.onEvent('themeChanged', window.__applyScheduleEditorTheme); } catch (e) { /* older clients */ }
+      }
 
       const DAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 
@@ -1072,7 +1066,12 @@
         service: '<svg class="bd-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><path d="M3.27 6.96L12 12.01l8.73-5.05"/></svg>',
         session: '<svg class="bd-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/></svg>',
         comment: '<svg class="bd-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>',
-        send: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>'
+        send: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>',
+        check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',
+        xCircle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>',
+        cancelOutline: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>',
+        userPlus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>',
+        linkOff: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M10 13a5 5 0 0 1 7.54.54 3 3 0 0 0 1.3 1.38"/><path d="M14 11a5 5 0 0 1 4.95 5.47"/><path d="M16 16a5 5 0 0 1-4.95 5"/><path d="M2 2l20 20"/><path d="M7.7 7.7A4 4 0 0 0 6 11c0 1.22.52 2.33 1.36 3.11"/><path d="M8.6 8.6A4 4 0 0 1 12 8a4 4 0 0 1 3.17 6.27"/></svg>'
       };
 
       function bookingInitials(displayName) {
@@ -1085,6 +1084,28 @@
       }
       const MONTHS = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
       const MONTHS_GENITIVE = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
+
+      /** Belarus E.164; aligned with `src.shared.profile_phone` and trainer-profile.html */
+      var PHONE_MAX_LEN = 32;
+      var PHONE_BY_RE = /^\+375\d{9}$/;
+      var PHONE_BY_ERR = 'Укажите корректный номер телефона.';
+      function normalizePhoneClient(s) {
+        var raw = String(s || '').trim();
+        if (!raw) return '';
+        var d = raw.replace(/\D/g, '');
+        if (!d) return raw.slice(0, PHONE_MAX_LEN);
+        if (d.length === 12 && d.indexOf('375') === 0) return '+' + d;
+        if (d.length === 11 && d.indexOf('80') === 0) return '+375' + d.slice(2);
+        if (d.length === 9) return '+375' + d;
+        return raw.replace(/\s+/g, '').replace(/-/g, '').replace(/\(/g, '').replace(/\)/g, '').replace(/\./g, '').slice(0, PHONE_MAX_LEN);
+      }
+      function validatePhoneMessage(normalized) {
+        var t = normalized;
+        if (!t) return 'Укажите номер телефона.';
+        if (t.length > PHONE_MAX_LEN) return 'Телефон: не длиннее 32 символов.';
+        if (!PHONE_BY_RE.test(t)) return PHONE_BY_ERR;
+        return null;
+      }
 
       function apiUrl(path) { return '/api/webapp' + path; }
       function headers() {
@@ -1154,11 +1175,26 @@
         }
       }
 
+      function refreshCalendarChrome() {
+        if (!state.weekStart) state.weekStart = getMonday(new Date());
+        const start = state.weekStart;
+        document.getElementById('weekLabel').textContent = formatWeekLabel(start);
+        var thisWeekMonday = getMonday(new Date());
+        document.getElementById('weekPrev').disabled = dateToStr(start) <= dateToStr(thisWeekMonday);
+      }
+
       function syncAfterBookingPop() {
         showBookingStack('main');
         window.scrollTo(0, 0);
         if (state.pendingReloadAfterPop) {
           state.pendingReloadAfterPop = false;
+          loadSlots();
+          return;
+        }
+        if (state.scheduleDataLoaded && state.tab === 'calendar') {
+          refreshCalendarChrome();
+          renderCalendar();
+          return;
         }
         loadSlots();
       }
@@ -1236,6 +1272,7 @@
           .then(function(r) { return r.json(); })
           .then(function(data) {
             state.slots = data.slots || [];
+            state.scheduleDataLoaded = true;
           })
           .catch(function() {});
       }
@@ -1280,18 +1317,18 @@
           var tid = b.client_telegram_id;
 
           if (pending) {
-            actions.innerHTML += '<button type="button" class="bd-btn bd-btn--confirm" data-baction="confirm">Подтвердить</button>';
-            actions.innerHTML += '<button type="button" class="bd-btn bd-btn--decline" data-baction="decline">Отклонить</button>';
+            actions.innerHTML += '<button type="button" class="bd-btn bd-btn--confirm" data-baction="confirm">' + BD_ICONS.check + ' Подтвердить</button>';
+            actions.innerHTML += '<button type="button" class="bd-btn bd-btn--decline" data-baction="decline">' + BD_ICONS.xCircle + ' Отклонить</button>';
           } else {
-            actions.innerHTML += '<button type="button" class="bd-btn bd-btn--outline-danger" data-baction="cancel">Отменить запись</button>';
+            actions.innerHTML += '<button type="button" class="bd-btn bd-btn--outline-danger" data-baction="cancel">' + BD_ICONS.cancelOutline + ' Отменить запись</button>';
           }
           if (tid && b.client_has_telegram !== false) {
-            actions.innerHTML += '<a class="bd-btn bd-btn--message" href="tg://user?id=' + encodeURIComponent(String(tid)) + '">' + BD_ICONS.send + ' Написать клиенту</a>';
+            actions.innerHTML += '<a class="bd-btn bd-btn--surface" href="tg://user?id=' + encodeURIComponent(String(tid)) + '">' + BD_ICONS.send + ' Написать клиенту</a>';
           }
           if (b.recurring_id) {
-            actions.innerHTML += '<button type="button" class="bd-btn bd-btn--soft" data-baction="remove_recurring" data-recurring-id="' + b.recurring_id + '">Снять регулярность</button>';
+            actions.innerHTML += '<button type="button" class="bd-btn bd-btn--soft" data-baction="remove_recurring" data-recurring-id="' + b.recurring_id + '">' + BD_ICONS.linkOff + ' Снять регулярность</button>';
           } else {
-            actions.innerHTML += '<button type="button" class="bd-btn bd-btn--soft" data-baction="make_regular">Сделать постоянным клиентом</button>';
+            actions.innerHTML += '<button type="button" class="bd-btn bd-btn--soft" data-baction="make_regular">' + BD_ICONS.userPlus + ' Сделать постоянным клиентом</button>';
           }
 
           actions.querySelectorAll('button[data-baction]').forEach(function(btn) {
@@ -1414,6 +1451,8 @@
         tab: 'calendar',
         weekStart: null,
         slots: [],
+        /** True after successful fetch (or prefetch) for current UI; avoids full refetch on back from booking detail. */
+        scheduleDataLoaded: false,
         templates: [],
         slotFilter: 'all',
         selectedBooking: null,
@@ -1430,7 +1469,60 @@
         pendingBookClientName: null,
         bookServices: [],
         bookServiceId: null,
+        trainerArenas: [],
+        bookArenaId: null,
       };
+
+      function syncBookArenaSelects() {
+        var v = state.bookArenaId != null ? String(state.bookArenaId) : '';
+        var s1 = document.getElementById('bookArenaSelect');
+        var s2 = document.getElementById('bookArenaSelectNew');
+        if (s1 && s1.value !== v) s1.value = v;
+        if (s2 && s2.value !== v) s2.value = v;
+      }
+
+      function fillTrainerArenasUI() {
+        var arenas = state.trainerArenas || [];
+        var show = arenas.length > 1;
+        var wrap = document.getElementById('bookArenaWrap');
+        var wrapNew = document.getElementById('bookArenaWrapNew');
+        var hint = document.getElementById('bookArenaTrainerHint');
+        if (wrap) wrap.style.display = show ? 'block' : 'none';
+        if (wrapNew) wrapNew.style.display = show ? 'block' : 'none';
+        if (hint) hint.style.display = show ? 'block' : 'none';
+        var primary = arenas.filter(function(a) { return a.is_primary; })[0];
+        state.bookArenaId = primary ? primary.id : (arenas.length ? arenas[0].id : null);
+        function fill(sel) {
+          if (!sel) return;
+          sel.innerHTML = '';
+          arenas.forEach(function(a) {
+            var o = document.createElement('option');
+            o.value = String(a.id);
+            o.textContent = (a.name || '—') + (a.is_primary ? ' · основная' : '');
+            sel.appendChild(o);
+          });
+          if (state.bookArenaId != null) sel.value = String(state.bookArenaId);
+        }
+        fill(document.getElementById('bookArenaSelect'));
+        fill(document.getElementById('bookArenaSelectNew'));
+        function onArenaChange() {
+          state.bookArenaId = this.value ? parseInt(this.value, 10) : null;
+          syncBookArenaSelects();
+        }
+        var s1 = document.getElementById('bookArenaSelect');
+        var s2 = document.getElementById('bookArenaSelectNew');
+        if (s1) s1.onchange = onArenaChange;
+        if (s2) s2.onchange = onArenaChange;
+        syncBookArenaSelects();
+      }
+
+      function trainerBookingPayload(clientId, serviceId) {
+        var o = { slot_id: state.bookSlotId, client_id: clientId, service_id: serviceId };
+        if (state.trainerArenas && state.trainerArenas.length > 1 && state.bookArenaId != null) {
+          o.arena_id = state.bookArenaId;
+        }
+        return o;
+      }
 
       function getMonday(d) {
         const date = new Date(d);
@@ -1524,6 +1616,34 @@
         return slots.filter(function(s) { return (s.status || '') === state.slotFilter; });
       }
 
+      /** Local end Date for a slot (browser TZ), or null if unparsable. */
+      function slotLocalEndTime(s) {
+        if (!s || !s.slot_date || s.end_time == null || s.end_time === '') return null;
+        var parts = String(s.slot_date).split('-');
+        if (parts.length !== 3) return null;
+        var y = parseInt(parts[0], 10), m = parseInt(parts[1], 10) - 1, day = parseInt(parts[2], 10);
+        var tp = String(s.end_time).split(':');
+        var hh = parseInt(tp[0], 10) || 0, mm = parseInt(tp[1], 10) || 0;
+        var sec = tp.length > 2 ? parseInt(tp[2], 10) : 0;
+        return new Date(y, m, day, hh, mm, isNaN(sec) ? 0 : sec, 0);
+      }
+
+      function isSlotEndedInPast(s) {
+        var end = slotLocalEndTime(s);
+        if (!end) return false;
+        return end.getTime() < Date.now();
+      }
+
+      /** Hide past calendar days and today's slots that already ended (local time). */
+      function filterOutPastSlots(slots) {
+        var todayStr = dateToStr(new Date());
+        return slots.filter(function(s) {
+          if (s.slot_date < todayStr) return false;
+          if (s.slot_date > todayStr) return true;
+          return !isSlotEndedInPast(s);
+        });
+      }
+
       function loadSlots() {
         if (!state.weekStart) state.weekStart = getMonday(new Date());
         const start = state.weekStart;
@@ -1539,6 +1659,7 @@
           .then(function(r) { return r.json(); })
           .then(function(data) {
             state.slots = data.slots || [];
+            state.scheduleDataLoaded = true;
             renderCalendar();
           })
           .catch(function() {
@@ -1560,10 +1681,8 @@
       }
 
       function renderCalendar() {
-        const todayStr = dateToStr(new Date());
         const byDay = {};
-        filterSlotsForUi(state.slots).forEach(function(s) {
-          if (s.slot_date < todayStr) return;
+        filterSlotsForUi(filterOutPastSlots(state.slots)).forEach(function(s) {
           const key = s.slot_date;
           if (!byDay[key]) byDay[key] = [];
           byDay[key].push(s);
@@ -1580,12 +1699,27 @@
           html += '<div class="day-block"><div class="day-title">' + escapeHtml(formatDateKey(dateKey)) + '</div>';
           daySlots.forEach(function(s) {
             const status = s.status || 'available';
-            const statusLabel = status === 'available' ? 'свободен' : status === 'booked' ? 'занят' : 'отменён';
             const available = status === 'available';
             const bookedClick = status === 'booked' && s.booking_id;
-            html += '<div class="slot-row' + (available ? ' slot-available' : '') + (bookedClick ? ' slot-booked-click' : '') + '"'
+            const bst = bookedClick ? String(s.booking_status || 'confirmed').toLowerCase() : '';
+            const bookingPending = bookedClick && bst === 'pending';
+            const bookingConfirmed = bookedClick && bst === 'confirmed';
+            let statusLabel = status === 'available' ? 'свободен' : status === 'booked' ? 'занят' : 'отменён';
+            let statusClass = status;
+            if (bookedClick) {
+              if (bookingPending) {
+                statusLabel = 'к подтверждению';
+                statusClass = 'booked booked-pending';
+              } else {
+                statusLabel = 'подтверждено';
+                statusClass = 'booked booked-confirmed';
+              }
+            }
+            html += '<div class="slot-row' + (available ? ' slot-available' : '') + (bookedClick ? ' slot-booked-click' : '')
+              + (bookingPending ? ' slot-booking-pending' : '') + (bookingConfirmed ? ' slot-booking-confirmed' : '') + '"'
               + (available ? ' data-slot-id="' + s.id + '" role="button" tabindex="0"' : '')
               + (bookedClick ? ' data-booking-id="' + s.booking_id + '" role="button" tabindex="0"' : '')
+              + (bookedClick ? ' data-booking-status="' + escapeHtml(bst) + '"' : '')
               + '>';
             html += '<div class="slot-row-left">';
             html += '<span class="slot-time">' + escapeHtml(s.start_time || '') + '–' + escapeHtml(s.end_time || '') + '</span>';
@@ -1597,7 +1731,7 @@
             }
             html += '</div>';
             html += '<div class="slot-meta">';
-            html += '<span class="slot-status ' + status + '">' + statusLabel + '</span>';
+            html += '<span class="slot-status ' + statusClass + '">' + statusLabel + '</span>';
             if (available) {
               html += '<button type="button" class="btn-slot-del" data-slot-id="' + s.id + '" aria-label="Удалить">×</button>';
             }
@@ -1610,13 +1744,15 @@
           btn.onclick = function(e) {
             e.stopPropagation();
             const id = parseInt(btn.dataset.slotId, 10);
-            if (!confirm('Удалить этот слот?')) return;
-            fetch(apiUrl('/schedule/slots/' + id), { method: 'DELETE', headers: headers() })
-              .then(function(r) {
-                if (r.ok) loadSlots();
-                else r.json().then(function(o) { alert(o.detail || 'Ошибка'); });
-              })
-              .catch(function() { alert('Ошибка сети'); });
+            showAppConfirm('Удалить этот слот?', { okText: 'Удалить', cancelText: 'Отмена' }).then(function (ok) {
+              if (!ok) return;
+              fetch(apiUrl('/schedule/slots/' + id), { method: 'DELETE', headers: headers() })
+                .then(function(r) {
+                  if (r.ok) loadSlots();
+                  else r.json().then(function(o) { alert(o.detail || 'Ошибка'); });
+                })
+                .catch(function() { alert('Ошибка сети'); });
+            });
           };
         });
         content.querySelectorAll('.slot-booked-click').forEach(function(row) {
@@ -1649,6 +1785,7 @@
               .then(function(data) {
                 state.bookServices = data.services || [];
                 state.bookServiceId = state.bookServices.length ? state.bookServices[0].id : null;
+                state.trainerArenas = data.arenas || [];
                 function fillServiceSelect(selEl) {
                   if (!selEl) return;
                   selEl.innerHTML = '';
@@ -1668,12 +1805,16 @@
                 document.getElementById('bookServiceSelectNew').onchange = function() {
                   state.bookServiceId = this.value ? parseInt(this.value, 10) : null;
                 };
+                fillTrainerArenasUI();
               })
               .catch(function() {
                 state.bookServices = [];
                 state.bookServiceId = null;
+                state.trainerArenas = [];
+                state.bookArenaId = null;
                 document.getElementById('bookServiceSelect').innerHTML = '<option value="">Нет услуг</option>';
                 document.getElementById('bookServiceSelectNew').innerHTML = '<option value="">Нет услуг</option>';
+                fillTrainerArenasUI();
               });
           }
           row.onclick = function(e) { if (!e.target.closest('.btn-slot-del')) openBookModal(); };
@@ -1742,7 +1883,7 @@
         fetch(url, {
           method: 'POST',
           headers: headers(),
-          body: JSON.stringify({ slot_id: state.bookSlotId, client_id: clientId, service_id: serviceId }),
+          body: JSON.stringify(trainerBookingPayload(clientId, serviceId)),
         })
           .then(function(r) {
             if (r.ok) {
@@ -1829,7 +1970,7 @@
         var first = (firstEl.value || '').trim() || null;
         var last = (lastEl.value || '').trim() || null;
         if (!/[\d]/.test(phoneRaw)) {
-          alert('Введите телефон (хотя бы цифры).');
+          showToast('Введите номер телефона (цифры).');
           phoneEl.focus();
           return;
         }
@@ -1848,7 +1989,13 @@
           }
           if (digitParts.length) phone = digitParts.join('').replace(/\D/g, function(c) { return c === '+' ? '+' : ''; });
         }
-        phone = (phone || '').trim();
+        phone = normalizePhoneClient((phone || '').trim());
+        var phoneErr = validatePhoneMessage(phone);
+        if (phoneErr) {
+          showToast(phoneErr);
+          phoneEl.focus();
+          return;
+        }
         if (!state.bookSlotId) return;
         var btn = document.getElementById('bookNewSubmit');
         btn.disabled = true;
@@ -1870,7 +2017,7 @@
             return fetch(apiUrl('/trainer/booking'), {
               method: 'POST',
               headers: headers(),
-              body: JSON.stringify({ slot_id: state.bookSlotId, client_id: clientId, service_id: serviceId }),
+              body: JSON.stringify(trainerBookingPayload(clientId, serviceId)),
             });
           })
           .then(function(r) {

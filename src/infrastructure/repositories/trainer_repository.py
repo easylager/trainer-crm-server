@@ -1,6 +1,7 @@
 """
 Infrastructure: trainer persistence. All SQL here; no business rules.
 """
+import json
 from typing import Any
 from datetime import date, datetime, timedelta
 
@@ -86,11 +87,40 @@ class TrainerRepository:
                 {"tid": trainer_id, "aid": aid},
             )
 
+    async def list_trainer_arena_ids(self, trainer_id: int) -> list[int]:
+        r = await self._session.execute(
+            text("SELECT arena_id FROM trainer_arenas WHERE trainer_id = :id ORDER BY arena_id"),
+            {"id": trainer_id},
+        )
+        return [row[0] for row in r.fetchall()]
+
+    async def set_trainer_primary_arena(self, trainer_id: int, arena_id: int | None) -> None:
+        await self._session.execute(
+            text("UPDATE trainers SET primary_arena_id = :aid WHERE id = :tid"),
+            {"tid": trainer_id, "aid": arena_id},
+        )
+
+    async def reconcile_primary_arena(self, trainer_id: int) -> None:
+        """If primary is missing or not in trainer_arenas, set to MIN(arena_id). Clears primary if no arenas."""
+        r = await self._session.execute(
+            text("SELECT primary_arena_id FROM trainers WHERE id = :id"),
+            {"id": trainer_id},
+        )
+        row = r.fetchone()
+        current = row[0] if row else None
+        aids = await self.list_trainer_arena_ids(trainer_id)
+        if not aids:
+            if current is not None:
+                await self.set_trainer_primary_arena(trainer_id, None)
+            return
+        if current is None or current not in aids:
+            await self.set_trainer_primary_arena(trainer_id, min(aids))
+
     async def get_by_id(self, trainer_id: int) -> dict[str, Any] | None:
         """Load trainer with profile, photos, service_ids; None if not found."""
         r = await self._session.execute(
             text(
-                "SELECT id, telegram_id, status, created_at, moderation_feedback, moderation_submitted_at "
+                "SELECT id, telegram_id, status, created_at, moderation_feedback, moderation_submitted_at, profile_pending, photo_pending, primary_arena_id "
                 "FROM trainers WHERE id = :id"
             ),
             {"id": trainer_id},
@@ -98,6 +128,18 @@ class TrainerRepository:
         row = r.fetchone()
         if not row:
             return None
+        raw_pending = row[6]
+        if raw_pending is not None and not isinstance(raw_pending, dict):
+            try:
+                raw_pending = json.loads(raw_pending) if isinstance(raw_pending, str) else raw_pending
+            except (json.JSONDecodeError, TypeError):
+                raw_pending = None
+        raw_photo_pend = row[7]
+        if raw_photo_pend is not None and not isinstance(raw_photo_pend, dict):
+            try:
+                raw_photo_pend = json.loads(raw_photo_pend) if isinstance(raw_photo_pend, str) else raw_photo_pend
+            except (json.JSONDecodeError, TypeError):
+                raw_photo_pend = None
         out: dict[str, Any] = {
             "id": row[0],
             "telegram_id": row[1],
@@ -105,6 +147,9 @@ class TrainerRepository:
             "created_at": str(row[3]) if row[3] else None,
             "moderation_feedback": row[4],
             "moderation_submitted_at": row[5],
+            "profile_pending": raw_pending if isinstance(raw_pending, dict) else None,
+            "photo_pending": raw_photo_pend if isinstance(raw_photo_pend, dict) else None,
+            "primary_arena_id": row[8] if len(row) > 8 else None,
         }
         rp = await self._session.execute(
             text("SELECT first_name, last_name, age, city_id, experience_years, description, phone, contacts, education, rating_avg, rating_count, session_duration_minutes, min_hours_before_booking FROM trainer_profiles WHERE trainer_id = :id"),
@@ -185,10 +230,52 @@ class TrainerRepository:
         out["has_certificate_products"] = r_has_cert.fetchone() is not None
         return out
 
+    async def list_trainer_ids_for_moderation_queue(self) -> list[int]:
+        """pending_profile trainers + active trainers with text or photo pending revision."""
+        r = await self._session.execute(
+            text(
+                """
+                SELECT id FROM trainers
+                WHERE status = 'pending_profile'
+                   OR (
+                        status = 'active'
+                        AND (
+                            (
+                                profile_pending IS NOT NULL
+                                AND jsonb_typeof(profile_pending) = 'object'
+                                AND profile_pending <> '{}'::jsonb
+                            )
+                            OR (
+                                photo_pending IS NOT NULL
+                                AND jsonb_typeof(photo_pending) = 'object'
+                                AND COALESCE(photo_pending->>'file_key', '') <> ''
+                            )
+                        )
+                   )
+                ORDER BY id
+                """
+            )
+        )
+        return [int(row[0]) for row in r.fetchall()]
+
     async def exists(self, trainer_id: int) -> bool:
         """True if trainer exists."""
         r = await self._session.execute(text("SELECT 1 FROM trainers WHERE id = :id"), {"id": trainer_id})
         return r.fetchone() is not None
+
+    async def ensure_trainer_profile_row(self, trainer_id: int) -> None:
+        """
+        Guarantee a trainer_profiles row (PK = trainer_id). Trainers created only via trainers INSERT
+        (e.g. admin welcome link) have no profile row until first PATCH — plain UPDATE would affect 0 rows.
+        """
+        await self._session.execute(
+            text("""
+                INSERT INTO trainer_profiles (trainer_id)
+                VALUES (:tid)
+                ON CONFLICT (trainer_id) DO NOTHING
+            """),
+            {"tid": trainer_id},
+        )
 
     async def update_profile(
         self,
@@ -599,6 +686,19 @@ class TrainerRepository:
             {"id": trainer_id},
         )
 
+    async def clear_moderation_feedback_and_submitted_at(self, trainer_id: int) -> None:
+        """Drop queue state when profile is no longer eligible for moderation (incomplete aggregate)."""
+        await self._session.execute(
+            text(
+                """
+                UPDATE trainers
+                SET moderation_feedback = NULL, moderation_submitted_at = NULL
+                WHERE id = :id
+                """
+            ),
+            {"id": trainer_id},
+        )
+
     async def mark_queued_for_moderation_review(self, trainer_id: int) -> bool:
         """Clear feedback and stamp submit time (idempotent duplicate detection). Returns True if row exists."""
         r = await self._session.execute(
@@ -611,6 +711,34 @@ class TrainerRepository:
             ),
             {"id": trainer_id},
         )
+        return r.rowcount > 0
+
+    async def set_profile_pending(self, trainer_id: int, pending: dict[str, Any] | None) -> bool:
+        """Store JSONB profile revision for active trainers; None clears."""
+        if pending is None:
+            r = await self._session.execute(
+                text("UPDATE trainers SET profile_pending = NULL WHERE id = :id"),
+                {"id": trainer_id},
+            )
+        else:
+            r = await self._session.execute(
+                text("UPDATE trainers SET profile_pending = CAST(:js AS jsonb) WHERE id = :id"),
+                {"id": trainer_id, "js": json.dumps(pending)},
+            )
+        return r.rowcount > 0
+
+    async def set_photo_pending(self, trainer_id: int, pending: dict[str, Any] | None) -> bool:
+        """Active trainer: staged photo keys until moderation; None clears."""
+        if pending is None:
+            r = await self._session.execute(
+                text("UPDATE trainers SET photo_pending = NULL WHERE id = :id"),
+                {"id": trainer_id},
+            )
+        else:
+            r = await self._session.execute(
+                text("UPDATE trainers SET photo_pending = CAST(:js AS jsonb) WHERE id = :id"),
+                {"id": trainer_id, "js": json.dumps(pending)},
+            )
         return r.rowcount > 0
 
     async def add_photo(
@@ -735,7 +863,8 @@ class TrainerRepository:
                    p.description, p.phone, p.contacts, p.education,
                    p.rating_avg, p.rating_count,
                    COALESCE(p.session_duration_minutes, 45) AS session_duration_minutes,
-                   COALESCE(p.min_hours_before_booking, 3) AS min_hours_before_booking
+                   COALESCE(p.min_hours_before_booking, 3) AS min_hours_before_booking,
+                   t.primary_arena_id
         """
         if order_by == "rating":
             # Bayesian: (v/(v+m))*R + (m/(v+m))*C. Must be in SELECT when using DISTINCT (PG rule).
@@ -753,6 +882,7 @@ class TrainerRepository:
                    p.rating_avg, p.rating_count,
                    COALESCE(p.session_duration_minutes, 45) AS session_duration_minutes,
                    COALESCE(p.min_hours_before_booking, 3) AS min_hours_before_booking,
+                   t.primary_arena_id,
                    ({has_rating_expr}) AS _has_rating,
                    ({score_expr}) AS _score
         """
@@ -863,9 +993,15 @@ class TrainerRepository:
             tid = row[0]
             arena_ids = arenas_by_id.get(tid, [])
             arena_names = [arena_names_by_id.get(aid, "—") for aid in arena_ids]
-            # session_duration_minutes=13, min_hours_before_booking=14; for rating order, _has_rating=15, _score=16
+            # session_duration_minutes=13, min_hours_before_booking=14, primary_arena_id=15; rating: _has_rating=16, _score=17
             duration = row[13] if len(row) > 13 and row[13] is not None else 45
             min_hours = int(row[14]) if len(row) > 14 and row[14] is not None else 3
+            primary_arena_id = row[15] if len(row) > 15 else None
+            primary_arena_name = (
+                (arena_names_by_id.get(primary_arena_id) or "").strip() or None
+                if primary_arena_id is not None
+                else None
+            )
             out.append(
                 {
                     "id": tid,
@@ -892,6 +1028,8 @@ class TrainerRepository:
                     "services": services_detail_by_id.get(tid, []),
                     "arena_ids": arena_ids,
                     "arena_names": arena_names,
+                    "primary_arena_id": primary_arena_id,
+                    "primary_arena_name": primary_arena_name,
                     "free_slots_14d": free_slots_by_id.get(tid, 0),
                     "has_pass_products": tid in pass_trainer_ids,
                     "has_certificate_products": tid in cert_trainer_ids,
