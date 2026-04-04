@@ -310,14 +310,40 @@ class Client(Base):
 
 
 class TrainerClientNote(Base):
-    """Per-trainer private note about a client (goes into trainer CRM; not visible to other trainers)."""
+    """Per-trainer private dossier about a client: profile fields + legacy note."""
     __tablename__ = "trainer_client_notes"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     trainer_id: Mapped[int] = mapped_column(ForeignKey("trainers.id", ondelete="CASCADE"), nullable=False, index=True)
     client_id: Mapped[int] = mapped_column(ForeignKey("clients.id", ondelete="CASCADE"), nullable=False, index=True)
     note: Mapped[Optional[str]] = mapped_column(Text(), nullable=True)
+    goals: Mapped[Optional[str]] = mapped_column(Text(), nullable=True)
+    limitations: Mapped[Optional[str]] = mapped_column(Text(), nullable=True)
+    level: Mapped[Optional[str]] = mapped_column(Text(), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class TrainerClientEntry(Base):
+    """Timeline entry: dated note about a client (e.g. after a session)."""
+    __tablename__ = "trainer_client_entries"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    trainer_id: Mapped[int] = mapped_column(ForeignKey("trainers.id", ondelete="CASCADE"), nullable=False)
+    client_id: Mapped[int] = mapped_column(ForeignKey("clients.id", ondelete="CASCADE"), nullable=False)
+    content: Mapped[str] = mapped_column(Text(), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class TrainerClientTag(Base):
+    """Quick-access tag for a client (e.g. 'Травма колена', 'Цель: аксель')."""
+    __tablename__ = "trainer_client_tags"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    trainer_id: Mapped[int] = mapped_column(ForeignKey("trainers.id", ondelete="CASCADE"), nullable=False)
+    client_id: Mapped[int] = mapped_column(ForeignKey("clients.id", ondelete="CASCADE"), nullable=False)
+    tag: Mapped[str] = mapped_column(String(100), nullable=False)
+    category: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 # --- Trainer schedule: weekly template → generated slots for booking ---

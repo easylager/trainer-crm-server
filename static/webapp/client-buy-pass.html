@@ -232,11 +232,15 @@
     [data-screen] { display: none; }
     [data-screen].active { display: block; }
   </style>
+  <link rel="stylesheet" href="mini-app-client-nav.css" />
 </head>
 <body>
   <div id="screenChoose" data-screen class="active">
     <div class="bp-top">
       <button type="button" class="bd-btn bd-btn--soft bp-back" id="btnBack" aria-label="Назад">← Назад</button>
+      <div class="client-mini-nav" style="margin-left: auto;">
+        <button type="button" class="btn-app-home" id="btnHome">Главная</button>
+      </div>
     </div>
 
     <section class="bd-hero bp-hero" aria-labelledby="heroTrainerName">
@@ -422,5 +426,6 @@
       loadProducts();
     })();
   </script>
+  <script src="mini-app-client-home.js"></script>
 </body>
 </html>

@@ -184,6 +184,24 @@
     .modal .actions button { flex: 1; padding: 12px; border-radius: 10px; border: none; font-weight: 600; cursor: pointer; font-size: 14px; }
     /* Единый стек с каталогом тренеров: вторичные = btn-secondary, отмена = btn-outline-danger */
     .client-booking-actions.bd-actions-wrap { gap: 12px; }
+    /* Дублируем фиксацию иконки: кэш TG / старые WebView иногда тянут SVG на полэкрана */
+    .client-booking-actions .btn-outline-danger.btn-block svg {
+      width: 20px !important;
+      height: 20px !important;
+      max-width: 20px !important;
+      max-height: 20px !important;
+      flex: 0 0 20px !important;
+    }
+    .client-booking-actions .btn-outline-danger.btn-block .client-booking-cancel-label {
+      flex: 0 1 auto;
+      min-width: 0;
+      max-width: 100%;
+      text-align: center;
+    }
+    /* Детали записи: воздух под «Назад к списку» + safe-area — иначе кнопка у края экрана и неудобно тапать */
+    #screenDetail .booking-detail {
+      padding-bottom: max(32px, calc(20px + env(safe-area-inset-bottom, 0px)));
+    }
     [data-screen] { display: none; }
     [data-screen].active { display: block; }
     /* In-app toast — без tg.showAlert / нативных модалок при копировании */
@@ -217,11 +235,15 @@
       color: var(--app-danger);
     }
   </style>
+  <link rel="stylesheet" href="mini-app-client-nav.css" />
 </head>
 <body>
   <div class="header">
     <span class="header-title">📋 Мои записи</span>
-    <button type="button" class="btn-close" id="btnClose" aria-label="Закрыть">Закрыть</button>
+    <div class="client-mini-nav">
+      <button type="button" class="btn-app-home" id="btnHome">Главная</button>
+      <button type="button" class="btn-close" id="btnClose" aria-label="Закрыть">Закрыть</button>
+    </div>
   </div>
 
   <div id="screenList" data-screen>
@@ -309,10 +331,10 @@
           Написать тренеру
         </button>
         <button type="button" class="btn-outline-danger btn-block" id="detailCancelBtn">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false">
             <path d="M18 6L6 18M6 6l12 12"/>
           </svg>
-          Отменить запись
+          <span class="client-booking-cancel-label">Отменить запись</span>
         </button>
       </div>
 
@@ -515,6 +537,35 @@
         return s;
       }
 
+      function getOpenBookingIdFromUrl() {
+        try {
+          var params = new URLSearchParams(window.location.search || '');
+          var id = params.get('open_booking');
+          if (id == null) return null;
+          var n = parseInt(id, 10);
+          return isNaN(n) ? null : n;
+        } catch (e) {
+          return null;
+        }
+      }
+
+      function tryOpenBookingFromQuery() {
+        var wantId = getOpenBookingIdFromUrl();
+        if (wantId == null) return;
+        for (var i = 0; i < state.days.length; i++) {
+          var day = state.days[i];
+          if (!day.bookings) continue;
+          for (var j = 0; j < day.bookings.length; j++) {
+            if (Number(day.bookings[j].id) === wantId) {
+              state.currentDayIndex = i;
+              renderDay();
+              if (typeof window.openBookingDetail === 'function') window.openBookingDetail(wantId);
+              return;
+            }
+          }
+        }
+      }
+
       function loadBookings() {
         document.getElementById('listContent').innerHTML = '<div class="loading">Загрузка...</div>';
         getJson(apiUrl('/client/bookings')).then(function(data) {
@@ -526,6 +577,7 @@
           }
           state.currentDayIndex = 0;
           renderDay();
+          tryOpenBookingFromQuery();
         }).catch(function() {
           document.getElementById('listContent').innerHTML = '<div class="error">Ошибка загрузки</div>';
         });
@@ -630,5 +682,6 @@
       showScreen('screenList');
     })();
   </script>
+  <script src="mini-app-client-home.js"></script>
 </body>
 </html>

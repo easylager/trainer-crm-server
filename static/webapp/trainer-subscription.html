@@ -824,8 +824,13 @@
       100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
     }
   </style>
+  <link rel="stylesheet" href="mini-app-trainer-nav.css" />
 </head>
 <body class="subscription-page">
+  <div class="trainer-app-topbar trainer-mini-nav">
+    <button type="button" class="btn-app-home" id="btnHome">Главная</button>
+    <button type="button" class="btn-close" id="btnClose">Закрыть</button>
+  </div>
   <!-- Loading screen -->
   <div id="screenLoading" class="screen active">
     <div class="loading-container">
@@ -950,6 +955,8 @@
         }
       }
       function closeApp() { if (tg) tg.close(); else window.history.back(); }
+      var btnCloseTop = document.getElementById('btnClose');
+      if (btnCloseTop) btnCloseTop.onclick = closeApp;
 
       // Screen management
       function showScreen(id) {
@@ -1333,5 +1340,6 @@
       loadData();
     })();
   </script>
+  <script src="mini-app-trainer-home.js"></script>
 </body>
 </html>

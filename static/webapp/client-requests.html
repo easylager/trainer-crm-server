@@ -21,12 +21,20 @@
     [data-screen] { display: none; }
     [data-screen].active { display: block; }
 
+    .header.cr-requests-header {
+      margin-bottom: 16px;
+      padding: 0 4px;
+    }
     .cr-requests-header {
-      flex-direction: column;
-      align-items: stretch;
-      gap: 0;
+      display: flex;
+      flex-direction: row;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
     }
     .cr-page-title {
+      flex: 1;
+      min-width: 0;
       margin: 0;
       font-size: clamp(22px, 6vw, 28px);
       font-weight: 700;
@@ -552,6 +560,30 @@
       overflow-wrap: anywhere;
       word-break: break-word;
     }
+    .trainer-card-full .tcf-education-more {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid rgba(128, 128, 128, 0.16);
+    }
+    .trainer-card-full .tcf-education-more-label {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--tg-theme-hint-color);
+      margin-bottom: 6px;
+    }
+    .trainer-card-full .tcf-education-more-body {
+      font-size: 13px;
+      line-height: 1.45;
+      color: var(--tg-theme-text-color);
+      opacity: 0.92;
+      max-height: 14rem;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
     /* Left accent only — same surface as stats/services (no orange fill) */
     .trainer-card-full .tcf-desc { 
       font-size: 15px; 
@@ -754,10 +786,14 @@
       font-family: var(--app-font-sans);
     }
   </style>
+  <link rel="stylesheet" href="mini-app-client-nav.css" />
 </head>
 <body>
   <div class="header cr-requests-header">
     <h1 class="cr-page-title" id="crHeaderTitle">Мои заявки</h1>
+    <div class="client-mini-nav">
+      <button type="button" class="btn-app-home" id="btnHome">Главная</button>
+    </div>
   </div>
 
   <div id="screenList" data-screen class="active">
@@ -922,15 +958,29 @@
         return t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
       }
 
-      /** One approved education row — same rules as catalog `formatCatalogEducationEntry`. */
+      /** Same rules as catalog `formatCatalogEducationEntry` (city/type/god — не пустая строка). */
       function formatResponderEducationEntry(edu) {
         if (!edu) return '';
         var inst = (edu.institution_name || '').trim();
         var prog = (edu.program_or_title || '').trim();
         var deg = (edu.degree_level || '').trim();
-        var head = inst;
-        var sub = [prog, deg].filter(Boolean).join(', ');
+        var city = (edu.city || '').trim();
+        var country = (edu.country || '').trim();
+        var place = [city, country].filter(Boolean).join(', ');
+        var typeKey = (edu.education_type || '').trim();
+        var typeHint = '';
+        if (typeKey === 'formal_education') typeHint = 'Вуз / колледж / ССО';
+        else if (typeKey === 'course_or_certificate') typeHint = 'Курсы / сертификат';
+        var head = inst || prog;
+        var parts = [];
+        if (inst && prog && inst !== prog) parts.push(prog);
+        if (deg) parts.push(deg);
+        var sub = parts.filter(function(x) { return x && x !== head; }).join(', ');
         var line = sub ? (head ? head + ' — ' + sub : sub) : head;
+        if (!line && place) line = place;
+        if (!line && typeHint) line = typeHint;
+        else if (line && place && line.indexOf(city) === -1 && city) line = line + ' · ' + place;
+        else if (line && place && !city && country && line.indexOf(country) === -1) line = line + ' · ' + country;
         var y = '';
         if (edu.is_in_progress) y = 'в процессе';
         else {
@@ -942,6 +992,16 @@
         }
         if (y) line = (line ? line + ' ' : '') + '(' + y + ')';
         return (line || '').trim();
+      }
+
+      function isResponderEducationCategoryOnly(s) {
+        if (!s || typeof s !== 'string') return false;
+        var t = s.trim();
+        var cats = [
+          'Среднее специальное', 'Высшее профильное', 'Высшее непрофильное',
+          'Курсы и сертификация', 'Ученая степень', 'Другое'
+        ];
+        return cats.indexOf(t) >= 0;
       }
 
       function photoUrl(fileKey) {
@@ -1140,18 +1200,33 @@
           html += '</div>';
         }
         
-        // Образование: education_entries из API или категория из профиля (tp.education)
+        // Образование: записи из API + при необходимости текст профиля (как в каталоге)
         var eduRows = Array.isArray(r.education_entries) ? r.education_entries : [];
         var eduCategory = (typeof r.education === 'string' && r.education.trim()) ? r.education.trim() : '';
+        var profileExtra = eduCategory;
+        if (eduRows.length > 0 && eduCategory && isResponderEducationCategoryOnly(eduCategory)) {
+          profileExtra = '';
+        }
         if (eduRows.length > 0) {
           html += '<div class="tcf-education">';
           html += '<div class="tcf-education-title">Образование</div>';
+          var eduAny = false;
           eduRows.forEach(function(edu) {
             var eduText = formatResponderEducationEntry(edu);
             if (eduText) {
+              eduAny = true;
               html += '<div class="tcf-education-item">' + escapeHtml(eduText) + '</div>';
             }
           });
+          if (!eduAny && eduCategory) {
+            html += '<div class="tcf-education-item">' + escapeHtml(eduCategory) + '</div>';
+          }
+          if (profileExtra) {
+            html += '<div class="tcf-education-more">';
+            html += '<div class="tcf-education-more-label">Подробнее</div>';
+            html += '<div class="tcf-education-more-body">' + escapeHtml(profileExtra).replace(/\n/g, '<br>') + '</div>';
+            html += '</div>';
+          }
           html += '</div>';
         } else if (eduCategory) {
           html += '<div class="tcf-education">';
@@ -1403,5 +1478,6 @@
       </div>
     </div>
   </div>
+  <script src="mini-app-client-home.js"></script>
 </body>
 </html>

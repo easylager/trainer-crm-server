@@ -218,7 +218,7 @@ async def get_trainer_education_public(
     trainer_id: int,
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, list]:
-    """Public education list: approved records only for active trainers (visible regardless of subscription)."""
+    """Public education list: same visibility as catalog (pending + approved snapshots; see repository predicate)."""
     trainer = await get_trainer(session, trainer_id)
     if not trainer or (trainer.get("status") or "").strip().lower() != "active":
         raise HTTPException(status_code=404, detail="Trainer not found")

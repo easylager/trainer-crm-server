@@ -87,6 +87,7 @@ from src.application.welcome_link_use_cases import (
 from src.infrastructure.db.models import SUPPORT_FROM_CLIENT
 from src.bot import messages as msg
 from src.shared.config import Settings
+from src.shared.mini_app_https import mini_app_https_base
 from src.shared.notification_hours import NOTIFICATION_TZ, working_hours_between
 from src.shared.audit import ACTOR_CLIENT_BOT, audit_log
 from src.bot.client_api import (
@@ -565,6 +566,22 @@ async def cmd_start(message: Message) -> None:
         )
         return
     await message.answer(msg.CLIENT_START_WELCOME)
+
+
+@router.message(Command("home"))
+async def cmd_home(message: Message) -> None:
+    """Client hub Mini App: contextual hero + links to catalog, bookings, requests, passes."""
+    base, _ = mini_app_https_base(Settings())
+    if not base or not base.lower().startswith("https://"):
+        await message.answer(msg.CLIENT_HOME_HTTPS_REQUIRED)
+        return
+    url = f"{base.rstrip('/')}/webapp/client-home"
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=msg.CLIENT_BUTTON_HOME_WEBAPP, web_app=WebAppInfo(url=url))],
+        ]
+    )
+    await message.answer(msg.CLIENT_HOME_OPEN_WEBAPP, parse_mode=ParseMode.HTML, reply_markup=kb)
 
 
 @router.message(Command("settings"))

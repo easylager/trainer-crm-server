@@ -12,17 +12,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet" />
   <style>
-    /* Base shell: theme.css + mini-app-components.css */
-    .btn-close {
-      flex-shrink: 0;
-      padding: 8px 14px;
-      border-radius: 8px;
-      border: none;
-      font-size: 14px;
-      background: var(--tg-theme-secondary-bg-color);
-      color: var(--tg-theme-text-color);
-      cursor: pointer;
-    }
+    /* Base shell: theme.css + mini-app-components.css — кнопки шапки: mini-app-components (.header .app-header-actions) */
     .tabs {
       display: flex;
       gap: 4px;
@@ -440,6 +430,16 @@
       color: var(--tg-theme-hint-color);
       margin: -2px 0 10px;
     }
+    .book-new-client .book-field-label {
+      margin: 10px 0 8px;
+    }
+    .book-new-client .book-field-label:first-of-type {
+      margin-top: 4px;
+    }
+    .book-req {
+      color: var(--app-danger);
+      font-weight: 700;
+    }
     .book-new-client .btn-primary {
       margin-top: 4px !important;
       font-weight: 700 !important;
@@ -598,11 +598,11 @@
     }
     /* JUSTSKATE.BY — перебиваем тему Telegram */
     body { background: #FFFBEB !important; color: #1a1a1a !important; }
-    .btn-close, .tab, .slot-row, .template-day-card, .hour-chip { background: #FFF3CC !important; color: #1a1a1a !important; }
+    .tab, .slot-row, .template-day-card, .hour-chip { background: #FFF3CC !important; color: #1a1a1a !important; }
     .tab.active { background: #FFFBEB !important; color: #1a1a1a !important; }
     @media (prefers-color-scheme: dark) {
       body { background: #1a1a1a !important; color: #f5f5f5 !important; }
-      .btn-close, .tab, .slot-row, .template-day-card, .hour-chip { background: #2a2a2a !important; color: #f5f5f5 !important; }
+      .tab, .slot-row, .template-day-card, .hour-chip { background: #2a2a2a !important; color: #f5f5f5 !important; }
       .tab.active { background: #1a1a1a !important; color: #f5f5f5 !important; }
       .modal { background: #1a1a1a !important; }
     }
@@ -753,6 +753,44 @@
       letter-spacing: 0.02em;
     }
     .bd-tel:active { opacity: 0.8; }
+    .bd-client--profile {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 0;
+    }
+    .bd-client-profile-hit {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin: -16px -18px 0;
+      padding: 16px 18px 10px;
+      border-radius: 18px 18px 0 0;
+      text-decoration: none;
+      color: inherit;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .bd-client-profile-hit:active {
+      background: color-mix(in srgb, var(--tg-theme-button-color) 10%, transparent);
+    }
+    .bd-client-profile-hint {
+      display: block;
+      margin-top: 4px;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--tg-theme-hint-color);
+    }
+    .bd-client-chevron {
+      flex-shrink: 0;
+      width: 20px;
+      height: 20px;
+      opacity: 0.45;
+      color: var(--tg-theme-hint-color);
+    }
+    .bd-tel--block {
+      margin: 0 -18px -16px;
+      padding: 0 18px 16px 88px;
+      display: block;
+    }
     .bd-section-label {
       font-size: 11px;
       font-weight: 600;
@@ -845,6 +883,7 @@
     #modalBookingCancel .modal .actions button { flex: 1; padding: 12px; border-radius: 10px; border: none; font-weight: 600; cursor: pointer; background: var(--app-cta-fill) !important; color: var(--app-cta-text) !important; }
     .no-bot { font-size: 11px; color: var(--tg-theme-hint-color, #666); font-style: italic; margin-left: 4px; }
   </style>
+  <link rel="stylesheet" href="mini-app-trainer-nav.css" />
 </head>
 <body>
   <script>
@@ -868,6 +907,10 @@
   <div id="screenMain" data-screen class="active">
   <div class="header">
     <span class="header-title">Расписание</span>
+    <div class="app-header-actions trainer-mini-nav">
+      <button type="button" class="btn-app-home" id="btnHome">Главная</button>
+      <button type="button" class="btn-close" id="btnClose">Закрыть</button>
+    </div>
   </div>
   <div class="tabs">
     <button type="button" class="tab active" data-tab="calendar">Расписание</button>
@@ -1029,8 +1072,10 @@
           <div class="book-new-client">
             <input type="tel" id="bookNewPhone" class="input" placeholder="+375 29 123 45 67" autocomplete="tel" inputmode="tel" maxlength="32">
             <p class="book-phone-hint">Номер в формате +375 XX XXX XX XX</p>
-            <input type="text" id="bookNewFirstName" class="input" placeholder="Имя" autocomplete="given-name">
-            <input type="text" id="bookNewLastName" class="input" placeholder="Фамилия" autocomplete="family-name">
+            <label class="book-field-label" for="bookNewFirstName">Имя <span class="book-req" aria-hidden="true">*</span></label>
+            <input type="text" id="bookNewFirstName" class="input" placeholder="Иван" autocomplete="given-name" maxlength="120" aria-required="true">
+            <label class="book-field-label" for="bookNewLastName">Фамилия <span class="book-req" aria-hidden="true">*</span></label>
+            <input type="text" id="bookNewLastName" class="input" placeholder="Иванов" autocomplete="family-name" maxlength="120" aria-required="true">
             <button type="button" class="btn-block btn-primary" id="bookNewSubmit">Добавить и записать</button>
           </div>
         </div>
@@ -1051,10 +1096,15 @@
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
+  <script src="mini-app-trainer-home.js"></script>
   <script>
     (function() {
       const tg = window.Telegram && window.Telegram.WebApp;
-      if (tg) { tg.ready(); tg.expand(); }
+      if (tg) {
+        tg.expand();
+        // Reply-keyboard Web App: initData may appear after first tick; call ready() again once it does (see callReadyWhenInitDataReady).
+        try { tg.ready(); } catch (e) {}
+      }
       if (typeof window.__applyScheduleEditorTheme === 'function') window.__applyScheduleEditorTheme();
       if (tg && typeof tg.onEvent === 'function') {
         try { tg.onEvent('themeChanged', window.__applyScheduleEditorTheme); } catch (e) { /* older clients */ }
@@ -1114,10 +1164,19 @@
         return h;
       }
 
+      /** Always append init_data to URL when present: edge/CDN often strips custom headers on fetch. */
       function apiUrlWithQuery(path) {
         var url = apiUrl(path);
         if (tg && tg.initData) url += (url.indexOf('?') >= 0 ? '&' : '?') + 'init_data=' + encodeURIComponent(tg.initData);
         return url;
+      }
+
+      /** Some clients (reply keyboard → Web App) fill initData late; notify Telegram again when it appears. */
+      var _readyAfterInitDone = false;
+      function callReadyWhenInitDataReady() {
+        if (!tg || !tg.initData || _readyAfterInitDone) return;
+        _readyAfterInitDone = true;
+        try { tg.ready(); } catch (e) {}
       }
 
       function getJsonTrainer(path) {
@@ -1199,11 +1258,45 @@
         loadSlots();
       }
 
+      function navigateToTrainerHomeSafe() {
+        if (typeof window.navigateTrainerHome === 'function') {
+          window.navigateTrainerHome();
+          return;
+        }
+        var pth = window.location.pathname || '';
+        var base = pth.replace(/[^/]+$/, '') || '/webapp/';
+        var u = base + 'trainer-home';
+        if (tg && tg.initData) u += (u.indexOf('?') >= 0 ? '&' : '?') + 'init_data=' + encodeURIComponent(tg.initData);
+        window.location.href = u;
+      }
+
       function goBackFromBookingDetail() {
+        if (state.bookingDetailReturn === 'hub') {
+          state.bookingDetailReturn = null;
+          navigateToTrainerHomeSafe();
+          return;
+        }
         if (history.state && history.state.ui === 'sched-detail') {
           history.back();
         } else {
           syncAfterBookingPop();
+        }
+      }
+
+      /** After confirm/decline/cancel: same return target as «Назад» (hub vs schedule). */
+      function leaveDetailAfterMutation() {
+        if (state.bookingDetailReturn === 'hub') {
+          state.bookingDetailReturn = null;
+          state.pendingReloadAfterPop = false;
+          navigateToTrainerHomeSafe();
+          return;
+        }
+        if (history.state && history.state.ui === 'sched-detail') {
+          state.pendingReloadAfterPop = true;
+          history.back();
+        } else {
+          showBookingStack('main');
+          loadSlots();
         }
       }
 
@@ -1265,12 +1358,14 @@
       });
 
       function prefetchSlotsInBackground() {
+        if (tg && !tg.initData) return;
         if (!state.weekStart) state.weekStart = getMonday(new Date());
         var end = new Date(state.weekStart);
         end.setDate(end.getDate() + 6);
-        fetch(apiUrl('/schedule?from_date=' + encodeURIComponent(dateToStr(state.weekStart)) + '&to_date=' + encodeURIComponent(dateToStr(end))), { headers: headers() })
-          .then(function(r) { return r.json(); })
+        fetch(apiUrlWithQuery('/schedule?from_date=' + encodeURIComponent(dateToStr(state.weekStart)) + '&to_date=' + encodeURIComponent(dateToStr(end))), { headers: headers() })
+          .then(function(r) { return r.ok ? r.json() : Promise.resolve(null); })
           .then(function(data) {
+            if (!data) return;
             state.slots = data.slots || [];
             state.scheduleDataLoaded = true;
           })
@@ -1278,6 +1373,9 @@
       }
 
       function openBookingDetail(bookingId) {
+        if (state.bookingDetailReturn !== 'hub') {
+          state.bookingDetailReturn = 'schedule';
+        }
         state.selectedBooking = null;
         getJsonTrainer('/trainer/bookings/' + bookingId).then(function(b) {
           state.selectedBooking = b;
@@ -1292,15 +1390,38 @@
           html += '<div class="bd-hero-time">' + escapeHtml(b.start_time || '—') + ' – ' + escapeHtml(b.end_time || '—') + '</div>';
           html += '<div class="bd-hero-date">' + escapeHtml(dateStr) + ' · ' + escapeHtml(b.day_label || '') + '</div>';
           html += '</div></div>';
-          html += '<div class="bd-client">';
-          html += '<div class="bd-avatar" aria-hidden="true">' + escapeHtml(initials) + '</div>';
-          html += '<div class="bd-client-body">';
-          html += '<div class="bd-client-name">' + escapeHtml(client) + (b.client_has_telegram === false ? ' <span class="no-bot">Без бота</span>' : '') + '</div>';
-          if (b.client_phone) {
-            var telRaw = String(b.client_phone).replace(/\s+/g, '');
-            html += '<a class="bd-tel" href="tel:' + escapeHtml(telRaw) + '">' + escapeHtml(b.client_phone) + '</a>';
+          if (b.client_id != null) {
+            var pathBase = (window.location.pathname || '').replace(/[^/]+$/, '') || '/webapp/';
+            var profileUrl = pathBase + 'trainer-clients?client_id=' + encodeURIComponent(String(b.client_id));
+            profileUrl += '&return_booking=' + encodeURIComponent(String(b.id));
+            var retFrom = (state.bookingDetailReturn === 'hub') ? 'hub' : 'schedule';
+            profileUrl += '&return_from=' + encodeURIComponent(retFrom);
+            if (tg && tg.initData) profileUrl += (profileUrl.indexOf('?') >= 0 ? '&' : '?') + 'init_data=' + encodeURIComponent(tg.initData);
+            html += '<div class="bd-client bd-client--profile">';
+            html += '<a class="bd-client-profile-hit" href="' + escapeHtml(profileUrl) + '" aria-label="Профиль клиента: заметки и история">';
+            html += '<div class="bd-avatar" aria-hidden="true">' + escapeHtml(initials) + '</div>';
+            html += '<div class="bd-client-body">';
+            html += '<div class="bd-client-name">' + escapeHtml(client) + (b.client_has_telegram === false ? ' <span class="no-bot">Без бота</span>' : '') + '</div>';
+            html += '<span class="bd-client-profile-hint">Профиль и заметки</span>';
+            html += '</div>';
+            html += '<svg class="bd-client-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>';
+            html += '</a>';
+            if (b.client_phone) {
+              var telRawP = String(b.client_phone).replace(/\s+/g, '');
+              html += '<a class="bd-tel bd-tel--block" href="tel:' + escapeHtml(telRawP) + '">' + escapeHtml(b.client_phone) + '</a>';
+            }
+            html += '</div>';
+          } else {
+            html += '<div class="bd-client">';
+            html += '<div class="bd-avatar" aria-hidden="true">' + escapeHtml(initials) + '</div>';
+            html += '<div class="bd-client-body">';
+            html += '<div class="bd-client-name">' + escapeHtml(client) + (b.client_has_telegram === false ? ' <span class="no-bot">Без бота</span>' : '') + '</div>';
+            if (b.client_phone) {
+              var telRaw = String(b.client_phone).replace(/\s+/g, '');
+              html += '<a class="bd-tel" href="tel:' + escapeHtml(telRaw) + '">' + escapeHtml(b.client_phone) + '</a>';
+            }
+            html += '</div></div>';
           }
-          html += '</div></div>';
           html += '<div class="bd-section-label">Подробности</div>';
           html += '<div class="bd-rows">';
           html += '<div class="bd-row">' + BD_ICONS.service + '<div class="bd-row-text"><div class="bd-row-label">Услуга · арена</div><div class="bd-row-value">' + escapeHtml(b.services_str || '—') + ' · ' + escapeHtml(b.arenas_str || '—') + '</div></div></div>';
@@ -1362,13 +1483,7 @@
 
       function confirmTrainerBooking(bookingId) {
         postJsonTrainer('/trainer/bookings/' + bookingId + '/confirm', null).then(function() {
-          if (history.state && history.state.ui === 'sched-detail') {
-            state.pendingReloadAfterPop = true;
-            history.back();
-          } else {
-            showBookingStack('main');
-            loadSlots();
-          }
+          leaveDetailAfterMutation();
         }).catch(function() { alert('Ошибка'); });
       }
 
@@ -1395,13 +1510,7 @@
         var id = state.selectedBooking && state.selectedBooking.id;
         if (!id) return;
         postJsonTrainer('/trainer/bookings/' + id + '/decline', { comment: comment }).then(function() {
-          if (history.state && history.state.ui === 'sched-detail') {
-            state.pendingReloadAfterPop = true;
-            history.back();
-          } else {
-            showBookingStack('main');
-            loadSlots();
-          }
+          leaveDetailAfterMutation();
         }).catch(function() { alert('Ошибка'); });
       };
 
@@ -1411,13 +1520,7 @@
         var id = state.selectedBooking && state.selectedBooking.id;
         if (!id) return;
         postJsonTrainer('/trainer/bookings/' + id + '/cancel', null).then(function() {
-          if (history.state && history.state.ui === 'sched-detail') {
-            state.pendingReloadAfterPop = true;
-            history.back();
-          } else {
-            showBookingStack('main');
-            loadSlots();
-          }
+          leaveDetailAfterMutation();
         }).catch(function() { alert('Ошибка'); });
       };
 
@@ -1471,6 +1574,10 @@
         bookServiceId: null,
         trainerArenas: [],
         bookArenaId: null,
+        /** From CRM: /schedule-editor?client_id= — preselect client when booking a slot. */
+        deepLinkClientId: null,
+        /** 'hub' when opened via /schedule-editor?open_booking=&from=hub (return to trainer-home). */
+        bookingDetailReturn: null,
       };
 
       function syncBookArenaSelects() {
@@ -1645,6 +1752,23 @@
       }
 
       function loadSlots() {
+        if (tg && !tg.initData) {
+          loadSlots._waitInit = (loadSlots._waitInit || 0) + 1;
+          if (loadSlots._waitInit < 200) {
+            document.getElementById('calendarContent').innerHTML = '<div class="loading">Подключение к Telegram…</div>';
+            setTimeout(function() {
+              callReadyWhenInitDataReady();
+              loadSlots();
+            }, 50);
+            return;
+          }
+          loadSlots._waitInit = 0;
+          document.getElementById('calendarContent').innerHTML = '<div class="error">Нет данных авторизации Telegram. Закройте мини-приложение и откройте «Расписание» через меню бота (кнопка слева от поля ввода) или через кнопку под сообщением в чате.</div>';
+          return;
+        }
+        loadSlots._waitInit = 0;
+        callReadyWhenInitDataReady();
+
         if (!state.weekStart) state.weekStart = getMonday(new Date());
         const start = state.weekStart;
         const end = new Date(start);
@@ -1655,21 +1779,36 @@
         var thisWeekMonday = getMonday(new Date());
         document.getElementById('weekPrev').disabled = dateToStr(start) <= dateToStr(thisWeekMonday);
         document.getElementById('calendarContent').innerHTML = '<div class="loading">Загрузка...</div>';
-        fetch(apiUrl('/schedule?from_date=' + encodeURIComponent(from) + '&to_date=' + encodeURIComponent(to)), { headers: headers() })
-          .then(function(r) { return r.json(); })
+        fetch(apiUrlWithQuery('/schedule?from_date=' + encodeURIComponent(from) + '&to_date=' + encodeURIComponent(to)), { headers: headers() })
+          .then(function(r) {
+            if (!r.ok) {
+              return r.json().then(function(body) {
+                var msg = (body && body.detail) ? String(body.detail) : '';
+                if (r.status === 401 && msg.indexOf('init') >= 0 && tg && !tg.initData) {
+                  return Promise.reject('retry-init');
+                }
+                throw new Error(msg || 'Ошибка загрузки');
+              });
+            }
+            return r.json();
+          })
           .then(function(data) {
-            state.slots = data.slots || [];
+            state.slots = (data && data.slots) ? data.slots : [];
             state.scheduleDataLoaded = true;
             renderCalendar();
           })
-          .catch(function() {
+          .catch(function(err) {
+            if (err === 'retry-init') {
+              setTimeout(loadSlots, 100);
+              return;
+            }
             document.getElementById('calendarContent').innerHTML = '<div class="error">Ошибка загрузки</div>';
           });
       }
 
       function loadTemplates() {
         document.getElementById('templateList').innerHTML = '<div class="loading">Загрузка...</div>';
-        fetch(apiUrl('/schedule/templates'), { headers: headers() })
+        fetch(apiUrlWithQuery('/schedule/templates'), { headers: headers() })
           .then(function(r) { return r.json(); })
           .then(function(data) {
             state.templates = data.templates || [];
@@ -1746,7 +1885,7 @@
             const id = parseInt(btn.dataset.slotId, 10);
             showAppConfirm('Удалить этот слот?', { okText: 'Удалить', cancelText: 'Отмена' }).then(function (ok) {
               if (!ok) return;
-              fetch(apiUrl('/schedule/slots/' + id), { method: 'DELETE', headers: headers() })
+              fetch(apiUrlWithQuery('/schedule/slots/' + id), { method: 'DELETE', headers: headers() })
                 .then(function(r) {
                   if (r.ok) loadSlots();
                   else r.json().then(function(o) { alert(o.detail || 'Ошибка'); });
@@ -1780,7 +1919,7 @@
             document.getElementById('bookStepNew').style.display = 'none';
             document.getElementById('modalBookClient').style.display = 'flex';
             updateTelegramBack();
-            fetch(apiUrl('/trainer/my-services'), { headers: headers() })
+            fetch(apiUrlWithQuery('/trainer/my-services'), { headers: headers() })
               .then(function(r) { return r.ok ? r.json() : Promise.reject(new Error('Ошибка')); })
               .then(function(data) {
                 state.bookServices = data.services || [];
@@ -1806,6 +1945,17 @@
                   state.bookServiceId = this.value ? parseInt(this.value, 10) : null;
                 };
                 fillTrainerArenasUI();
+                if (state.deepLinkClientId) {
+                  document.getElementById('bookStepChoice').style.display = 'none';
+                  document.getElementById('bookStepChoice').classList.remove('active');
+                  document.getElementById('bookStepExisting').style.display = 'block';
+                  document.getElementById('bookStepExisting').classList.add('active');
+                  var selPre = document.getElementById('bookServiceSelect');
+                  if (selPre && state.bookServiceId != null) selPre.value = String(state.bookServiceId);
+                  document.getElementById('bookClientSearch').value = '';
+                  document.getElementById('bookClientList').innerHTML = '<p class="book-list-loading">Загрузка…</p>';
+                  loadBookClients('', state.deepLinkClientId);
+                }
               })
               .catch(function() {
                 state.bookServices = [];
@@ -1823,13 +1973,11 @@
       }
 
       function clientsRequestUrl(q) {
-        var url = apiUrl('/trainer/clients');
-        var sep = '?';
-        if (tg && tg.initData) { url += sep + 'init_data=' + encodeURIComponent(tg.initData); sep = '&'; }
-        if (q && (q = String(q).trim())) { url += sep + 'q=' + encodeURIComponent(q); }
-        return url;
+        var path = '/trainer/clients';
+        if (q && String(q).trim()) path += '?q=' + encodeURIComponent(String(q).trim());
+        return apiUrlWithQuery(path);
       }
-      function loadBookClients(q) {
+      function loadBookClients(q, autoSelectClientId) {
         fetch(clientsRequestUrl(q), { headers: headers() })
           .then(function(r) { return r.json(); })
           .then(function(data) {
@@ -1837,6 +1985,10 @@
             var clients = data.clients || [];
             if (clients.length === 0) {
               list.innerHTML = '<p class="screen-hint" style="padding:8px 0;">Нет клиентов по поиску. Добавьте нового ниже.</p>';
+              if (autoSelectClientId) {
+                showToast('Клиент из ссылки не найден в списке.');
+                state.deepLinkClientId = null;
+              }
               return;
             }
             var html = '';
@@ -1859,8 +2011,18 @@
                 document.getElementById('modalBookConfirmText').textContent = 'Записать ' + clientName + ' на ' + slotLabel + '?';
                 document.getElementById('modalBookConfirm').style.display = 'flex';
                 updateTelegramBack();
+                state.deepLinkClientId = null;
               };
             });
+            if (autoSelectClientId) {
+              var target = list.querySelector('.client-row[data-client-id="' + String(autoSelectClientId) + '"]');
+              if (target) {
+                target.click();
+              } else {
+                showToast('Клиент из ссылки не найден в списке.');
+                state.deepLinkClientId = null;
+              }
+            }
           })
           .catch(function() {
             document.getElementById('bookClientList').innerHTML = '<p class="error">Ошибка загрузки</p>';
@@ -1878,9 +2040,7 @@
         updateTelegramBack();
         state.pendingBookClientId = null;
         state.pendingBookClientName = null;
-        var url = apiUrl('/trainer/booking');
-        if (tg && tg.initData) url += (url.indexOf('?') >= 0 ? '&' : '?') + 'init_data=' + encodeURIComponent(tg.initData);
-        fetch(url, {
+        fetch(apiUrlWithQuery('/trainer/booking'), {
           method: 'POST',
           headers: headers(),
           body: JSON.stringify(trainerBookingPayload(clientId, serviceId)),
@@ -1996,15 +2156,21 @@
           phoneEl.focus();
           return;
         }
+        first = (first || '').trim();
+        last = (last || '').trim();
+        if (!first || !last) {
+          showToast('Укажите имя и фамилию клиента.');
+          if (!first) firstEl.focus();
+          else lastEl.focus();
+          return;
+        }
         if (!state.bookSlotId) return;
         var btn = document.getElementById('bookNewSubmit');
         btn.disabled = true;
-        var postUrl = apiUrl('/trainer/clients');
-        if (tg && tg.initData) postUrl += (postUrl.indexOf('?') >= 0 ? '&' : '?') + 'init_data=' + encodeURIComponent(tg.initData);
-        fetch(postUrl, {
+        fetch(apiUrlWithQuery('/trainer/clients'), {
           method: 'POST',
           headers: headers(),
-          body: JSON.stringify({ phone: phone, first_name: first || '', last_name: last || '' }),
+          body: JSON.stringify({ phone: phone, first_name: first, last_name: last }),
         })
           .then(function(r) {
             if (!r.ok) return r.json().then(function(o) { throw new Error(o.detail || 'Ошибка'); });
@@ -2014,7 +2180,7 @@
             var clientId = data.client_id;
             var serviceId = state.bookServiceId != null ? state.bookServiceId : (state.bookServices.length ? state.bookServices[0].id : null);
             if (serviceId == null) throw new Error('Выберите услугу. Добавьте услугу в профиле, если списка нет.');
-            return fetch(apiUrl('/trainer/booking'), {
+            return fetch(apiUrlWithQuery('/trainer/booking'), {
               method: 'POST',
               headers: headers(),
               body: JSON.stringify(trainerBookingPayload(clientId, serviceId)),
@@ -2126,7 +2292,7 @@
       document.getElementById('editDone').onclick = function() {
         const hours = Array.from(state.selectedHours).sort(function(a, b) { return a - b; });
         if (state.editMode === 'template') {
-          fetch(apiUrl('/schedule/templates/day'), {
+          fetch(apiUrlWithQuery('/schedule/templates/day'), {
             method: 'PUT',
             headers: headers(),
             body: JSON.stringify({ day_of_week: state.editDay, start_hours: hours, duration_minutes: 60 }),
@@ -2137,7 +2303,7 @@
             })
             .catch(function() { alert('Ошибка сети'); });
         } else {
-          fetch(apiUrl('/schedule/slots'), {
+          fetch(apiUrlWithQuery('/schedule/slots'), {
             method: 'POST',
             headers: headers(),
             body: JSON.stringify({ slot_date: state.editDate, start_hours: hours, duration_minutes: 60 }),
@@ -2183,7 +2349,7 @@
         if (!state.applyWeekStart) return;
         document.getElementById('modalConfirm').style.display = 'none';
         updateTelegramBack();
-        fetch(apiUrl('/schedule/apply-week'), {
+        fetch(apiUrlWithQuery('/schedule/apply-week'), {
           method: 'POST',
           headers: headers(),
           body: JSON.stringify({ week_start: state.applyWeekStart }),
@@ -2253,13 +2419,22 @@
         tg.BackButton.hide();
       }
 
-      (function initFromUrl() {
-        var p = new URLSearchParams(window.location.search);
+      function initFromUrl() {
+        var p = new URLSearchParams(window.location.search || '');
+        var cidRaw = p.get('client_id');
+        var clientIdFromUrl = cidRaw ? parseInt(cidRaw, 10) : null;
         var ob = p.get('open_booking');
+        var fromHub = (p.get('from') || '') === 'hub';
+        if (clientIdFromUrl || ob) {
+          try { history.replaceState({}, '', window.location.pathname); } catch (e) {}
+        }
+        if (clientIdFromUrl) {
+          state.deepLinkClientId = clientIdFromUrl;
+        }
         if (ob) {
           var bid = parseInt(ob, 10);
           if (bid) {
-            try { history.replaceState({}, '', window.location.pathname); } catch (e) {}
+            state.bookingDetailReturn = fromHub ? 'hub' : 'schedule';
             document.getElementById('detailBookingContent').innerHTML = '<div class="loading">Загрузка...</div>';
             document.getElementById('detailBookingActions').innerHTML = '';
             showBookingStack('detail');
@@ -2269,6 +2444,33 @@
           }
         }
         loadSlots();
+      }
+
+      /** Telegram often fills initData later when Web App opens from reply keyboard (not inline); wait up to ~15s. */
+      (function startWhenInitDataReady() {
+        if (!tg) {
+          initFromUrl();
+          return;
+        }
+        if (tg.initData) {
+          callReadyWhenInitDataReady();
+          initFromUrl();
+          return;
+        }
+        var n = 0;
+        var iv = setInterval(function() {
+          n++;
+          if (tg.initData) {
+            callReadyWhenInitDataReady();
+            clearInterval(iv);
+            initFromUrl();
+            return;
+          }
+          if (n >= 300) {
+            clearInterval(iv);
+            initFromUrl();
+          }
+        }, 50);
       })();
     })();
   </script>

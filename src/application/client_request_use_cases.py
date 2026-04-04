@@ -6,6 +6,8 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.infrastructure.repositories.trainer_repository import _sql_public_catalog_education_predicate
+
 
 async def _trainer_services_with_prices_batch(
     session: AsyncSession,
@@ -64,20 +66,21 @@ async def _public_education_entries_by_trainer_ids(
     session: AsyncSession,
     trainer_ids: list[int],
 ) -> dict[int, list[dict[str, Any]]]:
-    """Approved education rows per trainer (same fields as catalog / public trainer detail)."""
+    """Catalog-visible education rows per trainer (same visibility as GET /api/public/trainers/{id})."""
     if not trainer_ids:
         return {}
     placeholders = ", ".join(f":e{i}" for i in range(len(trainer_ids)))
     params: dict[str, Any] = {f"e{i}": v for i, v in enumerate(trainer_ids)}
+    vis = _sql_public_catalog_education_predicate("e")
     r = await session.execute(
         text(
             f"""
-            SELECT trainer_id, institution_name, program_or_title, degree_level,
-                   city, country, start_year, end_year, is_in_progress
-            FROM trainer_education
-            WHERE trainer_id IN ({placeholders})
-              AND moderation_status = 'approved' AND approved_snapshot = true
-            ORDER BY trainer_id, updated_at DESC, id DESC
+            SELECT e.trainer_id, e.institution_name, e.program_or_title, e.degree_level,
+                   e.city, e.country, e.start_year, e.end_year, e.is_in_progress
+            FROM trainer_education e
+            WHERE e.trainer_id IN ({placeholders})
+              AND {vis}
+            ORDER BY e.trainer_id, e.updated_at DESC, e.id DESC
             """
         ),
         params,

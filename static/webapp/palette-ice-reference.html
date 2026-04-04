@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Референс палитр — только тёмные темы</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet" />
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 28px 16px 56px;
+      font-family: 'DM Sans', system-ui, sans-serif;
+      background: #020617;
+      color: #e2e8f0;
+      line-height: 1.45;
+    }
+    .page-intro {
+      max-width: 1100px;
+      margin: 0 auto 32px;
+    }
+    .page-intro h1 {
+      font-size: 1.4rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin: 0 0 10px;
+      color: #f8fafc;
+    }
+    .page-intro p {
+      margin: 0;
+      font-size: 0.9rem;
+      color: #94a3b8;
+      max-width: 58ch;
+    }
+    .page-intro code {
+      font-size: 0.85em;
+      color: #7dd3fc;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 22px;
+      max-width: 1100px;
+      margin: 0 auto;
+      align-items: start;
+    }
+    .variant-label {
+      font-size: 0.62rem;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: #64748b;
+      margin-bottom: 8px;
+    }
+    .variant-title {
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: #f1f5f9;
+      margin: 0 0 6px;
+    }
+    .variant-note {
+      font-size: 0.8rem;
+      color: #94a3b8;
+      margin: 0 0 14px;
+      line-height: 1.45;
+    }
+    .mock-wrap {
+      border-radius: 20px;
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+    }
+    /* Базовый макет: всегда тёмный UI внутри */
+    .mock {
+      --bg: #1e293b;
+      --surface: #334155;
+      --surface2: #3d4f66;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --kicker: #bae6fd;
+      --accent: #2dd4bf;
+      --accent-text: #0f172a;
+      --border: rgba(255, 255, 255, 0.1);
+      font-family: 'DM Sans', system-ui, sans-serif;
+      background: var(--mock-bg, var(--bg));
+      color: var(--text);
+      padding: 16px;
+      min-height: 400px;
+    }
+    .mock-kicker {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--kicker);
+      margin-bottom: 12px;
+    }
+    .mock-hero {
+      display: flex;
+      gap: 14px;
+      align-items: center;
+      padding: 16px;
+      border-radius: 16px;
+      background: var(--mock-hero-bg, linear-gradient(145deg, rgba(255, 255, 255, 0.06) 0%, transparent 40%), linear-gradient(210deg, rgba(147, 197, 253, 0.12) 0%, transparent 45%), var(--surface));
+      border: 1px solid var(--border);
+      margin-bottom: 14px;
+      box-shadow: var(--hero-shadow, 0 8px 24px rgba(15, 23, 42, 0.2));
+    }
+    .mock-avatar {
+      width: 52px;
+      height: 52px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 1rem;
+      flex-shrink: 0;
+      color: var(--avatar-text, var(--accent-text));
+      background: var(--avatar-bg, linear-gradient(145deg, #5eead4 0%, var(--accent) 100%));
+      box-shadow: 0 4px 16px rgba(45, 212, 191, 0.25);
+    }
+    .mock-name { font-size: 1.1rem; font-weight: 700; letter-spacing: -0.02em; margin: 0 0 2px; }
+    .mock-since { font-size: 0.8rem; color: var(--muted); margin: 0; }
+    .mock-stats { display: flex; gap: 8px; margin-bottom: 14px; }
+    .mock-stat {
+      flex: 1;
+      padding: 10px 10px;
+      border-radius: 12px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      font-size: 0.72rem;
+    }
+    .mock-stat span {
+      display: block;
+      color: var(--muted);
+      margin-bottom: 4px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    .mock-stat strong { font-size: 0.85rem; }
+    .mock-section {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+    .mock-section::before {
+      content: '';
+      display: inline-block;
+      width: 12px;
+      height: 2px;
+      background: var(--kicker);
+      border-radius: 1px;
+      margin-right: 8px;
+      vertical-align: middle;
+    }
+    .mock-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 12px 14px;
+      margin-bottom: 14px;
+      font-size: 0.88rem;
+    }
+    .mock-row { display: flex; justify-content: space-between; gap: 8px; }
+    .mock-row .l { color: var(--muted); font-size: 0.75rem; }
+    .mock-actions { display: flex; flex-direction: column; gap: 8px; }
+    .mock-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 12px 14px;
+      border-radius: 14px;
+      font-size: 0.88rem;
+      font-weight: 600;
+      border: none;
+      cursor: default;
+      font-family: inherit;
+    }
+    .mock-btn--primary {
+      background: var(--accent);
+      color: var(--accent-text);
+      box-shadow: 0 2px 14px color-mix(in srgb, var(--accent) 35%, transparent);
+    }
+    .mock-btn--secondary {
+      background: var(--surface2);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+
+    /* —— 1. Client Hub (production) —— */
+    .v-hub .mock {
+      --mock-bg:
+        radial-gradient(ellipse 130% 80% at 50% -25%, rgba(255, 255, 255, 0.07) 0%, transparent 45%),
+        radial-gradient(ellipse 120% 90% at 0% -5%, rgba(147, 197, 253, 0.22) 0%, transparent 55%),
+        radial-gradient(ellipse 100% 70% at 100% 5%, rgba(45, 212, 191, 0.12) 0%, transparent 52%),
+        #1e293b;
+      --bg: #1e293b;
+      --surface: #334155;
+      --surface2: #3d4f66;
+      --kicker: #bae6fd;
+      --accent: #2dd4bf;
+      --accent-text: #0f172a;
+      --border: rgba(255, 255, 255, 0.1);
+    }
+    .v-hub .mock-hero {
+      --mock-hero-bg:
+        linear-gradient(145deg, rgba(255, 255, 255, 0.06) 0%, transparent 40%),
+        linear-gradient(210deg, rgba(147, 197, 253, 0.15) 0%, transparent 45%),
+        linear-gradient(335deg, rgba(45, 212, 191, 0.08) 0%, transparent 42%),
+        #334155;
+    }
+
+    /* —— 2. Ледяная ночь — чистый cyan / slate —— */
+    .v-night .mock {
+      --mock-bg: #0f172a;
+      --bg: #0f172a;
+      --surface: #1e293b;
+      --surface2: #273549;
+      --kicker: #7dd3fc;
+      --accent: #38bdf8;
+      --accent-text: #0f172a;
+      --border: rgba(148, 163, 184, 0.2);
+    }
+    .v-night .mock-hero {
+      --mock-hero-bg: linear-gradient(155deg, rgba(56, 189, 248, 0.15) 0%, transparent 50%), #1e293b;
+    }
+    .v-night .mock-avatar {
+      --avatar-bg: linear-gradient(145deg, #bae6fd 0%, #38bdf8 55%, #0ea5e9 100%);
+    }
+
+    /* —— 3. Глубина — синий океан —— */
+    .v-ocean .mock {
+      --mock-bg: linear-gradient(180deg, #0c1929 0%, #0f2847 100%);
+      --bg: #0c1929;
+      --surface: #153049;
+      --surface2: #1c3a5c;
+      --kicker: #93c5fd;
+      --accent: #3b82f6;
+      --accent-text: #f8fafc;
+      --border: rgba(59, 130, 246, 0.2);
+    }
+    .v-ocean .mock-hero {
+      --mock-hero-bg: linear-gradient(160deg, rgba(59, 130, 246, 0.2) 0%, transparent 50%), #153049;
+      --hero-shadow: 0 8px 28px rgba(30, 64, 175, 0.25);
+    }
+    .v-ocean .mock-avatar {
+      --avatar-bg: linear-gradient(145deg, #60a5fa 0%, #2563eb 100%);
+      --avatar-text: #f8fafc;
+    }
+
+    /* —— 4. Аврора — фиолет + бирюза —— */
+    .v-aurora .mock {
+      --mock-bg:
+        radial-gradient(ellipse 100% 80% at 100% 0%, rgba(168, 85, 247, 0.15) 0%, transparent 50%),
+        radial-gradient(ellipse 80% 60% at 0% 100%, rgba(34, 211, 238, 0.08) 0%, transparent 50%),
+        #12081f;
+      --bg: #12081f;
+      --surface: #1f1533;
+      --surface2: #2a1f42;
+      --kicker: #e9d5ff;
+      --muted: #a8a29e;
+      --accent: #22d3ee;
+      --accent-text: #0c4a6e;
+      --border: rgba(167, 139, 250, 0.22);
+    }
+    .v-aurora .mock-hero {
+      --mock-hero-bg: linear-gradient(135deg, rgba(168, 85, 247, 0.12) 0%, transparent 45%), linear-gradient(225deg, rgba(34, 211, 238, 0.1) 0%, transparent 40%), #1f1533;
+    }
+    .v-aurora .mock-avatar {
+      --avatar-bg: linear-gradient(145deg, #a78bfa 0%, #22d3ee 100%);
+      --avatar-text: #1e1b4b;
+    }
+
+    /* —— 5. Огни катка — тёплый тёмный + янтарный хром —— */
+    .v-rink .mock {
+      --mock-bg: linear-gradient(165deg, #1a1410 0%, #1c1814 50%, #151210 100%);
+      --bg: #1a1410;
+      --surface: #2a221c;
+      --surface2: #352b24;
+      --kicker: #fcd34d;
+      --muted: #a8a29e;
+      --accent: #14b8a6;
+      --accent-text: #042f2e;
+      --border: rgba(251, 191, 36, 0.15);
+    }
+    .v-rink .mock-hero {
+      --mock-hero-bg: linear-gradient(145deg, rgba(251, 191, 36, 0.08) 0%, transparent 45%), linear-gradient(200deg, rgba(20, 184, 166, 0.1) 0%, transparent 40%), #2a221c;
+    }
+    .v-rink .mock-avatar {
+      --avatar-bg: linear-gradient(145deg, #fde68a 0%, #14b8a6 100%);
+      --avatar-text: #14532d;
+    }
+
+    /* —— 6. Северное сияние — холодный зелёный —— */
+    .v-boreal .mock {
+      --mock-bg:
+        radial-gradient(ellipse 90% 70% at 50% -20%, rgba(52, 211, 153, 0.12) 0%, transparent 55%),
+        #0d1915;
+      --bg: #0d1915;
+      --surface: #14261f;
+      --surface2: #1a332a;
+      --kicker: #86efac;
+      --muted: #9ca3af;
+      --accent: #4ade80;
+      --accent-text: #052e16;
+      --border: rgba(74, 222, 128, 0.18);
+    }
+    .v-boreal .mock-hero {
+      --mock-hero-bg: linear-gradient(155deg, rgba(52, 211, 153, 0.14) 0%, transparent 48%), #14261f;
+    }
+    .v-boreal .mock-avatar {
+      --avatar-bg: linear-gradient(145deg, #bbf7d0 0%, #22c55e 100%);
+      --avatar-text: #14532d;
+    }
+
+    /* —— 7. Неоновый зал — графит + кислотный акцент —— */
+    .v-neon .mock {
+      --mock-bg: #0a0a0f;
+      --bg: #0a0a0f;
+      --surface: #16161f;
+      --surface2: #1f1f2e;
+      --kicker: #c4b5fd;
+      --muted: #78716c;
+      --accent: #22d3ee;
+      --accent-text: #0c0a09;
+      --border: rgba(34, 211, 238, 0.15);
+    }
+    .v-neon .mock-hero {
+      --mock-hero-bg: linear-gradient(180deg, rgba(34, 211, 238, 0.08) 0%, transparent 55%), #16161f;
+      box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.12), 0 12px 40px rgba(0, 0, 0, 0.5);
+    }
+    .v-neon .mock-avatar {
+      --avatar-bg: linear-gradient(145deg, #67e8f9 0%, #22d3ee 50%, #06b6d4 100%);
+    }
+
+    .swatches {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 12px;
+    }
+    .swatch {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 10px;
+      font-family: ui-monospace, monospace;
+      color: #94a3b8;
+    }
+    .swatch i {
+      width: 14px;
+      height: 14px;
+      border-radius: 4px;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+    }
+  </style>
+</head>
+<body>
+  <div class="page-intro">
+    <h1>Тёмные палитры для CRM</h1>
+    <p>
+      Только варианты <strong>без белого фона</strong> и без «карточки на белом»: все поверхности — приглушённые сланцы, глубина, иногда цветной свет.
+      <strong>Hub</strong> — текущий стиль клиентского хаба в приложении. Остальные — для сравнения и вдохновения.
+      Открыть: <code>/webapp/palette-ice-reference</code>
+    </p>
+  </div>
+
+  <div class="grid">
+    <div class="v-hub">
+      <div class="variant-label">Текущий продукт</div>
+      <h2 class="variant-title">Client Hub — «вечерний лёд»</h2>
+      <p class="variant-note">Поднятый slate, небесный кикер, бирюзовый CTA, радиальный «свет сверху» — как в <code>client-home</code>.</p>
+      <div class="mock-wrap">
+        <div class="mock">
+          <div class="mock-kicker">Карточка клиента</div>
+          <div class="mock-hero">
+            <div class="mock-avatar">АП</div>
+            <div>
+              <p class="mock-name">Анна Петрова</p>
+              <p class="mock-since">Клиент с 12.01.2026</p>
+            </div>
+          </div>
+          <div class="mock-stats">
+            <div class="mock-stat"><span>Последнее</span><strong>02.04.2026</strong></div>
+            <div class="mock-stat"><span>Следующее</span><strong>08.04.2026</strong></div>
+          </div>
+          <div class="mock-section">Контакты</div>
+          <div class="mock-card">
+            <div class="mock-row"><span class="l">Телефон</span><span style="color: var(--accent); font-weight: 600;">+375 …</span></div>
+          </div>
+          <div class="mock-actions">
+            <button type="button" class="mock-btn mock-btn--primary">Записать на занятие</button>
+            <button type="button" class="mock-btn mock-btn--secondary">Заметки по клиенту</button>
+          </div>
+        </div>
+      </div>
+      <div class="swatches">
+        <span class="swatch"><i style="background:#1e293b"></i>bg</span>
+        <span class="swatch"><i style="background:#334155"></i>card</span>
+        <span class="swatch"><i style="background:#2dd4bf"></i>CTA</span>
+        <span class="swatch"><i style="background:#bae6fd"></i>kicker</span>
+      </div>
+    </div>
+
+    <div class="v-night">
+      <div class="variant-label">Классика</div>
+      <h2 class="variant-title">Ледяная ночь</h2>
+      <p class="variant-note">Глубокий slate + ледяной cyan. Контрастно и узнаваемо, чуть холоднее хаба.</p>
+      <div class="mock-wrap">
+        <div class="mock">
+          <div class="mock-kicker">Карточка клиента</div>
+          <div class="mock-hero">
+            <div class="mock-avatar">АП</div>
+            <div>
+              <p class="mock-name">Анна Петрова</p>
+              <p class="mock-since">Клиент с 12.01.2026</p>
+            </div>
+          </div>
+          <div class="mock-stats">
+            <div class="mock-stat"><span>Последнее</span><strong>02.04.2026</strong></div>
+            <div class="mock-stat"><span>Следующее</span><strong>08.04.2026</strong></div>
+          </div>
+          <div class="mock-section">Контакты</div>
+          <div class="mock-card">
+            <div class="mock-row"><span class="l">Телефон</span><span style="color: var(--accent); font-weight: 600;">+375 …</span></div>
+          </div>
+          <div class="mock-actions">
+            <button type="button" class="mock-btn mock-btn--primary">Записать на занятие</button>
+            <button type="button" class="mock-btn mock-btn--secondary">Заметки по клиенту</button>
+          </div>
+        </div>
+      </div>
+      <div class="swatches">
+        <span class="swatch"><i style="background:#0f172a"></i>bg</span>
+        <span class="swatch"><i style="background:#38bdf8"></i>CTA</span>
+      </div>
+    </div>
+
+    <div class="v-ocean">
+      <div class="variant-label">Глубина</div>
+      <h2 class="variant-title">Океан / зал</h2>
+      <p class="variant-note">Сине-индиго пласты, электрик на кнопке. Спокойный «профи», без фиолетовой авроры.</p>
+      <div class="mock-wrap">
+        <div class="mock">
+          <div class="mock-kicker">Карточка клиента</div>
+          <div class="mock-hero">
+            <div class="mock-avatar">АП</div>
+            <div>
+              <p class="mock-name">Анна Петрова</p>
+              <p class="mock-since">Клиент с 12.01.2026</p>
+            </div>
+          </div>
+          <div class="mock-stats">
+            <div class="mock-stat"><span>Последнее</span><strong>02.04.2026</strong></div>
+            <div class="mock-stat"><span>Следующее</span><strong>08.04.2026</strong></div>
+          </div>
+          <div class="mock-section">Контакты</div>
+          <div class="mock-card">
+            <div class="mock-row"><span class="l">Телефон</span><span style="color: var(--accent); font-weight: 600;">+375 …</span></div>
+          </div>
+          <div class="mock-actions">
+            <button type="button" class="mock-btn mock-btn--primary">Записать на занятие</button>
+            <button type="button" class="mock-btn mock-btn--secondary">Заметки по клиенту</button>
+          </div>
+        </div>
+      </div>
+      <div class="swatches">
+        <span class="swatch"><i style="background:#0c1929"></i>bg</span>
+        <span class="swatch"><i style="background:#3b82f6"></i>CTA</span>
+      </div>
+    </div>
+
+    <div class="v-aurora">
+      <div class="variant-label">Характер</div>
+      <h2 class="variant-title">Аврора</h2>
+      <p class="variant-note">Почти чёрный с фиолетовым свечением, кикер лавандовый, CTA — ледяной cyan. Для смелого бренда.</p>
+      <div class="mock-wrap">
+        <div class="mock">
+          <div class="mock-kicker">Карточка клиента</div>
+          <div class="mock-hero">
+            <div class="mock-avatar">АП</div>
+            <div>
+              <p class="mock-name">Анна Петрова</p>
+              <p class="mock-since">Клиент с 12.01.2026</p>
+            </div>
+          </div>
+          <div class="mock-stats">
+            <div class="mock-stat"><span>Последнее</span><strong>02.04.2026</strong></div>
+            <div class="mock-stat"><span>Следующее</span><strong>08.04.2026</strong></div>
+          </div>
+          <div class="mock-section">Контакты</div>
+          <div class="mock-card">
+            <div class="mock-row"><span class="l">Телефон</span><span style="color: var(--accent); font-weight: 600;">+375 …</span></div>
+          </div>
+          <div class="mock-actions">
+            <button type="button" class="mock-btn mock-btn--primary">Записать на занятие</button>
+            <button type="button" class="mock-btn mock-btn--secondary">Заметки по клиенту</button>
+          </div>
+        </div>
+      </div>
+      <div class="swatches">
+        <span class="swatch"><i style="background:#12081f"></i>bg</span>
+        <span class="swatch"><i style="background:#a78bfa"></i>glow</span>
+        <span class="swatch"><i style="background:#22d3ee"></i>CTA</span>
+      </div>
+    </div>
+
+    <div class="v-rink">
+      <div class="variant-label">Тепло</div>
+      <h2 class="variant-title">Огни катка</h2>
+      <p class="variant-note">Тёмный с тёплым подтоном, янтарный хром (огни), бирюза на действии — лёд без «морозилки».</p>
+      <div class="mock-wrap">
+        <div class="mock">
+          <div class="mock-kicker">Карточка клиента</div>
+          <div class="mock-hero">
+            <div class="mock-avatar">АП</div>
+            <div>
+              <p class="mock-name">Анна Петрова</p>
+              <p class="mock-since">Клиент с 12.01.2026</p>
+            </div>
+          </div>
+          <div class="mock-stats">
+            <div class="mock-stat"><span>Последнее</span><strong>02.04.2026</strong></div>
+            <div class="mock-stat"><span>Следующее</span><strong>08.04.2026</strong></div>
+          </div>
+          <div class="mock-section">Контакты</div>
+          <div class="mock-card">
+            <div class="mock-row"><span class="l">Телефон</span><span style="color: var(--accent); font-weight: 600;">+375 …</span></div>
+          </div>
+          <div class="mock-actions">
+            <button type="button" class="mock-btn mock-btn--primary">Записать на занятие</button>
+            <button type="button" class="mock-btn mock-btn--secondary">Заметки по клиенту</button>
+          </div>
+        </div>
+      </div>
+      <div class="swatches">
+        <span class="swatch"><i style="background:#1a1410"></i>bg</span>
+        <span class="swatch"><i style="background:#fcd34d"></i>chrome</span>
+        <span class="swatch"><i style="background:#14b8a6"></i>CTA</span>
+      </div>
+    </div>
+
+    <div class="v-boreal">
+      <div class="variant-label">Природа</div>
+      <h2 class="variant-title">Северный лес</h2>
+      <p class="variant-note">Почти чёрно-зелёный фон, мох и неоновый мятный CTA. Для «свежести» без голубого моно.</p>
+      <div class="mock-wrap">
+        <div class="mock">
+          <div class="mock-kicker">Карточка клиента</div>
+          <div class="mock-hero">
+            <div class="mock-avatar">АП</div>
+            <div>
+              <p class="mock-name">Анна Петрова</p>
+              <p class="mock-since">Клиент с 12.01.2026</p>
+            </div>
+          </div>
+          <div class="mock-stats">
+            <div class="mock-stat"><span>Последнее</span><strong>02.04.2026</strong></div>
+            <div class="mock-stat"><span>Следующее</span><strong>08.04.2026</strong></div>
+          </div>
+          <div class="mock-section">Контакты</div>
+          <div class="mock-card">
+            <div class="mock-row"><span class="l">Телефон</span><span style="color: var(--accent); font-weight: 600;">+375 …</span></div>
+          </div>
+          <div class="mock-actions">
+            <button type="button" class="mock-btn mock-btn--primary">Записать на занятие</button>
+            <button type="button" class="mock-btn mock-btn--secondary">Заметки по клиенту</button>
+          </div>
+        </div>
+      </div>
+      <div class="swatches">
+        <span class="swatch"><i style="background:#0d1915"></i>bg</span>
+        <span class="swatch"><i style="background:#4ade80"></i>CTA</span>
+      </div>
+    </div>
+
+    <div class="v-neon">
+      <div class="variant-label">Ритм</div>
+      <h2 class="variant-title">Неоновый зал</h2>
+      <p class="variant-note">Почти чистый графит, кислотный cyan и лёгкое свечение рамки — как табло у борта.</p>
+      <div class="mock-wrap">
+        <div class="mock">
+          <div class="mock-kicker">Карточка клиента</div>
+          <div class="mock-hero">
+            <div class="mock-avatar">АП</div>
+            <div>
+              <p class="mock-name">Анна Петрова</p>
+              <p class="mock-since">Клиент с 12.01.2026</p>
+            </div>
+          </div>
+          <div class="mock-stats">
+            <div class="mock-stat"><span>Последнее</span><strong>02.04.2026</strong></div>
+            <div class="mock-stat"><span>Следующее</span><strong>08.04.2026</strong></div>
+          </div>
+          <div class="mock-section">Контакты</div>
+          <div class="mock-card">
+            <div class="mock-row"><span class="l">Телефон</span><span style="color: var(--accent); font-weight: 600;">+375 …</span></div>
+          </div>
+          <div class="mock-actions">
+            <button type="button" class="mock-btn mock-btn--primary">Записать на занятие</button>
+            <button type="button" class="mock-btn mock-btn--secondary">Заметки по клиенту</button>
+          </div>
+        </div>
+      </div>
+      <div class="swatches">
+        <span class="swatch"><i style="background:#0a0a0f"></i>bg</span>
+        <span class="swatch"><i style="background:#22d3ee"></i>neon</span>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

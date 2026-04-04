@@ -20,6 +20,7 @@ def trainer_command_list(*, include_crm_features: bool, include_stats: bool) -> 
     """Commands shown in Telegram menu (left of input)."""
     cmds: list[BotCommand] = [
         BotCommand(command="guide", description="Помощь"),
+        BotCommand(command="home", description="Обзор"),
         BotCommand(command="profile", description="Профиль"),
     ]
     if include_crm_features:

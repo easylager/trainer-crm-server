@@ -214,8 +214,13 @@
       }
     }
   </style>
+  <link rel="stylesheet" href="mini-app-trainer-nav.css" />
 </head>
 <body>
+  <div class="trainer-app-topbar trainer-mini-nav">
+    <button type="button" class="btn-app-home" id="btnHome">Главная</button>
+    <button type="button" class="btn-close" id="btnCloseMain">Закрыть</button>
+  </div>
   <section class="pay-hero">
     <div class="pay-hero-inner">
       <p class="pay-hero-kicker">Подписка тренера</p>
@@ -259,6 +264,8 @@
         if (el) el.classList.add('active');
       }
       function closeApp() { if (tg) tg.close(); else window.history.back(); }
+      var btnCloseMain = document.getElementById('btnCloseMain');
+      if (btnCloseMain) btnCloseMain.onclick = closeApp;
       var params = new URLSearchParams(window.location.search || '');
       if (params.get('payment_stub') === '1' && params.get('tracking_id')) {
         var tid = params.get('tracking_id');
@@ -366,5 +373,6 @@
       loadPlans();
     })();
   </script>
+  <script src="mini-app-trainer-home.js"></script>
 </body>
 </html>

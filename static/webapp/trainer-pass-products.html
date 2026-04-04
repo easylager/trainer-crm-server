@@ -680,8 +680,13 @@
       .btn-copy:active { transform: none; }
     }
   </style>
+  <link rel="stylesheet" href="mini-app-trainer-nav.css" />
 </head>
 <body>
+  <div class="trainer-app-topbar trainer-mini-nav">
+    <button type="button" class="btn-app-home" id="btnHome">Главная</button>
+    <button type="button" class="btn-close" id="btnClose">Закрыть</button>
+  </div>
   <div id="screenList" data-screen class="active">
     <div class="pp-hero">
       <div class="pp-hero-inner">
@@ -936,6 +941,13 @@
         }
       }
       var initData = tg ? tg.initData : '';
+      var btnCloseEl = document.getElementById('btnClose');
+      if (btnCloseEl) {
+        btnCloseEl.onclick = function() {
+          if (tg && tg.close) tg.close();
+          else window.close();
+        };
+      }
       function initDataParam() {
         return initData ? '?init_data=' + encodeURIComponent(initData) : '';
       }
@@ -1724,5 +1736,6 @@
       })();
     })();
   </script>
+  <script src="mini-app-trainer-home.js"></script>
 </body>
 </html>

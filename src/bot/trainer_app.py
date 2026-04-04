@@ -12,8 +12,9 @@ from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
-from aiogram.types import MenuButtonCommands
+from aiogram.types import MenuButtonCommands, MenuButtonWebApp, WebAppInfo
 
+from src.bot import messages as msg
 from src.bot.schedule_notifications import set_client_bot
 from src.bot.handlers.trainer_handlers import router as trainer_router
 from src.bot.middlewares.rate_limit_middleware import RateLimitMiddleware
@@ -21,6 +22,8 @@ from src.bot.middlewares.trainer_gate_middleware import TrainerGateMiddleware
 from src.bot.middlewares.trainer_menu_sync_middleware import TrainerMenuSyncMiddleware
 from src.bot.trainer_menu_commands import set_default_trainer_commands_without_stats
 from src.shared.config import Settings
+from src.shared.mini_app_https import mini_app_https_base
+from src.shared.sentry_init import init_sentry
 from src.shared.rate_limit import RateLimiter
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s [%(name)s] %(message)s")
@@ -28,14 +31,35 @@ logger = logging.getLogger(__name__)
 
 
 async def setup_menu_and_commands(bot: Bot) -> None:
-    """Default command list (minimal); per-chat list set when trainer is active (CRM + Analytics add commands)."""
+    """Default command list (minimal); per-chat list set when trainer is active (CRM + Analytics add commands).
+
+    With a public HTTPS base (WEBAPP_BASE_URL or API_BASE_URL), the chat menu button opens the hub Mini App in one tap.
+    If both are HTTP (typical local dev), keep MenuButtonCommands.
+    """
     await set_default_trainer_commands_without_stats(bot)
-    await bot.set_chat_menu_button(menu_button=MenuButtonCommands())
-    logger.info("Trainer bot: menu button and commands set")
+    settings = Settings()
+    base, src = mini_app_https_base(settings)
+    if base:
+        hub_url = f"{base}/webapp/trainer-home"
+        await bot.set_chat_menu_button(
+            menu_button=MenuButtonWebApp(
+                text=msg.TRAINER_MENU_BUTTON_HUB,
+                web_app=WebAppInfo(url=hub_url),
+            ),
+        )
+        logger.info("Trainer bot: menu button = Web App hub (%s) [%s]", hub_url, src)
+    else:
+        await bot.set_chat_menu_button(menu_button=MenuButtonCommands())
+        logger.info(
+            "Trainer bot: menu button = commands (%s; set WEBAPP_BASE_URL or API_BASE_URL to https://...)",
+            src,
+        )
+    logger.info("Trainer bot: default commands configured")
 
 
 async def main() -> None:
     settings = Settings()
+    init_sentry(settings, "bot-trainer")
     bot = Bot(
         token=settings.telegram_bot_token_trainer,
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),

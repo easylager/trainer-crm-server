@@ -1,0 +1,1576 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Тренерский кабинет</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="stylesheet" href="theme.css" />
+  <link rel="stylesheet" href="mini-app-components.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet" />
+  <script>
+    (function () {
+      function isAppDark() {
+        var tg = window.Telegram && window.Telegram.WebApp;
+        if (tg && tg.colorScheme) return tg.colorScheme === 'dark';
+        return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+      }
+      function applyTrainerHomeTheme() {
+        var d = document.documentElement;
+        var dark = isAppDark();
+        d.classList.toggle('hub-is-dark', dark);
+        /* Align with theme.css dark/light — not pure #000 (matches schedule + constitution) */
+        d.style.setProperty('--tg-theme-button-color', '#f5a623', 'important');
+        d.style.setProperty('--tg-theme-button-text-color', '#1a1a1a', 'important');
+        d.style.setProperty('--tg-theme-bg-color', dark ? '#1c1c1c' : '#fffbec', 'important');
+        d.style.setProperty('--tg-theme-text-color', dark ? '#ffffff' : '#1a1a1a', 'important');
+        d.style.setProperty('--tg-theme-secondary-bg-color', dark ? '#2c2c2e' : '#fff5e1', 'important');
+        d.style.setProperty('--tg-theme-hint-color', dark ? '#8e8e93' : '#666666', 'important');
+      }
+      applyTrainerHomeTheme();
+      if (window.matchMedia) {
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTrainerHomeTheme);
+      }
+      window.__applyTrainerHomeTheme = applyTrainerHomeTheme;
+    })();
+  </script>
+  <style>
+    /* Genius Trainer Hub: Elevated design with sophisticated micro-interactions */
+    body.hub-body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: var(--app-font-sans);
+      color: var(--tg-theme-text-color);
+      /* Enhanced ambient glow with depth layers */
+      background:
+        radial-gradient(ellipse 140% 100% at 50% -30%, rgba(247, 166, 0, 0.18) 0%, rgba(247, 166, 0, 0.08) 40%, transparent 70%),
+        radial-gradient(ellipse 80% 60% at 80% 100%, rgba(247, 166, 0, 0.06) 0%, transparent 50%),
+        var(--tg-theme-bg-color) !important;
+      padding: 16px calc(16px + env(safe-area-inset-right)) calc(32px + env(safe-area-inset-bottom)) calc(16px + env(safe-area-inset-left));
+      overflow-x: hidden;
+    }
+    .hub-shell {
+      animation: hub-enter 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+      max-width: 540px;
+      margin: 0 auto;
+      position: relative;
+    }
+    
+    @keyframes hub-enter {
+      from { 
+        opacity: 0; 
+        transform: translateY(20px) scale(0.98);
+      }
+      to { 
+        opacity: 1; 
+        transform: translateY(0) scale(1);
+      }
+    }
+    
+    @keyframes float-gentle {
+      0%, 100% { transform: translateY(0px); }
+      50% { transform: translateY(-2px); }
+    }
+    
+    @keyframes pulse-glow {
+      0%, 100% { box-shadow: 0 0 20px rgba(247, 166, 0, 0.15); }
+      50% { box-shadow: 0 0 30px rgba(247, 166, 0, 0.25); }
+    }
+    
+    @keyframes stat-card-enter {
+      from { 
+        opacity: 0; 
+        transform: translateY(10px) scale(0.95);
+      }
+      to { 
+        opacity: 1; 
+        transform: translateY(0) scale(1);
+      }
+    }
+    
+    .hub-stat-card {
+      animation: stat-card-enter 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+    
+    .hub-stat-card:nth-child(1) { animation-delay: 0.1s; }
+    .hub-stat-card:nth-child(2) { animation-delay: 0.2s; }
+    .hub-stat-card:nth-child(3) { animation-delay: 0.3s; }
+    /* Elevated Header with Sophisticated Branding */
+    .hub-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 24px;
+      position: relative;
+    }
+    
+    .hub-header-text { 
+      min-width: 0; 
+      flex: 1;
+    }
+    
+    .hub-header-kicker {
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--app-cta-fill);
+      margin: 0 0 8px;
+      opacity: 0.9;
+    }
+    
+    .hub-header-title {
+      margin: 0;
+      font-size: clamp(24px, 6.5vw, 30px);
+      font-weight: 700;
+      letter-spacing: -0.04em;
+      line-height: 1.1;
+      color: var(--tg-theme-text-color);
+      background: linear-gradient(135deg, var(--tg-theme-text-color) 0%, var(--app-cta-fill) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .btn-close-hub {
+      flex-shrink: 0;
+      padding: 12px 18px;
+      border-radius: 24px;
+      border: 2px solid rgba(245, 166, 35, 0.3);
+      font-size: 14px;
+      font-weight: 600;
+      font-family: inherit;
+      background: rgba(245, 166, 35, 0.05);
+      color: var(--app-cta-fill);
+      cursor: pointer;
+      backdrop-filter: blur(10px);
+      transition: all 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+      position: relative;
+      overflow: hidden;
+    }
+    
+    .btn-close-hub::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, rgba(245, 166, 35, 0.1) 0%, transparent 100%);
+      opacity: 0;
+      transition: opacity 0.2s ease;
+    }
+    
+    .btn-close-hub:hover::before { opacity: 1; }
+    .btn-close-hub:active { 
+      transform: scale(0.96); 
+      border-color: var(--app-cta-fill);
+    }
+    
+    .hub-is-dark .btn-close-hub {
+      background: rgba(245, 166, 35, 0.12);
+      border-color: rgba(245, 166, 35, 0.4);
+    }
+    /* Genius Hero Block with Live Intelligence */
+    .hub-hero { 
+      margin-bottom: 24px;
+      position: relative;
+    }
+    
+    .hub-hero-main {
+      position: relative;
+      border-radius: 24px;
+      padding: 28px 24px 32px;
+      margin-bottom: 20px;
+      overflow: hidden;
+      background: 
+        linear-gradient(155deg, rgba(247, 166, 0, 0.16) 0%, rgba(247, 166, 0, 0.06) 48%, transparent 100%),
+        var(--tg-theme-secondary-bg-color);
+      border: 1px solid rgba(247, 166, 0, 0.35);
+      box-shadow: 
+        0 12px 40px rgba(0, 0, 0, 0.15),
+        0 4px 16px rgba(247, 166, 0, 0.1);
+      animation: pulse-glow 4s ease-in-out infinite;
+    }
+    
+    .hub-is-dark .hub-hero-main {
+      box-shadow: 
+        0 16px 50px rgba(0, 0, 0, 0.4),
+        0 6px 20px rgba(247, 166, 0, 0.15);
+    }
+    
+    .hub-hero-main::before {
+      content: '';
+      position: absolute;
+      top: -50%;
+      right: -30%;
+      width: 70%;
+      height: 150%;
+      background: radial-gradient(ellipse, rgba(247, 166, 0, 0.25) 0%, rgba(247, 166, 0, 0.1) 40%, transparent 70%);
+      pointer-events: none;
+      animation: float-gentle 6s ease-in-out infinite;
+    }
+    
+    .hub-hero-inner { 
+      position: relative; 
+      z-index: 1; 
+    }
+    
+    .hub-hero-greeting {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--app-cta-fill);
+      margin-bottom: 12px;
+      letter-spacing: 0.02em;
+    }
+    
+    .hub-hero-title {
+      font-size: clamp(28px, 7vw, 36px);
+      font-weight: 700;
+      letter-spacing: -0.05em;
+      line-height: 1.1;
+      color: var(--tg-theme-text-color);
+      margin-bottom: 16px;
+    }
+    
+    .hub-hero-subtitle {
+      font-size: 15px;
+      font-weight: 500;
+      color: var(--tg-theme-hint-color);
+      line-height: 1.5;
+      max-width: 32em;
+    }
+    /* Smart Analytics Dashboard */
+    .hub-stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 12px;
+      margin-bottom: 28px;
+    }
+    
+    .hub-stat-card {
+      position: relative;
+      padding: 18px 16px 20px;
+      border-radius: 18px;
+      background: var(--tg-theme-secondary-bg-color);
+      border: 1px solid rgba(128, 128, 128, 0.12);
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+      transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+      overflow: hidden;
+    }
+    
+    .hub-is-dark .hub-stat-card {
+      box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25);
+    }
+    
+    .hub-stat-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: linear-gradient(90deg, var(--app-cta-fill) 0%, rgba(247, 166, 0, 0.6) 100%);
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+    
+    .hub-stat-card.stat-highlight::before { opacity: 1; }
+    
+    .hub-stat-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 28px rgba(0, 0, 0, 0.15);
+    }
+    
+    .hub-is-dark .hub-stat-card:hover {
+      box-shadow: 0 10px 36px rgba(0, 0, 0, 0.35);
+    }
+    
+    .hub-stat-icon {
+      width: 24px;
+      height: 24px;
+      margin-bottom: 12px;
+      color: var(--app-cta-fill);
+      opacity: 0.9;
+    }
+    
+    .hub-stat-value {
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--tg-theme-text-color);
+      line-height: 1.1;
+      margin-bottom: 4px;
+    }
+    
+    .hub-stat-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--tg-theme-hint-color);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+    
+    .hub-stat-trend {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 4px 8px;
+      border-radius: 8px;
+      background: rgba(52, 199, 89, 0.15);
+      color: var(--app-success);
+    }
+    
+    .hub-stat-trend.trend-down {
+      background: rgba(255, 59, 48, 0.15);
+      color: var(--app-danger);
+    }
+    /* Quick Actions Panel */
+    .hub-quick-actions {
+      margin-bottom: 28px;
+    }
+    
+    .hub-quick-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 12px;
+    }
+    
+    .hub-quick-action {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 16px 18px;
+      border-radius: 16px;
+      background: var(--tg-theme-secondary-bg-color);
+      border: 1px solid rgba(128, 128, 128, 0.1);
+      cursor: pointer;
+      transition: all 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+      overflow: hidden;
+    }
+    
+    .hub-quick-action::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, rgba(247, 166, 0, 0.08) 0%, transparent 100%);
+      opacity: 0;
+      transition: opacity 0.25s ease;
+    }
+    
+    .hub-quick-action:hover {
+      transform: translateY(-1px);
+      border-color: rgba(247, 166, 0, 0.3);
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+    }
+    
+    .hub-quick-action:hover::before { opacity: 1; }
+    
+    .hub-quick-action:active {
+      transform: scale(0.98);
+    }
+    
+    .hub-quick-icon {
+      width: 28px;
+      height: 28px;
+      flex-shrink: 0;
+      color: var(--app-cta-fill);
+      position: relative;
+      z-index: 1;
+    }
+    
+    .hub-quick-text {
+      flex: 1;
+      position: relative;
+      z-index: 1;
+    }
+    
+    .hub-quick-label {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--tg-theme-text-color);
+      line-height: 1.2;
+      margin-bottom: 2px;
+    }
+    
+    .hub-quick-hint {
+      font-size: 11px;
+      color: var(--tg-theme-hint-color);
+      line-height: 1.3;
+    }
+    
+    /* Section Headers */
+    .hub-section-head {
+      margin: 32px 0 16px;
+      position: relative;
+    }
+    
+    .hub-section-head:first-of-type { margin-top: 8px; }
+    
+    .hub-section-title {
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--tg-theme-hint-color);
+      position: relative;
+      padding-left: 20px;
+    }
+    
+    .hub-section-title::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 12px;
+      height: 2px;
+      background: var(--app-cta-fill);
+      border-radius: 1px;
+    }
+    .hub-day-label {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--tg-theme-hint-color);
+      margin: 14px 0 8px;
+      letter-spacing: 0.02em;
+    }
+    .hub-day-label:first-child { margin-top: 0; }
+    /* Same slot row model as schedule-editor (calendar list) — cream/dark chip + green/amber border */
+    .hub-bookings-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+    .hub-bookings-stack .slot-row {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+      width: 100%;
+      box-sizing: border-box;
+      margin: 0 0 6px;
+      padding: 12px 14px;
+      border-radius: 12px;
+      border: 2px solid transparent;
+      background: #fff3cc !important;
+      color: #1a1a1a !important;
+      text-align: left;
+      font: inherit;
+      cursor: pointer;
+      -webkit-appearance: none;
+      appearance: none;
+    }
+    .hub-is-dark .hub-bookings-stack .slot-row {
+      background: #2a2a2a !important;
+      color: #f5f5f5 !important;
+    }
+    .hub-bookings-stack .slot-row:last-child { margin-bottom: 0; }
+    .hub-bookings-stack .slot-row.slot-booked-click {
+      border-color: rgba(247, 166, 0, 0.45);
+    }
+    .hub-bookings-stack .slot-row.slot-booked-click.slot-booking-pending {
+      border-color: rgba(255, 159, 10, 0.55);
+    }
+    .hub-bookings-stack .slot-row.slot-booked-click.slot-booking-confirmed {
+      border-color: rgba(52, 199, 89, 0.45);
+    }
+    .hub-bookings-stack .slot-row:active { opacity: 0.92; }
+    .hub-bookings-stack .slot-row .slot-row-left { flex: 1; min-width: 0; }
+    .hub-bookings-stack .slot-row .slot-time { font-weight: 600; font-size: 15px; }
+    .hub-bookings-stack .slot-row .slot-venue {
+      font-size: 13px;
+      color: var(--tg-theme-hint-color);
+      margin-top: 4px;
+      line-height: 1.35;
+    }
+    .hub-bookings-stack .slot-row .slot-venue .venue-muted { font-style: italic; }
+    .hub-bookings-stack .slot-row .slot-client-hint {
+      font-size: 12px;
+      color: var(--tg-theme-hint-color);
+      margin-top: 2px;
+    }
+    .hub-bookings-stack .slot-row .slot-meta {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+    .hub-bookings-stack .slot-row .slot-status {
+      font-size: 12px;
+      padding: 4px 10px;
+      border-radius: 8px;
+    }
+    .hub-bookings-stack .slot-row .slot-status.booked-confirmed {
+      background: rgba(52, 199, 89, 0.2);
+      color: #34c759;
+    }
+    .hub-bookings-stack .slot-row .slot-status.booked-pending {
+      background: rgba(255, 159, 10, 0.22);
+      color: #ff9500;
+    }
+    .hub-bookings-cap {
+      margin-top: 14px;
+      font-size: 12px;
+      line-height: 1.4;
+      color: var(--tg-theme-hint-color);
+      text-align: center;
+    }
+    /* Enhanced Navigation Grid */
+    .hub-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 14px;
+    }
+    /* Tiles: cream “chip” surface on dark (reference); warm secondary on light */
+    .hub-tile {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      justify-content: space-between;
+      min-height: 120px;
+      padding: 20px 18px 18px;
+      border-radius: 20px;
+      overflow: hidden;
+      border: 1px solid rgba(245, 166, 35, 0.2);
+      font: inherit;
+      cursor: pointer;
+      text-align: left;
+      transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+      background: var(--tg-theme-secondary-bg-color);
+    }
+    .hub-is-dark .hub-tile {
+      background: 
+        linear-gradient(165deg, rgba(255, 251, 235, 0.96) 0%, rgba(255, 243, 214, 0.92) 100%);
+      color: #1a1a1a;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+      border-color: rgba(245, 166, 35, 0.4);
+    }
+    
+    html:not(.hub-is-dark) .hub-tile {
+      background: 
+        linear-gradient(165deg, rgba(255, 243, 204, 0.6) 0%, var(--tg-theme-secondary-bg-color) 100%);
+      color: var(--tg-theme-text-color);
+    }
+    .hub-tile::before {
+      content: '';
+      position: absolute;
+      top: -20%;
+      right: -20%;
+      width: 60%;
+      height: 80%;
+      background: radial-gradient(ellipse, rgba(247, 166, 0, 0.18) 0%, rgba(247, 166, 0, 0.08) 50%, transparent 80%);
+      pointer-events: none;
+      transition: all 0.4s ease;
+    }
+    
+    .hub-tile:hover {
+      transform: translateY(-4px) scale(1.02);
+      border-color: rgba(247, 166, 0, 0.5);
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
+    }
+    
+    .hub-is-dark .hub-tile:hover {
+      box-shadow: 0 16px 50px rgba(0, 0, 0, 0.4);
+    }
+    
+    .hub-tile:hover::before {
+      background: radial-gradient(ellipse, rgba(247, 166, 0, 0.25) 0%, rgba(247, 166, 0, 0.12) 50%, transparent 80%);
+    }
+    
+    .hub-tile:active { 
+      transform: translateY(-2px) scale(0.98); 
+    }
+    
+    .hub-tile-inner { 
+      position: relative; 
+      z-index: 1; 
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+    
+    .hub-tile-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      width: 100%;
+      margin-bottom: 12px;
+    }
+    .hub-tile-icon {
+      width: 32px;
+      height: 32px;
+      flex-shrink: 0;
+    }
+    
+    .hub-is-dark .hub-tile-icon { 
+      color: #c27800; 
+    }
+    
+    html:not(.hub-is-dark) .hub-tile-icon { 
+      color: var(--app-cta-fill); 
+    }
+    
+    .hub-tile-badge {
+      font-size: 10px;
+      font-weight: 700;
+      padding: 4px 8px;
+      border-radius: 8px;
+      background: rgba(247, 166, 0, 0.2);
+      color: var(--app-cta-fill);
+      line-height: 1;
+    }
+    
+    .hub-tile-content {
+      flex: 1;
+    }
+    
+    .hub-tile-label { 
+      font-weight: 700; 
+      font-size: 15px; 
+      line-height: 1.2; 
+      letter-spacing: -0.02em;
+      margin-bottom: 6px;
+    }
+    
+    .hub-tile-hint { 
+      font-size: 12px; 
+      line-height: 1.4; 
+      opacity: 0.8;
+    }
+    
+    .hub-is-dark .hub-tile-hint { 
+      color: #4a4a4a; 
+    }
+    
+    html:not(.hub-is-dark) .hub-tile-hint { 
+      color: var(--tg-theme-hint-color); 
+    }
+    .state-panel {
+      padding: 16px;
+      border-radius: 16px;
+      background: var(--tg-theme-secondary-bg-color);
+      border: 1px solid rgba(128, 128, 128, 0.12);
+      font-size: 14px;
+      line-height: 1.45;
+    }
+    .state-panel.error { border-color: rgba(255, 59, 48, 0.4); color: var(--tg-theme-text-color); }
+    .state-panel.loading { color: var(--tg-theme-hint-color); }
+    .hub-empty {
+      text-align: center;
+      padding: 28px 16px 8px;
+      color: var(--tg-theme-hint-color);
+      font-size: 15px;
+      line-height: 1.5;
+    }
+    .hub-empty-actions { margin-top: 16px; }
+    .hub-footnote {
+      margin-top: 32px;
+      padding: 20px 22px;
+      border-radius: 18px;
+      font-size: 12px;
+      line-height: 1.55;
+      color: var(--tg-theme-hint-color);
+      background: 
+        linear-gradient(135deg, rgba(247, 166, 0, 0.04) 0%, var(--tg-theme-secondary-bg-color) 100%);
+      border: 1px solid rgba(245, 166, 35, 0.2);
+      box-shadow: 0 3px 16px rgba(0, 0, 0, 0.06);
+      position: relative;
+      overflow: hidden;
+    }
+    
+    .hub-footnote::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, var(--app-cta-fill) 0%, rgba(247, 166, 0, 0.4) 100%);
+    }
+    
+    .hub-is-dark .hub-footnote {
+      box-shadow: 0 6px 24px rgba(0, 0, 0, 0.2);
+      background: 
+        linear-gradient(135deg, rgba(247, 166, 0, 0.06) 0%, var(--tg-theme-secondary-bg-color) 100%);
+    }
+    
+    .hub-footnote strong { 
+      color: var(--tg-theme-text-color); 
+      font-weight: 600; 
+    }
+
+    /* Onboarding checklist (same tokens as trainer-profile; constitution surfaces) */
+    .onboarding-strip {
+      margin-bottom: 20px;
+      padding: 14px 16px 16px;
+      border-radius: 18px;
+      border: 1px solid rgba(128, 128, 128, 0.14);
+      background: var(--tg-theme-secondary-bg-color);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    }
+    .hub-is-dark .onboarding-strip { box-shadow: 0 4px 18px rgba(0, 0, 0, 0.22); }
+    .onboarding-strip-head {
+      margin-bottom: 12px;
+    }
+    .onboarding-strip-title {
+      margin: 0;
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: var(--tg-theme-text-color);
+    }
+    .onboarding-strip-lead {
+      margin: 4px 0 0;
+      font-size: 12px;
+      font-weight: 500;
+      line-height: 1.4;
+      color: var(--tg-theme-hint-color);
+    }
+    .onboarding-steps {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .onboarding-step {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 14px;
+      background: var(--tg-theme-bg-color);
+      border: 1px solid rgba(128, 128, 128, 0.1);
+    }
+    .onboarding-step-icon {
+      flex-shrink: 0;
+      width: 24px;
+      height: 24px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      font-weight: 700;
+      background: color-mix(in srgb, var(--tg-theme-button-color) 16%, transparent);
+      color: var(--tg-theme-text-color);
+    }
+    .onboarding-step.done .onboarding-step-icon {
+      background: color-mix(in srgb, var(--app-success) 22%, transparent);
+      color: var(--app-success);
+    }
+    .onboarding-step.locked .onboarding-step-icon { opacity: 0.75; }
+    .onboarding-step-body { flex: 1; min-width: 0; }
+    .onboarding-step-name {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--tg-theme-text-color);
+      line-height: 1.3;
+    }
+    .onboarding-step-hint {
+      margin: 4px 0 0;
+      font-size: 12px;
+      color: var(--tg-theme-hint-color);
+      line-height: 1.35;
+    }
+    .onboarding-step-cta {
+      flex-shrink: 0;
+      align-self: center;
+      padding: 8px 12px;
+      border-radius: 10px;
+      border: none;
+      font-size: 12px;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      background: var(--app-cta-fill);
+      color: var(--app-cta-text);
+    }
+    .onboarding-step-cta:disabled {
+      opacity: 0.45;
+      cursor: default;
+    }
+    .onboarding-faq-row {
+      margin-top: 12px;
+      padding-top: 10px;
+      border-top: 1px solid rgba(128, 128, 128, 0.1);
+      text-align: center;
+    }
+    .onboarding-faq-link {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--tg-theme-button-color);
+      text-decoration: none;
+      cursor: pointer;
+      border: none;
+      background: none;
+      font-family: inherit;
+      padding: 4px 8px;
+    }
+  </style>
+</head>
+<body class="hub-body">
+  <div class="hub-shell" id="hubShell">
+    <header class="hub-header">
+      <div class="hub-header-text">
+        <p class="hub-header-kicker">Тренерский кабинет</p>
+        <h1 class="hub-header-title" id="hubPageTitle">Главная</h1>
+      </div>
+      <button type="button" class="btn-close-hub" id="btnClose">Закрыть</button>
+    </header>
+
+    <!-- Genius Hero Block -->
+    <section class="hub-hero" aria-labelledby="heroTitle">
+      <div class="hub-hero-main">
+        <div class="hub-hero-inner">
+          <div class="hub-hero-greeting" id="heroGreeting">Добро пожаловать</div>
+          <h2 class="hub-hero-title" id="heroTitle">Ваш день</h2>
+          <p class="hub-hero-subtitle" id="heroSubtitle">Загрузка информации…</p>
+        </div>
+      </div>
+    </section>
+
+    <div id="onboardingStrip" class="onboarding-strip" style="display:none;" hidden>
+      <div class="onboarding-strip-head">
+        <h2 class="onboarding-strip-title">Первые шаги</h2>
+        <p class="onboarding-strip-lead">Профиль → слоты → первая запись. Ниже — статус каждого шага.</p>
+      </div>
+      <ol class="onboarding-steps">
+        <li class="onboarding-step" id="onboardingStepProfile">
+          <span class="onboarding-step-icon" id="onboardingIconProfile">1</span>
+          <div class="onboarding-step-body">
+            <div class="onboarding-step-name">Профиль и модерация</div>
+            <p class="onboarding-step-hint" id="onboardingHintProfile">Заполните анкету по критериям проверки.</p>
+          </div>
+          <button type="button" class="onboarding-step-cta" id="onboardingCtaProfile">Открыть</button>
+        </li>
+        <li class="onboarding-step" id="onboardingStepSlots">
+          <span class="onboarding-step-icon" id="onboardingIconSlots">2</span>
+          <div class="onboarding-step-body">
+            <div class="onboarding-step-name">Слоты в расписании</div>
+            <p class="onboarding-step-hint" id="onboardingHintSlots">Добавьте доступное время, чтобы клиенты могли записаться.</p>
+          </div>
+          <button type="button" class="onboarding-step-cta" id="onboardingCtaSlots">Расписание</button>
+        </li>
+        <li class="onboarding-step" id="onboardingStepBooking">
+          <span class="onboarding-step-icon" id="onboardingIconBooking">3</span>
+          <div class="onboarding-step-body">
+            <div class="onboarding-step-name">Первая запись</div>
+            <p class="onboarding-step-hint" id="onboardingHintBooking">Создайте запись на свободный слот в редакторе.</p>
+          </div>
+          <button type="button" class="onboarding-step-cta" id="onboardingCtaBooking">К слотам</button>
+        </li>
+      </ol>
+      <div class="onboarding-faq-row">
+        <button type="button" class="onboarding-faq-link" id="onboardingFaqBtn">Справка и FAQ</button>
+      </div>
+    </div>
+
+    <!-- Smart Analytics Dashboard -->
+    <div class="hub-stats" id="hubStats" aria-hidden="true">
+      <div class="hub-stat-card stat-highlight" id="statToday">
+        <svg class="hub-stat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="4" width="18" height="18" rx="2"/>
+          <path d="M16 2v4M8 2v4M3 10h18"/>
+        </svg>
+        <div class="hub-stat-value" id="statTodayValue">—</div>
+        <div class="hub-stat-label">Сегодня</div>
+        <div class="hub-stat-trend" id="statTodayTrend" style="display: none;">+2</div>
+      </div>
+      
+      <div class="hub-stat-card" id="statWeek">
+        <svg class="hub-stat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+          <circle cx="9" cy="7" r="4"/>
+          <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+          <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+        </svg>
+        <div class="hub-stat-value" id="statWeekValue">—</div>
+        <div class="hub-stat-label">На неделе</div>
+      </div>
+      
+      <div class="hub-stat-card" id="statRevenue">
+        <svg class="hub-stat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M3 3v18h18"/>
+          <path d="M7 12l4-4 4 4 6-6"/>
+        </svg>
+        <div class="hub-stat-value" id="statRevenueValue">—</div>
+        <div class="hub-stat-label">Доход</div>
+        <div class="hub-stat-trend" id="statRevenueTrend" style="display: none;">+15%</div>
+      </div>
+    </div>
+
+    <!-- Quick Actions Panel -->
+    <div class="hub-quick-actions">
+      <div class="hub-section-head">
+        <div class="hub-section-title">Быстрые действия</div>
+      </div>
+      <div class="hub-quick-grid" id="hubQuickGrid">
+        <button type="button" class="hub-quick-action" data-action="book-client">
+          <svg class="hub-quick-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="4" width="18" height="18" rx="2"/>
+            <path d="M16 2v4M8 2v4M3 10h18"/>
+            <path d="M12 11v6M9 14h6"/>
+          </svg>
+          <div class="hub-quick-text">
+            <div class="hub-quick-label">Записать клиента</div>
+            <div class="hub-quick-hint">Слот и новая запись</div>
+          </div>
+        </button>
+        
+        <button type="button" class="hub-quick-action" data-action="view-requests">
+          <svg class="hub-quick-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 12h-6l-2 3h-4l-2-3H2"/>
+            <path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>
+          </svg>
+          <div class="hub-quick-text">
+            <div class="hub-quick-label">Заявки</div>
+            <div class="hub-quick-hint">Новые запросы клиентов</div>
+          </div>
+        </button>
+        
+        <button type="button" class="hub-quick-action" data-action="client-message">
+          <svg class="hub-quick-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+          </svg>
+          <div class="hub-quick-text">
+            <div class="hub-quick-label">Написать клиенту</div>
+            <div class="hub-quick-hint">Быстрое сообщение</div>
+          </div>
+        </button>
+        
+        <button type="button" class="hub-quick-action" data-action="analytics">
+          <svg class="hub-quick-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M3 3v18h18"/>
+            <path d="M7 12l4-4 4 4 6-6"/>
+          </svg>
+          <div class="hub-quick-text">
+            <div class="hub-quick-label">Статистика</div>
+            <div class="hub-quick-hint">Показатели работы</div>
+          </div>
+        </button>
+      </div>
+    </div>
+
+    <div id="stateMessage" class="state-panel loading" style="display:none;" role="status"></div>
+
+    <div class="hub-section-head">
+      <div class="hub-section-title">Ближайшие записи</div>
+    </div>
+    <div id="bookingsBlock"></div>
+
+    <div class="hub-section-head">
+      <div class="hub-section-title">Все разделы</div>
+    </div>
+    <div class="hub-grid" id="hubGrid"></div>
+
+    <div class="hub-footnote" id="hubFootnote">
+      <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--app-cta-fill); opacity: 0.8;">
+          <circle cx="12" cy="12" r="10"/>
+          <path d="M12 16v-4"/>
+          <path d="M12 8h.01"/>
+        </svg>
+        <strong style="color: var(--tg-theme-text-color);">Быстрый доступ</strong>
+      </div>
+      <div style="font-size: 11px; line-height: 1.6;">
+        Команды в чате бота: <strong>/guide</strong> — помощь, <strong>/home</strong> — эта страница.
+        Все разделы синхронизированы в реальном времени.
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function() {
+      var tg = window.Telegram && window.Telegram.WebApp;
+      if (tg) {
+        if (typeof tg.ready === 'function') tg.ready();
+        if (typeof tg.expand === 'function') tg.expand();
+        if (typeof window.__applyTrainerHomeTheme === 'function') window.__applyTrainerHomeTheme();
+        try {
+          var darkUi = document.documentElement.classList.contains('hub-is-dark');
+          var bgHex = darkUi ? '#1c1c1c' : '#fffbec';
+          if (typeof tg.setHeaderColor === 'function') tg.setHeaderColor(bgHex);
+          if (typeof tg.setBackgroundColor === 'function') tg.setBackgroundColor(bgHex);
+        } catch (e) {}
+      }
+      var initData = tg && tg.initData ? tg.initData : '';
+
+      var ICONS = {
+        cal: '<svg class="hub-tile-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>',
+        users: '<svg class="hub-tile-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
+        inbox: '<svg class="hub-tile-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>',
+        ticket: '<svg class="hub-tile-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/><path d="M13 5v2"/><path d="M13 11v2"/><path d="M13 17v2"/></svg>',
+        user: '<svg class="hub-tile-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>',
+        card: '<svg class="hub-tile-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>',
+        chart: '<svg class="hub-tile-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 3v18h18"/><path d="M7 12l4-4 4 4 6-6"/></svg>',
+      };
+      /** Cap upcoming booking cards so the hub never renders an unbounded list. */
+      var HUB_UPCOMING_BOOKINGS_MAX = 8;
+
+      /** Mirrors server gate on GET /trainer/stats (SUBSCRIPTION_TIER_ANALYTICS). */
+      var hasAnalyticsAccess = false;
+
+      function headersJson() {
+        var h = { 'Content-Type': 'application/json' };
+        if (tg && tg.initData) h['X-Telegram-Init-Data'] = tg.initData;
+        return h;
+      }
+      function withInit(url) {
+        if (!initData) return url;
+        return url + (url.indexOf('?') === -1 ? '?' : '&') + 'init_data=' + encodeURIComponent(initData);
+      }
+      function apiUrlWithQuery(path) {
+        var url = '/api/webapp' + path;
+        if (tg && tg.initData) url += (url.indexOf('?') >= 0 ? '&' : '?') + 'init_data=' + encodeURIComponent(tg.initData);
+        return url;
+      }
+
+      function webappBasePath() {
+        var p = window.location.pathname || '';
+        return p.replace(/[^/]+$/, '') || '/webapp/';
+      }
+
+      function navigateTo(pathWithQuery) {
+        var url = webappBasePath() + pathWithQuery;
+        url = withInit(url);
+        window.location.href = url;
+      }
+
+      function navigateToWithHash(path, hash) {
+        var url = webappBasePath() + String(path).replace(/^\//, '');
+        url = withInit(url);
+        if (hash) url += '#' + String(hash).replace(/^#/, '');
+        window.location.href = url;
+      }
+
+      function onboardingAllComplete(data) {
+        if (!data || !data.profile_complete || !data.is_active) return false;
+        return !!data.has_future_available_slots && !!data.has_any_booking;
+      }
+
+      function applyOnboardingChecklist(data) {
+        var strip = document.getElementById('onboardingStrip');
+        if (!strip) return;
+        /* All three steps done: no need to show the checklist anymore */
+        if (data && onboardingAllComplete(data)) {
+          strip.setAttribute('hidden', 'hidden');
+          strip.style.display = 'none';
+          return;
+        }
+        strip.removeAttribute('hidden');
+        strip.style.display = 'block';
+
+        var stepP = document.getElementById('onboardingStepProfile');
+        var iconP = document.getElementById('onboardingIconProfile');
+        var hintP = document.getElementById('onboardingHintProfile');
+        var ctaP = document.getElementById('onboardingCtaProfile');
+        var pc = !!(data && data.profile_complete);
+        if (stepP) {
+          stepP.classList.toggle('done', pc);
+          stepP.classList.remove('locked');
+        }
+        if (iconP) iconP.textContent = pc ? '✓' : '1';
+        if (hintP) {
+          hintP.textContent = pc
+            ? 'Критерии анкеты закрыты — можно отправить на модерацию или ждать проверки.'
+            : 'Заполните анкету по критериям проверки — «Открыть» откроет профиль для редактирования.';
+        }
+        if (ctaP) {
+          ctaP.disabled = false;
+          ctaP.textContent = pc ? 'Статус' : 'Открыть';
+        }
+
+        var active = !!(data && data.is_active);
+        var slotsDone = active && !!(data && data.has_future_available_slots);
+        var slotsLocked = !active;
+        var stepS = document.getElementById('onboardingStepSlots');
+        var iconS = document.getElementById('onboardingIconSlots');
+        var hintS = document.getElementById('onboardingHintSlots');
+        var ctaS = document.getElementById('onboardingCtaSlots');
+        if (stepS) {
+          stepS.classList.toggle('done', slotsDone);
+          stepS.classList.toggle('locked', slotsLocked);
+        }
+        if (iconS) iconS.textContent = slotsDone ? '✓' : '2';
+        if (hintS) {
+          hintS.textContent = slotsLocked
+            ? (data && data.slots_locked_reason) || 'Станет доступно после активации аккаунта.'
+            : slotsDone
+              ? 'В расписании есть свободные слоты.'
+              : 'Добавьте слоты в редакторе расписания.';
+        }
+        if (ctaS) {
+          ctaS.disabled = slotsLocked || slotsDone;
+          ctaS.textContent = slotsDone ? 'Готово' : 'Расписание';
+        }
+
+        var bookDone = active && !!(data && data.has_any_booking);
+        var bookLocked = !active;
+        var stepB = document.getElementById('onboardingStepBooking');
+        var iconB = document.getElementById('onboardingIconBooking');
+        var hintB = document.getElementById('onboardingHintBooking');
+        var ctaB = document.getElementById('onboardingCtaBooking');
+        if (stepB) {
+          stepB.classList.toggle('done', bookDone);
+          stepB.classList.toggle('locked', bookLocked);
+        }
+        if (iconB) iconB.textContent = bookDone ? '✓' : '3';
+        if (hintB) {
+          hintB.textContent = bookLocked
+            ? (data && data.bookings_locked_reason) || 'Станет доступно после активации аккаунта.'
+            : bookDone
+              ? 'Есть хотя бы одна запись (не отменённая).'
+              : 'Создайте запись на свободный слот в редакторе расписания.';
+        }
+        if (ctaB) {
+          ctaB.disabled = bookLocked || bookDone;
+          ctaB.textContent = bookDone ? 'Готово' : 'К слотам';
+        }
+      }
+
+      function loadOnboardingChecklist() {
+        var strip = document.getElementById('onboardingStrip');
+        if (!strip) return;
+        if (!initData) {
+          strip.setAttribute('hidden', 'hidden');
+          strip.style.display = 'none';
+          return;
+        }
+        fetch(apiUrlWithQuery('/trainer/onboarding/checklist'), { headers: headersJson() })
+          .then(function(r) {
+            return r.json().then(function(d) {
+              return { ok: r.ok, data: d };
+            });
+          })
+          .then(function(o) {
+            if (!o.ok || !o.data) return;
+            applyOnboardingChecklist(o.data);
+          })
+          .catch(function() {});
+      }
+
+      function wireOnboardingHub() {
+        var ctaP = document.getElementById('onboardingCtaProfile');
+        if (ctaP) {
+          ctaP.onclick = function() {
+            if (ctaP.textContent === 'Статус') {
+              navigateToWithHash('trainer-profile', 'moderation');
+              return;
+            }
+            navigateTo('trainer-profile');
+          };
+        }
+        var ctaS = document.getElementById('onboardingCtaSlots');
+        if (ctaS) {
+          ctaS.onclick = function() {
+            if (ctaS.disabled) return;
+            navigateTo('schedule-editor');
+          };
+        }
+        var ctaB = document.getElementById('onboardingCtaBooking');
+        if (ctaB) {
+          ctaB.onclick = function() {
+            if (ctaB.disabled) return;
+            navigateTo('schedule-editor');
+          };
+        }
+        var faq = document.getElementById('onboardingFaqBtn');
+        if (faq) {
+          faq.onclick = function() {
+            navigateTo('trainer-faq');
+          };
+        }
+        document.addEventListener('visibilitychange', function() {
+          if (!document.hidden) loadOnboardingChecklist();
+        });
+      }
+
+      function escapeHtml(s) {
+        if (s == null) return '';
+        return String(s)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;');
+      }
+
+      function clientLabel(b) {
+        var first = (b.client_first_name || '').trim();
+        var last = (b.client_last_name || '').trim();
+        var name = (first + ' ' + last).trim();
+        if (name) return name;
+        if (b.client_phone) return b.client_phone;
+        return 'Клиент';
+      }
+
+      function formatDateShort(iso) {
+        if (!iso) return '';
+        var d = iso.slice(0, 10).split('-');
+        if (d.length !== 3) return iso;
+        return d[2] + '.' + d[1] + '.' + d[0];
+      }
+
+      function dayHeaderLine(day) {
+        var dateStr = formatDateShort(day.date);
+        var lab = (day.day_label || '').trim();
+        if (dateStr && lab) return dateStr + ' (' + lab + ')';
+        return dateStr || lab || '';
+      }
+
+      function setStateMessage(text, kind) {
+        var el = document.getElementById('stateMessage');
+        if (!text) {
+          el.style.display = 'none';
+          el.textContent = '';
+          el.className = 'state-panel';
+          return;
+        }
+        el.textContent = text;
+        el.className = 'state-panel ' + (kind === 'error' ? 'error' : 'loading');
+        el.style.display = 'block';
+      }
+
+      function setStats(todayCount, weekCount, revenue) {
+        var wrap = document.getElementById('hubStats');
+        var todayValue = document.getElementById('statTodayValue');
+        var weekValue = document.getElementById('statWeekValue');
+        var revenueValue = document.getElementById('statRevenueValue');
+        
+        if (!wrap || !todayValue || !weekValue || !revenueValue) return;
+        
+        if (!initData) {
+          wrap.setAttribute('aria-hidden', 'true');
+          wrap.style.display = 'none';
+          return;
+        }
+        
+        wrap.style.display = 'grid';
+        wrap.setAttribute('aria-hidden', 'false');
+        
+        todayValue.textContent = todayCount === 0 ? '0' : String(todayCount);
+        weekValue.textContent = weekCount === 0 ? '0' : String(weekCount);
+        revenueValue.textContent = revenue || '—';
+        
+        // Highlight today's card if there are bookings
+        var todayCard = document.getElementById('statToday');
+        if (todayCard) {
+          if (todayCount > 0) {
+            todayCard.classList.add('stat-highlight');
+          } else {
+            todayCard.classList.remove('stat-highlight');
+          }
+        }
+      }
+
+      function updateHero(count, firstLine, weekCount) {
+        var greeting = document.getElementById('heroGreeting');
+        var title = document.getElementById('heroTitle');
+        var subtitle = document.getElementById('heroSubtitle');
+        
+        if (!greeting || !title || !subtitle) return;
+        
+        // Smart greeting based on time
+        var now = new Date();
+        var hour = now.getHours();
+        var greetingText = 'Добро пожаловать';
+        if (hour >= 6 && hour < 12) greetingText = 'Доброе утро';
+        else if (hour >= 12 && hour < 18) greetingText = 'Добрый день';
+        else if (hour >= 18 && hour < 23) greetingText = 'Добрый вечер';
+        else greetingText = 'Доброй ночи';
+        
+        greeting.textContent = greetingText;
+        
+        if (!initData) {
+          title.textContent = 'Войдите через бота';
+          subtitle.textContent = 'Откройте экран из бота тренера — подтянутся записи и быстрый доступ к разделам.';
+          setStats(0, 0, null);
+          return;
+        }
+        
+        if (count === 0) {
+          title.textContent = 'Свободный день';
+          subtitle.textContent = 'Предстоящих записей пока нет. Добавьте слоты в расписании — клиенты смогут записаться.';
+          setStats(0, weekCount || 0, null);
+          return;
+        }
+        
+        title.textContent = count === 1 ? 'Одна запись сегодня' : count + ' ' + pluralRu(count, 'запись', 'записи', 'записей') + ' сегодня';
+        var w = firstLine ? ' Первая в ' + firstLine + '.' : '';
+        subtitle.textContent = 'У вас активный день с клиентами.' + w;
+        setStats(count, weekCount || 0, null);
+      }
+
+      function pluralRu(n, one, few, many) {
+        var m = n % 10;
+        var mm = n % 100;
+        if (mm >= 11 && mm <= 14) return many;
+        if (m === 1) return one;
+        if (m >= 2 && m <= 4) return few;
+        return many;
+      }
+
+      /** Same labels/classes as schedule-editor calendar rows (booked slots). */
+      function hubBookingSlotRowHtml(b, timeRange) {
+        var bst = String(b.status || 'confirmed').toLowerCase();
+        var pending = bst === 'pending';
+        var statusLabel = pending ? 'к подтверждению' : 'подтверждено';
+        var statusClass = pending ? 'booked booked-pending' : 'booked booked-confirmed';
+        var rowMod = pending ? 'slot-booking-pending' : 'slot-booking-confirmed';
+        var arena = (b.arenas_str || '').trim();
+        var venueInner = arena
+          ? escapeHtml(arena)
+          : '<span class="venue-muted">не указано</span>';
+        return (
+          '<button type="button" class="slot-row slot-booked-click ' + rowMod + '" data-bid="' + String(b.id) + '">' +
+            '<div class="slot-row-left">' +
+              '<span class="slot-time">' + escapeHtml(timeRange) + '</span>' +
+              '<div class="slot-venue">📍 ' + venueInner + '</div>' +
+              '<div class="slot-client-hint">' + escapeHtml(clientLabel(b)) + '</div>' +
+            '</div>' +
+            '<div class="slot-meta">' +
+              '<span class="slot-status ' + statusClass + '">' + statusLabel + '</span>' +
+            '</div>' +
+          '</button>'
+        );
+      }
+
+      var TILES = [
+        { path: 'schedule-editor', label: 'Расписание', hint: 'Слоты и записи', icon: 'cal', badge: null },
+        { path: 'trainer-clients', label: 'Клиенты', hint: 'База и заметки', icon: 'users', badge: null },
+        { path: 'trainer-requests', label: 'Заявки', hint: 'Отклики клиентов', icon: 'inbox', badge: 'NEW' },
+        { path: 'trainer-pass-products', label: 'Абонементы', hint: 'Продукты и выдача', icon: 'ticket', badge: null },
+        { path: 'trainer-profile', label: 'Профиль', hint: 'Анкета и модерация', icon: 'user', badge: null },
+        { path: 'trainer-subscription', label: 'Подписка', hint: 'Тариф и оплата', icon: 'card', badge: null },
+        { path: 'trainer-stats', label: 'Статистика', hint: 'Показатели и динамика', icon: 'chart', badge: null, tier: 'analytics' },
+      ];
+
+      function tilesToRender() {
+        return TILES.filter(function(t) {
+          if (t.tier === 'analytics' && !hasAnalyticsAccess) return false;
+          return true;
+        });
+      }
+
+      function renderTiles() {
+        var grid = document.getElementById('hubGrid');
+        grid.innerHTML = tilesToRender().map(function(t) {
+          var ic = ICONS[t.icon] || ICONS.cal;
+          var badgeHtml = t.badge ? '<div class="hub-tile-badge">' + escapeHtml(t.badge) + '</div>' : '';
+          return (
+            '<button type="button" class="hub-tile" data-path="' + escapeHtml(t.path) + '">' +
+              '<div class="hub-tile-inner">' +
+                '<div class="hub-tile-top">' + ic + badgeHtml + '</div>' +
+                '<div class="hub-tile-content">' +
+                  '<div class="hub-tile-label">' + escapeHtml(t.label) + '</div>' +
+                  '<div class="hub-tile-hint">' + escapeHtml(t.hint) + '</div>' +
+                '</div>' +
+              '</div>' +
+            '</button>'
+          );
+        }).join('');
+        grid.querySelectorAll('.hub-tile').forEach(function(btn) {
+          btn.onclick = function() {
+            navigateTo(btn.getAttribute('data-path'));
+          };
+        });
+      }
+
+      function renderBookings(days) {
+        var block = document.getElementById('bookingsBlock');
+        var total = 0;
+        var todayCount = 0;
+        var weekCount = 0;
+        
+        var today = new Date();
+        var todayStr = today.getFullYear() + '-' + 
+          String(today.getMonth() + 1).padStart(2, '0') + '-' + 
+          String(today.getDate()).padStart(2, '0');
+        
+        (days || []).forEach(function(d) {
+          var dayBookings = (d.bookings || []).length;
+          total += dayBookings;
+          weekCount += dayBookings;
+          
+          if (d.date === todayStr) {
+            todayCount = dayBookings;
+          }
+        });
+        
+        var firstWhen = '';
+        var flatFirst = null;
+        (days || []).some(function(d) {
+          var bs = d.bookings || [];
+          if (bs.length) {
+            flatFirst = { day: d, booking: bs[0] };
+            return true;
+          }
+          return false;
+        });
+        
+        if (flatFirst) {
+          var b0 = flatFirst.booking;
+          firstWhen = (b0.start_time || '').slice(0, 5);
+        }
+        
+        updateHero(todayCount, firstWhen, weekCount);
+
+        var maxN = HUB_UPCOMING_BOOKINGS_MAX;
+        var totalBookings = 0;
+        (days || []).forEach(function(day) {
+          totalBookings += (day.bookings || []).length;
+        });
+
+        var count = 0;
+        var parts = [];
+
+        (days || []).forEach(function(day) {
+          if (count >= maxN) return;
+          var bs = day.bookings || [];
+          if (!bs.length) return;
+          parts.push('<div class="hub-day-label">' + escapeHtml(dayHeaderLine(day)) + '</div>');
+          parts.push('<div class="hub-bookings-stack">');
+          bs.forEach(function(b) {
+            if (count >= maxN) return;
+            var timeRange = (b.start_time || '') + '–' + (b.end_time || '');
+            parts.push(hubBookingSlotRowHtml(b, timeRange));
+            count++;
+          });
+          parts.push('</div>');
+        });
+
+        if (!count) {
+          block.innerHTML =
+            '<div class="hub-empty">Нет предстоящих записей — добавьте слоты, чтобы клиенты могли выбрать время.</div>' +
+            '<div class="hub-empty-actions">' +
+              '<button type="button" class="bd-btn bd-btn--primary" id="btnOpenSchedule">Расписание</button>' +
+            '</div>';
+          var bsched = document.getElementById('btnOpenSchedule');
+          if (bsched) bsched.onclick = function() { navigateTo('schedule-editor'); };
+          return;
+        }
+        var capHint = '';
+        if (totalBookings > maxN) {
+          capHint = '<div class="hub-bookings-cap">Показаны ' + maxN + ' ближайших записей из ' + totalBookings + '</div>';
+        }
+        block.innerHTML = parts.join('') + capHint;
+        block.querySelectorAll('[data-bid]').forEach(function(btn) {
+          btn.onclick = function() {
+            var bid = btn.getAttribute('data-bid');
+            if (bid) navigateTo('schedule-editor?open_booking=' + encodeURIComponent(bid) + '&from=hub');
+          };
+        });
+      }
+
+      function loadBookings() {
+        if (!initData) {
+          setStateMessage('', '');
+          updateHero(0, '');
+          document.getElementById('heroSubtitle').textContent = 'Откройте экран из бота тренера — тогда подтянутся записи.';
+          document.getElementById('bookingsBlock').innerHTML =
+            '<div class="hub-empty">Авторизация Telegram недоступна в этом режиме.</div>';
+          return;
+        }
+        setStateMessage('Загрузка…', '');
+        fetch(apiUrlWithQuery('/trainer/bookings'), { headers: headersJson() })
+          .then(function(r) {
+            return r.json().then(function(data) {
+              if (!r.ok) throw new Error(data.detail || r.statusText || 'Ошибка');
+              return data;
+            });
+          })
+          .then(function(data) {
+            setStateMessage('');
+            renderBookings(data.days || []);
+          })
+          .catch(function() {
+            setStateMessage('Не удалось загрузить записи. Проверьте сеть и откройте раздел из бота тренера.', 'error');
+            document.getElementById('bookingsBlock').innerHTML = '';
+            updateHero(0, '');
+          });
+      }
+
+      document.getElementById('btnClose').onclick = function() {
+        if (tg && tg.close) tg.close();
+        else window.close();
+      };
+
+      // Quick Actions handlers
+      function setupQuickActions() {
+        var quickGrid = document.getElementById('hubQuickGrid');
+        if (!quickGrid) return;
+
+        var analyticsBtn = quickGrid.querySelector('[data-action="analytics"]');
+        if (analyticsBtn) {
+          var show = hasAnalyticsAccess;
+          analyticsBtn.style.display = show ? '' : 'none';
+          analyticsBtn.setAttribute('aria-hidden', show ? 'false' : 'true');
+          analyticsBtn.tabIndex = show ? 0 : -1;
+        }
+
+        quickGrid.querySelectorAll('.hub-quick-action').forEach(function(btn) {
+          btn.onclick = function() {
+            var action = btn.getAttribute('data-action');
+            switch (action) {
+              case 'book-client':
+                navigateTo('schedule-editor');
+                break;
+              case 'view-requests':
+                navigateTo('trainer-requests');
+                break;
+              case 'client-message':
+                navigateTo('trainer-clients?action=message');
+                break;
+              case 'analytics':
+                if (!hasAnalyticsAccess) return;
+                navigateTo('trainer-stats');
+                break;
+            }
+          };
+        });
+      }
+
+      function loadSubscriptionStatus() {
+        if (!initData) {
+          hasAnalyticsAccess = false;
+          renderTiles();
+          setupQuickActions();
+          return;
+        }
+        fetch(apiUrlWithQuery('/trainer/subscription/status'), { headers: headersJson() })
+          .then(function(r) {
+            return r.json().then(function(data) {
+              return { ok: r.ok, data: data };
+            });
+          })
+          .then(function(o) {
+            if (o.ok && o.data && Array.isArray(o.data.unlocked_features)) {
+              hasAnalyticsAccess = o.data.unlocked_features.indexOf('analytics') !== -1;
+            } else {
+              hasAnalyticsAccess = false;
+            }
+            renderTiles();
+            setupQuickActions();
+          })
+          .catch(function() {
+            hasAnalyticsAccess = false;
+            renderTiles();
+            setupQuickActions();
+          });
+      }
+
+      wireOnboardingHub();
+      loadSubscriptionStatus();
+      loadBookings();
+      loadOnboardingChecklist();
+    })();
+  </script>
+</body>
+</html>

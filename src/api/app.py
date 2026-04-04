@@ -24,6 +24,9 @@ from src.infrastructure.db import async_session_factory
 from src.api.middleware.http_limits import ApiRateLimitMiddleware, MaxBodySizeMiddleware
 from src.shared.config import Settings
 from src.shared.logging_redact import sanitize_validation_errors_for_log
+from src.shared.sentry_init import init_sentry
+
+init_sentry(Settings(), "api")
 
 app = FastAPI(title="Trainer CRM API")
 
@@ -117,6 +120,15 @@ def webapp_client_requests_page():
 def webapp_client_bookings_page():
     """Serve the client 'My bookings' Mini App (list by day, arena/address/map, cancel with reason)."""
     path = _WEBAPP_DIR / "client-bookings.html"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Web App not found")
+    return _webapp_file_response(path)
+
+
+@app.get("/webapp/client-home")
+def webapp_client_home_page():
+    """Client hub: contextual hero, upcoming bookings, links to catalog / bookings / requests / passes."""
+    path = _WEBAPP_DIR / "client-home.html"
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Web App not found")
     return _webapp_file_response(path)
@@ -242,6 +254,25 @@ def webapp_trainer_clients_page():
     return _webapp_file_response(path)
 
 
+@app.get("/webapp/trainer-home")
+def webapp_trainer_home_page():
+    """Trainer hub: upcoming bookings + links to schedule, clients, requests, etc."""
+    path = _WEBAPP_DIR / "trainer-home.html"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Web App not found")
+    return _webapp_file_response(path)
+
+
+@app.get("/webapp/palette-ice-reference")
+@app.get("/webapp/palette-ice-reference.html")
+def webapp_palette_ice_reference():
+    """Static design reference: ice palette variants (browser preview, not a Mini App entry)."""
+    path = _WEBAPP_DIR / "palette-ice-reference.html"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="File not found")
+    return _webapp_file_response(path)
+
+
 @app.get("/webapp/client-buy-pass")
 def webapp_client_buy_pass_page():
     """Serve the client 'Buy pass' Mini App (?trainer_id=..., optional trainer_name=...)."""
@@ -296,10 +327,67 @@ def webapp_components_css():
     return FileResponse(path, media_type="text/css")
 
 
+@app.get("/webapp/mini-app-trainer-nav.css")
+def webapp_trainer_nav_css():
+    """Trainer header buttons — must load after per-page <style> (mobile WebView)."""
+    path = _WEBAPP_DIR / "mini-app-trainer-nav.css"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="CSS file not found")
+    return FileResponse(path, media_type="text/css")
+
+
 @app.get("/webapp/client-mini-app-theme.js")
 def webapp_client_mini_app_theme_js():
     """Shared Telegram theme + CRM palette for client Mini Apps."""
     path = _WEBAPP_DIR / "client-mini-app-theme.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_WEBAPP_NO_CACHE_HEADERS,
+    )
+
+
+@app.get("/webapp/mini-app-trainer-home.js")
+def webapp_mini_app_trainer_home_js():
+    """Trainer hub navigation (init_data preserved); loaded by trainer Mini App pages."""
+    path = _WEBAPP_DIR / "mini-app-trainer-home.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_WEBAPP_NO_CACHE_HEADERS,
+    )
+
+
+@app.get("/webapp/mini-app-client-home.js")
+def webapp_mini_app_client_home_js():
+    """Client hub navigation (init_data preserved); loaded by client Mini App pages."""
+    path = _WEBAPP_DIR / "mini-app-client-home.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_WEBAPP_NO_CACHE_HEADERS,
+    )
+
+
+@app.get("/webapp/mini-app-client-nav.css")
+def webapp_mini_app_client_nav_css():
+    """Client header — Главная button; load after page inline styles."""
+    path = _WEBAPP_DIR / "mini-app-client-nav.css"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="CSS file not found")
+    return FileResponse(path, media_type="text/css")
+
+
+@app.get("/webapp/mini-app-confirm.js")
+def webapp_mini_app_confirm_js():
+    """Themed confirm dialog; used by schedule-editor, trainer-requests, etc."""
+    path = _WEBAPP_DIR / "mini-app-confirm.js"
     if not path.is_file():
         raise HTTPException(status_code=404, detail="JS file not found")
     return FileResponse(

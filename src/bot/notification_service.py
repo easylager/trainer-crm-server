@@ -29,6 +29,7 @@ from src.bot.notification_loops import (
     run_trainer_booked_notifier_loop,
 )
 from src.shared.config import Settings
+from src.shared.sentry_init import init_sentry
 
 logging.basicConfig(
     level=logging.INFO,
@@ -39,6 +40,7 @@ logger = logging.getLogger(__name__)
 
 async def main() -> None:
     settings = Settings()
+    init_sentry(settings, "notification-service")
     client_bot = Bot(
         token=settings.telegram_bot_token_client,
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),

@@ -30,8 +30,8 @@ async def _trainer_calendar_revenue_total(
     session: AsyncSession, trainer_id: int, d_start: date, d_end: date
 ) -> int:
     """
-    Total accrual revenue in [d_start, d_end]: session cash (after pass/cert overlap),
-    pass sales issued in range (excluding passes created from a certificate),
+    Total accrual revenue in [d_start, d_end]: session cash from **completed** bookings only
+    (after pass/cert overlap), pass sales issued in range (excluding passes created from a certificate),
     certificate sales issued in range.
     """
     r = await session.execute(
@@ -47,7 +47,7 @@ async def _trainer_calendar_revenue_total(
             LEFT JOIN trainer_services ts ON ts.trainer_id = b.trainer_id AND ts.service_id = b.service_id
             LEFT JOIN pass_redemptions pr ON pr.booking_id = b.id
             LEFT JOIN certificate_booking_credits cbc ON cbc.booking_id = b.id
-            WHERE b.trainer_id = :tid AND b.status != 'cancelled'
+            WHERE b.trainer_id = :tid AND b.status = 'completed'
               AND s.status = 'booked'
               AND s.slot_date >= :ds AND s.slot_date <= :de
             """
@@ -88,6 +88,102 @@ async def _trainer_calendar_revenue_total(
     )
     cert_cents = int(r.scalar() or 0)
     return session_cents + pass_cents + cert_cents
+
+
+REVENUE_RANGE_MAX_DAYS = 731  # ~24 months inclusive cap
+
+
+async def get_trainer_revenue_breakdown_for_range(
+    session: AsyncSession, trainer_id: int, d_start: date, d_end: date
+) -> dict:
+    """
+    Accrual revenue in [d_start, d_end] inclusive, split by stream (same rules as calendar total).
+    Sessions: completed bookings by slot_date; passes/certs by issue date (UTC date).
+    """
+    if d_start > d_end:
+        msg = "period_start after period_end"
+        raise ValueError(msg)
+    if (d_end - d_start).days > REVENUE_RANGE_MAX_DAYS:
+        msg = "range too long"
+        raise ValueError(msg)
+
+    r = await session.execute(
+        text(
+            """
+            SELECT
+                COALESCE(SUM(session_rev), 0)::bigint,
+                COUNT(*) FILTER (WHERE session_rev > 0)::int
+            FROM (
+                SELECT
+                    CASE WHEN pr.booking_id IS NOT NULL THEN 0
+                         ELSE GREATEST(0, COALESCE(ts.price_cents, 0) - COALESCE(cbc.amount_cents, 0))
+                    END AS session_rev
+                FROM bookings b
+                JOIN slots s ON s.id = b.slot_id
+                LEFT JOIN trainer_services ts ON ts.trainer_id = b.trainer_id AND ts.service_id = b.service_id
+                LEFT JOIN pass_redemptions pr ON pr.booking_id = b.id
+                LEFT JOIN certificate_booking_credits cbc ON cbc.booking_id = b.id
+                WHERE b.trainer_id = :tid AND b.status = 'completed'
+                  AND s.status = 'booked'
+                  AND s.slot_date >= :ds AND s.slot_date <= :de
+            ) sub
+            """
+        ),
+        {"tid": trainer_id, "ds": d_start, "de": d_end},
+    )
+    row = r.fetchone() or (0, 0)
+    revenue_sessions_cents = int(row[0] or 0)
+    paid_sessions_count = int(row[1] or 0)
+
+    r = await session.execute(
+        text(
+            """
+            SELECT COALESCE(SUM(tpp.price_cents), 0)::bigint
+            FROM pass_instances pi
+            JOIN trainer_pass_products tpp ON tpp.id = pi.pass_product_id
+            WHERE tpp.trainer_id = :tid
+              AND pi.status != 'cancelled'
+              AND pi.source_certificate_instance_id IS NULL
+              AND DATE((pi.issued_at AT TIME ZONE 'UTC')) >= CAST(:ds AS DATE)
+              AND DATE((pi.issued_at AT TIME ZONE 'UTC')) <= CAST(:de AS DATE)
+            """
+        ),
+        {"tid": trainer_id, "ds": d_start, "de": d_end},
+    )
+    revenue_pass_sales_cents = int(r.scalar() or 0)
+
+    r = await session.execute(
+        text(
+            """
+            SELECT COALESCE(SUM(ci.amount_cents), 0)::bigint
+            FROM certificate_instances ci
+            WHERE ci.trainer_id = :tid
+              AND ci.status != 'cancelled'
+              AND DATE((ci.issued_at AT TIME ZONE 'UTC')) >= CAST(:ds AS DATE)
+              AND DATE((ci.issued_at AT TIME ZONE 'UTC')) <= CAST(:de AS DATE)
+            """
+        ),
+        {"tid": trainer_id, "ds": d_start, "de": d_end},
+    )
+    revenue_certificate_sales_cents = int(r.scalar() or 0)
+
+    revenue_total_cents = (
+        revenue_sessions_cents + revenue_pass_sales_cents + revenue_certificate_sales_cents
+    )
+    avg_check_cents: int | None = None
+    if paid_sessions_count > 0:
+        avg_check_cents = int(revenue_sessions_cents // paid_sessions_count)
+
+    return {
+        "period_start": d_start.isoformat(),
+        "period_end": d_end.isoformat(),
+        "revenue_sessions_cents": revenue_sessions_cents,
+        "revenue_pass_sales_cents": revenue_pass_sales_cents,
+        "revenue_certificate_sales_cents": revenue_certificate_sales_cents,
+        "revenue_total_cents": revenue_total_cents,
+        "paid_sessions_count": paid_sessions_count,
+        "avg_check_cents": avg_check_cents,
+    }
 
 
 async def get_trainer_stats(session: AsyncSession, trainer_id: int) -> dict:
@@ -236,9 +332,9 @@ async def get_trainer_stats(session: AsyncSession, trainer_id: int) -> dict:
 
 async def get_trainer_stats_dashboard(session: AsyncSession, trainer_id: int) -> dict:
     """
-    Rich stats for trainer Mini App: base + trends, revenue (rolling + calendar week/month),
-    avg check, repeat clients, cancel rate, leads (requests/responses + response rate),
-    pass redemptions, top clients with revenue. All dates/times in server TZ.
+    Rich stats for trainer Mini App: base + trends, revenue (rolling + calendar week/month).
+    Session-line revenue and top-client session sums count only bookings with status ``completed``.
+    Pass/certificate sales still use issue date. All dates/times in server TZ.
     """
     base = await get_trainer_stats(session, trainer_id)
     today = date.today()
@@ -373,7 +469,7 @@ async def get_trainer_stats_dashboard(session: AsyncSession, trainer_id: int) ->
     if last_month_total and base["month_total"] != last_month_total:
         month_change_pct = round(100 * (base["month_total"] - last_month_total) / last_month_total, 0)
 
-    # Revenue: session cash (exclude pass-covered; subtract cert balance applied) + pass/cert sales at issue.
+    # Revenue: session cash only for completed bookings + pass/cert sales at issue.
     r = await session.execute(
         text(
             """
@@ -387,7 +483,7 @@ async def get_trainer_stats_dashboard(session: AsyncSession, trainer_id: int) ->
                 LEFT JOIN trainer_services ts ON ts.trainer_id = b.trainer_id AND ts.service_id = b.service_id
                 LEFT JOIN pass_redemptions pr ON pr.booking_id = b.id
                 LEFT JOIN certificate_booking_credits cbc ON cbc.booking_id = b.id
-                WHERE b.trainer_id = :tid AND b.status != 'cancelled'
+                WHERE b.trainer_id = :tid AND b.status = 'completed'
                   AND s.status = 'booked'
                   AND s.slot_date >= CURRENT_DATE - INTERVAL '30 days'
             )
@@ -650,7 +746,7 @@ async def get_trainer_stats_dashboard(session: AsyncSession, trainer_id: int) ->
             (revenue_calendar_month_cents * days_in_month) / max(1, today.day)
         )
 
-    # Top clients: session cash only (same rules as revenue_sessions_*).
+    # Top clients: session cash from completed bookings only (same rules as revenue_sessions_*).
     r = await session.execute(
         text(
             """
@@ -671,7 +767,7 @@ async def get_trainer_stats_dashboard(session: AsyncSession, trainer_id: int) ->
             LEFT JOIN pass_redemptions pr ON pr.booking_id = b.id
             LEFT JOIN certificate_booking_credits cbc ON cbc.booking_id = b.id
             WHERE b.trainer_id = :tid
-              AND b.status != 'cancelled'
+              AND b.status = 'completed'
               AND s.status = 'booked'
               AND s.slot_date >= CURRENT_DATE - INTERVAL '30 days'
             GROUP BY c.id, name, phone

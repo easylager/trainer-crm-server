@@ -21,6 +21,9 @@ qrcode>=7.4.0
 reportlab>=4.0.0
 pymupdf>=1.24.0
 
+# Observability
+sentry-sdk[fastapi]>=2.19.0
+
 # Utils
 python-dotenv>=1.0.0
 python-multipart>=0.0.22
