@@ -153,6 +153,7 @@ async def test_onboarding_checklist_inactive_trainer_slots_and_bookings_locked(
     data = resp.json()
     assert data.get("is_active") is False
     assert data.get("has_future_available_slots") is False
+    assert data.get("has_future_slots") is False
     assert data.get("has_any_booking") is False
     assert data.get("slots_locked_reason")
     assert data.get("bookings_locked_reason")
@@ -191,6 +192,7 @@ async def test_onboarding_checklist_active_future_available_slot(
     assert ej.get("is_active") is True
     assert ej.get("slots_locked_reason") is None
     assert ej.get("has_future_available_slots") is False
+    assert ej.get("has_future_slots") is False
 
     slot_day = date.today() + timedelta(days=14)
     await db_session.execute(
@@ -211,7 +213,53 @@ async def test_onboarding_checklist_active_future_available_slot(
                 headers={"X-Telegram-Init-Data": "mock"},
             )
     assert filled.status_code == 200
-    assert filled.json().get("has_future_available_slots") is True
+    fj = filled.json()
+    assert fj.get("has_future_available_slots") is True
+    assert fj.get("has_future_slots") is True
+
+
+@pytest.mark.asyncio
+async def test_onboarding_checklist_booked_future_slot_counts_for_slots_step(
+    app_use_test_db,
+    db_session,
+) -> None:
+    """Future slot fully booked: has_future_slots true, has_future_available_slots false (onboarding step 2 done)."""
+    tg = _fresh_trainer_telegram_id()
+    r = await db_session.execute(text("INSERT INTO trainers (status) VALUES ('active') RETURNING id"))
+    tid = r.fetchone()[0]
+    await db_session.execute(
+        text("UPDATE trainers SET telegram_id = :tg WHERE id = :id"),
+        {"tg": tg, "id": tid},
+    )
+    await db_session.execute(
+        text(
+            "INSERT INTO trainer_profiles (trainer_id, first_name, last_name, age) "
+            "VALUES (:tid, 'Бронь', 'Слот', 30)"
+        ),
+        {"tid": tid},
+    )
+    slot_day = date.today() + timedelta(days=7)
+    await db_session.execute(
+        text(
+            """
+            INSERT INTO slots (trainer_id, slot_date, start_time, end_time, status)
+            VALUES (:tid, :d, :st, :en, 'booked')
+            """
+        ),
+        {"tid": tid, "d": slot_day, "st": time(14, 0), "en": time(15, 0)},
+    )
+    await db_session.commit()
+
+    with patch_trainer_init_auth(tg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.get(
+                "/api/webapp/trainer/onboarding/checklist",
+                headers={"X-Telegram-Init-Data": "mock"},
+            )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data.get("has_future_available_slots") is False
+    assert data.get("has_future_slots") is True
 
 
 @pytest.mark.asyncio

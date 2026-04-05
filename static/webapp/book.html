@@ -327,7 +327,7 @@
       <textarea id="comment" placeholder="Напишите тренеру, если нужно"></textarea>
     </div>
     <button type="button" class="btn-primary" id="btnSubmit">Записаться</button>
-    <button type="button" class="back-link" id="btnBackForm"><svg class="back-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>Выбрать другое время</button>
+    <button type="button" class="back-link" id="btnBackForm"><svg class="back-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>К карточке тренера</button>
   </div>
   <div id="screenSuccess" style="display: none;">
     <div class="success-msg" id="successMsgBody"></div>
@@ -507,7 +507,38 @@
         render(weekSlots);
       }
 
-      document.getElementById('btnBackForm').onclick = showSlots;
+      function goToTrainerCatalogCard() {
+        if (!trainerId) {
+          showSlots();
+          return;
+        }
+        var base = window.location.pathname.replace(/[^/]+$/, '');
+        var initData = tg?.initData || '';
+        function navigateWithQuery(q) {
+          var url = base + 'catalog?' + q;
+          if (initData) url += '&init_data=' + encodeURIComponent(initData);
+          window.location.href = url;
+        }
+        var sessHeaders = { Accept: 'application/json' };
+        if (initData) sessHeaders['X-Telegram-Init-Data'] = initData;
+        fetch('/api/webapp/client/session', {
+          headers: sessHeaders,
+          cache: 'no-store',
+        })
+          .then(function(r) { return r.ok ? r.json() : null; })
+          .then(function(s) {
+            var q = 'trainer_id=' + encodeURIComponent(trainerId);
+            if (s && s.city_id != null) q += '&city_id=' + encodeURIComponent(s.city_id);
+            if (s && s.service_id != null) q += '&service_id=' + encodeURIComponent(s.service_id);
+            if (s && s.arena_id != null) q += '&arena_id=' + encodeURIComponent(s.arena_id);
+            navigateWithQuery(q);
+          })
+          .catch(function() {
+            navigateWithQuery('trainer_id=' + encodeURIComponent(trainerId));
+          });
+      }
+
+      document.getElementById('btnBackForm').onclick = goToTrainerCatalogCard;
 
       document.getElementById('prevWeek').onclick = function() {
         if (currentWeekStart.getTime() <= thisMonday.getTime()) return;

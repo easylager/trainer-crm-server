@@ -1184,7 +1184,7 @@
     <div id="slotPickList" class="slot-pick-list"></div>
   </div>
   <div id="screenBookingForm" data-screen>
-    <button type="button" class="back-link" id="backFromBookingForm" style="margin-bottom:8px;"><svg class="back-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>Другое время</button>
+    <button type="button" class="back-link" id="backFromBookingForm" style="margin-bottom:8px;"><svg class="back-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>К карточке тренера</button>
     <p id="bookingFormSlotLabel" class="booking-slot-label"></p>
     <p id="bookingVenueHint" class="booking-venue-hint" style="display:none;"></p>
     <div class="form-block">
@@ -2196,14 +2196,6 @@
               }));
             }).catch(function() { /* no-op */ });
           }
-          if (state.openTrainerIdAfterLoad) {
-            var wantId = state.openTrainerIdAfterLoad;
-            state.openTrainerIdAfterLoad = null;
-            var idx = state.trainers.findIndex(function(t) { return t.id === wantId; });
-            if (idx >= 0) {
-              openTrainerDetailFromTrainerObject(state.trainers[idx], true);
-            }
-          }
         }).catch(function() {
           document.getElementById('trainerList').innerHTML = '<div class="error">Ошибка загрузки</div>';
         });
@@ -2575,7 +2567,7 @@
       }
 
       document.getElementById('backFromSlotPick').onclick = function() { showScreen('screenTrainerDetail'); };
-      document.getElementById('backFromBookingForm').onclick = function() { showScreen('screenSlotPick'); };
+      document.getElementById('backFromBookingForm').onclick = function() { showScreen('screenTrainerDetail'); };
 
       document.getElementById('btnSubmitBooking').onclick = function() {
         var slot = state.selectedSlot;
@@ -2801,7 +2793,6 @@
             if (returnCtx.service_id != null) state.serviceId = parseInt(returnCtx.service_id, 10) || null;
             if (returnCtx.arena_id != null) state.arenaId = returnCtx.arena_id === '' ? null : (parseInt(returnCtx.arena_id, 10) || null);
             if (returnCtx.offset != null) state.offset = Math.max(0, parseInt(returnCtx.offset, 10) || 0);
-            state.openTrainerIdAfterLoad = returnCtx.trainer_id;
           }
           function showInitialScreen() {
             if (state.cityId && state.serviceId) {
@@ -2809,11 +2800,67 @@
               renderSummary();
               showScreen('screenSummary');
               switchTab(state.activeTab);
-              if (state.openTrainerIdAfterLoad) loadTrainers();
+              loadTrainers();
             } else {
               loadCities();
               showScreen('screenCity');
             }
+          }
+          /* Deep link ?trainer_id= — открыть карточку напрямую (в т.ч. возврат из book.html) */
+          if (returnCtx && returnCtx.trainer_id) {
+            loadTrainerById(returnCtx.trainer_id).then(function(t) {
+              if (t) {
+                state.selectedTrainer = t;
+                state.trainerName = trainerName(t);
+                renderTrainerDetail();
+                showScreen('screenTrainerDetail');
+                return;
+              }
+              if (state.trainerId) {
+                state.openedFromMyTrainerTab = true;
+                loadTrainerById(state.trainerId).then(function(t2) {
+                  if (t2) {
+                    state.selectedTrainer = t2;
+                    state.trainerName = trainerName(t2);
+                    renderTrainerDetail();
+                    showScreen('screenTrainerDetail');
+                  } else {
+                    state.trainerId = null;
+                    state.trainerName = '';
+                    showInitialScreen();
+                  }
+                }).catch(function() {
+                  state.trainerId = null;
+                  state.trainerName = '';
+                  showInitialScreen();
+                });
+                return;
+              }
+              showInitialScreen();
+            }).catch(function() {
+              if (state.trainerId) {
+                state.openedFromMyTrainerTab = true;
+                loadTrainerById(state.trainerId).then(function(t2) {
+                  if (t2) {
+                    state.selectedTrainer = t2;
+                    state.trainerName = trainerName(t2);
+                    renderTrainerDetail();
+                    showScreen('screenTrainerDetail');
+                  } else {
+                    state.trainerId = null;
+                    state.trainerName = '';
+                    showInitialScreen();
+                  }
+                }).catch(function() {
+                  state.trainerId = null;
+                  state.trainerName = '';
+                  showInitialScreen();
+                });
+                return;
+              }
+              showInitialScreen();
+            });
+            return;
           }
           if (state.trainerId) {
             state.openedFromMyTrainerTab = true;

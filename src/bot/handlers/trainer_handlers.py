@@ -198,23 +198,20 @@ def _trainer_profile_keyboard() -> InlineKeyboardMarkup | None:
 
 def _post_welcome_link_keyboard(*, for_active_menu: bool) -> InlineKeyboardMarkup:
     """
-    After /start with link_: overview (HTTPS), profile (+ subscription when fully active), then guide callback.
+    After /start with link_: Обзор (HTTPS onboarding hub) only — no inline Profile (avoid duplicate entry;
+    profile is reachable from trainer-home + left menu). Subscription when menu fully active.
     """
     rows: list[list[InlineKeyboardButton]] = []
     base = (Settings().webapp_base_url or "").rstrip("/")
-    if for_active_menu and base.lower().startswith("https://"):
+    # Always offer Обзор when Mini App is available — welcome flow must not skip onboarding (trainer-home).
+    if base.lower().startswith("https://"):
         rows.append(
             [
                 InlineKeyboardButton(
-                    text=msg.TRAINER_BUTTON_HOME_WEBAPP,
+                    text=msg.TRAINER_MENU_BUTTON_HUB,
                     web_app=WebAppInfo(url=f"{base}/webapp/trainer-home"),
                 )
             ]
-        )
-    profile_url = _trainer_profile_webapp_url()
-    if profile_url:
-        rows.append(
-            [InlineKeyboardButton(text=msg.TRAINER_PROFILE_BTN_MINI_APP, web_app=WebAppInfo(url=profile_url))]
         )
     if for_active_menu and base.lower().startswith("https://"):
         rows.append(

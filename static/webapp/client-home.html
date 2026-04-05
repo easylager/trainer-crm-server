@@ -28,18 +28,13 @@
     })();
   </script>
   <style>
-    /* Светлый хром (не индиго-мрак): небесный + мягкие пласты */
-    html[data-client-hub].hub-is-dark {
-      --hub-chrome: #bae6fd;
-      --hub-chrome-muted: rgba(186, 230, 253, 0.35);
-      --hub-surface-deep: #334155;
-      --hub-surface-stat: #3d4f66;
+    @keyframes pulse-glow {
+      0%, 100% { box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15), 0 4px 16px rgba(247, 166, 0, 0.1); }
+      50% { box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15), 0 4px 20px rgba(247, 166, 0, 0.18); }
     }
-    html[data-client-hub]:not(.hub-is-dark) {
-      --hub-chrome: #0ea5e9;
-      --hub-chrome-muted: rgba(14, 165, 233, 0.22);
-      --hub-surface-deep: #ffffff;
-      --hub-surface-stat: #f1f5f9;
+    @keyframes float-gentle {
+      0%, 100% { transform: translateY(0px); }
+      50% { transform: translateY(-2px); }
     }
     body.hub-body {
       margin: 0;
@@ -48,18 +43,9 @@
       color: var(--tg-theme-text-color);
       padding: 16px calc(16px + env(safe-area-inset-right)) calc(28px + env(safe-area-inset-bottom)) calc(16px + env(safe-area-inset-left));
       overflow-x: hidden;
-    }
-    html.hub-is-dark body.hub-body {
       background:
-        radial-gradient(ellipse 130% 80% at 50% -25%, rgba(255, 255, 255, 0.07) 0%, transparent 45%),
-        radial-gradient(ellipse 120% 90% at 0% -5%, rgba(147, 197, 253, 0.28) 0%, transparent 55%),
-        radial-gradient(ellipse 100% 70% at 100% 5%, rgba(45, 212, 191, 0.14) 0%, transparent 52%),
-        var(--tg-theme-bg-color) !important;
-    }
-    html:not(.hub-is-dark) body.hub-body {
-      background:
-        radial-gradient(ellipse 120% 90% at 0% -10%, rgba(99, 102, 241, 0.12) 0%, transparent 55%),
-        radial-gradient(ellipse 100% 70% at 100% 0%, rgba(20, 184, 166, 0.08) 0%, transparent 50%),
+        radial-gradient(ellipse 140% 100% at 50% -30%, rgba(247, 166, 0, 0.18) 0%, rgba(247, 166, 0, 0.08) 40%, transparent 70%),
+        radial-gradient(ellipse 80% 60% at 80% 100%, rgba(247, 166, 0, 0.06) 0%, transparent 50%),
         var(--tg-theme-bg-color) !important;
     }
     .hub-shell { max-width: 540px; margin: 0 auto; position: relative; }
@@ -75,7 +61,7 @@
       font-weight: 600;
       letter-spacing: 0.14em;
       text-transform: uppercase;
-      color: var(--hub-chrome);
+      color: var(--app-cta-fill);
       margin: 0 0 6px;
     }
     .hub-header-title {
@@ -84,50 +70,89 @@
       font-weight: 700;
       letter-spacing: -0.03em;
       line-height: 1.12;
-      color: var(--tg-theme-text-color);
+      background: linear-gradient(135deg, var(--tg-theme-text-color) 0%, var(--app-cta-fill) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
     }
     .btn-close-hub {
       flex-shrink: 0;
-      padding: 10px 16px;
-      border-radius: 20px;
-      border: 1px solid var(--hub-chrome-muted);
+      padding: 12px 18px;
+      border-radius: 24px;
+      border: 2px solid rgba(245, 166, 35, 0.3);
       font-size: 14px;
       font-weight: 600;
       font-family: inherit;
-      background: var(--hub-surface-deep);
-      color: var(--tg-theme-text-color);
+      background: rgba(245, 166, 35, 0.05);
+      color: var(--app-cta-fill);
       cursor: pointer;
+      backdrop-filter: blur(10px);
+      transition: all 0.2s cubic-bezier(0.22, 1, 0.36, 1);
     }
-    html:not(.hub-is-dark) .btn-close-hub {
-      background: var(--tg-theme-secondary-bg-color);
-      border-color: rgba(99, 102, 241, 0.22);
+    .btn-close-hub:active { transform: scale(0.96); border-color: var(--app-cta-fill); }
+    .hub-is-dark .btn-close-hub {
+      background: rgba(245, 166, 35, 0.12);
+      border-color: rgba(245, 166, 35, 0.4);
     }
+    .hub-hero { margin-bottom: 4px; }
     .hub-hero-main {
-      border-radius: 22px;
-      padding: 22px 20px 24px;
+      position: relative;
+      border-radius: 24px;
+      padding: 24px 22px 26px;
       margin-bottom: 20px;
       overflow: hidden;
-      position: relative;
       background:
-        linear-gradient(145deg, rgba(255, 255, 255, 0.06) 0%, transparent 40%),
-        linear-gradient(210deg, rgba(147, 197, 253, 0.15) 0%, transparent 45%),
-        linear-gradient(335deg, rgba(45, 212, 191, 0.08) 0%, transparent 42%),
-        var(--hub-surface-deep);
-      border: 1px solid rgba(255, 255, 255, 0.12);
-      box-shadow: 0 8px 28px rgba(0, 0, 0, 0.08);
-    }
-    html:not(.hub-is-dark) .hub-hero-main {
-      background:
-        linear-gradient(145deg, rgba(14, 165, 233, 0.06) 0%, transparent 45%),
-        linear-gradient(210deg, rgba(45, 212, 191, 0.06) 0%, transparent 45%),
+        linear-gradient(155deg, rgba(247, 166, 0, 0.16) 0%, rgba(247, 166, 0, 0.06) 48%, transparent 100%),
         var(--tg-theme-secondary-bg-color);
-      border-color: rgba(14, 165, 233, 0.15);
+      border: 1px solid rgba(247, 166, 0, 0.35);
+      box-shadow:
+        0 12px 40px rgba(0, 0, 0, 0.15),
+        0 4px 16px rgba(247, 166, 0, 0.1);
+      animation: pulse-glow 4s ease-in-out infinite;
     }
-    .hub-is-dark .hub-hero-main { box-shadow: 0 10px 32px rgba(15, 23, 42, 0.25); }
-    .hub-hero-greeting { font-size: 13px; font-weight: 600; color: var(--tg-theme-hint-color); margin-bottom: 8px; }
-    .hub-hero-title { margin: 0 0 10px; font-size: clamp(20px, 5.5vw, 24px); font-weight: 700; letter-spacing: -0.03em; line-height: 1.2; }
-    .hub-hero-subtitle { margin: 0 0 16px; font-size: 14px; line-height: 1.45; color: var(--tg-theme-hint-color); }
-    .hub-hero-cta { width: 100%; margin-top: 4px; }
+    .hub-is-dark .hub-hero-main {
+      box-shadow:
+        0 16px 50px rgba(0, 0, 0, 0.4),
+        0 6px 20px rgba(247, 166, 0, 0.15);
+    }
+    .hub-hero-main::before {
+      content: '';
+      position: absolute;
+      top: -50%;
+      right: -30%;
+      width: 70%;
+      height: 150%;
+      background: radial-gradient(ellipse, rgba(247, 166, 0, 0.25) 0%, rgba(247, 166, 0, 0.1) 40%, transparent 70%);
+      pointer-events: none;
+      animation: float-gentle 6s ease-in-out infinite;
+    }
+    .hub-hero-greeting {
+      position: relative;
+      z-index: 1;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--app-cta-fill);
+      margin-bottom: 8px;
+    }
+    .hub-hero-title {
+      position: relative;
+      z-index: 1;
+      margin: 0 0 10px;
+      font-size: clamp(20px, 5.5vw, 26px);
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1.2;
+      color: var(--tg-theme-text-color);
+    }
+    .hub-hero-subtitle {
+      position: relative;
+      z-index: 1;
+      margin: 0 0 16px;
+      font-size: 14px;
+      line-height: 1.45;
+      color: var(--tg-theme-hint-color);
+    }
+    .hub-hero-cta { position: relative; z-index: 1; width: 100%; margin-top: 4px; }
     .hub-stats {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
@@ -138,13 +163,11 @@
       border-radius: 16px;
       padding: 14px 12px;
       text-align: center;
-      background: var(--hub-surface-stat);
-      border: 1px solid rgba(255, 255, 255, 0.1);
+      background: var(--tg-theme-secondary-bg-color);
+      border: 1px solid rgba(128, 128, 128, 0.12);
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
     }
-    html:not(.hub-is-dark) .hub-stat-card {
-      border-color: rgba(99, 102, 241, 0.12);
-      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
-    }
+    .hub-is-dark .hub-stat-card { box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25); }
     .hub-stat-value { font-size: 20px; font-weight: 700; color: var(--tg-theme-text-color); }
     .hub-stat-label { font-size: 11px; font-weight: 600; color: var(--tg-theme-hint-color); margin-top: 4px; text-transform: uppercase; letter-spacing: 0.06em; }
     .hub-section-head {
@@ -169,7 +192,7 @@
       transform: translateY(-50%);
       width: 12px;
       height: 2px;
-      background: var(--hub-chrome);
+      background: var(--app-cta-fill);
       border-radius: 1px;
     }
     .hub-quick-grid {
@@ -177,28 +200,52 @@
       grid-template-columns: 1fr 1fr;
       gap: 10px;
     }
+    /* Две стартовые кнопки в один ряд — не копируют четырёхплиточную карту ниже */
+    .hub-quick-grid--start .hub-quick-action {
+      min-height: 76px;
+      align-items: flex-start;
+    }
     .hub-quick-action {
+      position: relative;
       display: flex;
       align-items: center;
       gap: 12px;
       padding: 14px 14px;
       border-radius: 16px;
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      background: var(--hub-surface-deep);
+      background: var(--tg-theme-secondary-bg-color);
+      border: 1px solid rgba(128, 128, 128, 0.1);
       font: inherit;
       text-align: left;
       cursor: pointer;
       color: inherit;
-      box-shadow: 0 1px 6px rgba(15, 23, 42, 0.08);
+      overflow: hidden;
+      transition: all 0.25s cubic-bezier(0.22, 1, 0.36, 1);
     }
-    html:not(.hub-is-dark) .hub-quick-action {
-      background: var(--tg-theme-secondary-bg-color);
-      border-color: rgba(99, 102, 241, 0.15);
+    .hub-quick-action::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, rgba(247, 166, 0, 0.08) 0%, transparent 100%);
+      opacity: 0;
+      transition: opacity 0.25s ease;
     }
-    .hub-quick-action:active { opacity: 0.92; transform: scale(0.99); }
-    .hub-quick-icon { width: 28px; height: 28px; flex-shrink: 0; color: var(--hub-chrome); }
-    .hub-quick-label { font-size: 14px; font-weight: 700; }
-    .hub-quick-hint { font-size: 11px; color: var(--tg-theme-hint-color); margin-top: 2px; }
+    .hub-quick-action:hover {
+      transform: translateY(-1px);
+      border-color: rgba(247, 166, 0, 0.3);
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+    }
+    .hub-quick-action:hover::before { opacity: 1; }
+    .hub-quick-action:active { transform: scale(0.98); }
+    .hub-quick-icon {
+      width: 28px;
+      height: 28px;
+      flex-shrink: 0;
+      color: var(--app-cta-fill);
+      position: relative;
+      z-index: 1;
+    }
+    .hub-quick-label { font-size: 14px; font-weight: 700; position: relative; z-index: 1; }
+    .hub-quick-hint { font-size: 11px; color: var(--tg-theme-hint-color); margin-top: 2px; position: relative; z-index: 1; }
     .hub-day-label {
       font-size: 13px;
       font-weight: 600;
@@ -217,20 +264,20 @@
       margin: 0 0 6px;
       padding: 12px 14px;
       border-radius: 12px;
-      border: 1px solid rgba(255, 255, 255, 0.12);
-      background: var(--hub-surface-deep);
-      color: var(--tg-theme-text-color);
+      border: 2px solid transparent;
+      background: #fff3cc !important;
+      color: #1a1a1a !important;
       text-align: left;
       font: inherit;
       cursor: pointer;
-      box-shadow: 0 2px 10px rgba(15, 23, 42, 0.12);
+      -webkit-appearance: none;
+      appearance: none;
+    }
+    .hub-is-dark .hub-bookings-stack .slot-row {
+      background: #2a2a2a !important;
+      color: #f5f5f5 !important;
     }
     .hub-bookings-stack .slot-row:active { opacity: 0.92; }
-    html:not(.hub-is-dark) .hub-bookings-stack .slot-row {
-      border-color: rgba(99, 102, 241, 0.25);
-      background: var(--tg-theme-secondary-bg-color);
-      box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06);
-    }
     .hub-bookings-stack .slot-time { font-weight: 600; font-size: 15px; }
     .hub-bookings-stack .slot-trainer { font-size: 13px; color: var(--tg-theme-hint-color); margin-top: 4px; }
     .hub-bookings-stack .slot-place { font-size: 12px; color: var(--tg-theme-hint-color); margin-top: 2px; }
@@ -249,7 +296,6 @@
       color: var(--tg-theme-hint-color);
       text-align: center;
     }
-    /* Section tiles — same visual language as trainer-home (cream chips on dark, radial glow) */
     .hub-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
@@ -265,7 +311,7 @@
       padding: 20px 18px 18px;
       border-radius: 20px;
       overflow: hidden;
-      border: 1px solid rgba(129, 140, 248, 0.28);
+      border: 1px solid rgba(245, 166, 35, 0.2);
       font: inherit;
       cursor: pointer;
       text-align: left;
@@ -275,16 +321,15 @@
     }
     .hub-is-dark .hub-tile {
       background:
-        linear-gradient(165deg, #334155 0%, #3d4f66 100%);
-      color: #f8fafc;
-      box-shadow: 0 6px 22px rgba(15, 23, 42, 0.18);
-      border-color: rgba(186, 230, 253, 0.2);
+        linear-gradient(165deg, rgba(255, 251, 235, 0.96) 0%, rgba(255, 243, 214, 0.92) 100%);
+      color: #1a1a1a;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+      border-color: rgba(245, 166, 35, 0.4);
     }
     html:not(.hub-is-dark) .hub-tile {
       background:
-        linear-gradient(165deg, #ffffff 0%, #f1f5f9 100%);
+        linear-gradient(165deg, rgba(255, 243, 204, 0.6) 0%, var(--tg-theme-secondary-bg-color) 100%);
       color: var(--tg-theme-text-color);
-      border-color: rgba(99, 102, 241, 0.2);
     }
     .hub-tile::before {
       content: '';
@@ -293,34 +338,20 @@
       right: -20%;
       width: 60%;
       height: 80%;
-      background: radial-gradient(ellipse, rgba(255, 255, 255, 0.1) 0%, rgba(147, 197, 253, 0.14) 40%, transparent 78%);
+      background: radial-gradient(ellipse, rgba(247, 166, 0, 0.18) 0%, rgba(247, 166, 0, 0.08) 50%, transparent 80%);
       pointer-events: none;
       transition: all 0.4s ease;
     }
-    html:not(.hub-is-dark) .hub-tile::before {
-      background: radial-gradient(ellipse, rgba(99, 102, 241, 0.14) 0%, rgba(20, 184, 166, 0.06) 50%, transparent 80%);
-    }
     .hub-tile:hover {
       transform: translateY(-4px) scale(1.02);
-      border-color: rgba(165, 180, 252, 0.45);
+      border-color: rgba(247, 166, 0, 0.5);
       box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
     }
-    html:not(.hub-is-dark) .hub-tile:hover {
-      border-color: rgba(99, 102, 241, 0.38);
-    }
-    .hub-is-dark .hub-tile:hover {
-      box-shadow: 0 10px 28px rgba(15, 23, 42, 0.22);
-      border-color: rgba(255, 255, 255, 0.22);
-    }
+    .hub-is-dark .hub-tile:hover { box-shadow: 0 16px 50px rgba(0, 0, 0, 0.4); }
     .hub-tile:hover::before {
-      background: radial-gradient(ellipse, rgba(255, 255, 255, 0.14) 0%, rgba(45, 212, 191, 0.1) 45%, transparent 80%);
+      background: radial-gradient(ellipse, rgba(247, 166, 0, 0.25) 0%, rgba(247, 166, 0, 0.12) 50%, transparent 80%);
     }
-    html:not(.hub-is-dark) .hub-tile:hover::before {
-      background: radial-gradient(ellipse, rgba(99, 102, 241, 0.2) 0%, rgba(20, 184, 166, 0.1) 50%, transparent 80%);
-    }
-    .hub-tile:active {
-      transform: translateY(-2px) scale(0.98);
-    }
+    .hub-tile:active { transform: translateY(-2px) scale(0.98); }
     .hub-tile-inner {
       position: relative;
       z-index: 1;
@@ -337,33 +368,19 @@
       width: 100%;
       margin-bottom: 12px;
     }
-    .hub-tile-icon {
-      width: 32px;
-      height: 32px;
-      flex-shrink: 0;
-    }
-    .hub-is-dark .hub-tile-icon {
-      color: #2dd4bf;
-    }
-    html:not(.hub-is-dark) .hub-tile-icon {
-      color: var(--app-cta-fill);
-    }
+    .hub-tile-icon { width: 32px; height: 32px; flex-shrink: 0; }
+    .hub-is-dark .hub-tile-icon { color: #c27800; }
+    html:not(.hub-is-dark) .hub-tile-icon { color: var(--app-cta-fill); }
     .hub-tile-badge {
       font-size: 10px;
       font-weight: 700;
       padding: 4px 8px;
       border-radius: 8px;
-      background: rgba(20, 184, 166, 0.22);
-      color: #5eead4;
+      background: rgba(247, 166, 0, 0.2);
+      color: var(--app-cta-fill);
       line-height: 1;
     }
-    html:not(.hub-is-dark) .hub-tile-badge {
-      background: rgba(13, 148, 136, 0.12);
-      color: #0d9488;
-    }
-    .hub-tile-content {
-      flex: 1;
-    }
+    .hub-tile-content { flex: 1; }
     .hub-tile-label {
       font-weight: 700;
       font-size: 15px;
@@ -376,23 +393,15 @@
       line-height: 1.4;
       opacity: 0.8;
     }
-    .hub-is-dark .hub-tile-hint {
-      color: #94a3b8;
-    }
-    html:not(.hub-is-dark) .hub-tile-hint {
-      color: var(--tg-theme-hint-color);
-    }
+    .hub-is-dark .hub-tile-hint { color: #4a4a4a; }
+    html:not(.hub-is-dark) .hub-tile-hint { color: var(--tg-theme-hint-color); }
     .state-panel {
       padding: 14px 16px;
       border-radius: 14px;
-      background: var(--hub-surface-deep);
-      border: 1px solid rgba(148, 163, 184, 0.16);
+      background: var(--tg-theme-secondary-bg-color);
+      border: 1px solid rgba(128, 128, 128, 0.12);
       font-size: 14px;
       margin-bottom: 12px;
-    }
-    html:not(.hub-is-dark) .state-panel {
-      background: var(--tg-theme-secondary-bg-color);
-      border-color: rgba(99, 102, 241, 0.12);
     }
     .state-panel.error { border-color: rgba(255, 59, 48, 0.35); }
     .state-panel.loading { color: var(--tg-theme-hint-color); }
@@ -410,22 +419,24 @@
       font-size: 12px;
       line-height: 1.5;
       color: var(--tg-theme-hint-color);
-      background: var(--hub-surface-deep);
-      border: 1px solid rgba(255, 255, 255, 0.1);
+      background:
+        linear-gradient(135deg, rgba(247, 166, 0, 0.04) 0%, var(--tg-theme-secondary-bg-color) 100%);
+      border: 1px solid rgba(245, 166, 35, 0.2);
+      box-shadow: 0 3px 16px rgba(0, 0, 0, 0.06);
     }
-    html:not(.hub-is-dark) .hub-footnote {
-      background: var(--tg-theme-secondary-bg-color);
-      border-color: rgba(99, 102, 241, 0.14);
+    .hub-is-dark .hub-footnote {
+      box-shadow: 0 6px 24px rgba(0, 0, 0, 0.2);
+      background:
+        linear-gradient(135deg, rgba(247, 166, 0, 0.06) 0%, var(--tg-theme-secondary-bg-color) 100%);
     }
     .hub-footnote strong { color: var(--tg-theme-text-color); }
-    /* mini-app-components .bd-btn--secondary — teal / indigo border on hub */
     .hub-body .bd-btn--secondary {
-      border-color: rgba(45, 212, 191, 0.4);
-      color: #99f6e4;
+      border-color: rgba(245, 166, 35, 0.4);
+      color: var(--app-cta-fill);
     }
     html:not(.hub-is-dark) .hub-body .bd-btn--secondary {
-      border-color: rgba(13, 148, 136, 0.4);
-      color: #0d9488;
+      border-color: rgba(245, 166, 35, 0.45);
+      color: #c27800;
     }
   </style>
 </head>
@@ -463,25 +474,18 @@
       </div>
     </div>
 
+    <!-- Стартовые сценарии (не дублируют сетку «Все разделы»): запись + возврат к расписанию -->
     <div class="hub-section-head">
-      <div class="hub-section-title">Быстрые действия</div>
+      <div class="hub-section-title">С чего начать</div>
     </div>
-    <div class="hub-quick-grid" id="hubQuickGrid">
+    <div class="hub-quick-grid hub-quick-grid--start" id="hubQuickGrid">
       <button type="button" class="hub-quick-action" data-action="catalog">
         <svg class="hub-quick-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-        <div><div class="hub-quick-label">Тренеры</div><div class="hub-quick-hint">Каталог и запись</div></div>
+        <div><div class="hub-quick-label">Записаться к тренеру</div><div class="hub-quick-hint">Каталог, фильтры и слоты</div></div>
       </button>
       <button type="button" class="hub-quick-action" data-action="bookings">
         <svg class="hub-quick-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
-        <div><div class="hub-quick-label">Мои записи</div><div class="hub-quick-hint">Расписание и адрес</div></div>
-      </button>
-      <button type="button" class="hub-quick-action" data-action="requests">
-        <svg class="hub-quick-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
-        <div><div class="hub-quick-label">Заявки</div><div class="hub-quick-hint">Отклики тренеров</div></div>
-      </button>
-      <button type="button" class="hub-quick-action" data-action="passes">
-        <svg class="hub-quick-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/></svg>
-        <div><div class="hub-quick-label">Абонементы</div><div class="hub-quick-hint">И сертификаты</div></div>
+        <div><div class="hub-quick-label">Мои записи</div><div class="hub-quick-hint">Что уже запланировано</div></div>
       </button>
     </div>
 
@@ -511,7 +515,7 @@
         if (typeof window.__applyClientHubTheme === 'function') window.__applyClientHubTheme();
         try {
           var darkUi = document.documentElement.classList.contains('hub-is-dark');
-          var bgHex = darkUi ? '#1e293b' : '#f8fafc';
+          var bgHex = darkUi ? '#1c1c1c' : '#fffbec';
           if (typeof tg.setHeaderColor === 'function') tg.setHeaderColor(bgHex);
           if (typeof tg.setBackgroundColor === 'function') tg.setBackgroundColor(bgHex);
         } catch (e) {}
@@ -527,15 +531,13 @@
         cal: '<svg class="hub-tile-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>',
         inbox: '<svg class="hub-tile-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>',
         ticket: '<svg class="hub-tile-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/><path d="M13 5v2"/><path d="M13 11v2"/><path d="M13 17v2"/></svg>',
-        cart: '<svg class="hub-tile-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>',
       };
 
       var TILES = [
         { path: 'catalog', label: 'Тренеры и запись', hint: 'Каталог, фильтры, запись', icon: 'search', badge: null },
         { path: 'client-bookings', label: 'Мои записи', hint: 'Список по дням', icon: 'cal', badge: null },
         { path: 'client-requests', label: 'Заявки и отклики', hint: 'Подбор тренера', icon: 'inbox', badge: 'NEW' },
-        { path: 'client-passes-certificates', label: 'Абонементы', hint: 'Остаток и сроки', icon: 'ticket', badge: null },
-        { path: 'client-buy-pass', label: 'Купить абонемент', hint: 'По выбранному тренеру', icon: 'cart', badge: null },
+        { path: 'client-passes-certificates', label: 'Абонементы', hint: 'Остаток, сроки, покупка', icon: 'ticket', badge: null },
       ];
 
       function headersJson() {
@@ -777,7 +779,7 @@
               sub.textContent = formatDateShort(scenario.next.day.date) + ' ' + (bn.start_time || '') + ' · ' + (bn.trainer_name || 'Тренер');
             } else {
               title.textContent = 'Вы в системе';
-              sub.textContent = 'Заявки и записи — ниже. Быстрые действия помогут не потеряться.';
+              sub.textContent = 'Заявки и записи — в блоках ниже. Полная карта разделов — внизу экрана.';
             }
             cta.textContent = 'Мои записи';
             cta.style.display = 'block';
@@ -800,23 +802,31 @@
         document.getElementById('statRequestsValue').textContent = String(requestCount);
       }
 
+      function addDaysToYmd(ymd, deltaDays) {
+        var p = ymd.split('-');
+        var d = new Date(parseInt(p[0], 10), parseInt(p[1], 10) - 1, parseInt(p[2], 10));
+        d.setDate(d.getDate() + deltaDays);
+        return d.getFullYear() + '-' +
+          String(d.getMonth() + 1).padStart(2, '0') + '-' +
+          String(d.getDate()).padStart(2, '0');
+      }
+
       function computeStats(days, requestItems) {
         var now = new Date();
         var todayStr = now.getFullYear() + '-' +
           String(now.getMonth() + 1).padStart(2, '0') + '-' +
           String(now.getDate()).padStart(2, '0');
-        var today0 = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        /* Inclusive 7-day window: today … today+6 */
-        var weekEnd = new Date(today0);
-        weekEnd.setDate(weekEnd.getDate() + 6);
+        /* «На неделе» = записи на датах от сегодня до +7 календарных дней включительно (8 дней).
+           Раньше было today…today+6 (7 дней) — запись на восьмой день (напр. вс vs сб недели) не попадала в счётчик. */
+        var weekLastStr = addDaysToYmd(todayStr, 7);
         var todayCount = 0;
         var weekCount = 0;
         (days || []).forEach(function(day) {
           var ds = (day.date || '').slice(0, 10);
-          var dayD = new Date(ds + 'T12:00:00');
+          if (!ds) return;
           var n = (day.bookings || []).length;
           if (ds === todayStr) todayCount += n;
-          if (dayD >= today0 && dayD <= weekEnd) weekCount += n;
+          if (ds >= todayStr && ds <= weekLastStr) weekCount += n;
         });
         var reqCount = (requestItems || []).filter(function(r) {
           return String(r.status || '').toLowerCase() !== 'archived';
@@ -904,8 +914,6 @@
             var a = btn.getAttribute('data-action');
             if (a === 'catalog') navigateTo('catalog');
             else if (a === 'bookings') navigateTo('client-bookings');
-            else if (a === 'requests') navigateTo('client-requests');
-            else if (a === 'passes') navigateTo('client-passes-certificates');
           };
         });
       }

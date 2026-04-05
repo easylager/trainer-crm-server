@@ -1018,6 +1018,14 @@
       /** Mirrors server gate on GET /trainer/stats (SUBSCRIPTION_TIER_ANALYTICS). */
       var hasAnalyticsAccess = false;
 
+      /** Last GET /trainer/onboarding/checklist payload — drives hero + empty list copy (avoid slots CTA before profile/active). */
+      var hubOnboardingData = null;
+      /** Last bookings payload from /trainer/bookings — used to refresh empty-state HTML after onboarding loads. */
+      var hubLastBookingsDays = null;
+      var hubLastTodayCount = 0;
+      var hubLastFirstWhen = '';
+      var hubLastWeekCount = 0;
+
       function headersJson() {
         var h = { 'Content-Type': 'application/json' };
         if (tg && tg.initData) h['X-Telegram-Init-Data'] = tg.initData;
@@ -1053,16 +1061,20 @@
 
       function onboardingAllComplete(data) {
         if (!data || !data.profile_complete || !data.is_active) return false;
-        return !!data.has_future_available_slots && !!data.has_any_booking;
+        var slotsOk = !!(data.has_future_slots || data.has_any_booking);
+        return slotsOk && !!data.has_any_booking;
       }
 
       function applyOnboardingChecklist(data) {
+        hubOnboardingData = data;
         var strip = document.getElementById('onboardingStrip');
         if (!strip) return;
         /* All three steps done: no need to show the checklist anymore */
         if (data && onboardingAllComplete(data)) {
           strip.setAttribute('hidden', 'hidden');
           strip.style.display = 'none';
+          applyHubHero();
+          refreshHubEmptyBookingsIfNeeded();
           return;
         }
         strip.removeAttribute('hidden');
@@ -1089,7 +1101,8 @@
         }
 
         var active = !!(data && data.is_active);
-        var slotsDone = active && !!(data && data.has_future_available_slots);
+        var slotsDone =
+          active && !!(data && (data.has_future_slots || data.has_any_booking));
         var slotsLocked = !active;
         var stepS = document.getElementById('onboardingStepSlots');
         var iconS = document.getElementById('onboardingIconSlots');
@@ -1104,7 +1117,11 @@
           hintS.textContent = slotsLocked
             ? (data && data.slots_locked_reason) || 'Станет доступно после активации аккаунта.'
             : slotsDone
-              ? 'В расписании есть свободные слоты.'
+              ? data.has_future_available_slots
+                ? 'В расписании есть свободные слоты.'
+                : data.has_future_slots
+                  ? 'Слоты в расписании есть — при необходимости добавьте новые окна.'
+                  : 'Записи есть — расписание уже использовалось.'
               : 'Добавьте слоты в редакторе расписания.';
         }
         if (ctaS) {
@@ -1134,6 +1151,56 @@
           ctaB.disabled = bookLocked || bookDone;
           ctaB.textContent = bookDone ? 'Готово' : 'К слотам';
         }
+
+        applyHubHero();
+        refreshHubEmptyBookingsIfNeeded();
+      }
+
+      /** When checklist arrives after bookings, re-render empty list so copy matches onboarding (no duplicate slots CTA). */
+      function refreshHubEmptyBookingsIfNeeded() {
+        var block = document.getElementById('bookingsBlock');
+        if (!block || !hubLastBookingsDays) return;
+        var total = 0;
+        (hubLastBookingsDays || []).forEach(function(d) {
+          total += (d.bookings || []).length;
+        });
+        if (total > 0) return;
+        block.innerHTML = buildEmptyBookingsHtml();
+        wireEmptyScheduleButton();
+      }
+
+      function buildEmptyBookingsHtml() {
+        var onb = hubOnboardingData;
+        var msg;
+        if (!onb) {
+          msg =
+            'Нет предстоящих записей. Ниже блок «Первые шаги» подскажет, с чего начать.';
+        } else if (!onb.profile_complete) {
+          msg =
+            'Нет предстоящих записей. Сначала завершите анкету в блоке «Первые шаги» — после проверки здесь появятся занятия.';
+        } else if (!onb.is_active) {
+          msg =
+            'Нет предстоящих записей. Расписание и записи откроются после активации аккаунта.';
+        } else if (onb.has_future_slots || onb.has_future_available_slots || onb.has_any_booking) {
+          msg =
+            'Нет предстоящих записей — когда появятся ближайшие занятия, они отобразятся здесь.';
+        } else {
+          msg = 'Нет предстоящих записей — добавьте слоты, чтобы клиенты могли выбрать время.';
+        }
+        var parts = ['<div class="hub-empty">' + escapeHtml(msg) + '</div>'];
+        if (onb && onb.profile_complete && onb.is_active) {
+          parts.push(
+            '<div class="hub-empty-actions">' +
+              '<button type="button" class="bd-btn bd-btn--primary" id="btnOpenSchedule">Расписание</button>' +
+            '</div>'
+          );
+        }
+        return parts.join('');
+      }
+
+      function wireEmptyScheduleButton() {
+        var bsched = document.getElementById('btnOpenSchedule');
+        if (bsched) bsched.onclick = function() { navigateTo('schedule-editor'); };
       }
 
       function loadOnboardingChecklist() {
@@ -1270,14 +1337,16 @@
         }
       }
 
-      function updateHero(count, firstLine, weekCount) {
+      /**
+       * Hero + stats: aligned with onboarding — no "add slots" until profile is complete and account active.
+       */
+      function applyHubHero() {
         var greeting = document.getElementById('heroGreeting');
         var title = document.getElementById('heroTitle');
         var subtitle = document.getElementById('heroSubtitle');
-        
+
         if (!greeting || !title || !subtitle) return;
-        
-        // Smart greeting based on time
+
         var now = new Date();
         var hour = now.getHours();
         var greetingText = 'Добро пожаловать';
@@ -1285,27 +1354,61 @@
         else if (hour >= 12 && hour < 18) greetingText = 'Добрый день';
         else if (hour >= 18 && hour < 23) greetingText = 'Добрый вечер';
         else greetingText = 'Доброй ночи';
-        
         greeting.textContent = greetingText;
-        
+
         if (!initData) {
           title.textContent = 'Войдите через бота';
           subtitle.textContent = 'Откройте экран из бота тренера — подтянутся записи и быстрый доступ к разделам.';
           setStats(0, 0, null);
           return;
         }
-        
-        if (count === 0) {
-          title.textContent = 'Свободный день';
-          subtitle.textContent = 'Предстоящих записей пока нет. Добавьте слоты в расписании — клиенты смогут записаться.';
+
+        var count = hubLastTodayCount;
+        var firstLine = hubLastFirstWhen;
+        var weekCount = hubLastWeekCount;
+
+        if (count > 0) {
+          title.textContent =
+            count === 1 ? 'Одна запись сегодня' : count + ' ' + pluralRu(count, 'запись', 'записи', 'записей') + ' сегодня';
+          var w = firstLine ? ' Первая в ' + firstLine + '.' : '';
+          subtitle.textContent = 'У вас активный день с клиентами.' + w;
+          setStats(count, weekCount || 0, null);
+          return;
+        }
+
+        var onb = hubOnboardingData;
+        if (!onb) {
+          title.textContent = 'Ваш день';
+          subtitle.textContent = 'Предстоящих записей на сегодня нет.';
           setStats(0, weekCount || 0, null);
           return;
         }
-        
-        title.textContent = count === 1 ? 'Одна запись сегодня' : count + ' ' + pluralRu(count, 'запись', 'записи', 'записей') + ' сегодня';
-        var w = firstLine ? ' Первая в ' + firstLine + '.' : '';
-        subtitle.textContent = 'У вас активный день с клиентами.' + w;
-        setStats(count, weekCount || 0, null);
+
+        if (!onb.profile_complete) {
+          title.textContent = 'Сначала анкета';
+          subtitle.textContent =
+            'Ниже в блоке «Первые шаги» заполните профиль и отправьте анкету на проверку — после одобрения откроются расписание и заявки.';
+          setStats(0, weekCount || 0, null);
+          return;
+        }
+
+        if (!onb.is_active) {
+          title.textContent = 'Скоро полный доступ';
+          subtitle.textContent =
+            'Ниже в блоке «Первые шаги» видно статус активации — расписание и записи откроются после активации аккаунта.';
+          setStats(0, weekCount || 0, null);
+          return;
+        }
+
+        title.textContent = 'Свободный день';
+        if (!onb.has_future_available_slots && !onb.has_future_slots) {
+          subtitle.textContent =
+            'Предстоящих записей пока нет. Добавьте слоты в расписании — клиенты смогут выбрать время.';
+        } else {
+          subtitle.textContent =
+            'Записей на сегодня нет — когда клиенты запишутся, они появятся здесь.';
+        }
+        setStats(0, weekCount || 0, null);
       }
 
       function pluralRu(n, one, few, many) {
@@ -1384,6 +1487,7 @@
       }
 
       function renderBookings(days) {
+        hubLastBookingsDays = days || [];
         var block = document.getElementById('bookingsBlock');
         var total = 0;
         var todayCount = 0;
@@ -1419,8 +1523,11 @@
           var b0 = flatFirst.booking;
           firstWhen = (b0.start_time || '').slice(0, 5);
         }
-        
-        updateHero(todayCount, firstWhen, weekCount);
+
+        hubLastTodayCount = todayCount;
+        hubLastFirstWhen = firstWhen;
+        hubLastWeekCount = weekCount;
+        applyHubHero();
 
         var maxN = HUB_UPCOMING_BOOKINGS_MAX;
         var totalBookings = 0;
@@ -1447,13 +1554,8 @@
         });
 
         if (!count) {
-          block.innerHTML =
-            '<div class="hub-empty">Нет предстоящих записей — добавьте слоты, чтобы клиенты могли выбрать время.</div>' +
-            '<div class="hub-empty-actions">' +
-              '<button type="button" class="bd-btn bd-btn--primary" id="btnOpenSchedule">Расписание</button>' +
-            '</div>';
-          var bsched = document.getElementById('btnOpenSchedule');
-          if (bsched) bsched.onclick = function() { navigateTo('schedule-editor'); };
+          block.innerHTML = buildEmptyBookingsHtml();
+          wireEmptyScheduleButton();
           return;
         }
         var capHint = '';
@@ -1472,8 +1574,11 @@
       function loadBookings() {
         if (!initData) {
           setStateMessage('', '');
-          updateHero(0, '');
-          document.getElementById('heroSubtitle').textContent = 'Откройте экран из бота тренера — тогда подтянутся записи.';
+          hubLastBookingsDays = null;
+          hubLastTodayCount = 0;
+          hubLastFirstWhen = '';
+          hubLastWeekCount = 0;
+          applyHubHero();
           document.getElementById('bookingsBlock').innerHTML =
             '<div class="hub-empty">Авторизация Telegram недоступна в этом режиме.</div>';
           return;
@@ -1493,7 +1598,11 @@
           .catch(function() {
             setStateMessage('Не удалось загрузить записи. Проверьте сеть и откройте раздел из бота тренера.', 'error');
             document.getElementById('bookingsBlock').innerHTML = '';
-            updateHero(0, '');
+            hubLastBookingsDays = null;
+            hubLastTodayCount = 0;
+            hubLastFirstWhen = '';
+            hubLastWeekCount = 0;
+            applyHubHero();
           });
       }
 
