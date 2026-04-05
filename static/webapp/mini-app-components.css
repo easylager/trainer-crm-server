@@ -943,3 +943,71 @@ body { background: var(--tg-theme-bg-color) !important; color: var(--tg-theme-te
 
 /* Trainer «Главная» / «Закрыть»: см. mini-app-trainer-nav.css (подключается после <style> страницы) */
 
+/* Onboarding gate (trainer not active yet) — palette: theme.css */
+.bd-trainer-gate {
+  font-family: var(--app-font-sans);
+  box-sizing: border-box;
+}
+.bd-trainer-gate--overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10040;
+  display: none;
+  align-items: flex-start;
+  justify-content: center;
+  padding: max(20px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom));
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  background: var(--tg-theme-bg-color);
+}
+.bd-trainer-gate__card {
+  width: 100%;
+  max-width: 400px;
+  margin: 0 auto;
+  padding: 22px 18px 20px;
+  border-radius: 16px;
+  background: var(--tg-theme-secondary-bg-color);
+  box-shadow: var(--app-btn-shadow-surface, 0 2px 12px rgba(0, 0, 0, 0.08));
+  border: 1px solid rgba(0, 0, 0, 0.06);
+}
+.bd-trainer-gate__card--compact {
+  padding: 16px 14px;
+  max-width: none;
+}
+.bd-trainer-gate__card--compact .bd-trainer-gate__title {
+  font-size: 16px;
+}
+.bd-trainer-gate__card--compact .bd-trainer-gate__hint {
+  font-size: 13px;
+}
+.bd-trainer-gate__icon {
+  font-size: 32px;
+  line-height: 1;
+  text-align: center;
+  margin-bottom: 10px;
+}
+.bd-trainer-gate__title {
+  margin: 0 0 10px;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  text-align: center;
+  color: var(--tg-theme-text-color);
+}
+.bd-trainer-gate__hint {
+  margin: 0 0 18px;
+  font-size: 14px;
+  line-height: 1.45;
+  text-align: center;
+  color: var(--tg-theme-hint-color);
+}
+.bd-trainer-gate__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.bd-trainer-gate__actions .bd-btn {
+  width: 100%;
+  justify-content: center;
+}
+

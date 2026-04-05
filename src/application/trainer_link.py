@@ -10,6 +10,8 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.shared.trainer_status import normalize_trainer_status_value
+
 
 @dataclass(frozen=True, slots=True)
 class ConsumeLinkTokenResult:
@@ -102,7 +104,11 @@ async def get_trainer_row_by_telegram_id(session: AsyncSession, telegram_id: int
     row = r.fetchone()
     if not row:
         return None
-    return {"id": row[0], "status": row[1], "moderation_feedback": row[2]}
+    return {
+        "id": row[0],
+        "status": normalize_trainer_status_value(row[1]),
+        "moderation_feedback": row[2],
+    }
 
 
 async def get_trainer_by_telegram_id(session: AsyncSession, telegram_id: int) -> bool:

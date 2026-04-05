@@ -1206,6 +1206,7 @@
     </div>
   </div>
 
+  <script src="mini-app-trainer-gate.js"></script>
   <script>
     (function() {
       var tg = window.Telegram && window.Telegram.WebApp;
@@ -1974,14 +1975,34 @@
       var contentEl = document.getElementById('content');
       contentEl.innerHTML = '<div class="loading">' + renderLoadingSkeleton() + '</div>';
 
-      getJson('/api/webapp/trainer/stats').then(function(data) {
-        contentEl.innerHTML = renderShell(data);
-        wireTabs(contentEl);
-        wireMoneyPeriod(contentEl, data);
-      }).catch(function(e) {
-        var msg = (e && e.message) ? e.message : 'Ошибка сети или таймаут. Проверьте tunnel и откройте из бота снова.';
-        contentEl.innerHTML = '<div class="error">' + msg + '</div>';
-      });
+      function loadStatsDashboard() {
+        if (window.TrainerMiniAppGate && window.TrainerMiniAppGate.shouldBlockFeatureFetch()) return;
+        getJson('/api/webapp/trainer/stats').then(function(data) {
+          contentEl.innerHTML = renderShell(data);
+          wireTabs(contentEl);
+          wireMoneyPeriod(contentEl, data);
+        }).catch(function(e) {
+          var msg = (e && e.message) ? e.message : 'Ошибка сети или таймаут. Проверьте tunnel и откройте из бота снова.';
+          contentEl.innerHTML = '<div class="error">' + msg + '</div>';
+        });
+      }
+
+      if (initData && window.TrainerMiniAppGate) {
+        window.TrainerMiniAppGate.fetchAccess(initData)
+          .then(function (a) {
+            if (a && !window.TrainerMiniAppGate.isActive(a)) {
+              contentEl.innerHTML = '';
+              window.TrainerMiniAppGate.showBlockingOverlay(a);
+              return;
+            }
+            loadStatsDashboard();
+          })
+          .catch(function () {
+            loadStatsDashboard();
+          });
+      } else {
+        loadStatsDashboard();
+      }
     })();
   </script>
   <script src="mini-app-trainer-home.js"></script>

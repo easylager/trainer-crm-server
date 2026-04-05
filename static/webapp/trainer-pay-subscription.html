@@ -248,6 +248,7 @@
     <div class="error" id="errorText">Не удалось загрузить.</div>
     <button type="button" class="btn" id="btnRetry">Повторить</button>
   </div>
+  <script src="mini-app-trainer-gate.js"></script>
   <script>
     (function() {
       var tg = window.Telegram && window.Telegram.WebApp;
@@ -308,6 +309,7 @@
         return days + ' дн.';
       }
       function loadPlans() {
+        if (window.TrainerMiniAppGate && window.TrainerMiniAppGate.shouldBlockFeatureFetch()) return;
         var url = '/api/webapp/trainer/subscription-plans' + (initData() ? '?init_data=' + encodeURIComponent(initData()) : '');
         fetch(url, { headers: headers() })
           .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }).catch(function() { return { ok: false, data: {} }; }); })
@@ -370,7 +372,21 @@
       }
       document.getElementById('btnRetry').onclick = function() { showScreen('screenChoose'); loadPlans(); };
       document.getElementById('btnClose').onclick = closeApp;
-      loadPlans();
+      if (initData() && window.TrainerMiniAppGate) {
+        window.TrainerMiniAppGate.fetchAccess(initData())
+          .then(function (a) {
+            if (a && !window.TrainerMiniAppGate.isActive(a)) {
+              window.TrainerMiniAppGate.showBlockingOverlay(a);
+              return;
+            }
+            loadPlans();
+          })
+          .catch(function () {
+            loadPlans();
+          });
+      } else {
+        loadPlans();
+      }
     })();
   </script>
   <script src="mini-app-trainer-home.js"></script>

@@ -222,9 +222,7 @@ def _post_welcome_link_keyboard(*, for_active_menu: bool) -> InlineKeyboardMarku
                 )
             ]
         )
-    rows.append(
-        [InlineKeyboardButton(text="❓ Как пользоваться ботом", callback_data=GUIDE_CALLBACK)]
-    )
+    # Guide: /guide — не дублируем кнопкой на первом шаге онбординга.
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 

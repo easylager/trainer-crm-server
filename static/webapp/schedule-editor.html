@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="theme.css" />
   <link rel="stylesheet" href="mini-app-components.css" />
   <script src="mini-app-confirm.js"></script>
+  <script src="mini-app-trainer-gate.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet" />
@@ -1358,6 +1359,7 @@
       });
 
       function prefetchSlotsInBackground() {
+        if (window.TrainerMiniAppGate && window.TrainerMiniAppGate.shouldBlockFeatureFetch()) return;
         if (tg && !tg.initData) return;
         if (!state.weekStart) state.weekStart = getMonday(new Date());
         var end = new Date(state.weekStart);
@@ -1752,6 +1754,7 @@
       }
 
       function loadSlots() {
+        if (window.TrainerMiniAppGate && window.TrainerMiniAppGate.shouldBlockFeatureFetch()) return;
         if (tg && !tg.initData) {
           loadSlots._waitInit = (loadSlots._waitInit || 0) + 1;
           if (loadSlots._waitInit < 200) {
@@ -1807,6 +1810,7 @@
       }
 
       function loadTemplates() {
+        if (window.TrainerMiniAppGate && window.TrainerMiniAppGate.shouldBlockFeatureFetch()) return;
         document.getElementById('templateList').innerHTML = '<div class="loading">Загрузка...</div>';
         fetch(apiUrlWithQuery('/schedule/templates'), { headers: headers() })
           .then(function(r) { return r.json(); })
@@ -2443,7 +2447,24 @@
             return;
           }
         }
-        loadSlots();
+        function startScheduleLoads() {
+          loadSlots();
+        }
+        if (tg && tg.initData && window.TrainerMiniAppGate) {
+          window.TrainerMiniAppGate.fetchAccess(tg.initData)
+            .then(function (a) {
+              if (a && !window.TrainerMiniAppGate.isActive(a)) {
+                window.TrainerMiniAppGate.showBlockingOverlay(a);
+                return;
+              }
+              startScheduleLoads();
+            })
+            .catch(function () {
+              startScheduleLoads();
+            });
+        } else {
+          startScheduleLoads();
+        }
       }
 
       /** Telegram often fills initData later when Web App opens from reply keyboard (not inline); wait up to ~15s. */

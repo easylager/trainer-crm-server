@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.application.trainer_link import get_trainer_row_by_telegram_id
 from src.application.trainer_profile_completeness import is_profile_complete_for_moderation
 from src.application.trainer_use_cases import get_trainer
+from src.shared.trainer_status import normalize_trainer_status_value
 from src.infrastructure.db.models import (
     TRAINER_STATUS_ACTIVE,
     TRAINER_STATUS_DEACTIVATED,
@@ -60,7 +61,7 @@ async def get_trainer_access_state(
     trainer = await get_trainer(session, tid)
     if not trainer:
         return TrainerAccessState.NOT_LINKED, None
-    status = str(trainer.get("status") or "")
+    status = normalize_trainer_status_value(trainer.get("status"))
     state = resolve_trainer_access_state(status=status, trainer=trainer)
     if status == TRAINER_STATUS_ACTIVE:
         return TrainerAccessState.ACTIVE, trainer
