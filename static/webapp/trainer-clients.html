@@ -1025,6 +1025,7 @@
     <div class="state-panel-inner"></div>
   </div>
 
+  <script src="mini-app-trainer-gate.js"></script>
   <script>
     (function() {
       var tg = window.Telegram && window.Telegram.WebApp;
@@ -1789,6 +1790,7 @@
       }
 
       function loadClients() {
+        if (window.TrainerMiniAppGate && window.TrainerMiniAppGate.shouldBlockFeatureFetch()) return;
         setStateMessage('Загрузка клиентов…', 'loading');
         var base = '/api/webapp/trainer/clients';
         var url = withInit(base);
@@ -1862,7 +1864,21 @@
       }
 
       initReturnContextFromQuery();
-      loadClients();
+      if (initData && window.TrainerMiniAppGate) {
+        window.TrainerMiniAppGate.fetchAccess(initData)
+          .then(function (a) {
+            if (a && !window.TrainerMiniAppGate.isActive(a)) {
+              window.TrainerMiniAppGate.showBlockingOverlay(a);
+              return;
+            }
+            loadClients();
+          })
+          .catch(function () {
+            loadClients();
+          });
+      } else {
+        loadClients();
+      }
     })();
   </script>
   <script src="mini-app-trainer-home.js"></script>

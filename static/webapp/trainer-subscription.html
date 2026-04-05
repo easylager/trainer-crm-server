@@ -914,6 +914,7 @@
 
   <div id="confetti" class="confetti"></div>
 
+  <script src="mini-app-trainer-gate.js"></script>
   <script>
     (function() {
       'use strict';
@@ -1029,6 +1030,7 @@
 
       // Load data
       function loadData() {
+        if (window.TrainerMiniAppGate && window.TrainerMiniAppGate.shouldBlockFeatureFetch()) return;
         showScreen('screenLoading');
         var catalogUrl = '/api/webapp/trainer/subscription/catalog' + (initData() ? '?init_data=' + encodeURIComponent(initData()) : '');
         var statusUrl = '/api/webapp/trainer/subscription/status' + (initData() ? '?init_data=' + encodeURIComponent(initData()) : '');
@@ -1337,7 +1339,21 @@
       document.getElementById('btnCloseSuccess').onclick = closeApp;
 
       // Initialize
-      loadData();
+      if (initData() && window.TrainerMiniAppGate) {
+        window.TrainerMiniAppGate.fetchAccess(initData())
+          .then(function (a) {
+            if (a && !window.TrainerMiniAppGate.isActive(a)) {
+              window.TrainerMiniAppGate.showBlockingOverlay(a);
+              return;
+            }
+            loadData();
+          })
+          .catch(function () {
+            loadData();
+          });
+      } else {
+        loadData();
+      }
     })();
   </script>
   <script src="mini-app-trainer-home.js"></script>

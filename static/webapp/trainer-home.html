@@ -370,6 +370,12 @@
     .hub-quick-action:active {
       transform: scale(0.98);
     }
+    .hub-quick-action.hub-quick-action--locked {
+      opacity: 0.55;
+    }
+    .hub-quick-action.hub-quick-action--locked:hover {
+      transform: none;
+    }
     
     .hub-quick-icon {
       width: 28px;
@@ -583,6 +589,16 @@
     
     .hub-tile:active { 
       transform: translateY(-2px) scale(0.98); 
+    }
+    .hub-tile.hub-tile--locked {
+      opacity: 0.58;
+    }
+    .hub-tile.hub-tile--locked:hover {
+      transform: none;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    }
+    .hub-is-dark .hub-tile.hub-tile--locked:hover {
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
     }
     
     .hub-tile-inner { 
@@ -987,6 +1003,7 @@
     </div>
   </div>
 
+  <script src="mini-app-trainer-gate.js"></script>
   <script>
     (function() {
       var tg = window.Telegram && window.Telegram.WebApp;
@@ -1002,6 +1019,8 @@
         } catch (e) {}
       }
       var initData = tg && tg.initData ? tg.initData : '';
+      /** Set after GET /trainer/access when initData present (onboarding vs active). */
+      var trainerAccessSnapshot = null;
 
       var ICONS = {
         cal: '<svg class="hub-tile-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>',
@@ -1041,15 +1060,132 @@
         return url;
       }
 
+      /** Same aggregate as «Профиль»: if шапка shows «Одобрено», hub must not stay in onboarding lock. */
+      function fetchTrainerProfileForHub() {
+        if (!initData) return Promise.resolve({ ok: false, data: null });
+        return fetch(apiUrlWithQuery('/trainer/profile'), { headers: headersJson() })
+          .then(function(r) {
+            return r.json().then(function(d) {
+              return { ok: r.ok, data: d };
+            });
+          })
+          .catch(function() {
+            return { ok: false, data: null };
+          });
+      }
+
+      function mergeHubAccessFromProfilePayload(prof) {
+        if (!prof || !prof.ok || !prof.data || !prof.data.trainer) return;
+        var st = String(prof.data.trainer.status || '')
+          .trim()
+          .toLowerCase();
+        if (st !== 'active') return;
+        trainerAccessSnapshot = trainerAccessSnapshot || {};
+        trainerAccessSnapshot.is_active = true;
+        trainerAccessSnapshot.access_state = 'active';
+        trainerAccessSnapshot.trainer_status = 'active';
+        if (prof.data.trainer.id != null) trainerAccessSnapshot.trainer_id = prof.data.trainer.id;
+      }
+
       function webappBasePath() {
         var p = window.location.pathname || '';
         return p.replace(/[^/]+$/, '') || '/webapp/';
       }
 
-      function navigateTo(pathWithQuery) {
+      function isProfilePath(pathWithQuery) {
+        var p = String(pathWithQuery || '').split('?')[0].replace(/^\//, '').toLowerCase();
+        return p === 'trainer-profile';
+      }
+
+      /** True if trainer row is active — must not depend on TrainerMiniAppGate (script may fail to load). */
+      function hubDataSaysTrainerActive(obj) {
+        if (!obj) return false;
+        var ia = obj.is_active;
+        if (ia === true || ia === 'true' || ia === 1 || ia === '1') return true;
+        if (String(obj.trainer_status || '')
+          .trim()
+          .toLowerCase() === 'active')
+          return true;
+        return false;
+      }
+
+      /** Schedule, clients, etc. — only after trainer account is active (profile stays open for onboarding). */
+      function canOpenTrainerSectionsSync() {
+        if (!initData) return false;
+        /* Checklist / snapshot first: same API answers user sees in Network; do NOT require TrainerMiniAppGate. */
+        if (hubDataSaysTrainerActive(hubOnboardingData)) return true;
+        if (hubDataSaysTrainerActive(trainerAccessSnapshot)) return true;
+        if (!window.TrainerMiniAppGate) return false;
+        if (!trainerAccessSnapshot) return false;
+        return TrainerMiniAppGate.isActive(trainerAccessSnapshot);
+      }
+
+      function showTrainerOnboardingNavAlert() {
+        var msg =
+          'Профиль ещё не готов: завершите анкету и дождитесь активации. Раздел «Профиль» можно открыть для редактирования.';
+        if (tg && typeof tg.showAlert === 'function') tg.showAlert(msg);
+        else alert(msg);
+      }
+
+      function navigateToImpl(pathWithQuery) {
         var url = webappBasePath() + pathWithQuery;
         url = withInit(url);
         window.location.href = url;
+      }
+
+      function applyHubLockedState() {
+        var locked = !canOpenTrainerSectionsSync();
+        var grid = document.getElementById('hubGrid');
+        if (grid) {
+          grid.querySelectorAll('.hub-tile').forEach(function(btn) {
+            var path = btn.getAttribute('data-path') || '';
+            var isLocked = locked && path !== 'trainer-profile';
+            btn.classList.toggle('hub-tile--locked', isLocked);
+            btn.setAttribute('aria-disabled', isLocked ? 'true' : 'false');
+          });
+        }
+        var quickGrid = document.getElementById('hubQuickGrid');
+        if (quickGrid) {
+          quickGrid.querySelectorAll('.hub-quick-action').forEach(function(btn) {
+            if (btn.style.display === 'none') return;
+            btn.classList.toggle('hub-quick-action--locked', locked);
+            btn.setAttribute('aria-disabled', locked ? 'true' : 'false');
+          });
+        }
+      }
+
+      function navigateTo(pathWithQuery) {
+        if (isProfilePath(pathWithQuery)) {
+          navigateToImpl(pathWithQuery);
+          return;
+        }
+        if (canOpenTrainerSectionsSync()) {
+          navigateToImpl(pathWithQuery);
+          return;
+        }
+        /* After moderation, is_active flips on the server while WebView keeps stale JS state — always refetch before blocking. */
+        if (!initData || !window.TrainerMiniAppGate) {
+          showTrainerOnboardingNavAlert();
+          return;
+        }
+        Promise.all([
+          window.TrainerMiniAppGate.fetchAccess(initData).catch(function() {
+            return null;
+          }),
+          fetchTrainerProfileForHub(),
+        ])
+          .then(function(results) {
+            var a = results[0];
+            var prof = results[1];
+            trainerAccessSnapshot = a;
+            mergeHubAccessFromProfilePayload(prof);
+            applyHubLockedState();
+            if (trainerAccessSnapshot && window.TrainerMiniAppGate.isActive(trainerAccessSnapshot)) {
+              navigateToImpl(pathWithQuery);
+            } else {
+              showTrainerOnboardingNavAlert();
+            }
+          });
       }
 
       function navigateToWithHash(path, hash) {
@@ -1067,6 +1203,18 @@
 
       function applyOnboardingChecklist(data) {
         hubOnboardingData = data;
+        /* Checklist loads async after GET /trainer/access — can show activation before snapshot was refreshed. */
+        var tsCh = data && String(data.trainer_status || '')
+          .trim()
+          .toLowerCase();
+        var activeFromChecklist = !!(data && hubDataSaysTrainerActive(data));
+        if (activeFromChecklist) {
+          trainerAccessSnapshot = trainerAccessSnapshot || {};
+          trainerAccessSnapshot.is_active = true;
+          trainerAccessSnapshot.access_state = 'active';
+          if (tsCh) trainerAccessSnapshot.trainer_status = tsCh;
+          applyHubLockedState();
+        }
         var strip = document.getElementById('onboardingStrip');
         if (!strip) return;
         /* All three steps done: no need to show the checklist anymore */
@@ -1256,7 +1404,22 @@
           };
         }
         document.addEventListener('visibilitychange', function() {
-          if (!document.hidden) loadOnboardingChecklist();
+          if (document.hidden) return;
+          loadOnboardingChecklist();
+          if (!initData || !window.TrainerMiniAppGate) return;
+          Promise.all([
+            window.TrainerMiniAppGate.fetchAccess(initData).catch(function() {
+              return null;
+            }),
+            fetchTrainerProfileForHub(),
+          ]).then(function(results) {
+            var a = results[0];
+            var prof = results[1];
+            if (a) trainerAccessSnapshot = a;
+            mergeHubAccessFromProfilePayload(prof);
+            applyHubLockedState();
+            if (trainerAccessSnapshot && window.TrainerMiniAppGate.isActive(trainerAccessSnapshot)) loadBookings();
+          });
         });
       }
 
@@ -1484,6 +1647,7 @@
             navigateTo(btn.getAttribute('data-path'));
           };
         });
+        applyHubLockedState();
       }
 
       function renderBookings(days) {
@@ -1571,6 +1735,27 @@
         });
       }
 
+      /** Upcoming bookings: friendly onboarding instead of red «network» when account not active yet. */
+      function renderBookingsOnboardingBlock(access) {
+        setStateMessage('', '');
+        hubLastBookingsDays = null;
+        hubLastTodayCount = 0;
+        hubLastFirstWhen = '';
+        hubLastWeekCount = 0;
+        applyHubHero();
+        var bb = document.getElementById('bookingsBlock');
+        if (window.TrainerMiniAppGate && access) {
+          bb.innerHTML =
+            '<div class="bd-trainer-gate" style="margin-top:4px">' +
+            window.TrainerMiniAppGate.gateCardHtml(access, true) +
+            '</div>';
+          window.TrainerMiniAppGate.wireGate(bb, initData);
+        } else {
+          bb.innerHTML =
+            '<div class="hub-empty">Раздел откроется после активации профиля. Заполните анкету в «Профиль» или дождитесь проверки — это не сбой сети.</div>';
+        }
+      }
+
       function loadBookings() {
         if (!initData) {
           setStateMessage('', '');
@@ -1583,26 +1768,91 @@
             '<div class="hub-empty">Авторизация Telegram недоступна в этом режиме.</div>';
           return;
         }
+        if (
+          trainerAccessSnapshot &&
+          window.TrainerMiniAppGate &&
+          !window.TrainerMiniAppGate.isActive(trainerAccessSnapshot)
+        ) {
+          renderBookingsOnboardingBlock(trainerAccessSnapshot);
+          return;
+        }
         setStateMessage('Загрузка…', '');
         fetch(apiUrlWithQuery('/trainer/bookings'), { headers: headersJson() })
           .then(function(r) {
             return r.json().then(function(data) {
-              if (!r.ok) throw new Error(data.detail || r.statusText || 'Ошибка');
-              return data;
+              return { status: r.status, ok: r.ok, data: data };
             });
           })
-          .then(function(data) {
+          .then(function(o) {
+            /* 401/403: API requires active trainer — same as onboarding, never blame «network». */
+            if (o.status === 401 || o.status === 403) {
+              setStateMessage('', '');
+              if (window.TrainerMiniAppGate && initData) {
+                return window.TrainerMiniAppGate.fetchAccess(initData)
+                  .then(function(a) {
+                    trainerAccessSnapshot = a;
+                    applyHubLockedState();
+                    renderBookingsOnboardingBlock(a);
+                  })
+                  .catch(function() {
+                    renderBookingsOnboardingBlock(trainerAccessSnapshot || null);
+                  });
+              }
+              renderBookingsOnboardingBlock(trainerAccessSnapshot || null);
+              return;
+            }
+            if (!o.ok) {
+              setStateMessage('', '');
+              hubLastBookingsDays = null;
+              hubLastTodayCount = 0;
+              hubLastFirstWhen = '';
+              hubLastWeekCount = 0;
+              applyHubHero();
+              document.getElementById('bookingsBlock').innerHTML =
+                '<div class="hub-empty">Не удалось обновить список. Попробуйте закрыть экран и открыть «Обзор» снова.</div>';
+              return;
+            }
             setStateMessage('');
-            renderBookings(data.days || []);
+            renderBookings((o.data && o.data.days) || []);
           })
           .catch(function() {
-            setStateMessage('Не удалось загрузить записи. Проверьте сеть и откройте раздел из бота тренера.', 'error');
-            document.getElementById('bookingsBlock').innerHTML = '';
-            hubLastBookingsDays = null;
-            hubLastTodayCount = 0;
-            hubLastFirstWhen = '';
-            hubLastWeekCount = 0;
-            applyHubHero();
+            setStateMessage('', '');
+            /* Offline / timeout: if account likely not active, avoid scary copy */
+            if (window.TrainerMiniAppGate && initData) {
+              window.TrainerMiniAppGate.fetchAccess(initData)
+                .then(function(a) {
+                  trainerAccessSnapshot = a;
+                  applyHubLockedState();
+                  if (!window.TrainerMiniAppGate.isActive(a)) {
+                    renderBookingsOnboardingBlock(a);
+                  } else {
+                    hubLastBookingsDays = null;
+                    hubLastTodayCount = 0;
+                    hubLastFirstWhen = '';
+                    hubLastWeekCount = 0;
+                    applyHubHero();
+                    document.getElementById('bookingsBlock').innerHTML =
+                      '<div class="hub-empty">Не удалось обновить список. Проверьте соединение и попробуйте снова.</div>';
+                  }
+                })
+                .catch(function() {
+                  hubLastBookingsDays = null;
+                  hubLastTodayCount = 0;
+                  hubLastFirstWhen = '';
+                  hubLastWeekCount = 0;
+                  applyHubHero();
+                  document.getElementById('bookingsBlock').innerHTML =
+                    '<div class="hub-empty">Не удалось обновить список. Проверьте соединение и попробуйте снова.</div>';
+                });
+            } else {
+              hubLastBookingsDays = null;
+              hubLastTodayCount = 0;
+              hubLastFirstWhen = '';
+              hubLastWeekCount = 0;
+              applyHubHero();
+              document.getElementById('bookingsBlock').innerHTML =
+                '<div class="hub-empty">Не удалось обновить список. Попробуйте снова.</div>';
+            }
           });
       }
 
@@ -1644,6 +1894,7 @@
             }
           };
         });
+        applyHubLockedState();
       }
 
       function loadSubscriptionStatus() {
@@ -1676,9 +1927,32 @@
       }
 
       wireOnboardingHub();
-      loadSubscriptionStatus();
-      loadBookings();
-      loadOnboardingChecklist();
+      function runHubAfterAccess() {
+        loadSubscriptionStatus();
+        loadBookings();
+        loadOnboardingChecklist();
+      }
+      if (!initData) {
+        runHubAfterAccess();
+      } else if (!window.TrainerMiniAppGate) {
+        fetchTrainerProfileForHub().then(function(prof) {
+          mergeHubAccessFromProfilePayload(prof);
+          runHubAfterAccess();
+        });
+      } else {
+        Promise.all([
+          window.TrainerMiniAppGate.fetchAccess(initData).catch(function() {
+            return null;
+          }),
+          fetchTrainerProfileForHub(),
+        ]).then(function(results) {
+          var a = results[0];
+          var prof = results[1];
+          trainerAccessSnapshot = a;
+          mergeHubAccessFromProfilePayload(prof);
+          runHubAfterAccess();
+        });
+      }
     })();
   </script>
 </body>

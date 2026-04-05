@@ -80,6 +80,8 @@ from src.application.recurring_use_cases import (
     create_recurring_client_slot,
     get_active_recurring_for_booking,
 )
+from src.application.trainer_access_state import TrainerAccessState, get_trainer_access_state
+from src.shared.trainer_status import normalize_trainer_status_value
 from src.application.trainer_link import get_trainer_id_by_telegram_id, get_trainer_id_linked_any_status
 from src.application.welcome_link_use_cases import (
     WELCOME_TOKEN_TYPE_CERT,
@@ -142,7 +144,7 @@ from src.application.subscription_tier_use_cases import (
     trainer_has_crm_access,
     update_subscription_tier_pricing,
 )
-from src.infrastructure.db.models import SUBSCRIPTION_TIER_ANALYTICS, SUBSCRIPTION_TIERS
+from src.infrastructure.db.models import SUBSCRIPTION_TIER_ANALYTICS, SUBSCRIPTION_TIERS, TRAINER_STATUS_ACTIVE
 from src.billing.payment_gateway import create_checkout
 from src.application.trainer_schedule_use_cases import (
     delete_slot as schedule_delete_slot,
@@ -204,6 +206,33 @@ def _admin_telegram_id(init_data: str) -> int:
     if tid not in admin_ids:
         raise HTTPException(status_code=403, detail="Not an admin")
     return tid
+
+
+@router.get("/trainer/access")
+async def get_trainer_access_for_webapp(
+    init_data: str | None = Query(None),
+    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    session: AsyncSession = Depends(get_session),
+):
+    """
+    Single source of truth for Mini App onboarding: linked trainer may be non-active.
+    Use this before feature APIs that require status=active (schedule, requests, CRM, etc.).
+    """
+    raw = init_data or x_telegram_init_data
+    if not raw:
+        raise HTTPException(status_code=401, detail="Missing init data")
+    telegram_id = _trainer_telegram_id(raw)
+    state, trainer = await get_trainer_access_state(session, telegram_id)
+    tid = int(trainer["id"]) if trainer and trainer.get("id") is not None else None
+    norm_status = normalize_trainer_status_value(trainer.get("status") if trainer else None)
+    # Belt-and-suspenders: state machine + raw status (drivers may have returned non-str before normalize in repo).
+    is_active = (state == TrainerAccessState.ACTIVE) or (norm_status == TRAINER_STATUS_ACTIVE)
+    return {
+        "access_state": state.value,
+        "trainer_id": tid,
+        "trainer_status": norm_status,
+        "is_active": is_active,
+    }
 
 
 @router.get("/schedule")

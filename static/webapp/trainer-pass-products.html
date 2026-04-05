@@ -909,6 +909,7 @@
     <button type="button" class="btn-delete" id="btnDeleteCert" style="display: none;">Удалить сертификат</button>
   </div>
 
+  <script src="mini-app-trainer-gate.js"></script>
   <script>
     (function() {
       var tg = window.Telegram && window.Telegram.WebApp;
@@ -1060,6 +1061,7 @@
       }
 
       function loadList() {
+        if (window.TrainerMiniAppGate && window.TrainerMiniAppGate.shouldBlockFeatureFetch()) return;
         document.getElementById('listContent').innerHTML = '<div class="pp-state pp-state--loading"><div class="pp-state-icon" aria-hidden="true">⏳</div><p class="pp-state-title">Загрузка</p><div class="pp-loading-dots" aria-hidden="true"><span></span><span></span><span></span></div></div>';
         fetch(apiUrl('/trainer/pass-products') + initDataParam(), { headers: headers() })
           .then(function(r) { return r.json(); })
@@ -1286,6 +1288,7 @@
         });
       }
       function loadCertList() {
+        if (window.TrainerMiniAppGate && window.TrainerMiniAppGate.shouldBlockFeatureFetch()) return;
         document.getElementById('certListContent').innerHTML = '<div class="pp-state pp-state--loading"><div class="pp-state-icon" aria-hidden="true">⏳</div><p class="pp-state-title">Загрузка</p><div class="pp-loading-dots" aria-hidden="true"><span></span><span></span><span></span></div></div>';
         fetch(apiUrl('/trainer/certificate-products') + initDataParam(), { headers: headers() })
           .then(function(r) { return r.json(); })
@@ -1717,8 +1720,24 @@
         });
       };
 
-      loadList();
-      loadCertList();
+      if (initData && window.TrainerMiniAppGate) {
+        window.TrainerMiniAppGate.fetchAccess(initData)
+          .then(function (a) {
+            if (a && !window.TrainerMiniAppGate.isActive(a)) {
+              window.TrainerMiniAppGate.showBlockingOverlay(a);
+              return;
+            }
+            loadList();
+            loadCertList();
+          })
+          .catch(function () {
+            loadList();
+            loadCertList();
+          });
+      } else {
+        loadList();
+        loadCertList();
+      }
       (function checkPassIssuePrefill() {
         var params = new URLSearchParams(window.location.search || '');
         var cid = params.get('client_id');

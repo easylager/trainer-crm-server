@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.trainer_use_cases import get_trainer, get_trainer_moderation_readiness
 from src.infrastructure.db.models import TRAINER_STATUS_ACTIVE
+from src.shared.trainer_status import normalize_trainer_status_value
 
 # How far ahead to look for slots (matches product: "reasonable horizon").
 _SLOT_HORIZON_DAYS = 56
@@ -27,7 +28,7 @@ async def get_trainer_onboarding_checklist(session: AsyncSession, trainer_id: in
     trainer = await get_trainer(session, trainer_id)
     if not trainer:
         return None
-    st = (trainer.get("status") or "").strip()
+    st = normalize_trainer_status_value(trainer.get("status"))
     is_active = st == TRAINER_STATUS_ACTIVE
 
     readiness = await get_trainer_moderation_readiness(session, trainer_id)

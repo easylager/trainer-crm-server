@@ -8,6 +8,8 @@ from datetime import date, datetime, timedelta
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.shared.trainer_status import normalize_trainer_status_value
+
 
 def _sql_public_catalog_education_predicate(table_alias: str = "e") -> str:
     """
@@ -166,7 +168,7 @@ class TrainerRepository:
         out: dict[str, Any] = {
             "id": row[0],
             "telegram_id": row[1],
-            "status": row[2],
+            "status": normalize_trainer_status_value(row[2]),
             "created_at": str(row[3]) if row[3] else None,
             "moderation_feedback": row[4],
             "moderation_submitted_at": row[5],
