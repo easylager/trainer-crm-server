@@ -110,7 +110,7 @@
 
 После правок откройте в Telegram WebView каждый экран в **светлой** и **тёмной** теме ОС и проверьте: hero/карточки, фильтры, кнопки, пустые и ошибочные состояния.
 
-Страницы: `schedule`, `schedule-editor`, `trainer-clients`, `trainer-requests`, `trainer-pass-products`, `trainer-profile`, `trainer-stats`, `trainer-subscription`, `trainer-pay-subscription`.
+Страницы: `trainer-home` (хаб «Обзор»: ближайшие записи + ссылки на разделы), `schedule`, `schedule-editor`, `trainer-clients`, `trainer-requests`, `trainer-pass-products`, `trainer-profile`, `trainer-stats`, `trainer-subscription`, `trainer-pay-subscription`.
 
 ---
 

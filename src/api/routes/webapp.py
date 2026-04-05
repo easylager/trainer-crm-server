@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from fastapi.responses import JSONResponse, Response
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
@@ -87,7 +87,11 @@ from src.application.welcome_link_use_cases import (
     WELCOME_TOKEN_TYPE_PASS,
     create_welcome_link_token,
 )
-from src.application.stats_use_cases import get_platform_stats, get_trainer_stats_dashboard
+from src.application.stats_use_cases import (
+    get_platform_stats,
+    get_trainer_revenue_breakdown_for_range,
+    get_trainer_stats_dashboard,
+)
 from src.application.support_use_cases import (
     create_support_message,
     list_support_messages,
@@ -155,6 +159,7 @@ from src.application.client_notes_use_cases import (
     upsert_trainer_client_note,
 )
 from src.bot.schedule_notifications import run_after_schedule_changed
+from src.application.trainer_onboarding_checklist import get_trainer_onboarding_checklist
 from src.application.trainer_use_cases import (
     get_trainer,
     get_trainer_moderation_readiness,
@@ -1098,6 +1103,31 @@ async def get_trainer_stats_api(
         raise HTTPException(status_code=403, detail="Analytics tier required for statistics")
     data = await get_trainer_stats_dashboard(session, trainer_id)
     return _serialize_trainer_dashboard(data)
+
+
+@router.get("/trainer/stats/revenue-range")
+async def get_trainer_revenue_range_api(
+    period_from: date = Query(..., alias="from"),
+    period_to: date = Query(..., alias="to"),
+    init_data: str | None = Query(None),
+    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    session: AsyncSession = Depends(get_session),
+):
+    """Accrual revenue breakdown for an arbitrary inclusive date range (Mini App «Бухгалтерия»)."""
+    raw = init_data or x_telegram_init_data
+    if not raw:
+        raise HTTPException(status_code=401, detail="Missing init data")
+    telegram_id = _trainer_telegram_id(raw)
+    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+    tier = await get_effective_subscription_tier(session, trainer_id)
+    if not tier_satisfies(tier, SUBSCRIPTION_TIER_ANALYTICS):
+        raise HTTPException(status_code=403, detail="Analytics tier required for statistics")
+    try:
+        return await get_trainer_revenue_breakdown_for_range(session, trainer_id, period_from, period_to)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 # --- Support: client/trainer send message; admin list and reply ---
@@ -2516,6 +2546,8 @@ async def get_trainer_booking_detail(
     else:
         detail["day_label"] = ""
     booking = await get_booking_with_slot(session, booking_id, trainer_id)
+    if booking:
+        detail["client_id"] = booking["client_id"]
     recurring = None
     if booking:
         recurring = await get_active_recurring_for_booking(
@@ -2702,13 +2734,20 @@ class TrainerCreateBookingBody(BaseModel):
 class TrainerCreateClientBody(BaseModel):
     """Create client by phone (no telegram_id); for trainer recording from schedule."""
     phone: str
-    first_name: str | None = None
-    last_name: str | None = None
+    first_name: str = Field(min_length=1)
+    last_name: str = Field(min_length=1)
 
     @field_validator("phone", mode="before")
     @classmethod
     def _phone_belarus_by(cls, v: object) -> str:
         return coerce_required_belarus_phone(v)
+
+    @field_validator("first_name", "last_name", mode="before")
+    @classmethod
+    def _strip_names(cls, v: object) -> str:
+        if v is None:
+            return ""
+        return str(v).strip()
 
 
 @router.get("/trainer/my-services")
@@ -2987,6 +3026,211 @@ async def post_trainer_client_note_route(
     return {"note": result.get("note", "")}
 
 
+# --- Client Dossier (structured notes) ---
+
+from src.application.client_dossier_use_cases import (
+    get_full_client_dossier,
+    upsert_client_dossier_profile,
+    list_client_entries,
+    add_client_entry,
+    delete_client_entry,
+    list_client_tags,
+    add_client_tag,
+    remove_client_tag,
+    SUGGESTED_TAGS,
+)
+
+
+class DossierProfileBody(BaseModel):
+    note: str | None = None
+    goals: str | None = None
+    limitations: str | None = None
+    level: str | None = None
+
+
+class DossierEntryBody(BaseModel):
+    content: str
+
+
+class DossierTagBody(BaseModel):
+    tag: str
+    category: str | None = None
+
+
+@router.get("/trainer/clients/{client_id:int}/dossier")
+async def get_client_dossier_route(
+    client_id: int,
+    init_data: str | None = Query(None),
+    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Get full client dossier: profile, tags, entries. Auth: trainer initData."""
+    raw = init_data or x_telegram_init_data
+    if not raw:
+        raise HTTPException(status_code=401, detail="Missing init data")
+    telegram_id = _trainer_telegram_id(raw)
+    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+    return await get_full_client_dossier(session, trainer_id, client_id)
+
+
+@router.post("/trainer/clients/{client_id:int}/dossier/profile")
+async def update_client_dossier_profile_route(
+    client_id: int,
+    body: DossierProfileBody,
+    init_data: str | None = Query(None),
+    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Update client profile fields. Auth: trainer initData."""
+    raw = init_data or x_telegram_init_data
+    if not raw:
+        raise HTTPException(status_code=401, detail="Missing init data")
+    telegram_id = _trainer_telegram_id(raw)
+    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+    return await upsert_client_dossier_profile(
+        session, trainer_id, client_id,
+        note=body.note,
+        goals=body.goals,
+        limitations=body.limitations,
+        level=body.level,
+    )
+
+
+@router.get("/trainer/clients/{client_id:int}/dossier/entries")
+async def list_client_entries_route(
+    client_id: int,
+    limit: int = Query(50, ge=1, le=100),
+    init_data: str | None = Query(None),
+    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """List timeline entries for a client. Auth: trainer initData."""
+    raw = init_data or x_telegram_init_data
+    if not raw:
+        raise HTTPException(status_code=401, detail="Missing init data")
+    telegram_id = _trainer_telegram_id(raw)
+    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+    entries = await list_client_entries(session, trainer_id, client_id, limit=limit)
+    return {"entries": entries}
+
+
+@router.post("/trainer/clients/{client_id:int}/dossier/entries")
+async def add_client_entry_route(
+    client_id: int,
+    body: DossierEntryBody,
+    init_data: str | None = Query(None),
+    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Add a timeline entry. Auth: trainer initData."""
+    raw = init_data or x_telegram_init_data
+    if not raw:
+        raise HTTPException(status_code=401, detail="Missing init data")
+    telegram_id = _trainer_telegram_id(raw)
+    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+    try:
+        entry = await add_client_entry(session, trainer_id, client_id, body.content)
+        return {"entry": entry}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.delete("/trainer/clients/{client_id:int}/dossier/entries/{entry_id:int}")
+async def delete_client_entry_route(
+    client_id: int,
+    entry_id: int,
+    init_data: str | None = Query(None),
+    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Delete a timeline entry. Auth: trainer initData."""
+    raw = init_data or x_telegram_init_data
+    if not raw:
+        raise HTTPException(status_code=401, detail="Missing init data")
+    telegram_id = _trainer_telegram_id(raw)
+    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+    deleted = await delete_client_entry(session, trainer_id, entry_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Entry not found")
+    return {"success": True}
+
+
+@router.get("/trainer/clients/{client_id:int}/dossier/tags")
+async def list_client_tags_route(
+    client_id: int,
+    init_data: str | None = Query(None),
+    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """List tags for a client. Auth: trainer initData."""
+    raw = init_data or x_telegram_init_data
+    if not raw:
+        raise HTTPException(status_code=401, detail="Missing init data")
+    telegram_id = _trainer_telegram_id(raw)
+    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+    tags = await list_client_tags(session, trainer_id, client_id)
+    return {"tags": tags, "suggested": SUGGESTED_TAGS}
+
+
+@router.post("/trainer/clients/{client_id:int}/dossier/tags")
+async def add_client_tag_route(
+    client_id: int,
+    body: DossierTagBody,
+    init_data: str | None = Query(None),
+    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Add a tag to a client. Auth: trainer initData."""
+    raw = init_data or x_telegram_init_data
+    if not raw:
+        raise HTTPException(status_code=401, detail="Missing init data")
+    telegram_id = _trainer_telegram_id(raw)
+    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+    try:
+        tag = await add_client_tag(session, trainer_id, client_id, body.tag, body.category)
+        if tag is None:
+            raise HTTPException(status_code=409, detail="Tag already exists")
+        return {"tag": tag}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.delete("/trainer/clients/{client_id:int}/dossier/tags/{tag_id:int}")
+async def remove_client_tag_route(
+    client_id: int,
+    tag_id: int,
+    init_data: str | None = Query(None),
+    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Remove a tag from a client. Auth: trainer initData."""
+    raw = init_data or x_telegram_init_data
+    if not raw:
+        raise HTTPException(status_code=401, detail="Missing init data")
+    telegram_id = _trainer_telegram_id(raw)
+    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+    deleted = await remove_client_tag(session, trainer_id, tag_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Tag not found")
+    return {"success": True}
+
+
 @router.post("/trainer/clients")
 async def post_trainer_clients(
     body: TrainerCreateClientBody,
@@ -3145,6 +3389,26 @@ async def webapp_trainer_moderation_readiness(
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Telegram not linked to a trainer")
     data = await get_trainer_moderation_readiness(session, trainer_id)
+    if not data:
+        raise HTTPException(status_code=404, detail="Trainer not found")
+    return data
+
+
+@router.get("/trainer/onboarding/checklist")
+async def webapp_trainer_onboarding_checklist(
+    init_data: str | None = Query(None),
+    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    session: AsyncSession = Depends(get_session),
+):
+    """Profile / slots / first booking flags for the «Первые шаги» strip (trainer hub Mini App)."""
+    raw = init_data or x_telegram_init_data
+    if not raw:
+        raise HTTPException(status_code=401, detail="Missing init data")
+    telegram_id = _trainer_telegram_id(raw)
+    trainer_id = await get_trainer_id_linked_any_status(session, telegram_id)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail="Telegram not linked to a trainer")
+    data = await get_trainer_onboarding_checklist(session, trainer_id)
     if not data:
         raise HTTPException(status_code=404, detail="Trainer not found")
     return data

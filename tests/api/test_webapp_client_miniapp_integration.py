@@ -827,3 +827,14 @@ async def test_certificate_products_requires_auth(app_use_test_db, db_session) -
             )
     assert resp.status_code == 200
     assert "items" in resp.json()
+
+
+@pytest.mark.asyncio
+async def test_webapp_client_home_page_served() -> None:
+    """Static Mini App: client hub HTML is reachable (route + file present)."""
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get("/webapp/client-home")
+    assert resp.status_code == 200
+    body = resp.text
+    assert "pickHeroScenario" in body
+    assert "Главная" in body

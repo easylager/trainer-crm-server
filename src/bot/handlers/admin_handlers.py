@@ -154,17 +154,14 @@ async def _notify_trainer_profile_moderation_feedback(trainer: dict | None, feed
     await _trainer_bot_send_html_with_profile_button(int(telegram_id), body)
 
 
-async def _notify_trainer_moderation_approved(trainer: dict | None, *, education_also_approved: bool) -> None:
+async def _notify_trainer_moderation_approved(trainer: dict | None) -> None:
     """Notify trainer that the profile passed moderation (catalog visible)."""
     if not trainer:
         return
     telegram_id = trainer.get("telegram_id")
     if not telegram_id:
         return
-    body = msg.TRAINER_MODERATION_PROFILE_APPROVED
-    if education_also_approved:
-        body += msg.TRAINER_MODERATION_PROFILE_APPROVED_EDU_EXTRA
-    await _trainer_bot_send_html_with_profile_button(int(telegram_id), body)
+    await _trainer_bot_send_html_with_profile_button(int(telegram_id), msg.TRAINER_MODERATION_PROFILE_APPROVED)
 
 
 async def _notify_trainer_moderation_rejected(trainer: dict | None) -> None:
@@ -660,7 +657,6 @@ async def on_approve(callback: CallbackQuery) -> None:
     if trainer_id is None:
         await callback.answer()
         return
-    approved_education = 0
     trainer: dict | None = None
     ok = False
     async with async_session_factory() as session:
@@ -677,7 +673,7 @@ async def on_approve(callback: CallbackQuery) -> None:
             repo_ap = TrainerRepository(session)
             await repo_ap.clear_moderation_submitted_at(trainer_id)
             await session.flush()
-            approved_education = await moderate_trainer_education_for_profile(
+            await moderate_trainer_education_for_profile(
                 session,
                 trainer_id,
                 decision="approved",
@@ -688,7 +684,7 @@ async def on_approve(callback: CallbackQuery) -> None:
             await set_trainer_moderation_feedback(session, trainer_id, None)
             ok = await update_trainer_status(session, trainer_id, TRAINER_STATUS_ACTIVE)
             trainer = await get_trainer(session, trainer_id)
-            approved_education = await moderate_trainer_education_for_profile(
+            await moderate_trainer_education_for_profile(
                 session,
                 trainer_id,
                 decision="approved",
@@ -698,10 +694,7 @@ async def on_approve(callback: CallbackQuery) -> None:
         audit_log("trainer.approved", ACTOR_ADMIN_BOT, user_id, {"trainer_id": trainer_id})
         await callback.message.edit_reply_markup(reply_markup=None)
         await callback.message.answer(msg.ADMIN_APPROVED)
-        await _notify_trainer_moderation_approved(
-            trainer,
-            education_also_approved=approved_education > 0,
-        )
+        await _notify_trainer_moderation_approved(trainer)
     else:
         await callback.message.answer(f"Не удалось одобрить тренера #{trainer_id}.")
     await callback.answer()

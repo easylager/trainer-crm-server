@@ -12,6 +12,20 @@
   function applyClientMiniAppTheme() {
     var d = document.documentElement;
     var dark = isAppDark();
+    if (d.hasAttribute('data-client-hub')) {
+      /* Client hub: тот же янтарный CRM-акцент, что и в catalog/book + trainer-home */
+      d.classList.toggle('hub-is-dark', dark);
+      d.style.setProperty('--app-cta-fill', '#f5a623', 'important');
+      d.style.setProperty('--app-cta-text', '#1a1a1a', 'important');
+      d.style.setProperty('--tg-theme-button-color', '#f5a623', 'important');
+      d.style.setProperty('--tg-theme-button-text-color', '#1a1a1a', 'important');
+      d.style.setProperty('--tg-theme-bg-color', dark ? '#1c1c1c' : '#fffbec');
+      d.style.setProperty('--tg-theme-text-color', dark ? '#ffffff' : '#1a1a1a');
+      d.style.setProperty('--tg-theme-secondary-bg-color', dark ? '#2c2c2e' : '#fff5e1');
+      d.style.setProperty('--tg-theme-hint-color', dark ? '#8e8e93' : '#666666');
+      d.style.setProperty('--app-danger', '#ff3b30');
+      return;
+    }
     d.style.setProperty('--app-cta-fill', '#f5a623', 'important');
     d.style.setProperty('--app-cta-text', '#1a1a1a', 'important');
     d.style.setProperty('--tg-theme-button-color', '#f5a623', 'important');

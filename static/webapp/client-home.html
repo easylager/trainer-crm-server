@@ -1,0 +1,986 @@
+<!DOCTYPE html>
+<html lang="ru" data-client-hub>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Главная</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="stylesheet" href="theme.css" />
+  <link rel="stylesheet" href="mini-app-components.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet" />
+  <script src="client-mini-app-theme.js"></script>
+  <script>
+    (function () {
+      function applyClientHubTheme() {
+        if (typeof window.__applyClientMiniAppTheme === 'function') window.__applyClientMiniAppTheme();
+      }
+      applyClientHubTheme();
+      if (window.matchMedia) {
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyClientHubTheme);
+      }
+      var tg0 = window.Telegram && window.Telegram.WebApp;
+      if (tg0 && typeof tg0.onEvent === 'function') {
+        try { tg0.onEvent('themeChanged', applyClientHubTheme); } catch (e) {}
+      }
+      window.__applyClientHubTheme = applyClientHubTheme;
+    })();
+  </script>
+  <style>
+    @keyframes pulse-glow {
+      0%, 100% { box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15), 0 4px 16px rgba(247, 166, 0, 0.1); }
+      50% { box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15), 0 4px 20px rgba(247, 166, 0, 0.18); }
+    }
+    @keyframes float-gentle {
+      0%, 100% { transform: translateY(0px); }
+      50% { transform: translateY(-2px); }
+    }
+    body.hub-body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: var(--app-font-sans);
+      color: var(--tg-theme-text-color);
+      padding: 16px calc(16px + env(safe-area-inset-right)) calc(28px + env(safe-area-inset-bottom)) calc(16px + env(safe-area-inset-left));
+      overflow-x: hidden;
+      background:
+        radial-gradient(ellipse 140% 100% at 50% -30%, rgba(247, 166, 0, 0.18) 0%, rgba(247, 166, 0, 0.08) 40%, transparent 70%),
+        radial-gradient(ellipse 80% 60% at 80% 100%, rgba(247, 166, 0, 0.06) 0%, transparent 50%),
+        var(--tg-theme-bg-color) !important;
+    }
+    .hub-shell { max-width: 540px; margin: 0 auto; position: relative; }
+    .hub-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    .hub-header-kicker {
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--app-cta-fill);
+      margin: 0 0 6px;
+    }
+    .hub-header-title {
+      margin: 0;
+      font-size: clamp(22px, 6vw, 28px);
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1.12;
+      background: linear-gradient(135deg, var(--tg-theme-text-color) 0%, var(--app-cta-fill) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .btn-close-hub {
+      flex-shrink: 0;
+      padding: 12px 18px;
+      border-radius: 24px;
+      border: 2px solid rgba(245, 166, 35, 0.3);
+      font-size: 14px;
+      font-weight: 600;
+      font-family: inherit;
+      background: rgba(245, 166, 35, 0.05);
+      color: var(--app-cta-fill);
+      cursor: pointer;
+      backdrop-filter: blur(10px);
+      transition: all 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    .btn-close-hub:active { transform: scale(0.96); border-color: var(--app-cta-fill); }
+    .hub-is-dark .btn-close-hub {
+      background: rgba(245, 166, 35, 0.12);
+      border-color: rgba(245, 166, 35, 0.4);
+    }
+    .hub-hero { margin-bottom: 4px; }
+    .hub-hero-main {
+      position: relative;
+      border-radius: 24px;
+      padding: 24px 22px 26px;
+      margin-bottom: 20px;
+      overflow: hidden;
+      background:
+        linear-gradient(155deg, rgba(247, 166, 0, 0.16) 0%, rgba(247, 166, 0, 0.06) 48%, transparent 100%),
+        var(--tg-theme-secondary-bg-color);
+      border: 1px solid rgba(247, 166, 0, 0.35);
+      box-shadow:
+        0 12px 40px rgba(0, 0, 0, 0.15),
+        0 4px 16px rgba(247, 166, 0, 0.1);
+      animation: pulse-glow 4s ease-in-out infinite;
+    }
+    .hub-is-dark .hub-hero-main {
+      box-shadow:
+        0 16px 50px rgba(0, 0, 0, 0.4),
+        0 6px 20px rgba(247, 166, 0, 0.15);
+    }
+    .hub-hero-main::before {
+      content: '';
+      position: absolute;
+      top: -50%;
+      right: -30%;
+      width: 70%;
+      height: 150%;
+      background: radial-gradient(ellipse, rgba(247, 166, 0, 0.25) 0%, rgba(247, 166, 0, 0.1) 40%, transparent 70%);
+      pointer-events: none;
+      animation: float-gentle 6s ease-in-out infinite;
+    }
+    .hub-hero-greeting {
+      position: relative;
+      z-index: 1;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--app-cta-fill);
+      margin-bottom: 8px;
+    }
+    .hub-hero-title {
+      position: relative;
+      z-index: 1;
+      margin: 0 0 10px;
+      font-size: clamp(20px, 5.5vw, 26px);
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1.2;
+      color: var(--tg-theme-text-color);
+    }
+    .hub-hero-subtitle {
+      position: relative;
+      z-index: 1;
+      margin: 0 0 16px;
+      font-size: 14px;
+      line-height: 1.45;
+      color: var(--tg-theme-hint-color);
+    }
+    .hub-hero-cta { position: relative; z-index: 1; width: 100%; margin-top: 4px; }
+    .hub-stats {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-bottom: 22px;
+    }
+    .hub-stat-card {
+      border-radius: 16px;
+      padding: 14px 12px;
+      text-align: center;
+      background: var(--tg-theme-secondary-bg-color);
+      border: 1px solid rgba(128, 128, 128, 0.12);
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+    }
+    .hub-is-dark .hub-stat-card { box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25); }
+    .hub-stat-value { font-size: 20px; font-weight: 700; color: var(--tg-theme-text-color); }
+    .hub-stat-label { font-size: 11px; font-weight: 600; color: var(--tg-theme-hint-color); margin-top: 4px; text-transform: uppercase; letter-spacing: 0.06em; }
+    .hub-section-head {
+      margin: 32px 0 16px;
+      position: relative;
+    }
+    .hub-section-head:first-of-type { margin-top: 8px; }
+    .hub-section-title {
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--tg-theme-hint-color);
+      position: relative;
+      padding-left: 20px;
+    }
+    .hub-section-title::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 12px;
+      height: 2px;
+      background: var(--app-cta-fill);
+      border-radius: 1px;
+    }
+    .hub-quick-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    /* Две стартовые кнопки в один ряд — не копируют четырёхплиточную карту ниже */
+    .hub-quick-grid--start .hub-quick-action {
+      min-height: 76px;
+      align-items: flex-start;
+    }
+    .hub-quick-action {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 14px;
+      border-radius: 16px;
+      background: var(--tg-theme-secondary-bg-color);
+      border: 1px solid rgba(128, 128, 128, 0.1);
+      font: inherit;
+      text-align: left;
+      cursor: pointer;
+      color: inherit;
+      overflow: hidden;
+      transition: all 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    .hub-quick-action::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, rgba(247, 166, 0, 0.08) 0%, transparent 100%);
+      opacity: 0;
+      transition: opacity 0.25s ease;
+    }
+    .hub-quick-action:hover {
+      transform: translateY(-1px);
+      border-color: rgba(247, 166, 0, 0.3);
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+    }
+    .hub-quick-action:hover::before { opacity: 1; }
+    .hub-quick-action:active { transform: scale(0.98); }
+    .hub-quick-icon {
+      width: 28px;
+      height: 28px;
+      flex-shrink: 0;
+      color: var(--app-cta-fill);
+      position: relative;
+      z-index: 1;
+    }
+    .hub-quick-label { font-size: 14px; font-weight: 700; position: relative; z-index: 1; }
+    .hub-quick-hint { font-size: 11px; color: var(--tg-theme-hint-color); margin-top: 2px; position: relative; z-index: 1; }
+    .hub-day-label {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--tg-theme-hint-color);
+      margin: 12px 0 8px;
+    }
+    .hub-day-label:first-child { margin-top: 0; }
+    .hub-bookings-stack { display: flex; flex-direction: column; gap: 0; }
+    .hub-bookings-stack .slot-row {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+      width: 100%;
+      box-sizing: border-box;
+      margin: 0 0 6px;
+      padding: 12px 14px;
+      border-radius: 12px;
+      border: 2px solid transparent;
+      background: #fff3cc !important;
+      color: #1a1a1a !important;
+      text-align: left;
+      font: inherit;
+      cursor: pointer;
+      -webkit-appearance: none;
+      appearance: none;
+    }
+    .hub-is-dark .hub-bookings-stack .slot-row {
+      background: #2a2a2a !important;
+      color: #f5f5f5 !important;
+    }
+    .hub-bookings-stack .slot-row:active { opacity: 0.92; }
+    .hub-bookings-stack .slot-time { font-weight: 600; font-size: 15px; }
+    .hub-bookings-stack .slot-trainer { font-size: 13px; color: var(--tg-theme-hint-color); margin-top: 4px; }
+    .hub-bookings-stack .slot-place { font-size: 12px; color: var(--tg-theme-hint-color); margin-top: 2px; }
+    .hub-bookings-stack .slot-status {
+      font-size: 11px;
+      padding: 4px 8px;
+      border-radius: 8px;
+      flex-shrink: 0;
+      align-self: flex-start;
+    }
+    .hub-bookings-stack .slot-status.confirmed { background: rgba(52, 199, 89, 0.2); color: #34c759; }
+    .hub-bookings-stack .slot-status.pending { background: rgba(255, 159, 10, 0.22); color: #ff9500; }
+    .hub-bookings-cap {
+      margin-top: 10px;
+      font-size: 12px;
+      color: var(--tg-theme-hint-color);
+      text-align: center;
+    }
+    .hub-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 14px;
+    }
+    .hub-tile {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      justify-content: space-between;
+      min-height: 120px;
+      padding: 20px 18px 18px;
+      border-radius: 20px;
+      overflow: hidden;
+      border: 1px solid rgba(245, 166, 35, 0.2);
+      font: inherit;
+      cursor: pointer;
+      text-align: left;
+      transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+      background: var(--tg-theme-secondary-bg-color);
+    }
+    .hub-is-dark .hub-tile {
+      background:
+        linear-gradient(165deg, rgba(255, 251, 235, 0.96) 0%, rgba(255, 243, 214, 0.92) 100%);
+      color: #1a1a1a;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+      border-color: rgba(245, 166, 35, 0.4);
+    }
+    html:not(.hub-is-dark) .hub-tile {
+      background:
+        linear-gradient(165deg, rgba(255, 243, 204, 0.6) 0%, var(--tg-theme-secondary-bg-color) 100%);
+      color: var(--tg-theme-text-color);
+    }
+    .hub-tile::before {
+      content: '';
+      position: absolute;
+      top: -20%;
+      right: -20%;
+      width: 60%;
+      height: 80%;
+      background: radial-gradient(ellipse, rgba(247, 166, 0, 0.18) 0%, rgba(247, 166, 0, 0.08) 50%, transparent 80%);
+      pointer-events: none;
+      transition: all 0.4s ease;
+    }
+    .hub-tile:hover {
+      transform: translateY(-4px) scale(1.02);
+      border-color: rgba(247, 166, 0, 0.5);
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
+    }
+    .hub-is-dark .hub-tile:hover { box-shadow: 0 16px 50px rgba(0, 0, 0, 0.4); }
+    .hub-tile:hover::before {
+      background: radial-gradient(ellipse, rgba(247, 166, 0, 0.25) 0%, rgba(247, 166, 0, 0.12) 50%, transparent 80%);
+    }
+    .hub-tile:active { transform: translateY(-2px) scale(0.98); }
+    .hub-tile-inner {
+      position: relative;
+      z-index: 1;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+    .hub-tile-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      width: 100%;
+      margin-bottom: 12px;
+    }
+    .hub-tile-icon { width: 32px; height: 32px; flex-shrink: 0; }
+    .hub-is-dark .hub-tile-icon { color: #c27800; }
+    html:not(.hub-is-dark) .hub-tile-icon { color: var(--app-cta-fill); }
+    .hub-tile-badge {
+      font-size: 10px;
+      font-weight: 700;
+      padding: 4px 8px;
+      border-radius: 8px;
+      background: rgba(247, 166, 0, 0.2);
+      color: var(--app-cta-fill);
+      line-height: 1;
+    }
+    .hub-tile-content { flex: 1; }
+    .hub-tile-label {
+      font-weight: 700;
+      font-size: 15px;
+      line-height: 1.2;
+      letter-spacing: -0.02em;
+      margin-bottom: 6px;
+    }
+    .hub-tile-hint {
+      font-size: 12px;
+      line-height: 1.4;
+      opacity: 0.8;
+    }
+    .hub-is-dark .hub-tile-hint { color: #4a4a4a; }
+    html:not(.hub-is-dark) .hub-tile-hint { color: var(--tg-theme-hint-color); }
+    .state-panel {
+      padding: 14px 16px;
+      border-radius: 14px;
+      background: var(--tg-theme-secondary-bg-color);
+      border: 1px solid rgba(128, 128, 128, 0.12);
+      font-size: 14px;
+      margin-bottom: 12px;
+    }
+    .state-panel.error { border-color: rgba(255, 59, 48, 0.35); }
+    .state-panel.loading { color: var(--tg-theme-hint-color); }
+    .hub-empty {
+      text-align: center;
+      padding: 20px 12px;
+      color: var(--tg-theme-hint-color);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    .hub-footnote {
+      margin-top: 28px;
+      padding: 16px 18px;
+      border-radius: 16px;
+      font-size: 12px;
+      line-height: 1.5;
+      color: var(--tg-theme-hint-color);
+      background:
+        linear-gradient(135deg, rgba(247, 166, 0, 0.04) 0%, var(--tg-theme-secondary-bg-color) 100%);
+      border: 1px solid rgba(245, 166, 35, 0.2);
+      box-shadow: 0 3px 16px rgba(0, 0, 0, 0.06);
+    }
+    .hub-is-dark .hub-footnote {
+      box-shadow: 0 6px 24px rgba(0, 0, 0, 0.2);
+      background:
+        linear-gradient(135deg, rgba(247, 166, 0, 0.06) 0%, var(--tg-theme-secondary-bg-color) 100%);
+    }
+    .hub-footnote strong { color: var(--tg-theme-text-color); }
+    .hub-body .bd-btn--secondary {
+      border-color: rgba(245, 166, 35, 0.4);
+      color: var(--app-cta-fill);
+    }
+    html:not(.hub-is-dark) .hub-body .bd-btn--secondary {
+      border-color: rgba(245, 166, 35, 0.45);
+      color: #c27800;
+    }
+  </style>
+</head>
+<body class="hub-body">
+  <div class="hub-shell" id="hubShell">
+    <header class="hub-header">
+      <div>
+        <p class="hub-header-kicker">Клиент</p>
+        <h1 class="hub-header-title" id="hubPageTitle">Главная</h1>
+      </div>
+      <button type="button" class="btn-close-hub" id="btnClose">Закрыть</button>
+    </header>
+
+    <section class="hub-hero" aria-labelledby="heroTitle">
+      <div class="hub-hero-main">
+        <div class="hub-hero-greeting" id="heroGreeting">Добро пожаловать</div>
+        <h2 class="hub-hero-title" id="heroTitle">Ваш день</h2>
+        <p class="hub-hero-subtitle" id="heroSubtitle">Загрузка…</p>
+        <button type="button" class="bd-btn bd-btn--primary hub-hero-cta" id="heroPrimaryCta" style="display:none;"></button>
+      </div>
+    </section>
+
+    <div class="hub-stats" id="hubStats" style="display:none;" aria-hidden="true">
+      <div class="hub-stat-card" id="statToday">
+        <div class="hub-stat-value" id="statTodayValue">—</div>
+        <div class="hub-stat-label">Сегодня</div>
+      </div>
+      <div class="hub-stat-card">
+        <div class="hub-stat-value" id="statWeekValue">—</div>
+        <div class="hub-stat-label">На неделе</div>
+      </div>
+      <div class="hub-stat-card">
+        <div class="hub-stat-value" id="statRequestsValue">—</div>
+        <div class="hub-stat-label">Заявки</div>
+      </div>
+    </div>
+
+    <!-- Стартовые сценарии (не дублируют сетку «Все разделы»): запись + возврат к расписанию -->
+    <div class="hub-section-head">
+      <div class="hub-section-title">С чего начать</div>
+    </div>
+    <div class="hub-quick-grid hub-quick-grid--start" id="hubQuickGrid">
+      <button type="button" class="hub-quick-action" data-action="catalog">
+        <svg class="hub-quick-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+        <div><div class="hub-quick-label">Записаться к тренеру</div><div class="hub-quick-hint">Каталог, фильтры и слоты</div></div>
+      </button>
+      <button type="button" class="hub-quick-action" data-action="bookings">
+        <svg class="hub-quick-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+        <div><div class="hub-quick-label">Мои записи</div><div class="hub-quick-hint">Что уже запланировано</div></div>
+      </button>
+    </div>
+
+    <div id="stateMessage" class="state-panel loading" style="display:none;" role="status"></div>
+
+    <div class="hub-section-head">
+      <div class="hub-section-title">Ближайшие записи</div>
+    </div>
+    <div id="bookingsBlock"></div>
+
+    <div class="hub-section-head">
+      <div class="hub-section-title">Все разделы</div>
+    </div>
+    <div class="hub-grid" id="hubGrid"></div>
+
+    <div class="hub-footnote" id="hubFootnote">
+      <strong>Подсказка:</strong> команды в чате — <strong>/guide</strong> (помощь), <strong>/home</strong> (эта страница). Меню слева от поля ввода тоже ведёт сюда, если у бота включена веб-кнопка.
+    </div>
+  </div>
+
+  <script>
+    (function() {
+      var tg = window.Telegram && window.Telegram.WebApp;
+      if (tg) {
+        if (typeof tg.ready === 'function') tg.ready();
+        if (typeof tg.expand === 'function') tg.expand();
+        if (typeof window.__applyClientHubTheme === 'function') window.__applyClientHubTheme();
+        try {
+          var darkUi = document.documentElement.classList.contains('hub-is-dark');
+          var bgHex = darkUi ? '#1c1c1c' : '#fffbec';
+          if (typeof tg.setHeaderColor === 'function') tg.setHeaderColor(bgHex);
+          if (typeof tg.setBackgroundColor === 'function') tg.setBackgroundColor(bgHex);
+        } catch (e) {}
+      }
+      var initData = tg && tg.initData ? tg.initData : '';
+
+      var HUB_UPCOMING_MAX = 6;
+      var SOON_MS = 3 * 60 * 60 * 1000;
+
+      /* Same icon set / sizing as trainer-home hub tiles */
+      var ICONS = {
+        search: '<svg class="hub-tile-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>',
+        cal: '<svg class="hub-tile-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>',
+        inbox: '<svg class="hub-tile-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>',
+        ticket: '<svg class="hub-tile-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/><path d="M13 5v2"/><path d="M13 11v2"/><path d="M13 17v2"/></svg>',
+      };
+
+      var TILES = [
+        { path: 'catalog', label: 'Тренеры и запись', hint: 'Каталог, фильтры, запись', icon: 'search', badge: null },
+        { path: 'client-bookings', label: 'Мои записи', hint: 'Список по дням', icon: 'cal', badge: null },
+        { path: 'client-requests', label: 'Заявки и отклики', hint: 'Подбор тренера', icon: 'inbox', badge: 'NEW' },
+        { path: 'client-passes-certificates', label: 'Абонементы', hint: 'Остаток, сроки, покупка', icon: 'ticket', badge: null },
+      ];
+
+      function headersJson() {
+        var h = { 'Content-Type': 'application/json' };
+        if (initData) h['X-Telegram-Init-Data'] = initData;
+        return h;
+      }
+
+      function apiUrl(path) {
+        var url = '/api/webapp' + path;
+        if (initData) url += (url.indexOf('?') >= 0 ? '&' : '?') + 'init_data=' + encodeURIComponent(initData);
+        return url;
+      }
+
+      function webappBasePath() {
+        var p = window.location.pathname || '';
+        return p.replace(/[^/]+$/, '') || '/webapp/';
+      }
+
+      function withInit(url) {
+        if (!initData) return url;
+        return url + (url.indexOf('?') === -1 ? '?' : '&') + 'init_data=' + encodeURIComponent(initData);
+      }
+
+      function navigateTo(pathWithQuery) {
+        var url = webappBasePath() + pathWithQuery;
+        window.location.href = withInit(url);
+      }
+
+      function escapeHtml(s) {
+        if (s == null) return '';
+        return String(s)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;');
+      }
+
+      function formatDateShort(iso) {
+        if (!iso) return '';
+        var d = iso.slice(0, 10).split('-');
+        if (d.length !== 3) return iso;
+        return d[2] + '.' + d[1] + '.' + d[0];
+      }
+
+      function dayHeaderLine(day) {
+        var dateStr = formatDateShort(day.date);
+        var lab = (day.day_label || '').trim();
+        if (dateStr && lab) return dateStr + ' (' + lab + ')';
+        return dateStr || lab || '';
+      }
+
+      function parseDateTime(dateStr, timeStr) {
+        var d = (dateStr || '').slice(0, 10).split('-');
+        var t = (timeStr || '00:00').slice(0, 5).split(':');
+        if (d.length !== 3) return new Date(0);
+        return new Date(
+          parseInt(d[0], 10),
+          parseInt(d[1], 10) - 1,
+          parseInt(d[2], 10),
+          parseInt(t[0], 10) || 0,
+          parseInt(t[1], 10) || 0
+        );
+      }
+
+      /** Flatten grouped days into chronological list of { b, day, start }. */
+      function flattenBookings(days) {
+        var out = [];
+        (days || []).forEach(function(day) {
+          (day.bookings || []).forEach(function(b) {
+            out.push({
+              b: b,
+              day: day,
+              start: parseDateTime(day.date, b.start_time),
+            });
+          });
+        });
+        out.sort(function(a, b) { return a.start - b.start; });
+        return out;
+      }
+
+      function greetingText(now) {
+        var hour = now.getHours();
+        if (hour >= 6 && hour < 12) return 'Доброе утро';
+        if (hour >= 12 && hour < 18) return 'Добрый день';
+        if (hour >= 18 && hour < 23) return 'Добрый вечер';
+        return 'Доброй ночи';
+      }
+
+      /**
+       * Pick the single hero scenario: time-sensitive booking > request with responses >
+       * pending booking > pass alert > waiting request > empty / default.
+       */
+      function pickHeroScenario(now, flatBookings, requestItems, passItems) {
+        var i;
+        var next = null;
+        for (i = 0; i < flatBookings.length; i++) {
+          if (flatBookings[i].start >= now) {
+            next = flatBookings[i];
+            break;
+          }
+        }
+        if (next && (next.start.getTime() - now.getTime()) <= SOON_MS) {
+          return { kind: 'soon', row: next };
+        }
+        for (i = 0; i < requestItems.length; i++) {
+          var rq = requestItems[i];
+          var st = String(rq.status || '').toLowerCase();
+          if (st === 'archived') continue;
+          if (rq.responses && rq.responses.length > 0) {
+            return { kind: 'request_responses', request: rq };
+          }
+        }
+        for (i = 0; i < flatBookings.length; i++) {
+          var stb = String(flatBookings[i].b.status || '').toLowerCase();
+          if (stb === 'pending') {
+            return { kind: 'pending', row: flatBookings[i] };
+          }
+        }
+        var passAlert = pickPassAlert(passItems, now);
+        if (passAlert) return passAlert;
+        for (i = 0; i < requestItems.length; i++) {
+          var rq2 = requestItems[i];
+          if (String(rq2.status || '').toLowerCase() === 'archived') continue;
+          if (!rq2.responses || rq2.responses.length === 0) {
+            return { kind: 'request_waiting', request: rq2 };
+          }
+        }
+        if (flatBookings.length === 0 && requestItems.length === 0) {
+          return { kind: 'empty' };
+        }
+        return { kind: 'default', next: next };
+      }
+
+      /** Active pass: low sessions or expiring within 14 days. */
+      function pickPassAlert(items, now) {
+        var best = null;
+        var bestScore = -1;
+        (items || []).forEach(function(p) {
+          if (String(p.status || '').toLowerCase() !== 'active') return;
+          var rem = p.sessions_remaining;
+          var exp = p.expires_at ? new Date(p.expires_at) : null;
+          var low = rem != null && rem <= 2 && rem >= 0;
+          var expSoon = exp && !isNaN(exp.getTime()) && exp > now &&
+            (exp.getTime() - now.getTime()) < 14 * 24 * 60 * 60 * 1000;
+          if (!low && !expSoon) return;
+          var score = low ? 100 : 0;
+          if (expSoon) score += 50 - Math.min(50, Math.floor((exp.getTime() - now.getTime()) / (24 * 60 * 60 * 1000)));
+          if (score > bestScore) {
+            bestScore = score;
+            best = { kind: 'pass', pass: p, low: low, exp: exp };
+          }
+        });
+        return best;
+      }
+
+      function applyHero(scenario) {
+        var g = document.getElementById('heroGreeting');
+        var title = document.getElementById('heroTitle');
+        var sub = document.getElementById('heroSubtitle');
+        var cta = document.getElementById('heroPrimaryCta');
+        if (!g || !title || !sub || !cta) return;
+
+        var now = new Date();
+        g.textContent = greetingText(now);
+        cta.style.display = 'none';
+        cta.onclick = null;
+
+        if (!initData) {
+          title.textContent = 'Войдите через бота';
+          sub.textContent = 'Откройте это приложение из клиентского бота Telegram — подтянутся записи и разделы.';
+          return;
+        }
+
+        switch (scenario.kind) {
+          case 'soon': {
+            var b = scenario.row.b;
+            var place = (b.arena_name || b.place_display || '').trim() || 'место уточните у тренера';
+            title.textContent = 'Скоро занятие';
+            sub.textContent = (b.start_time || '') + ' · ' + (b.trainer_name || 'Тренер') + ' · ' + place;
+            cta.textContent = 'К записи';
+            cta.style.display = 'block';
+            cta.onclick = function() { navigateTo('client-bookings?open_booking=' + encodeURIComponent(String(b.id))); };
+            break;
+          }
+          case 'request_responses': {
+            var r = scenario.request;
+            title.textContent = 'Есть отклики по заявке';
+            sub.textContent = (r.service_name || 'Услуга') + ' · ' + (r.responses.length) + ' ' +
+              (r.responses.length === 1 ? 'тренер откликнулся' : 'тренера откликнулись');
+            cta.textContent = 'Выбрать тренера';
+            cta.style.display = 'block';
+            cta.onclick = function() { navigateTo('client-requests?request_id=' + encodeURIComponent(String(r.id))); };
+            break;
+          }
+          case 'pending': {
+            var row = scenario.row;
+            var bp = row.b;
+            title.textContent = 'Ждём подтверждения';
+            sub.textContent = 'Запись ' + formatDateShort(row.day.date) + ' ' + (bp.start_time || '') + ' — ' + (bp.trainer_name || 'тренер');
+            cta.textContent = 'Мои записи';
+            cta.style.display = 'block';
+            cta.onclick = function() { navigateTo('client-bookings'); };
+            break;
+          }
+          case 'pass': {
+            var pp = scenario.pass;
+            var line = scenario.low
+              ? 'Осталось ' + (pp.sessions_remaining != null ? pp.sessions_remaining : '—') + ' занятий · ' + (pp.trainer_name || 'Тренер')
+              : 'Действует до ' + (scenario.exp ? scenario.exp.toLocaleDateString('ru-RU') : '—');
+            title.textContent = scenario.low ? 'Мало занятий на абонементе' : 'Абонемент скоро закончится';
+            sub.textContent = (pp.product_name || 'Абонемент') + ' · ' + line;
+            cta.textContent = 'Открыть абонементы';
+            cta.style.display = 'block';
+            cta.onclick = function() { navigateTo('client-passes-certificates'); };
+            break;
+          }
+          case 'request_waiting': {
+            var rw = scenario.request;
+            title.textContent = 'Заявка в работе';
+            sub.textContent = 'Ждём откликов тренеров по «' + (rw.service_name || 'услуге') + '». Загляните позже или откройте заявки.';
+            cta.textContent = 'Мои заявки';
+            cta.style.display = 'block';
+            cta.onclick = function() { navigateTo('client-requests'); };
+            break;
+          }
+          case 'empty': {
+            title.textContent = 'Начните с поиска тренера';
+            sub.textContent = 'Выберите город и услугу в каталоге — запишитесь на удобное время или оставьте заявку.';
+            cta.textContent = 'Тренеры и запись';
+            cta.style.display = 'block';
+            cta.onclick = function() { navigateTo('catalog'); };
+            break;
+          }
+          default: {
+            if (scenario.next) {
+              var bn = scenario.next.b;
+              title.textContent = 'Ближайшая запись';
+              sub.textContent = formatDateShort(scenario.next.day.date) + ' ' + (bn.start_time || '') + ' · ' + (bn.trainer_name || 'Тренер');
+            } else {
+              title.textContent = 'Вы в системе';
+              sub.textContent = 'Заявки и записи — в блоках ниже. Полная карта разделов — внизу экрана.';
+            }
+            cta.textContent = 'Мои записи';
+            cta.style.display = 'block';
+            cta.onclick = function() { navigateTo('client-bookings'); };
+            break;
+          }
+        }
+      }
+
+      function setStats(todayCount, weekCount, requestCount) {
+        var wrap = document.getElementById('hubStats');
+        if (!wrap || !initData) {
+          if (wrap) wrap.style.display = 'none';
+          return;
+        }
+        wrap.style.display = 'grid';
+        wrap.setAttribute('aria-hidden', 'false');
+        document.getElementById('statTodayValue').textContent = String(todayCount);
+        document.getElementById('statWeekValue').textContent = String(weekCount);
+        document.getElementById('statRequestsValue').textContent = String(requestCount);
+      }
+
+      function addDaysToYmd(ymd, deltaDays) {
+        var p = ymd.split('-');
+        var d = new Date(parseInt(p[0], 10), parseInt(p[1], 10) - 1, parseInt(p[2], 10));
+        d.setDate(d.getDate() + deltaDays);
+        return d.getFullYear() + '-' +
+          String(d.getMonth() + 1).padStart(2, '0') + '-' +
+          String(d.getDate()).padStart(2, '0');
+      }
+
+      function computeStats(days, requestItems) {
+        var now = new Date();
+        var todayStr = now.getFullYear() + '-' +
+          String(now.getMonth() + 1).padStart(2, '0') + '-' +
+          String(now.getDate()).padStart(2, '0');
+        /* «На неделе» = записи на датах от сегодня до +7 календарных дней включительно (8 дней).
+           Раньше было today…today+6 (7 дней) — запись на восьмой день (напр. вс vs сб недели) не попадала в счётчик. */
+        var weekLastStr = addDaysToYmd(todayStr, 7);
+        var todayCount = 0;
+        var weekCount = 0;
+        (days || []).forEach(function(day) {
+          var ds = (day.date || '').slice(0, 10);
+          if (!ds) return;
+          var n = (day.bookings || []).length;
+          if (ds === todayStr) todayCount += n;
+          if (ds >= todayStr && ds <= weekLastStr) weekCount += n;
+        });
+        var reqCount = (requestItems || []).filter(function(r) {
+          return String(r.status || '').toLowerCase() !== 'archived';
+        }).length;
+        return { todayCount: todayCount, weekCount: weekCount, requestCount: reqCount };
+      }
+
+      function renderBookingsStrip(days) {
+        var block = document.getElementById('bookingsBlock');
+        var flat = flattenBookings(days);
+        var count = 0;
+        var parts = [];
+        (days || []).forEach(function(day) {
+          if (count >= HUB_UPCOMING_MAX) return;
+          var bs = day.bookings || [];
+          if (!bs.length) return;
+          parts.push('<div class="hub-day-label">' + escapeHtml(dayHeaderLine(day)) + '</div>');
+          parts.push('<div class="hub-bookings-stack">');
+          bs.forEach(function(b) {
+            if (count >= HUB_UPCOMING_MAX) return;
+            var st = String(b.status || '').toLowerCase();
+            var pending = st === 'pending';
+            var statusClass = pending ? 'pending' : 'confirmed';
+            var statusLabel = pending ? 'ожидает' : 'подтверждено';
+            var place = ((b.arena_name || b.place_display || '') + '').trim() || 'Место уточните у тренера';
+            parts.push(
+              '<button type="button" class="slot-row" data-bid="' + escapeHtml(String(b.id)) + '">' +
+                '<div>' +
+                  '<div class="slot-time">' + escapeHtml((b.start_time || '') + ' · ' + (b.duration_minutes || 45) + ' мин') + '</div>' +
+                  '<div class="slot-trainer">' + escapeHtml(b.trainer_name || 'Тренер') + '</div>' +
+                  '<div class="slot-place">' + escapeHtml(place) + '</div>' +
+                '</div>' +
+                '<span class="slot-status ' + statusClass + '">' + statusLabel + '</span>' +
+              '</button>'
+            );
+            count++;
+          });
+          parts.push('</div>');
+        });
+        if (!count) {
+          block.innerHTML = '<div class="hub-empty">Нет предстоящих записей.<br><button type="button" class="bd-btn bd-btn--primary" id="btnHubToCatalog" style="margin-top:14px">Найти тренера</button></div>';
+          var bc = document.getElementById('btnHubToCatalog');
+          if (bc) bc.onclick = function() { navigateTo('catalog'); };
+          return;
+        }
+        var total = flat.length;
+        var cap = '';
+        if (total > HUB_UPCOMING_MAX) {
+          cap = '<div class="hub-bookings-cap">Показаны ' + HUB_UPCOMING_MAX + ' из ' + total + ' записей</div>';
+        }
+        block.innerHTML = parts.join('') + cap;
+        block.querySelectorAll('[data-bid]').forEach(function(btn) {
+          btn.onclick = function() {
+            var bid = btn.getAttribute('data-bid');
+            if (bid) navigateTo('client-bookings?open_booking=' + encodeURIComponent(bid));
+          };
+        });
+      }
+
+      function renderTiles() {
+        var grid = document.getElementById('hubGrid');
+        grid.innerHTML = TILES.map(function(t) {
+          var ic = ICONS[t.icon] || ICONS.cal;
+          var badgeHtml = t.badge ? '<div class="hub-tile-badge">' + escapeHtml(t.badge) + '</div>' : '';
+          return (
+            '<button type="button" class="hub-tile" data-path="' + escapeHtml(t.path) + '">' +
+              '<div class="hub-tile-inner">' +
+                '<div class="hub-tile-top">' + ic + badgeHtml + '</div>' +
+                '<div class="hub-tile-content">' +
+                  '<div class="hub-tile-label">' + escapeHtml(t.label) + '</div>' +
+                  '<div class="hub-tile-hint">' + escapeHtml(t.hint) + '</div>' +
+                '</div>' +
+              '</div>' +
+            '</button>'
+          );
+        }).join('');
+        grid.querySelectorAll('.hub-tile').forEach(function(btn) {
+          btn.onclick = function() { navigateTo(btn.getAttribute('data-path')); };
+        });
+      }
+
+      function setupQuickGrid() {
+        document.getElementById('hubQuickGrid').querySelectorAll('.hub-quick-action').forEach(function(btn) {
+          btn.onclick = function() {
+            var a = btn.getAttribute('data-action');
+            if (a === 'catalog') navigateTo('catalog');
+            else if (a === 'bookings') navigateTo('client-bookings');
+          };
+        });
+      }
+
+      function setStateMessage(text, kind) {
+        var el = document.getElementById('stateMessage');
+        if (!text) {
+          el.style.display = 'none';
+          el.textContent = '';
+          return;
+        }
+        el.textContent = text;
+        el.className = 'state-panel ' + (kind === 'error' ? 'error' : 'loading');
+        el.style.display = 'block';
+      }
+
+      function loadAll() {
+        if (!initData) {
+          setStateMessage('', '');
+          applyHero({ kind: 'default', next: null });
+          document.getElementById('bookingsBlock').innerHTML = '<div class="hub-empty">Авторизация Telegram недоступна в этом режиме.</div>';
+          renderTiles();
+          setupQuickGrid();
+          return;
+        }
+        setStateMessage('Загрузка…', '');
+        Promise.all([
+          fetch(apiUrl('/client/bookings'), { headers: headersJson() }).then(function(r) {
+            return r.json().then(function(d) { if (!r.ok) throw new Error(d.detail || r.statusText); return d; });
+          }),
+          fetch(apiUrl('/client/requests'), { headers: headersJson() }).then(function(r) {
+            return r.json().then(function(d) { if (!r.ok) throw new Error(d.detail || r.statusText); return d; });
+          }),
+          fetch(apiUrl('/client/passes'), { headers: headersJson() }).then(function(r) {
+            return r.json().then(function(d) { if (!r.ok) throw new Error(d.detail || r.statusText); return d; });
+          }),
+        ]).then(function(results) {
+          var bookingsData = results[0];
+          var reqData = results[1];
+          var passData = results[2];
+          var days = bookingsData.days || [];
+          var requestItems = reqData.items || [];
+          var passItems = passData.items || [];
+          setStateMessage('', '');
+          var flat = flattenBookings(days);
+          var scenario = pickHeroScenario(new Date(), flat, requestItems, passItems);
+          applyHero(scenario);
+          var st = computeStats(days, requestItems);
+          setStats(st.todayCount, st.weekCount, st.requestCount);
+          renderBookingsStrip(days);
+          renderTiles();
+          setupQuickGrid();
+        }).catch(function() {
+          setStateMessage('Не удалось загрузить данные. Проверьте сеть и откройте страницу из клиентского бота.', 'error');
+          applyHero({ kind: 'default', next: null });
+        });
+      }
+
+      document.getElementById('btnClose').onclick = function() {
+        if (tg && tg.close) tg.close();
+        else window.close();
+      };
+
+      renderTiles();
+      setupQuickGrid();
+      loadAll();
+    })();
+  </script>
+</body>
+</html>

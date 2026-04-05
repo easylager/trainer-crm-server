@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Конструктор цветовых гамм — CRM</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet" />
+  <style>
+    * { box-sizing: border-box; }
+    :root {
+      --tool-bg: #0f172a;
+      --tool-panel: #1e293b;
+      --tool-border: rgba(148, 163, 184, 0.2);
+      --tool-muted: #94a3b8;
+      --tool-text: #f1f5f9;
+    }
+    body {
+      margin: 0;
+      padding: 20px 16px 48px;
+      font-family: 'DM Sans', system-ui, sans-serif;
+      background: var(--tool-bg);
+      color: var(--tool-text);
+      line-height: 1.45;
+    }
+    .layout {
+      max-width: 1180px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: minmax(280px, 1fr) minmax(320px, 1.4fr);
+      gap: 24px;
+      align-items: start;
+    }
+    @media (max-width: 900px) {
+      .layout { grid-template-columns: 1fr; }
+    }
+    h1 {
+      font-size: 1.35rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin: 0 0 8px;
+    }
+    .lead {
+      margin: 0 0 20px;
+      font-size: 0.9rem;
+      color: var(--tool-muted);
+      max-width: 62ch;
+    }
+    .lead code { font-size: 0.85em; color: #7dd3fc; }
+    .panel {
+      background: var(--tool-panel);
+      border: 1px solid var(--tool-border);
+      border-radius: 16px;
+      padding: 18px 16px;
+    }
+    .panel h2 {
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--tool-muted);
+      margin: 0 0 14px;
+    }
+    .field-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px 12px;
+    }
+    @media (max-width: 400px) {
+      .field-grid { grid-template-columns: 1fr; }
+    }
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .field label {
+      font-size: 0.68rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--tool-muted);
+    }
+    .field-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .field-row input[type="color"] {
+      width: 40px;
+      height: 32px;
+      padding: 0;
+      border: 1px solid var(--tool-border);
+      border-radius: 8px;
+      cursor: pointer;
+      background: transparent;
+    }
+    .field-row input[type="text"] {
+      flex: 1;
+      min-width: 0;
+      padding: 8px 10px;
+      border-radius: 8px;
+      border: 1px solid var(--tool-border);
+      background: rgba(15, 23, 42, 0.6);
+      color: #e2e8f0;
+      font-family: ui-monospace, monospace;
+      font-size: 0.8rem;
+    }
+    .field-full { grid-column: 1 / -1; }
+    .slider-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .slider-row input[type="range"] { flex: 1; }
+    .slider-row span { font-size: 0.75rem; color: var(--tool-muted); min-width: 2.5rem; text-align: right; }
+    .presets {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 12px;
+    }
+    .presets button {
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--tool-border);
+      background: rgba(15, 23, 42, 0.5);
+      color: var(--tool-text);
+      font-size: 0.75rem;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+    }
+    .presets button:hover { border-color: rgba(125, 211, 252, 0.4); }
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .actions button {
+      padding: 10px 14px;
+      border-radius: 10px;
+      border: none;
+      font-size: 0.85rem;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+    }
+    .btn-primary {
+      background: linear-gradient(145deg, #38bdf8, #0ea5e9);
+      color: #0f172a;
+    }
+    .btn-secondary {
+      background: rgba(148, 163, 184, 0.2);
+      color: var(--tool-text);
+      border: 1px solid var(--tool-border);
+    }
+    .export-box {
+      margin-top: 8px;
+      width: 100%;
+      min-height: 120px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid var(--tool-border);
+      background: rgba(15, 23, 42, 0.75);
+      color: #cbd5e1;
+      font-family: ui-monospace, monospace;
+      font-size: 0.72rem;
+      line-height: 1.4;
+      resize: vertical;
+    }
+    .hint { font-size: 0.75rem; color: var(--tool-muted); margin-top: 8px; }
+
+    /* Live preview mock — tokens applied via inline style on #liveMock */
+    .preview-wrap {
+      border-radius: 20px;
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      box-shadow: 0 20px 56px rgba(0, 0, 0, 0.5);
+    }
+    .mock {
+      --bg: #1e293b;
+      --surface: #334155;
+      --surface2: #3d4f66;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --kicker: #bae6fd;
+      --accent: #2dd4bf;
+      --accent-text: #0f172a;
+      --border: rgba(255, 255, 255, 0.1);
+      font-family: 'DM Sans', system-ui, sans-serif;
+      background: var(--mock-bg, var(--bg));
+      color: var(--text);
+      padding: 16px;
+      min-height: 420px;
+    }
+    .mock-kicker {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--kicker);
+      margin-bottom: 12px;
+    }
+    .mock-hero {
+      display: flex;
+      gap: 14px;
+      align-items: center;
+      padding: 16px;
+      border-radius: 16px;
+      background: var(--mock-hero-bg, linear-gradient(145deg, rgba(255, 255, 255, 0.06) 0%, transparent 40%), var(--surface));
+      border: 1px solid var(--border);
+      margin-bottom: 14px;
+      box-shadow: var(--hero-shadow, 0 8px 24px rgba(15, 23, 42, 0.2));
+    }
+    .mock-avatar {
+      width: 52px;
+      height: 52px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 1rem;
+      flex-shrink: 0;
+      color: var(--avatar-text, var(--accent-text));
+      background: var(--avatar-bg, linear-gradient(145deg, #5eead4 0%, var(--accent) 100%));
+      box-shadow: 0 4px 16px color-mix(in srgb, var(--accent) 35%, transparent);
+    }
+    .mock-name { font-size: 1.1rem; font-weight: 700; letter-spacing: -0.02em; margin: 0 0 2px; }
+    .mock-since { font-size: 0.8rem; color: var(--muted); margin: 0; }
+    .mock-stats { display: flex; gap: 8px; margin-bottom: 14px; }
+    .mock-stat {
+      flex: 1;
+      padding: 10px 10px;
+      border-radius: 12px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      font-size: 0.72rem;
+    }
+    .mock-stat span {
+      display: block;
+      color: var(--muted);
+      margin-bottom: 4px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    .mock-stat strong { font-size: 0.85rem; }
+    .mock-section {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+    .mock-section::before {
+      content: '';
+      display: inline-block;
+      width: 12px;
+      height: 2px;
+      background: var(--kicker);
+      border-radius: 1px;
+      margin-right: 8px;
+      vertical-align: middle;
+    }
+    .mock-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 12px 14px;
+      margin-bottom: 14px;
+      font-size: 0.88rem;
+    }
+    .mock-row { display: flex; justify-content: space-between; gap: 8px; }
+    .mock-row .l { color: var(--muted); font-size: 0.75rem; }
+    .mock-actions { display: flex; flex-direction: column; gap: 8px; }
+    .mock-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 12px 14px;
+      border-radius: 14px;
+      font-size: 0.88rem;
+      font-weight: 600;
+      border: none;
+      cursor: default;
+      font-family: inherit;
+    }
+    .mock-btn--primary {
+      background: var(--accent);
+      color: var(--accent-text);
+      box-shadow: 0 2px 14px color-mix(in srgb, var(--accent) 35%, transparent);
+    }
+    .mock-btn--secondary {
+      background: var(--surface2);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .preview-hint {
+      font-size: 0.75rem;
+      color: var(--tool-muted);
+      margin: 10px 0 0;
+    }
+  </style>
+</head>
+<body>
+  <h1>Конструктор цветовых гамм</h1>
+  <p class="lead">
+    Задайте токены и сразу увидите превью «карточки клиента».
+    Пресеты — бывшие варианты со страницы; экспорт — блок для <code>theme.css</code> / mini-app.
+    Параметры можно передать в URL: <code>?bg=1a222e&accent=76d0b8</code> (поддерживаются ключи bg, surface, surface2, text, muted, kicker, accent, accentText, borderA, glow).
+  </p>
+
+  <div class="layout">
+    <div class="panel">
+      <h2>Параметры</h2>
+      <div class="field-grid" id="fields">
+        <div class="field">
+          <label for="c-bg">Фон страницы</label>
+          <div class="field-row">
+            <input type="color" id="c-bg" data-key="bg" value="#1e293b" />
+            <input type="text" id="t-bg" data-key="bg" spellcheck="false" />
+          </div>
+        </div>
+        <div class="field">
+          <label for="c-surface">Карточка / hero</label>
+          <div class="field-row">
+            <input type="color" id="c-surface" data-key="surface" value="#334155" />
+            <input type="text" id="t-surface" data-key="surface" spellcheck="false" />
+          </div>
+        </div>
+        <div class="field">
+          <label for="c-surface2">Стат / вторичная</label>
+          <div class="field-row">
+            <input type="color" id="c-surface2" data-key="surface2" value="#3d4f66" />
+            <input type="text" id="t-surface2" data-key="surface2" spellcheck="false" />
+          </div>
+        </div>
+        <div class="field">
+          <label for="c-text">Текст</label>
+          <div class="field-row">
+            <input type="color" id="c-text" data-key="text" value="#f8fafc" />
+            <input type="text" id="t-text" data-key="text" spellcheck="false" />
+          </div>
+        </div>
+        <div class="field">
+          <label for="c-muted">Подсказки</label>
+          <div class="field-row">
+            <input type="color" id="c-muted" data-key="muted" value="#94a3b8" />
+            <input type="text" id="t-muted" data-key="muted" spellcheck="false" />
+          </div>
+        </div>
+        <div class="field">
+          <label for="c-kicker">Кикер / хром</label>
+          <div class="field-row">
+            <input type="color" id="c-kicker" data-key="kicker" value="#bae6fd" />
+            <input type="text" id="t-kicker" data-key="kicker" spellcheck="false" />
+          </div>
+        </div>
+        <div class="field">
+          <label for="c-accent">CTA / акцент</label>
+          <div class="field-row">
+            <input type="color" id="c-accent" data-key="accent" value="#2dd4bf" />
+            <input type="text" id="t-accent" data-key="accent" spellcheck="false" />
+          </div>
+        </div>
+        <div class="field">
+          <label for="c-accentText">Текст на CTA</label>
+          <div class="field-row">
+            <input type="color" id="c-accentText" data-key="accentText" value="#0f172a" />
+            <input type="text" id="t-accentText" data-key="accentText" spellcheck="false" />
+          </div>
+        </div>
+        <div class="field field-full">
+          <label for="borderA">Прозрачность рамки (белая)</label>
+          <div class="slider-row">
+            <input type="range" id="borderA" min="0" max="35" value="10" />
+            <span id="borderAVal">10%</span>
+          </div>
+        </div>
+        <div class="field field-full">
+          <label for="glow">Сила цветных бликов на фоне</label>
+          <div class="slider-row">
+            <input type="range" id="glow" min="0" max="100" value="100" />
+            <span id="glowVal">100%</span>
+          </div>
+        </div>
+      </div>
+
+      <h2 style="margin-top: 18px">Пресеты</h2>
+      <div class="presets" id="presets"></div>
+
+      <div class="actions">
+        <button type="button" class="btn-primary" id="btnCopy">Копировать CSS</button>
+        <button type="button" class="btn-secondary" id="btnLink">Ссылка с параметрами</button>
+        <button type="button" class="btn-secondary" id="btnReset">Сбросить к Hub</button>
+      </div>
+      <textarea class="export-box" id="export" readonly rows="12" aria-label="Сгенерированный CSS"></textarea>
+      <p class="hint" id="copyHint"></p>
+    </div>
+
+    <div>
+      <h2 style="font-size: 0.72rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #94a3b8; margin: 0 0 12px;">Превью</h2>
+      <div class="preview-wrap">
+        <div class="mock" id="liveMock">
+          <div class="mock-kicker">Карточка клиента</div>
+          <div class="mock-hero">
+            <div class="mock-avatar">АП</div>
+            <div>
+              <p class="mock-name">Анна Петрова</p>
+              <p class="mock-since">Клиент с 12.01.2026</p>
+            </div>
+          </div>
+          <div class="mock-stats">
+            <div class="mock-stat"><span>Последнее</span><strong>02.04.2026</strong></div>
+            <div class="mock-stat"><span>Следующее</span><strong>08.04.2026</strong></div>
+          </div>
+          <div class="mock-section">Контакты</div>
+          <div class="mock-card">
+            <div class="mock-row"><span class="l">Телефон</span><span style="color: var(--accent); font-weight: 600;">+375 …</span></div>
+          </div>
+          <div class="mock-actions">
+            <button type="button" class="mock-btn mock-btn--primary">Записать на занятие</button>
+            <button type="button" class="mock-btn mock-btn--secondary">Заметки по клиенту</button>
+          </div>
+        </div>
+      </div>
+      <p class="preview-hint">Тот же макет, что в мини-приложении: hero, статистика, контакты, кнопки.</p>
+    </div>
+  </div>
+
+  <script>
+(function () {
+  var KEYS = ['bg', 'surface', 'surface2', 'text', 'muted', 'kicker', 'accent', 'accentText'];
+
+  var PRESETS = {
+    hub: {
+      name: 'Client Hub (лёд)',
+      bg: '#1e293b', surface: '#334155', surface2: '#3d4f66', text: '#f8fafc', muted: '#94a3b8',
+      kicker: '#bae6fd', accent: '#2dd4bf', accentText: '#0f172a', borderA: 10, glow: 100
+    },
+    night: {
+      name: 'Ледяная ночь',
+      bg: '#0f172a', surface: '#1e293b', surface2: '#273549', text: '#f8fafc', muted: '#94a3b8',
+      kicker: '#7dd3fc', accent: '#38bdf8', accentText: '#0f172a', borderA: 10, glow: 85
+    },
+    ocean: {
+      name: 'Океан',
+      bg: '#0c1929', surface: '#153049', surface2: '#1c3a5c', text: '#f8fafc', muted: '#94a3b8',
+      kicker: '#93c5fd', accent: '#3b82f6', accentText: '#f8fafc', borderA: 12, glow: 70
+    },
+    aurora: {
+      name: 'Аврора',
+      bg: '#12081f', surface: '#1f1533', surface2: '#2a1f42', text: '#f8fafc', muted: '#a8a29e',
+      kicker: '#e9d5ff', accent: '#22d3ee', accentText: '#0c4a6e', borderA: 14, glow: 90
+    },
+    rink: {
+      name: 'Огни катка',
+      bg: '#1a1410', surface: '#2a221c', surface2: '#352b24', text: '#f8fafc', muted: '#a8a29e',
+      kicker: '#fcd34d', accent: '#14b8a6', accentText: '#042f2e', borderA: 8, glow: 75
+    },
+    boreal: {
+      name: 'Северный лес',
+      bg: '#0d1915', surface: '#14261f', surface2: '#1a332a', text: '#f8fafc', muted: '#9ca3af',
+      kicker: '#86efac', accent: '#4ade80', accentText: '#052e16', borderA: 11, glow: 80
+    },
+    neon: {
+      name: 'Неоновый зал',
+      bg: '#0a0a0f', surface: '#16161f', surface2: '#1f1f2e', text: '#f8fafc', muted: '#78716c',
+      kicker: '#c4b5fd', accent: '#22d3ee', accentText: '#0c0a09', borderA: 9, glow: 65
+    },
+    iceCard: {
+      name: 'Карточка клиента (ref)',
+      bg: '#1a222e', surface: '#334155', surface2: '#374151', text: '#f8fafc', muted: '#94a3b8',
+      kicker: '#d1e8ff', accent: '#76d0b8', accentText: '#1a222e', borderA: 10, glow: 95
+    }
+  };
+
+  function hexToRgb(hex) {
+    var h = hex.replace(/^#/, '');
+    if (h.length === 3) h = h.split('').map(function (c) { return c + c; }).join('');
+    var n = parseInt(h, 16);
+    return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+  }
+
+  function rgbaHex(hex, a) {
+    var rgb = hexToRgb(hex);
+    return 'rgba(' + rgb.r + ',' + rgb.g + ',' + rgb.b + ',' + a + ')';
+  }
+
+  function normalizeHex(s) {
+    if (!s || typeof s !== 'string') return '#000000';
+    s = s.trim();
+    if (!s.startsWith('#')) s = '#' + s;
+    if (s.length === 4 && /^#[0-9a-f]{3}$/i.test(s)) {
+      s = '#' + s[1] + s[1] + s[2] + s[2] + s[3] + s[3];
+    }
+    if (s.length === 7 && /^#[0-9a-f]{6}$/i.test(s)) return s.toLowerCase();
+    return '#000000';
+  }
+
+  function buildMockBg(bg, kicker, accent, glowPct) {
+    var g = Math.max(0, Math.min(1, glowPct / 100));
+    return (
+      'radial-gradient(ellipse 130% 80% at 50% -25%, rgba(255,255,255,' + (0.07 * g) + ') 0%, transparent 45%),' +
+      'radial-gradient(ellipse 120% 90% at 0% -5%, ' + rgbaHex(kicker, 0.22 * g) + ' 0%, transparent 55%),' +
+      'radial-gradient(ellipse 100% 70% at 100% 5%, ' + rgbaHex(accent, 0.12 * g) + ' 0%, transparent 52%),' +
+      bg
+    );
+  }
+
+  function buildHeroBg(surface, kicker, accent, glowPct) {
+    var g = Math.max(0, Math.min(1, glowPct / 100));
+    return (
+      'linear-gradient(145deg, rgba(255,255,255,' + (0.06 * g) + ') 0%, transparent 40%),' +
+      'linear-gradient(210deg, ' + rgbaHex(kicker, 0.15 * g) + ' 0%, transparent 45%),' +
+      'linear-gradient(335deg, ' + rgbaHex(accent, 0.08 * g) + ' 0%, transparent 42%),' +
+      surface
+    );
+  }
+
+  function buildAvatarGradient(accent) {
+    return 'linear-gradient(145deg, #5eead4 0%, ' + accent + ' 100%)';
+  }
+
+  function readState() {
+    var o = {};
+    KEYS.forEach(function (k) {
+      var t = document.querySelector('input[type="text"][data-key="' + k + '"]');
+      o[k] = normalizeHex(t && t.value ? t.value : '#000000');
+    });
+    o.borderA = parseInt(document.getElementById('borderA').value, 10) || 0;
+    o.glow = parseInt(document.getElementById('glow').value, 10);
+    if (isNaN(o.glow)) o.glow = 100;
+    return o;
+  }
+
+  function applyState(o) {
+    KEYS.forEach(function (k) {
+      if (o[k] == null) return;
+      var hex = normalizeHex(o[k]);
+      var c = document.querySelector('input[type="color"][data-key="' + k + '"]');
+      var t = document.querySelector('input[type="text"][data-key="' + k + '"]');
+      if (c) c.value = hex.length === 7 ? hex : '#000000';
+      if (t) t.value = hex;
+    });
+    if (o.borderA != null) {
+      document.getElementById('borderA').value = String(o.borderA);
+      document.getElementById('borderAVal').textContent = o.borderA + '%';
+    }
+    if (o.glow != null) {
+      document.getElementById('glow').value = String(o.glow);
+      document.getElementById('glowVal').textContent = o.glow + '%';
+    }
+    syncPreview();
+  }
+
+  function syncPreview() {
+    var s = readState();
+    var border = 'rgba(255,255,255,' + (s.borderA / 100) + ')';
+    var el = document.getElementById('liveMock');
+    el.style.setProperty('--bg', s.bg);
+    el.style.setProperty('--surface', s.surface);
+    el.style.setProperty('--surface2', s.surface2);
+    el.style.setProperty('--text', s.text);
+    el.style.setProperty('--muted', s.muted);
+    el.style.setProperty('--kicker', s.kicker);
+    el.style.setProperty('--accent', s.accent);
+    el.style.setProperty('--accent-text', s.accentText);
+    el.style.setProperty('--border', border);
+    el.style.setProperty('--mock-bg', buildMockBg(s.bg, s.kicker, s.accent, s.glow));
+    el.style.setProperty('--mock-hero-bg', buildHeroBg(s.surface, s.kicker, s.accent, s.glow));
+    el.style.setProperty('--avatar-bg', buildAvatarGradient(s.accent));
+    document.getElementById('export').value = buildExportCss(s);
+  }
+
+  function buildExportCss(s) {
+    var border = 'rgba(255,255,255,' + (s.borderA / 100) + ')';
+    return [
+      '/* Скопируйте в mini-app / theme — проверьте контраст */',
+      ':root {',
+      '  --preview-bg: ' + s.bg + ';',
+      '  --preview-surface: ' + s.surface + ';',
+      '  --preview-surface-2: ' + s.surface2 + ';',
+      '  --preview-text: ' + s.text + ';',
+      '  --preview-muted: ' + s.muted + ';',
+      '  --preview-kicker: ' + s.kicker + ';',
+      '  --app-cta-fill: ' + s.accent + ';',
+      '  --app-cta-text: ' + s.accentText + ';',
+      '  --preview-border: ' + border + ';',
+      '}',
+      '/* Telegram tokens (пример): */',
+      '  /* --tg-theme-bg-color: ' + s.bg + '; */',
+      '  /* --tg-theme-secondary-bg-color: ' + s.surface + '; */',
+      '  /* --tg-theme-button-color: ' + s.accent + '; */',
+      '  /* --tg-theme-button-text-color: ' + s.accentText + '; */',
+    ].join('\n');
+  }
+
+  function wireInputs() {
+    KEYS.forEach(function (k) {
+      var c = document.querySelector('input[type="color"][data-key="' + k + '"]');
+      var t = document.querySelector('input[type="text"][data-key="' + k + '"]');
+      if (c && t) {
+        c.addEventListener('input', function () {
+          t.value = c.value;
+          syncPreview();
+        });
+        t.addEventListener('input', function () {
+          var hex = normalizeHex(t.value);
+          if (/^#[0-9A-Fa-f]{6}$/.test(hex)) c.value = hex;
+          syncPreview();
+        });
+      }
+    });
+    document.getElementById('borderA').addEventListener('input', function () {
+      document.getElementById('borderAVal').textContent = this.value + '%';
+      syncPreview();
+    });
+    document.getElementById('glow').addEventListener('input', function () {
+      document.getElementById('glowVal').textContent = this.value + '%';
+      syncPreview();
+    });
+  }
+
+  function applyFromQuery() {
+    var p = new URLSearchParams(window.location.search);
+    if (!p.toString()) return; 
+    var o = readState();
+    ['bg','surface','surface2','text','muted','kicker','accent','accentText'].forEach(function (k) {
+      var v = p.get(k);
+      if (v) o[k] = '#' + v.replace(/^#/, '');
+    });
+    if (p.has('borderA')) o.borderA = parseInt(p.get('borderA'), 10);
+    if (p.has('glow')) o.glow = parseInt(p.get('glow'), 10);
+    applyState(o);
+  }
+
+  function setUrlFromState() {
+    var s = readState();
+    var p = new URLSearchParams();
+    function short(h) { return h.replace(/^#/, ''); }
+    p.set('bg', short(s.bg));
+    p.set('surface', short(s.surface));
+    p.set('surface2', short(s.surface2));
+    p.set('text', short(s.text));
+    p.set('muted', short(s.muted));
+    p.set('kicker', short(s.kicker));
+    p.set('accent', short(s.accent));
+    p.set('accentText', short(s.accentText));
+    p.set('borderA', String(s.borderA));
+    p.set('glow', String(s.glow));
+    var url = window.location.pathname + '?' + p.toString();
+    history.replaceState(null, '', url);
+  }
+
+  document.getElementById('btnCopy').addEventListener('click', function () {
+    var ta = document.getElementById('export');
+    ta.select();
+    navigator.clipboard.writeText(ta.value).then(function () {
+      document.getElementById('copyHint').textContent = 'Скопировано в буфер.';
+      setTimeout(function () { document.getElementById('copyHint').textContent = ''; }, 2500);
+    }).catch(function () {
+      document.getElementById('copyHint').textContent = 'Выделите вручную и Ctrl+C.';
+    });
+  });
+
+  document.getElementById('btnLink').addEventListener('click', function () {
+    setUrlFromState();
+    navigator.clipboard.writeText(window.location.href).then(function () {
+      document.getElementById('copyHint').textContent = 'Ссылка с параметрами скопирована.';
+      setTimeout(function () { document.getElementById('copyHint').textContent = ''; }, 2500);
+    });
+  });
+
+  document.getElementById('btnReset').addEventListener('click', function () {
+    applyState(PRESETS.hub);
+    setUrlFromState();
+  });
+
+  var presetWrap = document.getElementById('presets');
+  Object.keys(PRESETS).forEach(function (key) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = PRESETS[key].name;
+    b.addEventListener('click', function () {
+      applyState(PRESETS[key]);
+      setUrlFromState();
+    });
+    presetWrap.appendChild(b);
+  });
+
+  KEYS.forEach(function (k) {
+    var t = document.querySelector('input[type="text"][data-key="' + k + '"]');
+    var c = document.querySelector('input[type="color"][data-key="' + k + '"]');
+    if (t && PRESETS.hub[k]) t.value = PRESETS.hub[k];
+    if (c && PRESETS.hub[k]) c.value = PRESETS.hub[k];
+  });
+
+  wireInputs();
+  applyFromQuery();
+  syncPreview();
+})();
+  </script>
+</body>
+</html>

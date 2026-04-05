@@ -11,7 +11,14 @@ from aiogram import Bot, F, Router
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ChatAction, ParseMode
 from aiogram.filters import Command, CommandStart
-from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message, WebAppInfo
+from aiogram.types import (
+    CallbackQuery,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    Message,
+    ReplyKeyboardRemove,
+    WebAppInfo,
+)
 
 from src.application.booking_use_cases import (
     cancel_booking,
@@ -84,6 +91,9 @@ from src.bot.schedule_notifications import run_after_schedule_changed
 from src.infrastructure.db import async_session_factory
 
 router = Router(name="trainer")
+
+# Telegram: remove stale reply keyboard (cannot combine with InlineKeyboardMarkup in one message).
+_REPLY_KEYBOARD_CLEAR = "\u200b"
 
 
 def _format_expires_ru_from_iso(iso_dt: str | None) -> str:
@@ -188,15 +198,21 @@ def _trainer_profile_keyboard() -> InlineKeyboardMarkup | None:
 
 def _post_welcome_link_keyboard(*, for_active_menu: bool) -> InlineKeyboardMarkup:
     """
-    After /start with link_: profile (+ subscription when fully active), then guide callback.
+    After /start with link_: Обзор (HTTPS onboarding hub) only — no inline Profile (avoid duplicate entry;
+    profile is reachable from trainer-home + left menu). Subscription when menu fully active.
     """
     rows: list[list[InlineKeyboardButton]] = []
-    profile_url = _trainer_profile_webapp_url()
-    if profile_url:
-        rows.append(
-            [InlineKeyboardButton(text=msg.TRAINER_PROFILE_BTN_MINI_APP, web_app=WebAppInfo(url=profile_url))]
-        )
     base = (Settings().webapp_base_url or "").rstrip("/")
+    # Always offer Обзор when Mini App is available — welcome flow must not skip onboarding (trainer-home).
+    if base.lower().startswith("https://"):
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=msg.TRAINER_MENU_BUTTON_HUB,
+                    web_app=WebAppInfo(url=f"{base}/webapp/trainer-home"),
+                )
+            ]
+        )
     if for_active_menu and base.lower().startswith("https://"):
         rows.append(
             [
@@ -304,7 +320,8 @@ async def cmd_start(message: Message) -> None:
         if len(args) > 1 and args[1].startswith(START_LINK_PREFIX):
             token = args[1].removeprefix(START_LINK_PREFIX)
             username = (message.from_user.username if message.from_user else None) or None
-            trainer_id = await consume_link_token(session, token, user_id, telegram_username=username)
+            link_out = await consume_link_token(session, token, user_id, telegram_username=username)
+            trainer_id = link_out.trainer_id
             if trainer_id is not None:
                 audit_log("trainer.linked", ACTOR_TRAINER_BOT, user_id, {"trainer_id": trainer_id})
                 state, trainer = await get_trainer_access_state(session, user_id)
@@ -343,6 +360,11 @@ async def cmd_start(message: Message) -> None:
                     )
                 if state == TrainerAccessState.ACTIVE:
                     await sync_trainer_menu_commands(message.bot, message.chat.id, trainer_id, session)
+            elif link_out.error == "telegram_other_trainer":
+                await message.answer(
+                    msg.TRAINER_LINK_TELEGRAM_CONFLICT,
+                    parse_mode=ParseMode.HTML,
+                )
             else:
                 await message.answer(msg.TRAINER_LINK_INVALID)
             return
@@ -351,7 +373,7 @@ async def cmd_start(message: Message) -> None:
         await message.answer(msg.TRAINER_ONLY_VIA_SITE)
         return
     if state == TrainerAccessState.ACTIVE:
-        await message.answer(msg.TRAINER_START_WELCOME)
+        await message.answer(msg.TRAINER_START_WELCOME, reply_markup=ReplyKeyboardRemove())
         async with async_session_factory() as session:
             tid = await get_trainer_id_by_telegram_id(session, user_id)
             if tid:
@@ -422,6 +444,33 @@ async def _send_trainer_invite_package(chat_message: Message, telegram_id: int) 
         plain = msg.TRAINER_INVITE_PLAIN_CLIENT_NO_CATALOG.format(deep_link=links.client_bot_deep_link)
     await chat_message.answer(msg.TRAINER_INVITE_INTRO_HTML)
     await chat_message.answer(plain, parse_mode=None)
+
+
+@router.message(Command("home"))
+async def cmd_home(message: Message) -> None:
+    """Trainer hub Mini App: upcoming bookings + links to schedule, clients, etc."""
+    await _trainer_typing(message.bot, message.chat.id)
+    uid = message.from_user.id if message.from_user else 0
+    async with async_session_factory() as session:
+        state, trainer = await get_trainer_access_state(session, uid)
+    if state == TrainerAccessState.NOT_LINKED or not trainer:
+        await message.answer(msg.TRAINER_ONLY_VIA_SITE)
+        return
+    base = (Settings().webapp_base_url or "").rstrip("/")
+    if not base.lower().startswith("https://"):
+        await message.answer(msg.TRAINER_HOME_HTTPS_REQUIRED)
+        return
+    url = f"{base}/webapp/trainer-home"
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=msg.TRAINER_BUTTON_HOME_WEBAPP, web_app=WebAppInfo(url=url))],
+        ]
+    )
+    await message.answer(
+        msg.TRAINER_HOME_OPEN_WEBAPP,
+        parse_mode=ParseMode.HTML,
+        reply_markup=kb,
+    )
 
 
 @router.message(Command("profile"))
@@ -601,15 +650,14 @@ async def cmd_editor(message: Message) -> None:
             return
     base = (Settings().webapp_base_url or "").rstrip("/")
     if base.startswith("https://"):
-        url = f"{base}/webapp/schedule-editor"
-        kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text=msg.TRAINER_BUTTON_SCHEDULE, web_app=WebAppInfo(url=url))],
-        ])
         await message.answer(
             msg.TRAINER_EDITOR_OPEN_HINT,
-            reply_markup=kb,
+            parse_mode=ParseMode.HTML,
+            reply_markup=ReplyKeyboardRemove(),
         )
         return
+    # Drop legacy reply keyboard (e.g. old "Расписание" bar); cannot mix Remove with inline keys.
+    await message.answer(_REPLY_KEYBOARD_CLEAR, reply_markup=ReplyKeyboardRemove())
     text, keyboard = await _schedule_keyboard(trainer_id)
     await message.answer(text, reply_markup=keyboard)
 
@@ -1342,6 +1390,26 @@ async def show_booking_detail(callback: CallbackQuery) -> None:
         rows.append([InlineKeyboardButton(text=msg.TRAINER_BOOKINGS_BUTTON_REMOVE_REGULARITY, callback_data=f"{REMOVE_RECURRING_PREFIX}{recurring['id']}")])
     else:
         rows.append([InlineKeyboardButton(text=msg.TRAINER_BOOKINGS_BUTTON_MAKE_REGULAR, callback_data=f"{MAKE_RECURRING_TRAINER_PREFIX}{booking_id}")])
+    base = (Settings().webapp_base_url or "").rstrip("/")
+    if (
+        booking
+        and base.startswith("https://")
+        and booking.get("client_id") is not None
+    ):
+        async with async_session_factory() as session:
+            has_crm = await _trainer_has_crm_subscription(session, trainer_id)
+        if has_crm:
+            rows.insert(
+                1,
+                [
+                    InlineKeyboardButton(
+                        text=msg.TRAINER_BUTTON_CLIENT_CARD_WEBAPP,
+                        web_app=WebAppInfo(
+                            url=f"{base}/webapp/trainer-clients?client_id={int(booking['client_id'])}"
+                        ),
+                    ),
+                ],
+            )
     rows.append([InlineKeyboardButton(text=msg.TRAINER_BOOKINGS_BUTTON_BACK_TO_LIST, callback_data=BOOKINGS_CALLBACK)])
     keyboard = InlineKeyboardMarkup(inline_keyboard=rows)
     await callback.message.edit_text(text, reply_markup=keyboard)

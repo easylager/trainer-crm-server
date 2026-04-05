@@ -23,9 +23,15 @@
       padding-bottom: env(safe-area-inset-bottom, 12px);
     }
     .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
       margin-bottom: 24px;
     }
-    .header-title { 
+    .header-title {
+      flex: 1;
+      min-width: 0;
       font-size: 24px;
       font-weight: 600;
       line-height: 1.25;
@@ -483,6 +489,31 @@
     }
     .trainer-detail-education-item:hover {
       border-color: rgba(245, 166, 35, 0.3);
+    }
+    /* Свободный текст «подробное образование» под модерируемыми строками — мягче карточек выше */
+    .trainer-detail-education-more {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid rgba(128, 128, 128, 0.16);
+    }
+    .trainer-detail-education-more-label {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--tg-theme-hint-color);
+      margin-bottom: 6px;
+    }
+    .trainer-detail-education-more-body {
+      font-size: 13px;
+      line-height: 1.45;
+      color: var(--tg-theme-text-color);
+      opacity: 0.92;
+      max-height: 14rem;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      overflow-wrap: anywhere;
+      word-break: break-word;
     }
     .trainer-detail-desc { 
       font-size: 15px; 
@@ -1029,10 +1060,14 @@
     }
     .empty-state-request .empty-state-text { font-size: 15px; color: var(--tg-theme-hint-color); margin-bottom: 14px; }
   </style>
+  <link rel="stylesheet" href="mini-app-client-nav.css" />
 </head>
 <body>
   <div class="header">
     <h1 class="header-title" id="headerTitle">Тренеры и запись</h1>
+    <div class="client-mini-nav">
+      <button type="button" class="btn-app-home" id="btnHome">Главная</button>
+    </div>
   </div>
 
   <div id="screenSummary" data-screen>
@@ -1149,7 +1184,7 @@
     <div id="slotPickList" class="slot-pick-list"></div>
   </div>
   <div id="screenBookingForm" data-screen>
-    <button type="button" class="back-link" id="backFromBookingForm" style="margin-bottom:8px;"><svg class="back-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>Другое время</button>
+    <button type="button" class="back-link" id="backFromBookingForm" style="margin-bottom:8px;"><svg class="back-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>К карточке тренера</button>
     <p id="bookingFormSlotLabel" class="booking-slot-label"></p>
     <p id="bookingVenueHint" class="booking-venue-hint" style="display:none;"></p>
     <div class="form-block">
@@ -1605,15 +1640,31 @@
         return n || 'Тренер';
       }
 
-      /** One approved education row for catalog detail (matches /api/public/trainers/{id}/education). */
+      /** One approved education row for catalog detail (matches GET /api/public/trainers/{id}). */
       function formatCatalogEducationEntry(edu) {
         if (!edu) return '';
         var inst = (edu.institution_name || '').trim();
         var prog = (edu.program_or_title || '').trim();
         var deg = (edu.degree_level || '').trim();
-        var head = inst;
-        var sub = [prog, deg].filter(Boolean).join(', ');
+        var city = (edu.city || '').trim();
+        var country = (edu.country || '').trim();
+        var place = [city, country].filter(Boolean).join(', ');
+        var typeKey = (edu.education_type || '').trim();
+        var typeHint = '';
+        if (typeKey === 'formal_education') typeHint = 'Вуз / колледж / ССО';
+        else if (typeKey === 'course_or_certificate') typeHint = 'Курсы / сертификат';
+
+        var head = inst || prog;
+        var parts = [];
+        if (inst && prog && inst !== prog) parts.push(prog);
+        if (deg) parts.push(deg);
+        var sub = parts.filter(function(x) { return x && x !== head; }).join(', ');
         var line = sub ? (head ? head + ' — ' + sub : sub) : head;
+        if (!line && place) line = place;
+        if (!line && typeHint) line = typeHint;
+        else if (line && place && line.indexOf(city) === -1 && city) line = line + ' · ' + place;
+        else if (line && place && !city && country && line.indexOf(country) === -1) line = line + ' · ' + country;
+
         var y = '';
         if (edu.is_in_progress) y = 'в процессе';
         else {
@@ -1625,6 +1676,17 @@
         }
         if (y) line = (line ? line + ' ' : '') + '(' + y + ')';
         return (line || '').trim();
+      }
+
+      /** Анкетное «Образование» — короткие категории из API (не дублируем под блоком записей). */
+      function isProfileEducationCategoryOnly(s) {
+        if (!s || typeof s !== 'string') return false;
+        var t = s.trim();
+        var cats = [
+          'Среднее специальное', 'Высшее профильное', 'Высшее непрофильное',
+          'Курсы и сертификация', 'Ученая степень', 'Другое'
+        ];
+        return cats.indexOf(t) >= 0;
       }
 
       function openTrainerDetailFromTrainerObject(t, prefetchPhotos) {
@@ -2048,6 +2110,22 @@
             if (t.arena_names && t.arena_names.length) {
               metaBottom.push(t.arena_names.slice(0, 2).join(', '));
             }
+            var eduEntries = t.education_entries || [];
+            var eduPreview = '';
+            for (var ei = 0; ei < eduEntries.length; ei++) {
+              var et = formatCatalogEducationEntry(eduEntries[ei]);
+              if (et) {
+                eduPreview = et;
+                break;
+              }
+            }
+            if (!eduPreview && p.education && String(p.education).trim()) {
+              eduPreview = String(p.education).trim();
+            }
+            if (eduPreview) {
+              if (eduPreview.length > 85) eduPreview = eduPreview.slice(0, 82) + '…';
+              metaBottom.push('Образование: ' + eduPreview);
+            }
 
             var infoHtml = '<div class="info"><div class="name">' + trainerName(t) + '</div>';
             if (metaTop.length) {
@@ -2117,14 +2195,6 @@
                 return photoSrcList(t.photos && t.photos[0]) || photoSrcDetail(t.photos && t.photos[0]);
               }));
             }).catch(function() { /* no-op */ });
-          }
-          if (state.openTrainerIdAfterLoad) {
-            var wantId = state.openTrainerIdAfterLoad;
-            state.openTrainerIdAfterLoad = null;
-            var idx = state.trainers.findIndex(function(t) { return t.id === wantId; });
-            if (idx >= 0) {
-              openTrainerDetailFromTrainerObject(state.trainers[idx], true);
-            }
           }
         }).catch(function() {
           document.getElementById('trainerList').innerHTML = '<div class="error">Ошибка загрузки</div>';
@@ -2286,20 +2356,38 @@
         }
         
         var eduRows = t.education_entries;
+        var profileEduDetail = (p.education && typeof p.education === 'string' && p.education.trim())
+          ? p.education.trim()
+          : '';
+        var profileExtraForDetail = profileEduDetail;
+        if (eduRows && eduRows.length > 0 && profileEduDetail && isProfileEducationCategoryOnly(profileEduDetail)) {
+          profileExtraForDetail = '';
+        }
         if (eduRows && eduRows.length > 0) {
           html += '<div class="trainer-detail-education">';
           html += '<div class="trainer-detail-education-title">Образование</div>';
+          var eduAny = false;
           eduRows.forEach(function(edu) {
             var eduText = formatCatalogEducationEntry(edu);
             if (eduText) {
+              eduAny = true;
               html += '<div class="trainer-detail-education-item">' + escapeHtml(eduText) + '</div>';
             }
           });
+          if (!eduAny && profileEduDetail) {
+            html += '<div class="trainer-detail-education-item">' + escapeHtml(profileEduDetail).replace(/\n/g, '<br>') + '</div>';
+          }
+          if (profileExtraForDetail) {
+            html += '<div class="trainer-detail-education-more">';
+            html += '<div class="trainer-detail-education-more-label">Подробнее</div>';
+            html += '<div class="trainer-detail-education-more-body">' + escapeHtml(profileExtraForDetail).replace(/\n/g, '<br>') + '</div>';
+            html += '</div>';
+          }
           html += '</div>';
-        } else if (p.education && typeof p.education === 'string' && p.education.trim()) {
+        } else if (profileEduDetail) {
           html += '<div class="trainer-detail-education">';
           html += '<div class="trainer-detail-education-title">Образование</div>';
-          html += '<div class="trainer-detail-education-item">' + escapeHtml(p.education.trim()).replace(/\n/g, '<br>') + '</div>';
+          html += '<div class="trainer-detail-education-item">' + escapeHtml(profileEduDetail).replace(/\n/g, '<br>') + '</div>';
           html += '</div>';
         }
         
@@ -2479,7 +2567,7 @@
       }
 
       document.getElementById('backFromSlotPick').onclick = function() { showScreen('screenTrainerDetail'); };
-      document.getElementById('backFromBookingForm').onclick = function() { showScreen('screenSlotPick'); };
+      document.getElementById('backFromBookingForm').onclick = function() { showScreen('screenTrainerDetail'); };
 
       document.getElementById('btnSubmitBooking').onclick = function() {
         var slot = state.selectedSlot;
@@ -2705,7 +2793,6 @@
             if (returnCtx.service_id != null) state.serviceId = parseInt(returnCtx.service_id, 10) || null;
             if (returnCtx.arena_id != null) state.arenaId = returnCtx.arena_id === '' ? null : (parseInt(returnCtx.arena_id, 10) || null);
             if (returnCtx.offset != null) state.offset = Math.max(0, parseInt(returnCtx.offset, 10) || 0);
-            state.openTrainerIdAfterLoad = returnCtx.trainer_id;
           }
           function showInitialScreen() {
             if (state.cityId && state.serviceId) {
@@ -2713,11 +2800,67 @@
               renderSummary();
               showScreen('screenSummary');
               switchTab(state.activeTab);
-              if (state.openTrainerIdAfterLoad) loadTrainers();
+              loadTrainers();
             } else {
               loadCities();
               showScreen('screenCity');
             }
+          }
+          /* Deep link ?trainer_id= — открыть карточку напрямую (в т.ч. возврат из book.html) */
+          if (returnCtx && returnCtx.trainer_id) {
+            loadTrainerById(returnCtx.trainer_id).then(function(t) {
+              if (t) {
+                state.selectedTrainer = t;
+                state.trainerName = trainerName(t);
+                renderTrainerDetail();
+                showScreen('screenTrainerDetail');
+                return;
+              }
+              if (state.trainerId) {
+                state.openedFromMyTrainerTab = true;
+                loadTrainerById(state.trainerId).then(function(t2) {
+                  if (t2) {
+                    state.selectedTrainer = t2;
+                    state.trainerName = trainerName(t2);
+                    renderTrainerDetail();
+                    showScreen('screenTrainerDetail');
+                  } else {
+                    state.trainerId = null;
+                    state.trainerName = '';
+                    showInitialScreen();
+                  }
+                }).catch(function() {
+                  state.trainerId = null;
+                  state.trainerName = '';
+                  showInitialScreen();
+                });
+                return;
+              }
+              showInitialScreen();
+            }).catch(function() {
+              if (state.trainerId) {
+                state.openedFromMyTrainerTab = true;
+                loadTrainerById(state.trainerId).then(function(t2) {
+                  if (t2) {
+                    state.selectedTrainer = t2;
+                    state.trainerName = trainerName(t2);
+                    renderTrainerDetail();
+                    showScreen('screenTrainerDetail');
+                  } else {
+                    state.trainerId = null;
+                    state.trainerName = '';
+                    showInitialScreen();
+                  }
+                }).catch(function() {
+                  state.trainerId = null;
+                  state.trainerName = '';
+                  showInitialScreen();
+                });
+                return;
+              }
+              showInitialScreen();
+            });
+            return;
           }
           if (state.trainerId) {
             state.openedFromMyTrainerTab = true;
@@ -2824,5 +2967,6 @@
     // Filter handlers are now initialized in initializeFilterHandlers() function
     // which is called when trainers screen loads
   </script>
+  <script src="mini-app-client-home.js"></script>
 </body>
 </html>

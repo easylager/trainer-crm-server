@@ -148,11 +148,16 @@
       border: 1px solid rgba(128, 128, 128, 0.1);
     }
   </style>
+  <link rel="stylesheet" href="mini-app-trainer-nav.css" />
 </head>
 <body>
   <div id="faqApp">
     <div class="header" style="margin-bottom: 12px;">
       <span class="header-title">Справка</span>
+      <div class="app-header-actions trainer-mini-nav">
+        <button type="button" class="btn-app-home" id="btnHome">Главная</button>
+        <button type="button" class="btn-close" id="btnClose">Закрыть</button>
+      </div>
     </div>
 
     <div class="bd-hero" id="faqHero">
@@ -183,6 +188,13 @@
       if (tg) {
         tg.ready();
         tg.expand();
+      }
+      var btnCloseFaq = document.getElementById('btnClose');
+      if (btnCloseFaq) {
+        btnCloseFaq.onclick = function() {
+          if (tg && tg.close) tg.close();
+          else window.close();
+        };
       }
 
       /** @type {{ id: string, q: string, a: string, popular?: boolean, chip?: string }[]} */
@@ -373,5 +385,6 @@
       }
     })();
   </script>
+  <script src="mini-app-trainer-home.js"></script>
 </body>
 </html>

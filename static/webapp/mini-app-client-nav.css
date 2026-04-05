@@ -1,0 +1,65 @@
+/**
+ * Client Mini App: «Главная» in header (with optional «Закрыть»).
+ * Load AFTER page inline <style> so WebView keeps consistent padding.
+ */
+.client-mini-nav {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  gap: 8px !important;
+  flex-wrap: nowrap !important;
+  box-sizing: border-box !important;
+}
+.header .client-mini-nav {
+  flex: 0 0 auto !important;
+  flex-shrink: 0 !important;
+}
+
+.client-mini-nav > button.btn-app-home,
+.client-mini-nav > button.btn-close {
+  min-height: 44px !important;
+  padding: 10px 16px !important;
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  line-height: 1.2 !important;
+  border-radius: 20px !important;
+  font-family: inherit !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  box-sizing: border-box !important;
+  margin: 0 !important;
+  flex: 0 0 auto !important;
+  width: auto !important;
+  max-width: none !important;
+  -webkit-appearance: none !important;
+  appearance: none !important;
+  cursor: pointer !important;
+  -webkit-tap-highlight-color: transparent !important;
+  touch-action: manipulation !important;
+  vertical-align: middle !important;
+}
+
+.client-mini-nav > button.btn-app-home {
+  border: 2px solid rgba(245, 166, 35, 0.42) !important;
+  background: transparent !important;
+  color: var(--app-cta-fill) !important;
+  box-shadow: none !important;
+}
+
+.client-mini-nav > button.btn-close {
+  border: 1px solid rgba(245, 166, 35, 0.22) !important;
+  background: var(--tg-theme-secondary-bg-color) !important;
+  color: var(--tg-theme-text-color) !important;
+  box-shadow: var(--app-btn-shadow-surface) !important;
+}
+
+.client-mini-nav > button.btn-app-home:active {
+  transform: scale(0.985) !important;
+  opacity: 0.92 !important;
+}
+
+.client-mini-nav > button.btn-close:active {
+  transform: scale(0.98) !important;
+  opacity: 0.9 !important;
+}

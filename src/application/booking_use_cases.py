@@ -1468,6 +1468,7 @@ async def get_pending_completed_for_trainer(session: AsyncSession, limit: int = 
     r = await session.execute(
         text("""
             SELECT n.id, n.booking_id, n.trainer_id, n.client_telegram_id,
+                   b.client_id,
                    s.slot_date, s.start_time
             FROM booking_completed_notifications n
             JOIN bookings b ON b.id = n.booking_id
@@ -1485,8 +1486,9 @@ async def get_pending_completed_for_trainer(session: AsyncSession, limit: int = 
             "booking_id": row[1],
             "trainer_id": row[2],
             "client_telegram_id": row[3],
-            "slot_date": row[4],
-            "start_time": row[5],
+            "client_id": row[4],
+            "slot_date": row[5],
+            "start_time": row[6],
         }
         for row in rows
     ]

@@ -13,6 +13,7 @@ from aiogram.types import BotCommand, MenuButtonCommands
 from src.bot.handlers.admin_handlers import router as admin_router
 from src.bot.middlewares.rate_limit_middleware import RateLimitMiddleware
 from src.shared.config import Settings
+from src.shared.sentry_init import init_sentry
 from src.shared.rate_limit import RateLimiter
 
 
@@ -38,6 +39,7 @@ async def setup_menu_and_commands(bot: Bot) -> None:
 
 async def main() -> None:
     settings = Settings()
+    init_sentry(settings, "bot-admin")
     if not settings.telegram_bot_token_admin:
         raise RuntimeError("telegram_bot_token_admin is not set in settings/.env")
     bot = Bot(

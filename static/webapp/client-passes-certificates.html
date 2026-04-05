@@ -264,11 +264,15 @@
       font-weight: 600;
     }
   </style>
+  <link rel="stylesheet" href="mini-app-client-nav.css" />
 </head>
 <body>
   <div class="header">
     <span class="header-title" id="headerTitle">📦 Мои абонементы</span>
-    <button type="button" class="btn-close" id="btnClose" aria-label="Закрыть">Закрыть</button>
+    <div class="client-mini-nav">
+      <button type="button" class="btn-app-home" id="btnHome">Главная</button>
+      <button type="button" class="btn-close" id="btnClose" aria-label="Закрыть">Закрыть</button>
+    </div>
   </div>
   <div class="tabs" role="tablist">
     <button type="button" class="tab active" id="tabPasses" data-tab="passes" role="tab" aria-selected="true">Абонементы</button>
@@ -588,5 +592,6 @@
       loadCertsList();
     })();
   </script>
+  <script src="mini-app-client-home.js"></script>
 </body>
 </html>

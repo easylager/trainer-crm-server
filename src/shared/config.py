@@ -103,3 +103,10 @@ class Settings(BaseSettings):
     smtp_user: str | None = None
     smtp_password: str | None = None
     smtp_from_email: str | None = None
+
+    # Sentry (https://sentry.io). When DSN is unset, SDK is not initialized.
+    sentry_dsn: str | None = None
+    sentry_environment: str | None = None
+    sentry_release: str | None = None
+    sentry_traces_sample_rate: float = 0.0
+    sentry_profiles_sample_rate: float = 0.0

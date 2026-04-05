@@ -11,10 +11,12 @@ import logging
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
-from aiogram.types import BotCommand, MenuButtonCommands
+from aiogram.types import MenuButtonCommands, MenuButtonWebApp, WebAppInfo
 
-from src.shared.config import Settings
 from src.bot import messages as msg
+from src.shared.config import Settings
+from src.shared.mini_app_https import mini_app_https_base
+from src.shared.sentry_init import init_sentry
 from src.bot.handlers.client_handlers import router as client_router
 from src.bot.middlewares.rate_limit_middleware import RateLimitMiddleware
 from src.shared.rate_limit import RateLimiter
@@ -24,22 +26,34 @@ logger = logging.getLogger(__name__)
 
 
 async def setup_menu_and_commands(bot: Bot) -> None:
-    """Menu button (left of attachment): opens command list. /start is intentionally hidden."""
-    await bot.set_my_commands(
-        [
-            BotCommand(command="guide", description="Помощь"),
-            BotCommand(command="settings", description="Тренеры и запись"),
-            BotCommand(command="my_requests", description="Мои заявки и отклики"),
-            BotCommand(command="my_bookings", description="Мои записи"),
-            BotCommand(command="my_passes", description=msg.CLIENT_MENU_PASSES_CERTIFICATES_DESC),
-        ]
-    )
-    await bot.set_chat_menu_button(menu_button=MenuButtonCommands())
-    logger.info("Menu button and commands set")
+    """Hub-only UX: no command list in the menu; single tap opens client-home Mini App (HTTPS).
+
+    Without HTTPS the Web App menu button is unavailable — menu falls back to empty commands.
+    """
+    settings = Settings()
+    await bot.set_my_commands([])
+    base, src = mini_app_https_base(settings)
+    if base:
+        hub_url = f"{base}/webapp/client-home"
+        await bot.set_chat_menu_button(
+            menu_button=MenuButtonWebApp(
+                text=msg.CLIENT_MENU_BUTTON_HUB,
+                web_app=WebAppInfo(url=hub_url),
+            ),
+        )
+        logger.info("Client bot: menu button = Web App hub only, commands cleared (%s) [%s]", hub_url, src)
+    else:
+        await bot.set_chat_menu_button(menu_button=MenuButtonCommands())
+        logger.info(
+            "Client bot: no HTTPS — menu button = commands (empty); set WEBAPP_BASE_URL or API_BASE_URL to https:// for hub button [%s]",
+            src,
+        )
+    logger.info("Client bot: menu configured")
 
 
 async def main() -> None:
     settings = Settings()
+    init_sentry(settings, "bot-client")
     bot = Bot(
         token=settings.telegram_bot_token_client,
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),

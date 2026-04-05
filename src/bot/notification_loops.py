@@ -50,6 +50,7 @@ from src.application.certificate_use_cases import (
     expire_certificates_past_expiry,
     process_certificate_email_outbox_batch,
 )
+from src.application.subscription_tier_use_cases import trainer_has_crm_access
 from src.application.subscription_use_cases import (
     expire_subscriptions_to_past_due,
     get_subscriptions_reminder_due,
@@ -338,6 +339,9 @@ async def process_completed_feedback_batch(
     trainer_bot: Bot, session: AsyncSession
 ) -> None:
     pending = await get_pending_completed_for_trainer(session)
+    settings = Settings()
+    base = (settings.webapp_base_url or "").rstrip("/")
+    webapp_https = base.startswith("https://")
     for p in pending:
         trainer_tid = await get_trainer_telegram_id(session, p["trainer_id"])
         if not trainer_tid:
@@ -363,16 +367,27 @@ async def process_completed_feedback_batch(
         text = msg.TRAINER_BOOKING_COMPLETED.format(
             date=date_str, day=day_str, time=time_str
         )
-        kb = InlineKeyboardMarkup(
-            inline_keyboard=[
-                [
-                    InlineKeyboardButton(
-                        text=msg.TRAINER_BUTTON_LEAVE_FEEDBACK,
-                        callback_data=f"feedback_booking_trainer:{p['booking_id']}",
-                    )
-                ],
-            ]
-        )
+        row: list[InlineKeyboardButton] = [
+            InlineKeyboardButton(
+                text=msg.TRAINER_BUTTON_LEAVE_FEEDBACK,
+                callback_data=f"feedback_booking_trainer:{p['booking_id']}",
+            ),
+        ]
+        client_id = p.get("client_id")
+        if (
+            webapp_https
+            and client_id is not None
+            and await trainer_has_crm_access(session, p["trainer_id"])
+        ):
+            row.append(
+                InlineKeyboardButton(
+                    text=msg.TRAINER_BUTTON_CLIENT_CARD_WEBAPP,
+                    web_app=WebAppInfo(
+                        url=f"{base}/webapp/trainer-clients?client_id={int(client_id)}"
+                    ),
+                )
+            )
+        kb = InlineKeyboardMarkup(inline_keyboard=[row])
         try:
             await trainer_bot.send_message(
                 chat_id=trainer_tid, text=text, reply_markup=kb

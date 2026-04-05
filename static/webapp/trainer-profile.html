@@ -57,18 +57,6 @@
     .tab-pane { display: none; animation: fadeIn 0.25s ease; }
     .tab-pane.active { display: block; }
     @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
-    .btn-close {
-      flex-shrink: 0;
-      padding: 8px 14px;
-      border-radius: var(--app-radius-sm);
-      border: none;
-      font-size: 14px;
-      background: var(--tg-theme-secondary-bg-color);
-      color: var(--tg-theme-text-color);
-      cursor: pointer;
-      transition: transform 0.15s;
-    }
-    .btn-close:active { transform: scale(0.95); }
     .section-title {
       display: flex;
       align-items: center;
@@ -345,6 +333,7 @@
       font-size: 24px;
       line-height: 1;
       cursor: pointer;
+      touch-action: manipulation;
       background: rgba(239, 68, 68, 0.12);
       color: #dc2626;
       display: flex;
@@ -1007,7 +996,7 @@
 
     /* JUSTSKATE.BY — перебиваем тему Telegram, как в расписании */
     body { background: #FFFBEB !important; color: #1a1a1a !important; }
-    .filter-btn, .btn-close, .card, .edu-readonly, .profile-hero {
+    .filter-btn, .card, .edu-readonly, .profile-hero {
       background: #fff5e1 !important;
       color: #1a1a1a !important;
     }
@@ -1034,7 +1023,7 @@
     }
     @media (prefers-color-scheme: dark) {
       body { background: #1a1a1a !important; color: #f5f5f5 !important; }
-      .filter-btn, .btn-close, .card, .edu-readonly {
+      .filter-btn, .card, .edu-readonly {
         background: #2a2a2a !important;
         color: #f5f5f5 !important;
       }
@@ -1070,11 +1059,15 @@
       .quick-action-btn { background: #252525 !important; }
     }
   </style>
+  <link rel="stylesheet" href="mini-app-trainer-nav.css" />
 </head>
 <body>
   <div class="header">
     <div class="header-title">Профиль</div>
-    <button type="button" class="btn-close" id="btnClose">Закрыть</button>
+    <div class="app-header-actions trainer-mini-nav">
+      <button type="button" class="btn-app-home" id="btnHome">Главная</button>
+      <button type="button" class="btn-close" id="btnClose">Закрыть</button>
+    </div>
   </div>
 
   <div id="skeleton" class="skeleton-wrap">
@@ -1125,7 +1118,6 @@
     <div id="tab-photo" class="tab-pane">
       <div class="section-title">Фото профиля</div>
       <div class="card">
-        <p class="hint" style="margin:0 0 16px;">Фото в каталоге: в списке — круглый аватар, на странице тренера — область 4:3 (как в обрезке). После выбора файла откроется кроп в том же соотношении.</p>
         <div class="photo-column">
           <div class="photo-upload-controls" id="photoDropZone">
             <label class="photo-upload-label" for="photoInput">
@@ -1142,7 +1134,7 @@
     </div>
 
     <div id="tab-form" class="tab-pane active">
-      <div class="section-title">Основное</div>
+      <div class="section-title" id="anketaStart">Основное</div>
       <div class="card">
         <div class="field">
           <label for="first_name"><span class="required-dot"></span>Имя</label>
@@ -1195,23 +1187,20 @@
       <div class="section-title">Опыт и квалификация</div>
       <div class="card">
         <div class="field">
-          <label for="experience_years"><span class="required-dot"></span>Опыт работы (лет)</label>
+          <label for="experience_years"><span class="required-dot"></span>Опыт работы, лет</label>
           <input id="experience_years" type="number" min="0" max="80" inputmode="numeric" placeholder="Сколько лет тренируете" />
-          <div class="field-hint">От 0 до 80 лет</div>
         </div>
         <div class="field">
           <label for="education"><span class="required-dot"></span>Образование</label>
           <select id="education"><option value="">Выберите категорию</option></select>
-          <div class="field-hint">Для проверки анкеты достаточно выбрать категорию здесь <strong>или</strong> добавить хотя бы одну подробную запись в блоке ниже (можно и то и другое).</div>
         </div>
       </div>
 
       <div class="section-title">Формат занятий</div>
       <div class="card">
         <div class="field">
-          <label for="session_duration_minutes"><span class="required-dot"></span>Длительность занятия</label>
-          <input id="session_duration_minutes" type="number" min="15" max="240" step="1" placeholder="Минут" inputmode="numeric" />
-          <div class="field-hint">От 15 до 240 минут</div>
+          <label for="session_duration_minutes"><span class="required-dot"></span>Длительность занятия (мин.)</label>
+          <input id="session_duration_minutes" type="number" min="15" max="240" step="1" placeholder="Например 60" inputmode="numeric" />
         </div>
         <div class="field">
           <label for="min_hours_before_booking"><span class="required-dot"></span>За сколько часов до занятия клиент может записаться</label>
@@ -1352,7 +1341,6 @@
         arenasList: [],
         snapshot: null,
       };
-
       /** Базовые подписи по enum (без pending_profile — см. heroStatusLabelRu). */
       function trainerStatusLabelRu(st) {
         var map = {
@@ -1978,6 +1966,128 @@
         } catch (e) {}
       }
 
+      /**
+       * Scroll/focus the first field that moderation still treats as missing (same order as API missing_fields).
+       * Falls back to «Основное» if the list is empty.
+       */
+      function focusNextMissingProfileField() {
+        var d = state.moderation_readiness || {};
+        var missing = d.missing_fields || [];
+        var key = missing.length ? missing[0] : null;
+
+        function focusEl(el) {
+          if (!el) return;
+          try {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          } catch (e) {}
+          setTimeout(function() {
+            try {
+              if (el.focus) el.focus({ preventScroll: true });
+            } catch (e2) {
+              try {
+                if (el.focus) el.focus();
+              } catch (e3) {}
+            }
+          }, 120);
+        }
+
+        if (!key) {
+          setTab('form');
+          setTimeout(function() {
+            var anchor = document.getElementById('anketaStart');
+            if (anchor) anchor.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            focusEl(document.getElementById('first_name'));
+          }, 80);
+          return;
+        }
+
+        if (key === 'photo') {
+          setTab('photo');
+          setTimeout(function() {
+            var drop = document.getElementById('photoDropZone');
+            var inp = document.getElementById('photoInput');
+            if (drop) {
+              try {
+                drop.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              } catch (e) {}
+            }
+            if (inp) {
+              setTimeout(function() {
+                try {
+                  inp.focus();
+                } catch (e2) {}
+              }, 150);
+            }
+          }, 80);
+          return;
+        }
+
+        setTab('form');
+        setTimeout(function() {
+          var el = null;
+          switch (key) {
+            case 'full_name': {
+              var fn = document.getElementById('first_name');
+              var ln = document.getElementById('last_name');
+              var fns = fn ? String(fn.value || '').trim() : '';
+              var lns = ln ? String(ln.value || '').trim() : '';
+              if (!fns) el = fn;
+              else if (!lns) el = ln;
+              else el = fn || ln;
+              break;
+            }
+            case 'age':
+              el = document.getElementById('age');
+              break;
+            case 'phone':
+              el = document.getElementById('phone');
+              break;
+            case 'description':
+              el = document.getElementById('description');
+              break;
+            case 'city':
+              el = document.getElementById('city_id');
+              break;
+            case 'education':
+              el = document.getElementById('education');
+              if (!el) el = document.getElementById('educationEntriesWrap');
+              break;
+            case 'experience_years':
+              el = document.getElementById('experience_years');
+              break;
+            case 'session_duration_minutes':
+              el = document.getElementById('session_duration_minutes');
+              break;
+            case 'min_hours_before_booking':
+              el = document.getElementById('min_hours_before_booking');
+              break;
+            case 'services': {
+              var uc = document.querySelector('#servicesWrap input[type="checkbox"]:not(:checked)');
+              el = uc || document.getElementById('servicesWrap');
+              break;
+            }
+            case 'arenas': {
+              var uca = document.querySelector('#arenasWrap input[type="checkbox"]:not(:checked)');
+              if (uca) {
+                el = uca;
+                break;
+              }
+              var pwrap = document.getElementById('primaryArenaWrap');
+              if (pwrap && pwrap.style.display !== 'none') {
+                if (!document.querySelector('input[name="primary_arena"]:checked')) {
+                  el = document.querySelector('input[name="primary_arena"]');
+                }
+              }
+              if (!el) el = document.getElementById('arenasWrap') || document.getElementById('arenaHint');
+              break;
+            }
+            default:
+              el = document.getElementById('anketaStart');
+          }
+          if (el) focusEl(el);
+        }, 80);
+      }
+
       (function initTabs() {
         var buttons = document.querySelectorAll('#profileFilters .filter-btn');
         buttons.forEach(function(btn) {
@@ -2142,12 +2252,10 @@
         var servicesCount = (t.services || []).length || 0;
         var arenasCount = (t.arena_ids || []).length || 0;
 
-        var age = p.age != null && p.age !== '' ? String(p.age) : '';
         var exp = p.experience_years != null && p.experience_years !== '' ? String(p.experience_years) : '';
 
         var subParts = [];
         if (cityName && cityName !== '—') subParts.push('Город: ' + cityName);
-        if (age) subParts.push('Возраст: ' + age);
         if (exp) subParts.push('Опыт: ' + exp + ' лет');
         if (!subParts.length) subParts.push('—');
 
@@ -2375,6 +2483,53 @@
         return JSON.stringify({ items: items, newDraft: newDraft });
       }
 
+      /**
+       * Deletes a persisted education row after confirm. Delegated from #educationEntries (capture)
+       * because Telegram/iOS WebView often drops direct button click delivery on small controls.
+       */
+      function runEducationDelete(delBtn) {
+        if (!delBtn || delBtn.disabled) return;
+        var card = delBtn.closest('.edu-card');
+        if (!card) return;
+        var eduId = parseInt(card.getAttribute('data-edu-id'), 10);
+        if (isNaN(eduId)) return;
+        function doDelete() {
+          delBtn.disabled = true;
+          fetch(apiUrl('/trainer/education/' + encodeURIComponent(eduId)), {
+            method: 'DELETE',
+            headers: headers(),
+          })
+            .then(parseJsonResponse)
+            .then(function(o) {
+              if (o.ok) {
+                haptic('success');
+                return loadProfile().then(function() {
+                  showSaveToast('Запись удалена', 'Список образования обновлён.');
+                }).then(function() { return maybeAutoSubmitForModeration(); });
+              }
+              haptic('error');
+              var msg = (o.data && o.data.detail) ? String(o.data.detail) : '\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u0443\u0434\u0430\u043b\u0438\u0442\u044c.';
+              alert(msg);
+            })
+            .catch(function() {
+              haptic('error');
+              alert('\u041e\u0448\u0438\u0431\u043a\u0430 \u0441\u0435\u0442\u0438.');
+            })
+            .finally(function() {
+              delBtn.disabled = false;
+            });
+        }
+        var q = '\u0423\u0434\u0430\u043b\u0438\u0442\u044c \u044d\u0442\u0443 \u0437\u0430\u043f\u0438\u0441\u044c \u043e\u0431 \u043e\u0431\u0440\u0430\u0437\u043e\u0432\u0430\u043d\u0438\u0438?';
+        if (typeof window.showAppConfirm === 'function') {
+          window.showAppConfirm(q, { okText: '\u0423\u0434\u0430\u043b\u0438\u0442\u044c', cancelText: '\u041e\u0442\u043c\u0435\u043d\u0430' }).then(function(ok) {
+            if (!ok) return;
+            doDelete();
+          });
+        } else if (typeof window.confirm === 'function' && window.confirm(q)) {
+          doDelete();
+        }
+      }
+
       function makeEducationCard(e) {
         var card = document.createElement('div');
         card.className = 'edu-card';
@@ -2397,38 +2552,6 @@
           delBtn.className = 'edu-delete';
           delBtn.setAttribute('aria-label', 'Удалить запись');
           delBtn.textContent = '\u00D7';
-          delBtn.addEventListener('click', function() {
-            if (delBtn.disabled) return;
-            showAppConfirm('\u0423\u0434\u0430\u043b\u0438\u0442\u044c \u044d\u0442\u0443 \u0437\u0430\u043f\u0438\u0441\u044c \u043e\u0431 \u043e\u0431\u0440\u0430\u0437\u043e\u0432\u0430\u043d\u0438\u0438?', { okText: '\u0423\u0434\u0430\u043b\u0438\u0442\u044c', cancelText: '\u041e\u0442\u043c\u0435\u043d\u0430' }).then(function (ok) {
-            if (!ok) return;
-            var eduId = parseInt(card.getAttribute('data-edu-id'), 10);
-            if (isNaN(eduId)) return;
-            delBtn.disabled = true;
-            fetch(apiUrl('/trainer/education/' + encodeURIComponent(eduId)), {
-              method: 'DELETE',
-              headers: headers(),
-            })
-              .then(parseJsonResponse)
-              .then(function(o) {
-                if (o.ok) {
-                  haptic('success');
-                  return loadProfile().then(function() {
-                    showSaveToast('Запись удалена', 'Список образования обновлён.');
-                  }).then(function() { return maybeAutoSubmitForModeration(); });
-                }
-                haptic('error');
-                var msg = (o.data && o.data.detail) ? String(o.data.detail) : '\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u0443\u0434\u0430\u043b\u0438\u0442\u044c.';
-                alert(msg);
-              })
-              .catch(function() {
-                haptic('error');
-                alert('\u041e\u0448\u0438\u0431\u043a\u0430 \u0441\u0435\u0442\u0438.');
-              })
-              .finally(function() {
-                delBtn.disabled = false;
-              });
-            });
-          });
           head.appendChild(titleEl);
           head.appendChild(delBtn);
           card.appendChild(head);
@@ -3226,6 +3349,25 @@
         el.classList.toggle('field-valid', hasValue && !hasError);
       }
 
+      (function initEducationDeleteCapture() {
+        var wrap = document.getElementById('educationEntries');
+        if (!wrap || wrap.dataset.eduDeleteCapture === '1') return;
+        wrap.dataset.eduDeleteCapture = '1';
+        wrap.addEventListener(
+          'click',
+          function(ev) {
+            var t = ev.target;
+            if (!t || typeof t.closest !== 'function') return;
+            var delBtn = t.closest('.edu-delete');
+            if (!delBtn) return;
+            ev.preventDefault();
+            ev.stopPropagation();
+            runEducationDelete(delBtn);
+          },
+          true
+        );
+      })();
+
       var btnEduAdd = document.getElementById('btnEducationAdd');
       if (btnEduAdd) {
         btnEduAdd.addEventListener('click', function() {
@@ -3246,5 +3388,6 @@
       loadRefs().then(function() { return loadProfile(); });
     })();
   </script>
+  <script src="mini-app-trainer-home.js"></script>
 </body>
 </html>

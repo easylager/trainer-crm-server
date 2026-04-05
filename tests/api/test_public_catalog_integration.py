@@ -50,6 +50,9 @@ def _assert_catalog_item_contract(item: dict) -> None:
     assert "has_certificate_products" in item and isinstance(
         item["has_certificate_products"], bool
     )
+    assert "education_entries" in item and isinstance(item["education_entries"], list)
+    for e in item["education_entries"]:
+        _assert_public_education_entry(e)
 
 
 def _assert_public_education_entry(entry: dict) -> None:
@@ -224,6 +227,35 @@ async def test_public_education_route_matches_detail_safe_fields(
     for e in c_edu:
         _assert_public_education_entry(e)
     for e in e_items:
+        _assert_public_education_entry(e)
+
+
+@pytest.mark.asyncio
+async def test_public_education_includes_pending_moderation_for_active_trainer(
+    app_use_test_db, db_session
+) -> None:
+    """Подробные записи об образовании видны в каталоге до отдельного апрува модератором (pending)."""
+    sid, cid, _ = await _require_seed_ids(db_session)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        tid = await _create_active_trainer_via_api(client, city_id=cid, service_ids=[sid])
+        await client.patch(f"/api/trainers/{tid}/status", json={"status": "active"})
+        post = await client.post(
+            f"/api/trainers/{tid}/education",
+            json={
+                "education_type": "formal_education",
+                "institution_name": "Пока на модерации",
+                "program_or_title": "Тренерский курс",
+            },
+        )
+        assert post.status_code == 201
+        card = await client.get(f"/api/public/trainers/{tid}")
+    assert card.status_code == 200
+    entries = card.json().get("education_entries") or []
+    assert len(entries) >= 1
+    assert any(
+        (e.get("institution_name") or "").strip() == "Пока на модерации" for e in entries
+    )
+    for e in entries:
         _assert_public_education_entry(e)
 
 

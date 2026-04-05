@@ -9,6 +9,29 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
+def _sql_public_catalog_education_predicate(table_alias: str = "e") -> str:
+    """
+    Which trainer_education rows appear in the public catalog / client APIs.
+
+    Includes pending_moderation (trainer already active in catalog; details matter before admin
+    ticks education). Includes approved snapshots unless a pending revision supersedes that row.
+    """
+    t = table_alias
+    return f"""(
+  {t}.moderation_status = 'pending_moderation'
+  OR (
+    {t}.moderation_status = 'approved'
+    AND {t}.approved_snapshot = true
+    AND NOT EXISTS (
+      SELECT 1 FROM trainer_education n
+      WHERE n.supersedes_id = {t}.id
+        AND n.trainer_id = {t}.trainer_id
+        AND n.moderation_status = 'pending_moderation'
+    )
+  )
+)"""
+
+
 class TrainerRepository:
     """Trainer aggregate persistence: trainers, profiles, photos, services. Raw SQL only."""
 
@@ -320,17 +343,18 @@ class TrainerRepository:
         *,
         public_only: bool = False,
     ) -> list[dict[str, Any]]:
-        """List trainer education entries; public_only returns approved snapshot only."""
+        """List trainer education entries; public_only returns catalog-visible rows (see _sql_public_catalog_education_predicate)."""
         params: dict[str, Any] = {"tid": trainer_id}
         if public_only:
-            q = """
-                SELECT id, education_type, institution_name, program_or_title, degree_level,
-                       country, city, start_year, end_year, is_in_progress, document_url,
-                       approved_at, updated_at
-                FROM trainer_education
-                WHERE trainer_id = :tid
-                  AND moderation_status = 'approved' AND approved_snapshot = true
-                ORDER BY updated_at DESC, id DESC
+            vis = _sql_public_catalog_education_predicate("e")
+            q = f"""
+                SELECT e.id, e.education_type, e.institution_name, e.program_or_title, e.degree_level,
+                       e.country, e.city, e.start_year, e.end_year, e.is_in_progress, e.document_url,
+                       e.approved_at, e.updated_at
+                FROM trainer_education e
+                WHERE e.trainer_id = :tid
+                  AND {vis}
+                ORDER BY e.updated_at DESC, e.id DESC
             """
         else:
             q = """
@@ -382,6 +406,56 @@ class TrainerRepository:
                         "updated_at": row[14].isoformat() if row[14] else None,
                     }
                 )
+        return out
+
+    async def batch_public_education_entries(
+        self,
+        trainer_ids: list[int],
+    ) -> dict[int, list[dict[str, Any]]]:
+        """
+        Catalog-visible education rows for many trainers (same rules as list_education_entries public_only).
+        """
+        if not trainer_ids:
+            return {}
+        placeholders = ", ".join(f":be{i}" for i in range(len(trainer_ids)))
+        params: dict[str, Any] = {f"be{i}": v for i, v in enumerate(trainer_ids)}
+        vis = _sql_public_catalog_education_predicate("e")
+        r = await self._session.execute(
+            text(
+                f"""
+                SELECT e.trainer_id, e.id, e.education_type, e.institution_name, e.program_or_title, e.degree_level,
+                       e.country, e.city, e.start_year, e.end_year, e.is_in_progress, e.document_url,
+                       e.approved_at, e.updated_at
+                FROM trainer_education e
+                WHERE e.trainer_id IN ({placeholders})
+                  AND {vis}
+                ORDER BY e.trainer_id, e.updated_at DESC, e.id DESC
+                """
+            ),
+            params,
+        )
+        out: dict[int, list[dict[str, Any]]] = {int(tid): [] for tid in trainer_ids}
+        for row in r.fetchall():
+            tid = int(row[0])
+            if tid not in out:
+                continue
+            out[tid].append(
+                {
+                    "id": row[1],
+                    "education_type": row[2],
+                    "institution_name": row[3],
+                    "program_or_title": row[4],
+                    "degree_level": row[5],
+                    "country": row[6],
+                    "city": row[7],
+                    "start_year": row[8],
+                    "end_year": row[9],
+                    "is_in_progress": bool(row[10]),
+                    "document_url": row[11],
+                    "approved_at": row[12].isoformat() if row[12] else None,
+                    "updated_at": row[13].isoformat() if row[13] else None,
+                }
+            )
         return out
 
     async def create_education_entry(
@@ -899,6 +973,7 @@ class TrainerRepository:
         ids = [row[0] for row in rows]
         placeholders = ", ".join(f":id{i}" for i in range(len(ids)))
         id_params = {f"id{i}": v for i, v in enumerate(ids)}
+        edu_by_tid = await self.batch_public_education_entries(ids)
         rph = await self._session.execute(
             text(f"SELECT trainer_id, file_key, file_key_list, sort_order FROM trainer_photos WHERE trainer_id IN ({placeholders}) ORDER BY trainer_id, sort_order"),
             id_params,
@@ -1033,6 +1108,7 @@ class TrainerRepository:
                     "free_slots_14d": free_slots_by_id.get(tid, 0),
                     "has_pass_products": tid in pass_trainer_ids,
                     "has_certificate_products": tid in cert_trainer_ids,
+                    "education_entries": edu_by_tid.get(tid, []),
                 }
             )
         return out, total
