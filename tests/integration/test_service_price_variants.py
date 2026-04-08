@@ -184,5 +184,6 @@ async def test_set_trainer_services_writes_tiers_and_anchor(db_session: AsyncSes
     )
     rows = r2.fetchall()
     assert len(rows) == 2
-    assert rows[0][0] == "Взрослый" and rows[0][1] == 8000 and rows[0][2] == 0 and rows[0][3] == "adult"
-    assert rows[1][0] == "Детский" and rows[1][1] == 5000 and rows[1][2] == 1 and rows[1][3] == "child"
+    # Display order matches PRICE_TIER_ORDER (child before adult), not input tuple order.
+    assert rows[0][0] == "Детский" and rows[0][1] == 5000 and rows[0][2] == 0 and rows[0][3] == "child"
+    assert rows[1][0] == "Взрослый" and rows[1][1] == 8000 and rows[1][2] == 1 and rows[1][3] == "adult"

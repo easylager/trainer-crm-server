@@ -28,7 +28,7 @@
       max-width: 1180px;
       margin: 0 auto;
       display: grid;
-      grid-template-columns: minmax(280px, 1fr) minmax(320px, 1.4fr);
+      grid-template-columns: minmax(280px, 1fr) minmax(320px, 1.35fr);
       gap: 24px;
       align-items: start;
     }
@@ -181,28 +181,51 @@
       box-shadow: 0 20px 56px rgba(0, 0, 0, 0.5);
     }
     .mock {
-      --bg: #1e293b;
-      --surface: #334155;
-      --surface2: #3d4f66;
-      --text: #f8fafc;
+      --bg: #05070d;
+      --surface: #0f1419;
+      --surface2: #1a2332;
+      --text: #ffffff;
       --muted: #94a3b8;
-      --kicker: #bae6fd;
-      --accent: #2dd4bf;
-      --accent-text: #0f172a;
+      --kicker: #e0f2fe;
+      --accent: #38bdf8;
+      --accent-text: #020617;
       --border: rgba(255, 255, 255, 0.1);
+      --mock-elev: 0 18px 48px rgba(0, 0, 0, 0.42);
+      position: relative;
       font-family: 'DM Sans', system-ui, sans-serif;
       background: var(--mock-bg, var(--bg));
       color: var(--text);
       padding: 16px;
       min-height: 420px;
+      isolation: isolate;
+    }
+    /* Subtle grain + vignette so flat palettes still read as layered */
+    .mock::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+      border-radius: inherit;
+      opacity: 0.45;
+      background-image:
+        radial-gradient(ellipse 120% 80% at 50% 100%, rgba(0, 0, 0, 0.35) 0%, transparent 55%),
+        radial-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+      background-size: auto, 5px 5px;
+      mix-blend-mode: soft-light;
+    }
+    .mock > * {
+      position: relative;
+      z-index: 1;
     }
     .mock-kicker {
       font-size: 10px;
-      font-weight: 600;
-      letter-spacing: 0.14em;
+      font-weight: 700;
+      letter-spacing: 0.16em;
       text-transform: uppercase;
       color: var(--kicker);
       margin-bottom: 12px;
+      text-shadow: 0 0 24px color-mix(in srgb, var(--kicker) 45%, transparent);
     }
     .mock-hero {
       display: flex;
@@ -212,8 +235,12 @@
       border-radius: 16px;
       background: var(--mock-hero-bg, linear-gradient(145deg, rgba(255, 255, 255, 0.06) 0%, transparent 40%), var(--surface));
       border: 1px solid var(--border);
+      border-left: 3px solid color-mix(in srgb, var(--kicker) 58%, transparent);
       margin-bottom: 14px;
-      box-shadow: var(--hero-shadow, 0 8px 24px rgba(15, 23, 42, 0.2));
+      box-shadow:
+        var(--mock-elev),
+        0 0 0 1px color-mix(in srgb, var(--kicker) 12%, transparent),
+        inset 0 1px 0 rgba(255, 255, 255, 0.14);
     }
     .mock-avatar {
       width: 52px;
@@ -229,16 +256,22 @@
       background: var(--avatar-bg, linear-gradient(145deg, #5eead4 0%, var(--accent) 100%));
       box-shadow: 0 4px 16px color-mix(in srgb, var(--accent) 35%, transparent);
     }
-    .mock-name { font-size: 1.1rem; font-weight: 700; letter-spacing: -0.02em; margin: 0 0 2px; }
+    .mock-name { font-size: 1.1rem; font-weight: 700; letter-spacing: -0.02em; margin: 0 0 2px; color: color-mix(in srgb, var(--text) 96%, var(--kicker) 4%); }
     .mock-since { font-size: 0.8rem; color: var(--muted); margin: 0; }
     .mock-stats { display: flex; gap: 8px; margin-bottom: 14px; }
     .mock-stat {
       flex: 1;
       padding: 10px 10px;
       border-radius: 12px;
-      background: var(--surface2);
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.07) 0%, transparent 48%),
+        var(--surface2);
       border: 1px solid var(--border);
+      border-top: 2px solid color-mix(in srgb, var(--accent) 42%, transparent);
       font-size: 0.72rem;
+      box-shadow:
+        0 6px 18px rgba(0, 0, 0, 0.22),
+        inset 0 1px 0 rgba(255, 255, 255, 0.08);
     }
     .mock-stat span {
       display: block;
@@ -252,28 +285,35 @@
     .mock-section {
       font-size: 10px;
       font-weight: 700;
-      letter-spacing: 0.1em;
+      letter-spacing: 0.12em;
       text-transform: uppercase;
-      color: var(--muted);
+      color: color-mix(in srgb, var(--muted) 88%, var(--kicker) 12%);
       margin-bottom: 8px;
     }
     .mock-section::before {
       content: '';
       display: inline-block;
-      width: 12px;
-      height: 2px;
-      background: var(--kicker);
-      border-radius: 1px;
+      width: 14px;
+      height: 3px;
+      background: linear-gradient(90deg, var(--kicker), color-mix(in srgb, var(--accent) 65%, var(--kicker)));
+      border-radius: 2px;
       margin-right: 8px;
       vertical-align: middle;
+      box-shadow: 0 0 12px color-mix(in srgb, var(--kicker) 35%, transparent);
     }
     .mock-card {
-      background: var(--surface);
+      background:
+        linear-gradient(165deg, rgba(255, 255, 255, 0.09) 0%, transparent 45%),
+        var(--surface);
       border: 1px solid var(--border);
+      border-right: 1px solid color-mix(in srgb, var(--accent) 18%, var(--border));
       border-radius: 14px;
       padding: 12px 14px;
       margin-bottom: 14px;
       font-size: 0.88rem;
+      box-shadow:
+        0 8px 26px rgba(0, 0, 0, 0.28),
+        inset 0 1px 0 rgba(255, 255, 255, 0.1);
     }
     .mock-row { display: flex; justify-content: space-between; gap: 8px; }
     .mock-row .l { color: var(--muted); font-size: 0.75rem; }
@@ -291,28 +331,305 @@
       font-family: inherit;
     }
     .mock-btn--primary {
-      background: var(--accent);
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.22) 0%, transparent 52%),
+        var(--accent);
       color: var(--accent-text);
-      box-shadow: 0 2px 14px color-mix(in srgb, var(--accent) 35%, transparent);
+      box-shadow:
+        0 2px 14px color-mix(in srgb, var(--accent) 40%, transparent),
+        inset 0 1px 0 rgba(255, 255, 255, 0.25);
     }
     .mock-btn--secondary {
-      background: var(--surface2);
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, transparent 55%),
+        var(--surface2);
       color: var(--text);
-      border: 1px solid var(--border);
+      border: 1px solid color-mix(in srgb, var(--kicker) 22%, var(--border));
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07);
     }
     .preview-hint {
       font-size: 0.75rem;
       color: var(--tool-muted);
       margin: 10px 0 0;
     }
+    .preview-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 22px;
+    }
+    .preview-block-title {
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: #94a3b8;
+      margin: 0 0 10px;
+    }
+    /* Trainer hub preview — same tokens as mock; mirrors trainer-home.html structure */
+    .mock-hub {
+      min-height: auto;
+      padding-bottom: 20px;
+    }
+    .hub-pv-header {
+      margin-bottom: 16px;
+    }
+    .hub-pv-kicker {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin: 0 0 6px;
+      opacity: 0.95;
+    }
+    .hub-pv-title {
+      margin: 0;
+      font-size: clamp(1.35rem, 4vw, 1.65rem);
+      font-weight: 700;
+      letter-spacing: -0.04em;
+      line-height: 1.1;
+      background: linear-gradient(135deg, var(--text) 0%, var(--accent) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .hub-pv-hero {
+      position: relative;
+      border-radius: 20px;
+      padding: 18px 16px 20px;
+      margin-bottom: 14px;
+      overflow: hidden;
+      background: var(--hub-hero-bg, var(--surface));
+      border: 1px solid color-mix(in srgb, var(--accent) 38%, transparent);
+      box-shadow:
+        var(--mock-elev),
+        0 4px 18px color-mix(in srgb, var(--accent) 12%, transparent);
+    }
+    .hub-pv-hero::after {
+      content: '';
+      position: absolute;
+      z-index: 0;
+      top: -40%;
+      right: -25%;
+      width: 65%;
+      height: 140%;
+      background: radial-gradient(ellipse, color-mix(in srgb, var(--accent) 28%, transparent) 0%, transparent 65%);
+      pointer-events: none;
+    }
+    .hub-pv-hero-inner { position: relative; z-index: 1; }
+    .hub-pv-greeting {
+      font-size: 0.88rem;
+      font-weight: 600;
+      color: var(--accent);
+      margin-bottom: 8px;
+      letter-spacing: 0.02em;
+    }
+    .hub-pv-hero-title {
+      font-size: clamp(1.5rem, 4.5vw, 1.85rem);
+      font-weight: 700;
+      letter-spacing: -0.05em;
+      line-height: 1.1;
+      color: var(--text);
+      margin-bottom: 8px;
+    }
+    .hub-pv-sub {
+      margin: 0;
+      font-size: 0.82rem;
+      font-weight: 500;
+      color: var(--muted);
+      line-height: 1.45;
+      max-width: 28em;
+    }
+    .hub-pv-stats {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+    .hub-pv-stat {
+      position: relative;
+      padding: 12px 10px 14px;
+      border-radius: 14px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      text-align: center;
+      overflow: hidden;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+    }
+    .hub-pv-stat::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 55%, var(--kicker)));
+      opacity: 0.85;
+    }
+    .hub-pv-stat-val {
+      font-size: 1.35rem;
+      font-weight: 700;
+      color: var(--text);
+      line-height: 1.1;
+      margin-bottom: 4px;
+    }
+    .hub-pv-stat-lbl {
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+    }
+    .hub-pv-section-head {
+      margin: 18px 0 10px;
+    }
+    .hub-pv-section-head:first-of-type { margin-top: 0; }
+    .hub-pv-section-title {
+      display: block;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      position: relative;
+      padding-left: 18px;
+    }
+    .hub-pv-section-title::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 11px;
+      height: 2px;
+      background: var(--accent);
+      border-radius: 1px;
+      box-shadow: 0 0 10px color-mix(in srgb, var(--accent) 40%, transparent);
+    }
+    .hub-pv-quick-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+    .hub-pv-quick {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 12px 12px;
+      border-radius: 14px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      position: relative;
+      overflow: hidden;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.14);
+    }
+    .hub-pv-quick::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 12%, transparent) 0%, transparent 55%);
+      pointer-events: none;
+    }
+    .hub-pv-icon {
+      width: 26px;
+      height: 26px;
+      flex-shrink: 0;
+      color: var(--accent);
+      position: relative;
+      z-index: 1;
+    }
+    .hub-pv-ql {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text);
+      line-height: 1.2;
+      margin-bottom: 2px;
+      position: relative;
+      z-index: 1;
+    }
+    .hub-pv-qh {
+      font-size: 0.65rem;
+      color: var(--muted);
+      line-height: 1.3;
+      position: relative;
+      z-index: 1;
+    }
+    .hub-pv-slot {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 12px 12px;
+      border-radius: 12px;
+      border: 2px solid color-mix(in srgb, var(--accent) 42%, transparent);
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.05) 0%, transparent 45%),
+        var(--surface2);
+      margin-bottom: 6px;
+    }
+    .hub-pv-time { font-weight: 700; font-size: 0.95rem; color: var(--text); }
+    .hub-pv-venue { font-size: 0.78rem; color: var(--muted); margin-top: 4px; line-height: 1.35; }
+    .hub-pv-client { font-size: 0.68rem; color: var(--muted); margin-top: 2px; }
+    .hub-pv-badge {
+      flex-shrink: 0;
+      font-size: 10px;
+      font-weight: 600;
+      padding: 4px 8px;
+      border-radius: 8px;
+      background: rgba(52, 199, 89, 0.2);
+      color: #34c759;
+    }
+    .hub-pv-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .hub-pv-tile {
+      min-height: 86px;
+      padding: 14px 12px;
+      border-radius: 16px;
+      border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--border));
+      background: linear-gradient(
+        165deg,
+        color-mix(in srgb, var(--text) 93%, var(--accent)) 0%,
+        color-mix(in srgb, var(--surface2) 45%, var(--text) 55%) 100%
+      );
+      color: #1a1a1a;
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.2);
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .hub-pv-tile-svg {
+      width: 22px;
+      height: 22px;
+      color: #1a1a1a;
+      opacity: 0.88;
+      flex-shrink: 0;
+    }
+    .hub-pv-tile-lbl {
+      font-size: 0.78rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+    .hub-pv-foot {
+      margin: 14px 0 0;
+      font-size: 0.68rem;
+      line-height: 1.4;
+      color: var(--muted);
+      opacity: 0.85;
+    }
   </style>
 </head>
 <body>
   <h1>Конструктор цветовых гамм</h1>
   <p class="lead">
-    Задайте токены и сразу увидите превью «карточки клиента».
-    Пресеты — бывшие варианты со страницы; экспорт — блок для <code>theme.css</code> / mini-app.
-    Параметры можно передать в URL: <code>?bg=1a222e&accent=76d0b8</code> (поддерживаются ключи bg, surface, surface2, text, muted, kicker, accent, accentText, borderA, glow).
+    Задайте токены и сразу увидите превью «карточки клиента» и фрагмента <strong>хаба тренера</strong> (шапка, hero, метрики, быстрые действия, слот, сетка разделов) — те же токены, что и в <code>trainer-home.html</code>.
+    Пресеты и экспорт — для <code>theme.css</code> / mini-app.
+    Параметры в URL: <code>?bg=05070d&accent=38bdf8</code> (bg, surface, surface2, text, muted, kicker, accent, accentText, borderA, glow).
   </p>
 
   <div class="layout">
@@ -322,28 +639,28 @@
         <div class="field">
           <label for="c-bg">Фон страницы</label>
           <div class="field-row">
-            <input type="color" id="c-bg" data-key="bg" value="#1e293b" />
+            <input type="color" id="c-bg" data-key="bg" value="#05070d" />
             <input type="text" id="t-bg" data-key="bg" spellcheck="false" />
           </div>
         </div>
         <div class="field">
           <label for="c-surface">Карточка / hero</label>
           <div class="field-row">
-            <input type="color" id="c-surface" data-key="surface" value="#334155" />
+            <input type="color" id="c-surface" data-key="surface" value="#0f1419" />
             <input type="text" id="t-surface" data-key="surface" spellcheck="false" />
           </div>
         </div>
         <div class="field">
           <label for="c-surface2">Стат / вторичная</label>
           <div class="field-row">
-            <input type="color" id="c-surface2" data-key="surface2" value="#3d4f66" />
+            <input type="color" id="c-surface2" data-key="surface2" value="#1a2332" />
             <input type="text" id="t-surface2" data-key="surface2" spellcheck="false" />
           </div>
         </div>
         <div class="field">
           <label for="c-text">Текст</label>
           <div class="field-row">
-            <input type="color" id="c-text" data-key="text" value="#f8fafc" />
+            <input type="color" id="c-text" data-key="text" value="#ffffff" />
             <input type="text" id="t-text" data-key="text" spellcheck="false" />
           </div>
         </div>
@@ -357,29 +674,29 @@
         <div class="field">
           <label for="c-kicker">Кикер / хром</label>
           <div class="field-row">
-            <input type="color" id="c-kicker" data-key="kicker" value="#bae6fd" />
+            <input type="color" id="c-kicker" data-key="kicker" value="#e0f2fe" />
             <input type="text" id="t-kicker" data-key="kicker" spellcheck="false" />
           </div>
         </div>
         <div class="field">
           <label for="c-accent">CTA / акцент</label>
           <div class="field-row">
-            <input type="color" id="c-accent" data-key="accent" value="#2dd4bf" />
+            <input type="color" id="c-accent" data-key="accent" value="#38bdf8" />
             <input type="text" id="t-accent" data-key="accent" spellcheck="false" />
           </div>
         </div>
         <div class="field">
           <label for="c-accentText">Текст на CTA</label>
           <div class="field-row">
-            <input type="color" id="c-accentText" data-key="accentText" value="#0f172a" />
+            <input type="color" id="c-accentText" data-key="accentText" value="#020617" />
             <input type="text" id="t-accentText" data-key="accentText" spellcheck="false" />
           </div>
         </div>
         <div class="field field-full">
           <label for="borderA">Прозрачность рамки (белая)</label>
           <div class="slider-row">
-            <input type="range" id="borderA" min="0" max="35" value="10" />
-            <span id="borderAVal">10%</span>
+            <input type="range" id="borderA" min="0" max="35" value="12" />
+            <span id="borderAVal">12%</span>
           </div>
         </div>
         <div class="field field-full">
@@ -405,31 +722,149 @@
 
     <div>
       <h2 style="font-size: 0.72rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #94a3b8; margin: 0 0 12px;">Превью</h2>
-      <div class="preview-wrap">
-        <div class="mock" id="liveMock">
-          <div class="mock-kicker">Карточка клиента</div>
-          <div class="mock-hero">
-            <div class="mock-avatar">АП</div>
-            <div>
-              <p class="mock-name">Анна Петрова</p>
-              <p class="mock-since">Клиент с 12.01.2026</p>
+      <div class="preview-stack">
+        <div>
+          <div class="preview-block-title">Карточка клиента</div>
+          <div class="preview-wrap">
+            <div class="mock" id="liveMock">
+              <div class="mock-kicker">Карточка клиента</div>
+              <div class="mock-hero">
+                <div class="mock-avatar">АП</div>
+                <div>
+                  <p class="mock-name">Анна Петрова</p>
+                  <p class="mock-since">Клиент с 12.01.2026</p>
+                </div>
+              </div>
+              <div class="mock-stats">
+                <div class="mock-stat"><span>Последнее</span><strong>02.04.2026</strong></div>
+                <div class="mock-stat"><span>Следующее</span><strong>08.04.2026</strong></div>
+              </div>
+              <div class="mock-section">Контакты</div>
+              <div class="mock-card">
+                <div class="mock-row"><span class="l">Телефон</span><span style="color: var(--accent); font-weight: 600;">+375 …</span></div>
+              </div>
+              <div class="mock-actions">
+                <button type="button" class="mock-btn mock-btn--primary">Записать на занятие</button>
+                <button type="button" class="mock-btn mock-btn--secondary">Заметки по клиенту</button>
+              </div>
             </div>
           </div>
-          <div class="mock-stats">
-            <div class="mock-stat"><span>Последнее</span><strong>02.04.2026</strong></div>
-            <div class="mock-stat"><span>Следующее</span><strong>08.04.2026</strong></div>
+          <p class="preview-hint">Экран детали клиента: hero, статистика, контакты, CTA.</p>
+        </div>
+
+        <div>
+          <div class="preview-block-title">Хаб тренера</div>
+          <div class="preview-wrap">
+            <div class="mock mock-hub" id="liveMockHub">
+              <header class="hub-pv-header">
+                <p class="hub-pv-kicker">Тренер</p>
+                <h2 class="hub-pv-title">Кабинет</h2>
+              </header>
+
+              <section class="hub-pv-hero" aria-label="Hero">
+                <div class="hub-pv-hero-inner">
+                  <div class="hub-pv-greeting">Добро пожаловать</div>
+                  <div class="hub-pv-hero-title">Ваш день</div>
+                  <p class="hub-pv-sub">3 записи сегодня · 2 новые заявки · расписание на неделе</p>
+                </div>
+              </section>
+
+              <div class="hub-pv-stats" aria-hidden="true">
+                <div class="hub-pv-stat">
+                  <div class="hub-pv-stat-val">3</div>
+                  <div class="hub-pv-stat-lbl">Сегодня</div>
+                </div>
+                <div class="hub-pv-stat">
+                  <div class="hub-pv-stat-val">12</div>
+                  <div class="hub-pv-stat-lbl">На неделе</div>
+                </div>
+                <div class="hub-pv-stat">
+                  <div class="hub-pv-stat-val">2</div>
+                  <div class="hub-pv-stat-lbl">Заявки</div>
+                </div>
+              </div>
+
+              <div class="hub-pv-section-head">
+                <span class="hub-pv-section-title">Быстрые действия</span>
+              </div>
+              <div class="hub-pv-quick-grid">
+                <div class="hub-pv-quick">
+                  <svg class="hub-pv-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <rect x="3" y="4" width="18" height="18" rx="2"/>
+                    <path d="M16 2v4M8 2v4M3 10h18"/>
+                    <path d="M12 11v6M9 14h6"/>
+                  </svg>
+                  <div>
+                    <div class="hub-pv-ql">Записать клиента</div>
+                    <div class="hub-pv-qh">Слот и новая запись</div>
+                  </div>
+                </div>
+                <div class="hub-pv-quick">
+                  <svg class="hub-pv-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <path d="M22 12h-6l-2 3h-4l-2-3H2"/>
+                    <path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>
+                  </svg>
+                  <div>
+                    <div class="hub-pv-ql">Заявки</div>
+                    <div class="hub-pv-qh">Новые запросы клиентов</div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="hub-pv-section-head">
+                <span class="hub-pv-section-title">Ближайшие записи</span>
+              </div>
+              <div class="hub-pv-slot">
+                <div>
+                  <div class="hub-pv-time">10:00</div>
+                  <div class="hub-pv-venue">Лёд · Минск-Арена</div>
+                  <div class="hub-pv-client">Анна Петрова · фигурное катание</div>
+                </div>
+                <span class="hub-pv-badge">Подтверждено</span>
+              </div>
+
+              <div class="hub-pv-section-head">
+                <span class="hub-pv-section-title">Все разделы</span>
+              </div>
+              <div class="hub-pv-grid">
+                <div class="hub-pv-tile">
+                  <svg class="hub-pv-tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <rect x="3" y="4" width="18" height="18" rx="2"/>
+                    <path d="M16 2v4M8 2v4M3 10h18"/>
+                  </svg>
+                  <span class="hub-pv-tile-lbl">Расписание</span>
+                </div>
+                <div class="hub-pv-tile">
+                  <svg class="hub-pv-tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                    <circle cx="9" cy="7" r="4"/>
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                  </svg>
+                  <span class="hub-pv-tile-lbl">Клиенты</span>
+                </div>
+                <div class="hub-pv-tile">
+                  <svg class="hub-pv-tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <path d="M3 3v18h18"/>
+                    <path d="M7 16l4-4 4 4 6-6"/>
+                  </svg>
+                  <span class="hub-pv-tile-lbl">Статистика</span>
+                </div>
+                <div class="hub-pv-tile">
+                  <svg class="hub-pv-tile-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+                    <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+                  </svg>
+                  <span class="hub-pv-tile-lbl">Абонементы</span>
+                </div>
+              </div>
+
+              <p class="hub-pv-foot">Упрощённый макет хаба: те же секции, что на главной тренера — цвета из ваших токенов.</p>
+            </div>
           </div>
-          <div class="mock-section">Контакты</div>
-          <div class="mock-card">
-            <div class="mock-row"><span class="l">Телефон</span><span style="color: var(--accent); font-weight: 600;">+375 …</span></div>
-          </div>
-          <div class="mock-actions">
-            <button type="button" class="mock-btn mock-btn--primary">Записать на занятие</button>
-            <button type="button" class="mock-btn mock-btn--secondary">Заметки по клиенту</button>
-          </div>
+          <p class="preview-hint">Плитки разделов — как «тёплые» карточки на тёмном фоне в CRM; слот — как строка ближайшей записи.</p>
         </div>
       </div>
-      <p class="preview-hint">Тот же макет, что в мини-приложении: hero, статистика, контакты, кнопки.</p>
     </div>
   </div>
 
@@ -439,9 +874,29 @@
 
   var PRESETS = {
     hub: {
-      name: 'Client Hub (лёд)',
+      name: 'Ч/б/голубой (Hub)',
+      bg: '#05070d', surface: '#0f1419', surface2: '#1a2332', text: '#ffffff', muted: '#94a3b8',
+      kicker: '#e0f2fe', accent: '#38bdf8', accentText: '#020617', borderA: 12, glow: 100
+    },
+    hubSlateTeal: {
+      name: 'Hub slate + бирюза',
       bg: '#1e293b', surface: '#334155', surface2: '#3d4f66', text: '#f8fafc', muted: '#94a3b8',
       kicker: '#bae6fd', accent: '#2dd4bf', accentText: '#0f172a', borderA: 10, glow: 100
+    },
+    bwMidnight: {
+      name: 'Чистый чёрный + лёд',
+      bg: '#000000', surface: '#0a0f18', surface2: '#111827', text: '#ffffff', muted: '#9ca3af',
+      kicker: '#bae6fd', accent: '#0ea5e9', accentText: '#020617', borderA: 14, glow: 95
+    },
+    bwArctic: {
+      name: 'Арктика (белый + голубой)',
+      bg: '#020617', surface: '#0b1220', surface2: '#152238', text: '#f8fafc', muted: '#9ca3af',
+      kicker: '#f0f9ff', accent: '#7dd3fc', accentText: '#0c4a6e', borderA: 11, glow: 90
+    },
+    bwNeonCyan: {
+      name: 'Неон циан на чёрном',
+      bg: '#000000', surface: '#0c0c0f', surface2: '#18181f', text: '#fafafa', muted: '#a1a1aa',
+      kicker: '#a5f3fc', accent: '#22d3ee', accentText: '#020617', borderA: 12, glow: 88
     },
     night: {
       name: 'Ледяная ночь',
@@ -477,6 +932,66 @@
       name: 'Карточка клиента (ref)',
       bg: '#1a222e', surface: '#334155', surface2: '#374151', text: '#f8fafc', muted: '#94a3b8',
       kicker: '#d1e8ff', accent: '#76d0b8', accentText: '#1a222e', borderA: 10, glow: 95
+    },
+    trainerAmber: {
+      name: 'Янтарь CRM (тёмная тема)',
+      bg: '#1c1c1c', surface: '#2c2c2e', surface2: '#3a3a3c', text: '#ffffff', muted: '#8e8e93',
+      kicker: '#f5a623', accent: '#f5a623', accentText: '#1a1a1a', borderA: 12, glow: 92
+    },
+    nordFrost: {
+      name: 'Nord — мороз',
+      bg: '#2e3440', surface: '#3b4252', surface2: '#434c5e', text: '#eceff4', muted: '#d8dee9',
+      kicker: '#88c0d0', accent: '#88c0d0', accentText: '#2e3440', borderA: 11, glow: 78
+    },
+    sunsetIce: {
+      name: 'Закат на льду',
+      bg: '#1a1418', surface: '#2d1f28', surface2: '#3d2834', text: '#fdf4f8', muted: '#c4b5bd',
+      kicker: '#fda4af', accent: '#fb7185', accentText: '#1f0a0f', borderA: 13, glow: 88
+    },
+    velvetGold: {
+      name: 'Бархат и золото',
+      bg: '#0f0a14', surface: '#221a2e', surface2: '#2e2440', text: '#f5f0ff', muted: '#a89bb8',
+      kicker: '#e9d5ff', accent: '#d4af37', accentText: '#1a1208', borderA: 10, glow: 72
+    },
+    deepTeal: {
+      name: 'Глубина и бирюза',
+      bg: '#08201c', surface: '#0f2e28', surface2: '#143d35', text: '#ecfdf5', muted: '#94d2c8',
+      kicker: '#5eead4', accent: '#22d3ee', accentText: '#042f2e', borderA: 11, glow: 85
+    },
+    graphiteLime: {
+      name: 'Графит лайм',
+      bg: '#18181b', surface: '#27272a', surface2: '#3f3f46', text: '#fafafa', muted: '#a1a1aa',
+      kicker: '#bef264', accent: '#a3e635', accentText: '#1a2e05', borderA: 9, glow: 68
+    },
+    royalInk: {
+      name: 'Чернильный синий',
+      bg: '#0c1222', surface: '#151d33', surface2: '#1e2a47', text: '#f1f5ff', muted: '#94a3d8',
+      kicker: '#93c5fd', accent: '#6366f1', accentText: '#f8fafc', borderA: 12, glow: 82
+    },
+    warmCocoa: {
+      name: 'Тёплый какао',
+      bg: '#1c1612', surface: '#2a221c', surface2: '#3d3228', text: '#faf6f0', muted: '#b8a99a',
+      kicker: '#fcd34d', accent: '#f59e0b', accentText: '#1c1208', borderA: 10, glow: 76
+    },
+    cherryFrost: {
+      name: 'Вишнёвый иней',
+      bg: '#160a10', surface: '#2a1420', surface2: '#3d1f32', text: '#fff1f2', muted: '#d4a5b8',
+      kicker: '#fda4af', accent: '#fb7185', accentText: '#3f0d1a', borderA: 12, glow: 80
+    },
+    slateCopper: {
+      name: 'Сланец и медь',
+      bg: '#1c1917', surface: '#292524', surface2: '#44403c', text: '#fafaf9', muted: '#a8a29e',
+      kicker: '#e7e5e4', accent: '#d97706', accentText: '#1c1206', borderA: 10, glow: 58
+    },
+    polarMint: {
+      name: 'Полярная мята',
+      bg: '#0f172a', surface: '#1e293b', surface2: '#273549', text: '#f8fafc', muted: '#94a3b8',
+      kicker: '#a5f3fc', accent: '#34d399', accentText: '#064e3b', borderA: 10, glow: 100
+    },
+    studioMauve: {
+      name: 'Студия лиловый',
+      bg: '#13101a', surface: '#221a2e', surface2: '#2f2540', text: '#faf5ff', muted: '#c4b5d0',
+      kicker: '#e9d5ff', accent: '#c084fc', accentText: '#1e0a2e', borderA: 11, glow: 74
     }
   };
 
@@ -503,12 +1018,21 @@
     return '#000000';
   }
 
+  /** Approximate perceived brightness 0–1 for adaptive shadow depth */
+  function relLum(hex) {
+    var rgb = hexToRgb(hex);
+    return (0.2126 * rgb.r + 0.7152 * rgb.g + 0.0722 * rgb.b) / 255;
+  }
+
   function buildMockBg(bg, kicker, accent, glowPct) {
     var g = Math.max(0, Math.min(1, glowPct / 100));
     return (
-      'radial-gradient(ellipse 130% 80% at 50% -25%, rgba(255,255,255,' + (0.07 * g) + ') 0%, transparent 45%),' +
-      'radial-gradient(ellipse 120% 90% at 0% -5%, ' + rgbaHex(kicker, 0.22 * g) + ' 0%, transparent 55%),' +
-      'radial-gradient(ellipse 100% 70% at 100% 5%, ' + rgbaHex(accent, 0.12 * g) + ' 0%, transparent 52%),' +
+      'linear-gradient(165deg, rgba(255,255,255,' + (0.045 * g) + ') 0%, transparent 42%),' +
+      'linear-gradient(195deg, ' + rgbaHex(accent, 0.1 * g) + ' 0%, transparent 38%),' +
+      'radial-gradient(ellipse 130% 85% at 50% -28%, rgba(255,255,255,' + (0.1 * g) + ') 0%, transparent 48%),' +
+      'radial-gradient(ellipse 115% 95% at 0% -8%, ' + rgbaHex(kicker, 0.32 * g) + ' 0%, transparent 58%),' +
+      'radial-gradient(ellipse 105% 75% at 100% 8%, ' + rgbaHex(accent, 0.18 * g) + ' 0%, transparent 54%),' +
+      'radial-gradient(ellipse 90% 60% at 50% 110%, rgba(0,0,0,' + (0.28 * g) + ') 0%, transparent 50%),' +
       bg
     );
   }
@@ -516,15 +1040,27 @@
   function buildHeroBg(surface, kicker, accent, glowPct) {
     var g = Math.max(0, Math.min(1, glowPct / 100));
     return (
-      'linear-gradient(145deg, rgba(255,255,255,' + (0.06 * g) + ') 0%, transparent 40%),' +
-      'linear-gradient(210deg, ' + rgbaHex(kicker, 0.15 * g) + ' 0%, transparent 45%),' +
-      'linear-gradient(335deg, ' + rgbaHex(accent, 0.08 * g) + ' 0%, transparent 42%),' +
+      'linear-gradient(155deg, rgba(255,255,255,' + (0.12 * g) + ') 0%, transparent 38%),' +
+      'linear-gradient(220deg, ' + rgbaHex(kicker, 0.22 * g) + ' 0%, transparent 50%),' +
+      'linear-gradient(320deg, ' + rgbaHex(accent, 0.14 * g) + ' 0%, transparent 48%),' +
+      'linear-gradient(180deg, rgba(0,0,0,' + (0.12 * g) + ') 0%, transparent 42%),' +
       surface
     );
   }
 
-  function buildAvatarGradient(accent) {
-    return 'linear-gradient(145deg, #5eead4 0%, ' + accent + ' 100%)';
+  /** Large hero panel on trainer hub — accent wash + surface (cf. trainer-home .hub-hero-main) */
+  function buildHubHeroBg(surface, kicker, accent, glowPct) {
+    var g = Math.max(0, Math.min(1, glowPct / 100));
+    return (
+      'linear-gradient(155deg, ' + rgbaHex(accent, 0.2 * g) + ' 0%, ' + rgbaHex(accent, 0.07 * g) + ' 52%, transparent 100%),' +
+      'radial-gradient(ellipse 85% 70% at 92% -15%, ' + rgbaHex(accent, 0.26 * g) + ' 0%, transparent 58%),' +
+      'radial-gradient(ellipse 60% 50% at 0% 100%, ' + rgbaHex(kicker, 0.12 * g) + ' 0%, transparent 50%),' +
+      surface
+    );
+  }
+
+  function buildAvatarGradient(kicker, accent) {
+    return 'linear-gradient(145deg, ' + kicker + ' 0%, ' + accent + ' 100%)';
   }
 
   function readState() {
@@ -562,19 +1098,34 @@
   function syncPreview() {
     var s = readState();
     var border = 'rgba(255,255,255,' + (s.borderA / 100) + ')';
-    var el = document.getElementById('liveMock');
-    el.style.setProperty('--bg', s.bg);
-    el.style.setProperty('--surface', s.surface);
-    el.style.setProperty('--surface2', s.surface2);
-    el.style.setProperty('--text', s.text);
-    el.style.setProperty('--muted', s.muted);
-    el.style.setProperty('--kicker', s.kicker);
-    el.style.setProperty('--accent', s.accent);
-    el.style.setProperty('--accent-text', s.accentText);
-    el.style.setProperty('--border', border);
-    el.style.setProperty('--mock-bg', buildMockBg(s.bg, s.kicker, s.accent, s.glow));
-    el.style.setProperty('--mock-hero-bg', buildHeroBg(s.surface, s.kicker, s.accent, s.glow));
-    el.style.setProperty('--avatar-bg', buildAvatarGradient(s.accent));
+    var mockBg = buildMockBg(s.bg, s.kicker, s.accent, s.glow);
+    var cardHeroBg = buildHeroBg(s.surface, s.kicker, s.accent, s.glow);
+    var hubHeroBg = buildHubHeroBg(s.surface, s.kicker, s.accent, s.glow);
+    var avatarBg = buildAvatarGradient(s.kicker, s.accent);
+    var lum = relLum(s.bg);
+    var elevA = 0.26 + (1 - lum) * 0.42;
+    var elev = '0 18px 52px rgba(0,0,0,' + elevA.toFixed(2) + ')';
+
+    function paintPreviewRoot(el) {
+      if (!el) return;
+      el.style.setProperty('--bg', s.bg);
+      el.style.setProperty('--surface', s.surface);
+      el.style.setProperty('--surface2', s.surface2);
+      el.style.setProperty('--text', s.text);
+      el.style.setProperty('--muted', s.muted);
+      el.style.setProperty('--kicker', s.kicker);
+      el.style.setProperty('--accent', s.accent);
+      el.style.setProperty('--accent-text', s.accentText);
+      el.style.setProperty('--border', border);
+      el.style.setProperty('--mock-bg', mockBg);
+      el.style.setProperty('--mock-hero-bg', cardHeroBg);
+      el.style.setProperty('--hub-hero-bg', hubHeroBg);
+      el.style.setProperty('--avatar-bg', avatarBg);
+      el.style.setProperty('--mock-elev', elev);
+    }
+
+    paintPreviewRoot(document.getElementById('liveMock'));
+    paintPreviewRoot(document.getElementById('liveMockHub'));
     document.getElementById('export').value = buildExportCss(s);
   }
 
