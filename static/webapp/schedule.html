@@ -5,18 +5,25 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Моё расписание</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="mini-app-telegram-chrome.js"></script>
   <link rel="stylesheet" href="theme.css" />
   <link rel="stylesheet" href="mini-app-components.css" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="mini-app-trainer-nav.css" />
 </head>
 <body>
 
-  <div id="screenSchedule" data-screen class="active">
-    <div class="header">
-      <span class="header-title">Моё расписание</span>
+  <div class="header">
+    <span class="header-title">Моё расписание</span>
+    <div class="trainer-mini-nav">
+      <button type="button" class="btn-app-home" id="btnHome">Главная</button>
+      <button type="button" class="btn-app-back" id="btnBack" data-skip-history-back="true" hidden>Назад</button>
     </div>
+  </div>
+
+  <div id="screenSchedule" data-screen class="active">
     <p style="font-size:13px;color:var(--tg-theme-hint-color);margin:-8px 0 10px;line-height:1.45;">
       Здесь — применённое расписание и записи. Тап по <b>занятому</b> слоту: детали и действия.
       <a href="/webapp/schedule-editor" style="color:var(--tg-theme-button-color);display:block;margin-top:8px;">Редактор расписания</a> — календарь слотов и шаблон недели (другой экран).
@@ -137,17 +144,21 @@
       function authQuery() { return state.initData ? 'init_data=' + encodeURIComponent(state.initData) : ''; }
       function authHeader() { return state.initData ? { 'X-Telegram-Init-Data': state.initData } : {}; }
 
+      function updateScheduleHeaderBack() {
+        var btn = document.getElementById('btnBack');
+        if (!btn) return;
+        var modal = document.getElementById('modalCancel');
+        var onModal = modal && modal.style.display === 'flex';
+        var onDecline = document.getElementById('screenDecline').classList.contains('active');
+        var onDetail = document.getElementById('screenDetail').classList.contains('active');
+        btn.hidden = !(onModal || onDecline || onDetail);
+      }
+
       function showScreen(id) {
         document.querySelectorAll('[data-screen]').forEach(function(el) { el.classList.remove('active'); });
         const el = document.getElementById(id);
         if (el) el.classList.add('active');
-        if (tg && tg.BackButton) {
-          if (id === 'screenDetail' || id === 'screenDecline') {
-            tg.BackButton.show();
-          } else {
-            tg.BackButton.hide();
-          }
-        }
+        updateScheduleHeaderBack();
       }
 
       /** Return to list UI (after popstate or if History API unavailable). */
@@ -179,6 +190,7 @@
         var modal = document.getElementById('modalCancel');
         if (modal && modal.style.display === 'flex') {
           modal.style.display = 'none';
+          updateScheduleHeaderBack();
           return;
         }
         if (document.getElementById('screenDecline').classList.contains('active')) {
@@ -446,7 +458,10 @@
               const act = btn.getAttribute('data-action');
               if (act === 'confirm') doConfirm(b.id);
               else if (act === 'decline') { showScreen('screenDecline'); document.getElementById('declineComment').value = ''; }
-              else if (act === 'cancel') document.getElementById('modalCancel').style.display = 'flex';
+              else if (act === 'cancel') {
+                document.getElementById('modalCancel').style.display = 'flex';
+                updateScheduleHeaderBack();
+              }
               else if (act === 'make_regular') doMakeRegular(b.id);
               else if (act === 'remove_recurring') {
                 const rid = parseInt(btn.getAttribute('data-recurring-id') || '0', 10);
@@ -512,10 +527,14 @@
           }
         }).catch(function() { alert('Ошибка'); });
       };
-      document.getElementById('backFromDecline').onclick = function() { showScreen('screenDetail'); };
+      document.getElementById('backFromDecline').onclick = function() {
+        showScreen('screenDetail');
+        updateScheduleHeaderBack();
+      };
 
       document.getElementById('modalCancelYes').onclick = function() {
         document.getElementById('modalCancel').style.display = 'none';
+        updateScheduleHeaderBack();
         const id = state.selectedBooking && state.selectedBooking.id;
         if (!id) return;
         postJson('/api/webapp/trainer/bookings/' + id + '/cancel', null).then(function() {
@@ -528,14 +547,17 @@
           }
         }).catch(function() { alert('Ошибка'); });
       };
-      document.getElementById('modalCancelNo').onclick = function() { document.getElementById('modalCancel').style.display = 'none'; };
+      document.getElementById('modalCancelNo').onclick = function() {
+        document.getElementById('modalCancel').style.display = 'none';
+        updateScheduleHeaderBack();
+      };
 
       document.getElementById('backToSchedule').onclick = function() { goBackFromDetail(); };
 
-      if (tg && tg.BackButton) {
-        tg.BackButton.onClick(handleTelegramBack);
-        tg.BackButton.hide();
-      }
+      (function () {
+        var bb = document.getElementById('btnBack');
+        if (bb) bb.onclick = handleTelegramBack;
+      })();
 
       document.getElementById('prevWeek').onclick = function() {
         state.currentWeekStart.setDate(state.currentWeekStart.getDate() - 7);
@@ -576,5 +598,6 @@
       })();
     })();
   </script>
+  <script src="mini-app-trainer-home.js"></script>
 </body>
 </html>

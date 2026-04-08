@@ -405,6 +405,8 @@ async def confirm_subscription_invoice_after_payment(
     """
     On gateway success for subscription: mark invoice paid, create trainer_subscriptions
     (active) for the period. Idempotent: if invoice already paid, return True without duplicate.
+
+    Also triggers referral credit grant if this is the trainer's first paid subscription.
     """
     r = await session.execute(
         text("""
@@ -421,6 +423,16 @@ async def confirm_subscription_invoice_after_payment(
         return True
     if status not in (INVOICE_STATUS_SENT, INVOICE_STATUS_OVERDUE):
         return False
+    # Check if this is the trainer's first paid subscription (for referral credit)
+    r_first = await session.execute(
+        text("""
+            SELECT 1 FROM trainer_subscriptions
+            WHERE trainer_id = :tid AND status = :active
+            LIMIT 1
+        """),
+        {"tid": tid, "active": SUBSCRIPTION_STATUS_ACTIVE},
+    )
+    is_first_paid = r_first.fetchone() is None
     now = datetime.now(timezone.utc)
     await session.execute(
         text("""
@@ -444,4 +456,8 @@ async def confirm_subscription_invoice_after_payment(
         },
     )
     await session.commit()
+    # Referral credit: grant to referrer if this is first paid subscription
+    if is_first_paid:
+        from src.application.referral_use_cases import grant_referral_credit_if_eligible
+        await grant_referral_credit_if_eligible(session, tid)
     return True

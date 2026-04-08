@@ -30,6 +30,7 @@ from src.application.booking_use_cases import (
     get_booking_with_slot,
     get_first_service_id_for_trainer,
     get_trainer_default_city_and_service,
+    is_slot_end_in_past_local,
     list_bookings_for_trainer,
     list_trainer_clients,
     set_booking_trainer_review,
@@ -58,6 +59,10 @@ from src.application.subscription_tier_use_cases import (
 )
 from src.application.trainer_access_state import TrainerAccessState, get_trainer_access_state
 from src.application.trainer_link import consume_link_token, get_trainer_id_by_telegram_id
+from src.application.referral_use_cases import (
+    get_trainer_id_by_referral_code,
+    record_referral_attribution,
+)
 from src.application.trainer_use_cases import get_trainer
 from src.application.support_use_cases import create_support_message
 from src.infrastructure.db.models import SUBSCRIPTION_TIER_ANALYTICS, SUBSCRIPTION_TIER_CRM, SUPPORT_FROM_TRAINER
@@ -77,6 +82,7 @@ from src.application.trainer_schedule_use_cases import (
     this_week_monday,
 )
 from src.bot import messages as msg
+from src.bot.trainer_cancel_client_notify import send_trainer_cancel_notification_for_booking_now
 from src.bot.trainer_bot_state import trainer_support_awaiting
 from src.bot.trainer_gate_text import trainer_first_link_onboarding_html, trainer_gate_message
 from src.bot.trainer_menu_commands import sync_trainer_menu_commands
@@ -116,6 +122,7 @@ async def _trainer_has_crm_subscription(session, trainer_id: int) -> bool:
 
 
 START_LINK_PREFIX = "link_"
+START_REF_PREFIX = "ref_"  # Referral code payload: t.me/bot?start=ref_ABC123
 SCHEDULE_CALLBACK = "schedule"
 SCHEDULE_ADD = "schedule:add"
 SCHEDULE_ADD_TEMPLATE = "schedule:template"
@@ -314,7 +321,40 @@ async def cmd_start(message: Message) -> None:
     user_id = message.from_user.id if message.from_user else 0
     text = message.text or ""
     args = text.split(maxsplit=1)
+    pending_referrer_id: int | None = None  # Referral code to attribute after link
     async with async_session_factory() as session:
+        # Parse referral code from payload (ref_<CODE> or link_<token>_ref_<CODE>)
+        if len(args) > 1:
+            payload = args[1]
+            # Check for standalone referral code: ref_ABC123
+            if payload.startswith(START_REF_PREFIX) and not payload.startswith(START_LINK_PREFIX):
+                ref_code = payload.removeprefix(START_REF_PREFIX).split("_")[0]
+                pending_referrer_id = await get_trainer_id_by_referral_code(session, ref_code)
+                # Referral-only link: user must already be linked or will link later
+                state, trainer = await get_trainer_access_state(session, user_id)
+                if state != TrainerAccessState.NOT_LINKED and trainer:
+                    # Already linked: record attribution if not yet set
+                    tid = trainer.get("id")
+                    if tid and pending_referrer_id:
+                        await record_referral_attribution(session, pending_referrer_id, tid)
+                    if state == TrainerAccessState.ACTIVE:
+                        await message.answer(msg.TRAINER_START_WELCOME, reply_markup=ReplyKeyboardRemove())
+                        await sync_trainer_menu_commands(message.bot, message.chat.id, tid, session)
+                    else:
+                        await message.answer(trainer_gate_message(state, trainer))
+                else:
+                    # Not linked yet: tell them to use welcome link
+                    await message.answer(msg.TRAINER_ONLY_VIA_SITE)
+                return
+            # Check for combined payload: link_<token>_ref_<CODE>
+            if "_ref_" in payload and payload.startswith(START_LINK_PREFIX):
+                parts = payload.split("_ref_", 1)
+                token_part = parts[0].removeprefix(START_LINK_PREFIX)
+                ref_code = parts[1].split("_")[0] if len(parts) > 1 else ""
+                if ref_code:
+                    pending_referrer_id = await get_trainer_id_by_referral_code(session, ref_code)
+                # Continue with link token processing below
+                args[1] = START_LINK_PREFIX + token_part
         if len(args) > 1 and args[1].startswith(START_LINK_PREFIX):
             token = args[1].removeprefix(START_LINK_PREFIX)
             username = (message.from_user.username if message.from_user else None) or None
@@ -322,6 +362,9 @@ async def cmd_start(message: Message) -> None:
             trainer_id = link_out.trainer_id
             if trainer_id is not None:
                 audit_log("trainer.linked", ACTOR_TRAINER_BOT, user_id, {"trainer_id": trainer_id})
+                # Record referral attribution if referrer was in payload
+                if pending_referrer_id:
+                    await record_referral_attribution(session, pending_referrer_id, trainer_id)
                 state, trainer = await get_trainer_access_state(session, user_id)
                 if state == TrainerAccessState.ACTIVE:
                     async with async_session_factory() as s2:
@@ -1097,6 +1140,47 @@ async def cmd_subscription(message: Message) -> None:
     await message.answer(text, reply_markup=kb, parse_mode=ParseMode.HTML)
 
 
+@router.message(Command("referral"))
+async def cmd_referral(message: Message) -> None:
+    """Реферальная программа: ссылка для приглашения коллег."""
+    await _trainer_typing(message.bot, message.chat.id)
+    telegram_id = message.from_user.id if message.from_user else 0
+    async with async_session_factory() as session:
+        trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    if not trainer_id:
+        await message.answer(msg.TRAINER_ONLY_VIA_SITE)
+        return
+    from src.application.referral_use_cases import (
+        ensure_trainer_referral_code,
+        get_referral_credit_balance,
+        get_referral_stats_for_trainer,
+    )
+    async with async_session_factory() as session:
+        code = await ensure_trainer_referral_code(session, trainer_id)
+        if not code:
+            await message.answer("Не удалось создать реферальный код. Попробуйте позже.")
+            return
+        stats = await get_referral_stats_for_trainer(session, trainer_id)
+    bot_username = Settings().trainer_bot_username or "trainer_bot"
+    referral_link = f"https://t.me/{bot_username}?start=ref_{code}"
+    balance = stats.get("balance_days", 0)
+    credited = stats.get("credited_count", 0)
+    text = (
+        f"🎁 <b>Реферальная программа</b>\n\n"
+        f"Пригласи коллегу — получи <b>14 дней</b> подписки!\n\n"
+        f"Твоя ссылка:\n<code>{html.escape(referral_link)}</code>\n\n"
+        f"📊 Баланс: <b>{balance}</b> дней\n"
+        f"👥 Оплатили: <b>{credited}</b> тренеров"
+    )
+    base = (Settings().webapp_base_url or "").rstrip("/")
+    referral_url = f"{base}/webapp/trainer-referral" if base and base.startswith("https://") else None
+    rows: list[list[InlineKeyboardButton]] = []
+    if referral_url:
+        rows.append([InlineKeyboardButton(text="📊 Подробнее", web_app=WebAppInfo(url=referral_url))])
+    kb = InlineKeyboardMarkup(inline_keyboard=rows) if rows else None
+    await message.answer(text, reply_markup=kb, parse_mode=ParseMode.HTML)
+
+
 @router.callback_query(lambda c: c.data == SCHEDULE_CALLBACK)
 async def show_schedule(callback: CallbackQuery) -> None:
     await callback.answer()
@@ -1289,8 +1373,9 @@ async def schedule_create_booking_finalize(callback: CallbackQuery) -> None:
     if not booking_id:
         await callback.message.answer(msg.TRAINER_CREATE_BOOKING_SLOT_UNAVAILABLE)
         return
-    async with async_session_factory() as session:
-        await generate_reminders_for_booking(session, booking_id)
+    if not is_slot_end_in_past_local(slot.get("slot_date"), slot.get("end_time")):
+        async with async_session_factory() as session:
+            await generate_reminders_for_booking(session, booking_id)
     slot_date = slot.get("slot_date")
     start_time = slot.get("start_time")
     date_str = slot_date.strftime("%d.%m") if slot_date and hasattr(slot_date, "strftime") else "—"
@@ -1545,15 +1630,30 @@ async def on_confirm_booking(callback: CallbackQuery) -> None:
         token=settings.telegram_bot_token_client,
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
     )
+    map_url = info.get("map_link")
+    text_client = msg.format_client_booking_confirmed_by_trainer_text(
+        date=date_str,
+        day=dow,
+        time=time_str,
+        trainer_name=trainer_name,
+        service_name=info.get("service_name"),
+        booking_price_cents=info.get("booking_price_cents"),
+        price_tier_label=info.get("price_tier_label"),
+        arena_name=info.get("arena_name"),
+        arena_address=info.get("arena_address"),
+    )
+    reply_markup = None
+    if map_url:
+        reply_markup = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text=msg.CLIENT_BUTTON_SHOW_ON_MAP, url=map_url)]
+            ]
+        )
     try:
         await client_bot.send_message(
             chat_id=client_tid,
-            text=msg.CLIENT_BOOKING_CONFIRMED_BY_TRAINER.format(
-                date=date_str,
-                day=dow,
-                time=time_str,
-                trainer_name=trainer_name,
-            ),
+            text=text_client,
+            reply_markup=reply_markup,
         )
     finally:
         await client_bot.session.close()
@@ -1606,6 +1706,18 @@ async def on_cancel_booking_confirm(callback: CallbackQuery) -> None:
     if not ok:
         await callback.message.answer(msg.TRAINER_ERROR_CANCEL_FAILED)
         return
+    settings = Settings()
+    client_bot = Bot(
+        token=settings.telegram_bot_token_client,
+        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+    )
+    try:
+        async with async_session_factory() as session:
+            await send_trainer_cancel_notification_for_booking_now(
+                client_bot, session, booking_id
+            )
+    finally:
+        await client_bot.session.close()
     audit_log("booking.cancelled", ACTOR_TRAINER_BOT, telegram_id, {"booking_id": booking_id, "trainer_id": trainer_id})
     text, keyboard = await _bookings_content(trainer_id)
     await callback.message.edit_text(text, reply_markup=keyboard)
@@ -2021,7 +2133,12 @@ async def on_request_book_slot(callback: CallbackQuery) -> None:
     async with async_session_factory() as session:
         await clear_trainer_pending_request_booking(session, trainer_id, request_id)
     async with async_session_factory() as session:
-        await generate_reminders_for_booking(session, booking_id)
+        slot_for_rem = await get_slot(session, slot_id)
+    if slot_for_rem and not is_slot_end_in_past_local(
+        slot_for_rem.get("slot_date"), slot_for_rem.get("end_time")
+    ):
+        async with async_session_factory() as session:
+            await generate_reminders_for_booking(session, booking_id)
     await callback.message.answer(msg.TRAINER_REQUEST_BOOK_SUCCESS)
     audit_log("request.trainer_booked_client", ACTOR_TRAINER_BOT, telegram_id, {"request_id": request_id, "trainer_id": trainer_id, "booking_id": booking_id})
 

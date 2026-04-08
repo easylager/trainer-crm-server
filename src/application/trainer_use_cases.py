@@ -91,14 +91,46 @@ def _profile_to_kwargs(profile: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _services_to_tuples(services: list[dict[str, Any]]) -> list[tuple[int, int | None]]:
-    """Convert API services (price_byn in rubles) to (service_id, price_cents) for repo."""
-    result = []
+def _services_to_entries(services: list[dict[str, Any]]) -> list[tuple[int, list[tuple[str, int]]]]:
+    """
+    Convert API services to repo entries: (service_id, [(tier_kind, price_cents), ...]).
+    """
+    from src.shared.price_tier_kind import (
+        PRICE_TIER_ADULT,
+        PRICE_TIER_CHILD,
+        normalize_price_tier_kind,
+        price_tier_sort_key,
+    )
+
+    result: list[tuple[int, list[tuple[str, int]]]] = []
     for s in services:
-        sid = s["service_id"]
+        sid = int(s["service_id"])
+        tiers_raw = s.get("price_tiers")
+        if isinstance(tiers_raw, list) and len(tiers_raw) > 0:
+            merged: dict[str, int] = {}
+            for t in tiers_raw:
+                if not isinstance(t, dict):
+                    continue
+                pb = t.get("price_byn")
+                if pb is None:
+                    continue
+                cents = int(round(float(pb) * 100))
+                tk = normalize_price_tier_kind(t.get("tier_kind"))
+                if tk is None:
+                    continue
+                merged[tk] = cents
+            ordered = sorted(merged.items(), key=lambda x: price_tier_sort_key(x[0]))
+            result.append((sid, ordered))
+            continue
         price_byn = s.get("price_byn")
-        price_cents = int(round(price_byn * 100)) if price_byn is not None else None
-        result.append((sid, price_cents))
+        child_byn = s.get("price_child_byn")
+        tiers: list[tuple[str, int]] = []
+        if price_byn is not None:
+            tiers.append((PRICE_TIER_ADULT, int(round(float(price_byn) * 100))))
+        if child_byn is not None:
+            tiers.append((PRICE_TIER_CHILD, int(round(float(child_byn) * 100))))
+        tiers.sort(key=lambda x: price_tier_sort_key(x[0]))
+        result.append((sid, tiers))
     return result
 
 
@@ -139,9 +171,9 @@ async def create_trainer(
     if profile:
         await repo.create_profile(trainer_id, **_profile_to_kwargs(profile))
     if services is not None:
-        await repo.set_trainer_services(trainer_id, _services_to_tuples(services))
+        await repo.set_trainer_services(trainer_id, _services_to_entries(services))
     elif service_ids:
-        await repo.set_trainer_services(trainer_id, [(sid, None) for sid in service_ids])
+        await repo.set_trainer_services(trainer_id, [(sid, []) for sid in service_ids])
     if arena_ids:
         await repo.set_trainer_arenas(trainer_id, arena_ids)
         await repo.reconcile_primary_arena(trainer_id)
@@ -309,9 +341,9 @@ async def update_trainer_profile(
             await repo.set_profile_pending(trainer_id, new_pending)
             await repo.mark_queued_for_moderation_review(trainer_id)
         if services is not None:
-            await repo.set_trainer_services(trainer_id, _services_to_tuples(services))
+            await repo.set_trainer_services(trainer_id, _services_to_entries(services))
         elif service_ids is not None:
-            await repo.set_trainer_services(trainer_id, [(sid, None) for sid in service_ids])
+            await repo.set_trainer_services(trainer_id, [(sid, []) for sid in service_ids])
         if arena_ids is not None:
             await repo.set_trainer_arenas(trainer_id, arena_ids)
             await repo.reconcile_primary_arena(trainer_id)
@@ -337,9 +369,9 @@ async def update_trainer_profile(
         await repo.ensure_trainer_profile_row(trainer_id)
         await repo.update_profile(trainer_id, **updates)
     if services is not None:
-        await repo.set_trainer_services(trainer_id, _services_to_tuples(services))
+        await repo.set_trainer_services(trainer_id, _services_to_entries(services))
     elif service_ids is not None:
-        await repo.set_trainer_services(trainer_id, [(sid, None) for sid in service_ids])
+        await repo.set_trainer_services(trainer_id, [(sid, []) for sid in service_ids])
     if arena_ids is not None:
         await repo.set_trainer_arenas(trainer_id, arena_ids)
         await repo.reconcile_primary_arena(trainer_id)

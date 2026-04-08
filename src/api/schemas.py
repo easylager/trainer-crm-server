@@ -3,11 +3,14 @@
 Trainer onboarding completeness for the moderation queue is defined in code as
 `src.application.trainer_profile_completeness` (not every optional field here is required for PATCH).
 """
+from __future__ import annotations
+
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from src.shared.profile_phone import PHONE_MAX_LEN, coerce_optional_phone_for_profile
+from src.shared.price_tier_kind import normalize_price_tier_kind
 
 # Allowed trainer lifecycle statuses
 TrainerStatus = Literal[
@@ -61,10 +64,49 @@ class ProfileCreate(BaseModel):
         return coerce_optional_phone_for_profile(v)
 
 
+class TrainerServicePriceTierItem(BaseModel):
+    """One fixed tariff for a service (tier_kind from price_tier_kind.PRICE_TIER_*)."""
+
+    tier_kind: str = Field(..., min_length=1, max_length=32)
+    price_byn: float = Field(..., ge=0)
+
+    @field_validator("tier_kind")
+    @classmethod
+    def _normalize_tier_kind(cls, v: object) -> str:
+        if not isinstance(v, str):
+            raise ValueError("Некорректный тип тарифа.")
+        n = normalize_price_tier_kind(v.strip())
+        if n is None:
+            raise ValueError("Неизвестный тип тарифа.")
+        return n
+
+
 class TrainerServiceItem(BaseModel):
     """Service offered by trainer with optional price in BYN (rubles). Stored as kopecks in DB."""
+
     service_id: int = Field(..., ge=1)
-    price_byn: float | None = Field(default=None, ge=0)
+    price_byn: float | None = Field(default=None, ge=0, description="Legacy: single adult price.")
+    price_child_byn: float | None = Field(default=None, ge=0, description="Legacy: child price.")
+    price_tiers: list[TrainerServicePriceTierItem] | None = Field(
+        default=None,
+        description="Up to five fixed tariffs per service (checkboxes in trainer profile).",
+    )
+
+    @model_validator(mode="after")
+    def _tiers_or_legacy_price(self) -> TrainerServiceItem:
+        tiers = self.price_tiers
+        if tiers is not None and len(tiers) > 0:
+            if len(tiers) > 5:
+                raise ValueError("Не более пяти тарифов на одну услугу.")
+            seen: set[str] = set()
+            for t in tiers:
+                if t.tier_kind in seen:
+                    raise ValueError("Один и тот же тариф указан дважды.")
+                seen.add(t.tier_kind)
+            return self
+        if self.price_child_byn is not None and self.price_byn is None:
+            raise ValueError("Укажите цену для взрослых или уберите детскую цену.")
+        return self
 
 
 class TrainerCreateBody(BaseModel):

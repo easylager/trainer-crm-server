@@ -1,6 +1,6 @@
 /**
- * Trainer Mini App: «Главная» + «Закрыть».
- * Подключать ПОСЛЕ всех inline <style> страницы — иначе мобильный WebView оставляет разный padding/цвет.
+ * Trainer Mini App: «Главная» + «Назад» (browser history) in header.
+ * Load AFTER page inline <style> so WebView keeps consistent padding.
  */
 .trainer-mini-nav {
   display: flex !important;
@@ -23,7 +23,7 @@
 }
 
 .trainer-mini-nav > button.btn-app-home,
-.trainer-mini-nav > button.btn-close {
+.trainer-mini-nav > button.btn-app-back {
   min-height: 44px !important;
   padding: 10px 16px !important;
   font-size: 14px !important;
@@ -54,7 +54,7 @@
   box-shadow: none !important;
 }
 
-.trainer-mini-nav > button.btn-close {
+.trainer-mini-nav > button.btn-app-back {
   border: 1px solid rgba(245, 166, 35, 0.22) !important;
   background: var(--tg-theme-secondary-bg-color) !important;
   color: var(--tg-theme-text-color) !important;
@@ -66,7 +66,11 @@
   opacity: 0.92 !important;
 }
 
-.trainer-mini-nav > button.btn-close:active {
+.trainer-mini-nav > button.btn-app-back:active {
   transform: scale(0.98) !important;
   opacity: 0.9 !important;
+}
+
+.trainer-mini-nav > button.btn-app-back[hidden] {
+  display: none !important;
 }

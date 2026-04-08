@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Мои заявки</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="mini-app-telegram-chrome.js"></script>
   <link rel="stylesheet" href="theme.css" />
   <link rel="stylesheet" href="mini-app-components.css" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -793,6 +794,7 @@
     <h1 class="cr-page-title" id="crHeaderTitle">Мои заявки</h1>
     <div class="client-mini-nav">
       <button type="button" class="btn-app-home" id="btnHome">Главная</button>
+      <button type="button" class="btn-app-back" id="btnBack" data-skip-history-back="true" hidden>Назад</button>
     </div>
   </div>
 
@@ -918,6 +920,35 @@
         return h;
       }
 
+      function canBrowserGoBack() {
+        try {
+          if (window.navigation && typeof window.navigation.canGoBack === 'function') {
+            return window.navigation.canGoBack();
+          }
+        } catch (e) {}
+        return window.history && window.history.length > 1;
+      }
+
+      function syncClientRequestsHeaderBack() {
+        var btn = document.getElementById('btnBack');
+        if (!btn) return;
+        var id = document.querySelector('[data-screen].active');
+        id = id ? id.id : 'screenList';
+        if (id === 'screenList') {
+          btn.hidden = !canBrowserGoBack();
+          btn.onclick = function() { window.history.back(); };
+          return;
+        }
+        btn.hidden = false;
+        if (id === 'screenDetail') {
+          btn.onclick = function() { showScreen('screenList'); };
+        } else if (id === 'screenResponderDetail') {
+          btn.onclick = function() { showScreen('screenDetail'); };
+        } else if (id === 'screenEdit') {
+          btn.onclick = function() { showScreen('screenDetail'); };
+        }
+      }
+
       function showScreen(id) {
         document.querySelectorAll('[data-screen]').forEach(function(el) { el.classList.remove('active'); });
         const el = document.getElementById(id);
@@ -929,13 +960,9 @@
           else if (id === 'screenResponderDetail') ht.textContent = 'Тренер';
           else if (id === 'screenEdit') ht.textContent = 'Редактирование';
         }
+        syncClientRequestsHeaderBack();
       }
 
-      function closeApp() {
-        if (tg) tg.close(); else window.close();
-      }
-      var btnClose = document.getElementById('btnClose');
-      if (btnClose) btnClose.onclick = closeApp;
 
       // Base URL for book Mini App (same origin)
       const path = window.location.pathname || '';
@@ -956,6 +983,18 @@
         if (s == null || s === undefined) return '';
         const t = String(s);
         return t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+      }
+
+      function formatResponderServicePrice(s) {
+        var minV = s.price_byn_min != null ? s.price_byn_min : s.price_byn;
+        var maxV = s.price_byn_max != null ? s.price_byn_max : s.price_byn;
+        if (minV == null && s.price_byn == null) return 'по запросу';
+        if (minV != null && maxV != null && minV !== maxV) {
+          var a = (minV === Math.floor(minV) ? minV : minV.toFixed(2));
+          return 'от ' + a + ' BYN';
+        }
+        var v = minV != null ? minV : s.price_byn;
+        return (v === Math.floor(v) ? v : v.toFixed(2)) + ' BYN';
       }
 
       /** Same rules as catalog `formatCatalogEducationEntry` (city/type/god — не пустая строка). */
@@ -1191,7 +1230,7 @@
           html += '<div class="tcf-services-title">Услуги и цены</div>';
           servicesList.forEach(function(s) {
             var serviceName = s.service_name || '—';
-            var priceText = s.price_byn != null ? (s.price_byn === Math.floor(s.price_byn) ? s.price_byn : s.price_byn.toFixed(2)) + ' BYN' : 'по запросу';
+            var priceText = formatResponderServicePrice(s);
             html += '<div class="tcf-service">';
             html += '<span class="tcf-service-name">' + escapeHtml(serviceName) + '</span>';
             html += '<span class="tcf-service-price">' + escapeHtml(priceText) + '</span>';
@@ -1463,6 +1502,9 @@
       window.closeReviewsModal = function() {
         document.getElementById('reviewsModal').classList.remove('show');
       };
+
+      window.addEventListener('popstate', syncClientRequestsHeaderBack);
+      syncClientRequestsHeaderBack();
     })();
   </script>
   

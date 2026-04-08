@@ -22,9 +22,32 @@
 
   window.navigateClientHome = navigateClientHome;
 
+  function canBrowserGoBack() {
+    try {
+      if (window.navigation && typeof window.navigation.canGoBack === 'function') {
+        return window.navigation.canGoBack();
+      }
+    } catch (e) { /* older WebViews */ }
+    return window.history && window.history.length > 1;
+  }
+
+  function wireBack() {
+    var btn = document.getElementById('btnBack');
+    if (!btn || btn.getAttribute('data-skip-history-back') === 'true') return;
+    function sync() {
+      btn.hidden = !canBrowserGoBack();
+    }
+    btn.onclick = function () {
+      window.history.back();
+    };
+    sync();
+    window.addEventListener('popstate', sync);
+  }
+
   function wire() {
     var b = document.getElementById('btnHome');
     if (b) b.onclick = navigateClientHome;
+    wireBack();
   }
 
   if (document.readyState === 'loading') {

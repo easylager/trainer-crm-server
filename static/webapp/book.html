@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Запись</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="mini-app-telegram-chrome.js"></script>
   <link rel="stylesheet" href="theme.css" />
   <link rel="stylesheet" href="mini-app-components.css" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -37,16 +38,6 @@
       line-height: 1.25;
       letter-spacing: -0.02em;
       color: var(--tg-theme-text-color);
-    }
-    .btn-close {
-      flex-shrink: 0;
-      padding: 8px 14px;
-      border-radius: 8px;
-      border: none;
-      font-size: 14px;
-      background: var(--tg-theme-secondary-bg-color);
-      color: var(--tg-theme-text-color);
-      cursor: pointer;
     }
     .week-nav {
       display: flex;
@@ -185,7 +176,9 @@
       text-transform: uppercase;
       letter-spacing: 0.3px;
     }
-    .form-block input, .form-block textarea {
+    /* Не трогать radio/checkbox — иначе width:100% съедает подпись у «Категория цены». */
+    .form-block input:not([type="radio"]):not([type="checkbox"]),
+    .form-block textarea {
       width: 100%;
       padding: 14px 16px;
       border-radius: 16px;
@@ -198,7 +191,8 @@
       transition: all 0.12s ease;
       font-family: inherit;
     }
-    .form-block input:focus, .form-block textarea:focus {
+    .form-block input:not([type="radio"]):not([type="checkbox"]):focus,
+    .form-block textarea:focus {
       outline: none;
       border-color: rgba(247, 166, 0, 0.45);
       box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08), 0 0 0 3px rgba(247, 166, 0, 0.1);
@@ -206,6 +200,34 @@
     .form-block textarea {
       min-height: 100px;
       resize: vertical;
+    }
+    .price-tier-radios label {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+      font-size: 15px;
+      cursor: pointer;
+      text-transform: none;
+      letter-spacing: normal;
+      font-weight: 500;
+      color: var(--tg-theme-text-color);
+    }
+    .price-tier-radios input[type="radio"] {
+      width: auto;
+      max-width: none;
+      flex-shrink: 0;
+      margin: 0;
+      padding: 0;
+      box-shadow: none;
+      border: none;
+      background: transparent;
+      accent-color: var(--tg-theme-button-color);
+    }
+    .price-tier-radios label .tier-radio-text {
+      flex: 1 1 auto;
+      min-width: 0;
+      line-height: 1.35;
     }
     /* .btn-primary — mini-app-components.css + theme tokens */
     #screenForm .btn-primary {
@@ -304,6 +326,7 @@
     <h1 class="header-title" id="headerTitle">📅 Запись</h1>
     <div class="client-mini-nav">
       <button type="button" class="btn-app-home" id="btnHome">Главная</button>
+      <button type="button" class="btn-app-back" id="btnBack" hidden>Назад</button>
     </div>
   </div>
   <div id="screenSlots">
@@ -318,6 +341,16 @@
   </div>
   <div id="screenForm" style="display: none;">
     <div id="selectedSlotLabel" style="margin-bottom: 20px; padding: 16px 18px; background: var(--tg-theme-secondary-bg-color); border-radius: 16px; border: 1px solid rgba(247, 166, 0, 0.28); font-size: 15px; font-weight: 600; text-align: center; box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);"></div>
+    <div id="priceTierBlock" class="form-block" style="display: none;">
+      <label>Категория цены</label>
+      <div id="priceTierRadios" class="price-tier-radios"></div>
+    </div>
+    <div id="bookNameBlock" class="form-block" style="display: none;">
+      <label for="bookFirstName">Имя *</label>
+      <input type="text" id="bookFirstName" autocomplete="given-name" maxlength="64" placeholder="Как к вам обращаться" />
+      <label for="bookLastName" style="margin-top:10px;display:block;">Фамилия</label>
+      <input type="text" id="bookLastName" autocomplete="family-name" maxlength="64" placeholder="Необязательно" />
+    </div>
     <div class="form-block">
       <label for="phone">Телефон *</label>
       <input type="tel" id="phone" placeholder="+375291234567" inputmode="tel" />
@@ -331,7 +364,7 @@
   </div>
   <div id="screenSuccess" style="display: none;">
     <div class="success-msg" id="successMsgBody"></div>
-    <button type="button" class="btn-primary" id="btnCloseSuccess">Закрыть</button>
+    <button type="button" class="btn-primary" id="btnCloseSuccess">Готово</button>
   </div>
 
   <script>
@@ -380,12 +413,10 @@
         document.getElementById('weekLabel').textContent = '';
       }
 
-      function closeApp() {
+      function dismissSuccessOrExit() {
         if (tg) tg.close(); else window.close();
       }
-      var btnClose = document.getElementById('btnClose');
-      if (btnClose) btnClose.onclick = closeApp;
-      document.getElementById('btnCloseSuccess').onclick = closeApp;
+      document.getElementById('btnCloseSuccess').onclick = dismissSuccessOrExit;
 
       function getMonday(d) {
         const date = new Date(d);
@@ -410,7 +441,79 @@
       let trainerName = 'Тренер';
       let currentWeekStart = null;
       let clientPhone = null;
+      let needsProfileName = true;
+      let clientFirstName = '';
+      let clientLastName = '';
       let sessionServiceId = null;
+      let bookTrainerDetailCache = null;
+      let selectedPriceVariantId = null;
+
+      const PRICE_TIER_LABEL_RU = {
+        child: 'Детский',
+        adult: 'Взрослый',
+        two_children: '2 ребенка',
+        two_adults: '2 взрослых',
+        adult_and_child: 'Взрослый + ребенок',
+      };
+      function priceTierLabelRu(tier) {
+        const k = (tier.tier_kind || '').toLowerCase();
+        return PRICE_TIER_LABEL_RU[k] || tier.label || 'Тариф';
+      }
+
+      async function loadTrainerDetailForBook() {
+        if (!trainerId) return null;
+        if (bookTrainerDetailCache) return bookTrainerDetailCache;
+        try {
+          const res = await fetch('/api/public/trainers/' + encodeURIComponent(trainerId));
+          if (res.ok) bookTrainerDetailCache = await res.json();
+        } catch (e) {}
+        return bookTrainerDetailCache;
+      }
+
+      function renderPriceTierUi(effServiceId) {
+        const block = document.getElementById('priceTierBlock');
+        const host = document.getElementById('priceTierRadios');
+        selectedPriceVariantId = null;
+        if (!block || !host) return;
+        if (effServiceId == null) {
+          block.style.display = 'none';
+          return;
+        }
+        const t = bookTrainerDetailCache;
+        const services = (t && t.services) ? t.services : [];
+        const svc = services.find(function(s) { return Number(s.service_id) === Number(effServiceId); });
+        const tiers = (svc && svc.price_tiers) ? svc.price_tiers : [];
+        if (tiers.length <= 1) {
+          block.style.display = 'none';
+          selectedPriceVariantId = tiers.length === 1 ? tiers[0].id : null;
+          return;
+        }
+        block.style.display = 'block';
+        host.innerHTML = '';
+        tiers.forEach(function(tier) {
+          const lab = document.createElement('label');
+          const inp = document.createElement('input');
+          inp.type = 'radio';
+          inp.name = 'priceTierChoice';
+          inp.value = String(tier.id);
+          const pb = tier.price_byn;
+          const priceStr = (pb === Math.floor(pb) ? pb : Number(pb).toFixed(2)) + ' BYN';
+          lab.appendChild(inp);
+          var tierTxt = document.createElement('span');
+          tierTxt.className = 'tier-radio-text';
+          tierTxt.textContent = priceTierLabelRu(tier) + ' — ' + priceStr;
+          lab.appendChild(tierTxt);
+          inp.addEventListener('change', function() {
+            selectedPriceVariantId = parseInt(inp.value, 10);
+          });
+          host.appendChild(lab);
+        });
+        const first = host.querySelector('input');
+        if (first) {
+          first.checked = true;
+          selectedPriceVariantId = parseInt(first.value, 10);
+        }
+      }
       const thisMonday = getMonday(new Date());
       const nextMonday = new Date(thisMonday);
       nextMonday.setDate(nextMonday.getDate() + 7);
@@ -432,8 +535,23 @@
             const raw = data.client_phone;
             clientPhone = raw != null && String(raw).trim() !== '' ? String(raw).trim() : null;
             if (data.service_id != null) sessionServiceId = data.service_id;
+            needsProfileName = !!data.needs_profile_name;
+            clientFirstName = data.client_first_name != null ? String(data.client_first_name).trim() : '';
+            clientLastName = data.client_last_name != null ? String(data.client_last_name).trim() : '';
           }
         } catch (e) {}
+      }
+
+      function updateBookNameFields() {
+        const block = document.getElementById('bookNameBlock');
+        if (!block) return;
+        block.style.display = needsProfileName ? 'block' : 'none';
+        if (needsProfileName) {
+          const f = document.getElementById('bookFirstName');
+          const l = document.getElementById('bookLastName');
+          if (f) f.value = clientFirstName || '';
+          if (l) l.value = clientLastName || '';
+        }
       }
 
       async function fetchSlots() {
@@ -491,12 +609,42 @@
 
       async function showForm(slotId, dateStr, timeStr) {
         window._selectedSlotId = slotId;
-        document.getElementById('selectedSlotLabel').textContent = 'Выбрано: ' + formatDateKey(dateStr) + ', ' + timeStr;
         document.getElementById('screenSlots').style.display = 'none';
         document.getElementById('screenForm').style.display = 'block';
         document.getElementById('comment').value = '';
         await fetchClientSession();
+        updateBookNameFields();
         document.getElementById('phone').value = clientPhone || '';
+        await loadTrainerDetailForBook();
+        let effSid = serviceIdFromUrl || sessionServiceId;
+        if (requestId != null && effSid == null) {
+          const initData = tg?.initData || '';
+          const hdr = { Accept: 'application/json' };
+          if (initData) hdr['X-Telegram-Init-Data'] = initData;
+          try {
+            const res = await fetch(
+              '/api/webapp/client/requests' + (initData ? '?init_data=' + encodeURIComponent(initData) : ''),
+              { headers: hdr }
+            );
+            if (res.ok) {
+              const data = await res.json();
+              const items = data.items || [];
+              const found = items.find(function(x) { return Number(x.id) === requestId; });
+              if (found && found.service_id != null) effSid = found.service_id;
+            }
+          } catch (e) {}
+        }
+        renderPriceTierUi(effSid);
+        var slotLine = formatDateKey(dateStr) + ', ' + timeStr;
+        var tDetail = bookTrainerDetailCache;
+        var srvList = (tDetail && tDetail.services) ? tDetail.services : [];
+        if (effSid != null) {
+          var srow = srvList.find(function(x) { return Number(x.service_id) === Number(effSid); });
+          if (srow && (srow.service_name || '').trim()) {
+            slotLine = String(srow.service_name).trim() + ' · ' + slotLine;
+          }
+        }
+        document.getElementById('selectedSlotLabel').textContent = 'Выбрано: ' + slotLine;
       }
 
       function showSlots() {
@@ -561,17 +709,30 @@
           alert('Введите корректный номер телефона (например +375291234567)');
           return;
         }
+        if (needsProfileName) {
+          const fn = (document.getElementById('bookFirstName') && document.getElementById('bookFirstName').value || '').trim();
+          if (!fn) {
+            alert('Укажите имя');
+            return;
+          }
+        }
         const comment = (document.getElementById('comment').value || '').trim() || null;
         const btn = document.getElementById('btnSubmit');
         btn.disabled = true;
         const initData = tg?.initData || '';
         const url = '/api/webapp/client/booking' + (initData ? '?init_data=' + encodeURIComponent(initData) : '');
         const body = { slot_id: window._selectedSlotId, phone: phone, comment: comment };
+        if (needsProfileName) {
+          body.first_name = (document.getElementById('bookFirstName').value || '').trim();
+          const ln = (document.getElementById('bookLastName').value || '').trim();
+          if (ln) body.last_name = ln;
+        }
         if (requestId) body.request_id = requestId;
         else {
           const sid = serviceIdFromUrl || sessionServiceId;
           if (sid != null) body.service_id = sid;
         }
+        if (selectedPriceVariantId != null) body.service_price_variant_id = selectedPriceVariantId;
         fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'X-Telegram-Init-Data': initData },
@@ -590,6 +751,7 @@
               document.getElementById('successMsgBody').innerHTML = successMain + successCtx + successFoot;
               document.getElementById('screenForm').style.display = 'none';
               document.getElementById('screenSuccess').style.display = 'block';
+              fetchClientSession().then(function() { updateBookNameFields(); }).catch(function() {});
             } else {
               alert(data.detail || 'Ошибка. Попробуйте ещё раз.');
             }
@@ -599,6 +761,7 @@
 
       (async function init() {
         await fetchClientSession();
+        updateBookNameFields();
         if (!trainerId) return;
         try {
           const data = await fetchSlots();

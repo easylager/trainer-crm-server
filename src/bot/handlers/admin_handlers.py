@@ -1,5 +1,5 @@
 """
-Admin bot: moderation of trainers (approve / reject), platform stats Mini App, support inbox.
+Admin bot: moderation of trainers (approve / reject), platform stats Mini App, support inbox, referral management.
 """
 import html
 import logging
@@ -10,6 +10,11 @@ from aiogram.enums import ParseMode
 from aiogram.filters import Command, CommandStart
 from aiogram.types import BufferedInputFile, CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message, WebAppInfo
 
+from src.application.referral_use_cases import (
+    admin_adjust_referral_credit,
+    get_referral_credit_balance,
+    get_referral_stats_for_trainer,
+)
 from src.application.stats_use_cases import get_platform_stats
 from src.application.support_use_cases import (
     get_support_message,
@@ -824,10 +829,73 @@ async def on_admin_message(message: Message) -> None:
     if feedback_stripped:
         await _notify_trainer_profile_moderation_feedback(trainer, feedback_stripped)
     elif rejected_education > 0:
-        # No general comment text — still notify about education rows if any were rejected.
         await _notify_trainer_education_moderation(
             trainer,
             decision="rejected",
             reason=text or "",
         )
+
+
+# --- Referral admin commands ---
+
+@router.message(Command("referral_balance"))
+async def cmd_referral_balance(message: Message) -> None:
+    """Check referral balance for a trainer: /referral_balance <trainer_id>"""
+    user_id = message.from_user.id if message.from_user else 0
+    if user_id not in ADMIN_IDS:
+        return
+    text = (message.text or "").strip()
+    parts = text.split()
+    if len(parts) < 2:
+        await message.answer("Использование: /referral_balance <trainer_id>")
+        return
+    try:
+        trainer_id = int(parts[1])
+    except ValueError:
+        await message.answer("trainer_id должен быть числом")
+        return
+    async with async_session_factory() as session:
+        stats = await get_referral_stats_for_trainer(session, trainer_id)
+    await message.answer(
+        f"📊 <b>Реферальная статистика тренера #{trainer_id}</b>\n\n"
+        f"Баланс: <b>{stats['balance_days']}</b> дней\n"
+        f"Всего заработано: <b>{stats['total_earned_days']}</b> дней\n"
+        f"Приглашено: <b>{stats['total_referred']}</b>\n"
+        f"Оплатили: <b>{stats['credited_count']}</b>",
+        parse_mode=ParseMode.HTML,
+    )
+
+
+@router.message(Command("referral_adjust"))
+async def cmd_referral_adjust(message: Message) -> None:
+    """Adjust referral credit: /referral_adjust <trainer_id> <days> [note]"""
+    user_id = message.from_user.id if message.from_user else 0
+    if user_id not in ADMIN_IDS:
+        return
+    text = (message.text or "").strip()
+    parts = text.split(maxsplit=3)
+    if len(parts) < 3:
+        await message.answer("Использование: /referral_adjust <trainer_id> <days> [note]\ndays может быть отрицательным")
+        return
+    try:
+        trainer_id = int(parts[1])
+        days = int(parts[2])
+    except ValueError:
+        await message.answer("trainer_id и days должны быть числами")
+        return
+    note = parts[3] if len(parts) > 3 else None
+    async with async_session_factory() as session:
+        new_balance = await admin_adjust_referral_credit(session, trainer_id, days, user_id, note)
+    audit_log("referral.admin_adjust", ACTOR_ADMIN_BOT, user_id, {
+        "trainer_id": trainer_id,
+        "days": days,
+        "note": note,
+        "new_balance": new_balance,
+    })
+    sign = "+" if days > 0 else ""
+    await message.answer(
+        f"✅ Реферальный баланс тренера #{trainer_id} изменён на <b>{sign}{days}</b> дней.\n"
+        f"Новый баланс: <b>{new_balance}</b> дней.",
+        parse_mode=ParseMode.HTML,
+    )
 

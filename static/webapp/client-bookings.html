@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Мои записи</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="mini-app-telegram-chrome.js"></script>
   <link rel="stylesheet" href="theme.css" />
   <link rel="stylesheet" href="mini-app-components.css" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -28,34 +29,27 @@
       padding-bottom: 8px;
     }
     .header-title { flex: 1; }
-    .btn-close {
-      flex-shrink: 0;
-      padding: 8px 14px;
-      border-radius: 8px;
-      border: none;
-      font-size: 14px;
-      background: var(--tg-theme-secondary-bg-color);
-      color: var(--tg-theme-text-color);
-      cursor: pointer;
+    /* Date groups: one scrollable list, no day pagination */
+    .cb-date-group {
+      margin-top: 22px;
     }
-    .day-nav {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 12px;
+    .cb-date-group:first-child {
+      margin-top: 0;
     }
-    .day-nav span { font-weight: 600; font-size: 15px; }
-    .day-nav button {
-      width: 36px; height: 36px;
-      border-radius: 50%;
-      border: none;
-      background: var(--tg-theme-secondary-bg-color);
-      color: var(--tg-theme-text-color);
-      font-size: 18px;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+    .cb-date-group-label {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--tg-theme-hint-color);
+      margin-bottom: 10px;
+      padding: 4px 0 4px 12px;
+      border-left: 3px solid var(--tg-theme-button-color);
+      line-height: 1.35;
+    }
+    .cb-date-group-weekday {
+      font-weight: 600;
+      letter-spacing: 0.04em;
     }
     .booking-card {
       display: flex;
@@ -81,7 +75,14 @@
     }
     .booking-card-main { flex: 1; min-width: 0; }
     .booking-card .time { font-weight: 600; font-size: 15px; margin-bottom: 4px; }
-    .booking-card .trainer { font-size: 14px; color: var(--tg-theme-hint-color); margin-bottom: 6px; }
+    .booking-card .trainer { font-size: 14px; color: var(--tg-theme-hint-color); margin-bottom: 4px; }
+    .booking-card .service-line {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--tg-theme-text-color);
+      margin-bottom: 6px;
+      line-height: 1.35;
+    }
     .booking-card .arena { font-size: 14px; margin-bottom: 2px; }
     .booking-card .address { font-size: 13px; color: var(--tg-theme-hint-color); margin-bottom: 0; }
     /* Row: map chip + status — flex so gap + baseline alignment stay consistent */
@@ -242,16 +243,11 @@
     <span class="header-title">📋 Мои записи</span>
     <div class="client-mini-nav">
       <button type="button" class="btn-app-home" id="btnHome">Главная</button>
-      <button type="button" class="btn-close" id="btnClose" aria-label="Закрыть">Закрыть</button>
+      <button type="button" class="btn-app-back" id="btnBack" data-skip-history-back="true" hidden>Назад</button>
     </div>
   </div>
 
   <div id="screenList" data-screen>
-    <div class="day-nav">
-      <button type="button" id="prevDay" aria-label="Пред. день">‹</button>
-      <span id="dayLabel">—</span>
-      <button type="button" id="nextDay" aria-label="След. день">›</button>
-    </div>
     <div id="listContent"></div>
   </div>
 
@@ -296,6 +292,24 @@
           <div class="bd-row-text">
             <div class="bd-row-label">Длительность</div>
             <div class="bd-row-value" id="detailDuration">—</div>
+          </div>
+        </div>
+        <div class="bd-row" id="detailServiceRow">
+          <svg class="bd-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M4 7h16M4 12h16M4 17h10"/>
+          </svg>
+          <div class="bd-row-text">
+            <div class="bd-row-label">Услуга</div>
+            <div class="bd-row-value" id="detailServiceName">—</div>
+          </div>
+        </div>
+        <div class="bd-row" id="detailTierRow" style="display: none;">
+          <svg class="bd-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+          </svg>
+          <div class="bd-row-text">
+            <div class="bd-row-label">Тариф</div>
+            <div class="bd-row-value" id="detailTierLabel">—</div>
           </div>
         </div>
         <div class="bd-row" id="detailStatusRow">
@@ -378,15 +392,34 @@
         return h;
       }
 
-      function closeApp() { if (tg) tg.close(); else window.close(); }
-      document.getElementById('btnClose').onclick = closeApp;
+      var state = { days: [], cancelBookingId: null, currentBooking: null };
 
-      var state = { days: [], currentDayIndex: 0, cancelBookingId: null, currentBooking: null };
+      function canBrowserGoBack() {
+        try {
+          if (window.navigation && typeof window.navigation.canGoBack === 'function') {
+            return window.navigation.canGoBack();
+          }
+        } catch (e) {}
+        return window.history && window.history.length > 1;
+      }
+
+      function syncClientBookingsHeaderBack() {
+        var btn = document.getElementById('btnBack');
+        if (!btn) return;
+        if (document.getElementById('screenDetail').classList.contains('active')) {
+          btn.hidden = false;
+          btn.onclick = function() { showScreen('screenList'); };
+          return;
+        }
+        btn.hidden = !canBrowserGoBack();
+        btn.onclick = function() { window.history.back(); };
+      }
 
       function showScreen(id) {
         document.querySelectorAll('[data-screen]').forEach(function(el) { el.classList.remove('active'); });
         var el = document.getElementById(id);
         if (el) el.classList.add('active');
+        syncClientBookingsHeaderBack();
       }
 
       function getJson(url) {
@@ -493,6 +526,17 @@
         if (booking.arena_address) venue += (venue ? '\n' : '') + booking.arena_address;
         document.getElementById('detailVenue').textContent = venue || 'Не указано';
         document.getElementById('detailDuration').textContent = (booking.duration_minutes || 45) + ' минут';
+
+        var svcName = (booking.service_name || '').trim();
+        document.getElementById('detailServiceName').textContent = svcName || '—';
+        var tierRow = document.getElementById('detailTierRow');
+        var tierLab = (booking.price_tier_label || '').trim();
+        if (tierLab) {
+          tierRow.style.display = '';
+          document.getElementById('detailTierLabel').textContent = tierLab;
+        } else {
+          tierRow.style.display = 'none';
+        }
         
         var statusText = (booking.status === 'confirmed') ? 'Подтверждено' : 'Ожидает подтверждения';
         document.getElementById('detailStatus').textContent = statusText;
@@ -557,8 +601,6 @@
           if (!day.bookings) continue;
           for (var j = 0; j < day.bookings.length; j++) {
             if (Number(day.bookings[j].id) === wantId) {
-              state.currentDayIndex = i;
-              renderDay();
               if (typeof window.openBookingDetail === 'function') window.openBookingDetail(wantId);
               return;
             }
@@ -572,52 +614,69 @@
           state.days = data.days || [];
           if (state.days.length === 0) {
             document.getElementById('listContent').innerHTML = '<div class="empty">У вас пока нет записей.<br>Выберите тренера в каталоге и нажмите «Записаться».</div>';
-            document.getElementById('dayLabel').textContent = '';
             return;
           }
-          state.currentDayIndex = 0;
-          renderDay();
+          renderAllBookings();
           tryOpenBookingFromQuery();
         }).catch(function() {
           document.getElementById('listContent').innerHTML = '<div class="error">Ошибка загрузки</div>';
         });
       }
 
-      function renderDay() {
-        var days = state.days;
-        var idx = Math.max(0, Math.min(state.currentDayIndex, days.length - 1));
-        state.currentDayIndex = idx;
-        var day = days[idx];
-        document.getElementById('dayLabel').textContent = formatDate(day.date) + ' (' + (day.day_label || '') + ')';
+      function bookingCardHtml(b) {
+        var statusClass = (b.status || '') === 'confirmed' ? 'confirmed' : 'pending';
+        var statusText = statusClass === 'confirmed' ? 'Подтверждено' : 'Ожидает подтверждения';
+        var arena = (b.arena_name || '').trim() || null;
+        var address = (b.arena_address || '').trim() || null;
+        var mapLink = b.map_link || null;
         var html = '';
-        if (!day.bookings || day.bookings.length === 0) {
-          html = '<div class="empty">На этот день записей нет</div>';
-        } else {
-          day.bookings.forEach(function(b) {
-            var statusClass = (b.status || '') === 'confirmed' ? 'confirmed' : 'pending';
-            var statusText = statusClass === 'confirmed' ? 'Подтверждено' : 'Ожидает подтверждения';
-            var arena = (b.arena_name || '').trim() || null;
-            var address = (b.arena_address || '').trim() || null;
-            var mapLink = b.map_link || null;
-            html += '<div class="booking-card" data-id="' + b.id + '" onclick="openBookingDetail(' + b.id + ')">';
-            html += '<div class="booking-card-main">';
-            html += '<div class="time">' + escapeHtml(b.start_time || '') + ' · ' + (b.duration_minutes || 45) + ' мин</div>';
-            html += '<div class="trainer">' + escapeHtml(b.trainer_name || 'Тренер') + '</div>';
-            if (arena) html += '<div class="arena">' + escapeHtml(arena) + '</div>';
-            if (address) html += '<div class="address">' + escapeHtml(address) + '</div>';
-            html += '<div class="booking-card-meta">';
-            if (mapLink) {
-              html += '<a href="' + escapeHtml(mapLink) + '" class="map-link" target="_blank" rel="noopener" onclick="event.stopPropagation();">';
-              html += '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>';
-              html += 'На карте</a>';
-            }
-            html += '<span class="badge ' + statusClass + '">' + escapeHtml(statusText) + '</span>';
-            html += '</div>';
-            html += '</div>';
-            html += '<button type="button" class="btn-cancel" data-id="' + b.id + '" aria-label="Отменить запись" onclick="event.stopPropagation();">';
-            html += '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>';
-            html += '</button></div>';
-          });
+        html += '<div class="booking-card" data-id="' + b.id + '" onclick="openBookingDetail(' + b.id + ')">';
+        html += '<div class="booking-card-main">';
+        html += '<div class="time">' + escapeHtml(b.start_time || '') + ' · ' + (b.duration_minutes || 45) + ' мин</div>';
+        html += '<div class="trainer">' + escapeHtml(b.trainer_name || 'Тренер') + '</div>';
+        var svc = (b.service_name || '').trim();
+        if (svc) {
+          var tierPart = (b.price_tier_label || '').trim();
+          html += '<div class="service-line">' + escapeHtml(svc) + (tierPart ? ' · ' + escapeHtml(tierPart) : '') + '</div>';
+        }
+        if (arena) html += '<div class="arena">' + escapeHtml(arena) + '</div>';
+        if (address) html += '<div class="address">' + escapeHtml(address) + '</div>';
+        html += '<div class="booking-card-meta">';
+        if (mapLink) {
+          html += '<a href="' + escapeHtml(mapLink) + '" class="map-link" target="_blank" rel="noopener" onclick="event.stopPropagation();">';
+          html += '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>';
+          html += 'На карте</a>';
+        }
+        html += '<span class="badge ' + statusClass + '">' + escapeHtml(statusText) + '</span>';
+        html += '</div>';
+        html += '</div>';
+        html += '<button type="button" class="btn-cancel" data-id="' + b.id + '" aria-label="Отменить запись" onclick="event.stopPropagation();">';
+        html += '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>';
+        html += '</button></div>';
+        return html;
+      }
+
+      function renderAllBookings() {
+        var days = state.days;
+        var html = '';
+        var anyCard = false;
+        for (var d = 0; d < days.length; d++) {
+          var day = days[d];
+          if (!day.bookings || day.bookings.length === 0) continue;
+          anyCard = true;
+          html += '<div class="cb-date-group">';
+          html += '<div class="cb-date-group-label">' + escapeHtml(formatDate(day.date));
+          if (day.day_label) {
+            html += ' <span class="cb-date-group-weekday">(' + escapeHtml(day.day_label) + ')</span>';
+          }
+          html += '</div>';
+          for (var k = 0; k < day.bookings.length; k++) {
+            html += bookingCardHtml(day.bookings[k]);
+          }
+          html += '</div>';
+        }
+        if (!anyCard) {
+          html = '<div class="empty">У вас пока нет записей.<br>Выберите тренера в каталоге и нажмите «Записаться».</div>';
         }
         document.getElementById('listContent').innerHTML = html;
         document.querySelectorAll('.booking-card .btn-cancel').forEach(function(btn) {
@@ -629,13 +688,6 @@
           };
         });
       }
-
-      document.getElementById('prevDay').onclick = function() {
-        if (state.currentDayIndex > 0) { state.currentDayIndex--; renderDay(); }
-      };
-      document.getElementById('nextDay').onclick = function() {
-        if (state.currentDayIndex < state.days.length - 1) { state.currentDayIndex++; renderDay(); }
-      };
 
       document.getElementById('modalCancelNo').onclick = function() {
         document.getElementById('modalCancel').style.display = 'none';
@@ -678,6 +730,7 @@
           }
         });
       });
+      window.addEventListener('popstate', syncClientBookingsHeaderBack);
       loadBookings();
       showScreen('screenList');
     })();

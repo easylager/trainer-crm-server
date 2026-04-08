@@ -263,6 +263,24 @@ def webapp_trainer_home_page():
     return _webapp_file_response(path)
 
 
+@app.get("/webapp/trainer-referral")
+def webapp_trainer_referral_page():
+    """B2B referral program: link, balance, invited trainers."""
+    path = _WEBAPP_DIR / "trainer-referral.html"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Web App not found")
+    return _webapp_file_response(path)
+
+
+@app.get("/webapp/referral-rules")
+def webapp_referral_rules_page():
+    """Public referral program rules (BY)."""
+    path = _WEBAPP_DIR / "referral-rules.html"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Web App not found")
+    return _webapp_file_response(path)
+
+
 @app.get("/webapp/palette-ice-reference")
 @app.get("/webapp/palette-ice-reference.html")
 def webapp_palette_ice_reference():
@@ -353,6 +371,32 @@ def webapp_client_mini_app_theme_js():
 def webapp_mini_app_trainer_home_js():
     """Trainer hub navigation (init_data preserved); loaded by trainer Mini App pages."""
     path = _WEBAPP_DIR / "mini-app-trainer-home.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_WEBAPP_NO_CACHE_HEADERS,
+    )
+
+
+@app.get("/webapp/mini-app-trainer-gate.js")
+def webapp_mini_app_trainer_gate_js():
+    """Trainer Mini App access gate; loaded by trainer hub, subscription, schedule, etc."""
+    path = _WEBAPP_DIR / "mini-app-trainer-gate.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_WEBAPP_NO_CACHE_HEADERS,
+    )
+
+
+@app.get("/webapp/mini-app-trainer-celebration.js")
+def webapp_mini_app_trainer_celebration_js():
+    """Post-purchase hub banner (sessionStorage helpers); loaded by trainer-home and subscription pages."""
+    path = _WEBAPP_DIR / "mini-app-trainer-celebration.js"
     if not path.is_file():
         raise HTTPException(status_code=404, detail="JS file not found")
     return FileResponse(

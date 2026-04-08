@@ -117,3 +117,21 @@ def parse_user_id_from_init_data(init_data: str) -> int | None:
         return int(user.get("id"))
     except Exception:
         return None
+
+
+def parse_user_json_from_init_data(init_data: str) -> dict | None:
+    """
+    Parsed ``user`` object from init_data (first_name, last_name, username, id).
+    Only call after validate_init_data / require_telegram_user_id.
+    """
+    if not init_data:
+        return None
+    try:
+        vals = _parse_init_data_vals(init_data)
+        user_str = vals.get("user")
+        if not user_str:
+            return None
+        import json
+        return json.loads(user_str)
+    except Exception:
+        return None

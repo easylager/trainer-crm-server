@@ -583,3 +583,107 @@ async def test_trainer_booking_detail_includes_client_id(
             )
     assert resp.status_code == 200
     assert resp.json().get("client_id") == client_id
+
+
+@pytest.mark.asyncio
+async def test_schedule_and_booking_detail_include_completed_past_booking(
+    app_use_test_db,
+    db_session,
+) -> None:
+    """Completed bookings attach to /schedule and open via GET /trainer/bookings/{id} (history week)."""
+    from tests.conftest import belarus_test_phone, unique_test_telegram_id
+    from tests.db_catalog_helpers import require_seed_arena_city_name, require_seed_service_id
+
+    past_day = date.today() - timedelta(days=10)
+    arena_id, city_id, _arena_name = await require_seed_arena_city_name(db_session)
+    service_id = await require_seed_service_id(db_session)
+    trainer_tg = _fresh_trainer_telegram_id()
+    r = await db_session.execute(text("INSERT INTO trainers (status) VALUES ('active') RETURNING id"))
+    (trainer_id,) = r.fetchone()
+    await db_session.execute(
+        text("UPDATE trainers SET telegram_id = :tg WHERE id = :id"),
+        {"tg": trainer_tg, "id": trainer_id},
+    )
+    await db_session.execute(
+        text(
+            """
+            INSERT INTO trainer_profiles (trainer_id, first_name, last_name, age, city_id)
+            VALUES (:tid, 'Past', 'Trainer', 30, :cid)
+            """
+        ),
+        {"tid": trainer_id, "cid": city_id},
+    )
+    await db_session.execute(
+        text(
+            "INSERT INTO trainer_services (trainer_id, service_id, price_cents) VALUES (:tid, :sid, 1000)"
+        ),
+        {"tid": trainer_id, "sid": service_id},
+    )
+    await db_session.execute(
+        text("INSERT INTO trainer_arenas (trainer_id, arena_id) VALUES (:tid, :aid)"),
+        {"tid": trainer_id, "aid": arena_id},
+    )
+    r = await db_session.execute(
+        text(
+            """
+            INSERT INTO slots (trainer_id, slot_date, start_time, end_time, status)
+            VALUES (:tid, :d, :st, :et, 'booked')
+            RETURNING id
+            """
+        ),
+        {"tid": trainer_id, "d": past_day, "st": time(14, 0), "et": time(15, 0)},
+    )
+    (slot_id,) = r.fetchone()
+    ctg = unique_test_telegram_id()
+    phone, phone_n = belarus_test_phone(ctg)
+    r = await db_session.execute(
+        text(
+            """
+            INSERT INTO clients (telegram_id, first_name, last_name, phone, phone_normalized)
+            VALUES (:tg, 'Done', 'Client', :phone, :pn)
+            RETURNING id
+            """
+        ),
+        {"tg": ctg, "phone": phone, "pn": phone_n},
+    )
+    (client_id,) = r.fetchone()
+    r = await db_session.execute(
+        text(
+            """
+            INSERT INTO bookings (slot_id, trainer_id, client_id, service_id, status)
+            VALUES (:sid, :tid, :cid, :svc, 'completed')
+            RETURNING id
+            """
+        ),
+        {"sid": slot_id, "tid": trainer_id, "cid": client_id, "svc": service_id},
+    )
+    (booking_id,) = r.fetchone()
+    await db_session.commit()
+
+    d_from = _monday_on_or_before(past_day)
+    d_to = d_from + timedelta(days=6)
+
+    with patch_trainer_webapp_init(trainer_tg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            sched = await client.get(
+                f"/api/webapp/schedule?from_date={d_from.isoformat()}&to_date={d_to.isoformat()}",
+                headers={"X-Telegram-Init-Data": "mock"},
+            )
+            detail = await client.get(
+                f"/api/webapp/trainer/bookings/{booking_id}",
+                headers={"X-Telegram-Init-Data": "mock"},
+            )
+
+    assert sched.status_code == 200
+    slots = sched.json().get("slots") or []
+    match = next((x for x in slots if x.get("id") == slot_id), None)
+    assert match is not None
+    assert match.get("status") == "booked"
+    assert match.get("booking_id") == booking_id
+    assert match.get("booking_status") == "completed"
+
+    assert detail.status_code == 200
+    body = detail.json()
+    assert body.get("id") == booking_id
+    assert body.get("status") == "completed"
+    assert body.get("client_id") == client_id

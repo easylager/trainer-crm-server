@@ -1,8 +1,7 @@
 """
 Gift certificate PDF:
-- Static template (decor + field labels only) in static/templates/certificate_template.pdf
-- Fill AcroForm fields when present, else overlay text using certificate_layout.json fractions
-- Legacy full ReportLab page as fallback
+- **Production:** single ReportLab canvas (`_legacy_build_certificate_pdf`) — one coordinate system, aligned price/QR.
+- Optional: PyMuPDF template + overlay kept for AcroForm experiments; not used in `build_certificate_pdf`.
 """
 from __future__ import annotations
 
@@ -21,6 +20,7 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen import canvas
 from reportlab.platypus import Paragraph
+from reportlab.lib.utils import ImageReader
 
 try:
     import fitz  # PyMuPDF
@@ -323,9 +323,13 @@ def _insert_qr(page: fitz.Page, rect: fitz.Rect, payload: str) -> None:
     qr.add_data(payload)
     qr.make(fit=True)
     img = qr.make_image(fill_color="black", back_color="white")
-    assert isinstance(img, Image.Image)
+    # qrcode returns PilImage (wrapper), not PIL.Image.Image — raster is from get_image().
+    pil_img = img.get_image() if hasattr(img, "get_image") else img
+    if not isinstance(pil_img, Image.Image):
+        logger.warning("Unexpected QR image type %s; skip QR on certificate", type(img))
+        return
     buf = BytesIO()
-    img.save(buf, format="PNG")
+    pil_img.save(buf, format="PNG")
     page.insert_image(rect, stream=buf.getvalue())
 
 
@@ -474,6 +478,27 @@ def _build_on_template(
         doc.close()
 
 
+def _qr_png_bytes(payload: str) -> Optional[bytes]:
+    """PNG bytes for QR or None if qrcode/PIL missing."""
+    if not (payload or "").strip():
+        return None
+    try:
+        import qrcode
+        from PIL import Image
+    except ImportError:
+        return None
+    qr = qrcode.QRCode(version=None, error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=4, border=2)
+    qr.add_data(payload)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="black", back_color="white")
+    pil_img = img.get_image() if hasattr(img, "get_image") else img
+    if not isinstance(pil_img, Image.Image):
+        return None
+    buf = BytesIO()
+    pil_img.save(buf, format="PNG")
+    return buf.getvalue()
+
+
 def _legacy_build_certificate_pdf(
     *,
     trainer_name: str,
@@ -484,6 +509,7 @@ def _legacy_build_certificate_pdf(
     purchased_by_name: Optional[str] = None,
     issued_at: Optional[date] = None,
     expires_at: Optional[date] = None,
+    activation_url: Optional[str] = None,
 ) -> bytes:
     _register_fonts()
     buf = BytesIO()
@@ -576,12 +602,13 @@ def _legacy_build_certificate_pdf(
     c.roundRect(right_x, badge_y + badge_h - 8 * mm, right_w, 8 * mm, 4 * mm, fill=1, stroke=0)
 
     amount_str = _format_amount(amount_cents)
+    # Badge: main amber is badge_y..badge_y+24mm; top 8mm is lighter amber (drawn second).
     c.setFillColor(_hex(TEXT_DARK))
     c.setFont(_FONT_BOLD, 24)
-    c.drawCentredString(right_x + right_w / 2, badge_y + 14 * mm, amount_str)
+    c.drawCentredString(right_x + right_w / 2, badge_y + 12 * mm, amount_str)
 
     c.setFont(_FONT_SEMI, 10)
-    c.drawCentredString(right_x + right_w / 2, badge_y + 6 * mm, "BYN")
+    c.drawCentredString(right_x + right_w / 2, badge_y + badge_h - 4 * mm, "BYN")
 
     y -= max(prod_h + 16 * mm, badge_h + 8 * mm)
 
@@ -603,10 +630,23 @@ def _legacy_build_certificate_pdf(
     expires_str = _format_date(expires_at) if expires_at else "бессрочно"
     c.drawString(left_x + 18 * mm, detail_y, expires_str)
 
-    y = detail_y - 24 * mm
-
+    # detail_y is «До» row baseline; strip top = detail_y − 24mm → ~24mm band above charcoal bar for QR.
+    strip_top = detail_y - 24 * mm
     code_h = 28 * mm
-    code_y = y - code_h
+    code_y = strip_top - code_h
+    if activation_url:
+        png = _qr_png_bytes(activation_url)
+        if png:
+            m = 2 * mm
+            gap_top = detail_y - m
+            gap_bottom = strip_top + m
+            gap_h = gap_top - gap_bottom
+            if gap_h >= 8 * mm:
+                qr_side = min(22 * mm, gap_h - 1 * mm)
+                qr_side = max(10 * mm, qr_side)
+                y_qr = gap_bottom + (gap_h - qr_side) / 2
+                x_qr = right_x + (right_w - qr_side) / 2
+                c.drawImage(ImageReader(BytesIO(png)), x_qr, y_qr, width=qr_side, height=qr_side, mask="auto")
 
     c.setFillColor(_hex(CHARCOAL))
     c.rect(0, code_y, w, code_h, fill=1, stroke=0)
@@ -663,26 +703,9 @@ def build_certificate_pdf(
     activation_url: Optional[str] = None,
 ) -> bytes:
     """
-    Build PDF: template + AcroForm or fractional overlay, else legacy canvas.
+    Single ReportLab layout: price/BYN/QR share one coordinate system (no PyMuPDF overlay drift).
     activation_url: optional deep link for QR (e.g. t.me/bot?start=cert_CODE).
     """
-    tpl = _template_pdf_path()
-    if tpl is not None and fitz is not None:
-        try:
-            return _build_on_template(
-                tpl,
-                trainer_name=trainer_name,
-                product_name=product_name,
-                amount_cents=amount_cents,
-                code=code,
-                recipient_name=recipient_name,
-                purchased_by_name=purchased_by_name,
-                issued_at=issued_at,
-                expires_at=expires_at,
-                activation_url=activation_url,
-            )
-        except Exception as e:
-            logger.warning("Certificate template failed, using legacy PDF: %s", e)
     return _legacy_build_certificate_pdf(
         trainer_name=trainer_name,
         product_name=product_name,
@@ -692,4 +715,5 @@ def build_certificate_pdf(
         purchased_by_name=purchased_by_name,
         issued_at=issued_at,
         expires_at=expires_at,
+        activation_url=activation_url,
     )

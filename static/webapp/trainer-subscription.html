@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Подписка</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="mini-app-telegram-chrome.js"></script>
   <link rel="stylesheet" href="theme.css" />
   <link rel="stylesheet" href="mini-app-components.css" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -829,7 +830,7 @@
 <body class="subscription-page">
   <div class="trainer-app-topbar trainer-mini-nav">
     <button type="button" class="btn-app-home" id="btnHome">Главная</button>
-    <button type="button" class="btn-close" id="btnClose">Закрыть</button>
+    <button type="button" class="btn-app-back" id="btnBack" hidden>Назад</button>
   </div>
   <!-- Loading screen -->
   <div id="screenLoading" class="screen active">
@@ -908,13 +909,15 @@
         </div>
       </div>
       <div class="unlocked-list" id="unlockedList"></div>
-      <button type="button" class="btn-close-success" id="btnCloseSuccess">Отлично!</button>
+      <button type="button" class="btn-close-success" id="btnCloseSuccess">В кабинет</button>
     </div>
   </div>
 
   <div id="confetti" class="confetti"></div>
 
   <script src="mini-app-trainer-gate.js"></script>
+  <script src="mini-app-trainer-celebration.js"></script>
+  <script src="mini-app-trainer-home.js"></script>
   <script>
     (function() {
       'use strict';
@@ -956,8 +959,57 @@
         }
       }
       function closeApp() { if (tg) tg.close(); else window.history.back(); }
-      var btnCloseTop = document.getElementById('btnClose');
-      if (btnCloseTop) btnCloseTop.onclick = closeApp;
+
+      /** Last mock-checkout API payload for hub celebration (set in showSuccess). */
+      var lastCheckoutResponse = null;
+
+      function periodLabelFromMonths(m) {
+        if (m === 1) return '1 мес.';
+        if (m === 3) return '3 мес.';
+        if (m === 12) return '1 год';
+        return String(m) + ' мес.';
+      }
+
+      /** Same URL rules as mini-app-trainer-home.js — used if external script order/load fails. */
+      function navigateTrainerHomeInline() {
+        var p = window.location.pathname || '';
+        var base = p.replace(/[^/]+$/, '') || '/webapp/';
+        var url = base + 'trainer-home';
+        var id = initData();
+        if (id) url += (url.indexOf('?') === -1 ? '?' : '&') + 'init_data=' + encodeURIComponent(id);
+        url += (url.indexOf('?') === -1 ? '?' : '&') + 'hub_celebrate=1';
+        window.location.href = url;
+      }
+
+      function goToHubAfterSuccess() {
+        if (window.TrainerHubCelebration && window.TrainerHubCelebration.set && lastCheckoutResponse) {
+          try {
+            var data = lastCheckoutResponse;
+            var tierData = catalog.find(function(t) { return t.tier === data.tier; });
+            var planName = tierData ? tierData.name_ru : String(data.tier || '');
+            var expiresAt = data.expires_at ? String(data.expires_at).slice(0, 10) : '';
+            var priceLine = data.price_cents != null
+              ? (Math.round(data.price_cents / 100) + ' BYN')
+              : null;
+            var included = tierData && tierData.includes_tiers ? tierData.includes_tiers : [data.tier];
+            var features = window.TrainerHubCelebration.featuresFromIncludesTiers(included);
+            window.TrainerHubCelebration.set({
+              headline: 'Подписка активирована',
+              planName: planName,
+              expiresAt: expiresAt,
+              periodLabel: periodLabelFromMonths(selectedPeriod),
+              priceLine: priceLine,
+              features: features,
+              source: 'trainer-subscription',
+            });
+          } catch (e) { /* still navigate */ }
+        }
+        if (typeof window.navigateTrainerHome === 'function') {
+          window.navigateTrainerHome({ subscriptionCelebrationHint: true });
+        } else {
+          navigateTrainerHomeInline();
+        }
+      }
 
       // Screen management
       function showScreen(id) {
@@ -1291,6 +1343,7 @@
 
       // Show success celebration
       function showSuccess(data) {
+        lastCheckoutResponse = data;
         var tierData = catalog.find(function(t) { return t.tier === data.tier; });
         var expiresDate = data.expires_at ? data.expires_at.slice(0, 10) : '';
         
@@ -1336,7 +1389,7 @@
       // Event listeners
       document.getElementById('btnRetry').onclick = loadData;
       document.getElementById('btnPay').onclick = doCheckout;
-      document.getElementById('btnCloseSuccess').onclick = closeApp;
+      document.getElementById('btnCloseSuccess').onclick = goToHubAfterSuccess;
 
       // Initialize
       if (initData() && window.TrainerMiniAppGate) {
@@ -1356,6 +1409,5 @@
       }
     })();
   </script>
-  <script src="mini-app-trainer-home.js"></script>
 </body>
 </html>

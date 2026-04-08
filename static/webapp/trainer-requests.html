@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Заявки клиентов</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="mini-app-telegram-chrome.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet" />
@@ -636,7 +637,7 @@
       <h1 class="header-title" id="headerTitle">Заявки клиентов</h1>
       <div class="app-header-actions trainer-mini-nav">
         <button type="button" class="btn-app-home" id="btnHome">Главная</button>
-        <button type="button" class="btn-close" id="btnClose">Закрыть</button>
+        <button type="button" class="btn-app-back" id="btnBack" data-skip-history-back="true" hidden>Назад</button>
       </div>
     </div>
   </header>
@@ -660,7 +661,7 @@
     </div>
     <div id="screenAuthError" class="empty auth-error-block" style="display: none;">
       <p id="authErrorText"></p>
-      <p class="auth-error-hint">Закройте приложение (кнопка «Закрыть») и откройте снова из меню бота — заявки появятся.</p>
+      <p class="auth-error-hint">Закройте мини-приложение (крестик в шапке Telegram) и откройте снова из меню бота — заявки появятся.</p>
     </div>
     <div id="pagination" class="pagination"></div>
   </div>
@@ -786,17 +787,50 @@
       }
       function apiUrl(path) { return '/api/webapp' + path; }
 
+      function canBrowserGoBack() {
+        try {
+          if (window.navigation && typeof window.navigation.canGoBack === 'function') {
+            return window.navigation.canGoBack();
+          }
+        } catch (e) {}
+        return window.history && window.history.length > 1;
+      }
+
+      function syncTrainerRequestsHeaderBack() {
+        var btn = document.getElementById('btnBack');
+        if (!btn) return;
+        var active = document.querySelector('[data-screen].active');
+        var sid = active ? active.id : 'screenList';
+        if (sid === 'screenList') {
+          btn.hidden = !canBrowserGoBack();
+          btn.onclick = function() { window.history.back(); };
+          return;
+        }
+        btn.hidden = false;
+        if (sid === 'screenDetail') {
+          btn.onclick = function() {
+            state.currentRequest = null;
+            loadList();
+            showScreen('screenList');
+          };
+        } else if (sid === 'screenRespond') {
+          btn.onclick = function() { showScreen('screenDetail'); };
+        } else if (sid === 'screenSlots') {
+          btn.onclick = function() { showScreen('screenDetail'); };
+        } else if (sid === 'screenSuccess') {
+          btn.onclick = function() {
+            loadList();
+            showScreen('screenList');
+          };
+        }
+      }
+
       function showScreen(id) {
         document.querySelectorAll('[data-screen]').forEach(function(el) { el.classList.remove('active'); });
         const el = document.getElementById(id);
         if (el) el.classList.add('active');
+        syncTrainerRequestsHeaderBack();
       }
-
-      function closeApp() { if (tg) tg.close(); else window.close(); }
-      var btnClose = document.getElementById('btnClose');
-      if (btnClose) btnClose.onclick = closeApp;
-      var btnCloseSuccess = document.getElementById('btnCloseSuccess');
-      if (btnCloseSuccess) btnCloseSuccess.onclick = closeApp;
 
       function escapeHtml(s) {
         if (s == null || s === undefined) return '';
@@ -1215,7 +1249,7 @@
             } else {
               document.getElementById('screenAuthError').style.display = 'none';
               document.getElementById('emptyStateText').textContent = e.message || 'Ошибка загрузки';
-              document.getElementById('emptyStateHint').textContent = 'Закройте приложение и откройте снова из меню бота для тренеров.';
+              document.getElementById('emptyStateHint').textContent = 'Закройте мини-приложение (крестик в шапке Telegram) и откройте снова из меню бота для тренеров.';
               document.getElementById('screenEmpty').style.display = 'block';
             }
           });
@@ -1236,6 +1270,9 @@
       } else {
         loadList();
       }
+
+      window.addEventListener('popstate', syncTrainerRequestsHeaderBack);
+      syncTrainerRequestsHeaderBack();
     })();
   </script>
   <script src="mini-app-trainer-home.js"></script>

@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Оплата подписки</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="mini-app-telegram-chrome.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet">
@@ -219,7 +220,7 @@
 <body>
   <div class="trainer-app-topbar trainer-mini-nav">
     <button type="button" class="btn-app-home" id="btnHome">Главная</button>
-    <button type="button" class="btn-close" id="btnCloseMain">Закрыть</button>
+    <button type="button" class="btn-app-back" id="btnBack" hidden>Назад</button>
   </div>
   <section class="pay-hero">
     <div class="pay-hero-inner">
@@ -241,7 +242,7 @@
       <div class="success-icon">✅</div>
       <p class="success-title">Подписка оплачена</p>
       <p class="success-text">Доступ продлён до указанной даты. Вы в каталоге.</p>
-      <button type="button" class="btn" id="btnClose">Закрыть</button>
+      <button type="button" class="btn" id="btnPaySuccessDone">В кабинет</button>
     </div>
   </div>
   <div id="screenError" class="screen">
@@ -249,6 +250,8 @@
     <button type="button" class="btn" id="btnRetry">Повторить</button>
   </div>
   <script src="mini-app-trainer-gate.js"></script>
+  <script src="mini-app-trainer-celebration.js"></script>
+  <script src="mini-app-trainer-home.js"></script>
   <script>
     (function() {
       var tg = window.Telegram && window.Telegram.WebApp;
@@ -265,8 +268,61 @@
         if (el) el.classList.add('active');
       }
       function closeApp() { if (tg) tg.close(); else window.history.back(); }
-      var btnCloseMain = document.getElementById('btnCloseMain');
-      if (btnCloseMain) btnCloseMain.onclick = closeApp;
+
+      function navigateTrainerHomeInline() {
+        var p = window.location.pathname || '';
+        var base = p.replace(/[^/]+$/, '') || '/webapp/';
+        var url = base + 'trainer-home';
+        var id = initData();
+        if (id) url += (url.indexOf('?') === -1 ? '?' : '&') + 'init_data=' + encodeURIComponent(id);
+        url += (url.indexOf('?') === -1 ? '?' : '&') + 'hub_celebrate=1';
+        window.location.href = url;
+      }
+
+      function goToHubAfterFetch() {
+        if (typeof window.navigateTrainerHome === 'function') {
+          window.navigateTrainerHome({ subscriptionCelebrationHint: true });
+        } else {
+          navigateTrainerHomeInline();
+        }
+      }
+
+      function fetchStatusAndNavigateToHub() {
+        var statusUrl = '/api/webapp/trainer/subscription/status' + (initData() ? '?init_data=' + encodeURIComponent(initData()) : '');
+        fetch(statusUrl, { headers: headers() })
+          .then(function(r) {
+            return r.json().then(function(d) { return { ok: r.ok, data: d }; });
+          })
+          .then(function(o) {
+            if (o.ok && o.data && window.TrainerHubCelebration && window.TrainerHubCelebration.set) {
+              try {
+                var s = o.data;
+                var expiresAt = s.expires_at ? String(s.expires_at).slice(0, 10) : '';
+                var pm = s.billing_period_months;
+                var periodLabel = null;
+                if (pm === 1) periodLabel = '1 мес.';
+                else if (pm === 3) periodLabel = '3 мес.';
+                else if (pm === 12) periodLabel = '1 год';
+                else if (pm) periodLabel = pm + ' мес.';
+                var features = window.TrainerHubCelebration.featuresFromUnlockedList(s.unlocked_features || []);
+                window.TrainerHubCelebration.set({
+                  headline: 'Оплата прошла',
+                  planName: (s.tier_name_ru || s.tier || 'Подписка').toString(),
+                  expiresAt: expiresAt,
+                  periodLabel: periodLabel,
+                  priceLine: null,
+                  features: features,
+                  source: 'trainer-pay-subscription',
+                });
+              } catch (e) { /* */ }
+            }
+            goToHubAfterFetch();
+          })
+          .catch(function() {
+            goToHubAfterFetch();
+          });
+      }
+
       var params = new URLSearchParams(window.location.search || '');
       if (params.get('payment_stub') === '1' && params.get('tracking_id')) {
         var tid = params.get('tracking_id');
@@ -280,7 +336,10 @@
             fetch(url, { method: 'POST', headers: Object.assign(headers(), {'Content-Type': 'application/json'}), body: JSON.stringify({ invoice_id: invoiceId }) })
               .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }).catch(function() { return { ok: false, data: {} }; }); })
               .then(function(o) {
-                if (o.ok) { showScreen('screenSuccess'); document.getElementById('btnClose').onclick = closeApp; }
+                if (o.ok) {
+                  showScreen('screenSuccess');
+                  document.getElementById('btnPaySuccessDone').onclick = fetchStatusAndNavigateToHub;
+                }
                 else { document.getElementById('errorText').textContent = o.data.detail || 'Ошибка подтверждения'; showScreen('screenError'); document.getElementById('btnRetry').style.display = 'none'; }
               })
               .catch(function() {
@@ -294,7 +353,7 @@
       }
       if (params.get('payment_success') === '1') {
         showScreen('screenSuccess');
-        document.getElementById('btnClose').onclick = closeApp;
+        document.getElementById('btnPaySuccessDone').onclick = fetchStatusAndNavigateToHub;
         return;
       }
       function formatPrice(cents) { return cents == null ? '—' : (cents / 100) + ' BYN'; }
@@ -371,7 +430,6 @@
           });
       }
       document.getElementById('btnRetry').onclick = function() { showScreen('screenChoose'); loadPlans(); };
-      document.getElementById('btnClose').onclick = closeApp;
       if (initData() && window.TrainerMiniAppGate) {
         window.TrainerMiniAppGate.fetchAccess(initData())
           .then(function (a) {
@@ -389,6 +447,5 @@
       }
     })();
   </script>
-  <script src="mini-app-trainer-home.js"></script>
 </body>
 </html>
