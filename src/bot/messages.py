@@ -9,6 +9,8 @@ Voice (UX):
 - Не хардкодить тексты в handlers — только через константы здесь.
 """
 
+import html
+
 # --- Client bot ---
 CLIENT_START_WELCOME = (
     "👋 Привет! Здесь можно найти тренера и записаться на занятие. "
@@ -73,11 +75,14 @@ CLIENT_MENU_BOOKING_MOVED = (
     "Время и слот выберите в <b>Mini App</b> после нажатия кнопки «Записаться» ниже."
 )
 CLIENT_MENU_REQUEST_MOVED = "Оставить заявку можно в «Тренеры и запись»: внизу списка тренеров или в карточке тренера."
-CLIENT_PROFILE_ENTER_NAME = "Напишите, пожалуйста, <b>Имя и Фамилию</b> в одном сообщении (как показывать вас тренерам)."
+CLIENT_PROFILE_ENTER_NAME = (
+    "Напишите, пожалуйста, <b>Имя</b> (обязательно) и при желании <b>фамилию</b> через пробел — "
+    "так вас будут видеть тренеры."
+)
 CLIENT_PROFILE_USE_TELEGRAM_NAME = "Использовать имя из Telegram: {name}?"
 CLIENT_BUTTON_USE_TG_NAME = "Да"
 CLIENT_BUTTON_ENTER_MANUAL = "Ввести вручную"
-CLIENT_PROFILE_NAME_INVALID = "Нужно указать и <b>Имя</b>, и <b>Фамилию</b> в одном сообщении. Например: Иван Петров."
+CLIENT_PROFILE_NAME_INVALID = "Укажите хотя бы <b>имя</b> одним словом или имя и фамилию, например: Иван или Иван Петров."
 CLIENT_BOOK_ENTER_PHONE = "Введите номер телефона (например +375291234567) или нажмите кнопку ниже, чтобы отправить контакт."
 CLIENT_BOOK_ENTER_COMMENT = "Комментарий к записи (необязательно). Напишите текст или нажмите «Пропустить»."
 CLIENT_BOOK_SKIP_COMMENT = "Пропустить"
@@ -310,12 +315,72 @@ CLIENT_BOOKING_CANCELLED_BY_TRAINER = (
     "Было: <b>{date}</b> ({day}) в {time}\n\n"
     "Выберите другое время или тренера: <b>Тренеры и запись</b> в меню бота."
 )
-CLIENT_BOOKING_CONFIRMED_BY_TRAINER = (
-    "<b>Запись подтверждена</b>\n\n"
-    "Когда: <b>{date}</b> ({day}) {time}\n"
-    "Тренер: {trainer_name}\n\n"
-    "Детали и адрес — в «Мои записи»."
-)
+CLIENT_BUTTON_SHOW_ON_MAP = "Показать на карте"
+
+
+def format_client_booking_confirmed_by_trainer_text(
+    *,
+    date: str,
+    day: str,
+    time: str,
+    trainer_name: str,
+    service_name: str | None,
+    booking_price_cents: int | None,
+    price_tier_label: str | None,
+    arena_name: str | None,
+    arena_address: str | None,
+) -> str:
+    """HTML for ParseMode.HTML; escapes user-controlled and venue strings."""
+    tn = html.escape((trainer_name or "").strip() or "Тренер")
+    svc_price = _format_client_booking_confirmed_service_price_block(
+        service_name, booking_price_cents, price_tier_label
+    )
+    venue = _format_client_booking_confirmed_venue_block(arena_name, arena_address)
+    return (
+        "<b>Запись подтверждена</b>\n\n"
+        f"Когда: <b>{html.escape(date)}</b> ({html.escape(day)}) {html.escape(time)}\n"
+        f"Тренер: {tn}\n"
+        f"{svc_price}"
+        f"{venue}"
+    )
+
+
+def _format_client_booking_confirmed_service_price_block(
+    service_name: str | None,
+    booking_price_cents: int | None,
+    price_tier_label: str | None,
+) -> str:
+    lines: list[str] = []
+    svc = (service_name or "").strip()
+    if svc:
+        if price_tier_label:
+            tl = html.escape(price_tier_label.strip())
+            lines.append(f"Услуга: <b>{html.escape(svc)}</b> · тариф: <b>{tl}</b>")
+        else:
+            lines.append(f"Услуга: <b>{html.escape(svc)}</b>")
+    elif (price_tier_label or "").strip():
+        lines.append(f"Тариф: <b>{html.escape(price_tier_label.strip())}</b>")
+    if booking_price_cents is not None:
+        byn = booking_price_cents / 100.0
+        ps = f"{int(byn)} BYN" if byn == int(byn) else f"{byn:.2f} BYN"
+        lines.append(f"Цена: <b>{html.escape(ps)}</b>")
+    return ("\n".join(lines) + "\n") if lines else ""
+
+
+def _format_client_booking_confirmed_venue_block(
+    arena_name: str | None,
+    arena_address: str | None,
+) -> str:
+    name = (arena_name or "").strip()
+    addr = (arena_address or "").strip()
+    lines: list[str] = []
+    if name:
+        lines.append(f"Площадка: <b>{html.escape(name)}</b>")
+    if addr:
+        lines.append(f"Адрес: {html.escape(addr)}")
+    if not name and not addr:
+        lines.append("Площадка: уточните у тренера")
+    return "\n".join(lines) + "\n"
 CLIENT_BOOKING_DECLINED_BY_TRAINER = (
     "<b>Запись не состоится</b>\n\n"
     "Слот: <b>{date}</b> ({day}) {time}\n"

@@ -24,8 +24,10 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 
 from src.api.deps import get_session
+from src.shared.price_tier_kind import normalize_price_tier_kind, price_tier_label_ru, sql_order_case_tier_kind
 from src.shared.profile_phone import coerce_required_belarus_phone
 from src.application.booking_use_cases import (
+    ServicePriceVariantRequired,
     active_booking_summaries_by_slot_for_trainer_range,
     cancel_booking,
     cancel_booking_by_client,
@@ -39,7 +41,9 @@ from src.application.booking_use_cases import (
     get_trainer_default_city_and_service,
     mark_booking_completed_by_trainer,
     get_booking_with_slot,
+    get_trainer_booking_detail_payload,
     get_trainer_client_next_booking,
+    is_slot_end_in_past_local,
     list_bookings_for_client,
     list_bookings_for_trainer,
     list_trainer_clients,
@@ -50,6 +54,7 @@ from src.application.booking_use_cases import (
 from src.application.client_use_cases import (
     get_client_id_by_telegram_id,
     get_client_phone_for_webapp,
+    get_client_profile_basic,
     get_client_telegram_id,
     get_or_create_client,
     get_or_create_client_by_phone,
@@ -168,10 +173,11 @@ from src.application.trainer_use_cases import (
     try_submit_trainer_for_moderation_review,
 )
 from src.bot import messages as msg
+from src.bot.trainer_cancel_client_notify import send_trainer_cancel_notification_for_booking_now
 from src.shared.ttl_cache import get_slots_cached, set_slots_cached
 from src.shared.config import Settings
 from src.shared.notification_hours import NOTIFICATION_TZ, working_hours_between
-from src.shared.telegram_webapp import InitDataAuthError, require_telegram_user_id
+from src.shared.telegram_webapp import InitDataAuthError, parse_user_json_from_init_data, require_telegram_user_id
 
 try:
     from zoneinfo import ZoneInfo
@@ -194,6 +200,57 @@ def _trainer_telegram_id(init_data: str) -> int:
 
 def _client_telegram_id(init_data: str) -> int:
     return _get_telegram_id_from_init_data(init_data, bot_token=Settings().telegram_bot_token_client)
+
+
+def _strip_client_name_field(value: str | None) -> str | None:
+    if value is None:
+        return None
+    t = (value or "").strip()[:64]
+    return t or None
+
+
+async def _ensure_client_for_webapp_miniapp(
+    session: AsyncSession,
+    telegram_id: int,
+    raw_init_data: str,
+    *,
+    phone: str | None = None,
+    first_name: str | None = None,
+    last_name: str | None = None,
+) -> int:
+    """
+    Mini App: client row must have first_name (last_name optional).
+    If profile already has first_name, only phone is updated when provided.
+    Otherwise first_name is taken from body or Telegram user in initData.
+    """
+    profile = await get_client_profile_basic(session, telegram_id)
+    tg_user = parse_user_json_from_init_data(raw_init_data) or {}
+    body_f = _strip_client_name_field(first_name)
+    body_l = _strip_client_name_field(last_name)
+    _tgf = tg_user.get("first_name")
+    _tgl = tg_user.get("last_name")
+    tg_first = _strip_client_name_field(str(_tgf).strip() if _tgf is not None else None)
+    tg_last = _strip_client_name_field(str(_tgl).strip() if _tgl is not None else None)
+    has_saved_name = bool(profile and (profile.get("first_name") or "").strip())
+
+    if has_saved_name:
+        return await get_or_create_client(session, telegram_id, phone=phone)
+
+    resolved_first = body_f or tg_first
+    resolved_last = body_l if body_l is not None else tg_last
+    if not resolved_first:
+        raise HTTPException(
+            status_code=400,
+            detail="Укажите имя",
+            headers={"X-Error-Code": "CLIENT_NAME_REQUIRED"},
+        )
+    return await get_or_create_client(
+        session,
+        telegram_id,
+        phone=phone,
+        first_name=resolved_first,
+        last_name=resolved_last,
+    )
 
 
 def _admin_telegram_id(init_data: str) -> int:
@@ -520,6 +577,9 @@ class ClientBookingBody(BaseModel):
     comment: str | None = None
     request_id: int | None = None  # when booking from "my request" flow, link and archive request
     service_id: int | None = None  # required when no request_id; when request_id set, taken from request
+    service_price_variant_id: int | None = None  # required when trainer has multiple tiers for this service
+    first_name: str | None = None  # required when client has no saved first_name (unless present in initData user)
+    last_name: str | None = None
 
 
 @router.post("/client/booking")
@@ -570,7 +630,14 @@ async def post_client_booking(
             raise HTTPException(status_code=400, detail="service_id required when not booking from request")
         service_id = body.service_id
 
-    client_id = await get_or_create_client(session, telegram_id, phone=phone)
+    client_id = await _ensure_client_for_webapp_miniapp(
+        session,
+        telegram_id,
+        raw,
+        phone=phone,
+        first_name=body.first_name,
+        last_name=body.last_name,
+    )
 
     arena_for_booking: int | None = None
     used_primary_despite_filter = False
@@ -589,17 +656,25 @@ async def post_client_booking(
             raise HTTPException(status_code=400, detail="Выбранная арена недоступна для этого тренера.")
         arena_for_booking = resolved
 
-    booking_id = await create_booking(
-        session,
-        body.slot_id,
-        trainer_id,
-        client_id,
-        service_id=service_id,
-        client_comment=body.comment,
-        client_request_id=client_request_id,
-        created_by_trainer=False,
-        arena_id=arena_for_booking,
-    )
+    try:
+        booking_id = await create_booking(
+            session,
+            body.slot_id,
+            trainer_id,
+            client_id,
+            service_id=service_id,
+            client_comment=body.comment,
+            client_request_id=client_request_id,
+            created_by_trainer=False,
+            arena_id=arena_for_booking,
+            service_price_variant_id=body.service_price_variant_id,
+            strict_service_price_variant=True,
+        )
+    except ServicePriceVariantRequired:
+        raise HTTPException(
+            status_code=400,
+            detail="Выберите категорию цены (тариф) для этой услуги.",
+        ) from None
     if not booking_id:
         raise HTTPException(status_code=400, detail="Slot not available")
     await generate_reminders_for_booking(session, booking_id)
@@ -620,8 +695,8 @@ async def get_client_session_state(
     if not raw:
         raise HTTPException(status_code=401, detail="Missing init data")
     telegram_id = _client_telegram_id(raw)
-    # Ensure clients row exists (same as /start) so phone lookup is consistent.
-    await get_or_create_client(session, telegram_id)
+    profile = await get_client_profile_basic(session, telegram_id)
+    needs_profile_name = not bool(profile and (profile.get("first_name") or "").strip())
     row = await get_client_session(telegram_id, session)
     client_phone = await get_client_phone_for_webapp(session, telegram_id)
     city_id = row.get("city_id")
@@ -660,6 +735,8 @@ async def get_client_session_state(
             last = (p.get("last_name") or "").strip()
             trainer_name = (first + " " + last).strip() or "Тренер"
 
+    cfn = (profile.get("first_name") or "").strip() if profile else ""
+    cln = (profile.get("last_name") or "").strip() if profile else ""
     payload = {
         "city_id": city_id,
         "city_name": city_name,
@@ -670,6 +747,9 @@ async def get_client_session_state(
         "trainer_id": trainer_id,
         "trainer_name": trainer_name,
         "client_phone": client_phone,
+        "needs_profile_name": needs_profile_name,
+        "client_first_name": cfn or None,
+        "client_last_name": cln or None,
     }
     return JSONResponse(
         content=payload,
@@ -750,6 +830,8 @@ class ClientRequestCreateBody(BaseModel):
     service_id: int
     comment: str | None = None
     trainer_id: int | None = None
+    first_name: str | None = None
+    last_name: str | None = None
 
 
 @router.post("/client/request")
@@ -764,7 +846,14 @@ async def post_client_request(
     if not raw:
         raise HTTPException(status_code=401, detail="Missing init data")
     telegram_id = _client_telegram_id(raw)
-    client_id = await get_or_create_client(session, telegram_id, first_name=None, last_name=None)
+    client_id = await _ensure_client_for_webapp_miniapp(
+        session,
+        telegram_id,
+        raw,
+        phone=None,
+        first_name=body.first_name,
+        last_name=body.last_name,
+    )
     comment = (body.comment or "").strip() or None
     request_id = await create_client_request(
         session, client_id, body.city_id, body.service_id, comment=comment, trainer_id=body.trainer_id
@@ -845,14 +934,20 @@ CLIENT_DAYS = ("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс")
 
 
 def _serialize_client_booking(b: dict) -> dict:
-    """Client booking to JSON: date/time strings, arena, address, map_link."""
+    """Client booking to JSON: date/time strings, arena, service, optional tier snapshot."""
     slot_date = b.get("slot_date")
     start_time = b.get("start_time")
     end_time = b.get("end_time")
+    ptk = normalize_price_tier_kind(b.get("price_tier_kind"))
+    svc_name = (b.get("service_name") or "").strip()
     return {
         "id": b["id"],
         "slot_id": b.get("slot_id"),
         "trainer_id": b.get("trainer_id"),
+        "service_id": b.get("service_id"),
+        "service_name": svc_name or None,
+        "price_tier_kind": ptk,
+        "price_tier_label": price_tier_label_ru(ptk) if ptk else None,
         "trainer_name": (b.get("trainer_name") or "Тренер").strip(),
         "trainer_telegram_id": b.get("trainer_telegram_id"),
         "trainer_telegram_username": (b.get("trainer_telegram_username") or "").strip() or None,
@@ -2564,8 +2659,7 @@ async def get_trainer_booking_detail(
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
 
-    bookings = await list_bookings_for_trainer(session, trainer_id)
-    b = next((x for x in bookings if x["id"] == booking_id), None)
+    b = await get_trainer_booking_detail_payload(session, booking_id, trainer_id)
     if not b:
         raise HTTPException(status_code=404, detail="Booking not found")
     detail = _serialize_booking(b)
@@ -2623,12 +2717,30 @@ async def post_trainer_booking_confirm(
             token=settings.telegram_bot_token_client,
             default=DefaultBotProperties(parse_mode=ParseMode.HTML),
         )
+        map_url = info.get("map_link")
+        text_client = msg.format_client_booking_confirmed_by_trainer_text(
+            date=date_str,
+            day=dow,
+            time=time_str,
+            trainer_name=trainer_name,
+            service_name=info.get("service_name"),
+            booking_price_cents=info.get("booking_price_cents"),
+            price_tier_label=info.get("price_tier_label"),
+            arena_name=info.get("arena_name"),
+            arena_address=info.get("arena_address"),
+        )
+        reply_markup = None
+        if map_url:
+            reply_markup = InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [InlineKeyboardButton(text=msg.CLIENT_BUTTON_SHOW_ON_MAP, url=map_url)]
+                ]
+            )
         try:
             await client_bot.send_message(
                 chat_id=client_tid,
-                text=msg.CLIENT_BOOKING_CONFIRMED_BY_TRAINER.format(
-                    date=date_str, day=dow, time=time_str, trainer_name=trainer_name,
-                ),
+                text=text_client,
+                reply_markup=reply_markup,
             )
         finally:
             await client_bot.session.close()
@@ -2700,6 +2812,17 @@ async def post_trainer_booking_cancel(
     ok = await cancel_booking(session, booking_id, trainer_id)
     if not ok:
         raise HTTPException(status_code=400, detail="Cancel failed")
+    settings = Settings()
+    client_bot = Bot(
+        token=settings.telegram_bot_token_client,
+        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+    )
+    try:
+        await send_trainer_cancel_notification_for_booking_now(
+            client_bot, session, booking_id
+        )
+    finally:
+        await client_bot.session.close()
     return {"success": True}
 
 
@@ -2758,13 +2881,14 @@ class TrainerCreateBookingBody(BaseModel):
     client_id: int
     service_id: int
     arena_id: int | None = None
+    service_price_variant_id: int | None = None  # if multiple tiers, optional; defaults to first tier
 
 
 class TrainerCreateClientBody(BaseModel):
     """Create client by phone (no telegram_id); for trainer recording from schedule."""
     phone: str
-    first_name: str = Field(min_length=1)
-    last_name: str = Field(min_length=1)
+    first_name: str = Field(min_length=1, max_length=64)
+    last_name: str = Field(default="", max_length=64)  # optional when booking from schedule
 
     @field_validator("phone", mode="before")
     @classmethod
@@ -2804,7 +2928,42 @@ async def get_trainer_my_services(
         {"tid": trainer_id},
     )
     rows = r.fetchall()
-    services = [{"id": row[0], "name": (row[1] or "").strip() or "—"} for row in rows]
+    service_ids = [row[0] for row in rows]
+    tiers_by_sid: dict[int, list[dict]] = {}
+    if service_ids:
+        rv = await session.execute(
+            text(
+                f"""
+                SELECT service_id, id, label, price_cents, sort_order, tier_kind
+                FROM trainer_service_price_variants
+                WHERE trainer_id = :tid
+                ORDER BY service_id,
+                  {sql_order_case_tier_kind("tier_kind")},
+                  sort_order
+                """
+            ),
+            {"tid": trainer_id},
+        )
+        for vrow in rv.fetchall():
+            sid_v, vid, lab, pc, so = int(vrow[0]), int(vrow[1]), vrow[2], int(vrow[3]), int(vrow[4])
+            tk = normalize_price_tier_kind(vrow[5]) or "adult"
+            tiers_by_sid.setdefault(sid_v, []).append(
+                {
+                    "id": vid,
+                    "tier_kind": tk,
+                    "label": price_tier_label_ru(tk) or ((lab or "").strip() or "—"),
+                    "price_byn": round(pc / 100, 2),
+                    "sort_order": so,
+                }
+            )
+    services = [
+        {
+            "id": row[0],
+            "name": (row[1] or "").strip() or "—",
+            "price_tiers": tiers_by_sid.get(int(row[0]), []),
+        }
+        for row in rows
+    ]
 
     primary_aid = await get_trainer_primary_arena_resolved(session, trainer_id)
     r2 = await session.execute(
@@ -3303,7 +3462,6 @@ async def post_trainer_booking(
     trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
-    from src.application.trainer_schedule_use_cases import get_slot
     slot = await get_slot(session, body.slot_id)
     if not slot or slot.get("trainer_id") != trainer_id or (slot.get("status") or "").strip() != "available":
         raise HTTPException(status_code=400, detail="Slot not found or not available")
@@ -3325,10 +3483,13 @@ async def post_trainer_booking(
         client_request_id=None,
         created_by_trainer=True,
         arena_id=arena_id,
+        service_price_variant_id=body.service_price_variant_id,
+        strict_service_price_variant=False,
     )
     if not booking_id:
         raise HTTPException(status_code=400, detail="Slot not available")
-    await generate_reminders_for_booking(session, booking_id)
+    if not is_slot_end_in_past_local(slot.get("slot_date"), slot.get("end_time")):
+        await generate_reminders_for_booking(session, booking_id)
     return {"success": True, "booking_id": booking_id}
 
 
@@ -3623,6 +3784,7 @@ async def get_trainer_request_slots(
 
 class TrainerBookRequestBody(BaseModel):
     slot_id: int
+    service_price_variant_id: int | None = None
 
 
 @router.post("/trainer/requests/{request_id:int}/book")
@@ -3653,9 +3815,69 @@ async def post_trainer_request_book(
         client_comment=None,
         client_request_id=request_id,
         created_by_trainer=True,
+        service_price_variant_id=body.service_price_variant_id,
+        strict_service_price_variant=False,
     )
     if not booking_id:
         raise HTTPException(status_code=400, detail="Slot not available")
     await clear_trainer_pending_request_booking(session, trainer_id, request_id)
-    await generate_reminders_for_booking(session, booking_id)
+    slot_row = await get_slot(session, body.slot_id)
+    if slot_row and not is_slot_end_in_past_local(slot_row.get("slot_date"), slot_row.get("end_time")):
+        await generate_reminders_for_booking(session, booking_id)
     return {"success": True, "booking_id": booking_id}
+
+
+# --- Referral program (B2B: trainer invites trainer) ---
+
+from src.application.referral_use_cases import (
+    ensure_trainer_referral_code,
+    get_referral_stats_for_trainer,
+    list_referred_trainers,
+    REFERRAL_CREDIT_DAYS_PER_REFERRAL,
+    REFERRAL_ATTRIBUTION_WINDOW_DAYS,
+)
+
+
+@router.get("/trainer/referral")
+async def get_trainer_referral_info(
+    session: AsyncSession = Depends(get_session),
+    x_telegram_init_data: str = Header(None, alias="X-Telegram-Init-Data"),
+) -> dict[str, Any]:
+    """Get referral info for trainer: code, link, stats, balance."""
+    raw = x_telegram_init_data
+    if not raw:
+        raise HTTPException(status_code=401, detail="Missing init data")
+    telegram_id = _trainer_telegram_id(raw)
+    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail="Trainer not linked")
+    code = await ensure_trainer_referral_code(session, trainer_id)
+    if not code:
+        raise HTTPException(status_code=500, detail="Failed to generate referral code")
+    stats = await get_referral_stats_for_trainer(session, trainer_id)
+    bot_username = Settings().trainer_bot_username or "trainer_bot"
+    referral_link = f"https://t.me/{bot_username}?start=ref_{code}"
+    return {
+        "referral_code": code,
+        "referral_link": referral_link,
+        "credit_per_referral_days": REFERRAL_CREDIT_DAYS_PER_REFERRAL,
+        "attribution_window_days": REFERRAL_ATTRIBUTION_WINDOW_DAYS,
+        **stats,
+    }
+
+
+@router.get("/trainer/referral/referred")
+async def get_trainer_referred_list(
+    session: AsyncSession = Depends(get_session),
+    x_telegram_init_data: str = Header(None, alias="X-Telegram-Init-Data"),
+    limit: int = Query(50, ge=1, le=100),
+) -> list[dict[str, Any]]:
+    """List trainers referred by this trainer."""
+    raw = x_telegram_init_data
+    if not raw:
+        raise HTTPException(status_code=401, detail="Missing init data")
+    telegram_id = _trainer_telegram_id(raw)
+    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail="Trainer not linked")
+    return await list_referred_trainers(session, trainer_id, limit=limit)

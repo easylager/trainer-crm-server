@@ -6,7 +6,11 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.infrastructure.repositories.trainer_repository import _sql_public_catalog_education_predicate
+from src.infrastructure.repositories.trainer_repository import (
+    TRAINER_SERVICE_DEFAULT_TIER_LABEL,
+    _sql_public_catalog_education_predicate,
+)
+from src.shared.price_tier_kind import normalize_price_tier_kind, price_tier_label_ru, sql_order_case_tier_kind
 
 
 async def _trainer_services_with_prices_batch(
@@ -14,7 +18,8 @@ async def _trainer_services_with_prices_batch(
     trainer_ids: list[int],
 ) -> dict[int, list[dict[str, Any]]]:
     """
-    Same shape as catalog / TrainerRepository: service_id, service_name, price_cents, price_byn.
+    Same shape as catalog / TrainerRepository: service_id, service_name, price_cents, price_byn,
+    price_byn_min/max, price_tiers (with id for booking).
     """
     if not trainer_ids:
         return {}
@@ -44,19 +49,57 @@ async def _trainer_services_with_prices_batch(
             s_params,
         )
         service_names_by_id = {r[0]: (r[1] or "") for r in r_sn.fetchall()}
+    tiers_by_tid_sid: dict[tuple[int, int], list[dict[str, Any]]] = {}
+    rv = await session.execute(
+        text(
+            f"""
+            SELECT trainer_id, service_id, id, label, price_cents, sort_order, tier_kind
+            FROM trainer_service_price_variants
+            WHERE trainer_id IN ({placeholders})
+            ORDER BY trainer_id, service_id,
+              {sql_order_case_tier_kind("tier_kind")},
+              sort_order
+            """
+        ),
+        params,
+    )
+    for row in rv.fetchall():
+        t_id, s_id, vid = int(row[0]), int(row[1]), int(row[2])
+        lab, pc, so = row[3], int(row[4]), int(row[5])
+        tk = normalize_price_tier_kind(row[6]) or "adult"
+        tiers_by_tid_sid.setdefault((t_id, s_id), []).append(
+            {
+                "id": vid,
+                "tier_kind": tk,
+                "label": lab or price_tier_label_ru(tk) or TRAINER_SERVICE_DEFAULT_TIER_LABEL,
+                "price_cents": pc,
+                "price_byn": round(pc / 100.0, 2),
+                "sort_order": so,
+            }
+        )
     out: dict[int, list[dict[str, Any]]] = {tid: [] for tid in trainer_ids}
     for row in rows:
         tid, sid, price_cents = row[0], row[1], row[2]
-        # Plain int/float for JSON (DB may return Decimal).
         pc = int(price_cents) if price_cents is not None else None
         price_byn = round(float(price_cents) / 100.0, 2) if price_cents is not None else None
         sid_int = int(sid) if sid is not None else None
+        tiers = tiers_by_tid_sid.get((int(tid), int(sid)), [])
+        if tiers:
+            prices = [t["price_cents"] for t in tiers]
+            p_min, p_max = min(prices), max(prices)
+            price_byn_min = round(p_min / 100.0, 2)
+            price_byn_max = round(p_max / 100.0, 2)
+        else:
+            price_byn_min = price_byn_max = price_byn
         out.setdefault(tid, []).append(
             {
                 "service_id": sid_int,
                 "service_name": service_names_by_id.get(sid, "—") if sid is not None else "—",
                 "price_cents": pc,
                 "price_byn": price_byn,
+                "price_byn_min": price_byn_min,
+                "price_byn_max": price_byn_max,
+                "price_tiers": tiers,
             }
         )
     return out

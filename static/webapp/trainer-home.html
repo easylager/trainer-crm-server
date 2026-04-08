@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Тренерский кабинет</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="mini-app-telegram-chrome.js"></script>
   <link rel="stylesheet" href="theme.css" />
   <link rel="stylesheet" href="mini-app-components.css" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -134,48 +135,36 @@
       -webkit-text-fill-color: transparent;
       background-clip: text;
     }
-    .btn-close-hub {
-      flex-shrink: 0;
-      padding: 12px 18px;
-      border-radius: 24px;
-      border: 2px solid rgba(245, 166, 35, 0.3);
-      font-size: 14px;
-      font-weight: 600;
-      font-family: inherit;
-      background: rgba(245, 166, 35, 0.05);
-      color: var(--app-cta-fill);
-      cursor: pointer;
-      backdrop-filter: blur(10px);
-      transition: all 0.2s cubic-bezier(0.22, 1, 0.36, 1);
-      position: relative;
-      overflow: hidden;
-    }
-    
-    .btn-close-hub::before {
-      content: '';
-      position: absolute;
-      inset: 0;
-      background: linear-gradient(135deg, rgba(245, 166, 35, 0.1) 0%, transparent 100%);
-      opacity: 0;
-      transition: opacity 0.2s ease;
-    }
-    
-    .btn-close-hub:hover::before { opacity: 1; }
-    .btn-close-hub:active { 
-      transform: scale(0.96); 
-      border-color: var(--app-cta-fill);
-    }
-    
-    .hub-is-dark .btn-close-hub {
-      background: rgba(245, 166, 35, 0.12);
-      border-color: rgba(245, 166, 35, 0.4);
-    }
     /* Genius Hero Block with Live Intelligence */
     .hub-hero { 
       margin-bottom: 24px;
       position: relative;
     }
     
+    button.hub-hero-main {
+      width: 100%;
+      margin: 0;
+      display: block;
+      text-align: left;
+      font: inherit;
+      -webkit-tap-highlight-color: transparent;
+      cursor: default;
+    }
+    button.hub-hero-main:disabled {
+      cursor: default;
+    }
+    button.hub-hero-main.hub-hero-main--nav {
+      cursor: pointer;
+    }
+    button.hub-hero-main.hub-hero-main--nav:active {
+      opacity: 0.96;
+      transform: scale(0.995);
+    }
+    button.hub-hero-main.hub-hero-main--nav:focus-visible {
+      outline: 2px solid var(--app-cta-fill);
+      outline-offset: 3px;
+    }
+
     .hub-hero-main {
       position: relative;
       border-radius: 24px;
@@ -830,6 +819,224 @@
       font-family: inherit;
       padding: 4px 8px;
     }
+
+    /* Post-purchase celebration — constitution gradients + --app-success accent */
+    .hub-sub-celebration {
+      margin: 0 0 22px;
+      position: relative;
+      border-radius: 22px;
+      overflow: hidden;
+      background: linear-gradient(155deg, rgba(247, 166, 0, 0.18) 0%, rgba(247, 166, 0, 0.06) 42%, transparent 100%);
+      border: 1px solid rgba(247, 166, 0, 0.3);
+      box-shadow:
+        0 8px 32px rgba(0, 0, 0, 0.1),
+        0 0 0 1px rgba(255, 255, 255, 0.04) inset;
+      animation: hub-sub-cele-enter 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+    .hub-sub-celebration[hidden] {
+      display: none !important;
+    }
+    @keyframes hub-sub-cele-enter {
+      from {
+        opacity: 0;
+        transform: translateY(16px) scale(0.97);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
+    @keyframes hub-sub-feature-in {
+      from {
+        opacity: 0;
+        transform: translateX(-8px);
+      }
+      to {
+        opacity: 1;
+        transform: translateX(0);
+      }
+    }
+    .hub-sub-celebration::before {
+      content: '';
+      position: absolute;
+      top: -40%;
+      right: -12%;
+      width: 58%;
+      height: 115%;
+      background: radial-gradient(ellipse, rgba(247, 166, 0, 0.22) 0%, transparent 68%);
+      pointer-events: none;
+    }
+    .hub-sub-celebration::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(247, 166, 0, 0.35), transparent);
+      pointer-events: none;
+    }
+    .hub-sub-celebration__inner {
+      position: relative;
+      z-index: 1;
+      padding: 20px 46px 20px 20px;
+    }
+    .hub-sub-celebration__close {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      width: 34px;
+      height: 34px;
+      border: none;
+      border-radius: 12px;
+      background: color-mix(in srgb, var(--tg-theme-secondary-bg-color) 90%, transparent);
+      color: var(--tg-theme-hint-color);
+      font-size: 20px;
+      line-height: 1;
+      cursor: pointer;
+      padding: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform 0.15s ease, background 0.15s ease;
+    }
+    .hub-sub-celebration__close:active {
+      transform: scale(0.94);
+      opacity: 0.9;
+    }
+    .hub-sub-celebration__hero {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0;
+      margin-bottom: 14px;
+    }
+    .hub-sub-celebration__badge {
+      width: 52px;
+      height: 52px;
+      border-radius: 50%;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(145deg, #34c759 0%, #28a745 55%, #1e8e3e 100%);
+      box-shadow:
+        0 4px 16px rgba(52, 199, 89, 0.35),
+        0 0 0 3px color-mix(in srgb, var(--tg-theme-bg-color) 70%, transparent);
+    }
+    .hub-sub-celebration__badge svg {
+      width: 26px;
+      height: 26px;
+      stroke: #fff;
+      fill: none;
+      stroke-width: 2.5;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    .hub-sub-celebration__kicker {
+      margin: 0 0 6px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--tg-theme-hint-color);
+    }
+    .hub-sub-celebration__title {
+      margin: 0 0 8px;
+      font-size: clamp(20px, 4.8vw, 24px);
+      font-weight: 700;
+      letter-spacing: -0.035em;
+      line-height: 1.15;
+      color: var(--tg-theme-text-color);
+    }
+    .hub-sub-celebration__sub {
+      margin: 0;
+      font-size: 14px;
+      line-height: 1.5;
+      font-weight: 500;
+      color: var(--tg-theme-hint-color);
+      max-width: 36em;
+    }
+    .hub-sub-celebration__chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+    .hub-sub-celebration__chip {
+      display: inline-flex;
+      align-items: center;
+      padding: 7px 12px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      background: var(--tg-theme-secondary-bg-color);
+      color: var(--tg-theme-text-color);
+      border: 1px solid rgba(128, 128, 128, 0.12);
+    }
+    .hub-sub-celebration__chip--accent {
+      border-color: rgba(247, 166, 0, 0.35);
+      background: color-mix(in srgb, var(--tg-theme-secondary-bg-color) 85%, rgba(247, 166, 0, 0.12));
+    }
+    .hub-sub-celebration__section-label {
+      margin: 0 0 10px;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--tg-theme-hint-color);
+    }
+    .hub-sub-celebration__features {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .hub-sub-celebration__feature {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 14px;
+      border-radius: 16px;
+      background: var(--tg-theme-secondary-bg-color);
+      border: 1px solid rgba(128, 128, 128, 0.1);
+      font-size: 14px;
+      font-weight: 600;
+      line-height: 1.35;
+      color: var(--tg-theme-text-color);
+      animation: hub-sub-feature-in 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+    .hub-sub-celebration__feature:nth-child(1) { animation-delay: 0.06s; }
+    .hub-sub-celebration__feature:nth-child(2) { animation-delay: 0.12s; }
+    .hub-sub-celebration__feature:nth-child(3) { animation-delay: 0.18s; }
+    .hub-sub-celebration__feature:nth-child(4) { animation-delay: 0.24s; }
+    .hub-sub-celebration__feature-icon {
+      flex-shrink: 0;
+      width: 36px;
+      height: 36px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      background: linear-gradient(145deg, rgba(247, 166, 0, 0.2) 0%, rgba(247, 166, 0, 0.06) 100%);
+      border: 1px solid rgba(247, 166, 0, 0.22);
+    }
+    .hub-sub-celebration__hint {
+      margin: 16px 0 0;
+      font-size: 12px;
+      line-height: 1.45;
+      color: var(--tg-theme-hint-color);
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .hub-sub-celebration,
+      .hub-sub-celebration__feature {
+        animation: none !important;
+      }
+    }
   </style>
 </head>
 <body class="hub-body">
@@ -839,18 +1046,37 @@
         <p class="hub-header-kicker">Тренерский кабинет</p>
         <h1 class="hub-header-title" id="hubPageTitle">Главная</h1>
       </div>
-      <button type="button" class="btn-close-hub" id="btnClose">Закрыть</button>
     </header>
+
+    <section id="hubSubscriptionCelebration" class="hub-sub-celebration" hidden aria-live="polite">
+      <div class="hub-sub-celebration__inner">
+        <button type="button" class="hub-sub-celebration__close" id="hubSubCelebrationClose" aria-label="Закрыть">×</button>
+        <div class="hub-sub-celebration__hero">
+          <div class="hub-sub-celebration__badge" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12" /></svg>
+          </div>
+          <p class="hub-sub-celebration__kicker">Оплата прошла успешно</p>
+          <h2 class="hub-sub-celebration__title" id="hubSubCelebrationHeadline">Подписка активирована</h2>
+          <p class="hub-sub-celebration__sub" id="hubSubCelebrationSub"></p>
+        </div>
+        <div class="hub-sub-celebration__chips" id="hubSubCelebrationChips"></div>
+        <p class="hub-sub-celebration__section-label">Возможности вашего тарифа</p>
+        <ul class="hub-sub-celebration__features" id="hubSubCelebrationFeatures"></ul>
+        <p class="hub-sub-celebration__hint" id="hubSubCelebrationHint">
+          Дальше — расписание, клиенты и аналитика в блоках ниже. Приятной работы.
+        </p>
+      </div>
+    </section>
 
     <!-- Genius Hero Block -->
     <section class="hub-hero" aria-labelledby="heroTitle">
-      <div class="hub-hero-main">
+      <button type="button" class="hub-hero-main" id="heroScheduleCta" disabled aria-describedby="heroSubtitle">
         <div class="hub-hero-inner">
           <div class="hub-hero-greeting" id="heroGreeting">Добро пожаловать</div>
           <h2 class="hub-hero-title" id="heroTitle">Ваш день</h2>
           <p class="hub-hero-subtitle" id="heroSubtitle">Загрузка информации…</p>
         </div>
-      </div>
+      </button>
     </section>
 
     <div id="onboardingStrip" class="onboarding-strip" style="display:none;" hidden>
@@ -1004,6 +1230,7 @@
   </div>
 
   <script src="mini-app-trainer-gate.js"></script>
+  <script src="mini-app-trainer-celebration.js"></script>
   <script>
     (function() {
       var tg = window.Telegram && window.Telegram.WebApp;
@@ -1030,12 +1257,15 @@
         user: '<svg class="hub-tile-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>',
         card: '<svg class="hub-tile-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>',
         chart: '<svg class="hub-tile-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 3v18h18"/><path d="M7 12l4-4 4 4 6-6"/></svg>',
+        gift: '<svg class="hub-tile-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M20 12v10H4V12"/><rect x="2" y="7" width="20" height="5" rx="1"/><path d="M12 22V7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg>',
       };
       /** Cap upcoming booking cards so the hub never renders an unbounded list. */
       var HUB_UPCOMING_BOOKINGS_MAX = 8;
 
       /** Mirrors server gate on GET /trainer/stats (SUBSCRIPTION_TIER_ANALYTICS). */
       var hasAnalyticsAccess = false;
+      /** Last JSON from GET /trainer/subscription/status — used if sessionStorage was cleared (Telegram WebView) but URL has hub_celebrate=1. */
+      var hubLastSubscriptionStatus = null;
 
       /** Last GET /trainer/onboarding/checklist payload — drives hero + empty list copy (avoid slots CTA before profile/active). */
       var hubOnboardingData = null;
@@ -1152,7 +1382,30 @@
             btn.setAttribute('aria-disabled', locked ? 'true' : 'false');
           });
         }
+        syncHubHeroScheduleClick();
       }
+
+      /** Big hero → расписание, когда день свободен и разделы не заблокированы. */
+      function syncHubHeroScheduleClick() {
+        var el = document.getElementById('heroScheduleCta');
+        if (!el) return;
+        var allowed = !!initData && hubLastTodayCount === 0 && canOpenTrainerSectionsSync();
+        el.disabled = !allowed;
+        el.classList.toggle('hub-hero-main--nav', allowed);
+        if (allowed) {
+          el.setAttribute(
+            'aria-label',
+            'Открыть расписание: слоты и записи, в том числе задним числом'
+          );
+        } else {
+          el.removeAttribute('aria-label');
+        }
+      }
+
+      document.getElementById('heroScheduleCta').addEventListener('click', function() {
+        if (this.disabled) return;
+        navigateTo('schedule-editor');
+      });
 
       function navigateTo(pathWithQuery) {
         if (isProfilePath(pathWithQuery)) {
@@ -1523,6 +1776,7 @@
           title.textContent = 'Войдите через бота';
           subtitle.textContent = 'Откройте экран из бота тренера — подтянутся записи и быстрый доступ к разделам.';
           setStats(0, 0, null);
+          syncHubHeroScheduleClick();
           return;
         }
 
@@ -1536,6 +1790,7 @@
           var w = firstLine ? ' Первая в ' + firstLine + '.' : '';
           subtitle.textContent = 'У вас активный день с клиентами.' + w;
           setStats(count, weekCount || 0, null);
+          syncHubHeroScheduleClick();
           return;
         }
 
@@ -1544,6 +1799,7 @@
           title.textContent = 'Ваш день';
           subtitle.textContent = 'Предстоящих записей на сегодня нет.';
           setStats(0, weekCount || 0, null);
+          syncHubHeroScheduleClick();
           return;
         }
 
@@ -1552,6 +1808,7 @@
           subtitle.textContent =
             'Ниже в блоке «Первые шаги» заполните профиль и отправьте анкету на проверку — после одобрения откроются расписание и заявки.';
           setStats(0, weekCount || 0, null);
+          syncHubHeroScheduleClick();
           return;
         }
 
@@ -1560,6 +1817,7 @@
           subtitle.textContent =
             'Ниже в блоке «Первые шаги» видно статус активации — расписание и записи откроются после активации аккаунта.';
           setStats(0, weekCount || 0, null);
+          syncHubHeroScheduleClick();
           return;
         }
 
@@ -1572,6 +1830,7 @@
             'Записей на сегодня нет — когда клиенты запишутся, они появятся здесь.';
         }
         setStats(0, weekCount || 0, null);
+        syncHubHeroScheduleClick();
       }
 
       function pluralRu(n, one, few, many) {
@@ -1616,6 +1875,7 @@
         { path: 'trainer-profile', label: 'Профиль', hint: 'Анкета и модерация', icon: 'user', badge: null },
         { path: 'trainer-subscription', label: 'Подписка', hint: 'Тариф и оплата', icon: 'card', badge: null },
         { path: 'trainer-stats', label: 'Статистика', hint: 'Показатели и динамика', icon: 'chart', badge: null, tier: 'analytics' },
+        { path: 'trainer-referral', label: 'Рефералы', hint: 'Пригласи коллегу', icon: 'gift', badge: 'NEW' },
       ];
 
       function tilesToRender() {
@@ -1856,11 +2116,6 @@
           });
       }
 
-      document.getElementById('btnClose').onclick = function() {
-        if (tg && tg.close) tg.close();
-        else window.close();
-      };
-
       // Quick Actions handlers
       function setupQuickActions() {
         var quickGrid = document.getElementById('hubQuickGrid');
@@ -1902,15 +2157,16 @@
           hasAnalyticsAccess = false;
           renderTiles();
           setupQuickActions();
-          return;
+          return Promise.resolve();
         }
-        fetch(apiUrlWithQuery('/trainer/subscription/status'), { headers: headersJson() })
+        return fetch(apiUrlWithQuery('/trainer/subscription/status'), { headers: headersJson() })
           .then(function(r) {
             return r.json().then(function(data) {
               return { ok: r.ok, data: data };
             });
           })
           .then(function(o) {
+            hubLastSubscriptionStatus = o.ok && o.data ? o.data : null;
             if (o.ok && o.data && Array.isArray(o.data.unlocked_features)) {
               hasAnalyticsAccess = o.data.unlocked_features.indexOf('analytics') !== -1;
             } else {
@@ -1920,15 +2176,164 @@
             setupQuickActions();
           })
           .catch(function() {
+            hubLastSubscriptionStatus = null;
             hasAnalyticsAccess = false;
             renderTiles();
             setupQuickActions();
           });
       }
 
+      function hideHubSubscriptionCelebration() {
+        var sec = document.getElementById('hubSubscriptionCelebration');
+        if (!sec) return;
+        sec.setAttribute('hidden', 'hidden');
+      }
+
+      function stripHubCelebrateQueryParam() {
+        try {
+          var params = new URLSearchParams(window.location.search || '');
+          if (params.get('hub_celebrate') !== '1') return;
+          params.delete('hub_celebrate');
+          var ns = params.toString();
+          var clean = window.location.pathname + (ns ? '?' + ns : '') + (window.location.hash || '');
+          window.history.replaceState({}, '', clean);
+        } catch (e) { /* */ }
+      }
+
+      /** Same mapping as mini-app-trainer-celebration.js if that script failed to load. */
+      function hubCelebrationFeaturesFromUnlocked(unlocked) {
+        if (window.TrainerHubCelebration && typeof window.TrainerHubCelebration.featuresFromUnlockedList === 'function') {
+          return window.TrainerHubCelebration.featuresFromUnlockedList(unlocked || []);
+        }
+        var META = {
+          crm: { id: 'crm', label: 'CRM и клиентская база', icon: '📋' },
+          online: { id: 'online', label: 'Онлайн-запись клиентов', icon: '🌐' },
+          analytics: { id: 'analytics', label: 'Аналитика и отчёты', icon: '📊' },
+        };
+        var order = ['crm', 'online', 'analytics'];
+        var out = [];
+        var u = unlocked || [];
+        order.forEach(function(id) {
+          if (u.indexOf(id) === -1) return;
+          if (META[id]) out.push(META[id]);
+        });
+        return out;
+      }
+
+      /** Fallback when sessionStorage was empty but user arrived from subscription success (?hub_celebrate=1). */
+      function buildCelebrationPayloadFromStatus(s) {
+        if (!s || !s.is_active) return null;
+        var expiresAt = s.expires_at ? String(s.expires_at).slice(0, 10) : '';
+        var pm = s.billing_period_months;
+        var periodLabel = null;
+        if (pm === 1) periodLabel = '1 мес.';
+        else if (pm === 3) periodLabel = '3 мес.';
+        else if (pm === 12) periodLabel = '1 год';
+        else if (pm) periodLabel = pm + ' мес.';
+        var features = hubCelebrationFeaturesFromUnlocked(s.unlocked_features || []);
+        return {
+          v: 1,
+          headline: 'Подписка активирована',
+          planName: (s.tier_name_ru || s.tier || 'Подписка').toString(),
+          expiresAt: expiresAt,
+          periodLabel: periodLabel,
+          priceLine: null,
+          features: features,
+          source: 'hub_status_fallback',
+        };
+      }
+
+      function showHubSubscriptionCelebrationIfPending() {
+        var params = new URLSearchParams(window.location.search || '');
+        var urlHint = params.get('hub_celebrate') === '1';
+
+        var payload = null;
+        if (window.TrainerHubCelebration && typeof window.TrainerHubCelebration.take === 'function') {
+          payload = window.TrainerHubCelebration.take();
+        }
+        if (!payload && urlHint && hubLastSubscriptionStatus) {
+          payload = buildCelebrationPayloadFromStatus(hubLastSubscriptionStatus);
+        }
+        if (urlHint) {
+          stripHubCelebrateQueryParam();
+        }
+        if (!payload) return;
+        var sec = document.getElementById('hubSubscriptionCelebration');
+        var hEl = document.getElementById('hubSubCelebrationHeadline');
+        var subEl = document.getElementById('hubSubCelebrationSub');
+        var chipsEl = document.getElementById('hubSubCelebrationChips');
+        var ul = document.getElementById('hubSubCelebrationFeatures');
+        if (!sec || !hEl || !subEl || !chipsEl || !ul) return;
+
+        function formatDateRu(iso) {
+          if (!iso || String(iso).length < 10) return String(iso || '');
+          var p = String(iso).slice(0, 10).split('-');
+          if (p.length !== 3) return String(iso);
+          return p[2] + '.' + p[1] + '.' + p[0];
+        }
+
+        hEl.textContent = payload.headline || 'Подписка активирована';
+        var plan = String(payload.planName || '').trim();
+        subEl.textContent = plan
+          ? 'Тариф «' + plan + '» уже подключён — всё из списка ниже доступно вам в этом кабинете.'
+          : 'Ваш тариф уже подключён — возможности ниже доступны в этом кабинете.';
+
+        chipsEl.innerHTML = '';
+        function addChip(label, accent) {
+          var span = document.createElement('span');
+          span.className = 'hub-sub-celebration__chip' + (accent ? ' hub-sub-celebration__chip--accent' : '');
+          span.textContent = label;
+          chipsEl.appendChild(span);
+        }
+        if (payload.expiresAt) {
+          addChip('До ' + formatDateRu(payload.expiresAt), true);
+        }
+        if (payload.periodLabel) {
+          addChip(String(payload.periodLabel), false);
+        }
+        if (payload.priceLine) {
+          addChip(String(payload.priceLine), false);
+        }
+
+        ul.innerHTML = '';
+        var feats = payload.features || [];
+        feats.forEach(function(f) {
+          var li = document.createElement('li');
+          li.className = 'hub-sub-celebration__feature';
+          var ic = document.createElement('span');
+          ic.className = 'hub-sub-celebration__feature-icon';
+          ic.setAttribute('aria-hidden', 'true');
+          ic.textContent = f.icon || '✓';
+          var tx = document.createElement('span');
+          tx.textContent = f.label || f.id || '';
+          li.appendChild(ic);
+          li.appendChild(tx);
+          ul.appendChild(li);
+        });
+
+        sec.removeAttribute('hidden');
+        try {
+          if (tg && tg.HapticFeedback && typeof tg.HapticFeedback.notificationOccurred === 'function') {
+            tg.HapticFeedback.notificationOccurred('success');
+          }
+        } catch (eH) {}
+
+        try {
+          sec.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        } catch (eS) {}
+      }
+
+      function wireHubSubscriptionCelebrationClose() {
+        var btn = document.getElementById('hubSubCelebrationClose');
+        if (btn) btn.onclick = hideHubSubscriptionCelebration;
+      }
+      wireHubSubscriptionCelebrationClose();
+
       wireOnboardingHub();
       function runHubAfterAccess() {
-        loadSubscriptionStatus();
+        loadSubscriptionStatus().then(function() {
+          showHubSubscriptionCelebrationIfPending();
+        });
         loadBookings();
         loadOnboardingChecklist();
       }

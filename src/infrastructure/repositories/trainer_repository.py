@@ -8,7 +8,17 @@ from datetime import date, datetime, timedelta
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.shared.price_tier_kind import (
+    PRICE_TIER_ADULT,
+    normalize_price_tier_kind,
+    price_tier_label_ru,
+    price_tier_sort_key,
+    sql_order_case_tier_kind,
+)
 from src.shared.trainer_status import normalize_trainer_status_value
+
+# Legacy display; DB column `label` kept for compatibility; tier_kind is source of truth.
+TRAINER_SERVICE_DEFAULT_TIER_LABEL = "Основной"
 
 
 def _sql_public_catalog_education_predicate(table_alias: str = "e") -> str:
@@ -86,19 +96,51 @@ class TrainerRepository:
     async def set_trainer_services(
         self,
         trainer_id: int,
-        services: list[tuple[int, int | None]],
+        entries: list[tuple[int, list[tuple[str, int]]]],
     ) -> None:
-        """Replace trainer's services; each item is (service_id, price_cents or None)."""
+        """
+        Replace trainer's services. Each entry is (service_id, tiers) with tiers
+        (tier_kind, price_cents) — up to one row per fixed tariff code (see price_tier_kind.py).
+        Empty tiers => trainer_services with price_cents NULL.
+        Anchor price on trainer_services: adult tier if present, else cheapest tier by display order.
+        """
         await self._session.execute(text("DELETE FROM trainer_services WHERE trainer_id = :tid"), {"tid": trainer_id})
-        for sid, price_cents in services:
+
+        def _anchor_cents(sorted_tiers: list[tuple[str, int]]) -> int | None:
+            if not sorted_tiers:
+                return None
+            by_k = dict(sorted_tiers)
+            if PRICE_TIER_ADULT in by_k:
+                return by_k[PRICE_TIER_ADULT]
+            return sorted_tiers[0][1]
+
+        for sid, tiers in entries:
+            merged: dict[str, int] = {}
+            for tier_kind, pc in tiers:
+                tk = normalize_price_tier_kind(tier_kind)
+                if tk is None:
+                    continue
+                merged[tk] = int(pc)
+            clean_tiers = sorted(merged.items(), key=lambda x: price_tier_sort_key(x[0]))
+            anchor = _anchor_cents(clean_tiers)
             await self._session.execute(
                 text("""
                     INSERT INTO trainer_services (trainer_id, service_id, price_cents)
                     VALUES (:tid, :sid, :price_cents)
-                    ON CONFLICT (trainer_id, service_id) DO UPDATE SET price_cents = EXCLUDED.price_cents
                 """),
-                {"tid": trainer_id, "sid": sid, "price_cents": price_cents},
+                {"tid": trainer_id, "sid": sid, "price_cents": anchor},
             )
+            for order, (tk, pc) in enumerate(clean_tiers):
+                lbl = (price_tier_label_ru(tk) or TRAINER_SERVICE_DEFAULT_TIER_LABEL)[:64]
+                await self._session.execute(
+                    text("""
+                        INSERT INTO trainer_service_price_variants (
+                            trainer_id, service_id, label, price_cents, sort_order, tier_kind
+                        )
+                        VALUES (:tid, :sid, :lbl, :pc, :ord, :tk)
+                    """),
+                    {"tid": trainer_id, "sid": sid, "lbl": lbl, "pc": pc, "ord": order, "tk": tk},
+                )
 
     async def set_trainer_arenas(self, trainer_id: int, arena_ids: list[int]) -> None:
         """Replace trainer's arenas with given ids."""
@@ -205,6 +247,38 @@ class TrainerRepository:
         )
         service_rows = rsv.fetchall()
         out["service_ids"] = [r[0] for r in service_rows]
+        tiers_by_sid: dict[int, list[dict[str, Any]]] = {}
+        if service_rows:
+            rv = await self._session.execute(
+                text(
+                    f"""
+                    SELECT service_id, id, label, price_cents, sort_order, tier_kind
+                    FROM trainer_service_price_variants
+                    WHERE trainer_id = :tid
+                    ORDER BY service_id,
+                      {sql_order_case_tier_kind("tier_kind")},
+                      sort_order
+                    """
+                ),
+                {"tid": trainer_id},
+            )
+            for row in rv.fetchall():
+                sid_v = int(row[0])
+                vid = int(row[1])
+                lab = row[2]
+                pc = int(row[3])
+                so = int(row[4])
+                tk = normalize_price_tier_kind(row[5]) or PRICE_TIER_ADULT
+                tiers_by_sid.setdefault(sid_v, []).append(
+                    {
+                        "id": vid,
+                        "tier_kind": tk,
+                        "label": lab or price_tier_label_ru(tk) or TRAINER_SERVICE_DEFAULT_TIER_LABEL,
+                        "price_cents": pc,
+                        "price_byn": round(pc / 100, 2),
+                        "sort_order": so,
+                    }
+                )
         if service_rows:
             s_placeholders = ", ".join(f":s{i}" for i in range(len(out["service_ids"])))
             s_params = {f"s{i}": r[0] for i, r in enumerate(service_rows)}
@@ -213,15 +287,29 @@ class TrainerRepository:
                 s_params,
             )
             name_by_sid = {r[0]: (r[1] or "") for r in r_sn.fetchall()}
-            out["services"] = [
-                {
-                    "service_id": r[0],
-                    "service_name": name_by_sid.get(r[0], "—"),
-                    "price_cents": r[1],
-                    "price_byn": round(r[1] / 100, 2) if r[1] is not None else None,
-                }
-                for r in service_rows
-            ]
+            out["services"] = []
+            for r in service_rows:
+                sid = r[0]
+                tiers = tiers_by_sid.get(sid, [])
+                pc_row = r[1]
+                if tiers:
+                    prices = [t["price_cents"] for t in tiers]
+                    p_min, p_max = min(prices), max(prices)
+                    price_byn_min = round(p_min / 100, 2)
+                    price_byn_max = round(p_max / 100, 2)
+                else:
+                    price_byn_min = price_byn_max = (round(pc_row / 100, 2) if pc_row is not None else None)
+                out["services"].append(
+                    {
+                        "service_id": sid,
+                        "service_name": name_by_sid.get(sid, "—"),
+                        "price_cents": pc_row,
+                        "price_byn": round(pc_row / 100, 2) if pc_row is not None else None,
+                        "price_byn_min": price_byn_min,
+                        "price_byn_max": price_byn_max,
+                        "price_tiers": tiers,
+                    }
+                )
         else:
             out["services"] = []
         rec = await self._session.execute(
@@ -1008,14 +1096,57 @@ class TrainerRepository:
                 s_params,
             )
             service_names_by_id = {r[0]: (r[1] or "") for r in r_sn.fetchall()}
+        tiers_by_tid_sid: dict[tuple[int, int], list[dict[str, Any]]] = {}
+        rv = await self._session.execute(
+            text(
+                f"""
+                SELECT trainer_id, service_id, id, label, price_cents, sort_order, tier_kind
+                FROM trainer_service_price_variants
+                WHERE trainer_id IN ({placeholders})
+                ORDER BY trainer_id, service_id,
+                  {sql_order_case_tier_kind("tier_kind")},
+                  sort_order
+                """
+            ),
+            id_params,
+        )
+        for row in rv.fetchall():
+            t_id, s_id, vid = int(row[0]), int(row[1]), int(row[2])
+            lab, pc, so = row[3], int(row[4]), int(row[5])
+            tk = normalize_price_tier_kind(row[6]) or PRICE_TIER_ADULT
+            key = (t_id, s_id)
+            tiers_by_tid_sid.setdefault(key, []).append(
+                {
+                    "id": vid,
+                    "tier_kind": tk,
+                    "label": lab or price_tier_label_ru(tk) or TRAINER_SERVICE_DEFAULT_TIER_LABEL,
+                    "price_cents": pc,
+                    "price_byn": round(pc / 100, 2),
+                    "sort_order": so,
+                }
+            )
         for row in service_rows:
+            tid, sid = row[0], row[1]
             price_cents = row[2]
-            services_detail_by_id[row[0]].append({
-                "service_id": row[1],
-                "service_name": service_names_by_id.get(row[1], "—"),
-                "price_cents": price_cents,
-                "price_byn": round(price_cents / 100, 2) if price_cents is not None else None,
-            })
+            tiers = tiers_by_tid_sid.get((tid, sid), [])
+            if tiers:
+                prices = [t["price_cents"] for t in tiers]
+                p_min, p_max = min(prices), max(prices)
+                price_byn_min = round(p_min / 100, 2)
+                price_byn_max = round(p_max / 100, 2)
+            else:
+                price_byn_min = price_byn_max = (round(price_cents / 100, 2) if price_cents is not None else None)
+            services_detail_by_id[tid].append(
+                {
+                    "service_id": sid,
+                    "service_name": service_names_by_id.get(sid, "—"),
+                    "price_cents": price_cents,
+                    "price_byn": round(price_cents / 100, 2) if price_cents is not None else None,
+                    "price_byn_min": price_byn_min,
+                    "price_byn_max": price_byn_max,
+                    "price_tiers": tiers,
+                }
+            )
         rar = await self._session.execute(
             text(f"SELECT trainer_id, arena_id FROM trainer_arenas WHERE trainer_id IN ({placeholders}) ORDER BY trainer_id, arena_id"),
             id_params,

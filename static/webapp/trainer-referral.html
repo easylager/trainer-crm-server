@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Реферальная программа</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="mini-app-telegram-chrome.js"></script>
+  <link rel="stylesheet" href="theme.css" />
+  <link rel="stylesheet" href="mini-app-components.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet" />
+  <style>
+    html { height: 100%; overflow-x: hidden; }
+    body.ref-page {
+      margin: 0;
+      font-family: var(--app-font-sans);
+      background: var(--tg-theme-bg-color);
+      color: var(--tg-theme-text-color);
+      min-height: 100%;
+      min-height: 100dvh;
+      padding: 12px;
+      padding-bottom: calc(env(safe-area-inset-bottom, 12px) + 80px);
+      -webkit-font-smoothing: antialiased;
+      --tg-theme-bg-color: #FFFBEB;
+      --tg-theme-text-color: #1a1a1a;
+      --tg-theme-hint-color: #666666;
+      --tg-theme-secondary-bg-color: #fff5e1;
+      --ref-accent: #F7A600;
+      --ref-success: #34c759;
+    }
+    body.ref-page.ref-theme-dark {
+      --tg-theme-bg-color: #1a1a1a;
+      --tg-theme-text-color: #f5f5f5;
+      --tg-theme-hint-color: #8e8e93;
+      --tg-theme-secondary-bg-color: #2a2a2a;
+    }
+    @keyframes refFadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .ref-shell { animation: refFadeIn 0.38s cubic-bezier(0.22, 1, 0.36, 1) both; max-width: 540px; margin: 0 auto; }
+
+    .ref-hero {
+      position: relative;
+      border-radius: 20px;
+      padding: 24px 20px;
+      margin-bottom: 18px;
+      overflow: hidden;
+      text-align: center;
+      background: linear-gradient(155deg, rgba(247, 166, 0, 0.14) 0%, rgba(247, 166, 0, 0.04) 48%, transparent 100%);
+      border: 1px solid rgba(247, 166, 0, 0.28);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+    }
+    body.ref-page.ref-theme-dark .ref-hero {
+      background: linear-gradient(155deg, rgba(20, 22, 26, 0.98) 0%, rgba(12, 14, 18, 0.99) 55%, #0a0c10 100%);
+      border: 1px solid rgba(247, 166, 0, 0.25);
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.45);
+    }
+    .ref-hero::before {
+      content: '';
+      position: absolute;
+      top: -40%;
+      right: -20%;
+      width: 55%;
+      height: 120%;
+      background: radial-gradient(ellipse, rgba(247, 166, 0, 0.22) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .ref-hero-icon {
+      width: 56px;
+      height: 56px;
+      margin: 0 auto 12px;
+      border-radius: 16px;
+      background: linear-gradient(135deg, var(--ref-accent) 0%, #e69500 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 16px rgba(247, 166, 0, 0.35);
+    }
+    .ref-hero-icon svg { width: 28px; height: 28px; color: #1a1a1a; }
+    .ref-hero-title { font-size: 22px; font-weight: 700; margin: 0 0 8px; letter-spacing: -0.02em; }
+    .ref-hero-subtitle { font-size: 14px; color: var(--tg-theme-hint-color); margin: 0; line-height: 1.5; }
+
+    .ref-card {
+      background: var(--tg-theme-secondary-bg-color);
+      border-radius: 18px;
+      padding: 18px;
+      margin-bottom: 14px;
+      border: 1px solid rgba(128, 128, 128, 0.12);
+    }
+    .ref-card-title {
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--tg-theme-hint-color);
+      margin: 0 0 12px;
+    }
+
+    .ref-link-box {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: var(--tg-theme-bg-color);
+      border-radius: 12px;
+      padding: 12px 14px;
+      border: 1px solid rgba(247, 166, 0, 0.2);
+    }
+    .ref-link-text {
+      flex: 1;
+      font-size: 13px;
+      font-weight: 500;
+      word-break: break-all;
+      color: var(--tg-theme-text-color);
+    }
+    .ref-copy-btn {
+      flex-shrink: 0;
+      padding: 10px 16px;
+      border-radius: 10px;
+      border: none;
+      font-size: 13px;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      background: var(--ref-accent);
+      color: #1a1a1a;
+      transition: transform 0.15s, opacity 0.15s;
+    }
+    .ref-copy-btn:active { transform: scale(0.96); opacity: 0.9; }
+    .ref-copy-btn.copied { background: var(--ref-success); color: #fff; }
+
+    .ref-stats-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+    }
+    .ref-stat-item {
+      background: var(--tg-theme-bg-color);
+      border-radius: 14px;
+      padding: 16px 14px;
+      text-align: center;
+      border: 1px solid rgba(128, 128, 128, 0.1);
+    }
+    .ref-stat-value {
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--tg-theme-text-color);
+      margin-bottom: 4px;
+    }
+    .ref-stat-value.highlight { color: var(--ref-accent); }
+    .ref-stat-label {
+      font-size: 12px;
+      color: var(--tg-theme-hint-color);
+      line-height: 1.3;
+    }
+
+    .ref-rules {
+      font-size: 13px;
+      line-height: 1.6;
+      color: var(--tg-theme-hint-color);
+    }
+    .ref-rules strong { color: var(--tg-theme-text-color); font-weight: 600; }
+    .ref-rules ul { margin: 10px 0 0; padding-left: 18px; }
+    .ref-rules li { margin-bottom: 6px; }
+
+    .ref-invited-list { margin-top: 12px; }
+    .ref-invited-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 14px;
+      background: var(--tg-theme-bg-color);
+      border-radius: 12px;
+      margin-bottom: 8px;
+      border: 1px solid rgba(128, 128, 128, 0.1);
+    }
+    .ref-invited-avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, rgba(247, 166, 0, 0.2) 0%, rgba(247, 166, 0, 0.08) 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--ref-accent);
+    }
+    .ref-invited-info { flex: 1; min-width: 0; }
+    .ref-invited-name {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--tg-theme-text-color);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .ref-invited-date {
+      font-size: 12px;
+      color: var(--tg-theme-hint-color);
+      margin-top: 2px;
+    }
+    .ref-invited-status {
+      flex-shrink: 0;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 5px 10px;
+      border-radius: 8px;
+    }
+    .ref-invited-status.pending {
+      background: rgba(255, 159, 10, 0.18);
+      color: #ff9500;
+    }
+    .ref-invited-status.credited {
+      background: rgba(52, 199, 89, 0.18);
+      color: var(--ref-success);
+    }
+    .ref-empty {
+      text-align: center;
+      padding: 24px 16px;
+      color: var(--tg-theme-hint-color);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .ref-loading {
+      text-align: center;
+      padding: 40px 20px;
+      color: var(--tg-theme-hint-color);
+      font-size: 14px;
+    }
+    .ref-error {
+      text-align: center;
+      padding: 24px 16px;
+      color: #ff3b30;
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body class="ref-page">
+  <div class="ref-shell">
+    <section class="ref-hero">
+      <div class="ref-hero-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M20 12v10H4V12"/>
+          <rect x="2" y="7" width="20" height="5" rx="1"/>
+          <path d="M12 22V7"/>
+          <path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/>
+          <path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/>
+        </svg>
+      </div>
+      <h1 class="ref-hero-title">Пригласи коллегу</h1>
+      <p class="ref-hero-subtitle">Получи бонусные дни подписки за каждого тренера, который оплатит подписку по твоей ссылке</p>
+    </section>
+
+    <div id="refLoading" class="ref-loading">Загрузка…</div>
+    <div id="refError" class="ref-error" style="display:none;"></div>
+
+    <div id="refContent" style="display:none;">
+      <div class="ref-card">
+        <div class="ref-card-title">Твоя ссылка</div>
+        <div class="ref-link-box">
+          <span class="ref-link-text" id="refLinkText">—</span>
+          <button type="button" class="ref-copy-btn" id="refCopyBtn">Копировать</button>
+        </div>
+      </div>
+
+      <div class="ref-card">
+        <div class="ref-card-title">Твой баланс</div>
+        <div class="ref-stats-grid">
+          <div class="ref-stat-item">
+            <div class="ref-stat-value highlight" id="refBalance">0</div>
+            <div class="ref-stat-label">Бонусных дней</div>
+          </div>
+          <div class="ref-stat-item">
+            <div class="ref-stat-value" id="refEarned">0</div>
+            <div class="ref-stat-label">Всего заработано</div>
+          </div>
+          <div class="ref-stat-item">
+            <div class="ref-stat-value" id="refReferred">0</div>
+            <div class="ref-stat-label">Приглашено</div>
+          </div>
+          <div class="ref-stat-item">
+            <div class="ref-stat-value" id="refCredited">0</div>
+            <div class="ref-stat-label">Оплатили</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="ref-card">
+        <div class="ref-card-title">Как это работает</div>
+        <div class="ref-rules">
+          <ul>
+            <li><strong id="refCreditDays">14</strong> дней подписки за каждого коллегу, который оплатит подписку</li>
+            <li>Коллега должен оплатить в течение <strong id="refWindowDays">60</strong> дней после перехода по ссылке</li>
+            <li>Бонусные дни автоматически добавляются к твоей подписке при продлении</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="ref-card" id="refInvitedCard" style="display:none;">
+        <div class="ref-card-title">Приглашённые</div>
+        <div class="ref-invited-list" id="refInvitedList"></div>
+      </div>
+
+      <div class="ref-card" style="text-align: center;">
+        <a href="/webapp/referral-rules" style="font-size: 13px; color: var(--tg-theme-hint-color); text-decoration: underline;">Полные правила программы</a>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function() {
+      var tg = window.Telegram && window.Telegram.WebApp;
+      if (tg) {
+        if (typeof tg.ready === 'function') tg.ready();
+        if (typeof tg.expand === 'function') tg.expand();
+      }
+      var isDark = tg && tg.colorScheme === 'dark';
+      if (isDark) document.body.classList.add('ref-theme-dark');
+      try {
+        var bgHex = isDark ? '#1a1a1a' : '#FFFBEB';
+        if (tg && typeof tg.setHeaderColor === 'function') tg.setHeaderColor(bgHex);
+        if (tg && typeof tg.setBackgroundColor === 'function') tg.setBackgroundColor(bgHex);
+      } catch (e) {}
+
+      var initData = tg && tg.initData ? tg.initData : '';
+
+      function headersJson() {
+        var h = { 'Content-Type': 'application/json' };
+        if (initData) h['X-Telegram-Init-Data'] = initData;
+        return h;
+      }
+
+      function escapeHtml(s) {
+        if (!s) return '';
+        return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+      }
+
+      function formatDate(isoStr) {
+        if (!isoStr) return '';
+        try {
+          var d = new Date(isoStr);
+          return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
+        } catch (e) { return ''; }
+      }
+
+      var loadingEl = document.getElementById('refLoading');
+      var errorEl = document.getElementById('refError');
+      var contentEl = document.getElementById('refContent');
+      var linkTextEl = document.getElementById('refLinkText');
+      var copyBtnEl = document.getElementById('refCopyBtn');
+      var balanceEl = document.getElementById('refBalance');
+      var earnedEl = document.getElementById('refEarned');
+      var referredEl = document.getElementById('refReferred');
+      var creditedEl = document.getElementById('refCredited');
+      var creditDaysEl = document.getElementById('refCreditDays');
+      var windowDaysEl = document.getElementById('refWindowDays');
+      var invitedCardEl = document.getElementById('refInvitedCard');
+      var invitedListEl = document.getElementById('refInvitedList');
+
+      var referralLink = '';
+
+      function showError(msg) {
+        loadingEl.style.display = 'none';
+        contentEl.style.display = 'none';
+        errorEl.textContent = msg;
+        errorEl.style.display = 'block';
+      }
+
+      function showContent() {
+        loadingEl.style.display = 'none';
+        errorEl.style.display = 'none';
+        contentEl.style.display = 'block';
+      }
+
+      function loadReferralInfo() {
+        if (!initData) {
+          showError('Откройте через Telegram Mini App');
+          return;
+        }
+        fetch('/api/webapp/trainer/referral', { headers: headersJson() })
+          .then(function(r) {
+            if (!r.ok) throw new Error('Ошибка загрузки');
+            return r.json();
+          })
+          .then(function(data) {
+            referralLink = data.referral_link || '';
+            linkTextEl.textContent = referralLink;
+            balanceEl.textContent = data.balance_days || 0;
+            earnedEl.textContent = data.total_earned_days || 0;
+            referredEl.textContent = data.total_referred || 0;
+            creditedEl.textContent = data.credited_count || 0;
+            creditDaysEl.textContent = data.credit_per_referral_days || 14;
+            windowDaysEl.textContent = data.attribution_window_days || 60;
+            showContent();
+            loadInvitedList();
+          })
+          .catch(function(e) {
+            showError(e.message || 'Не удалось загрузить данные');
+          });
+      }
+
+      function loadInvitedList() {
+        fetch('/api/webapp/trainer/referral/referred?limit=20', { headers: headersJson() })
+          .then(function(r) { return r.ok ? r.json() : []; })
+          .then(function(list) {
+            if (!list || !list.length) {
+              invitedCardEl.style.display = 'none';
+              return;
+            }
+            invitedCardEl.style.display = 'block';
+            invitedListEl.innerHTML = list.map(function(item) {
+              var name = item.first_name || item.telegram_username || 'Тренер';
+              var initial = (name[0] || 'T').toUpperCase();
+              var dateStr = formatDate(item.created_at);
+              var isCredited = !!item.credit_granted_at;
+              var statusClass = isCredited ? 'credited' : 'pending';
+              var statusText = isCredited ? 'Оплатил' : 'Ожидание';
+              return (
+                '<div class="ref-invited-item">' +
+                  '<div class="ref-invited-avatar">' + escapeHtml(initial) + '</div>' +
+                  '<div class="ref-invited-info">' +
+                    '<div class="ref-invited-name">' + escapeHtml(name) + '</div>' +
+                    '<div class="ref-invited-date">' + escapeHtml(dateStr) + '</div>' +
+                  '</div>' +
+                  '<span class="ref-invited-status ' + statusClass + '">' + statusText + '</span>' +
+                '</div>'
+              );
+            }).join('');
+          })
+          .catch(function() {
+            invitedCardEl.style.display = 'none';
+          });
+      }
+
+      copyBtnEl.onclick = function() {
+        if (!referralLink) return;
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(referralLink).then(function() {
+            copyBtnEl.textContent = 'Скопировано!';
+            copyBtnEl.classList.add('copied');
+            setTimeout(function() {
+              copyBtnEl.textContent = 'Копировать';
+              copyBtnEl.classList.remove('copied');
+            }, 2000);
+          }).catch(function() {
+            fallbackCopy();
+          });
+        } else {
+          fallbackCopy();
+        }
+      };
+
+      function fallbackCopy() {
+        var ta = document.createElement('textarea');
+        ta.value = referralLink;
+        ta.style.position = 'fixed';
+        ta.style.left = '-9999px';
+        document.body.appendChild(ta);
+        ta.select();
+        try {
+          document.execCommand('copy');
+          copyBtnEl.textContent = 'Скопировано!';
+          copyBtnEl.classList.add('copied');
+          setTimeout(function() {
+            copyBtnEl.textContent = 'Копировать';
+            copyBtnEl.classList.remove('copied');
+          }, 2000);
+        } catch (e) {}
+        document.body.removeChild(ta);
+      }
+
+      loadReferralInfo();
+    })();
+  </script>
+</body>
+</html>

@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Абонементы</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="mini-app-telegram-chrome.js"></script>
   <link rel="stylesheet" href="theme.css" />
   <link rel="stylesheet" href="mini-app-components.css" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -237,7 +238,7 @@
 <body>
   <div id="screenChoose" data-screen class="active">
     <div class="bp-top">
-      <button type="button" class="bd-btn bd-btn--soft bp-back" id="btnBack" aria-label="Назад">← Назад</button>
+      <button type="button" class="bd-btn bd-btn--soft bp-back" id="btnBpBack" aria-label="Назад">← Назад</button>
       <div class="client-mini-nav" style="margin-left: auto;">
         <button type="button" class="btn-app-home" id="btnHome">Главная</button>
       </div>
@@ -313,7 +314,7 @@
         if (window.history.length > 1) window.history.back();
         else closeApp();
       }
-      document.getElementById('btnBack').onclick = goBack;
+      document.getElementById('btnBpBack').onclick = goBack;
       function escapeHtml(s) {
         if (s == null) return '';
         var d = document.createElement('div');

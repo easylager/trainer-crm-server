@@ -85,6 +85,8 @@ class Trainer(Base):
     primary_arena_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("arenas.id", ondelete="SET NULL"), nullable=True, index=True
     )
+    # Stable short code for referral deep links (e.g. t.me/bot?start=ref_ABC123)
+    referral_code: Mapped[Optional[str]] = mapped_column(String(16), nullable=True, unique=True, index=True)
 
     link_tokens: Mapped[list["TrainerLinkToken"]] = relationship(back_populates="trainer", lazy="raise")
     profile: Mapped[Optional["TrainerProfile"]] = relationship(back_populates="trainer", uselist=False, lazy="raise")
@@ -406,6 +408,11 @@ class Booking(Base):
     arena_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("arenas.id", ondelete="SET NULL"), nullable=True, index=True
     )
+    service_price_variant_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("trainer_service_price_variants.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    booking_price_cents: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    price_tier_kind: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)  # tariff code snapshot
 
     client: Mapped["Client"] = relationship(back_populates="bookings", lazy="raise")
 
@@ -795,4 +802,55 @@ class TrainerAgreement(Base):
     accepted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     accepted_version: Mapped[int] = mapped_column(Integer(), nullable=False)
 
+
+# --- Referral program (B2B: trainer invites trainer) ---
+
+REFERRAL_CREDIT_REASON_ACCRUAL = "referral_accrual"
+REFERRAL_CREDIT_REASON_REDEMPTION = "subscription_redemption"
+REFERRAL_CREDIT_REASON_ADMIN = "admin_adjustment"
+REFERRAL_CREDIT_REASON_EXPIRY = "expiry"
+
+REFERRAL_CREDIT_REASONS = (
+    REFERRAL_CREDIT_REASON_ACCRUAL,
+    REFERRAL_CREDIT_REASON_REDEMPTION,
+    REFERRAL_CREDIT_REASON_ADMIN,
+    REFERRAL_CREDIT_REASON_EXPIRY,
+)
+
+
+class TrainerReferral(Base):
+    """Attribution: which trainer referred which new trainer."""
+    __tablename__ = "trainer_referrals"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    referrer_id: Mapped[int] = mapped_column(
+        ForeignKey("trainers.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    referred_id: Mapped[int] = mapped_column(
+        ForeignKey("trainers.id", ondelete="CASCADE"), nullable=False, unique=True, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    attribution_expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    credit_granted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class TrainerReferralCredit(Base):
+    """Ledger of referral credit movements: accrual, redemption, admin adjustments."""
+    __tablename__ = "trainer_referral_credits"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    trainer_id: Mapped[int] = mapped_column(
+        ForeignKey("trainers.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    amount_days: Mapped[int] = mapped_column(Integer(), nullable=False)
+    reason: Mapped[str] = mapped_column(String(64), nullable=False)
+    referral_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("trainer_referrals.id", ondelete="SET NULL"), nullable=True
+    )
+    subscription_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("trainer_subscriptions.id", ondelete="SET NULL"), nullable=True
+    )
+    note: Mapped[Optional[str]] = mapped_column(Text(), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    created_by_admin_id: Mapped[Optional[int]] = mapped_column(BigInteger(), nullable=True)
 

@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Мои абонементы</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="mini-app-telegram-chrome.js"></script>
   <link rel="stylesheet" href="theme.css" />
   <link rel="stylesheet" href="mini-app-components.css" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -28,16 +29,6 @@
       margin-bottom: 16px;
     }
     .header-title { flex: 1; }
-    .btn-close {
-      flex-shrink: 0;
-      padding: 8px 14px;
-      border-radius: 8px;
-      border: none;
-      font-size: 14px;
-      background: var(--tg-theme-secondary-bg-color);
-      color: var(--tg-theme-text-color);
-      cursor: pointer;
-    }
     .loading, .error { text-align: center; padding: 32px 16px; color: var(--tg-theme-hint-color); }
     .error { color: var(--app-danger); }
     .empty { text-align: center; padding: 32px 16px; color: var(--tg-theme-hint-color); font-size: 15px; }
@@ -183,11 +174,15 @@
     }
     #screenDetail .bd-rows { font-family: var(--app-font-sans); }
   </style>
+  <link rel="stylesheet" href="mini-app-client-nav.css" />
 </head>
 <body>
   <div class="header">
     <span class="header-title">📦 Мои абонементы</span>
-    <button type="button" class="btn-close" id="btnClose" aria-label="Закрыть">Закрыть</button>
+    <div class="client-mini-nav">
+      <button type="button" class="btn-app-home" id="btnHome">Главная</button>
+      <button type="button" class="btn-app-back" id="btnBack" hidden>Назад</button>
+    </div>
   </div>
   <div id="screenList" data-screen class="active">
     <div id="listContent"></div>
@@ -234,8 +229,6 @@
         var el = document.getElementById(id);
         if (el) el.classList.add('active');
       }
-      function closeApp() { if (tg) tg.close(); else window.close(); }
-      document.getElementById('btnClose').onclick = closeApp;
       function escapeHtml(s) {
         if (s == null) return '';
         var d = document.createElement('div');
@@ -348,5 +341,6 @@
       loadList();
     })();
   </script>
+  <script src="mini-app-client-home.js"></script>
 </body>
 </html>

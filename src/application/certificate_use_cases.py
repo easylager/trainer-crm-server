@@ -679,7 +679,8 @@ async def redeem_certificate_balance_for_booking(
     r = await session.execute(
         text(
             """
-            SELECT b.client_id, b.trainer_id, b.service_id, ts.price_cents
+            SELECT b.client_id, b.trainer_id, b.service_id,
+                   COALESCE(b.booking_price_cents, ts.price_cents) AS price_cents
             FROM bookings b
             LEFT JOIN trainer_services ts
               ON ts.trainer_id = b.trainer_id AND ts.service_id = b.service_id

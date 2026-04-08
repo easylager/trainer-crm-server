@@ -25,7 +25,6 @@ from src.application.booking_use_cases import (
     list_bookings_to_complete,
     list_pending_reminders,
     mark_client_booking_completion_push_sent,
-    mark_booking_cancel_notification_sent,
     mark_booking_completed_and_notify,
     mark_booking_notified,
     mark_confirm_reminder_sent,
@@ -58,6 +57,7 @@ from src.application.subscription_use_cases import (
 )
 from src.bot import messages as msg
 from src.bot.handlers.trainer_handlers import REQUEST_DECLINE_PREFIX, REQUEST_RESPOND_PREFIX
+from src.bot.trainer_cancel_client_notify import send_cancel_notification_payload
 from src.infrastructure.db import async_session_factory
 from src.shared.config import Settings
 from src.shared.notification_hours import is_within_notification_hours
@@ -211,34 +211,7 @@ async def process_booking_complete_round(client_bot: Bot, trainer_bot: Bot) -> N
 async def process_cancel_notifications_batch(client_bot: Bot, session: AsyncSession) -> None:
     pending = await get_pending_booking_cancel_notifications(session)
     for p in pending:
-        chat_id = p.get("client_telegram_id")
-        if not chat_id:
-            continue
-        slot_date = p.get("slot_date")
-        start_time = p.get("start_time")
-        date_str = (
-            slot_date.strftime("%d.%m")
-            if slot_date and hasattr(slot_date, "strftime")
-            else "—"
-        )
-        day_str = (
-            msg.TRAINER_DAYS[slot_date.weekday()]
-            if slot_date and hasattr(slot_date, "weekday")
-            else ""
-        )
-        time_str = (
-            start_time.strftime("%H:%M")
-            if start_time and hasattr(start_time, "strftime")
-            else "—"
-        )
-        text = msg.CLIENT_BOOKING_CANCELLED_BY_TRAINER.format(
-            date=date_str, day=day_str, time=time_str
-        )
-        try:
-            await client_bot.send_message(chat_id=chat_id, text=text)
-            await mark_booking_cancel_notification_sent(session, p["id"])
-        except Exception as e:
-            logger.warning("Cancel notifier send to client %s: %s", chat_id, e)
+        await send_cancel_notification_payload(client_bot, session, p)
 
 
 async def process_response_notifications_batch(client_bot: Bot, session: AsyncSession) -> None:
@@ -457,11 +430,10 @@ async def run_booking_complete_loop(client_bot: Bot, trainer_bot: Bot) -> None:
 
 
 async def run_cancel_notifier_loop(client_bot: Bot) -> None:
+    """Drain booking_cancel_notifications queue (retry if immediate send after cancel failed)."""
     while True:
         await asyncio.sleep(CANCEL_NOTIFIER_INTERVAL_SEC)
         try:
-            if not is_within_notification_hours():
-                continue
             async with async_session_factory() as session:
                 await process_cancel_notifications_batch(client_bot, session)
         except asyncio.CancelledError:

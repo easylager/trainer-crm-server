@@ -69,7 +69,7 @@ def set_slots_cached(trainer_id: int, min_hours: int, slots: list) -> None:
 
 
 def invalidate_slots_for_trainer(trainer_id: int) -> None:
-    """Call when slots are created/deleted for this trainer (optional; TTL will expire anyway)."""
+    """Drop cached /client/slots lists when availability changes (slots CRUD or booking create/cancel/decline)."""
     to_del = [k for k in _CACHE if isinstance(k, tuple) and k[0] == "slots" and k[1] == trainer_id]
     for k in to_del:
         _CACHE.pop(k, None)

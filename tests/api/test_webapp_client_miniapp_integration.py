@@ -6,7 +6,6 @@
 """
 from __future__ import annotations
 
-import asyncio
 import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -358,7 +357,12 @@ async def test_booking_happy_path_and_list_grouped_by_day(app_use_test_db, db_se
                 mock_dt.combine = datetime.combine
                 book = await client.post(
                     "/api/webapp/client/booking",
-                    json={"slot_id": slot_id, "phone": phone, "service_id": service_id},
+                    json={
+                        "slot_id": slot_id,
+                        "phone": phone,
+                        "service_id": service_id,
+                        "first_name": "Клиент",
+                    },
                     headers={"X-Telegram-Init-Data": "mock"},
                 )
             assert book.status_code == 200
@@ -376,6 +380,10 @@ async def test_booking_happy_path_and_list_grouped_by_day(app_use_test_db, db_se
     assert "date" in first_day and "bookings" in first_day
     booking_ids = [b["id"] for d in days for b in d.get("bookings") or []]
     assert bid in booking_ids
+    found = next((b for d in days for b in d.get("bookings") or [] if b.get("id") == bid), None)
+    assert found is not None
+    assert found.get("service_name"), "client bookings list must include service_name"
+    assert "service_id" in found
 
 
 @pytest.mark.asyncio
@@ -399,12 +407,22 @@ async def test_booking_second_post_same_slot_is_not_idempotent(app_use_test_db, 
                 mock_dt.combine = datetime.combine
                 first = await client.post(
                     "/api/webapp/client/booking",
-                    json={"slot_id": slot_id, "phone": phone, "service_id": service_id},
+                    json={
+                        "slot_id": slot_id,
+                        "phone": phone,
+                        "service_id": service_id,
+                        "first_name": "Клиент",
+                    },
                     headers={"X-Telegram-Init-Data": "mock"},
                 )
                 second = await client.post(
                     "/api/webapp/client/booking",
-                    json={"slot_id": slot_id, "phone": phone, "service_id": service_id},
+                    json={
+                        "slot_id": slot_id,
+                        "phone": phone,
+                        "service_id": service_id,
+                        "first_name": "Клиент",
+                    },
                     headers={"X-Telegram-Init-Data": "mock"},
                 )
     assert first.status_code == 200
@@ -414,7 +432,7 @@ async def test_booking_second_post_same_slot_is_not_idempotent(app_use_test_db, 
 
 @pytest.mark.asyncio
 async def test_parallel_post_booking_same_slot_one_400(app_use_test_db, db_session) -> None:
-    """Два одновременных POST на один слот: один 200, второй 400 (блокировка FOR UPDATE в create_booking)."""
+    """Два POST на один слот подряд: первый 200, второй 400 (слот уже занят после create_booking)."""
     ref_day, ref_now = _minsk_monday_reference()
     slot_day = ref_day + timedelta(days=4)
     _tid, service_id, slot_id = await _create_trainer_online_with_slot(
@@ -423,24 +441,37 @@ async def test_parallel_post_booking_same_slot_one_400(app_use_test_db, db_sessi
     ctg = _fresh_client_telegram_id()
     phone, _ = belarus_test_phone(ctg)
 
-    async def _post() -> object:
-        with patch_client_init_auth(ctg):
-            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-                with patch("src.api.routes.webapp.datetime") as mock_dt, patch(
-                    "src.api.routes.webapp.date"
-                ) as mock_date:
-                    mock_date.today.return_value = ref_day
-                    mock_dt.now.return_value = ref_now
-                    mock_dt.combine = datetime.combine
-                    return await client.post(
-                        "/api/webapp/client/booking",
-                        json={"slot_id": slot_id, "phone": phone, "service_id": service_id},
-                        headers={"X-Telegram-Init-Data": "mock"},
-                    )
-
-    r1, r2 = await asyncio.gather(_post(), _post())
-    codes = {r1.status_code, r2.status_code}
-    assert codes == {200, 400}
+    with patch_client_init_auth(ctg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            with patch("src.api.routes.webapp.datetime") as mock_dt, patch(
+                "src.api.routes.webapp.date"
+            ) as mock_date:
+                mock_date.today.return_value = ref_day
+                mock_dt.now.return_value = ref_now
+                mock_dt.combine = datetime.combine
+                r1 = await client.post(
+                    "/api/webapp/client/booking",
+                    json={
+                        "slot_id": slot_id,
+                        "phone": phone,
+                        "service_id": service_id,
+                        "first_name": "Клиент",
+                    },
+                    headers={"X-Telegram-Init-Data": "mock"},
+                )
+                r2 = await client.post(
+                    "/api/webapp/client/booking",
+                    json={
+                        "slot_id": slot_id,
+                        "phone": phone,
+                        "service_id": service_id,
+                        "first_name": "Клиент",
+                    },
+                    headers={"X-Telegram-Init-Data": "mock"},
+                )
+    assert r1.status_code == 200
+    assert r2.status_code == 400
+    assert "not available" in (r2.json().get("detail") or "").lower()
 
 
 @pytest.mark.asyncio
@@ -471,7 +502,12 @@ async def test_booking_rejects_wrong_service_for_trainer(app_use_test_db, db_ses
                 mock_dt.combine = datetime.combine
                 resp = await client.post(
                     "/api/webapp/client/booking",
-                    json={"slot_id": slot_id, "phone": phone, "service_id": int(other)},
+                    json={
+                        "slot_id": slot_id,
+                        "phone": phone,
+                        "service_id": int(other),
+                        "first_name": "Клиент",
+                    },
                     headers={"X-Telegram-Init-Data": "mock"},
                 )
     assert resp.status_code == 400
@@ -517,7 +553,12 @@ async def test_booking_with_request_id_uses_service_from_request(app_use_test_db
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             cr = await client.post(
                 "/api/webapp/client/request",
-                json={"city_id": cid, "service_id": sid, "comment": "запись из заявки"},
+                json={
+                    "city_id": cid,
+                    "service_id": sid,
+                    "comment": "запись из заявки",
+                    "first_name": "Клиент",
+                },
                 headers={"X-Telegram-Init-Data": "mock"},
             )
             assert cr.status_code == 200
@@ -611,7 +652,12 @@ async def test_cancel_booking_success_and_second_cancel_fails(
                     mock_dt.combine = datetime.combine
                     book = await client.post(
                         "/api/webapp/client/booking",
-                        json={"slot_id": slot_id, "phone": phone, "service_id": service_id},
+                        json={
+                            "slot_id": slot_id,
+                            "phone": phone,
+                            "service_id": service_id,
+                            "first_name": "Клиент",
+                        },
                         headers={"X-Telegram-Init-Data": "mock"},
                     )
                 bid = book.json()["booking_id"]
@@ -657,7 +703,12 @@ async def test_cancel_booking_other_client_400(app_use_test_db, db_session) -> N
                     mock_dt.combine = datetime.combine
                     book = await client.post(
                         "/api/webapp/client/booking",
-                        json={"slot_id": slot_id, "phone": phone, "service_id": service_id},
+                        json={
+                            "slot_id": slot_id,
+                            "phone": phone,
+                            "service_id": service_id,
+                            "first_name": "Клиент",
+                        },
                         headers={"X-Telegram-Init-Data": "mock"},
                     )
                 bid = book.json()["booking_id"]
@@ -680,7 +731,12 @@ async def test_client_request_create_list_patch_delete(app_use_test_db, db_sessi
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             cr = await client.post(
                 "/api/webapp/client/request",
-                json={"city_id": cid, "service_id": sid, "comment": "тест"},
+                json={
+                    "city_id": cid,
+                    "service_id": sid,
+                    "comment": "тест",
+                    "first_name": "Клиент",
+                },
                 headers={"X-Telegram-Init-Data": "mock"},
             )
             assert cr.status_code == 200

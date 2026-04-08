@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Тренеры и запись</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="mini-app-telegram-chrome.js"></script>
   <link rel="stylesheet" href="theme.css" />
   <link rel="stylesheet" href="mini-app-components.css" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -37,16 +38,6 @@
       line-height: 1.25;
       letter-spacing: -0.02em;
       color: var(--tg-theme-text-color);
-    }
-    .btn-close {
-      flex-shrink: 0;
-      padding: 8px 14px;
-      border-radius: 8px;
-      border: none;
-      font-size: 14px;
-      background: var(--tg-theme-secondary-bg-color);
-      color: var(--tg-theme-text-color);
-      cursor: pointer;
     }
     .step-title {
       font-size: 11px;
@@ -1016,12 +1007,47 @@
     }
     .form-block { margin-bottom: 16px; }
     .form-block label { display: block; font-size: 13px; font-weight: 600; color: var(--tg-theme-hint-color); margin-bottom: 6px; }
-    .form-block input, .form-block textarea {
+    .form-block input:not([type="radio"]):not([type="checkbox"]),
+    .form-block textarea {
       width: 100%; box-sizing: border-box; padding: 12px 14px; border-radius: 12px; border: none;
       background: var(--tg-theme-secondary-bg-color); color: var(--tg-theme-text-color); font-size: 16px;
     }
     .form-block textarea { min-height: 60px; resize: vertical; }
-    .booking-slot-label { font-size: 15px; margin-bottom: 16px; color: var(--tg-theme-hint-color); }
+    .booking-slot-label { font-size: 15px; margin-bottom: 12px; color: var(--tg-theme-hint-color); }
+    .booking-service-line {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--tg-theme-text-color);
+      margin-bottom: 12px;
+      line-height: 1.4;
+    }
+    .catalog-price-tier-radios label {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+      font-size: 15px;
+      cursor: pointer;
+      text-transform: none;
+      font-weight: 500;
+      color: var(--tg-theme-text-color);
+    }
+    .catalog-price-tier-radios input[type="radio"] {
+      width: auto;
+      max-width: none;
+      flex-shrink: 0;
+      margin: 0;
+      padding: 0;
+      box-shadow: none;
+      border: none;
+      background: transparent;
+      accent-color: var(--tg-theme-button-color);
+    }
+    .catalog-price-tier-radios label .tier-radio-text {
+      flex: 1 1 auto;
+      min-width: 0;
+      line-height: 1.35;
+    }
     .booking-venue-hint {
       font-size: 14px; margin-bottom: 14px; line-height: 1.35;
       color: var(--tg-theme-text-color);
@@ -1067,6 +1093,7 @@
     <h1 class="header-title" id="headerTitle">Тренеры и запись</h1>
     <div class="client-mini-nav">
       <button type="button" class="btn-app-home" id="btnHome">Главная</button>
+      <button type="button" class="btn-app-back" id="btnBack" hidden data-skip-history-back="true">Назад</button>
     </div>
   </div>
 
@@ -1184,9 +1211,19 @@
     <div id="slotPickList" class="slot-pick-list"></div>
   </div>
   <div id="screenBookingForm" data-screen>
-    <button type="button" class="back-link" id="backFromBookingForm" style="margin-bottom:8px;"><svg class="back-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>К карточке тренера</button>
     <p id="bookingFormSlotLabel" class="booking-slot-label"></p>
+    <p id="bookingFormServiceLine" class="booking-service-line" style="display: none;"></p>
+    <div id="bookingPriceTierBlockCatalog" class="form-block" style="display: none;">
+      <label>Категория цены</label>
+      <div id="bookingPriceTierRadiosCatalog" class="catalog-price-tier-radios"></div>
+    </div>
     <p id="bookingVenueHint" class="booking-venue-hint" style="display:none;"></p>
+    <div id="bookingNameBlockCatalog" class="form-block" style="display:none;">
+      <label for="bookingFirstName">Имя *</label>
+      <input type="text" id="bookingFirstName" autocomplete="given-name" maxlength="64" placeholder="Как к вам обращаться" />
+      <label for="bookingLastName" style="margin-top:10px;display:block;">Фамилия</label>
+      <input type="text" id="bookingLastName" autocomplete="family-name" maxlength="64" placeholder="Необязательно" />
+    </div>
     <div class="form-block">
       <label for="bookingPhone">Телефон *</label>
       <input type="tel" id="bookingPhone" placeholder="+375291234567" inputmode="tel" />
@@ -1195,11 +1232,11 @@
       <label for="bookingComment">Комментарий (необязательно)</label>
       <textarea id="bookingComment" rows="2" placeholder="Напишите тренеру, если нужно"></textarea>
     </div>
-    <button type="button" class="btn-block btn-primary" id="btnSubmitBooking">Отправить заявку на запись</button>
+    <button type="button" class="btn-block btn-primary" id="btnSubmitBooking">Записаться</button>
   </div>
   <div id="screenSuccess" data-screen>
     <div class="success-msg" id="successText"></div>
-    <button type="button" class="btn-primary" id="btnCloseSuccess">Закрыть</button>
+    <button type="button" class="btn-primary" id="btnCloseSuccess">Готово</button>
   </div>
 
   <div id="screenRequestForm" data-screen>
@@ -1207,6 +1244,12 @@
     <div id="requestFormTitle" class="step-title">Комментарий к заявке</div>
     <div id="requestFormContext" class="request-form-context"></div>
     <p class="request-form-hint">Напишите, что важно для тренера: удобные день и время, возраст, цели.</p>
+    <div id="requestNameBlockCatalog" class="form-block" style="display:none;">
+      <label for="requestFirstName">Имя *</label>
+      <input type="text" id="requestFirstName" autocomplete="given-name" maxlength="64" placeholder="Как к вам обращаться" />
+      <label for="requestLastName" style="margin-top:10px;display:block;">Фамилия</label>
+      <input type="text" id="requestLastName" autocomplete="family-name" maxlength="64" placeholder="Необязательно" />
+    </div>
     <textarea id="requestComment" class="request-comment-input" rows="4" maxlength="2000" placeholder="Например: Пн и Ср после 18:00, ребёнку 8 лет, хочу научить кататься с нуля"></textarea>
     <div class="request-form-actions">
       <button type="button" class="btn-block btn-primary" id="btnSubmitRequestWithComment">Отправить заявку</button>
@@ -1257,6 +1300,8 @@
         offset: 0,
         limit: 10,
         selectedTrainer: null,
+        /** When trainer has multiple price tiers for filtered service — required by POST /client/booking */
+        catalogBookingPriceVariantId: null,
         slotsForTrainer: [],
         selectedSlot: null,
         returnToSummary: false,
@@ -1266,6 +1311,10 @@
         openedFromMyTrainerTab: false,
         /** From GET /client/session — clients.phone for prefill in booking form */
         clientPhone: '',
+        /** When true, booking/request forms must collect first name (last optional). */
+        needsProfileName: true,
+        clientFirstName: '',
+        clientLastName: '',
         // Time-based filters
         filters: {
           days: [], // [1,2,3,4,5,6,0] for Mon-Sun
@@ -1288,6 +1337,15 @@
         if (!t || t.primary_arena_id == null) return false;
         return state.arenaId !== t.primary_arena_id;
       }
+
+      /** Switch catalog filter to trainer's primary arena (online booking). */
+      function applyTrainerPrimaryArenaToCatalogFilter(t) {
+        if (!t || t.primary_arena_id == null) return false;
+        state.arenaId = t.primary_arena_id;
+        var label = primaryVenueLabel(t);
+        state.arenaName = label || 'Основная площадка';
+        return true;
+      }
       function updateBookingVenueHint() {
         var el = document.getElementById('bookingVenueHint');
         if (!el) return;
@@ -1304,10 +1362,90 @@
           var filterName = (state.arenaName && state.arenaName !== 'Любая') ? state.arenaName : 'другой арене';
           el.innerHTML = 'Вы смотрите тренера по фильтру «' + escapeHtml(filterName) + '». <strong>Онлайн-запись оформляется на основную площадку: ' + escapeHtml(label) + '.</strong> Чтобы заниматься на площадке из фильтра — оставьте заявку: тренер согласует место и запишет вас сам.';
         } else if (label) {
-          el.textContent = 'Площадка онлайн-записи: ' + label;
+          el.textContent = 'Площадка: ' + label;
         } else {
           el.textContent = '';
           el.style.display = 'none';
+        }
+      }
+
+      var CATALOG_PRICE_TIER_LABELS = {
+        child: 'Детский',
+        adult: 'Взрослый',
+        two_children: '2 ребенка',
+        two_adults: '2 взрослых',
+        adult_and_child: 'Взрослый + ребенок',
+      };
+      function catalogTierLabelRu(tier) {
+        var k = (tier.tier_kind || '').toLowerCase();
+        return CATALOG_PRICE_TIER_LABELS[k] || tier.label || 'Тариф';
+      }
+
+      function getTiersForCatalogBooking() {
+        var t = state.selectedTrainer;
+        if (!t || !t.services || state.serviceId == null) return [];
+        var sid = Number(state.serviceId);
+        var svc = null;
+        var i;
+        for (i = 0; i < t.services.length; i++) {
+          if (Number(t.services[i].service_id) === sid) {
+            svc = t.services[i];
+            break;
+          }
+        }
+        if (!svc || !svc.price_tiers) return [];
+        return svc.price_tiers;
+      }
+
+      /** Услуга из фильтра + выбор тарифа при нескольких ценах (строгий режим API). */
+      function updateBookingFormServiceAndTiers() {
+        var svcEl = document.getElementById('bookingFormServiceLine');
+        var block = document.getElementById('bookingPriceTierBlockCatalog');
+        var host = document.getElementById('bookingPriceTierRadiosCatalog');
+        state.catalogBookingPriceVariantId = null;
+        if (svcEl) {
+          var nm = (state.serviceName || '').trim();
+          if (nm) {
+            svcEl.style.display = 'block';
+            svcEl.textContent = 'Услуга: ' + nm;
+          } else {
+            svcEl.style.display = 'none';
+            svcEl.textContent = '';
+          }
+        }
+        if (!block || !host) return;
+        host.innerHTML = '';
+        var tiers = getTiersForCatalogBooking();
+        if (tiers.length <= 1) {
+          block.style.display = 'none';
+          if (tiers.length === 1 && tiers[0].id != null) {
+            state.catalogBookingPriceVariantId = parseInt(String(tiers[0].id), 10);
+          }
+          return;
+        }
+        block.style.display = 'block';
+        tiers.forEach(function(tier) {
+          var lab = document.createElement('label');
+          var inp = document.createElement('input');
+          inp.type = 'radio';
+          inp.name = 'catalogPriceTierChoice';
+          inp.value = String(tier.id);
+          var pb = tier.price_byn;
+          var priceStr = (pb === Math.floor(pb) ? pb : Number(pb).toFixed(2)) + ' BYN';
+          lab.appendChild(inp);
+          var tierTxt = document.createElement('span');
+          tierTxt.className = 'tier-radio-text';
+          tierTxt.textContent = catalogTierLabelRu(tier) + ' — ' + priceStr;
+          lab.appendChild(tierTxt);
+          inp.addEventListener('change', function() {
+            state.catalogBookingPriceVariantId = parseInt(inp.value, 10);
+          });
+          host.appendChild(lab);
+        });
+        var first = host.querySelector('input');
+        if (first) {
+          first.checked = true;
+          state.catalogBookingPriceVariantId = parseInt(first.value, 10);
         }
       }
 
@@ -1347,8 +1485,41 @@
       function closeApp() {
         if (tg) tg.close(); else window.close();
       }
-      var btnClose = document.getElementById("btnClose");
-      if (btnClose) btnClose.onclick = closeApp;
+
+      function canBrowserGoBack() {
+        try {
+          if (window.navigation && typeof window.navigation.canGoBack === 'function') {
+            return window.navigation.canGoBack();
+          }
+        } catch (e) { /* older WebViews */ }
+        return window.history && window.history.length > 1;
+      }
+
+      /** Header #btnBack: in-app stack for booking/slot/request; otherwise browser back. */
+      function syncCatalogHeaderBack() {
+        var btn = document.getElementById('btnBack');
+        if (!btn) return;
+        var active = document.querySelector('[data-screen].active');
+        var sid = active ? active.id : '';
+        if (sid === 'screenBookingForm' || sid === 'screenSlotPick') {
+          btn.hidden = false;
+          btn.onclick = function() { showScreen('screenTrainerDetail'); };
+          return;
+        }
+        if (sid === 'screenRequestForm') {
+          btn.hidden = false;
+          btn.onclick = function() {
+            if (state.requestFormOpenedFrom === 'trainerDetail') {
+              showScreen('screenTrainerDetail');
+            } else {
+              showScreen('screenTrainers');
+            }
+          };
+          return;
+        }
+        btn.hidden = !canBrowserGoBack();
+        btn.onclick = function() { window.history.back(); };
+      }
 
       function showScreen(id) {
         document.querySelectorAll('[data-screen]').forEach(function(el) { el.classList.remove('active'); });
@@ -1363,7 +1534,10 @@
           renderSummary();
           switchTab(state.activeTab);
         }
+        syncCatalogHeaderBack();
       }
+
+      window.addEventListener('popstate', syncCatalogHeaderBack);
 
       function photoUrl(fileKey) {
         if (!fileKey) return null;
@@ -1787,14 +1961,52 @@
           session.client_phone != null && session.client_phone !== undefined
             ? String(session.client_phone).trim()
             : '';
+        state.needsProfileName = !!session.needs_profile_name;
+        state.clientFirstName =
+          session.client_first_name != null && session.client_first_name !== undefined
+            ? String(session.client_first_name).trim()
+            : '';
+        state.clientLastName =
+          session.client_last_name != null && session.client_last_name !== undefined
+            ? String(session.client_last_name).trim()
+            : '';
+      }
+
+      function updateBookingNameFieldsVisibility() {
+        var block = document.getElementById('bookingNameBlockCatalog');
+        if (!block) return;
+        var show = !!state.needsProfileName;
+        block.style.display = show ? 'block' : 'none';
+        if (show) {
+          var f = document.getElementById('bookingFirstName');
+          var l = document.getElementById('bookingLastName');
+          if (f) f.value = state.clientFirstName || '';
+          if (l) l.value = state.clientLastName || '';
+        }
+      }
+
+      function updateRequestNameFieldsVisibility() {
+        var block = document.getElementById('requestNameBlockCatalog');
+        if (!block) return;
+        block.style.display = state.needsProfileName ? 'block' : 'none';
+        if (state.needsProfileName) {
+          var f = document.getElementById('requestFirstName');
+          var l = document.getElementById('requestLastName');
+          if (f) f.value = state.clientFirstName || '';
+          if (l) l.value = state.clientLastName || '';
+        }
       }
 
       /** Refresh client phone from API (e.g. before booking form) so DB updates are visible. */
       function refreshClientPhoneForBookingForm(cb) {
         getClientSession().then(function(session) {
           applySessionToState(session);
+          updateBookingNameFieldsVisibility();
           if (cb) cb();
-        }).catch(function() { if (cb) cb(); });
+        }).catch(function() {
+          updateBookingNameFieldsVisibility();
+          if (cb) cb();
+        });
       }
 
       function prefillBookingPhoneField() {
@@ -1997,6 +2209,18 @@
         });
       }
 
+      function formatCatalogServicePrice(s) {
+        var minV = s.price_byn_min != null ? s.price_byn_min : s.price_byn;
+        var maxV = s.price_byn_max != null ? s.price_byn_max : s.price_byn;
+        if (minV == null && s.price_byn == null) return 'по запросу';
+        if (minV != null && maxV != null && minV !== maxV) {
+          var a = (minV === Math.floor(minV) ? minV : minV.toFixed(2));
+          return 'от ' + a + ' BYN';
+        }
+        var v = minV != null ? minV : s.price_byn;
+        return (v === Math.floor(v) ? v : v.toFixed(2)) + ' BYN';
+      }
+
       function loadTrainers() {
         document.getElementById('trainerList').innerHTML = '<div class="loading">Загрузка...</div>';
         document.getElementById('pagination').innerHTML = '';
@@ -2098,14 +2322,7 @@
             var services = t.services || [];
             if (services.length) {
               var s0 = services[0];
-              var priceStr = '';
-              if (s0.price_byn != null) {
-                var priceVal = s0.price_byn;
-                priceStr = (priceVal === Math.floor(priceVal) ? priceVal : priceVal.toFixed(2)) + ' BYN';
-              } else {
-                priceStr = 'по запросу';
-              }
-              metaBottom.push((s0.service_name || 'Услуга') + ': ' + priceStr);
+              metaBottom.push((s0.service_name || 'Услуга') + ': ' + formatCatalogServicePrice(s0));
             }
             if (t.arena_names && t.arena_names.length) {
               metaBottom.push(t.arena_names.slice(0, 2).join(', '));
@@ -2292,7 +2509,7 @@
         }
         var services = t.services || [];
         var servicesStr = services.length ? services.map(function(s) {
-          return (s.service_name || '—') + (s.price_byn != null ? ': ' + (s.price_byn === Math.floor(s.price_byn) ? s.price_byn : s.price_byn.toFixed(2)) + ' BYN' : ': по запросу');
+          return (s.service_name || '—') + ': ' + formatCatalogServicePrice(s);
         }).join(', ') : '—';
         var desc = (p.description || '').trim() || '—';
         var detailPhoto = t.photos && t.photos[0];
@@ -2346,7 +2563,7 @@
           html += '<div class="trainer-detail-services-title">Услуги и цены</div>';
           services.forEach(function(s) {
             var serviceName = s.service_name || '—';
-            var priceText = s.price_byn != null ? (s.price_byn === Math.floor(s.price_byn) ? s.price_byn : s.price_byn.toFixed(2)) + ' BYN' : 'по запросу';
+            var priceText = formatCatalogServicePrice(s);
             html += '<div class="trainer-detail-service">';
             html += '<span class="trainer-detail-service-name">' + serviceName + '</span>';
             html += '<span class="trainer-detail-service-price">' + priceText + '</span>';
@@ -2429,12 +2646,27 @@
           var slots = state.slotsForTrainer;
           var slotsHtml = '<div class="slots-title">Ближайшие слоты</div>';
           if (isNonPrimaryArenaFilter()) {
+            var primArenaName = primaryVenueLabel(t);
+            var btnPrimarySlotsLabel = primArenaName
+              ? ('Слоты на основной площадке: «' + escapeHtml(primArenaName) + '»')
+              : 'Показать слоты на основной площадке';
             slotsEl.innerHTML = slotsHtml +
               '<div class="slots-empty">Онлайн-запись только на основную площадку тренера. Чтобы заниматься на другой арене, оставьте заявку — тренер согласует место и время.</div>';
             actionsEl.innerHTML = '';
+            actionsEl.innerHTML += '<button type="button" class="btn-primary btn-block" id="btnCatalogSlotsPrimaryArena">' + btnPrimarySlotsLabel + '</button>';
             actionsEl.innerHTML += '<button type="button" class="btn-secondary btn-block" data-action="leave-request">Оставить заявку</button>';
             if (t.has_pass_products || t.has_certificate_products) {
               actionsEl.innerHTML += '<button type="button" class="btn-secondary btn-block" data-action="buy-pass">Абонементы/Сертификаты</button>';
+            }
+            var btnPrim = document.getElementById('btnCatalogSlotsPrimaryArena');
+            if (btnPrim) {
+              btnPrim.onclick = function() {
+                var tr = state.selectedTrainer;
+                if (!applyTrainerPrimaryArenaToCatalogFilter(tr)) return;
+                renderSummary();
+                persistTrainerSelection(tr.id);
+                renderTrainerDetail();
+              };
             }
             var secondaryElNp = document.getElementById('trainerDetailSecondary');
             if (!state.openedFromMyTrainerTab) {
@@ -2468,6 +2700,7 @@
               refreshClientPhoneForBookingForm(function() {
                 prefillBookingPhoneField();
                 updateBookingVenueHint();
+                updateBookingFormServiceAndTiers();
                 showScreen('screenBookingForm');
               });
             };
@@ -2560,6 +2793,7 @@
             refreshClientPhoneForBookingForm(function() {
               prefillBookingPhoneField();
               updateBookingVenueHint();
+              updateBookingFormServiceAndTiers();
               showScreen('screenBookingForm');
             });
           };
@@ -2567,7 +2801,6 @@
       }
 
       document.getElementById('backFromSlotPick').onclick = function() { showScreen('screenTrainerDetail'); };
-      document.getElementById('backFromBookingForm').onclick = function() { showScreen('screenTrainerDetail'); };
 
       document.getElementById('btnSubmitBooking').onclick = function() {
         var slot = state.selectedSlot;
@@ -2577,13 +2810,28 @@
           alert('Введите корректный телефон');
           return;
         }
+        if (state.needsProfileName) {
+          var fn = (document.getElementById('bookingFirstName') && document.getElementById('bookingFirstName').value || '').trim();
+          if (!fn) {
+            alert('Укажите имя');
+            return;
+          }
+        }
         var btn = document.getElementById('btnSubmitBooking');
         btn.disabled = true;
         var initData = tg ? tg.initData : '';
         var headers = { 'Content-Type': 'application/json' };
         if (initData) headers['X-Telegram-Init-Data'] = initData;
         var body = { slot_id: slot.id, phone: phone, comment: (document.getElementById('bookingComment').value || '').trim() || null };
+        if (state.needsProfileName) {
+          body.first_name = (document.getElementById('bookingFirstName').value || '').trim();
+          var ln = (document.getElementById('bookingLastName').value || '').trim();
+          if (ln) body.last_name = ln;
+        }
         if (state.serviceId != null) body.service_id = state.serviceId;
+        if (state.catalogBookingPriceVariantId != null) {
+          body.service_price_variant_id = state.catalogBookingPriceVariantId;
+        }
         fetch('/api/webapp/client/booking', {
           method: 'POST',
           headers: headers,
@@ -2597,6 +2845,10 @@
               }
               document.getElementById('successText').innerHTML = okMsg;
               showScreen('screenSuccess');
+              getClientSession().then(function(session) {
+                applySessionToState(session);
+                updateBookingNameFieldsVisibility();
+              }).catch(function() {});
             } else { alert(data.detail || 'Не удалось записаться'); }
             btn.disabled = false;
           });
@@ -2632,7 +2884,14 @@
         state.requestFormOpenedFrom = 'trainerDetail';
         document.getElementById('requestComment').value = '';
         updateRequestFormContext();
-        showScreen('screenRequestForm');
+        getClientSession().then(function(session) {
+          applySessionToState(session);
+          updateRequestNameFieldsVisibility();
+          showScreen('screenRequestForm');
+        }).catch(function() {
+          updateRequestNameFieldsVisibility();
+          showScreen('screenRequestForm');
+        });
       }
 
       document.getElementById('trainerDetailActions').addEventListener('click', function(e) {
@@ -2676,7 +2935,14 @@
         state.requestFormOpenedFrom = 'trainerList';
         document.getElementById('requestComment').value = '';
         updateRequestFormContext();
-        showScreen('screenRequestForm');
+        getClientSession().then(function(session) {
+          applySessionToState(session);
+          updateRequestNameFieldsVisibility();
+          showScreen('screenRequestForm');
+        }).catch(function() {
+          updateRequestNameFieldsVisibility();
+          showScreen('screenRequestForm');
+        });
       }
 
       document.getElementById('backFromRequestForm').onclick = function() {
@@ -2700,6 +2966,17 @@
         if (state.requestForTrainer && state.requestForTrainer.id) body.trainer_id = state.requestForTrainer.id;
         var commentStr = comment != null && String(comment).trim() ? String(comment).trim() : null;
         if (commentStr) body.comment = commentStr;
+        if (state.needsProfileName) {
+          var rfn = (document.getElementById('requestFirstName') && document.getElementById('requestFirstName').value || '').trim();
+          if (!rfn) {
+            alert('Укажите имя');
+            btn.disabled = false;
+            return;
+          }
+          body.first_name = rfn;
+          var rln = (document.getElementById('requestLastName') && document.getElementById('requestLastName').value || '').trim();
+          if (rln) body.last_name = rln;
+        }
         fetch('/api/webapp/client/request', {
           method: 'POST',
           headers: headers,
@@ -2710,6 +2987,10 @@
               document.getElementById('successText').innerHTML =
                 '✅ <b>Заявка отправлена</b>.<br><br>Когда появится подходящий тренер — напишем вам в боте.';
               showScreen('screenSuccess');
+              getClientSession().then(function(session) {
+                applySessionToState(session);
+                updateRequestNameFieldsVisibility();
+              }).catch(function() {});
             } else {
               alert(data.detail || 'Не удалось отправить заявку. Попробуйте ещё раз.');
             }
@@ -2780,6 +3061,8 @@
       getClientSession()
         .then(function(session) {
           applySessionToState(session);
+          updateBookingNameFieldsVisibility();
+          updateRequestNameFieldsVisibility();
           var returnCtx = (function() {
             var p = new URLSearchParams(window.location.search || '');
             var tid = p.get('trainer_id');

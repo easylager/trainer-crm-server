@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Аналитика и бухгалтерия</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="mini-app-telegram-chrome.js"></script>
   <script src="client-mini-app-theme.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -1184,7 +1185,7 @@
 <body>
   <div class="trainer-app-topbar trainer-mini-nav">
     <button type="button" class="btn-app-home" id="btnHome">Главная</button>
-    <button type="button" class="btn-close" id="btnClose">Закрыть</button>
+    <button type="button" class="btn-app-back" id="btnBack" hidden>Назад</button>
   </div>
   <section class="bd-hero" aria-labelledby="stats-hero-heading">
     <div class="bd-hero-inner">
@@ -1211,14 +1212,6 @@
     (function() {
       var tg = window.Telegram && window.Telegram.WebApp;
       if (tg) { tg.ready(); tg.expand(); }
-
-      var btnCloseEl = document.getElementById('btnClose');
-      if (btnCloseEl) {
-        btnCloseEl.onclick = function() {
-          if (tg && tg.close) tg.close();
-          else window.close();
-        };
-      }
 
       var initData = tg ? tg.initData : '';
       function fetchWithTimeout(url, opts, ms) {

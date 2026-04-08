@@ -1,5 +1,5 @@
 /**
- * Client Mini App: «Главная» in header (with optional «Закрыть»).
+ * Client Mini App: «Главная» + «Назад» (browser history) in header.
  * Load AFTER page inline <style> so WebView keeps consistent padding.
  */
 .client-mini-nav {
@@ -16,7 +16,7 @@
 }
 
 .client-mini-nav > button.btn-app-home,
-.client-mini-nav > button.btn-close {
+.client-mini-nav > button.btn-app-back {
   min-height: 44px !important;
   padding: 10px 16px !important;
   font-size: 14px !important;
@@ -47,7 +47,7 @@
   box-shadow: none !important;
 }
 
-.client-mini-nav > button.btn-close {
+.client-mini-nav > button.btn-app-back {
   border: 1px solid rgba(245, 166, 35, 0.22) !important;
   background: var(--tg-theme-secondary-bg-color) !important;
   color: var(--tg-theme-text-color) !important;
@@ -59,7 +59,11 @@
   opacity: 0.92 !important;
 }
 
-.client-mini-nav > button.btn-close:active {
+.client-mini-nav > button.btn-app-back:active {
   transform: scale(0.98) !important;
   opacity: 0.9 !important;
+}
+
+.client-mini-nav > button.btn-app-back[hidden] {
+  display: none !important;
 }

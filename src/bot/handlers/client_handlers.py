@@ -1036,7 +1036,7 @@ def _normalize_phone(text: str | None) -> str:
 
 @router.callback_query(lambda c: c.data and c.data.startswith(BOOK_SLOT_PREFIX))
 async def on_book_slot(callback: CallbackQuery) -> None:
-    """Start booking flow: ask for phone (slot chosen)."""
+    """Start booking flow: ask name (first time), then phone / comment as needed."""
     await callback.answer()
     telegram_id = callback.from_user.id if callback.from_user else 0
     slot_id = int(callback.data[len(BOOK_SLOT_PREFIX):])
@@ -1051,18 +1051,23 @@ async def on_book_slot(callback: CallbackQuery) -> None:
     first_name_existing = (profile.get("first_name") or "").strip() if profile else ""
     last_name_existing = (profile.get("last_name") or "").strip() if profile else ""
     phone_existing = (profile.get("phone") or "").strip() if profile else ""
-    need_name = not (first_name_existing and last_name_existing)
+    # Фамилия в профиле опциональна; для повторных записей достаточно сохранённого имени.
+    need_name = not first_name_existing
     has_phone = bool(phone_existing)
     state["has_phone"] = has_phone
-    # 1) Нет имени/фамилии — предложить из Telegram или ввести вручную
+    if not need_name:
+        # Чтобы при завершении записи не подставлялись имена из Telegram вместо сохранённых в БД.
+        state["override_first_name"] = first_name_existing
+        state["override_last_name"] = last_name_existing
+    # 1) Нет имени — предложить из Telegram или ввести вручную
     if need_name:
         from_user = callback.from_user
         tg_first = (from_user.first_name or "").strip() if from_user else ""
         tg_last = (from_user.last_name or "").strip() if from_user else ""
-        if tg_first and tg_last:
+        if tg_first:
             state["need_name"] = True
             _booking_state[telegram_id] = state
-            name_display = f"{tg_first} {tg_last}"
+            name_display = f"{tg_first} {tg_last}".strip()
             kb = InlineKeyboardMarkup(inline_keyboard=[
                 [InlineKeyboardButton(text=msg.CLIENT_BUTTON_USE_TG_NAME, callback_data=BOOKING_USE_TG_NAME)],
                 [InlineKeyboardButton(text=msg.CLIENT_BUTTON_ENTER_MANUAL, callback_data=BOOKING_ENTER_MANUAL)],
@@ -1077,7 +1082,7 @@ async def on_book_slot(callback: CallbackQuery) -> None:
         _booking_state[telegram_id] = state
         await callback.message.answer(msg.CLIENT_PROFILE_ENTER_NAME, reply_markup=ReplyKeyboardRemove())
         return
-    # 2) Есть имя/фамилия и уже сохранён телефон — сразу переходим к комментарию
+    # 2) Есть имя в профиле и уже сохранён телефон — сразу переходим к комментарию
     if has_phone:
         state["phone"] = phone_existing
         _booking_state[telegram_id] = state
@@ -1090,7 +1095,7 @@ async def on_book_slot(callback: CallbackQuery) -> None:
         )
         await callback.message.answer(msg.CLIENT_BOOK_COMMENT_OR_BUTTON, reply_markup=skip_kb)
         return
-    # 3) Имя/фамилия есть, телефона нет — просим телефон как раньше
+    # 3) Имя в профиле есть, телефона нет — просим телефон
     _booking_state[telegram_id] = state
     keyboard = ReplyKeyboardMarkup(
         keyboard=[[KeyboardButton(text=msg.CLIENT_BOOK_BUTTON_SEND_CONTACT, request_contact=True)]],
@@ -1251,11 +1256,11 @@ async def on_booking_message(message: Message) -> None:
     if state.get("need_name"):
         full = (message.text or "").strip()
         parts = full.split()
-        if len(parts) < 2:
+        if not parts or not parts[0].strip():
             await message.answer(msg.CLIENT_PROFILE_NAME_INVALID)
             return
         first_name = parts[0]
-        last_name = " ".join(parts[1:])
+        last_name = " ".join(parts[1:]) if len(parts) > 1 else ""
         state.pop("need_name", None)
         state["override_first_name"] = first_name
         state["override_last_name"] = last_name
@@ -1451,7 +1456,13 @@ async def on_repeat_booking(callback: CallbackQuery) -> None:
         if service_id:
             async with async_session_factory() as db_session:
                 new_booking_id = await create_booking(
-                    db_session, slot_info["slot_id"], trainer_id, client_id, service_id=service_id, client_comment=None
+                    db_session,
+                    slot_info["slot_id"],
+                    trainer_id,
+                    client_id,
+                    service_id=service_id,
+                    client_comment=None,
+                    service_price_variant_id=booking.get("service_price_variant_id"),
                 )
             if new_booking_id:
                 async with async_session_factory() as db_session:
@@ -1539,7 +1550,13 @@ async def on_make_recurring(callback: CallbackQuery) -> None:
     if slot_info and service_id:
         async with async_session_factory() as db_session:
             new_booking_id = await create_booking(
-                db_session, slot_info["slot_id"], trainer_id, client_id, service_id=service_id, client_comment=None
+                db_session,
+                slot_info["slot_id"],
+                trainer_id,
+                client_id,
+                service_id=service_id,
+                client_comment=None,
+                service_price_variant_id=booking.get("service_price_variant_id"),
             )
         if new_booking_id:
             async with async_session_factory() as db_session:

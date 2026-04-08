@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Расписание</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="mini-app-telegram-chrome.js"></script>
   <link rel="stylesheet" href="theme.css" />
   <link rel="stylesheet" href="mini-app-components.css" />
   <script src="mini-app-confirm.js"></script>
@@ -67,7 +68,56 @@
       display: flex;
       flex-direction: column;
       gap: 8px;
-      margin-bottom: 18px;
+      margin-bottom: 12px;
+    }
+    .calendar-past-reveal-wrap {
+      margin: 0 0 14px;
+      display: flex;
+      justify-content: center;
+    }
+    .calendar-past-reveal-wrap[hidden] {
+      display: none !important;
+    }
+    .calendar-past-reveal {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      max-width: 100%;
+      padding: 9px 16px;
+      border-radius: 999px;
+      border: 1px solid color-mix(in srgb, var(--tg-theme-hint-color) 38%, transparent);
+      background: color-mix(in srgb, var(--tg-theme-secondary-bg-color) 88%, var(--tg-theme-hint-color) 12%);
+      color: var(--tg-theme-text-color);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: inherit;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .calendar-past-reveal:active { opacity: 0.88; }
+    .calendar-past-reveal-icon {
+      font-size: 20px;
+      line-height: 1;
+      letter-spacing: 0.12em;
+      color: var(--tg-theme-hint-color);
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+    .calendar-past-reveal-label {
+      text-align: center;
+      line-height: 1.3;
+    }
+    .empty.calendar-past-nudge {
+      font-size: 14px;
+      line-height: 1.45;
+      color: var(--tg-theme-hint-color);
+    }
+    @supports not (color: color-mix(in srgb, red, blue)) {
+      .calendar-past-reveal {
+        border-color: rgba(102, 102, 102, 0.35);
+        background: var(--tg-theme-secondary-bg-color);
+      }
     }
     .btn-block {
       display: block;
@@ -122,6 +172,66 @@
     .slot-row.slot-booked-click.slot-booking-confirmed {
       border-color: rgba(52, 199, 89, 0.45);
     }
+    .slot-row.slot-booked-click.slot-booking-completed {
+      border-color: rgba(52, 199, 89, 0.38);
+    }
+    /*
+     * Past slots / bookings: clearly «архив» vs яркие будущие строки.
+     * !important beats page-level JUSTSKATE overrides on .slot-row background.
+     */
+    .slot-row.slot-past {
+      background: color-mix(in srgb, var(--tg-theme-secondary-bg-color) 68%, var(--tg-theme-hint-color) 32%) !important;
+      border: 2px dashed color-mix(in srgb, var(--tg-theme-hint-color) 48%, transparent) !important;
+      box-shadow: inset 0 1px 0 color-mix(in srgb, var(--tg-theme-bg-color) 40%, transparent);
+    }
+    .slot-row.slot-past .slot-time {
+      color: color-mix(in srgb, var(--tg-theme-text-color) 58%, var(--tg-theme-hint-color) 42%);
+      font-weight: 600;
+    }
+    .slot-row.slot-past .slot-venue,
+    .slot-row.slot-past .slot-client-hint {
+      opacity: 0.9;
+    }
+    .slot-row.slot-past .slot-status {
+      opacity: 0.92;
+    }
+    /* Past booked: приглушённая рамка (не тот же зелёный акцент, что у будущих). */
+    .slot-row.slot-past.slot-booked-click {
+      border-color: color-mix(in srgb, var(--tg-theme-hint-color) 52%, var(--app-success) 22%) !important;
+      border-style: dashed;
+    }
+    .slot-row.slot-past.slot-booked-click.slot-booking-pending {
+      border-color: color-mix(in srgb, var(--tg-theme-hint-color) 45%, var(--tg-theme-button-color) 35%) !important;
+    }
+    .slot-row.slot-past.slot-booked-click.slot-booking-confirmed,
+    .slot-row.slot-past.slot-booked-click.slot-booking-completed {
+      border-color: color-mix(in srgb, var(--tg-theme-hint-color) 48%, var(--app-success) 30%) !important;
+    }
+    @supports not (color: color-mix(in srgb, red, blue)) {
+      .slot-row.slot-past {
+        background: var(--tg-theme-secondary-bg-color) !important;
+        border: 2px dashed rgba(102, 102, 102, 0.45) !important;
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+      }
+      .slot-row.slot-past .slot-time { color: #666; }
+      .slot-row.slot-past.slot-booked-click { border-color: rgba(90, 120, 95, 0.55) !important; }
+      .slot-row.slot-past.slot-booked-click.slot-booking-pending { border-color: rgba(140, 110, 70, 0.55) !important; }
+      .slot-row.slot-past.slot-booked-click.slot-booking-confirmed,
+      .slot-row.slot-past.slot-booked-click.slot-booking-completed { border-color: rgba(80, 130, 88, 0.5) !important; }
+    }
+    @media (prefers-color-scheme: dark) {
+      @supports not (color: color-mix(in srgb, red, blue)) {
+        .slot-row.slot-past {
+          border-color: rgba(142, 142, 147, 0.5) !important;
+          box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+        }
+        .slot-row.slot-past .slot-time { color: #aeaeb2; }
+        .slot-row.slot-past.slot-booked-click { border-color: rgba(110, 140, 115, 0.45) !important; }
+        .slot-row.slot-past.slot-booked-click.slot-booking-pending { border-color: rgba(150, 120, 75, 0.5) !important; }
+        .slot-row.slot-past.slot-booked-click.slot-booking-confirmed,
+        .slot-row.slot-past.slot-booked-click.slot-booking-completed { border-color: rgba(95, 145, 105, 0.48) !important; }
+      }
+    }
     .slot-row.slot-booked-click:active { opacity: 0.92; }
     .slot-row .slot-meta { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
     .slot-status {
@@ -138,6 +248,10 @@
     .slot-status.booked-pending {
       background: rgba(255, 159, 10, 0.22);
       color: #ff9500;
+    }
+    .slot-status.booked-completed {
+      background: rgba(52, 199, 89, 0.18);
+      color: var(--app-success, #34c759);
     }
     .slot-status.cancelled { background: rgba(142, 142, 147, 0.2); color: var(--tg-theme-hint-color); }
     .btn-slot-del {
@@ -655,6 +769,14 @@
     #screenBookingDetail {
       font-family: var(--app-font-sans);
     }
+    .booking-detail-screen-header {
+      margin-bottom: 12px;
+      position: sticky;
+      top: 0;
+      z-index: 4;
+      background: var(--tg-theme-bg-color);
+      padding-top: 4px;
+    }
     #screenBookingDetail .back-link { font-family: var(--app-font-sans); }
     .booking-detail { animation: bd-enter 0.38s cubic-bezier(0.22, 1, 0.36, 1) both; }
     @keyframes bd-enter {
@@ -910,7 +1032,7 @@
     <span class="header-title">Расписание</span>
     <div class="app-header-actions trainer-mini-nav">
       <button type="button" class="btn-app-home" id="btnHome">Главная</button>
-      <button type="button" class="btn-close" id="btnClose">Закрыть</button>
+      <button type="button" class="btn-app-back" id="btnBack" data-skip-history-back="true" hidden>Назад</button>
     </div>
   </div>
   <div class="tabs">
@@ -932,6 +1054,12 @@
     <div class="action-bar">
       <button type="button" class="btn-block btn-outline" id="btnAddSlots">➕ Добавить слоты на день</button>
     </div>
+    <div id="calendarPastRevealWrap" class="calendar-past-reveal-wrap" hidden>
+      <button type="button" class="calendar-past-reveal" id="btnTogglePastThisWeek" aria-expanded="false" aria-controls="calendarContent">
+        <span class="calendar-past-reveal-icon" aria-hidden="true">⋯</span>
+        <span class="calendar-past-reveal-label"></span>
+      </button>
+    </div>
     <div id="calendarContent"></div>
   </div>
 
@@ -946,6 +1074,13 @@
   </div>
 
   <div id="screenBookingDetail" data-screen>
+    <div class="header booking-detail-screen-header">
+      <span class="header-title">Запись</span>
+      <div class="trainer-mini-nav">
+        <button type="button" class="btn-app-home" id="btnHomeBookingDetail">Главная</button>
+        <button type="button" class="btn-app-back" id="btnBackBookingDetail" data-skip-history-back="true">Назад</button>
+      </div>
+    </div>
     <div id="detailBookingContent"></div>
     <div class="bd-actions-wrap" id="detailBookingActions"></div>
     <button type="button" class="back-link" id="backToScheduleFromBooking">
@@ -955,7 +1090,13 @@
   </div>
 
   <div id="screenBookingDecline" data-screen class="decline-screen">
-    <div class="screen-title">Отклонить запись</div>
+    <div class="header booking-detail-screen-header">
+      <span class="header-title">Отклонить запись</span>
+      <div class="trainer-mini-nav">
+        <button type="button" class="btn-app-home" id="btnHomeBookingDecline">Главная</button>
+        <button type="button" class="btn-app-back" id="btnBackBookingDecline" data-skip-history-back="true">Назад</button>
+      </div>
+    </div>
     <div class="screen-hint">Клиент увидит причину в уведомлении. Напишите коротко.</div>
     <div class="card-wrap">
       <div class="form-block">
@@ -1044,10 +1185,13 @@
           <label class="book-field-label" for="bookServiceSelect">Услуга</label>
           <select id="bookServiceSelect" class="input book-service-select"></select>
         </div>
+        <div class="book-field-stack" id="bookPriceTierWrapExisting" style="display:none;">
+          <label class="book-field-label">Тариф</label>
+          <div id="bookPriceTierRadiosExisting" class="book-price-tier-radios"></div>
+        </div>
         <div class="book-field-stack" id="bookArenaWrap" style="display:none;">
           <label class="book-field-label" for="bookArenaSelect">Площадка</label>
           <select id="bookArenaSelect" class="input book-service-select"></select>
-          <p class="book-phone-hint" id="bookArenaTrainerHint" style="display:none;">Онлайн-запись клиента в каталоге — только на основную площадку; здесь вы можете указать любую площадку из профиля.</p>
         </div>
         <div class="book-field-stack">
           <label class="book-field-label" for="bookClientSearch">Поиск по имени или телефону</label>
@@ -1064,6 +1208,10 @@
           <label class="book-field-label" for="bookServiceSelectNew">Услуга</label>
           <select id="bookServiceSelectNew" class="input book-service-select"></select>
         </div>
+        <div class="book-field-stack" id="bookPriceTierWrapNew" style="display:none;">
+          <label class="book-field-label">Тариф</label>
+          <div id="bookPriceTierRadiosNew" class="book-price-tier-radios"></div>
+        </div>
         <div class="book-field-stack" id="bookArenaWrapNew" style="display:none;">
           <label class="book-field-label" for="bookArenaSelectNew">Площадка</label>
           <select id="bookArenaSelectNew" class="input book-service-select"></select>
@@ -1071,12 +1219,13 @@
         <div class="book-modal-divider">
           <div class="label">Новый клиент</div>
           <div class="book-new-client">
-            <input type="tel" id="bookNewPhone" class="input" placeholder="+375 29 123 45 67" autocomplete="tel" inputmode="tel" maxlength="32">
+            <label class="book-field-label" for="bookNewPhone">Телефон <span class="book-req" aria-hidden="true">*</span></label>
+            <input type="tel" id="bookNewPhone" class="input" placeholder="+375 29 123 45 67" autocomplete="tel" inputmode="tel" maxlength="32" aria-required="true">
             <p class="book-phone-hint">Номер в формате +375 XX XXX XX XX</p>
             <label class="book-field-label" for="bookNewFirstName">Имя <span class="book-req" aria-hidden="true">*</span></label>
             <input type="text" id="bookNewFirstName" class="input" placeholder="Иван" autocomplete="given-name" maxlength="120" aria-required="true">
-            <label class="book-field-label" for="bookNewLastName">Фамилия <span class="book-req" aria-hidden="true">*</span></label>
-            <input type="text" id="bookNewLastName" class="input" placeholder="Иванов" autocomplete="family-name" maxlength="120" aria-required="true">
+            <label class="book-field-label" for="bookNewLastName">Фамилия</label>
+            <input type="text" id="bookNewLastName" class="input" placeholder="По желанию" autocomplete="family-name" maxlength="120" aria-required="false">
             <button type="button" class="btn-block btn-primary" id="bookNewSubmit">Добавить и записать</button>
           </div>
         </div>
@@ -1219,7 +1368,8 @@
       }
 
       function updateTelegramBack() {
-        if (!tg || !tg.BackButton) return;
+        var btn = document.getElementById('btnBack');
+        if (!btn) return;
         var booking = document.getElementById('screenBookingDetail') && document.getElementById('screenBookingDetail').classList.contains('active');
         var decline = document.getElementById('screenBookingDecline') && document.getElementById('screenBookingDecline').classList.contains('active');
         var edit = document.getElementById('screenEdit').style.display === 'block';
@@ -1228,19 +1378,13 @@
         var mBookConf = document.getElementById('modalBookConfirm').style.display === 'flex';
         var mCancelB = document.getElementById('modalBookingCancel').style.display === 'flex';
         var mTpl = document.getElementById('modalConfirm').style.display === 'flex';
-        if (booking || decline || edit || dayPick || mBook || mBookConf || mCancelB || mTpl) {
-          tg.BackButton.show();
-        } else {
-          tg.BackButton.hide();
-        }
+        btn.hidden = !(booking || decline || edit || dayPick || mBook || mBookConf || mCancelB || mTpl);
       }
 
       function refreshCalendarChrome() {
         if (!state.weekStart) state.weekStart = getMonday(new Date());
         const start = state.weekStart;
         document.getElementById('weekLabel').textContent = formatWeekLabel(start);
-        var thisWeekMonday = getMonday(new Date());
-        document.getElementById('weekPrev').disabled = dateToStr(start) <= dateToStr(thisWeekMonday);
       }
 
       function syncAfterBookingPop() {
@@ -1386,7 +1530,6 @@
           var initials = bookingInitials(client);
           var html = '';
           html += '<div class="booking-detail">';
-          html += '<div class="bd-screen-head"><div class="bd-screen-title">Запись</div></div>';
           html += '<div class="bd-hero"><div class="bd-hero-inner">';
           html += '<div class="bd-hero-kicker">Дата и время</div>';
           html += '<div class="bd-hero-time">' + escapeHtml(b.start_time || '—') + ' – ' + escapeHtml(b.end_time || '—') + '</div>';
@@ -1437,21 +1580,24 @@
           var actions = document.getElementById('detailBookingActions');
           actions.innerHTML = '';
           var pending = (b.status || '') === 'pending';
+          var completed = (b.status || '') === 'completed';
           var tid = b.client_telegram_id;
 
           if (pending) {
             actions.innerHTML += '<button type="button" class="bd-btn bd-btn--confirm" data-baction="confirm">' + BD_ICONS.check + ' Подтвердить</button>';
             actions.innerHTML += '<button type="button" class="bd-btn bd-btn--decline" data-baction="decline">' + BD_ICONS.xCircle + ' Отклонить</button>';
-          } else {
+          } else if (!completed) {
             actions.innerHTML += '<button type="button" class="bd-btn bd-btn--outline-danger" data-baction="cancel">' + BD_ICONS.cancelOutline + ' Отменить запись</button>';
           }
           if (tid && b.client_has_telegram !== false) {
             actions.innerHTML += '<a class="bd-btn bd-btn--surface" href="tg://user?id=' + encodeURIComponent(String(tid)) + '">' + BD_ICONS.send + ' Написать клиенту</a>';
           }
-          if (b.recurring_id) {
-            actions.innerHTML += '<button type="button" class="bd-btn bd-btn--soft" data-baction="remove_recurring" data-recurring-id="' + b.recurring_id + '">' + BD_ICONS.linkOff + ' Снять регулярность</button>';
-          } else {
-            actions.innerHTML += '<button type="button" class="bd-btn bd-btn--soft" data-baction="make_regular">' + BD_ICONS.userPlus + ' Сделать постоянным клиентом</button>';
+          if (!completed) {
+            if (b.recurring_id) {
+              actions.innerHTML += '<button type="button" class="bd-btn bd-btn--soft" data-baction="remove_recurring" data-recurring-id="' + b.recurring_id + '">' + BD_ICONS.linkOff + ' Снять регулярность</button>';
+            } else {
+              actions.innerHTML += '<button type="button" class="bd-btn bd-btn--soft" data-baction="make_regular">' + BD_ICONS.userPlus + ' Сделать постоянным клиентом</button>';
+            }
           }
 
           actions.querySelectorAll('button[data-baction]').forEach(function(btn) {
@@ -1568,12 +1714,15 @@
         selectedHours: new Set(),
         lockedHours: new Set(),
         applyWeekStart: null,
+        /** When true, current/partial week lists Mon… + ended slots (backfill). */
+        showPastThisWeek: false,
         bookSlotId: null,
         bookModalStep: 'choice',
         pendingBookClientId: null,
         pendingBookClientName: null,
         bookServices: [],
         bookServiceId: null,
+        bookPriceVariantId: null,
         trainerArenas: [],
         bookArenaId: null,
         /** From CRM: /schedule-editor?client_id= — preselect client when booking a slot. */
@@ -1595,10 +1744,8 @@
         var show = arenas.length > 1;
         var wrap = document.getElementById('bookArenaWrap');
         var wrapNew = document.getElementById('bookArenaWrapNew');
-        var hint = document.getElementById('bookArenaTrainerHint');
         if (wrap) wrap.style.display = show ? 'block' : 'none';
         if (wrapNew) wrapNew.style.display = show ? 'block' : 'none';
-        if (hint) hint.style.display = show ? 'block' : 'none';
         var primary = arenas.filter(function(a) { return a.is_primary; })[0];
         state.bookArenaId = primary ? primary.id : (arenas.length ? arenas[0].id : null);
         function fill(sel) {
@@ -1630,7 +1777,66 @@
         if (state.trainerArenas && state.trainerArenas.length > 1 && state.bookArenaId != null) {
           o.arena_id = state.bookArenaId;
         }
+        if (state.bookPriceVariantId != null) o.service_price_variant_id = state.bookPriceVariantId;
         return o;
+      }
+
+      var PRICE_TIER_LABEL_RU = {
+        child: 'Детский',
+        adult: 'Взрослый',
+        two_children: '2 ребенка',
+        two_adults: '2 взрослых',
+        adult_and_child: 'Взрослый + ребенок',
+      };
+      function priceTierLabelRuSe(tier) {
+        var k = (tier.tier_kind || '').toLowerCase();
+        return PRICE_TIER_LABEL_RU[k] || tier.label || 'Тариф';
+      }
+
+      function syncBookPriceTierRadios(which) {
+        var sid = state.bookServiceId;
+        var svc = (state.bookServices || []).filter(function(x) { return x.id === sid; })[0];
+        var tiers = (svc && svc.price_tiers) ? svc.price_tiers : [];
+        var wrap = document.getElementById(which === 'existing' ? 'bookPriceTierWrapExisting' : 'bookPriceTierWrapNew');
+        var host = document.getElementById(which === 'existing' ? 'bookPriceTierRadiosExisting' : 'bookPriceTierRadiosNew');
+        if (!wrap || !host) return;
+        if (tiers.length <= 1) {
+          wrap.style.display = 'none';
+          state.bookPriceVariantId = tiers.length === 1 ? tiers[0].id : null;
+          return;
+        }
+        wrap.style.display = 'block';
+        host.innerHTML = '';
+        var gname = 'bpt_' + which + '_' + String(state.bookSlotId || 0);
+        tiers.forEach(function(tier) {
+          var lab = document.createElement('label');
+          lab.style.display = 'flex';
+          lab.style.alignItems = 'center';
+          lab.style.gap = '10px';
+          lab.style.marginBottom = '8px';
+          var inp = document.createElement('input');
+          inp.type = 'radio';
+          inp.name = gname;
+          inp.value = String(tier.id);
+          var pb = tier.price_byn;
+          var priceStr = (pb === Math.floor(pb) ? pb : Number(pb).toFixed(2)) + ' BYN';
+          lab.appendChild(inp);
+          lab.appendChild(document.createTextNode(priceTierLabelRuSe(tier) + ' — ' + priceStr));
+          inp.addEventListener('change', function() {
+            state.bookPriceVariantId = parseInt(inp.value, 10);
+          });
+          host.appendChild(lab);
+        });
+        var first = host.querySelector('input');
+        if (first) {
+          first.checked = true;
+          state.bookPriceVariantId = parseInt(first.value, 10);
+        }
+      }
+
+      function syncAllBookPriceTierRadios() {
+        syncBookPriceTierRadios('existing');
+        syncBookPriceTierRadios('new');
       }
 
       function getMonday(d) {
@@ -1648,12 +1854,15 @@
         weekEnd.setHours(0, 0, 0, 0);
         const startCopy = new Date(start);
         startCopy.setHours(0, 0, 0, 0);
+        const fmt = function(d) { return d.getDate() + ' ' + MONTHS[d.getMonth()]; };
+        if (weekEnd < today) {
+          return fmt(startCopy) + ' – ' + fmt(weekEnd);
+        }
         const effectiveStart = startCopy < today ? today : startCopy;
         if (effectiveStart > weekEnd) return 'Прошедшая неделя';
         if (effectiveStart.getTime() === weekEnd.getTime()) {
           return effectiveStart.getDate() + ' ' + MONTHS_GENITIVE[effectiveStart.getMonth()];
         }
-        const fmt = function(d) { return d.getDate() + ' ' + MONTHS[d.getMonth()]; };
         return fmt(effectiveStart) + ' – ' + fmt(weekEnd);
       }
 
@@ -1674,11 +1883,6 @@
         if (s == null || s === undefined) return '';
         return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
       }
-
-      var btnCloseEl = document.getElementById('btnClose');
-      if (btnCloseEl) btnCloseEl.onclick = function() {
-        if (tg) tg.close(); else window.close();
-      };
 
       function setActiveTab(tabName) {
         state.tab = tabName;
@@ -1753,6 +1957,50 @@
         });
       }
 
+      /** Monday-based week fully before today (00:00 local) — show full history without hiding past days. */
+      function isEntireWeekInPast(weekStart) {
+        var end = new Date(weekStart);
+        end.setDate(end.getDate() + 6);
+        end.setHours(0, 0, 0, 0);
+        var t = new Date();
+        t.setHours(0, 0, 0, 0);
+        return end < t;
+      }
+
+      function countPastHiddenSlots(slots) {
+        if (!slots || !slots.length) return 0;
+        return slots.length - filterOutPastSlots(slots).length;
+      }
+
+      function pastSlotsToggleLabel(n) {
+        var nv = n % 100;
+        var nl = n % 10;
+        var word = (nv >= 11 && nv <= 14) ? 'слотов' : (nl === 1 ? 'слот' : (nl >= 2 && nl <= 4 ? 'слота' : 'слотов'));
+        return 'Показать прошлые · ' + n + ' ' + word;
+      }
+
+      function updatePastRevealChrome() {
+        var wrap = document.getElementById('calendarPastRevealWrap');
+        var btn = document.getElementById('btnTogglePastThisWeek');
+        if (!wrap || !btn) return;
+        var entirePast = isEntireWeekInPast(state.weekStart);
+        var n = countPastHiddenSlots(state.slots);
+        if (entirePast || n === 0) {
+          wrap.hidden = true;
+          state.showPastThisWeek = false;
+          return;
+        }
+        wrap.hidden = false;
+        var label = btn.querySelector('.calendar-past-reveal-label');
+        if (state.showPastThisWeek) {
+          btn.setAttribute('aria-expanded', 'true');
+          if (label) label.textContent = 'Скрыть прошлые';
+        } else {
+          btn.setAttribute('aria-expanded', 'false');
+          if (label) label.textContent = pastSlotsToggleLabel(n);
+        }
+      }
+
       function loadSlots() {
         if (window.TrainerMiniAppGate && window.TrainerMiniAppGate.shouldBlockFeatureFetch()) return;
         if (tg && !tg.initData) {
@@ -1779,8 +2027,8 @@
         const from = dateToStr(start);
         const to = dateToStr(end);
         document.getElementById('weekLabel').textContent = formatWeekLabel(start);
-        var thisWeekMonday = getMonday(new Date());
-        document.getElementById('weekPrev').disabled = dateToStr(start) <= dateToStr(thisWeekMonday);
+        var pastWrap = document.getElementById('calendarPastRevealWrap');
+        if (pastWrap) pastWrap.hidden = true;
         document.getElementById('calendarContent').innerHTML = '<div class="loading">Загрузка...</div>';
         fetch(apiUrlWithQuery('/schedule?from_date=' + encodeURIComponent(from) + '&to_date=' + encodeURIComponent(to)), { headers: headers() })
           .then(function(r) {
@@ -1825,15 +2073,25 @@
 
       function renderCalendar() {
         const byDay = {};
-        filterSlotsForUi(filterOutPastSlots(state.slots)).forEach(function(s) {
+        var entirePast = isEntireWeekInPast(state.weekStart);
+        var baseSlots = entirePast || state.showPastThisWeek
+          ? state.slots
+          : filterOutPastSlots(state.slots);
+        filterSlotsForUi(baseSlots).forEach(function(s) {
           const key = s.slot_date;
           if (!byDay[key]) byDay[key] = [];
           byDay[key].push(s);
         });
         const days = Object.keys(byDay).sort();
         const content = document.getElementById('calendarContent');
+        var hiddenPastN = (!entirePast && !state.showPastThisWeek) ? countPastHiddenSlots(state.slots) : 0;
         if (days.length === 0) {
-          content.innerHTML = '<div class="empty">На эту неделю слотов нет. Добавьте слоты или примените шаблон.</div>';
+          if (state.slotFilter === 'all' && hiddenPastN > 0 && !state.showPastThisWeek) {
+            content.innerHTML = '<div class="empty calendar-past-nudge">Слоты прошедших дней на этой неделе скрыты. Откройте список кнопкой выше — можно записать клиента задним числом или поправить слоты.</div>';
+          } else {
+            content.innerHTML = '<div class="empty">На эту неделю слотов нет. Добавьте слоты или примените шаблон.</div>';
+          }
+          updatePastRevealChrome();
           return;
         }
         let html = '';
@@ -1843,9 +2101,11 @@
           daySlots.forEach(function(s) {
             const status = s.status || 'available';
             const available = status === 'available';
+            const slotPast = isSlotEndedInPast(s);
             const bookedClick = status === 'booked' && s.booking_id;
             const bst = bookedClick ? String(s.booking_status || 'confirmed').toLowerCase() : '';
             const bookingPending = bookedClick && bst === 'pending';
+            const bookingCompleted = bookedClick && bst === 'completed';
             const bookingConfirmed = bookedClick && bst === 'confirmed';
             let statusLabel = status === 'available' ? 'свободен' : status === 'booked' ? 'занят' : 'отменён';
             let statusClass = status;
@@ -1853,13 +2113,19 @@
               if (bookingPending) {
                 statusLabel = 'к подтверждению';
                 statusClass = 'booked booked-pending';
+              } else if (bookingCompleted) {
+                statusLabel = 'проведено';
+                statusClass = 'booked booked-completed';
               } else {
                 statusLabel = 'подтверждено';
                 statusClass = 'booked booked-confirmed';
               }
             }
-            html += '<div class="slot-row' + (available ? ' slot-available' : '') + (bookedClick ? ' slot-booked-click' : '')
-              + (bookingPending ? ' slot-booking-pending' : '') + (bookingConfirmed ? ' slot-booking-confirmed' : '') + '"'
+            html += '<div class="slot-row' + (slotPast ? ' slot-past' : '')
+              + (available ? ' slot-available' : '') + (bookedClick ? ' slot-booked-click' : '')
+              + (bookingPending ? ' slot-booking-pending' : '')
+              + (bookingConfirmed ? ' slot-booking-confirmed' : '')
+              + (bookingCompleted ? ' slot-booking-completed' : '') + '"'
               + (available ? ' data-slot-id="' + s.id + '" role="button" tabindex="0"' : '')
               + (bookedClick ? ' data-booking-id="' + s.booking_id + '" role="button" tabindex="0"' : '')
               + (bookedClick ? ' data-booking-status="' + escapeHtml(bst) + '"' : '')
@@ -1911,6 +2177,7 @@
           function openBookModal() {
             const id = parseInt(row.dataset.slotId, 10);
             state.bookSlotId = id;
+            state.bookPriceVariantId = null;
             state.bookModalStep = 'choice';
             document.getElementById('bookClientSearch').value = '';
             document.getElementById('bookNewPhone').value = '';
@@ -1944,10 +2211,13 @@
                 fillServiceSelect(document.getElementById('bookServiceSelectNew'));
                 document.getElementById('bookServiceSelect').onchange = function() {
                   state.bookServiceId = this.value ? parseInt(this.value, 10) : null;
+                  syncAllBookPriceTierRadios();
                 };
                 document.getElementById('bookServiceSelectNew').onchange = function() {
                   state.bookServiceId = this.value ? parseInt(this.value, 10) : null;
+                  syncAllBookPriceTierRadios();
                 };
+                syncAllBookPriceTierRadios();
                 fillTrainerArenasUI();
                 if (state.deepLinkClientId) {
                   document.getElementById('bookStepChoice').style.display = 'none';
@@ -1974,6 +2244,7 @@
           row.onclick = function(e) { if (!e.target.closest('.btn-slot-del')) openBookModal(); };
           row.onkeydown = function(e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openBookModal(); } };
         });
+        updatePastRevealChrome();
       }
 
       function clientsRequestUrl(q) {
@@ -2162,10 +2433,9 @@
         }
         first = (first || '').trim();
         last = (last || '').trim();
-        if (!first || !last) {
-          showToast('Укажите имя и фамилию клиента.');
-          if (!first) firstEl.focus();
-          else lastEl.focus();
+        if (!first) {
+          showToast('Укажите имя клиента.');
+          firstEl.focus();
           return;
         }
         if (!state.bookSlotId) return;
@@ -2371,21 +2641,19 @@
 
       document.getElementById('btnAddSlots').onclick = function() {
         if (!state.weekStart) return;
-        const todayStr = dateToStr(new Date());
         const list = document.getElementById('dayPickList');
         let html = '';
         for (let i = 0; i < 7; i++) {
           const d = new Date(state.weekStart);
           d.setDate(d.getDate() + i);
           const dateStr = dateToStr(d);
-          if (dateStr < todayStr) continue;
           html += '<button type="button" class="template-day-card" data-date="' + escapeHtml(dateStr) + '">';
           html += '<span class="day-name">' + DAYS[i] + '</span>';
           html += '<span class="day-slots">' + formatDateKey(dateStr) + '</span>';
           html += '<span class="arrow">→</span></button>';
         }
         if (!html) {
-          list.innerHTML = '<div class="empty">На эту неделю нет будущих дней. Переключите неделю вперёд (›).</div>';
+          list.innerHTML = '<div class="empty">Нет дней для выбора.</div>';
         } else {
           list.innerHTML = html;
         document.querySelector('.tabs').style.display = 'none';
@@ -2408,20 +2676,38 @@
       };
 
       document.getElementById('weekPrev').onclick = function() {
+        state.showPastThisWeek = false;
         state.weekStart.setDate(state.weekStart.getDate() - 7);
         loadSlots();
       };
       document.getElementById('weekNext').onclick = function() {
+        state.showPastThisWeek = false;
         state.weekStart.setDate(state.weekStart.getDate() + 7);
         loadSlots();
       };
 
+      document.getElementById('btnTogglePastThisWeek').onclick = function() {
+        state.showPastThisWeek = !state.showPastThisWeek;
+        renderCalendar();
+      };
+
       state.weekStart = getMonday(new Date());
 
-      if (tg && tg.BackButton) {
-        tg.BackButton.onClick(handleTelegramBackUnified);
-        tg.BackButton.hide();
-      }
+      (function () {
+        var bb = document.getElementById('btnBack');
+        if (bb) bb.onclick = handleTelegramBackUnified;
+        function goTrainerHome() {
+          navigateToTrainerHomeSafe();
+        }
+        var hbd = document.getElementById('btnHomeBookingDetail');
+        var bbd = document.getElementById('btnBackBookingDetail');
+        var hdecl = document.getElementById('btnHomeBookingDecline');
+        var bdecl = document.getElementById('btnBackBookingDecline');
+        if (hbd) hbd.onclick = goTrainerHome;
+        if (bbd) bbd.onclick = handleTelegramBackUnified;
+        if (hdecl) hdecl.onclick = goTrainerHome;
+        if (bdecl) bdecl.onclick = handleTelegramBackUnified;
+      })();
 
       function initFromUrl() {
         var p = new URLSearchParams(window.location.search || '');

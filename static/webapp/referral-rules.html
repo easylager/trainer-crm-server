@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Правила реферальной программы</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="mini-app-telegram-chrome.js"></script>
+  <link rel="stylesheet" href="theme.css" />
+  <link rel="stylesheet" href="mini-app-components.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet" />
+  <style>
+    html { height: 100%; overflow-x: hidden; }
+    body.rules-page {
+      margin: 0;
+      font-family: var(--app-font-sans);
+      background: var(--tg-theme-bg-color);
+      color: var(--tg-theme-text-color);
+      min-height: 100%;
+      min-height: 100dvh;
+      padding: 16px;
+      padding-bottom: calc(env(safe-area-inset-bottom, 16px) + 40px);
+      -webkit-font-smoothing: antialiased;
+      --tg-theme-bg-color: #FFFBEB;
+      --tg-theme-text-color: #1a1a1a;
+      --tg-theme-hint-color: #666666;
+      --tg-theme-secondary-bg-color: #fff5e1;
+    }
+    body.rules-page.rules-theme-dark {
+      --tg-theme-bg-color: #1a1a1a;
+      --tg-theme-text-color: #f5f5f5;
+      --tg-theme-hint-color: #8e8e93;
+      --tg-theme-secondary-bg-color: #2a2a2a;
+    }
+    .rules-shell { max-width: 600px; margin: 0 auto; }
+    .rules-title {
+      font-size: 22px;
+      font-weight: 700;
+      margin: 0 0 8px;
+      letter-spacing: -0.02em;
+    }
+    .rules-updated {
+      font-size: 12px;
+      color: var(--tg-theme-hint-color);
+      margin-bottom: 24px;
+    }
+    .rules-section {
+      margin-bottom: 24px;
+    }
+    .rules-section-title {
+      font-size: 16px;
+      font-weight: 700;
+      margin: 0 0 12px;
+      color: var(--tg-theme-text-color);
+    }
+    .rules-text {
+      font-size: 14px;
+      line-height: 1.7;
+      color: var(--tg-theme-text-color);
+    }
+    .rules-text p { margin: 0 0 12px; }
+    .rules-text ul { margin: 0 0 12px; padding-left: 20px; }
+    .rules-text li { margin-bottom: 8px; }
+    .rules-text strong { font-weight: 600; }
+    .rules-highlight {
+      background: var(--tg-theme-secondary-bg-color);
+      border-radius: 12px;
+      padding: 14px 16px;
+      margin: 16px 0;
+      border-left: 3px solid #F7A600;
+    }
+    .rules-highlight p { margin: 0; }
+  </style>
+</head>
+<body class="rules-page">
+  <div class="rules-shell">
+    <h1 class="rules-title">Правила реферальной программы</h1>
+    <p class="rules-updated">Редакция от 5 апреля 2026 г.</p>
+
+    <section class="rules-section">
+      <h2 class="rules-section-title">1. Общие положения</h2>
+      <div class="rules-text">
+        <p>Реферальная программа позволяет тренерам, зарегистрированным на платформе, получать бонусные дни подписки за приглашение коллег.</p>
+        <p>Участником программы может стать любой тренер с активным аккаунтом на платформе.</p>
+      </div>
+    </section>
+
+    <section class="rules-section">
+      <h2 class="rules-section-title">2. Условия начисления бонуса</h2>
+      <div class="rules-text">
+        <div class="rules-highlight">
+          <p><strong>14 дней подписки</strong> начисляется рефереру, когда приглашённый тренер впервые оплачивает подписку.</p>
+        </div>
+        <ul>
+          <li>Приглашённый тренер должен перейти по вашей персональной реферальной ссылке</li>
+          <li>Оплата подписки должна произойти в течение <strong>60 дней</strong> после перехода по ссылке</li>
+          <li>Бонус начисляется только за первую оплату каждого приглашённого тренера</li>
+          <li>Максимум <strong>90 дней</strong> бонуса можно заработать за один календарный месяц</li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="rules-section">
+      <h2 class="rules-section-title">3. Использование бонусных дней</h2>
+      <div class="rules-text">
+        <ul>
+          <li>Бонусные дни накапливаются на вашем балансе</li>
+          <li>При продлении подписки бонусные дни автоматически добавляются к оплаченному периоду</li>
+          <li>Бонусные дни <strong>не подлежат обмену на денежные средства</strong> и не могут быть выведены</li>
+          <li>Бонусы действуют только в рамках платформы</li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="rules-section">
+      <h2 class="rules-section-title">4. Ограничения</h2>
+      <div class="rules-text">
+        <ul>
+          <li>Запрещено приглашать самого себя (создавать дополнительные аккаунты)</li>
+          <li>Один тренер может быть приглашён только одним реферером</li>
+          <li>Платформа оставляет за собой право отменить начисление бонуса при выявлении злоупотреблений</li>
+          <li>Администрация может изменить условия программы с уведомлением участников</li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="rules-section">
+      <h2 class="rules-section-title">5. Контакты</h2>
+      <div class="rules-text">
+        <p>По вопросам реферальной программы обращайтесь в поддержку через бот или Mini App.</p>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    (function() {
+      var tg = window.Telegram && window.Telegram.WebApp;
+      if (tg) {
+        if (typeof tg.ready === 'function') tg.ready();
+        if (typeof tg.expand === 'function') tg.expand();
+      }
+      var isDark = tg && tg.colorScheme === 'dark';
+      if (isDark) document.body.classList.add('rules-theme-dark');
+      try {
+        var bgHex = isDark ? '#1a1a1a' : '#FFFBEB';
+        if (tg && typeof tg.setHeaderColor === 'function') tg.setHeaderColor(bgHex);
+        if (tg && typeof tg.setBackgroundColor === 'function') tg.setBackgroundColor(bgHex);
+      } catch (e) {}
+    })();
+  </script>
+</body>
+</html>

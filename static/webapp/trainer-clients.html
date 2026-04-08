@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Мои клиенты</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="mini-app-telegram-chrome.js"></script>
   <link rel="stylesheet" href="theme.css" />
   <link rel="stylesheet" href="mini-app-components.css" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -987,7 +988,7 @@
       <div class="header-title">Мои клиенты</div>
       <div class="app-header-actions trainer-mini-nav">
         <button type="button" class="btn-app-home" id="btnHome">Главная</button>
-        <button type="button" class="btn-close" id="btnClose">Закрыть</button>
+        <button type="button" class="btn-app-back" id="btnBack" data-skip-history-back="true" hidden>Назад</button>
       </div>
     </div>
   </div>
@@ -1098,26 +1099,54 @@
         window.location.href = u;
       }
 
+      function canBrowserGoBack() {
+        try {
+          if (window.navigation && typeof window.navigation.canGoBack === 'function') {
+            return window.navigation.canGoBack();
+          }
+        } catch (e) {}
+        return window.history && window.history.length > 1;
+      }
+
+      function backToListFromDetail() {
+        document.getElementById('clientsSection').style.display = 'block';
+        document.querySelector('.search-box').style.display = 'block';
+        document.getElementById('detailSection').style.display = 'none';
+        state.selectedClientId = null;
+        if (headerTitleEl) headerTitleEl.textContent = defaultHeaderTitle || 'Мои клиенты';
+        syncTrainerClientsHeaderBack();
+      }
+
+      function syncTrainerClientsHeaderBack() {
+        var btn = document.getElementById('btnBack');
+        if (!btn) return;
+        var detailVisible = document.getElementById('detailSection').style.display !== 'none';
+        if (detailVisible && state.returnBookingId) {
+          btn.hidden = false;
+          btn.onclick = function() { navigateToScheduleBooking(); };
+          return;
+        }
+        if (detailVisible) {
+          btn.hidden = false;
+          btn.onclick = function() { backToListFromDetail(); };
+          return;
+        }
+        btn.hidden = !canBrowserGoBack();
+        btn.onclick = function() { window.history.back(); };
+      }
+
       function updateReturnBookingBackUi() {
         var btnB = document.getElementById('btnBackToBooking');
-        if (!btnB) return;
-        if (state.returnBookingId) {
-          btnB.removeAttribute('hidden');
-          btnB.onclick = function() { navigateToScheduleBooking(); };
-        } else {
-          btnB.setAttribute('hidden', '');
-          btnB.onclick = null;
-        }
-        if (tg && tg.BackButton) {
-          if (state.returnBookingId && document.getElementById('detailSection').style.display !== 'none') {
-            tg.BackButton.show();
-            tg.BackButton.onClick(function() {
-              navigateToScheduleBooking();
-            });
+        if (btnB) {
+          if (state.returnBookingId) {
+            btnB.removeAttribute('hidden');
+            btnB.onclick = function() { navigateToScheduleBooking(); };
           } else {
-            tg.BackButton.hide();
+            btnB.setAttribute('hidden', '');
+            btnB.onclick = null;
           }
         }
+        syncTrainerClientsHeaderBack();
       }
 
       function setStateMessage(text, kind) {
@@ -1651,12 +1680,7 @@
         var backBtn = document.getElementById('btnBackToList');
         if (backBtn) {
           backBtn.onclick = function() {
-            document.getElementById('clientsSection').style.display = 'block';
-            document.querySelector('.search-box').style.display = 'block';
-            document.getElementById('detailSection').style.display = 'none';
-            state.selectedClientId = null;
-            if (headerTitleEl) headerTitleEl.textContent = defaultHeaderTitle || 'Мои клиенты';
-            if (tg && tg.BackButton) tg.BackButton.hide();
+            backToListFromDetail();
           };
         }
         var copyBtn = document.getElementById('btnCopyPhone');
@@ -1815,10 +1839,8 @@
         });
       }
 
-      document.getElementById('btnClose').onclick = function() {
-        if (tg && tg.close) tg.close();
-        else window.close();
-      };
+      window.addEventListener('popstate', syncTrainerClientsHeaderBack);
+
       document.getElementById('searchInput').addEventListener('input', function() {
         applyFilter();
       });
@@ -1864,6 +1886,7 @@
       }
 
       initReturnContextFromQuery();
+      syncTrainerClientsHeaderBack();
       if (initData && window.TrainerMiniAppGate) {
         window.TrainerMiniAppGate.fetchAccess(initData)
           .then(function (a) {

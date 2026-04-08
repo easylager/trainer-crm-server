@@ -61,19 +61,21 @@ class CertificateOverlayLayout:
 
 
 def _default_layout() -> CertificateOverlayLayout:
-    """A4 portrait (~595×842 pt): matches programmatic background in certificate_pdf."""
+    """A4 portrait: fractions calibrated to `certificate_pdf` legacy canvas (same template PDF)."""
     return CertificateOverlayLayout(
-        recipient=RectFrac(0.097, 0.245, 0.78, 0.36),
-        product_title=RectFrac(0.097, 0.38, 0.62, 0.445),
-        amount=RectFrac(0.66, 0.395, 0.93, 0.455),
-        amount_currency=RectFrac(0.66, 0.455, 0.93, 0.48),
-        trainer_value=RectFrac(0.22, 0.52, 0.75, 0.545),
-        expires_value=RectFrac(0.22, 0.555, 0.75, 0.58),
-        code=RectFrac(0.06, 0.66, 0.94, 0.715),
-        issued_line=RectFrac(0.097, 0.74, 0.88, 0.765),
-        hint=RectFrac(0.097, 0.77, 0.92, 0.795),
-        brand_footer=RectFrac(0.097, 0.92, 0.9, 0.97),
-        qr=RectFrac(0.62, 0.52, 0.93, 0.64),
+        recipient=RectFrac(0.097, 0.235, 0.78, 0.33),
+        product_title=RectFrac(0.097, 0.318, 0.62, 0.378),
+        # Right badge: amount in upper amber block, BYN in lower strip (see legacy drawCentredString on badge_y + 14mm / +6mm).
+        amount=RectFrac(0.628, 0.302, 0.886, 0.378),
+        amount_currency=RectFrac(0.628, 0.376, 0.886, 0.412),
+        trainer_value=RectFrac(0.22, 0.453, 0.75, 0.488),
+        expires_value=RectFrac(0.22, 0.483, 0.75, 0.518),
+        code=RectFrac(0.06, 0.568, 0.94, 0.628),
+        issued_line=RectFrac(0.097, 0.678, 0.88, 0.708),
+        hint=RectFrac(0.097, 0.706, 0.92, 0.736),
+        brand_footer=RectFrac(0.097, 0.94, 0.9, 0.97),
+        # Between «До» row and charcoal code strip (strip top ~0.544); keep QR bottom < 0.54.
+        qr=RectFrac(0.62, 0.432, 0.93, 0.536),
         draw_field_labels_on_overlay=False,
         skip_brand_footer_overlay=True,
         font_scale=1.0,
