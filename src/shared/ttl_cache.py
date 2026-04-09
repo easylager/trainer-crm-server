@@ -14,8 +14,8 @@ def _key_trainers(limit: int, offset: int, city_id: int | None, service_id: int 
     return ("trainers", limit, offset, city_id, service_id, arena_id, order_by)
 
 
-def _key_slots(trainer_id: int, min_hours: int) -> tuple:
-    return ("slots", trainer_id, min_hours)
+def _key_slots(trainer_id: int, min_hours: int, service_id: int | None) -> tuple:
+    return ("slots", trainer_id, min_hours, service_id)
 
 
 def get_trainers_cached(
@@ -51,8 +51,8 @@ def set_trainers_cached(
     _CACHE[k] = ((items, total), time.monotonic() + _TRAINERS_TTL_SEC)
 
 
-def get_slots_cached(trainer_id: int, min_hours: int) -> list | None:
-    k = _key_slots(trainer_id, min_hours)
+def get_slots_cached(trainer_id: int, min_hours: int, service_id: int | None = None) -> list | None:
+    k = _key_slots(trainer_id, min_hours, service_id)
     entry = _CACHE.get(k)
     if not entry:
         return None
@@ -63,8 +63,8 @@ def get_slots_cached(trainer_id: int, min_hours: int) -> list | None:
     return val
 
 
-def set_slots_cached(trainer_id: int, min_hours: int, slots: list) -> None:
-    k = _key_slots(trainer_id, min_hours)
+def set_slots_cached(trainer_id: int, min_hours: int, slots: list, service_id: int | None = None) -> None:
+    k = _key_slots(trainer_id, min_hours, service_id)
     _CACHE[k] = (slots, time.monotonic() + _SLOTS_TTL_SEC)
 
 

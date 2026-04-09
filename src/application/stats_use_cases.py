@@ -48,7 +48,7 @@ async def _trainer_calendar_revenue_total(
             LEFT JOIN pass_redemptions pr ON pr.booking_id = b.id
             LEFT JOIN certificate_booking_credits cbc ON cbc.booking_id = b.id
             WHERE b.trainer_id = :tid AND b.status = 'completed'
-              AND s.status = 'booked'
+              AND s.status IN ('available', 'booked')
               AND s.slot_date >= :ds AND s.slot_date <= :de
             """
         ),
@@ -124,7 +124,7 @@ async def get_trainer_revenue_breakdown_for_range(
                 LEFT JOIN pass_redemptions pr ON pr.booking_id = b.id
                 LEFT JOIN certificate_booking_credits cbc ON cbc.booking_id = b.id
                 WHERE b.trainer_id = :tid AND b.status = 'completed'
-                  AND s.status = 'booked'
+                  AND s.status IN ('available', 'booked')
                   AND s.slot_date >= :ds AND s.slot_date <= :de
             ) sub
             """
@@ -484,7 +484,7 @@ async def get_trainer_stats_dashboard(session: AsyncSession, trainer_id: int) ->
                 LEFT JOIN pass_redemptions pr ON pr.booking_id = b.id
                 LEFT JOIN certificate_booking_credits cbc ON cbc.booking_id = b.id
                 WHERE b.trainer_id = :tid AND b.status = 'completed'
-                  AND s.status = 'booked'
+                  AND s.status IN ('available', 'booked')
                   AND s.slot_date >= CURRENT_DATE - INTERVAL '30 days'
             )
             SELECT
@@ -768,7 +768,7 @@ async def get_trainer_stats_dashboard(session: AsyncSession, trainer_id: int) ->
             LEFT JOIN certificate_booking_credits cbc ON cbc.booking_id = b.id
             WHERE b.trainer_id = :tid
               AND b.status = 'completed'
-              AND s.status = 'booked'
+              AND s.status IN ('available', 'booked')
               AND s.slot_date >= CURRENT_DATE - INTERVAL '30 days'
             GROUP BY c.id, name, phone
             ORDER BY cnt DESC, name

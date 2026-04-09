@@ -20,7 +20,12 @@ from sqlalchemy import text
 from src.api.app import app
 from src.application.subscription_use_cases import create_trial_subscription
 from src.application.trainer_schedule_use_cases import replace_slots_for_day
-from src.infrastructure.db.models import SUBSCRIPTION_STATUS_ACTIVE, SUBSCRIPTION_TIER_CRM, SUBSCRIPTION_TIER_ONLINE
+from src.infrastructure.db.models import (
+    SUBSCRIPTION_STATUS_ACTIVE,
+    SUBSCRIPTION_STATUS_TRIAL,
+    SUBSCRIPTION_TIER_CRM,
+    SUBSCRIPTION_TIER_ONLINE,
+)
 from src.shared.telegram_webapp import InitDataAuthError
 from tests.conftest import belarus_test_phone
 
@@ -55,39 +60,53 @@ async def _ensure_trainer_subscription_tier(db_session, trainer_id: int, tier: s
     """
     Активная подписка с нужным tier. Сначала trial (как в проде), иначе — любой plan из БД
     (в тестовой базе может не быть is_trial-плана).
+
+    Всегда выставляет tier на **все** строки подписок тренера — иначе после PATCH active
+    остаётся trial с analytics, а INSERT добавлял бы вторую строку crm и эффективный tier
+    оставался бы analytics.
     """
     sub = await create_trial_subscription(db_session, trainer_id)
-    if sub is not None:
-        await db_session.execute(
-            text("UPDATE trainer_subscriptions SET tier = :tier WHERE trainer_id = :tid"),
-            {"tid": trainer_id, "tier": tier},
+    if sub is None:
+        r = await db_session.execute(
+            text(
+                """
+                SELECT 1 FROM trainer_subscriptions
+                WHERE trainer_id = :tid AND expires_at > NOW()
+                  AND status IN (:s1, :s2)
+                LIMIT 1
+                """
+            ),
+                {"tid": trainer_id, "s1": SUBSCRIPTION_STATUS_ACTIVE, "s2": SUBSCRIPTION_STATUS_TRIAL},
         )
-        await db_session.commit()
-        return
-    r = await db_session.execute(text("SELECT id FROM subscription_plans ORDER BY id LIMIT 1"))
-    plan_id = r.scalar()
-    if plan_id is None:
-        pytest.skip("need subscription_plans seed")
-    await db_session.execute(
-        text(
-            """
-            INSERT INTO trainer_subscriptions (trainer_id, plan_id, started_at, expires_at, status, tier)
-            VALUES (
-                :tid,
-                :pid,
-                NOW(),
-                NOW() + INTERVAL '400 days',
-                :st,
-                :tier
+        if r.fetchone() is None:
+            r = await db_session.execute(text("SELECT id FROM subscription_plans ORDER BY id LIMIT 1"))
+            plan_id = r.scalar()
+            if plan_id is None:
+                pytest.skip("need subscription_plans seed")
+            await db_session.execute(
+                text(
+                    """
+                    INSERT INTO trainer_subscriptions (trainer_id, plan_id, started_at, expires_at, status, tier)
+                    VALUES (
+                        :tid,
+                        :pid,
+                        NOW(),
+                        NOW() + INTERVAL '400 days',
+                        :st,
+                        :tier
+                    )
+                    """
+                ),
+                {
+                    "tid": trainer_id,
+                    "pid": plan_id,
+                    "st": SUBSCRIPTION_STATUS_ACTIVE,
+                    "tier": tier,
+                },
             )
-            """
-        ),
-        {
-            "tid": trainer_id,
-            "pid": plan_id,
-            "st": SUBSCRIPTION_STATUS_ACTIVE,
-            "tier": tier,
-        },
+    await db_session.execute(
+        text("UPDATE trainer_subscriptions SET tier = :tier WHERE trainer_id = :tid"),
+        {"tid": trainer_id, "tier": tier},
     )
     await db_session.commit()
 

@@ -3,6 +3,7 @@ Notification loops: read from DB and send Telegram messages.
 Used by notification_service (standalone process). Client/trainer apps no longer run these.
 """
 import asyncio
+import html as html_lib
 import logging
 from datetime import date, datetime, timedelta
 
@@ -50,6 +51,14 @@ from src.application.certificate_use_cases import (
     process_certificate_email_outbox_batch,
 )
 from src.application.subscription_tier_use_cases import trainer_has_crm_access
+from src.application.group_attendance_use_cases import (
+    attendance_rsvp_sign,
+    list_pending_attendance_prompts,
+    mark_attendance_prompt_failed,
+    mark_attendance_prompt_sent,
+    rsvp_hmac_secret,
+    sync_group_attendance_prompts,
+)
 from src.application.subscription_use_cases import (
     expire_subscriptions_to_past_due,
     get_subscriptions_reminder_due,
@@ -412,6 +421,77 @@ async def run_reminder_loop(client_bot: Bot) -> None:
             break
         except Exception as e:
             logger.exception("Reminder loop: %s", e)
+
+
+async def run_group_attendance_prompt_loop(client_bot: Bot) -> None:
+    """RSVP for cohort slots: sync prompt rows, send Telegram with inline buttons."""
+    while True:
+        await asyncio.sleep(REMINDER_INTERVAL_SEC)
+        try:
+            settings = Settings()
+            hours = settings.group_attendance_prompt_hours
+            if not hours or int(hours) <= 0:
+                continue
+            if not is_within_notification_hours():
+                continue
+            async with async_session_factory() as session:
+                await sync_group_attendance_prompts(session, int(hours))
+            async with async_session_factory() as session:
+                pending = await list_pending_attendance_prompts(session, limit=40)
+            secret = rsvp_hmac_secret(settings.telegram_bot_token_client)
+            for p in pending:
+                chat_id = p.get("client_telegram_id")
+                if not chat_id:
+                    continue
+                date_str, day_str, time_str = _slot_display_strings(
+                    p.get("slot_date"), p.get("start_time")
+                )
+                duration = _reminder_duration_minutes(p.get("start_time"), p.get("end_time"))
+                pid = int(p["id"])
+                sig_y = attendance_rsvp_sign(pid, "y", secret)
+                sig_n = attendance_rsvp_sign(pid, "n", secret)
+                text = msg.CLIENT_GROUP_RSVP_INVITE.format(
+                    group=html_lib.escape(p.get("group_name") or "Группа"),
+                    date=date_str,
+                    day=day_str,
+                    time=time_str,
+                    duration=duration,
+                )
+                kb = InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [
+                            InlineKeyboardButton(
+                                text=msg.GROUP_RSVP_BUTTON_YES,
+                                callback_data=f"RSY:{pid}:{sig_y}",
+                            )
+                        ],
+                        [
+                            InlineKeyboardButton(
+                                text=msg.GROUP_RSVP_BUTTON_NO,
+                                callback_data=f"RSN:{pid}:{sig_n}",
+                            )
+                        ],
+                    ]
+                )
+                try:
+                    await client_bot.send_message(
+                        chat_id=chat_id, text=text, reply_markup=kb, parse_mode="HTML"
+                    )
+                    async with async_session_factory() as session:
+                        await mark_attendance_prompt_sent(session, pid)
+                except Exception as e:
+                    logger.warning(
+                        "Group RSVP send to client %s (prompt_id=%s): %s",
+                        chat_id,
+                        pid,
+                        e,
+                    )
+                    async with async_session_factory() as session:
+                        await mark_attendance_prompt_failed(session, pid, str(e))
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.exception("Group attendance prompt loop: %s", e)
 
 
 async def run_booking_complete_loop(client_bot: Bot, trainer_bot: Bot) -> None:

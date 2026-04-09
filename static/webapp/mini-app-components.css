@@ -23,8 +23,16 @@ body {
   font-weight: 600;
   margin-bottom: 16px;
   padding-bottom: 8px;
+  min-width: 0;
+  max-width: 100%;
 }
-.header-title { flex: 1; }
+.header-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .filters {
   display: flex;
   gap: 8px;

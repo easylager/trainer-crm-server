@@ -115,6 +115,34 @@
         initData: tg ? tg.initData : '',
         selectedBooking: null,
       };
+      document.getElementById('detailActions').addEventListener('click', function(ev) {
+        var btn = ev.target && ev.target.closest && ev.target.closest('button[data-action="write_client"]');
+        if (!btn) return;
+        ev.preventDefault();
+        var booking = state.selectedBooking;
+        if (!booking) return;
+        var un = String(booking.client_telegram_username || '').replace(/^@/, '').trim();
+        var tid = booking.client_telegram_id;
+        var url;
+        if (un) url = 'https://t.me/' + encodeURIComponent(un);
+        else if (tid != null && tid !== '') url = 'tg://user?id=' + encodeURIComponent(String(tid));
+        else return;
+        if (tg) {
+          try {
+            if (typeof tg.openTelegramLink === 'function') {
+              tg.openTelegramLink(url);
+              return;
+            }
+          } catch (e) { /* noop */ }
+          try {
+            if (typeof tg.openLink === 'function') {
+              tg.openLink(url);
+              return;
+            }
+          } catch (e2) { /* noop */ }
+        }
+        window.location.href = url;
+      });
       /** After confirm/decline/cancel we pop history; popstate refreshes the list. */
       var pendingReloadAfterPop = false;
 
@@ -342,8 +370,9 @@
             const st = s.status || 'available';
             const booked = st === 'booked';
             const hasBooking = booked && s.booking_id;
+            const cohortSlot = !!(s.training_group_id);
             const cardClass = 'slot-card ' + (booked ? 'slot-booked' + (hasBooking ? '' : ' slot-booked-noaction') : st === 'available' ? 'slot-free' : 'slot-cancelled');
-            const clientHint = booked && s.client_preview
+            const clientHint = booked && s.client_preview && !cohortSlot
               ? '<div class="slot-client-hint">' + escapeHtml(s.client_preview) + '</div>'
               : '';
             const tag = hasBooking ? 'button' : 'div';
@@ -445,7 +474,7 @@
             actions.innerHTML += '<button type="button" class="bd-btn bd-btn--outline-danger" data-action="cancel">' + BD_ICONS.cancelOutline + ' Отменить запись</button>';
           }
           if (tid && b.client_has_telegram !== false) {
-            actions.innerHTML += '<a class="bd-btn bd-btn--surface" href="tg://user?id=' + encodeURIComponent(String(tid)) + '">' + BD_ICONS.send + ' Написать клиенту</a>';
+            actions.innerHTML += '<button type="button" class="bd-btn bd-btn--surface" data-action="write_client">' + BD_ICONS.send + ' Написать клиенту</button>';
           }
           if (b.recurring_id) {
             actions.innerHTML += '<button type="button" class="bd-btn bd-btn--soft" data-action="remove_recurring" data-recurring-id="' + b.recurring_id + '">' + BD_ICONS.linkOff + ' Снять регулярность</button>';
@@ -456,6 +485,7 @@
           actions.querySelectorAll('button[data-action]').forEach(function(btn) {
             btn.onclick = function() {
               const act = btn.getAttribute('data-action');
+              if (act === 'write_client') return;
               if (act === 'confirm') doConfirm(b.id);
               else if (act === 'decline') { showScreen('screenDecline'); document.getElementById('declineComment').value = ''; }
               else if (act === 'cancel') {

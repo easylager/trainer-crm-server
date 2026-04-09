@@ -1,0 +1,3475 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <title>Группы</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="mini-app-telegram-chrome.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="theme.css" />
+  <link rel="stylesheet" href="mini-app-components.css" />
+  <link rel="stylesheet" href="mini-app-trainer-nav.css" />
+  <script>
+    /** Same palette + Telegram lock as trainer-clients — themeParams often inject blue. */
+    (function () {
+      function isAppDark() {
+        var tg = window.Telegram && window.Telegram.WebApp;
+        if (tg && tg.colorScheme) return tg.colorScheme === 'dark';
+        return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+      }
+      function applyTrainerGroupsTheme() {
+        var d = document.documentElement;
+        var dark = isAppDark();
+        d.style.setProperty('--tg-theme-button-color', '#f5a623', 'important');
+        d.style.setProperty('--tg-theme-button-text-color', '#1a1a1a', 'important');
+        d.style.setProperty('--tg-theme-bg-color', dark ? '#1a1a1a' : '#fffbeb', 'important');
+        d.style.setProperty('--tg-theme-text-color', dark ? '#f5f5f5' : '#1a1a1a', 'important');
+        d.style.setProperty('--tg-theme-secondary-bg-color', dark ? '#2a2a2a' : '#fff3cc', 'important');
+        d.style.setProperty('--tg-theme-hint-color', dark ? '#8e8e93' : '#666666', 'important');
+      }
+      applyTrainerGroupsTheme();
+      if (window.matchMedia) {
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTrainerGroupsTheme);
+      }
+      window.__applyTrainerGroupsTheme = applyTrainerGroupsTheme;
+    })();
+  </script>
+  <style>
+    /* Page-only: группы — токены theme + приёмы bd-hero / bd-section из mini-app-components */
+    body {
+      background: var(--tg-theme-bg-color) !important;
+      color: var(--tg-theme-text-color) !important;
+    }
+    #screenCreate,
+    #screenDetail .tg-group-detail {
+      font-family: var(--app-font-sans);
+    }
+    /* Long group name: wrap instead of ellipsis (mini-app-components .header-title is single-line) */
+    #screenDetail .header {
+      align-items: flex-start;
+    }
+    #screenDetail .header-title {
+      white-space: normal;
+      overflow: visible;
+      text-overflow: unset;
+      line-height: 1.28;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+    }
+    #screenList {
+      padding-bottom: calc(88px + env(safe-area-inset-bottom));
+    }
+    #screenCreate .tg-create-form {
+      animation: bd-enter 0.38s cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+    .tg-create-hero {
+      margin-bottom: 16px;
+    }
+    .tg-create-hero .bd-hero-time {
+      font-size: clamp(20px, 5.5vw, 26px);
+      font-weight: 700;
+      letter-spacing: -0.03em;
+    }
+    .tg-screen-hint {
+      font-size: 13px;
+      color: var(--tg-theme-hint-color);
+      margin: 0;
+      line-height: 1.5;
+    }
+    .tg-groups-intro {
+      margin: -4px 0 14px;
+      padding: 16px;
+      border-radius: 18px;
+      background:
+        linear-gradient(155deg, rgba(247, 166, 0, 0.14) 0%, rgba(247, 166, 0, 0.05) 48%, transparent 100%),
+        var(--tg-theme-secondary-bg-color);
+      border: 1px solid rgba(247, 166, 0, 0.24);
+      box-shadow: 0 6px 22px rgba(0, 0, 0, 0.08);
+      position: relative;
+      overflow: hidden;
+    }
+    .tg-groups-intro::before {
+      content: '';
+      position: absolute;
+      top: -38%;
+      right: -26%;
+      width: 60%;
+      height: 145%;
+      background: radial-gradient(ellipse, rgba(247, 166, 0, 0.22) 0%, transparent 72%);
+      pointer-events: none;
+    }
+    .tg-groups-intro__kicker {
+      position: relative;
+      z-index: 1;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.13em;
+      text-transform: uppercase;
+      color: var(--tg-theme-hint-color);
+      margin: 0 0 8px;
+    }
+    .tg-groups-intro .tg-screen-hint {
+      position: relative;
+      z-index: 1;
+      margin-bottom: 12px;
+      color: var(--tg-theme-text-color);
+      opacity: 0.88;
+      max-width: 34ch;
+    }
+    .tg-groups-toolbar {
+      position: sticky;
+      top: calc(4px + env(safe-area-inset-top, 0px));
+      z-index: 14;
+      margin-bottom: 12px;
+      padding: 8px;
+      border-radius: 16px;
+      border: 1px solid rgba(128, 128, 128, 0.14);
+      background: var(--tg-theme-bg-color);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.05);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+    }
+    .tg-toolbar-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .tg-search {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex: 1;
+      min-width: 0;
+      border-radius: 14px;
+      border: 1px solid rgba(128, 128, 128, 0.2);
+      background: var(--tg-theme-secondary-bg-color);
+      padding: 10px 12px;
+      transition: border-color 0.16s ease, box-shadow 0.16s ease;
+    }
+    .tg-search:focus-within {
+      border-color: rgba(247, 166, 0, 0.55);
+      box-shadow: 0 0 0 3px rgba(247, 166, 0, 0.12);
+    }
+    .tg-search__icon {
+      color: var(--tg-theme-hint-color);
+      width: 18px;
+      height: 18px;
+      flex-shrink: 0;
+      opacity: 0.9;
+    }
+    .tg-search__icon svg {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    .tg-search input {
+      flex: 1;
+      min-width: 0;
+      border: none;
+      outline: none;
+      background: transparent;
+      color: var(--tg-theme-text-color);
+      font-size: 15px;
+      font-family: inherit;
+      padding: 0;
+      margin: 0;
+    }
+    .tg-search input::placeholder {
+      color: var(--tg-theme-hint-color);
+      opacity: 0.9;
+    }
+    .tg-search__clear {
+      width: 24px;
+      height: 24px;
+      border: none;
+      border-radius: 50%;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+      font-size: 16px;
+      line-height: 1;
+      cursor: pointer;
+      color: var(--tg-theme-text-color);
+      background: rgba(128, 128, 128, 0.18);
+      transition: transform 0.12s ease, opacity 0.12s ease;
+    }
+    .tg-search__clear:active {
+      transform: scale(0.92);
+      opacity: 0.85;
+    }
+    .tg-btn-mini {
+      min-width: 40px;
+      height: 40px;
+      border-radius: 12px;
+      padding: 0 12px;
+      font-size: 13px;
+      font-weight: 600;
+      line-height: 1;
+    }
+    .tg-btn-mini.tg-btn-icon {
+      padding: 0;
+      width: 40px;
+      justify-content: center;
+    }
+    .tg-btn-mini svg {
+      width: 18px;
+      height: 18px;
+      display: block;
+    }
+    .tg-scroll-chips {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      overflow-x: auto;
+      padding: 10px 0 4px;
+      margin: 0 -8px;
+      padding-left: 8px;
+      padding-right: 8px;
+      scrollbar-width: none;
+      -webkit-overflow-scrolling: touch;
+    }
+    .tg-scroll-chips::-webkit-scrollbar {
+      display: none;
+    }
+    .tg-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 14px;
+      border-radius: 999px;
+      border: 1px solid rgba(128, 128, 128, 0.18);
+      background: var(--tg-theme-secondary-bg-color);
+      color: var(--tg-theme-text-color);
+      font-size: 14px;
+      font-weight: 600;
+      font-family: inherit;
+      white-space: nowrap;
+      cursor: pointer;
+      flex-shrink: 0;
+      user-select: none;
+      -webkit-user-select: none;
+      transition: transform 0.12s ease, background 0.15s ease, border-color 0.15s ease;
+    }
+    .tg-chip:active {
+      transform: scale(0.96);
+    }
+    .tg-chip.active {
+      background: var(--app-cta-fill);
+      color: var(--app-cta-text);
+      border-color: transparent;
+    }
+    .tg-chip-cnt {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 18px;
+      height: 18px;
+      padding: 0 5px;
+      border-radius: 9px;
+      background: rgba(128, 128, 128, 0.15);
+      font-size: 11px;
+      font-weight: 700;
+      color: inherit;
+      opacity: 0.9;
+    }
+    .tg-chip.active .tg-chip-cnt {
+      background: rgba(0, 0, 0, 0.15);
+    }
+    .tg-chip-divider {
+      width: 1px;
+      height: 20px;
+      background: rgba(128, 128, 128, 0.2);
+      flex-shrink: 0;
+      margin: 0 2px;
+    }
+    .tg-chip-toggle {
+      padding-left: 10px;
+    }
+    .tg-chip-toggle input {
+      width: 16px;
+      height: 16px;
+      margin: 0;
+      accent-color: var(--app-cta-fill);
+      cursor: pointer;
+    }
+    .tg-chip-toggle.is-on {
+      border-color: rgba(247, 166, 0, 0.45);
+      background: rgba(247, 166, 0, 0.1);
+    }
+    .tg-chip-select {
+      position: relative;
+      padding-right: 10px;
+    }
+    .tg-chip-select svg {
+      width: 16px;
+      height: 16px;
+      opacity: 0.6;
+    }
+    .tg-chip-select select {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      width: 100%;
+      height: 100%;
+      cursor: pointer;
+      appearance: none;
+      -webkit-appearance: none;
+    }
+    .tg-chip-reset {
+      color: var(--app-danger);
+      background: rgba(255, 59, 48, 0.08);
+      border-color: rgba(255, 59, 48, 0.2);
+    }
+    .group-card-tg {
+      position: relative;
+      border-radius: 18px;
+      padding: 16px 18px 16px 20px;
+      margin-bottom: 12px;
+      cursor: pointer;
+      background: var(--tg-theme-secondary-bg-color);
+      border: 1px solid rgba(128, 128, 128, 0.14);
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+      overflow: hidden;
+      transition: transform 0.16s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.16s ease, border-color 0.16s ease;
+    }
+    .group-card-tg::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 4px;
+      background: rgba(247, 166, 0, 0.72);
+    }
+    .group-card-tg[data-status="active"]::before {
+      background: rgba(52, 199, 89, 0.75);
+    }
+    .group-card-tg[data-status="archived"]::before {
+      background: rgba(142, 142, 147, 0.6);
+    }
+    .group-card-tg[data-status="paused"]::before {
+      background: rgba(255, 149, 0, 0.72);
+    }
+    .group-card-tg[data-status="draft"]::before {
+      background: rgba(128, 128, 128, 0.68);
+    }
+    .group-card-tg:hover {
+      border-color: rgba(247, 166, 0, 0.22);
+      box-shadow: 0 8px 28px rgba(0, 0, 0, 0.08);
+    }
+    @media (prefers-color-scheme: dark) {
+      .group-card-tg:hover {
+        box-shadow: 0 10px 36px rgba(0, 0, 0, 0.45);
+      }
+    }
+    .group-card-tg:active {
+      transform: scale(0.992);
+      opacity: 0.96;
+    }
+    .group-card-tg__top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 6px;
+    }
+    .group-card-tg__name {
+      margin: 0;
+      font-size: 17px;
+      font-weight: 600;
+      line-height: 1.25;
+      letter-spacing: -0.02em;
+      color: var(--tg-theme-text-color);
+    }
+    .group-card-tg__top-end {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+    .tg-status-pill {
+      flex-shrink: 0;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 600;
+      line-height: 1.2;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      background: rgba(247, 166, 0, 0.18);
+      color: var(--tg-theme-text-color);
+      border: 1px solid rgba(247, 166, 0, 0.35);
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      box-sizing: border-box;
+      min-height: 26px;
+    }
+    .tg-status-pill::before {
+      content: '';
+      width: 5px;
+      height: 5px;
+      border-radius: 999px;
+      background: currentColor;
+      opacity: 0.74;
+      flex-shrink: 0;
+    }
+    .tg-status-pill--recruiting { background: rgba(247, 166, 0, 0.22); border-color: rgba(247, 166, 0, 0.4); }
+    .tg-status-pill--active { background: rgba(52, 199, 89, 0.18); border-color: rgba(52, 199, 89, 0.35); color: var(--tg-theme-text-color); }
+    .tg-status-pill--archived { background: rgba(142, 142, 147, 0.15); border-color: rgba(142, 142, 147, 0.25); color: var(--tg-theme-hint-color); }
+    .tg-status-pill--paused { background: rgba(255, 149, 0, 0.15); border-color: rgba(255, 149, 0, 0.3); }
+    .tg-status-pill--draft { opacity: 0.9; }
+    .group-card-tg__open {
+      width: 24px;
+      height: 24px;
+      border-radius: 999px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--tg-theme-hint-color);
+      background: rgba(128, 128, 128, 0.14);
+      border: 1px solid rgba(128, 128, 128, 0.18);
+      flex-shrink: 0;
+    }
+    .group-card-tg__open svg {
+      width: 14px;
+      height: 14px;
+      display: block;
+    }
+    .group-card-tg__meta {
+      font-size: 14px;
+      color: var(--tg-theme-hint-color);
+      line-height: 1.4;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .group-card-tg__meta svg {
+      width: 14px;
+      height: 14px;
+      opacity: 0.7;
+    }
+    .group-card-tg__chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 10px;
+      margin-bottom: 12px;
+    }
+    .group-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(128, 128, 128, 0.2);
+      background: rgba(128, 128, 128, 0.08);
+      color: var(--tg-theme-text-color);
+      font-size: 11px;
+      font-weight: 600;
+      line-height: 1.2;
+      letter-spacing: 0.02em;
+      box-sizing: border-box;
+      min-height: 26px;
+    }
+    .group-chip--catalog {
+      border-color: rgba(247, 166, 0, 0.34);
+      background: rgba(247, 166, 0, 0.16);
+    }
+    .group-chip--season {
+      border-color: rgba(52, 199, 89, 0.34);
+      background: rgba(52, 199, 89, 0.13);
+    }
+    .group-card-tg__bottom {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 16px;
+      padding-top: 14px;
+      border-top: 1px solid rgba(128, 128, 128, 0.1);
+    }
+    .group-card-tg__next-block {
+      flex: 1;
+      min-width: 0;
+    }
+    .group-card-tg__next-label {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--tg-theme-hint-color);
+      margin-bottom: 4px;
+    }
+    .group-card-tg__next {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--tg-theme-text-color);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .group-card-tg__cap-block {
+      text-align: right;
+      flex-shrink: 0;
+    }
+    .group-card-tg__cap-text {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--tg-theme-text-color);
+      margin-bottom: 6px;
+    }
+    .group-card-tg__cap-text span {
+      color: var(--tg-theme-hint-color);
+      font-weight: 500;
+    }
+    .group-card-tg__cap-hint {
+      font-size: 11px;
+      color: var(--tg-theme-hint-color);
+      margin-bottom: 6px;
+    }
+    .group-card-tg__meter {
+      width: 64px;
+      height: 6px;
+      border-radius: 6px;
+      overflow: hidden;
+      background: rgba(128, 128, 128, 0.15);
+      margin-left: auto;
+    }
+    .group-card-tg__meter > span {
+      display: block;
+      height: 100%;
+      border-radius: 6px;
+      background: linear-gradient(90deg, #ffc23d 0%, var(--app-cta-fill) 100%);
+      transition: width 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    .group-card-tg__meter > span.is-high {
+      background: linear-gradient(90deg, rgba(245, 166, 35, 0.96) 0%, rgba(255, 149, 0, 0.95) 100%);
+    }
+    .group-card-tg__meter > span.is-full {
+      background: linear-gradient(90deg, rgba(255, 149, 0, 0.95) 0%, rgba(255, 59, 48, 0.95) 100%);
+    }
+    .group-card-skeleton {
+      pointer-events: none;
+      cursor: default;
+    }
+    .group-card-skeleton .sk-line {
+      height: 11px;
+      border-radius: 6px;
+      background: rgba(128, 128, 128, 0.18);
+      animation: pulse 1.3s ease-in-out infinite;
+    }
+    .group-card-skeleton .sk-line + .sk-line {
+      margin-top: 8px;
+    }
+    .group-card-skeleton .sk-line--lg {
+      height: 16px;
+      width: 52%;
+    }
+    .group-card-skeleton .sk-line--md {
+      width: 72%;
+    }
+    .group-card-skeleton .sk-line--sm {
+      width: 38%;
+    }
+    .tg-detail-head-meta {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .tg-detail-head-meta .tg-status-pill,
+    .tg-detail-head-meta .group-chip {
+      backdrop-filter: blur(3px);
+    }
+    .tg-hero-meta {
+      margin-top: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      line-height: 1.35;
+      color: var(--tg-theme-hint-color);
+    }
+    .tg-detail-roster {
+      margin: 0 0 12px;
+      border-radius: 16px;
+      border: 1px solid rgba(128, 128, 128, 0.14);
+      background: var(--tg-theme-secondary-bg-color);
+      padding: 12px 14px 14px;
+    }
+    .tg-detail-roster__top {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+    .tg-detail-roster__top-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .tg-detail-roster__title {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--tg-theme-hint-color);
+    }
+    .tg-detail-roster__nums {
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      color: var(--tg-theme-text-color);
+    }
+    .tg-detail-roster .group-card-tg__meter {
+      width: 100%;
+      height: 7px;
+      margin: 0;
+    }
+    .tg-detail-roster__hint {
+      margin-top: 8px;
+      font-size: 13px;
+      color: var(--tg-theme-hint-color);
+      line-height: 1.35;
+    }
+    .tg-detail-schedule-strip {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      margin: 0 0 14px;
+      padding: 12px 14px;
+      border-radius: 14px;
+      border: 1px solid rgba(128, 128, 128, 0.14);
+      background: rgba(128, 128, 128, 0.06);
+    }
+    .tg-detail-schedule-strip__label {
+      display: block;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--tg-theme-hint-color);
+      margin-bottom: 4px;
+    }
+    .tg-detail-schedule-strip__value {
+      font-size: 15px;
+      font-weight: 600;
+      line-height: 1.35;
+      color: var(--tg-theme-text-color);
+    }
+    .tg-detail-schedule-strip__value--with-icon {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+    }
+    .tg-detail-schedule-strip__value--with-icon .bd-icon {
+      margin-top: 1px;
+      flex-shrink: 0;
+    }
+    .tg-text-link {
+      flex-shrink: 0;
+      margin-top: 2px;
+      padding: 6px 0 6px 8px;
+      border: none;
+      background: none;
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--tg-theme-button-color);
+      cursor: pointer;
+      text-decoration: none;
+    }
+    .tg-text-link:active {
+      opacity: 0.85;
+    }
+    .tg-upcoming-compact {
+      margin-bottom: 14px;
+    }
+    .tg-upcoming-section-hint {
+      margin: -4px 0 10px 4px;
+      font-size: 12px;
+      line-height: 1.35;
+      color: var(--tg-theme-hint-color);
+    }
+    .tg-upcoming-compact .bd-section-label {
+      margin-bottom: 8px;
+    }
+    .tg-upcoming-compact .bd-row {
+      padding: 10px 12px;
+    }
+    .tg-upcoming-compact .bd-client-name {
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .tg-upcoming-compact .bd-row-label {
+      font-size: 12px;
+      text-transform: none;
+      letter-spacing: 0;
+    }
+    .tg-upcoming-row {
+      align-items: center;
+    }
+    .tg-upcoming-row__actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+    .tg-slot-pill {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 54px;
+      height: 28px;
+      padding: 0 8px;
+      border-radius: 999px;
+      border: 1px solid rgba(128, 128, 128, 0.2);
+      background: rgba(128, 128, 128, 0.08);
+      color: var(--tg-theme-text-color);
+      font-size: 12px;
+      font-weight: 600;
+      line-height: 1.2;
+      letter-spacing: 0.02em;
+      white-space: nowrap;
+    }
+    .tg-slot-pill--free {
+      color: var(--app-success);
+      border-color: rgba(52, 199, 89, 0.24);
+      background: rgba(52, 199, 89, 0.12);
+    }
+    .tg-slot-pill--busy {
+      color: var(--tg-theme-button-color);
+      border-color: rgba(245, 166, 35, 0.32);
+      background: rgba(245, 166, 35, 0.14);
+    }
+    .tg-slot-pill--full {
+      color: var(--app-danger);
+      border-color: rgba(255, 59, 48, 0.3);
+      background: rgba(255, 59, 48, 0.12);
+    }
+    .tg-slot-menu {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 30px;
+      height: 30px;
+      padding: 0;
+      border-radius: 9px;
+      border: 1px solid rgba(128, 128, 128, 0.22);
+      background: rgba(128, 128, 128, 0.08);
+      color: var(--tg-theme-hint-color);
+      font-size: 18px;
+      font-weight: 700;
+      line-height: 1;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .tg-slot-menu:active {
+      opacity: 0.88;
+    }
+    .tg-slot-actions-modal {
+      max-width: min(460px, 96vw);
+    }
+    .tg-slot-actions-meta {
+      margin: -6px 0 12px;
+    }
+    .tg-slot-actions-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    .tg-slot-actions-list .bd-btn {
+      width: 100%;
+      justify-content: center;
+    }
+    .tg-detail-cta {
+      margin: 0 0 14px;
+    }
+    .tg-detail-cta .bd-btn--primary {
+      width: 100%;
+      justify-content: center;
+    }
+    .tg-members-note {
+      margin: 0 0 10px;
+      font-size: 13px;
+      line-height: 1.45;
+      color: var(--tg-theme-hint-color);
+    }
+    .tg-detail-panel {
+      margin-top: 18px;
+      border-radius: 16px;
+      border: 1px solid rgba(128, 128, 128, 0.14);
+      background: var(--tg-theme-secondary-bg-color);
+      overflow: hidden;
+    }
+    .tg-detail-panel > summary {
+      list-style: none;
+      cursor: pointer;
+      padding: 14px 16px;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--tg-theme-text-color);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .tg-detail-panel > summary::-webkit-details-marker {
+      display: none;
+    }
+    .tg-detail-panel > summary::after {
+      content: '';
+      width: 8px;
+      height: 8px;
+      border-right: 2px solid var(--tg-theme-hint-color);
+      border-bottom: 2px solid var(--tg-theme-hint-color);
+      transform: rotate(45deg);
+      opacity: 0.65;
+      flex-shrink: 0;
+    }
+    .tg-detail-panel[open] > summary::after {
+      transform: rotate(-135deg);
+      margin-top: 4px;
+    }
+    .tg-detail-panel__body {
+      padding: 0 14px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .tg-detail-panel__hint {
+      margin: 0 0 4px;
+      font-size: 12px;
+      line-height: 1.4;
+      color: var(--tg-theme-hint-color);
+    }
+    .tg-detail-panel__body .bd-btn {
+      width: 100%;
+      justify-content: center;
+    }
+    .tg-detail-panel--open {
+      padding: 14px 16px 16px;
+    }
+    .tg-detail-panel--open .tg-detail-panel__body {
+      padding: 8px 0 0;
+    }
+    .tg-catalog-toggle {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      font-size: 14px;
+      line-height: 1.45;
+      color: var(--tg-theme-text-color);
+      cursor: pointer;
+    }
+    .tg-catalog-toggle input {
+      margin-top: 2px;
+      flex-shrink: 0;
+    }
+    .tg-upcoming-rows {
+      margin-bottom: 8px;
+    }
+    .tg-upcoming-row .bd-client-name {
+      font-size: 14px;
+      line-height: 1.3;
+    }
+    .tg-modal-edit-schedule {
+      max-height: min(92vh, 720px);
+      overflow-y: auto;
+    }
+    .tg-req-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+      width: 100%;
+    }
+    .tg-req-actions .btn-primary,
+    .tg-req-actions .btn-secondary {
+      flex: 1;
+      min-height: 36px;
+      padding: 0 12px;
+      font-size: 14px;
+      border-radius: 10px;
+    }
+    .tg-form-card {
+      border-radius: 20px;
+      padding: 20px 18px 22px;
+      background: var(--tg-theme-secondary-bg-color);
+      border: 1px solid rgba(128, 128, 128, 0.12);
+      box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
+    }
+    @media (prefers-color-scheme: dark) {
+      .tg-form-card {
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+      }
+    }
+    .tg-form-card .bd-section-label {
+      margin-top: 0;
+      margin-bottom: 12px;
+    }
+    .tg-form-card .bd-section-label:not(:first-child) {
+      margin-top: 8px;
+    }
+    .tg-form-divider {
+      border: none;
+      height: 1px;
+      margin: 18px 0;
+      background: linear-gradient(90deg, transparent, rgba(128, 128, 128, 0.14) 15%, rgba(128, 128, 128, 0.14) 85%, transparent);
+    }
+    .tg-form-card .form-block input[type="text"],
+    .tg-form-card .form-block input[type="number"],
+    .tg-form-card .form-block input[type="date"],
+    .tg-form-card .form-block select.tg-select {
+      width: 100%;
+      padding: 13px 14px;
+      border-radius: var(--app-radius-md);
+      border: 1px solid rgba(128, 128, 128, 0.2);
+      background: var(--tg-theme-bg-color);
+      color: var(--tg-theme-text-color);
+      font-size: 16px;
+      font-family: inherit;
+      box-sizing: border-box;
+      transition: border-color 0.18s ease, box-shadow 0.18s ease;
+    }
+    .tg-form-card .form-block input:focus,
+    .tg-form-card .form-block select.tg-select:focus {
+      outline: none;
+      border-color: rgba(247, 166, 0, 0.55);
+      box-shadow: 0 0 0 3px rgba(247, 166, 0, 0.12);
+    }
+    .tg-form-card .form-block select.tg-select {
+      appearance: none;
+      -webkit-appearance: none;
+      padding-right: 42px;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%23f5a623' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 12px center;
+      background-size: 18px;
+      cursor: pointer;
+    }
+    .tg-form-card .form-block textarea {
+      border: 1px solid rgba(128, 128, 128, 0.22);
+      background: var(--tg-theme-bg-color);
+      border-radius: var(--app-radius-md);
+      transition: border-color 0.18s ease, box-shadow 0.18s ease;
+    }
+    .tg-form-card .form-block textarea:focus {
+      outline: none;
+      border-color: rgba(247, 166, 0, 0.55);
+      box-shadow: 0 0 0 3px rgba(247, 166, 0, 0.12);
+    }
+    .tg-form-card .form-block .form-label {
+      color: var(--tg-theme-hint-color);
+      letter-spacing: 0.08em;
+    }
+    .tg-form-card .form-block label:not(.form-label) {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--tg-theme-text-color);
+      line-height: 1.4;
+    }
+    .tg-form-card .form-block input[type="checkbox"] {
+      width: 20px;
+      height: 20px;
+      margin-top: 2px;
+      flex-shrink: 0;
+      accent-color: var(--app-cta-fill);
+    }
+    .tg-form-row-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    @media (max-width: 360px) {
+      .tg-form-row-2 {
+        grid-template-columns: 1fr;
+      }
+    }
+    .tg-quick-dates {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .tg-chip-btn {
+      flex: 0 0 auto;
+      padding: 8px 12px;
+      border-radius: 10px;
+      border: 1px solid rgba(128, 128, 128, 0.22);
+      background: var(--tg-theme-bg-color);
+      color: var(--tg-theme-text-color);
+      font-size: 13px;
+      font-weight: 500;
+      font-family: inherit;
+      cursor: pointer;
+      transition: border-color 0.15s ease, transform 0.12s ease, box-shadow 0.15s ease;
+    }
+    .tg-chip-btn:active {
+      transform: scale(0.98);
+    }
+    .tg-chip-btn:focus-visible {
+      outline: none;
+      border-color: rgba(247, 166, 0, 0.55);
+      box-shadow: 0 0 0 3px rgba(247, 166, 0, 0.12);
+    }
+    .tg-weekday {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(0, 1fr));
+      gap: 6px;
+      width: 100%;
+    }
+    .tg-weekday .wd {
+      width: 100%;
+      max-width: none;
+      aspect-ratio: 1;
+      height: auto;
+      min-height: 36px;
+      padding: 0;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid rgba(128, 128, 128, 0.22);
+      background: var(--tg-theme-bg-color);
+      font-size: 12px;
+      font-weight: 700;
+      font-family: inherit;
+      letter-spacing: -0.02em;
+      cursor: pointer;
+      user-select: none;
+      appearance: none;
+      -webkit-appearance: none;
+      transition: transform 0.12s ease, border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+    }
+    .tg-weekday .wd:active {
+      transform: scale(0.94);
+    }
+    .tg-weekday .wd.on {
+      border-color: rgba(247, 166, 0, 0.65);
+      background: linear-gradient(145deg, rgba(255, 194, 61, 0.22) 0%, rgba(247, 166, 0, 0.12) 100%);
+      color: var(--tg-theme-text-color);
+      box-shadow: 0 2px 12px rgba(247, 166, 0, 0.2);
+    }
+    @media (prefers-color-scheme: dark) {
+      .tg-weekday .wd.on {
+        box-shadow: 0 4px 16px rgba(247, 166, 0, 0.18);
+      }
+    }
+    .tg-req-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: flex-end;
+    }
+    .tg-req-actions .btn-primary,
+    .tg-req-actions .btn-secondary {
+      min-height: 40px;
+      padding-left: 14px;
+      padding-right: 14px;
+      font-size: 14px;
+    }
+    .tg-fab {
+      position: fixed;
+      right: 12px;
+      bottom: calc(12px + env(safe-area-inset-bottom));
+      z-index: 20;
+      box-shadow: var(--app-btn-shadow-cta, 0 4px 20px rgba(0, 0, 0, 0.18));
+      border-radius: 999px;
+    }
+    .tg-fab .btn-primary {
+      min-height: 48px;
+      padding: 0 22px;
+      border-radius: 999px;
+      font-weight: 600;
+      font-size: 15px;
+    }
+    .list-err {
+      padding: 12px 14px;
+      border-radius: 14px;
+      background: rgba(255, 59, 48, 0.1);
+      border: 1px solid rgba(255, 59, 48, 0.22);
+      color: var(--app-danger);
+      font-size: 14px;
+      line-height: 1.4;
+      margin-bottom: 14px;
+    }
+    .tg-empty-state {
+      text-align: center;
+      padding: 36px 20px 40px;
+      border-radius: 20px;
+      background: var(--tg-theme-secondary-bg-color);
+      border: 1px dashed rgba(128, 128, 128, 0.22);
+      margin-bottom: 8px;
+    }
+    .tg-empty-state__visual {
+      width: 72px;
+      height: 72px;
+      margin: 0 auto 16px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(155deg, rgba(247, 166, 0, 0.18) 0%, rgba(247, 166, 0, 0.05) 100%);
+      border: 1px solid rgba(247, 166, 0, 0.28);
+      box-shadow: 0 8px 28px rgba(0, 0, 0, 0.08);
+      color: var(--app-cta-fill);
+    }
+    .tg-empty-state__visual svg {
+      width: 34px;
+      height: 34px;
+      opacity: 0.92;
+    }
+    .tg-empty-state__title {
+      margin: 0 0 8px;
+      font-size: 17px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      color: var(--tg-theme-text-color);
+    }
+    .tg-empty-state__hint {
+      margin: 0;
+      font-size: 14px;
+      line-height: 1.45;
+      color: var(--tg-theme-hint-color);
+      max-width: 280px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .tg-empty-state__action {
+      margin-top: 14px;
+    }
+    @media (prefers-color-scheme: dark) {
+      .list-err {
+        background: rgba(255, 59, 48, 0.12);
+        border-color: rgba(255, 100, 90, 0.28);
+      }
+      .tg-groups-toolbar {
+        box-shadow: 0 10px 28px rgba(0, 0, 0, 0.34);
+      }
+      .tg-groups-intro {
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+      }
+    }
+    @media (max-width: 380px) {
+      .tg-toolbar-row {
+        gap: 6px;
+      }
+      .tg-btn-mini {
+        min-width: 38px;
+        height: 38px;
+      }
+    }
+    @keyframes pulse {
+      0% { opacity: 0.6; }
+      50% { opacity: 0.3; }
+      100% { opacity: 0.6; }
+    }
+    .tg-members-hint {
+      font-size: 13px;
+      line-height: 1.45;
+      color: var(--tg-theme-hint-color);
+      margin: 0 0 10px;
+    }
+    .bd-row.tg-member-row {
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 14px;
+    }
+    .bd-row.tg-member-row .bd-avatar {
+      width: 44px;
+      height: 44px;
+      font-size: 14px;
+      box-shadow: 0 3px 12px rgba(0, 0, 0, 0.12);
+    }
+    .bd-row.tg-member-row .bd-client-name {
+      font-size: 15px;
+      line-height: 1.25;
+    }
+    .tg-member-state {
+      margin: 2px 0 0;
+      font-size: 12px;
+      text-transform: none;
+      letter-spacing: 0;
+    }
+    .tg-member-state.is-trial {
+      color: var(--app-cta-fill);
+    }
+    /* .bd-btn defaults to width:100%; as a flex sibling it steals the whole row — override */
+    .tg-member-remove {
+      width: auto;
+      align-self: center;
+      flex-shrink: 0;
+      padding: 6px 10px;
+      font-size: 13px;
+      border-radius: 10px;
+    }
+    .tg-member-profile-hit {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex: 1;
+      min-width: 0;
+      text-decoration: none;
+      color: inherit;
+      -webkit-tap-highlight-color: transparent;
+      margin: -12px -14px;
+      padding: 12px 10px 12px 14px;
+      border-radius: 14px;
+    }
+    .tg-member-profile-hit:active {
+      background: color-mix(in srgb, var(--tg-theme-button-color) 10%, transparent);
+    }
+    .tg-member-chevron {
+      flex-shrink: 0;
+      width: 18px;
+      height: 18px;
+      opacity: 0.45;
+      color: var(--tg-theme-hint-color);
+    }
+    /* Add-member flow — same visual system as schedule-editor «Записать клиента» */
+    #modalAddMember.modal-overlay.book-flow-overlay {
+      align-items: center;
+      justify-content: center;
+      padding: max(16px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom));
+      background: rgba(26, 26, 26, 0.42);
+      -webkit-backdrop-filter: blur(12px);
+      backdrop-filter: blur(12px);
+    }
+    #modalAddMember .modal.book-flow-modal {
+      position: relative;
+      max-width: 360px;
+      max-height: min(85vh, 560px);
+      overflow-y: auto;
+      padding: 22px 20px 20px;
+      border-radius: 22px;
+      overflow-x: hidden;
+      background: var(--tg-theme-bg-color);
+      box-shadow:
+        0 0 0 1px rgba(247, 166, 0, 0.14),
+        0 24px 48px -12px rgba(0, 0, 0, 0.28);
+    }
+    #modalAddMember .modal.book-flow-modal::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      pointer-events: none;
+      background: linear-gradient(165deg, rgba(247, 166, 0, 0.07) 0%, transparent 42%);
+    }
+    #modalAddMember .modal.book-flow-modal h3.book-modal-title {
+      margin: 0 0 4px;
+    }
+    .book-step { display: none; }
+    .book-step.active { display: block !important; }
+    .book-modal-title {
+      position: relative;
+      z-index: 1;
+      margin: 0 0 2px;
+      font-size: 1.125rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      line-height: 1.25;
+      color: var(--tg-theme-text-color);
+    }
+    .book-choice-lead {
+      position: relative;
+      z-index: 1;
+      margin: 0 0 18px;
+      font-size: 14px;
+      line-height: 1.45;
+      color: var(--tg-theme-hint-color);
+    }
+    .btn-book-option {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      gap: 14px;
+      width: 100%;
+      padding: 14px 14px 14px 12px;
+      margin-bottom: 10px;
+      border: none;
+      border-radius: 16px;
+      background: var(--tg-theme-secondary-bg-color);
+      color: var(--tg-theme-text-color);
+      text-align: left;
+      cursor: pointer;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+      transition: transform 0.15s ease, box-shadow 0.2s ease, background 0.2s ease;
+    }
+    .btn-book-option:active {
+      transform: scale(0.985);
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+    }
+    .btn-book-option-media {
+      flex-shrink: 0;
+      width: 48px;
+      height: 48px;
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(145deg, rgba(247, 166, 0, 0.28), rgba(247, 166, 0, 0.09));
+      color: #c77800;
+    }
+    @media (prefers-color-scheme: dark) {
+      .btn-book-option-media { color: #f7a600; }
+    }
+    .btn-book-option-media svg {
+      width: 22px;
+      height: 22px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    .btn-book-option-body {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 3px;
+    }
+    .btn-book-option-text {
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      line-height: 1.25;
+    }
+    .btn-book-option-hint {
+      font-size: 12px;
+      font-weight: 400;
+      color: var(--tg-theme-hint-color);
+      line-height: 1.35;
+    }
+    .btn-book-option-arrow {
+      flex-shrink: 0;
+      font-size: 22px;
+      font-weight: 300;
+      color: var(--tg-theme-hint-color);
+      opacity: 0.45;
+      line-height: 1;
+    }
+    .btn-book-cancel {
+      position: relative;
+      z-index: 1;
+      margin-top: 16px !important;
+      padding: 13px 16px !important;
+      border-radius: 14px !important;
+      font-size: var(--app-btn-font-size) !important;
+      font-family: inherit !important;
+      line-height: 1.25 !important;
+      font-weight: var(--app-btn-font-weight, 600) !important;
+      background: transparent !important;
+      /* Same scale as .bd-btn; readable on dark sheets without matching primary weight */
+      color: var(--tg-theme-text-color) !important;
+      color: color-mix(in srgb, var(--tg-theme-text-color) 78%, var(--tg-theme-hint-color)) !important;
+      border: 1px solid rgba(128, 128, 128, 0.28) !important;
+      box-shadow: none !important;
+    }
+    .btn-book-cancel:active { opacity: 0.85; }
+    .book-modal-back {
+      position: relative;
+      z-index: 1;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 4px 12px 0;
+      margin: -4px 0 4px -2px;
+      border: none;
+      background: none;
+      color: var(--tg-theme-hint-color);
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: color 0.15s ease;
+    }
+    .book-modal-back:hover { color: var(--tg-theme-text-color); }
+    .book-modal-back-icon {
+      width: 18px;
+      height: 18px;
+      flex-shrink: 0;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 2.2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      vertical-align: middle;
+    }
+    .book-field-label {
+      position: relative;
+      z-index: 1;
+      display: block;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--tg-theme-hint-color);
+      margin: 0 0 8px;
+    }
+    .book-field-label + .book-search-input { margin-top: 0; }
+    .book-field-stack { margin-bottom: 16px; }
+    .book-field-stack:last-of-type { margin-bottom: 0; }
+    .book-search-input {
+      width: 100%;
+      padding: 13px 14px;
+      margin-bottom: 0;
+      border-radius: 14px;
+      border: none;
+      font-size: 15px;
+      box-sizing: border-box;
+      background: var(--tg-theme-secondary-bg-color);
+      color: var(--tg-theme-text-color);
+      box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.05);
+    }
+    .book-search-input::placeholder { color: var(--tg-theme-hint-color); opacity: 0.85; }
+    #modalAddMember .client-list .client-row {
+      display: block;
+      width: 100%;
+      padding: 12px 14px;
+      margin-bottom: 6px;
+      border-radius: 10px;
+      border: none;
+      font-size: 15px;
+      text-align: left;
+      background: var(--tg-theme-secondary-bg-color);
+      color: var(--tg-theme-text-color);
+      cursor: pointer;
+    }
+    #modalAddMember .client-row:active { opacity: 0.9; }
+    #modalAddMember .client-row .phone { font-size: 13px; color: var(--tg-theme-hint-color); }
+    .book-client-list {
+      position: relative;
+      z-index: 1;
+      max-height: 220px;
+      overflow-y: auto;
+      margin: 12px 0 0;
+      padding: 4px 4px 4px 0;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(247, 166, 0, 0.45) transparent;
+    }
+    .book-client-list::-webkit-scrollbar { width: 5px; }
+    .book-client-list::-webkit-scrollbar-thumb {
+      background: rgba(247, 166, 0, 0.4);
+      border-radius: 99px;
+    }
+    #modalAddMember .book-client-list .client-row {
+      margin-bottom: 8px;
+      padding: 14px 16px;
+      border-radius: 14px;
+      border: none;
+      box-shadow: 0 1px 0 rgba(0, 0, 0, 0.04);
+      transition: transform 0.12s ease, box-shadow 0.12s ease;
+    }
+    #modalAddMember .book-client-list .client-row:active {
+      transform: scale(0.99);
+    }
+    .book-list-loading {
+      position: relative;
+      z-index: 1;
+      margin: 0;
+      padding: 20px 12px;
+      text-align: center;
+      font-size: 14px;
+      color: var(--tg-theme-hint-color);
+    }
+    .book-modal-divider {
+      position: relative;
+      z-index: 1;
+      margin: 4px 0 0;
+      padding: 18px 16px 16px;
+      border-radius: 16px;
+      background: var(--tg-theme-secondary-bg-color);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    }
+    .book-modal-divider .label {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--tg-theme-hint-color);
+      margin: 0 0 14px;
+    }
+    .book-new-client .input {
+      width: 100%;
+      padding: 13px 14px;
+      border-radius: 14px;
+      border: none;
+      margin-bottom: 10px;
+      font-size: 15px;
+      background: var(--tg-theme-bg-color);
+      color: var(--tg-theme-text-color);
+      box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.06);
+    }
+    .book-new-client .input:last-of-type { margin-bottom: 14px; }
+    .book-new-client .input::placeholder { color: var(--tg-theme-hint-color); opacity: 0.9; }
+    .book-phone-hint {
+      font-size: 12px;
+      line-height: 1.35;
+      color: var(--tg-theme-hint-color);
+      margin: -2px 0 10px;
+    }
+    .book-new-client .book-field-label {
+      margin: 10px 0 8px;
+    }
+    .book-new-client .book-field-label:first-of-type {
+      margin-top: 4px;
+    }
+    .book-req {
+      color: var(--app-danger);
+      font-weight: 700;
+    }
+    .book-new-client .btn-primary {
+      margin-top: 4px !important;
+      font-weight: 700 !important;
+      letter-spacing: -0.01em;
+    }
+  </style>
+</head>
+<body>
+  <div id="screenList" data-screen class="active">
+    <div class="header">
+      <span class="header-title">Группы</span>
+      <div class="trainer-mini-nav">
+        <button type="button" class="btn-app-home" id="btnHomeList">Главная</button>
+      </div>
+    </div>
+    <div class="tg-groups-intro">
+      <p class="tg-groups-intro__kicker">Управление потоками</p>
+      <p class="tg-screen-hint" id="groupsLead">
+        Создавайте группы, открывайте набор и управляйте расписанием без лишних действий.
+      </p>
+    </div>
+    <div class="tg-groups-toolbar">
+      <div class="tg-toolbar-row">
+        <div class="tg-search">
+          <span class="tg-search__icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+          </span>
+          <input id="groupSearch" type="search" placeholder="Поиск по названию, услуге или площадке" autocomplete="off" />
+          <button type="button" class="tg-search__clear" id="btnClearSearch" aria-label="Очистить поиск">×</button>
+        </div>
+      </div>
+      <div class="tg-scroll-chips" id="filterChips">
+        <button type="button" class="tg-chip active" data-filter="all">Все <span class="tg-chip-cnt" data-count="all">0</span></button>
+        <button type="button" class="tg-chip" data-filter="recruiting">Набор <span class="tg-chip-cnt" data-count="recruiting">0</span></button>
+        <button type="button" class="tg-chip" data-filter="active">Идут <span class="tg-chip-cnt" data-count="active">0</span></button>
+        <button type="button" class="tg-chip" data-filter="archived">Архив <span class="tg-chip-cnt" data-count="archived">0</span></button>
+        <div class="tg-chip-divider"></div>
+        <label class="tg-chip tg-chip-toggle">
+          <input type="checkbox" id="onlyFreeSeats" />
+          <span>Свободные места</span>
+        </label>
+        <label class="tg-chip tg-chip-select">
+          <span id="sortLabel">Ближайшие</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+          <select id="sortSelect" aria-label="Сортировка списка групп">
+            <option value="next">Ближайшие</option>
+            <option value="recruiting">Сначала набор</option>
+            <option value="occupancy">По заполненности</option>
+            <option value="name">По названию</option>
+          </select>
+        </label>
+        <button type="button" class="tg-chip tg-chip-reset" id="btnResetListState" style="display:none;">Сбросить</button>
+      </div>
+    </div>
+    <div id="listError" class="list-err" style="display:none;"></div>
+    <div id="groupList"></div>
+  </div>
+
+  <div id="screenCreate" data-screen>
+    <div class="header">
+      <span class="header-title">Новая группа</span>
+      <div class="trainer-mini-nav">
+        <button type="button" class="btn-app-back" id="btnBackCreate">Назад</button>
+      </div>
+    </div>
+    <div class="bd-hero tg-create-hero">
+      <div class="bd-hero-inner">
+        <div class="bd-hero-kicker">Когорта</div>
+        <div class="bd-hero-time">Правила серии</div>
+        <div class="bd-hero-date">После сохранения слоты появятся в календаре по выбранным дням и времени.</div>
+      </div>
+    </div>
+    <div class="tg-form-card tg-create-form">
+      <p class="bd-section-label">Основное</p>
+      <div class="form-block">
+        <label class="form-label" for="fName">Название</label>
+        <input id="fName" type="text" maxlength="200" placeholder="Например, Утро вторник-четверг" autocomplete="off" />
+      </div>
+      <div class="form-block">
+        <label class="form-label" for="fService">Услуга</label>
+        <select id="fService" class="tg-select"></select>
+      </div>
+      <div class="form-block">
+        <label class="form-label" for="fArena">Площадка</label>
+        <select id="fArena" class="tg-select"></select>
+      </div>
+      <div class="form-block">
+        <label class="form-label" for="fMax">Мест в группе</label>
+        <input id="fMax" type="number" min="2" max="500" value="8" inputmode="numeric" />
+      </div>
+      <hr class="tg-form-divider" />
+      <p class="bd-section-label">Расписание</p>
+      <div class="form-block">
+        <span class="form-label">Дни недели</span>
+        <div class="weekday-row tg-weekday" id="weekdayPick" role="group" aria-label="Дни недели"></div>
+      </div>
+      <div class="form-block">
+        <span class="form-label">Время начала</span>
+        <div class="tg-form-row-2">
+          <div class="form-block" style="margin-bottom:0;">
+            <label class="form-label" for="fStartHour" style="font-size:12px;letter-spacing:0.06em;">Час</label>
+            <select id="fStartHour" class="tg-select" aria-label="Час начала"></select>
+          </div>
+          <div class="form-block" style="margin-bottom:0;">
+            <label class="form-label" for="fStartMin" style="font-size:12px;letter-spacing:0.06em;">Минуты</label>
+            <select id="fStartMin" class="tg-select" aria-label="Минуты начала"></select>
+          </div>
+        </div>
+      </div>
+      <div class="form-block">
+        <label class="form-label" for="fDur">Длительность, мин</label>
+        <input id="fDur" type="number" min="15" max="480" value="60" inputmode="numeric" />
+      </div>
+      <div class="form-block">
+        <label class="form-label" for="fSeason">Старт сезона (опционально)</label>
+        <input id="fSeason" type="date" autocomplete="off" />
+        <div class="tg-quick-dates" role="group" aria-label="Быстрый выбор даты старта">
+          <button type="button" class="tg-chip-btn" id="btnSeasonToday">Сегодня</button>
+          <button type="button" class="tg-chip-btn" id="btnSeasonWeek">Через 7 дней</button>
+          <button type="button" class="tg-chip-btn" id="btnSeasonClear">Без даты</button>
+        </div>
+      </div>
+      <hr class="tg-form-divider" />
+      <p class="bd-section-label">Каталог и набор</p>
+      <div class="form-block">
+        <label><input type="checkbox" id="fCatalog" /> Показывать в каталоге для набора</label>
+      </div>
+      <div class="form-block">
+        <label class="form-label" for="fCatText">Текст для каталога</label>
+        <textarea id="fCatText" maxlength="2000" placeholder="Кратко для клиентов — формат, уровень, что входит"></textarea>
+      </div>
+      <div id="createError" class="list-err" style="display:none;"></div>
+      <button type="button" class="btn-primary btn-block" id="btnSubmitCreate" style="margin-top:8px;">Создать группу</button>
+    </div>
+  </div>
+
+  <div id="screenDetail" data-screen>
+    <div class="header">
+      <span class="header-title" id="detailTitle">Группа</span>
+      <div class="trainer-mini-nav">
+        <button type="button" class="btn-app-home" id="btnHomeDetail">Главная</button>
+        <button type="button" class="btn-app-back" id="btnBackDetail">Назад</button>
+      </div>
+    </div>
+    <div id="detailBody"></div>
+  </div>
+
+  <div id="modalAddMember" class="modal-overlay book-flow-overlay" style="display:none;" aria-hidden="true">
+    <div class="modal book-flow-modal" role="dialog" aria-labelledby="addMemberTitle">
+      <h3 id="addMemberTitle" class="book-modal-title">Добавить участника</h3>
+      <div id="addMemberStepChoice" class="book-step active" data-step="choice">
+        <p class="book-choice-lead" id="addMemberChoiceLead">Кого добавить в группу?</p>
+        <button type="button" class="btn-book-option" id="btnAddMemberOptExisting">
+          <span class="btn-book-option-media" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.5"/><path d="M5 20v-1a5 5 0 0 1 5-5h4a5 5 0 0 1 5 5v1"/></svg>
+          </span>
+          <span class="btn-book-option-body">
+            <span class="btn-book-option-text">Выбрать из списка</span>
+            <span class="btn-book-option-hint" id="addMemberExistingHint">Существующий клиент</span>
+          </span>
+          <span class="btn-book-option-arrow" aria-hidden="true">›</span>
+        </button>
+        <button type="button" class="btn-book-option" id="btnAddMemberOptNew">
+          <span class="btn-book-option-media" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+          </span>
+          <span class="btn-book-option-body">
+            <span class="btn-book-option-text">Добавить нового</span>
+            <span class="btn-book-option-hint" id="addMemberNewHint">Телефон, имя — и добавить в группу</span>
+          </span>
+          <span class="btn-book-option-arrow" aria-hidden="true">›</span>
+        </button>
+        <button type="button" class="btn-block btn-book-cancel" id="btnAddMemberCancel">Отмена</button>
+      </div>
+      <div id="addMemberStepExisting" class="book-step" data-step="existing">
+        <button type="button" class="book-modal-back" id="btnAddMemberBackExisting">
+          <svg class="book-modal-back-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+          Назад
+        </button>
+        <div class="book-field-stack">
+          <label class="book-field-label" for="addMemberSearch">Поиск по имени или телефону</label>
+          <input type="text" id="addMemberSearch" class="input book-search-input" placeholder="Имя или телефон…" autocomplete="off" />
+        </div>
+        <div id="addMemberClientList" class="client-list book-client-list"></div>
+      </div>
+      <div id="addMemberStepNew" class="book-step" data-step="new">
+        <button type="button" class="book-modal-back" id="btnAddMemberBackNew">
+          <svg class="book-modal-back-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+          Назад
+        </button>
+        <div class="book-modal-divider">
+          <div class="label">Новый клиент</div>
+          <div class="book-new-client">
+            <label class="book-field-label" for="addMemberPhone">Телефон <span class="book-req" aria-hidden="true">*</span></label>
+            <input type="tel" id="addMemberPhone" class="input" placeholder="+375 29 123 45 67" autocomplete="tel" inputmode="tel" maxlength="32" aria-required="true" />
+            <p class="book-phone-hint">Номер в формате +375 XX XXX XX XX</p>
+            <label class="book-field-label" for="addMemberFn">Имя <span class="book-req" aria-hidden="true">*</span></label>
+            <input type="text" id="addMemberFn" class="input" placeholder="Иван" autocomplete="given-name" maxlength="120" aria-required="true" />
+            <label class="book-field-label" for="addMemberLn">Фамилия</label>
+            <input type="text" id="addMemberLn" class="input" placeholder="По желанию" autocomplete="family-name" maxlength="120" />
+            <button type="button" class="btn-block btn-primary" id="btnAddMemberNew">Добавить в группу</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="modalSlotActions" class="modal-overlay book-flow-overlay" style="display:none;" aria-hidden="true">
+    <div class="modal book-flow-modal tg-slot-actions-modal" role="dialog" aria-labelledby="slotActionsTitle">
+      <h3 id="slotActionsTitle" class="book-modal-title">Действия со слотом</h3>
+      <p id="slotActionsMeta" class="tg-screen-hint tg-slot-actions-meta">—</p>
+      <div class="tg-slot-actions-list">
+        <button type="button" class="bd-btn bd-btn--primary" id="btnSlotActionAdd">Записать клиента</button>
+        <button type="button" class="bd-btn bd-btn--outline-danger" id="btnSlotActionCancel">Отменить слот</button>
+      </div>
+      <button type="button" class="btn-block btn-book-cancel" id="btnSlotActionClose">Закрыть</button>
+    </div>
+  </div>
+
+  <div id="modalEditSchedule" class="modal-overlay book-flow-overlay" style="display:none;" aria-hidden="true">
+    <div class="modal book-flow-modal tg-modal-edit-schedule" role="dialog" aria-labelledby="editScheduleTitle">
+      <h3 id="editScheduleTitle" class="book-modal-title">Изменить расписание серии</h3>
+      <p class="tg-screen-hint" style="margin-top:0;">Будущие пустые слоты пересоберутся по новым правилам. Если есть записи на будущие занятия — сначала перенесите или отмените их.</p>
+      <div class="form-block">
+        <span class="form-label">Дни недели</span>
+        <div class="weekday-row tg-weekday" id="editWeekdayPick" role="group" aria-label="Дни недели"></div>
+      </div>
+      <div class="form-block">
+        <span class="form-label">Время начала</span>
+        <div class="tg-form-row-2">
+          <div class="form-block" style="margin-bottom:0;">
+            <label class="form-label" for="editFStartHour" style="font-size:12px;letter-spacing:0.06em;">Час</label>
+            <select id="editFStartHour" class="tg-select" aria-label="Час начала"></select>
+          </div>
+          <div class="form-block" style="margin-bottom:0;">
+            <label class="form-label" for="editFStartMin" style="font-size:12px;letter-spacing:0.06em;">Минуты</label>
+            <select id="editFStartMin" class="tg-select" aria-label="Минуты начала"></select>
+          </div>
+        </div>
+      </div>
+      <div class="form-block">
+        <label class="form-label" for="editFDur">Длительность, мин</label>
+        <input id="editFDur" type="number" min="15" max="480" value="60" inputmode="numeric" />
+      </div>
+      <div class="form-block">
+        <label class="form-label" for="editFSeason">Старт сезона (опционально)</label>
+        <input id="editFSeason" type="date" autocomplete="off" />
+        <div class="tg-quick-dates" role="group" aria-label="Быстрый выбор даты старта">
+          <button type="button" class="tg-chip-btn" id="btnEditSeasonToday">Сегодня</button>
+          <button type="button" class="tg-chip-btn" id="btnEditSeasonWeek">Через 7 дней</button>
+          <button type="button" class="tg-chip-btn" id="btnEditSeasonClear">Без даты</button>
+        </div>
+      </div>
+      <div id="editScheduleError" class="list-err" style="display:none;"></div>
+      <button type="button" class="btn-primary btn-block" id="btnSubmitEditSchedule" style="margin-top:8px;">Сохранить</button>
+      <button type="button" class="btn-block btn-book-cancel" id="btnEditScheduleCancel">Закрыть</button>
+    </div>
+  </div>
+
+  <div class="tg-fab" id="fabNew" style="display:none;">
+    <button type="button" class="btn-primary" id="btnFabNew">+ Новая группа</button>
+  </div>
+
+  <script src="mini-app-trainer-home.js"></script>
+  <script>
+(function () {
+  var tg = window.Telegram && window.Telegram.WebApp;
+  if (tg) {
+    if (typeof tg.ready === 'function') tg.ready();
+    if (typeof tg.expand === 'function') tg.expand();
+    if (typeof window.__applyTrainerGroupsTheme === 'function') {
+      window.__applyTrainerGroupsTheme();
+    }
+    try {
+      var darkUi = tg.colorScheme === 'dark' ||
+        (tg.colorScheme !== 'light' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+      var bgHex = darkUi ? '#1a1a1a' : '#fffbeb';
+      if (typeof tg.setHeaderColor === 'function') tg.setHeaderColor(bgHex);
+      if (typeof tg.setBackgroundColor === 'function') tg.setBackgroundColor(bgHex);
+    } catch (e) { /* older clients */ }
+    if (tg.onEvent) {
+      tg.onEvent('themeChanged', function () {
+        if (typeof window.__applyTrainerGroupsTheme === 'function') {
+          window.__applyTrainerGroupsTheme();
+        }
+        try {
+          var du = tg.colorScheme === 'dark' ||
+            (tg.colorScheme !== 'light' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          var bg = du ? '#1a1a1a' : '#fffbeb';
+          if (typeof tg.setHeaderColor === 'function') tg.setHeaderColor(bg);
+          if (typeof tg.setBackgroundColor === 'function') tg.setBackgroundColor(bg);
+        } catch (err) { /* ignore */ }
+      });
+    }
+  }
+
+  var qs = new URLSearchParams(window.location.search);
+  function initFromUrl() {
+    return qs.get('init_data') || qs.get('initData') || '';
+  }
+  var initData = (tg && tg.initData) ? tg.initData : initFromUrl();
+
+  function syncInitFromTg() {
+    if (tg && tg.initData) initData = tg.initData;
+  }
+
+  function currentInit() {
+    syncInitFromTg();
+    return initData || '';
+  }
+
+  var apiBase = '/api/webapp';
+
+  function apiUrlWithQuery(path) {
+    var u = apiBase + path;
+    var raw = currentInit();
+    if (!raw) return u;
+    return u + (u.indexOf('?') >= 0 ? '&' : '?') + 'init_data=' + encodeURIComponent(raw);
+  }
+
+  /** Same entry point as schedule-editor: full client card (passes, TG, history). */
+  function trainerClientProfileUrl(clientId, groupId) {
+    var path = (window.location.pathname || '').replace(/[^/]+$/, '') || '/webapp/';
+    var u = path + 'trainer-clients?client_id=' + encodeURIComponent(String(clientId));
+    if (groupId != null && groupId !== '') {
+      u += '&return_from=groups&group_id=' + encodeURIComponent(String(groupId));
+    }
+    var raw = currentInit();
+    if (raw) u += (u.indexOf('?') >= 0 ? '&' : '?') + 'init_data=' + encodeURIComponent(raw);
+    return u;
+  }
+
+  function apiHeaders() {
+    var raw = currentInit();
+    var h = {};
+    if (raw) h['X-Telegram-Init-Data'] = raw;
+    return h;
+  }
+
+  var DAYS = [
+    { v: 1, l: 'Пн' }, { v: 2, l: 'Вт' }, { v: 3, l: 'Ср' }, { v: 4, l: 'Чт' },
+    { v: 5, l: 'Пт' }, { v: 6, l: 'Сб' }, { v: 7, l: 'Вс' }
+  ];
+  var DOW_SHORT = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+  var STATUS_RU = {
+    draft: 'Черновик',
+    recruiting: 'Набор',
+    active: 'Идёт',
+    paused: 'Пауза',
+    archived: 'Архив'
+  };
+  var FILTER_LABELS = {
+    all: 'Все',
+    recruiting: 'Набор',
+    active: 'Идут',
+    archived: 'Архив'
+  };
+  var SORT_LABELS = {
+    next: 'Ближайшие',
+    recruiting: 'Сначала набор',
+    occupancy: 'Заполненность',
+    name: 'По названию'
+  };
+  var STATUS_SORT_PRIORITY = {
+    recruiting: 0,
+    active: 1,
+    paused: 2,
+    draft: 3,
+    archived: 4
+  };
+  var LIST_UI_STATE_KEY = 'trainer.groups.list-ui.v2';
+
+  var IC = {
+    service: '<svg class="bd-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><path d="M3.27 6.96L12 12.01l8.73-5.05"/></svg>',
+    session: '<svg class="bd-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/></svg>',
+    users: '<svg class="bd-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
+    inbox: '<svg class="bd-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M22 12h-6l-2 3H10l-2-3H2"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>'
+  };
+
+  function statusPillClass(st) {
+    if (st === 'recruiting') return 'tg-status-pill--recruiting';
+    if (st === 'active') return 'tg-status-pill--active';
+    if (st === 'archived') return 'tg-status-pill--archived';
+    if (st === 'paused') return 'tg-status-pill--paused';
+    return 'tg-status-pill--draft';
+  }
+
+  var state = {
+    groups: [],
+    filter: 'all',
+    sort: 'next',
+    onlyFreeSeats: false,
+    detailId: null,
+    addMemberGroupId: null,
+    addMemberSlotId: null,
+    addMemberServiceId: null,
+    groupMemberIds: [],
+    groupSpotsLeft: null,
+    groupRosterFull: false,
+    slotActionGroupId: null,
+    slotActionSlotId: null,
+    slotActionServiceId: null,
+    slotActionCanCancel: false,
+    slotActionLabel: '',
+    slotActionOccupancy: '',
+    selectedWeekdays: [2, 4],
+    editWeekdays: [2, 4],
+    editScheduleOriginalSeason: '',
+    editScheduleGroupId: null,
+    search: ''
+  };
+  var addMemberSearchTimer = null;
+  loadPersistedListState();
+
+  function loadPersistedListState() {
+    try {
+      var raw = window.localStorage ? localStorage.getItem(LIST_UI_STATE_KEY) : '';
+      if (!raw) return;
+      var saved = JSON.parse(raw);
+      if (saved && FILTER_LABELS[saved.filter]) state.filter = saved.filter;
+      if (saved && SORT_LABELS[saved.sort]) state.sort = saved.sort;
+      if (saved && typeof saved.search === 'string') state.search = saved.search.slice(0, 120);
+      if (saved) state.onlyFreeSeats = !!saved.onlyFreeSeats;
+    } catch (e) {
+      // Ignore malformed localStorage and keep defaults.
+    }
+  }
+
+  function saveListUiState() {
+    try {
+      if (!window.localStorage) return;
+      localStorage.setItem(LIST_UI_STATE_KEY, JSON.stringify({
+        filter: state.filter,
+        sort: state.sort,
+        search: state.search,
+        onlyFreeSeats: state.onlyFreeSeats
+      }));
+    } catch (e) {
+      // Ignore WebView storage limitations.
+    }
+  }
+
+  function showScreen(name) {
+    document.getElementById('screenList').classList.toggle('active', name === 'list');
+    document.getElementById('screenCreate').classList.toggle('active', name === 'create');
+    document.getElementById('screenDetail').classList.toggle('active', name === 'detail');
+    document.getElementById('fabNew').style.display = name === 'list' ? 'block' : 'none';
+  }
+
+  function esc(s) {
+    if (s == null) return '';
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+  }
+
+  function fetchJson(url, opts) {
+    opts = opts || {};
+    opts.headers = Object.assign({}, apiHeaders(), opts.headers || {});
+    if (opts.body && typeof opts.body === 'string' && !opts.headers['Content-Type']) {
+      opts.headers['Content-Type'] = 'application/json';
+    }
+    return fetch(url, opts).then(function (r) {
+      return r.text().then(function (t) {
+        var j = null;
+        try { j = t ? JSON.parse(t) : null; } catch (e) { j = null; }
+        if (!r.ok) {
+          var msg = (j && (j.detail || j.message)) || t || r.statusText;
+          if (typeof msg === 'string' && /missing init data/i.test(msg)) {
+            msg = 'Откройте раздел из Telegram (мини-приложение тренера).';
+          }
+          throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+        }
+        return j;
+      });
+    });
+  }
+
+  function showAddMemberStep(step) {
+    var choice = document.getElementById('addMemberStepChoice');
+    var existing = document.getElementById('addMemberStepExisting');
+    var neu = document.getElementById('addMemberStepNew');
+    if (choice) choice.classList.toggle('active', step === 'choice');
+    if (existing) existing.classList.toggle('active', step === 'existing');
+    if (neu) neu.classList.toggle('active', step === 'new');
+  }
+
+  function closeAddMemberModal() {
+    state.addMemberGroupId = null;
+    state.addMemberSlotId = null;
+    state.addMemberServiceId = null;
+    var ttl = document.getElementById('addMemberTitle');
+    if (ttl) ttl.textContent = 'Добавить участника';
+    showAddMemberStep('choice');
+    var m = document.getElementById('modalAddMember');
+    if (m) {
+      m.style.display = 'none';
+      m.setAttribute('aria-hidden', 'true');
+    }
+  }
+
+  function openAddMemberModal(gid, opts) {
+    opts = opts || {};
+    closeSlotActionsModal();
+    state.addMemberGroupId = gid;
+    state.addMemberSlotId = opts.slotId != null ? opts.slotId : null;
+    state.addMemberServiceId = opts.serviceId != null ? opts.serviceId : null;
+    var slotMode = !!state.addMemberSlotId;
+    var ttl = document.getElementById('addMemberTitle');
+    if (ttl) ttl.textContent = slotMode ? 'Запись на занятие' : 'Добавить участника';
+    var lead = document.getElementById('addMemberChoiceLead');
+    if (lead) lead.textContent = slotMode ? 'Кого записать на это занятие?' : 'Кого добавить в группу?';
+    var exHint = document.getElementById('addMemberExistingHint');
+    if (exHint) exHint.textContent = slotMode ? 'Без добавления в состав группы' : 'Существующий клиент';
+    var newHint = document.getElementById('addMemberNewHint');
+    if (newHint) {
+      newHint.textContent = slotMode
+        ? 'Одноразовая запись на этот слот — не в состав группы'
+        : 'Телефон, имя — и добавить в группу';
+    }
+    var btnNew = document.getElementById('btnAddMemberNew');
+    if (btnNew) btnNew.textContent = slotMode ? 'Создать и записать на слот' : 'Добавить в группу';
+    var m = document.getElementById('modalAddMember');
+    if (m) {
+      m.style.display = 'flex';
+      m.setAttribute('aria-hidden', 'false');
+    }
+    showAddMemberStep('choice');
+    var search = document.getElementById('addMemberSearch');
+    if (search) search.value = '';
+    var ph = document.getElementById('addMemberPhone');
+    var fn = document.getElementById('addMemberFn');
+    var ln = document.getElementById('addMemberLn');
+    if (ph) ph.value = '';
+    if (fn) fn.value = '';
+    if (ln) ln.value = '';
+    var list = document.getElementById('addMemberClientList');
+    if (list) list.innerHTML = '';
+  }
+
+  function closeSlotActionsModal() {
+    state.slotActionGroupId = null;
+    state.slotActionSlotId = null;
+    state.slotActionServiceId = null;
+    state.slotActionCanCancel = false;
+    state.slotActionLabel = '';
+    state.slotActionOccupancy = '';
+    var m = document.getElementById('modalSlotActions');
+    if (m) {
+      m.style.display = 'none';
+      m.setAttribute('aria-hidden', 'true');
+    }
+  }
+
+  function openSlotActionsModal(gid, opts) {
+    opts = opts || {};
+    state.slotActionGroupId = gid;
+    state.slotActionSlotId = opts.slotId != null ? opts.slotId : null;
+    state.slotActionServiceId = opts.serviceId != null ? opts.serviceId : null;
+    state.slotActionCanCancel = !!opts.canCancel;
+    state.slotActionLabel = opts.label || '';
+    state.slotActionOccupancy = opts.occupancy || '';
+    var title = document.getElementById('slotActionsTitle');
+    if (title) title.textContent = state.slotActionLabel || 'Действия со слотом';
+    var meta = document.getElementById('slotActionsMeta');
+    if (meta) {
+      var parts = [];
+      if (state.slotActionOccupancy) parts.push(state.slotActionOccupancy);
+      if (opts.statusLabel) parts.push(opts.statusLabel);
+      meta.textContent = parts.length ? parts.join(' · ') : 'Выберите действие';
+    }
+    var btnCancel = document.getElementById('btnSlotActionCancel');
+    if (btnCancel) btnCancel.style.display = state.slotActionCanCancel ? 'inline-flex' : 'none';
+    var m = document.getElementById('modalSlotActions');
+    if (m) {
+      m.style.display = 'flex';
+      m.setAttribute('aria-hidden', 'false');
+    }
+  }
+
+  function loadAddMemberClients(q) {
+    if (!state.addMemberGroupId) return;
+    var host = document.getElementById('addMemberClientList');
+    if (host) {
+      host.innerHTML = '<p class="book-list-loading">Загрузка…</p>';
+    }
+    var qstr = (q || '').trim();
+    var url = '/trainer/clients' + (qstr ? '?q=' + encodeURIComponent(qstr) : '');
+    fetchJson(apiUrlWithQuery(url))
+      .then(function (data) {
+        var clients = (data && data.clients) || [];
+        if (!host) return;
+        host.innerHTML = clients.map(function (c) {
+          var name = [c.first_name, c.last_name].filter(Boolean).join(' ').trim() || 'Клиент';
+          return (
+            '<button type="button" class="client-row" data-id="' + c.id + '">' +
+              '<div>' + esc(name) + '</div>' +
+              '<div class="phone">' + esc(c.phone || '') + '</div>' +
+            '</button>'
+          );
+        }).join('') || '<p class="book-list-loading">Нет клиентов</p>';
+        Array.prototype.forEach.call(host.querySelectorAll('.client-row'), function (btn) {
+          btn.addEventListener('click', function () {
+            var cid = parseInt(btn.getAttribute('data-id'), 10);
+            postAddMember({ client_id: cid });
+          });
+        });
+      })
+      .catch(function (e) {
+        if (host) host.innerHTML = '';
+        alert(e.message || String(e));
+      });
+  }
+
+  function postAddMember(payload) {
+    var gid = state.addMemberGroupId;
+    if (!gid) return;
+    if (payload.client_id == null) {
+      var fn = ((payload.first_name || '') + '').trim();
+      if (!fn) {
+        alert('Укажите имя');
+        return;
+      }
+    }
+    var slotId = state.addMemberSlotId;
+    var svcId = state.addMemberServiceId;
+
+    function bookSlotOnly(clientId) {
+      return fetchJson(apiUrlWithQuery('/trainer/booking'), {
+        method: 'POST',
+        body: JSON.stringify({
+          slot_id: slotId,
+          client_id: clientId,
+          service_id: svcId,
+          allow_overbook: true
+        })
+      });
+    }
+
+    function finishOk() {
+      closeAddMemberModal();
+      openDetail(gid);
+    }
+
+    // One-off slot booking: does NOT add client to group roster (same as schedule).
+    if (slotId && svcId) {
+      if (payload.client_id != null) {
+        bookSlotOnly(payload.client_id).then(finishOk).catch(function (e) {
+          alert(e.message || String(e));
+        });
+        return;
+      }
+      fetchJson(apiUrlWithQuery('/trainer/clients'), {
+        method: 'POST',
+        body: JSON.stringify({
+          phone: payload.phone,
+          first_name: payload.first_name,
+          last_name: payload.last_name
+        })
+      })
+        .then(function (res) {
+          var clientId = res && res.client_id;
+          if (!clientId) throw new Error('Не удалось создать клиента');
+          return bookSlotOnly(clientId);
+        })
+        .then(finishOk)
+        .catch(function (e) {
+          alert(e.message || String(e));
+        });
+      return;
+    }
+
+    var memberIds = state.groupMemberIds || [];
+
+    function postMemberOnce(body) {
+      return fetchJson(apiUrlWithQuery('/trainer/training-groups/' + gid + '/members'), {
+        method: 'POST',
+        body: JSON.stringify(body)
+      });
+    }
+
+    var cid = payload.client_id;
+    var inGroup = cid != null && memberIds.indexOf(cid) >= 0;
+    var needRoster = !inGroup;
+    if (needRoster && state.groupRosterFull) {
+      if (!confirm('Уверены, что хотите расширить группу? Лимит мест будет увеличен.')) return;
+    }
+    var expand = needRoster && state.groupRosterFull;
+    var p = Promise.resolve();
+    if (needRoster) {
+      p = postMemberOnce(Object.assign({}, payload, { expand_roster: expand }));
+    }
+    p.then(function (res) {
+      var clientId = cid != null ? cid : (res && res.client_id);
+      if (!clientId) throw new Error('Не удалось определить клиента');
+      return clientId;
+    })
+      .then(finishOk)
+      .catch(function (e) {
+        alert(e.message || String(e));
+      });
+  }
+
+  function bindAddMemberModal() {
+    var modal = document.getElementById('modalAddMember');
+    if (modal) {
+      modal.addEventListener('click', function (e) {
+        if (e.target === modal) closeAddMemberModal();
+      });
+    }
+    var cancel = document.getElementById('btnAddMemberCancel');
+    if (cancel) cancel.addEventListener('click', closeAddMemberModal);
+    var optEx = document.getElementById('btnAddMemberOptExisting');
+    if (optEx) {
+      optEx.addEventListener('click', function () {
+        showAddMemberStep('existing');
+        var search = document.getElementById('addMemberSearch');
+        loadAddMemberClients(search ? search.value.trim() : '');
+        if (search) search.focus();
+      });
+    }
+    var optNew = document.getElementById('btnAddMemberOptNew');
+    if (optNew) optNew.addEventListener('click', function () {
+      showAddMemberStep('new');
+      var ph = document.getElementById('addMemberPhone');
+      if (ph) ph.focus();
+    });
+    var backEx = document.getElementById('btnAddMemberBackExisting');
+    if (backEx) backEx.addEventListener('click', function () { showAddMemberStep('choice'); });
+    var backNew = document.getElementById('btnAddMemberBackNew');
+    if (backNew) backNew.addEventListener('click', function () { showAddMemberStep('choice'); });
+    var search = document.getElementById('addMemberSearch');
+    if (search) {
+      search.addEventListener('input', function () {
+        clearTimeout(addMemberSearchTimer);
+        var q = search.value.trim();
+        addMemberSearchTimer = setTimeout(function () {
+          loadAddMemberClients(q);
+        }, 300);
+      });
+    }
+    var btnNew = document.getElementById('btnAddMemberNew');
+    if (btnNew) {
+      btnNew.addEventListener('click', function () {
+        postAddMember({
+          phone: document.getElementById('addMemberPhone') ? document.getElementById('addMemberPhone').value : '',
+          first_name: document.getElementById('addMemberFn') ? document.getElementById('addMemberFn').value : '',
+          last_name: document.getElementById('addMemberLn') ? document.getElementById('addMemberLn').value : ''
+        });
+      });
+    }
+  }
+
+  function bindSlotActionsModal() {
+    var modal = document.getElementById('modalSlotActions');
+    if (modal) {
+      modal.addEventListener('click', function (e) {
+        if (e.target === modal) closeSlotActionsModal();
+      });
+    }
+    var btnClose = document.getElementById('btnSlotActionClose');
+    if (btnClose) btnClose.addEventListener('click', closeSlotActionsModal);
+    var btnAdd = document.getElementById('btnSlotActionAdd');
+    if (btnAdd) {
+      btnAdd.addEventListener('click', function () {
+        var gid = state.slotActionGroupId;
+        var sid = state.slotActionSlotId;
+        var svc = state.slotActionServiceId;
+        closeSlotActionsModal();
+        if (!gid || !sid || !svc) return;
+        openAddMemberModal(gid, { slotId: sid, serviceId: svc });
+      });
+    }
+    var btnCancel = document.getElementById('btnSlotActionCancel');
+    if (btnCancel) {
+      btnCancel.addEventListener('click', function () {
+        var gid = state.slotActionGroupId;
+        var sid = state.slotActionSlotId;
+        if (!gid || !sid || !state.slotActionCanCancel) return;
+        if (!confirm('Отменить это занятие? Слот станет недоступен.')) return;
+        fetchJson(apiUrlWithQuery('/trainer/training-groups/' + gid + '/slots/' + sid + '/cancel'), { method: 'POST' })
+          .then(function () {
+            closeSlotActionsModal();
+            openDetail(gid);
+          })
+          .catch(function (e) {
+            alert(e.message || String(e));
+          });
+      });
+    }
+  }
+
+  function setRefreshButtonLoading(isLoading) {
+    var btn = document.getElementById('btnRefreshList');
+    if (!btn) return;
+    btn.disabled = !!isLoading;
+    btn.style.opacity = isLoading ? '0.72' : '1';
+  }
+
+  function hasActiveListRefinement() {
+    return state.filter !== 'all' || !!normalizeText(state.search) || state.sort !== 'next' || state.onlyFreeSeats;
+  }
+
+  function syncListControls() {
+    var searchInput = document.getElementById('groupSearch');
+    if (searchInput && searchInput.value !== state.search) searchInput.value = state.search;
+    Array.prototype.forEach.call(document.querySelectorAll('#filterChips .tg-chip[data-filter]'), function (btn) {
+      btn.classList.toggle('active', btn.getAttribute('data-filter') === state.filter);
+    });
+    var sortSelect = document.getElementById('sortSelect');
+    if (sortSelect && sortSelect.value !== state.sort) sortSelect.value = state.sort;
+    var sortLabel = document.getElementById('sortLabel');
+    if (sortLabel && sortSelect) {
+      var opt = sortSelect.options[sortSelect.selectedIndex];
+      if (opt) sortLabel.textContent = opt.text;
+    }
+    var freeSeatsToggle = document.getElementById('onlyFreeSeats');
+    if (freeSeatsToggle) {
+      freeSeatsToggle.checked = !!state.onlyFreeSeats;
+      var freeSeatsWrap = freeSeatsToggle.closest('.tg-chip-toggle');
+      if (freeSeatsWrap) freeSeatsWrap.classList.toggle('is-on', !!state.onlyFreeSeats);
+    }
+    var resetBtn = document.getElementById('btnResetListState');
+    if (resetBtn) resetBtn.style.display = hasActiveListRefinement() ? 'inline-flex' : 'none';
+  }
+
+  function resetListRefinements(opts) {
+    state.filter = 'all';
+    state.sort = 'next';
+    state.onlyFreeSeats = false;
+    state.search = '';
+    saveListUiState();
+    renderList();
+    if (opts && opts.focusSearch) {
+      var searchInput = document.getElementById('groupSearch');
+      if (searchInput) searchInput.focus();
+    }
+  }
+
+  function loadList() {
+    var elErr = document.getElementById('listError');
+    elErr.style.display = 'none';
+    if (!currentInit()) {
+      elErr.textContent = 'Данные сессии Telegram не переданы. Откройте «Группы» из мини-приложения тренера в боте.';
+      elErr.style.display = 'block';
+      document.getElementById('groupList').innerHTML = '';
+      document.getElementById('fabNew').style.display = 'none';
+      return Promise.resolve();
+    }
+    document.getElementById('groupList').innerHTML = renderListSkeleton();
+    setRefreshButtonLoading(true);
+    return fetchJson(apiUrlWithQuery('/trainer/training-groups'))
+      .then(function (data) {
+        state.groups = data.groups || [];
+        renderList();
+        showScreen('list');
+      })
+      .catch(function (e) {
+        var m = e.message || String(e);
+        if (/missing init data/i.test(m)) m = 'Откройте раздел из Telegram (мини-приложение тренера).';
+        elErr.textContent = m;
+        elErr.style.display = 'block';
+      })
+      .finally(function () {
+        setRefreshButtonLoading(false);
+      });
+  }
+
+  function groupMatchesFilter(g) {
+    if (state.filter === 'all') return true;
+    return g.status === state.filter;
+  }
+
+  function normalizeText(v) {
+    return String(v || '').toLowerCase().replace(/ё/g, 'е').trim();
+  }
+
+  function groupMatchesSearch(g) {
+    var q = normalizeText(state.search);
+    if (!q) return true;
+    var hay = normalizeText([g.name, g.service_name, g.arena_name, STATUS_RU[g.status] || g.status].join(' '));
+    return hay.indexOf(q) >= 0;
+  }
+
+  function groupCapacity(g) {
+    var cap = Number(g && g.max_members);
+    if (!isFinite(cap) || cap <= 0) return 1;
+    return Math.round(cap);
+  }
+
+  function groupOccupancy(g) {
+    var occ = Number(g && g.member_count);
+    if (!isFinite(occ) || occ < 0) return 0;
+    return Math.round(occ);
+  }
+
+  function groupFreeSeats(g) {
+    return Math.max(0, groupCapacity(g) - groupOccupancy(g));
+  }
+
+  function groupMatchesOnlyFreeSeats(g) {
+    if (!state.onlyFreeSeats) return true;
+    return groupFreeSeats(g) > 0;
+  }
+
+  function nextSessionTs(g) {
+    if (!g || !g.next_session_at) return Number.MAX_SAFE_INTEGER;
+    var ts = new Date(g.next_session_at).getTime();
+    return isFinite(ts) ? ts : Number.MAX_SAFE_INTEGER;
+  }
+
+  function sortRows(rows) {
+    var copied = rows.slice();
+    copied.sort(function (a, b) {
+      if (state.sort === 'name') {
+        return String(a.name || '').localeCompare(String(b.name || ''), 'ru', { sensitivity: 'base' });
+      }
+      if (state.sort === 'occupancy') {
+        var ratioA = groupOccupancy(a) / groupCapacity(a);
+        var ratioB = groupOccupancy(b) / groupCapacity(b);
+        if (ratioB !== ratioA) return ratioB - ratioA;
+        return nextSessionTs(a) - nextSessionTs(b);
+      }
+      if (state.sort === 'recruiting') {
+        var prA = STATUS_SORT_PRIORITY[a.status] != null ? STATUS_SORT_PRIORITY[a.status] : 9;
+        var prB = STATUS_SORT_PRIORITY[b.status] != null ? STATUS_SORT_PRIORITY[b.status] : 9;
+        if (prA !== prB) return prA - prB;
+        return nextSessionTs(a) - nextSessionTs(b);
+      }
+      return nextSessionTs(a) - nextSessionTs(b);
+    });
+    return copied;
+  }
+
+  function updateSearchClearVisibility() {
+    var btn = document.getElementById('btnClearSearch');
+    if (!btn) return;
+    btn.style.display = normalizeText(state.search) ? 'inline-flex' : 'none';
+  }
+
+  function formatSeasonDate(v) {
+    if (!v) return '';
+    var p = String(v).split('-');
+    if (p.length !== 3) return String(v);
+    var dt = new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]));
+    if (isNaN(dt.getTime())) return String(v);
+    return dt.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
+  }
+
+  function formatNextSession(v) {
+    if (!v) return 'не запланировано';
+    var dt = new Date(v);
+    if (isNaN(dt.getTime())) return 'не запланировано';
+    // Human-readable relative day label keeps schedule scanning fast.
+    var now = new Date();
+    var today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    var eventDay = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate());
+    var diff = Math.round((eventDay - today) / 86400000);
+    var dayLabel;
+    if (diff === 0) dayLabel = 'Сегодня';
+    else if (diff === 1) dayLabel = 'Завтра';
+    else dayLabel = dt.toLocaleDateString('ru-RU', { weekday: 'short', day: 'numeric', month: 'short' });
+    var timeLabel = dt.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+    return dayLabel + ' · ' + timeLabel;
+  }
+
+  function seatsText(v) {
+    var n = Math.abs(v) % 100;
+    var n1 = n % 10;
+    if (n > 10 && n < 20) return v + ' мест';
+    if (n1 === 1) return v + ' место';
+    if (n1 >= 2 && n1 <= 4) return v + ' места';
+    return v + ' мест';
+  }
+
+  function renderFilterCounts(rows) {
+    var counts = { all: rows.length, recruiting: 0, active: 0, archived: 0 };
+    rows.forEach(function (g) {
+      if (counts[g.status] != null) counts[g.status] += 1;
+    });
+    Object.keys(counts).forEach(function (k) {
+      var node = document.querySelector('#filterChips .tg-chip-cnt[data-count="' + k + '"]');
+      if (node) node.textContent = String(counts[k]);
+    });
+  }
+
+  function renderStats(rowsBySearch, rowsVisible) {
+    var lead = document.getElementById('groupsLead');
+    var q = normalizeText(state.search);
+    if (!lead) return;
+    var activeHints = [];
+    if (state.filter !== 'all') activeHints.push('фильтр «' + (FILTER_LABELS[state.filter] || state.filter) + '»');
+    if (state.onlyFreeSeats) activeHints.push('только со свободными местами');
+    if (state.sort !== 'next') activeHints.push('сортировка «' + (SORT_LABELS[state.sort] || state.sort) + '»');
+    if (q) {
+      var searchLead = 'Найдено ' + rowsBySearch.length + ' групп по запросу «' + state.search.trim() + '».';
+      if (activeHints.length) searchLead += ' Активно: ' + activeHints.join(', ') + '.';
+      lead.textContent = searchLead;
+      return;
+    }
+    if (activeHints.length) {
+      lead.textContent = 'Показано ' + rowsVisible.length + ' групп. Активно: ' + activeHints.join(', ') + '.';
+      return;
+    }
+    lead.textContent = 'Создавайте группы, открывайте набор и управляйте расписанием без лишних действий.';
+  }
+
+  function renderListSkeleton() {
+    var card =
+      '<article class="group-card-tg group-card-skeleton" aria-hidden="true">' +
+        '<div class="sk-line sk-line--lg"></div>' +
+        '<div class="sk-line sk-line--md"></div>' +
+        '<div class="sk-line sk-line--sm"></div>' +
+      '</article>';
+    return card + card + card;
+  }
+
+  function renderList() {
+    var box = document.getElementById('groupList');
+    // First apply search, then status filter so chip counters match search scope.
+    var rowsBySearch = state.groups.filter(groupMatchesSearch);
+    var rows = rowsBySearch.filter(groupMatchesFilter).filter(groupMatchesOnlyFreeSeats);
+    rows = sortRows(rows);
+    updateSearchClearVisibility();
+    syncListControls();
+    renderFilterCounts(rowsBySearch);
+    renderStats(rowsBySearch, rows);
+    if (!rows.length) {
+      var q = normalizeText(state.search);
+      var emptyTitle = 'В этом разделе пока нет групп';
+      var emptyHint = 'Попробуйте другой фильтр или нажмите «Новая группа» — правила серии появятся в календаре автоматически.';
+      if (q) {
+        emptyTitle = 'По вашему запросу ничего не найдено';
+        emptyHint = 'Уточните запрос или очистите поиск. Можно искать по названию, услуге и площадке.';
+      } else if (state.filter !== 'all') {
+        emptyTitle = 'Нет групп в статусе «' + (FILTER_LABELS[state.filter] || state.filter) + '»';
+      } else if (state.onlyFreeSeats) {
+        emptyTitle = 'Свободных мест сейчас нет';
+        emptyHint = 'Снимите ограничение или обновите список позже — новые места появятся после изменений в группах.';
+      }
+      var showReset = hasActiveListRefinement();
+      box.innerHTML =
+        '<div class="tg-empty-state">' +
+          '<div class="tg-empty-state__visual" aria-hidden="true">' +
+            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">' +
+              '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>' +
+              '<path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>' +
+            '</svg>' +
+          '</div>' +
+          '<p class="tg-empty-state__title">' + esc(emptyTitle) + '</p>' +
+          '<p class="tg-empty-state__hint">' + esc(emptyHint) + '</p>' +
+          (showReset ? '<button type="button" class="btn-secondary btn-block tg-empty-state__action" id="btnResetFromEmpty">Сбросить ограничения</button>' : '') +
+        '</div>';
+      var btnResetFromEmpty = document.getElementById('btnResetFromEmpty');
+      if (btnResetFromEmpty) {
+        btnResetFromEmpty.addEventListener('click', function () {
+          resetListRefinements({ focusSearch: true });
+        });
+      }
+      return;
+    }
+    box.innerHTML = rows.map(function (g) {
+      var nextStr = formatNextSession(g.next_session_at);
+      var cap = groupCapacity(g);
+      var occ = groupOccupancy(g);
+      var pct = Math.min(100, Math.round((occ / cap) * 100));
+      var st = g.status || '';
+      var statusLabel = STATUS_RU[st] || st || '—';
+      var pillClass = statusPillClass(st);
+      var meterClass = pct >= 100 ? 'is-full' : (pct >= 80 ? 'is-high' : '');
+      var freeSeats = groupFreeSeats(g);
+      var seatsHint = freeSeats ? ('ещё ' + seatsText(freeSeats)) : 'мест нет';
+      var chips = [];
+      if (g.catalog_visible) {
+        chips.push('<span class="group-chip group-chip--catalog">В каталоге</span>');
+      }
+      if (g.season_start_date) {
+        chips.push('<span class="group-chip group-chip--season">Старт ' + esc(formatSeasonDate(g.season_start_date)) + '</span>');
+      }
+      var chipsHtml = chips.length ? ('<div class="group-card-tg__chips">' + chips.join('') + '</div>') : '';
+      return (
+        '<article class="group-card-tg" data-id="' + g.id + '" data-status="' + esc(st || 'draft') + '" role="button" tabindex="0">' +
+          '<div class="group-card-tg__top">' +
+            '<h2 class="group-card-tg__name">' + esc(g.name) + '</h2>' +
+            '<div class="group-card-tg__top-end">' +
+              '<span class="tg-status-pill ' + pillClass + '">' + esc(statusLabel) + '</span>' +
+              '<span class="group-card-tg__open" aria-hidden="true">' +
+                '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"></path></svg>' +
+              '</span>' +
+            '</div>' +
+          '</div>' +
+          '<div class="group-card-tg__meta">' +
+            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>' +
+            esc(g.service_name || '—') + ' · ' + esc(g.arena_name || '—') +
+          '</div>' +
+          chipsHtml +
+          '<div class="group-card-tg__bottom">' +
+            '<div class="group-card-tg__next-block">' +
+              '<div class="group-card-tg__next-label">Ближайшее занятие</div>' +
+              '<div class="group-card-tg__next">' + esc(nextStr) + '</div>' +
+            '</div>' +
+            '<div class="group-card-tg__cap-block">' +
+              '<div class="group-card-tg__cap-text">' + occ + ' <span>/ ' + cap + '</span></div>' +
+              '<div class="group-card-tg__cap-hint">' + esc(seatsHint) + '</div>' +
+              '<div class="group-card-tg__meter" aria-hidden="true"><span class="' + meterClass + '" style="width:' + pct + '%"></span></div>' +
+            '</div>' +
+          '</div>' +
+        '</article>'
+      );
+    }).join('');
+    Array.prototype.forEach.call(box.querySelectorAll('.group-card-tg'), function (el) {
+      function go() {
+        var id = parseInt(el.getAttribute('data-id'), 10);
+        openDetail(id);
+      }
+      el.addEventListener('click', go);
+      el.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); }
+      });
+    });
+  }
+
+  function loadMetaForCreate() {
+    return fetchJson(apiUrlWithQuery('/trainer/my-services')).then(function (data) {
+      var services = data.services || [];
+      var arenas = data.arenas || [];
+      var sSel = document.getElementById('fService');
+      var aSel = document.getElementById('fArena');
+      sSel.innerHTML = services.map(function (s) {
+        return '<option value="' + s.id + '">' + esc(s.name || ('Услуга ' + s.id)) + '</option>';
+      }).join('');
+      aSel.innerHTML = arenas.map(function (a) {
+        return '<option value="' + a.id + '">' + esc(a.name || ('Площадка ' + a.id)) + '</option>';
+      }).join('');
+    });
+  }
+
+  function renderWeekdayPick() {
+    var row = document.getElementById('weekdayPick');
+    row.innerHTML = DAYS.map(function (d) {
+      var isOn = state.selectedWeekdays.indexOf(d.v) >= 0;
+      return '<button type="button" class="wd' + (isOn ? ' on' : '') + '" data-d="' + d.v + '" aria-pressed="' + (isOn ? 'true' : 'false') + '">' + esc(d.l) + '</button>';
+    }).join('');
+    Array.prototype.forEach.call(row.querySelectorAll('.wd'), function (el) {
+      el.addEventListener('click', function () {
+        var v = parseInt(el.getAttribute('data-d'), 10);
+        var ix = state.selectedWeekdays.indexOf(v);
+        if (ix >= 0) state.selectedWeekdays.splice(ix, 1);
+        else state.selectedWeekdays.push(v);
+        state.selectedWeekdays.sort(function (a, b) { return a - b; });
+        renderWeekdayPick();
+      });
+    });
+  }
+
+  function pad2(n) {
+    var x = typeof n === 'string' ? parseInt(n, 10) : n;
+    if (isNaN(x)) return '00';
+    return x < 10 ? '0' + x : String(x);
+  }
+
+  function todayYmdLocal() {
+    var t = new Date();
+    return t.getFullYear() + '-' + pad2(t.getMonth() + 1) + '-' + pad2(t.getDate());
+  }
+
+  function addDaysYmd(ymd, days) {
+    if (!ymd || ymd.length < 10) return '';
+    var p = ymd.split('-');
+    var d = new Date(parseInt(p[0], 10), parseInt(p[1], 10) - 1, parseInt(p[2], 10));
+    d.setDate(d.getDate() + days);
+    return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+  }
+
+  function setSeasonDateMin() {
+    var el = document.getElementById('fSeason');
+    if (!el) return;
+    el.min = todayYmdLocal();
+  }
+
+  function getGroupStartTimeHHMM() {
+    var hEl = document.getElementById('fStartHour');
+    var mEl = document.getElementById('fStartMin');
+    var h = hEl ? parseInt(hEl.value, 10) : 18;
+    var m = mEl ? parseInt(mEl.value, 10) : 0;
+    if (isNaN(h) || h < 0 || h > 23) h = 18;
+    if (isNaN(m) || m < 0 || m > 59) m = 0;
+    return pad2(h) + ':' + pad2(m);
+  }
+
+  function initGroupCreateTimePickers() {
+    var hEl = document.getElementById('fStartHour');
+    var mEl = document.getElementById('fStartMin');
+    if (!hEl || !mEl || hEl.options.length) return;
+    var hOpts = '';
+    for (var h = 0; h < 24; h++) {
+      hOpts += '<option value="' + h + '">' + pad2(h) + '</option>';
+    }
+    hEl.innerHTML = hOpts;
+    var mOpts = '';
+    for (var mm = 0; mm < 60; mm += 5) {
+      mOpts += '<option value="' + mm + '">' + pad2(mm) + '</option>';
+    }
+    mEl.innerHTML = mOpts;
+  }
+
+  function renderEditWeekdayPick() {
+    var row = document.getElementById('editWeekdayPick');
+    if (!row) return;
+    row.innerHTML = DAYS.map(function (d) {
+      var isOn = state.editWeekdays.indexOf(d.v) >= 0;
+      return '<button type="button" class="wd' + (isOn ? ' on' : '') + '" data-d="' + d.v + '" aria-pressed="' + (isOn ? 'true' : 'false') + '">' + esc(d.l) + '</button>';
+    }).join('');
+    Array.prototype.forEach.call(row.querySelectorAll('.wd'), function (el) {
+      el.addEventListener('click', function () {
+        var v = parseInt(el.getAttribute('data-d'), 10);
+        var ix = state.editWeekdays.indexOf(v);
+        if (ix >= 0) state.editWeekdays.splice(ix, 1);
+        else state.editWeekdays.push(v);
+        state.editWeekdays.sort(function (a, b) { return a - b; });
+        renderEditWeekdayPick();
+      });
+    });
+  }
+
+  function setEditSeasonDateMin() {
+    var el = document.getElementById('editFSeason');
+    if (!el) return;
+    el.min = todayYmdLocal();
+  }
+
+  function getEditGroupStartTimeHHMM() {
+    var hEl = document.getElementById('editFStartHour');
+    var mEl = document.getElementById('editFStartMin');
+    var h = hEl ? parseInt(hEl.value, 10) : 18;
+    var m = mEl ? parseInt(mEl.value, 10) : 0;
+    if (isNaN(h) || h < 0 || h > 23) h = 18;
+    if (isNaN(m) || m < 0 || m > 59) m = 0;
+    return pad2(h) + ':' + pad2(m);
+  }
+
+  function initEditScheduleTimePickers() {
+    var hEl = document.getElementById('editFStartHour');
+    var mEl = document.getElementById('editFStartMin');
+    if (!hEl || !mEl) return;
+    if (!hEl.options.length) {
+      var hOpts = '';
+      for (var h = 0; h < 24; h++) {
+        hOpts += '<option value="' + h + '">' + pad2(h) + '</option>';
+      }
+      hEl.innerHTML = hOpts;
+      var mOpts = '';
+      for (var mm = 0; mm < 60; mm += 5) {
+        mOpts += '<option value="' + mm + '">' + pad2(mm) + '</option>';
+      }
+      mEl.innerHTML = mOpts;
+    }
+  }
+
+  function openEditScheduleModal(d) {
+    state.editScheduleGroupId = d.id;
+    state.editScheduleOriginalSeason = d.season_start_date ? String(d.season_start_date).slice(0, 10) : '';
+    var rules = (d.schedule_rules || []).slice();
+    var wds = [];
+    rules.forEach(function (r) {
+      var dw = Number(r.day_of_week);
+      if (isFinite(dw)) wds.push(dw + 1);
+    });
+    state.editWeekdays = wds.filter(function (x, i, a) { return a.indexOf(x) === i; }).sort(function (a, b) { return a - b; });
+    if (!state.editWeekdays.length) state.editWeekdays = [2, 4];
+    var first = rules[0] || {};
+    var t = ((first.start_time || '18:00') + '').slice(0, 5).split(':');
+    var h = parseInt(t[0], 10);
+    var m = parseInt(t[1], 10) || 0;
+    if (isNaN(h)) h = 18;
+    if (isNaN(m)) m = 0;
+    m = Math.round(m / 5) * 5;
+    if (m > 55) m = 55;
+    initEditScheduleTimePickers();
+    document.getElementById('editFStartHour').value = String(h);
+    document.getElementById('editFStartMin').value = String(m);
+    document.getElementById('editFDur').value = String(first.duration_minutes || 60);
+    var es = document.getElementById('editFSeason');
+    if (es) es.value = state.editScheduleOriginalSeason;
+    setEditSeasonDateMin();
+    renderEditWeekdayPick();
+    var errEl = document.getElementById('editScheduleError');
+    if (errEl) errEl.style.display = 'none';
+    var modal = document.getElementById('modalEditSchedule');
+    if (modal) {
+      modal.style.display = 'flex';
+      modal.setAttribute('aria-hidden', 'false');
+    }
+  }
+
+  function closeEditScheduleModal() {
+    state.editScheduleGroupId = null;
+    var m = document.getElementById('modalEditSchedule');
+    if (m) {
+      m.style.display = 'none';
+      m.setAttribute('aria-hidden', 'true');
+    }
+  }
+
+  function submitEditSchedule() {
+    var gid = state.editScheduleGroupId;
+    var err = document.getElementById('editScheduleError');
+    if (err) err.style.display = 'none';
+    if (!gid) return;
+    if (!state.editWeekdays.length) {
+      if (err) {
+        err.textContent = 'Выберите хотя бы один день недели';
+        err.style.display = 'block';
+      }
+      return;
+    }
+    var timeStr = getEditGroupStartTimeHHMM();
+    if (timeStr.length === 5) timeStr = timeStr + ':00';
+    var schedule_rules = state.editWeekdays.map(function (ud) {
+      return {
+        day_of_week: ud - 1,
+        start_time: timeStr.slice(0, 5),
+        duration_minutes: parseInt(document.getElementById('editFDur').value, 10) || 60
+      };
+    });
+    var body = { schedule_rules: schedule_rules };
+    var seasonEl = document.getElementById('editFSeason');
+    var newSeason = seasonEl ? seasonEl.value : '';
+    if (newSeason !== state.editScheduleOriginalSeason) {
+      body.season_start_date = newSeason || '';
+    }
+    var btn = document.getElementById('btnSubmitEditSchedule');
+    if (btn) btn.disabled = true;
+    fetchJson(apiUrlWithQuery('/trainer/training-groups/' + gid + '/schedule-rules'), {
+      method: 'PUT',
+      body: JSON.stringify(body)
+    })
+      .then(function () {
+        closeEditScheduleModal();
+        openDetail(gid);
+      })
+      .catch(function (e) {
+        if (err) {
+          err.textContent = e.message || String(e);
+          err.style.display = 'block';
+        }
+      })
+      .finally(function () {
+        if (btn) btn.disabled = false;
+      });
+  }
+
+  function openCreate() {
+    document.getElementById('createError').style.display = 'none';
+    document.getElementById('fName').value = '';
+    document.getElementById('fMax').value = '8';
+    document.getElementById('fStartHour').value = '18';
+    document.getElementById('fStartMin').value = '0';
+    document.getElementById('fDur').value = '60';
+    document.getElementById('fSeason').value = '';
+    setSeasonDateMin();
+    document.getElementById('fCatalog').checked = true;
+    document.getElementById('fCatText').value = '';
+    state.selectedWeekdays = [2, 4];
+    renderWeekdayPick();
+    loadMetaForCreate().then(function () {
+      showScreen('create');
+    });
+  }
+
+  function submitCreate() {
+    var err = document.getElementById('createError');
+    err.style.display = 'none';
+    var name = document.getElementById('fName').value.trim();
+    if (!name) {
+      err.textContent = 'Укажите название';
+      err.style.display = 'block';
+      return;
+    }
+    if (!state.selectedWeekdays.length) {
+      err.textContent = 'Выберите хотя бы один день недели';
+      err.style.display = 'block';
+      return;
+    }
+    var arenaEl = document.getElementById('fArena');
+    var arenaId = arenaEl && arenaEl.value ? parseInt(arenaEl.value, 10) : null;
+    var timeStr = getGroupStartTimeHHMM();
+    if (timeStr.length === 5) timeStr = timeStr + ':00';
+    var schedule_rules = state.selectedWeekdays.map(function (ud) {
+      return {
+        day_of_week: ud - 1,
+        start_time: timeStr.length >= 5 ? timeStr.slice(0, 5) : timeStr,
+        duration_minutes: parseInt(document.getElementById('fDur').value, 10) || 60
+      };
+    });
+    var body = {
+      name: name,
+      service_id: parseInt(document.getElementById('fService').value, 10),
+      arena_id: arenaId,
+      max_members: parseInt(document.getElementById('fMax').value, 10) || 8,
+      status: 'recruiting',
+      catalog_visible: document.getElementById('fCatalog').checked,
+      catalog_pitch: document.getElementById('fCatText').value.trim() || null,
+      season_start_date: document.getElementById('fSeason').value || null,
+      schedule_rules: schedule_rules
+    };
+    var btn = document.getElementById('btnSubmitCreate');
+    btn.disabled = true;
+    fetchJson(apiUrlWithQuery('/trainer/training-groups'), { method: 'POST', body: JSON.stringify(body) })
+      .then(function (g) {
+        showScreen('list');
+        var newId = g && g.id;
+        return loadList().then(function () { if (newId) openDetail(newId); });
+      })
+      .catch(function (e) {
+        err.textContent = e.message || String(e);
+        err.style.display = 'block';
+      })
+      .finally(function () { btn.disabled = false; });
+  }
+
+  function openDetail(id) {
+    state.detailId = id;
+    closeSlotActionsModal();
+    var box = document.getElementById('detailBody');
+    box.innerHTML =
+      '<div class="bd-hero" style="opacity:0.6;animation:pulse 1.5s infinite ease-in-out">' +
+        '<div class="bd-hero-inner">' +
+          '<div style="width:60px;height:12px;background:rgba(128,128,128,0.2);border-radius:4px;margin-bottom:12px"></div>' +
+          '<div style="width:140px;height:28px;background:rgba(128,128,128,0.2);border-radius:6px;margin-bottom:12px"></div>' +
+          '<div style="width:100px;height:14px;background:rgba(128,128,128,0.2);border-radius:4px"></div>' +
+        '</div>' +
+      '</div>';
+    showScreen('detail');
+    Promise.all([
+      fetchJson(apiUrlWithQuery('/trainer/training-groups/' + id)),
+      fetchJson(apiUrlWithQuery('/trainer/training-groups/' + id + '/upcoming-slots?limit=3')).catch(function () {
+        return { slots: [] };
+      })
+    ])
+      .then(function (parts) {
+        var d = parts[0];
+        var upcomingSlots = (parts[1] && parts[1].slots) ? parts[1].slots : [];
+        document.getElementById('detailTitle').textContent = d.name || 'Группа';
+        var nextShort = formatNextSession(d.next_session_at);
+        var scheduleRules = Array.isArray(d.schedule_rules) ? d.schedule_rules.slice() : [];
+        scheduleRules.sort(function (a, b) {
+          var dayA = Number(a && a.day_of_week);
+          var dayB = Number(b && b.day_of_week);
+          if (isFinite(dayA) && isFinite(dayB) && dayA !== dayB) return dayA - dayB;
+          var timeA = ((a && a.start_time) || '').slice(0, 5);
+          var timeB = ((b && b.start_time) || '').slice(0, 5);
+          return timeA.localeCompare(timeB);
+        });
+        function scheduleSeriesSummary(rules) {
+          if (!rules || !rules.length) return 'Не задано';
+          var seen = {};
+          var days = [];
+          for (var ri = 0; ri < rules.length; ri++) {
+            var dayIdx = Number(rules[ri].day_of_week);
+            var lbl = DOW_SHORT[dayIdx] || String(dayIdx);
+            if (!seen[lbl]) {
+              seen[lbl] = true;
+              days.push(lbl);
+            }
+          }
+          var first = rules[0];
+          var tm = ((first.start_time || '') + '').slice(0, 5) || '—';
+          var duration = Number(first.duration_minutes);
+          if (!isFinite(duration) || duration <= 0) duration = 60;
+          return days.join(', ') + ' · ' + tm + ' · ' + duration + ' мин';
+        }
+        var seriesLine = scheduleSeriesSummary(scheduleRules);
+        var members = (d.members || []).filter(function (m) { return m.status === 'active' || m.status === 'trial'; });
+        var cap = groupCapacity(d);
+        var occ = members.length;
+        var freeSeats = Math.max(0, cap - occ);
+        var pct = Math.max(0, Math.min(100, Math.round((occ / cap) * 100)));
+        var meterClass = pct >= 100 ? 'is-full' : (pct >= 80 ? 'is-high' : '');
+        var seatsHint = freeSeats > 0 ? ('Свободно ' + seatsText(freeSeats)) : 'Группа заполнена';
+        var spotsLeft = typeof d.spots_left === 'number' ? d.spots_left : null;
+        state.groupMemberIds = members.map(function (m) { return m.client_id; });
+        state.groupSpotsLeft = spotsLeft;
+        state.groupRosterFull = occ >= cap;
+        function clientName(m) {
+          var a = [m.first_name, m.last_name].filter(Boolean).join(' ').trim();
+          return a || ('Клиент #' + m.client_id);
+        }
+        function bookingInitials(displayName) {
+          var s = (displayName || '').trim();
+          if (!s) return '?';
+          var parts = s.split(/\s+/).filter(Boolean);
+          if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+          if (parts[0].length >= 2) return parts[0].slice(0, 2).toUpperCase();
+          return parts[0][0].toUpperCase();
+        }
+        var st = d.status || '';
+        var statusLabel = STATUS_RU[st] || st || '—';
+        var pillClass = statusPillClass(st);
+        var headerChips =
+          '<div class="tg-detail-head-meta">' +
+            '<span class="tg-status-pill ' + pillClass + '">' + esc(statusLabel) + '</span>' +
+            (d.catalog_visible ? '<span class="group-chip group-chip--catalog">В каталоге</span>' : '') +
+            (d.season_start_date ? '<span class="group-chip group-chip--season">Старт ' + esc(formatSeasonDate(d.season_start_date)) + '</span>' : '') +
+          '</div>';
+        var membersHintShort = d.catalog_visible
+          ? 'Заявки из каталога зачисляются автоматически.'
+          : 'Участников добавляете вручную.';
+        var scheduleEditBtn =
+          d.status !== 'archived'
+            ? '<button type="button" class="tg-text-link" id="btnOpenEditSchedule">Изменить</button>'
+            : '';
+        var upcomingHtml = '';
+        if (upcomingSlots.length) {
+          upcomingHtml =
+            '<div class="tg-upcoming-compact">' +
+            '<p class="bd-section-label">Ближайшие в календаре</p>' +
+            '<p class="tg-upcoming-section-hint">До 3 ближайших слотов</p>' +
+            '<div class="bd-rows tg-upcoming-rows">' +
+            upcomingSlots.map(function (s) {
+              var st = (s.start_time || '').slice(0, 8);
+              var iso = s.slot_date + 'T' + (st.length <= 5 ? st + ':00' : st);
+              var pretty = new Date(iso).toLocaleString('ru-RU', {
+                weekday: 'short',
+                day: '2-digit',
+                month: 'short',
+                hour: '2-digit',
+                minute: '2-digit'
+              });
+              var nb = Number(s.active_bookings) || 0;
+              var slotCap = Math.max(1, Number(s.capacity) || 1);
+              var canCancel = d.status !== 'archived' && (s.status === 'available') && nb === 0;
+              var occupancy = nb + '/' + slotCap;
+              var stLabel = (s.status === 'available')
+                ? (nb > 0 ? ('Записей: ' + occupancy) : ('Свободно · ' + occupancy))
+                : ('Статус: ' + String(s.status || '—') + ' · ' + occupancy);
+              var occupancyClass = 'tg-slot-pill ';
+              if (nb >= slotCap) occupancyClass += 'tg-slot-pill--full';
+              else if (nb > 0) occupancyClass += 'tg-slot-pill--busy';
+              else occupancyClass += 'tg-slot-pill--free';
+              var slotMenuBtn =
+                d.status !== 'archived'
+                  ? '<button type="button" class="tg-slot-menu" data-slot-id="' + s.id + '" data-slot-label="' + esc(pretty) + '" data-slot-occupancy="' + esc('Записей: ' + occupancy) + '" data-slot-status="' + esc(String(s.status || '—')) + '" data-slot-can-cancel="' + (canCancel ? '1' : '0') + '" aria-label="Действия со слотом">...</button>'
+                  : '';
+              return (
+                '<div class="bd-row tg-upcoming-row">' +
+                  '<div class="bd-row-text">' +
+                    '<div class="bd-client-name">' + esc(pretty) + '</div>' +
+                    '<div class="bd-row-label">' + esc(stLabel) + '</div>' +
+                  '</div>' +
+                  '<div class="tg-upcoming-row__actions">' +
+                    '<span class="' + occupancyClass + '">' + esc(occupancy) + '</span>' +
+                    slotMenuBtn +
+                  '</div>' +
+                '</div>'
+              );
+            }).join('') +
+            '</div></div>';
+        } else if (d.status !== 'archived') {
+          upcomingHtml =
+            '<div class="tg-upcoming-compact">' +
+            '<p class="bd-section-label">Ближайшие в календаре</p>' +
+            '<div class="bd-rows"><div class="bd-row">' +
+              '<div class="bd-row-text"><div class="bd-row-value" style="color:var(--tg-theme-hint-color)">Пока без слотов в календаре</div></div>' +
+            '</div></div></div>';
+        }
+        var catalogPanel = '';
+        if (d.status !== 'archived') {
+          catalogPanel =
+            '<div class="tg-detail-panel tg-detail-panel--open">' +
+              '<p class="bd-section-label">Каталог для клиентов</p>' +
+              '<div class="tg-detail-panel__body">' +
+                '<label class="tg-catalog-toggle">' +
+                  '<input type="checkbox" id="tgCatalogVisible" ' + (d.catalog_visible ? 'checked' : '') + ' /> ' +
+                  'Показывать в общем каталоге (поиск по городу и услуге)' +
+                '</label>' +
+                '<p class="tg-detail-panel__hint">Статус «Набор» — только в вашем списке групп. Без этой галочки клиенты не увидят группу во вкладке «Группы» в каталоге.</p>' +
+              '</div>' +
+            '</div>';
+        }
+        var managePanel = '';
+        if (d.status !== 'archived') {
+          managePanel =
+            '<details class="tg-detail-panel">' +
+              '<summary>Управление группой</summary>' +
+              '<div class="tg-detail-panel__body">' +
+                '<p class="tg-detail-panel__hint">Пауза и архив — редкие действия. Рассылки и другие инструменты появятся здесь.</p>' +
+                '<button type="button" class="bd-btn bd-btn--secondary" id="btnPause">' + (d.status === 'paused' ? 'Возобновить' : 'Пауза') + '</button>' +
+                '<button type="button" class="bd-btn bd-btn--outline-danger" id="btnArchive">В архив</button>' +
+                '<button type="button" class="bd-btn bd-btn--surface" disabled title="В разработке">Уведомление участникам</button>' +
+              '</div>' +
+            '</details>';
+        }
+        var addMemberCta =
+          d.status !== 'archived'
+            ? '<div class="tg-detail-cta"><button type="button" class="bd-btn bd-btn--primary" id="btnOpenAddMember">+ Добавить участника</button></div>'
+            : '';
+        box.innerHTML =
+          '<div class="tg-group-detail booking-detail">' +
+            '<div class="bd-hero">' +
+              '<div class="bd-hero-inner">' +
+                headerChips +
+                '<div class="bd-hero-kicker">Ближайшее занятие</div>' +
+                '<div class="bd-hero-time">' + esc(nextShort) + '</div>' +
+                '<div class="bd-hero-date">' + esc((d.service_name || '—') + ' · ' + (d.arena_name || '—')) + '</div>' +
+              '</div>' +
+            '</div>' +
+            '<div class="tg-detail-roster">' +
+              '<div class="tg-detail-roster__top">' +
+                '<span class="tg-detail-roster__title">Состав</span>' +
+                '<div class="tg-detail-roster__top-right">' +
+                  '<span class="tg-detail-roster__nums">' + occ + ' / ' + cap + '</span>' +
+                '</div>' +
+              '</div>' +
+              '<div class="group-card-tg__meter" aria-hidden="true"><span class="' + meterClass + '" style="width:' + pct + '%"></span></div>' +
+              '<div class="tg-detail-roster__hint">' + esc(seatsHint) + '</div>' +
+            '</div>' +
+            '<div class="tg-detail-schedule-strip">' +
+              '<div>' +
+                '<span class="tg-detail-schedule-strip__label">Серия</span>' +
+                '<div class="tg-detail-schedule-strip__value tg-detail-schedule-strip__value--with-icon">' + IC.session + '<span>' + esc(seriesLine) + '</span></div>' +
+              '</div>' +
+              scheduleEditBtn +
+            '</div>' +
+            upcomingHtml +
+            addMemberCta +
+            catalogPanel +
+            '<p class="bd-section-label">Участники</p>' +
+            '<p class="tg-members-note">' + esc(membersHintShort) + '</p>' +
+            '<div class="bd-rows">' +
+              members.map(function (m) {
+                var cName = clientName(m);
+                var initials = bookingInitials(cName);
+                var profileHref = esc(trainerClientProfileUrl(m.client_id, id));
+                var memberChevron =
+                  '<svg class="tg-member-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>';
+                var removeBtn =
+                  d.status !== 'archived'
+                    ? '<button type="button" class="bd-btn bd-btn--outline-danger tg-member-remove" data-client-id="' + m.client_id + '">Убрать</button>'
+                    : '';
+                return (
+                  '<div class="bd-row bd-client tg-member-row">' +
+                    '<a class="tg-member-profile-hit" href="' + profileHref + '" aria-label="Карточка клиента: ' + esc(cName) + '">' +
+                      '<div class="bd-avatar">' + esc(initials) + '</div>' +
+                      '<div class="bd-row-text">' +
+                        '<div class="bd-client-name">' + esc(cName) + '</div>' +
+                        '<div class="bd-row-label tg-member-state' + (m.status === 'trial' ? ' is-trial' : '') + '">' + esc(m.status === 'trial' ? 'Пробное занятие' : 'В составе группы') + '</div>' +
+                      '</div>' +
+                      memberChevron +
+                    '</a>' +
+                    removeBtn +
+                  '</div>'
+                );
+              }).join('') +
+              (members.length ? '' : '<div class="bd-row"><div class="bd-row-text"><div class="bd-row-value" style="color:var(--tg-theme-hint-color)">Пока никого</div></div></div>') +
+            '</div>' +
+            managePanel +
+          '</div>';
+        var catVis = document.getElementById('tgCatalogVisible');
+        if (catVis) {
+          catVis.addEventListener('change', function () {
+            var checked = catVis.checked;
+            catVis.disabled = true;
+            fetchJson(apiUrlWithQuery('/trainer/training-groups/' + id), {
+              method: 'PATCH',
+              body: JSON.stringify({ catalog_visible: checked })
+            })
+              .then(function () {
+                openDetail(id);
+              })
+              .catch(function (e) {
+                catVis.checked = !checked;
+                alert(e.message || String(e));
+              })
+              .finally(function () {
+                catVis.disabled = false;
+              });
+          });
+        }
+        var btnPause = document.getElementById('btnPause');
+        if (btnPause) {
+          btnPause.addEventListener('click', function () {
+            var nextStatus;
+            if (d.status === 'paused') {
+              // Must not always send 'active': that wrongly ends recruitment before season start.
+              nextStatus = 'active';
+              if (d.season_start_date) {
+                var p = String(d.season_start_date).split('-');
+                if (p.length >= 3) {
+                  var sd = new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]));
+                  var today = new Date();
+                  today.setHours(0, 0, 0, 0);
+                  sd.setHours(0, 0, 0, 0);
+                  if (sd > today) nextStatus = 'recruiting';
+                }
+              }
+            } else {
+              nextStatus = 'paused';
+            }
+            fetchJson(apiUrlWithQuery('/trainer/training-groups/' + id), {
+              method: 'PATCH',
+              body: JSON.stringify({ status: nextStatus })
+            }).then(function () { openDetail(id); });
+          });
+        }
+        var btnArch = document.getElementById('btnArchive');
+        if (btnArch) {
+          btnArch.addEventListener('click', function () {
+            if (!confirm('Завершить сезон и отменить будущие занятия?')) return;
+            fetchJson(apiUrlWithQuery('/trainer/training-groups/' + id), {
+              method: 'PATCH',
+              body: JSON.stringify({ status: 'archived' })
+            }).then(function () { openDetail(id); });
+          });
+        }
+        var btnAdd = document.getElementById('btnOpenAddMember');
+        if (btnAdd) {
+          btnAdd.addEventListener('click', function () {
+            openAddMemberModal(id);
+          });
+        }
+        Array.prototype.forEach.call(box.querySelectorAll('.tg-slot-menu'), function (b) {
+          b.addEventListener('click', function () {
+            var sid = parseInt(b.getAttribute('data-slot-id'), 10);
+            if (!sid) return;
+            var rawStatus = String(b.getAttribute('data-slot-status') || '').toLowerCase();
+            var statusLabel = 'Слот доступен';
+            if (rawStatus === 'booked') statusLabel = 'Слот заполнен';
+            else if (rawStatus && rawStatus !== 'available') statusLabel = 'Статус: ' + rawStatus;
+            openSlotActionsModal(id, {
+              slotId: sid,
+              serviceId: d.service_id,
+              canCancel: b.getAttribute('data-slot-can-cancel') === '1',
+              label: b.getAttribute('data-slot-label') || '',
+              occupancy: b.getAttribute('data-slot-occupancy') || '',
+              statusLabel: statusLabel
+            });
+          });
+        });
+        Array.prototype.forEach.call(box.querySelectorAll('.tg-member-remove'), function (b) {
+          b.addEventListener('click', function () {
+            var cid = parseInt(b.getAttribute('data-client-id'), 10);
+            if (!cid || !confirm('Убрать этого участника из группы?')) return;
+            fetchJson(apiUrlWithQuery('/trainer/training-groups/' + id + '/members/' + cid), { method: 'DELETE' })
+              .then(function () { openDetail(id); })
+              .catch(function (e) { alert(e.message || String(e)); });
+          });
+        });
+        var btnEdit = document.getElementById('btnOpenEditSchedule');
+        if (btnEdit) {
+          btnEdit.addEventListener('click', function () {
+            openEditScheduleModal(d);
+          });
+        }
+      })
+      .catch(function (e) {
+        box.innerHTML = '<div class="list-err" style="display:block">' + esc(e.message || String(e)) + '</div>';
+      });
+  }
+
+  document.getElementById('filterChips').addEventListener('click', function (ev) {
+    var t = ev.target;
+    while (t && t !== ev.currentTarget && (!t.getAttribute || t.getAttribute('data-filter') == null)) {
+      t = t.parentNode;
+    }
+    if (!t || !t.getAttribute || t.getAttribute('data-filter') == null) return;
+    state.filter = t.getAttribute('data-filter');
+    saveListUiState();
+    renderList();
+  });
+
+  var sortSelect = document.getElementById('sortSelect');
+  if (sortSelect) {
+    sortSelect.value = state.sort;
+    sortSelect.addEventListener('change', function () {
+      state.sort = sortSelect.value || 'next';
+      saveListUiState();
+      renderList();
+    });
+  }
+
+  var searchInput = document.getElementById('groupSearch');
+  if (searchInput) {
+    searchInput.value = state.search;
+    searchInput.addEventListener('input', function () {
+      state.search = searchInput.value || '';
+      saveListUiState();
+      renderList();
+    });
+  }
+  var clearSearchBtn = document.getElementById('btnClearSearch');
+  if (clearSearchBtn && searchInput) {
+    clearSearchBtn.addEventListener('click', function () {
+      state.search = '';
+      searchInput.value = '';
+      saveListUiState();
+      searchInput.focus();
+      renderList();
+    });
+  }
+  var onlyFreeSeatsToggle = document.getElementById('onlyFreeSeats');
+  if (onlyFreeSeatsToggle) {
+    onlyFreeSeatsToggle.checked = !!state.onlyFreeSeats;
+    onlyFreeSeatsToggle.addEventListener('change', function () {
+      state.onlyFreeSeats = !!onlyFreeSeatsToggle.checked;
+      saveListUiState();
+      renderList();
+    });
+  }
+  var resetListStateBtn = document.getElementById('btnResetListState');
+  if (resetListStateBtn) {
+    resetListStateBtn.addEventListener('click', function () {
+      resetListRefinements({ focusSearch: true });
+    });
+  }
+  var refreshListBtn = document.getElementById('btnRefreshList');
+  if (refreshListBtn) {
+    refreshListBtn.addEventListener('click', function () {
+      loadList();
+    });
+  }
+
+  document.getElementById('btnFabNew').addEventListener('click', openCreate);
+  document.getElementById('btnSubmitCreate').addEventListener('click', submitCreate);
+
+  initGroupCreateTimePickers();
+  setSeasonDateMin();
+  document.getElementById('btnSeasonToday').addEventListener('click', function () {
+    setSeasonDateMin();
+    document.getElementById('fSeason').value = todayYmdLocal();
+  });
+  document.getElementById('btnSeasonWeek').addEventListener('click', function () {
+    setSeasonDateMin();
+    document.getElementById('fSeason').value = addDaysYmd(todayYmdLocal(), 7);
+  });
+  document.getElementById('btnSeasonClear').addEventListener('click', function () {
+    document.getElementById('fSeason').value = '';
+  });
+
+  (function bindEditScheduleModal() {
+    var sub = document.getElementById('btnSubmitEditSchedule');
+    var can = document.getElementById('btnEditScheduleCancel');
+    if (sub) sub.addEventListener('click', submitEditSchedule);
+    if (can) can.addEventListener('click', closeEditScheduleModal);
+    var m = document.getElementById('modalEditSchedule');
+    if (m) {
+      m.addEventListener('click', function (ev) {
+        if (ev.target === m) closeEditScheduleModal();
+      });
+    }
+    var btnEt = document.getElementById('btnEditSeasonToday');
+    if (btnEt) {
+      btnEt.addEventListener('click', function () {
+        setEditSeasonDateMin();
+        var el = document.getElementById('editFSeason');
+        if (el) el.value = todayYmdLocal();
+      });
+    }
+    var btnEw = document.getElementById('btnEditSeasonWeek');
+    if (btnEw) {
+      btnEw.addEventListener('click', function () {
+        setEditSeasonDateMin();
+        var el = document.getElementById('editFSeason');
+        if (el) el.value = addDaysYmd(todayYmdLocal(), 7);
+      });
+    }
+    var btnEc = document.getElementById('btnEditSeasonClear');
+    if (btnEc) {
+      btnEc.addEventListener('click', function () {
+        var el = document.getElementById('editFSeason');
+        if (el) el.value = '';
+      });
+    }
+  })();
+
+  document.getElementById('btnHomeList').addEventListener('click', function () {
+    if (window.navigateTrainerHome) window.navigateTrainerHome();
+    else window.location.href = '/webapp/trainer-home';
+  });
+  document.getElementById('btnBackCreate').addEventListener('click', function () { showScreen('list'); });
+  document.getElementById('btnHomeDetail').addEventListener('click', function () {
+    if (window.navigateTrainerHome) window.navigateTrainerHome();
+    else window.location.href = '/webapp/trainer-home';
+  });
+  document.getElementById('btnBackDetail').addEventListener('click', function () {
+    showScreen('list');
+    try {
+      var p = new URLSearchParams(window.location.search || '');
+      if (p.has('id')) {
+        p.delete('id');
+        var q = p.toString();
+        var next = window.location.pathname + (q ? '?' + q : '') + (window.location.hash || '');
+        window.history.replaceState(null, '', next);
+      }
+    } catch (e) { /* ignore */ }
+  });
+
+  renderWeekdayPick();
+  showScreen('list');
+  syncListControls();
+  updateSearchClearVisibility();
+  bindAddMemberModal();
+  bindSlotActionsModal();
+
+  function waitForInitThen(cb) {
+    syncInitFromTg();
+    if (currentInit()) {
+      cb();
+      return;
+    }
+    if (!tg) {
+      cb();
+      return;
+    }
+    var n = 0;
+    var iv = setInterval(function () {
+      n++;
+      syncInitFromTg();
+      if (currentInit()) {
+        clearInterval(iv);
+        cb();
+        return;
+      }
+      if (n >= 300) {
+        clearInterval(iv);
+        cb();
+      }
+    }, 50);
+  }
+
+  waitForInitThen(function () {
+    loadList().then(function () {
+      var deep = qs.get('id');
+      if (deep) openDetail(parseInt(deep, 10));
+    });
+  });
+})();
+  </script>
+</body>
+</html>

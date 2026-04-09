@@ -169,6 +169,9 @@ class TrainerProfile(Base):
     min_hours_before_booking: Mapped[int] = mapped_column(
         Integer(), nullable=False, server_default="3"
     )  # Only slots at least this many *working* hours (08:00–22:00 Minsk) from now are bookable by clients
+    group_classes_enabled: Mapped[bool] = mapped_column(
+        nullable=False, server_default="false"
+    )  # When false, schedule UI/API disallow capacity > 1 (opt-in for group slots)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
@@ -359,8 +362,100 @@ class TrainerScheduleTemplate(Base):
     day_of_week: Mapped[int] = mapped_column(Integer(), nullable=False)  # 0=Monday .. 6=Sunday
     start_time: Mapped[time] = mapped_column(Time(), nullable=False)  # e.g. 10:00
     duration_minutes: Mapped[int] = mapped_column(Integer(), nullable=False, server_default="60")
+    capacity: Mapped[int] = mapped_column(Integer(), nullable=False, server_default="1")
+    service_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("services.id", ondelete="SET NULL"), nullable=True, index=True
+    )  # Required when capacity > 1 (group slot for this service).
+    arena_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("arenas.id", ondelete="SET NULL"), nullable=True, index=True
+    )  # When capacity > 1: venue fixed on generated slots (mirrors slots.arena_id).
 
     trainer: Mapped["Trainer"] = relationship(back_populates="schedule_templates", lazy="raise")
+
+
+class TrainingGroup(Base):
+    """Long-term cohort: roster, recurring schedule, optional catalog listing for recruitment."""
+
+    __tablename__ = "training_groups"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    trainer_id: Mapped[int] = mapped_column(ForeignKey("trainers.id", ondelete="CASCADE"), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    service_id: Mapped[int] = mapped_column(ForeignKey("services.id", ondelete="RESTRICT"), nullable=False)
+    arena_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("arenas.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    max_members: Mapped[int] = mapped_column(Integer(), nullable=False, server_default="10")
+    status: Mapped[str] = mapped_column(String(20), nullable=False, server_default="draft")
+    season_start_date: Mapped[Optional[date]] = mapped_column(Date(), nullable=True)
+    catalog_visible: Mapped[bool] = mapped_column(default=False, server_default="false")
+    catalog_pitch: Mapped[Optional[str]] = mapped_column(Text(), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class TrainingGroupScheduleRule(Base):
+    """One recurring weekday + time within a training group."""
+
+    __tablename__ = "training_group_schedule_rules"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    training_group_id: Mapped[int] = mapped_column(
+        ForeignKey("training_groups.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    day_of_week: Mapped[int] = mapped_column(Integer(), nullable=False)  # 0=Monday .. 6=Sunday
+    start_time: Mapped[time] = mapped_column(Time(), nullable=False)
+    duration_minutes: Mapped[int] = mapped_column(Integer(), nullable=False, server_default="60")
+
+
+class TrainingGroupMember(Base):
+    __tablename__ = "training_group_members"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    training_group_id: Mapped[int] = mapped_column(
+        ForeignKey("training_groups.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    client_id: Mapped[int] = mapped_column(ForeignKey("clients.id", ondelete="CASCADE"), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, server_default="active")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    __table_args__ = (UniqueConstraint("training_group_id", "client_id", name="uq_training_group_member"),)
+
+
+class TrainingGroupJoinRequest(Base):
+    __tablename__ = "training_group_join_requests"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    training_group_id: Mapped[int] = mapped_column(
+        ForeignKey("training_groups.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    client_id: Mapped[int] = mapped_column(ForeignKey("clients.id", ondelete="CASCADE"), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, server_default="pending")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class GroupAttendancePrompt(Base):
+    """RSVP: one row per (group slot, member); send_at when to Telegram-prompt attendance."""
+
+    __tablename__ = "group_attendance_prompts"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    slot_id: Mapped[int] = mapped_column(ForeignKey("slots.id", ondelete="CASCADE"), nullable=False, index=True)
+    client_id: Mapped[int] = mapped_column(ForeignKey("clients.id", ondelete="CASCADE"), nullable=False, index=True)
+    training_group_id: Mapped[int] = mapped_column(
+        ForeignKey("training_groups.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    send_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, server_default="pending")
+    response: Mapped[Optional[str]] = mapped_column(String(8), nullable=True)
+    responded_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    booking_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("bookings.id", ondelete="SET NULL"), nullable=True
+    )
+    error: Mapped[Optional[str]] = mapped_column(Text(), nullable=True)
+    sent_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (UniqueConstraint("slot_id", "client_id", name="uq_group_attendance_prompt_slot_client"),)
 
 
 class Slot(Base):
@@ -373,6 +468,16 @@ class Slot(Base):
     start_time: Mapped[time] = mapped_column(Time(), nullable=False)
     end_time: Mapped[time] = mapped_column(Time(), nullable=False)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="available")  # available | booked | cancelled
+    capacity: Mapped[int] = mapped_column(Integer(), nullable=False, server_default="1")
+    service_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("services.id", ondelete="SET NULL"), nullable=True, index=True
+    )  # Set when capacity > 1: group slot is for this service only.
+    arena_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("arenas.id", ondelete="SET NULL"), nullable=True, index=True
+    )  # Venue for this slot (group: fixed; individual: default from trainer).
+    training_group_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("training_groups.id", ondelete="SET NULL"), nullable=True, index=True
+    )  # Set when slot is generated from a cohort (TrainingGroup).
 
     trainer: Mapped["Trainer"] = relationship(back_populates="slots", lazy="raise")
 
@@ -413,6 +518,7 @@ class Booking(Base):
     )
     booking_price_cents: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     price_tier_kind: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)  # tariff code snapshot
+    status: Mapped[str] = mapped_column(String(32), nullable=False, server_default="pending")
 
     client: Mapped["Client"] = relationship(back_populates="bookings", lazy="raise")
 

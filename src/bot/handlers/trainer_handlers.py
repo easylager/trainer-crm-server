@@ -287,9 +287,13 @@ async def _schedule_keyboard(trainer_id: int) -> tuple[str, InlineKeyboardMarkup
             lines.append("")
         prev_day = dow
         day_name = msg.TRAINER_DAYS[dow] if dow < 7 else "?"
+        time_str = _format_time(t["start_time"])
+        cap = int(t.get("capacity") or 1)
+        if cap > 1:
+            time_str = f"{time_str} (×{cap})"
         lines.append(msg.TRAINER_SCHEDULE_ROW.format(
             day=day_name,
-            time=_format_time(t["start_time"]),
+            time=time_str,
             duration=t["duration_minutes"],
         ))
     text = msg.TRAINER_SCHEDULE_TITLE + "\n\n"
@@ -1604,16 +1608,19 @@ async def on_confirm_booking(callback: CallbackQuery) -> None:
     dow = msg.TRAINER_DAYS[d.weekday()] if hasattr(d, "weekday") else ""
     start_time = info["start_time"]
     time_str = _format_time(start_time)
-    client_phone = info.get("client_phone") or "—"
-    client_display = client_phone
-    # Notify trainer in current chat
+    client_name_raw = (info.get("client_name") or "").strip() or "Клиент"
+    client_name = html.escape(client_name_raw)
+    phone = (info.get("client_phone") or "").strip()
+    phone_block = f"Телефон: <b>{html.escape(phone)}</b>\n" if phone else ""
+    # Notify trainer in current chat (HTML — same structure as client-cancel notification)
     text_trainer = msg.TRAINER_BOOKING_CONFIRMED.format(
-        client_display=client_display,
-        date=date_str,
-        day=dow,
-        time=time_str,
+        client_name=client_name,
+        phone_block=phone_block,
+        date=html.escape(date_str),
+        day=html.escape(dow),
+        time=html.escape(time_str),
     )
-    await callback.message.answer(text_trainer)
+    await callback.message.answer(text_trainer, parse_mode=ParseMode.HTML)
     # Notify client via client bot (separate token)
     client_tid = info.get("client_telegram_id")
     if not client_tid:
@@ -1630,7 +1637,6 @@ async def on_confirm_booking(callback: CallbackQuery) -> None:
         token=settings.telegram_bot_token_client,
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
     )
-    map_url = info.get("map_link")
     text_client = msg.format_client_booking_confirmed_by_trainer_text(
         date=date_str,
         day=dow,
@@ -1642,13 +1648,10 @@ async def on_confirm_booking(callback: CallbackQuery) -> None:
         arena_name=info.get("arena_name"),
         arena_address=info.get("arena_address"),
     )
-    reply_markup = None
-    if map_url:
-        reply_markup = InlineKeyboardMarkup(
-            inline_keyboard=[
-                [InlineKeyboardButton(text=msg.CLIENT_BUTTON_SHOW_ON_MAP, url=map_url)]
-            ]
-        )
+    reply_markup = msg.build_client_booking_confirmed_inline_keyboard(
+        map_url=info.get("map_link"),
+        trainer_telegram_id=info.get("trainer_telegram_id"),
+    )
     try:
         await client_bot.send_message(
             chat_id=client_tid,
@@ -2338,7 +2341,7 @@ async def schedule_done_times(callback: CallbackQuery) -> None:
         else:
             # Template
             _schedule_add_state.pop(telegram_id, None)
-            await replace_templates_for_day(session, trainer_id, day, hours, 60)
+            await replace_templates_for_day(session, trainer_id, day, {h: 1 for h in hours}, 60)
             if hours:
                 text = msg.TRAINER_SCHEDULE_ADDED_MULTI.format(count=len(hours)) + "\n\n" + msg.TRAINER_SCHEDULE_TEMPLATE_CHOOSE_ANOTHER_DAY
             else:

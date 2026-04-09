@@ -1,5 +1,6 @@
 """
-Trainer onboarding checklist: profile completeness, future slots (any status in horizon), any booking.
+Trainer onboarding checklist: profile completeness, future slots, optional any-booking flag.
+Hub «Первые шаги» completes after profile + future slots; ``has_any_booking`` is informational only.
 Used by GET /api/webapp/trainer/onboarding/checklist (trainer hub + profile flows).
 """
 from __future__ import annotations

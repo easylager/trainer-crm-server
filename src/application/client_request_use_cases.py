@@ -368,6 +368,10 @@ async def list_requests_for_trainer(
                    (r.trainer_id = :tid) AS is_personalized,
                    (SELECT 1 FROM client_request_responses resp
                     WHERE resp.client_request_id = r.id AND resp.trainer_id = :tid) IS NOT NULL AS has_responded,
+                   EXISTS (
+                       SELECT 1 FROM trainer_pending_request_booking pb
+                       WHERE pb.client_request_id = r.id AND pb.trainer_id = :tid
+                   ) AS remind_slots_pending,
                    r.client_id,
                    cl.telegram_id AS client_telegram_id,
                    COALESCE(TRIM(cl.first_name), '') AS client_first_name,
@@ -404,10 +408,11 @@ async def list_requests_for_trainer(
             "service_name": row[6],
             "is_personalized": bool(row[7]),
             "has_responded": bool(row[8]),
-            "client_id": row[9],
-            "client_telegram_id": row[10],
-            "client_first_name": (row[11] or "").strip() or None,
-            "client_last_name": (row[12] or "").strip() or None,
+            "remind_slots_pending": bool(row[9]),
+            "client_id": row[10],
+            "client_telegram_id": row[11],
+            "client_first_name": (row[12] or "").strip() or None,
+            "client_last_name": (row[13] or "").strip() or None,
         }
         for row in rows
     ]
@@ -438,17 +443,22 @@ async def get_request_client_for_trainer_booking(
 async def add_trainer_pending_request_booking(
     session: AsyncSession, trainer_id: int, client_request_id: int
 ) -> bool:
-    """Trainer said "remind me when I have slots". Idempotent: one row per (trainer, request)."""
-    await session.execute(
+    """Trainer said "remind me when I have slots". Idempotent: one row per (trainer, request).
+
+    Returns True if a new row was inserted, False if it already existed.
+    """
+    r = await session.execute(
         text("""
             INSERT INTO trainer_pending_request_booking (trainer_id, client_request_id)
             VALUES (:tid, :rid)
             ON CONFLICT (trainer_id, client_request_id) DO NOTHING
+            RETURNING 1
         """),
         {"tid": trainer_id, "rid": client_request_id},
     )
+    was_new = r.fetchone() is not None
     await session.commit()
-    return True
+    return was_new
 
 
 async def clear_trainer_pending_request_booking(
@@ -567,6 +577,47 @@ async def create_request_response(
     return pk
 
 
+async def archive_client_requests_fulfilled_by_bookings(
+    session: AsyncSession,
+    client_telegram_id: int,
+) -> None:
+    """
+    If a booking was created without client_request_id (catalog flow), the linked request
+    could stay status='new'. Archive when an active booking matches the same client+service
+    and either a responding trainer or a personalized request trainer.
+    """
+    r = await session.execute(
+        text("""
+            UPDATE client_requests r
+            SET status = 'archived'
+            WHERE r.status = 'new'
+              AND r.client_id = (SELECT id FROM clients WHERE telegram_id = :tid LIMIT 1)
+              AND (
+                EXISTS (
+                  SELECT 1 FROM bookings b
+                  INNER JOIN client_request_responses resp
+                    ON resp.client_request_id = r.id AND resp.trainer_id = b.trainer_id
+                  WHERE b.client_id = r.client_id
+                    AND b.service_id = r.service_id
+                    AND b.status NOT IN ('cancelled', 'declined')
+                )
+                OR EXISTS (
+                  SELECT 1 FROM bookings b
+                  WHERE b.client_id = r.client_id
+                    AND b.service_id = r.service_id
+                    AND b.status NOT IN ('cancelled', 'declined')
+                    AND r.trainer_id IS NOT NULL
+                    AND b.trainer_id = r.trainer_id
+                )
+              )
+            RETURNING r.id
+        """),
+        {"tid": client_telegram_id},
+    )
+    if r.fetchone() is not None:
+        await session.commit()
+
+
 async def list_my_requests_with_responses(
     session: AsyncSession,
     client_telegram_id: int,
@@ -575,6 +626,7 @@ async def list_my_requests_with_responses(
     """
     Client's requests with list of responding trainers (id, name, telegram_id for link).
     """
+    await archive_client_requests_fulfilled_by_bookings(session, client_telegram_id)
     r = await session.execute(
         text("""
             SELECT r.id, r.city_id, r.service_id, r.comment, r.created_at, r.status,

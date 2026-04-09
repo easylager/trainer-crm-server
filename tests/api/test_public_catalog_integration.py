@@ -46,6 +46,7 @@ def _assert_catalog_item_contract(item: dict) -> None:
     assert "arena_ids" in item and isinstance(item["arena_ids"], list)
     assert "arena_names" in item and isinstance(item["arena_names"], list)
     assert "free_slots_14d" in item and isinstance(item["free_slots_14d"], int)
+    assert "open_groups_count" in item and isinstance(item["open_groups_count"], int)
     assert "has_pass_products" in item and isinstance(item["has_pass_products"], bool)
     assert "has_certificate_products" in item and isinstance(
         item["has_certificate_products"], bool
@@ -434,3 +435,39 @@ async def test_public_invalid_filter_params_do_not_500(app_use_test_db, db_sessi
         )
     assert r.status_code == 200
     assert "items" in r.json()
+
+
+@pytest.mark.asyncio
+async def test_public_training_groups_catalog_shape(app_use_test_db, db_session) -> None:
+    """GET /api/public/training-groups — список групп с набором (может быть пустым)."""
+    sid, cid, _aid = await _require_seed_ids(db_session)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        r = await client.get(
+            "/api/public/training-groups",
+            params={"city_id": cid, "service_id": sid, "limit": 10, "offset": 0},
+        )
+        r2 = await client.get(
+            "/api/public/training-groups",
+            params={"filter_days": "not-numeric", "limit": 5},
+        )
+        r3 = await client.get(
+            "/api/public/training-groups",
+            params={"filter_days": "0,1,2", "city_id": cid},
+        )
+    assert r.status_code == 200
+    data = r.json()
+    assert set(data.keys()) >= {"items", "total", "_photo_source"}
+    assert data["_photo_source"] in ("cdn", "direct", "proxy")
+    assert isinstance(data["total"], int)
+    for it in data["items"]:
+        assert isinstance(it.get("id"), int)
+        assert isinstance(it.get("trainer_id"), int)
+        assert "schedule_rules" in it
+        tr = it.get("trainer") or {}
+        _assert_no_public_trainer_leaks(tr)
+        assert tr.get("id") == it["trainer_id"]
+        assert "can_book" in tr and isinstance(tr["can_book"], bool)
+        assert "photos" in tr and isinstance(tr["photos"], list)
+    assert r2.status_code == 200
+    assert "items" in r2.json()
+    assert r3.status_code == 200

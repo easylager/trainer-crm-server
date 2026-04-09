@@ -87,6 +87,9 @@ class Settings(BaseSettings):
     bepaid_checkout_base_url: str = "https://checkout.bepaid.by"
     payment_sandbox: bool = True
 
+    # Group cohort RSVP: hours before slot to ask «Буду?» in client bot (disabled if unset or 0).
+    group_attendance_prompt_hours: int | None = None
+
     # Trainer subscription: trial and reminders
     # Trial: if set, overrides DB platform_settings.welcome_trial_period_days and subscription_plans.period_days
     trial_period_days: int | None = None

@@ -12,6 +12,7 @@ from tests.conftest import belarus_test_phone, unique_test_telegram_id
 from tests.db_catalog_helpers import require_seed_service_id
 
 from src.application.booking_use_cases import (
+    cancel_booking,
     create_booking,
     generate_reminders_for_booking,
     get_bookings_pending_notification,
@@ -29,6 +30,8 @@ async def _create_trainer_and_slot(
     start_time: time,
     end_time: time,
     status: str = "available",
+    *,
+    capacity: int = 1,
 ) -> tuple[int, int, int]:
     """Insert trainer + profile + trainer_services + slot. Uses seeded `services` row (no junk names)."""
     service_id = await require_seed_service_id(session)
@@ -46,20 +49,39 @@ async def _create_trainer_and_slot(
         text("INSERT INTO trainer_services (trainer_id, service_id, price_cents) VALUES (:tid, :sid, 5000)"),
         {"tid": trainer_id, "sid": service_id},
     )
-    r = await session.execute(
-        text("""
-            INSERT INTO slots (trainer_id, slot_date, start_time, end_time, status)
-            VALUES (:tid, :d, :start, :end, :status)
-            RETURNING id
-        """),
-        {
-            "tid": trainer_id,
-            "d": slot_date,
-            "start": start_time,
-            "end": end_time,
-            "status": status,
-        },
-    )
+    if capacity > 1:
+        r = await session.execute(
+            text("""
+                INSERT INTO slots (trainer_id, slot_date, start_time, end_time, status, capacity, service_id)
+                VALUES (:tid, :d, :start, :end, :status, :capacity, :sid)
+                RETURNING id
+            """),
+            {
+                "tid": trainer_id,
+                "d": slot_date,
+                "start": start_time,
+                "end": end_time,
+                "status": status,
+                "capacity": capacity,
+                "sid": service_id,
+            },
+        )
+    else:
+        r = await session.execute(
+            text("""
+                INSERT INTO slots (trainer_id, slot_date, start_time, end_time, status, capacity)
+                VALUES (:tid, :d, :start, :end, :status, :capacity)
+                RETURNING id
+            """),
+            {
+                "tid": trainer_id,
+                "d": slot_date,
+                "start": start_time,
+                "end": end_time,
+                "status": status,
+                "capacity": capacity,
+            },
+        )
     (slot_id,) = r.fetchone()
     await session.commit()
     return trainer_id, slot_id, service_id
@@ -294,3 +316,71 @@ async def test_trainer_created_booking_not_in_trainer_pending_notification_queue
     ids = [b["id"] for b in pending]
     assert bid_trainer not in ids
     assert bid_client in ids
+
+
+@pytest.mark.asyncio
+async def test_group_slot_first_booking_keeps_slot_available(db_session: AsyncSession) -> None:
+    """capacity=2: first booking leaves slot available until capacity is full."""
+    tomorrow = date.today() + timedelta(days=1)
+    trainer_id, slot_id, service_id = await _create_trainer_and_slot(
+        db_session, tomorrow, time(10, 0), time(11, 0), capacity=2
+    )
+    client_id = await _create_client(db_session, unique_test_telegram_id())
+    bid = await create_booking(db_session, slot_id, trainer_id, client_id, service_id=service_id)
+    assert bid is not None
+    r = await db_session.execute(text("SELECT status FROM slots WHERE id = :id"), {"id": slot_id})
+    assert r.scalar() == "available"
+
+
+@pytest.mark.asyncio
+async def test_group_slot_second_booking_then_booked(db_session: AsyncSession) -> None:
+    """capacity=2: two bookings fill the slot (status booked)."""
+    tomorrow = date.today() + timedelta(days=1)
+    trainer_id, slot_id, service_id = await _create_trainer_and_slot(
+        db_session, tomorrow, time(10, 0), time(11, 0), capacity=2
+    )
+    c1 = await _create_client(db_session, unique_test_telegram_id())
+    c2 = await _create_client(db_session, unique_test_telegram_id())
+    assert await create_booking(db_session, slot_id, trainer_id, c1, service_id=service_id) is not None
+    assert await create_booking(db_session, slot_id, trainer_id, c2, service_id=service_id) is not None
+    r = await db_session.execute(text("SELECT status FROM slots WHERE id = :id"), {"id": slot_id})
+    assert r.scalar() == "booked"
+
+
+@pytest.mark.asyncio
+async def test_group_slot_third_booking_rejected(db_session: AsyncSession) -> None:
+    """capacity=2: third client cannot book the same slot."""
+    tomorrow = date.today() + timedelta(days=1)
+    trainer_id, slot_id, service_id = await _create_trainer_and_slot(
+        db_session, tomorrow, time(10, 0), time(11, 0), capacity=2
+    )
+    c1 = await _create_client(db_session, unique_test_telegram_id())
+    c2 = await _create_client(db_session, unique_test_telegram_id())
+    c3 = await _create_client(db_session, unique_test_telegram_id())
+    assert await create_booking(db_session, slot_id, trainer_id, c1, service_id=service_id) is not None
+    assert await create_booking(db_session, slot_id, trainer_id, c2, service_id=service_id) is not None
+    third = await create_booking(db_session, slot_id, trainer_id, c3, service_id=service_id)
+    assert third is None
+
+
+@pytest.mark.asyncio
+async def test_group_slot_cancel_frees_space(db_session: AsyncSession) -> None:
+    """After cancel, slot becomes available again and another client can book."""
+    tomorrow = date.today() + timedelta(days=1)
+    trainer_id, slot_id, service_id = await _create_trainer_and_slot(
+        db_session, tomorrow, time(10, 0), time(11, 0), capacity=2
+    )
+    c1 = await _create_client(db_session, unique_test_telegram_id())
+    c2 = await _create_client(db_session, unique_test_telegram_id())
+    c3 = await _create_client(db_session, unique_test_telegram_id())
+    assert await create_booking(db_session, slot_id, trainer_id, c1, service_id=service_id) is not None
+    bid2 = await create_booking(db_session, slot_id, trainer_id, c2, service_id=service_id)
+    assert bid2 is not None
+    r = await db_session.execute(text("SELECT status FROM slots WHERE id = :id"), {"id": slot_id})
+    assert r.scalar() == "booked"
+    ok = await cancel_booking(db_session, bid2, trainer_id)
+    assert ok is True
+    r = await db_session.execute(text("SELECT status FROM slots WHERE id = :id"), {"id": slot_id})
+    assert r.scalar() == "available"
+    third = await create_booking(db_session, slot_id, trainer_id, c3, service_id=service_id)
+    assert third is not None

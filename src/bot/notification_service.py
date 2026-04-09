@@ -20,6 +20,7 @@ from src.bot.notification_loops import (
     run_certificate_email_outbox_loop,
     run_completed_feedback_loop,
     run_daily_request_reminder_loop,
+    run_group_attendance_prompt_loop,
     run_inactive_client_loop,
     run_no_response_reminder_loop,
     run_reminder_loop,
@@ -53,6 +54,7 @@ async def main() -> None:
     # Client-facing loops
     client_tasks = [
         asyncio.create_task(run_reminder_loop(client_bot), name="reminder"),
+        asyncio.create_task(run_group_attendance_prompt_loop(client_bot), name="group_attendance_rsvp"),
         asyncio.create_task(run_booking_complete_loop(client_bot, trainer_bot), name="booking_complete"),
         asyncio.create_task(run_cancel_notifier_loop(client_bot), name="cancel_notifier"),
         asyncio.create_task(run_response_notifier_loop(client_bot), name="response_notifier"),

@@ -25,19 +25,25 @@
     }
     .header {
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       justify-content: space-between;
       gap: 12px;
       margin-bottom: 24px;
     }
+    /* Override mini-app-components.css (.header-title { ellipsis }) — full title on mobile */
     .header-title {
       flex: 1;
       min-width: 0;
+      margin: 0;
       font-size: 24px;
       font-weight: 600;
       line-height: 1.25;
       letter-spacing: -0.02em;
       color: var(--tg-theme-text-color);
+      overflow: visible;
+      text-overflow: unset;
+      white-space: normal;
+      overflow-wrap: anywhere;
     }
     .step-title {
       font-size: 11px;
@@ -207,11 +213,22 @@
     .trainer-list-card .trainer-card-photo-wrap img.loaded {
       opacity: 1;
     }
-    .trainer-list-card .info { 
-      flex: 1; 
-      min-width: 0; 
-      position: relative; 
-      z-index: 1; 
+    /* Middle column: photo | __main (info + badge) | arrow — badge must not sit in the row or it steals width from text */
+    .trainer-list-card__main {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 6px;
+      position: relative;
+      z-index: 1;
+    }
+    .trainer-list-card .info {
+      width: 100%;
+      min-width: 0;
+      position: relative;
+      z-index: 1;
     }
     
     /* Hover эффект для списка — subtle zoom аватара */
@@ -233,10 +250,12 @@
       line-height: 1.35;
       overflow: hidden;
     }
-    .trainer-list-card .arrow { 
-      color: var(--tg-theme-button-color); 
-      font-size: 16px; 
-      position: relative; 
+    .trainer-list-card .arrow {
+      flex-shrink: 0;
+      align-self: center;
+      color: var(--tg-theme-button-color);
+      font-size: 16px;
+      position: relative;
       z-index: 1;
       opacity: 0.8;
       transition: opacity 0.12s ease, transform 0.12s ease;
@@ -448,6 +467,13 @@
       background: var(--tg-theme-secondary-bg-color);
       border-radius: 10px;
       font-size: 14px;
+      border: 2px solid transparent;
+      box-sizing: border-box;
+    }
+    /* Услуга, под которую клиент зашёл из каталога (при нескольких услугах) */
+    .trainer-detail-service--catalog-selected {
+      border-color: color-mix(in srgb, var(--tg-theme-button-color) 55%, transparent);
+      background: color-mix(in srgb, var(--tg-theme-button-color) 9%, var(--tg-theme-secondary-bg-color));
     }
     .trainer-detail-service-name {
       font-weight: 500;
@@ -591,6 +617,90 @@
     .trainer-list-card:nth-child(4) { animation-delay: 0.2s; }
     .trainer-list-card:nth-child(5) { animation-delay: 0.25s; }
     .trainer-list-card:nth-child(6) { animation-delay: 0.3s; }
+    .catalog-list-mode {
+      display: flex;
+      gap: 8px;
+      margin: 0 0 16px;
+      padding: 4px;
+      border-radius: 14px;
+      background: var(--tg-theme-secondary-bg-color);
+      border: 1px solid rgba(247, 166, 0, 0.22);
+    }
+    .catalog-mode-btn {
+      flex: 1;
+      min-height: 44px;
+      padding: 10px 12px;
+      border: none;
+      border-radius: 11px;
+      font: inherit;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      color: var(--tg-theme-text-color);
+      background: transparent;
+      transition: background 0.15s ease, color 0.15s ease;
+    }
+    .catalog-mode-btn.active {
+      background: var(--tg-theme-button-color);
+      color: var(--tg-theme-button-text-color);
+    }
+    .catalog-trainer-group-badge {
+      display: inline-block;
+      align-self: flex-start;
+      margin-top: 0;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+      background: rgba(247, 166, 0, 0.18);
+      color: var(--tg-theme-text-color);
+      border: 1px solid rgba(247, 166, 0, 0.35);
+    }
+    .catalog-group-list-card {
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+      padding: 16px 18px;
+      margin-bottom: 12px;
+      border-radius: 18px;
+      background: var(--tg-theme-secondary-bg-color);
+      border: 1px solid rgba(247, 166, 0, 0.28);
+      text-align: left;
+      width: 100%;
+      font: inherit;
+      color: inherit;
+      cursor: pointer;
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+    }
+    .catalog-group-list-card .cg-photo-wrap {
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      overflow: hidden;
+      background: var(--tg-theme-bg-color);
+      position: relative;
+    }
+    .catalog-group-list-card .cg-photo-wrap .cg-photo {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: center center;
+      display: block;
+      opacity: 0;
+      transition: opacity 0.25s ease;
+    }
+    .catalog-group-list-card .cg-photo-wrap .cg-photo.loaded {
+      opacity: 1;
+    }
+    .catalog-group-list-card .cg-photo-wrap--placeholder {
+      background: var(--tg-theme-secondary-bg-color);
+    }
+    .catalog-group-list-card .cg-body { flex: 1; min-width: 0; }
+    .catalog-group-list-card .cg-name { font-size: 17px; font-weight: 600; margin: 0 0 4px; line-height: 1.25; }
+    .catalog-group-list-card .cg-meta { font-size: 13px; color: var(--tg-theme-hint-color); margin: 0 0 6px; line-height: 1.35; }
+    .catalog-group-list-card .cg-actions { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+    .catalog-group-list-card .cg-actions .btn-secondary { margin: 0; }
     .pagination {
       display: flex;
       justify-content: center;
@@ -816,13 +926,60 @@
     .trainer-detail-slots .slots-title { font-size: 13px; font-weight: 600; color: var(--tg-theme-hint-color); margin-bottom: 10px; text-transform: uppercase; }
     .trainer-detail-slots .slot-row {
       display: flex; align-items: center; justify-content: space-between;
+      gap: 10px;
       padding: 10px 0; border-bottom: 1px solid rgba(128,128,128,0.1);
       font-size: 15px; cursor: pointer; border: none; width: 100%; text-align: left; background: transparent; color: inherit; font: inherit;
+    }
+    .trainer-detail-slots .slot-row-main {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 6px;
+      flex: 1;
+      min-width: 0;
+    }
+    .trainer-detail-slots .slot-spots-pill {
+      font-size: 12px;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: var(--tg-theme-secondary-bg-color);
+      color: var(--tg-theme-button-color);
+      border: 1px solid color-mix(in srgb, var(--tg-theme-button-color) 35%, transparent);
+    }
+    @supports not (color: color-mix(in srgb, red, blue)) {
+      .trainer-detail-slots .slot-spots-pill {
+        border-color: rgba(245, 166, 35, 0.45);
+      }
     }
     .trainer-detail-slots .slot-row:last-child { border-bottom: none; }
     .trainer-detail-slots .slot-row:active { opacity: 0.85; }
     .trainer-detail-slots .slots-empty { font-size: 14px; color: var(--tg-theme-hint-color); padding: 8px 0; }
     .trainer-detail-slots .slots-empty-hint { padding-top: 0; margin-top: -4px; }
+    .trainer-detail-groups {
+      margin-top: 8px;
+      margin-bottom: 4px;
+    }
+    .trainer-detail-groups-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--tg-theme-hint-color);
+      margin-bottom: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+    .trainer-detail-group-card {
+      border-radius: 16px;
+      padding: 14px 16px;
+      margin-bottom: 10px;
+      background: var(--tg-theme-secondary-bg-color);
+      border: 1px solid rgba(247, 166, 0, 0.22);
+    }
+    .trainer-detail-group-name { font-size: 17px; font-weight: 600; margin-bottom: 4px; }
+    .trainer-detail-group-meta { font-size: 13px; color: var(--tg-theme-hint-color); margin-bottom: 4px; }
+    .trainer-detail-group-sched { font-size: 14px; margin: 6px 0; }
+    .trainer-detail-group-pitch { font-size: 14px; line-height: 1.4; margin: 6px 0; color: var(--tg-theme-text-color); }
+    .trainer-detail-group-spots { font-size: 13px; font-weight: 600; margin: 10px 0 8px; color: var(--tg-theme-hint-color); }
     .trainer-detail-actions { margin-top: 16px; display: flex; flex-direction: column; gap: 10px; }
     .trainer-detail-secondary {
       margin-top: 24px;
@@ -842,6 +999,28 @@
       margin: 4px 0 12px 4px;
       text-transform: uppercase;
       letter-spacing: 0.1em;
+    }
+    .slot-pick-list .slot-card-body {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 6px;
+      flex: 1;
+      min-width: 0;
+    }
+    .slot-pick-list .slot-spots-pill {
+      font-size: 12px;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: var(--tg-theme-secondary-bg-color);
+      color: var(--tg-theme-button-color);
+      border: 1px solid color-mix(in srgb, var(--tg-theme-button-color) 35%, transparent);
+    }
+    @supports not (color: color-mix(in srgb, red, blue)) {
+      .slot-pick-list .slot-spots-pill {
+        border-color: rgba(245, 166, 35, 0.45);
+      }
     }
     .slot-pick-list .slot-card {
       display: flex; align-items: center; justify-content: space-between;
@@ -1144,8 +1323,11 @@
     <div id="arenaList"></div>
   </div>
   <div id="screenTrainers" data-screen>
-    <div class="back-link" id="backFromTrainers" style="margin-bottom:8px;"><svg class="back-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>Назад</div>
-    <div class="step-title">Тренеры</div>
+    <div class="step-title" id="screenTrainersTitle">Тренеры</div>
+    <div class="catalog-list-mode" id="catalogListMode" role="tablist" aria-label="Режим каталога">
+      <button type="button" class="catalog-mode-btn active" data-mode="trainers" role="tab" aria-selected="true">Тренеры</button>
+      <button type="button" class="catalog-mode-btn" data-mode="groups" role="tab" aria-selected="false">Группы с набором</button>
+    </div>
     
     <!-- Time Filters Panel -->
     <div class="filter-panel expanded" id="timeFilters">
@@ -1170,8 +1352,8 @@
           </div>
         </div>
 
-        <!-- Time Slots -->
-        <div class="filter-section">
+        <!-- Time Slots (скрыто в режиме «Группы»: фильтр по свободным слотам) -->
+        <div class="filter-section" id="timeSlotFiltersSection">
           <div class="filter-section-title">Время дня</div>
           <div class="filter-chips" id="timeSlotFilters">
             <div class="filter-chip" data-time="06:00-09:00">Раннее утро (6-9)</div>
@@ -1200,13 +1382,14 @@
       <button type="button" class="tab-btn" id="tabCatalogFromDetail" data-tab="catalog">Каталог</button>
       <button type="button" class="tab-btn active" id="tabMyTrainerFromDetail" data-tab="my_trainer">Мой тренер</button>
     </div>
-    <div id="trainerDetailContent"></div>
+    <div id="trainerDetailTop"></div>
+    <div id="trainerDetailGroups" class="trainer-detail-groups"></div>
+    <div id="trainerDetailRest"></div>
     <div id="trainerDetailSlots" class="trainer-detail-slots"></div>
     <div id="trainerDetailActions" class="trainer-detail-actions"></div>
     <div class="trainer-detail-secondary" id="trainerDetailSecondary"></div>
   </div>
   <div id="screenSlotPick" data-screen>
-    <button type="button" class="back-link" id="backFromSlotPick" style="margin-bottom:8px;"><svg class="back-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>К тренеру</button>
     <div class="step-title">Выберите время</div>
     <div id="slotPickList" class="slot-pick-list"></div>
   </div>
@@ -1309,6 +1492,8 @@
         requestFormOpenedFrom: null,
         activeTab: 'catalog',
         openedFromMyTrainerTab: false,
+        /** trainers | groups — список после выбора города/услуги/арены */
+        catalogMode: 'trainers',
         /** From GET /client/session — clients.phone for prefill in booking form */
         clientPhone: '',
         /** When true, booking/request forms must collect first name (last optional). */
@@ -1397,7 +1582,7 @@
         return svc.price_tiers;
       }
 
-      /** Услуга из фильтра + выбор тарифа при нескольких ценах (строгий режим API). */
+      /** Услуга из фильтра + выбор тарифа при нескольких ценах (строгий режим API). Групповые слоты — без выбора тира. */
       function updateBookingFormServiceAndTiers() {
         var svcEl = document.getElementById('bookingFormServiceLine');
         var block = document.getElementById('bookingPriceTierBlockCatalog');
@@ -1415,6 +1600,13 @@
         }
         if (!block || !host) return;
         host.innerHTML = '';
+        var slot = state.selectedSlot;
+        var capRaw = slot && slot.capacity != null ? parseInt(slot.capacity, 10) : 1;
+        var cap = isNaN(capRaw) ? 1 : capRaw;
+        if (cap > 1) {
+          block.style.display = 'none';
+          return;
+        }
         var tiers = getTiersForCatalogBooking();
         if (tiers.length <= 1) {
           block.style.display = 'none';
@@ -1517,6 +1709,17 @@
           };
           return;
         }
+        if (sid === 'screenTrainers') {
+          btn.hidden = false;
+          btn.onclick = function() {
+            if (state.returnToSummary) {
+              goBackToSummary();
+            } else {
+              showScreen('screenArena');
+            }
+          };
+          return;
+        }
         btn.hidden = !canBrowserGoBack();
         btn.onclick = function() { window.history.back(); };
       }
@@ -1566,15 +1769,21 @@
         });
       }
       /** Prefetch list + detail URLs for catalog rows (detail may differ from list thumb). */
+      function catalogItemFirstPhoto(item) {
+        if (!item) return null;
+        var p0 = item.photos && item.photos[0];
+        if (p0) return p0;
+        var tr = item.trainer;
+        return tr && tr.photos && tr.photos[0] ? tr.photos[0] : null;
+      }
       function warmupCatalogImagesFromItems(items, maxRows) {
         var n = maxRows != null ? maxRows : 16;
         var slice = (items || []).slice(0, n);
         warmupImageUrls(slice.map(function(t) {
-          var p0 = t.photos && t.photos[0];
-          return photoSrcList(p0);
+          return photoSrcList(catalogItemFirstPhoto(t));
         }));
         warmupImageUrls(slice.map(function(t) {
-          var p0 = t.photos && t.photos[0];
+          var p0 = catalogItemFirstPhoto(t);
           var a = photoSrcDetail(p0);
           var b = photoSrcList(p0);
           return a && b && a !== b ? a : null;
@@ -1590,7 +1799,7 @@
         return photoUrl(photo.file_key);
       }
       function bindTrainerDetailPhotoWrap() {
-        var wrap = document.querySelector('#trainerDetailContent .trainer-detail-photo-wrap');
+        var wrap = document.querySelector('#trainerDetailTop .trainer-detail-photo-wrap');
         if (!wrap) return;
         var ph = wrap.querySelector('.trainer-detail-photo-placeholder');
         function hidePh() { if (ph) ph.style.display = 'none'; }
@@ -1635,11 +1844,29 @@
         }
         return params;
       }
+      /** Каталог: чипы дней 0=Вс..6=Сб (как PG DOW для слотов) → правила групп 0=Пн..6=Вс */
+      function mapCatalogChipDaysToGroupRuleDays(days) {
+        return days.map(function(d) {
+          var n = parseInt(d, 10);
+          if (n === 0) return 6;
+          return n - 1;
+        });
+      }
+      function makeGroupListParams(offset) {
+        var params = { limit: state.limit, offset: offset, city_id: state.cityId, service_id: state.serviceId };
+        if (state.arenaId) params.arena_id = state.arenaId;
+        var f = state.filters;
+        if (f.days.length > 0) {
+          params.filter_days = mapCatalogChipDaysToGroupRuleDays(f.days).join(',');
+        }
+        return params;
+      }
       function makeFirstPageKey() {
         var f = state.filters;
         var dayPart = f.days.length ? f.days.slice().sort(function(a, b) { return a - b; }).join('-') : '';
         var timePart = f.timeSlots.length ? f.timeSlots.slice().sort().join('|') : '';
-        return [state.cityId || 0, state.serviceId || 0, state.arenaId || 0, state.limit || 10, dayPart, timePart].join(':');
+        var mode = state.catalogMode || 'trainers';
+        return [mode, state.cityId || 0, state.serviceId || 0, state.arenaId || 0, state.limit || 10, dayPart, timePart].join(':');
       }
 
       function toggleFilterPanel() {
@@ -1667,10 +1894,16 @@
         var clearBtn = document.getElementById('clearFilters');
         
         if (summary.length === 0) {
-          summaryEl.textContent = 'Все временные промежутки';
+          summaryEl.textContent =
+            state.catalogMode === 'groups'
+              ? 'Любые дни (серия группы)'
+              : 'Все временные промежутки';
           if (clearBtn) clearBtn.style.display = 'none';
         } else {
-          summaryEl.textContent = summary.join(' · ');
+          summaryEl.textContent =
+            state.catalogMode === 'groups' && f.days.length > 0
+              ? ('Серия в: ' + summary.join(' · '))
+              : summary.join(' · ');
           if (clearBtn) clearBtn.style.display = 'inline';
         }
       }
@@ -1695,7 +1928,58 @@
         state.offset = 0;
         prefetch.firstPageKey = null;
         prefetch.firstPageData = null;
-        loadTrainers();
+        loadCatalogList();
+      }
+
+      function updateCatalogModeUi() {
+        var isGroups = state.catalogMode === 'groups';
+        var titleEl = document.getElementById('screenTrainersTitle');
+        if (titleEl) titleEl.textContent = isGroups ? 'Группы с набором' : 'Тренеры';
+        var ts = document.getElementById('timeSlotFiltersSection');
+        if (ts) ts.style.display = isGroups ? 'none' : '';
+        document.querySelectorAll('#catalogListMode .catalog-mode-btn').forEach(function(btn) {
+          var on = btn.getAttribute('data-mode') === state.catalogMode;
+          btn.classList.toggle('active', on);
+          btn.setAttribute('aria-selected', on ? 'true' : 'false');
+        });
+        var ft = document.getElementById('timeFilters');
+        if (ft && isGroups) {
+          ft.classList.add('expanded');
+        }
+        updateFilterSummary();
+      }
+
+      function loadCatalogList() {
+        updateCatalogModeUi();
+        if (state.catalogMode === 'groups') {
+          loadTrainingGroupsCatalog();
+        } else {
+          loadTrainers();
+        }
+      }
+
+      function initCatalogModeToggle() {
+        var row = document.getElementById('catalogListMode');
+        if (!row || row.getAttribute('data-bound') === '1') return;
+        row.setAttribute('data-bound', '1');
+        row.querySelectorAll('.catalog-mode-btn').forEach(function(btn) {
+          btn.addEventListener('click', function() {
+            var mode = btn.getAttribute('data-mode');
+            if (!mode || mode === state.catalogMode) return;
+            state.catalogMode = mode;
+            if (mode === 'groups') {
+              state.filters.timeSlots = [];
+              document.querySelectorAll('#timeSlotFilters .filter-chip').forEach(function(chip) {
+                chip.classList.remove('selected');
+              });
+              updateFilterSummary();
+            }
+            state.offset = 0;
+            prefetch.firstPageKey = null;
+            prefetch.firstPageData = null;
+            loadCatalogList();
+          });
+        });
       }
 
       var filterHandlersInitialized = false;
@@ -1777,9 +2061,27 @@
         return y + ' ' + ruYearsWord(y) + ' опыта';
       }
 
+      function formatGroupCountMessage(n) {
+        n = n | 0;
+        var mod10 = n % 10;
+        var mod100 = n % 100;
+        if (mod10 === 1 && mod100 !== 11) {
+          return 'Найдена ' + n + ' группа';
+        }
+        if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) {
+          return 'Найдено ' + n + ' группы';
+        }
+        return 'Найдено ' + n + ' групп';
+      }
+
       function updateResultsCount(count) {
         var resultsEl = document.getElementById('resultsCount');
-        if (resultsEl) resultsEl.textContent = formatTrainerCountMessage(count);
+        if (!resultsEl) return;
+        if (state.catalogMode === 'groups') {
+          resultsEl.textContent = formatGroupCountMessage(count);
+        } else {
+          resultsEl.textContent = formatTrainerCountMessage(count);
+        }
       }
       function prefetchFirstPageIfNeeded() {
         if (!state.cityId || !state.serviceId) return;
@@ -1794,7 +2096,9 @@
         }
         if (prefetch.inflightByKey[key]) return;
         prefetch.inflightByKey[key] = true;
-        getJson('/trainers', makeTrainerListParams(0)).then(function(data) {
+        var path = state.catalogMode === 'groups' ? '/training-groups' : '/trainers';
+        var params = state.catalogMode === 'groups' ? makeGroupListParams(0) : makeTrainerListParams(0);
+        getJson(path, params).then(function(data) {
           prefetch.firstPageKey = key;
           prefetch.firstPageData = data;
           writeCatalogFirstPageToStorage(key, data);
@@ -1888,7 +2192,16 @@
       }
 
       function getJson(path, params) {
-        var q = params ? '?' + Object.keys(params).map(function(k) { return k + '=' + encodeURIComponent(params[k]); }).join('&') : '';
+        var q = '';
+        if (params) {
+          var parts = [];
+          Object.keys(params).forEach(function(k) {
+            var v = params[k];
+            if (v === undefined || v === null) return;
+            parts.push(k + '=' + encodeURIComponent(v));
+          });
+          if (parts.length) q = '?' + parts.join('&');
+        }
         return fetch('/api/public' + path + q, { cache: 'no-store' }).then(function(r) { return r.json(); });
       }
       function loadTrainerById(trainerId) {
@@ -2037,6 +2350,73 @@
         if (s == null || s === undefined) return '';
         return String(s).replace(/"/g, '&quot;');
       }
+      function formatCatalogGroupDow(dow) {
+        var labels = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+        if (dow == null || dow < 0 || dow > 6) return '—';
+        return labels[dow] || '—';
+      }
+      function formatCatalogGroupRules(rules) {
+        if (!rules || !rules.length) return '';
+        return rules.map(function(r) {
+          return formatCatalogGroupDow(r.day_of_week) + ' ' + (r.start_time || '').slice(0, 5);
+        }).join(', ');
+      }
+      function loadTrainingGroupsBlock(trainer) {
+        var el = document.getElementById('trainerDetailGroups');
+        if (!el || !trainer || !trainer.id) return;
+        el.innerHTML = '';
+        getJson('/trainers/' + trainer.id + '/training-groups').then(function(data) {
+          var groups = (data && data.groups) || [];
+          if (!groups.length) return;
+          var html = '<div class="trainer-detail-groups-title">Набор в группы</div>';
+          groups.forEach(function(g) {
+            var sched = formatCatalogGroupRules(g.schedule_rules);
+            html += '<div class="trainer-detail-group-card">';
+            html += '<div class="trainer-detail-group-name">' + escapeHtml(g.name || '') + '</div>';
+            html += '<div class="trainer-detail-group-meta">' + escapeHtml(g.service_name || '—');
+            if (g.arena_name) html += ' · ' + escapeHtml(g.arena_name);
+            html += '</div>';
+            if (sched) html += '<div class="trainer-detail-group-sched">' + escapeHtml(sched) + '</div>';
+            if (g.catalog_pitch) html += '<div class="trainer-detail-group-pitch">' + escapeHtml(g.catalog_pitch) + '</div>';
+            html += '<div class="trainer-detail-group-spots">Занято: ' + (g.seated_count != null ? g.seated_count : 0) + ' из ' + (g.max_members || '—') + ' · свободно ' + (g.spots_left != null ? g.spots_left : '—') + '</div>';
+            html += '<button type="button" class="btn-primary btn-block catalog-group-join" data-group-id="' + g.id + '">Вступить в группу</button>';
+            html += '</div>';
+          });
+          el.innerHTML = html;
+          el.querySelectorAll('.catalog-group-join').forEach(function(btn) {
+            btn.onclick = function() {
+              var gid = parseInt(btn.getAttribute('data-group-id'), 10);
+              if (!gid) return;
+              submitCatalogGroupJoinRequest(gid);
+            };
+          });
+        }).catch(function() { /* no block */ });
+      }
+      function submitCatalogGroupJoinRequest(groupId) {
+        var initData = tg && tg.initData ? tg.initData : '';
+        if (!initData) {
+          alert('Откройте каталог из Telegram, чтобы отправить заявку.');
+          return;
+        }
+        var headers = { 'Content-Type': 'application/json', 'X-Telegram-Init-Data': initData };
+        var url = '/api/webapp/client/training-groups/' + groupId + '/join-request?initData=' + encodeURIComponent(initData);
+        fetch(url, { method: 'POST', headers: headers, body: '{}' })
+          .then(function(r) {
+            return r.json().then(function(j) {
+              if (!r.ok) {
+                var d = j && j.detail;
+                throw new Error(typeof d === 'string' ? d : (r.statusText || 'Ошибка'));
+              }
+              return j;
+            });
+          })
+          .then(function() {
+            alert('Вы добавлены в группу. Тренер увидит вас в списке участников.');
+          })
+          .catch(function(e) {
+            alert(e.message || 'Не удалось отправить заявку');
+          });
+      }
       function renderSummary() {
         var rows = [
           { key: 'city', label: 'Город', value: state.cityName || '—', cls: '' },
@@ -2085,7 +2465,7 @@
               if (!state.cityId || !state.serviceId) return;
               state.returnToSummary = true;
               state.offset = 0;
-              loadTrainers();
+              loadCatalogList();
               showScreen('screenTrainers');
             }
           };
@@ -2196,7 +2576,7 @@
                 renderSummary();
                 showScreen('screenSummary');
               } else {
-                loadTrainers();
+                loadCatalogList();
                 showScreen('screenTrainers');
               }
               prefetchFirstPageIfNeeded();
@@ -2221,12 +2601,163 @@
         return (v === Math.floor(v) ? v : v.toFixed(2)) + ' BYN';
       }
 
+      function loadTrainingGroupsCatalog() {
+        document.getElementById('trainerList').innerHTML = '<div class="loading">Загрузка...</div>';
+        document.getElementById('pagination').innerHTML = '';
+        initializeFilterHandlers();
+        initCatalogModeToggle();
+        updateCatalogModeUi();
+        var params = makeGroupListParams(state.offset);
+        var firstPageKey = makeFirstPageKey();
+        var request;
+        if (state.offset === 0) {
+          if (!(prefetch.firstPageKey === firstPageKey && prefetch.firstPageData)) {
+            var fromDisk = readCatalogFirstPageFromStorage(firstPageKey);
+            if (fromDisk) {
+              prefetch.firstPageKey = firstPageKey;
+              prefetch.firstPageData = fromDisk;
+            }
+          }
+        }
+        if (state.offset === 0 && prefetch.firstPageKey === firstPageKey && prefetch.firstPageData) {
+          request = Promise.resolve(prefetch.firstPageData);
+        } else {
+          request = getJson('/training-groups', params);
+        }
+        request.then(function(data) {
+          var items = data.items || [];
+          var total = data.total != null ? data.total : items.length;
+          state.groupCatalogItems = items;
+          state.total = total;
+          state.photoSource = data._photo_source || 'proxy';
+          updateResultsCount(total);
+          if (!items.length) {
+            document.getElementById('trainerList').innerHTML =
+              '<div class="empty">Групп с набором по вашему запросу пока нет.</div>' +
+              '<div class="empty-state-request">' +
+              '<p class="empty-state-text">Попробуйте другие дни или арену — или оставьте заявку.</p>' +
+              '<button type="button" class="btn-block btn-leave-request" id="btnEmptyStateRequestGroups">Оставить заявку</button>' +
+              '</div>';
+            document.getElementById('pagination').innerHTML = '';
+            var btnEg = document.getElementById('btnEmptyStateRequestGroups');
+            if (btnEg) btnEg.onclick = openGeneralRequestForm;
+            document.getElementById('trainerListFooter').innerHTML = '';
+            document.getElementById('trainerListFooter').style.display = 'none';
+            return;
+          }
+          if (state.offset === 0) {
+            writeCatalogFirstPageToStorage(firstPageKey, data);
+            prefetch.firstPageKey = firstPageKey;
+            prefetch.firstPageData = data;
+          }
+          warmupCatalogImagesFromItems(items, 16);
+          var html = items.map(function(g, idx) {
+            var tr = g.trainer || {};
+            var p = tr.profile || {};
+            var photo = tr.photos && tr.photos[0];
+            var src = photoSrcList(photo);
+            var proxyFallback = photo ? photoUrl(photo.file_key_list || photo.file_key) : '';
+            var tname = trainerName(tr);
+            var sched = formatCatalogGroupRules(g.schedule_rules);
+            var meta = [
+              tname,
+              (g.service_name || '—'),
+              g.arena_name ? g.arena_name : null,
+              sched
+            ].filter(Boolean).join(' · ');
+            var spots = (g.spots_left != null && g.max_members != null)
+              ? ('Свободно ' + g.spots_left + ' из ' + g.max_members)
+              : '';
+            var photoHtml = src
+              ? '<div class="cg-photo-wrap"><img class="cg-photo" src="' + src + '" alt="" loading="lazy" decoding="async" data-fallback="' + (proxyFallback || '').replace(/"/g, '&quot;') + '"></div>'
+              : '<div class="cg-photo-wrap cg-photo-wrap--placeholder" aria-hidden="true"></div>';
+            var joinBtn = '<button type="button" class="btn-primary btn-block catalog-group-join" data-group-id="' + g.id + '">Вступить в группу</button>';
+            var profileBtn = '<button type="button" class="btn-secondary btn-block catalog-group-open-trainer" data-index="' + idx + '">Профиль тренера</button>';
+            return '<div class="catalog-group-list-card" data-index="' + idx + '">' +
+              photoHtml +
+              '<div class="cg-body">' +
+              '<div class="cg-name">' + escapeHtml(g.name || 'Группа') + '</div>' +
+              '<div class="cg-meta">' + escapeHtml(meta) + '</div>' +
+              (spots ? '<div class="cg-meta">' + escapeHtml(spots) + '</div>' : '') +
+              (g.catalog_pitch ? '<div class="cg-meta">' + escapeHtml(g.catalog_pitch.length > 120 ? g.catalog_pitch.slice(0, 117) + '…' : g.catalog_pitch) + '</div>' : '') +
+              '<div class="cg-actions">' + joinBtn + profileBtn + '</div>' +
+              '</div></div>';
+          }).join('');
+          document.getElementById('trainerList').innerHTML = html;
+          document.querySelectorAll('#trainerList .cg-photo-wrap img.cg-photo').forEach(function(img) {
+            function showLoaded() {
+              img.classList.add('loaded');
+            }
+            img.onload = showLoaded;
+            img.onerror = function() {
+              var fb = img.dataset.fallback;
+              if (fb) {
+                img.onerror = null;
+                img.src = fb;
+                return;
+              }
+              img.style.display = 'none';
+            };
+            if (img.complete && img.naturalWidth) showLoaded();
+          });
+          document.querySelectorAll('#trainerList .catalog-group-join').forEach(function(btn) {
+            btn.addEventListener('click', function(ev) {
+              ev.stopPropagation();
+              var gid = parseInt(btn.getAttribute('data-group-id'), 10);
+              if (gid) submitCatalogGroupJoinRequest(gid);
+            });
+          });
+          document.querySelectorAll('#trainerList .catalog-group-open-trainer').forEach(function(btn) {
+            btn.addEventListener('click', function(ev) {
+              ev.stopPropagation();
+              var ix = parseInt(btn.getAttribute('data-index'), 10);
+              var row = state.groupCatalogItems[ix];
+              if (row && row.trainer) openTrainerDetailFromTrainerObject(row.trainer, true);
+            });
+          });
+          document.querySelectorAll('#trainerList .catalog-group-list-card').forEach(function(card) {
+            card.addEventListener('click', function(ev) {
+              if (ev.target.closest && (ev.target.closest('.catalog-group-join') || ev.target.closest('.catalog-group-open-trainer'))) return;
+              var ix = parseInt(card.getAttribute('data-index'), 10);
+              var row = state.groupCatalogItems[ix];
+              if (row && row.trainer) openTrainerDetailFromTrainerObject(row.trainer, true);
+            });
+          });
+          var page = Math.floor(state.offset / state.limit) + 1;
+          var totalPages = Math.max(1, Math.ceil(total / state.limit));
+          var pagHtml = '';
+          if (state.offset > 0) {
+            pagHtml += '<button type="button" id="pagePrevGroups">◀ Назад</button>';
+          }
+          pagHtml += '<span>Стр. ' + page + ' из ' + totalPages + '</span>';
+          if (state.offset + items.length < total) {
+            pagHtml += '<button type="button" id="pageNextGroups">Вперёд ▶</button>';
+          }
+          document.getElementById('pagination').innerHTML = pagHtml;
+          var prevG = document.getElementById('pagePrevGroups');
+          if (prevG) prevG.onclick = function() { state.offset -= state.limit; loadTrainingGroupsCatalog(); };
+          var nextG = document.getElementById('pageNextGroups');
+          if (nextG) nextG.onclick = function() { state.offset += state.limit; loadTrainingGroupsCatalog(); };
+          var footerHtml = 'Не нашли группу? <span class="link" id="linkGeneralRequestFromGroupList">Оставить заявку</span>';
+          var photoSourceLabel = state.photoSource === 'cdn' ? 'через CDN' : (state.photoSource === 'direct' ? 'напрямую с S3' : 'через сервер');
+          footerHtml += '<div class="photo-source-hint">Фото: ' + photoSourceLabel + '</div>';
+          document.getElementById('trainerListFooter').innerHTML = footerHtml;
+          document.getElementById('trainerListFooter').style.display = 'block';
+          var linkG = document.getElementById('linkGeneralRequestFromGroupList');
+          if (linkG) linkG.onclick = openGeneralRequestForm;
+        }).catch(function() {
+          document.getElementById('trainerList').innerHTML = '<div class="error">Ошибка загрузки</div>';
+        });
+      }
+
       function loadTrainers() {
         document.getElementById('trainerList').innerHTML = '<div class="loading">Загрузка...</div>';
         document.getElementById('pagination').innerHTML = '';
         
         // Initialize filter handlers if not already done
         initializeFilterHandlers();
+        initCatalogModeToggle();
+        updateCatalogModeUi();
         
         // Only city/service/arena — never trainer_id, so list shows all matching trainers (selected trainer is on "Мой тренер" tab).
         var params = makeTrainerListParams(state.offset);
@@ -2252,7 +2783,7 @@
           state.trainers = items;
           state.total = total;
           state.photoSource = data._photo_source || 'proxy';
-          updateResultsCount(items.length);
+          updateResultsCount(total);
           if (!items.length) {
             document.getElementById('trainerList').innerHTML =
               '<div class="empty">Тренеров по вашему запросу пока нет.</div>' +
@@ -2352,13 +2883,18 @@
               infoHtml += '<div class="meta">' + metaBottom.join(' · ') + '</div>';
             }
             infoHtml += '</div>';
+            var groupBadgeHtml = '';
+            if (typeof t.open_groups_count === 'number' && t.open_groups_count > 0) {
+              groupBadgeHtml = '<div class="catalog-trainer-group-badge">Набор в группу</div>';
+            }
 
             var photoHtml = src
               ? '<div class="trainer-card-photo-wrap"><div class="trainer-card-photo-placeholder"></div><img src="' + src + '" alt="" loading="' + (isPriority ? 'eager' : 'lazy') + '" fetchpriority="' + (isPriority ? 'high' : 'auto') + '" decoding="async" class="trainer-card-img"' + (proxyFallback ? ' data-fallback="' + proxyFallback.replace(/"/g, '&quot;') + '"' : '') + '></div>'
               : '<div class="trainer-card-photo-wrap"><div class="trainer-card-photo-placeholder"></div></div>';
             return '<button type="button" class="trainer-list-card" data-index="' + idx + '">' +
               photoHtml +
-              infoHtml + '<span class="arrow">→</span></button>';
+              '<div class="trainer-list-card__main">' + infoHtml + groupBadgeHtml + '</div>' +
+              '<span class="arrow">→</span></button>';
           }).join('');
           document.getElementById('trainerList').innerHTML = html;
           document.querySelectorAll('#trainerList .trainer-card-img').forEach(function(img) {
@@ -2393,9 +2929,9 @@
           }
           document.getElementById('pagination').innerHTML = pagHtml;
           var prevBtn = document.getElementById('pagePrev');
-          if (prevBtn) prevBtn.onclick = function() { state.offset -= state.limit; loadTrainers(); };
+          if (prevBtn) prevBtn.onclick = function() { state.offset -= state.limit; loadCatalogList(); };
           var nextBtn = document.getElementById('pageNext');
-          if (nextBtn) nextBtn.onclick = function() { state.offset += state.limit; loadTrainers(); };
+          if (nextBtn) nextBtn.onclick = function() { state.offset += state.limit; loadCatalogList(); };
           var footerHtml = 'Не нашли подходящего? <span class="link" id="linkGeneralRequestFromList">Оставить заявку</span>';
           var photoSourceLabel = state.photoSource === 'cdn' ? 'через CDN' : (state.photoSource === 'direct' ? 'напрямую с S3' : 'через сервер');
           footerHtml += '<div class="photo-source-hint">Фото: ' + photoSourceLabel + '</div>';
@@ -2430,6 +2966,38 @@
         return dateStr + ' (' + dayName + '), ' + (s.start_time || '') + '–' + (s.end_time || '');
       }
 
+      /** Russian plural for «N мест(о/а/ )» in group-slot UI. */
+      function ruSpotsWord(n) {
+        var k = Math.abs(parseInt(n, 10)) % 100;
+        var k1 = k % 10;
+        if (k > 10 && k < 20) return 'мест';
+        if (k1 === 1) return 'место';
+        if (k1 >= 2 && k1 <= 4) return 'места';
+        return 'мест';
+      }
+
+      /** Full line for booking form (includes spots for group slots). */
+      function formatSlotSelectionSummary(s) {
+        var base = formatSlotLabel(s);
+        var cap = (s.capacity != null) ? parseInt(s.capacity, 10) : 1;
+        var sl = (s.spots_left != null) ? parseInt(s.spots_left, 10) : null;
+        if (cap > 1 && sl != null && !isNaN(sl) && sl > 0) {
+          return base + ' · осталось ' + sl + ' ' + ruSpotsWord(sl);
+        }
+        return base;
+      }
+
+      function slotGroupSpotsPillHtml(s) {
+        var cap = (s.capacity != null) ? parseInt(s.capacity, 10) : 1;
+        var sl = (s.spots_left != null) ? parseInt(s.spots_left, 10) : null;
+        if (cap > 1 && sl != null && !isNaN(sl) && sl > 0) {
+          var w = ruSpotsWord(sl);
+          var label = 'Осталось ' + sl + ' ' + w;
+          return '<span class="slot-spots-pill" aria-label="' + label.replace(/"/g, '&quot;') + '">' + label + '</span>';
+        }
+        return '';
+      }
+
       function loadSlotsForTrainer(trainerId, trainerFromList) {
         var initData = tg ? tg.initData : '';
         var q = 'trainer_id=' + encodeURIComponent(trainerId);
@@ -2439,6 +3007,7 @@
           var tn = trainerName(trainerFromList);
           if (tn) q += '&trainer_name=' + encodeURIComponent(tn);
         }
+        if (state.serviceId != null) q += '&service_id=' + encodeURIComponent(state.serviceId);
         if (initData) q += '&init_data=' + encodeURIComponent(initData);
         var headers = {};
         if (initData) headers['X-Telegram-Init-Data'] = initData;
@@ -2564,13 +3133,21 @@
           services.forEach(function(s) {
             var serviceName = s.service_name || '—';
             var priceText = formatCatalogServicePrice(s);
-            html += '<div class="trainer-detail-service">';
+            var sid = s.service_id != null ? Number(s.service_id) : NaN;
+            var matchCatalog =
+              services.length > 1 &&
+              state.serviceId != null &&
+              !isNaN(sid) &&
+              Number(state.serviceId) === sid;
+            html += '<div class="trainer-detail-service' + (matchCatalog ? ' trainer-detail-service--catalog-selected' : '') + '">';
             html += '<span class="trainer-detail-service-name">' + serviceName + '</span>';
             html += '<span class="trainer-detail-service-price">' + priceText + '</span>';
             html += '</div>';
           });
           html += '</div>';
         }
+        var htmlTop = html;
+        html = '';
         
         var eduRows = t.education_entries;
         var profileEduDetail = (p.education && typeof p.education === 'string' && p.education.trim())
@@ -2613,8 +3190,11 @@
         }
         var photoSourceLabel = (detailPhoto && detailPhoto._source === 'cdn') ? 'Фото: через CDN' : (detailPhoto && detailPhoto._source === 'direct') ? 'Фото: напрямую с S3' : 'Фото: через сервер';
         html += '<div class="photo-source-hint trainer-detail-photo-source">' + photoSourceLabel + '</div>';
-        document.getElementById('trainerDetailContent').innerHTML = html;
+        document.getElementById('trainerDetailTop').innerHTML = htmlTop;
+        document.getElementById('trainerDetailRest').innerHTML = html;
+        document.getElementById('trainerDetailGroups').innerHTML = '';
         bindTrainerDetailPhotoWrap();
+        loadTrainingGroupsBlock(t);
         document.getElementById('trainerDetailSlots').innerHTML = '<div class="slots-empty">Загрузка слотов…</div>';
         document.getElementById('trainerDetailActions').innerHTML = '';
         var canBook = t.can_book === true;
@@ -2684,7 +3264,8 @@
             for (var i = 0; i < showCount; i++) {
               var s = slots[i];
               slotsHtml += '<button type="button" class="slot-row" data-slot-index="' + i + '">' +
-                '<span>' + formatSlotLabel(s) + '</span><span>→</span></button>';
+                '<span class="slot-row-main"><span class="slot-row-line">' + formatSlotLabel(s) + '</span>' +
+                slotGroupSpotsPillHtml(s) + '</span><span>→</span></button>';
             }
             if (slots.length > showCount) {
               slotsHtml += '<button type="button" class="slot-row slot-row-more" id="btnShowAllSlots">Ещё слоты (' + (slots.length - showCount) + ') →</button>';
@@ -2695,7 +3276,7 @@
             btn.onclick = function() {
               var i = parseInt(btn.dataset.slotIndex, 10);
               state.selectedSlot = state.slotsForTrainer[i];
-              document.getElementById('bookingFormSlotLabel').textContent = 'Выбрано: ' + formatSlotLabel(state.selectedSlot);
+              document.getElementById('bookingFormSlotLabel').textContent = 'Выбрано: ' + formatSlotSelectionSummary(state.selectedSlot);
               document.getElementById('bookingComment').value = '';
               refreshClientPhoneForBookingForm(function() {
                 prefillBookingPhoneField();
@@ -2776,7 +3357,8 @@
             var s = item.slot;
             var i = item.index;
             html += '<button type="button" class="slot-card" data-slot-index="' + i + '">' +
-              '<span class="slot-time">' + (s.start_time || '') + '–' + (s.end_time || '') + '</span><span>→</span></button>';
+              '<span class="slot-card-body"><span class="slot-time">' + (s.start_time || '') + '–' + (s.end_time || '') + '</span>' +
+              slotGroupSpotsPillHtml(s) + '</span><span>→</span></button>';
           });
           
           html += '</div>';
@@ -2788,7 +3370,7 @@
           btn.onclick = function() {
             var i = parseInt(btn.dataset.slotIndex, 10);
             state.selectedSlot = state.slotsForTrainer[i];
-            document.getElementById('bookingFormSlotLabel').textContent = 'Выбрано: ' + formatSlotLabel(state.selectedSlot);
+            document.getElementById('bookingFormSlotLabel').textContent = 'Выбрано: ' + formatSlotSelectionSummary(state.selectedSlot);
             document.getElementById('bookingComment').value = '';
             refreshClientPhoneForBookingForm(function() {
               prefillBookingPhoneField();
@@ -2799,8 +3381,6 @@
           };
         });
       }
-
-      document.getElementById('backFromSlotPick').onclick = function() { showScreen('screenTrainerDetail'); };
 
       document.getElementById('btnSubmitBooking').onclick = function() {
         var slot = state.selectedSlot;
@@ -3009,7 +3589,7 @@
         if (!state.cityId || !state.serviceId) return;
         state.returnToSummary = true;
         state.offset = 0;
-        loadTrainers();
+        loadCatalogList();
         showScreen('screenTrainers');
       };
       document.getElementById('tabCatalog').onclick = function() { switchTab('catalog'); };
@@ -3019,7 +3599,7 @@
         if (state.cityId && state.serviceId) {
           state.returnToSummary = true;
           state.offset = 0;
-          loadTrainers();
+          loadCatalogList();
           showScreen('screenTrainers');
         } else {
           switchTab('catalog');
@@ -3031,14 +3611,6 @@
         showScreen('screenSummary');
       };
       document.getElementById('tabMyTrainerFromDetail').onclick = function() { /* already on my trainer card */ };
-
-      document.getElementById('backFromTrainers').onclick = function() {
-        if (state.returnToSummary) {
-          goBackToSummary();
-        } else {
-          showScreen('screenArena');
-        }
-      };
 
       function goBackToSummary() {
         state.returnToSummary = false;
@@ -3083,7 +3655,7 @@
               renderSummary();
               showScreen('screenSummary');
               switchTab(state.activeTab);
-              loadTrainers();
+              loadCatalogList();
             } else {
               loadCities();
               showScreen('screenCity');

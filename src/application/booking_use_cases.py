@@ -1,7 +1,9 @@
 """
 Booking use cases: create booking (slot + client_id, comment), list for trainer, pending notifications.
 """
+from collections import defaultdict
 from datetime import date, datetime, time, timedelta, timezone
+from urllib.parse import quote
 
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
@@ -22,8 +24,11 @@ try:
 except ImportError:
     from backports.zoneinfo import ZoneInfo  # type: ignore[no-redef]
 
-# Correlated subquery for trainer-facing "Арена" text (alias `b` = bookings row).
-# Prefer booking.arena_id when set; otherwise aggregate trainer_arenas (legacy rows).
+# Seats counted toward slot capacity (group lessons).
+BOOKING_STATUSES_OCCUPYING_SEAT = ("pending", "confirmed")
+
+# Correlated subquery for trainer-facing "Арена" text (aliases `b` = booking, `s` = slot).
+# Prefer booking.arena_id, then slot.arena_id (group / fixed-venue slots), else all trainer_arenas (legacy).
 class ServicePriceVariantRequired(Exception):
     """Trainer has multiple price tiers for this service; client must choose service_price_variant_id."""
 
@@ -81,8 +86,35 @@ async def _resolve_service_booking_price(
     return (None, None, None)
 
 
+async def _resolve_trainer_group_slot_booking_price(
+    session: AsyncSession,
+    trainer_id: int,
+    service_id: int,
+) -> tuple[int | None, int | None, str | None]:
+    """
+    Any booking into a group slot (trainer or client catalog): no tier — snapshot is
+    trainer_services.price_cents only (per-seat; child/adult variants do not apply).
+    """
+    r = await session.execute(
+        text(
+            """
+            SELECT price_cents FROM trainer_services
+            WHERE trainer_id = :tid AND service_id = :sid
+            """
+        ),
+        {"tid": trainer_id, "sid": service_id},
+    )
+    row = r.fetchone()
+    if not row:
+        return (None, None, None)
+    pc = row[0]
+    booking_price_cents = int(pc) if pc is not None else None
+    return (None, booking_price_cents, None)
+
+
 SQL_BOOKING_ARENA_DISPLAY = """COALESCE(
     (SELECT a.name FROM arenas a WHERE a.id = b.arena_id),
+    (SELECT a.name FROM arenas a WHERE a.id = s.arena_id),
     (
         SELECT string_agg(a.name, ', ' ORDER BY a.name)
         FROM trainer_arenas ta
@@ -91,11 +123,54 @@ SQL_BOOKING_ARENA_DISPLAY = """COALESCE(
     )
 )"""
 
+# Single arena id for venue/map: booking override, then slot (fixed-venue / group), then trainer defaults.
+SQL_BOOKING_RESOLVED_ARENA_ID = """COALESCE(
+    b.arena_id,
+    s.arena_id,
+    (SELECT t.primary_arena_id FROM trainers t WHERE t.id = b.trainer_id),
+    (SELECT MIN(ta.arena_id) FROM trainer_arenas ta WHERE ta.trainer_id = b.trainer_id)
+)"""
+
 
 def _normalize_trainer_arenas_display(raw: str | None) -> str | None:
     """Single normalization for arenas_str / venue_label (matches list_bookings_for_trainer output)."""
     s = (raw or "").strip()
     return s if s else None
+
+
+async def _count_occupying_bookings(session: AsyncSession, slot_id: int) -> int:
+    """How many pending/confirmed bookings currently hold a seat on this slot (group-capacity)."""
+    r = await session.execute(
+        text(
+            """
+            SELECT COUNT(*) FROM bookings
+            WHERE slot_id = :sid AND status IN ('pending', 'confirmed')
+            """
+        ),
+        {"sid": slot_id},
+    )
+    row = r.fetchone()
+    return int(row[0]) if row else 0
+
+
+async def sync_slot_status_for_occupancy(session: AsyncSession, slot_id: int) -> None:
+    """
+    Set slot to 'booked' when pending+confirmed count >= capacity, else 'available'.
+    Call after booking create/cancel/decline within the same transaction.
+    """
+    r = await session.execute(
+        text("SELECT capacity FROM slots WHERE id = :sid"),
+        {"sid": slot_id},
+    )
+    row = r.fetchone()
+    if not row:
+        return
+    cap = max(1, int(row[0]))
+    cnt = await _count_occupying_bookings(session, slot_id)
+    if cnt >= cap:
+        await session.execute(text("UPDATE slots SET status = 'booked' WHERE id = :id"), {"id": slot_id})
+    else:
+        await session.execute(text("UPDATE slots SET status = 'available' WHERE id = :id"), {"id": slot_id})
 
 
 def is_slot_end_in_past_local(slot_date: date | None, end_time: time | None) -> bool:
@@ -158,9 +233,12 @@ async def create_booking(
     arena_id: int | None = None,
     service_price_variant_id: int | None = None,
     strict_service_price_variant: bool = False,
+    *,
+    allow_overbook: bool = False,
 ) -> int | None:
     """
-    Create booking: insert row and set slot status to 'booked'. service_id required (must be in trainer_services).
+    Create booking: insert row; slot becomes 'booked' only when pending+confirmed count reaches capacity.
+    service_id required (must be in trainer_services).
     Status semantics:
     - Client-initiated bookings start as 'pending' (trainer should confirm/decline).
     - Trainer-initiated bookings (created_by_trainer=True) start as 'confirmed'.
@@ -173,20 +251,33 @@ async def create_booking(
     Returns booking id or None if slot not available / wrong trainer / service not offered by trainer.
 
     Concurrency: two parallel bookings on the same slot are serialized with FOR UPDATE on the slot row
-    (pessimistic lock until commit). The second transaction waits, then sees status != 'available' and
-    returns None — no reliance on unique constraint errors for the happy path. (Unique on slot_id remains
-    defense in depth.)
+    (pessimistic lock until commit). Second client waits, then sees full capacity and returns None.
     """
     r = await session.execute(
         text("""
-            SELECT id FROM slots
-            WHERE id = :sid AND trainer_id = :tid AND status = 'available'
+            SELECT id, capacity, status, service_id, arena_id FROM slots
+            WHERE id = :sid AND trainer_id = :tid AND status != 'cancelled'
             FOR UPDATE
         """),
         {"sid": slot_id, "tid": trainer_id},
     )
-    if not r.fetchone():
+    slot_row = r.fetchone()
+    if not slot_row:
         return None
+    capacity = max(1, int(slot_row[1]))
+    if (slot_row[2] or "").strip().lower() == "cancelled":
+        return None
+    slot_service_id = slot_row[3]
+    slot_arena_id: int | None = int(slot_row[4]) if slot_row[4] is not None else None
+    if capacity > 1:
+        if slot_service_id is None:
+            return None
+        if int(service_id) != int(slot_service_id):
+            return None
+    cnt = await _count_occupying_bookings(session, slot_id)
+    if cnt >= capacity:
+        if not (allow_overbook and created_by_trainer and capacity > 1):
+            return None
     r = await session.execute(
         text("""
             SELECT 1 FROM trainer_services
@@ -197,38 +288,69 @@ async def create_booking(
     if not r.fetchone():
         return None
     try:
-        variant_id_resolved, booking_price_cents, price_tier_kind = await _resolve_service_booking_price(
-            session,
-            trainer_id,
-            service_id,
-            service_price_variant_id,
-            strict_variant=strict_service_price_variant,
-        )
+        if capacity > 1:
+            # Group slot: one seat price from trainer_services base row; catalog tiers (child/adult) do not apply.
+            variant_id_resolved, booking_price_cents, price_tier_kind = (
+                await _resolve_trainer_group_slot_booking_price(session, trainer_id, service_id)
+            )
+        else:
+            variant_id_resolved, booking_price_cents, price_tier_kind = await _resolve_service_booking_price(
+                session,
+                trainer_id,
+                service_id,
+                service_price_variant_id,
+                strict_variant=strict_service_price_variant,
+            )
     except ServicePriceVariantRequired:
         raise
-    if service_price_variant_id is not None and variant_id_resolved is None:
-        return None
-    resolved_arena: int | None = arena_id
-    if resolved_arena is None:
-        rpa = await session.execute(
-            text("SELECT primary_arena_id FROM trainers WHERE id = :tid"),
-            {"tid": trainer_id},
-        )
-        row_pa = rpa.fetchone()
-        resolved_arena = row_pa[0] if row_pa else None
+    if not (created_by_trainer and capacity > 1):
+        if service_price_variant_id is not None and variant_id_resolved is None:
+            return None
+    # Group slots: venue is fixed on the slot (set when the trainer created the slot); ignore request arena/session.
+    if capacity > 1:
+        resolved_arena = slot_arena_id
         if resolved_arena is None:
-            rmin = await session.execute(
-                text("SELECT MIN(arena_id) FROM trainer_arenas WHERE trainer_id = :tid"),
+            rpa = await session.execute(
+                text("SELECT primary_arena_id FROM trainers WHERE id = :tid"),
                 {"tid": trainer_id},
             )
-            resolved_arena = rmin.scalar()
+            row_pa = rpa.fetchone()
+            resolved_arena = row_pa[0] if row_pa else None
+            if resolved_arena is None:
+                rmin = await session.execute(
+                    text("SELECT MIN(arena_id) FROM trainer_arenas WHERE trainer_id = :tid"),
+                    {"tid": trainer_id},
+                )
+                resolved_arena = rmin.scalar()
+        else:
+            rchk = await session.execute(
+                text("SELECT 1 FROM trainer_arenas WHERE trainer_id = :tid AND arena_id = :aid"),
+                {"tid": trainer_id, "aid": resolved_arena},
+            )
+            if not rchk.fetchone():
+                return None
     else:
-        rchk = await session.execute(
-            text("SELECT 1 FROM trainer_arenas WHERE trainer_id = :tid AND arena_id = :aid"),
-            {"tid": trainer_id, "aid": resolved_arena},
-        )
-        if not rchk.fetchone():
-            return None
+        resolved_arena: int | None = arena_id
+        if resolved_arena is None:
+            rpa = await session.execute(
+                text("SELECT primary_arena_id FROM trainers WHERE id = :tid"),
+                {"tid": trainer_id},
+            )
+            row_pa = rpa.fetchone()
+            resolved_arena = row_pa[0] if row_pa else None
+            if resolved_arena is None:
+                rmin = await session.execute(
+                    text("SELECT MIN(arena_id) FROM trainer_arenas WHERE trainer_id = :tid"),
+                    {"tid": trainer_id},
+                )
+                resolved_arena = rmin.scalar()
+        else:
+            rchk = await session.execute(
+                text("SELECT 1 FROM trainer_arenas WHERE trainer_id = :tid AND arena_id = :aid"),
+                {"tid": trainer_id, "aid": resolved_arena},
+            )
+            if not rchk.fetchone():
+                return None
     try:
         r = await session.execute(
             text("""
@@ -257,13 +379,9 @@ async def create_booking(
         )
         (booking_id,) = r.fetchone()
     except IntegrityError:
-        # Rare: unique(slot_id) if lock was bypassed; keep API predictable (no 500 on race).
         await session.rollback()
         return None
-    await session.execute(
-        text("UPDATE slots SET status = 'booked' WHERE id = :id"),
-        {"id": slot_id},
-    )
+    await sync_slot_status_for_occupancy(session, slot_id)
     r_sd = await session.execute(
         text("SELECT slot_date, end_time FROM slots WHERE id = :sid"),
         {"sid": slot_id},
@@ -580,7 +698,7 @@ async def get_trainer_booking_detail_payload(
         text(
             """
             SELECT b.id, b.slot_id,
-                   c.telegram_id, c.phone, c.first_name AS client_first_name, c.last_name AS client_last_name,
+                   c.telegram_id, c.telegram_username, c.phone, c.first_name AS client_first_name, c.last_name AS client_last_name,
                    b.client_comment, b.created_at,
                    s.slot_date, s.start_time, s.end_time,
                    (SELECT COUNT(*) + 1
@@ -612,18 +730,19 @@ async def get_trainer_booking_detail_payload(
         "id": row[0],
         "slot_id": row[1],
         "client_telegram_id": row[2],
-        "client_phone": row[3] or "",
-        "client_first_name": row[4],
-        "client_last_name": row[5],
-        "client_comment": row[6],
-        "created_at": row[7],
-        "slot_date": row[8],
-        "start_time": row[9],
-        "end_time": row[10],
-        "session_num": row[11],
-        "status": (row[12] or "confirmed").strip(),
-        "services_str": (row[13] or "").strip() or None,
-        "arenas_str": _normalize_trainer_arenas_display(row[14] if len(row) > 14 else None),
+        "client_telegram_username": (row[3] or "").strip() or None,
+        "client_phone": row[4] or "",
+        "client_first_name": row[5],
+        "client_last_name": row[6],
+        "client_comment": row[7],
+        "created_at": row[8],
+        "slot_date": row[9],
+        "start_time": row[10],
+        "end_time": row[11],
+        "session_num": row[12],
+        "status": (row[13] or "confirmed").strip(),
+        "services_str": (row[14] or "").strip() or None,
+        "arenas_str": _normalize_trainer_arenas_display(row[15] if len(row) > 15 else None),
     }
 
 
@@ -642,7 +761,7 @@ async def list_bookings_for_trainer(
         text("""
             WITH upcoming AS (
                 SELECT b.id, b.slot_id, b.client_id,
-                       c.telegram_id, c.phone, c.first_name AS client_first_name, c.last_name AS client_last_name,
+                       c.telegram_id, c.telegram_username, c.phone, c.first_name AS client_first_name, c.last_name AS client_last_name,
                        b.client_comment, b.created_at,
                        s.slot_date, s.start_time, s.end_time,
                        (SELECT COUNT(*) + 1
@@ -656,17 +775,18 @@ async def list_bookings_for_trainer(
                        srv.name AS services_str,
                        """
             + SQL_BOOKING_ARENA_DISPLAY
-            + """ AS arenas_str
+            + """ AS arenas_str,
+                       s.capacity AS slot_capacity
                 FROM bookings b
                 JOIN clients c ON c.id = b.client_id
                 JOIN slots s ON s.id = b.slot_id
                 JOIN services srv ON srv.id = b.service_id
-                WHERE b.trainer_id = :tid AND s.status = 'booked' AND s.slot_date >= CURRENT_DATE
+                WHERE b.trainer_id = :tid AND s.status IN ('available', 'booked') AND s.slot_date >= CURRENT_DATE
                   AND b.status IN ('pending', 'confirmed')
             )
-            SELECT id, slot_id, telegram_id, phone, client_first_name, client_last_name,
+            SELECT id, slot_id, telegram_id, telegram_username, phone, client_first_name, client_last_name,
                    client_comment, created_at, slot_date, start_time, end_time,
-                   session_num, services_str, arenas_str, status
+                   session_num, services_str, arenas_str, status, slot_capacity
             FROM upcoming
             ORDER BY slot_date ASC, start_time ASC
             LIMIT :lim
@@ -679,18 +799,20 @@ async def list_bookings_for_trainer(
             "id": row[0],
             "slot_id": row[1],
             "client_telegram_id": row[2],
-            "client_phone": row[3] or "",
-            "client_first_name": row[4],
-            "client_last_name": row[5],
-            "client_comment": row[6],
-            "created_at": row[7],
-            "slot_date": row[8],
-            "start_time": row[9],
-            "end_time": row[10],
-            "session_num": row[11],
-            "services_str": (row[12] or "").strip() or None,
-            "arenas_str": _normalize_trainer_arenas_display(row[13] if len(row) > 13 else None),
-            "status": (row[14] or "confirmed").strip() if len(row) > 14 else "confirmed",
+            "client_telegram_username": (row[3] or "").strip() or None,
+            "client_phone": row[4] or "",
+            "client_first_name": row[5],
+            "client_last_name": row[6],
+            "client_comment": row[7],
+            "created_at": row[8],
+            "slot_date": row[9],
+            "start_time": row[10],
+            "end_time": row[11],
+            "session_num": row[12],
+            "services_str": (row[13] or "").strip() or None,
+            "arenas_str": _normalize_trainer_arenas_display(row[14] if len(row) > 14 else None),
+            "status": (row[15] or "confirmed").strip() if len(row) > 15 else "confirmed",
+            "slot_capacity": max(1, int(row[16])) if len(row) > 16 and row[16] is not None else 1,
         }
         for row in rows
     ]
@@ -703,9 +825,9 @@ async def active_booking_summaries_by_slot_for_trainer_range(
     to_date: date,
 ) -> dict[int, dict]:
     """
-    For booked slots in a date range: slot_id -> display fields for schedule UI.
-    Uses SQL_BOOKING_ARENA_DISPLAY so venue_label matches booking detail arenas_str.
-    Includes completed bookings (past conducted sessions) so schedule history stays clickable.
+    For slots with at least one booking in range: slot_id -> display fields for schedule UI.
+    Group slots: aggregated client_preview and booking_count; booking_id is first id for drill-down.
+    ``bookings`` lists pending/confirmed rows for the group hub UI (booking_id, client_preview, status).
     """
     r = await session.execute(
         text(
@@ -716,32 +838,66 @@ async def active_booking_summaries_by_slot_for_trainer_range(
                    """
             + SQL_BOOKING_ARENA_DISPLAY
             + """ AS arenas_str,
-                   c.first_name AS client_first_name, c.last_name AS client_last_name, c.phone AS client_phone
+                   c.first_name AS client_first_name, c.last_name AS client_last_name, c.phone AS client_phone,
+                   s.capacity
             FROM bookings b
             JOIN slots s ON s.id = b.slot_id
             JOIN clients c ON c.id = b.client_id
             JOIN services srv ON srv.id = b.service_id
             WHERE b.trainer_id = :tid
               AND s.slot_date >= :from_d AND s.slot_date <= :to_d
-              AND s.status = 'booked'
+              AND s.status IN ('available', 'booked')
               AND b.status IN ('pending', 'confirmed', 'completed')
+            ORDER BY b.slot_id, b.id
         """),
         {"tid": trainer_id, "from_d": from_date, "to_d": to_date},
     )
-    out: dict[int, dict] = {}
+    groups: dict[int, list] = defaultdict(list)
     for row in r.fetchall():
-        slot_id = int(row[0])
-        first = (row[5] or "").strip() if row[5] else ""
-        last = (row[6] or "").strip() if row[6] else ""
-        phone = (row[7] or "").strip() if row[7] else ""
-        name = " ".join(p for p in (first, last) if p).strip()
-        client_preview = name or phone or "Клиент"
+        groups[int(row[0])].append(row)
+
+    out: dict[int, dict] = {}
+    for slot_id, rows in groups.items():
+        first_row = rows[0]
+        capacity = max(1, int(first_row[8]))
+        previews: list[str] = []
+        for r_ in rows:
+            fn = (r_[5] or "").strip() if r_[5] else ""
+            ln = (r_[6] or "").strip() if r_[6] else ""
+            ph = (r_[7] or "").strip() if r_[7] else ""
+            name = " ".join(p for p in (fn, ln) if p).strip()
+            previews.append(name or ph or "Клиент")
+        n = len(rows)
+        if n <= 2:
+            client_preview = ", ".join(previews)
+        else:
+            client_preview = ", ".join(previews[:2]) + f" (+{n - 2})"
+        booking_entries: list[dict] = []
+        for r_ in rows:
+            st_raw = (r_[2] or "confirmed").strip()
+            if st_raw.lower() not in ("pending", "confirmed"):
+                continue
+            bid = int(r_[1])
+            fn = (r_[5] or "").strip() if r_[5] else ""
+            ln = (r_[6] or "").strip() if r_[6] else ""
+            ph = (r_[7] or "").strip() if r_[7] else ""
+            name = " ".join(p for p in (fn, ln) if p).strip()
+            booking_entries.append(
+                {
+                    "booking_id": bid,
+                    "client_preview": name or ph or "Клиент",
+                    "status": st_raw,
+                }
+            )
         out[slot_id] = {
-            "booking_id": int(row[1]),
-            "status": (row[2] or "confirmed").strip(),
-            "services_str": ((row[3] or "").strip() or None),
-            "venue_label": _normalize_trainer_arenas_display(row[4]),
+            "booking_id": int(first_row[1]),
+            "status": (first_row[2] or "confirmed").strip(),
+            "services_str": ((first_row[3] or "").strip() or None),
+            "venue_label": _normalize_trainer_arenas_display(first_row[4]),
             "client_preview": client_preview,
+            "booking_count": n,
+            "capacity": capacity,
+            "bookings": booking_entries,
         }
     return out
 
@@ -814,15 +970,98 @@ async def list_trainer_clients(
     ]
 
 
+async def get_trainer_client_for_card(
+    session: AsyncSession,
+    trainer_id: int,
+    client_id: int,
+) -> dict | None:
+    """
+    One client row for the trainer mini-app card when opened by id (e.g. from a training group).
+    Allowed if the client has a non-cancelled booking with this trainer or is an active/trial group member.
+    """
+    r = await session.execute(
+        text(
+            """
+            SELECT
+              (
+                EXISTS (
+                  SELECT 1 FROM bookings b
+                  WHERE b.trainer_id = :tid AND b.client_id = :cid
+                    AND b.status NOT IN ('cancelled', 'declined')
+                )
+                OR EXISTS (
+                  SELECT 1 FROM training_group_members m
+                  INNER JOIN training_groups g ON g.id = m.training_group_id
+                  WHERE g.trainer_id = :tid AND m.client_id = :cid
+                    AND m.status IN ('active', 'trial')
+                )
+              ) AS allowed,
+              c.id,
+              c.telegram_id,
+              c.telegram_username,
+              c.phone,
+              c.first_name,
+              c.last_name
+            FROM clients c
+            WHERE c.id = :cid
+            """
+        ),
+        {"tid": trainer_id, "cid": client_id},
+    )
+    row = r.fetchone()
+    if not row or not row[0]:
+        return None
+    r2 = await session.execute(
+        text(
+            """
+            SELECT
+              (SELECT s.slot_date
+               FROM bookings b
+               JOIN slots s ON s.id = b.slot_id
+               WHERE b.client_id = :cid AND b.trainer_id = :tid
+                 AND b.status NOT IN ('cancelled', 'declined')
+               ORDER BY s.slot_date DESC, s.start_time DESC NULLS LAST
+               LIMIT 1) AS last_date,
+              (SELECT s.start_time
+               FROM bookings b
+               JOIN slots s ON s.id = b.slot_id
+               WHERE b.client_id = :cid AND b.trainer_id = :tid
+                 AND b.status NOT IN ('cancelled', 'declined')
+               ORDER BY s.slot_date DESC, s.start_time DESC NULLS LAST
+               LIMIT 1) AS last_start,
+              (SELECT MIN(s2.slot_date)
+               FROM bookings b2
+               JOIN slots s2 ON s2.id = b2.slot_id
+               WHERE b2.client_id = :cid AND b2.trainer_id = :tid
+                 AND b2.status NOT IN ('cancelled', 'declined')) AS first_date
+            """
+        ),
+        {"tid": trainer_id, "cid": client_id},
+    )
+    d = r2.fetchone()
+    return {
+        "id": row[1],
+        "telegram_id": row[2],
+        "telegram_username": row[3] or "",
+        "phone": row[4] or "",
+        "first_name": row[5] or "",
+        "last_name": row[6] or "",
+        "last_date": d[0] if d else None,
+        "last_start": d[1] if d else None,
+        "first_date": d[2] if d else None,
+    }
+
+
 async def list_bookings_for_client(
     session: AsyncSession,
     client_telegram_id: int,
     limit: int = 50,
 ) -> list[dict]:
     """List client's active (upcoming) bookings only — pending, not completed/cancelled; slot still booked.
-    Includes arena (one per trainer): name, address, map_link (Yandex) from coords; place_display for bot."""
+    Arena: booking.arena_id, then slot.arena_id, then trainer primary / MIN(trainer_arenas); not arbitrary ta row."""
     r = await session.execute(
-        text("""
+        text(
+            """
             SELECT b.id, b.slot_id, b.trainer_id, b.service_id, b.client_comment, b.status,
                    s.slot_date, s.start_time, s.end_time,
                    (EXTRACT(EPOCH FROM (s.end_time - s.start_time)) / 60)::int AS duration_minutes,
@@ -844,17 +1083,18 @@ async def list_bookings_for_client(
             LEFT JOIN trainer_profiles p ON p.trainer_id = b.trainer_id
             LEFT JOIN LATERAL (
                 SELECT a2.name, a2.address, a2.latitude, a2.longitude
-                FROM trainer_arenas ta
-                JOIN arenas a2 ON a2.id = ta.arena_id
-                WHERE ta.trainer_id = b.trainer_id
-                LIMIT 1
+                FROM arenas a2
+                WHERE a2.id = ("""
+            + SQL_BOOKING_RESOLVED_ARENA_ID
+            + """)
             ) a ON true
             WHERE c.telegram_id = :ctid
-              AND s.status = 'booked'
+              AND s.status IN ('available', 'booked')
               AND b.status IN ('pending', 'confirmed')
             ORDER BY s.slot_date ASC, s.start_time ASC
             LIMIT :lim
-        """),
+        """
+        ),
         {"ctid": client_telegram_id, "lim": limit},
     )
     rows = r.fetchall()
@@ -923,11 +1163,10 @@ async def list_trainer_client_history(
             JOIN services srv ON srv.id = b.service_id
             LEFT JOIN LATERAL (
                 SELECT a.name
-                FROM trainer_arenas ta
-                JOIN arenas a ON a.id = ta.arena_id
-                WHERE ta.trainer_id = b.trainer_id
-                ORDER BY ta.arena_id
-                LIMIT 1
+                FROM arenas a
+                WHERE a.id = ("""
+            + SQL_BOOKING_RESOLVED_ARENA_ID
+            + """)
             ) a2 ON true
             WHERE b.trainer_id = :tid
               AND b.client_id = :cid
@@ -996,10 +1235,11 @@ async def get_trainer_client_next_booking(
             JOIN slots s ON s.id = b.slot_id
             JOIN services srv ON srv.id = b.service_id
             LEFT JOIN LATERAL (
-                SELECT a.name FROM trainer_arenas ta
-                JOIN arenas a ON a.id = ta.arena_id
-                WHERE ta.trainer_id = b.trainer_id
-                ORDER BY ta.arena_id LIMIT 1
+                SELECT a.name
+                FROM arenas a
+                WHERE a.id = ("""
+            + SQL_BOOKING_RESOLVED_ARENA_ID
+            + """)
             ) a2 ON true
             WHERE b.trainer_id = :tid
               AND b.client_id = :cid
@@ -1060,10 +1300,9 @@ async def get_bookings_pending_notification(session: AsyncSession) -> list[dict]
                    TRIM(COALESCE(c.first_name, '') || ' ' || COALESCE(c.last_name, '')) AS client_name,
                    COALESCE(srv.name, '—') AS service_name,
                    COALESCE(ci.name, ci2.name, '—') AS city_name,
-                   (SELECT string_agg(a.name, ', ' ORDER BY a.name)
-                    FROM trainer_arenas ta
-                    JOIN arenas a ON a.id = ta.arena_id
-                    WHERE ta.trainer_id = b.trainer_id) AS arenas_str
+                   """
+            + SQL_BOOKING_ARENA_DISPLAY
+            + """ AS arenas_str
             FROM bookings b
             JOIN clients c ON c.id = b.client_id
             JOIN slots s ON s.id = b.slot_id
@@ -1108,25 +1347,25 @@ async def mark_booking_notified(session: AsyncSession, booking_id: int) -> None:
 
 async def cancel_booking(session: AsyncSession, booking_id: int, trainer_id: int) -> bool:
     """
-    Cancel booking: set slot back to 'available', booking status to 'cancelled', cancel reminders, enqueue client notification.
+    Cancel booking: booking status to 'cancelled', slot occupancy synced (group slots may stay partially filled).
     Returns True if booking was found and cancelled.
     """
     r = await session.execute(
         text("""
-            UPDATE slots s
-            SET status = 'available'
-            FROM bookings b
-            WHERE b.slot_id = s.id AND b.id = :bid AND b.trainer_id = :tid AND s.status = 'booked'
-            RETURNING s.id
+            SELECT b.slot_id FROM bookings b
+            WHERE b.id = :bid AND b.trainer_id = :tid AND b.status IN ('pending', 'confirmed')
         """),
         {"bid": booking_id, "tid": trainer_id},
     )
-    if not r.fetchone():
+    row = r.fetchone()
+    if not row:
         return False
+    slot_id = int(row[0])
     await session.execute(
         text("UPDATE bookings SET status = 'cancelled' WHERE id = :bid"),
         {"bid": booking_id},
     )
+    await sync_slot_status_for_occupancy(session, slot_id)
     await session.execute(
         text("UPDATE reminders SET status = 'cancelled' WHERE booking_id = :bid"),
         {"bid": booking_id},
@@ -1158,7 +1397,8 @@ async def cancel_booking_by_client(
             JOIN clients c ON c.id = b.client_id AND c.telegram_id = :ctid
             JOIN slots s ON s.id = b.slot_id
             JOIN trainers t ON t.id = b.trainer_id
-            WHERE b.id = :bid AND b.status IN ('pending', 'confirmed') AND s.status = 'booked'
+            WHERE b.id = :bid AND b.status IN ('pending', 'confirmed')
+              AND s.status IN ('available', 'booked')
         """),
         {"bid": booking_id, "ctid": client_telegram_id},
     )
@@ -1175,18 +1415,16 @@ async def cancel_booking_by_client(
 
     r = await session.execute(
         text("""
-            UPDATE slots s
-            SET status = 'available'
-            FROM bookings b
+            SELECT b.slot_id FROM bookings b
             JOIN clients c ON c.id = b.client_id AND c.telegram_id = :ctid
-            WHERE b.slot_id = s.id AND b.id = :bid AND s.status = 'booked'
-              AND b.status IN ('pending', 'confirmed')
-            RETURNING s.id
+            WHERE b.id = :bid AND b.status IN ('pending', 'confirmed')
         """),
         {"bid": booking_id, "ctid": client_telegram_id},
     )
-    if not r.fetchone():
+    row_slot = r.fetchone()
+    if not row_slot:
         return None
+    slot_id_cancel = int(row_slot[0])
     await session.execute(
         text("""
             UPDATE bookings
@@ -1195,6 +1433,7 @@ async def cancel_booking_by_client(
         """),
         {"bid": booking_id, "reason": reason_val},
     )
+    await sync_slot_status_for_occupancy(session, slot_id_cancel)
     await session.execute(
         text("UPDATE reminders SET status = 'cancelled' WHERE booking_id = :bid"),
         {"bid": booking_id},
@@ -1231,7 +1470,7 @@ async def confirm_booking(session: AsyncSession, booking_id: int, trainer_id: in
             WHERE b.slot_id = s.id
               AND b.id = :bid
               AND b.trainer_id = :tid
-              AND s.status = 'booked'
+              AND s.status IN ('available', 'booked')
               AND b.status = 'pending'
             RETURNING b.id
             """
@@ -1246,6 +1485,7 @@ async def confirm_booking(session: AsyncSession, booking_id: int, trainer_id: in
         text(
             """
             SELECT b.id, b.slot_id, b.client_id, c.telegram_id, COALESCE(c.phone, '') AS client_phone,
+                   TRIM(COALESCE(c.first_name, '') || ' ' || COALESCE(c.last_name, '')) AS client_name,
                    b.client_comment, b.created_at, s.slot_date, s.start_time, s.end_time,
                    COALESCE(NULLIF(TRIM(srv.name), ''), '') AS service_name,
                    COALESCE(b.booking_price_cents, ts.price_cents) AS price_cents_effective,
@@ -1253,7 +1493,8 @@ async def confirm_booking(session: AsyncSession, booking_id: int, trainer_id: in
                    ar.name AS arena_name,
                    ar.address AS arena_address,
                    ar.latitude AS arena_lat,
-                   ar.longitude AS arena_lon
+                   ar.longitude AS arena_lon,
+                   (SELECT t.telegram_id FROM trainers t WHERE t.id = b.trainer_id) AS trainer_telegram_id
             FROM bookings b
             JOIN clients c ON c.id = b.client_id
             JOIN slots s ON s.id = b.slot_id
@@ -1264,6 +1505,7 @@ async def confirm_booking(session: AsyncSession, booking_id: int, trainer_id: in
                 FROM arenas a
                 WHERE a.id = COALESCE(
                     b.arena_id,
+                    s.arena_id,
                     (SELECT t.primary_arena_id FROM trainers t WHERE t.id = b.trainer_id),
                     (SELECT MIN(ta.arena_id) FROM trainer_arenas ta WHERE ta.trainer_id = b.trainer_id)
                 )
@@ -1277,33 +1519,41 @@ async def confirm_booking(session: AsyncSession, booking_id: int, trainer_id: in
     await session.commit()
     if not row2:
         return None
-    arena_lat, arena_lon = row2[15], row2[16]
+    arena_lat, arena_lon = row2[16], row2[17]
+    trainer_tid = row2[18]
     map_link: str | None = None
     if arena_lat is not None and arena_lon is not None:
         map_link = f"https://yandex.ru/maps/?pt={arena_lon},{arena_lat}&z=16"
-    an = (row2[13] or "").strip() if row2[13] else ""
-    aa = (row2[14] or "").strip() if row2[14] else ""
-    ptk = normalize_price_tier_kind(row2[12])
+    an = (row2[14] or "").strip() if row2[14] else ""
+    aa = (row2[15] or "").strip() if row2[15] else ""
+    if not map_link and aa:
+        map_link = f"https://yandex.ru/maps/?text={quote(aa)}"
+    elif not map_link and an:
+        map_link = f"https://yandex.ru/maps/?text={quote(an)}"
+    ptk = normalize_price_tier_kind(row2[13])
     tier_label = price_tier_label_ru(ptk) if ptk else None
-    sn = (row2[10] or "").strip() if row2[10] else ""
-    price_cents = row2[11]
+    sn = (row2[11] or "").strip() if row2[11] else ""
+    price_cents = row2[12]
+    cn_raw = (row2[5] or "").strip() if row2[5] else ""
     return {
         "id": row2[0],
         "slot_id": row2[1],
         "client_id": row2[2],
         "client_telegram_id": row2[3],
         "client_phone": row2[4] or "",
-        "client_comment": row2[5],
-        "created_at": row2[6],
-        "slot_date": row2[7],
-        "start_time": row2[8],
-        "end_time": row2[9],
+        "client_name": cn_raw or None,
+        "client_comment": row2[6],
+        "created_at": row2[7],
+        "slot_date": row2[8],
+        "start_time": row2[9],
+        "end_time": row2[10],
         "service_name": sn or None,
         "booking_price_cents": int(price_cents) if price_cents is not None else None,
         "price_tier_label": tier_label,
         "arena_name": an or None,
         "arena_address": aa or None,
         "map_link": map_link,
+        "trainer_telegram_id": int(trainer_tid) if trainer_tid is not None else None,
     }
 
 
@@ -1321,7 +1571,7 @@ async def decline_booking(
     r = await session.execute(
         text(
             """
-            SELECT b.id,
+            SELECT b.slot_id, b.id,
                    c.telegram_id,
                    COALESCE(c.phone, '') AS client_phone,
                    s.slot_date,
@@ -1333,7 +1583,7 @@ async def decline_booking(
             WHERE b.id = :bid
               AND b.trainer_id = :tid
               AND b.status = 'pending'
-              AND s.status = 'booked'
+              AND s.status IN ('available', 'booked')
             """
         ),
         {"bid": booking_id, "tid": trainer_id},
@@ -1341,25 +1591,12 @@ async def decline_booking(
     row = r.fetchone()
     if not row:
         return None
-
-    await session.execute(
-        text(
-            """
-            UPDATE slots s
-            SET status = 'available'
-            FROM bookings b
-            WHERE b.slot_id = s.id
-              AND b.id = :bid
-              AND b.trainer_id = :tid
-              AND s.status = 'booked'
-            """
-        ),
-        {"bid": booking_id, "tid": trainer_id},
-    )
+    slot_id_decl = int(row[0])
     await session.execute(
         text("UPDATE bookings SET status = 'declined' WHERE id = :bid"),
         {"bid": booking_id},
     )
+    await sync_slot_status_for_occupancy(session, slot_id_decl)
     await session.execute(
         text("UPDATE reminders SET status = 'cancelled' WHERE booking_id = :bid"),
         {"bid": booking_id},
@@ -1367,12 +1604,12 @@ async def decline_booking(
     await session.commit()
     invalidate_slots_for_trainer(trainer_id)
     return {
-        "id": row[0],
-        "client_telegram_id": row[1],
-        "client_phone": row[2] or "",
-        "slot_date": row[3],
-        "start_time": row[4],
-        "end_time": row[5],
+        "id": row[1],
+        "client_telegram_id": row[2],
+        "client_phone": row[3] or "",
+        "slot_date": row[4],
+        "start_time": row[5],
+        "end_time": row[6],
     }
 
 
@@ -1427,7 +1664,7 @@ async def list_bookings_pending_confirm_reminder(
             JOIN clients c ON c.id = b.client_id
             JOIN slots s ON s.id = b.slot_id
             WHERE b.status = 'pending'
-              AND s.status = 'booked'
+              AND s.status IN ('available', 'booked')
               AND (s.slot_date + s.start_time) > CURRENT_TIMESTAMP
               AND (s.slot_date + s.start_time) <= CURRENT_TIMESTAMP + INTERVAL '2 hours'
               AND b.trainer_confirm_reminder_sent_at IS NULL
@@ -1534,7 +1771,7 @@ async def list_bookings_to_complete(session: AsyncSession, limit: int = 50) -> l
             FROM bookings b
             JOIN clients c ON c.id = b.client_id
             JOIN slots s ON s.id = b.slot_id
-            WHERE b.status IN ('pending', 'confirmed') AND s.status = 'booked'
+            WHERE b.status IN ('pending', 'confirmed') AND s.status IN ('available', 'booked')
               AND (s.slot_date + s.end_time) < CURRENT_TIMESTAMP
             ORDER BY s.slot_date, s.end_time
             LIMIT :lim

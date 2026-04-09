@@ -314,6 +314,86 @@
       background: rgba(255, 59, 48, 0.15);
       color: var(--app-danger);
     }
+
+    /* Contextual hints under «Сводка» — pending bookings / unanswered requests (see renderHubSummaryHints). */
+    .hub-summary-hints {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin: 0 0 24px;
+    }
+    .hub-summary-hints[hidden] {
+      display: none !important;
+    }
+    .hub-summary-hint {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      width: 100%;
+      padding: 12px 14px;
+      border-radius: 14px;
+      border: 1px solid rgba(128, 128, 128, 0.14);
+      background: var(--tg-theme-secondary-bg-color);
+      text-align: left;
+      font-size: 14px;
+      font-weight: 600;
+      line-height: 1.35;
+      color: var(--tg-theme-text-color);
+      cursor: pointer;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .hub-is-dark .hub-summary-hint {
+      border-color: rgba(255, 255, 255, 0.08);
+    }
+    .hub-summary-hint:active {
+      transform: scale(0.99);
+    }
+    .hub-summary-hint--urgent {
+      border-color: rgba(245, 166, 35, 0.45);
+      background: linear-gradient(135deg, rgba(245, 166, 35, 0.14), var(--tg-theme-secondary-bg-color));
+    }
+    .hub-summary-hint--info {
+      border-color: rgba(90, 160, 255, 0.28);
+    }
+    .hub-summary-hint__chev {
+      flex-shrink: 0;
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--tg-theme-hint-color);
+      line-height: 1;
+    }
+
+    .hub-priority-actions {
+      margin-bottom: 20px;
+    }
+    .hub-quick-grid--priority {
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    @media (max-width: 360px) {
+      .hub-quick-grid--priority {
+        grid-template-columns: 1fr;
+      }
+    }
+    .hub-section-head--bookings-top {
+      margin-top: 0;
+      margin-bottom: 12px;
+    }
+    .hub-section-head--stats {
+      margin-top: 6px;
+      margin-bottom: 12px;
+    }
+    .hub-hero.hub-hero--compact .hub-hero-main {
+      padding: 18px 20px 22px;
+      margin-bottom: 14px;
+    }
+    .hub-hero.hub-hero--compact .hub-hero-title {
+      font-size: clamp(22px, 5.5vw, 28px);
+    }
+    .hub-hero.hub-hero--compact .hub-hero-subtitle {
+      font-size: 14px;
+    }
     /* Quick Actions Panel */
     .hub-quick-actions {
       margin-bottom: 28px;
@@ -487,15 +567,53 @@
       margin-top: 2px;
     }
     .hub-bookings-stack .slot-row .slot-meta {
-      display: flex;
-      align-items: center;
-      gap: 10px;
+      display: inline-flex;
+      flex-direction: column;
+      align-items: flex-end;
+      justify-content: flex-start;
+      gap: 6px;
       flex-shrink: 0;
+      max-width: 46%;
+      min-width: 0;
+    }
+    /* «Написать» под бейджем статуса; вторичная ссылка без «коробки» */
+    .hub-bookings-stack .hub-slot-msg {
+      font-size: 12px;
+      font-weight: 600;
+      padding: 0;
+      margin: 0;
+      border: none;
+      border-radius: 0;
+      background: transparent;
+      color: var(--tg-theme-hint-color);
+      cursor: pointer;
+      font-family: inherit;
+      line-height: 1.25;
+      white-space: nowrap;
+      text-decoration: underline;
+      text-decoration-color: rgba(245, 166, 35, 0.4);
+      text-underline-offset: 3px;
+      -webkit-appearance: none;
+      appearance: none;
+      flex-shrink: 0;
+    }
+    .hub-bookings-stack .hub-slot-msg:hover {
+      color: var(--tg-theme-button-color, #f5a623);
+      text-decoration-color: rgba(245, 166, 35, 0.75);
+    }
+    .hub-bookings-stack .hub-slot-msg:active {
+      opacity: 0.88;
+    }
+    .hub-bookings-stack .hub-slot-msg:focus-visible {
+      outline: 2px solid rgba(245, 166, 35, 0.55);
+      outline-offset: 2px;
+      border-radius: 4px;
     }
     .hub-bookings-stack .slot-row .slot-status {
       font-size: 12px;
       padding: 4px 10px;
       border-radius: 8px;
+      flex-shrink: 0;
     }
     .hub-bookings-stack .slot-row .slot-status.booked-confirmed {
       background: rgba(52, 199, 89, 0.2);
@@ -1068,8 +1186,40 @@
       </div>
     </section>
 
-    <!-- Genius Hero Block -->
-    <section class="hub-hero" aria-labelledby="heroTitle">
+    <div class="hub-priority-actions" id="hubPriorityActions" role="group" aria-label="Расписание и запись">
+      <div class="hub-quick-grid hub-quick-grid--priority">
+        <button type="button" class="hub-quick-action" id="hubBtnSchedule" data-priority-action="schedule">
+          <svg class="hub-quick-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <rect x="3" y="4" width="18" height="18" rx="2"/>
+            <path d="M16 2v4M8 2v4M3 10h18"/>
+          </svg>
+          <div class="hub-quick-text">
+            <div class="hub-quick-label">Расписание</div>
+            <div class="hub-quick-hint">Слоты и записи</div>
+          </div>
+        </button>
+        <button type="button" class="hub-quick-action" id="hubBtnBookClient" data-priority-action="book">
+          <svg class="hub-quick-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+            <circle cx="9" cy="7" r="4"/>
+            <line x1="19" y1="8" x2="19" y2="14"/>
+            <line x1="22" y1="11" x2="16" y2="11"/>
+          </svg>
+          <div class="hub-quick-text">
+            <div class="hub-quick-label">Записать клиента</div>
+            <div class="hub-quick-hint">Свободные слоты</div>
+          </div>
+        </button>
+      </div>
+    </div>
+
+    <div class="hub-section-head hub-section-head--bookings-top">
+      <div class="hub-section-title">Ближайшие записи</div>
+    </div>
+    <div id="bookingsBlock"></div>
+
+    <!-- Hero (приветствие) — скрыт, логика applyHubHero / syncHubHeroScheduleClick сохранена -->
+    <section class="hub-hero" id="hubHeroBanner" hidden aria-hidden="true">
       <button type="button" class="hub-hero-main" id="heroScheduleCta" disabled aria-describedby="heroSubtitle">
         <div class="hub-hero-inner">
           <div class="hub-hero-greeting" id="heroGreeting">Добро пожаловать</div>
@@ -1079,43 +1229,9 @@
       </button>
     </section>
 
-    <div id="onboardingStrip" class="onboarding-strip" style="display:none;" hidden>
-      <div class="onboarding-strip-head">
-        <h2 class="onboarding-strip-title">Первые шаги</h2>
-        <p class="onboarding-strip-lead">Профиль → слоты → первая запись. Ниже — статус каждого шага.</p>
-      </div>
-      <ol class="onboarding-steps">
-        <li class="onboarding-step" id="onboardingStepProfile">
-          <span class="onboarding-step-icon" id="onboardingIconProfile">1</span>
-          <div class="onboarding-step-body">
-            <div class="onboarding-step-name">Профиль и модерация</div>
-            <p class="onboarding-step-hint" id="onboardingHintProfile">Заполните анкету по критериям проверки.</p>
-          </div>
-          <button type="button" class="onboarding-step-cta" id="onboardingCtaProfile">Открыть</button>
-        </li>
-        <li class="onboarding-step" id="onboardingStepSlots">
-          <span class="onboarding-step-icon" id="onboardingIconSlots">2</span>
-          <div class="onboarding-step-body">
-            <div class="onboarding-step-name">Слоты в расписании</div>
-            <p class="onboarding-step-hint" id="onboardingHintSlots">Добавьте доступное время, чтобы клиенты могли записаться.</p>
-          </div>
-          <button type="button" class="onboarding-step-cta" id="onboardingCtaSlots">Расписание</button>
-        </li>
-        <li class="onboarding-step" id="onboardingStepBooking">
-          <span class="onboarding-step-icon" id="onboardingIconBooking">3</span>
-          <div class="onboarding-step-body">
-            <div class="onboarding-step-name">Первая запись</div>
-            <p class="onboarding-step-hint" id="onboardingHintBooking">Создайте запись на свободный слот в редакторе.</p>
-          </div>
-          <button type="button" class="onboarding-step-cta" id="onboardingCtaBooking">К слотам</button>
-        </li>
-      </ol>
-      <div class="onboarding-faq-row">
-        <button type="button" class="onboarding-faq-link" id="onboardingFaqBtn">Справка и FAQ</button>
-      </div>
+    <div class="hub-section-head hub-section-head--stats">
+      <div class="hub-section-title">Сводка</div>
     </div>
-
-    <!-- Smart Analytics Dashboard -->
     <div class="hub-stats" id="hubStats" aria-hidden="true">
       <div class="hub-stat-card stat-highlight" id="statToday">
         <svg class="hub-stat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1148,25 +1264,56 @@
         <div class="hub-stat-trend" id="statRevenueTrend" style="display: none;">+15%</div>
       </div>
     </div>
+    <div
+      role="region"
+      aria-label="Что сделать в первую очередь"
+      class="hub-summary-hints"
+      id="hubSummaryHints"
+      hidden
+    ></div>
+
+    <div id="onboardingStrip" class="onboarding-strip" style="display:none;" hidden>
+      <div class="onboarding-strip-head">
+        <h2 class="onboarding-strip-title">Первые шаги</h2>
+        <p class="onboarding-strip-lead">Профиль → слоты → первая запись. Статус каждого шага — на этом экране.</p>
+      </div>
+      <ol class="onboarding-steps">
+        <li class="onboarding-step" id="onboardingStepProfile">
+          <span class="onboarding-step-icon" id="onboardingIconProfile">1</span>
+          <div class="onboarding-step-body">
+            <div class="onboarding-step-name">Профиль и модерация</div>
+            <p class="onboarding-step-hint" id="onboardingHintProfile">Заполните анкету по критериям проверки.</p>
+          </div>
+          <button type="button" class="onboarding-step-cta" id="onboardingCtaProfile">Открыть</button>
+        </li>
+        <li class="onboarding-step" id="onboardingStepSlots">
+          <span class="onboarding-step-icon" id="onboardingIconSlots">2</span>
+          <div class="onboarding-step-body">
+            <div class="onboarding-step-name">Слоты в расписании</div>
+            <p class="onboarding-step-hint" id="onboardingHintSlots">Добавьте доступное время, чтобы клиенты могли записаться.</p>
+          </div>
+          <button type="button" class="onboarding-step-cta" id="onboardingCtaSlots">Расписание</button>
+        </li>
+        <li class="onboarding-step" id="onboardingStepBooking">
+          <span class="onboarding-step-icon" id="onboardingIconBooking">3</span>
+          <div class="onboarding-step-body">
+            <div class="onboarding-step-name">Первая запись</div>
+            <p class="onboarding-step-hint" id="onboardingHintBooking">Создайте запись на свободный слот в редакторе.</p>
+          </div>
+          <button type="button" class="onboarding-step-cta" id="onboardingCtaBooking">К слотам</button>
+        </li>
+      </ol>
+      <div class="onboarding-faq-row">
+        <button type="button" class="onboarding-faq-link" id="onboardingFaqBtn">Справка и FAQ</button>
+      </div>
+    </div>
 
     <!-- Quick Actions Panel -->
     <div class="hub-quick-actions">
       <div class="hub-section-head">
-        <div class="hub-section-title">Быстрые действия</div>
+        <div class="hub-section-title">Остальное</div>
       </div>
       <div class="hub-quick-grid" id="hubQuickGrid">
-        <button type="button" class="hub-quick-action" data-action="book-client">
-          <svg class="hub-quick-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="3" y="4" width="18" height="18" rx="2"/>
-            <path d="M16 2v4M8 2v4M3 10h18"/>
-            <path d="M12 11v6M9 14h6"/>
-          </svg>
-          <div class="hub-quick-text">
-            <div class="hub-quick-label">Записать клиента</div>
-            <div class="hub-quick-hint">Слот и новая запись</div>
-          </div>
-        </button>
-        
         <button type="button" class="hub-quick-action" data-action="view-requests">
           <svg class="hub-quick-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M22 12h-6l-2 3h-4l-2-3H2"/>
@@ -1187,26 +1334,10 @@
             <div class="hub-quick-hint">Быстрое сообщение</div>
           </div>
         </button>
-        
-        <button type="button" class="hub-quick-action" data-action="analytics">
-          <svg class="hub-quick-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M3 3v18h18"/>
-            <path d="M7 12l4-4 4 4 6-6"/>
-          </svg>
-          <div class="hub-quick-text">
-            <div class="hub-quick-label">Статистика</div>
-            <div class="hub-quick-hint">Показатели работы</div>
-          </div>
-        </button>
       </div>
     </div>
 
     <div id="stateMessage" class="state-panel loading" style="display:none;" role="status"></div>
-
-    <div class="hub-section-head">
-      <div class="hub-section-title">Ближайшие записи</div>
-    </div>
-    <div id="bookingsBlock"></div>
 
     <div class="hub-section-head">
       <div class="hub-section-title">Все разделы</div>
@@ -1260,7 +1391,7 @@
         gift: '<svg class="hub-tile-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M20 12v10H4V12"/><rect x="2" y="7" width="20" height="5" rx="1"/><path d="M12 22V7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg>',
       };
       /** Cap upcoming booking cards so the hub never renders an unbounded list. */
-      var HUB_UPCOMING_BOOKINGS_MAX = 8;
+      var HUB_UPCOMING_BOOKINGS_MAX = 5;
 
       /** Mirrors server gate on GET /trainer/stats (SUBSCRIPTION_TIER_ANALYTICS). */
       var hasAnalyticsAccess = false;
@@ -1274,6 +1405,18 @@
       var hubLastTodayCount = 0;
       var hubLastFirstWhen = '';
       var hubLastWeekCount = 0;
+      var hubLastUpcomingListCount = 0;
+      /** Bookings with status pending — drives summary hint + week card highlight. */
+      var hubLastPendingCount = 0;
+      /** Client requests without trainer response (GET /trainer/requests). */
+      var hubLastNewRequestsCount = 0;
+      var hubRequestsStatReady = false;
+
+      function syncHubHeroCompact() {
+        var el = document.querySelector('.hub-hero');
+        if (!el) return;
+        el.classList.toggle('hub-hero--compact', hubLastUpcomingListCount > 0);
+      }
 
       function headersJson() {
         var h = { 'Content-Type': 'application/json' };
@@ -1382,6 +1525,13 @@
             btn.setAttribute('aria-disabled', locked ? 'true' : 'false');
           });
         }
+        var pri = document.getElementById('hubPriorityActions');
+        if (pri) {
+          pri.querySelectorAll('.hub-quick-action').forEach(function(btn) {
+            btn.classList.toggle('hub-quick-action--locked', locked);
+            btn.setAttribute('aria-disabled', locked ? 'true' : 'false');
+          });
+        }
         syncHubHeroScheduleClick();
       }
 
@@ -1402,10 +1552,15 @@
         }
       }
 
-      document.getElementById('heroScheduleCta').addEventListener('click', function() {
-        if (this.disabled) return;
-        navigateTo('schedule-editor');
-      });
+      (function () {
+        var heroCta = document.getElementById('heroScheduleCta');
+        if (heroCta) {
+          heroCta.addEventListener('click', function() {
+            if (this.disabled) return;
+            navigateTo('schedule-editor');
+          });
+        }
+      })();
 
       function navigateTo(pathWithQuery) {
         if (isProfilePath(pathWithQuery)) {
@@ -1721,17 +1876,124 @@
         el.style.display = 'block';
       }
 
+      /**
+       * Loads unanswered client requests count for contextual summary hints.
+       * Safe to call in parallel with loadBookings; re-renders hints when done.
+       */
+      function loadHubRequestsSummary() {
+        if (!initData || !canOpenTrainerSectionsSync()) {
+          hubRequestsStatReady = false;
+          hubLastNewRequestsCount = 0;
+          renderHubSummaryHints();
+          return Promise.resolve();
+        }
+        return fetch(apiUrlWithQuery('/trainer/requests'), { headers: headersJson() })
+          .then(function(r) {
+            return r.json().then(function(data) {
+              return { status: r.status, ok: r.ok, data: data };
+            });
+          })
+          .then(function(o) {
+            hubRequestsStatReady = true;
+            if (!o.ok || o.status === 401 || o.status === 403) {
+              hubLastNewRequestsCount = 0;
+            } else {
+              var items = (o.data && o.data.items) || [];
+              hubLastNewRequestsCount = items.filter(function(x) {
+                return x && !x.has_responded;
+              }).length;
+            }
+            renderHubSummaryHints();
+          })
+          .catch(function() {
+            hubRequestsStatReady = true;
+            hubLastNewRequestsCount = 0;
+            renderHubSummaryHints();
+          });
+      }
+
+      /** Renders actionable chips under «Сводка» when pending bookings or new requests exist. */
+      function renderHubSummaryHints() {
+        var el = document.getElementById('hubSummaryHints');
+        if (!el) return;
+        if (!initData) {
+          el.setAttribute('hidden', '');
+          el.innerHTML = '';
+          return;
+        }
+        var hints = [];
+        if (hubLastPendingCount > 0) {
+          var ptxt =
+            hubLastPendingCount +
+            ' ' +
+            pluralRu(
+              hubLastPendingCount,
+              'запись требует подтверждения',
+              'записи требуют подтверждения',
+              'записей требуют подтверждения'
+            );
+          hints.push({ type: 'urgent', text: ptxt, href: 'schedule-editor' });
+        }
+        if (hubRequestsStatReady && hubLastNewRequestsCount > 0) {
+          hints.push({
+            type: 'info',
+            text:
+              hubLastNewRequestsCount +
+              ' ' +
+              pluralRu(
+                hubLastNewRequestsCount,
+                'новая заявка без ответа',
+                'новые заявки без ответа',
+                'новых заявок без ответа'
+              ),
+            href: 'trainer-requests',
+          });
+        }
+        if (!hints.length) {
+          el.setAttribute('hidden', '');
+          el.innerHTML = '';
+          return;
+        }
+        el.removeAttribute('hidden');
+        el.innerHTML = hints
+          .map(function(h) {
+            var mod = h.type === 'urgent' ? 'urgent' : 'info';
+            return (
+              '<button type="button" class="hub-summary-hint hub-summary-hint--' +
+              mod +
+              '" data-hub-hint-href="' +
+              escapeHtml(h.href) +
+              '">' +
+              '<span class="hub-summary-hint__text">' +
+              escapeHtml(h.text) +
+              '</span>' +
+              '<span class="hub-summary-hint__chev" aria-hidden="true">›</span>' +
+              '</button>'
+            );
+          })
+          .join('');
+        el.querySelectorAll('[data-hub-hint-href]').forEach(function(btn) {
+          btn.onclick = function() {
+            navigateTo(btn.getAttribute('data-hub-hint-href'));
+          };
+        });
+      }
+
       function setStats(todayCount, weekCount, revenue) {
         var wrap = document.getElementById('hubStats');
         var todayValue = document.getElementById('statTodayValue');
         var weekValue = document.getElementById('statWeekValue');
         var revenueValue = document.getElementById('statRevenueValue');
         
-        if (!wrap || !todayValue || !weekValue || !revenueValue) return;
-        
+        if (!wrap || !todayValue || !weekValue || !revenueValue) {
+          renderHubSummaryHints();
+          return;
+        }
+
         if (!initData) {
           wrap.setAttribute('aria-hidden', 'true');
           wrap.style.display = 'none';
+          renderHubSummaryHints();
           return;
         }
         
@@ -1751,6 +2013,17 @@
             todayCard.classList.remove('stat-highlight');
           }
         }
+
+        var weekCard = document.getElementById('statWeek');
+        if (weekCard) {
+          if (hubLastPendingCount > 0) {
+            weekCard.classList.add('stat-highlight');
+          } else {
+            weekCard.classList.remove('stat-highlight');
+          }
+        }
+
+        renderHubSummaryHints();
       }
 
       /**
@@ -1787,8 +2060,9 @@
         if (count > 0) {
           title.textContent =
             count === 1 ? 'Одна запись сегодня' : count + ' ' + pluralRu(count, 'запись', 'записи', 'записей') + ' сегодня';
-          var w = firstLine ? ' Первая в ' + firstLine + '.' : '';
-          subtitle.textContent = 'У вас активный день с клиентами.' + w;
+          subtitle.textContent = firstLine
+            ? 'Первая в ' + firstLine + ' — карточки на сегодня в списке выше.'
+            : 'Сегодняшние занятия перечислены в блоке выше.';
           setStats(count, weekCount || 0, null);
           syncHubHeroScheduleClick();
           return;
@@ -1842,6 +2116,38 @@
         return many;
       }
 
+      function openTelegramDmMiniApp(username, telegramId) {
+        var un = String(username || '').replace(/^@/, '').trim();
+        var url;
+        if (un) url = 'https://t.me/' + encodeURIComponent(un);
+        else if (telegramId != null && telegramId !== '') url = 'tg://user?id=' + encodeURIComponent(String(telegramId));
+        else return;
+        var tg = window.Telegram && window.Telegram.WebApp;
+        if (tg) {
+          try {
+            if (typeof tg.openTelegramLink === 'function') {
+              tg.openTelegramLink(url);
+              return;
+            }
+          } catch (e) { /* noop */ }
+          try {
+            if (typeof tg.openLink === 'function') {
+              tg.openLink(url);
+              return;
+            }
+          } catch (e2) { /* noop */ }
+        }
+        window.location.href = url;
+      }
+
+      function hubTrainerCanWriteClient(b) {
+        var cap = parseInt(String(b.slot_capacity != null ? b.slot_capacity : '1'), 10);
+        if (isNaN(cap) || cap > 1) return false;
+        var tid = b.client_telegram_id;
+        var un = (b.client_telegram_username || '').replace(/^@/, '').trim();
+        return (tid != null && tid !== '') || !!un;
+      }
+
       /** Same labels/classes as schedule-editor calendar rows (booked slots). */
       function hubBookingSlotRowHtml(b, timeRange) {
         var bst = String(b.status || 'confirmed').toLowerCase();
@@ -1853,8 +2159,18 @@
         var venueInner = arena
           ? escapeHtml(arena)
           : '<span class="venue-muted">не указано</span>';
+        var msgBtn = '';
+        if (hubTrainerCanWriteClient(b)) {
+          msgBtn =
+            '<button type="button" class="hub-slot-msg" data-hub-dm="trainer"' +
+            ' data-dm-un="' + escapeHtml((b.client_telegram_username || '').replace(/^@/, '')) + '"' +
+            ' data-dm-tid="' + escapeHtml(b.client_telegram_id != null ? String(b.client_telegram_id) : '') + '"' +
+            ' aria-label="Написать клиенту" title="Написать в Telegram">' +
+            'Написать' +
+            '</button>';
+        }
         return (
-          '<button type="button" class="slot-row slot-booked-click ' + rowMod + '" data-bid="' + String(b.id) + '">' +
+          '<div class="slot-row slot-booked-click ' + rowMod + '" data-bid="' + String(b.id) + '" role="button" tabindex="0">' +
             '<div class="slot-row-left">' +
               '<span class="slot-time">' + escapeHtml(timeRange) + '</span>' +
               '<div class="slot-venue">📍 ' + venueInner + '</div>' +
@@ -1862,8 +2178,9 @@
             '</div>' +
             '<div class="slot-meta">' +
               '<span class="slot-status ' + statusClass + '">' + statusLabel + '</span>' +
+              msgBtn +
             '</div>' +
-          '</button>'
+          '</div>'
         );
       }
 
@@ -1922,6 +2239,7 @@
           String(today.getMonth() + 1).padStart(2, '0') + '-' + 
           String(today.getDate()).padStart(2, '0');
         
+        var pending = 0;
         (days || []).forEach(function(d) {
           var dayBookings = (d.bookings || []).length;
           total += dayBookings;
@@ -1930,8 +2248,12 @@
           if (d.date === todayStr) {
             todayCount = dayBookings;
           }
+          (d.bookings || []).forEach(function(b) {
+            if (b && b.status === 'pending') pending += 1;
+          });
         });
-        
+        hubLastPendingCount = pending;
+
         var firstWhen = '';
         var flatFirst = null;
         (days || []).some(function(d) {
@@ -1951,7 +2273,6 @@
         hubLastTodayCount = todayCount;
         hubLastFirstWhen = firstWhen;
         hubLastWeekCount = weekCount;
-        applyHubHero();
 
         var maxN = HUB_UPCOMING_BOOKINGS_MAX;
         var totalBookings = 0;
@@ -1977,8 +2298,13 @@
           parts.push('</div>');
         });
 
+        hubLastUpcomingListCount = count;
+        syncHubHeroCompact();
+        applyHubHero();
+
         if (!count) {
           block.innerHTML = buildEmptyBookingsHtml();
+          block.onclick = null;
           wireEmptyScheduleButton();
           return;
         }
@@ -1987,12 +2313,19 @@
           capHint = '<div class="hub-bookings-cap">Показаны ' + maxN + ' ближайших записей из ' + totalBookings + '</div>';
         }
         block.innerHTML = parts.join('') + capHint;
-        block.querySelectorAll('[data-bid]').forEach(function(btn) {
-          btn.onclick = function() {
-            var bid = btn.getAttribute('data-bid');
-            if (bid) navigateTo('schedule-editor?open_booking=' + encodeURIComponent(bid) + '&from=hub');
-          };
-        });
+        block.onclick = function(ev) {
+          var msgBtn = ev.target && ev.target.closest && ev.target.closest('button.hub-slot-msg[data-hub-dm]');
+          if (msgBtn) {
+            ev.preventDefault();
+            ev.stopPropagation();
+            openTelegramDmMiniApp(msgBtn.getAttribute('data-dm-un'), msgBtn.getAttribute('data-dm-tid'));
+            return;
+          }
+          var row = ev.target && ev.target.closest && ev.target.closest('.slot-row.slot-booked-click[data-bid]');
+          if (!row) return;
+          var bid = row.getAttribute('data-bid');
+          if (bid) navigateTo('schedule-editor?open_booking=' + encodeURIComponent(bid) + '&from=hub');
+        };
       }
 
       /** Upcoming bookings: friendly onboarding instead of red «network» when account not active yet. */
@@ -2002,6 +2335,9 @@
         hubLastTodayCount = 0;
         hubLastFirstWhen = '';
         hubLastWeekCount = 0;
+        hubLastUpcomingListCount = 0;
+        hubLastPendingCount = 0;
+        syncHubHeroCompact();
         applyHubHero();
         var bb = document.getElementById('bookingsBlock');
         if (window.TrainerMiniAppGate && access) {
@@ -2023,6 +2359,9 @@
           hubLastTodayCount = 0;
           hubLastFirstWhen = '';
           hubLastWeekCount = 0;
+          hubLastUpcomingListCount = 0;
+          hubLastPendingCount = 0;
+          syncHubHeroCompact();
           applyHubHero();
           document.getElementById('bookingsBlock').innerHTML =
             '<div class="hub-empty">Авторизация Telegram недоступна в этом режиме.</div>';
@@ -2067,6 +2406,9 @@
               hubLastTodayCount = 0;
               hubLastFirstWhen = '';
               hubLastWeekCount = 0;
+              hubLastUpcomingListCount = 0;
+              hubLastPendingCount = 0;
+              syncHubHeroCompact();
               applyHubHero();
               document.getElementById('bookingsBlock').innerHTML =
                 '<div class="hub-empty">Не удалось обновить список. Попробуйте закрыть экран и открыть «Обзор» снова.</div>';
@@ -2090,6 +2432,9 @@
                     hubLastTodayCount = 0;
                     hubLastFirstWhen = '';
                     hubLastWeekCount = 0;
+                    hubLastUpcomingListCount = 0;
+                    hubLastPendingCount = 0;
+                    syncHubHeroCompact();
                     applyHubHero();
                     document.getElementById('bookingsBlock').innerHTML =
                       '<div class="hub-empty">Не удалось обновить список. Проверьте соединение и попробуйте снова.</div>';
@@ -2100,6 +2445,9 @@
                   hubLastTodayCount = 0;
                   hubLastFirstWhen = '';
                   hubLastWeekCount = 0;
+                  hubLastUpcomingListCount = 0;
+                  hubLastPendingCount = 0;
+                  syncHubHeroCompact();
                   applyHubHero();
                   document.getElementById('bookingsBlock').innerHTML =
                     '<div class="hub-empty">Не удалось обновить список. Проверьте соединение и попробуйте снова.</div>';
@@ -2109,6 +2457,9 @@
               hubLastTodayCount = 0;
               hubLastFirstWhen = '';
               hubLastWeekCount = 0;
+              hubLastUpcomingListCount = 0;
+              hubLastPendingCount = 0;
+              syncHubHeroCompact();
               applyHubHero();
               document.getElementById('bookingsBlock').innerHTML =
                 '<div class="hub-empty">Не удалось обновить список. Попробуйте снова.</div>';
@@ -2118,33 +2469,31 @@
 
       // Quick Actions handlers
       function setupQuickActions() {
+        var btnSched = document.getElementById('hubBtnSchedule');
+        if (btnSched) {
+          btnSched.onclick = function() {
+            navigateTo('schedule-editor');
+          };
+        }
+        var btnBook = document.getElementById('hubBtnBookClient');
+        if (btnBook) {
+          btnBook.onclick = function() {
+            navigateTo('schedule-editor?flow=book');
+          };
+        }
+
         var quickGrid = document.getElementById('hubQuickGrid');
         if (!quickGrid) return;
-
-        var analyticsBtn = quickGrid.querySelector('[data-action="analytics"]');
-        if (analyticsBtn) {
-          var show = hasAnalyticsAccess;
-          analyticsBtn.style.display = show ? '' : 'none';
-          analyticsBtn.setAttribute('aria-hidden', show ? 'false' : 'true');
-          analyticsBtn.tabIndex = show ? 0 : -1;
-        }
 
         quickGrid.querySelectorAll('.hub-quick-action').forEach(function(btn) {
           btn.onclick = function() {
             var action = btn.getAttribute('data-action');
             switch (action) {
-              case 'book-client':
-                navigateTo('schedule-editor');
-                break;
               case 'view-requests':
                 navigateTo('trainer-requests');
                 break;
               case 'client-message':
                 navigateTo('trainer-clients?action=message');
-                break;
-              case 'analytics':
-                if (!hasAnalyticsAccess) return;
-                navigateTo('trainer-stats');
                 break;
             }
           };
@@ -2335,6 +2684,7 @@
           showHubSubscriptionCelebrationIfPending();
         });
         loadBookings();
+        loadHubRequestsSummary();
         loadOnboardingChecklist();
       }
       if (!initData) {

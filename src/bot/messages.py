@@ -315,7 +315,39 @@ CLIENT_BOOKING_CANCELLED_BY_TRAINER = (
     "Было: <b>{date}</b> ({day}) в {time}\n\n"
     "Выберите другое время или тренера: <b>Тренеры и запись</b> в меню бота."
 )
+CLIENT_BOOKING_CANCELLED_BY_SELF = (
+    "<b>Запись успешно отменена</b>\n\n"
+    "Было: <b>{date}</b> ({day}) в {time}.\n\n"
+    "Новую запись можно оформить в <b>Тренеры и запись</b>."
+)
 CLIENT_BUTTON_SHOW_ON_MAP = "Показать на карте"
+CLIENT_BOOKING_CONFIRMED_BTN_MAP = "Карта"
+CLIENT_BOOKING_CONFIRMED_BTN_WRITE_TRAINER = "Написать тренеру"
+
+
+def build_client_booking_confirmed_inline_keyboard(
+    *,
+    map_url: str | None,
+    trainer_telegram_id: int | None,
+):
+    """One row: map (if URL) + write to trainer (if Telegram id known)."""
+    from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+
+    row: list[InlineKeyboardButton] = []
+    if map_url:
+        row.append(
+            InlineKeyboardButton(text=CLIENT_BOOKING_CONFIRMED_BTN_MAP, url=map_url)
+        )
+    if trainer_telegram_id:
+        row.append(
+            InlineKeyboardButton(
+                text=CLIENT_BOOKING_CONFIRMED_BTN_WRITE_TRAINER,
+                url=f"tg://user?id={trainer_telegram_id}",
+            )
+        )
+    if not row:
+        return None
+    return InlineKeyboardMarkup(inline_keyboard=[row])
 
 
 def format_client_booking_confirmed_by_trainer_text(
@@ -337,7 +369,7 @@ def format_client_booking_confirmed_by_trainer_text(
     )
     venue = _format_client_booking_confirmed_venue_block(arena_name, arena_address)
     return (
-        "<b>Запись подтверждена</b>\n\n"
+        "✅ <b>Запись подтверждена</b>\n\n"
         f"Когда: <b>{html.escape(date)}</b> ({html.escape(day)}) {html.escape(time)}\n"
         f"Тренер: {tn}\n"
         f"{svc_price}"
@@ -441,6 +473,16 @@ CLIENT_REMINDER_2H = (
     "⏱ Длительность: {duration} мин.\n\n"
     "Адрес и детали — в <b>«Мои записи»</b> (меню бота)."
 )
+# Group cohort RSVP (client bot)
+CLIENT_GROUP_RSVP_INVITE = (
+    "<b>Напоминание: групповое занятие</b>\n\n"
+    "Группа: <b>{group}</b>\n"
+    "📅 <b>{date}</b> ({day}) в {time}\n"
+    "⏱ Длительность: {duration} мин.\n\n"
+    "Подтвердите, что придёте — так тренер видит заполненность."
+)
+GROUP_RSVP_BUTTON_YES = "✅ Буду"
+GROUP_RSVP_BUTTON_NO = "❌ Не смогу"
 CLIENT_BOOKING_COMPLETED = (
     "<b>Занятие завершено</b>\n\n"
     "Было: <b>{date}</b> ({day}) в {time}\n\n"
@@ -903,13 +945,13 @@ TRAINER_BOOKINGS_BUTTON_CONFIRM = "✅ Подтвердить"
 TRAINER_BOOKING_CANCELLED_BY_CLIENT = (
     "<b>Клиент отменил запись</b>\n\n"
     "Кто: <b>{client_name}</b>\n"
-    "Когда было: <b>{date}</b> ({day}) в {time}\n"
+    "Когда было: <b>{date}</b> ({day}) в <b>{time}</b>\n"
     "Причина: {reason}"
 )
 TRAINER_BOOKING_CANCELLED_BY_CLIENT_NO_REASON = (
     "<b>Клиент отменил запись</b>\n\n"
     "Кто: <b>{client_name}</b>\n"
-    "Когда было: <b>{date}</b> ({day}) в {time}"
+    "Когда было: <b>{date}</b> ({day}) в <b>{time}</b>"
 )
 TRAINER_BOOKINGS_BUTTON_DECLINE = "❌ Отклонить"
 TRAINER_BOOKINGS_BUTTON_MAKE_REGULAR = "📅 Сделать постоянным клиентом"
@@ -952,9 +994,10 @@ TRAINER_BOOKING_NOTIFICATION_NO_COMMENT = (
     "<i>Слот уже занят; клиент получит напоминания автоматически.</i>"
 )
 TRAINER_BOOKING_CONFIRMED = (
-    "Запись подтверждена.\n\n"
-    "Клиент: {client_display}\n"
-    "Дата и время: {date} ({day}) {time}"
+    "✅ <b>Запись подтверждена</b>\n\n"
+    "Кто: <b>{client_name}</b>\n"
+    "{phone_block}"
+    "Когда: <b>{date}</b> ({day}) в <b>{time}</b>"
 )
 TRAINER_BOOKING_DECLINE_PROMPT = (
     "Напиши короткий комментарий, почему не получается провести это занятие.\n\n"

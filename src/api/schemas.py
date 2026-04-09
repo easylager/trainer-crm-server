@@ -128,6 +128,10 @@ class ProfilePatch(BaseModel):
     education: TrainerEducation | None = Field(default=None)
     session_duration_minutes: int | None = Field(default=None)
     min_hours_before_booking: int | None = Field(default=None)
+    group_classes_enabled: bool | None = Field(
+        default=None,
+        description="Разрешить слоты с несколькими участниками (ёмкость > 1) в расписании.",
+    )
 
     @field_validator("phone", mode="before")
     @classmethod

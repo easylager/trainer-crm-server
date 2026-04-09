@@ -199,7 +199,7 @@
       max-width: 100%;
       text-align: center;
     }
-    /* Детали записи: воздух под «Назад к списку» + safe-area — иначе кнопка у края экрана и неудобно тапать */
+    /* Детали записи: safe-area под блоком действий */
     #screenDetail .booking-detail {
       padding-bottom: max(32px, calc(20px + env(safe-area-inset-bottom, 0px)));
     }
@@ -351,13 +351,6 @@
           <span class="client-booking-cancel-label">Отменить запись</span>
         </button>
       </div>
-
-      <button type="button" class="back-link" id="backToList">
-        <svg class="back-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M15 18l-6-6 6-6"/>
-        </svg>
-        Назад к списку
-      </button>
     </div>
   </div>
 
@@ -709,10 +702,6 @@
       };
 
       // Обработчики для детального экрана
-      document.getElementById('backToList').onclick = function() {
-        showScreen('screenList');
-      };
-
       document.getElementById('detailCancelBtn').onclick = function() {
         if (state.currentBooking) {
           state.cancelBookingId = state.currentBooking.id;

@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from fastapi.responses import JSONResponse, Response
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
@@ -43,6 +43,7 @@ from src.application.booking_use_cases import (
     get_booking_with_slot,
     get_trainer_booking_detail_payload,
     get_trainer_client_next_booking,
+    get_trainer_client_for_card,
     is_slot_end_in_past_local,
     list_bookings_for_client,
     list_bookings_for_trainer,
@@ -159,6 +160,7 @@ from src.application.trainer_schedule_use_cases import (
     replace_slots_for_day,
     replace_templates_for_day,
     replace_week_with_template,
+    trainer_offers_service,
 )
 from src.application.recurring_use_cases import apply_recurring_bookings_for_week
 from src.application.client_notes_use_cases import (
@@ -323,25 +325,46 @@ async def get_schedule(
     summaries = await active_booking_summaries_by_slot_for_trainer_range(
         session, trainer_id, from_date, to_date
     )
+    trainer_row = await get_trainer(session, trainer_id)
+    group_classes_enabled = bool(
+        (trainer_row.get("profile") or {}).get("group_classes_enabled")
+    )
     out_slots: list[dict[str, Any]] = []
     for s in slots:
         st = s.get("status") or "available"
-        row: dict[str, Any] = {
+        cap = max(1, int(s.get("capacity") or 1))
+        occ = int(s.get("active_bookings") or 0)
+        spots_left = max(0, cap - occ)
+        svc_lbl = (s.get("service_name") or "").strip() or None
+        ar_lbl = (s.get("arena_name") or "").strip() or None
+        row = {
             "id": s["id"],
             "slot_date": s["slot_date"].isoformat() if hasattr(s["slot_date"], "isoformat") else str(s["slot_date"]),
             "start_time": s["start_time"].strftime("%H:%M") if hasattr(s["start_time"], "strftime") else str(s["start_time"])[:5],
             "end_time": s["end_time"].strftime("%H:%M") if hasattr(s["end_time"], "strftime") else str(s["end_time"])[:5],
             "status": st,
+            "capacity": cap,
+            "service_id": s.get("service_id"),
+            "arena_id": s.get("arena_id"),
+            "service_label": svc_lbl,
+            "arena_label": ar_lbl,
+            "training_group_id": s.get("training_group_id"),
+            "training_group_name": s.get("training_group_name"),
+            "active_bookings": occ,
+            "spots_left": spots_left,
         }
-        if st == "booked":
-            bsum = summaries.get(s["id"])
-            if bsum:
-                row["booking_id"] = bsum["booking_id"]
-                row["booking_status"] = bsum["status"]
-                row["venue_label"] = bsum["venue_label"]
-                row["client_preview"] = bsum["client_preview"]
+        bsum = summaries.get(s["id"])
+        if bsum:
+            row["booking_id"] = bsum["booking_id"]
+            row["booking_status"] = bsum["status"]
+            row["venue_label"] = bsum["venue_label"]
+            row["client_preview"] = bsum["client_preview"]
+            if int(bsum.get("booking_count") or 1) > 1:
+                row["booking_count"] = int(bsum["booking_count"])
+            if bsum.get("bookings") is not None:
+                row["bookings"] = bsum["bookings"]
         out_slots.append(row)
-    return {"slots": out_slots}
+    return {"slots": out_slots, "group_classes_enabled": group_classes_enabled}
 
 
 # --- Schedule editor Mini App (trainer): templates, slots, apply week, delete slot ---
@@ -368,16 +391,37 @@ async def get_schedule_templates(
                 "day_of_week": t["day_of_week"],
                 "start_time": t["start_time"].strftime("%H:%M") if hasattr(t["start_time"], "strftime") else str(t["start_time"])[:5],
                 "duration_minutes": t["duration_minutes"],
+                "capacity": int(t.get("capacity") or 1),
+                "service_id": t.get("service_id"),
+                "arena_id": t.get("arena_id"),
             }
             for t in templates
         ],
     }
 
 
+class ScheduleTemplateSlotBody(BaseModel):
+    hour: int = Field(..., ge=0, le=23)
+    capacity: int = Field(default=1, ge=1, le=500)
+    service_id: int | None = Field(default=None, description="Required when capacity > 1 (group slot for this service)")
+
+
 class ScheduleTemplateDayBody(BaseModel):
     day_of_week: int  # 0=Mon .. 6=Sun
-    start_hours: list[int]  # e.g. [9, 10, 11]
     duration_minutes: int = 60
+    start_hours: list[int] | None = None  # legacy: all capacity 1
+    slots: list[ScheduleTemplateSlotBody] | None = None  # preferred: per-hour capacity
+    group_arena_id: int | None = Field(
+        default=None,
+        description="Venue for all group template rows (capacity>1); required when trainer has multiple arenas",
+    )
+
+    @model_validator(mode="after")
+    def _normalize_slots(self):
+        if self.slots is not None:
+            return self
+        self.slots = [ScheduleTemplateSlotBody(hour=h, capacity=1) for h in (self.start_hours or [])]
+        return self
 
 
 @router.put("/schedule/templates/day")
@@ -387,7 +431,7 @@ async def put_schedule_templates_day(
     x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
     session: AsyncSession = Depends(get_session),
 ):
-    """Set template for one week day: replace all slots for that day with given hours. Auth: trainer."""
+    """Set template for one week day: replace template rows for that weekday (per-hour capacity). Auth: trainer."""
     raw = init_data or x_telegram_init_data
     if not raw:
         raise HTTPException(status_code=401, detail="Missing init data")
@@ -400,8 +444,65 @@ async def put_schedule_templates_day(
         raise HTTPException(status_code=403, detail="Subscription tier required: CRM")
     if body.day_of_week < 0 or body.day_of_week > 6:
         raise HTTPException(status_code=400, detail="day_of_week must be 0-6")
-    hours_set = {h for h in body.start_hours if 0 <= h <= 23}
-    await replace_templates_for_day(session, trainer_id, body.day_of_week, hours_set, body.duration_minutes)
+    slots = body.slots or []
+    trainer_row = await get_trainer(session, trainer_id) or {}
+    group_classes_enabled = bool((trainer_row.get("profile") or {}).get("group_classes_enabled"))
+    if any((x.capacity or 1) > 1 for x in slots) and not group_classes_enabled:
+        raise HTTPException(
+            status_code=400,
+            detail="Включите «Групповые занятия» в профиле, чтобы задавать групповые слоты в шаблоне.",
+        )
+    r_arena_n = await session.execute(
+        text("SELECT COUNT(*) FROM trainer_arenas WHERE trainer_id = :tid"),
+        {"tid": trainer_id},
+    )
+    arena_n = int(r_arena_n.scalar() or 0)
+    has_group = any((x.capacity or 1) > 1 for x in slots)
+    if has_group and arena_n == 0:
+        raise HTTPException(
+            status_code=400,
+            detail="Добавьте хотя бы одну площадку в профиле, чтобы задавать групповые слоты в шаблоне.",
+        )
+    if has_group and arena_n > 1:
+        if body.group_arena_id is None:
+            raise HTTPException(
+                status_code=400,
+                detail="Выберите площадку для групповых слотов в шаблоне.",
+            )
+        rchk = await session.execute(
+            text("SELECT 1 FROM trainer_arenas WHERE trainer_id = :tid AND arena_id = :aid"),
+            {"tid": trainer_id, "aid": int(body.group_arena_id)},
+        )
+        if not rchk.fetchone():
+            raise HTTPException(status_code=400, detail="Площадка не привязана к вашему профилю")
+
+    hour_to_cap: dict[int, int] = {}
+    hour_to_service: dict[int, int | None] = {}
+    for s in slots:
+        hour_to_cap[s.hour] = s.capacity
+        if s.capacity > 1:
+            if s.service_id is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Укажите услугу для групповых слотов в шаблоне.",
+                )
+            if not await trainer_offers_service(session, trainer_id, int(s.service_id)):
+                raise HTTPException(status_code=400, detail="Услуга не найдена в вашем списке.")
+            hour_to_service[s.hour] = int(s.service_id)
+        else:
+            hour_to_service[s.hour] = None
+    try:
+        await replace_templates_for_day(
+            session,
+            trainer_id,
+            body.day_of_week,
+            hour_to_cap,
+            body.duration_minutes,
+            hour_to_service,
+            group_arena_id=int(body.group_arena_id) if body.group_arena_id is not None else None,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
     return {"ok": True}
 
 
@@ -409,6 +510,9 @@ class ScheduleSlotsDayBody(BaseModel):
     slot_date: str  # YYYY-MM-DD
     start_hours: list[int]
     duration_minutes: int = 60
+    capacity: int = Field(default=1, ge=1, le=500)
+    group_service_id: int | None = Field(default=None, description="services.id for group slots (capacity > 1)")
+    arena_id: int | None = Field(default=None, description="Venue for new group slots (capacity > 1); fixed on slot")
 
 
 @router.post("/schedule/slots")
@@ -429,12 +533,45 @@ async def post_schedule_slots(
     # Require CRM tier to create/update slots
     if not await trainer_has_crm_access(session, trainer_id):
         raise HTTPException(status_code=403, detail="Subscription tier required: CRM")
+    if body.capacity > 1:
+        trainer_row = await get_trainer(session, trainer_id) or {}
+        if not bool((trainer_row.get("profile") or {}).get("group_classes_enabled")):
+            raise HTTPException(
+                status_code=400,
+                detail="Включите «Групповые занятия» в профиле, чтобы создавать групповые слоты в календаре.",
+            )
+        if body.group_service_id is None:
+            raise HTTPException(
+                status_code=400,
+                detail="Для группового слота укажите услугу.",
+            )
+        if not await trainer_offers_service(session, trainer_id, int(body.group_service_id)):
+            raise HTTPException(status_code=400, detail="Услуга не в вашем списке")
+        if body.arena_id is not None:
+            rchk = await session.execute(
+                text("SELECT 1 FROM trainer_arenas WHERE trainer_id = :tid AND arena_id = :aid"),
+                {"tid": trainer_id, "aid": int(body.arena_id)},
+            )
+            if not rchk.fetchone():
+                raise HTTPException(status_code=400, detail="Площадка не привязана к вашему профилю")
     try:
         slot_date = date.fromisoformat(body.slot_date)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid slot_date")
     hours_set = {h for h in body.start_hours if 0 <= h <= 23}
-    await replace_slots_for_day(session, trainer_id, slot_date, hours_set, body.duration_minutes)
+    try:
+        await replace_slots_for_day(
+            session,
+            trainer_id,
+            slot_date,
+            hours_set,
+            body.duration_minutes,
+            capacity=body.capacity,
+            group_service_id=body.group_service_id,
+            slot_arena_id=int(body.arena_id) if body.capacity > 1 and body.arena_id is not None else None,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
     return {"ok": True}
 
 
@@ -502,6 +639,10 @@ async def get_client_slots(
     trainer_id: int = Query(..., description="Trainer to book"),
     min_hours: int | None = Query(None, description="From list/card; skip get_trainer when set"),
     trainer_name: str | None = Query(None, description="From list/card; skip get_trainer when set"),
+    service_id: int | None = Query(
+        None,
+        description="Catalog/service context: show individual slots + group slots for this service only",
+    ),
     init_data: str | None = Query(None),
     x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
     session: AsyncSession = Depends(get_session),
@@ -509,6 +650,8 @@ async def get_client_slots(
     """
     Available slots for a trainer (client view). Pass min_hours and trainer_name from
     catalog when opening card to avoid extra get_trainer round-trip.
+    Pass service_id from catalog filter so group slots are scoped to that service.
+    Without service_id, only individual (capacity 1) slots are returned.
     """
     raw = init_data or x_telegram_init_data
     if not raw:
@@ -539,7 +682,9 @@ async def get_client_slots(
             last = (trainer["profile"].get("last_name") or "").strip()
             trainer_name_val = (first + " " + last).strip() or trainer_name_val
 
-    cached_slots = get_slots_cached(trainer_id, min_hours_val)
+    filter_service_id = int(service_id) if service_id is not None else None
+
+    cached_slots = get_slots_cached(trainer_id, min_hours_val, filter_service_id)
     if cached_slots is not None:
         return {"trainer_name": trainer_name_val, "slots": cached_slots, "online_booking_available": True}
 
@@ -553,16 +698,31 @@ async def get_client_slots(
         s for s in available
         if working_hours_between(now_minsk, s["slot_date"], s["start_time"]) >= min_hours_val
     ]
+    if filter_service_id is not None:
+        available = [
+            s
+            for s in available
+            if max(1, int(s.get("capacity") or 1)) == 1
+            or int(s.get("service_id") or 0) == filter_service_id
+        ]
+    else:
+        available = [s for s in available if max(1, int(s.get("capacity") or 1)) == 1]
     serialized = [
         {
             "id": s["id"],
             "slot_date": s["slot_date"].isoformat() if hasattr(s["slot_date"], "isoformat") else str(s["slot_date"]),
             "start_time": s["start_time"].strftime("%H:%M") if hasattr(s["start_time"], "strftime") else str(s["start_time"])[:5],
             "end_time": s["end_time"].strftime("%H:%M") if hasattr(s["end_time"], "strftime") else str(s["end_time"])[:5],
+            "capacity": max(1, int(s.get("capacity") or 1)),
+            "spots_left": max(
+                0,
+                max(1, int(s.get("capacity") or 1)) - int(s.get("active_bookings") or 0),
+            ),
+            "service_id": s.get("service_id"),
         }
         for s in available
     ]
-    set_slots_cached(trainer_id, min_hours_val, serialized)
+    set_slots_cached(trainer_id, min_hours_val, serialized, filter_service_id)
     return {"trainer_name": trainer_name_val, "slots": serialized, "online_booking_available": True}
 
 
@@ -639,22 +799,28 @@ async def post_client_booking(
         last_name=body.last_name,
     )
 
+    slot_cap = max(1, int(slot.get("capacity") or 1))
     arena_for_booking: int | None = None
     used_primary_despite_filter = False
     if client_request_id is None:
-        sess_row = await get_client_session(telegram_id, session)
-        sess_arena = sess_row.get("selected_arena_id") if sess_row else None
-        resolved, err, used_primary_despite_filter = await resolve_arena_for_client_self_booking(
-            session, trainer_id, sess_arena
-        )
-        if err == "no_venue":
-            raise HTTPException(
-                status_code=400,
-                detail="У тренера не настроена основная площадка — запись через каталог недоступна.",
+        if slot_cap > 1:
+            # Group: venue is stored on the slot; catalog/session arena filter does not apply.
+            arena_for_booking = None
+            used_primary_despite_filter = False
+        else:
+            sess_row = await get_client_session(telegram_id, session)
+            sess_arena = sess_row.get("selected_arena_id") if sess_row else None
+            resolved, err, used_primary_despite_filter = await resolve_arena_for_client_self_booking(
+                session, trainer_id, sess_arena
             )
-        if err == "invalid_arena":
-            raise HTTPException(status_code=400, detail="Выбранная арена недоступна для этого тренера.")
-        arena_for_booking = resolved
+            if err == "no_venue":
+                raise HTTPException(
+                    status_code=400,
+                    detail="У тренера не настроена основная площадка — запись через каталог недоступна.",
+                )
+            if err == "invalid_arena":
+                raise HTTPException(status_code=400, detail="Выбранная арена недоступна для этого тренера.")
+            arena_for_booking = resolved
 
     try:
         booking_id = await create_booking(
@@ -1092,18 +1258,18 @@ async def post_client_booking_cancel(
     )
     if not payload:
         raise HTTPException(status_code=400, detail="Booking not found or already cancelled")
+    slot_date = payload.get("slot_date")
+    start_time = payload.get("start_time")
+    date_str = slot_date.strftime("%d.%m") if hasattr(slot_date, "strftime") else str(slot_date)
+    day_label = CLIENT_DAYS[slot_date.weekday()] if hasattr(slot_date, "weekday") else ""
+    time_str = start_time.strftime("%H:%M") if hasattr(start_time, "strftime") else str(start_time)[:5]
     # Notify trainer right away (async in same flow, no polling)
     trainer_tid = payload.get("trainer_telegram_id")
     if trainer_tid:
-        slot_date = payload.get("slot_date")
-        start_time = payload.get("start_time")
         client_name = (payload.get("client_name") or "Клиент").strip() or "Клиент"
         client_name_safe = html.escape(client_name)
         reason = payload.get("reason")
         reason_safe = html.escape(reason) if reason else ""
-        date_str = slot_date.strftime("%d.%m") if hasattr(slot_date, "strftime") else str(slot_date)
-        day_label = CLIENT_DAYS[slot_date.weekday()] if hasattr(slot_date, "weekday") else ""
-        time_str = start_time.strftime("%H:%M") if hasattr(start_time, "strftime") else str(start_time)[:5]
         if reason:
             text = msg.TRAINER_BOOKING_CANCELLED_BY_CLIENT.format(
                 client_name=client_name_safe, date=date_str, day=day_label, time=time_str, reason=reason_safe
@@ -1120,6 +1286,17 @@ async def post_client_booking_cancel(
             await trainer_bot.send_message(chat_id=trainer_tid, text=text)
         finally:
             await trainer_bot.session.close()
+    text_client = msg.CLIENT_BOOKING_CANCELLED_BY_SELF.format(
+        date=date_str, day=day_label, time=time_str
+    )
+    client_bot = Bot(
+        token=Settings().telegram_bot_token_client,
+        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+    )
+    try:
+        await client_bot.send_message(chat_id=telegram_id, text=text_client)
+    finally:
+        await client_bot.session.close()
     return {"success": True}
 
 
@@ -1184,6 +1361,7 @@ def _serialize_booking(b: dict) -> dict:
         "id": b["id"],
         "slot_id": b.get("slot_id"),
         "client_telegram_id": b.get("client_telegram_id"),
+        "client_telegram_username": (b.get("client_telegram_username") or "").strip() or None,
         "client_has_telegram": b.get("client_telegram_id") is not None,
         "client_phone": (b.get("client_phone") or "").strip(),
         "client_first_name": b.get("client_first_name"),
@@ -1196,6 +1374,7 @@ def _serialize_booking(b: dict) -> dict:
         "services_str": b.get("services_str"),
         "arenas_str": b.get("arenas_str"),
         "status": (b.get("status") or "confirmed").strip(),
+        "slot_capacity": max(1, int(b.get("slot_capacity") or 1)),
     }
 
 
@@ -2717,7 +2896,6 @@ async def post_trainer_booking_confirm(
             token=settings.telegram_bot_token_client,
             default=DefaultBotProperties(parse_mode=ParseMode.HTML),
         )
-        map_url = info.get("map_link")
         text_client = msg.format_client_booking_confirmed_by_trainer_text(
             date=date_str,
             day=dow,
@@ -2729,13 +2907,10 @@ async def post_trainer_booking_confirm(
             arena_name=info.get("arena_name"),
             arena_address=info.get("arena_address"),
         )
-        reply_markup = None
-        if map_url:
-            reply_markup = InlineKeyboardMarkup(
-                inline_keyboard=[
-                    [InlineKeyboardButton(text=msg.CLIENT_BUTTON_SHOW_ON_MAP, url=map_url)]
-                ]
-            )
+        reply_markup = msg.build_client_booking_confirmed_inline_keyboard(
+            map_url=info.get("map_link"),
+            trainer_telegram_id=info.get("trainer_telegram_id"),
+        )
         try:
             await client_bot.send_message(
                 chat_id=client_tid,
@@ -2881,7 +3056,8 @@ class TrainerCreateBookingBody(BaseModel):
     client_id: int
     service_id: int
     arena_id: int | None = None
-    service_price_variant_id: int | None = None  # if multiple tiers, optional; defaults to first tier
+    service_price_variant_id: int | None = None  # individual slot: optional tier; ignored for group slots (capacity>1)
+    allow_overbook: bool = False  # trainer-only: group slot (capacity>1) may exceed nominal capacity
 
 
 class TrainerCreateClientBody(BaseModel):
@@ -3019,6 +3195,27 @@ async def get_trainer_clients(
             or (digits and digits in phone_digits_only(c.get("phone")))
         ]
     return {"clients": clients}
+
+
+@router.get("/trainer/clients/{client_id:int}/card")
+async def get_trainer_client_card(
+    client_id: int,
+    init_data: str | None = Query(None),
+    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Single client summary for card UI (booking roster or active/trial training group member)."""
+    raw = init_data or x_telegram_init_data
+    if not raw:
+        raise HTTPException(status_code=401, detail="Missing init data")
+    telegram_id = _trainer_telegram_id(raw)
+    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+    client = await get_trainer_client_for_card(session, trainer_id, client_id)
+    if not client:
+        raise HTTPException(status_code=404, detail="Клиент не найден или нет доступа")
+    return {"client": client}
 
 
 @router.get("/trainer/clients/{client_id:int}/history")
@@ -3463,8 +3660,16 @@ async def post_trainer_booking(
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     slot = await get_slot(session, body.slot_id)
-    if not slot or slot.get("trainer_id") != trainer_id or (slot.get("status") or "").strip() != "available":
+    if not slot or slot.get("trainer_id") != trainer_id:
         raise HTTPException(status_code=400, detail="Slot not found or not available")
+    st_raw = (slot.get("status") or "").strip().lower()
+    cap_slot = max(1, int(slot.get("capacity") or 1))
+    allow_ob = bool(body.allow_overbook) and cap_slot > 1
+    if st_raw == "cancelled":
+        raise HTTPException(status_code=400, detail="Slot not found or not available")
+    if st_raw != "available":
+        if not (allow_ob and st_raw == "booked"):
+            raise HTTPException(status_code=400, detail="Slot not found or not available")
     arena_id: int | None = body.arena_id
     if arena_id is not None:
         rchk = await session.execute(
@@ -3485,6 +3690,7 @@ async def post_trainer_booking(
         arena_id=arena_id,
         service_price_variant_id=body.service_price_variant_id,
         strict_service_price_variant=False,
+        allow_overbook=allow_ob,
     )
     if not booking_id:
         raise HTTPException(status_code=400, detail="Slot not available")
@@ -3557,6 +3763,7 @@ def _serialize_trainer_request(req: dict) -> dict:
         "service_name": req.get("service_name"),
         "is_personalized": bool(req.get("is_personalized")),
         "has_responded": bool(req.get("has_responded")),
+        "remind_slots_pending": bool(req.get("remind_slots_pending")),
         "client_id": req.get("client_id"),
         "client_telegram_id": req.get("client_telegram_id"),
         "client_first_name": req.get("client_first_name"),
@@ -3590,7 +3797,7 @@ async def webapp_trainer_onboarding_checklist(
     x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
     session: AsyncSession = Depends(get_session),
 ):
-    """Profile / slots / first booking flags for the «Первые шаги» strip (trainer hub Mini App)."""
+    """Profile / slots / optional booking flag for the «Первые шаги» strip (trainer hub Mini App)."""
     raw = init_data or x_telegram_init_data
     if not raw:
         raise HTTPException(status_code=401, detail="Missing init data")
@@ -3734,8 +3941,8 @@ async def post_trainer_request_remind_slots(
     trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
-    await add_trainer_pending_request_booking(session, trainer_id, request_id)
-    return {"success": True}
+    was_new = await add_trainer_pending_request_booking(session, trainer_id, request_id)
+    return {"success": True, "remind_slots_pending": True, "was_new": was_new}
 
 
 @router.get("/trainer/requests/{request_id:int}/slots")
@@ -3881,3 +4088,8 @@ async def get_trainer_referred_list(
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked")
     return await list_referred_trainers(session, trainer_id, limit=limit)
+
+
+from src.api.routes.webapp_training_groups import router as _webapp_training_groups_router
+
+router.include_router(_webapp_training_groups_router)

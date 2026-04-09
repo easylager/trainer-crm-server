@@ -191,6 +191,33 @@
       font-weight: 500;
       color: var(--tg-theme-hint-color);
     }
+    .cr-list-intro {
+      margin: 0 0 14px;
+      padding: 12px 14px;
+      border-radius: 14px;
+      background: var(--tg-theme-secondary-bg-color);
+      border: 1px solid rgba(128, 128, 128, 0.14);
+      font-size: 14px;
+      line-height: 1.5;
+      color: var(--tg-theme-hint-color);
+    }
+    .cr-list-intro p { margin: 0; }
+    .cr-detail-section-hint {
+      margin: 0 0 12px;
+      font-size: 14px;
+      line-height: 1.5;
+      color: var(--tg-theme-hint-color);
+    }
+    .trainer-card-full .tcf-next-hint {
+      margin: 0 0 14px;
+      padding: 12px 14px;
+      border-radius: 14px;
+      background: var(--tg-theme-secondary-bg-color);
+      border: 1px solid rgba(245, 166, 35, 0.22);
+      font-size: 14px;
+      line-height: 1.5;
+      color: var(--tg-theme-text-color);
+    }
     .cr-comment-block {
       margin-bottom: 16px;
     }
@@ -333,7 +360,6 @@
     .responder-row:hover .row-arrow {
       opacity: 1;
     }
-    .detail-back-wrap { margin-top: 28px; padding-top: 8px; }
     /* Как в catalog.html: вторичная навигация — hint, не CTA */
     .back-link {
       display: inline-flex;
@@ -618,7 +644,6 @@
       align-items: center;
       justify-content: center;
     }
-    .trainer-card-full .tcf-back { margin-top: 24px; }
     .card-wrap {
       padding: 14px 16px;
       border-radius: 16px;
@@ -799,11 +824,14 @@
   </div>
 
   <div id="screenList" data-screen class="active">
+    <div id="listIntro" class="cr-list-intro" style="display: none;" role="note">
+      <p>Здесь — ваши обращения: вы описываете задачу, а тренеры по городу и услуге могут на неё ответить. Когда кто-то готов с вами заниматься, откройте его карточку и нажмите <b>Записаться</b>, чтобы выбрать время — так оформляется занятие.</p>
+    </div>
     <div id="requestList"></div>
     <div id="pagination" class="pagination"></div>
     <div id="screenEmpty" class="empty" style="display: none;">
-      <p>У вас пока нет заявок.</p>
-      <p style="margin-top: 8px; font-size: 14px;">Оставьте заявку в «Тренеры и запись»: когда список тренеров пустой, внизу списка или в карточке тренера. После этого заявка появится здесь.</p>
+      <p>Пока нет обращений.</p>
+      <p style="margin-top: 8px; font-size: 14px; line-height: 1.5; color: var(--tg-theme-hint-color);">В разделе «Тренеры и запись» можно оставить заявку, если удобнее сначала описать задачу. Подходящие тренеры увидят её здесь и смогут ответить.</p>
       <button type="button" class="btn-neutral btn-block" id="btnRefreshEmpty" style="margin-top: 16px;">Обновить</button>
     </div>
   </div>
@@ -828,31 +856,26 @@
       <div class="bd-rows cr-comment-block">
         <div class="bd-row bd-comment">
           <div class="bd-row-text">
-            <div class="bd-row-label">Комментарий</div>
+            <div class="bd-row-label">Ваш комментарий к заявке</div>
             <div class="bd-row-value" id="detailComment">—</div>
           </div>
         </div>
       </div>
-      <div class="bd-section-label">Откликнулись</div>
+      <div class="bd-section-label">Тренеры</div>
+      <p class="cr-detail-section-hint" id="detailTrainersHint"></p>
       <div id="detailResponses"></div>
-      <div class="detail-back-wrap">
-        <span class="back-link" id="backFromDetail"><svg class="back-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>К списку заявок</span>
-      </div>
     </div>
   </div>
 
   <div id="screenResponderDetail" data-screen>
     <div id="responderDetailContent" class="trainer-card-full"></div>
-    <div class="trainer-card-full tcf-back">
-      <span class="back-link" id="backFromResponderDetail"><svg class="back-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>К откликам</span>
-    </div>
   </div>
 
   <div id="screenEdit" data-screen>
     <div class="screen-title">Редактирование заявки</div>
     <div class="screen-hint" id="editCityService">—</div>
     <div class="card-wrap">
-      <textarea id="editComment" placeholder="Комментарий к заявке (необязательно)"></textarea>
+      <textarea id="editComment" placeholder="Напишите, чем мы можем помочь (необязательно)"></textarea>
     </div>
     <div class="action-buttons">
       <button type="button" class="btn-block btn-primary" id="btnSaveComment">Сохранить</button>
@@ -941,9 +964,17 @@
         }
         btn.hidden = false;
         if (id === 'screenDetail') {
-          btn.onclick = function() { showScreen('screenList'); };
+          btn.onclick = function() {
+            state.currentRequest = null;
+            renderList();
+            showScreen('screenList');
+          };
         } else if (id === 'screenResponderDetail') {
-          btn.onclick = function() { showScreen('screenDetail'); };
+          btn.onclick = function() {
+            state.selectedResponder = null;
+            if (state.currentRequest) renderDetail();
+            showScreen('screenDetail');
+          };
         } else if (id === 'screenEdit') {
           btn.onclick = function() { showScreen('screenDetail'); };
         }
@@ -1063,29 +1094,39 @@
         } catch (e) { return ''; }
       }
 
+      /** Сколько тренеров ответили — без слова «отклик». */
+      function formatTrainerAnswersLine(count) {
+        if (count === 0) return 'Пока нет ответов от тренеров';
+        var n = count % 100;
+        var last = n % 10;
+        if (n >= 11 && n <= 14) return count + ' тренеров ответили';
+        if (last === 1) return count + ' тренер ответил';
+        if (last >= 2 && last <= 4) return count + ' тренера ответили';
+        return count + ' тренеров ответили';
+      }
+
       function renderList() {
         const listEl = document.getElementById('requestList');
         const emptyEl = document.getElementById('screenEmpty');
         const pagEl = document.getElementById('pagination');
         state.items = state.items || [];
         const total = state.items.length;
+        var listIntro = document.getElementById('listIntro');
         if (total === 0) {
           listEl.innerHTML = '';
           emptyEl.style.display = 'block';
           pagEl.innerHTML = '';
+          if (listIntro) listIntro.style.display = 'none';
           return;
         }
+        if (listIntro) listIntro.style.display = 'block';
         emptyEl.style.display = 'none';
         const start = state.page * PER_PAGE;
         const pageItems = state.items.slice(start, start + PER_PAGE);
         let html = '';
         pageItems.forEach(function(req) {
           const count = (Array.isArray(req.responses) ? req.responses : []).length;
-          let sub;
-          if (count === 0) sub = 'Нет откликов';
-          else if (count % 10 === 1 && count % 100 !== 11) sub = count + ' отклик';
-          else if ([2, 3, 4].indexOf(count % 10) >= 0 && (count % 100 < 10 || count % 100 >= 20)) sub = count + ' отклика';
-          else sub = count + ' откликов';
+          const sub = formatTrainerAnswersLine(count);
           html += '<button type="button" class="request-card" data-request-id="' + req.id + '">';
           html += '<div class="main"><div class="title">' + escapeHtml(formatRequestLabel(req)) + '</div>';
           html += '<div class="meta">' + escapeHtml(sub) + '</div></div>';
@@ -1130,22 +1171,28 @@
         const comment = (req.comment || '').trim();
         var cEl = document.getElementById('detailComment');
         if (cEl) {
-          cEl.textContent = comment ? comment : 'Без комментария';
+          cEl.textContent = comment ? comment : 'Не указан';
           cEl.style.fontStyle = comment ? 'italic' : 'normal';
           cEl.style.opacity = comment ? '0.92' : '0.65';
         }
         // API всегда отдаёт массив; на всякий случай нормализуем (не-массив ломает forEach).
         var responses = Array.isArray(req.responses) ? req.responses : [];
+        var hintEl = document.getElementById('detailTrainersHint');
+        if (hintEl) {
+          hintEl.textContent = responses.length === 0
+            ? 'Когда тренер будет готов с вами заниматься, он появится в списке ниже. Откройте карточку и нажмите «Записаться», чтобы выбрать время.'
+            : 'Нажмите на тренера. На следующем экране — «Записаться» (время в календаре) или «Написать», если нужно что-то уточнить.';
+        }
         const wrap = document.getElementById('detailResponses');
         if (responses.length === 0) {
-          wrap.innerHTML = '<div class="cr-responses-empty" role="status">Пока никто не откликнулся. Тренеры по вашему городу и услуге увидят заявку и смогут написать.</div>';
+          wrap.innerHTML = '<div class="cr-responses-empty" role="status">Пока никто не ответил. Подходящие тренеры увидят вашу заявку и смогут написать.</div>';
         } else {
           let html = '';
           responses.forEach(function(r, idx) {
             const name = (r.name || 'Тренер').trim() || 'Тренер';
             const tc = (r.trainer_comment || '').trim();
             const photo = photoUrl(r.photo_key);
-            const commentShort = tc ? (tc.length > 50 ? tc.slice(0, 47) + '…' : tc) : 'Отклик без комментария';
+            const commentShort = tc ? (tc.length > 50 ? tc.slice(0, 47) + '…' : tc) : 'Откройте карточку, чтобы записаться';
             html += '<button type="button" class="responder-row" data-responder-index="' + idx + '">';
             if (photo) {
               html += '<span class="row-avatar-wrap"><span class="row-avatar-loading"></span><img src="' + escapeHtml(photo) + '" alt="" class="row-avatar" loading="lazy"></span>';
@@ -1275,6 +1322,7 @@
         }
         
         if (desc) html += '<div class="tcf-desc">' + escapeHtml(desc).replace(/\n/g, '<br>') + '</div>';
+        html += '<div class="tcf-next-hint">Чтобы выбрать дату и время, нажмите <b>Записаться</b> — откроется расписание. Кнопка <b>Написать</b> — если нужно обсудить детали в чате.</div>';
         html += '<div class="tcf-actions">';
         html += '<a href="' + escapeHtml(bookUrl) + '" class="btn-primary tcf-book">Записаться</a>';
         // В Mini App tg:// не открывается; только https://t.me/username через tg.openLink
@@ -1300,18 +1348,6 @@
         }
       }
 
-      document.getElementById('backFromResponderDetail').onclick = function() {
-        state.selectedResponder = null;
-        if (state.currentRequest) renderDetail();
-        showScreen('screenDetail');
-      };
-
-      document.getElementById('backFromDetail').onclick = function() {
-        state.currentRequest = null;
-        renderList();
-        showScreen('screenList');
-      };
-
       document.getElementById('btnEditRequest').onclick = function() {
         const req = state.currentRequest;
         if (!req) return;
@@ -1323,7 +1359,7 @@
         }
         if (hasResponses) {
           showAppConfirm(
-            'При редактировании заявки все текущие отклики тренеров будут удалены — вы больше не увидите их в этой заявке. Продолжить?',
+            'Если сохранить изменения, ответы тренеров к этой заявке исчезнут — их придётся дождаться снова. Продолжить?',
             { okText: 'Продолжить', cancelText: 'Отмена' }
           ).then(function (ok) {
             if (ok) openEdit();

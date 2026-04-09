@@ -1,13 +1,19 @@
 """Public API (no auth): catalog (cities, services, trainers) and photo serving for client/bot."""
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.deps import get_session
 from src.application.catalog_use_cases import list_arenas, list_cities, list_services
 from src.application.subscription_tier_use_cases import get_trainer_booking_availability
+from src.application.training_group_use_cases import (
+    batch_open_groups_count_for_trainers,
+    list_open_training_groups_catalog,
+    list_open_training_groups_public,
+)
 from src.application.trainer_use_cases import (
     get_trainer,
     list_active_trainers_for_client,
@@ -70,6 +76,32 @@ def _enrich_trainer_photo_urls(trainer: dict) -> bool:
                     any_direct = True
         ph["_source"] = source
     return any_direct
+
+
+async def _batch_trainer_photos(session: AsyncSession, trainer_ids: list[int]) -> dict[int, list[dict]]:
+    """First-page catalog photos for many trainers (same shape as list_active_with_details)."""
+    if not trainer_ids:
+        return {}
+    placeholders = ", ".join(f":pid{i}" for i in range(len(trainer_ids)))
+    params: dict = {f"pid{i}": v for i, v in enumerate(trainer_ids)}
+    r = await session.execute(
+        text(
+            f"""
+            SELECT trainer_id, file_key, file_key_list, sort_order
+            FROM trainer_photos
+            WHERE trainer_id IN ({placeholders})
+            ORDER BY trainer_id, sort_order
+            """
+        ),
+        params,
+    )
+    out: dict[int, list[dict]] = {tid: [] for tid in trainer_ids}
+    for row in r.fetchall():
+        tid = int(row[0])
+        out.setdefault(tid, []).append(
+            {"file_key": row[1], "file_key_list": row[2], "sort_order": row[3]}
+        )
+    return out
 
 
 @router.get("/cities")
@@ -146,9 +178,12 @@ async def list_active_trainers(
         filter_days=days_filter,
         filter_time_slots=time_slots_filter,
     )
+    trainer_ids_page = [t["id"] for t in items]
+    open_grp = await batch_open_groups_count_for_trainers(session, trainer_ids_page)
     # Enrich with booking availability and photo URLs (strip internal ids from catalog payloads)
     for i, t in enumerate(items):
         t = sanitize_trainer_for_public_catalog(t)
+        t["open_groups_count"] = int(open_grp.get(t["id"], 0))
         items[i] = t
         _enrich_trainer_photo_urls(t)
         availability = await get_trainer_booking_availability(session, t["id"])
@@ -162,6 +197,67 @@ async def list_active_trainers(
     else:
         photo_source = "proxy"
     return {"items": items, "total": total, "_photo_source": photo_source}
+
+
+@router.get("/training-groups")
+async def list_catalog_training_groups(
+    response: Response,
+    limit: int = 10,
+    offset: int = 0,
+    city_id: int | None = None,
+    service_id: int | None = None,
+    arena_id: int | None = None,
+    filter_days: str | None = Query(
+        None,
+        description="Comma-separated weekday 0=Mon..6=Sun (matches training_group_schedule_rules)",
+    ),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Open recruiting groups across trainers (catalog browse). Same group rules as per-trainer list."""
+    response.headers["Cache-Control"] = "no-store"
+    days_filter: list[int] | None = None
+    if filter_days:
+        try:
+            days_filter = [int(d.strip()) for d in filter_days.split(",") if d.strip().isdigit()]
+        except ValueError:
+            days_filter = None
+    if days_filter is not None and len(days_filter) == 0:
+        days_filter = None
+
+    items, total = await list_open_training_groups_catalog(
+        session,
+        city_id=city_id,
+        service_id=service_id,
+        arena_id=arena_id,
+        filter_days=days_filter,
+        limit=limit,
+        offset=offset,
+    )
+    tids = list({it["trainer_id"] for it in items})
+    photos_by_tid = await _batch_trainer_photos(session, tids)
+    out_items = []
+    for it in items:
+        tid = int(it["trainer_id"])
+        tr = {
+            "id": tid,
+            "profile": (it.get("trainer") or {}).get("profile"),
+            "photos": photos_by_tid.get(tid, []),
+        }
+        _enrich_trainer_photo_urls(tr)
+        avail = await get_trainer_booking_availability(session, tid)
+        tr["can_book"] = avail["can_book"]
+        row = {k: v for k, v in it.items() if k != "trainer"}
+        row["trainer"] = tr
+        out_items.append(row)
+
+    first_photo_sources = [(row["trainer"].get("photos") or [{}])[0].get("_source") for row in out_items if row.get("trainer")]
+    if any(s == "cdn" for s in first_photo_sources):
+        photo_source = "cdn"
+    elif any(s == "direct" for s in first_photo_sources):
+        photo_source = "direct"
+    else:
+        photo_source = "proxy"
+    return {"items": out_items, "total": total, "_photo_source": photo_source}
 
 
 @router.get("/trainers/{trainer_id:int}")
@@ -194,6 +290,21 @@ async def get_one_active_trainer(
     trainer["education_entries"] = edu if edu is not None else []
 
     return trainer
+
+
+@router.get("/trainers/{trainer_id:int}/training-groups")
+async def list_trainer_training_groups_public(
+    trainer_id: int,
+    response: Response,
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Open cohorts with catalog_visible + recruiting (for client catalog)."""
+    response.headers["Cache-Control"] = "no-store"
+    trainer = await get_trainer(session, trainer_id)
+    if not trainer or (trainer.get("status") or "").strip().lower() != "active":
+        raise HTTPException(status_code=404, detail="Trainer not found")
+    groups = await list_open_training_groups_public(session, trainer_id)
+    return {"groups": groups}
 
 
 @router.get("/trainers/{trainer_id:int}/reviews")

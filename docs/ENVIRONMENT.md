@@ -34,6 +34,7 @@
 | `SCHEDULE_REMINDER_COOLDOWN_MINUTES` | Кулдаун напоминаний о заявках. |
 | `BEPAID_SHOP_ID`, `BEPAID_SECRET_KEY`, `BEPAID_CHECKOUT_BASE_URL`, `PAYMENT_SANDBOX` | Оплата bePaid. Если оба ключа заданы, `POST /api/webhooks/bepaid` требует `Authorization: Basic` (shop id и secret, как в [доке bePaid](https://docs.bepaid.by/en/using_api/webhooks/)). |
 | `TRIAL_PERIOD_DAYS`, `SUBSCRIPTION_REMINDER_DAYS_AHEAD` | Подписки тренеров. |
+| `GROUP_ATTENDANCE_PROMPT_HOURS` | (Опционально) За сколько часов до группового слота слать клиентам RSVP в Telegram («Буду» / «Не смогу»). Без переменной или `0` — функция отключена. |
 | `NOTIFY_TELEGRAM_ID` | Тестовые уведомления (скрипты). |
 | `CLIENT_BOT_USERNAME` | Username бота без `@` для deep links (сертификаты и т.д.). |
 | `SMTP_*` | Отправка писем (сертификаты); если не заданы — отправка отключена. |

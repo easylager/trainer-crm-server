@@ -219,7 +219,9 @@ class TrainerRepository:
             "primary_arena_id": row[8] if len(row) > 8 else None,
         }
         rp = await self._session.execute(
-            text("SELECT first_name, last_name, age, city_id, experience_years, description, phone, contacts, education, rating_avg, rating_count, session_duration_minutes, min_hours_before_booking FROM trainer_profiles WHERE trainer_id = :id"),
+            text(
+                "SELECT first_name, last_name, age, city_id, experience_years, description, phone, contacts, education, rating_avg, rating_count, session_duration_minutes, min_hours_before_booking, COALESCE(group_classes_enabled, false) FROM trainer_profiles WHERE trainer_id = :id"
+            ),
             {"id": trainer_id},
         )
         prof = rp.fetchone()
@@ -232,6 +234,7 @@ class TrainerRepository:
                 # Raw DB values so moderation completeness can require explicit session/hours (no silent 45/3).
                 "session_duration_minutes": prof[11],
                 "min_hours_before_booking": int(prof[12]) if prof[12] is not None else None,
+                "group_classes_enabled": bool(prof[13]) if len(prof) > 13 and prof[13] is not None else False,
             }
             if prof
             else None
@@ -405,6 +408,7 @@ class TrainerRepository:
         education: str | None = None,
         session_duration_minutes: int | None = None,
         min_hours_before_booking: int | None = None,
+        group_classes_enabled: bool | None = None,
     ) -> None:
         """Partial update of profile; only non-None fields are set."""
         updates: list[str] = []
@@ -420,6 +424,9 @@ class TrainerRepository:
         if education is not None: updates.append("education = :edu"); params["edu"] = education
         if session_duration_minutes is not None: updates.append("session_duration_minutes = :dur"); params["dur"] = session_duration_minutes
         if min_hours_before_booking is not None: updates.append("min_hours_before_booking = :mhb"); params["mhb"] = min_hours_before_booking
+        if group_classes_enabled is not None:
+            updates.append("group_classes_enabled = :gce")
+            params["gce"] = bool(group_classes_enabled)
         if not updates:
             return
         await self._session.execute(

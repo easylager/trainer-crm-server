@@ -7,6 +7,7 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
+from starlette.staticfiles import StaticFiles
 
 logger = logging.getLogger(__name__)
 
@@ -263,6 +264,15 @@ def webapp_trainer_home_page():
     return _webapp_file_response(path)
 
 
+@app.get("/webapp/trainer-groups")
+def webapp_trainer_groups_page():
+    """Trainer cohorts: groups, roster, catalog recruitment."""
+    path = _WEBAPP_DIR / "trainer-groups.html"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Web App not found")
+    return _webapp_file_response(path)
+
+
 @app.get("/webapp/trainer-referral")
 def webapp_trainer_referral_page():
     """B2B referral program: link, balance, invited trainers."""
@@ -352,6 +362,19 @@ def webapp_trainer_nav_css():
     if not path.is_file():
         raise HTTPException(status_code=404, detail="CSS file not found")
     return FileResponse(path, media_type="text/css")
+
+
+@app.get("/webapp/mini-app-telegram-chrome.js")
+def webapp_mini_app_telegram_chrome_js():
+    """Telegram WebView quirks (focus, chrome); loaded by all Mini App HTML pages."""
+    path = _WEBAPP_DIR / "mini-app-telegram-chrome.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_WEBAPP_NO_CACHE_HEADERS,
+    )
 
 
 @app.get("/webapp/client-mini-app-theme.js")
@@ -479,3 +502,6 @@ app.include_router(upload_router)
 webapp_router.include_router(webapp_trainer_profile_router)
 app.include_router(webapp_router)
 app.include_router(webhooks_router)
+
+# Alias for repo path static/webapp — same files as explicit /webapp/* routes above.
+app.mount("/static/webapp", StaticFiles(directory=str(_WEBAPP_DIR)), name="static_webapp")

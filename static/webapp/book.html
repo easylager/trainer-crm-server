@@ -25,7 +25,7 @@
     }
     .header {
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       justify-content: space-between;
       gap: 12px;
       margin-bottom: 24px;
@@ -33,11 +33,16 @@
     .header-title {
       flex: 1;
       min-width: 0;
+      margin: 0;
       font-size: 24px;
       font-weight: 600;
       line-height: 1.25;
       letter-spacing: -0.02em;
       color: var(--tg-theme-text-color);
+      overflow: visible;
+      text-overflow: unset;
+      white-space: normal;
+      overflow-wrap: anywhere;
     }
     .week-nav {
       display: flex;
@@ -103,6 +108,28 @@
       color: inherit;
       cursor: pointer;
       transition: all 0.2s ease;
+    }
+    .slot-card-body {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 6px;
+      flex: 1;
+      min-width: 0;
+    }
+    .slot-spots-pill {
+      font-size: 12px;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: var(--tg-theme-bg-color);
+      color: var(--tg-theme-button-color);
+      border: 1px solid color-mix(in srgb, var(--tg-theme-button-color) 35%, transparent);
+    }
+    @supports not (color: color-mix(in srgb, red, blue)) {
+      .slot-spots-pill {
+        border-color: rgba(245, 166, 35, 0.45);
+      }
     }
     .slot-card:hover {
       border-color: var(--tg-theme-button-color);
@@ -556,7 +583,10 @@
 
       async function fetchSlots() {
         const initData = tg?.initData || '';
-        const q = 'trainer_id=' + encodeURIComponent(trainerId) + (initData ? '&init_data=' + encodeURIComponent(initData) : '');
+        let q = 'trainer_id=' + encodeURIComponent(trainerId);
+        const sidForSlots = serviceIdFromUrl != null ? serviceIdFromUrl : sessionServiceId;
+        if (sidForSlots != null) q += '&service_id=' + encodeURIComponent(sidForSlots);
+        if (initData) q += '&init_data=' + encodeURIComponent(initData);
         const res = await fetch('/api/webapp/client/slots?' + q);
         if (!res.ok) {
           const err = await res.json().catch(function() { return { detail: res.statusText }; });
@@ -591,8 +621,17 @@
           html += '<div class="day-block"><div class="day-title">' + formatDateKey(dateKey) + '</div>';
           daySlots.forEach(function(s) {
             html += '<button type="button" class="slot-card" data-slot-id="' + s.id + '" data-date="' + s.slot_date + '" data-time="' + (s.start_time || '') + '–' + (s.end_time || '') + '">';
-            html += '<span class="slot-time">' + (s.start_time || '') + '–' + (s.end_time || '') + '</span>';
-            html += '<span class="slot-arrow">→</span></button>';
+            html += '<span class="slot-card-body"><span class="slot-time">' + (s.start_time || '') + '–' + (s.end_time || '') + '</span>';
+            var cap = (s.capacity != null) ? parseInt(s.capacity, 10) : 1;
+            var sl = (s.spots_left != null) ? parseInt(s.spots_left, 10) : null;
+            if (cap > 1 && sl != null && !isNaN(sl) && sl > 0) {
+              var k = Math.abs(sl) % 100;
+              var k1 = k % 10;
+              var rw = (k > 10 && k < 20) ? 'мест' : (k1 === 1 ? 'место' : (k1 >= 2 && k1 <= 4 ? 'места' : 'мест'));
+              var label = 'Осталось ' + sl + ' ' + rw;
+              html += '<span class="slot-spots-pill" aria-label="' + label.replace(/"/g, '&quot;') + '">' + label + '</span>';
+            }
+            html += '</span><span class="slot-arrow">→</span></button>';
           });
           html += '</div>';
         });
@@ -634,7 +673,15 @@
             }
           } catch (e) {}
         }
-        renderPriceTierUi(effSid);
+        var selSlot = (allSlots || []).find(function(s) { return Number(s.id) === Number(slotId); });
+        var capBook = selSlot && selSlot.capacity != null ? parseInt(selSlot.capacity, 10) : 1;
+        if (!isNaN(capBook) && capBook > 1) {
+          var ptb = document.getElementById('priceTierBlock');
+          if (ptb) ptb.style.display = 'none';
+          selectedPriceVariantId = null;
+        } else {
+          renderPriceTierUi(effSid);
+        }
         var slotLine = formatDateKey(dateStr) + ', ' + timeStr;
         var tDetail = bookTrainerDetailCache;
         var srvList = (tDetail && tDetail.services) ? tDetail.services : [];

@@ -78,6 +78,11 @@ from src.application.trainer_schedule_use_cases import (
 )
 from src.application.trainer_use_cases import add_trainer_rating, get_trainer
 from src.application.support_use_cases import create_support_message
+from src.application.group_attendance_use_cases import (
+    attendance_rsvp_verify,
+    respond_attendance_rsvp,
+    rsvp_hmac_secret,
+)
 from src.application.welcome_link_use_cases import (
     WELCOME_TOKEN_TYPE_CERT,
     WELCOME_TOKEN_TYPE_GENERIC,
@@ -2566,6 +2571,38 @@ async def on_link_phone_message(message: Message) -> None:
             return
         await message.answer(msg.CLIENT_LINK_SUCCESS)
         return
+
+
+@router.callback_query(lambda c: c.data and (c.data.startswith("RSY:") or c.data.startswith("RSN:")))
+async def on_group_rsvp_callback(callback: CallbackQuery) -> None:
+    """Cohort attendance: confirm or decline from inline keyboard."""
+    raw = callback.data or ""
+    parts = raw.split(":", 2)
+    if len(parts) != 3:
+        await callback.answer()
+        return
+    pref, pid_s, sig = parts
+    try:
+        prompt_id = int(pid_s)
+    except ValueError:
+        await callback.answer()
+        return
+    action = "y" if pref == "RSY" else "n"
+    secret = rsvp_hmac_secret(Settings().telegram_bot_token_client)
+    if not attendance_rsvp_verify(prompt_id, action, sig, secret):
+        await callback.answer("Кнопка устарела или недействительна.", show_alert=True)
+        return
+    await callback.answer()
+    _ok, message_text = await respond_attendance_rsvp(
+        prompt_id=prompt_id,
+        telegram_user_id=callback.from_user.id,
+        accept=(action == "y"),
+    )
+    if callback.message:
+        try:
+            await callback.message.edit_text(message_text)
+        except Exception:
+            await callback.message.answer(message_text)
 
 
 @router.message()

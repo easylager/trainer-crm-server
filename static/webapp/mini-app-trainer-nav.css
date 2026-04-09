@@ -15,11 +15,17 @@
   flex: 0 0 auto !important;
   flex-shrink: 0 !important;
 }
-/* Экраны только с topbar (статистика, абонементы, …) */
+/* Экраны только с topbar (статистика, абонементы, …) — полная ширина строки */
 .trainer-app-topbar.trainer-mini-nav {
   width: 100% !important;
   margin-bottom: 12px !important;
   justify-content: flex-end !important;
+}
+/* Рядом с заголовком в .header — 100% ширины ломает строку (overflow по X) */
+.header .trainer-mini-nav.trainer-app-topbar {
+  width: auto !important;
+  max-width: 100%;
+  margin-bottom: 0 !important;
 }
 
 .trainer-mini-nav > button.btn-app-home,

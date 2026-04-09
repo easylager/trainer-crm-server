@@ -90,6 +90,21 @@
     }
     .field { margin-bottom: 16px; position: relative; }
     .field:last-child { margin-bottom: 0; }
+    .field.field-toggle .toggle-label {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      margin-bottom: 0;
+      cursor: pointer;
+      font-weight: 600;
+      color: var(--tg-theme-text-color);
+    }
+    .field.field-toggle .toggle-label input[type="checkbox"] {
+      width: auto;
+      margin-top: 3px;
+      flex-shrink: 0;
+      accent-color: var(--tg-theme-button-color);
+    }
     .field label {
       display: flex;
       align-items: center;
@@ -1419,6 +1434,13 @@
           <label for="min_hours_before_booking"><span class="required-dot"></span>За сколько часов до занятия клиент может записаться</label>
           <input id="min_hours_before_booking" type="number" min="0" max="168" step="1" placeholder="Например 12 или 24" inputmode="numeric" />
         </div>
+        <div class="field field-toggle">
+          <label class="toggle-label" for="group_classes_enabled">
+            <input type="checkbox" id="group_classes_enabled" />
+            <span class="toggle-text">Групповые занятия</span>
+          </label>
+          <p class="hint" style="margin: 8px 0 0 28px;">Если включено, в расписании можно задавать несколько мест в одном слоте. Индивидуальные слоты по-прежнему доступны (1 место).</p>
+        </div>
       </div>
 
       <div class="section-title">Подробное образование</div>
@@ -2106,6 +2128,7 @@
             education: p.education || null,
             session_duration_minutes: p.session_duration_minutes != null ? Number(p.session_duration_minutes) : null,
             min_hours_before_booking: p.min_hours_before_booking != null ? Number(p.min_hours_before_booking) : null,
+            group_classes_enabled: !!p.group_classes_enabled,
           },
           services: svc,
           arena_ids: arena_ids,
@@ -2183,6 +2206,10 @@
             education: eduVal ? eduVal : null,
             session_duration_minutes: num('session_duration_minutes', true),
             min_hours_before_booking: num('min_hours_before_booking', true),
+            group_classes_enabled: (function() {
+              var el = document.getElementById('group_classes_enabled');
+              return !!(el && el.checked);
+            })(),
           },
           services: services,
           arena_ids: arena_ids,
@@ -2412,6 +2439,8 @@
         setv('experience_years', p.experience_years);
         setv('session_duration_minutes', p.session_duration_minutes);
         setv('min_hours_before_booking', p.min_hours_before_booking);
+        var gce = document.getElementById('group_classes_enabled');
+        if (gce) gce.checked = !!p.group_classes_enabled;
         var citySel = document.getElementById('city_id');
         if (citySel) citySel.value = p.city_id != null ? String(p.city_id) : '';
         var eduSel = document.getElementById('education');
@@ -3452,6 +3481,7 @@
             education: pr.education,
             session_duration_minutes: pr.session_duration_minutes,
             min_hours_before_booking: pr.min_hours_before_booking,
+            group_classes_enabled: !!pr.group_classes_enabled,
           },
           services: parsed.services,
           arena_ids: parsed.arena_ids,
@@ -3763,6 +3793,14 @@
           el.parentElement.classList.remove('field-focused');
         });
       });
+      (function() {
+        var gce = document.getElementById('group_classes_enabled');
+        if (gce) {
+          gce.addEventListener('change', function() {
+            setDirty();
+          });
+        }
+      })();
       
       function formatPhoneInput(el) {
         var val = el.value.replace(/\D/g, '');

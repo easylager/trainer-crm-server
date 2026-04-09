@@ -231,16 +231,23 @@
       background: var(--req-chip-warn-bg);
       color: var(--req-chip-warn-fg);
     }
+    /* «Для вас» / «Заявка для вас»: не secondary-bg + тёмный текст — в тёмном Telegram это сливается. */
     .request-card .badge.personalized,
     .badge.personalized {
-      background: var(--tg-theme-secondary-bg-color);
-      color: #1a1a1a;
+      background: rgba(245, 166, 35, 0.22);
+      border: 1px solid rgba(245, 166, 35, 0.38);
+      color: var(--req-accent);
     }
-    @media (prefers-color-scheme: light) {
-      .badge.personalized {
-        background: rgba(247, 166, 0, 0.22);
-        color: #7c2d12;
-      }
+    html[data-app-theme="light"] .request-card .badge.personalized,
+    html[data-app-theme="light"] .badge.personalized {
+      color: #7c2d12;
+      border-color: rgba(245, 166, 35, 0.32);
+    }
+    html[data-app-theme="dark"] .request-card .badge.personalized,
+    html[data-app-theme="dark"] .badge.personalized {
+      color: #fde68a;
+      border-color: rgba(245, 166, 35, 0.48);
+      background: rgba(245, 166, 35, 0.2);
     }
     .request-card .arrow-wrap {
       display: flex;
@@ -371,6 +378,24 @@
       border: 1px solid rgba(34, 197, 94, 0.25);
       animation: bannerPop 0.45s ease;
     }
+    .detail-remind-status {
+      display: none;
+      padding: 12px 14px;
+      margin-bottom: 12px;
+      border-radius: var(--req-radius-sm);
+      background: var(--req-chip-success-bg);
+      color: var(--req-chip-success-fg);
+      font-size: 14px;
+      line-height: 1.45;
+      font-weight: 600;
+      border: 1px solid rgba(34, 197, 94, 0.28);
+    }
+    .action-buttons .bd-btn:disabled {
+      opacity: 0.88;
+      cursor: default;
+      transform: none;
+      box-shadow: none;
+    }
     @keyframes bannerPop {
       from { opacity: 0; transform: translateY(-6px); }
       to { opacity: 1; transform: translateY(0); }
@@ -412,14 +437,10 @@
     .detail-info-popover strong { display: block; margin-top: 10px; color: var(--req-accent); font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; }
     .detail-info-popover strong:first-child { margin-top: 0; }
     .action-buttons { margin-top: 8px; }
-    .action-buttons .btn-block {
-      display: flex;
-      width: 100%;
+    .action-buttons .bd-btn {
       margin-bottom: var(--app-btn-stack-gap, 10px);
-      box-sizing: border-box;
     }
-    .action-buttons .btn-block:last-of-type { margin-bottom: 0; }
-    .action-buttons .btn-block:active { transform: scale(0.985); }
+    .action-buttons .bd-btn:last-child { margin-bottom: 0; }
     .btn-ghost {
       background: transparent;
       color: var(--req-muted);
@@ -620,6 +641,7 @@
         d.style.setProperty('--tg-theme-secondary-bg-color', dark ? '#2a2a2a' : '#fff3cc', 'important');
         d.style.setProperty('--tg-theme-hint-color', dark ? '#8e8e93' : '#666666', 'important');
         d.style.setProperty('--req-accent', '#f5a623', 'important');
+        d.setAttribute('data-app-theme', dark ? 'dark' : 'light');
       }
       applyAppTheme();
       if (window.matchMedia) {
@@ -691,9 +713,9 @@
         <span class="detail-info-icon" id="detailInfoTrigger" title="Подсказка">i</span>
       </div>
       <div id="detailInfoPopover" class="detail-info-popover" style="display: none;"></div>
+      <div id="detailRemindStatus" class="detail-remind-status" style="display: none;" role="status" aria-live="polite"></div>
       <div class="action-buttons" id="detailActions"></div>
     </div>
-    <span class="back-link" id="backFromDetail"><svg class="back-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>К списку заявок</span>
   </div>
 
   <div id="screenRespond" data-screen>
@@ -703,8 +725,8 @@
       <textarea id="respondComment" placeholder="Например: готов провести занятие в удобное для вас время"></textarea>
     </div>
     <div class="action-buttons">
-      <button type="button" class="btn-block btn-primary" id="btnSendRespond">Отправить отклик</button>
-      <button type="button" class="btn-block btn-secondary" id="btnRespondSkip">Без комментариев</button>
+      <button type="button" class="bd-btn bd-btn--primary" id="btnSendRespond">Отправить отклик</button>
+      <button type="button" class="bd-btn bd-btn--secondary" id="btnRespondSkip">Без комментариев</button>
       <button type="button" class="back-link btn-ghost-block" id="backFromRespond"><svg class="back-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>Назад</button>
     </div>
   </div>
@@ -928,11 +950,12 @@
       }
 
       var DETAIL_HINT_HTML = '<strong>Записать клиента</strong> — выберите свободный слот и оформите запись, если знаете удобное для клиента время; клиент получит подтверждение в боте.<br>' +
-        '<strong>Напомнить когда появятся слоты</strong> — вы получите уведомление в боте, когда добавите слоты в расписание. Удобно, если пока нет свободного окна.';
+        '<strong>Напомнить когда появятся слоты</strong> — вы получите уведомление в боте, когда добавите слоты в расписание. После нажатия появится зелёная подпись «напоминание включено».';
 
       function renderDetail() {
         const req = state.currentRequest;
         if (!req) return;
+        req.remind_slots_pending = !!req.remind_slots_pending;
         const titleBase = escapeHtml((req.city_name || '—') + '  ·  ' + (req.service_name || '—'));
         const titleEl = document.getElementById('detailTitle');
         var titleBadges = [];
@@ -979,17 +1002,30 @@
           infoPopover.style.display = 'none';
         }
 
+        var remindStatusEl = document.getElementById('detailRemindStatus');
+        if (remindStatusEl) {
+          if (req.has_responded && req.remind_slots_pending) {
+            remindStatusEl.textContent = '✓ Напоминание включено: напишем в боте, когда в расписании появятся свободные окна.';
+            remindStatusEl.style.display = 'block';
+          } else {
+            remindStatusEl.style.display = 'none';
+            remindStatusEl.textContent = '';
+          }
+        }
+
         const actions = document.getElementById('detailActions');
         actions.innerHTML = '';
         if (!req.has_responded) {
-          actions.innerHTML += '<button type="button" class="btn-block btn-primary" id="btnRespond">✅ Готов взять</button>';
-          actions.innerHTML += '<button type="button" class="btn-block btn-danger" id="btnDecline">Отклонить</button>';
+          actions.innerHTML += '<button type="button" class="bd-btn bd-btn--primary" id="btnRespond">Готов взять</button>';
+          actions.innerHTML += '<button type="button" class="bd-btn bd-btn--outline-danger" id="btnDecline">Отклонить</button>';
         } else {
-          actions.innerHTML += '<button type="button" class="btn-block btn-primary" id="btnBookClient">Записать клиента</button>';
-          actions.innerHTML += '<button type="button" class="btn-block btn-secondary" id="btnRemindSlots">Напомнить когда появятся слоты</button>';
+          actions.innerHTML += '<button type="button" class="bd-btn bd-btn--primary" id="btnBookClient">Записать клиента</button>';
+          if (req.remind_slots_pending) {
+            actions.innerHTML += '<button type="button" class="bd-btn bd-btn--secondary" id="btnRemindSlots" disabled aria-disabled="true">Напоминание включено</button>';
+          } else {
+            actions.innerHTML += '<button type="button" class="bd-btn bd-btn--secondary" id="btnRemindSlots">Напомнить когда появятся слоты</button>';
+          }
         }
-
-        document.getElementById('backFromDetail').onclick = function() { state.currentRequest = null; loadList(); showScreen('screenList'); };
 
         var btnRespond = document.getElementById('btnRespond');
         if (btnRespond) btnRespond.onclick = function() { showScreen('screenRespond'); };
@@ -1012,12 +1048,34 @@
         var btnBookClient = document.getElementById('btnBookClient');
         if (btnBookClient) btnBookClient.onclick = function() { loadSlots(req); };
         var btnRemindSlots = document.getElementById('btnRemindSlots');
-        if (btnRemindSlots) btnRemindSlots.onclick = function() {
+        if (btnRemindSlots && !btnRemindSlots.disabled) btnRemindSlots.onclick = function() {
+          btnRemindSlots.disabled = true;
           fetch(apiUrl('/trainer/requests/' + req.id + '/remind-slots'), { method: 'POST', headers: headers() })
-            .then(function(res) { return res.json(); })
-            .then(function(data) {
-              if (data.success) alert('Напомним, когда появятся свободные слоты.');
-            }).catch(function() { alert('Ошибка сети'); });
+            .then(function(res) { return res.json().then(function(data) { return { ok: res.ok, data: data }; }); })
+            .then(function(o) {
+              if (!o.ok || !o.data.success) {
+                btnRemindSlots.disabled = false;
+                alert((o.data && o.data.detail) ? o.data.detail : 'Не удалось включить напоминание');
+                return;
+              }
+              req.remind_slots_pending = true;
+              var ix = state.items.findIndex(function(r) { return r.id === req.id; });
+              if (ix >= 0) state.items[ix].remind_slots_pending = true;
+              state.currentRequest = req;
+              try {
+                if (tg && tg.HapticFeedback && tg.HapticFeedback.notificationOccurred) {
+                  tg.HapticFeedback.notificationOccurred('success');
+                }
+              } catch (e) {}
+              if (o.data.was_new === false && tg && typeof tg.showAlert === 'function') {
+                tg.showAlert('Напоминание уже было включено — уведомления придут в боте.');
+              }
+              renderDetail();
+            })
+            .catch(function() {
+              btnRemindSlots.disabled = false;
+              alert('Ошибка сети');
+            });
         };
       }
 
@@ -1034,6 +1092,7 @@
           .then(function(o) {
             if (o.ok && o.data.success) {
               req.has_responded = true;
+              req.remind_slots_pending = false;
               state.currentRequest = req;
               state.justResponded = true;
               var idx = state.items.findIndex(function(r) { return r.id === req.id; });
@@ -1055,6 +1114,7 @@
           .then(function(o) {
             if (o.ok && o.data.success) {
               req.has_responded = true;
+              req.remind_slots_pending = false;
               var idx = state.items.findIndex(function(r) { return r.id === req.id; });
               if (idx >= 0) state.items[idx] = req;
               state.currentRequest = req;

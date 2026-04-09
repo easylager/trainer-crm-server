@@ -158,6 +158,28 @@
     }
     .slot-row .slot-row-left { flex: 1; min-width: 0; }
     .slot-row .slot-time { font-weight: 600; font-size: 15px; }
+    .slot-cohort-hint {
+      font-size: 11px;
+      color: var(--tg-theme-hint-color);
+      margin-top: 3px;
+      font-weight: 500;
+    }
+    /* Group slots (capacity > 1): full text on mobile — wrap, no ellipsis (hover title useless on touch) */
+    .slot-group-catalog-meta {
+      margin-top: 4px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      max-width: 100%;
+    }
+    .slot-group-meta-line {
+      font-size: 11px;
+      line-height: 1.35;
+      color: var(--tg-theme-hint-color);
+      font-weight: 500;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
     .slot-venue { font-size: 13px; color: var(--tg-theme-hint-color); margin-top: 4px; line-height: 1.35; }
     .slot-venue .venue-muted { font-style: italic; }
     .slot-client-hint { font-size: 12px; color: var(--tg-theme-hint-color); margin-top: 2px; }
@@ -189,7 +211,8 @@
       font-weight: 600;
     }
     .slot-row.slot-past .slot-venue,
-    .slot-row.slot-past .slot-client-hint {
+    .slot-row.slot-past .slot-client-hint,
+    .slot-row.slot-past .slot-group-catalog-meta {
       opacity: 0.9;
     }
     .slot-row.slot-past .slot-status {
@@ -270,6 +293,69 @@
     .btn-slot-del:active { opacity: 0.8; }
     .slot-row.slot-available { cursor: pointer; }
     .slot-row.slot-available:active { opacity: 0.9; }
+    .slot-row.slot-cohort {
+      cursor: pointer;
+    }
+    .slot-row.slot-group-hub {
+      cursor: pointer;
+      border-color: color-mix(in srgb, var(--tg-theme-button-color) 42%, transparent);
+    }
+    .slot-row.slot-group-hub:active { opacity: 0.92; }
+    .slot-group-meter-wrap {
+      margin-top: 8px;
+      height: 5px;
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--tg-theme-hint-color) 22%, transparent);
+      overflow: hidden;
+    }
+    .slot-group-meter-fill {
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, color-mix(in srgb, var(--tg-theme-button-color) 75%, transparent), var(--tg-theme-button-color));
+      min-width: 6%;
+      transition: width 0.2s ease;
+    }
+    .slot-group-chip {
+      font-size: 12px;
+      font-weight: 700;
+      padding: 5px 10px;
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--tg-theme-button-color) 18%, transparent);
+      color: var(--tg-theme-text-color);
+      border: 1px solid color-mix(in srgb, var(--tg-theme-button-color) 35%, transparent);
+    }
+    #modalGroupSlot .group-slot-list {
+      max-height: min(52vh, 420px);
+      overflow-y: auto;
+      margin: 12px 0 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    #modalGroupSlot .group-slot-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      width: 100%;
+      padding: 12px 14px;
+      border-radius: 12px;
+      border: none;
+      text-align: left;
+      font: inherit;
+      background: var(--tg-theme-secondary-bg-color);
+      color: var(--tg-theme-text-color);
+      cursor: pointer;
+    }
+    #modalGroupSlot .group-slot-row:active { opacity: 0.9; }
+    #modalGroupSlot .group-slot-row .g-name { font-weight: 600; font-size: 15px; }
+    #modalGroupSlot .group-slot-row .g-st {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--tg-theme-hint-color);
+    }
+    #modalGroupSlot .group-slot-sub { font-size: 13px; color: var(--tg-theme-hint-color); margin: 4px 0 0; line-height: 1.35; }
     .client-list .client-row {
       display: block;
       width: 100%;
@@ -608,6 +694,129 @@
     }
     .template-day-card .day-slots.empty { font-style: italic; }
     .template-day-card .arrow { color: var(--tg-theme-hint-color); font-size: 14px; }
+    .template-cap-panel { margin-top: 4px; margin-bottom: 12px; }
+    .template-cap-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 8px;
+      font-size: 14px;
+      color: var(--tg-theme-text-color);
+    }
+    .template-cap-hour {
+      min-width: 44px;
+      font-weight: 600;
+    }
+    .template-cap-controls {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      align-items: flex-end;
+    }
+    .template-cap-inline-label {
+      font-size: 12px;
+      color: var(--tg-theme-hint-color);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .template-cap-inline-label .slot-flow-number {
+      width: 76px;
+      min-height: 38px;
+      max-width: 76px;
+      padding: 7px 9px;
+      font-size: 15px;
+    }
+    .template-cap-inline-label .slot-flow-select {
+      max-width: 188px;
+      min-height: 38px;
+      padding-top: 7px;
+      padding-bottom: 7px;
+      font-size: 14px;
+    }
+    .template-cap-inline-label .slot-flow-select:disabled {
+      opacity: 0.56;
+      cursor: not-allowed;
+    }
+    .slot-flow-panel {
+      margin: 0 0 14px;
+      padding: 14px;
+      border-radius: 16px;
+      border: 1px solid color-mix(in srgb, var(--tg-theme-hint-color) 24%, transparent);
+      background: color-mix(in srgb, var(--tg-theme-secondary-bg-color) 84%, transparent);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    }
+    .slot-flow-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .slot-flow-field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      min-width: 0;
+    }
+    .slot-flow-field--wide {
+      grid-column: 1 / -1;
+    }
+    .slot-flow-label {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--tg-theme-hint-color);
+      margin: 0;
+    }
+    .slot-flow-help {
+      margin: 0;
+      font-size: 12px;
+      line-height: 1.4;
+      color: var(--tg-theme-hint-color);
+    }
+    .slot-flow-select,
+    .slot-flow-number {
+      width: 100%;
+      min-height: 44px;
+      border-radius: 12px;
+      border: 1px solid color-mix(in srgb, var(--tg-theme-hint-color) 32%, transparent);
+      background: var(--tg-theme-secondary-bg-color);
+      color: var(--tg-theme-text-color);
+      font-size: 15px;
+      font-family: inherit;
+      box-sizing: border-box;
+      outline: none;
+      transition: border-color 0.16s ease, box-shadow 0.16s ease;
+    }
+    .slot-flow-number {
+      max-width: 132px;
+      padding: 10px 12px;
+    }
+    .slot-flow-select {
+      appearance: none;
+      -webkit-appearance: none;
+      padding: 10px 40px 10px 12px;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%238e8e93' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 12px center;
+    }
+    .slot-flow-number:focus,
+    .slot-flow-select:focus {
+      border-color: rgba(247, 166, 0, 0.55);
+      box-shadow: 0 0 0 3px rgba(247, 166, 0, 0.12);
+    }
+    #slotCapacityWrap .slot-flow-grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    @media (max-width: 380px) {
+      .slot-flow-grid {
+        grid-template-columns: minmax(0, 1fr);
+      }
+    }
+    #templateCapacityPanel .slot-flow-help {
+      margin-top: 8px;
+    }
     .hour-grid {
       display: flex;
       flex-wrap: wrap;
@@ -631,8 +840,16 @@
       color: var(--app-cta-fill) !important;
     }
     .hour-chip.locked { opacity: 0.7; cursor: not-allowed; }
+    /* Calendar «add slots»: existing slot hours stay selected but cannot be toggled off */
+    .hour-chip.pinned { cursor: default; }
     .edit-actions { display: flex; gap: 10px; margin-top: 8px; }
     .edit-actions .btn-block { flex: 1; }
+    .edit-actions .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+    /* Add slots / template hour editor: space above bottom edge + home indicator */
+    #screenEdit {
+      box-sizing: border-box;
+      padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+    }
     .back-link {
       display: inline-flex;
       align-items: center;
@@ -705,6 +922,70 @@
     .modal p { margin: 0 0 20px; font-size: 14px; color: var(--tg-theme-hint-color); line-height: 1.4; }
     .modal-actions { display: flex; gap: 10px; }
     .modal-actions button { flex: 1; }
+    #modalSlotIntent .modal {
+      max-width: 400px;
+      border-radius: 20px;
+      padding: 18px;
+    }
+    .slot-intent-modal-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .slot-intent-choice {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      width: 100%;
+      border: 1px solid rgba(128, 128, 128, 0.26);
+      border-radius: 14px;
+      background: var(--tg-theme-secondary-bg-color);
+      color: var(--tg-theme-text-color);
+      padding: 12px;
+      text-align: left;
+      font: inherit;
+      cursor: pointer;
+      transition: border-color 0.16s ease, transform 0.12s ease, box-shadow 0.16s ease;
+    }
+    .slot-intent-choice:active {
+      transform: scale(0.99);
+    }
+    .slot-intent-choice.is-suggested {
+      border-color: rgba(247, 166, 0, 0.42);
+      box-shadow: 0 6px 14px rgba(247, 166, 0, 0.12);
+    }
+    .slot-intent-choice-icon {
+      width: 34px;
+      height: 34px;
+      border-radius: 10px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 17px;
+      font-weight: 700;
+      color: var(--app-cta-fill);
+      background: color-mix(in srgb, var(--tg-theme-button-color) 17%, transparent);
+      flex-shrink: 0;
+    }
+    .slot-intent-choice-body {
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .slot-intent-choice-title {
+      font-size: 15px;
+      font-weight: 700;
+      line-height: 1.25;
+    }
+    .slot-intent-choice-hint {
+      font-size: 12px;
+      line-height: 1.35;
+      color: var(--tg-theme-hint-color);
+    }
+    .slot-intent-cancel {
+      margin-top: 2px;
+    }
     .day-pick-title {
       margin: 0 0 20px;
       font-size: 17px;
@@ -1083,10 +1364,6 @@
     </div>
     <div id="detailBookingContent"></div>
     <div class="bd-actions-wrap" id="detailBookingActions"></div>
-    <button type="button" class="back-link" id="backToScheduleFromBooking">
-      <svg class="back-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
-      Назад
-    </button>
   </div>
 
   <div id="screenBookingDecline" data-screen class="decline-screen">
@@ -1124,8 +1401,49 @@
 
   <div id="screenEdit" style="display: none;">
     <div class="screen-title" id="editTitle">Выбор часов</div>
-    <div class="screen-hint" id="editHint" style="font-size:14px;color:var(--tg-theme-hint-color);margin-bottom:12px;">Отметь часы (повторное нажатие снимает). Занятые слоты нельзя убрать.</div>
+    <div class="screen-hint" id="editHint" style="font-size:14px;color:var(--tg-theme-hint-color);margin-bottom:12px;">Выбор часов</div>
     <div class="hour-grid" id="hourGrid"></div>
+    <div id="templateCapacityPanel" class="template-cap-panel slot-flow-panel" style="display:none;">
+      <div id="templateDefaultCapRow" class="slot-flow-grid" style="margin-bottom:12px;">
+        <div class="slot-flow-field">
+          <label for="templateDefaultCapacityInput" class="slot-flow-label">Мест в слоте</label>
+          <input type="number" id="templateDefaultCapacityInput" class="slot-flow-number" min="1" max="500" value="2" inputmode="numeric" />
+        </div>
+        <div id="templateDefaultServiceRow" class="slot-flow-field" style="margin-bottom:0;display:none;">
+          <label for="templateDefaultServiceSelect" class="slot-flow-label">Услуга</label>
+          <select id="templateDefaultServiceSelect" class="slot-flow-select"></select>
+          <p class="slot-flow-help">Одна услуга для всех выбранных часов в этом дне шаблона.</p>
+        </div>
+      </div>
+      <div id="templateGroupArenaWrap" class="slot-flow-field slot-flow-field--wide" style="display:none;">
+        <label for="templateGroupArenaSelect" class="slot-flow-label">Площадка</label>
+        <select id="templateGroupArenaSelect" class="slot-flow-select"></select>
+        <p class="slot-flow-help">Для всех выбранных групповых часов. Если площадок несколько — выберите явно.</p>
+      </div>
+      <p id="templateCapacityHelp" class="slot-flow-help">Параметры ниже задаются один раз и действуют на все отмеченные часы. После «Применить на неделю» в календаре появятся слоты с этими настройками.</p>
+    </div>
+    <div id="slotCapacityWrap" class="slot-flow-panel" style="display:none; margin-top:14px; margin-bottom:8px;">
+      <div class="slot-flow-grid">
+        <div class="slot-flow-field">
+          <label for="slotCapacityInput" class="slot-flow-label">Мест в слоте</label>
+          <input type="number" id="slotCapacityInput" class="slot-flow-number" min="1" max="500" value="2" inputmode="numeric" />
+        </div>
+      </div>
+    </div>
+    <div id="calendarGroupServiceWrap" class="slot-flow-panel" style="display:none; margin-top:12px; margin-bottom:8px;">
+      <div class="slot-flow-field">
+        <label for="calendarGroupServiceSelect" class="slot-flow-label">Услуга для групповых слотов</label>
+        <select id="calendarGroupServiceSelect" class="slot-flow-select"></select>
+        <p class="slot-flow-help">Клиенты в каталоге по этой услуге увидят эти групповые окна.</p>
+      </div>
+    </div>
+    <div id="calendarGroupArenaWrap" class="slot-flow-panel" style="display:none; margin-top:12px; margin-bottom:8px;">
+      <div class="slot-flow-field">
+        <label for="calendarGroupArenaSelect" class="slot-flow-label">Площадка для групповых слотов</label>
+        <select id="calendarGroupArenaSelect" class="slot-flow-select"></select>
+        <p class="slot-flow-help">Запись на группу только на эту площадку, без выбора при брони.</p>
+      </div>
+    </div>
     <div class="edit-actions">
       <button type="button" class="btn-block btn-primary" id="editDone">Готово</button>
       <button type="button" class="btn-block btn-secondary" id="editCancel">Отмена</button>
@@ -1133,7 +1451,7 @@
   </div>
 
   <div id="screenDayPick" style="display: none;">
-    <h2 class="day-pick-title">Добавить слоты на какой день?</h2>
+    <h2 class="day-pick-title" id="dayPickTitle">Добавить слоты на какой день?</h2>
     <div id="dayPickList"></div>
     <span class="back-link" id="dayPickBack"><svg class="back-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>Назад к расписанию</span>
   </div>
@@ -1146,6 +1464,40 @@
         <button type="button" class="btn-block btn-secondary" id="modalConfirmNo">Отмена</button>
         <button type="button" class="btn-block btn-primary" id="modalConfirmYes">Применить</button>
       </div>
+    </div>
+  </div>
+
+  <div id="modalSlotIntent" class="modal-overlay" style="display: none;" aria-hidden="true">
+    <div class="modal">
+      <h3 id="slotIntentTitle">Тип слотов</h3>
+      <p id="slotIntentText" style="font-size:14px;color:var(--tg-theme-hint-color);line-height:1.45;margin:0 0 16px;">Выберите тип слотов.</p>
+      <div class="slot-intent-modal-actions">
+        <button type="button" class="slot-intent-choice" id="btnSlotIntentIndividual">
+          <span class="slot-intent-choice-icon" aria-hidden="true">1</span>
+          <span class="slot-intent-choice-body">
+            <span class="slot-intent-choice-title">Индивидуальные</span>
+            <span class="slot-intent-choice-hint">Один клиент на час, без доп. настроек.</span>
+          </span>
+        </button>
+        <button type="button" class="slot-intent-choice" id="btnSlotIntentGroup">
+          <span class="slot-intent-choice-icon" aria-hidden="true">G</span>
+          <span class="slot-intent-choice-body">
+            <span class="slot-intent-choice-title">Групповые</span>
+            <span class="slot-intent-choice-hint">Несколько мест + услуга и площадка в один шаг.</span>
+          </span>
+        </button>
+        <button type="button" class="btn-block btn-secondary slot-intent-cancel" id="btnSlotIntentCancel">Отмена</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="modalGroupSlot" class="modal-overlay book-flow-overlay" style="display: none;" aria-hidden="true">
+    <div class="modal book-flow-modal" style="max-width: 420px;">
+      <h3 id="groupSlotTitle" class="book-modal-title">Группа</h3>
+      <p id="groupSlotSub" class="group-slot-sub"></p>
+      <div id="groupSlotList" class="group-slot-list"></div>
+      <button type="button" class="btn-block btn-primary" id="groupSlotAddBtn" style="display: none;">Добавить участника</button>
+      <button type="button" class="btn-block btn-secondary" id="groupSlotCloseBtn">Закрыть</button>
     </div>
   </div>
 
@@ -1375,16 +1727,26 @@
         var edit = document.getElementById('screenEdit').style.display === 'block';
         var dayPick = document.getElementById('screenDayPick').style.display === 'block';
         var mBook = document.getElementById('modalBookClient').style.display === 'flex';
+        var mGroup = document.getElementById('modalGroupSlot') && document.getElementById('modalGroupSlot').style.display === 'flex';
         var mBookConf = document.getElementById('modalBookConfirm').style.display === 'flex';
         var mCancelB = document.getElementById('modalBookingCancel').style.display === 'flex';
         var mTpl = document.getElementById('modalConfirm').style.display === 'flex';
-        btn.hidden = !(booking || decline || edit || dayPick || mBook || mBookConf || mCancelB || mTpl);
+        var mIntent = document.getElementById('modalSlotIntent') && document.getElementById('modalSlotIntent').style.display === 'flex';
+        btn.hidden = !(booking || decline || edit || dayPick || mBook || mGroup || mBookConf || mCancelB || mTpl || mIntent);
       }
 
       function refreshCalendarChrome() {
         if (!state.weekStart) state.weekStart = getMonday(new Date());
         const start = state.weekStart;
         document.getElementById('weekLabel').textContent = formatWeekLabel(start);
+      }
+
+      function flushPendingGroupHubModal() {
+        if (state.pendingOpenGroupSlotId) {
+          var gid = state.pendingOpenGroupSlotId;
+          state.pendingOpenGroupSlotId = null;
+          setTimeout(function() { openGroupSlotModal(gid); }, 0);
+        }
       }
 
       function syncAfterBookingPop() {
@@ -1398,6 +1760,7 @@
         if (state.scheduleDataLoaded && state.tab === 'calendar') {
           refreshCalendarChrome();
           renderCalendar();
+          flushPendingGroupHubModal();
           return;
         }
         loadSlots();
@@ -1421,6 +1784,17 @@
           navigateToTrainerHomeSafe();
           return;
         }
+        if (state.bookingDetailReturn === 'group' && state.groupHubSlotId != null) {
+          state.pendingOpenGroupSlotId = state.groupHubSlotId;
+          state.bookingDetailReturn = null;
+          state.groupHubSlotId = null;
+          if (history.state && history.state.ui === 'sched-detail') {
+            history.back();
+            return;
+          }
+          syncAfterBookingPop();
+          return;
+        }
         if (history.state && history.state.ui === 'sched-detail') {
           history.back();
         } else {
@@ -1436,6 +1810,20 @@
           navigateToTrainerHomeSafe();
           return;
         }
+        if (state.bookingDetailReturn === 'group' && state.groupHubSlotId != null) {
+          var sid = state.groupHubSlotId;
+          state.bookingDetailReturn = null;
+          state.groupHubSlotId = null;
+          state.pendingOpenGroupSlotId = sid;
+          if (history.state && history.state.ui === 'sched-detail') {
+            state.pendingReloadAfterPop = true;
+            history.back();
+            return;
+          }
+          showBookingStack('main');
+          loadSlots();
+          return;
+        }
         if (history.state && history.state.ui === 'sched-detail') {
           state.pendingReloadAfterPop = true;
           history.back();
@@ -1446,6 +1834,25 @@
       }
 
       function handleTelegramBackUnified() {
+        var mgr = document.getElementById('modalGroupSlot');
+        if (mgr && mgr.style.display === 'flex') {
+          mgr.style.display = 'none';
+          updateTelegramBack();
+          return;
+        }
+        var msi = document.getElementById('modalSlotIntent');
+        if (msi && msi.style.display === 'flex') {
+          msi.style.display = 'none';
+          msi.setAttribute('aria-hidden', 'true');
+          state.pendingIntentFlow = null;
+          state.pendingTemplateDay = null;
+          var ind = document.getElementById('btnSlotIntentIndividual');
+          var grp = document.getElementById('btnSlotIntentGroup');
+          if (ind) ind.classList.remove('is-suggested');
+          if (grp) grp.classList.remove('is-suggested');
+          updateTelegramBack();
+          return;
+        }
         var mbc = document.getElementById('modalBookingCancel');
         if (mbc && mbc.style.display === 'flex') {
           mbc.style.display = 'none';
@@ -1469,7 +1876,7 @@
         var mb = document.getElementById('modalBookClient');
         if (mb && mb.style.display === 'flex') {
           mb.style.display = 'none';
-          state.bookSlotId = null;
+          clearBookSlotModalState();
           state.bookModalStep = 'choice';
           updateTelegramBack();
           return;
@@ -1513,13 +1920,14 @@
           .then(function(data) {
             if (!data) return;
             state.slots = data.slots || [];
+            state.groupClassesEnabled = !!data.group_classes_enabled;
             state.scheduleDataLoaded = true;
           })
           .catch(function() {});
       }
 
       function openBookingDetail(bookingId) {
-        if (state.bookingDetailReturn !== 'hub') {
+        if (state.bookingDetailReturn !== 'hub' && state.bookingDetailReturn !== 'group') {
           state.bookingDetailReturn = 'schedule';
         }
         state.selectedBooking = null;
@@ -1590,7 +1998,7 @@
             actions.innerHTML += '<button type="button" class="bd-btn bd-btn--outline-danger" data-baction="cancel">' + BD_ICONS.cancelOutline + ' Отменить запись</button>';
           }
           if (tid && b.client_has_telegram !== false) {
-            actions.innerHTML += '<a class="bd-btn bd-btn--surface" href="tg://user?id=' + encodeURIComponent(String(tid)) + '">' + BD_ICONS.send + ' Написать клиенту</a>';
+            actions.innerHTML += '<button type="button" class="bd-btn bd-btn--surface" data-baction="write_client">' + BD_ICONS.send + ' Написать клиенту</button>';
           }
           if (!completed) {
             if (b.recurring_id) {
@@ -1603,6 +2011,7 @@
           actions.querySelectorAll('button[data-baction]').forEach(function(btn) {
             btn.onclick = function() {
               var act = btn.getAttribute('data-baction');
+              if (act === 'write_client') return;
               if (act === 'confirm') confirmTrainerBooking(b.id);
               else if (act === 'decline') {
                 showBookingStack('decline');
@@ -1649,7 +2058,6 @@
         }).catch(function() { alert('Ошибка'); });
       }
 
-      document.getElementById('backToScheduleFromBooking').onclick = function() { goBackFromBookingDetail(); };
       document.getElementById('backFromDeclineBooking').onclick = function() { showBookingStack('detail'); };
 
       document.getElementById('btnDeclineSubmitBooking').onclick = function() {
@@ -1729,7 +2137,59 @@
         deepLinkClientId: null,
         /** 'hub' when opened via /schedule-editor?open_booking=&from=hub (return to trainer-home). */
         bookingDetailReturn: null,
+        /** When opening booking detail from group hub: reopen hub on back. */
+        groupHubSlotId: null,
+        /** After history.back / loadSlots: reopen group modal. */
+        pendingOpenGroupSlotId: null,
+        /** schedule-editor?flow=book from trainer hub — filter «Свободны» + scroll to first bookable row. */
+        pendingBookFlowFromHub: false,
+        /** From GET /schedule: allow capacity > 1 in POST /schedule/slots (profile opt-in). */
+        groupClassesEnabled: false,
+        /** 'individual' | 'group' — set before opening calendar/template editor when group classes are enabled. */
+        slotEditIntent: null,
+        pendingIntentFlow: null,
+        pendingTemplateDay: null,
+        trainerServices: [],
+        /** From GET /trainer/my-services: arenas for group slot venue picker. */
+        trainerScheduleArenas: [],
+        /** Calendar day editor: hours that already had slots when the screen opened (cannot deselect). */
+        calendarBaselineHours: null,
+        /** Book-client modal: group slot (capacity &gt; 1) — fixed service, no price tier UI. */
+        bookSlotIsGroup: false,
+        bookSlotGroupServiceId: null,
+        /** At least one client with booking history (GET /trainer/clients non-empty). */
+        trainerHasBookClients: false,
       };
+
+      // «Написать клиенту»: delegation — Mini App WebView часто игнорирует per-button onclick на динамически вставленных кнопках; tg из замыкания надёжнее window.*.
+      document.getElementById('detailBookingActions').addEventListener('click', function(ev) {
+        var btn = ev.target && ev.target.closest && ev.target.closest('button[data-baction="write_client"]');
+        if (!btn) return;
+        ev.preventDefault();
+        var booking = state.selectedBooking;
+        if (!booking) return;
+        var un = String(booking.client_telegram_username || '').replace(/^@/, '').trim();
+        var tid = booking.client_telegram_id;
+        var url;
+        if (un) url = 'https://t.me/' + encodeURIComponent(un);
+        else if (tid != null && tid !== '') url = 'tg://user?id=' + encodeURIComponent(String(tid));
+        else return;
+        if (tg) {
+          try {
+            if (typeof tg.openTelegramLink === 'function') {
+              tg.openTelegramLink(url);
+              return;
+            }
+          } catch (e) { /* noop */ }
+          try {
+            if (typeof tg.openLink === 'function') {
+              tg.openLink(url);
+              return;
+            }
+          } catch (e2) { /* noop */ }
+        }
+        window.location.href = url;
+      });
 
       function syncBookArenaSelects() {
         var v = state.bookArenaId != null ? String(state.bookArenaId) : '';
@@ -1740,6 +2200,13 @@
       }
 
       function fillTrainerArenasUI() {
+        if (state.bookSlotIsGroup) {
+          var w1 = document.getElementById('bookArenaWrap');
+          var w2 = document.getElementById('bookArenaWrapNew');
+          if (w1) w1.style.display = 'none';
+          if (w2) w2.style.display = 'none';
+          return;
+        }
         var arenas = state.trainerArenas || [];
         var show = arenas.length > 1;
         var wrap = document.getElementById('bookArenaWrap');
@@ -1772,13 +2239,41 @@
         syncBookArenaSelects();
       }
 
+      function setBookOptExistingVisible(show) {
+        var btn = document.getElementById('bookOptExisting');
+        if (!btn) return;
+        btn.style.display = show ? '' : 'none';
+        btn.setAttribute('aria-hidden', show ? 'false' : 'true');
+        btn.tabIndex = show ? 0 : -1;
+      }
+
       function trainerBookingPayload(clientId, serviceId) {
         var o = { slot_id: state.bookSlotId, client_id: clientId, service_id: serviceId };
-        if (state.trainerArenas && state.trainerArenas.length > 1 && state.bookArenaId != null) {
+        if (!state.bookSlotIsGroup && state.trainerArenas && state.trainerArenas.length > 1 && state.bookArenaId != null) {
           o.arena_id = state.bookArenaId;
         }
-        if (state.bookPriceVariantId != null) o.service_price_variant_id = state.bookPriceVariantId;
+        if (!state.bookSlotIsGroup && state.bookPriceVariantId != null) {
+          o.service_price_variant_id = state.bookPriceVariantId;
+        }
         return o;
+      }
+
+      function applyBookModalGroupUi() {
+        var dis = !!(state.bookSlotIsGroup && state.bookSlotGroupServiceId != null);
+        ['bookServiceSelect', 'bookServiceSelectNew'].forEach(function(id) {
+          var el = document.getElementById(id);
+          if (el) el.disabled = dis;
+        });
+      }
+
+      function clearBookSlotModalState() {
+        state.bookSlotId = null;
+        state.bookSlotIsGroup = false;
+        state.bookSlotGroupServiceId = null;
+        ['bookServiceSelect', 'bookServiceSelectNew'].forEach(function(id) {
+          var el = document.getElementById(id);
+          if (el) el.disabled = false;
+        });
       }
 
       var PRICE_TIER_LABEL_RU = {
@@ -1794,6 +2289,14 @@
       }
 
       function syncBookPriceTierRadios(which) {
+        var wrapE = document.getElementById('bookPriceTierWrapExisting');
+        var wrapN = document.getElementById('bookPriceTierWrapNew');
+        if (state.bookSlotIsGroup) {
+          if (wrapE) wrapE.style.display = 'none';
+          if (wrapN) wrapN.style.display = 'none';
+          state.bookPriceVariantId = null;
+          return;
+        }
         var sid = state.bookServiceId;
         var svc = (state.bookServices || []).filter(function(x) { return x.id === sid; })[0];
         var tiers = (svc && svc.price_tiers) ? svc.price_tiers : [];
@@ -1921,6 +2424,228 @@
         });
         if (state.tab === 'calendar') loadSlots();
         else loadTemplates();
+        state.slotEditIntent = null;
+        state.pendingIntentFlow = null;
+        state.pendingTemplateDay = null;
+        state.calendarBaselineHours = null;
+        updateTelegramBack();
+      }
+
+      function isGroupClassesFeatureEnabled() {
+        return !!state.groupClassesEnabled;
+      }
+
+      /** Group-only editor controls are visible only for explicit "group" intent. */
+      function slotIntentUseGroupUi() {
+        return isGroupClassesFeatureEnabled() && state.slotEditIntent === 'group';
+      }
+
+      function detectSlotIntentFromRows(rows) {
+        var list = Array.isArray(rows) ? rows : [];
+        for (var i = 0; i < list.length; i++) {
+          var cap = (list[i] && list[i].capacity != null) ? parseInt(list[i].capacity, 10) : 1;
+          if (!isNaN(cap) && cap > 1) return 'group';
+        }
+        return 'individual';
+      }
+
+      // English note: one modal entry point keeps the flow explicit before trainer picks a day/hours.
+      function openSlotIntentModal(flow, templateDay, suggestedIntent) {
+        var modal = document.getElementById('modalSlotIntent');
+        if (!modal) return;
+        state.pendingIntentFlow = flow || null;
+        state.pendingTemplateDay = (templateDay == null ? null : templateDay);
+        var hint = suggestedIntent === 'group'
+          ? 'В этом дне уже есть групповые часы, поэтому рекомендуем групповой режим.'
+          : 'Индивидуальный режим быстрее, если нужен один клиент на каждый час.';
+        var titleEl = document.getElementById('slotIntentTitle');
+        var textEl = document.getElementById('slotIntentText');
+        if (titleEl) {
+          titleEl.textContent = flow === 'template' ? 'Шаблон: тип часов' : 'Какие слоты добавить?';
+        }
+        if (textEl) {
+          textEl.textContent = flow === 'template'
+            ? ('Выберите формат для выбранного дня шаблона. ' + hint)
+            : ('Сначала выберите формат, затем день и часы. ' + hint);
+        }
+        var ind = document.getElementById('btnSlotIntentIndividual');
+        var grp = document.getElementById('btnSlotIntentGroup');
+        if (grp) {
+          grp.style.display = isGroupClassesFeatureEnabled() ? '' : 'none';
+        }
+        if (ind) ind.classList.remove('is-suggested');
+        if (grp) grp.classList.remove('is-suggested');
+        if (suggestedIntent === 'group') {
+          if (grp) grp.classList.add('is-suggested');
+        } else if (ind) {
+          ind.classList.add('is-suggested');
+        }
+        modal.style.display = 'flex';
+        modal.setAttribute('aria-hidden', 'false');
+        updateTelegramBack();
+      }
+
+      /** True if at least one hour was added beyond the slots that existed when opening the day editor. */
+      function hasCalendarNewSlotSelection() {
+        if (state.editMode !== 'calendar' || !state.calendarBaselineHours) return true;
+        var base = state.calendarBaselineHours;
+        var hasNew = false;
+        state.selectedHours.forEach(function(h) {
+          if (!base.has(h)) hasNew = true;
+        });
+        return hasNew;
+      }
+
+      function updateEditDoneButton() {
+        var btn = document.getElementById('editDone');
+        if (!btn) return;
+        if (state.editMode === 'calendar' && state.calendarBaselineHours) {
+          var ok = hasCalendarNewSlotSelection();
+          btn.disabled = !ok;
+          btn.title = ok ? '' : 'Добавьте хотя бы один новый час';
+        } else {
+          btn.disabled = false;
+          btn.title = '';
+        }
+      }
+
+      function buildServiceOptionsHtml(selectedId) {
+        var o = '<option value="">— выберите —</option>';
+        (state.trainerServices || []).forEach(function(s) {
+          var sid = parseInt(s.id, 10);
+          var sel = selectedId != null && parseInt(selectedId, 10) === sid ? ' selected' : '';
+          o += '<option value="' + sid + '"' + sel + '>' + escapeHtml(s.name || '') + '</option>';
+        });
+        return o;
+      }
+
+      function fillTrainerServiceSelects() {
+        var opts = buildServiceOptionsHtml(null);
+        var cal = document.getElementById('calendarGroupServiceSelect');
+        var td = document.getElementById('templateDefaultServiceSelect');
+        if (cal) cal.innerHTML = opts;
+        if (td) td.innerHTML = opts;
+      }
+
+      /** Template group mode: arena dropdown (same options as calendar group slots). */
+      function fillTemplateGroupArenaSelect() {
+        var ars = state.trainerScheduleArenas || [];
+        var sel = document.getElementById('templateGroupArenaSelect');
+        if (!sel) return;
+        sel.innerHTML = '';
+        ars.forEach(function(a) {
+          var o = document.createElement('option');
+          o.value = String(a.id);
+          o.textContent = (a.name || '—') + (a.is_primary ? ' · основная' : '');
+          sel.appendChild(o);
+        });
+      }
+
+      function applyTemplateGroupPrefillFromExisting(existing, useTplGroup) {
+        var tdef = document.getElementById('templateDefaultCapacityInput');
+        var tsvc = document.getElementById('templateDefaultServiceSelect');
+        if (!useTplGroup) {
+          if (tdef) tdef.value = '1';
+          return;
+        }
+        var caps = (existing || []).map(function(t) { return (t.capacity != null) ? parseInt(t.capacity, 10) : 1; });
+        var capVal = 2;
+        if (caps.length && caps.every(function(c) { return c === caps[0]; })) capVal = Math.max(2, caps[0]);
+        if (tdef) tdef.value = String(Math.min(500, capVal));
+        var svcPick = null;
+        (existing || []).forEach(function(t) {
+          var c = (t.capacity != null) ? parseInt(t.capacity, 10) : 1;
+          if (c > 1 && t.service_id != null) svcPick = parseInt(t.service_id, 10);
+        });
+        if (tsvc && svcPick != null && !isNaN(svcPick)) tsvc.value = String(svcPick);
+      }
+
+      function loadTrainerServicesIfNeeded() {
+        if (state.trainerServices && state.trainerServices.length) {
+          fillTrainerServiceSelects();
+          return Promise.resolve();
+        }
+        return fetch(apiUrlWithQuery('/trainer/my-services'), { headers: headers() })
+          .then(function(r) { return r.json(); })
+          .then(function(data) {
+            state.trainerServices = (data && data.services) ? data.services : [];
+            state.trainerScheduleArenas = (data && data.arenas) ? data.arenas : [];
+            fillTrainerServiceSelects();
+          });
+      }
+
+      function showDayPickScreen() {
+        if (!state.weekStart) return;
+        var dayPickTitle = document.getElementById('dayPickTitle');
+        if (dayPickTitle) {
+          dayPickTitle.textContent = slotIntentUseGroupUi()
+            ? 'Добавить групповые слоты на какой день?'
+            : 'Добавить индивидуальные слоты на какой день?';
+        }
+        const list = document.getElementById('dayPickList');
+        let html = '';
+        for (let i = 0; i < 7; i++) {
+          const d = new Date(state.weekStart);
+          d.setDate(d.getDate() + i);
+          const dateStr = dateToStr(d);
+          html += '<button type="button" class="template-day-card" data-date="' + escapeHtml(dateStr) + '">';
+          html += '<span class="day-name">' + DAYS[i] + '</span>';
+          html += '<span class="day-slots">' + formatDateKey(dateStr) + '</span>';
+          html += '<span class="arrow">→</span></button>';
+        }
+        if (!html) {
+          list.innerHTML = '<div class="empty">Нет дней для выбора.</div>';
+        } else {
+          list.innerHTML = html;
+          document.querySelector('.tabs').style.display = 'none';
+          document.getElementById('tabCalendar').style.display = 'none';
+          document.getElementById('tabTemplate').style.display = 'none';
+          document.getElementById('screenDayPick').style.display = 'block';
+          updateTelegramBack();
+          document.querySelectorAll('#dayPickList .template-day-card').forEach(function(btn) {
+            btn.onclick = function() {
+              document.getElementById('screenDayPick').style.display = 'none';
+              openEditCalendarDay(btn.dataset.date);
+            };
+          });
+        }
+      }
+
+      function applySlotIntentChoice(intent) {
+        state.slotEditIntent = intent;
+        var flow = state.pendingIntentFlow;
+        var dayNum = state.pendingTemplateDay;
+        state.pendingIntentFlow = null;
+        state.pendingTemplateDay = null;
+        var modal = document.getElementById('modalSlotIntent');
+        if (modal) {
+          modal.style.display = 'none';
+          modal.setAttribute('aria-hidden', 'true');
+        }
+        var ind = document.getElementById('btnSlotIntentIndividual');
+        var grp = document.getElementById('btnSlotIntentGroup');
+        if (ind) ind.classList.remove('is-suggested');
+        if (grp) grp.classList.remove('is-suggested');
+        if (flow === 'calendar') {
+          showDayPickScreen();
+        } else if (flow === 'template' && dayNum != null) {
+          openEditTemplateDay(dayNum);
+        }
+        updateTelegramBack();
+      }
+
+      function cancelSlotIntentModal() {
+        state.pendingIntentFlow = null;
+        state.pendingTemplateDay = null;
+        var modal = document.getElementById('modalSlotIntent');
+        if (modal) {
+          modal.style.display = 'none';
+          modal.setAttribute('aria-hidden', 'true');
+        }
+        var ind = document.getElementById('btnSlotIntentIndividual');
+        var grp = document.getElementById('btnSlotIntentGroup');
+        if (ind) ind.classList.remove('is-suggested');
+        if (grp) grp.classList.remove('is-suggested');
         updateTelegramBack();
       }
 
@@ -2045,8 +2770,31 @@
           })
           .then(function(data) {
             state.slots = (data && data.slots) ? data.slots : [];
+            state.groupClassesEnabled = !!(data && data.group_classes_enabled);
             state.scheduleDataLoaded = true;
+            if (state.pendingBookFlowFromHub) {
+              state.slotFilter = 'available';
+              document.querySelectorAll('.filter-btn[data-slot-filter]').forEach(function(b) {
+                b.classList.toggle('active', (b.getAttribute('data-slot-filter') || '') === 'available');
+              });
+            }
             renderCalendar();
+            if (state.pendingBookFlowFromHub) {
+              state.pendingBookFlowFromHub = false;
+              setTimeout(function() {
+                var el = document.querySelector('#calendarContent .slot-available');
+                if (el) {
+                  try {
+                    el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                  } catch (e) {
+                    el.scrollIntoView(true);
+                  }
+                } else {
+                  showToast('На этой неделе нет свободных слотов — смените неделю или добавьте слоты.');
+                }
+              }, 80);
+            }
+            flushPendingGroupHubModal();
           })
           .catch(function(err) {
             if (err === 'retry-init') {
@@ -2069,6 +2817,167 @@
           .catch(function() {
             document.getElementById('templateList').innerHTML = '<div class="error">Ошибка загрузки</div>';
           });
+      }
+
+      /** Opens the book-client flow for a slot id (used by calendar row and group hub). */
+      function openBookModalForSlot(slotId) {
+        state.bookSlotId = slotId;
+        state.bookPriceVariantId = null;
+        state.bookSlotIsGroup = false;
+        state.bookSlotGroupServiceId = null;
+        var slotRow = (state.slots || []).find(function(x) { return x.id === slotId; });
+        if (slotRow) {
+          var cap = (slotRow.capacity != null) ? parseInt(slotRow.capacity, 10) : 1;
+          if (isNaN(cap) || cap < 1) cap = 1;
+          state.bookSlotIsGroup = cap > 1;
+          var svcRaw = slotRow.service_id;
+          if (svcRaw != null && !isNaN(parseInt(svcRaw, 10))) {
+            state.bookSlotGroupServiceId = parseInt(svcRaw, 10);
+          }
+        }
+        if (state.bookSlotIsGroup && state.bookSlotGroupServiceId == null) {
+          showToast('У группового слота не задана услуга. Обновите слот в расписании.');
+          clearBookSlotModalState();
+          return;
+        }
+        state.bookModalStep = 'choice';
+        document.getElementById('bookClientSearch').value = '';
+        document.getElementById('bookNewPhone').value = '';
+        document.getElementById('bookNewFirstName').value = '';
+        document.getElementById('bookNewLastName').value = '';
+        document.querySelectorAll('.book-step').forEach(function(step) { step.classList.remove('active'); step.style.display = ''; });
+        document.getElementById('bookStepChoice').style.display = 'block';
+        document.getElementById('bookStepChoice').classList.add('active');
+        document.getElementById('bookStepExisting').style.display = 'none';
+        document.getElementById('bookStepNew').style.display = 'none';
+        document.getElementById('modalBookClient').style.display = 'flex';
+        applyBookModalGroupUi();
+        updateTelegramBack();
+        setBookOptExistingVisible(false);
+        Promise.all([
+          fetch(apiUrlWithQuery('/trainer/my-services'), { headers: headers() }).then(function(r) {
+            return r.ok ? r.json() : Promise.reject(new Error('Ошибка'));
+          }),
+          fetch(apiUrlWithQuery('/trainer/clients'), { headers: headers() }).then(function(r) {
+            return r.ok ? r.json() : Promise.reject(new Error('Ошибка'));
+          }),
+        ])
+          .then(function(results) {
+            var data = results[0];
+            var clientsPayload = results[1];
+            var hasClients = !!(clientsPayload.clients && clientsPayload.clients.length);
+            state.trainerHasBookClients = hasClients;
+            setBookOptExistingVisible(hasClients);
+            state.bookServices = data.services || [];
+            state.bookServiceId = state.bookSlotIsGroup && state.bookSlotGroupServiceId != null
+              ? state.bookSlotGroupServiceId
+              : (state.bookServices.length ? state.bookServices[0].id : null);
+            state.trainerArenas = data.arenas || [];
+            function fillServiceSelect(selEl) {
+              if (!selEl) return;
+              selEl.innerHTML = '';
+              state.bookServices.forEach(function(s) {
+                var opt = document.createElement('option');
+                opt.value = s.id;
+                opt.textContent = s.name || '—';
+                selEl.appendChild(opt);
+              });
+              selEl.value = state.bookServiceId != null ? String(state.bookServiceId) : '';
+            }
+            fillServiceSelect(document.getElementById('bookServiceSelect'));
+            fillServiceSelect(document.getElementById('bookServiceSelectNew'));
+            applyBookModalGroupUi();
+            document.getElementById('bookServiceSelect').onchange = function() {
+              state.bookServiceId = this.value ? parseInt(this.value, 10) : null;
+              syncAllBookPriceTierRadios();
+            };
+            document.getElementById('bookServiceSelectNew').onchange = function() {
+              state.bookServiceId = this.value ? parseInt(this.value, 10) : null;
+              syncAllBookPriceTierRadios();
+            };
+            syncAllBookPriceTierRadios();
+            applyBookModalGroupUi();
+            fillTrainerArenasUI();
+            if (state.deepLinkClientId && hasClients) {
+              document.getElementById('bookStepChoice').style.display = 'none';
+              document.getElementById('bookStepChoice').classList.remove('active');
+              document.getElementById('bookStepExisting').style.display = 'block';
+              document.getElementById('bookStepExisting').classList.add('active');
+              var selPre = document.getElementById('bookServiceSelect');
+              if (selPre && state.bookServiceId != null) selPre.value = String(state.bookServiceId);
+              document.getElementById('bookClientSearch').value = '';
+              document.getElementById('bookClientList').innerHTML = '<p class="book-list-loading">Загрузка…</p>';
+              loadBookClients('', state.deepLinkClientId);
+            }
+          })
+          .catch(function() {
+            state.trainerHasBookClients = false;
+            setBookOptExistingVisible(false);
+            state.bookServices = [];
+            state.bookServiceId = null;
+            state.trainerArenas = [];
+            state.bookArenaId = null;
+            document.getElementById('bookServiceSelect').innerHTML = '<option value="">Нет услуг</option>';
+            document.getElementById('bookServiceSelectNew').innerHTML = '<option value="">Нет услуг</option>';
+            applyBookModalGroupUi();
+            fillTrainerArenasUI();
+          });
+      }
+
+      function openGroupSlotModal(slotId) {
+        var s = (state.slots || []).find(function(x) { return x.id === slotId; });
+        if (!s) return;
+        var mgr = document.getElementById('modalGroupSlot');
+        if (!mgr) return;
+        mgr.style.display = 'flex';
+        mgr.setAttribute('aria-hidden', 'false');
+        var cap = (s.capacity != null) ? parseInt(s.capacity, 10) : 1;
+        var occ = (s.active_bookings != null) ? parseInt(s.active_bookings, 10) : 0;
+        var spotsLeft = (s.spots_left != null) ? parseInt(s.spots_left, 10) : Math.max(0, cap - occ);
+        document.getElementById('groupSlotTitle').textContent = (s.start_time || '') + '–' + (s.end_time || '');
+        var sub = 'Занято ' + occ + ' из ' + cap;
+        if (spotsLeft > 0) sub += ' · свободно мест: ' + spotsLeft;
+        else sub += ' · группа набрана';
+        document.getElementById('groupSlotSub').textContent = sub;
+        var listEl = document.getElementById('groupSlotList');
+        listEl.innerHTML = '';
+        var bookings = s.bookings || [];
+        if (bookings.length === 0 && s.client_preview) {
+          listEl.innerHTML = '<p class="group-slot-sub">' + escapeHtml(String(s.client_preview)) + '</p>';
+        } else {
+          bookings.forEach(function(b) {
+            var st = (b.status || '').toLowerCase();
+            var stLabel = st === 'pending' ? 'Ожидает подтверждения' : 'Подтверждено';
+            var bid = parseInt(b.booking_id, 10);
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'group-slot-row';
+            btn.innerHTML = '<span><span class="g-name">' + escapeHtml(String(b.client_preview || 'Клиент')) + '</span><br><span class="g-st">' + stLabel + '</span></span><span aria-hidden="true" style="color:var(--tg-theme-hint-color);font-size:18px;">›</span>';
+            btn.onclick = function() {
+              state.groupHubSlotId = slotId;
+              state.bookingDetailReturn = 'group';
+              mgr.style.display = 'none';
+              mgr.setAttribute('aria-hidden', 'true');
+              updateTelegramBack();
+              openBookingDetail(bid);
+            };
+            listEl.appendChild(btn);
+          });
+        }
+        var addBtn = document.getElementById('groupSlotAddBtn');
+        if (spotsLeft > 0) {
+          addBtn.style.display = 'block';
+          addBtn.onclick = function() {
+            mgr.style.display = 'none';
+            mgr.setAttribute('aria-hidden', 'true');
+            updateTelegramBack();
+            openBookModalForSlot(slotId);
+          };
+        } else {
+          addBtn.style.display = 'none';
+          addBtn.onclick = null;
+        }
+        updateTelegramBack();
       }
 
       function renderCalendar() {
@@ -2100,14 +3009,25 @@
           html += '<div class="day-block"><div class="day-title">' + escapeHtml(formatDateKey(dateKey)) + '</div>';
           daySlots.forEach(function(s) {
             const status = s.status || 'available';
-            const available = status === 'available';
+            const cap = (s.capacity != null) ? parseInt(s.capacity, 10) : 1;
+            const occ = (s.active_bookings != null) ? parseInt(s.active_bookings, 10) : 0;
+            const spotsLeft = (s.spots_left != null) ? parseInt(s.spots_left, 10) : Math.max(0, cap - occ);
+            const cohortSlot = !!(s.training_group_id);
+            const available = status === 'available' && spotsLeft > 0;
+            const bookableAvailable = available && !cohortSlot;
             const slotPast = isSlotEndedInPast(s);
-            const bookedClick = status === 'booked' && s.booking_id;
+            const groupHub = cap > 1 && occ > 0 && !cohortSlot;
+            const bookedClick = !!(s.booking_id) && !available && !groupHub && !cohortSlot;
             const bst = bookedClick ? String(s.booking_status || 'confirmed').toLowerCase() : '';
             const bookingPending = bookedClick && bst === 'pending';
             const bookingCompleted = bookedClick && bst === 'completed';
             const bookingConfirmed = bookedClick && bst === 'confirmed';
             let statusLabel = status === 'available' ? 'свободен' : status === 'booked' ? 'занят' : 'отменён';
+            if (cap > 1 && !groupHub) {
+              statusLabel = occ + '/' + cap;
+              if (spotsLeft > 0) statusLabel += ' · есть места';
+              else statusLabel += ' · полная группа';
+            }
             let statusClass = status;
             if (bookedClick) {
               if (bookingPending) {
@@ -2121,27 +3041,63 @@
                 statusClass = 'booked booked-confirmed';
               }
             }
+            const pct = cap > 0 ? Math.min(100, Math.round((occ / cap) * 100)) : 0;
             html += '<div class="slot-row' + (slotPast ? ' slot-past' : '')
-              + (available ? ' slot-available' : '') + (bookedClick ? ' slot-booked-click' : '')
+              + (cohortSlot ? ' slot-cohort' : '')
+              + (groupHub ? ' slot-group-hub' : '')
+              + (!groupHub && bookableAvailable ? ' slot-available' : '')
+              + (!groupHub && bookedClick ? ' slot-booked-click' : '')
               + (bookingPending ? ' slot-booking-pending' : '')
               + (bookingConfirmed ? ' slot-booking-confirmed' : '')
               + (bookingCompleted ? ' slot-booking-completed' : '') + '"'
-              + (available ? ' data-slot-id="' + s.id + '" role="button" tabindex="0"' : '')
-              + (bookedClick ? ' data-booking-id="' + s.booking_id + '" role="button" tabindex="0"' : '')
-              + (bookedClick ? ' data-booking-status="' + escapeHtml(bst) + '"' : '')
+              + (!groupHub && bookableAvailable ? ' data-slot-id="' + s.id + '" role="button" tabindex="0"' : '')
+              + (groupHub ? ' data-slot-id="' + s.id + '" data-group-hub="1" role="button" tabindex="0"' : '')
+              + (cohortSlot ? ' data-training-group-id="' + String(s.training_group_id) + '" role="button" tabindex="0"' : '')
+              + (!groupHub && bookedClick ? ' data-booking-id="' + s.booking_id + '" role="button" tabindex="0"' : '')
+              + (!groupHub && bookedClick ? ' data-booking-status="' + escapeHtml(bst) + '"' : '')
               + '>';
             html += '<div class="slot-row-left">';
             html += '<span class="slot-time">' + escapeHtml(s.start_time || '') + '–' + escapeHtml(s.end_time || '') + '</span>';
+            if (s.training_group_id && s.training_group_name) {
+              html += '<div class="slot-cohort-hint">Группа: ' + escapeHtml(s.training_group_name) + '</div>';
+            }
+            if (cap > 1) {
+              var svcL = (s.service_label && String(s.service_label).trim()) || '';
+              var arL = (s.arena_label && String(s.arena_label).trim()) || '';
+              if (svcL || arL) {
+                html += '<div class="slot-group-catalog-meta">';
+                if (svcL) html += '<div class="slot-group-meta-line">' + escapeHtml(svcL) + '</div>';
+                if (arL) html += '<div class="slot-group-meta-line">' + escapeHtml(arL) + '</div>';
+                html += '</div>';
+              }
+            }
+            if (groupHub) {
+              html += '<div class="slot-group-meter-wrap" aria-hidden="true"><div class="slot-group-meter-fill" style="width:' + pct + '%"></div></div>';
+            }
             if (bookedClick) {
               const v = s.venue_label;
               const vt = (v && String(v).trim()) ? escapeHtml(String(v).trim()) : '<span class="venue-muted">не указано</span>';
               html += '<div class="slot-venue">📍 ' + vt + '</div>';
-              if (s.client_preview) html += '<div class="slot-client-hint">' + escapeHtml(s.client_preview) + '</div>';
+              // Group cohort slots: keep card compact — roster lives in «Группы», not on every slot row
+              if (s.client_preview && !cohortSlot) html += '<div class="slot-client-hint">' + escapeHtml(s.client_preview) + '</div>';
+            } else if (occ > 0 && s.client_preview && !groupHub && !cohortSlot) {
+              html += '<div class="slot-client-hint">' + escapeHtml(s.client_preview) + '</div>';
+            } else if (groupHub && s.client_preview) {
+              html += '<div class="slot-client-hint">' + escapeHtml(s.client_preview) + '</div>';
             }
             html += '</div>';
             html += '<div class="slot-meta">';
-            html += '<span class="slot-status ' + statusClass + '">' + statusLabel + '</span>';
-            if (available) {
+            if (groupHub) {
+              html += '<span class="slot-group-chip">' + occ + '/' + cap + '</span>';
+              if (spotsLeft > 0) {
+                html += '<span class="slot-status available" style="font-size:11px;padding:4px 8px;">ещё места</span>';
+              } else {
+                html += '<span class="slot-status booked" style="font-size:11px;padding:4px 8px;">полная</span>';
+              }
+            } else {
+              html += '<span class="slot-status ' + statusClass + '">' + statusLabel + '</span>';
+            }
+            if (status === 'available' && occ === 0 && !cohortSlot) {
               html += '<button type="button" class="btn-slot-del" data-slot-id="' + s.id + '" aria-label="Удалить">×</button>';
             }
             html += '</div></div>';
@@ -2164,6 +3120,30 @@
             });
           };
         });
+        content.querySelectorAll('.slot-cohort').forEach(function(row) {
+          row.onclick = function(e) {
+            if (e.target.closest('.btn-slot-del')) return;
+            var gid = row.getAttribute('data-training-group-id');
+            if (gid) {
+              var u = '/webapp/trainer-groups?id=' + encodeURIComponent(gid);
+              if (tg && tg.initData) u += '&init_data=' + encodeURIComponent(tg.initData);
+              window.location.href = u;
+            }
+          };
+          row.onkeydown = function(e) {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); row.click(); }
+          };
+        });
+        content.querySelectorAll('.slot-group-hub').forEach(function(row) {
+          row.onclick = function(e) {
+            if (e.target.closest('.btn-slot-del')) return;
+            var sid = row.getAttribute('data-slot-id');
+            if (sid) openGroupSlotModal(parseInt(sid, 10));
+          };
+          row.onkeydown = function(e) {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); row.click(); }
+          };
+        });
         content.querySelectorAll('.slot-booked-click').forEach(function(row) {
           row.onclick = function() {
             var bid = row.getAttribute('data-booking-id');
@@ -2173,76 +3153,9 @@
             if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); row.click(); }
           };
         });
-        content.querySelectorAll('.slot-available').forEach(function(row) {
-          function openBookModal() {
-            const id = parseInt(row.dataset.slotId, 10);
-            state.bookSlotId = id;
-            state.bookPriceVariantId = null;
-            state.bookModalStep = 'choice';
-            document.getElementById('bookClientSearch').value = '';
-            document.getElementById('bookNewPhone').value = '';
-            document.getElementById('bookNewFirstName').value = '';
-            document.getElementById('bookNewLastName').value = '';
-            document.querySelectorAll('.book-step').forEach(function(step) { step.classList.remove('active'); step.style.display = ''; });
-            document.getElementById('bookStepChoice').style.display = 'block';
-            document.getElementById('bookStepChoice').classList.add('active');
-            document.getElementById('bookStepExisting').style.display = 'none';
-            document.getElementById('bookStepNew').style.display = 'none';
-            document.getElementById('modalBookClient').style.display = 'flex';
-            updateTelegramBack();
-            fetch(apiUrlWithQuery('/trainer/my-services'), { headers: headers() })
-              .then(function(r) { return r.ok ? r.json() : Promise.reject(new Error('Ошибка')); })
-              .then(function(data) {
-                state.bookServices = data.services || [];
-                state.bookServiceId = state.bookServices.length ? state.bookServices[0].id : null;
-                state.trainerArenas = data.arenas || [];
-                function fillServiceSelect(selEl) {
-                  if (!selEl) return;
-                  selEl.innerHTML = '';
-                  state.bookServices.forEach(function(s) {
-                    var opt = document.createElement('option');
-                    opt.value = s.id;
-                    opt.textContent = s.name || '—';
-                    selEl.appendChild(opt);
-                  });
-                  selEl.value = state.bookServiceId != null ? String(state.bookServiceId) : '';
-                }
-                fillServiceSelect(document.getElementById('bookServiceSelect'));
-                fillServiceSelect(document.getElementById('bookServiceSelectNew'));
-                document.getElementById('bookServiceSelect').onchange = function() {
-                  state.bookServiceId = this.value ? parseInt(this.value, 10) : null;
-                  syncAllBookPriceTierRadios();
-                };
-                document.getElementById('bookServiceSelectNew').onchange = function() {
-                  state.bookServiceId = this.value ? parseInt(this.value, 10) : null;
-                  syncAllBookPriceTierRadios();
-                };
-                syncAllBookPriceTierRadios();
-                fillTrainerArenasUI();
-                if (state.deepLinkClientId) {
-                  document.getElementById('bookStepChoice').style.display = 'none';
-                  document.getElementById('bookStepChoice').classList.remove('active');
-                  document.getElementById('bookStepExisting').style.display = 'block';
-                  document.getElementById('bookStepExisting').classList.add('active');
-                  var selPre = document.getElementById('bookServiceSelect');
-                  if (selPre && state.bookServiceId != null) selPre.value = String(state.bookServiceId);
-                  document.getElementById('bookClientSearch').value = '';
-                  document.getElementById('bookClientList').innerHTML = '<p class="book-list-loading">Загрузка…</p>';
-                  loadBookClients('', state.deepLinkClientId);
-                }
-              })
-              .catch(function() {
-                state.bookServices = [];
-                state.bookServiceId = null;
-                state.trainerArenas = [];
-                state.bookArenaId = null;
-                document.getElementById('bookServiceSelect').innerHTML = '<option value="">Нет услуг</option>';
-                document.getElementById('bookServiceSelectNew').innerHTML = '<option value="">Нет услуг</option>';
-                fillTrainerArenasUI();
-              });
-          }
-          row.onclick = function(e) { if (!e.target.closest('.btn-slot-del')) openBookModal(); };
-          row.onkeydown = function(e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openBookModal(); } };
+        content.querySelectorAll('.slot-available:not(.slot-group-hub)').forEach(function(row) {
+          row.onclick = function(e) { if (!e.target.closest('.btn-slot-del')) openBookModalForSlot(parseInt(row.dataset.slotId, 10)); };
+          row.onkeydown = function(e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openBookModalForSlot(parseInt(row.dataset.slotId, 10)); } };
         });
         updatePastRevealChrome();
       }
@@ -2323,7 +3236,7 @@
           .then(function(r) {
             if (r.ok) {
               document.getElementById('modalBookClient').style.display = 'none';
-              state.bookSlotId = null;
+              clearBookSlotModalState();
               loadSlots();
               updateTelegramBack();
               return;
@@ -2342,11 +3255,12 @@
 
       document.getElementById('modalBookCancel').onclick = function() {
         document.getElementById('modalBookClient').style.display = 'none';
-        state.bookSlotId = null;
+        clearBookSlotModalState();
         state.bookModalStep = 'choice';
         updateTelegramBack();
       };
       document.getElementById('bookOptExisting').onclick = function() {
+        if (!state.trainerHasBookClients) return;
         document.getElementById('bookStepChoice').classList.remove('active');
         document.getElementById('bookStepChoice').style.display = 'none';
         document.getElementById('bookStepExisting').style.display = 'block';
@@ -2463,7 +3377,7 @@
           .then(function(r) {
             if (r.ok) {
               document.getElementById('modalBookClient').style.display = 'none';
-              state.bookSlotId = null;
+              clearBookSlotModalState();
               loadSlots();
               showToast('Клиент добавлен и записан на занятие.');
               return;
@@ -2481,11 +3395,14 @@
         state.templates.forEach(function(t) {
           const d = t.day_of_week;
           if (!byDay[d]) byDay[d] = [];
-          byDay[d].push(t.start_time);
+          const cap = (t.capacity != null) ? parseInt(t.capacity, 10) : 1;
+          const timeShort = (t.start_time || '').toString().substring(0, 5);
+          const label = (cap > 1) ? (timeShort + ' ×' + cap) : timeShort;
+          byDay[d].push(label);
         });
         let html = '';
         for (let d = 0; d < 7; d++) {
-          const times = (byDay[d] || []).sort();
+          const times = (byDay[d] || []).sort(function(a, b) { return String(a).localeCompare(String(b)); });
           const text = times.length ? times.join(', ') : 'Нет слотов';
           html += '<button type="button" class="template-day-card" data-day="' + d + '">';
           html += '<span class="day-name">' + DAYS[d] + '</span>';
@@ -2493,9 +3410,15 @@
           html += '<span class="arrow">→</span></button>';
         }
         document.getElementById('templateList').innerHTML = html;
-        document.querySelectorAll('.template-day-card').forEach(function(btn) {
+        document.querySelectorAll('#templateList .template-day-card').forEach(function(btn) {
           btn.onclick = function() {
             const day = parseInt(btn.dataset.day, 10);
+            if (isGroupClassesFeatureEnabled()) {
+              var existing = (state.templates || []).filter(function(t) { return t.day_of_week === day; });
+              openSlotIntentModal('template', day, detectSlotIntentFromRows(existing));
+              return;
+            }
+            state.slotEditIntent = 'individual';
             openEditTemplateDay(day);
           };
         });
@@ -2506,18 +3429,79 @@
         state.editDay = day;
         state.editDate = null;
         state.lockedHours = new Set();
+        state.calendarBaselineHours = null;
         const existing = (state.templates || []).filter(function(t) { return t.day_of_week === day; });
+        if (!isGroupClassesFeatureEnabled()) {
+          state.slotEditIntent = 'individual';
+        } else if (state.slotEditIntent !== 'group' && state.slotEditIntent !== 'individual') {
+          state.slotEditIntent = detectSlotIntentFromRows(existing);
+        }
         state.selectedHours = new Set(existing.map(function(t) {
           const p = (t.start_time || '').split(':');
           return parseInt(p[0], 10);
         }));
+        var cgw = document.getElementById('calendarGroupServiceWrap');
+        var cawCal = document.getElementById('calendarGroupArenaWrap');
+        var tgar = document.getElementById('templateGroupArenaWrap');
+        if (cgw) cgw.style.display = 'none';
+        if (cawCal) cawCal.style.display = 'none';
         document.querySelector('.tabs').style.display = 'none';
         document.getElementById('tabCalendar').style.display = 'none';
         document.getElementById('tabTemplate').style.display = 'none';
         document.getElementById('editTitle').textContent = DAYS[day] + ': часы в шаблоне';
-        document.getElementById('editHint').textContent = 'Отметь часы. «Готово» сохранит шаблон на этот день.';
+        var useTplGroup = slotIntentUseGroupUi();
+        document.getElementById('editHint').textContent = useTplGroup
+          ? 'Групповые слоты: места, услуга и площадка задаются один раз — для всех отмеченных часов.'
+          : 'Индивидуальные слоты. Отметьте часы — «Готово» сохранит шаблон на этот день.';
+        var capWrap = document.getElementById('slotCapacityWrap');
+        if (capWrap) capWrap.style.display = 'none';
+        var tdef = document.getElementById('templateDefaultCapacityInput');
+        if (tdef) {
+          tdef.setAttribute('min', useTplGroup ? '2' : '1');
+          if (!useTplGroup) tdef.value = '1';
+          else if (!existing.length) tdef.value = '2';
+        }
+        var trow = document.getElementById('templateDefaultCapRow');
+        if (trow) {
+          var narrow = !!(window.matchMedia && window.matchMedia('(max-width: 380px)').matches);
+          trow.style.gridTemplateColumns = (useTplGroup && !narrow) ? 'repeat(2, minmax(0, 1fr))' : 'minmax(0, 1fr)';
+        }
+        var tdsr = document.getElementById('templateDefaultServiceRow');
+        if (tdsr) tdsr.style.display = useTplGroup ? 'block' : 'none';
+        var tpan = document.getElementById('templateCapacityPanel');
+        if (tpan) tpan.style.display = useTplGroup ? 'block' : 'none';
+        if (tgar) tgar.style.display = 'none';
         document.getElementById('screenEdit').style.display = 'block';
-        renderHourGrid();
+        if (useTplGroup) {
+          loadTrainerServicesIfNeeded().then(function() {
+            applyTemplateGroupPrefillFromExisting(existing, true);
+            fillTemplateGroupArenaSelect();
+            var ars = state.trainerScheduleArenas || [];
+            if (tgar) {
+              if (ars.length > 1) {
+                tgar.style.display = 'block';
+                var gArena = null;
+                existing.forEach(function(t) {
+                  var c = (t.capacity != null) ? parseInt(t.capacity, 10) : 1;
+                  if (c > 1 && t.arena_id != null && !isNaN(parseInt(t.arena_id, 10))) gArena = parseInt(t.arena_id, 10);
+                });
+                var asel = document.getElementById('templateGroupArenaSelect');
+                if (asel) {
+                  if (gArena != null && !isNaN(gArena)) asel.value = String(gArena);
+                  else if (ars.length) {
+                    var prim = ars.filter(function(x) { return x.is_primary; })[0];
+                    asel.value = String((prim || ars[0]).id);
+                  }
+                }
+              } else {
+                tgar.style.display = 'none';
+              }
+            }
+            renderHourGrid();
+          });
+        } else {
+          renderHourGrid();
+        }
         updateTelegramBack();
       }
 
@@ -2526,18 +3510,94 @@
         state.editDay = null;
         state.editDate = slotDate;
         const daySlots = (state.slots || []).filter(function(s) { return s.slot_date === slotDate; });
+        if (!isGroupClassesFeatureEnabled()) {
+          state.slotEditIntent = 'individual';
+        } else if (state.slotEditIntent !== 'group' && state.slotEditIntent !== 'individual') {
+          state.slotEditIntent = detectSlotIntentFromRows(daySlots);
+        }
         state.selectedHours = new Set();
         state.lockedHours = new Set();
         daySlots.forEach(function(s) {
           const h = parseInt((s.start_time || '').split(':')[0], 10);
           state.selectedHours.add(h);
-          if ((s.status || '') === 'booked') state.lockedHours.add(h);
+          const occ = (s.active_bookings != null) ? parseInt(s.active_bookings, 10) : 0;
+          if ((s.status || '') === 'booked' || occ > 0) state.lockedHours.add(h);
         });
+        state.calendarBaselineHours = new Set(state.selectedHours);
         document.querySelector('.tabs').style.display = 'none';
         document.getElementById('tabCalendar').style.display = 'none';
         document.getElementById('tabTemplate').style.display = 'none';
         document.getElementById('editTitle').textContent = 'Слоты на ' + formatDateKey(slotDate);
-        document.getElementById('editHint').textContent = 'Отметь часы. Занятые слоты (🔒) нельзя убрать.';
+        var useCalGroup = slotIntentUseGroupUi();
+        document.getElementById('editHint').textContent = useCalGroup
+          ? 'Групповые слоты: «Мест в слоте» и услуга — для новых часов. Уже открытые часы снять нельзя. «Готово» — после выбора хотя бы одного нового часа.'
+          : 'Индивидуальные слоты. Уже открытые и занятые часы снять нельзя. «Готово» — после выбора хотя бы одного нового часа.';
+        var capWrap = document.getElementById('slotCapacityWrap');
+        var capInput = document.getElementById('slotCapacityInput');
+        if (capInput) capInput.setAttribute('min', useCalGroup ? '2' : '1');
+        if (capWrap) {
+          if (useCalGroup) {
+            capWrap.style.display = 'block';
+            var caps = daySlots.map(function(s) { return (s.capacity != null) ? parseInt(s.capacity, 10) : 1; });
+            var capVal = 2;
+            if (caps.length && caps.every(function(c) { return c === caps[0]; })) capVal = caps[0];
+            if (capVal < 2) capVal = 2;
+            if (capInput) capInput.value = String(Math.min(500, Math.max(2, capVal)));
+          } else {
+            capWrap.style.display = 'none';
+            if (capInput) capInput.value = '1';
+          }
+        }
+        var tpan = document.getElementById('templateCapacityPanel');
+        if (tpan) tpan.style.display = 'none';
+        var tdsr = document.getElementById('templateDefaultServiceRow');
+        if (tdsr) tdsr.style.display = 'none';
+        var tgar = document.getElementById('templateGroupArenaWrap');
+        if (tgar) tgar.style.display = 'none';
+        var cgw = document.getElementById('calendarGroupServiceWrap');
+        var caw = document.getElementById('calendarGroupArenaWrap');
+        if (cgw) {
+          if (useCalGroup) {
+            cgw.style.display = 'block';
+            loadTrainerServicesIfNeeded().then(function() {
+              var sel = document.getElementById('calendarGroupServiceSelect');
+              var gs = null;
+              var gArena = null;
+              daySlots.forEach(function(s) {
+                var c = (s.capacity != null) ? parseInt(s.capacity, 10) : 1;
+                if (c > 1 && s.service_id != null) gs = parseInt(s.service_id, 10);
+                if (c > 1 && s.arena_id != null && !isNaN(parseInt(s.arena_id, 10))) gArena = parseInt(s.arena_id, 10);
+              });
+              if (sel && gs != null && !isNaN(gs)) sel.value = String(gs);
+              var ars = state.trainerScheduleArenas || [];
+              if (caw) {
+                if (ars.length > 1) {
+                  caw.style.display = 'block';
+                  var asel = document.getElementById('calendarGroupArenaSelect');
+                  if (asel) {
+                    asel.innerHTML = '';
+                    ars.forEach(function(a) {
+                      var o = document.createElement('option');
+                      o.value = String(a.id);
+                      o.textContent = (a.name || '—') + (a.is_primary ? ' · основная' : '');
+                      asel.appendChild(o);
+                    });
+                    if (gArena != null && !isNaN(gArena)) asel.value = String(gArena);
+                    else if (ars.length) {
+                      var prim = ars.filter(function(x) { return x.is_primary; })[0];
+                      asel.value = String((prim || ars[0]).id);
+                    }
+                  }
+                } else {
+                  caw.style.display = 'none';
+                }
+              }
+            });
+          } else {
+            cgw.style.display = 'none';
+            if (caw) caw.style.display = 'none';
+          }
+        }
         document.getElementById('screenEdit').style.display = 'block';
         renderHourGrid();
         updateTelegramBack();
@@ -2549,27 +3609,99 @@
         for (let h = 8; h <= 20; h++) {
           const selected = state.selectedHours.has(h);
           const locked = state.lockedHours.has(h);
-          const label = locked ? h + ' 🔒' : h;
-          html += '<button type="button" class="hour-chip' + (selected ? ' selected' : '') + (locked ? ' locked' : '') + '" data-hour="' + h + '"' + (locked ? ' disabled' : '') + '>' + label + '</button>';
+          const pinned =
+            state.editMode === 'calendar' &&
+            state.calendarBaselineHours &&
+            state.calendarBaselineHours.has(h) &&
+            selected &&
+            !locked;
+          const label = String(h);
+          html +=
+            '<button type="button" class="hour-chip' +
+            (selected ? ' selected' : '') +
+            (locked ? ' locked' : '') +
+            (pinned ? ' pinned' : '') +
+            '" data-hour="' +
+            h +
+            '"' +
+            (locked ? ' disabled title="Есть записи — убрать нельзя"' : '') +
+            (pinned ? ' title="Уже в расписании — убрать нельзя"' : '') +
+            '>' +
+            label +
+            '</button>';
         }
         grid.innerHTML = html;
-        grid.querySelectorAll('.hour-chip:not(.locked)').forEach(function(btn) {
+        grid.querySelectorAll('.hour-chip:not(.locked):not(.pinned)').forEach(function(btn) {
           btn.onclick = function() {
             const h = parseInt(btn.dataset.hour, 10);
+            if (state.editMode === 'template' && slotIntentUseGroupUi()) {
+              if (state.selectedHours.has(h)) state.selectedHours.delete(h);
+              else state.selectedHours.add(h);
+              btn.classList.toggle('selected', state.selectedHours.has(h));
+              updateEditDoneButton();
+              return;
+            }
             if (state.selectedHours.has(h)) state.selectedHours.delete(h);
             else state.selectedHours.add(h);
             btn.classList.toggle('selected', state.selectedHours.has(h));
+            updateEditDoneButton();
           };
         });
+        if (!(state.editMode === 'template' && slotIntentUseGroupUi())) {
+          var tpanHide = document.getElementById('templateCapacityPanel');
+          if (tpanHide) tpanHide.style.display = 'none';
+        }
+        updateEditDoneButton();
       }
 
       document.getElementById('editDone').onclick = function() {
+        if (state.editMode === 'calendar' && state.calendarBaselineHours && !hasCalendarNewSlotSelection()) {
+          return;
+        }
         const hours = Array.from(state.selectedHours).sort(function(a, b) { return a - b; });
         if (state.editMode === 'template') {
+          var slotsPayload;
+          var templateBody;
+          if (slotIntentUseGroupUi()) {
+            var capRaw = parseInt(document.getElementById('templateDefaultCapacityInput').value, 10);
+            var c = (isNaN(capRaw) || capRaw < 2) ? 2 : Math.min(500, capRaw);
+            var gid = parseInt(document.getElementById('templateDefaultServiceSelect').value, 10);
+            if (isNaN(gid)) {
+              alert('Выберите услугу для групповых слотов в шаблоне.');
+              return;
+            }
+            var ars = state.trainerScheduleArenas || [];
+            if (!ars.length) {
+              alert('Добавьте хотя бы одну площадку в профиле, чтобы задавать групповые слоты в шаблоне.');
+              return;
+            }
+            var groupArenaPayload = null;
+            if (ars.length > 1) {
+              var tas = document.getElementById('templateGroupArenaSelect');
+              var aid = tas ? parseInt(tas.value, 10) : NaN;
+              if (isNaN(aid)) {
+                alert('Выберите площадку для групповых слотов в шаблоне.');
+                return;
+              }
+              groupArenaPayload = aid;
+            }
+            slotsPayload = hours.map(function(h) {
+              return { hour: h, capacity: c, service_id: gid };
+            });
+            templateBody = {
+              day_of_week: state.editDay,
+              slots: slotsPayload,
+              duration_minutes: 60,
+              group_arena_id: groupArenaPayload,
+            };
+          } else {
+            slotsPayload = hours.map(function(h) { return { hour: h, capacity: 1 }; });
+            templateBody = { day_of_week: state.editDay, slots: slotsPayload, duration_minutes: 60, group_arena_id: null };
+          }
           fetch(apiUrlWithQuery('/schedule/templates/day'), {
             method: 'PUT',
             headers: headers(),
-            body: JSON.stringify({ day_of_week: state.editDay, start_hours: hours, duration_minutes: 60 }),
+            body: JSON.stringify(templateBody),
           })
             .then(function(r) {
               if (r.ok) { showMain(); }
@@ -2577,10 +3709,43 @@
             })
             .catch(function() { alert('Ошибка сети'); });
         } else {
+          var capRaw = parseInt(document.getElementById('slotCapacityInput').value, 10);
+          var capacity = (isNaN(capRaw) || capRaw < 1) ? 1 : Math.min(500, capRaw);
+          if (slotIntentUseGroupUi()) {
+            if (capacity < 2) capacity = 2;
+          } else {
+            capacity = 1;
+          }
+          var postBody = { slot_date: state.editDate, start_hours: hours, duration_minutes: 60, capacity: capacity };
+          if (slotIntentUseGroupUi() && capacity > 1) {
+            var gsel = document.getElementById('calendarGroupServiceSelect');
+            var gid = gsel ? parseInt(gsel.value, 10) : NaN;
+            if (isNaN(gid)) {
+              alert('Выберите услугу для групповых слотов.');
+              return;
+            }
+            postBody.group_service_id = gid;
+            var ars = state.trainerScheduleArenas || [];
+            if (!ars.length) {
+              alert('Добавьте хотя бы одну площадку в профиле, чтобы создавать групповые слоты.');
+              return;
+            }
+            if (ars.length === 1) {
+              postBody.arena_id = ars[0].id;
+            } else {
+              var asel = document.getElementById('calendarGroupArenaSelect');
+              var aid = asel ? parseInt(asel.value, 10) : NaN;
+              if (isNaN(aid)) {
+                alert('Выберите площадку для групповых слотов.');
+                return;
+              }
+              postBody.arena_id = aid;
+            }
+          }
           fetch(apiUrlWithQuery('/schedule/slots'), {
             method: 'POST',
             headers: headers(),
-            body: JSON.stringify({ slot_date: state.editDate, start_hours: hours, duration_minutes: 60 }),
+            body: JSON.stringify(postBody),
           })
             .then(function(r) {
               if (r.ok) { showMain(); }
@@ -2619,6 +3784,15 @@
         updateTelegramBack();
       };
 
+      document.getElementById('groupSlotCloseBtn').onclick = function() {
+        var mgr = document.getElementById('modalGroupSlot');
+        if (mgr) {
+          mgr.style.display = 'none';
+          mgr.setAttribute('aria-hidden', 'true');
+        }
+        updateTelegramBack();
+      };
+
       document.getElementById('modalConfirmYes').onclick = function() {
         if (!state.applyWeekStart) return;
         document.getElementById('modalConfirm').style.display = 'none';
@@ -2641,33 +3815,22 @@
 
       document.getElementById('btnAddSlots').onclick = function() {
         if (!state.weekStart) return;
-        const list = document.getElementById('dayPickList');
-        let html = '';
-        for (let i = 0; i < 7; i++) {
-          const d = new Date(state.weekStart);
-          d.setDate(d.getDate() + i);
-          const dateStr = dateToStr(d);
-          html += '<button type="button" class="template-day-card" data-date="' + escapeHtml(dateStr) + '">';
-          html += '<span class="day-name">' + DAYS[i] + '</span>';
-          html += '<span class="day-slots">' + formatDateKey(dateStr) + '</span>';
-          html += '<span class="arrow">→</span></button>';
+        if (isGroupClassesFeatureEnabled()) {
+          openSlotIntentModal('calendar', null, 'individual');
+          return;
         }
-        if (!html) {
-          list.innerHTML = '<div class="empty">Нет дней для выбора.</div>';
-        } else {
-          list.innerHTML = html;
-        document.querySelector('.tabs').style.display = 'none';
-        document.getElementById('tabCalendar').style.display = 'none';
-        document.getElementById('tabTemplate').style.display = 'none';
-        document.getElementById('screenDayPick').style.display = 'block';
-        updateTelegramBack();
-          document.querySelectorAll('#dayPickList .template-day-card').forEach(function(btn) {
-            btn.onclick = function() {
-              document.getElementById('screenDayPick').style.display = 'none';
-              openEditCalendarDay(btn.dataset.date);
-            };
-          });
-        }
+        state.slotEditIntent = 'individual';
+        showDayPickScreen();
+      };
+
+      document.getElementById('btnSlotIntentIndividual').onclick = function() {
+        applySlotIntentChoice('individual');
+      };
+      document.getElementById('btnSlotIntentGroup').onclick = function() {
+        applySlotIntentChoice('group');
+      };
+      document.getElementById('btnSlotIntentCancel').onclick = function() {
+        cancelSlotIntentModal();
       };
 
       document.getElementById('dayPickBack').onclick = function() {
@@ -2715,8 +3878,14 @@
         var clientIdFromUrl = cidRaw ? parseInt(cidRaw, 10) : null;
         var ob = p.get('open_booking');
         var fromHub = (p.get('from') || '') === 'hub';
+        var flowBook = (p.get('flow') || '') === 'book';
         if (clientIdFromUrl || ob) {
           try { history.replaceState({}, '', window.location.pathname); } catch (e) {}
+        } else if (flowBook) {
+          try { history.replaceState({}, '', window.location.pathname); } catch (e) {}
+        }
+        if (flowBook && !ob) {
+          state.pendingBookFlowFromHub = true;
         }
         if (clientIdFromUrl) {
           state.deepLinkClientId = clientIdFromUrl;
