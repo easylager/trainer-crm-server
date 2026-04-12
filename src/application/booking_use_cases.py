@@ -414,6 +414,53 @@ async def create_booking(
     return booking_id
 
 
+async def create_trainer_quick_booking(
+    session: AsyncSession,
+    trainer_id: int,
+    slot_date: date,
+    start_minutes: int,
+    duration_minutes: int,
+    client_id: int,
+    service_id: int,
+    *,
+    arena_id: int | None = None,
+    service_price_variant_id: int | None = None,
+) -> tuple[int, int] | None:
+    """
+    Create an individual slot at date/start_minutes (15 min grid) if needed, then a trainer-initiated booking.
+
+    ValueError is raised by ensure_individual_slot_for_quick_book (caller maps to HTTP 400).
+    ServicePriceVariantRequired is re-raised after rollback.
+    """
+    from src.application.trainer_schedule_use_cases import ensure_individual_slot_for_quick_book
+
+    slot_id = await ensure_individual_slot_for_quick_book(
+        session, trainer_id, slot_date, start_minutes, duration_minutes
+    )
+    try:
+        booking_id = await create_booking(
+            session,
+            slot_id=slot_id,
+            trainer_id=trainer_id,
+            client_id=client_id,
+            service_id=service_id,
+            client_comment=None,
+            client_request_id=None,
+            created_by_trainer=True,
+            arena_id=arena_id,
+            service_price_variant_id=service_price_variant_id,
+            strict_service_price_variant=False,
+            allow_overbook=False,
+        )
+    except ServicePriceVariantRequired:
+        await session.rollback()
+        raise
+    if booking_id is None:
+        await session.rollback()
+        return None
+    return (booking_id, slot_id)
+
+
 async def get_trainer_primary_arena_resolved(session: AsyncSession, trainer_id: int) -> int | None:
     """primary_arena_id from trainers, or MIN(arena_id) from trainer_arenas as fallback."""
     r = await session.execute(

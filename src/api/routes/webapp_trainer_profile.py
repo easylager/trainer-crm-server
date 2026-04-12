@@ -38,6 +38,7 @@ from src.application.trainer_use_cases import (
     register_photo,
     update_trainer_education,
     update_trainer_profile,
+    upload_trainer_education_document_photo_from_bytes,
     upload_trainer_photo_from_bytes,
 )
 from src.application.trainer_profile_completeness import moderation_readiness_dict
@@ -250,6 +251,35 @@ async def webapp_delete_trainer_education(
         {"trainer_id": trainer_id, "education_id": education_id},
     )
     return {"ok": True}
+
+
+@router.post("/trainer/education/documents")
+async def webapp_trainer_education_document_upload(
+    file: UploadFile = File(...),
+    init_data: str | None = Form(None),
+    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    session: AsyncSession = Depends(get_session),
+):
+    """Upload one diploma/certificate photo and return scoped storage keys for education entry payloads."""
+    raw = init_data or x_telegram_init_data
+    trainer_id = await _require_linked_trainer_id(session, raw)
+    content_type = file.content_type or "image/jpeg"
+    body_bytes = await file.read()
+    ok, err, file_key, file_key_list = await upload_trainer_education_document_photo_from_bytes(
+        session, trainer_id, body_bytes, content_type
+    )
+    if not ok:
+        if err == "too_large":
+            raise HTTPException(status_code=413, detail="File too large")
+        if err == "not_image":
+            raise HTTPException(status_code=400, detail="Not a valid image")
+        if err == "storage":
+            raise HTTPException(status_code=503, detail="Storage temporarily unavailable")
+        raise HTTPException(status_code=404, detail="Trainer not found")
+    out: dict[str, str] = {"file_key": file_key or ""}
+    if file_key_list:
+        out["file_key_list"] = file_key_list
+    return out
 
 
 @router.post("/trainer/photos/presign")

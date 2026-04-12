@@ -1,11 +1,13 @@
 """
-Subscription tiers: three-level access model (crm < online < analytics).
+Subscription: CRM base + independent modules (online, analytics, groups).
 
-Domain logic for tier hierarchy, effective tier resolution, and mock checkout.
+Legacy helpers tier_satisfies / get_effective_subscription_tier remain for display
+and coarse checks; feature gates use trainer_has_*_access and get_trainer_entitlements.
 """
 import json
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Literal
+from typing import Any, Literal
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -27,19 +29,75 @@ SubscriptionTier = Literal["none", "crm", "online", "analytics"]
 # Billing periods (months) — must match DB CHECK and subscription_tier_period_pricing seed.
 SUBSCRIPTION_BILLING_PERIOD_MONTHS: tuple[int, ...] = (1, 3, 12)
 
+SUBSCRIPTION_MODULE_ONLINE = "online"
+SUBSCRIPTION_MODULE_ANALYTICS = "analytics"
+SUBSCRIPTION_MODULE_GROUPS = "groups"
+SUBSCRIPTION_MODULES: tuple[str, ...] = (
+    SUBSCRIPTION_MODULE_ONLINE,
+    SUBSCRIPTION_MODULE_ANALYTICS,
+    SUBSCRIPTION_MODULE_GROUPS,
+)
+
+
+def default_modules_dict() -> dict[str, bool]:
+    return {k: False for k in SUBSCRIPTION_MODULES}
+
+
+def normalize_modules_dict(raw: Any) -> dict[str, bool]:
+    """Merge JSON modules with defaults; unknown keys ignored."""
+    out = default_modules_dict()
+    if isinstance(raw, dict):
+        for k in SUBSCRIPTION_MODULES:
+            if k in raw and raw[k] is not None:
+                out[k] = bool(raw[k])
+    return out
+
+
+def infer_modules_from_legacy_tier(tier: str | None) -> dict[str, bool]:
+    """Pre-migration tier column → module flags (fallback)."""
+    if tier == SUBSCRIPTION_TIER_ONLINE:
+        d = default_modules_dict()
+        d[SUBSCRIPTION_MODULE_ONLINE] = True
+        return d
+    if tier == SUBSCRIPTION_TIER_ANALYTICS:
+        d = default_modules_dict()
+        d[SUBSCRIPTION_MODULE_ONLINE] = True
+        d[SUBSCRIPTION_MODULE_ANALYTICS] = True
+        return d
+    return default_modules_dict()
+
+
+@dataclass
+class TrainerEntitlements:
+    """Resolved access for one trainer (active subscription row)."""
+
+    has_base_crm: bool
+    modules: dict[str, bool]
+    raw_tier: str | None  # DB tier column (canonical crm after migration)
+
+
+def unlocked_capability_codes(ent: TrainerEntitlements) -> list[str]:
+    """Human-readable capability codes for API / menu (crm + enabled modules)."""
+    if not ent.has_base_crm:
+        return []
+    codes: list[str] = ["crm"]
+    for k in SUBSCRIPTION_MODULES:
+        if ent.modules.get(k):
+            codes.append(k)
+    return codes
+
 
 def tier_satisfies(current: SubscriptionTier, required: SubscriptionTier) -> bool:
     """
-    Check if current tier meets or exceeds the required tier.
-    
-    Hierarchy: analytics > online > crm > none
-    Example: tier_satisfies("online", "crm") → True (online includes crm)
+    Legacy linear comparison on synthetic effective tier (for tests / coarse UI).
+
+    Prefer trainer_has_tier_access for real checks.
     """
     return SUBSCRIPTION_TIER_LEVELS.get(current, 0) >= SUBSCRIPTION_TIER_LEVELS.get(required, 0)
 
 
 def tier_includes(tier: SubscriptionTier) -> list[str]:
-    """Return list of features/tiers included in given tier (for UI display)."""
+    """Synthetic tier labels for backward-compatible display."""
     if tier == SUBSCRIPTION_TIER_ANALYTICS:
         return [SUBSCRIPTION_TIER_CRM, SUBSCRIPTION_TIER_ONLINE, SUBSCRIPTION_TIER_ANALYTICS]
     if tier == SUBSCRIPTION_TIER_ONLINE:
@@ -49,28 +107,18 @@ def tier_includes(tier: SubscriptionTier) -> list[str]:
     return []
 
 
-async def get_effective_subscription_tier(session: AsyncSession, trainer_id: int) -> SubscriptionTier:
-    """
-    Resolve trainer's effective tier considering expiration.
-    
-    Returns highest active tier or 'none' if no valid subscription.
-    """
+async def get_trainer_entitlements(session: AsyncSession, trainer_id: int) -> TrainerEntitlements:
+    """Active subscription row → CRM base + module flags."""
     now = datetime.now(timezone.utc)
     result = await session.execute(
         text("""
-            SELECT tier
+            SELECT tier, modules
             FROM trainer_subscriptions
             WHERE trainer_id = :tid
               AND expires_at > :now
               AND status IN (:s1, :s2)
               AND tier IS NOT NULL
-            ORDER BY 
-                CASE tier 
-                    WHEN 'analytics' THEN 3 
-                    WHEN 'online' THEN 2 
-                    WHEN 'crm' THEN 1 
-                    ELSE 0 
-                END DESC
+            ORDER BY expires_at DESC
             LIMIT 1
         """),
         {
@@ -81,65 +129,169 @@ async def get_effective_subscription_tier(session: AsyncSession, trainer_id: int
         },
     )
     row = result.fetchone()
-    return row[0] if row else SUBSCRIPTION_TIER_NONE
+    if not row:
+        return TrainerEntitlements(has_base_crm=False, modules=default_modules_dict(), raw_tier=None)
+    raw_tier = row[0]
+    mods = normalize_modules_dict(row[1])
+    if raw_tier in (SUBSCRIPTION_TIER_ONLINE, SUBSCRIPTION_TIER_ANALYTICS) and not any(mods.values()):
+        mods = infer_modules_from_legacy_tier(raw_tier)
+    return TrainerEntitlements(has_base_crm=True, modules=mods, raw_tier=raw_tier)
+
+
+async def get_effective_subscription_tier(session: AsyncSession, trainer_id: int) -> SubscriptionTier:
+    """
+    Synthetic tier for menus / legacy code: analytics if analytics module, elif online, elif crm.
+    """
+    ent = await get_trainer_entitlements(session, trainer_id)
+    if not ent.has_base_crm:
+        return SUBSCRIPTION_TIER_NONE
+    if ent.modules.get(SUBSCRIPTION_MODULE_ANALYTICS):
+        return SUBSCRIPTION_TIER_ANALYTICS
+    if ent.modules.get(SUBSCRIPTION_MODULE_ONLINE):
+        return SUBSCRIPTION_TIER_ONLINE
+    return SUBSCRIPTION_TIER_CRM
+
+
+async def get_subscription_constructor_catalog(session: AsyncSession) -> dict[str, Any]:
+    """
+    CRM base (subscription_tier_pricing.crm) + module surcharges (subscription_module_period_pricing).
+    """
+    result = await session.execute(
+        text("""
+            SELECT tier, currency, name_ru, short_description_ru, bullets_json, display_order
+            FROM subscription_tier_pricing
+            WHERE is_active = true AND tier = :crm
+        """),
+        {"crm": SUBSCRIPTION_TIER_CRM},
+    )
+    base_row = result.fetchone()
+    if not base_row:
+        return {"base": None, "modules": []}
+
+    result = await session.execute(
+        text("""
+            SELECT stpp.period_months, stpp.price_cents, stpp.period_days
+            FROM subscription_tier_period_pricing stpp
+            INNER JOIN subscription_tier_pricing stp ON stp.tier = stpp.tier
+            WHERE stpp.tier = :crm AND stp.is_active = true
+            ORDER BY stpp.period_months
+        """),
+        {"crm": SUBSCRIPTION_TIER_CRM},
+    )
+    base_prices: dict[str, int] = {}
+    base_days: dict[str, int] = {}
+    for pm, cents, days in result.fetchall():
+        k = str(int(pm))
+        base_prices[k] = cents
+        base_days[k] = days
+
+    base = {
+        "tier": SUBSCRIPTION_TIER_CRM,
+        "currency": base_row[1],
+        "name_ru": base_row[2],
+        "short_description_ru": base_row[3],
+        "bullets": base_row[4] or [],
+        "display_order": base_row[5],
+        "prices_by_period": base_prices,
+        "period_days_by_period": base_days,
+    }
+
+    result = await session.execute(
+        text("""
+            SELECT module, period_months, price_cents, period_days, currency, name_ru
+            FROM subscription_module_period_pricing
+            ORDER BY module, period_months
+        """)
+    )
+    by_mod: dict[str, dict[str, Any]] = {}
+    for mod, pm, cents, days, cur, name_ru in result.fetchall():
+        m = by_mod.setdefault(
+            mod,
+            {
+                "code": mod,
+                "currency": cur,
+                "name_ru": name_ru,
+                "prices_by_period": {},
+                "period_days_by_period": {},
+            },
+        )
+        m["prices_by_period"][str(int(pm))] = cents
+        m["period_days_by_period"][str(int(pm))] = days
+
+    return {"base": base, "modules": list(by_mod.values())}
 
 
 async def get_subscription_tier_catalog(session: AsyncSession) -> list[dict]:
     """
-    Get all active tier pricing for catalog display.
-
-    Prices are authoritative per (tier, period_months) in subscription_tier_period_pricing.
+    Backward-compatible: three legacy tier cards built from constructor (crm-only, crm+online, crm+online+analytics).
     """
-    result = await session.execute(
-        text("""
-            SELECT
-                tier, currency,
-                name_ru, short_description_ru, bullets_json, display_order
-            FROM subscription_tier_pricing
-            WHERE is_active = true
-            ORDER BY display_order ASC
-        """)
-    )
-    tier_rows = result.fetchall()
-    if not tier_rows:
+    ctor = await get_subscription_constructor_catalog(session)
+    base = ctor.get("base")
+    mod_list = ctor.get("modules") or []
+    if not base:
         return []
 
-    result = await session.execute(
-        text("""
-            SELECT stpp.tier, stpp.period_months, stpp.price_cents, stpp.period_days
-            FROM subscription_tier_period_pricing stpp
-            INNER JOIN subscription_tier_pricing stp ON stp.tier = stpp.tier
-            WHERE stp.is_active = true
-            ORDER BY stpp.tier, stpp.period_months
-        """)
-    )
-    period_rows = result.fetchall()
-    by_tier: dict[str, dict[str, int]] = {}
-    days_by_tier: dict[str, dict[str, int]] = {}
-    for tr, pm, cents, days in period_rows:
-        key = str(int(pm))
-        by_tier.setdefault(tr, {})[key] = cents
-        days_by_tier.setdefault(tr, {})[key] = days
+    def _mod_prices(code: str) -> dict[str, int]:
+        for m in mod_list:
+            if m.get("code") == code:
+                return dict(m.get("prices_by_period") or {})
+        return {}
 
-    out: list[dict] = []
-    for row in tier_rows:
-        tier = row[0]
-        prices = by_tier.get(tier, {})
-        days_map = days_by_tier.get(tier, {})
-        out.append(
-            {
-                "tier": tier,
-                "currency": row[1],
-                "name_ru": row[2],
-                "short_description_ru": row[3],
-                "bullets": row[4] or [],
-                "display_order": row[5],
-                "includes_tiers": tier_includes(tier),
-                "prices_by_period": prices,
-                "period_days_by_period": days_map,
-            }
-        )
-    return out
+    def _sum_periods(*price_maps: dict[str, int]) -> dict[str, int]:
+        keys = set()
+        for pm in price_maps:
+            keys |= set(pm.keys())
+        out: dict[str, int] = {}
+        for k in keys:
+            out[k] = sum(int(pm.get(k, 0)) for pm in price_maps)
+        return out
+
+    base_p = base.get("prices_by_period") or {}
+    on_p = _mod_prices(SUBSCRIPTION_MODULE_ONLINE)
+    an_p = _mod_prices(SUBSCRIPTION_MODULE_ANALYTICS)
+    base_days = base.get("period_days_by_period") or {}
+
+    crm_only = {
+        "tier": SUBSCRIPTION_TIER_CRM,
+        "currency": base["currency"],
+        "name_ru": base["name_ru"],
+        "short_description_ru": base["short_description_ru"],
+        "bullets": base["bullets"],
+        "display_order": 1,
+        "includes_tiers": [SUBSCRIPTION_TIER_CRM],
+        "prices_by_period": dict(base_p),
+        "period_days_by_period": dict(base_days),
+        "modules": default_modules_dict(),
+    }
+    online_bundle = {
+        "tier": SUBSCRIPTION_TIER_ONLINE,
+        "currency": base["currency"],
+        "name_ru": "CRM + онлайн-запись",
+        "short_description_ru": "База и самозапись клиентов в каталоге",
+        "bullets": base["bullets"] + ["Онлайн-запись в каталоге"],
+        "display_order": 2,
+        "includes_tiers": [SUBSCRIPTION_TIER_CRM, SUBSCRIPTION_TIER_ONLINE],
+        "prices_by_period": _sum_periods(base_p, on_p),
+        "period_days_by_period": dict(base_days),
+        "modules": {**default_modules_dict(), SUBSCRIPTION_MODULE_ONLINE: True},
+    }
+    analytics_bundle = {
+        "tier": SUBSCRIPTION_TIER_ANALYTICS,
+        "currency": base["currency"],
+        "name_ru": "CRM + онлайн + аналитика",
+        "short_description_ru": "Как прежний тариф «Аналитика» (онлайн + отчёты)",
+        "bullets": (base["bullets"] or []) + ["Онлайн-запись", "Аналитика и отчёты"],
+        "display_order": 3,
+        "includes_tiers": [SUBSCRIPTION_TIER_CRM, SUBSCRIPTION_TIER_ONLINE, SUBSCRIPTION_TIER_ANALYTICS],
+        "prices_by_period": _sum_periods(base_p, on_p, an_p),
+        "period_days_by_period": dict(base_days),
+        "modules": {
+            **default_modules_dict(),
+            SUBSCRIPTION_MODULE_ONLINE: True,
+            SUBSCRIPTION_MODULE_ANALYTICS: True,
+        },
+    }
+    return [crm_only, online_bundle, analytics_bundle]
 
 
 async def _infer_billing_period_months(
@@ -169,16 +321,16 @@ async def _infer_billing_period_months(
 async def get_trainer_subscription_status(session: AsyncSession, trainer_id: int) -> dict:
     """
     Get trainer's current subscription status for UI.
-    
-    Includes effective tier, expiration, and what's unlocked.
+
+    Includes effective tier, modules, expiration, and unlocked capability codes.
     """
     tier = await get_effective_subscription_tier(session, trainer_id)
+    ent = await get_trainer_entitlements(session, trainer_id)
     now = datetime.now(timezone.utc)
-    
-    # Get subscription details if active (latest segment by end date)
+
     result = await session.execute(
         text("""
-            SELECT ts.id, ts.tier, ts.expires_at, ts.status, ts.started_at, ts.billing_period_months
+            SELECT ts.id, ts.tier, ts.modules, ts.expires_at, ts.status, ts.started_at, ts.billing_period_months
             FROM trainer_subscriptions ts
             WHERE ts.trainer_id = :tid
               AND ts.expires_at > :now
@@ -194,29 +346,40 @@ async def get_trainer_subscription_status(session: AsyncSession, trainer_id: int
         },
     )
     row = result.fetchone()
-    
+
     if row:
         row_tier = row[1] or tier
-        expires_at = row[2]
-        sub_status = row[3]
-        started_at = row[4]
-        stored_pm = row[5]
+        mods = normalize_modules_dict(row[2])
+        if row_tier in (SUBSCRIPTION_TIER_ONLINE, SUBSCRIPTION_TIER_ANALYTICS) and not any(mods.values()):
+            mods = infer_modules_from_legacy_tier(row_tier)
+        expires_at = row[3]
+        sub_status = row[4]
+        started_at = row[5]
+        stored_pm = row[6]
         billing_pm: int | None = int(stored_pm) if stored_pm is not None else None
         if billing_pm is None and row_tier and expires_at and started_at:
             billing_pm = await _infer_billing_period_months(session, row_tier, started_at, expires_at)
+        # Human label: use synthetic effective tier (trial with full modules → analytics name, not bare CRM).
         tier_name_ru: str | None = None
         if row_tier:
+            lookup_tier = tier if tier != SUBSCRIPTION_TIER_NONE else row_tier
+            if lookup_tier not in SUBSCRIPTION_TIERS:
+                lookup_tier = row_tier
             nr = await session.execute(
                 text("SELECT name_ru FROM subscription_tier_pricing WHERE tier = :t LIMIT 1"),
-                {"t": row_tier},
+                {"t": lookup_tier},
             )
             nrow = nr.fetchone()
             tier_name_ru = nrow[0] if nrow else None
         is_trial = sub_status == SUBSCRIPTION_STATUS_TRIAL
+        caps = unlocked_capability_codes(
+            TrainerEntitlements(has_base_crm=ent.has_base_crm, modules=mods, raw_tier=row_tier)
+        )
         return {
             "subscription_id": row[0],
             "tier": row_tier,
             "effective_tier": tier,
+            "modules": mods,
             "expires_at": expires_at.isoformat() if expires_at else None,
             "status": sub_status,
             "is_trial": is_trial,
@@ -224,13 +387,14 @@ async def get_trainer_subscription_status(session: AsyncSession, trainer_id: int
             "started_at": started_at.isoformat() if started_at else None,
             "billing_period_months": billing_pm,
             "is_active": True,
-            "unlocked_features": tier_includes(tier),
+            "unlocked_features": caps,
         }
-    
+
     return {
         "subscription_id": None,
         "tier": SUBSCRIPTION_TIER_NONE,
         "effective_tier": SUBSCRIPTION_TIER_NONE,
+        "modules": default_modules_dict(),
         "expires_at": None,
         "status": None,
         "is_trial": False,
@@ -272,34 +436,66 @@ async def get_tier_period_pricing(
     }
 
 
-async def set_subscription_after_mock_payment(
+async def get_module_period_pricing(
+    session: AsyncSession,
+    module: str,
+    period_months: int,
+) -> dict | None:
+    """Surcharge for one module (online / analytics / groups)."""
+    if module not in SUBSCRIPTION_MODULES or period_months not in SUBSCRIPTION_BILLING_PERIOD_MONTHS:
+        return None
+    result = await session.execute(
+        text("""
+            SELECT price_cents, period_days, currency, name_ru
+            FROM subscription_module_period_pricing
+            WHERE module = :m AND period_months = :pm
+        """),
+        {"m": module, "pm": period_months},
+    )
+    row = result.fetchone()
+    if not row:
+        return None
+    return {
+        "price_cents": row[0],
+        "period_days": row[1],
+        "currency": row[2],
+        "name_ru": row[3],
+    }
+
+
+async def set_subscription_constructor_after_mock_payment(
     session: AsyncSession,
     trainer_id: int,
-    tier: SubscriptionTier,
+    modules: dict[str, bool],
     period_months: int,
 ) -> dict | None:
     """
-    Activate tier subscription after mock payment.
+    Activate CRM + selected modules after mock payment.
 
-    Creates new trainer_subscription with tier and period from subscription_tier_period_pricing.
-    Policy: replaces tier (doesn't stack), extends from now or current expires_at.
+    Canonical row: tier='crm', modules JSONB. Total price = CRM base + enabled module surcharges.
     """
-    if tier not in (SUBSCRIPTION_TIER_CRM, SUBSCRIPTION_TIER_ONLINE, SUBSCRIPTION_TIER_ANALYTICS):
-        return None
     if period_months not in SUBSCRIPTION_BILLING_PERIOD_MONTHS:
         return None
-
-    pricing = await get_tier_period_pricing(session, tier, period_months)
-    if not pricing:
+    mods = normalize_modules_dict(modules)
+    base = await get_tier_period_pricing(session, SUBSCRIPTION_TIER_CRM, period_months)
+    if not base:
         return None
-    
+    total_cents = int(base["price_cents"])
+    period_days = int(base["period_days"])
+    currency = base["currency"]
+    for key in SUBSCRIPTION_MODULES:
+        if not mods.get(key):
+            continue
+        mp = await get_module_period_pricing(session, key, period_months)
+        if not mp:
+            return None
+        total_cents += int(mp["price_cents"])
+
     now = datetime.now(timezone.utc)
-    
-    # Check if there's an active subscription to extend from
     result = await session.execute(
         text("""
             SELECT expires_at FROM trainer_subscriptions
-            WHERE trainer_id = :tid 
+            WHERE trainer_id = :tid
               AND expires_at > :now
               AND status IN (:s1, :s2)
             ORDER BY expires_at DESC
@@ -313,31 +509,29 @@ async def set_subscription_after_mock_payment(
         },
     )
     row = result.fetchone()
-    
-    # Start from current expiration or now
     started_at = row[0] if row and row[0] > now else now
-    expires_at = started_at + timedelta(days=pricing["period_days"])
-    
-    # Get or create a dummy plan_id (use first non-trial plan)
+    expires_at = started_at + timedelta(days=period_days)
+
     plan_result = await session.execute(
         text("SELECT id FROM subscription_plans WHERE is_trial = false ORDER BY sort_order LIMIT 1")
     )
     plan_row = plan_result.fetchone()
     plan_id = plan_row[0] if plan_row else 1
-    
-    # Insert new subscription with tier
+
+    mods_json = json.dumps(mods, ensure_ascii=False)
     result = await session.execute(
         text("""
-            INSERT INTO trainer_subscriptions 
-                (trainer_id, plan_id, tier, billing_period_months, started_at, expires_at, status)
-            VALUES 
-                (:tid, :pid, :tier, :bpm, :started_at, :expires_at, :status)
+            INSERT INTO trainer_subscriptions
+                (trainer_id, plan_id, tier, modules, billing_period_months, started_at, expires_at, status)
+            VALUES
+                (:tid, :pid, :tier, CAST(:mods AS jsonb), :bpm, :started_at, :expires_at, :status)
             RETURNING id, started_at, expires_at
         """),
         {
             "tid": trainer_id,
             "pid": plan_id,
-            "tier": tier,
+            "tier": SUBSCRIPTION_TIER_CRM,
+            "mods": mods_json,
             "bpm": period_months,
             "started_at": started_at,
             "expires_at": expires_at,
@@ -346,17 +540,36 @@ async def set_subscription_after_mock_payment(
     )
     row = result.fetchone()
     await session.commit()
-    
+
     return {
         "subscription_id": row[0],
-        "tier": tier,
+        "tier": SUBSCRIPTION_TIER_CRM,
+        "modules": mods,
         "started_at": row[1].isoformat(),
         "expires_at": row[2].isoformat(),
-        "price_cents": pricing["price_cents"],
-        "currency": pricing["currency"],
-        "period_days": pricing["period_days"],
+        "price_cents": total_cents,
+        "currency": currency,
+        "period_days": period_days,
         "period_months": period_months,
     }
+
+
+async def set_subscription_after_mock_payment(
+    session: AsyncSession,
+    trainer_id: int,
+    tier: SubscriptionTier,
+    period_months: int,
+) -> dict | None:
+    """Legacy: map old tier bundles to module flags."""
+    if tier not in (SUBSCRIPTION_TIER_CRM, SUBSCRIPTION_TIER_ONLINE, SUBSCRIPTION_TIER_ANALYTICS):
+        return None
+    mods = default_modules_dict()
+    if tier == SUBSCRIPTION_TIER_ONLINE:
+        mods[SUBSCRIPTION_MODULE_ONLINE] = True
+    elif tier == SUBSCRIPTION_TIER_ANALYTICS:
+        mods[SUBSCRIPTION_MODULE_ONLINE] = True
+        mods[SUBSCRIPTION_MODULE_ANALYTICS] = True
+    return await set_subscription_constructor_after_mock_payment(session, trainer_id, mods, period_months)
 
 
 async def trainer_has_tier_access(
@@ -364,63 +577,68 @@ async def trainer_has_tier_access(
     trainer_id: int,
     required_tier: SubscriptionTier,
 ) -> bool:
-    """Check if trainer has at least the required tier level."""
-    current = await get_effective_subscription_tier(session, trainer_id)
-    return tier_satisfies(current, required_tier)
+    """
+    Feature gate aligned with modules: 'crm' = base; 'online'/'analytics' = module flags
+    (analytics does not imply online).
+    """
+    if required_tier == SUBSCRIPTION_TIER_NONE:
+        return True
+    ent = await get_trainer_entitlements(session, trainer_id)
+    if not ent.has_base_crm:
+        return False
+    if required_tier == SUBSCRIPTION_TIER_CRM:
+        return True
+    if required_tier == SUBSCRIPTION_TIER_ONLINE:
+        return bool(ent.modules.get(SUBSCRIPTION_MODULE_ONLINE))
+    if required_tier == SUBSCRIPTION_TIER_ANALYTICS:
+        return bool(ent.modules.get(SUBSCRIPTION_MODULE_ANALYTICS))
+    return False
 
 
 async def trainer_allows_online_booking(session: AsyncSession, trainer_id: int) -> bool:
-    """
-    Check if trainer's subscription allows clients to book via catalog.
-    
-    Requires tier >= 'online'. Without this tier, clients can see trainer
-    in catalog but cannot self-book (must contact directly).
-    """
-    return await trainer_has_tier_access(session, trainer_id, SUBSCRIPTION_TIER_ONLINE)
+    """Catalog self-booking requires CRM base + online module."""
+    ent = await get_trainer_entitlements(session, trainer_id)
+    return ent.has_base_crm and bool(ent.modules.get(SUBSCRIPTION_MODULE_ONLINE))
 
 
 async def trainer_has_crm_access(session: AsyncSession, trainer_id: int) -> bool:
-    """
-    Check if trainer has CRM access (tier >= 'crm').
-    
-    CRM tier includes: schedule, templates, slots, manual booking,
-    client management, passes, certificates.
-    """
-    return await trainer_has_tier_access(session, trainer_id, SUBSCRIPTION_TIER_CRM)
+    """Active subscription with CRM base (any paid/trial row)."""
+    ent = await get_trainer_entitlements(session, trainer_id)
+    return ent.has_base_crm
 
 
 async def trainer_has_analytics_access(session: AsyncSession, trainer_id: int) -> bool:
-    """
-    Check if trainer has analytics access (tier >= 'analytics').
-    
-    Analytics tier includes: all CRM + online features, plus
-    statistics, reports, data exports.
-    """
-    return await trainer_has_tier_access(session, trainer_id, SUBSCRIPTION_TIER_ANALYTICS)
+    ent = await get_trainer_entitlements(session, trainer_id)
+    return ent.has_base_crm and bool(ent.modules.get(SUBSCRIPTION_MODULE_ANALYTICS))
+
+
+async def trainer_has_groups_access(session: AsyncSession, trainer_id: int) -> bool:
+    ent = await get_trainer_entitlements(session, trainer_id)
+    return ent.has_base_crm and bool(ent.modules.get(SUBSCRIPTION_MODULE_GROUPS))
 
 
 async def get_trainer_booking_availability(session: AsyncSession, trainer_id: int) -> dict:
     """
     Get trainer's booking availability info for catalog display.
-    
+
     Returns:
-        - can_book: True if clients can self-book (tier >= online)
-        - tier: current effective tier
+        - can_book: True if CRM + online module
+        - tier: synthetic effective tier (legacy display)
         - reason: explanation if can_book is False
     """
     tier = await get_effective_subscription_tier(session, trainer_id)
-    can_book = tier_satisfies(tier, SUBSCRIPTION_TIER_ONLINE)
-    
+    can_book = await trainer_allows_online_booking(session, trainer_id)
+
     if can_book:
         return {"can_book": True, "tier": tier, "reason": None}
-    
+
     if tier == SUBSCRIPTION_TIER_NONE:
         reason = "no_subscription"
-    elif tier == SUBSCRIPTION_TIER_CRM:
-        reason = "crm_only"
+    elif not await trainer_has_crm_access(session, trainer_id):
+        reason = "no_subscription"
     else:
-        reason = "tier_insufficient"
-    
+        reason = "crm_only"
+
     return {"can_book": False, "tier": tier, "reason": reason}
 
 

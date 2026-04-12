@@ -180,6 +180,69 @@ async def test_webapp_trainer_education_create_and_patch(
 
 
 @pytest.mark.asyncio
+async def test_webapp_trainer_education_supports_uploaded_document_photos(
+    app_use_test_db,
+    db_session,
+) -> None:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        create_resp = await client.post(
+            "/api/trainers",
+            json={"profile": {"first_name": "Док", "last_name": "Фото", "age": 30}},
+        )
+        trainer_id = create_resp.json()["id"]
+    tg = _fresh_trainer_telegram_id()
+    await db_session.execute(
+        text("UPDATE trainers SET telegram_id = :tg WHERE id = :id"),
+        {"tg": tg, "id": trainer_id},
+    )
+    await db_session.commit()
+
+    fake_key = f"trainers/{trainer_id}/edu-proof.jpg"
+    fake_key_list = f"trainers/{trainer_id}/edu-proof_list.jpg"
+    with (
+        patch("src.api.routes.webapp_trainer_profile.require_telegram_user_id", return_value=tg),
+        patch("src.application.trainer_use_cases.trainer_photo_bytes_look_like_image", return_value=True),
+        patch("src.application.trainer_use_cases.s3.upload_photo", return_value=(fake_key, fake_key_list)),
+    ):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            upload_resp = await client.post(
+                "/api/webapp/trainer/education/documents",
+                headers={"X-Telegram-Init-Data": "mock"},
+                files={"file": ("proof.jpg", b"fake image bytes", "image/jpeg")},
+            )
+            assert upload_resp.status_code == 200
+            uploaded = upload_resp.json()
+            assert uploaded["file_key"] == fake_key
+            assert uploaded["file_key_list"] == fake_key_list
+
+            post_resp = await client.post(
+                "/api/webapp/trainer/education",
+                headers={"X-Telegram-Init-Data": "mock"},
+                json={
+                    "education_type": "formal_education",
+                    "institution_name": "БГУФК",
+                    "program_or_title": "Тренерский факультет",
+                    "document_photos": [
+                        {
+                            "file_key": fake_key,
+                            "file_key_list": fake_key_list,
+                        }
+                    ],
+                },
+            )
+            assert post_resp.status_code == 201
+            get_prof = await client.get(
+                "/api/webapp/trainer/profile",
+                headers={"X-Telegram-Init-Data": "mock"},
+            )
+    assert get_prof.status_code == 200
+    entries = get_prof.json().get("education_entries") or []
+    assert len(entries) >= 1
+    assert entries[0].get("document_photos")
+    assert entries[0]["document_photos"][0]["file_key"] == fake_key
+
+
+@pytest.mark.asyncio
 async def test_webapp_trainer_education_delete(
     app_use_test_db,
     db_session,

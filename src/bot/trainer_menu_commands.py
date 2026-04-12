@@ -11,9 +11,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.subscription_tier_use_cases import (
     get_effective_subscription_tier,
-    tier_satisfies,
+    trainer_has_analytics_access,
+    trainer_has_crm_access,
 )
-from src.infrastructure.db.models import SUBSCRIPTION_TIER_ANALYTICS, SUBSCRIPTION_TIER_CRM
 
 
 def trainer_command_list(*, include_crm_features: bool, include_stats: bool) -> list[BotCommand]:
@@ -43,16 +43,15 @@ async def trainer_menu_signature(session: AsyncSession, trainer_id: int) -> str:
     Stable string for current menu (CRM block + stats). Used to detect tier changes and sync immediately.
     """
     tier = await get_effective_subscription_tier(session, trainer_id)
-    include_crm = tier_satisfies(tier, SUBSCRIPTION_TIER_CRM)
-    include_stats = tier_satisfies(tier, SUBSCRIPTION_TIER_ANALYTICS)
+    include_crm = await trainer_has_crm_access(session, trainer_id)
+    include_stats = await trainer_has_analytics_access(session, trainer_id)
     return f"{tier}|{int(include_crm)}|{int(include_stats)}"
 
 
 async def sync_trainer_menu_commands(bot: Bot, chat_id: int, trainer_id: int, session: AsyncSession) -> None:
     """Set per-chat command list from effective subscription tier."""
-    tier = await get_effective_subscription_tier(session, trainer_id)
-    include_crm = tier_satisfies(tier, SUBSCRIPTION_TIER_CRM)
-    include_stats = tier_satisfies(tier, SUBSCRIPTION_TIER_ANALYTICS)
+    include_crm = await trainer_has_crm_access(session, trainer_id)
+    include_stats = await trainer_has_analytics_access(session, trainer_id)
     await bot.set_my_commands(
         trainer_command_list(include_crm_features=include_crm, include_stats=include_stats),
         scope=BotCommandScopeChat(chat_id=chat_id),

@@ -367,6 +367,41 @@
       background: var(--tg-theme-bg-color);
       color: var(--tg-theme-text-color);
     }
+    .svc-desc-wrap {
+      width: 100%;
+      margin-bottom: 12px;
+    }
+    .svc-desc-label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--tg-theme-hint-color);
+      margin-bottom: 6px;
+      line-height: 1.3;
+    }
+    .svc-desc-textarea {
+      width: 100%;
+      box-sizing: border-box;
+      min-height: 72px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid rgba(128, 128, 128, 0.22);
+      background: var(--tg-theme-bg-color);
+      color: var(--tg-theme-text-color);
+      font-size: 14px;
+      line-height: 1.4;
+      font-family: inherit;
+      resize: vertical;
+    }
+    .svc-desc-textarea:disabled {
+      opacity: 0.45;
+    }
+    .svc-desc-count {
+      font-size: 11px;
+      color: var(--tg-theme-hint-color);
+      margin-top: 4px;
+      text-align: right;
+    }
     .svc-tier-hint {
       font-size: 12px;
       color: var(--tg-theme-hint-color);
@@ -499,6 +534,131 @@
       border-radius: 8px;
     }
     .edu-err:empty { display: none; }
+    .edu-docs {
+      margin-top: 14px;
+      padding: 12px;
+      border-radius: 12px;
+      border: 1px solid rgba(128, 128, 128, 0.14);
+      background: var(--tg-theme-secondary-bg-color);
+    }
+    .edu-docs-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+    .edu-docs-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--tg-theme-text-color);
+    }
+    .edu-docs-count {
+      font-size: 12px;
+      color: var(--tg-theme-hint-color);
+      white-space: nowrap;
+    }
+    .edu-docs-hint {
+      margin: 0 0 10px;
+      font-size: 12px;
+      line-height: 1.4;
+      color: var(--tg-theme-hint-color);
+    }
+    .edu-docs-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(86px, 1fr));
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .edu-doc-item {
+      position: relative;
+      border-radius: 10px;
+      overflow: hidden;
+      background: var(--tg-theme-bg-color);
+      border: 1px solid rgba(128, 128, 128, 0.14);
+      min-height: 84px;
+    }
+    .edu-doc-thumb {
+      display: block;
+      width: 100%;
+      border: none;
+      margin: 0;
+      padding: 0;
+      background: transparent;
+      cursor: pointer;
+    }
+    .edu-doc-thumb img {
+      display: block;
+      width: 100%;
+      height: 84px;
+      object-fit: cover;
+      background: var(--tg-theme-secondary-bg-color);
+    }
+    .edu-doc-remove {
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      width: 24px;
+      height: 24px;
+      border: none;
+      border-radius: 999px;
+      margin: 0;
+      padding: 0;
+      background: rgba(220, 38, 38, 0.9);
+      color: #fff;
+      font-size: 16px;
+      line-height: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+    }
+    .edu-doc-remove:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .edu-docs-empty {
+      font-size: 12px;
+      line-height: 1.4;
+      color: var(--tg-theme-hint-color);
+      margin-bottom: 10px;
+    }
+    .edu-doc-upload-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+    }
+    .edu-doc-upload-btn {
+      border: 1px dashed color-mix(in srgb, var(--tg-theme-button-color) 60%, transparent);
+      background: color-mix(in srgb, var(--tg-theme-button-color) 10%, var(--tg-theme-bg-color));
+      color: var(--tg-theme-text-color);
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.12s ease, opacity 0.12s ease;
+    }
+    .edu-doc-upload-btn:active {
+      transform: scale(0.98);
+    }
+    .edu-doc-upload-btn:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+    .edu-doc-upload-input {
+      display: none;
+    }
+    .edu-docs-status {
+      font-size: 12px;
+      line-height: 1.35;
+      color: var(--tg-theme-hint-color);
+      margin: 0;
+    }
+    .edu-docs-status.edu-docs-status--error {
+      color: var(--app-danger);
+    }
     #descriptionMeta {
       display: flex;
       align-items: center;
@@ -1427,8 +1587,9 @@
       <div class="section-title">Формат занятий</div>
       <div class="card">
         <div class="field">
-          <label for="session_duration_minutes"><span class="required-dot"></span>Длительность занятия (мин.)</label>
-          <input id="session_duration_minutes" type="number" min="15" max="240" step="1" placeholder="Например 60" inputmode="numeric" />
+          <label for="session_duration_minutes"><span class="required-dot"></span>Стандартное время занятия (мин.)</label>
+          <input id="session_duration_minutes" type="number" min="15" max="240" step="1" placeholder="Например 60" inputmode="numeric" aria-describedby="session_duration_minutes_hint" />
+          <p id="session_duration_minutes_hint" class="hint" style="margin-top:8px;">Базовая длительность для карточки в каталоге и напоминаний. В «Расписании» это же значение подставляется по умолчанию в поле длительности при добавлении слотов (его можно изменить на экране перед сохранением).</p>
         </div>
         <div class="field">
           <label for="min_hours_before_booking"><span class="required-dot"></span>За сколько часов до занятия клиент может записаться</label>
@@ -1659,8 +1820,11 @@
       var PHONE_BY_ERR = 'Укажите корректный номер телефона.';
       var MIN_DESCRIPTION_CHARS = 25;
       var MAX_DESCRIPTION_CHARS = 5000;
+      /** Per-service blurb in «Услуги и цены»; aligned with LEN_TRAINER_SERVICE_DESCRIPTION on the server. */
+      var MAX_SERVICE_DESCRIPTION_CHARS = 800;
       /** Fallback if API omits field; must match MODERATION_CRITERIA_TOTAL on the server. */
       var MODERATION_CRITERIA_TOTAL_FALLBACK = 12;
+      var MAX_EDUCATION_DOCUMENT_PHOTOS = 12;
 
       /** Russian plural for "остался N критерий" (criteria, not form fields). */
       function ruCriteriaWord(n) {
@@ -1900,7 +2064,7 @@
           var sv = el.value;
           if (sv !== '' && sv != null) {
             var sn = Number(sv);
-            if (isNaN(sn) || sn < 15 || sn > 240) msg = 'Длительность: от 15 до 240 минут.';
+            if (isNaN(sn) || sn < 15 || sn > 240) msg = 'Стандартное время занятия: от 15 до 240 минут.';
           }
         } else if (fieldId === 'min_hours_before_booking') {
           var mv = el.value;
@@ -1940,7 +2104,7 @@
           errs.push(['experience_years', 'Опыт: от 0 до 80 лет.']);
         }
         if (pr.session_duration_minutes != null && (pr.session_duration_minutes < 15 || pr.session_duration_minutes > 240)) {
-          errs.push(['session_duration_minutes', 'Длительность: от 15 до 240 минут.']);
+          errs.push(['session_duration_minutes', 'Стандартное время занятия: от 15 до 240 минут.']);
         }
         if (pr.min_hours_before_booking != null && (pr.min_hours_before_booking < 0 || pr.min_hours_before_booking > 168)) {
           errs.push(['min_hours_before_booking', 'От 0 до 168 часов.']);
@@ -1966,6 +2130,16 @@
         var i;
         for (i = 0; i < services.length; i++) {
           if (!serviceEntryPricesOk(services[i])) return false;
+        }
+        return true;
+      }
+
+      function serviceDescriptionsLengthOk(parsed) {
+        var services = parsed.services || [];
+        var i;
+        for (i = 0; i < services.length; i++) {
+          var d = services[i].description;
+          if (d != null && String(d).length > MAX_SERVICE_DESCRIPTION_CHARS) return false;
         }
         return true;
       }
@@ -2011,7 +2185,11 @@
         });
         var errEl = document.getElementById('err_services');
         if (errEl) {
-          if (!svcOk && (parsed.services || []).length > 0) {
+          var descOk = serviceDescriptionsLengthOk(parsed);
+          if (!descOk) {
+            errEl.textContent = 'Описание услуги не длиннее ' + MAX_SERVICE_DESCRIPTION_CHARS + ' символов.';
+            errEl.hidden = false;
+          } else if (!svcOk && (parsed.services || []).length > 0) {
             errEl.textContent = 'Для каждой выбранной услуги отметьте хотя бы один тариф и укажите цену.';
             errEl.hidden = false;
           } else {
@@ -2029,6 +2207,7 @@
         }
         if (collectProfileFieldErrors(parsed).length) return false;
         if (!servicesPricesValid(parsed)) return false;
+        if (!serviceDescriptionsLengthOk(parsed)) return false;
         if (parsed.arena_ids && parsed.arena_ids.length >= 2) {
           if (!parsed.primary_arena_id || parsed.arena_ids.indexOf(parsed.primary_arena_id) < 0) return false;
         }
@@ -2040,6 +2219,9 @@
         var errs = collectProfileFieldErrors(parsed);
         if (!servicesPricesValid(parsed)) {
           errs.push(['services', 'Для каждой выбранной услуги отметьте хотя бы один тариф и укажите цену.']);
+        }
+        if (!serviceDescriptionsLengthOk(parsed)) {
+          errs.push(['services', 'Описание услуги не длиннее ' + MAX_SERVICE_DESCRIPTION_CHARS + ' символов.']);
         }
         if (parsed.arena_ids && parsed.arena_ids.length >= 2) {
           if (!parsed.primary_arena_id || parsed.arena_ids.indexOf(parsed.primary_arena_id) < 0) {
@@ -2111,7 +2293,9 @@
           tiers.sort(function(a, b) {
             return SERVICE_TIER_ORDER.indexOf(a.tier_kind) - SERVICE_TIER_ORDER.indexOf(b.tier_kind);
           });
-          return { service_id: s.service_id, price_tiers: tiers };
+          var descOut = null;
+          if (s.description != null && String(s.description).trim()) descOut = String(s.description).trim();
+          return { service_id: s.service_id, price_tiers: tiers, description: descOut };
         }).sort(function(a, b) { return a.service_id - b.service_id; });
         var arena_ids = (state.trainer && state.trainer.arena_ids) ? state.trainer.arena_ids.slice().sort(function(a,b){ return a-b; }) : [];
         var primary_arena_id = (state.trainer && state.trainer.primary_arena_id != null) ? Number(state.trainer.primary_arena_id) : null;
@@ -2174,7 +2358,13 @@
                 if (!isNaN(p) && p >= 0) tiers.push({ tier_kind: code, price_byn: p });
               }
             });
-            if (tiers.length) services.push({ service_id: s.id, price_tiers: tiers });
+            if (tiers.length) {
+              var svcObj = { service_id: s.id, price_tiers: tiers };
+              var sdEl = document.getElementById('svc_desc_' + s.id);
+              var sdRaw = sdEl ? sdEl.value.trim() : '';
+              svcObj.description = sdRaw ? sdRaw : null;
+              services.push(svcObj);
+            }
           }
         });
         services.sort(function(a, b) { return a.service_id - b.service_id; });
@@ -2718,6 +2908,166 @@
         return t === '' ? null : t;
       }
 
+      function educationPhotoUrl(fileKey) {
+        if (!fileKey) return '';
+        return '/api/public/photos/' + encodeURIComponent(fileKey);
+      }
+
+      function normalizeEducationDocumentPhotos(raw) {
+        if (!Array.isArray(raw)) return [];
+        var out = [];
+        var seen = {};
+        raw.forEach(function(item) {
+          if (!item || typeof item !== 'object') return;
+          var fk = (item.file_key || '').toString().trim();
+          var fkl = (item.file_key_list || '').toString().trim();
+          if (!fk || seen[fk]) return;
+          seen[fk] = true;
+          out.push({
+            file_key: fk,
+            file_key_list: fkl ? fkl : null,
+          });
+        });
+        return out;
+      }
+
+      function getCardEducationDocumentPhotos(card) {
+        if (!card) return [];
+        return normalizeEducationDocumentPhotos(card.__documentPhotos || []);
+      }
+
+      function setCardEducationDocumentPhotos(card, docs) {
+        if (!card) return;
+        card.__documentPhotos = normalizeEducationDocumentPhotos(docs);
+      }
+
+      function renderEducationDocumentPhotos(card) {
+        if (!card) return;
+        var listEl = card.querySelector('.edu-docs-list');
+        var emptyEl = card.querySelector('.edu-docs-empty');
+        var countEl = card.querySelector('.edu-docs-count');
+        if (!listEl || !emptyEl || !countEl) return;
+        var docs = getCardEducationDocumentPhotos(card);
+        listEl.innerHTML = '';
+        countEl.textContent = docs.length > 0 ? ('Фото: ' + docs.length) : 'Фото: 0';
+        emptyEl.style.display = docs.length ? 'none' : 'block';
+        docs.forEach(function(doc, idx) {
+          var tile = document.createElement('div');
+          tile.className = 'edu-doc-item';
+
+          var previewBtn = document.createElement('button');
+          previewBtn.type = 'button';
+          previewBtn.className = 'edu-doc-thumb';
+          previewBtn.setAttribute('aria-label', 'Открыть фото документа');
+          previewBtn.addEventListener('click', function() {
+            var href = educationPhotoUrl(doc.file_key);
+            if (!href) return;
+            if (tg && typeof tg.openLink === 'function') tg.openLink(href);
+            else window.open(href, '_blank', 'noopener');
+          });
+
+          var img = document.createElement('img');
+          img.alt = 'Документ #' + (idx + 1);
+          var previewKey = doc.file_key_list || doc.file_key;
+          img.src = educationPhotoUrl(previewKey);
+          previewBtn.appendChild(img);
+          tile.appendChild(previewBtn);
+
+          var removeBtn = document.createElement('button');
+          removeBtn.type = 'button';
+          removeBtn.className = 'edu-doc-remove';
+          removeBtn.setAttribute('aria-label', 'Удалить фото документа');
+          removeBtn.textContent = '×';
+          removeBtn.addEventListener('click', function() {
+            var next = getCardEducationDocumentPhotos(card).filter(function(_, i) { return i !== idx; });
+            setCardEducationDocumentPhotos(card, next);
+            renderEducationDocumentPhotos(card);
+            setDirty();
+          });
+          tile.appendChild(removeBtn);
+
+          listEl.appendChild(tile);
+        });
+      }
+
+      function setEducationDocsStatus(card, text, isError) {
+        var status = card ? card.querySelector('.edu-docs-status') : null;
+        if (!status) return;
+        status.textContent = text || '';
+        status.classList.toggle('edu-docs-status--error', !!isError);
+      }
+
+      function setEducationDocsBusy(card, busy) {
+        if (!card) return;
+        var uploadBtn = card.querySelector('.edu-doc-upload-btn');
+        if (uploadBtn) uploadBtn.disabled = !!busy;
+        card.classList.toggle('edu-card--docs-busy', !!busy);
+      }
+
+      function uploadEducationDocumentFile(card, file) {
+        if (!card || !file) return Promise.resolve();
+        if (!file.type || file.type.indexOf('image/') !== 0) {
+          setEducationDocsStatus(card, 'Нужен файл изображения (JPEG/PNG/WebP).', true);
+          haptic('error');
+          return Promise.resolve();
+        }
+        if (file.size > MAX_TRAINER_PHOTO_BYTES) {
+          setEducationDocsStatus(card, 'Файл слишком большой (макс. 15 МБ).', true);
+          haptic('error');
+          return Promise.resolve();
+        }
+        if (getCardEducationDocumentPhotos(card).length >= MAX_EDUCATION_DOCUMENT_PHOTOS) {
+          setEducationDocsStatus(
+            card,
+            'Достигнут лимит: не более ' + MAX_EDUCATION_DOCUMENT_PHOTOS + ' фото документов.',
+            true
+          );
+          haptic('error');
+          return Promise.resolve();
+        }
+        setEducationDocsBusy(card, true);
+        setEducationDocsStatus(card, 'Загружаем «' + (file.name || 'документ') + '»…', false);
+        var fd = new FormData();
+        fd.append('file', file, file.name || 'document.jpg');
+        var h = {};
+        if (initData()) h['X-Telegram-Init-Data'] = initData();
+        return fetch('/api/webapp/trainer/education/documents', { method: 'POST', headers: h, body: fd })
+          .then(parseJsonResponse)
+          .then(function(o) {
+            if (!o.ok) {
+              var msg = (o.data && o.data.detail) ? String(o.data.detail) : 'Не удалось загрузить документ.';
+              if (msg === 'File too large') msg = 'Файл слишком большой (макс. 15 МБ).';
+              else if (msg === 'Not a valid image') msg = 'Нужен файл изображения (JPEG/PNG/WebP).';
+              setEducationDocsStatus(card, msg, true);
+              haptic('error');
+              return;
+            }
+            var fileKey = (o.data && o.data.file_key) ? String(o.data.file_key).trim() : '';
+            if (!fileKey) {
+              setEducationDocsStatus(card, 'Сервер вернул пустой ключ файла.', true);
+              haptic('error');
+              return;
+            }
+            var docs = getCardEducationDocumentPhotos(card);
+            docs.push({
+              file_key: fileKey,
+              file_key_list: (o.data && o.data.file_key_list) ? String(o.data.file_key_list).trim() : null,
+            });
+            setCardEducationDocumentPhotos(card, docs);
+            renderEducationDocumentPhotos(card);
+            setEducationDocsStatus(card, 'Документ добавлен. Не забудьте нажать «Сохранить изменения».', false);
+            haptic('success');
+            setDirty();
+          })
+          .catch(function() {
+            setEducationDocsStatus(card, 'Ошибка сети при загрузке документа.', true);
+            haptic('error');
+          })
+          .finally(function() {
+            setEducationDocsBusy(card, false);
+          });
+      }
+
       function collectEducationPayload(card) {
         var typeEl = card.querySelector('.edu-type');
         var get = function(sel) {
@@ -2732,6 +3082,7 @@
           country: optionalStr(get('.edu-country')),
           city: optionalStr(get('.edu-city')),
           document_url: optionalStr(get('.edu-doc')),
+          document_photos: getCardEducationDocumentPhotos(card),
           is_in_progress: !!(card.querySelector('.edu-inprog') && card.querySelector('.edu-inprog').checked),
         };
         var sy = get('.edu-sy').trim();
@@ -2770,6 +3121,10 @@
           errEl.textContent = 'Год начала не должен быть больше года окончания.';
           return false;
         }
+        if (Array.isArray(body.document_photos) && body.document_photos.length > MAX_EDUCATION_DOCUMENT_PHOTOS) {
+          errEl.textContent = 'Не более ' + MAX_EDUCATION_DOCUMENT_PHOTOS + ' фото документов.';
+          return false;
+        }
         return true;
       }
 
@@ -2782,6 +3137,7 @@
           country: optionalStr(e.country),
           city: optionalStr(e.city),
           document_url: optionalStr(e.document_url),
+          document_photos: normalizeEducationDocumentPhotos(e.document_photos),
           is_in_progress: !!e.is_in_progress,
           start_year: e.start_year != null ? Number(e.start_year) : null,
           end_year: e.end_year != null ? Number(e.end_year) : null,
@@ -2991,6 +3347,46 @@
         doc.value = e.document_url || '';
         addField('Ссылка на документ (необязательно)', doc);
 
+        var docsBox = document.createElement('div');
+        docsBox.className = 'edu-docs';
+        docsBox.innerHTML =
+          '<div class="edu-docs-head">' +
+            '<div class="edu-docs-title">Фото дипломов и сертификатов</div>' +
+            '<div class="edu-docs-count">Фото: 0</div>' +
+          '</div>' +
+          '<p class="edu-docs-hint">Добавьте несколько фото подтверждающих документов. Клиент увидит их в раскрывающихся деталях образования.</p>' +
+          '<div class="edu-docs-list"></div>' +
+          '<div class="edu-docs-empty">Пока нет загруженных фото документов.</div>' +
+          '<div class="edu-doc-upload-row">' +
+            '<button type="button" class="edu-doc-upload-btn">+ Загрузить фото документа</button>' +
+            '<input type="file" class="edu-doc-upload-input" accept="image/jpeg,image/png,image/webp" multiple />' +
+            '<p class="edu-docs-status" aria-live="polite"></p>' +
+          '</div>';
+        card.appendChild(docsBox);
+        setCardEducationDocumentPhotos(card, normalizeEducationDocumentPhotos(e.document_photos));
+        renderEducationDocumentPhotos(card);
+
+        var uploadBtn = docsBox.querySelector('.edu-doc-upload-btn');
+        var uploadInput = docsBox.querySelector('.edu-doc-upload-input');
+        if (uploadBtn && uploadInput) {
+          uploadBtn.addEventListener('click', function() {
+            uploadInput.click();
+          });
+          uploadInput.addEventListener('change', function(ev) {
+            var files = Array.prototype.slice.call((ev.target && ev.target.files) || []);
+            if (!files.length) return;
+            var chain = Promise.resolve();
+            files.forEach(function(file) {
+              chain = chain.then(function() {
+                return uploadEducationDocumentFile(card, file);
+              });
+            });
+            chain.finally(function() {
+              uploadInput.value = '';
+            });
+          });
+        }
+
         var err = document.createElement('p');
         err.className = 'edu-err';
         err.setAttribute('role', 'status');
@@ -3034,6 +3430,7 @@
           end_year: null,
           is_in_progress: false,
           document_url: null,
+          document_photos: [],
           moderation_status: null,
         };
         var card = makeEducationCard(blank);
@@ -3083,6 +3480,19 @@
         return out;
       }
 
+      /** Optional per-service description for clients (trainer_services.description). */
+      function getServiceDescription(serviceId) {
+        var list = state.trainer.services || [];
+        var i;
+        for (i = 0; i < list.length; i++) {
+          if (list[i].service_id === serviceId) {
+            var d = list[i].description;
+            return d != null ? String(d) : '';
+          }
+        }
+        return '';
+      }
+
       function renderServices() {
         var wrap = document.getElementById('servicesWrap');
         wrap.innerHTML = '';
@@ -3121,6 +3531,38 @@
           tierBody.className = 'svc-tier-body';
           tierBody.id = 'svc_tier_body_' + id;
           tierBody.hidden = true;
+
+          var descBlock = document.createElement('div');
+          descBlock.className = 'svc-desc-wrap';
+          var descLabel = document.createElement('label');
+          descLabel.className = 'svc-desc-label';
+          descLabel.setAttribute('for', 'svc_desc_' + id);
+          descLabel.textContent = 'Описание для клиентов (необязательно)';
+          var descTa = document.createElement('textarea');
+          descTa.className = 'svc-desc-textarea';
+          descTa.id = 'svc_desc_' + id;
+          descTa.rows = 3;
+          descTa.maxLength = MAX_SERVICE_DESCRIPTION_CHARS;
+          descTa.setAttribute('aria-label', 'Описание услуги для клиентов');
+          descTa.placeholder = 'Кому подходит, формат занятия…';
+          descTa.value = getServiceDescription(id);
+          descTa.disabled = !isSelected;
+          var descCount = document.createElement('div');
+          descCount.className = 'svc-desc-count';
+          descCount.id = 'svc_desc_count_' + id;
+          function refreshSvcDescCount() {
+            var len = (descTa.value || '').length;
+            descCount.textContent = len + ' / ' + MAX_SERVICE_DESCRIPTION_CHARS;
+          }
+          refreshSvcDescCount();
+          descTa.addEventListener('input', function() {
+            refreshSvcDescCount();
+            setDirty();
+          });
+          descTa.addEventListener('change', setDirty);
+          descBlock.appendChild(descLabel);
+          descBlock.appendChild(descTa);
+          descBlock.appendChild(descCount);
 
           var tierWrap = document.createElement('div');
           tierWrap.className = 'svc-tier-grid' + (isSelected ? '' : ' is-disabled');
@@ -3175,6 +3617,7 @@
           hint.className = 'svc-tier-hint';
           hint.textContent = 'Отметьте нужные тарифы и укажите цену для каждого.';
 
+          tierBody.appendChild(descBlock);
           tierBody.appendChild(tierWrap);
           tierBody.appendChild(hint);
 
@@ -3196,6 +3639,13 @@
               toggleBtn.setAttribute('aria-expanded', 'false');
               toggleBtn.textContent = 'Тарифы ▾';
               tierWrap.classList.remove('svc-tier-grid--error');
+              var sde = document.getElementById('svc_desc_' + id);
+              if (sde) {
+                sde.value = '';
+                sde.disabled = true;
+              }
+              var sdc = document.getElementById('svc_desc_count_' + id);
+              if (sdc) sdc.textContent = '0 / ' + MAX_SERVICE_DESCRIPTION_CHARS;
               SERVICE_TIER_ORDER.forEach(function(code) {
                 var tcb = document.getElementById('svc_tier_' + id + '_' + code);
                 var pel = document.getElementById('price_tier_' + id + '_' + code);
@@ -3203,6 +3653,8 @@
                 if (pel) { pel.value = ''; pel.disabled = true; }
               });
             } else {
+              var sdeOn = document.getElementById('svc_desc_' + id);
+              if (sdeOn) sdeOn.disabled = false;
               SERVICE_TIER_ORDER.forEach(function(code) {
                 var pel = document.getElementById('price_tier_' + id + '_' + code);
                 var tcb = document.getElementById('svc_tier_' + id + '_' + code);

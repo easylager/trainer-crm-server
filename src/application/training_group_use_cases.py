@@ -524,9 +524,10 @@ async def replace_training_group_schedule(
             params,
         )
 
+    # Single commit after rule replace + materialization (avoid half-applied schedule on materialize failure).
+    await materialize_slots_for_group(session, trainer_id, training_group_id, do_commit=False, do_invalidate=False)
     await session.commit()
     invalidate_slots_for_trainer(trainer_id)
-    await materialize_slots_for_group(session, trainer_id, training_group_id)
 
 
 async def list_upcoming_group_slots(
@@ -619,9 +620,12 @@ async def materialize_slots_for_group(
     training_group_id: int,
     *,
     weeks_ahead: int = SLOT_HORIZON_WEEKS,
+    do_commit: bool = True,
+    do_invalidate: bool = True,
 ) -> int:
     """
     Insert future slots for all schedule rules. Skips dates that already have a slot for same start_time.
+    Skips today's occurrences whose start time is already in the past (server local clock).
     Returns number of rows inserted.
     """
     r = await session.execute(
@@ -656,6 +660,7 @@ async def materialize_slots_for_group(
         return 0
 
     start_d, end_d = _materialize_date_range(season_start, weeks_ahead=weeks_ahead)
+    now = datetime.now()
 
     created = 0
     d = start_d
@@ -670,6 +675,9 @@ async def materialize_slots_for_group(
                 parts = str(st_raw).split(":")
                 st = time(int(parts[0]), int(parts[1]) if len(parts) > 1 else 0)
             dur = int(dur_raw or 60)
+            # Do not materialize a same-day slot whose start has already passed (avoids useless past rows).
+            if d == now.date() and datetime.combine(d, st) < now:
+                continue
             end_t = _time_end(st, dur)
             # Avoid asyncpg "ambiguous parameter" when :aid is NULL — branch explicitly.
             if aid is None:
@@ -721,8 +729,10 @@ async def materialize_slots_for_group(
             created += 1
         d += timedelta(days=1)
 
-    await session.commit()
-    invalidate_slots_for_trainer(trainer_id)
+    if do_commit:
+        await session.commit()
+    if do_invalidate:
+        invalidate_slots_for_trainer(trainer_id)
     return created
 
 
@@ -735,12 +745,21 @@ async def update_future_group_slot_capacities(session: AsyncSession, trainer_id:
     if not row:
         return
     cap = max(2, min(int(row[0]), 500))
+    # Align cohort slot capacity with roster limit; do not shrink booked slots below current headcount.
     await session.execute(
         text(
             """
-            UPDATE slots SET capacity = :cap
-            WHERE training_group_id = :gid AND trainer_id = :tid AND slot_date >= CURRENT_DATE
-              AND status = 'available'
+            UPDATE slots AS s SET capacity = :cap
+            WHERE s.training_group_id = :gid AND s.trainer_id = :tid AND s.slot_date >= CURRENT_DATE
+              AND s.status != 'cancelled'
+              AND (
+                s.status = 'available'
+                OR COALESCE(
+                     (SELECT COUNT(*)::int FROM bookings b
+                      WHERE b.slot_id = s.id AND b.status IN ('pending', 'confirmed')),
+                     0
+                   ) <= :cap
+              )
             """
         ),
         {"cap": cap, "gid": training_group_id, "tid": trainer_id},

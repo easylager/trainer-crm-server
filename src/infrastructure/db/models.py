@@ -197,6 +197,8 @@ class TrainerEducation(Base):
     end_year: Mapped[Optional[int]] = mapped_column(Integer(), nullable=True)
     is_in_progress: Mapped[bool] = mapped_column(nullable=False, server_default="false")
     document_url: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    # Uploaded diploma/certificate photos (list of {"file_key", "file_key_list"} dicts).
+    document_photos: Mapped[Optional[dict]] = mapped_column(JSONB(), nullable=True)
     moderation_status: Mapped[str] = mapped_column(
         Enum(*TRAINER_EDU_MOD_STATUSES, name="trainer_education_moderation_status_enum", create_constraint=True),
         nullable=False,
@@ -789,7 +791,12 @@ class TrainerSubscription(Base):
     tier: Mapped[Optional[str]] = mapped_column(
         Enum(*SUBSCRIPTION_TIERS, name="subscription_tier_enum", create_constraint=False),
         nullable=True,
-    )  # crm | online | analytics — determines feature access
+    )  # Canonical base is crm; legacy values may exist until migrated
+    modules: Mapped[dict] = mapped_column(
+        JSONB,
+        nullable=False,
+        server_default='{"online": false, "analytics": false, "groups": false}',
+    )  # Independent add-ons; each implies CRM base when true
     # 1 / 3 / 12 — last paid billing period for tier mock checkout (UX: "current" on period tab)
     billing_period_months: Mapped[Optional[int]] = mapped_column(Integer(), nullable=True)
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -852,6 +859,21 @@ class SubscriptionTierPricingAudit(Base):
     admin_telegram_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
     changed_fields: Mapped[dict] = mapped_column(JSONB, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class SubscriptionModulePeriodPricing(Base):
+    """Surcharge pricing per module (online, analytics, groups) for 1/3/12 month periods."""
+
+    __tablename__ = "subscription_module_period_pricing"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    module: Mapped[str] = mapped_column(String(32), nullable=False)
+    period_months: Mapped[int] = mapped_column(Integer(), nullable=False)
+    price_cents: Mapped[int] = mapped_column(Integer(), nullable=False)
+    period_days: Mapped[int] = mapped_column(Integer(), nullable=False)
+    currency: Mapped[str] = mapped_column(String(8), server_default="BYN", nullable=False)
+    name_ru: Mapped[str] = mapped_column(String(128), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 # --- Support: messages from clients/trainers to admins ---

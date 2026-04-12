@@ -20,6 +20,21 @@ from src.shared.trainer_status import normalize_trainer_status_value
 # Legacy display; DB column `label` kept for compatibility; tier_kind is source of truth.
 TRAINER_SERVICE_DEFAULT_TIER_LABEL = "Основной"
 
+# set_trainer_services accepts (service_id, tiers) or (service_id, tiers, description) for tests/backward compat.
+TrainerServiceWriteEntry = (
+    tuple[int, list[tuple[str, int]]] | tuple[int, list[tuple[str, int]], str | None]
+)
+
+
+def _normalize_trainer_service_write_entry(
+    entry: TrainerServiceWriteEntry,
+) -> tuple[int, list[tuple[str, int]], str | None]:
+    if len(entry) == 2:
+        sid, tiers = entry
+        return sid, tiers, None
+    sid, tiers, desc = entry
+    return sid, tiers, desc
+
 
 def _sql_public_catalog_education_predicate(table_alias: str = "e") -> str:
     """
@@ -42,6 +57,30 @@ def _sql_public_catalog_education_predicate(table_alias: str = "e") -> str:
     )
   )
 )"""
+
+
+def _normalize_education_document_photos(raw: Any) -> list[dict[str, str | None]]:
+    """Parse/clean JSONB education photos payload to stable API list."""
+    if raw is None:
+        return []
+    payload = raw
+    if isinstance(payload, str):
+        try:
+            payload = json.loads(payload)
+        except (json.JSONDecodeError, TypeError):
+            return []
+    if not isinstance(payload, list):
+        return []
+    out: list[dict[str, str | None]] = []
+    for item in payload:
+        if not isinstance(item, dict):
+            continue
+        file_key = (item.get("file_key") or "").strip()
+        file_key_list = (item.get("file_key_list") or "").strip() or None
+        if not file_key:
+            continue
+        out.append({"file_key": file_key, "file_key_list": file_key_list})
+    return out
 
 
 class TrainerRepository:
@@ -96,10 +135,10 @@ class TrainerRepository:
     async def set_trainer_services(
         self,
         trainer_id: int,
-        entries: list[tuple[int, list[tuple[str, int]]]],
+        entries: list[TrainerServiceWriteEntry],
     ) -> None:
         """
-        Replace trainer's services. Each entry is (service_id, tiers) with tiers
+        Replace trainer's services. Each entry is (service_id, tiers) or (service_id, tiers, description) with tiers
         (tier_kind, price_cents) — up to one row per fixed tariff code (see price_tier_kind.py).
         Empty tiers => trainer_services with price_cents NULL.
         Anchor price on trainer_services: adult tier if present, else cheapest tier by display order.
@@ -114,7 +153,8 @@ class TrainerRepository:
                 return by_k[PRICE_TIER_ADULT]
             return sorted_tiers[0][1]
 
-        for sid, tiers in entries:
+        for raw in entries:
+            sid, tiers, svc_description = _normalize_trainer_service_write_entry(raw)
             merged: dict[str, int] = {}
             for tier_kind, pc in tiers:
                 tk = normalize_price_tier_kind(tier_kind)
@@ -125,10 +165,10 @@ class TrainerRepository:
             anchor = _anchor_cents(clean_tiers)
             await self._session.execute(
                 text("""
-                    INSERT INTO trainer_services (trainer_id, service_id, price_cents)
-                    VALUES (:tid, :sid, :price_cents)
+                    INSERT INTO trainer_services (trainer_id, service_id, price_cents, description)
+                    VALUES (:tid, :sid, :price_cents, :descr)
                 """),
-                {"tid": trainer_id, "sid": sid, "price_cents": anchor},
+                {"tid": trainer_id, "sid": sid, "price_cents": anchor, "descr": svc_description},
             )
             for order, (tk, pc) in enumerate(clean_tiers):
                 lbl = (price_tier_label_ru(tk) or TRAINER_SERVICE_DEFAULT_TIER_LABEL)[:64]
@@ -245,7 +285,7 @@ class TrainerRepository:
         )
         out["photos"] = [{"file_key": r[0], "file_key_list": r[1], "sort_order": r[2]} for r in rph.fetchall()]
         rsv = await self._session.execute(
-            text("SELECT service_id, price_cents FROM trainer_services WHERE trainer_id = :id ORDER BY service_id"),
+            text("SELECT service_id, price_cents, description FROM trainer_services WHERE trainer_id = :id ORDER BY service_id"),
             {"id": trainer_id},
         )
         service_rows = rsv.fetchall()
@@ -295,6 +335,11 @@ class TrainerRepository:
                 sid = r[0]
                 tiers = tiers_by_sid.get(sid, [])
                 pc_row = r[1]
+                svc_desc: str | None = None
+                if len(r) > 2 and r[2] is not None:
+                    s = str(r[2]).strip()
+                    if s:
+                        svc_desc = s
                 if tiers:
                     prices = [t["price_cents"] for t in tiers]
                     p_min, p_max = min(prices), max(prices)
@@ -311,6 +356,7 @@ class TrainerRepository:
                         "price_byn_min": price_byn_min,
                         "price_byn_max": price_byn_max,
                         "price_tiers": tiers,
+                        "description": svc_desc,
                     }
                 )
         else:
@@ -447,6 +493,7 @@ class TrainerRepository:
             q = f"""
                 SELECT e.id, e.education_type, e.institution_name, e.program_or_title, e.degree_level,
                        e.country, e.city, e.start_year, e.end_year, e.is_in_progress, e.document_url,
+                       e.document_photos,
                        e.approved_at, e.updated_at
                 FROM trainer_education e
                 WHERE e.trainer_id = :tid
@@ -457,6 +504,7 @@ class TrainerRepository:
             q = """
                 SELECT id, education_type, institution_name, program_or_title, degree_level,
                        country, city, start_year, end_year, is_in_progress, document_url,
+                       document_photos,
                        moderation_status, moderation_comment, approved_at, updated_at
                 FROM trainer_education
                 WHERE trainer_id = :tid
@@ -479,8 +527,9 @@ class TrainerRepository:
                         "end_year": row[8],
                         "is_in_progress": bool(row[9]),
                         "document_url": row[10],
-                        "approved_at": row[11].isoformat() if row[11] else None,
-                        "updated_at": row[12].isoformat() if row[12] else None,
+                        "document_photos": _normalize_education_document_photos(row[11]),
+                        "approved_at": row[12].isoformat() if row[12] else None,
+                        "updated_at": row[13].isoformat() if row[13] else None,
                     }
                 )
             else:
@@ -497,10 +546,11 @@ class TrainerRepository:
                         "end_year": row[8],
                         "is_in_progress": bool(row[9]),
                         "document_url": row[10],
-                        "moderation_status": row[11],
-                        "moderation_comment": row[12],
-                        "approved_at": row[13].isoformat() if row[13] else None,
-                        "updated_at": row[14].isoformat() if row[14] else None,
+                        "document_photos": _normalize_education_document_photos(row[11]),
+                        "moderation_status": row[12],
+                        "moderation_comment": row[13],
+                        "approved_at": row[14].isoformat() if row[14] else None,
+                        "updated_at": row[15].isoformat() if row[15] else None,
                     }
                 )
         return out
@@ -522,6 +572,7 @@ class TrainerRepository:
                 f"""
                 SELECT e.trainer_id, e.id, e.education_type, e.institution_name, e.program_or_title, e.degree_level,
                        e.country, e.city, e.start_year, e.end_year, e.is_in_progress, e.document_url,
+                       e.document_photos,
                        e.approved_at, e.updated_at
                 FROM trainer_education e
                 WHERE e.trainer_id IN ({placeholders})
@@ -549,8 +600,9 @@ class TrainerRepository:
                     "end_year": row[9],
                     "is_in_progress": bool(row[10]),
                     "document_url": row[11],
-                    "approved_at": row[12].isoformat() if row[12] else None,
-                    "updated_at": row[13].isoformat() if row[13] else None,
+                    "document_photos": _normalize_education_document_photos(row[12]),
+                    "approved_at": row[13].isoformat() if row[13] else None,
+                    "updated_at": row[14].isoformat() if row[14] else None,
                 }
             )
         return out
@@ -569,6 +621,7 @@ class TrainerRepository:
         end_year: int | None = None,
         is_in_progress: bool = False,
         document_url: str | None = None,
+        document_photos: list[dict[str, Any]] | None = None,
     ) -> int:
         """Create pending education entry and return id."""
         r = await self._session.execute(
@@ -577,11 +630,11 @@ class TrainerRepository:
                 INSERT INTO trainer_education (
                     trainer_id, education_type, institution_name, program_or_title,
                     degree_level, country, city, start_year, end_year, is_in_progress,
-                    document_url, moderation_status, approved_snapshot, created_at, updated_at
+                    document_url, document_photos, moderation_status, approved_snapshot, created_at, updated_at
                 ) VALUES (
                     :trainer_id, :education_type, :institution_name, :program_or_title,
                     :degree_level, :country, :city, :start_year, :end_year, :is_in_progress,
-                    :document_url, 'pending_moderation', false, now(), now()
+                    :document_url, CAST(:document_photos_js AS jsonb), 'pending_moderation', false, now(), now()
                 )
                 RETURNING id
                 """
@@ -598,6 +651,7 @@ class TrainerRepository:
                 "end_year": end_year,
                 "is_in_progress": is_in_progress,
                 "document_url": document_url,
+                "document_photos_js": json.dumps(document_photos if isinstance(document_photos, list) else []),
             },
         )
         row = r.fetchone()
@@ -609,7 +663,8 @@ class TrainerRepository:
             text(
                 """
                 SELECT id, moderation_status, institution_name, program_or_title, education_type,
-                       degree_level, country, city, start_year, end_year, is_in_progress, document_url
+                       degree_level, country, city, start_year, end_year, is_in_progress, document_url,
+                       document_photos
                 FROM trainer_education
                 WHERE trainer_id = :tid AND id = :eid
                 """
@@ -632,6 +687,7 @@ class TrainerRepository:
             "end_year": row[9],
             "is_in_progress": bool(row[10]),
             "document_url": row[11],
+            "document_photos": _normalize_education_document_photos(row[12]),
         }
 
     async def update_education_entry_in_place(
@@ -655,14 +711,19 @@ class TrainerRepository:
             "end_year",
             "is_in_progress",
             "document_url",
+            "document_photos",
         }
         sets: list[str] = []
         params: dict[str, Any] = {"tid": trainer_id, "eid": education_id}
         for key, value in updates.items():
             if key not in allowed:
                 continue
-            sets.append(f"{key} = :{key}")
-            params[key] = value
+            if key == "document_photos":
+                sets.append("document_photos = CAST(:document_photos_js AS jsonb)")
+                params["document_photos_js"] = json.dumps(value if isinstance(value, list) else [])
+            else:
+                sets.append(f"{key} = :{key}")
+                params[key] = value
         if not sets:
             return True
         sets.append("moderation_status = 'pending_moderation'")
@@ -697,12 +758,12 @@ class TrainerRepository:
                 INSERT INTO trainer_education (
                     trainer_id, education_type, institution_name, program_or_title,
                     degree_level, country, city, start_year, end_year, is_in_progress,
-                    document_url, moderation_status, moderation_comment, approved_snapshot,
+                    document_url, document_photos, moderation_status, moderation_comment, approved_snapshot,
                     approved_at, approved_by_admin_id, supersedes_id, created_at, updated_at
                 ) VALUES (
                     :trainer_id, :education_type, :institution_name, :program_or_title,
                     :degree_level, :country, :city, :start_year, :end_year, :is_in_progress,
-                    :document_url, 'pending_moderation', NULL, false,
+                    :document_url, CAST(:document_photos_js AS jsonb), 'pending_moderation', NULL, false,
                     NULL, NULL, :supersedes_id, now(), now()
                 )
                 RETURNING id
@@ -720,6 +781,9 @@ class TrainerRepository:
                 "end_year": payload.get("end_year"),
                 "is_in_progress": payload.get("is_in_progress", False),
                 "document_url": payload.get("document_url"),
+                "document_photos_js": json.dumps(
+                    payload.get("document_photos") if isinstance(payload.get("document_photos"), list) else []
+                ),
                 "supersedes_id": education_id,
             },
         )
@@ -1083,7 +1147,9 @@ class TrainerRepository:
                 "sort_order": row[3],
             })
         rsv = await self._session.execute(
-            text(f"SELECT trainer_id, service_id, price_cents FROM trainer_services WHERE trainer_id IN ({placeholders}) ORDER BY trainer_id, service_id"),
+            text(
+                f"SELECT trainer_id, service_id, price_cents, description FROM trainer_services WHERE trainer_id IN ({placeholders}) ORDER BY trainer_id, service_id"
+            ),
             id_params,
         )
         service_rows = rsv.fetchall()
@@ -1135,6 +1201,11 @@ class TrainerRepository:
         for row in service_rows:
             tid, sid = row[0], row[1]
             price_cents = row[2]
+            svc_desc_row: str | None = None
+            if len(row) > 3 and row[3] is not None:
+                s = str(row[3]).strip()
+                if s:
+                    svc_desc_row = s
             tiers = tiers_by_tid_sid.get((tid, sid), [])
             if tiers:
                 prices = [t["price_cents"] for t in tiers]
@@ -1152,6 +1223,7 @@ class TrainerRepository:
                     "price_byn_min": price_byn_min,
                     "price_byn_max": price_byn_max,
                     "price_tiers": tiers,
+                    "description": svc_desc_row,
                 }
             )
         rar = await self._session.execute(

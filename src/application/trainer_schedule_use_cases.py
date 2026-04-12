@@ -7,6 +7,14 @@ from datetime import date, time, timedelta, timezone
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.arena_schedule_preset import (
+    allowed_start_minutes_from_preset,
+    fixed_slot_duration_minutes,
+    get_schedule_grid_preset_for_trainer,
+    validate_duration_for_preset,
+    validate_start_minutes_for_preset,
+)
+
 
 def this_week_monday() -> date:
     """Monday of the current week (ISO: Mon=0)."""
@@ -114,19 +122,22 @@ async def replace_templates_for_day(
     session: AsyncSession,
     trainer_id: int,
     day_of_week: int,
-    hour_to_capacity: dict[int, int],
+    minute_to_capacity: dict[int, int],
     duration_minutes: int,
-    hour_to_service_id: dict[int, int | None] | None = None,
+    minute_to_service_id: dict[int, int | None] | None = None,
     group_arena_id: int | None = None,
 ) -> None:
     """
     Set template for one day: replace all template rows for that weekday.
-    ``hour_to_capacity`` maps hour (0–23) to slot capacity (1 = individual, >1 = group).
-    For capacity > 1, ``hour_to_service_id[h]`` must be the services.id for that group slot.
+    ``minute_to_capacity`` maps minutes-from-midnight (0–1439) to slot capacity (1 = individual, >1 = group).
+    For capacity > 1, ``minute_to_service_id[m]`` must be the services.id for that group slot.
     ``group_arena_id`` is stored on each group row (capacity>1); if None, uses trainer default arena.
     Single transaction.
     """
-    svc_map = hour_to_service_id or {}
+    svc_map = minute_to_service_id or {}
+    preset = await get_schedule_grid_preset_for_trainer(session, trainer_id)
+    validate_start_minutes_for_preset(set(minute_to_capacity.keys()), preset)
+    validate_duration_for_preset(duration_minutes, preset)
     default_arena = await trainer_default_slot_arena_id(session, trainer_id)
     await session.execute(
         text("""
@@ -135,9 +146,10 @@ async def replace_templates_for_day(
         """),
         {"tid": trainer_id, "dow": day_of_week},
     )
-    for h in sorted(hour_to_capacity.keys()):
-        cap = max(1, min(int(hour_to_capacity[h]), 500))
-        sid = svc_map.get(h)
+    for m in sorted(minute_to_capacity.keys()):
+        cap = max(1, min(int(minute_to_capacity[m]), 500))
+        sid = svc_map.get(m)
+        start_t = time_from_minutes(int(m))
         if cap > 1:
             if sid is None:
                 raise ValueError("Group template slot requires service_id")
@@ -151,7 +163,7 @@ async def replace_templates_for_day(
                 {
                     "tid": trainer_id,
                     "dow": day_of_week,
-                    "st": time(h, 0),
+                    "st": start_t,
                     "dur": duration_minutes,
                     "cap": cap,
                     "svc": int(sid),
@@ -168,7 +180,7 @@ async def replace_templates_for_day(
                 {
                     "tid": trainer_id,
                     "dow": day_of_week,
-                    "st": time(h, 0),
+                    "st": start_t,
                     "dur": duration_minutes,
                     "cap": cap,
                 },
@@ -183,6 +195,18 @@ def _time_end(start: time, duration_minutes: int) -> time:
     return d.time()
 
 
+def minutes_from_time(t: time) -> int:
+    """Minutes from midnight (0–1439) for schedule keys."""
+    return t.hour * 60 + t.minute
+
+
+def time_from_minutes(m: int) -> time:
+    """Build time from minutes from midnight; raises ValueError if out of range."""
+    if m < 0 or m > 23 * 60 + 59:
+        raise ValueError("start time out of range")
+    return time(m // 60, m % 60)
+
+
 async def generate_slots_for_week(
     session: AsyncSession, trainer_id: int, week_start: date
 ) -> int:
@@ -194,6 +218,8 @@ async def generate_slots_for_week(
     templates = await list_templates(session, trainer_id)
     if not templates:
         return 0
+    preset = await get_schedule_grid_preset_for_trainer(session, trainer_id)
+    fixed_dur = fixed_slot_duration_minutes(preset)
     default_arena = await trainer_default_slot_arena_id(session, trainer_id)
     created = 0
     for day_offset in range(7):
@@ -208,7 +234,9 @@ async def generate_slots_for_week(
             else:
                 parts = str(st).split(":")
                 start_time = time(int(parts[0]), int(parts[1]) if len(parts) > 1 else 0)
-            end_time = _time_end(start_time, t["duration_minutes"])
+            row_dur = int(t["duration_minutes"])
+            slot_dur = fixed_dur if fixed_dur is not None else row_dur
+            end_time = _time_end(start_time, slot_dur)
             cap = max(1, min(int(t.get("capacity") or 1), 500))
             tmpl_svc = t.get("service_id")
             svc = int(tmpl_svc) if tmpl_svc is not None else None
@@ -256,6 +284,8 @@ async def replace_week_with_template(
     then create slots from template. Booked slots are left unchanged.
     Returns number of slots created.
     """
+    preset = await get_schedule_grid_preset_for_trainer(session, trainer_id)
+    fixed_dur = fixed_slot_duration_minutes(preset)
     week_end = week_start + timedelta(days=6)
     await session.execute(
         text("""
@@ -286,7 +316,9 @@ async def replace_week_with_template(
             else:
                 parts = str(st).split(":")
                 start_time = time(int(parts[0]), int(parts[1]) if len(parts) > 1 else 0)
-            end_time = _time_end(start_time, t["duration_minutes"])
+            row_dur = int(t["duration_minutes"])
+            slot_dur = fixed_dur if fixed_dur is not None else row_dur
+            end_time = _time_end(start_time, slot_dur)
             cap = max(1, min(int(t.get("capacity") or 1), 500))
             tmpl_svc = t.get("service_id")
             svc = int(tmpl_svc) if tmpl_svc is not None else None
@@ -319,18 +351,22 @@ async def add_slots_for_week(
     trainer_id: int,
     week_start: date,
     day_of_week: int,
-    hours: set[int],
+    start_minutes: set[int],
     duration_minutes: int,
 ) -> int:
     """
     Create slots for one day in a specific week. week_start = Monday; day_of_week 0–6.
+    ``start_minutes`` are minutes from midnight (0–1439) for each slot start.
     Returns number of slots created.
     """
     slot_date = week_start + timedelta(days=day_of_week)
     default_arena = await trainer_default_slot_arena_id(session, trainer_id)
+    preset = await get_schedule_grid_preset_for_trainer(session, trainer_id)
+    validate_start_minutes_for_preset({int(m) for m in start_minutes}, preset)
+    validate_duration_for_preset(duration_minutes, preset)
     created = 0
-    for h in sorted(hours):
-        start_time = time(h, 0)
+    for m in sorted(start_minutes):
+        start_time = time_from_minutes(int(m))
         end_time = _time_end(start_time, duration_minutes)
         r = await session.execute(
             text("""
@@ -361,7 +397,7 @@ async def replace_slots_for_day(
     session: AsyncSession,
     trainer_id: int,
     slot_date: date,
-    start_hours: set[int],
+    start_minutes: set[int],
     duration_minutes: int = DEFAULT_SLOT_DURATION_MINUTES,
     capacity: int = 1,
     group_service_id: int | None = None,
@@ -370,11 +406,11 @@ async def replace_slots_for_day(
     """
     Set slots for one calendar day.
 
-    - Removes only slots for hours **not** in ``start_hours`` (empty available slots; never touches
-      slots with active bookings).
-    - Inserts a slot for each hour in ``start_hours`` that does not yet exist, using ``capacity``.
-    - **Does not** change ``capacity`` on slots that already exist — avoids turning every hour
-      into a group slot when the trainer edits the day and only wants new hours to use the form value.
+    - Removes only **available** slots whose start time is **not** in ``start_minutes`` (minutes from
+      midnight). Booked slots are never removed.
+    - Inserts a slot for each minute key in ``start_minutes`` that does not yet exist, using ``capacity``.
+    - **Does not** change ``capacity`` on slots that already exist — avoids turning every slot
+      into a group slot when the trainer edits the day and only wants new times to use the form value.
     For ``capacity`` > 1, ``group_service_id`` must be set (group slot is tied to that service).
     """
     cap = max(1, min(int(capacity), 500))
@@ -382,7 +418,11 @@ async def replace_slots_for_day(
         raise ValueError("Group slot requires group_service_id")
     default_arena = await trainer_default_slot_arena_id(session, trainer_id)
     arena_for_new_slots = slot_arena_id if slot_arena_id is not None else default_arena
-    hour_list = sorted(h for h in start_hours if 0 <= h <= 23)
+    minute_set = {int(m) for m in start_minutes if 0 <= int(m) <= 23 * 60 + 59}
+    preset = await get_schedule_grid_preset_for_trainer(session, trainer_id)
+    validate_start_minutes_for_preset(minute_set, preset)
+    validate_duration_for_preset(duration_minutes, preset)
+    minute_list = sorted(minute_set)
 
     booking_guard = """
               AND NOT EXISTS (
@@ -391,7 +431,7 @@ async def replace_slots_for_day(
               )
     """
 
-    if not hour_list:
+    if not minute_list:
         await session.execute(
             text(
                 """
@@ -405,7 +445,7 @@ async def replace_slots_for_day(
         await session.commit()
         return
 
-    in_clause = ", ".join(str(int(h)) for h in hour_list)
+    in_clause = ", ".join(str(int(m)) for m in minute_list)
     await session.execute(
         text(
             f"""
@@ -414,23 +454,26 @@ async def replace_slots_for_day(
             """
             + booking_guard
             + f"""
-              AND EXTRACT(HOUR FROM start_time)::int NOT IN ({in_clause})
+              AND (
+                EXTRACT(HOUR FROM start_time)::int * 60 + EXTRACT(MINUTE FROM start_time)::int
+              ) NOT IN ({in_clause})
         """
         ),
         {"tid": trainer_id, "d": slot_date},
     )
     r = await session.execute(
         text("""
-            SELECT EXTRACT(HOUR FROM start_time)::int FROM slots
+            SELECT EXTRACT(HOUR FROM start_time)::int * 60 + EXTRACT(MINUTE FROM start_time)::int
+            FROM slots
             WHERE trainer_id = :tid AND slot_date = :d
         """),
         {"tid": trainer_id, "d": slot_date},
     )
-    existing_hours = {int(row[0]) for row in r.fetchall()}
-    for h in hour_list:
-        if h in existing_hours:
+    existing_minutes = {int(row[0]) for row in r.fetchall()}
+    for m in minute_list:
+        if int(m) in existing_minutes:
             continue
-        start_time = time(h, 0)
+        start_time = time_from_minutes(int(m))
         end_time = _time_end(start_time, duration_minutes)
         svc = int(group_service_id) if cap > 1 else None
         await session.execute(
@@ -449,6 +492,101 @@ async def replace_slots_for_day(
             },
         )
     await session.commit()
+
+
+def _intervals_overlap_half_open(a0: int, a1: int, b0: int, b1: int) -> bool:
+    """Half-open [a0,a1) vs [b0,b1)."""
+    return a0 < b1 and b0 < a1
+
+
+async def ensure_individual_slot_for_quick_book(
+    session: AsyncSession,
+    trainer_id: int,
+    slot_date: date,
+    start_minutes: int,
+    duration_minutes: int = DEFAULT_SLOT_DURATION_MINUTES,
+) -> int:
+    """
+    Returns slot_id for an individual slot at start_minutes (arena schedule grid, same rules as schedule editor).
+    Reuses an existing empty slot if it matches the same [start, end) interval.
+
+    Raises ValueError on invalid time, group slot, booked slot, or interval overlap.
+    """
+    dm = int(duration_minutes)
+    if dm < 15 or dm > 24 * 60:
+        raise ValueError("Некорректная длительность")
+    if start_minutes < 0 or start_minutes > 23 * 60 + 59:
+        raise ValueError("Некорректное время начала")
+    preset = await get_schedule_grid_preset_for_trainer(session, trainer_id)
+    if start_minutes not in allowed_start_minutes_from_preset(preset):
+        raise ValueError("Время начала не соответствует сетке площадки.")
+    validate_duration_for_preset(dm, preset)
+    new_end = start_minutes + dm
+    if new_end > 24 * 60:
+        raise ValueError("Некорректная длительность для выбранного времени")
+
+    start_t = time_from_minutes(start_minutes)
+    end_t = _time_end(start_t, dm)
+
+    r = await session.execute(
+        text(
+            """
+            SELECT s.id,
+              (EXTRACT(HOUR FROM s.start_time)::int * 60 + EXTRACT(MINUTE FROM s.start_time)::int) AS sm,
+              (EXTRACT(HOUR FROM s.end_time)::int * 60 + EXTRACT(MINUTE FROM s.end_time)::int) AS em,
+              s.capacity,
+              (SELECT COUNT(*)::int FROM bookings b
+               WHERE b.slot_id = s.id AND b.status IN ('pending', 'confirmed')) AS active_cnt
+            FROM slots s
+            WHERE s.trainer_id = :tid AND s.slot_date = :d AND s.status != 'cancelled'
+            ORDER BY s.start_time, s.id
+            """
+        ),
+        {"tid": trainer_id, "d": slot_date},
+    )
+    for row in r.fetchall():
+        sid = int(row[0])
+        sm = int(row[1])
+        em = int(row[2])
+        cap = max(1, int(row[3] or 1))
+        active_cnt = int(row[4] or 0)
+        if em < sm:
+            em = sm + 24 * 60
+        if not _intervals_overlap_half_open(start_minutes, new_end, sm, em):
+            continue
+        if cap > 1:
+            raise ValueError(
+                "На это время уже есть групповой слот — используйте расписание.",
+            )
+        if sm == start_minutes and em == new_end:
+            if active_cnt >= 1:
+                raise ValueError("Это время уже занято.")
+            return sid
+        if active_cnt >= 1:
+            raise ValueError("Это время уже занято.")
+        raise ValueError("Время пересекается с другим слотом в расписании.")
+
+    default_arena = await trainer_default_slot_arena_id(session, trainer_id)
+    r2 = await session.execute(
+        text(
+            """
+            INSERT INTO slots (trainer_id, slot_date, start_time, end_time, status, capacity, service_id, arena_id)
+            VALUES (:tid, :d, :st, :end, 'available', 1, NULL, :aid)
+            RETURNING id
+            """
+        ),
+        {
+            "tid": trainer_id,
+            "d": slot_date,
+            "st": start_t,
+            "end": end_t,
+            "aid": default_arena,
+        },
+    )
+    new_id = r2.fetchone()
+    if not new_id:
+        raise ValueError("Не удалось создать слот")
+    return int(new_id[0])
 
 
 async def list_slots(

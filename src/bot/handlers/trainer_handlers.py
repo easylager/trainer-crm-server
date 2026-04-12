@@ -53,9 +53,9 @@ from src.application.client_request_use_cases import (
 from src.application.stats_use_cases import get_trainer_stats
 from src.application.subscription_use_cases import ensure_trainer_welcome_trial
 from src.application.subscription_tier_use_cases import (
-    get_effective_subscription_tier,
     get_trainer_subscription_status,
-    tier_satisfies,
+    trainer_has_analytics_access,
+    trainer_has_crm_access,
 )
 from src.application.trainer_access_state import TrainerAccessState, get_trainer_access_state
 from src.application.trainer_link import consume_link_token, get_trainer_id_by_telegram_id
@@ -65,7 +65,7 @@ from src.application.referral_use_cases import (
 )
 from src.application.trainer_use_cases import get_trainer
 from src.application.support_use_cases import create_support_message
-from src.infrastructure.db.models import SUBSCRIPTION_TIER_ANALYTICS, SUBSCRIPTION_TIER_CRM, SUPPORT_FROM_TRAINER
+from src.infrastructure.db.models import SUPPORT_FROM_TRAINER
 from src.shared.audit import ACTOR_TRAINER_BOT, audit_log
 from src.shared.validation import MAX_COMMENT_LEN, MAX_REVIEW_LEN, safe_parse_id, truncate_text
 from src.application.trainer_schedule_use_cases import (
@@ -117,8 +117,7 @@ def _format_expires_ru_from_iso(iso_dt: str | None) -> str:
 
 async def _trainer_has_crm_subscription(session, trainer_id: int) -> bool:
     """True if trainer has an active paid tier at least CRM (schedule, clients, passes)."""
-    tier = await get_effective_subscription_tier(session, trainer_id)
-    return tier_satisfies(tier, SUBSCRIPTION_TIER_CRM)
+    return await trainer_has_crm_access(session, trainer_id)
 
 
 START_LINK_PREFIX = "link_"
@@ -1008,8 +1007,7 @@ async def cmd_stats(message: Message) -> None:
         if not trainer_id:
             await message.answer(msg.TRAINER_ONLY_VIA_SITE)
             return
-        tier = await get_effective_subscription_tier(session, trainer_id)
-        if not tier_satisfies(tier, SUBSCRIPTION_TIER_ANALYTICS):
+        if not await trainer_has_analytics_access(session, trainer_id):
             await message.answer(
                 msg.TRAINER_TIER_REQUIRED_ANALYTICS + "\n\n" + msg.TRAINER_TIER_CTA,
                 parse_mode=ParseMode.HTML,
@@ -2232,6 +2230,71 @@ def _hour_from_start_time(st) -> int:
     return int(s.split(":")[0]) if ":" in s else int(s[:2])
 
 
+def _time_tuple_from_start(st) -> tuple[int, int, int]:
+    """(hour, minute, second) from DB time or string."""
+    if hasattr(st, "hour"):
+        return (
+            int(st.hour),
+            int(st.minute),
+            int(getattr(st, "second", 0) or 0),
+        )
+    s = str(st).strip()
+    parts = s.split(":")
+    h = int(parts[0]) if parts else 0
+    m = int(parts[1]) if len(parts) > 1 else 0
+    sec = int(parts[2]) if len(parts) > 2 else 0
+    return (h, m, sec)
+
+
+async def _merge_week_slot_minutes_with_preserves(
+    session,
+    trainer_id: int,
+    slot_date: date,
+    hours: set[int],
+) -> set[int]:
+    """User-selected whole hours + available slots not on :00 (Mini App only)."""
+    start_minutes = {h * 60 for h in hours}
+    slots = await list_slots(session, trainer_id, slot_date, slot_date)
+    for s in slots:
+        hh, mi, sec = _time_tuple_from_start(s["start_time"])
+        if mi != 0 or sec != 0:
+            if (s.get("status") or "").strip() == "available":
+                start_minutes.add(hh * 60 + mi)
+    return start_minutes
+
+
+async def _merge_template_minutes_with_preserves(
+    session,
+    trainer_id: int,
+    day_of_week: int,
+    hours: set[int],
+) -> tuple[dict[int, int], dict[int, int | None], int | None]:
+    """Merge bot hour picks with template rows that do not start on :00."""
+    minute_to_cap: dict[int, int] = {}
+    minute_to_service: dict[int, int | None] = {}
+    group_arena_id: int | None = None
+    templates = await list_templates(session, trainer_id)
+    for t in templates:
+        if t["day_of_week"] != day_of_week:
+            continue
+        hh, mi, sec = _time_tuple_from_start(t["start_time"])
+        m = hh * 60 + mi
+        if mi != 0 or sec != 0:
+            cap = max(1, min(int(t.get("capacity") or 1), 500))
+            minute_to_cap[m] = cap
+            if cap > 1:
+                sid = t.get("service_id")
+                minute_to_service[m] = int(sid) if sid is not None else None
+                if group_arena_id is None and t.get("arena_id") is not None:
+                    group_arena_id = int(t["arena_id"])
+            else:
+                minute_to_service[m] = None
+    for h in hours:
+        minute_to_cap[h * 60] = 1
+        minute_to_service[h * 60] = None
+    return minute_to_cap, minute_to_service, group_arena_id
+
+
 @router.callback_query(lambda c: c.data and c.data.startswith(SCHEDULE_DAY_PREFIX))
 async def schedule_choose_time(callback: CallbackQuery) -> None:
     """Day chosen; show hour picker 8–20. Pre-fill from template (template) or real slots (week)."""
@@ -2330,7 +2393,8 @@ async def schedule_done_times(callback: CallbackQuery) -> None:
         if state.get("week_start"):
             week_start = date.fromisoformat(state["week_start"])
             slot_date = week_start + timedelta(days=day)
-            await replace_slots_for_day(session, trainer_id, slot_date, hours)
+            start_minutes = await _merge_week_slot_minutes_with_preserves(session, trainer_id, slot_date, hours)
+            await replace_slots_for_day(session, trainer_id, slot_date, start_minutes)
             audit_log("schedule.week_slots_updated", ACTOR_TRAINER_BOT, telegram_id, {"trainer_id": trainer_id, "week_start": state["week_start"], "day": day, "slots_count": len(hours)})
             asyncio.create_task(run_after_schedule_changed(trainer_id, callback.bot))
             _schedule_add_state[telegram_id] = {"week_start": state["week_start"]}
@@ -2341,7 +2405,10 @@ async def schedule_done_times(callback: CallbackQuery) -> None:
         else:
             # Template
             _schedule_add_state.pop(telegram_id, None)
-            await replace_templates_for_day(session, trainer_id, day, {h: 1 for h in hours}, 60)
+            mcap, mservice, garena = await _merge_template_minutes_with_preserves(session, trainer_id, day, hours)
+            await replace_templates_for_day(
+                session, trainer_id, day, mcap, 60, mservice, group_arena_id=garena
+            )
             if hours:
                 text = msg.TRAINER_SCHEDULE_ADDED_MULTI.format(count=len(hours)) + "\n\n" + msg.TRAINER_SCHEDULE_TEMPLATE_CHOOSE_ANOTHER_DAY
             else:

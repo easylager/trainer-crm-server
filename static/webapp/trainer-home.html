@@ -367,6 +367,12 @@
     .hub-priority-actions {
       margin-bottom: 20px;
     }
+    /* Shared with priority strip (schedule / book client) — not the removed «Остальное» block. */
+    .hub-quick-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 12px;
+    }
     .hub-quick-grid--priority {
       grid-template-columns: 1fr 1fr;
       gap: 12px;
@@ -394,17 +400,6 @@
     .hub-hero.hub-hero--compact .hub-hero-subtitle {
       font-size: 14px;
     }
-    /* Quick Actions Panel */
-    .hub-quick-actions {
-      margin-bottom: 28px;
-    }
-    
-    .hub-quick-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-      gap: 12px;
-    }
-    
     .hub-quick-action {
       position: relative;
       display: flex;
@@ -418,7 +413,6 @@
       transition: all 0.25s cubic-bezier(0.22, 1, 0.36, 1);
       overflow: hidden;
     }
-    
     .hub-quick-action::before {
       content: '';
       position: absolute;
@@ -427,15 +421,12 @@
       opacity: 0;
       transition: opacity 0.25s ease;
     }
-    
     .hub-quick-action:hover {
       transform: translateY(-1px);
       border-color: rgba(247, 166, 0, 0.3);
       box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
     }
-    
     .hub-quick-action:hover::before { opacity: 1; }
-    
     .hub-quick-action:active {
       transform: scale(0.98);
     }
@@ -445,7 +436,6 @@
     .hub-quick-action.hub-quick-action--locked:hover {
       transform: none;
     }
-    
     .hub-quick-icon {
       width: 28px;
       height: 28px;
@@ -454,13 +444,11 @@
       position: relative;
       z-index: 1;
     }
-    
     .hub-quick-text {
       flex: 1;
       position: relative;
       z-index: 1;
     }
-    
     .hub-quick-label {
       font-size: 14px;
       font-weight: 600;
@@ -468,13 +456,11 @@
       line-height: 1.2;
       margin-bottom: 2px;
     }
-    
     .hub-quick-hint {
       font-size: 11px;
       color: var(--tg-theme-hint-color);
       line-height: 1.3;
     }
-    
     /* Section Headers */
     .hub-section-head {
       margin: 32px 0 16px;
@@ -576,38 +562,48 @@
       max-width: 46%;
       min-width: 0;
     }
-    /* «Написать» под бейджем статуса; вторичная ссылка без «коробки» */
+    /* Иконка «чат в Telegram» под бейджем — компактно, без текстовой ссылки */
     .hub-bookings-stack .hub-slot-msg {
-      font-size: 12px;
-      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
       padding: 0;
       margin: 0;
-      border: none;
-      border-radius: 0;
-      background: transparent;
-      color: var(--tg-theme-hint-color);
+      border: 1px solid color-mix(in srgb, var(--tg-theme-button-color) 32%, transparent);
+      border-radius: 10px;
+      background: color-mix(in srgb, var(--tg-theme-button-color) 12%, transparent);
+      color: var(--tg-theme-button-color);
       cursor: pointer;
       font-family: inherit;
-      line-height: 1.25;
-      white-space: nowrap;
-      text-decoration: underline;
-      text-decoration-color: rgba(245, 166, 35, 0.4);
-      text-underline-offset: 3px;
+      line-height: 0;
       -webkit-appearance: none;
       appearance: none;
       flex-shrink: 0;
+      transition: background 0.2s ease, border-color 0.2s ease, transform 0.12s ease;
     }
     .hub-bookings-stack .hub-slot-msg:hover {
-      color: var(--tg-theme-button-color, #f5a623);
-      text-decoration-color: rgba(245, 166, 35, 0.75);
+      background: color-mix(in srgb, var(--tg-theme-button-color) 22%, transparent);
+      border-color: color-mix(in srgb, var(--tg-theme-button-color) 48%, transparent);
     }
     .hub-bookings-stack .hub-slot-msg:active {
-      opacity: 0.88;
+      transform: scale(0.96);
+      opacity: 0.92;
     }
     .hub-bookings-stack .hub-slot-msg:focus-visible {
-      outline: 2px solid rgba(245, 166, 35, 0.55);
+      outline: 2px solid color-mix(in srgb, var(--tg-theme-button-color) 55%, transparent);
       outline-offset: 2px;
-      border-radius: 4px;
+    }
+    .hub-bookings-stack .hub-slot-msg-icon {
+      width: 16px;
+      height: 16px;
+      flex-shrink: 0;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
     }
     .hub-bookings-stack .slot-row .slot-status {
       font-size: 12px;
@@ -1207,7 +1203,7 @@
           </svg>
           <div class="hub-quick-text">
             <div class="hub-quick-label">Записать клиента</div>
-            <div class="hub-quick-hint">Свободные слоты</div>
+            <div class="hub-quick-hint">Слот создаётся в календаре · сетка 15 мин</div>
           </div>
         </button>
       </div>
@@ -1308,39 +1304,10 @@
       </div>
     </div>
 
-    <!-- Quick Actions Panel -->
-    <div class="hub-quick-actions">
-      <div class="hub-section-head">
-        <div class="hub-section-title">Остальное</div>
-      </div>
-      <div class="hub-quick-grid" id="hubQuickGrid">
-        <button type="button" class="hub-quick-action" data-action="view-requests">
-          <svg class="hub-quick-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M22 12h-6l-2 3h-4l-2-3H2"/>
-            <path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>
-          </svg>
-          <div class="hub-quick-text">
-            <div class="hub-quick-label">Заявки</div>
-            <div class="hub-quick-hint">Новые запросы клиентов</div>
-          </div>
-        </button>
-        
-        <button type="button" class="hub-quick-action" data-action="client-message">
-          <svg class="hub-quick-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-          </svg>
-          <div class="hub-quick-text">
-            <div class="hub-quick-label">Написать клиенту</div>
-            <div class="hub-quick-hint">Быстрое сообщение</div>
-          </div>
-        </button>
-      </div>
-    </div>
-
     <div id="stateMessage" class="state-panel loading" style="display:none;" role="status"></div>
 
     <div class="hub-section-head">
-      <div class="hub-section-title">Все разделы</div>
+      <div class="hub-section-title">Разделы</div>
     </div>
     <div class="hub-grid" id="hubGrid"></div>
 
@@ -1389,6 +1356,8 @@
         card: '<svg class="hub-tile-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>',
         chart: '<svg class="hub-tile-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 3v18h18"/><path d="M7 12l4-4 4 4 6-6"/></svg>',
         gift: '<svg class="hub-tile-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M20 12v10H4V12"/><rect x="2" y="7" width="20" height="5" rx="1"/><path d="M12 22V7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg>',
+        groups:
+          '<svg class="hub-tile-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>',
       };
       /** Cap upcoming booking cards so the hub never renders an unbounded list. */
       var HUB_UPCOMING_BOOKINGS_MAX = 5;
@@ -1411,6 +1380,8 @@
       /** Client requests without trainer response (GET /trainer/requests). */
       var hubLastNewRequestsCount = 0;
       var hubRequestsStatReady = false;
+      /** From trainer profile — show «Группы» tile before «Заявки» when enabled. */
+      var hubGroupClassesEnabled = false;
 
       function syncHubHeroCompact() {
         var el = document.querySelector('.hub-hero');
@@ -1449,7 +1420,10 @@
 
       function mergeHubAccessFromProfilePayload(prof) {
         if (!prof || !prof.ok || !prof.data || !prof.data.trainer) return;
-        var st = String(prof.data.trainer.status || '')
+        var tr = prof.data.trainer;
+        var p = tr.profile && typeof tr.profile === 'object' ? tr.profile : {};
+        hubGroupClassesEnabled = !!p.group_classes_enabled;
+        var st = String(tr.status || '')
           .trim()
           .toLowerCase();
         if (st !== 'active') return;
@@ -1457,7 +1431,7 @@
         trainerAccessSnapshot.is_active = true;
         trainerAccessSnapshot.access_state = 'active';
         trainerAccessSnapshot.trainer_status = 'active';
-        if (prof.data.trainer.id != null) trainerAccessSnapshot.trainer_id = prof.data.trainer.id;
+        if (tr.id != null) trainerAccessSnapshot.trainer_id = tr.id;
       }
 
       function webappBasePath() {
@@ -1515,14 +1489,6 @@
             var isLocked = locked && path !== 'trainer-profile';
             btn.classList.toggle('hub-tile--locked', isLocked);
             btn.setAttribute('aria-disabled', isLocked ? 'true' : 'false');
-          });
-        }
-        var quickGrid = document.getElementById('hubQuickGrid');
-        if (quickGrid) {
-          quickGrid.querySelectorAll('.hub-quick-action').forEach(function(btn) {
-            if (btn.style.display === 'none') return;
-            btn.classList.toggle('hub-quick-action--locked', locked);
-            btn.setAttribute('aria-disabled', locked ? 'true' : 'false');
           });
         }
         var pri = document.getElementById('hubPriorityActions');
@@ -2165,8 +2131,10 @@
             '<button type="button" class="hub-slot-msg" data-hub-dm="trainer"' +
             ' data-dm-un="' + escapeHtml((b.client_telegram_username || '').replace(/^@/, '')) + '"' +
             ' data-dm-tid="' + escapeHtml(b.client_telegram_id != null ? String(b.client_telegram_id) : '') + '"' +
-            ' aria-label="Написать клиенту" title="Написать в Telegram">' +
-            'Написать' +
+            ' aria-label="Написать клиенту в Telegram" title="Написать в Telegram">' +
+            '<svg class="hub-slot-msg-icon" viewBox="0 0 24 24" aria-hidden="true">' +
+            '<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/>' +
+            '</svg>' +
             '</button>';
         }
         return (
@@ -2184,12 +2152,24 @@
         );
       }
 
+      /**
+       * Hub grid order (2 columns): Клиенты → [Группы если включены] → Заявки → Расписание → Профиль → остальное.
+       * `feature: 'groups'` — tile only when hubGroupClassesEnabled (profile.group_classes_enabled).
+       */
       var TILES = [
-        { path: 'schedule-editor', label: 'Расписание', hint: 'Слоты и записи', icon: 'cal', badge: null },
         { path: 'trainer-clients', label: 'Клиенты', hint: 'База и заметки', icon: 'users', badge: null },
+        {
+          path: 'trainer-groups',
+          label: 'Группы',
+          hint: 'Набор и расписание',
+          icon: 'groups',
+          badge: null,
+          feature: 'groups',
+        },
         { path: 'trainer-requests', label: 'Заявки', hint: 'Отклики клиентов', icon: 'inbox', badge: 'NEW' },
-        { path: 'trainer-pass-products', label: 'Абонементы', hint: 'Продукты и выдача', icon: 'ticket', badge: null },
+        { path: 'schedule-editor', label: 'Расписание', hint: 'Слоты и записи', icon: 'cal', badge: null },
         { path: 'trainer-profile', label: 'Профиль', hint: 'Анкета и модерация', icon: 'user', badge: null },
+        { path: 'trainer-pass-products', label: 'Абонементы', hint: 'Продукты и выдача', icon: 'ticket', badge: null },
         { path: 'trainer-subscription', label: 'Подписка', hint: 'Тариф и оплата', icon: 'card', badge: null },
         { path: 'trainer-stats', label: 'Статистика', hint: 'Показатели и динамика', icon: 'chart', badge: null, tier: 'analytics' },
         { path: 'trainer-referral', label: 'Рефералы', hint: 'Пригласи коллегу', icon: 'gift', badge: 'NEW' },
@@ -2197,6 +2177,7 @@
 
       function tilesToRender() {
         return TILES.filter(function(t) {
+          if (t.feature === 'groups' && !hubGroupClassesEnabled) return false;
           if (t.tier === 'analytics' && !hasAnalyticsAccess) return false;
           return true;
         });
@@ -2482,22 +2463,6 @@
           };
         }
 
-        var quickGrid = document.getElementById('hubQuickGrid');
-        if (!quickGrid) return;
-
-        quickGrid.querySelectorAll('.hub-quick-action').forEach(function(btn) {
-          btn.onclick = function() {
-            var action = btn.getAttribute('data-action');
-            switch (action) {
-              case 'view-requests':
-                navigateTo('trainer-requests');
-                break;
-              case 'client-message':
-                navigateTo('trainer-clients?action=message');
-                break;
-            }
-          };
-        });
         applyHubLockedState();
       }
 

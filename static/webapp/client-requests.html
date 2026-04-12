@@ -479,23 +479,25 @@
       font-size: 18px;
       opacity: 0.6;
     }
-    .trainer-card-full .tcf-stats {
+    /* Stats + arenas + services: same layout as catalog.html trainer detail */
+    .trainer-card-full .trainer-detail-stats {
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 12px;
-      margin-bottom: 16px;
+      margin-bottom: 20px;
     }
-    .trainer-card-full .tcf-stat {
+    .trainer-card-full .trainer-detail-stat {
       padding: 12px;
       background: var(--tg-theme-secondary-bg-color);
       border-radius: 12px;
-      border: 1px solid rgba(128, 128, 128, 0.12);
+      border: 2px solid transparent;
       transition: border-color 0.2s ease;
+      box-sizing: border-box;
     }
-    .trainer-card-full .tcf-stat:hover {
-      border-color: rgba(247, 166, 0, 0.28);
+    .trainer-card-full .trainer-detail-stat:hover {
+      border-color: rgba(245, 166, 35, 0.3);
     }
-    .trainer-card-full .tcf-stat-label {
+    .trainer-card-full .trainer-detail-stat-label {
       font-size: 11px;
       font-weight: 600;
       text-transform: uppercase;
@@ -503,15 +505,64 @@
       color: var(--tg-theme-hint-color);
       margin-bottom: 4px;
     }
-    .trainer-card-full .tcf-stat-value {
+    .trainer-card-full .trainer-detail-stat-value {
       font-size: 15px;
       font-weight: 600;
       color: var(--tg-theme-text-color);
     }
-    .trainer-card-full .tcf-stat-value--arenas {
-      overflow-wrap: anywhere;
-      word-break: break-word;
+    .trainer-card-full .trainer-detail-stat--arenas {
+      grid-column: 1 / -1;
+    }
+    .trainer-card-full .trainer-detail-arena-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .trainer-card-full .trainer-detail-arena-primary-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+    }
+    .trainer-card-full .trainer-detail-arena-primary-name {
+      font-size: 15px;
+      font-weight: 600;
       line-height: 1.35;
+      color: var(--tg-theme-text-color);
+    }
+    .trainer-card-full .trainer-detail-arena-pill {
+      flex-shrink: 0;
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--tg-theme-button-color);
+      background: linear-gradient(135deg, rgba(245, 166, 35, 0.14) 0%, rgba(245, 166, 35, 0.06) 100%);
+      padding: 3px 7px;
+      border-radius: 8px;
+      border: 1px solid rgba(245, 166, 35, 0.28);
+    }
+    .trainer-card-full .trainer-detail-arena-others {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      margin-top: 2px;
+      padding-left: 10px;
+      border-left: 2px solid rgba(128, 128, 128, 0.22);
+    }
+    .trainer-card-full .trainer-detail-arena-secondary {
+      font-size: 13px;
+      font-weight: 500;
+      line-height: 1.35;
+      color: var(--tg-theme-hint-color);
+    }
+    .trainer-card-full .trainer-detail-arena-hint {
+      font-size: 12px;
+      line-height: 1.45;
+      color: var(--tg-theme-hint-color);
+      margin: 10px 0 0;
+      padding-top: 10px;
+      border-top: 1px solid rgba(128, 128, 128, 0.18);
     }
     .trainer-card-full .tcf-rating {
       display: inline-flex;
@@ -525,10 +576,10 @@
       color: var(--tg-theme-button-color);
       margin-bottom: 16px;
     }
-    .trainer-card-full .tcf-services {
+    .trainer-card-full .trainer-detail-services {
       margin-bottom: 20px;
     }
-    .trainer-card-full .tcf-services-title {
+    .trainer-card-full .trainer-detail-services-title {
       font-size: 13px;
       font-weight: 600;
       text-transform: uppercase;
@@ -536,19 +587,27 @@
       color: var(--tg-theme-hint-color);
       margin-bottom: 12px;
     }
-    .trainer-card-full .tcf-service {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 10px;
+    .trainer-card-full .trainer-detail-service {
       padding: 10px 14px;
       margin-bottom: 6px;
       background: var(--tg-theme-secondary-bg-color);
       border-radius: 10px;
       font-size: 14px;
+      border: 2px solid transparent;
+      box-sizing: border-box;
       min-width: 0;
     }
-    .trainer-card-full .tcf-service-name {
+    .trainer-card-full .trainer-detail-service--request-selected {
+      border-color: color-mix(in srgb, var(--tg-theme-button-color) 55%, transparent);
+      background: color-mix(in srgb, var(--tg-theme-button-color) 9%, var(--tg-theme-secondary-bg-color));
+    }
+    .trainer-card-full .trainer-detail-service-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+    }
+    .trainer-card-full .trainer-detail-service-name {
       font-weight: 500;
       color: var(--tg-theme-text-color);
       flex: 1;
@@ -556,11 +615,46 @@
       overflow-wrap: anywhere;
       word-break: break-word;
     }
-    .trainer-card-full .tcf-service-price {
+    .trainer-card-full .trainer-detail-service-price {
       font-weight: 600;
       color: var(--tg-theme-button-color);
       flex-shrink: 0;
       text-align: right;
+    }
+    .trainer-card-full .trainer-detail-service-callout {
+      margin: 0 0 18px 0;
+      padding: 14px 16px 16px 18px;
+      border-radius: 12px;
+      border: 1px solid color-mix(in srgb, var(--tg-theme-button-color) 45%, transparent);
+      background: color-mix(in srgb, var(--tg-theme-button-color) 14%, var(--tg-theme-secondary-bg-color));
+      box-shadow: 0 2px 14px rgba(0, 0, 0, 0.07);
+      position: relative;
+      box-sizing: border-box;
+    }
+    .trainer-card-full .trainer-detail-service-callout::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 10px;
+      bottom: 10px;
+      width: 4px;
+      border-radius: 0 4px 4px 0;
+      background: var(--tg-theme-button-color);
+    }
+    .trainer-card-full .trainer-detail-service-callout-kicker {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--tg-theme-button-color);
+      margin-bottom: 10px;
+      line-height: 1.35;
+    }
+    .trainer-card-full .trainer-detail-service-callout-body {
+      font-size: 15px;
+      font-weight: 500;
+      line-height: 1.5;
+      color: var(--tg-theme-text-color);
     }
     .trainer-card-full .tcf-education {
       margin-bottom: 20px;
@@ -571,21 +665,124 @@
       text-transform: uppercase;
       letter-spacing: 0.1em;
       color: var(--tg-theme-hint-color);
-      margin-bottom: 12px;
+      margin-bottom: 10px;
     }
-    /* Plain cards like .tcf-stat — no left accent */
-    .trainer-card-full .tcf-education-item {
-      padding: 12px 14px;
-      margin-bottom: 8px;
-      background: var(--tg-theme-secondary-bg-color);
-      border-radius: 12px;
-      border: 1px solid rgba(128, 128, 128, 0.12);
-      font-size: 14px;
+    .trainer-card-full .tcf-education-hint {
+      margin: 0 0 10px;
+      font-size: 12px;
       line-height: 1.4;
-      max-width: 100%;
+      color: var(--tg-theme-hint-color);
+    }
+    .trainer-card-full .tcf-education-item {
+      margin-bottom: 8px;
+      border-radius: 12px;
+      border: 1px solid rgba(128, 128, 128, 0.14);
+      background: var(--tg-theme-secondary-bg-color);
+      overflow: hidden;
+    }
+    .trainer-card-full .tcf-education-item summary {
+      list-style: none;
+      cursor: pointer;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 12px 14px;
+    }
+    .trainer-card-full .tcf-education-item summary::-webkit-details-marker {
+      display: none;
+    }
+    .trainer-card-full .tcf-education-summary-main {
       min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .trainer-card-full .tcf-education-summary-title {
+      font-size: 14px;
+      line-height: 1.35;
+      color: var(--tg-theme-text-color);
       overflow-wrap: anywhere;
       word-break: break-word;
+    }
+    .trainer-card-full .tcf-education-summary-meta {
+      font-size: 12px;
+      line-height: 1.35;
+      color: var(--tg-theme-hint-color);
+    }
+    .trainer-card-full .tcf-education-summary-right {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+    .trainer-card-full .tcf-education-badge {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--tg-theme-button-color);
+      background: color-mix(in srgb, var(--tg-theme-button-color) 14%, var(--tg-theme-secondary-bg-color));
+      border: 1px solid color-mix(in srgb, var(--tg-theme-button-color) 45%, transparent);
+      border-radius: 999px;
+      padding: 3px 8px;
+      white-space: nowrap;
+    }
+    .trainer-card-full .tcf-education-chevron {
+      font-size: 12px;
+      color: var(--tg-theme-hint-color);
+      transition: transform 0.2s ease;
+    }
+    .trainer-card-full .tcf-education-item[open] .tcf-education-chevron {
+      transform: rotate(180deg);
+    }
+    .trainer-card-full .tcf-education-body {
+      padding: 0 14px 12px;
+      border-top: 1px solid rgba(128, 128, 128, 0.14);
+    }
+    .trainer-card-full .tcf-education-body-line {
+      margin-top: 8px;
+      font-size: 13px;
+      line-height: 1.45;
+      color: var(--tg-theme-text-color);
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+    .trainer-card-full .tcf-education-body-line b {
+      font-weight: 600;
+    }
+    .trainer-card-full .tcf-education-docs {
+      margin-top: 10px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .trainer-card-full .tcf-education-doc {
+      display: inline-flex;
+      width: 56px;
+      height: 56px;
+      border-radius: 10px;
+      overflow: hidden;
+      border: 1px solid rgba(128, 128, 128, 0.16);
+      background: var(--tg-theme-bg-color);
+    }
+    .trainer-card-full .tcf-education-doc img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .trainer-card-full .tcf-education-doc-more {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 56px;
+      height: 56px;
+      border-radius: 10px;
+      border: 1px dashed color-mix(in srgb, var(--tg-theme-button-color) 50%, transparent);
+      color: var(--tg-theme-hint-color);
+      font-size: 12px;
+      padding: 0 8px;
+      background: var(--tg-theme-bg-color);
     }
     .trainer-card-full .tcf-education-more {
       margin-top: 12px;
@@ -1028,40 +1225,120 @@
         return (v === Math.floor(v) ? v : v.toFixed(2)) + ' BYN';
       }
 
-      /** Same rules as catalog `formatCatalogEducationEntry` (city/type/god — не пустая строка). */
+      function responderEducationTypeLabel(typeKey) {
+        var key = (typeKey || '').trim();
+        if (key === 'formal_education') return 'Вуз / колледж / ССО';
+        if (key === 'course_or_certificate') return 'Курсы / сертификат';
+        return '';
+      }
+
+      function responderEducationYearLine(edu) {
+        if (!edu) return '';
+        if (edu.is_in_progress) return 'в процессе';
+        var sy = edu.start_year;
+        var ey = edu.end_year;
+        if (sy != null && ey != null) return sy + '–' + ey;
+        if (ey != null) return String(ey);
+        if (sy != null) return 'с ' + sy;
+        return '';
+      }
+
+      function normalizeResponderEducationPhotos(edu) {
+        var rows = edu && Array.isArray(edu.document_photos) ? edu.document_photos : [];
+        var out = [];
+        var seen = {};
+        rows.forEach(function(item) {
+          if (!item || typeof item !== 'object') return;
+          var fk = (item.file_key || '').toString().trim();
+          var fkl = (item.file_key_list || '').toString().trim();
+          if (!fk || seen[fk]) return;
+          seen[fk] = true;
+          out.push({ file_key: fk, file_key_list: fkl ? fkl : null });
+        });
+        return out;
+      }
+
+      /** One-line education preview for request response cards. */
       function formatResponderEducationEntry(edu) {
         if (!edu) return '';
         var inst = (edu.institution_name || '').trim();
         var prog = (edu.program_or_title || '').trim();
-        var deg = (edu.degree_level || '').trim();
         var city = (edu.city || '').trim();
         var country = (edu.country || '').trim();
         var place = [city, country].filter(Boolean).join(', ');
-        var typeKey = (edu.education_type || '').trim();
-        var typeHint = '';
-        if (typeKey === 'formal_education') typeHint = 'Вуз / колледж / ССО';
-        else if (typeKey === 'course_or_certificate') typeHint = 'Курсы / сертификат';
-        var head = inst || prog;
-        var parts = [];
-        if (inst && prog && inst !== prog) parts.push(prog);
-        if (deg) parts.push(deg);
-        var sub = parts.filter(function(x) { return x && x !== head; }).join(', ');
-        var line = sub ? (head ? head + ' — ' + sub : sub) : head;
+        var head = inst || prog || responderEducationTypeLabel(edu.education_type);
+        var line = head;
+        if (inst && prog && inst !== prog) line = inst + ' — ' + prog;
+        var y = responderEducationYearLine(edu);
+        if (line && y) line += ' (' + y + ')';
         if (!line && place) line = place;
-        if (!line && typeHint) line = typeHint;
-        else if (line && place && line.indexOf(city) === -1 && city) line = line + ' · ' + place;
-        else if (line && place && !city && country && line.indexOf(country) === -1) line = line + ' · ' + country;
-        var y = '';
-        if (edu.is_in_progress) y = 'в процессе';
-        else {
-          var sy = edu.start_year;
-          var ey = edu.end_year;
-          if (sy != null && ey != null) y = sy + '–' + ey;
-          else if (ey != null) y = String(ey);
-          else if (sy != null) y = 'с ' + sy;
-        }
-        if (y) line = (line ? line + ' ' : '') + '(' + y + ')';
+        else if (line && place && line.indexOf(place) === -1) line += ' · ' + place;
         return (line || '').trim();
+      }
+
+      function buildResponderEducationItemHtml(edu) {
+        if (!edu) return '';
+        var summary = formatResponderEducationEntry(edu) || 'Запись об образовании';
+        var degree = (edu.degree_level || '').trim();
+        var city = (edu.city || '').trim();
+        var country = (edu.country || '').trim();
+        var place = [city, country].filter(Boolean).join(', ');
+        var years = responderEducationYearLine(edu);
+        var typeLabel = responderEducationTypeLabel(edu.education_type);
+        var docs = normalizeResponderEducationPhotos(edu);
+
+        var summaryMetaParts = [];
+        if (years) summaryMetaParts.push(years);
+        if (place) summaryMetaParts.push(place);
+        var summaryMeta = summaryMetaParts.join(' · ');
+
+        var body = '';
+        if (typeLabel) {
+          body += '<div class="tcf-education-body-line"><b>Тип:</b> ' + escapeHtml(typeLabel) + '</div>';
+        }
+        if (degree) {
+          body += '<div class="tcf-education-body-line"><b>Квалификация:</b> ' + escapeHtml(degree) + '</div>';
+        }
+        if (years) {
+          body += '<div class="tcf-education-body-line"><b>Период:</b> ' + escapeHtml(years) + '</div>';
+        }
+        if (place) {
+          body += '<div class="tcf-education-body-line"><b>Город:</b> ' + escapeHtml(place) + '</div>';
+        }
+        if (docs.length) {
+          var docsHtml = docs.slice(0, 4).map(function(doc, idx) {
+            var imgSrc = photoUrl(doc.file_key_list || doc.file_key);
+            var href = photoUrl(doc.file_key);
+            return (
+              '<a class="tcf-education-doc" href="' + href + '" target="_blank" rel="noopener noreferrer" aria-label="Документ #' + (idx + 1) + '">' +
+                '<img src="' + imgSrc + '" alt="Документ #' + (idx + 1) + '" loading="lazy" decoding="async">' +
+              '</a>'
+            );
+          }).join('');
+          if (docs.length > 4) {
+            docsHtml += '<span class="tcf-education-doc-more">+' + (docs.length - 4) + '</span>';
+          }
+          body += '<div class="tcf-education-docs">' + docsHtml + '</div>';
+        }
+        if (!body) {
+          body = '<div class="tcf-education-body-line">Без дополнительных деталей.</div>';
+        }
+
+        return (
+          '<details class="tcf-education-item">' +
+            '<summary>' +
+              '<div class="tcf-education-summary-main">' +
+                '<div class="tcf-education-summary-title">' + escapeHtml(summary) + '</div>' +
+                (summaryMeta ? '<div class="tcf-education-summary-meta">' + escapeHtml(summaryMeta) + '</div>' : '') +
+              '</div>' +
+              '<div class="tcf-education-summary-right">' +
+                (docs.length ? '<span class="tcf-education-badge">' + docs.length + ' фото</span>' : '') +
+                '<span class="tcf-education-chevron">▾</span>' +
+              '</div>' +
+            '</summary>' +
+            '<div class="tcf-education-body">' + body + '</div>' +
+          '</details>'
+        );
       }
 
       function isResponderEducationCategoryOnly(s) {
@@ -1072,6 +1349,48 @@
           'Курсы и сертификация', 'Ученая степень', 'Другое'
         ];
         return cats.indexOf(t) >= 0;
+      }
+
+      /** Arenas: primary + secondaries + hint — aligned with catalog.html `buildTrainerArenasBlock`. */
+      function buildResponderArenasBlock(r) {
+        var ids = Array.isArray(r.arena_ids) ? r.arena_ids : [];
+        var names = Array.isArray(r.arena_names) ? r.arena_names : [];
+        var n = ids.length;
+        if (n === 0 && names.length) {
+          n = names.length;
+          ids = names.map(function(_, i) { return i; });
+        }
+        if (n <= 1) {
+          var single = (names[0] && String(names[0]).trim()) ? String(names[0]).trim() : '—';
+          return '<div class="trainer-detail-stat-value">' + escapeHtml(single) + '</div>';
+        }
+        var primaryId = r.primary_arena_id;
+        var primaryIdx = 0;
+        if (primaryId != null) {
+          var pi = ids.indexOf(primaryId);
+          if (pi >= 0) primaryIdx = pi;
+        }
+        var primaryName = (names[primaryIdx] || '—').trim();
+        var others = [];
+        for (var i = 0; i < n; i++) {
+          if (i === primaryIdx) continue;
+          others.push((names[i] || '—').trim());
+        }
+        var html = '<div class="trainer-detail-arena-stack">';
+        html += '<div class="trainer-detail-arena-primary-row">';
+        html += '<span class="trainer-detail-arena-primary-name">' + escapeHtml(primaryName) + '</span>';
+        html += '<span class="trainer-detail-arena-pill">основная</span>';
+        html += '</div>';
+        if (others.length) {
+          html += '<div class="trainer-detail-arena-others">';
+          others.forEach(function(nm) {
+            html += '<div class="trainer-detail-arena-secondary">' + escapeHtml(nm) + '</div>';
+          });
+          html += '</div>';
+        }
+        html += '<p class="trainer-detail-arena-hint">Запись в каталоге — на основную площадку. Нужна другая? Оставьте заявку — тренер согласует.</p>';
+        html += '</div>';
+        return html;
       }
 
       function photoUrl(fileKey) {
@@ -1231,8 +1550,12 @@
         var ratingStr = (r.rating_avg != null && (r.rating_count || 0) > 0) ? (r.rating_avg.toFixed(1) + ' ★ (' + r.rating_count + ')') : null;
         var duration = r.session_duration_minutes != null ? r.session_duration_minutes : 45;
         var expDisplay = (r.experience_years != null) ? (r.experience_years + ' лет опыта') : '—';
-        var arenasList = Array.isArray(r.arena_names) ? r.arena_names : [];
-        var arenasDisplay = arenasList.length ? arenasList.join(', ') : '—';
+        var arenaIdsForLayout = Array.isArray(r.arena_ids) ? r.arena_ids : [];
+        var arenaNamesForLayout = Array.isArray(r.arena_names) ? r.arena_names : [];
+        var arenaStatClass = 'trainer-detail-stat';
+        if (arenaIdsForLayout.length > 1 || arenaNamesForLayout.length > 1) {
+          arenaStatClass += ' trainer-detail-stat--arenas';
+        }
         var desc = (r.description || '').trim();
         var photo = photoUrl(r.photo_key);
         var bookUrl = state.bookBaseUrl + '?trainer_id=' + encodeURIComponent(r.trainer_id) + '&request_id=' + encodeURIComponent(req.id);
@@ -1255,32 +1578,56 @@
         // Комментарий тренера к заявке (особенность карточки в откликах)
         if (tc) html += '<div class="tcf-comment">' + escapeHtml(tc) + '</div>';
         
-        html += '<div class="tcf-stats">';
-        html += '<div class="tcf-stat">';
-        html += '<div class="tcf-stat-label">Опыт</div>';
-        html += '<div class="tcf-stat-value">' + escapeHtml(expDisplay) + '</div>';
+        html += '<div class="trainer-detail-stats">';
+        html += '<div class="trainer-detail-stat">';
+        html += '<div class="trainer-detail-stat-label">Опыт</div>';
+        html += '<div class="trainer-detail-stat-value">' + escapeHtml(expDisplay) + '</div>';
         html += '</div>';
-        html += '<div class="tcf-stat">';
-        html += '<div class="tcf-stat-label">Занятие</div>';
-        html += '<div class="tcf-stat-value">' + duration + ' мин</div>';
+        html += '<div class="trainer-detail-stat">';
+        html += '<div class="trainer-detail-stat-label">Занятие</div>';
+        html += '<div class="trainer-detail-stat-value">' + duration + ' мин</div>';
         html += '</div>';
-        html += '<div class="tcf-stat">';
-        html += '<div class="tcf-stat-label">Арены</div>';
-        html += '<div class="tcf-stat-value tcf-stat-value--arenas">' + escapeHtml(arenasDisplay) + '</div>';
+        html += '<div class="' + arenaStatClass + '">';
+        html += '<div class="trainer-detail-stat-label">Арены</div>';
+        html += buildResponderArenasBlock(r);
         html += '</div>';
         html += '</div>';
-        
-        // Услуги и цены — тот же формат, что в каталоге (service_name + price_byn)
+
         var servicesList = Array.isArray(r.services) ? r.services : [];
+        var requestServiceId = req.service_id != null ? Number(req.service_id) : NaN;
         if (servicesList.length > 0) {
-          html += '<div class="tcf-services">';
-          html += '<div class="tcf-services-title">Услуги и цены</div>';
+          var selectedServiceDescEscaped = '';
+          if (!isNaN(requestServiceId)) {
+            var sj;
+            for (sj = 0; sj < servicesList.length; sj++) {
+              var sx = servicesList[sj];
+              if (sx.service_id == null || Number(sx.service_id) !== requestServiceId) continue;
+              var rawDesc = sx.description && String(sx.description).trim();
+              if (rawDesc) selectedServiceDescEscaped = escapeHtml(rawDesc).replace(/\n/g, '<br>');
+              break;
+            }
+          }
+          if (selectedServiceDescEscaped) {
+            html += '<div class="trainer-detail-service-callout" role="region" aria-label="О выбранной услуге">';
+            html += '<div class="trainer-detail-service-callout-kicker">К вашей заявке</div>';
+            html += '<div class="trainer-detail-service-callout-body">' + selectedServiceDescEscaped + '</div>';
+            html += '</div>';
+          }
+          html += '<div class="trainer-detail-services">';
+          html += '<div class="trainer-detail-services-title">Услуги и цены</div>';
           servicesList.forEach(function(s) {
             var serviceName = s.service_name || '—';
             var priceText = formatResponderServicePrice(s);
-            html += '<div class="tcf-service">';
-            html += '<span class="tcf-service-name">' + escapeHtml(serviceName) + '</span>';
-            html += '<span class="tcf-service-price">' + escapeHtml(priceText) + '</span>';
+            var sid = s.service_id != null ? Number(s.service_id) : NaN;
+            var matchRequest =
+              !isNaN(requestServiceId) &&
+              !isNaN(sid) &&
+              requestServiceId === sid;
+            html += '<div class="trainer-detail-service' + (matchRequest ? ' trainer-detail-service--request-selected' : '') + '">';
+            html += '<div class="trainer-detail-service-top">';
+            html += '<span class="trainer-detail-service-name">' + escapeHtml(serviceName) + '</span>';
+            html += '<span class="trainer-detail-service-price">' + escapeHtml(priceText) + '</span>';
+            html += '</div>';
             html += '</div>';
           });
           html += '</div>';
@@ -1296,20 +1643,20 @@
         if (eduRows.length > 0) {
           html += '<div class="tcf-education">';
           html += '<div class="tcf-education-title">Образование</div>';
-          var eduAny = false;
+          html += '<p class="tcf-education-hint">Нажмите на запись, чтобы раскрыть детали и фото документов.</p>';
+          var eduAnyHtml = '';
           eduRows.forEach(function(edu) {
-            var eduText = formatResponderEducationEntry(edu);
-            if (eduText) {
-              eduAny = true;
-              html += '<div class="tcf-education-item">' + escapeHtml(eduText) + '</div>';
-            }
+            var itemHtml = buildResponderEducationItemHtml(edu);
+            if (itemHtml) eduAnyHtml += itemHtml;
           });
-          if (!eduAny && eduCategory) {
-            html += '<div class="tcf-education-item">' + escapeHtml(eduCategory) + '</div>';
+          if (eduAnyHtml) {
+            html += eduAnyHtml;
+          } else if (eduCategory) {
+            html += '<div class="tcf-education-body-line">' + escapeHtml(eduCategory) + '</div>';
           }
           if (profileExtra) {
             html += '<div class="tcf-education-more">';
-            html += '<div class="tcf-education-more-label">Подробнее</div>';
+            html += '<div class="tcf-education-more-label">Дополнительно</div>';
             html += '<div class="tcf-education-more-body">' + escapeHtml(profileExtra).replace(/\n/g, '<br>') + '</div>';
             html += '</div>';
           }
@@ -1317,7 +1664,9 @@
         } else if (eduCategory) {
           html += '<div class="tcf-education">';
           html += '<div class="tcf-education-title">Образование</div>';
-          html += '<div class="tcf-education-item">' + escapeHtml(eduCategory) + '</div>';
+          html += '<div class="tcf-education-more">';
+          html += '<div class="tcf-education-more-body">' + escapeHtml(eduCategory).replace(/\n/g, '<br>') + '</div>';
+          html += '</div>';
           html += '</div>';
         }
         
@@ -1331,6 +1680,14 @@
         }
         html += '</div></div>';
         document.getElementById('responderDetailContent').innerHTML = html;
+        document.querySelectorAll('#responderDetailContent .tcf-education-doc').forEach(function(linkEl) {
+          linkEl.addEventListener('click', function(ev) {
+            if (tg && typeof tg.openLink === 'function') {
+              ev.preventDefault();
+              tg.openLink(linkEl.href);
+            }
+          });
+        });
         var tcfImg = document.querySelector('#responderDetailContent .tcf-photo');
         if (tcfImg) {
           function onPhotoLoaded() {

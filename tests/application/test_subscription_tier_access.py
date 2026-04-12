@@ -1,71 +1,81 @@
-"""Tests for subscription tier access control."""
+"""Tests for subscription entitlements (CRM base + modules)."""
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
 from src.application.subscription_tier_use_cases import (
-    trainer_allows_online_booking,
-    trainer_has_crm_access,
-    trainer_has_analytics_access,
     get_trainer_booking_availability,
+    trainer_allows_online_booking,
+    trainer_has_analytics_access,
+    trainer_has_crm_access,
+    trainer_has_groups_access,
 )
 from src.infrastructure.db.models import (
-    SUBSCRIPTION_TIER_NONE,
     SUBSCRIPTION_TIER_CRM,
-    SUBSCRIPTION_TIER_ONLINE,
     SUBSCRIPTION_TIER_ANALYTICS,
+    SUBSCRIPTION_TIER_NONE,
+    SUBSCRIPTION_TIER_ONLINE,
 )
+
+
+def _mods(online: bool = False, analytics: bool = False, groups: bool = False) -> dict:
+    return {"online": online, "analytics": analytics, "groups": groups}
+
+
+def _ent_row(tier: str | None, modules: dict | None) -> tuple | None:
+    if tier is None:
+        return None
+    return (tier, modules)
 
 
 class TestTrainerAllowsOnlineBooking:
-    """Tests for trainer_allows_online_booking (tier >= online)."""
+    """trainer_allows_online_booking: CRM base + online module."""
 
     @pytest.mark.asyncio
     async def test_no_subscription_denies_booking(self) -> None:
-        """Trainer without subscription cannot allow online booking."""
         mock_session = AsyncMock()
         mock_result = MagicMock()
-        mock_result.fetchone.return_value = None  # No active subscription
+        mock_result.fetchone.return_value = None
         mock_session.execute.return_value = mock_result
 
         result = await trainer_allows_online_booking(mock_session, trainer_id=1)
         assert result is False
 
     @pytest.mark.asyncio
-    async def test_crm_tier_denies_booking(self) -> None:
-        """Trainer with CRM tier cannot allow online booking."""
+    async def test_crm_only_denies_booking(self) -> None:
         mock_session = AsyncMock()
         mock_result = MagicMock()
-        mock_result.fetchone.return_value = (SUBSCRIPTION_TIER_CRM,)
+        mock_result.fetchone.return_value = _ent_row(SUBSCRIPTION_TIER_CRM, _mods())
         mock_session.execute.return_value = mock_result
 
         result = await trainer_allows_online_booking(mock_session, trainer_id=1)
         assert result is False
 
     @pytest.mark.asyncio
-    async def test_online_tier_allows_booking(self) -> None:
-        """Trainer with online tier can allow online booking."""
+    async def test_online_module_allows_booking(self) -> None:
         mock_session = AsyncMock()
         mock_result = MagicMock()
-        mock_result.fetchone.return_value = (SUBSCRIPTION_TIER_ONLINE,)
+        mock_result.fetchone.return_value = _ent_row(SUBSCRIPTION_TIER_CRM, _mods(online=True))
         mock_session.execute.return_value = mock_result
 
         result = await trainer_allows_online_booking(mock_session, trainer_id=1)
         assert result is True
 
     @pytest.mark.asyncio
-    async def test_analytics_tier_allows_booking(self) -> None:
-        """Trainer with analytics tier can allow online booking (includes online)."""
+    async def test_analytics_without_online_denies_booking(self) -> None:
+        """Independent modules: analytics does not imply online."""
         mock_session = AsyncMock()
         mock_result = MagicMock()
-        mock_result.fetchone.return_value = (SUBSCRIPTION_TIER_ANALYTICS,)
+        mock_result.fetchone.return_value = _ent_row(
+            SUBSCRIPTION_TIER_CRM, _mods(online=False, analytics=True)
+        )
         mock_session.execute.return_value = mock_result
 
         result = await trainer_allows_online_booking(mock_session, trainer_id=1)
-        assert result is True
+        assert result is False
 
 
 class TestTrainerHasCrmAccess:
-    """Tests for trainer_has_crm_access (tier >= crm)."""
+    """trainer_has_crm_access: any active subscription row with tier set."""
 
     @pytest.mark.asyncio
     async def test_no_subscription_denies_crm(self) -> None:
@@ -78,21 +88,10 @@ class TestTrainerHasCrmAccess:
         assert result is False
 
     @pytest.mark.asyncio
-    async def test_crm_tier_allows_crm(self) -> None:
+    async def test_crm_base_allows_crm(self) -> None:
         mock_session = AsyncMock()
         mock_result = MagicMock()
-        mock_result.fetchone.return_value = (SUBSCRIPTION_TIER_CRM,)
-        mock_session.execute.return_value = mock_result
-
-        result = await trainer_has_crm_access(mock_session, trainer_id=1)
-        assert result is True
-
-    @pytest.mark.asyncio
-    async def test_online_tier_allows_crm(self) -> None:
-        """Online tier includes CRM."""
-        mock_session = AsyncMock()
-        mock_result = MagicMock()
-        mock_result.fetchone.return_value = (SUBSCRIPTION_TIER_ONLINE,)
+        mock_result.fetchone.return_value = _ent_row(SUBSCRIPTION_TIER_CRM, _mods())
         mock_session.execute.return_value = mock_result
 
         result = await trainer_has_crm_access(mock_session, trainer_id=1)
@@ -100,41 +99,55 @@ class TestTrainerHasCrmAccess:
 
 
 class TestTrainerHasAnalyticsAccess:
-    """Tests for trainer_has_analytics_access (tier >= analytics)."""
+    """trainer_has_analytics_access: CRM + analytics module."""
 
     @pytest.mark.asyncio
-    async def test_crm_tier_denies_analytics(self) -> None:
+    async def test_crm_only_denies_analytics(self) -> None:
         mock_session = AsyncMock()
         mock_result = MagicMock()
-        mock_result.fetchone.return_value = (SUBSCRIPTION_TIER_CRM,)
+        mock_result.fetchone.return_value = _ent_row(SUBSCRIPTION_TIER_CRM, _mods())
         mock_session.execute.return_value = mock_result
 
         result = await trainer_has_analytics_access(mock_session, trainer_id=1)
         assert result is False
 
     @pytest.mark.asyncio
-    async def test_online_tier_denies_analytics(self) -> None:
+    async def test_online_only_denies_analytics(self) -> None:
         mock_session = AsyncMock()
         mock_result = MagicMock()
-        mock_result.fetchone.return_value = (SUBSCRIPTION_TIER_ONLINE,)
+        mock_result.fetchone.return_value = _ent_row(SUBSCRIPTION_TIER_CRM, _mods(online=True))
         mock_session.execute.return_value = mock_result
 
         result = await trainer_has_analytics_access(mock_session, trainer_id=1)
         assert result is False
 
     @pytest.mark.asyncio
-    async def test_analytics_tier_allows_analytics(self) -> None:
+    async def test_analytics_module_allows_analytics(self) -> None:
         mock_session = AsyncMock()
         mock_result = MagicMock()
-        mock_result.fetchone.return_value = (SUBSCRIPTION_TIER_ANALYTICS,)
+        mock_result.fetchone.return_value = _ent_row(
+            SUBSCRIPTION_TIER_CRM, _mods(analytics=True)
+        )
         mock_session.execute.return_value = mock_result
 
         result = await trainer_has_analytics_access(mock_session, trainer_id=1)
         assert result is True
 
 
+class TestTrainerHasGroupsAccess:
+    @pytest.mark.asyncio
+    async def test_groups_module(self) -> None:
+        mock_session = AsyncMock()
+        mock_result = MagicMock()
+        mock_result.fetchone.return_value = _ent_row(
+            SUBSCRIPTION_TIER_CRM, _mods(groups=True)
+        )
+        mock_session.execute.return_value = mock_result
+        assert await trainer_has_groups_access(mock_session, 1) is True
+
+
 class TestGetTrainerBookingAvailability:
-    """Tests for get_trainer_booking_availability (catalog display)."""
+    """get_trainer_booking_availability uses two entitlement reads."""
 
     @pytest.mark.asyncio
     async def test_no_subscription_returns_cannot_book(self) -> None:
@@ -144,82 +157,71 @@ class TestGetTrainerBookingAvailability:
         mock_session.execute.return_value = mock_result
 
         result = await get_trainer_booking_availability(mock_session, trainer_id=1)
-        
+
         assert result["can_book"] is False
         assert result["tier"] == SUBSCRIPTION_TIER_NONE
         assert result["reason"] == "no_subscription"
 
     @pytest.mark.asyncio
-    async def test_crm_tier_returns_cannot_book_crm_only(self) -> None:
+    async def test_crm_only_returns_crm_only(self) -> None:
+        """effective tier → allows_online → has_crm (three entitlement reads)."""
         mock_session = AsyncMock()
+        row = _ent_row(SUBSCRIPTION_TIER_CRM, _mods())
         mock_result = MagicMock()
-        mock_result.fetchone.return_value = (SUBSCRIPTION_TIER_CRM,)
+        mock_result.fetchone.return_value = row
         mock_session.execute.return_value = mock_result
 
         result = await get_trainer_booking_availability(mock_session, trainer_id=1)
-        
+
         assert result["can_book"] is False
         assert result["tier"] == SUBSCRIPTION_TIER_CRM
         assert result["reason"] == "crm_only"
 
     @pytest.mark.asyncio
-    async def test_online_tier_returns_can_book(self) -> None:
+    async def test_online_module_returns_can_book(self) -> None:
         mock_session = AsyncMock()
+        row = _ent_row(SUBSCRIPTION_TIER_CRM, _mods(online=True))
         mock_result = MagicMock()
-        mock_result.fetchone.return_value = (SUBSCRIPTION_TIER_ONLINE,)
+        mock_result.fetchone.return_value = row
         mock_session.execute.return_value = mock_result
 
         result = await get_trainer_booking_availability(mock_session, trainer_id=1)
-        
+
         assert result["can_book"] is True
         assert result["tier"] == SUBSCRIPTION_TIER_ONLINE
         assert result["reason"] is None
 
-    @pytest.mark.asyncio
-    async def test_analytics_tier_returns_can_book(self) -> None:
-        mock_session = AsyncMock()
-        mock_result = MagicMock()
-        mock_result.fetchone.return_value = (SUBSCRIPTION_TIER_ANALYTICS,)
-        mock_session.execute.return_value = mock_result
-
-        result = await get_trainer_booking_availability(mock_session, trainer_id=1)
-        
-        assert result["can_book"] is True
-        assert result["tier"] == SUBSCRIPTION_TIER_ANALYTICS
-        assert result["reason"] is None
-
 
 class TestTierAccessMatrix:
-    """Integration tests for tier access matrix."""
+    """Parametrized entitlements matrix."""
 
     @pytest.mark.parametrize(
-        "tier,crm_access,online_access,analytics_access",
+        "modules,crm_access,online_access,analytics_access",
         [
-            (None, False, False, False),  # No subscription
-            (SUBSCRIPTION_TIER_CRM, True, False, False),
-            (SUBSCRIPTION_TIER_ONLINE, True, True, False),
-            (SUBSCRIPTION_TIER_ANALYTICS, True, True, True),
+            (None, False, False, False),
+            (_mods(), True, False, False),
+            (_mods(online=True), True, True, False),
+            (_mods(online=True, analytics=True), True, True, True),
+            (_mods(analytics=True), True, False, True),
         ],
     )
     @pytest.mark.asyncio
     async def test_tier_access_matrix(
         self,
-        tier: str | None,
+        modules: dict | None,
         crm_access: bool,
         online_access: bool,
         analytics_access: bool,
     ) -> None:
-        """Verify access matrix for all tiers."""
         mock_session = AsyncMock()
         mock_result = MagicMock()
-        mock_result.fetchone.return_value = (tier,) if tier else None
+        mock_result.fetchone.return_value = (
+            None if modules is None else _ent_row(SUBSCRIPTION_TIER_CRM, modules)
+        )
         mock_session.execute.return_value = mock_result
 
         assert await trainer_has_crm_access(mock_session, 1) == crm_access
-        
-        # Reset mock for next call
         mock_session.execute.return_value = mock_result
         assert await trainer_allows_online_booking(mock_session, 1) == online_access
-        
         mock_session.execute.return_value = mock_result
         assert await trainer_has_analytics_access(mock_session, 1) == analytics_access

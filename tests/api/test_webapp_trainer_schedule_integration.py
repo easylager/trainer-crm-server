@@ -170,6 +170,12 @@ async def test_schedule_get_returns_slots_in_range_and_shape(
     assert resp.status_code == 200
     data = resp.json()
     assert "slots" in data
+    assert "session_duration_minutes" in data
+    assert "schedule_grid" in data
+    sg = data["schedule_grid"]
+    assert sg.get("kind") == "quarter_15"
+    assert sg.get("slot_duration_minutes") is None
+    assert int(sg.get("hour_start", -1)) >= 0
     assert len(data["slots"]) >= 1
     s0 = next((x for x in data["slots"] if x.get("id") == slot_id), None)
     assert s0 is not None
@@ -178,6 +184,73 @@ async def test_schedule_get_returns_slots_in_range_and_shape(
     assert s0["end_time"] == "11:00"
     assert s0["status"] == "available"
     assert "booking_id" not in s0
+
+
+@pytest.mark.asyncio
+async def test_schedule_get_schedule_grid_zamok_hourly_when_primary(
+    app_use_test_db,
+    db_session,
+) -> None:
+    """Primary arena ТЦ Замок → GET /schedule exposes hourly :10 grid from arena_schedule_presets."""
+    r = await db_session.execute(text("SELECT id FROM arenas WHERE name = 'ТЦ Замок' LIMIT 1"))
+    row = r.fetchone()
+    if row is None:
+        pytest.skip("need arena ТЦ Замок in DB")
+    zamok_id = int(row[0])
+    reg = await db_session.execute(text("SELECT to_regclass('public.arena_schedule_presets')"))
+    if reg.scalar() is None:
+        pytest.skip("need alembic migration 0095 (table arena_schedule_presets)")
+    col = await db_session.execute(
+        text(
+            """
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema = 'public' AND table_name = 'arena_schedule_presets'
+              AND column_name = 'slot_duration_minutes'
+            """
+        )
+    )
+    if col.fetchone() is None:
+        pytest.skip("need alembic migration 0096 (slot_duration_minutes on arena_schedule_presets)")
+    pr = await db_session.execute(
+        text("SELECT 1 FROM arena_schedule_presets WHERE arena_id = :aid"),
+        {"aid": zamok_id},
+    )
+    if pr.fetchone() is None:
+        pytest.skip("need row in arena_schedule_presets for ТЦ Замок (migration 0095 or manual INSERT)")
+    await db_session.execute(
+        text(
+            """
+            UPDATE arena_schedule_presets
+            SET slot_duration_minutes = 45
+            WHERE arena_id = :aid AND slot_duration_minutes IS NULL
+            """
+        ),
+        {"aid": zamok_id},
+    )
+    await db_session.commit()
+    tg = _fresh_trainer_telegram_id()
+    trainer_id = await _create_active_trainer(db_session, tg, with_crm=False)
+    await db_session.execute(
+        text("INSERT INTO trainer_arenas (trainer_id, arena_id) VALUES (:tid, :aid)"),
+        {"tid": trainer_id, "aid": zamok_id},
+    )
+    await db_session.execute(
+        text("UPDATE trainers SET primary_arena_id = :aid WHERE id = :tid"),
+        {"aid": zamok_id, "tid": trainer_id},
+    )
+    await db_session.commit()
+
+    with patch_trainer_webapp_init(tg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.get(
+                "/api/webapp/schedule?from_date=2099-01-01&to_date=2099-01-02",
+                headers={"X-Telegram-Init-Data": "mock"},
+            )
+    assert resp.status_code == 200
+    sg = resp.json().get("schedule_grid") or {}
+    assert sg.get("kind") == "hourly_minute"
+    assert int(sg.get("minute_offset", -1)) == 10
+    assert sg.get("slot_duration_minutes") == 45
 
 
 @pytest.mark.asyncio
@@ -300,6 +373,83 @@ async def test_schedule_get_init_data_query_param_equivalent_to_header(
 
 
 @pytest.mark.asyncio
+async def test_put_templates_day_with_minute_offset(
+    app_use_test_db,
+    db_session,
+) -> None:
+    """Template slots can start at non-whole hours (minute field)."""
+    tg = _fresh_trainer_telegram_id()
+    trainer_id = await _create_active_trainer(db_session, tg, with_crm=True)
+
+    with patch_trainer_webapp_init(tg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            put = await client.put(
+                "/api/webapp/schedule/templates/day",
+                headers={"X-Telegram-Init-Data": "mock", "Content-Type": "application/json"},
+                json={
+                    "day_of_week": 4,
+                    "duration_minutes": 90,
+                    "slots": [
+                        {"hour": 9, "minute": 30, "capacity": 1},
+                        {"hour": 11, "minute": 0, "capacity": 1},
+                    ],
+                },
+            )
+            assert put.status_code == 200
+
+    r = await db_session.execute(
+        text(
+            """
+            SELECT EXTRACT(HOUR FROM start_time)::int, EXTRACT(MINUTE FROM start_time)::int, duration_minutes
+            FROM trainer_schedule_templates
+            WHERE trainer_id = :tid AND day_of_week = 4
+            ORDER BY start_time
+            """
+        ),
+        {"tid": trainer_id},
+    )
+    rows = r.fetchall()
+    assert len(rows) == 2
+    assert (int(rows[0][0]), int(rows[0][1]), int(rows[0][2])) == (9, 30, 90)
+    assert (int(rows[1][0]), int(rows[1][1]), int(rows[1][2])) == (11, 0, 90)
+
+
+@pytest.mark.asyncio
+async def test_post_schedule_slots_with_start_times_strings(
+    app_use_test_db,
+    db_session,
+) -> None:
+    """POST /schedule/slots accepts start_times HH:MM."""
+    tg = _fresh_trainer_telegram_id()
+    trainer_id = await _create_active_trainer(db_session, tg, with_crm=True)
+    d = date.today() + timedelta(days=40)
+
+    with patch_trainer_webapp_init(tg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post(
+                "/api/webapp/schedule/slots",
+                headers={"X-Telegram-Init-Data": "mock", "Content-Type": "application/json"},
+                json={
+                    "slot_date": d.isoformat(),
+                    "start_times": ["10:10", "11:45"],
+                    "duration_minutes": 70,
+                },
+            )
+    assert resp.status_code == 200
+
+    r = await db_session.execute(
+        text(
+            "SELECT start_time, end_time FROM slots WHERE trainer_id = :tid AND slot_date = :d ORDER BY start_time"
+        ),
+        {"tid": trainer_id, "d": d},
+    )
+    rows = r.fetchall()
+    assert len(rows) == 2
+    assert rows[0][0] == time(10, 10)
+    assert rows[1][0] == time(11, 45)
+
+
+@pytest.mark.asyncio
 async def test_schedule_templates_get_empty_then_put_day(
     app_use_test_db,
     db_session,
@@ -315,6 +465,9 @@ async def test_schedule_templates_get_empty_then_put_day(
             )
             assert g0.status_code == 200
             assert g0.json().get("templates") == []
+            sg0 = g0.json().get("schedule_grid") or {}
+            assert sg0.get("kind") == "quarter_15"
+            assert sg0.get("slot_duration_minutes") is None
 
             put = await client.put(
                 "/api/webapp/schedule/templates/day",
@@ -1066,3 +1219,370 @@ async def test_schedule_and_booking_detail_include_completed_past_booking(
     assert body.get("id") == booking_id
     assert body.get("status") == "completed"
     assert body.get("client_id") == client_id
+
+
+@pytest.mark.asyncio
+async def test_trainer_booking_quick_creates_slot_and_booking(
+    app_use_test_db,
+    db_session,
+) -> None:
+    """POST /trainer/booking/quick creates individual slot + booking when CRM active."""
+    from tests.conftest import belarus_test_phone, unique_test_telegram_id
+    from tests.db_catalog_helpers import require_seed_arena_city_name, require_seed_service_id
+
+    d0 = date.today() + timedelta(days=10)
+    arena_id, city_id, _ = await require_seed_arena_city_name(db_session)
+    service_id = await require_seed_service_id(db_session)
+    tg = _fresh_trainer_telegram_id()
+    trainer_id = await _create_active_trainer(db_session, tg, with_crm=True)
+    await db_session.execute(
+        text("UPDATE trainer_profiles SET city_id = :cid WHERE trainer_id = :tid"),
+        {"cid": city_id, "tid": trainer_id},
+    )
+    await db_session.execute(
+        text(
+            "INSERT INTO trainer_services (trainer_id, service_id, price_cents) VALUES (:tid, :sid, 5000)"
+        ),
+        {"tid": trainer_id, "sid": service_id},
+    )
+    await db_session.execute(
+        text("INSERT INTO trainer_arenas (trainer_id, arena_id) VALUES (:tid, :aid)"),
+        {"tid": trainer_id, "aid": arena_id},
+    )
+    await db_session.execute(
+        text("UPDATE trainers SET primary_arena_id = :aid WHERE id = :tid"),
+        {"aid": arena_id, "tid": trainer_id},
+    )
+    ctg = unique_test_telegram_id()
+    phone, phone_n = belarus_test_phone(ctg)
+    r = await db_session.execute(
+        text(
+            """
+            INSERT INTO clients (telegram_id, first_name, last_name, phone, phone_normalized)
+            VALUES (:tg, 'Quick', 'Book', :phone, :pn)
+            RETURNING id
+            """
+        ),
+        {"tg": ctg, "phone": phone, "pn": phone_n},
+    )
+    (client_id,) = r.fetchone()
+    await db_session.commit()
+
+    with patch_trainer_webapp_init(tg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post(
+                "/api/webapp/trainer/booking/quick",
+                headers={"X-Telegram-Init-Data": "mock"},
+                json={
+                    "slot_date": d0.isoformat(),
+                    "start_hour": 14,
+                    "duration_minutes": 60,
+                    "client_id": client_id,
+                    "service_id": service_id,
+                },
+            )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data.get("success") is True
+    booking_id = data.get("booking_id")
+    slot_id = data.get("slot_id")
+    assert booking_id and slot_id
+
+    r2 = await db_session.execute(
+        text("SELECT slot_id FROM bookings WHERE id = :id"),
+        {"id": booking_id},
+    )
+    row = r2.fetchone()
+    assert row is not None
+    assert int(row[0]) == int(slot_id)
+
+
+@pytest.mark.asyncio
+async def test_trainer_booking_quick_400_when_time_occupied(
+    app_use_test_db,
+    db_session,
+) -> None:
+    from tests.conftest import belarus_test_phone, unique_test_telegram_id
+    from tests.db_catalog_helpers import require_seed_arena_city_name, require_seed_service_id
+
+    d0 = date.today() + timedelta(days=11)
+    arena_id, city_id, _ = await require_seed_arena_city_name(db_session)
+    service_id = await require_seed_service_id(db_session)
+    tg = _fresh_trainer_telegram_id()
+    trainer_id = await _create_active_trainer(db_session, tg, with_crm=True)
+    await db_session.execute(
+        text("UPDATE trainer_profiles SET city_id = :cid WHERE trainer_id = :tid"),
+        {"cid": city_id, "tid": trainer_id},
+    )
+    await db_session.execute(
+        text(
+            "INSERT INTO trainer_services (trainer_id, service_id, price_cents) VALUES (:tid, :sid, 5000)"
+        ),
+        {"tid": trainer_id, "sid": service_id},
+    )
+    await db_session.execute(
+        text("INSERT INTO trainer_arenas (trainer_id, arena_id) VALUES (:tid, :aid)"),
+        {"tid": trainer_id, "aid": arena_id},
+    )
+    await db_session.execute(
+        text("UPDATE trainers SET primary_arena_id = :aid WHERE id = :tid"),
+        {"aid": arena_id, "tid": trainer_id},
+    )
+    slot_id = await _insert_slot(db_session, trainer_id, d0, 15, 16, "available")
+    ctg_a = unique_test_telegram_id()
+    phone_a, phone_n_a = belarus_test_phone(ctg_a)
+    r = await db_session.execute(
+        text(
+            """
+            INSERT INTO clients (telegram_id, first_name, last_name, phone, phone_normalized)
+            VALUES (:tg, 'A', 'One', :phone, :pn)
+            RETURNING id
+            """
+        ),
+        {"tg": ctg_a, "phone": phone_a, "pn": phone_n_a},
+    )
+    (client_a,) = r.fetchone()
+    await db_session.execute(
+        text(
+            """
+            INSERT INTO bookings (slot_id, trainer_id, client_id, service_id, status)
+            VALUES (:sid, :tid, :cid, :svc, 'confirmed')
+            """
+        ),
+        {"sid": slot_id, "tid": trainer_id, "cid": client_a, "svc": service_id},
+    )
+    ctg_b = unique_test_telegram_id()
+    phone_b, phone_n_b = belarus_test_phone(ctg_b)
+    r = await db_session.execute(
+        text(
+            """
+            INSERT INTO clients (telegram_id, first_name, last_name, phone, phone_normalized)
+            VALUES (:tg, 'B', 'Two', :phone, :pn)
+            RETURNING id
+            """
+        ),
+        {"tg": ctg_b, "phone": phone_b, "pn": phone_n_b},
+    )
+    (client_b,) = r.fetchone()
+    await db_session.commit()
+
+    with patch_trainer_webapp_init(tg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post(
+                "/api/webapp/trainer/booking/quick",
+                headers={"X-Telegram-Init-Data": "mock"},
+                json={
+                    "slot_date": d0.isoformat(),
+                    "start_hour": 15,
+                    "duration_minutes": 60,
+                    "client_id": client_b,
+                    "service_id": service_id,
+                },
+            )
+    assert resp.status_code == 400
+    assert "занят" in (resp.json().get("detail") or "").lower()
+
+
+@pytest.mark.asyncio
+async def test_trainer_booking_quick_400_overlap_empty_slot(
+    app_use_test_db,
+    db_session,
+) -> None:
+    """Quick book interval must not overlap an existing slot (15:15 vs 15:00–16:00)."""
+    from tests.conftest import belarus_test_phone, unique_test_telegram_id
+    from tests.db_catalog_helpers import require_seed_arena_city_name, require_seed_service_id
+
+    d0 = date.today() + timedelta(days=14)
+    arena_id, city_id, _ = await require_seed_arena_city_name(db_session)
+    service_id = await require_seed_service_id(db_session)
+    tg = _fresh_trainer_telegram_id()
+    trainer_id = await _create_active_trainer(db_session, tg, with_crm=True)
+    await db_session.execute(
+        text("UPDATE trainer_profiles SET city_id = :cid WHERE trainer_id = :tid"),
+        {"cid": city_id, "tid": trainer_id},
+    )
+    await db_session.execute(
+        text(
+            "INSERT INTO trainer_services (trainer_id, service_id, price_cents) VALUES (:tid, :sid, 5000)"
+        ),
+        {"tid": trainer_id, "sid": service_id},
+    )
+    await db_session.execute(
+        text("INSERT INTO trainer_arenas (trainer_id, arena_id) VALUES (:tid, :aid)"),
+        {"tid": trainer_id, "aid": arena_id},
+    )
+    await db_session.execute(
+        text("UPDATE trainers SET primary_arena_id = :aid WHERE id = :tid"),
+        {"aid": arena_id, "tid": trainer_id},
+    )
+    await _insert_slot(db_session, trainer_id, d0, 15, 16, "available")
+    ctg = unique_test_telegram_id()
+    phone, phone_n = belarus_test_phone(ctg)
+    r = await db_session.execute(
+        text(
+            """
+            INSERT INTO clients (telegram_id, first_name, last_name, phone, phone_normalized)
+            VALUES (:tg, 'O', 'vl', :phone, :pn)
+            RETURNING id
+            """
+        ),
+        {"tg": ctg, "phone": phone, "pn": phone_n},
+    )
+    (client_id,) = r.fetchone()
+    await db_session.commit()
+
+    with patch_trainer_webapp_init(tg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post(
+                "/api/webapp/trainer/booking/quick",
+                headers={"X-Telegram-Init-Data": "mock"},
+                json={
+                    "slot_date": d0.isoformat(),
+                    "start_time": "15:15",
+                    "duration_minutes": 60,
+                    "client_id": client_id,
+                    "service_id": service_id,
+                },
+            )
+    assert resp.status_code == 400
+    assert "пересеч" in (resp.json().get("detail") or "").lower()
+
+
+@pytest.mark.asyncio
+async def test_trainer_booking_quick_400_group_slot_at_hour(
+    app_use_test_db,
+    db_session,
+) -> None:
+    from tests.conftest import belarus_test_phone, unique_test_telegram_id
+    from tests.db_catalog_helpers import require_seed_arena_city_name, require_seed_service_id
+
+    d0 = date.today() + timedelta(days=12)
+    arena_id, city_id, _ = await require_seed_arena_city_name(db_session)
+    service_id = await require_seed_service_id(db_session)
+    tg = _fresh_trainer_telegram_id()
+    trainer_id = await _create_active_trainer(db_session, tg, with_crm=True)
+    await db_session.execute(
+        text("UPDATE trainer_profiles SET city_id = :cid WHERE trainer_id = :tid"),
+        {"cid": city_id, "tid": trainer_id},
+    )
+    await db_session.execute(
+        text(
+            "INSERT INTO trainer_services (trainer_id, service_id, price_cents) VALUES (:tid, :sid, 5000)"
+        ),
+        {"tid": trainer_id, "sid": service_id},
+    )
+    await db_session.execute(
+        text("INSERT INTO trainer_arenas (trainer_id, arena_id) VALUES (:tid, :aid)"),
+        {"tid": trainer_id, "aid": arena_id},
+    )
+    await db_session.execute(
+        text("UPDATE trainers SET primary_arena_id = :aid WHERE id = :tid"),
+        {"aid": arena_id, "tid": trainer_id},
+    )
+    await db_session.execute(
+        text(
+            """
+            INSERT INTO slots (trainer_id, slot_date, start_time, end_time, status, capacity, service_id)
+            VALUES (:tid, :d, :st, :et, 'available', 2, :svc)
+            """
+        ),
+        {
+            "tid": trainer_id,
+            "d": d0,
+            "st": time(16, 0),
+            "et": time(17, 0),
+            "svc": service_id,
+        },
+    )
+    ctg = unique_test_telegram_id()
+    phone, phone_n = belarus_test_phone(ctg)
+    r = await db_session.execute(
+        text(
+            """
+            INSERT INTO clients (telegram_id, first_name, last_name, phone, phone_normalized)
+            VALUES (:tg, 'G', 'rp', :phone, :pn)
+            RETURNING id
+            """
+        ),
+        {"tg": ctg, "phone": phone, "pn": phone_n},
+    )
+    (client_id,) = r.fetchone()
+    await db_session.commit()
+
+    with patch_trainer_webapp_init(tg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post(
+                "/api/webapp/trainer/booking/quick",
+                headers={"X-Telegram-Init-Data": "mock"},
+                json={
+                    "slot_date": d0.isoformat(),
+                    "start_hour": 16,
+                    "duration_minutes": 60,
+                    "client_id": client_id,
+                    "service_id": service_id,
+                },
+            )
+    assert resp.status_code == 400
+    assert "группов" in (resp.json().get("detail") or "").lower()
+
+
+@pytest.mark.asyncio
+async def test_trainer_booking_quick_403_without_crm(
+    app_use_test_db,
+    db_session,
+) -> None:
+    from tests.conftest import belarus_test_phone, unique_test_telegram_id
+    from tests.db_catalog_helpers import require_seed_arena_city_name, require_seed_service_id
+
+    d0 = date.today() + timedelta(days=13)
+    arena_id, city_id, _ = await require_seed_arena_city_name(db_session)
+    service_id = await require_seed_service_id(db_session)
+    tg = _fresh_trainer_telegram_id()
+    trainer_id = await _create_active_trainer(db_session, tg, with_crm=False)
+    await db_session.execute(
+        text("UPDATE trainer_profiles SET city_id = :cid WHERE trainer_id = :tid"),
+        {"cid": city_id, "tid": trainer_id},
+    )
+    await db_session.execute(
+        text(
+            "INSERT INTO trainer_services (trainer_id, service_id, price_cents) VALUES (:tid, :sid, 5000)"
+        ),
+        {"tid": trainer_id, "sid": service_id},
+    )
+    await db_session.execute(
+        text("INSERT INTO trainer_arenas (trainer_id, arena_id) VALUES (:tid, :aid)"),
+        {"tid": trainer_id, "aid": arena_id},
+    )
+    await db_session.execute(
+        text("UPDATE trainers SET primary_arena_id = :aid WHERE id = :tid"),
+        {"aid": arena_id, "tid": trainer_id},
+    )
+    ctg = unique_test_telegram_id()
+    phone, phone_n = belarus_test_phone(ctg)
+    r = await db_session.execute(
+        text(
+            """
+            INSERT INTO clients (telegram_id, first_name, last_name, phone, phone_normalized)
+            VALUES (:tg, 'No', 'Crm', :phone, :pn)
+            RETURNING id
+            """
+        ),
+        {"tg": ctg, "phone": phone, "pn": phone_n},
+    )
+    (client_id,) = r.fetchone()
+    await db_session.commit()
+
+    with patch_trainer_webapp_init(tg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post(
+                "/api/webapp/trainer/booking/quick",
+                headers={"X-Telegram-Init-Data": "mock"},
+                json={
+                    "slot_date": d0.isoformat(),
+                    "start_hour": 11,
+                    "duration_minutes": 60,
+                    "client_id": client_id,
+                    "service_id": service_id,
+                },
+            )
+    assert resp.status_code == 403

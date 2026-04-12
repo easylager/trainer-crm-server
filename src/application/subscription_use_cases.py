@@ -2,6 +2,7 @@
 Trainer platform subscription: trial, paid plans, active check.
 Single source for trainer_has_active_subscription used by catalog and payment flows.
 """
+import json
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import text
@@ -19,8 +20,11 @@ from src.infrastructure.db.models import (
     SUBSCRIPTION_STATUS_ACTIVE,
     SUBSCRIPTION_STATUS_PAST_DUE,
     SUBSCRIPTION_STATUS_TRIAL,
-    SUBSCRIPTION_TIER_ANALYTICS,
+    SUBSCRIPTION_TIER_CRM,
 )
+
+# Welcome / trial: full product access — CRM base + all paid modules (incl. cohorts).
+_TRIAL_MODULES_JSON = json.dumps({"online": True, "analytics": True, "groups": True}, ensure_ascii=False)
 
 
 async def trainer_has_active_subscription(session: AsyncSession, trainer_id: int) -> bool:
@@ -141,14 +145,16 @@ async def create_trial_subscription(session: AsyncSession, trainer_id: int) -> d
     expires_at = now + timedelta(days=period_days)
     r = await session.execute(
         text("""
-            INSERT INTO trainer_subscriptions (trainer_id, plan_id, tier, started_at, expires_at, status)
-            VALUES (:tid, :pid, :tier, :started_at, :expires_at, :status)
+            INSERT INTO trainer_subscriptions
+                (trainer_id, plan_id, tier, modules, started_at, expires_at, status)
+            VALUES (:tid, :pid, :tier, CAST(:mods AS jsonb), :started_at, :expires_at, :status)
             RETURNING id, started_at, expires_at
         """),
         {
             "tid": trainer_id,
             "pid": plan_id,
-            "tier": SUBSCRIPTION_TIER_ANALYTICS,
+            "tier": SUBSCRIPTION_TIER_CRM,
+            "mods": _TRIAL_MODULES_JSON,
             "started_at": started_at,
             "expires_at": expires_at,
             "status": SUBSCRIPTION_STATUS_TRIAL,
@@ -168,7 +174,9 @@ async def create_trial_subscription(session: AsyncSession, trainer_id: int) -> d
 
 async def ensure_trainer_welcome_trial(session: AsyncSession, trainer_id: int) -> None:
     """
-    After first Telegram link: create max-tier trial if missing, or backfill tier on legacy trial rows.
+    After first Telegram link: create trial with full modules if missing.
+
+    If trial already exists, normalize row(s): canonical CRM tier + all modules (online, analytics, groups).
     """
     created = await create_trial_subscription(session, trainer_id)
     if created is not None:
@@ -177,18 +185,18 @@ async def ensure_trainer_welcome_trial(session: AsyncSession, trainer_id: int) -
     await session.execute(
         text("""
             UPDATE trainer_subscriptions AS ts
-            SET tier = :tier
+            SET tier = :tier, modules = CAST(:mods AS jsonb)
             FROM subscription_plans sp
             WHERE ts.trainer_id = :tid
               AND ts.plan_id = sp.id
               AND sp.is_trial = true
-              AND ts.tier IS NULL
               AND ts.status IN (:s1, :s2)
               AND ts.expires_at > :now
         """),
         {
             "tid": trainer_id,
-            "tier": SUBSCRIPTION_TIER_ANALYTICS,
+            "tier": SUBSCRIPTION_TIER_CRM,
+            "mods": _TRIAL_MODULES_JSON,
             "s1": SUBSCRIPTION_STATUS_TRIAL,
             "s2": SUBSCRIPTION_STATUS_ACTIVE,
             "now": now,

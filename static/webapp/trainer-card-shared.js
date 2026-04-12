@@ -29,9 +29,16 @@
     }
     return '<ul class="' + listClass + '">' + services.map(function(s) {
       var selected = selectedServiceId != null && Number(s.service_id) === Number(selectedServiceId);
+      var desc = '';
+      if (selectedServiceId != null && Number(s.service_id) === Number(selectedServiceId)) {
+        desc = (s.description && String(s.description).trim()) ? String(s.description).trim() : '';
+      }
       return '<li class="' + itemClass + (selected ? (' ' + selectedClass) : '') + '">' +
+        '<div class="trainer-service-item-row">' +
         '<span class="name service-name">' + escapeHtml(s.service_name || '—') + '</span>' +
         '<span class="value service-price">' + escapeHtml(formatPriceByn(s.price_byn)) + '</span>' +
+        '</div>' +
+        (desc ? '<div class="trainer-service-item-desc">' + escapeHtml(desc).replace(/\n/g, '<br>') + '</div>' : '') +
       '</li>';
     }).join('') + '</ul>';
   }

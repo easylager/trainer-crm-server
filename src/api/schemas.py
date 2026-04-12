@@ -25,7 +25,9 @@ TrainerStatus = Literal[
 LEN_FIRST_LAST = 64
 LEN_PHONE = PHONE_MAX_LEN
 LEN_DESCRIPTION = 5000
+LEN_TRAINER_SERVICE_DESCRIPTION = 800
 LEN_FILE_KEY = 512
+MAX_EDUCATION_DOCUMENT_PHOTOS = 12
 
 TRAINER_EDUCATION_OPTIONS = (
     "Среднее специальное",
@@ -91,6 +93,21 @@ class TrainerServiceItem(BaseModel):
         default=None,
         description="Up to five fixed tariffs per service (checkboxes in trainer profile).",
     )
+    description: str | None = Field(
+        default=None,
+        max_length=LEN_TRAINER_SERVICE_DESCRIPTION,
+        description="Optional short text shown to clients for this trainer's offering of the service.",
+    )
+
+    @field_validator("description", mode="before")
+    @classmethod
+    def _strip_service_description(cls, v: object) -> str | None:
+        if v is None:
+            return None
+        if not isinstance(v, str):
+            raise ValueError("Описание услуги: строка или пусто.")
+        s = v.strip()
+        return s if s else None
 
     @model_validator(mode="after")
     def _tiers_or_legacy_price(self) -> TrainerServiceItem:
@@ -259,6 +276,47 @@ class TrainerTermsCreateBody(BaseModel):
 TrainerEducationType = Literal["formal_education", "course_or_certificate"]
 
 
+class TrainerEducationDocumentPhotoItem(BaseModel):
+    """One uploaded education proof image in trainer storage namespace."""
+
+    file_key: str = Field(..., min_length=1, max_length=LEN_FILE_KEY)
+    file_key_list: str | None = Field(default=None, max_length=LEN_FILE_KEY)
+
+    @field_validator("file_key")
+    @classmethod
+    def _normalize_file_key(cls, v: object) -> str:
+        if not isinstance(v, str):
+            raise ValueError("Некорректный ключ файла документа.")
+        s = v.strip()
+        if not s:
+            raise ValueError("Ключ файла документа не может быть пустым.")
+        return s
+
+    @field_validator("file_key_list")
+    @classmethod
+    def _normalize_file_key_list(cls, v: object) -> str | None:
+        if v is None:
+            return None
+        if not isinstance(v, str):
+            raise ValueError("Некорректный ключ миниатюры документа.")
+        s = v.strip()
+        return s or None
+
+
+def _validate_document_photos_unique(
+    photos: list[TrainerEducationDocumentPhotoItem] | None,
+) -> None:
+    if photos is None:
+        return
+    if len(photos) > MAX_EDUCATION_DOCUMENT_PHOTOS:
+        raise ValueError(f"Не более {MAX_EDUCATION_DOCUMENT_PHOTOS} фото документов.")
+    seen: set[str] = set()
+    for item in photos:
+        if item.file_key in seen:
+            raise ValueError("Один и тот же документ добавлен несколько раз.")
+        seen.add(item.file_key)
+
+
 class TrainerEducationCreateBody(BaseModel):
     education_type: TrainerEducationType
     institution_name: str = Field(..., min_length=2, max_length=160)
@@ -270,6 +328,12 @@ class TrainerEducationCreateBody(BaseModel):
     end_year: int | None = Field(default=None, ge=1950, le=2100)
     is_in_progress: bool = False
     document_url: str | None = Field(default=None, max_length=512)
+    document_photos: list[TrainerEducationDocumentPhotoItem] | None = Field(default=None)
+
+    @model_validator(mode="after")
+    def _document_photos_unique(self) -> "TrainerEducationCreateBody":
+        _validate_document_photos_unique(self.document_photos)
+        return self
 
 
 class TrainerEducationPatchBody(BaseModel):
@@ -283,5 +347,11 @@ class TrainerEducationPatchBody(BaseModel):
     end_year: int | None = Field(default=None, ge=1950, le=2100)
     is_in_progress: bool | None = None
     document_url: str | None = Field(default=None, max_length=512)
+    document_photos: list[TrainerEducationDocumentPhotoItem] | None = Field(default=None)
+
+    @model_validator(mode="after")
+    def _document_photos_unique(self) -> "TrainerEducationPatchBody":
+        _validate_document_photos_unique(self.document_photos)
+        return self
 
 

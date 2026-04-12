@@ -11,55 +11,61 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet" />
+  <script>
+    (function () {
+      function isSubDark() {
+        var tg = window.Telegram && window.Telegram.WebApp;
+        if (tg && tg.colorScheme) return tg.colorScheme === 'dark';
+        return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+      }
+      function applySubscriptionTheme() {
+        var d = document.documentElement;
+        var dark = isSubDark();
+        d.classList.toggle('sub-root-dark', dark);
+        d.style.setProperty('--tg-theme-button-color', '#f5a623', 'important');
+        d.style.setProperty('--tg-theme-button-text-color', '#1a1a1a', 'important');
+        d.style.setProperty('--tg-theme-bg-color', dark ? '#1c1c1c' : '#fffbec', 'important');
+        d.style.setProperty('--tg-theme-text-color', dark ? '#ffffff' : '#1a1a1a', 'important');
+        d.style.setProperty('--tg-theme-secondary-bg-color', dark ? '#2c2c2e' : '#fff5e1', 'important');
+        d.style.setProperty('--tg-theme-hint-color', dark ? '#8e8e93' : '#666666', 'important');
+      }
+      applySubscriptionTheme();
+      if (window.matchMedia) {
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applySubscriptionTheme);
+      }
+      document.addEventListener('DOMContentLoaded', applySubscriptionTheme);
+      window.__applySubscriptionTheme = applySubscriptionTheme;
+    })();
+  </script>
   <style>
-    /* Shell: theme.css + mini-app-components.css */
-    /* Page palette (dark): navy canvas, bronze frames, blue price accent — scoped to this screen */
-    html {
-      height: 100%;
-      overflow-x: hidden;
-    }
+    /* Subscription: theme.css tokens + local layout only (constitution). */
+    html { height: 100%; overflow-x: hidden; }
     body.subscription-page {
       margin: 0;
       font-family: var(--app-font-sans);
-      background: var(--tg-theme-bg-color);
+      background:
+        radial-gradient(ellipse 120% 80% at 50% -20%, rgba(245, 166, 35, 0.12) 0%, transparent 55%),
+        var(--tg-theme-bg-color);
       color: var(--tg-theme-text-color);
       min-height: 100%;
       min-height: 100dvh;
       padding: 12px;
-      /* Fixed bottom bar — scroll room for last card */
       padding-bottom: calc(env(safe-area-inset-bottom, 12px) + 220px);
       -webkit-font-smoothing: antialiased;
-      
-      /* Light theme defaults */
-      --tg-theme-bg-color: #FFFBEB;
-      --tg-theme-text-color: #1a1a1a;
-      --tg-theme-hint-color: #666666;
-      --tg-theme-secondary-bg-color: #fff5e1;
-      --sub-border-bronze: rgba(247, 166, 0, 0.25);
-      --sub-border-bronze-strong: rgba(247, 166, 0, 0.45);
-      --sub-price-accent: #F7A600;
-      --sub-hero-glow: rgba(247, 166, 0, 0.12);
-      --sub-bottom-tint: #FFFBEB;
-      --sub-btn-disabled-bg: #fff5e1;
-      --sub-btn-disabled-fg: #666666;
     }
-    body.subscription-page.sub-theme-dark {
-      --tg-theme-bg-color: #1a1a1a;
-      --tg-theme-text-color: #f5f5f5;
-      --tg-theme-hint-color: #8e8e93;
-      --tg-theme-secondary-bg-color: #2a2a2a;
-      --sub-border-bronze: rgba(247, 166, 0, 0.25);
-      --sub-border-bronze-strong: rgba(247, 166, 0, 0.45);
-      --sub-price-accent: #F7A600;
-      --sub-hero-glow: rgba(247, 166, 0, 0.12);
-      --sub-bottom-tint: #1a1a1a;
-      --sub-btn-disabled-bg: #2a2a2a;
-      --sub-btn-disabled-fg: #8e8e93;
+    html.sub-root-dark body.subscription-page {
+      background:
+        radial-gradient(ellipse 100% 60% at 50% 0%, rgba(245, 166, 35, 0.08) 0%, transparent 50%),
+        var(--tg-theme-bg-color);
     }
 
-    .sub-head {
-      font-family: var(--app-font-sans);
+    .sub-shell {
+      max-width: 480px;
+      margin: 0 auto;
+      width: 100%;
     }
+
+    .sub-head { font-family: var(--app-font-sans); }
 
     /* Screens */
     .screen { display: none; animation: subFadeIn 0.38s cubic-bezier(0.22, 1, 0.36, 1) both; }
@@ -81,7 +87,7 @@
       border: 1px solid rgba(247, 166, 0, 0.28);
       box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
     }
-    body.subscription-page.sub-theme-dark .sub-hero {
+    html.sub-root-dark .sub-hero {
       background: linear-gradient(155deg, rgba(20, 22, 26, 0.98) 0%, rgba(12, 14, 18, 0.99) 55%, #0a0c10 100%);
       border: 1px solid var(--sub-border-bronze, rgba(77, 64, 48, 0.55));
       box-shadow: 0 10px 40px rgba(0, 0, 0, 0.45);
@@ -96,7 +102,7 @@
       background: radial-gradient(ellipse, rgba(247, 166, 0, 0.22) 0%, transparent 70%);
       pointer-events: none;
     }
-    body.subscription-page.sub-theme-dark .sub-hero::before {
+    html.sub-root-dark .sub-hero::before {
       background: radial-gradient(ellipse, var(--sub-hero-glow, rgba(247, 166, 0, 0.12)) 0%, transparent 72%);
     }
     .sub-hero-inner { position: relative; z-index: 1; }
@@ -133,15 +139,16 @@
       .sub-hero { box-shadow: 0 8px 36px rgba(0, 0, 0, 0.45); }
     }
 
-    /* Period selector */
+    /* Period selector — segmented control (constitution radii) */
     .period-selector {
       display: flex;
       gap: 4px;
-      margin-bottom: 20px;
+      margin-bottom: 24px;
       padding: 4px;
       background: var(--tg-theme-secondary-bg-color);
-      border-radius: 12px;
+      border-radius: var(--app-radius-md);
       position: relative;
+      border: 1px solid rgba(128, 128, 128, 0.1);
     }
 
     .period-option {
@@ -149,21 +156,26 @@
       padding: 10px 8px;
       border: none;
       border-radius: 10px;
-      font-size: 14px;
+      font-size: 13px;
       font-weight: 600;
       background: transparent;
       color: var(--tg-theme-hint-color);
       cursor: pointer;
-      transition: all 0.2s ease;
+      transition: background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
       position: relative;
       text-align: center;
       font-family: inherit;
+    }
+    .period-option:focus-visible {
+      outline: 2px solid var(--tg-theme-button-color);
+      outline-offset: 2px;
+      z-index: 1;
     }
 
     .period-option.active {
       background: var(--tg-theme-bg-color);
       color: var(--tg-theme-text-color);
-      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      box-shadow: var(--app-btn-shadow-surface);
     }
 
     .period-option .discount {
@@ -206,7 +218,7 @@
       background: linear-gradient(135deg, rgba(247, 166, 0, 0.14) 0%, rgba(247, 166, 0, 0.04) 100%);
       box-shadow: 0 4px 18px rgba(0, 0, 0, 0.06);
     }
-    body.subscription-page.sub-theme-dark .trial-strip {
+    html.sub-root-dark .trial-strip {
       border-color: var(--sub-border-bronze, rgba(77, 64, 48, 0.55));
       background: linear-gradient(145deg, rgba(247, 166, 0, 0.1) 0%, rgba(20, 22, 26, 0.92) 100%);
       box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
@@ -246,7 +258,7 @@
       border: 1px solid rgba(128, 128, 128, 0.14);
       box-shadow: 0 1px 0 rgba(0, 0, 0, 0.04);
     }
-    body.subscription-page.sub-theme-dark .status-badge {
+    html.sub-root-dark .status-badge {
       background: rgba(28, 38, 32, 0.95);
       border-color: rgba(52, 199, 89, 0.22);
       color: var(--tg-theme-hint-color);
@@ -256,7 +268,7 @@
       color: var(--app-success, #34c759);
       border-color: rgba(52, 199, 89, 0.35);
     }
-    body.subscription-page.sub-theme-dark .status-badge.active {
+    html.sub-root-dark .status-badge.active {
       background: rgba(22, 101, 52, 0.55);
       color: #6ee7b7;
       border-color: rgba(52, 199, 89, 0.4);
@@ -291,10 +303,10 @@
       -webkit-tap-highlight-color: transparent;
       box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
     }
-    body.subscription-page.sub-theme-dark .tier-card {
-      background: #2a2a2a;
+    html.sub-root-dark .tier-card {
+      background: var(--tg-theme-secondary-bg-color);
       border-width: 1px;
-      border-color: var(--sub-border-bronze, rgba(247, 166, 0, 0.25));
+      border-color: rgba(245, 166, 35, 0.18);
       box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
     }
     @media (prefers-color-scheme: dark) {
@@ -303,7 +315,7 @@
     .tier-card:hover {
       border-color: rgba(247, 166, 0, 0.2);
     }
-    body.subscription-page.sub-theme-dark .tier-card:hover {
+    html.sub-root-dark .tier-card:hover {
       border-color: var(--sub-border-bronze-strong, rgba(120, 98, 72, 0.65));
     }
     .tier-card:active { transform: scale(0.985); }
@@ -311,15 +323,15 @@
       border-color: rgba(247, 166, 0, 0.55);
       box-shadow: 0 6px 28px rgba(247, 166, 0, 0.22), 0 1px 0 rgba(0, 0, 0, 0.04);
     }
-    body.subscription-page.sub-theme-dark .tier-card.selected {
+    html.sub-root-dark .tier-card.selected {
       border-color: var(--sub-border-bronze-strong, rgba(120, 98, 72, 0.65));
       box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(247, 166, 0, 0.12);
     }
     .tier-card.current {
       background: linear-gradient(160deg, rgba(247, 166, 0, 0.12) 0%, var(--tg-theme-secondary-bg-color) 55%);
     }
-    body.subscription-page.sub-theme-dark .tier-card.current {
-      background: linear-gradient(165deg, rgba(247, 166, 0, 0.08) 0%, #2a2a2a 50%);
+    html.sub-root-dark .tier-card.current {
+      background: linear-gradient(165deg, rgba(245, 166, 35, 0.1) 0%, var(--tg-theme-secondary-bg-color) 55%);
     }
 
     .badge-popular {
@@ -390,9 +402,6 @@
       letter-spacing: -0.03em;
       color: var(--tg-theme-button-color);
     }
-    body.subscription-page.sub-theme-dark .tier-price .amount {
-      color: var(--sub-price-accent, #F7A600);
-    }
     .tier-price .period {
       font-size: 12px;
       font-weight: 500;
@@ -436,7 +445,7 @@
       font-weight: 700;
       flex-shrink: 0;
     }
-    body.subscription-page.sub-theme-dark .tier-features li::before {
+    html.sub-root-dark .tier-features li::before {
       background: rgba(22, 101, 52, 0.85);
       color: #ffffff;
       border-radius: 6px;
@@ -459,6 +468,85 @@
       border-top: 1px dashed rgba(128, 128, 128, 0.25);
     }
 
+    .sub-section-kicker {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--tg-theme-hint-color);
+      margin: 0 0 10px;
+    }
+    .period-selector + .sub-section-kicker { margin-top: 0; }
+    .constructor-panel {
+      border-radius: 18px;
+      padding: 18px 16px 16px;
+      margin-bottom: 8px;
+      background: var(--tg-theme-secondary-bg-color);
+      border: 1px solid rgba(128, 128, 128, 0.14);
+      box-shadow: var(--app-btn-shadow-surface);
+    }
+    html.sub-root-dark .constructor-panel {
+      border-color: rgba(245, 166, 35, 0.22);
+    }
+    .constructor-base-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 12px;
+      margin-bottom: 12px;
+      padding-bottom: 10px;
+      border-bottom: 1px dashed rgba(128, 128, 128, 0.22);
+    }
+    .constructor-base-row .name { font-weight: 700; font-size: 15px; color: var(--tg-theme-text-color); }
+    .constructor-base-row .price { font-weight: 700; font-size: 16px; color: var(--tg-theme-button-color); }
+    .module-toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 10px 0;
+      border-bottom: 1px solid rgba(128, 128, 128, 0.12);
+    }
+    .module-toggle-row:last-child { border-bottom: none; }
+    .module-toggle-row label {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      cursor: pointer;
+      flex: 1;
+      min-width: 0;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--tg-theme-text-color);
+    }
+    .module-toggle-row input[type="checkbox"] {
+      width: 20px;
+      height: 20px;
+      margin-top: 2px;
+      accent-color: var(--tg-theme-button-color);
+    }
+    .module-toggle-row .mod-meta { text-align: right; flex-shrink: 0; }
+    .module-toggle-row .mod-price { font-weight: 700; font-size: 14px; color: var(--tg-theme-button-color); }
+    .constructor-total {
+      margin-top: 12px;
+      padding-top: 10px;
+      border-top: 1px dashed rgba(128, 128, 128, 0.25);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 15px;
+      font-weight: 700;
+    }
+    .constructor-total .sum { color: var(--tg-theme-button-color); }
+    .preset-hint {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--tg-theme-hint-color);
+      margin: 24px 0 12px;
+    }
+
     .selection-indicator {
       flex-shrink: 0;
       width: 24px;
@@ -469,7 +557,7 @@
       transition: border-color 0.18s ease, background 0.18s ease, transform 0.18s ease;
       box-sizing: border-box;
     }
-    body.subscription-page.sub-theme-dark .selection-indicator {
+    html.sub-root-dark .selection-indicator {
       border-color: rgba(160, 160, 160, 0.45);
       background: transparent;
     }
@@ -478,7 +566,7 @@
       background: linear-gradient(145deg, #ffc23d 0%, #f0a000 100%);
       box-shadow: 0 2px 8px rgba(247, 166, 0, 0.35);
     }
-    body.subscription-page.sub-theme-dark .tier-card.selected .selection-indicator {
+    html.sub-root-dark .tier-card.selected .selection-indicator {
       border-color: rgba(168, 140, 90, 0.95);
       background: linear-gradient(145deg, #c9a227 0%, #8b6914 100%);
       box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
@@ -508,10 +596,14 @@
       border-top: 1px solid rgba(128, 128, 128, 0.16);
       box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.12);
     }
-    body.subscription-page.sub-theme-dark .bottom-bar {
-      background: var(--sub-bottom-tint, #1a232e);
-      border-top-color: var(--sub-border-bronze, rgba(77, 64, 48, 0.45));
+    html.sub-root-dark .bottom-bar {
+      border-top-color: rgba(245, 166, 35, 0.15);
       box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.45);
+    }
+    .bottom-bar-inner {
+      max-width: 480px;
+      margin: 0 auto;
+      width: 100%;
     }
     @supports (backdrop-filter: blur(1px)) {
       .bottom-bar {
@@ -535,7 +627,13 @@
       font-family: var(--app-font-sans);
     }
     .summary-row .label { color: var(--tg-theme-hint-color); font-weight: 500; }
-    .summary-row .value { font-weight: 700; letter-spacing: -0.02em; }
+    .summary-row .value {
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      text-align: right;
+      max-width: 65%;
+      line-height: 1.35;
+    }
 
     .subscription-page .btn-primary {
       width: 100%;
@@ -543,10 +641,11 @@
       letter-spacing: -0.01em;
       font-family: var(--app-font-sans);
     }
-    body.subscription-page.sub-theme-dark .btn-primary:disabled {
-      background: var(--sub-btn-disabled-bg, #252f3a);
-      color: var(--sub-btn-disabled-fg, #8a939e);
+    html.sub-root-dark .subscription-page .btn-primary:disabled {
+      background: var(--tg-theme-secondary-bg-color);
+      color: var(--tg-theme-hint-color);
       opacity: 1;
+      box-shadow: none;
     }
 
     /* Loading — empty / waiting */
@@ -570,7 +669,7 @@
       background: linear-gradient(155deg, rgba(247, 166, 0, 0.12) 0%, rgba(247, 166, 0, 0.03) 50%, transparent 100%);
       border: 1px solid rgba(247, 166, 0, 0.22);
     }
-    body.subscription-page.sub-theme-dark .loading-hero {
+    html.sub-root-dark .loading-hero {
       background: linear-gradient(155deg, rgba(20, 22, 26, 0.95) 0%, #0c0e12 100%);
       border: 1px solid var(--sub-border-bronze, rgba(77, 64, 48, 0.55));
     }
@@ -583,7 +682,7 @@
       background: radial-gradient(ellipse, rgba(247, 166, 0, 0.18) 0%, transparent 65%);
       pointer-events: none;
     }
-    body.subscription-page.sub-theme-dark .loading-hero::before {
+    html.sub-root-dark .loading-hero::before {
       background: radial-gradient(ellipse, rgba(247, 166, 0, 0.1) 0%, transparent 65%);
     }
     .spinner {
@@ -764,6 +863,8 @@
     .unlocked-item:nth-child(1) { animation-delay: 0.12s; }
     .unlocked-item:nth-child(2) { animation-delay: 0.22s; }
     .unlocked-item:nth-child(3) { animation-delay: 0.32s; }
+    .unlocked-item:nth-child(4) { animation-delay: 0.42s; }
+    .unlocked-item:nth-child(5) { animation-delay: 0.52s; }
     @keyframes slideIn {
       from { opacity: 0; transform: translateY(10px); }
       to { opacity: 1; transform: translateY(0); }
@@ -780,27 +881,11 @@
       font-size: 17px;
       box-shadow: 0 4px 12px rgba(247, 166, 0, 0.35);
     }
-    .btn-close-success {
-      width: 100%;
+    .success-container .btn-primary {
       max-width: 320px;
-      padding: 15px 28px;
-      border-radius: 14px;
-      border: none;
-      font-size: 16px;
-      font-weight: 700;
-      font-family: var(--app-font-sans);
-      background: linear-gradient(180deg, #ffc23d 0%, #f0a000 100%);
-      color: #141414;
-      cursor: pointer;
-      box-shadow: 0 6px 20px rgba(247, 166, 0, 0.38);
-      transition: transform 0.12s ease, box-shadow 0.12s ease;
-    }
-    .btn-close-success:hover {
-      box-shadow: 0 8px 26px rgba(247, 166, 0, 0.45);
-    }
-    .btn-close-success:active {
-      transform: scale(0.985);
-      box-shadow: 0 3px 12px rgba(247, 166, 0, 0.28);
+      margin-left: auto;
+      margin-right: auto;
+      display: block;
     }
 
     .confetti {
@@ -828,10 +913,15 @@
   <link rel="stylesheet" href="mini-app-trainer-nav.css" />
 </head>
 <body class="subscription-page">
-  <div class="trainer-app-topbar trainer-mini-nav">
-    <button type="button" class="btn-app-home" id="btnHome">Главная</button>
-    <button type="button" class="btn-app-back" id="btnBack" hidden>Назад</button>
-  </div>
+  <header class="header" role="banner">
+    <span class="header-title">Подписка</span>
+    <div class="trainer-mini-nav">
+      <button type="button" class="btn-app-home" id="btnHome">Главная</button>
+      <button type="button" class="btn-app-back" id="btnBack" hidden>Назад</button>
+    </div>
+  </header>
+
+  <div class="sub-shell">
   <!-- Loading screen -->
   <div id="screenLoading" class="screen active">
     <div class="loading-container">
@@ -858,44 +948,35 @@
   <div id="screenMain" class="screen">
     <div class="sub-hero sub-head">
       <div class="sub-hero-inner">
-        <p class="sub-hero-kicker">Подписка</p>
-        <h1 class="sub-hero-title">Выберите план</h1>
-        <p class="sub-hero-sub">Каждый следующий уровень включает всё из предыдущего</p>
+        <p class="sub-hero-kicker">Тарифы</p>
+        <h1 class="sub-hero-title">Соберите подписку</h1>
+        <p class="sub-hero-sub">База CRM и модули по необходимости: онлайн-запись, аналитика, группы</p>
       </div>
     </div>
 
     <div id="trialStrip"></div>
+    <div id="realPayBanner" class="trial-strip" style="display:none;" role="status" aria-live="polite"></div>
     <div id="currentStatus"></div>
     
-    <!-- Period selector -->
-    <div class="period-selector">
-      <button class="period-option active" data-period="1">
+    <div class="period-selector" role="group" aria-label="Период оплаты">
+      <button type="button" class="period-option active" data-period="1" aria-pressed="true">
         1 месяц
       </button>
-      <button class="period-option has-discount" data-period="3">
+      <button type="button" class="period-option has-discount" data-period="3" aria-pressed="false">
         3 месяца
         <span class="discount">-10%</span>
       </button>
-      <button class="period-option has-discount" data-period="12">
+      <button type="button" class="period-option has-discount" data-period="12" aria-pressed="false">
         1 год
         <span class="discount">-20%</span>
       </button>
     </div>
 
-    <div id="tiersContainer" class="tiers-container"></div>
-  </div>
+    <p class="sub-section-kicker">Конструктор</p>
+    <div id="constructorPanel" class="constructor-panel" style="display:none;" aria-live="polite"></div>
 
-  <!-- Bottom bar (fixed) -->
-  <div id="bottomBar" class="bottom-bar" style="display:none;">
-    <div class="summary-row">
-      <span class="label">Выбран:</span>
-      <span class="value" id="summaryTier">—</span>
-    </div>
-    <div class="summary-row">
-      <span class="label">К оплате:</span>
-      <span class="value" id="summaryPrice">—</span>
-    </div>
-    <button type="button" class="btn-primary" id="btnPay" disabled>Оплатить (демо)</button>
+    <p class="preset-hint">Готовые пакеты</p>
+    <div id="tiersContainer" class="tiers-container"></div>
   </div>
 
   <!-- Success screen -->
@@ -909,7 +990,23 @@
         </div>
       </div>
       <div class="unlocked-list" id="unlockedList"></div>
-      <button type="button" class="btn-close-success" id="btnCloseSuccess">В кабинет</button>
+      <button type="button" class="btn-primary btn-block" id="btnCloseSuccess">В кабинет</button>
+    </div>
+  </div>
+  </div><!-- .sub-shell -->
+
+  <!-- Bottom bar (fixed) -->
+  <div id="bottomBar" class="bottom-bar" style="display:none;">
+    <div class="bottom-bar-inner">
+      <div class="summary-row">
+        <span class="label">Выбрано</span>
+        <span class="value" id="summaryTier">—</span>
+      </div>
+      <div class="summary-row">
+        <span class="label">К оплате</span>
+        <span class="value" id="summaryPrice">—</span>
+      </div>
+      <button type="button" class="btn-primary btn-block" id="btnPay" disabled>Оплатить (демо)</button>
     </div>
   </div>
 
@@ -924,16 +1021,16 @@
       var tg = window.Telegram && window.Telegram.WebApp;
       if (tg) { tg.ready(); tg.expand(); }
 
-      /** Navy/bronze palette: Telegram colorScheme wins, else OS preference. */
+      /** Telegram theme + same tokens as head script (constitution #1c1c1c / #fffbec). */
       function syncSubscriptionTheme() {
-        var dark = (tg && tg.colorScheme)
-          ? tg.colorScheme === 'dark'
-          : (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
-        document.body.classList.toggle('sub-theme-dark', !!dark);
+        if (typeof window.__applySubscriptionTheme === 'function') {
+          window.__applySubscriptionTheme();
+        }
+        var dark = document.documentElement.classList.contains('sub-root-dark');
         try {
-          var bgHex = dark ? '#1a1a1a' : '#FFFBEB';
-          if (typeof tg.setHeaderColor === 'function') tg.setHeaderColor(bgHex);
-          if (typeof tg.setBackgroundColor === 'function') tg.setBackgroundColor(bgHex);
+          var bgHex = dark ? '#1c1c1c' : '#fffbec';
+          if (typeof tg !== 'undefined' && tg && typeof tg.setHeaderColor === 'function') tg.setHeaderColor(bgHex);
+          if (typeof tg !== 'undefined' && tg && typeof tg.setBackgroundColor === 'function') tg.setBackgroundColor(bgHex);
         } catch (e) { /* older clients */ }
       }
       syncSubscriptionTheme();
@@ -962,12 +1059,38 @@
 
       /** Last mock-checkout API payload for hub celebration (set in showSuccess). */
       var lastCheckoutResponse = null;
+      /** False when payment_sandbox is off — mock activation disabled; use bePaid page. */
+      var mockCheckoutEnabled = true;
 
       function periodLabelFromMonths(m) {
         if (m === 1) return '1 мес.';
         if (m === 3) return '3 мес.';
         if (m === 12) return '1 год';
         return String(m) + ' мес.';
+      }
+
+      function applyMockCheckoutMode() {
+        var banner = document.getElementById('realPayBanner');
+        if (banner) {
+          if (!mockCheckoutEnabled) {
+            banner.style.display = 'block';
+            banner.innerHTML =
+              '<p class="trial-strip-title">Оплата</p>' +
+              '<p class="trial-strip-body">Демо-активация отключена. Нажмите кнопку ниже — откроется страница оплаты через bePaid.</p>';
+          } else {
+            banner.innerHTML = '';
+            banner.style.display = 'none';
+          }
+        }
+      }
+
+      function navigateToRealSubscriptionPayment() {
+        var p = window.location.pathname || '';
+        var base = p.replace(/[^/]+$/, '') || '/webapp/';
+        var url = base + 'trainer-pay-subscription';
+        var id = initData();
+        if (id) url += (url.indexOf('?') === -1 ? '?' : '&') + 'init_data=' + encodeURIComponent(id);
+        window.location.href = url;
       }
 
       /** Same URL rules as mini-app-trainer-home.js — used if external script order/load fails. */
@@ -987,12 +1110,29 @@
             var data = lastCheckoutResponse;
             var tierData = catalog.find(function(t) { return t.tier === data.tier; });
             var planName = tierData ? tierData.name_ru : String(data.tier || '');
+            if (data.modules) {
+              var bits = ['CRM'];
+              if (data.modules.online) bits.push('онлайн');
+              if (data.modules.analytics) bits.push('аналитика');
+              if (data.modules.groups) bits.push('группы');
+              planName = bits.join(' + ');
+            }
             var expiresAt = data.expires_at ? String(data.expires_at).slice(0, 10) : '';
             var priceLine = data.price_cents != null
               ? (Math.round(data.price_cents / 100) + ' BYN')
               : null;
-            var included = tierData && tierData.includes_tiers ? tierData.includes_tiers : [data.tier];
-            var features = window.TrainerHubCelebration.featuresFromIncludesTiers(included);
+            var included;
+            var features;
+            if (data.modules) {
+              included = ['crm'];
+              if (data.modules.online) included.push('online');
+              if (data.modules.analytics) included.push('analytics');
+              if (data.modules.groups) included.push('groups');
+              features = window.TrainerHubCelebration.featuresFromUnlockedList(included);
+            } else {
+              included = tierData && tierData.includes_tiers ? tierData.includes_tiers : [data.tier];
+              features = window.TrainerHubCelebration.featuresFromIncludesTiers(included);
+            }
             window.TrainerHubCelebration.set({
               headline: 'Подписка активирована',
               planName: planName,
@@ -1023,8 +1163,12 @@
 
       // State
       var catalog = [];
+      var constructor = null;
       var status = null;
+      /** 'tier' = legacy card; 'constructor' = CRM base + module checkboxes. */
+      var checkoutMode = 'tier';
       var selectedTier = null;
+      var selectedModules = { online: false, analytics: false, groups: false };
       var selectedPeriod = 1; // 1, 3, or 12 months
 
       // Format helpers
@@ -1066,16 +1210,74 @@
         });
       }
 
+      function constructorTotalCents() {
+        if (!constructor || !constructor.base) return null;
+        var p = constructor.base.prices_by_period[String(selectedPeriod)];
+        if (p == null) return null;
+        var total = p;
+        (constructor.modules || []).forEach(function(m) {
+          if (!selectedModules[m.code]) return;
+          var mp = m.prices_by_period && m.prices_by_period[String(selectedPeriod)];
+          if (mp != null) total += mp;
+        });
+        return total;
+      }
+
+      function renderConstructor() {
+        var panel = document.getElementById('constructorPanel');
+        if (!constructor || !constructor.base) {
+          panel.style.display = 'none';
+          panel.innerHTML = '';
+          return;
+        }
+        panel.style.display = 'block';
+        var base = constructor.base;
+        var bc = base.prices_by_period[String(selectedPeriod)];
+        var perMo = bc != null && selectedPeriod > 0 ? Math.round(bc / selectedPeriod / 100) : null;
+        var html = '';
+        html += '<div class="constructor-base-row">';
+        html += '<span class="name">' + (base.name_ru || 'База CRM') + ' <span style="font-weight:500;color:var(--tg-theme-hint-color);font-size:12px;">(обязательно)</span></span>';
+        html += '<span class="price">' + (perMo != null ? perMo + ' BYN / мес' : '—') + '</span>';
+        html += '</div>';
+        (constructor.modules || []).forEach(function(m) {
+          var mc = m.prices_by_period && m.prices_by_period[String(selectedPeriod)];
+          var mpm = mc != null && selectedPeriod > 0 ? Math.round(mc / selectedPeriod / 100) : null;
+          var code = m.code || '';
+          var checked = selectedModules[code] ? ' checked' : '';
+          html += '<div class="module-toggle-row">';
+          html += '<label><input type="checkbox" data-code="' + code + '"' + checked + ' />';
+          html += '<span>' + (m.name_ru || code) + '</span></label>';
+          html += '<div class="mod-meta"><span class="mod-price">+' + (mpm != null ? mpm + ' BYN/мес' : '—') + '</span></div>';
+          html += '</div>';
+        });
+        var tot = constructorTotalCents();
+        html += '<div class="constructor-total"><span>Итого за период</span><span class="sum">' + (tot != null ? Math.round(tot / 100) + ' BYN' : '—') + '</span></div>';
+        panel.innerHTML = html;
+        panel.querySelectorAll('input[type="checkbox"]').forEach(function(cb) {
+          cb.onchange = function() {
+            selectedModules[cb.dataset.code] = cb.checked;
+            checkoutMode = 'constructor';
+            selectedTier = null;
+            renderTiers();
+            renderConstructor();
+            updateCheckoutButton();
+            haptic('light');
+          };
+        });
+      }
+
       // Tier icons for success screen
       var tierIcons = {
         crm: '📋',
         online: '🌐',
-        analytics: '📊'
+        analytics: '📊',
+        groups: '👥'
       };
       var tierLabels = {
         crm: 'CRM и клиентская база',
         online: 'Онлайн-запись клиентов',
-        analytics: 'Аналитика и отчёты'
+        analytics: 'Аналитика и отчёты',
+        groups: 'Группы (когорты)'
       };
       /** Higher index = more features (for downgrade warning). */
       var tierRank = { crm: 1, online: 2, analytics: 3 };
@@ -1100,10 +1302,15 @@
           }
           
           catalog = catalogData.tiers;
+          constructor = catalogData.constructor || null;
+          mockCheckoutEnabled = catalogData.mock_checkout_enabled !== false;
           status = statusData;
           renderTiers();
+          renderConstructor();
           initPeriodSelector();
           refreshPeriodBadges();
+          applyMockCheckoutMode();
+          updateCheckoutButton();
           showScreen('screenMain');
         })
         .catch(function(err) {
@@ -1170,7 +1377,7 @@
         catalog.forEach(function(tier, idx) {
           var isPopular = tier.tier === 'online';
           var isCurrent = isCurrentTierForPeriod(tier.tier);
-          var isSelected = selectedTier === tier.tier;
+          var isSelected = checkoutMode === 'tier' && selectedTier === tier.tier;
           
           html += '<div class="tier-card' + (isSelected ? ' selected' : '') + (isCurrent ? ' current' : '') + '" data-tier="' + tier.tier + '">';
           
@@ -1244,16 +1451,19 @@
             // Remove active class from all buttons
             document.querySelectorAll('.period-option').forEach(function(b) {
               b.classList.remove('active');
+              b.setAttribute('aria-pressed', 'false');
             });
             
             // Add active class to clicked button
             btn.classList.add('active');
+            btn.setAttribute('aria-pressed', 'true');
             
             // Update selected period
             selectedPeriod = parseInt(btn.dataset.period);
             
             // Re-render tiers with new prices
             renderTiers();
+            renderConstructor();
             
             // Update checkout button
             updateCheckoutButton();
@@ -1270,11 +1480,14 @@
           selectedTier = null;
         } else {
           selectedTier = tier;
+          checkoutMode = 'tier';
+          selectedModules = { online: false, analytics: false, groups: false };
+          renderConstructor();
         }
         
         // Update UI
         document.querySelectorAll('.tier-card').forEach(function(card) {
-          card.classList.toggle('selected', selectedTier && card.dataset.tier === selectedTier);
+          card.classList.toggle('selected', checkoutMode === 'tier' && selectedTier && card.dataset.tier === selectedTier);
         });
         
         updateCheckoutButton();
@@ -1282,16 +1495,45 @@
 
       // Update checkout button and summary
       function updateCheckoutButton() {
+        if (!mockCheckoutEnabled) {
+          document.getElementById('summaryTier').textContent = 'Оплата на следующей странице';
+          document.getElementById('summaryPrice').textContent = '—';
+          document.getElementById('btnPay').disabled = false;
+          document.getElementById('btnPay').textContent = 'Перейти к оплате';
+          return;
+        }
+        if (checkoutMode === 'constructor') {
+          var tc = constructorTotalCents();
+          var totalPrice = tc != null ? tc / 100 : null;
+          if (tc == null) {
+            document.getElementById('summaryTier').textContent = '—';
+            document.getElementById('summaryPrice').textContent = '—';
+            document.getElementById('btnPay').disabled = true;
+            document.getElementById('btnPay').textContent = 'Нет цены';
+            return;
+          }
+          var parts = ['База CRM'];
+          ['online', 'analytics', 'groups'].forEach(function(k) {
+            if (selectedModules[k]) parts.push(k === 'online' ? 'онлайн' : k === 'analytics' ? 'аналитика' : 'группы');
+          });
+          document.getElementById('summaryTier').textContent = parts.join(' · ');
+          document.getElementById('summaryPrice').textContent = totalPrice != null ? Math.round(totalPrice) + ' BYN' : '—';
+          document.getElementById('btnPay').disabled = false;
+          var periodText = selectedPeriod === 1 ? 'мес' : selectedPeriod === 3 ? '3 мес' : 'год';
+          document.getElementById('btnPay').textContent = 'Оплатить ' + Math.round(totalPrice) + ' BYN (' + periodText + ')';
+          return;
+        }
+
         var tierData = selectedTier ? catalog.find(function(t) { return t.tier === selectedTier; }) : null;
         if (!tierData) {
           document.getElementById('summaryTier').textContent = '—';
           document.getElementById('summaryPrice').textContent = '—';
           document.getElementById('btnPay').disabled = true;
-          document.getElementById('btnPay').textContent = 'Выберите тариф';
+          document.getElementById('btnPay').textContent = 'Выберите тариф или модули';
           return;
         }
-        var tc = getTierPeriodCents(tierData, selectedPeriod);
-        var totalPrice = tc != null ? tc / 100 : null;
+        var tpc = getTierPeriodCents(tierData, selectedPeriod);
+        var totalPrice = tpc != null ? tpc / 100 : null;
         
         document.getElementById('summaryTier').textContent = tierData.name_ru;
         document.getElementById('summaryPrice').textContent = totalPrice != null ? Math.round(totalPrice) + ' BYN' : '—';
@@ -1305,21 +1547,33 @@
 
       // Mock checkout
       function doCheckout() {
-        if (!selectedTier) return;
+        if (!mockCheckoutEnabled) {
+          haptic('light');
+          navigateToRealSubscriptionPayment();
+          return;
+        }
+        if (checkoutMode === 'constructor') {
+          if (!constructor || !constructor.base) return;
+        } else if (!selectedTier) {
+          return;
+        }
         
         var btn = document.getElementById('btnPay');
         btn.disabled = true;
         btn.textContent = 'Обработка…';
         
         var url = '/api/webapp/trainer/subscription/mock-checkout' + (initData() ? '?init_data=' + encodeURIComponent(initData()) : '');
+        var payload = { period_months: selectedPeriod };
+        if (checkoutMode === 'constructor') {
+          payload.modules = selectedModules;
+        } else {
+          payload.tier = selectedTier;
+        }
         
         fetch(url, {
           method: 'POST',
           headers: Object.assign(headers(), { 'Content-Type': 'application/json' }),
-          body: JSON.stringify({ 
-            tier: selectedTier,
-            period_months: selectedPeriod
-          })
+          body: JSON.stringify(payload)
         })
         .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
         .then(function(res) {
@@ -1347,12 +1601,28 @@
         var tierData = catalog.find(function(t) { return t.tier === data.tier; });
         var expiresDate = data.expires_at ? data.expires_at.slice(0, 10) : '';
         
+        var planLabel = tierData ? tierData.name_ru : String(data.tier || '');
+        if (data.modules) {
+          var bits = ['CRM'];
+          if (data.modules.online) bits.push('онлайн');
+          if (data.modules.analytics) bits.push('аналитика');
+          if (data.modules.groups) bits.push('группы');
+          planLabel = bits.join(' + ');
+        }
         document.getElementById('successSubtitle').textContent = 
-          'План «' + (tierData ? tierData.name_ru : data.tier) + '» активен до ' + expiresDate;
+          'План «' + planLabel + '» активен до ' + expiresDate;
         
         // Render unlocked features
         var unlockedHtml = '';
-        var includedTiers = tierData ? tierData.includes_tiers : [data.tier];
+        var includedTiers;
+        if (data.modules) {
+          includedTiers = ['crm'];
+          if (data.modules.online) includedTiers.push('online');
+          if (data.modules.analytics) includedTiers.push('analytics');
+          if (data.modules.groups) includedTiers.push('groups');
+        } else {
+          includedTiers = tierData ? tierData.includes_tiers : [data.tier];
+        }
         includedTiers.forEach(function(t) {
           unlockedHtml += '<div class="unlocked-item">';
           unlockedHtml += '<span class="icon">' + (tierIcons[t] || '✓') + '</span>';

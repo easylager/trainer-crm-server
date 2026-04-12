@@ -293,11 +293,6 @@
       to { opacity: 1; transform: translateY(0); }
     }
     .pp-hero--form { margin-bottom: 14px; }
-    .pp-form-back {
-      margin-bottom: 10px;
-      font-weight: 600;
-      letter-spacing: -0.02em;
-    }
     .pp-form-fields {
       padding: 18px 16px 16px;
       border-radius: 18px;
@@ -436,20 +431,6 @@
       transition: transform 0.12s ease, opacity 0.12s ease;
     }
     .btn-delete:active { transform: scale(0.985); opacity: 0.95; }
-    .back-link {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      margin-bottom: 14px;
-      font-size: 14px;
-      font-weight: 500;
-      color: var(--tg-theme-hint-color);
-      text-decoration: none;
-      font-family: var(--app-font-sans);
-    }
-    .back-link:hover { color: var(--tg-theme-text-color); }
-    .back-link:active { opacity: 0.7; }
-    .back-link-chevron { width: 16px; height: 16px; flex-shrink: 0; opacity: 0.85; }
     .tabs {
       display: flex;
       gap: 6px;
@@ -721,7 +702,6 @@
   </div>
 
   <div id="screenCertIssue" data-screen>
-    <a href="#" class="back-link" id="backFromCertIssue"><svg class="back-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>К списку</a>
     <div class="pp-hero" style="margin-bottom:16px;">
       <div class="pp-hero-inner">
         <p class="pp-hero-kicker">Сертификат</p>
@@ -771,7 +751,6 @@
   </div>
 
   <div id="screenPassWelcomeLink" data-screen>
-    <a href="#" class="back-link" id="backFromPassWelcomeLink"><svg class="back-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>К списку</a>
     <div class="pp-hero" style="margin-bottom:16px;">
       <div class="pp-hero-inner">
         <p class="pp-hero-kicker">Абонемент</p>
@@ -797,7 +776,6 @@
   </div>
 
   <div id="screenPassIssue" data-screen>
-    <a href="#" class="back-link" id="backFromPassIssue"><svg class="back-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>К списку</a>
     <div class="pp-hero" style="margin-bottom:16px;">
       <div class="pp-hero-inner">
         <p class="pp-hero-kicker">Абонемент</p>
@@ -837,7 +815,6 @@
   </div>
 
   <div id="screenForm" data-screen>
-    <a href="#" class="back-link pp-form-back" id="backFromForm"><svg class="back-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>К списку</a>
     <div class="pp-hero pp-hero--form">
       <div class="pp-hero-inner">
         <p class="pp-hero-kicker">Каталог</p>
@@ -878,7 +855,6 @@
   </div>
 
   <div id="screenCertForm" data-screen>
-    <a href="#" class="back-link pp-form-back" id="backFromCertForm"><svg class="back-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>К списку</a>
     <div class="pp-hero pp-hero--form">
       <div class="pp-hero-inner">
         <p class="pp-hero-kicker">Каталог</p>
@@ -1198,11 +1174,6 @@
           openWhenReady();
         });
       };
-      document.getElementById('backFromPassIssue').onclick = function(e) {
-        e.preventDefault();
-        showScreen('screenList');
-        setTab('passes');
-      };
       document.getElementById('btnCancelPassIssue').onclick = function() {
         showScreen('screenList');
         setTab('passes');
@@ -1413,11 +1384,6 @@
         state.certIssueFilteredClients = (state.clients || []).slice();
         renderCertIssueClientList();
       };
-      document.getElementById('backFromCertIssue').onclick = function(e) {
-        e.preventDefault();
-        showScreen('screenList');
-        setTab('certs');
-      };
       document.getElementById('btnCancelCertIssue').onclick = function() {
         showScreen('screenList');
         setTab('certs');
@@ -1521,11 +1487,6 @@
               .catch(function() { state.items = []; });
         promise.then(openPassWelcomeLinkScreen).catch(function() { state.items = []; openPassWelcomeLinkScreen(); });
       };
-      document.getElementById('backFromPassWelcomeLink').onclick = function(e) {
-        e.preventDefault();
-        showScreen('screenList');
-        setTab('passes');
-      };
       document.getElementById('btnCancelPassWelcomeLink').onclick = function() {
         showScreen('screenList');
         setTab('passes');
@@ -1555,12 +1516,6 @@
         } else { alert(link); }
       };
 
-      document.getElementById('backFromCertForm').onclick = function(e) {
-        e.preventDefault();
-        showScreen('screenList');
-        setTab('certs');
-        loadCertList();
-      };
       document.getElementById('btnCancelCertForm').onclick = function() {
         showScreen('screenList');
         setTab('certs');
@@ -1647,11 +1602,6 @@
         showScreen('screenForm');
       };
 
-      document.getElementById('backFromForm').onclick = function(e) {
-        e.preventDefault();
-        showScreen('screenList');
-        loadList();
-      };
       document.getElementById('btnCancelForm').onclick = function() {
         showScreen('screenList');
         loadList();

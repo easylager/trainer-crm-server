@@ -6,6 +6,7 @@
 """
 from __future__ import annotations
 
+import json
 import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -23,6 +24,7 @@ from src.application.trainer_schedule_use_cases import replace_slots_for_day
 from src.infrastructure.db.models import (
     SUBSCRIPTION_STATUS_ACTIVE,
     SUBSCRIPTION_STATUS_TRIAL,
+    SUBSCRIPTION_TIER_ANALYTICS,
     SUBSCRIPTION_TIER_CRM,
     SUBSCRIPTION_TIER_ONLINE,
 )
@@ -56,6 +58,17 @@ async def _require_seed_ids(db_session) -> tuple[int, int, int | None]:
     return int(sid), int(cid), int(aid) if aid is not None else None
 
 
+def _modules_json_for_subscription_tier(tier: str) -> str:
+    """Canonical CRM row + module flags (matches migration mapping)."""
+    m = {"online": False, "analytics": False, "groups": False}
+    if tier == SUBSCRIPTION_TIER_ONLINE:
+        m["online"] = True
+    elif tier == SUBSCRIPTION_TIER_ANALYTICS:
+        m["online"] = True
+        m["analytics"] = True
+    return json.dumps(m, ensure_ascii=False)
+
+
 async def _ensure_trainer_subscription_tier(db_session, trainer_id: int, tier: str) -> None:
     """
     Активная подписка с нужным tier. Сначала trial (как в проде), иначе — любой plan из БД
@@ -86,14 +99,16 @@ async def _ensure_trainer_subscription_tier(db_session, trainer_id: int, tier: s
             await db_session.execute(
                 text(
                     """
-                    INSERT INTO trainer_subscriptions (trainer_id, plan_id, started_at, expires_at, status, tier)
+                    INSERT INTO trainer_subscriptions
+                        (trainer_id, plan_id, started_at, expires_at, status, tier, modules)
                     VALUES (
                         :tid,
                         :pid,
                         NOW(),
                         NOW() + INTERVAL '400 days',
                         :st,
-                        :tier
+                        :crm,
+                        CAST(:mods AS jsonb)
                     )
                     """
                 ),
@@ -101,12 +116,23 @@ async def _ensure_trainer_subscription_tier(db_session, trainer_id: int, tier: s
                     "tid": trainer_id,
                     "pid": plan_id,
                     "st": SUBSCRIPTION_STATUS_ACTIVE,
-                    "tier": tier,
+                    "crm": SUBSCRIPTION_TIER_CRM,
+                    "mods": _modules_json_for_subscription_tier(tier),
                 },
             )
     await db_session.execute(
-        text("UPDATE trainer_subscriptions SET tier = :tier WHERE trainer_id = :tid"),
-        {"tid": trainer_id, "tier": tier},
+        text(
+            """
+            UPDATE trainer_subscriptions
+            SET tier = :crm, modules = CAST(:mods AS jsonb)
+            WHERE trainer_id = :tid
+            """
+        ),
+        {
+            "tid": trainer_id,
+            "crm": SUBSCRIPTION_TIER_CRM,
+            "mods": _modules_json_for_subscription_tier(tier),
+        },
     )
     await db_session.commit()
 
@@ -143,7 +169,7 @@ async def _create_trainer_online_with_slot(
 
     await _ensure_trainer_subscription_tier(db_session, trainer_id, tier)
 
-    await replace_slots_for_day(db_session, trainer_id, slot_date, start_hours, 60)
+    await replace_slots_for_day(db_session, trainer_id, slot_date, {h * 60 for h in start_hours}, 60)
     r = await db_session.execute(
         text(
             """

@@ -237,10 +237,37 @@
       color: #ff3b30;
       font-size: 13px;
     }
+
+    .ref-page-header-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 16px;
+      min-height: 44px;
+    }
+    .ref-page-title {
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin: 0;
+      line-height: 1.2;
+      color: var(--tg-theme-text-color);
+      flex: 1;
+      min-width: 0;
+    }
   </style>
+  <link rel="stylesheet" href="mini-app-trainer-nav.css" />
 </head>
 <body class="ref-page">
   <div class="ref-shell">
+    <header class="ref-page-header-row" aria-label="Раздел">
+      <div class="ref-page-title">Рефералы</div>
+      <div class="trainer-app-topbar trainer-mini-nav">
+        <button type="button" class="btn-app-home" id="btnHome">Главная</button>
+        <button type="button" class="btn-app-back" id="btnBack" hidden>Назад</button>
+      </div>
+    </header>
     <section class="ref-hero">
       <div class="ref-hero-icon">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -311,6 +338,7 @@
     </div>
   </div>
 
+  <script src="mini-app-trainer-home.js"></script>
   <script>
     (function() {
       var tg = window.Telegram && window.Telegram.WebApp;

@@ -274,6 +274,46 @@
       margin-bottom: 18px;
       line-height: 1.5;
     }
+    .respond-presets {
+      margin-bottom: 14px;
+    }
+    .respond-presets-label {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--req-muted);
+      margin-bottom: 10px;
+    }
+    .respond-presets-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .respond-preset-chip {
+      appearance: none;
+      border: 1px solid rgba(247, 166, 0, 0.42);
+      background: rgba(247, 166, 0, 0.1);
+      color: var(--req-text);
+      font: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      line-height: 1.25;
+      padding: 8px 12px;
+      border-radius: 999px;
+      cursor: pointer;
+      text-align: left;
+      max-width: 100%;
+      transition: background 0.15s ease, border-color 0.15s ease;
+    }
+    .respond-preset-chip:active {
+      transform: scale(0.98);
+      background: rgba(247, 166, 0, 0.2);
+    }
+    html[data-app-theme="dark"] .respond-preset-chip {
+      border-color: rgba(245, 166, 35, 0.38);
+      background: rgba(245, 166, 35, 0.12);
+    }
     .detail-hero {
       border-radius: var(--req-radius);
       padding: 1px;
@@ -721,13 +761,16 @@
   <div id="screenRespond" data-screen>
     <div class="screen-title">Комментарий к отклику</div>
     <div class="screen-hint">Напишите клиенту короткое сообщение (необязательно).</div>
+    <div class="respond-presets" role="group" aria-label="Готовые фразы для отклика">
+      <div class="respond-presets-label">Частые ответы</div>
+      <div class="respond-presets-row" id="respondPresetChips"></div>
+    </div>
     <div class="card-wrap">
       <textarea id="respondComment" placeholder="Например: готов провести занятие в удобное для вас время"></textarea>
     </div>
     <div class="action-buttons">
       <button type="button" class="bd-btn bd-btn--primary" id="btnSendRespond">Отправить отклик</button>
       <button type="button" class="bd-btn bd-btn--secondary" id="btnRespondSkip">Без комментариев</button>
-      <button type="button" class="back-link btn-ghost-block" id="backFromRespond"><svg class="back-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>Назад</button>
     </div>
   </div>
 
@@ -788,6 +831,45 @@
       const DAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
       const MONTHS = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
       let state = { items: [], page: 0, currentRequest: null, slots: [], slotsWeekStarts: [], slotsWeekIndex: 0, justResponded: false };
+
+      /** Built-in quick replies: one tap inserts into textarea (appends if non-empty). */
+      var RESPOND_PRESETS = [
+        { label: 'Запишу в личку', text: 'Напишите мне в личку — как появятся слоты в расписании, запишу вас сам.' },
+        { label: 'Напишу в боте', text: 'Как только появятся свободные окна, напишу вам здесь в боте.' },
+        { label: 'Готов взять', text: 'Готов взять заявку. Напишите в личку — уточним время и детали.' },
+        { label: 'Удобное время', text: 'Готов провести занятие в удобное для вас время. Напишите в личку, договоримся.' },
+        { label: 'Уточнить детали', text: 'Напишите в личку — уточним формат и удобное время.' },
+        { label: 'Коротко', text: 'Готов. Жду сообщения в личку.' }
+      ];
+
+      function applyRespondPreset(text) {
+        var ta = document.getElementById('respondComment');
+        if (!ta) return;
+        var t = String(text || '').trim();
+        if (!t) return;
+        var cur = (ta.value || '').trim();
+        ta.value = cur ? cur + '\n\n' + t : t;
+        ta.focus();
+        try { ta.setSelectionRange(ta.value.length, ta.value.length); } catch (e) {}
+        try {
+          if (tg && tg.HapticFeedback && tg.HapticFeedback.impactOccurred) {
+            tg.HapticFeedback.impactOccurred('light');
+          }
+        } catch (e) {}
+      }
+
+      function initRespondPresets() {
+        var wrap = document.getElementById('respondPresetChips');
+        if (!wrap || wrap.childNodes.length) return;
+        RESPOND_PRESETS.forEach(function(p) {
+          var b = document.createElement('button');
+          b.type = 'button';
+          b.className = 'respond-preset-chip';
+          b.textContent = p.label;
+          b.onclick = function() { applyRespondPreset(p.text); };
+          wrap.appendChild(b);
+        });
+      }
 
       function initData() {
         if (tg && tg.initData && tg.initData.length >= 10) return tg.initData;
@@ -1079,7 +1161,6 @@
         };
       }
 
-      document.getElementById('backFromRespond').onclick = function() { showScreen('screenDetail'); };
       document.getElementById('btnSendRespond').onclick = function() {
         var req = state.currentRequest;
         if (!req) return;
@@ -1314,6 +1395,8 @@
             }
           });
       }
+
+      initRespondPresets();
 
       if (initData() && window.TrainerMiniAppGate) {
         window.TrainerMiniAppGate.fetchAccess(initData())

@@ -2999,11 +2999,34 @@
               days.push(lbl);
             }
           }
+          var firstSig = null;
+          var uniform = true;
+          for (var u = 0; u < rules.length; u++) {
+            var tmU = ((rules[u].start_time || '') + '').slice(0, 5) || '—';
+            var durU = Number(rules[u].duration_minutes);
+            if (!isFinite(durU) || durU <= 0) durU = 60;
+            var sig = tmU + '|' + durU;
+            if (u === 0) firstSig = sig;
+            else if (sig !== firstSig) uniform = false;
+          }
           var first = rules[0];
           var tm = ((first.start_time || '') + '').slice(0, 5) || '—';
           var duration = Number(first.duration_minutes);
           if (!isFinite(duration) || duration <= 0) duration = 60;
-          return days.join(', ') + ' · ' + tm + ' · ' + duration + ' мин';
+          if (uniform) {
+            return days.join(', ') + ' · ' + tm + ' · ' + duration + ' мин';
+          }
+          var line = [];
+          for (var j = 0; j < rules.length; j++) {
+            var r = rules[j];
+            var dix = Number(r.day_of_week);
+            var lb = DOW_SHORT[dix] || String(dix);
+            var tj = ((r.start_time || '') + '').slice(0, 5) || '—';
+            var dj = Number(r.duration_minutes);
+            if (!isFinite(dj) || dj <= 0) dj = 60;
+            line.push(lb + ' ' + tj + ' (' + dj + ' мин)');
+          }
+          return line.join(', ');
         }
         var seriesLine = scheduleSeriesSummary(scheduleRules);
         var members = (d.members || []).filter(function (m) { return m.status === 'active' || m.status === 'trial'; });
@@ -3466,7 +3489,10 @@
   waitForInitThen(function () {
     loadList().then(function () {
       var deep = qs.get('id');
-      if (deep) openDetail(parseInt(deep, 10));
+      if (deep) {
+        var idNum = parseInt(deep, 10);
+        if (isFinite(idNum) && idNum > 0) openDetail(idNum);
+      }
     });
   });
 })();

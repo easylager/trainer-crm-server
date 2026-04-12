@@ -187,3 +187,32 @@ async def test_set_trainer_services_writes_tiers_and_anchor(db_session: AsyncSes
     # Display order matches PRICE_TIER_ORDER (child before adult), not input tuple order.
     assert rows[0][0] == "Детский" and rows[0][1] == 5000 and rows[0][2] == 0 and rows[0][3] == "child"
     assert rows[1][0] == "Взрослый" and rows[1][1] == 8000 and rows[1][2] == 1 and rows[1][3] == "adult"
+
+
+@pytest.mark.asyncio
+async def test_set_trainer_services_stores_description(db_session: AsyncSession) -> None:
+    service_id = await require_seed_service_id(db_session)
+    r = await db_session.execute(text("INSERT INTO trainers (status) VALUES ('active') RETURNING id"))
+    (trainer_id,) = r.fetchone()
+    repo = TrainerRepository(db_session)
+    await repo.set_trainer_services(
+        trainer_id,
+        [
+            (
+                service_id,
+                [("adult", 5000)],
+                "Индивидуально, 60 мин.",
+            )
+        ],
+    )
+    await db_session.commit()
+    r = await db_session.execute(
+        text("SELECT description FROM trainer_services WHERE trainer_id = :t AND service_id = :s"),
+        {"t": trainer_id, "s": service_id},
+    )
+    assert (r.scalar() or "").strip() == "Индивидуально, 60 мин."
+    loaded = await repo.get_by_id(trainer_id)
+    assert loaded is not None
+    svcs = loaded.get("services") or []
+    assert len(svcs) == 1
+    assert svcs[0].get("description") == "Индивидуально, 60 мин."

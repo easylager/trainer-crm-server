@@ -35,6 +35,7 @@ from src.application.booking_use_cases import (
     count_trainer_client_sessions,
     count_trainer_client_upcoming,
     create_booking,
+    create_trainer_quick_booking,
     decline_booking,
     generate_reminders_for_booking,
     get_booking_no_pass_notify_payload,
@@ -140,18 +141,24 @@ from src.application.subscription_use_cases import (
     list_paid_subscription_plans,
 )
 from src.application.subscription_tier_use_cases import (
-    get_effective_subscription_tier,
+    get_subscription_constructor_catalog,
     get_subscription_tier_catalog,
     get_trainer_subscription_status,
     list_subscription_tier_pricing_for_admin,
+    normalize_modules_dict,
     set_subscription_after_mock_payment,
-    tier_satisfies,
+    set_subscription_constructor_after_mock_payment,
     trainer_allows_online_booking,
+    trainer_has_analytics_access,
     trainer_has_crm_access,
     update_subscription_tier_pricing,
 )
-from src.infrastructure.db.models import SUBSCRIPTION_TIER_ANALYTICS, SUBSCRIPTION_TIERS, TRAINER_STATUS_ACTIVE
+from src.infrastructure.db.models import SUBSCRIPTION_TIERS, TRAINER_STATUS_ACTIVE
 from src.billing.payment_gateway import create_checkout
+from src.application.arena_schedule_preset import (
+    get_schedule_grid_preset_for_trainer,
+    schedule_grid_preset_to_api,
+)
 from src.application.trainer_schedule_use_cases import (
     delete_slot as schedule_delete_slot,
     get_slot,
@@ -364,7 +371,15 @@ async def get_schedule(
             if bsum.get("bookings") is not None:
                 row["bookings"] = bsum["bookings"]
         out_slots.append(row)
-    return {"slots": out_slots, "group_classes_enabled": group_classes_enabled}
+    profile = trainer_row.get("profile") or {}
+    session_duration_minutes = profile.get("session_duration_minutes")
+    grid_preset = await get_schedule_grid_preset_for_trainer(session, trainer_id)
+    return {
+        "slots": out_slots,
+        "group_classes_enabled": group_classes_enabled,
+        "session_duration_minutes": session_duration_minutes,
+        "schedule_grid": schedule_grid_preset_to_api(grid_preset),
+    }
 
 
 # --- Schedule editor Mini App (trainer): templates, slots, apply week, delete slot ---
@@ -384,6 +399,7 @@ async def get_schedule_templates(
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     templates = await list_templates(session, trainer_id)
+    grid_preset = await get_schedule_grid_preset_for_trainer(session, trainer_id)
     return {
         "templates": [
             {
@@ -397,20 +413,22 @@ async def get_schedule_templates(
             }
             for t in templates
         ],
+        "schedule_grid": schedule_grid_preset_to_api(grid_preset),
     }
 
 
 class ScheduleTemplateSlotBody(BaseModel):
     hour: int = Field(..., ge=0, le=23)
+    minute: int = Field(default=0, ge=0, le=59)
     capacity: int = Field(default=1, ge=1, le=500)
     service_id: int | None = Field(default=None, description="Required when capacity > 1 (group slot for this service)")
 
 
 class ScheduleTemplateDayBody(BaseModel):
     day_of_week: int  # 0=Mon .. 6=Sun
-    duration_minutes: int = 60
-    start_hours: list[int] | None = None  # legacy: all capacity 1
-    slots: list[ScheduleTemplateSlotBody] | None = None  # preferred: per-hour capacity
+    duration_minutes: int = Field(default=60, ge=15, le=480)
+    start_hours: list[int] | None = None  # legacy: all capacity 1, :00 only
+    slots: list[ScheduleTemplateSlotBody] | None = None  # preferred: per-slot capacity + minute
     group_arena_id: int | None = Field(
         default=None,
         description="Venue for all group template rows (capacity>1); required when trainer has multiple arenas",
@@ -420,7 +438,7 @@ class ScheduleTemplateDayBody(BaseModel):
     def _normalize_slots(self):
         if self.slots is not None:
             return self
-        self.slots = [ScheduleTemplateSlotBody(hour=h, capacity=1) for h in (self.start_hours or [])]
+        self.slots = [ScheduleTemplateSlotBody(hour=h, minute=0, capacity=1) for h in (self.start_hours or [])]
         return self
 
 
@@ -476,10 +494,13 @@ async def put_schedule_templates_day(
         if not rchk.fetchone():
             raise HTTPException(status_code=400, detail="Площадка не привязана к вашему профилю")
 
-    hour_to_cap: dict[int, int] = {}
-    hour_to_service: dict[int, int | None] = {}
+    minute_to_cap: dict[int, int] = {}
+    minute_to_service: dict[int, int | None] = {}
     for s in slots:
-        hour_to_cap[s.hour] = s.capacity
+        sm = s.hour * 60 + s.minute
+        if sm in minute_to_cap:
+            raise HTTPException(status_code=400, detail="Повторяется время начала слота в шаблоне.")
+        minute_to_cap[sm] = s.capacity
         if s.capacity > 1:
             if s.service_id is None:
                 raise HTTPException(
@@ -488,17 +509,17 @@ async def put_schedule_templates_day(
                 )
             if not await trainer_offers_service(session, trainer_id, int(s.service_id)):
                 raise HTTPException(status_code=400, detail="Услуга не найдена в вашем списке.")
-            hour_to_service[s.hour] = int(s.service_id)
+            minute_to_service[sm] = int(s.service_id)
         else:
-            hour_to_service[s.hour] = None
+            minute_to_service[sm] = None
     try:
         await replace_templates_for_day(
             session,
             trainer_id,
             body.day_of_week,
-            hour_to_cap,
+            minute_to_cap,
             body.duration_minutes,
-            hour_to_service,
+            minute_to_service,
             group_arena_id=int(body.group_arena_id) if body.group_arena_id is not None else None,
         )
     except ValueError as e:
@@ -506,13 +527,35 @@ async def put_schedule_templates_day(
     return {"ok": True}
 
 
+def _hhmm_strings_to_minutes(values: list[str]) -> set[int]:
+    """Parse HH:MM strings into minutes from midnight."""
+    out: set[int] = set()
+    for raw in values:
+        s = raw.strip()
+        parts = s.split(":")
+        if len(parts) != 2:
+            raise ValueError("Неверный формат времени (нужно ЧЧ:ММ).")
+        h, m = int(parts[0]), int(parts[1])
+        if h < 0 or h > 23 or m < 0 or m > 59:
+            raise ValueError("Время вне допустимого диапазона.")
+        out.add(h * 60 + m)
+    return out
+
+
 class ScheduleSlotsDayBody(BaseModel):
     slot_date: str  # YYYY-MM-DD
-    start_hours: list[int]
-    duration_minutes: int = 60
+    start_hours: list[int] | None = None  # legacy: whole hours only
+    start_times: list[str] | None = None  # preferred: "HH:MM" starts
+    duration_minutes: int = Field(default=60, ge=15, le=480)
     capacity: int = Field(default=1, ge=1, le=500)
     group_service_id: int | None = Field(default=None, description="services.id for group slots (capacity > 1)")
     arena_id: int | None = Field(default=None, description="Venue for new group slots (capacity > 1); fixed on slot")
+
+    @model_validator(mode="after")
+    def _one_time_source(self):
+        if self.start_times is not None and self.start_hours is not None:
+            raise ValueError("Укажите либо start_times, либо start_hours, не оба.")
+        return self
 
 
 @router.post("/schedule/slots")
@@ -558,13 +601,21 @@ async def post_schedule_slots(
         slot_date = date.fromisoformat(body.slot_date)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid slot_date")
-    hours_set = {h for h in body.start_hours if 0 <= h <= 23}
+    if body.start_times is not None:
+        try:
+            minutes_set = _hhmm_strings_to_minutes(body.start_times)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+    elif body.start_hours is not None:
+        minutes_set = {h * 60 for h in body.start_hours if 0 <= h <= 23}
+    else:
+        minutes_set = set()
     try:
         await replace_slots_for_day(
             session,
             trainer_id,
             slot_date,
-            hours_set,
+            minutes_set,
             body.duration_minutes,
             capacity=body.capacity,
             group_service_id=body.group_service_id,
@@ -984,6 +1035,8 @@ def _serialize_client_request(req: dict) -> dict:
                 "photo_key": r.get("photo_key"),
                 "services": r.get("services") or [],
                 "arena_names": r.get("arena_names") or [],
+                "arena_ids": r.get("arena_ids") or [],
+                "primary_arena_id": r.get("primary_arena_id"),
             }
             for r in (req.get("responses") or [])
         ],
@@ -1401,9 +1454,8 @@ async def get_trainer_stats_api(
     trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
-    tier = await get_effective_subscription_tier(session, trainer_id)
-    if not tier_satisfies(tier, SUBSCRIPTION_TIER_ANALYTICS):
-        raise HTTPException(status_code=403, detail="Analytics tier required for statistics")
+    if not await trainer_has_analytics_access(session, trainer_id):
+        raise HTTPException(status_code=403, detail="Analytics module required for statistics")
     data = await get_trainer_stats_dashboard(session, trainer_id)
     return _serialize_trainer_dashboard(data)
 
@@ -1424,9 +1476,8 @@ async def get_trainer_revenue_range_api(
     trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
-    tier = await get_effective_subscription_tier(session, trainer_id)
-    if not tier_satisfies(tier, SUBSCRIPTION_TIER_ANALYTICS):
-        raise HTTPException(status_code=403, detail="Analytics tier required for statistics")
+    if not await trainer_has_analytics_access(session, trainer_id):
+        raise HTTPException(status_code=403, detail="Analytics module required for statistics")
     try:
         return await get_trainer_revenue_breakdown_for_range(session, trainer_id, period_from, period_to)
     except ValueError as e:
@@ -1686,7 +1737,10 @@ async def get_trainer_subscription_tier_catalog(
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     
     tiers = await get_subscription_tier_catalog(session)
-    return {"tiers": tiers}
+    constructor = await get_subscription_constructor_catalog(session)
+    # Same flag as stub-confirm: no free activation when real payments are enforced.
+    mock_enabled = Settings().payment_sandbox
+    return {"tiers": tiers, "constructor": constructor, "mock_checkout_enabled": mock_enabled}
 
 
 @router.get("/trainer/subscription/status")
@@ -1713,46 +1767,63 @@ async def get_trainer_subscription_tier_status(
     return status
 
 
-class SubscriptionTierMockCheckoutBody(BaseModel):
-    tier: str
+class SubscriptionConstructorCheckoutBody(BaseModel):
+    """Either legacy `tier` bundle or independent `modules` (crm base is always included)."""
+
     period_months: Literal[1, 3, 12]
+    tier: str | None = None
+    modules: dict | None = None
 
 
 @router.post("/trainer/subscription/mock-checkout")
 async def post_trainer_subscription_mock_checkout(
-    body: SubscriptionTierMockCheckoutBody,
+    body: SubscriptionConstructorCheckoutBody,
     init_data: str | None = Query(None),
     x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
     session: AsyncSession = Depends(get_session),
 ):
     """
-    Mock checkout for subscription tier (demo payment).
-    
-    Activates the tier subscription using pricing from subscription_tier_period_pricing.
-    In production this would redirect to payment gateway.
+    Mock checkout: legacy tier bundle OR CRM + module constructor.
+
+    Disabled when payment_sandbox is false (production real payments); use bePaid flow instead.
     Auth: trainer initData.
     """
     raw = init_data or x_telegram_init_data
     if not raw:
         raise HTTPException(status_code=401, detail="Missing init data")
+    if not Settings().payment_sandbox:
+        raise HTTPException(
+            status_code=404,
+            detail="Mock checkout is not available when payment_sandbox is disabled",
+        )
     telegram_id = _trainer_telegram_id(raw)
     trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
-    
-    if body.tier not in SUBSCRIPTION_TIERS:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid tier. Must be one of: {', '.join(SUBSCRIPTION_TIERS)}",
+
+    if body.tier is not None and body.modules is not None:
+        raise HTTPException(status_code=400, detail="Send either tier or modules, not both")
+
+    if body.tier is not None:
+        if body.tier not in SUBSCRIPTION_TIERS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid tier. Must be one of: {', '.join(SUBSCRIPTION_TIERS)}",
+            )
+        result = await set_subscription_after_mock_payment(
+            session, trainer_id, body.tier, body.period_months
         )
-    
-    result = await set_subscription_after_mock_payment(
-        session, trainer_id, body.tier, body.period_months
-    )
+    elif body.modules is not None:
+        result = await set_subscription_constructor_after_mock_payment(
+            session, trainer_id, normalize_modules_dict(body.modules), body.period_months
+        )
+    else:
+        raise HTTPException(status_code=400, detail="Specify tier or modules")
+
     if not result:
         raise HTTPException(status_code=400, detail="Could not activate tier subscription")
-    
-    return {
+
+    out: dict = {
         "ok": True,
         "tier": result["tier"],
         "expires_at": result["expires_at"],
@@ -1761,6 +1832,9 @@ async def post_trainer_subscription_mock_checkout(
         "period_days": result["period_days"],
         "period_months": result["period_months"],
     }
+    if "modules" in result:
+        out["modules"] = result["modules"]
+    return out
 
 
 # --- Trainer pass products (subscription products for sale) ---
@@ -3060,6 +3134,18 @@ class TrainerCreateBookingBody(BaseModel):
     allow_overbook: bool = False  # trainer-only: group slot (capacity>1) may exceed nominal capacity
 
 
+class TrainerQuickBookingBody(BaseModel):
+    """Trainer quick book: slot_date + start_time creates individual slot if missing, then books client."""
+    slot_date: str  # YYYY-MM-DD
+    start_time: str | None = Field(default=None, description="HH:MM (15 min grid; preferred)")
+    start_hour: int | None = Field(default=None, ge=0, le=23, description="legacy: same as HH:00")
+    duration_minutes: int = Field(default=60, ge=15, le=24 * 60)
+    client_id: int
+    service_id: int
+    arena_id: int | None = None
+    service_price_variant_id: int | None = None
+
+
 class TrainerCreateClientBody(BaseModel):
     """Create client by phone (no telegram_id); for trainer recording from schedule."""
     phone: str
@@ -3095,7 +3181,7 @@ async def get_trainer_my_services(
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     r = await session.execute(
         text("""
-            SELECT s.id, s.name
+            SELECT s.id, s.name, ts.description
             FROM trainer_services ts
             JOIN services s ON s.id = ts.service_id
             WHERE ts.trainer_id = :tid
@@ -3132,10 +3218,17 @@ async def get_trainer_my_services(
                     "sort_order": so,
                 }
             )
+    def _service_row_description(row: tuple[Any, ...]) -> str | None:
+        if len(row) < 3 or row[2] is None:
+            return None
+        s = str(row[2]).strip()
+        return s if s else None
+
     services = [
         {
             "id": row[0],
             "name": (row[1] or "").strip() or "—",
+            "description": _service_row_description(row),
             "price_tiers": tiers_by_sid.get(int(row[0]), []),
         }
         for row in rows
@@ -3333,11 +3426,12 @@ async def post_trainer_client_pass_issue(
                 ((profile.get("first_name") or "") + " " + (profile.get("last_name") or "")).strip()
                 or "Тренер"
             )
-            text = msg.CLIENT_PASS_ISSUED.format(
+            text = msg.format_client_pass_issued_html(
                 product_name=instance["product_name"],
                 sessions_total=instance["sessions_total"],
                 sessions_remaining=instance["sessions_remaining"],
                 trainer_name=trainer_name,
+                service_name=instance.get("service_name"),
             )
             base_url = (Settings().api_base_url or "").rstrip("/")
             kb = InlineKeyboardMarkup(
@@ -3697,6 +3791,65 @@ async def post_trainer_booking(
     if not is_slot_end_in_past_local(slot.get("slot_date"), slot.get("end_time")):
         await generate_reminders_for_booking(session, booking_id)
     return {"success": True, "booking_id": booking_id}
+
+
+@router.post("/trainer/booking/quick")
+async def post_trainer_booking_quick(
+    body: TrainerQuickBookingBody,
+    init_data: str | None = Query(None),
+    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    session: AsyncSession = Depends(get_session),
+):
+    """Create individual slot at date/hour if needed, then booking. Requires CRM (same as creating slots)."""
+    raw = init_data or x_telegram_init_data
+    if not raw:
+        raise HTTPException(status_code=401, detail="Missing init data")
+    telegram_id = _trainer_telegram_id(raw)
+    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+    if not await trainer_has_crm_access(session, trainer_id):
+        raise HTTPException(status_code=403, detail="Subscription tier required: CRM")
+    try:
+        slot_date = date.fromisoformat(body.slot_date)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid slot_date") from None
+    if body.start_time is not None and str(body.start_time).strip():
+        try:
+            start_minutes = next(iter(_hhmm_strings_to_minutes([body.start_time.strip()])))
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+    elif body.start_hour is not None:
+        start_minutes = int(body.start_hour) * 60
+    else:
+        raise HTTPException(status_code=400, detail="Укажите время начала (start_time или start_hour).")
+    try:
+        result = await create_trainer_quick_booking(
+            session,
+            trainer_id=trainer_id,
+            slot_date=slot_date,
+            start_minutes=start_minutes,
+            duration_minutes=body.duration_minutes,
+            client_id=body.client_id,
+            service_id=body.service_id,
+            arena_id=body.arena_id,
+            service_price_variant_id=body.service_price_variant_id,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except ServicePriceVariantRequired:
+        await session.rollback()
+        raise HTTPException(
+            status_code=400,
+            detail="Выберите категорию цены (тариф) для этой услуги.",
+        ) from None
+    if result is None:
+        raise HTTPException(status_code=400, detail="Не удалось создать запись")
+    booking_id, slot_id = result
+    slot = await get_slot(session, slot_id)
+    if slot and not is_slot_end_in_past_local(slot.get("slot_date"), slot.get("end_time")):
+        await generate_reminders_for_booking(session, booking_id)
+    return {"success": True, "booking_id": booking_id, "slot_id": slot_id}
 
 
 @router.post("/trainer/bookings/{booking_id:int}/make_regular")

@@ -1,6 +1,7 @@
 """
 Client request use cases: create request, list for trainer (matching city+service), respond, list for client with responses.
 """
+import json
 from typing import Any
 
 from sqlalchemy import text
@@ -28,7 +29,7 @@ async def _trainer_services_with_prices_batch(
     rsv = await session.execute(
         text(
             f"""
-            SELECT trainer_id, service_id, price_cents
+            SELECT trainer_id, service_id, price_cents, description
             FROM trainer_services
             WHERE trainer_id IN ({placeholders})
             ORDER BY trainer_id, service_id
@@ -80,6 +81,11 @@ async def _trainer_services_with_prices_batch(
     out: dict[int, list[dict[str, Any]]] = {tid: [] for tid in trainer_ids}
     for row in rows:
         tid, sid, price_cents = row[0], row[1], row[2]
+        svc_desc: str | None = None
+        if len(row) > 3 and row[3] is not None:
+            s = str(row[3]).strip()
+            if s:
+                svc_desc = s
         pc = int(price_cents) if price_cents is not None else None
         price_byn = round(float(price_cents) / 100.0, 2) if price_cents is not None else None
         sid_int = int(sid) if sid is not None else None
@@ -100,6 +106,7 @@ async def _trainer_services_with_prices_batch(
                 "price_byn_min": price_byn_min,
                 "price_byn_max": price_byn_max,
                 "price_tiers": tiers,
+                "description": svc_desc,
             }
         )
     return out
@@ -115,11 +122,34 @@ async def _public_education_entries_by_trainer_ids(
     placeholders = ", ".join(f":e{i}" for i in range(len(trainer_ids)))
     params: dict[str, Any] = {f"e{i}": v for i, v in enumerate(trainer_ids)}
     vis = _sql_public_catalog_education_predicate("e")
+
+    def _normalize_document_photos(raw: Any) -> list[dict[str, str | None]]:
+        if raw is None:
+            return []
+        payload = raw
+        if isinstance(payload, str):
+            try:
+                payload = json.loads(payload)
+            except (json.JSONDecodeError, TypeError):
+                return []
+        if not isinstance(payload, list):
+            return []
+        out: list[dict[str, str | None]] = []
+        for item in payload:
+            if not isinstance(item, dict):
+                continue
+            file_key = (item.get("file_key") or "").strip()
+            file_key_list = (item.get("file_key_list") or "").strip() or None
+            if not file_key:
+                continue
+            out.append({"file_key": file_key, "file_key_list": file_key_list})
+        return out
+
     r = await session.execute(
         text(
             f"""
-            SELECT e.trainer_id, e.institution_name, e.program_or_title, e.degree_level,
-                   e.city, e.country, e.start_year, e.end_year, e.is_in_progress
+            SELECT e.trainer_id, e.id, e.education_type, e.institution_name, e.program_or_title, e.degree_level,
+                   e.city, e.country, e.start_year, e.end_year, e.is_in_progress, e.document_url, e.document_photos
             FROM trainer_education e
             WHERE e.trainer_id IN ({placeholders})
               AND {vis}
@@ -135,32 +165,47 @@ async def _public_education_entries_by_trainer_ids(
             continue
         out[tid].append(
             {
-                "institution_name": row[1],
-                "program_or_title": row[2],
-                "degree_level": row[3],
-                "city": row[4],
-                "country": row[5],
-                "start_year": row[6],
-                "end_year": row[7],
-                "is_in_progress": bool(row[8]),
+                "id": row[1],
+                "education_type": row[2],
+                "institution_name": row[3],
+                "program_or_title": row[4],
+                "degree_level": row[5],
+                "city": row[6],
+                "country": row[7],
+                "start_year": row[8],
+                "end_year": row[9],
+                "is_in_progress": bool(row[10]),
+                "document_url": row[11],
+                "document_photos": _normalize_document_photos(row[12]),
             }
         )
     return out
 
 
-async def _trainer_arena_names_batch(
+async def _trainer_arena_catalog_batch(
     session: AsyncSession,
     trainer_ids: list[int],
-) -> dict[int, list[str]]:
-    """Arena display names per trainer (same link as catalog `arena_names`)."""
+) -> dict[int, dict[str, Any]]:
+    """
+    Arena ids + names (parallel, ordered by arena_id) and primary_arena_id — same semantics as catalog trainer card.
+    """
     if not trainer_ids:
         return {}
     placeholders = ", ".join(f":an{i}" for i in range(len(trainer_ids)))
     params: dict[str, Any] = {f"an{i}": v for i, v in enumerate(trainer_ids)}
+    r_pri = await session.execute(
+        text(f"SELECT id, primary_arena_id FROM trainers WHERE id IN ({placeholders})"),
+        params,
+    )
+    primary_by_tid: dict[int, int | None] = {}
+    for row in r_pri.fetchall():
+        tid = int(row[0])
+        primary_by_tid[tid] = int(row[1]) if row[1] is not None else None
+
     r = await session.execute(
         text(
             f"""
-            SELECT ta.trainer_id, a.name
+            SELECT ta.trainer_id, ta.arena_id, TRIM(COALESCE(a.name, ''))
             FROM trainer_arenas ta
             INNER JOIN arenas a ON a.id = ta.arena_id
             WHERE ta.trainer_id IN ({placeholders})
@@ -169,11 +214,18 @@ async def _trainer_arena_names_batch(
         ),
         params,
     )
-    out: dict[int, list[str]] = {int(tid): [] for tid in trainer_ids}
+    out: dict[int, dict[str, Any]] = {
+        int(tid): {"arena_ids": [], "arena_names": [], "primary_arena_id": primary_by_tid.get(int(tid))}
+        for tid in trainer_ids
+    }
     for row in r.fetchall():
-        tid, nm = row[0], (row[1] or "").strip()
-        if tid in out and nm:
-            out[tid].append(nm)
+        tid = int(row[0])
+        aid = int(row[1])
+        nm = (row[2] or "").strip() or "—"
+        if tid not in out:
+            continue
+        out[tid]["arena_ids"].append(aid)
+        out[tid]["arena_names"].append(nm)
     return out
 
 
@@ -662,13 +714,14 @@ async def list_my_requests_with_responses(
         trainer_ids = [tr[0] for tr in resp_rows]
         services_by_trainer = await _trainer_services_with_prices_batch(session, trainer_ids)
         edu_by_tid = await _public_education_entries_by_trainer_ids(session, trainer_ids)
-        arenas_by_tid = await _trainer_arena_names_batch(session, trainer_ids)
+        arenas_by_tid = await _trainer_arena_catalog_batch(session, trainer_ids)
         responders = []
         for tr in resp_rows:
             first_name = (tr[1] or "").strip()
             last_name = (tr[2] or "").strip()
             name = f"{first_name} {last_name}".strip() or "Тренер"
             tid = tr[0]
+            ar = arenas_by_tid.get(tid) or {}
             responders.append({
                 "trainer_id": tid,
                 "name": name,
@@ -684,7 +737,9 @@ async def list_my_requests_with_responses(
                 "photo_key": tr[12],
                 "services": services_by_trainer.get(tid, []),
                 "education_entries": edu_by_tid.get(tid, []),
-                "arena_names": arenas_by_tid.get(tid, []),
+                "arena_names": ar.get("arena_names") or [],
+                "arena_ids": ar.get("arena_ids") or [],
+                "primary_arena_id": ar.get("primary_arena_id"),
             })
         out.append({
             "id": req_id,

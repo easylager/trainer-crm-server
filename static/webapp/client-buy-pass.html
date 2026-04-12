@@ -21,15 +21,9 @@
     .bp-top {
       display: flex;
       align-items: center;
+      justify-content: flex-end;
       gap: 10px;
       margin-bottom: 14px;
-    }
-    .bp-back {
-      flex-shrink: 0;
-      width: auto;
-      min-height: 44px;
-      padding: 10px 16px;
-      font-size: 14px;
     }
     .bp-hero .bp-hero-name {
       font-size: clamp(22px, 6vw, 28px);
@@ -238,8 +232,8 @@
 <body>
   <div id="screenChoose" data-screen class="active">
     <div class="bp-top">
-      <button type="button" class="bd-btn bd-btn--soft bp-back" id="btnBpBack" aria-label="Назад">← Назад</button>
-      <div class="client-mini-nav" style="margin-left: auto;">
+      <div class="client-mini-nav">
+        <button type="button" class="btn-app-back" id="btnBpBack" aria-label="Назад">Назад</button>
         <button type="button" class="btn-app-home" id="btnHome">Главная</button>
       </div>
     </div>

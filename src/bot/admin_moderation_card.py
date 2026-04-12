@@ -108,7 +108,7 @@ def format_admin_trainer_moderation_caption(
     ]
     if contacts_raw:
         parts.append(f"Другие контакты: {_esc_multiline(contacts_raw)}")
-    parts.append(f"Длительность занятия: {html.escape(dur_str)}")
+    parts.append(f"Стандартное время занятия: {html.escape(dur_str)}")
     parts.append(f"Запись не позднее чем за: {html.escape(mhb_str)}")
     parts.append("")
     parts.append(desc_block)

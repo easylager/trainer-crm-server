@@ -37,6 +37,7 @@ logger = logging.getLogger(__name__)
 
 # Below Telegram Bot API ~20MB file limit; keeps memory bounded in bot handlers.
 MAX_TRAINER_PHOTO_BYTES = 15 * 1024 * 1024
+MAX_TRAINER_EDUCATION_DOCUMENT_PHOTOS = 12
 
 
 class TrainerPhotoFileKeyError(ValueError):
@@ -91,9 +92,19 @@ def _profile_to_kwargs(profile: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _services_to_entries(services: list[dict[str, Any]]) -> list[tuple[int, list[tuple[str, int]]]]:
+def _service_description_from_payload(s: dict[str, Any]) -> str | None:
+    raw = s.get("description")
+    if raw is None:
+        return None
+    if not isinstance(raw, str):
+        return None
+    t = raw.strip()
+    return t if t else None
+
+
+def _services_to_entries(services: list[dict[str, Any]]) -> list[tuple[int, list[tuple[str, int]], str | None]]:
     """
-    Convert API services to repo entries: (service_id, [(tier_kind, price_cents), ...]).
+    Convert API services to repo entries: (service_id, [(tier_kind, price_cents), ...], description).
     """
     from src.shared.price_tier_kind import (
         PRICE_TIER_ADULT,
@@ -102,9 +113,10 @@ def _services_to_entries(services: list[dict[str, Any]]) -> list[tuple[int, list
         price_tier_sort_key,
     )
 
-    result: list[tuple[int, list[tuple[str, int]]]] = []
+    result: list[tuple[int, list[tuple[str, int]], str | None]] = []
     for s in services:
         sid = int(s["service_id"])
+        desc = _service_description_from_payload(s)
         tiers_raw = s.get("price_tiers")
         if isinstance(tiers_raw, list) and len(tiers_raw) > 0:
             merged: dict[str, int] = {}
@@ -120,7 +132,7 @@ def _services_to_entries(services: list[dict[str, Any]]) -> list[tuple[int, list
                     continue
                 merged[tk] = cents
             ordered = sorted(merged.items(), key=lambda x: price_tier_sort_key(x[0]))
-            result.append((sid, ordered))
+            result.append((sid, ordered, desc))
             continue
         price_byn = s.get("price_byn")
         child_byn = s.get("price_child_byn")
@@ -130,7 +142,7 @@ def _services_to_entries(services: list[dict[str, Any]]) -> list[tuple[int, list
         if child_byn is not None:
             tiers.append((PRICE_TIER_CHILD, int(round(float(child_byn) * 100))))
         tiers.sort(key=lambda x: price_tier_sort_key(x[0]))
-        result.append((sid, tiers))
+        result.append((sid, tiers, desc))
     return result
 
 
@@ -575,6 +587,39 @@ def _validate_education_payload(payload: dict[str, Any]) -> None:
         raise ValueError("start_year must be <= end_year")
 
 
+def _normalize_education_document_photos_for_trainer(
+    trainer_id: int,
+    raw_photos: Any,
+) -> list[dict[str, str | None]]:
+    """
+    Normalize education document photos and enforce trainer-owned storage namespace.
+
+    The UI may send an empty list or omit the field; both are treated as "no files".
+    """
+    if raw_photos is None:
+        return []
+    if not isinstance(raw_photos, list):
+        raise ValueError("document_photos must be an array")
+    if len(raw_photos) > MAX_TRAINER_EDUCATION_DOCUMENT_PHOTOS:
+        raise ValueError(f"document_photos supports up to {MAX_TRAINER_EDUCATION_DOCUMENT_PHOTOS} files")
+    out: list[dict[str, str | None]] = []
+    seen: set[str] = set()
+    for i, raw in enumerate(raw_photos):
+        if not isinstance(raw, dict):
+            raise ValueError(f"document_photos[{i}] must be an object")
+        file_key = (raw.get("file_key") or "").strip()
+        file_key_list = (raw.get("file_key_list") or "").strip() or None
+        if not file_key:
+            raise ValueError(f"document_photos[{i}].file_key is required")
+        if not photo_storage_keys_allowed_for_trainer(trainer_id, file_key, file_key_list):
+            raise ValueError("document_photos file_key must be under trainers/{trainer_id}/")
+        if file_key in seen:
+            continue
+        seen.add(file_key)
+        out.append({"file_key": file_key, "file_key_list": file_key_list})
+    return out
+
+
 async def list_trainer_education(
     session: AsyncSession,
     trainer_id: int,
@@ -599,6 +644,10 @@ async def create_trainer_education(
     if not await repo.exists(trainer_id):
         return None
     _validate_education_payload(payload)
+    document_photos = _normalize_education_document_photos_for_trainer(
+        trainer_id,
+        payload.get("document_photos"),
+    )
     entry_id = await repo.create_education_entry(
         trainer_id,
         education_type=payload["education_type"],
@@ -611,6 +660,7 @@ async def create_trainer_education(
         end_year=payload.get("end_year"),
         is_in_progress=bool(payload.get("is_in_progress", False)),
         document_url=payload.get("document_url"),
+        document_photos=document_photos,
     )
     await repo.clear_moderation_submitted_at(trainer_id)
     await session.commit()
@@ -633,6 +683,10 @@ async def update_trainer_education(
     if not current:
         return None
     merged = {**current, **payload}
+    merged["document_photos"] = _normalize_education_document_photos_for_trainer(
+        trainer_id,
+        merged.get("document_photos"),
+    )
     _validate_education_payload(merged)
     if current.get("moderation_status") == "approved":
         new_id = await repo.create_education_revision(trainer_id, education_id, payload=merged)
@@ -725,6 +779,33 @@ async def upload_trainer_photo_from_bytes(
     ok = await register_photo(session, trainer_id, file_key, 0, file_key_list=file_key_list)
     if not ok:
         return False, "not_found", None, None
+    return True, "", file_key, file_key_list
+
+
+async def upload_trainer_education_document_photo_from_bytes(
+    session: AsyncSession,
+    trainer_id: int,
+    body: bytes,
+    content_type: str,
+) -> tuple[bool, str, str | None, str | None]:
+    """
+    Upload one education proof image to trainer storage namespace.
+
+    Returns (success, error_code, file_key, file_key_list). error_code:
+    too_large | not_image | storage | not_found.
+    """
+    repo = TrainerRepository(session)
+    if not await repo.exists(trainer_id):
+        return False, "not_found", None, None
+    if len(body) > MAX_TRAINER_PHOTO_BYTES:
+        return False, "too_large", None, None
+    if not trainer_photo_bytes_look_like_image(body):
+        return False, "not_image", None, None
+    try:
+        file_key, file_key_list = s3.upload_photo(trainer_id, body, content_type)
+    except Exception:
+        logger.exception("education document storage upload failed trainer_id=%s", trainer_id)
+        return False, "storage", None, None
     return True, "", file_key, file_key_list
 
 

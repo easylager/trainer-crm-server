@@ -1351,7 +1351,7 @@ async def on_feedback_booking_start(callback: CallbackQuery) -> None:
 
 @router.callback_query(lambda c: c.data and c.data.startswith(FEEDBACK_RATING_PREFIX))
 async def on_feedback_rating(callback: CallbackQuery) -> None:
-    """Client chose rating; ask for optional review text or skip."""
+    """Client chose rating: persist immediately, then optional review (skip or message)."""
     await callback.answer()
     # data = feedback_rating:booking_id:rating
     parts = (callback.data or "").replace(FEEDBACK_RATING_PREFIX, "").strip().split(":")
@@ -1376,6 +1376,23 @@ async def on_feedback_rating(callback: CallbackQuery) -> None:
         _feedback_state[telegram_id] = state
     state["rating"] = rating
     _feedback_state[telegram_id] = state
+    async with async_session_factory() as db_session:
+        ok = await add_trainer_rating(
+            db_session,
+            state["trainer_id"],
+            telegram_id,
+            rating,
+            review_text=None,
+        )
+    if not ok:
+        await callback.message.answer(msg.CLIENT_ERROR_TRY_AGAIN)
+        return
+    audit_log(
+        "trainer.rated",
+        ACTOR_CLIENT_BOT,
+        telegram_id,
+        {"trainer_id": state["trainer_id"], "booking_id": state.get("booking_id"), "rating": rating},
+    )
     skip_kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text=msg.CLIENT_FEEDBACK_SKIP, callback_data=f"{FEEDBACK_SKIP_PREFIX}{booking_id}")],
     ])
@@ -1384,7 +1401,7 @@ async def on_feedback_rating(callback: CallbackQuery) -> None:
 
 @router.callback_query(lambda c: c.data and c.data.startswith(FEEDBACK_SKIP_PREFIX))
 async def on_feedback_skip(callback: CallbackQuery) -> None:
-    """Client skipped review text; save rating only."""
+    """Client skipped review text; rating already saved on star tap."""
     await callback.answer()
     raw = (callback.data or "").replace(FEEDBACK_SKIP_PREFIX, "").strip()
     booking_id = safe_parse_id(raw)
@@ -1394,20 +1411,12 @@ async def on_feedback_skip(callback: CallbackQuery) -> None:
     state = _feedback_state.pop(telegram_id, None)
     if not state or state.get("booking_id") != booking_id or "rating" not in state:
         return
-    async with async_session_factory() as db_session:
-        await add_trainer_rating(
-            db_session,
-            state["trainer_id"],
-            telegram_id,
-            state["rating"],
-            review_text=None,
-        )
     await callback.message.answer(msg.CLIENT_FEEDBACK_THANKS)
 
 
 @router.message(lambda m: m.from_user and m.from_user.id in _feedback_state)
 async def on_feedback_review_message(message: Message) -> None:
-    """Client sent review text after rating."""
+    """Client sent review text after rating (rating already persisted on star tap)."""
     telegram_id = message.from_user.id if message.from_user else 0
     state = _feedback_state.pop(telegram_id, None)
     if not state or "rating" not in state:
@@ -1421,7 +1430,6 @@ async def on_feedback_review_message(message: Message) -> None:
             state["rating"],
             review_text=review_text,
         )
-    audit_log("trainer.rated", ACTOR_CLIENT_BOT, telegram_id, {"trainer_id": state["trainer_id"], "booking_id": state.get("booking_id"), "rating": state["rating"]})
     await message.answer(msg.CLIENT_FEEDBACK_THANKS)
 
 

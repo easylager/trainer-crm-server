@@ -19,6 +19,7 @@ from src.infrastructure.db.models import SUBSCRIPTION_TIER_CRM, SUBSCRIPTION_TIE
 from src.shared.public_trainer_payload import PUBLIC_CATALOG_TRAINER_DROP_KEYS
 from tests.api.test_webapp_client_miniapp_integration import (
     _ensure_trainer_subscription_tier,
+    _modules_json_for_subscription_tier,
     _require_seed_ids,
 )
 from tests.conftest import unique_test_telegram_id
@@ -70,10 +71,13 @@ def _assert_public_education_entry(entry: dict) -> None:
         "end_year",
         "is_in_progress",
         "document_url",
+        "document_photos",
         "approved_at",
         "updated_at",
     }
     assert set(entry.keys()) <= allowed, f"unexpected keys in public education: {set(entry) - allowed}"
+    if "document_photos" in entry and entry["document_photos"] is not None:
+        assert isinstance(entry["document_photos"], list)
 
 
 async def _create_active_trainer_via_api(
@@ -145,8 +149,18 @@ async def test_public_trainer_detail_shape_booking_flags_education_and_no_leaks(
         _assert_public_education_entry(e)
 
     await db_session.execute(
-        text("UPDATE trainer_subscriptions SET tier = :tier WHERE trainer_id = :tid"),
-        {"tid": tid, "tier": SUBSCRIPTION_TIER_CRM},
+        text(
+            """
+            UPDATE trainer_subscriptions
+            SET tier = :crm, modules = CAST(:mods AS jsonb)
+            WHERE trainer_id = :tid
+            """
+        ),
+        {
+            "tid": tid,
+            "crm": SUBSCRIPTION_TIER_CRM,
+            "mods": _modules_json_for_subscription_tier(SUBSCRIPTION_TIER_CRM),
+        },
     )
     await db_session.commit()
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
@@ -338,7 +352,7 @@ async def test_public_time_filters_require_matching_slot(
         for x in (t_with, t_without):
             await _ensure_trainer_subscription_tier(db_session, x, SUBSCRIPTION_TIER_ONLINE)
 
-    await replace_slots_for_day(db_session, t_with, slot_date, {10}, 60)
+    await replace_slots_for_day(db_session, t_with, slot_date, {10 * 60}, 60)
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.get(

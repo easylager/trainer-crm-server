@@ -9,6 +9,7 @@
     crm: { label: 'CRM и клиентская база', icon: '📋' },
     online: { label: 'Онлайн-запись клиентов', icon: '🌐' },
     analytics: { label: 'Аналитика и отчёты', icon: '📊' },
+    groups: { label: 'Группы (когорты)', icon: '👥' },
   };
 
   /**
@@ -17,7 +18,7 @@
   function featuresFromUnlockedList(unlocked) {
     if (!unlocked || !unlocked.length) return [];
     var out = [];
-    var order = ['crm', 'online', 'analytics'];
+    var order = ['crm', 'online', 'analytics', 'groups'];
     order.forEach(function (id) {
       if (unlocked.indexOf(id) === -1) return;
       var m = TIER_FEATURE_META[id];

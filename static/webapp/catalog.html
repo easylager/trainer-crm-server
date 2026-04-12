@@ -447,6 +447,42 @@
       padding-top: 10px;
       border-top: 1px solid rgba(128, 128, 128, 0.18);
     }
+    /* Callout: описание только когда клиент зашёл с выбранной в каталоге услугой (см. renderTrainerDetail). */
+    .trainer-detail-service-callout {
+      margin: 0 0 18px 0;
+      padding: 14px 16px 16px 18px;
+      border-radius: 12px;
+      border: 1px solid color-mix(in srgb, var(--tg-theme-button-color) 45%, transparent);
+      background: color-mix(in srgb, var(--tg-theme-button-color) 14%, var(--tg-theme-secondary-bg-color));
+      box-shadow: 0 2px 14px rgba(0, 0, 0, 0.07);
+      position: relative;
+      box-sizing: border-box;
+    }
+    .trainer-detail-service-callout::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 10px;
+      bottom: 10px;
+      width: 4px;
+      border-radius: 0 4px 4px 0;
+      background: var(--tg-theme-button-color);
+    }
+    .trainer-detail-service-callout-kicker {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--tg-theme-button-color);
+      margin-bottom: 10px;
+      line-height: 1.35;
+    }
+    .trainer-detail-service-callout-body {
+      font-size: 15px;
+      font-weight: 500;
+      line-height: 1.5;
+      color: var(--tg-theme-text-color);
+    }
     .trainer-detail-services {
       margin-bottom: 20px;
     }
@@ -459,9 +495,6 @@
       margin-bottom: 12px;
     }
     .trainer-detail-service {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
       padding: 10px 14px;
       margin-bottom: 6px;
       background: var(--tg-theme-secondary-bg-color);
@@ -470,7 +503,13 @@
       border: 2px solid transparent;
       box-sizing: border-box;
     }
-    /* Услуга, под которую клиент зашёл из каталога (при нескольких услугах) */
+    .trainer-detail-service-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+    }
+    /* Услуга, под которую клиент зашёл из каталога (в т.ч. если у тренера одна услуга) */
     .trainer-detail-service--catalog-selected {
       border-color: color-mix(in srgb, var(--tg-theme-button-color) 55%, transparent);
       background: color-mix(in srgb, var(--tg-theme-button-color) 9%, var(--tg-theme-secondary-bg-color));
@@ -492,28 +531,131 @@
       text-transform: uppercase;
       letter-spacing: 0.1em;
       color: var(--tg-theme-hint-color);
-      margin-bottom: 12px;
+      margin-bottom: 10px;
+    }
+    .trainer-detail-education-hint {
+      margin: 0 0 10px;
+      font-size: 12px;
+      line-height: 1.4;
+      color: var(--tg-theme-hint-color);
     }
     .trainer-detail-education-item {
-      padding: 12px 14px;
       margin-bottom: 8px;
-      background: var(--tg-theme-secondary-bg-color);
       border-radius: 12px;
+      border: 1px solid rgba(128, 128, 128, 0.14);
+      background: var(--tg-theme-secondary-bg-color);
+      overflow: hidden;
+    }
+    .trainer-detail-education-item summary {
+      list-style: none;
+      cursor: pointer;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 12px 14px;
+    }
+    .trainer-detail-education-item summary::-webkit-details-marker {
+      display: none;
+    }
+    .trainer-detail-education-summary-main {
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .trainer-detail-education-summary-title {
       font-size: 14px;
-      line-height: 1.4;
-      border: 2px solid transparent;
-      transition: all 0.2s ease;
+      line-height: 1.35;
+      color: var(--tg-theme-text-color);
+      overflow-wrap: anywhere;
+      word-break: break-word;
     }
-    .trainer-detail-education-item:hover {
-      border-color: rgba(245, 166, 35, 0.3);
+    .trainer-detail-education-summary-meta {
+      font-size: 12px;
+      line-height: 1.35;
+      color: var(--tg-theme-hint-color);
     }
-    /* Свободный текст «подробное образование» под модерируемыми строками — мягче карточек выше */
-    .trainer-detail-education-more {
+    .trainer-detail-education-summary-right {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+    .trainer-detail-education-badge {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--tg-theme-button-color);
+      background: color-mix(in srgb, var(--tg-theme-button-color) 14%, var(--tg-theme-secondary-bg-color));
+      border: 1px solid color-mix(in srgb, var(--tg-theme-button-color) 45%, transparent);
+      border-radius: 999px;
+      padding: 3px 8px;
+      white-space: nowrap;
+    }
+    .trainer-detail-education-chevron {
+      font-size: 12px;
+      color: var(--tg-theme-hint-color);
+      transition: transform 0.2s ease;
+    }
+    .trainer-detail-education-item[open] .trainer-detail-education-chevron {
+      transform: rotate(180deg);
+    }
+    .trainer-detail-education-body {
+      padding: 0 14px 12px;
+      border-top: 1px solid rgba(128, 128, 128, 0.14);
+    }
+    .trainer-detail-education-body-line {
+      margin-top: 8px;
+      font-size: 13px;
+      line-height: 1.45;
+      color: var(--tg-theme-text-color);
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+    .trainer-detail-education-body-line b {
+      font-weight: 600;
+    }
+    .trainer-detail-education-docs {
+      margin-top: 10px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .trainer-detail-education-doc {
+      display: inline-flex;
+      width: 56px;
+      height: 56px;
+      border-radius: 10px;
+      overflow: hidden;
+      border: 1px solid rgba(128, 128, 128, 0.16);
+      background: var(--tg-theme-bg-color);
+    }
+    .trainer-detail-education-doc img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .trainer-detail-education-doc-more {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 56px;
+      height: 56px;
+      border-radius: 10px;
+      border: 1px dashed color-mix(in srgb, var(--tg-theme-button-color) 50%, transparent);
+      color: var(--tg-theme-hint-color);
+      font-size: 12px;
+      padding: 0 8px;
+      background: var(--tg-theme-bg-color);
+    }
+    .trainer-detail-education-extra {
       margin-top: 12px;
       padding-top: 12px;
       border-top: 1px solid rgba(128, 128, 128, 0.16);
     }
-    .trainer-detail-education-more-label {
+    .trainer-detail-education-extra-label {
       font-size: 11px;
       font-weight: 600;
       letter-spacing: 0.06em;
@@ -521,7 +663,7 @@
       color: var(--tg-theme-hint-color);
       margin-bottom: 6px;
     }
-    .trainer-detail-education-more-body {
+    .trainer-detail-education-extra-body {
       font-size: 13px;
       line-height: 1.45;
       color: var(--tg-theme-text-color);
@@ -1076,6 +1218,9 @@
       }
       .trainer-detail-service {
         box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+      }
+      .trainer-detail-service-callout {
+        box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
       }
       .trainer-detail-desc {
         box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
@@ -2118,42 +2263,120 @@
         return n || 'Тренер';
       }
 
-      /** One approved education row for catalog detail (matches GET /api/public/trainers/{id}). */
+      function educationTypeHintLabel(typeKey) {
+        var key = (typeKey || '').trim();
+        if (key === 'formal_education') return 'Вуз / колледж / ССО';
+        if (key === 'course_or_certificate') return 'Курсы / сертификат';
+        return '';
+      }
+
+      function buildCatalogEducationYearLine(edu) {
+        if (!edu) return '';
+        if (edu.is_in_progress) return 'в процессе';
+        var sy = edu.start_year;
+        var ey = edu.end_year;
+        if (sy != null && ey != null) return sy + '–' + ey;
+        if (ey != null) return String(ey);
+        if (sy != null) return 'с ' + sy;
+        return '';
+      }
+
+      function normalizeCatalogEducationDocumentPhotos(edu) {
+        var rows = edu && Array.isArray(edu.document_photos) ? edu.document_photos : [];
+        var out = [];
+        var seen = {};
+        rows.forEach(function(item) {
+          if (!item || typeof item !== 'object') return;
+          var fk = (item.file_key || '').toString().trim();
+          var fkl = (item.file_key_list || '').toString().trim();
+          if (!fk || seen[fk]) return;
+          seen[fk] = true;
+          out.push({ file_key: fk, file_key_list: fkl ? fkl : null });
+        });
+        return out;
+      }
+
+      /** Short education one-liner for list cards. */
       function formatCatalogEducationEntry(edu) {
         if (!edu) return '';
         var inst = (edu.institution_name || '').trim();
         var prog = (edu.program_or_title || '').trim();
-        var deg = (edu.degree_level || '').trim();
         var city = (edu.city || '').trim();
         var country = (edu.country || '').trim();
         var place = [city, country].filter(Boolean).join(', ');
-        var typeKey = (edu.education_type || '').trim();
-        var typeHint = '';
-        if (typeKey === 'formal_education') typeHint = 'Вуз / колледж / ССО';
-        else if (typeKey === 'course_or_certificate') typeHint = 'Курсы / сертификат';
-
-        var head = inst || prog;
-        var parts = [];
-        if (inst && prog && inst !== prog) parts.push(prog);
-        if (deg) parts.push(deg);
-        var sub = parts.filter(function(x) { return x && x !== head; }).join(', ');
-        var line = sub ? (head ? head + ' — ' + sub : sub) : head;
+        var head = inst || prog || educationTypeHintLabel(edu.education_type);
+        var line = head;
+        if (inst && prog && inst !== prog) line = inst + ' — ' + prog;
+        var y = buildCatalogEducationYearLine(edu);
+        if (line && y) line += ' (' + y + ')';
         if (!line && place) line = place;
-        if (!line && typeHint) line = typeHint;
-        else if (line && place && line.indexOf(city) === -1 && city) line = line + ' · ' + place;
-        else if (line && place && !city && country && line.indexOf(country) === -1) line = line + ' · ' + country;
-
-        var y = '';
-        if (edu.is_in_progress) y = 'в процессе';
-        else {
-          var sy = edu.start_year;
-          var ey = edu.end_year;
-          if (sy != null && ey != null) y = sy + '–' + ey;
-          else if (ey != null) y = String(ey);
-          else if (sy != null) y = 'с ' + sy;
-        }
-        if (y) line = (line ? line + ' ' : '') + '(' + y + ')';
+        else if (line && place && line.indexOf(place) === -1) line += ' · ' + place;
         return (line || '').trim();
+      }
+
+      function buildCatalogEducationItemHtml(edu) {
+        if (!edu) return '';
+        var summary = formatCatalogEducationEntry(edu) || 'Запись об образовании';
+        var degree = (edu.degree_level || '').trim();
+        var city = (edu.city || '').trim();
+        var country = (edu.country || '').trim();
+        var place = [city, country].filter(Boolean).join(', ');
+        var years = buildCatalogEducationYearLine(edu);
+        var typeHint = educationTypeHintLabel(edu.education_type);
+        var docs = normalizeCatalogEducationDocumentPhotos(edu);
+
+        var summaryMetaParts = [];
+        if (years) summaryMetaParts.push(years);
+        if (place) summaryMetaParts.push(place);
+        var summaryMeta = summaryMetaParts.join(' · ');
+
+        var body = '';
+        if (typeHint) {
+          body += '<div class="trainer-detail-education-body-line"><b>Тип:</b> ' + escapeHtml(typeHint) + '</div>';
+        }
+        if (degree) {
+          body += '<div class="trainer-detail-education-body-line"><b>Квалификация:</b> ' + escapeHtml(degree) + '</div>';
+        }
+        if (years) {
+          body += '<div class="trainer-detail-education-body-line"><b>Период:</b> ' + escapeHtml(years) + '</div>';
+        }
+        if (place) {
+          body += '<div class="trainer-detail-education-body-line"><b>Город:</b> ' + escapeHtml(place) + '</div>';
+        }
+        if (docs.length) {
+          var docsHtml = docs.slice(0, 4).map(function(doc, idx) {
+            var imgSrc = photoUrl(doc.file_key_list || doc.file_key);
+            var href = photoUrl(doc.file_key);
+            return (
+              '<a class="trainer-detail-education-doc" href="' + href + '" target="_blank" rel="noopener noreferrer" aria-label="Документ #' + (idx + 1) + '">' +
+                '<img src="' + imgSrc + '" alt="Документ #' + (idx + 1) + '" loading="lazy" decoding="async">' +
+              '</a>'
+            );
+          }).join('');
+          if (docs.length > 4) {
+            docsHtml += '<span class="trainer-detail-education-doc-more">+' + (docs.length - 4) + '</span>';
+          }
+          body += '<div class="trainer-detail-education-docs">' + docsHtml + '</div>';
+        }
+        if (!body) {
+          body = '<div class="trainer-detail-education-body-line">Без дополнительных деталей.</div>';
+        }
+
+        return (
+          '<details class="trainer-detail-education-item">' +
+            '<summary>' +
+              '<div class="trainer-detail-education-summary-main">' +
+                '<div class="trainer-detail-education-summary-title">' + escapeHtml(summary) + '</div>' +
+                (summaryMeta ? '<div class="trainer-detail-education-summary-meta">' + escapeHtml(summaryMeta) + '</div>' : '') +
+              '</div>' +
+              '<div class="trainer-detail-education-summary-right">' +
+                (docs.length ? '<span class="trainer-detail-education-badge">' + docs.length + ' фото</span>' : '') +
+                '<span class="trainer-detail-education-chevron">▾</span>' +
+              '</div>' +
+            '</summary>' +
+            '<div class="trainer-detail-education-body">' + body + '</div>' +
+          '</details>'
+        );
       }
 
       /** Анкетное «Образование» — короткие категории из API (не дублируем под блоком записей). */
@@ -3128,6 +3351,24 @@
         html += '</div>';
         
         if (services.length > 0) {
+          var selectedServiceDescEscaped = '';
+          if (state.serviceId != null) {
+            var selSvcId = Number(state.serviceId);
+            var sj;
+            for (sj = 0; sj < services.length; sj++) {
+              var sx = services[sj];
+              if (sx.service_id == null || Number(sx.service_id) !== selSvcId) continue;
+              var rawDesc = sx.description && String(sx.description).trim();
+              if (rawDesc) selectedServiceDescEscaped = escapeHtml(rawDesc).replace(/\n/g, '<br>');
+              break;
+            }
+          }
+          if (selectedServiceDescEscaped) {
+            html += '<div class="trainer-detail-service-callout" role="region" aria-label="О выбранной услуге">';
+            html += '<div class="trainer-detail-service-callout-kicker">К вашему выбору в каталоге</div>';
+            html += '<div class="trainer-detail-service-callout-body">' + selectedServiceDescEscaped + '</div>';
+            html += '</div>';
+          }
           html += '<div class="trainer-detail-services">';
           html += '<div class="trainer-detail-services-title">Услуги и цены</div>';
           services.forEach(function(s) {
@@ -3135,13 +3376,14 @@
             var priceText = formatCatalogServicePrice(s);
             var sid = s.service_id != null ? Number(s.service_id) : NaN;
             var matchCatalog =
-              services.length > 1 &&
               state.serviceId != null &&
               !isNaN(sid) &&
               Number(state.serviceId) === sid;
             html += '<div class="trainer-detail-service' + (matchCatalog ? ' trainer-detail-service--catalog-selected' : '') + '">';
-            html += '<span class="trainer-detail-service-name">' + serviceName + '</span>';
-            html += '<span class="trainer-detail-service-price">' + priceText + '</span>';
+            html += '<div class="trainer-detail-service-top">';
+            html += '<span class="trainer-detail-service-name">' + escapeHtml(serviceName) + '</span>';
+            html += '<span class="trainer-detail-service-price">' + escapeHtml(priceText) + '</span>';
+            html += '</div>';
             html += '</div>';
           });
           html += '</div>';
@@ -3149,7 +3391,7 @@
         var htmlTop = html;
         html = '';
         
-        var eduRows = t.education_entries;
+        var eduRows = Array.isArray(t.education_entries) ? t.education_entries : [];
         var profileEduDetail = (p.education && typeof p.education === 'string' && p.education.trim())
           ? p.education.trim()
           : '';
@@ -3157,31 +3399,33 @@
         if (eduRows && eduRows.length > 0 && profileEduDetail && isProfileEducationCategoryOnly(profileEduDetail)) {
           profileExtraForDetail = '';
         }
-        if (eduRows && eduRows.length > 0) {
+        if (eduRows.length > 0) {
           html += '<div class="trainer-detail-education">';
           html += '<div class="trainer-detail-education-title">Образование</div>';
-          var eduAny = false;
+          html += '<p class="trainer-detail-education-hint">Нажмите на запись, чтобы раскрыть детали и фото документов.</p>';
+          var eduAnyHtml = '';
           eduRows.forEach(function(edu) {
-            var eduText = formatCatalogEducationEntry(edu);
-            if (eduText) {
-              eduAny = true;
-              html += '<div class="trainer-detail-education-item">' + escapeHtml(eduText) + '</div>';
-            }
+            var itemHtml = buildCatalogEducationItemHtml(edu);
+            if (itemHtml) eduAnyHtml += itemHtml;
           });
-          if (!eduAny && profileEduDetail) {
-            html += '<div class="trainer-detail-education-item">' + escapeHtml(profileEduDetail).replace(/\n/g, '<br>') + '</div>';
+          if (eduAnyHtml) {
+            html += eduAnyHtml;
+          } else if (profileEduDetail) {
+            html += '<div class="trainer-detail-education-body-line">' + escapeHtml(profileEduDetail).replace(/\n/g, '<br>') + '</div>';
           }
           if (profileExtraForDetail) {
-            html += '<div class="trainer-detail-education-more">';
-            html += '<div class="trainer-detail-education-more-label">Подробнее</div>';
-            html += '<div class="trainer-detail-education-more-body">' + escapeHtml(profileExtraForDetail).replace(/\n/g, '<br>') + '</div>';
+            html += '<div class="trainer-detail-education-extra">';
+            html += '<div class="trainer-detail-education-extra-label">Дополнительно</div>';
+            html += '<div class="trainer-detail-education-extra-body">' + escapeHtml(profileExtraForDetail).replace(/\n/g, '<br>') + '</div>';
             html += '</div>';
           }
           html += '</div>';
         } else if (profileEduDetail) {
           html += '<div class="trainer-detail-education">';
           html += '<div class="trainer-detail-education-title">Образование</div>';
-          html += '<div class="trainer-detail-education-item">' + escapeHtml(profileEduDetail).replace(/\n/g, '<br>') + '</div>';
+          html += '<div class="trainer-detail-education-extra">';
+          html += '<div class="trainer-detail-education-extra-body">' + escapeHtml(profileEduDetail).replace(/\n/g, '<br>') + '</div>';
+          html += '</div>';
           html += '</div>';
         }
         
@@ -3192,6 +3436,14 @@
         html += '<div class="photo-source-hint trainer-detail-photo-source">' + photoSourceLabel + '</div>';
         document.getElementById('trainerDetailTop').innerHTML = htmlTop;
         document.getElementById('trainerDetailRest').innerHTML = html;
+        document.querySelectorAll('#trainerDetailRest .trainer-detail-education-doc').forEach(function(linkEl) {
+          linkEl.addEventListener('click', function(ev) {
+            if (tg && typeof tg.openLink === 'function') {
+              ev.preventDefault();
+              tg.openLink(linkEl.href);
+            }
+          });
+        });
         document.getElementById('trainerDetailGroups').innerHTML = '';
         bindTrainerDetailPhotoWrap();
         loadTrainingGroupsBlock(t);
@@ -3211,12 +3463,7 @@
           state.slotsForTrainer = [];
           var actionsEl = document.getElementById('trainerDetailActions');
           actionsEl.innerHTML = '<button type="button" class="btn-secondary btn-block" data-action="leave-request">Оставить заявку</button>';
-          var secondaryEl = document.getElementById('trainerDetailSecondary');
-          if (!state.openedFromMyTrainerTab) {
-            secondaryEl.innerHTML = '<button type="button" class="back-link" data-action="back-to-list"><svg class="back-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>К списку тренеров</button>';
-          } else {
-            secondaryEl.innerHTML = '';
-          }
+          document.getElementById('trainerDetailSecondary').innerHTML = '';
           return;
         }
         loadSlotsForTrainer(t.id, t).then(function(data) {
@@ -3248,12 +3495,7 @@
                 renderTrainerDetail();
               };
             }
-            var secondaryElNp = document.getElementById('trainerDetailSecondary');
-            if (!state.openedFromMyTrainerTab) {
-              secondaryElNp.innerHTML = '<button type="button" class="back-link" data-action="back-to-list"><svg class="back-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>К списку тренеров</button>';
-            } else {
-              secondaryElNp.innerHTML = '';
-            }
+            document.getElementById('trainerDetailSecondary').innerHTML = '';
             return;
           }
           if (slots.length === 0) {
@@ -3299,21 +3541,11 @@
           }
           var btnBook = document.getElementById('btnBookFromDetail');
           if (btnBook) btnBook.onclick = function() { renderSlotPickList(); showScreen('screenSlotPick'); };
-          var secondaryEl = document.getElementById('trainerDetailSecondary');
-          if (!state.openedFromMyTrainerTab) {
-            secondaryEl.innerHTML = '<button type="button" class="back-link" data-action="back-to-list"><svg class="back-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>К списку тренеров</button>';
-          } else {
-            secondaryEl.innerHTML = '';
-          }
+          document.getElementById('trainerDetailSecondary').innerHTML = '';
         }).catch(function() {
           document.getElementById('trainerDetailSlots').innerHTML = '<div class="slots-title">Ближайшие слоты</div><div class="slots-empty">Не удалось загрузить слоты</div>';
           document.getElementById('trainerDetailActions').innerHTML = '<button type="button" class="btn-secondary btn-block" data-action="leave-request">Оставить заявку</button>';
-          var secondaryEl = document.getElementById('trainerDetailSecondary');
-          if (!state.openedFromMyTrainerTab) {
-            secondaryEl.innerHTML = '<button type="button" class="back-link" data-action="back-to-list"><svg class="back-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>К списку тренеров</button>';
-          } else {
-            secondaryEl.innerHTML = '';
-          }
+          document.getElementById('trainerDetailSecondary').innerHTML = '';
         });
       }
 
@@ -3493,23 +3725,6 @@
           window.location.href = base + 'client-buy-pass?' + q;
         }
       });
-      document.getElementById('trainerDetailSecondary').addEventListener('click', function(e) {
-        var action = e.target.closest('[data-action]');
-        if (!action) return;
-        if (action.dataset.action === 'back-to-list') {
-          state.openedFromMyTrainerTab = false;
-          showScreen('screenTrainers');
-          return;
-        }
-        if (action.dataset.action === 'back-to-choice') {
-          state.openedFromMyTrainerTab = false;
-          renderSummary();
-          switchTab('my_trainer');
-          showScreen('screenSummary');
-          return;
-        }
-      });
-
       function openGeneralRequestForm() {
         state.requestForTrainer = null;
         state.requestFormOpenedFrom = 'trainerList';

@@ -19,31 +19,31 @@ from src.infrastructure.db.models import (
 )
 
 
+def _mods(online: bool = False, analytics: bool = False, groups: bool = False) -> dict:
+    return {"online": online, "analytics": analytics, "groups": groups}
+
+
 # --- Pure function tests (no DB) ---
 
 
 class TestTierSatisfies:
-    """Matrix tests for tier_satisfies: analytics > online > crm > none."""
+    """Matrix tests for tier_satisfies on synthetic effective tier levels."""
 
     @pytest.mark.parametrize(
         "current,required,expected",
         [
-            # none satisfies nothing except none
             (SUBSCRIPTION_TIER_NONE, SUBSCRIPTION_TIER_NONE, True),
             (SUBSCRIPTION_TIER_NONE, SUBSCRIPTION_TIER_CRM, False),
             (SUBSCRIPTION_TIER_NONE, SUBSCRIPTION_TIER_ONLINE, False),
             (SUBSCRIPTION_TIER_NONE, SUBSCRIPTION_TIER_ANALYTICS, False),
-            # crm satisfies crm and none
             (SUBSCRIPTION_TIER_CRM, SUBSCRIPTION_TIER_NONE, True),
             (SUBSCRIPTION_TIER_CRM, SUBSCRIPTION_TIER_CRM, True),
             (SUBSCRIPTION_TIER_CRM, SUBSCRIPTION_TIER_ONLINE, False),
             (SUBSCRIPTION_TIER_CRM, SUBSCRIPTION_TIER_ANALYTICS, False),
-            # online satisfies online, crm, none
             (SUBSCRIPTION_TIER_ONLINE, SUBSCRIPTION_TIER_NONE, True),
             (SUBSCRIPTION_TIER_ONLINE, SUBSCRIPTION_TIER_CRM, True),
             (SUBSCRIPTION_TIER_ONLINE, SUBSCRIPTION_TIER_ONLINE, True),
             (SUBSCRIPTION_TIER_ONLINE, SUBSCRIPTION_TIER_ANALYTICS, False),
-            # analytics satisfies everything
             (SUBSCRIPTION_TIER_ANALYTICS, SUBSCRIPTION_TIER_NONE, True),
             (SUBSCRIPTION_TIER_ANALYTICS, SUBSCRIPTION_TIER_CRM, True),
             (SUBSCRIPTION_TIER_ANALYTICS, SUBSCRIPTION_TIER_ONLINE, True),
@@ -59,7 +59,7 @@ class TestTierSatisfies:
 
 
 class TestTierIncludes:
-    """Tests for tier_includes: what features are unlocked at each tier."""
+    """Tests for tier_includes: what features are unlocked at each synthetic tier."""
 
     def test_none_includes_nothing(self) -> None:
         assert tier_includes(SUBSCRIPTION_TIER_NONE) == []
@@ -85,7 +85,7 @@ class TestTierIncludes:
 
 
 class TestGetEffectiveSubscriptionTier:
-    """Tests for get_effective_subscription_tier with mocked DB."""
+    """get_effective_subscription_tier: synthetic tier from CRM row + modules."""
 
     @pytest.mark.asyncio
     async def test_no_subscription_returns_none(self) -> None:
@@ -98,10 +98,21 @@ class TestGetEffectiveSubscriptionTier:
         assert tier == SUBSCRIPTION_TIER_NONE
 
     @pytest.mark.asyncio
-    async def test_active_subscription_returns_tier(self) -> None:
+    async def test_online_module_returns_online_effective(self) -> None:
         mock_session = AsyncMock()
         mock_result = MagicMock()
-        mock_result.fetchone.return_value = (SUBSCRIPTION_TIER_ONLINE,)
+        mock_result.fetchone.return_value = (SUBSCRIPTION_TIER_CRM, _mods(online=True))
+        mock_session.execute.return_value = mock_result
+
+        tier = await get_effective_subscription_tier(mock_session, trainer_id=1)
+        assert tier == SUBSCRIPTION_TIER_ONLINE
+
+    @pytest.mark.asyncio
+    async def test_legacy_online_tier_row_infer_modules(self) -> None:
+        """Old tier column without JSON modules still maps to online."""
+        mock_session = AsyncMock()
+        mock_result = MagicMock()
+        mock_result.fetchone.return_value = (SUBSCRIPTION_TIER_ONLINE, _mods())
         mock_session.execute.return_value = mock_result
 
         tier = await get_effective_subscription_tier(mock_session, trainer_id=1)
@@ -109,23 +120,21 @@ class TestGetEffectiveSubscriptionTier:
 
 
 class TestGetTrainerSubscriptionStatus:
-    """Tests for get_trainer_subscription_status with mocked DB."""
+    """get_trainer_subscription_status: two entitlement reads + subscription row + CRM name."""
 
     @pytest.mark.asyncio
     async def test_inactive_subscription_status(self) -> None:
         mock_session = AsyncMock()
-        
-        # First call: get_effective_subscription_tier → none
-        # Second call: get subscription details → none
-        mock_result1 = MagicMock()
-        mock_result1.fetchone.return_value = None
-        mock_result2 = MagicMock()
-        mock_result2.fetchone.return_value = None
-        
-        mock_session.execute.side_effect = [mock_result1, mock_result2]
+
+        mock_result_ent = MagicMock()
+        mock_result_ent.fetchone.return_value = None
+        mock_result_sub = MagicMock()
+        mock_result_sub.fetchone.return_value = None
+
+        mock_session.execute.side_effect = [mock_result_ent, mock_result_ent, mock_result_sub]
 
         status = await get_trainer_subscription_status(mock_session, trainer_id=1)
-        
+
         assert status["is_active"] is False
         assert status["tier"] == SUBSCRIPTION_TIER_NONE
         assert status["effective_tier"] == SUBSCRIPTION_TIER_NONE
@@ -134,52 +143,55 @@ class TestGetTrainerSubscriptionStatus:
     @pytest.mark.asyncio
     async def test_active_subscription_status(self) -> None:
         mock_session = AsyncMock()
-        
+
         now = datetime.now(timezone.utc)
         expires_at = now + timedelta(days=30)
         started_at = now - timedelta(days=5)
-        
-        # First call: get_effective_subscription_tier → online
-        mock_result1 = MagicMock()
-        mock_result1.fetchone.return_value = (SUBSCRIPTION_TIER_ONLINE,)
-        
-        # Second call: get subscription details
-        mock_result2 = MagicMock()
-        mock_result2.fetchone.return_value = (
-            123,  # id
-            SUBSCRIPTION_TIER_ONLINE,  # tier
-            expires_at,  # expires_at
-            "active",  # status
-            started_at,  # started_at
-            1,  # billing_period_months
+        mods = _mods(online=True)
+
+        mock_result_ent = MagicMock()
+        mock_result_ent.fetchone.return_value = (SUBSCRIPTION_TIER_CRM, mods)
+
+        mock_result_sub = MagicMock()
+        mock_result_sub.fetchone.return_value = (
+            123,
+            SUBSCRIPTION_TIER_CRM,
+            mods,
+            expires_at,
+            "active",
+            started_at,
+            1,
         )
 
-        mock_result3 = MagicMock()
-        mock_result3.fetchone.return_value = ("Онлайн-запись",)
+        mock_result_name = MagicMock()
+        mock_result_name.fetchone.return_value = ("CRM + онлайн-запись",)
 
-        mock_session.execute.side_effect = [mock_result1, mock_result2, mock_result3]
+        mock_session.execute.side_effect = [
+            mock_result_ent,
+            mock_result_ent,
+            mock_result_sub,
+            mock_result_name,
+        ]
 
         status = await get_trainer_subscription_status(mock_session, trainer_id=1)
-        
+
         assert status["is_active"] is True
         assert status["is_trial"] is False
-        assert status["tier_name_ru"] == "Онлайн-запись"
-        assert status["tier"] == SUBSCRIPTION_TIER_ONLINE
+        assert status["tier_name_ru"] == "CRM + онлайн-запись"
+        assert status["tier"] == SUBSCRIPTION_TIER_CRM
         assert status["effective_tier"] == SUBSCRIPTION_TIER_ONLINE
         assert status["billing_period_months"] == 1
-        assert SUBSCRIPTION_TIER_CRM in status["unlocked_features"]
-        assert SUBSCRIPTION_TIER_ONLINE in status["unlocked_features"]
+        assert status["unlocked_features"] == ["crm", "online"]
+        assert status["modules"]["online"] is True
 
 
 class TestExpiredSubscription:
-    """Tests for expired subscription behavior."""
+    """Expired subscription behavior."""
 
     @pytest.mark.asyncio
     async def test_expired_subscription_returns_none_tier(self) -> None:
-        """When subscription is expired, effective tier should be 'none'."""
         mock_session = AsyncMock()
         mock_result = MagicMock()
-        # DB query filters by expires_at > now, so expired won't be returned
         mock_result.fetchone.return_value = None
         mock_session.execute.return_value = mock_result
 
@@ -188,51 +200,55 @@ class TestExpiredSubscription:
 
 
 class TestMockCheckout:
-    """Tests for set_subscription_after_mock_payment."""
+    """set_subscription_after_mock_payment maps legacy tier → constructor (CRM + modules)."""
 
     @pytest.mark.asyncio
     async def test_invalid_tier_returns_none(self) -> None:
         mock_session = AsyncMock()
-        
+
         result = await set_subscription_after_mock_payment(
             mock_session, trainer_id=1, tier="invalid_tier", period_months=1
         )
         assert result is None
 
     @pytest.mark.asyncio
-    async def test_valid_tier_creates_subscription(self) -> None:
+    async def test_valid_online_tier_creates_subscription(self) -> None:
         mock_session = AsyncMock()
-        
+
         now = datetime.now(timezone.utc)
         expires_at = now + timedelta(days=30)
-        
-        # Mock period pricing lookup (get_tier_period_pricing join)
-        mock_pricing_result = MagicMock()
-        mock_pricing_result.fetchone.return_value = (
-            2900,  # price_cents
-            "BYN",  # currency
-            30,  # period_days
-            "Онлайн-запись",  # name_ru
+
+        mock_base_pricing = MagicMock()
+        mock_base_pricing.fetchone.return_value = (
+            2000,
+            "BYN",
+            30,
+            "База CRM",
         )
-        
-        # Mock check for active subscription (none)
+        mock_online_pricing = MagicMock()
+        mock_online_pricing.fetchone.return_value = (
+            500,
+            30,
+            "BYN",
+            "Онлайн-запись",
+        )
+
         mock_active_result = MagicMock()
         mock_active_result.fetchone.return_value = None
-        
-        # Mock plan lookup
+
         mock_plan_result = MagicMock()
-        mock_plan_result.fetchone.return_value = (1,)  # plan_id
-        
-        # Mock insert
+        mock_plan_result.fetchone.return_value = (1,)
+
         mock_insert_result = MagicMock()
         mock_insert_result.fetchone.return_value = (
-            999,  # subscription_id
-            now,  # started_at
-            expires_at,  # expires_at
+            999,
+            now,
+            expires_at,
         )
-        
+
         mock_session.execute.side_effect = [
-            mock_pricing_result,
+            mock_base_pricing,
+            mock_online_pricing,
             mock_active_result,
             mock_plan_result,
             mock_insert_result,
@@ -241,11 +257,12 @@ class TestMockCheckout:
         result = await set_subscription_after_mock_payment(
             mock_session, trainer_id=1, tier=SUBSCRIPTION_TIER_ONLINE, period_months=1
         )
-        
+
         assert result is not None
-        assert result["tier"] == SUBSCRIPTION_TIER_ONLINE
+        assert result["tier"] == SUBSCRIPTION_TIER_CRM
+        assert result["modules"]["online"] is True
         assert result["subscription_id"] == 999
-        assert result["price_cents"] == 2900
+        assert result["price_cents"] == 2500
         assert result["currency"] == "BYN"
         assert result["period_days"] == 30
         assert result["period_months"] == 1
@@ -253,41 +270,52 @@ class TestMockCheckout:
 
 
 class TestTierCatalog:
-    """Tests for get_subscription_tier_catalog."""
+    """get_subscription_tier_catalog builds legacy cards from constructor pricing."""
 
     @pytest.mark.asyncio
     async def test_catalog_returns_all_active_tiers(self) -> None:
         mock_session = AsyncMock()
-        mock_tiers = MagicMock()
-        mock_tiers.fetchall.return_value = [
-            ("crm", "BYN", "CRM", "Базовый функционал", ["Feature 1"], 1),
-            ("online", "BYN", "Онлайн-запись", "Клиенты записываются", ["Feature 2"], 2),
-            ("analytics", "BYN", "Аналитика", "Отчёты", ["Feature 3"], 3),
+
+        mock_base_row = MagicMock()
+        mock_base_row.fetchone.return_value = (
+            "crm",
+            "BYN",
+            "CRM",
+            "Базовый функционал",
+            ["Feature 1"],
+            1,
+        )
+        mock_base_periods = MagicMock()
+        mock_base_periods.fetchall.return_value = [
+            (1, 2000, 30),
+            (3, 5400, 90),
+            (12, 19200, 365),
         ]
-        mock_periods = MagicMock()
-        mock_periods.fetchall.return_value = [
-            ("crm", 1, 1900, 30),
-            ("crm", 3, 5000, 90),
-            ("crm", 12, 18000, 365),
-            ("online", 1, 2900, 30),
-            ("online", 3, 7800, 90),
-            ("online", 12, 27000, 365),
-            ("analytics", 1, 4900, 30),
-            ("analytics", 3, 13000, 90),
-            ("analytics", 12, 45000, 365),
+        byn = "BYN"
+        mock_modules = MagicMock()
+        mock_modules.fetchall.return_value = [
+            ("online", 1, 500, 30, byn, "Онлайн"),
+            ("online", 3, 1350, 90, byn, "Онлайн"),
+            ("online", 12, 4800, 365, byn, "Онлайн"),
+            ("analytics", 1, 500, 30, byn, "Аналитика"),
+            ("analytics", 3, 1350, 90, byn, "Аналитика"),
+            ("analytics", 12, 4800, 365, byn, "Аналитика"),
+            ("groups", 1, 500, 30, byn, "Группы"),
+            ("groups", 3, 1350, 90, byn, "Группы"),
+            ("groups", 12, 4800, 365, byn, "Группы"),
         ]
-        mock_session.execute.side_effect = [mock_tiers, mock_periods]
+
+        mock_session.execute.side_effect = [mock_base_row, mock_base_periods, mock_modules]
 
         catalog = await get_subscription_tier_catalog(mock_session)
-        
+
         assert len(catalog) == 3
         assert catalog[0]["tier"] == "crm"
         assert catalog[1]["tier"] == "online"
         assert catalog[2]["tier"] == "analytics"
-        assert catalog[0]["prices_by_period"]["1"] == 1900
-        assert catalog[1]["prices_by_period"]["3"] == 7800
-        
-        # Check includes_tiers is computed correctly
+        assert catalog[0]["prices_by_period"]["1"] == 2000
+        assert catalog[1]["prices_by_period"]["3"] == 6750
+
         assert catalog[0]["includes_tiers"] == [SUBSCRIPTION_TIER_CRM]
         assert SUBSCRIPTION_TIER_CRM in catalog[1]["includes_tiers"]
         assert SUBSCRIPTION_TIER_ONLINE in catalog[1]["includes_tiers"]

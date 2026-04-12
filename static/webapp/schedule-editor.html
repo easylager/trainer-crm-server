@@ -531,6 +531,188 @@
     .book-field-label + .book-search-input { margin-top: 0; }
     .book-field-stack { margin-bottom: 16px; }
     .book-field-stack:last-of-type { margin-bottom: 0; }
+
+    /* Quick book (hub): compact bd-hero + field card — visual constitution hero + rows */
+    #modalQuickBookDatetime .modal.book-flow-modal.quick-book-sheet {
+      font-family: var(--app-font-sans);
+      max-width: 420px;
+      animation: quickBookSheetIn 0.38s cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+    @keyframes quickBookSheetIn {
+      from {
+        opacity: 0;
+        transform: translateY(12px) scale(0.985);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      #modalQuickBookDatetime .modal.book-flow-modal.quick-book-sheet {
+        animation: none;
+      }
+    }
+    #modalQuickBookDatetime .quick-book-hero {
+      position: relative;
+      border-radius: 18px;
+      padding: 16px 44px 16px 16px;
+      margin: 0 0 16px;
+      overflow: hidden;
+      background: linear-gradient(155deg, rgba(247, 166, 0, 0.14) 0%, rgba(247, 166, 0, 0.04) 48%, transparent 100%);
+      border: 1px solid rgba(247, 166, 0, 0.28);
+      box-shadow: 0 8px 28px rgba(0, 0, 0, 0.1);
+    }
+    @media (prefers-color-scheme: dark) {
+      #modalQuickBookDatetime .quick-book-hero {
+        box-shadow: 0 10px 36px rgba(0, 0, 0, 0.42);
+      }
+    }
+    #modalQuickBookDatetime .quick-book-hero::before {
+      content: '';
+      position: absolute;
+      top: -38%;
+      right: -22%;
+      width: 58%;
+      height: 125%;
+      background: radial-gradient(ellipse, rgba(247, 166, 0, 0.22) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    #modalQuickBookDatetime .quick-book-hero-inner {
+      position: relative;
+      z-index: 1;
+    }
+    #modalQuickBookDatetime .quick-book-hero-decor {
+      position: absolute;
+      top: 14px;
+      right: 14px;
+      z-index: 2;
+      width: 28px;
+      height: 28px;
+      opacity: 0.42;
+      color: var(--tg-theme-button-color);
+      pointer-events: none;
+    }
+    #modalQuickBookDatetime .quick-book-kicker {
+      margin: 0 0 8px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--tg-theme-hint-color);
+    }
+    #modalQuickBookDatetime .book-modal-title.quick-book-title {
+      margin: 0 0 8px;
+      font-size: 1.1875rem;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1.2;
+      color: var(--tg-theme-text-color);
+    }
+    #modalQuickBookDatetime .quick-book-lead {
+      margin: 0;
+      font-size: 13px;
+      line-height: 1.45;
+      color: var(--tg-theme-hint-color);
+    }
+    #modalQuickBookDatetime .quick-book-fields {
+      position: relative;
+      z-index: 1;
+      margin: 0 0 18px;
+      border-radius: 16px;
+      background: var(--tg-theme-secondary-bg-color);
+      border: 1px solid rgba(128, 128, 128, 0.12);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+      overflow: hidden;
+    }
+    #modalQuickBookDatetime .quick-book-fields .book-field-stack {
+      margin: 0;
+      padding: 12px 14px;
+      border-bottom: 1px solid rgba(128, 128, 128, 0.08);
+    }
+    #modalQuickBookDatetime .quick-book-fields .book-field-stack:last-child {
+      border-bottom: none;
+    }
+    #modalQuickBookDatetime .quick-book-fields .book-field-label {
+      margin-bottom: 6px;
+    }
+    /* Inputs sit on secondary surface: use bg for contrast (constitution card hierarchy) */
+    #modalQuickBookDatetime .quick-book-date-input,
+    #modalQuickBookDatetime .quick-book-fields .book-service-select {
+      background: var(--tg-theme-bg-color);
+      color: var(--tg-theme-text-color);
+      box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.06);
+      transition: box-shadow 0.18s ease, transform 0.12s ease;
+    }
+    #modalQuickBookDatetime .quick-book-fields .book-service-select {
+      width: 100%;
+      padding: 13px 40px 13px 14px;
+      border-radius: 14px;
+      border: none;
+      margin-bottom: 0;
+      font-size: 15px;
+      font-variant-numeric: tabular-nums;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%238e8e93' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 12px center;
+      appearance: none;
+    }
+    #modalQuickBookDatetime .quick-book-date-input {
+      width: 100%;
+      padding: 13px 14px;
+      border-radius: 14px;
+      border: none;
+      font-size: 15px;
+      font-variant-numeric: tabular-nums;
+      box-sizing: border-box;
+      font-family: inherit;
+      color-scheme: light dark;
+    }
+    #modalQuickBookDatetime .quick-book-date-input:focus-visible,
+    #modalQuickBookDatetime .quick-book-fields .book-service-select:focus-visible {
+      outline: none;
+      box-shadow:
+        0 0 0 3px color-mix(in srgb, var(--tg-theme-button-color) 30%, transparent),
+        inset 0 1px 2px rgba(0, 0, 0, 0.06);
+    }
+    #modalQuickBookDatetime .quick-book-actions {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    #modalQuickBookDatetime .quick-book-actions .btn-block {
+      border-radius: 14px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      min-height: 48px;
+    }
+    #modalQuickBookDatetime .quick-book-actions .btn-primary {
+      margin-top: 0 !important;
+      box-shadow: var(--app-btn-shadow-cta);
+    }
+    #modalQuickBookDatetime .quick-book-actions .btn-primary:active {
+      transform: scale(0.985);
+    }
+    #modalQuickBookDatetime .quick-book-actions .btn-secondary:active {
+      transform: scale(0.99);
+    }
+    #modalQuickBookDatetime .quick-book-actions .btn-book-cancel {
+      margin-top: 4px !important;
+    }
+    #modalQuickBookDatetime .quick-book-hour-hint {
+      margin: 6px 0 0;
+      font-size: 12px;
+      line-height: 1.4;
+      color: var(--tg-theme-hint-color);
+    }
+    #modalQuickBookDatetime .quick-book-hour-hint[hidden] {
+      display: none !important;
+    }
+    #modalQuickBookDatetime #quickBookHourSelect:disabled {
+      opacity: 0.72;
+    }
     .book-service-select {
       width: 100%;
       padding: 13px 40px 13px 14px;
@@ -817,32 +999,242 @@
     #templateCapacityPanel .slot-flow-help {
       margin-top: 8px;
     }
-    .hour-grid {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
+    /* Editor: duration + time grid (tokens only — see theme.css / constitution) */
+    #screenEdit .screen-title {
+      font-family: var(--app-font-sans);
+      font-size: 18px;
+      font-weight: 600;
+      margin: 0 0 8px;
+      color: var(--tg-theme-text-color);
+      line-height: 1.25;
+    }
+    #screenEdit .screen-hint {
+      margin: 0 0 20px;
+      font-size: 14px;
+      color: var(--tg-theme-hint-color);
+      line-height: 1.45;
+      font-family: var(--app-font-sans);
+    }
+    /* Длительность: лёгкий «hero» как в конституции (янтарный градиент + блик) */
+    .schedule-edit-duration-panel.slot-flow-panel {
+      position: relative;
+      overflow: hidden;
       margin-bottom: 20px;
+      padding: 16px 16px 14px;
+      border: 1px solid rgba(247, 166, 0, 0.28);
+      background: linear-gradient(
+        155deg,
+        rgba(247, 166, 0, 0.14) 0%,
+        rgba(247, 166, 0, 0.05) 48%,
+        color-mix(in srgb, var(--tg-theme-secondary-bg-color) 92%, transparent) 100%
+      );
+      box-shadow:
+        0 8px 28px rgba(0, 0, 0, 0.07),
+        inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    }
+    .schedule-edit-duration-panel.slot-flow-panel::before {
+      content: '';
+      position: absolute;
+      top: -42%;
+      right: -18%;
+      width: 58%;
+      height: 130%;
+      background: radial-gradient(ellipse, rgba(247, 166, 0, 0.2) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .schedule-edit-duration-panel .slot-flow-field {
+      position: relative;
+      z-index: 1;
+    }
+    .schedule-edit-duration-panel .slot-flow-help {
+      margin-top: 8px;
+      max-width: 36em;
+    }
+    .schedule-duration-select {
+      max-width: 220px;
+      font-weight: 600;
+    }
+    @media (max-width: 380px) {
+      .schedule-duration-select {
+        max-width: none;
+      }
+    }
+    @media (prefers-color-scheme: dark) {
+      .schedule-edit-duration-panel.slot-flow-panel {
+        box-shadow:
+          0 10px 32px rgba(0, 0, 0, 0.35),
+          inset 0 1px 0 rgba(255, 255, 255, 0.06);
+      }
+    }
+    .schedule-time-grid-section {
+      margin-bottom: 16px;
+    }
+    .schedule-time-grid-head {
+      margin-bottom: 12px;
+    }
+    .schedule-time-grid-label.slot-flow-label {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.14em;
+      margin: 0 0 4px;
+    }
+    .schedule-time-grid-sub {
+      margin: 0;
+      font-size: 12px;
+      line-height: 1.35;
+      font-weight: 500;
+      color: color-mix(in srgb, var(--tg-theme-hint-color) 92%, var(--tg-theme-text-color) 8%);
+      font-family: var(--app-font-sans);
+    }
+    .schedule-time-grid-surface {
+      padding: 14px 12px 16px;
+      border-radius: 16px;
+      border: 1px solid color-mix(in srgb, var(--tg-theme-hint-color) 16%, transparent);
+      background: color-mix(
+        in srgb,
+        var(--tg-theme-secondary-bg-color) 38%,
+        var(--tg-theme-bg-color) 62%
+      );
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.05),
+        0 1px 2px rgba(0, 0, 0, 0.03);
+    }
+    @media (prefers-color-scheme: dark) {
+      .schedule-time-grid-surface {
+        box-shadow:
+          inset 0 1px 0 rgba(255, 255, 255, 0.04),
+          0 2px 8px rgba(0, 0, 0, 0.18);
+      }
+    }
+    /* One row per clock hour: rail + quarter chips — less visual noise than a single wrap wall */
+    .schedule-hour-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      margin: 0;
+    }
+    .schedule-hour-row {
+      display: grid;
+      grid-template-columns: minmax(2.75rem, 3rem) minmax(0, 1fr);
+      gap: 10px;
+      align-items: start;
+      padding: 10px 0;
+      border-bottom: 1px solid color-mix(in srgb, var(--tg-theme-hint-color) 10%, transparent);
+    }
+    .schedule-hour-row:last-child {
+      border-bottom: none;
+      padding-bottom: 0;
+    }
+    .schedule-hour-row:first-child {
+      padding-top: 0;
+    }
+    .schedule-hour-row__rail {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      padding-top: 7px;
+      border-right: 2px solid color-mix(in srgb, var(--app-cta-fill) 28%, transparent);
+      padding-right: 10px;
+      min-height: 2.5rem;
+    }
+    .schedule-hour-row__label {
+      font-size: 13px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -0.03em;
+      color: var(--tg-theme-hint-color);
+      font-family: var(--app-font-sans);
+      line-height: 1;
+    }
+    .schedule-hour-row__chips {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+    }
+    @media (max-width: 340px) {
+      .schedule-hour-row__chips {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px 10px;
+      }
     }
     .hour-chip {
-      padding: 10px 16px;
-      border-radius: 10px;
-      border: 2px solid #FFF3CC;
-      background: #FFF3CC !important;
-      color: #1a1a1a;
-      font-size: 14px;
-      font-weight: 500;
+      box-sizing: border-box;
+      min-width: 0;
+      width: 100%;
+      padding: 0.45rem 0.35rem;
+      border-radius: 12px;
+      border: 1px solid color-mix(in srgb, var(--tg-theme-hint-color) 28%, transparent);
+      background: var(--app-chip-bg);
+      color: var(--app-chip-text);
+      font-size: 12px;
+      font-weight: 600;
+      font-family: var(--app-font-sans);
+      font-variant-numeric: tabular-nums;
+      line-height: 1.25;
       cursor: pointer;
-      min-width: 52px;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+      transition:
+        border-color 0.16s ease,
+        background 0.16s ease,
+        color 0.16s ease,
+        opacity 0.12s ease,
+        transform 0.12s ease,
+        box-shadow 0.16s ease;
+    }
+    .hour-chip:focus-visible {
+      outline: none;
+      box-shadow:
+        0 0 0 3px rgba(247, 166, 0, 0.22),
+        0 1px 2px rgba(0, 0, 0, 0.06);
+      border-color: rgba(247, 166, 0, 0.55);
+    }
+    .hour-chip:active:not(.locked):not(.pinned):not(.duration-blocked) {
+      opacity: 0.94;
+      transform: scale(0.98);
     }
     .hour-chip.selected {
-      border-color: var(--app-cta-fill) !important;
-      background: color-mix(in srgb, var(--app-cta-fill) 22%, transparent) !important;
-      color: var(--app-cta-fill) !important;
+      border-color: var(--app-cta-fill);
+      background: color-mix(in srgb, var(--app-cta-fill) 24%, transparent);
+      color: var(--app-cta-fill);
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      box-shadow:
+        0 2px 10px rgba(247, 166, 0, 0.22),
+        0 1px 2px rgba(0, 0, 0, 0.06);
     }
-    .hour-chip.locked { opacity: 0.7; cursor: not-allowed; }
-    /* Calendar «add slots»: existing slot hours stay selected but cannot be toggled off */
+    .hour-chip.locked {
+      opacity: 0.68;
+      cursor: not-allowed;
+      filter: saturate(0.92);
+    }
+    /* Уже в расписании: выбрано, но снять нельзя — пунктир вместо сплошной рамки */
+    .hour-chip.pinned.selected {
+      border-style: dashed;
+      cursor: default;
+      opacity: 1;
+      filter: none;
+    }
     .hour-chip.pinned { cursor: default; }
-    .edit-actions { display: flex; gap: 10px; margin-top: 8px; }
+    /* Start would overlap another slot at current duration — not selectable */
+    .hour-chip.duration-blocked {
+      opacity: 0.38;
+      cursor: not-allowed;
+      border-style: dashed;
+      color: color-mix(in srgb, var(--tg-theme-hint-color) 92%, var(--tg-theme-text-color) 8%);
+      background: color-mix(in srgb, var(--tg-theme-secondary-bg-color) 78%, var(--tg-theme-hint-color) 22%);
+      box-shadow: none;
+      pointer-events: none;
+    }
+    .hour-chip.duration-blocked:disabled {
+      opacity: 0.38;
+    }
+    #screenEdit .edit-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 24px;
+      padding-top: 20px;
+      border-top: 1px solid color-mix(in srgb, var(--tg-theme-hint-color) 14%, transparent);
+    }
     .edit-actions .btn-block { flex: 1; }
     .edit-actions .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
     /* Add slots / template hour editor: space above bottom edge + home indicator */
@@ -992,13 +1384,13 @@
       font-weight: 600;
       line-height: 1.3;
     }
-    /* JUSTSKATE.BY — перебиваем тему Telegram */
+    /* JUSTSKATE.BY — перебиваем тему Telegram (чипы времени — только токены, см. .hour-chip выше) */
     body { background: #FFFBEB !important; color: #1a1a1a !important; }
-    .tab, .slot-row, .template-day-card, .hour-chip { background: #FFF3CC !important; color: #1a1a1a !important; }
+    .tab, .slot-row, .template-day-card { background: #FFF3CC !important; color: #1a1a1a !important; }
     .tab.active { background: #FFFBEB !important; color: #1a1a1a !important; }
     @media (prefers-color-scheme: dark) {
       body { background: #1a1a1a !important; color: #f5f5f5 !important; }
-      .tab, .slot-row, .template-day-card, .hour-chip { background: #2a2a2a !important; color: #f5f5f5 !important; }
+      .tab, .slot-row, .template-day-card { background: #2a2a2a !important; color: #f5f5f5 !important; }
       .tab.active { background: #1a1a1a !important; color: #f5f5f5 !important; }
       .modal { background: #1a1a1a !important; }
     }
@@ -1304,6 +1696,14 @@
       d.style.setProperty('--tg-theme-text-color', dark ? '#f5f5f5' : '#1a1a1a', 'important');
       d.style.setProperty('--tg-theme-secondary-bg-color', dark ? '#2a2a2a' : '#fff3cc', 'important');
       d.style.setProperty('--tg-theme-hint-color', dark ? '#8e8e93' : '#666666', 'important');
+      /* Telegram dark + OS light: @media (prefers-color-scheme: dark) in theme.css does not run — chips must not equal secondary (#2a2a2a). */
+      if (dark) {
+        d.style.setProperty('--app-chip-bg', '#3c3c3e', 'important');
+        d.style.setProperty('--app-chip-text', '#f5f5f5', 'important');
+      } else {
+        d.style.setProperty('--app-chip-bg', '#fff5e1', 'important');
+        d.style.setProperty('--app-chip-text', '#1a1a1a', 'important');
+      }
     };
     window.__applyScheduleEditorTheme();
   })();
@@ -1400,9 +1800,35 @@
   </div>
 
   <div id="screenEdit" style="display: none;">
-    <div class="screen-title" id="editTitle">Выбор часов</div>
-    <div class="screen-hint" id="editHint" style="font-size:14px;color:var(--tg-theme-hint-color);margin-bottom:12px;">Выбор часов</div>
-    <div class="hour-grid" id="hourGrid"></div>
+    <div class="screen-title" id="editTitle">Время слотов</div>
+    <div class="screen-hint" id="editHint">Длительность одна на весь экран; начала отмечайте по сетке ниже (как у основной площадки в профиле).</div>
+    <div id="slotDurationWrap" class="slot-flow-panel schedule-edit-duration-panel">
+      <div class="slot-flow-field slot-flow-field--wide">
+        <label for="slotDurationSelect" class="slot-flow-label">Длительность</label>
+        <select id="slotDurationSelect" class="slot-flow-select schedule-duration-select" aria-describedby="slotDurationHelp slotDurationFixedNote">
+          <option value="45">45 мин</option>
+          <option value="50">50 мин</option>
+          <option value="60" selected>60 мин</option>
+          <option value="70">70 мин</option>
+          <option value="75">75 мин</option>
+          <option value="90">90 мин</option>
+          <option value="105">105 мин</option>
+          <option value="120">120 мин</option>
+          <option value="180">180 мин</option>
+        </select>
+        <p id="slotDurationHelp" class="slot-flow-help">Одно значение для всех отмеченных начал на этом экране. Начала, которые пересеклись бы с уже выбранным слотом при этой длительности, недоступны.</p>
+      </div>
+    </div>
+    <p id="slotDurationFixedNote" class="slot-flow-help schedule-fixed-duration-note" style="display:none;margin-top:0;" role="status"></p>
+    <div class="schedule-time-grid-section">
+      <div class="schedule-time-grid-head">
+        <p class="slot-flow-label schedule-time-grid-label" id="scheduleTimeGridLabel">Начало слота</p>
+        <p class="schedule-time-grid-sub" id="scheduleTimeGridHint">Слева — час, справа четверти (:00 … :45)</p>
+      </div>
+      <div class="schedule-time-grid-surface">
+        <div class="schedule-hour-grid" id="hourGrid" role="group" aria-labelledby="scheduleTimeGridLabel" aria-describedby="scheduleTimeGridHint"></div>
+      </div>
+    </div>
     <div id="templateCapacityPanel" class="template-cap-panel slot-flow-panel" style="display:none;">
       <div id="templateDefaultCapRow" class="slot-flow-grid" style="margin-bottom:12px;">
         <div class="slot-flow-field">
@@ -1453,7 +1879,6 @@
   <div id="screenDayPick" style="display: none;">
     <h2 class="day-pick-title" id="dayPickTitle">Добавить слоты на какой день?</h2>
     <div id="dayPickList"></div>
-    <span class="back-link" id="dayPickBack"><svg class="back-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>Назад к расписанию</span>
   </div>
 
   <div id="modalConfirm" class="modal-overlay" style="display: none;">
@@ -1498,6 +1923,45 @@
       <div id="groupSlotList" class="group-slot-list"></div>
       <button type="button" class="btn-block btn-primary" id="groupSlotAddBtn" style="display: none;">Добавить участника</button>
       <button type="button" class="btn-block btn-secondary" id="groupSlotCloseBtn">Закрыть</button>
+    </div>
+  </div>
+
+  <div id="modalQuickBookDatetime" class="modal-overlay book-flow-overlay" style="display: none;" aria-hidden="true">
+    <div class="modal book-flow-modal" style="max-width: 420px;">
+      <p class="quick-book-kicker">Быстрая запись</p>
+      <h3 class="book-modal-title">Когда занятие?</h3>
+      <p class="book-choice-lead quick-book-lead">Слот в календаре будет создан автоматически. Сетка стартов и длительность — как в редакторе расписания (занятые интервалы недоступны).</p>
+      <div class="quick-book-fields">
+        <div class="book-field-stack">
+          <label class="book-field-label" for="quickBookDateInput">Дата</label>
+          <input type="date" id="quickBookDateInput" class="quick-book-date-input" autocomplete="off">
+        </div>
+        <div class="book-field-stack">
+          <label class="book-field-label" for="quickBookHourSelect">Время начала</label>
+          <select id="quickBookHourSelect" class="book-service-select" aria-describedby="quickBookHourHint"></select>
+          <p id="quickBookHourHint" class="quick-book-hour-hint" hidden></p>
+        </div>
+        <div class="book-field-stack" id="quickBookDurationWrap">
+          <label class="book-field-label" for="quickBookDurationSelect">Длительность</label>
+          <select id="quickBookDurationSelect" class="book-service-select" aria-describedby="quickBookDurationFixedHint">
+            <option value="45">45 мин</option>
+            <option value="50">50 мин</option>
+            <option value="60" selected>60 мин</option>
+            <option value="70">70 мин</option>
+            <option value="75">75 мин</option>
+            <option value="90">90 мин</option>
+            <option value="105">105 мин</option>
+            <option value="120">120 мин</option>
+            <option value="180">180 мин</option>
+          </select>
+          <p id="quickBookDurationFixedHint" class="quick-book-hour-hint" style="margin-top:6px;" hidden></p>
+        </div>
+      </div>
+      <div class="quick-book-actions">
+        <button type="button" class="btn-block btn-primary" id="btnQuickBookContinue">Далее — выбрать клиента</button>
+        <button type="button" class="btn-block btn-secondary" id="btnQuickBookShowFreeSlots">Показать свободные слоты</button>
+        <button type="button" class="btn-block btn-book-cancel" id="btnQuickBookCancel">Отмена</button>
+      </div>
     </div>
   </div>
 
@@ -1726,13 +2190,14 @@
         var decline = document.getElementById('screenBookingDecline') && document.getElementById('screenBookingDecline').classList.contains('active');
         var edit = document.getElementById('screenEdit').style.display === 'block';
         var dayPick = document.getElementById('screenDayPick').style.display === 'block';
+        var mQuick = document.getElementById('modalQuickBookDatetime') && document.getElementById('modalQuickBookDatetime').style.display === 'flex';
         var mBook = document.getElementById('modalBookClient').style.display === 'flex';
         var mGroup = document.getElementById('modalGroupSlot') && document.getElementById('modalGroupSlot').style.display === 'flex';
         var mBookConf = document.getElementById('modalBookConfirm').style.display === 'flex';
         var mCancelB = document.getElementById('modalBookingCancel').style.display === 'flex';
         var mTpl = document.getElementById('modalConfirm').style.display === 'flex';
         var mIntent = document.getElementById('modalSlotIntent') && document.getElementById('modalSlotIntent').style.display === 'flex';
-        btn.hidden = !(booking || decline || edit || dayPick || mBook || mGroup || mBookConf || mCancelB || mTpl || mIntent);
+        btn.hidden = !(booking || decline || edit || dayPick || mQuick || mBook || mGroup || mBookConf || mCancelB || mTpl || mIntent);
       }
 
       function refreshCalendarChrome() {
@@ -1870,6 +2335,14 @@
           mbf.style.display = 'none';
           state.pendingBookClientId = null;
           state.pendingBookClientName = null;
+          updateTelegramBack();
+          return;
+        }
+        var mq = document.getElementById('modalQuickBookDatetime');
+        if (mq && mq.style.display === 'flex') {
+          mq.style.display = 'none';
+          mq.setAttribute('aria-hidden', 'true');
+          state.pendingBookFlowFromHub = false;
           updateTelegramBack();
           return;
         }
@@ -2093,7 +2566,7 @@
           renderCalendar();
         };
       });
-      function showToast(message) {
+      function showToast(message, durationMs) {
         var el = document.getElementById('toast');
         if (!el) return;
         el.textContent = message;
@@ -2101,9 +2574,10 @@
         void el.offsetHeight;
         el.classList.add('toast-visible');
         clearTimeout(el._toastTimer);
+        var ms = durationMs != null && !isNaN(durationMs) ? Math.max(1200, durationMs) : 2800;
         el._toastTimer = setTimeout(function() {
           el.classList.remove('toast-visible');
-        }, 2500);
+        }, ms);
       }
 
       let state = {
@@ -2119,8 +2593,9 @@
         editMode: null,
         editDay: null,
         editDate: null,
-        selectedHours: new Set(),
-        lockedHours: new Set(),
+        /** Minutes from midnight (0–1439) for selected slot starts */
+        selectedStarts: new Set(),
+        lockedStarts: new Set(),
         applyWeekStart: null,
         /** When true, current/partial week lists Mon… + ended slots (backfill). */
         showPastThisWeek: false,
@@ -2141,8 +2616,20 @@
         groupHubSlotId: null,
         /** After history.back / loadSlots: reopen group modal. */
         pendingOpenGroupSlotId: null,
-        /** schedule-editor?flow=book from trainer hub — filter «Свободны» + scroll to first bookable row. */
+        /** schedule-editor?flow=book from trainer hub — quick datetime modal, then book client. */
         pendingBookFlowFromHub: false,
+        /** True while booking via POST /trainer/booking/quick (no pre-existing slot). */
+        bookFlowQuick: false,
+        /** Slots for selected quick-book day (from GET /schedule); used to mark busy hours. */
+        quickBookSlotsForDay: null,
+        quickBookSlotDate: null,
+        /** Minutes from midnight for quick book (15 min grid, 08:00–21:00). */
+        quickBookStartMinutes: null,
+        quickBookDurationMinutes: 60,
+        /** From GET /schedule + /schedule/templates: arena-based grid (kind, hour window, optional :MM offset). */
+        scheduleGridPreset: null,
+        /** From GET /schedule: profile session_duration_minutes → default duration select when adding slots. */
+        defaultSlotDurationMinutes: 60,
         /** From GET /schedule: allow capacity > 1 in POST /schedule/slots (profile opt-in). */
         groupClassesEnabled: false,
         /** 'individual' | 'group' — set before opening calendar/template editor when group classes are enabled. */
@@ -2152,8 +2639,8 @@
         trainerServices: [],
         /** From GET /trainer/my-services: arenas for group slot venue picker. */
         trainerScheduleArenas: [],
-        /** Calendar day editor: hours that already had slots when the screen opened (cannot deselect). */
-        calendarBaselineHours: null,
+        /** Calendar day editor: start minutes that already had slots when the screen opened (cannot deselect). */
+        calendarBaselineStarts: null,
         /** Book-client modal: group slot (capacity &gt; 1) — fixed service, no price tier UI. */
         bookSlotIsGroup: false,
         bookSlotGroupServiceId: null,
@@ -2258,6 +2745,23 @@
         return o;
       }
 
+      function trainerQuickBookingPayload(clientId, serviceId) {
+        var o = {
+          slot_date: state.quickBookSlotDate,
+          start_time: formatMinuteClock(state.quickBookStartMinutes),
+          duration_minutes: state.quickBookDurationMinutes || 60,
+          client_id: clientId,
+          service_id: serviceId
+        };
+        if (state.trainerArenas && state.trainerArenas.length > 1 && state.bookArenaId != null) {
+          o.arena_id = state.bookArenaId;
+        }
+        if (state.bookPriceVariantId != null) {
+          o.service_price_variant_id = state.bookPriceVariantId;
+        }
+        return o;
+      }
+
       function applyBookModalGroupUi() {
         var dis = !!(state.bookSlotIsGroup && state.bookSlotGroupServiceId != null);
         ['bookServiceSelect', 'bookServiceSelectNew'].forEach(function(id) {
@@ -2268,6 +2772,11 @@
 
       function clearBookSlotModalState() {
         state.bookSlotId = null;
+        state.bookFlowQuick = false;
+        state.quickBookSlotDate = null;
+        state.quickBookStartMinutes = null;
+        state.quickBookSlotsForDay = null;
+        state.quickBookDurationMinutes = state.defaultSlotDurationMinutes || 60;
         state.bookSlotIsGroup = false;
         state.bookSlotGroupServiceId = null;
         ['bookServiceSelect', 'bookServiceSelectNew'].forEach(function(id) {
@@ -2382,6 +2891,253 @@
         return d.getDate() + '.' + String(d.getMonth() + 1).padStart(2, '0') + ' (' + DAYS[wd === 0 ? 6 : wd - 1] + ')';
       }
 
+      /** Minutes from midnight; API sends "HH:MM" for slot/template starts. */
+      function parseStartToMinutes(startTime) {
+        var s = (startTime == null ? '' : String(startTime)).trim();
+        var parts = s.split(':');
+        var h = parseInt(parts[0], 10);
+        var min = parts.length > 1 ? parseInt(parts[1], 10) : 0;
+        if (isNaN(h)) h = 0;
+        if (isNaN(min)) min = 0;
+        return h * 60 + min;
+      }
+
+      /** "HH:MM" for minutes-from-midnight (POST /schedule/slots start_times). */
+      function formatMinuteClock(totalMinutes) {
+        var m = Math.max(0, Math.floor(totalMinutes));
+        var h = Math.floor(m / 60);
+        var rem = m % 60;
+        return String(h).padStart(2, '0') + ':' + String(rem).padStart(2, '0');
+      }
+
+      function slotDurationFromRow(row) {
+        var d = row && row.duration_minutes != null ? parseInt(row.duration_minutes, 10) : NaN;
+        return !isNaN(d) ? d : 60;
+      }
+
+      var SCHEDULE_DURATION_OPTIONS = [45, 50, 60, 70, 75, 90, 105, 120, 180];
+
+      /** Map profile minutes to nearest option in #slotDurationSelect / quick-book. */
+      function normalizeDurationToScheduleSelect(minutes) {
+        var allowed = SCHEDULE_DURATION_OPTIONS;
+        var n = parseInt(minutes, 10);
+        if (isNaN(n) || n < 15) return 60;
+        n = Math.min(480, Math.max(15, n));
+        if (allowed.indexOf(n) >= 0) return n;
+        var best = 60;
+        var bestD = 999;
+        for (var i = 0; i < allowed.length; i++) {
+          var d = Math.abs(allowed[i] - n);
+          if (d < bestD) {
+            bestD = d;
+            best = allowed[i];
+          }
+        }
+        return best;
+      }
+
+      /** Called when GET /schedule returns session_duration_minutes (trainer profile). */
+      function applyScheduleDefaultDurationFromProfile(rawMinutes) {
+        var n = rawMinutes != null && rawMinutes !== '' ? parseInt(rawMinutes, 10) : NaN;
+        state.defaultSlotDurationMinutes = !isNaN(n) ? normalizeDurationToScheduleSelect(n) : 60;
+        state.quickBookDurationMinutes = state.defaultSlotDurationMinutes;
+        var qbd = document.getElementById('quickBookDurationSelect');
+        if (qbd) qbd.value = String(state.defaultSlotDurationMinutes);
+      }
+
+      /** Half-open [a, a+da) vs [b, b+db) */
+      function intervalsOverlapMin(a, da, b, db) {
+        return a < b + db && b < a + da;
+      }
+
+      /** Half-open intervals as absolute minutes [a0,a1) vs [b0,b1). */
+      function intervalsOverlapAbsolute(a0, a1, b0, b1) {
+        return a0 < b1 && b0 < a1;
+      }
+
+      function slotIntervalMinutesFromRow(s) {
+        var sm = parseStartToMinutes(s.start_time);
+        var em = parseStartToMinutes(s.end_time);
+        if (em <= sm) em = sm + 60;
+        return { start: sm, end: em };
+      }
+
+      function defaultScheduleGridPreset() {
+        return {
+          kind: 'quarter_15',
+          minute_offset: 0,
+          hour_start: 8,
+          hour_end: 21,
+          arena_id: null,
+          slot_duration_minutes: null,
+        };
+      }
+
+      /** When set, editor and quick book use this duration only (matches arena_schedule_presets.slot_duration_minutes). */
+      function scheduleGridFixedDurationMinutes() {
+        var p = state.scheduleGridPreset || defaultScheduleGridPreset();
+        if (p.slot_duration_minutes == null || p.slot_duration_minutes === '') return null;
+        var n = parseInt(p.slot_duration_minutes, 10);
+        if (isNaN(n) || n < 15) return null;
+        return Math.min(480, n);
+      }
+
+      function updateScheduleTimeGridHintFromPreset() {
+        var sub = document.getElementById('scheduleTimeGridHint');
+        if (!sub) return;
+        var p = state.scheduleGridPreset || defaultScheduleGridPreset();
+        var k = (p.kind || 'quarter_15').toString().trim();
+        sub.textContent =
+          k === 'hourly_minute'
+            ? 'Допустимые начала задаёт площадка'
+            : 'Слева — час, справа четверти (:00 … :45)';
+      }
+
+      /** Hide duration selects when preset fixes length; show explanatory line instead. */
+      function syncDurationUIFromScheduleGrid() {
+        var fixed = scheduleGridFixedDurationMinutes();
+        var wrap = document.getElementById('slotDurationWrap');
+        var note = document.getElementById('slotDurationFixedNote');
+        var durSel = document.getElementById('slotDurationSelect');
+        var qbWrap = document.getElementById('quickBookDurationWrap');
+        var qbDur = document.getElementById('quickBookDurationSelect');
+        var qbHint = document.getElementById('quickBookDurationFixedHint');
+        updateScheduleTimeGridHintFromPreset();
+        if (fixed != null) {
+          if (wrap) wrap.style.display = 'none';
+          if (durSel) durSel.value = String(fixed);
+          if (note) {
+            note.style.display = 'block';
+            note.textContent = 'Длительность: ' + fixed + ' мин (зафиксировано правилами площадки).';
+          }
+          if (qbWrap) qbWrap.style.display = 'none';
+          if (qbDur) qbDur.value = String(fixed);
+          if (qbHint) {
+            qbHint.removeAttribute('hidden');
+            qbHint.textContent = 'Длительность: ' + fixed + ' мин (площадка).';
+          }
+          state.quickBookDurationMinutes = fixed;
+        } else {
+          if (wrap) wrap.style.display = '';
+          if (note) {
+            note.style.display = 'none';
+            note.textContent = '';
+          }
+          if (qbWrap) qbWrap.style.display = '';
+          if (qbHint) {
+            qbHint.setAttribute('hidden', 'hidden');
+            qbHint.textContent = '';
+          }
+        }
+      }
+
+      /** Merge schedule_grid from GET /schedule or /schedule/templates into state. */
+      function applyScheduleGridFromApi(data) {
+        if (data && data.schedule_grid) {
+          state.scheduleGridPreset = data.schedule_grid;
+        } else if (!state.scheduleGridPreset) {
+          state.scheduleGridPreset = defaultScheduleGridPreset();
+        }
+        syncDurationUIFromScheduleGrid();
+      }
+
+      /** Mirrors backend allowed_start_minutes_from_preset (arena_schedule_preset.py). */
+      function allowedStartMinutesFromScheduleGridPreset(preset) {
+        preset = preset || defaultScheduleGridPreset();
+        var kind = (preset.kind || 'quarter_15').toString().trim();
+        var h0 = Math.max(0, Math.min(23, parseInt(preset.hour_start, 10)));
+        if (isNaN(h0)) h0 = 8;
+        var h1 = Math.max(0, Math.min(23, parseInt(preset.hour_end, 10)));
+        if (isNaN(h1)) h1 = 21;
+        if (h1 < h0) {
+          var swap = h0;
+          h0 = h1;
+          h1 = swap;
+        }
+        var out = [];
+        if (kind === 'hourly_minute') {
+          var mo = Math.max(0, Math.min(59, parseInt(preset.minute_offset, 10) || 0));
+          for (var h = h0; h <= h1; h++) {
+            out.push(h * 60 + mo);
+          }
+        } else {
+          for (var m = h0 * 60; m <= h1 * 60; m += 15) {
+            out.push(m);
+          }
+        }
+        return out;
+      }
+
+      function scheduleGridHintSuffix() {
+        var p = state.scheduleGridPreset || defaultScheduleGridPreset();
+        var k = (p.kind || 'quarter_15').toString().trim();
+        var base;
+        if (k === 'hourly_minute') {
+          var mo = Math.max(0, Math.min(59, parseInt(p.minute_offset, 10) || 0));
+          base = 'Сетка: :' + String(mo).padStart(2, '0') + ' каждый час';
+        } else {
+          base = 'Отметьте начала (шаг 15 мин)';
+        }
+        var fxd = scheduleGridFixedDurationMinutes();
+        if (fxd != null) {
+          return base + ', длительность ' + fxd + ' мин';
+        }
+        return base;
+      }
+
+      function getEditDurationMinutes() {
+        var fixed = scheduleGridFixedDurationMinutes();
+        if (fixed != null) return fixed;
+        var durSel = document.getElementById('slotDurationSelect');
+        var d = durSel ? parseInt(durSel.value, 10) : 60;
+        if (isNaN(d) || d < 15) d = 60;
+        return Math.min(480, Math.max(15, d));
+      }
+
+      /** Calendar baseline slot without booking — cannot deselect (same as pinned chip). */
+      function isMinutePinnedBaseline(m) {
+        return (
+          state.editMode === 'calendar' &&
+          state.calendarBaselineStarts &&
+          state.calendarBaselineStarts.has(m) &&
+          state.selectedStarts.has(m) &&
+          !state.lockedStarts.has(m)
+        );
+      }
+
+      /**
+       * Drop optional starts that overlap after duration change; keep locked + baseline-pinned.
+       * English note: greedy by sorted time — first kept wins; later conflicts are removed.
+       */
+      function pruneSelectedStartsForOverlap(durationMinutes) {
+        var sorted = Array.from(state.selectedStarts).sort(function(a, b) {
+          return a - b;
+        });
+        var kept = new Set();
+        sorted.forEach(function(m) {
+          if (state.lockedStarts.has(m) || isMinutePinnedBaseline(m)) {
+            kept.add(m);
+            return;
+          }
+          var conflict = false;
+          kept.forEach(function(s) {
+            if (intervalsOverlapMin(s, durationMinutes, m, durationMinutes)) conflict = true;
+          });
+          if (!conflict) kept.add(m);
+        });
+        state.selectedStarts = kept;
+      }
+
+      /** True if choosing m as a start would overlap any already selected slot span. */
+      function isStartMinuteBlockedByOthers(m, durationMinutes, selectedStarts) {
+        if (selectedStarts.has(m)) return false;
+        var blocked = false;
+        selectedStarts.forEach(function(s) {
+          if (intervalsOverlapMin(s, durationMinutes, m, durationMinutes)) blocked = true;
+        });
+        return blocked;
+      }
+
       function escapeHtml(s) {
         if (s == null || s === undefined) return '';
         return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -2427,7 +3183,7 @@
         state.slotEditIntent = null;
         state.pendingIntentFlow = null;
         state.pendingTemplateDay = null;
-        state.calendarBaselineHours = null;
+        state.calendarBaselineStarts = null;
         updateTelegramBack();
       }
 
@@ -2485,13 +3241,13 @@
         updateTelegramBack();
       }
 
-      /** True if at least one hour was added beyond the slots that existed when opening the day editor. */
+      /** True if at least one start time was added beyond the slots that existed when opening the day editor. */
       function hasCalendarNewSlotSelection() {
-        if (state.editMode !== 'calendar' || !state.calendarBaselineHours) return true;
-        var base = state.calendarBaselineHours;
+        if (state.editMode !== 'calendar' || !state.calendarBaselineStarts) return true;
+        var base = state.calendarBaselineStarts;
         var hasNew = false;
-        state.selectedHours.forEach(function(h) {
-          if (!base.has(h)) hasNew = true;
+        state.selectedStarts.forEach(function(m) {
+          if (!base.has(m)) hasNew = true;
         });
         return hasNew;
       }
@@ -2499,10 +3255,10 @@
       function updateEditDoneButton() {
         var btn = document.getElementById('editDone');
         if (!btn) return;
-        if (state.editMode === 'calendar' && state.calendarBaselineHours) {
+        if (state.editMode === 'calendar' && state.calendarBaselineStarts) {
           var ok = hasCalendarNewSlotSelection();
           btn.disabled = !ok;
-          btn.title = ok ? '' : 'Добавьте хотя бы один новый час';
+          btn.title = ok ? '' : 'Добавьте хотя бы одно новое время';
         } else {
           btn.disabled = false;
           btn.title = '';
@@ -2771,27 +3527,14 @@
           .then(function(data) {
             state.slots = (data && data.slots) ? data.slots : [];
             state.groupClassesEnabled = !!(data && data.group_classes_enabled);
+            applyScheduleDefaultDurationFromProfile(data && data.session_duration_minutes);
+            applyScheduleGridFromApi(data);
             state.scheduleDataLoaded = true;
-            if (state.pendingBookFlowFromHub) {
-              state.slotFilter = 'available';
-              document.querySelectorAll('.filter-btn[data-slot-filter]').forEach(function(b) {
-                b.classList.toggle('active', (b.getAttribute('data-slot-filter') || '') === 'available');
-              });
-            }
             renderCalendar();
             if (state.pendingBookFlowFromHub) {
               state.pendingBookFlowFromHub = false;
               setTimeout(function() {
-                var el = document.querySelector('#calendarContent .slot-available');
-                if (el) {
-                  try {
-                    el.scrollIntoView({ block: 'center', behavior: 'smooth' });
-                  } catch (e) {
-                    el.scrollIntoView(true);
-                  }
-                } else {
-                  showToast('На этой неделе нет свободных слотов — смените неделю или добавьте слоты.');
-                }
+                openQuickBookModalFromHub();
               }, 80);
             }
             flushPendingGroupHubModal();
@@ -2812,6 +3555,7 @@
           .then(function(r) { return r.json(); })
           .then(function(data) {
             state.templates = data.templates || [];
+            applyScheduleGridFromApi(data);
             renderTemplate();
           })
           .catch(function() {
@@ -2819,27 +3563,205 @@
           });
       }
 
-      /** Opens the book-client flow for a slot id (used by calendar row and group hub). */
-      function openBookModalForSlot(slotId) {
-        state.bookSlotId = slotId;
-        state.bookPriceVariantId = null;
-        state.bookSlotIsGroup = false;
-        state.bookSlotGroupServiceId = null;
-        var slotRow = (state.slots || []).find(function(x) { return x.id === slotId; });
-        if (slotRow) {
-          var cap = (slotRow.capacity != null) ? parseInt(slotRow.capacity, 10) : 1;
-          if (isNaN(cap) || cap < 1) cap = 1;
-          state.bookSlotIsGroup = cap > 1;
-          var svcRaw = slotRow.service_id;
-          if (svcRaw != null && !isNaN(parseInt(svcRaw, 10))) {
-            state.bookSlotGroupServiceId = parseInt(svcRaw, 10);
-          }
+      function formatQuickBookSlotLabel() {
+        if (!state.quickBookSlotDate || state.quickBookStartMinutes == null) return '';
+        var dsl = formatDateKey(state.quickBookSlotDate);
+        return dsl + ' ' + formatMinuteClock(state.quickBookStartMinutes);
+      }
+
+      /**
+       * free — можно создать/использовать слот; busy — занято; group — группа;
+       * past — уже прошло; overlap — пересечение с другим слотом при этой длительности; invalid — не влезает в сутки.
+       */
+      function quickBookSlotAvailability(slotsForDay, startMinutes, durationMinutes, isoDate) {
+        var dm = durationMinutes || 60;
+        var newEnd = startMinutes + dm;
+        if (newEnd > 24 * 60) return 'invalid';
+        var todayStr = dateToStr(new Date());
+        if (isoDate === todayStr) {
+          var now = new Date();
+          var nowM = now.getHours() * 60 + now.getMinutes();
+          if (startMinutes < nowM) return 'past';
         }
-        if (state.bookSlotIsGroup && state.bookSlotGroupServiceId == null) {
-          showToast('У группового слота не задана услуга. Обновите слот в расписании.');
-          clearBookSlotModalState();
+        var rows = (slotsForDay || []).filter(function(s) {
+          return (s.status || '').toLowerCase() !== 'cancelled';
+        });
+        for (var i = 0; i < rows.length; i++) {
+          var s = rows[i];
+          var iv = slotIntervalMinutesFromRow(s);
+          if (!intervalsOverlapAbsolute(startMinutes, newEnd, iv.start, iv.end)) continue;
+          var cap = (s.capacity != null) ? parseInt(s.capacity, 10) : 1;
+          if (isNaN(cap) || cap < 1) cap = 1;
+          var occ = (s.active_bookings != null) ? parseInt(s.active_bookings, 10) : 0;
+          if (cap > 1) return 'group';
+          if (iv.start === startMinutes && iv.end === newEnd) {
+            if (occ >= 1) return 'busy';
+            return 'free';
+          }
+          if (occ >= 1) return 'busy';
+          return 'overlap';
+        }
+        return 'free';
+      }
+
+      function setQuickBookHourHint(text, show) {
+        var el = document.getElementById('quickBookHourHint');
+        if (!el) return;
+        if (!show || !text) {
+          el.setAttribute('hidden', 'hidden');
+          el.textContent = '';
           return;
         }
+        el.removeAttribute('hidden');
+        el.textContent = text;
+      }
+
+      /** Rebuild start-time &lt;select&gt; from arena grid (GET /schedule) + chosen duration. */
+      function refreshQuickBookHourOptions(isoDate) {
+        var hourSel = document.getElementById('quickBookHourSelect');
+        var durEl = document.getElementById('quickBookDurationSelect');
+        if (!hourSel || !isoDate) return Promise.resolve();
+        var dm = durEl ? parseInt(durEl.value, 10) : 60;
+        if (isNaN(dm) || dm < 15) dm = 60;
+        hourSel.disabled = true;
+        var btnGo = document.getElementById('btnQuickBookContinue');
+        if (btnGo) btnGo.disabled = true;
+        setQuickBookHourHint('Загрузка расписания…', true);
+        return fetch(
+          apiUrlWithQuery('/schedule?from_date=' + encodeURIComponent(isoDate) + '&to_date=' + encodeURIComponent(isoDate)),
+          { headers: headers() }
+        )
+          .then(function(r) {
+            if (!r.ok) return Promise.reject(new Error('schedule'));
+            return r.json();
+          })
+          .then(function(data) {
+            applyScheduleGridFromApi(data);
+            var slots = (data && data.slots) ? data.slots : [];
+            var slotsForDay = slots.filter(function(s) {
+              var d = s.slot_date;
+              return d === isoDate || String(d) === isoDate;
+            });
+            state.quickBookSlotsForDay = slotsForDay;
+            var prev = hourSel.value;
+            hourSel.innerHTML = '';
+            var anyFree = false;
+            var gridMins = allowedStartMinutesFromScheduleGridPreset(state.scheduleGridPreset);
+            for (var gi = 0; gi < gridMins.length; gi++) {
+              var m = gridMins[gi];
+              var opt = document.createElement('option');
+              opt.value = String(m);
+              var label = formatMinuteClock(m);
+              var av = quickBookSlotAvailability(slotsForDay, m, dm, isoDate);
+              if (av === 'past') {
+                opt.disabled = true;
+                opt.textContent = label + ' — прошло';
+              } else if (av === 'busy') {
+                opt.disabled = true;
+                opt.textContent = label + ' — занято';
+              } else if (av === 'group') {
+                opt.disabled = true;
+                opt.textContent = label + ' — группа';
+              } else if (av === 'overlap') {
+                opt.disabled = true;
+                opt.textContent = label + ' — пересечение';
+              } else if (av === 'invalid') {
+                opt.disabled = true;
+                opt.textContent = label + ' — не влезает';
+              } else {
+                opt.textContent = label;
+                anyFree = true;
+              }
+              hourSel.appendChild(opt);
+            }
+            var tryPrev = hourSel.querySelector('option[value="' + prev + '"]:not([disabled])');
+            if (tryPrev) {
+              hourSel.value = prev;
+            } else {
+              var firstOk = hourSel.querySelector('option:not([disabled])');
+              if (firstOk) hourSel.value = firstOk.value;
+              else if (hourSel.options.length) hourSel.value = hourSel.options[0].value;
+            }
+            hourSel.disabled = false;
+            if (!anyFree) {
+              setQuickBookHourHint(
+                'Нет свободного времени в сетке на выбранную длительность — смените дату, длительность или откройте расписание.',
+                true
+              );
+            } else {
+              setQuickBookHourHint('', false);
+            }
+            var btnGo2 = document.getElementById('btnQuickBookContinue');
+            if (btnGo2) btnGo2.disabled = !anyFree;
+          })
+          .catch(function() {
+            hourSel.disabled = false;
+            var btnGo3 = document.getElementById('btnQuickBookContinue');
+            if (btnGo3) btnGo3.disabled = false;
+            hourSel.innerHTML = '';
+            var fallbackMins = allowedStartMinutesFromScheduleGridPreset(state.scheduleGridPreset);
+            for (var fi = 0; fi < fallbackMins.length; fi++) {
+              var m2 = fallbackMins[fi];
+              var o = document.createElement('option');
+              o.value = String(m2);
+              o.textContent = formatMinuteClock(m2);
+              hourSel.appendChild(o);
+            }
+            setQuickBookHourHint('Не удалось проверить занятость — выберите время вручную.', true);
+            showToast('Не удалось загрузить расписание');
+          });
+      }
+
+      var quickBookDateDebounce = null;
+      function scheduleQuickBookHourRefresh() {
+        if (quickBookDateDebounce) clearTimeout(quickBookDateDebounce);
+        quickBookDateDebounce = setTimeout(function() {
+          quickBookDateDebounce = null;
+          var inp = document.getElementById('quickBookDateInput');
+          if (inp && inp.value) refreshQuickBookHourOptions(inp.value);
+        }, 300);
+      }
+
+      function openQuickBookModalFromHub() {
+        var mq = document.getElementById('modalQuickBookDatetime');
+        if (!mq) return;
+        var minD = dateToStr(new Date());
+        var inp = document.getElementById('quickBookDateInput');
+        if (inp) {
+          inp.min = minD;
+          inp.value = minD;
+        }
+        var dur = document.getElementById('quickBookDurationSelect');
+        if (dur) dur.value = String(state.defaultSlotDurationMinutes || 60);
+        syncDurationUIFromScheduleGrid();
+        mq.style.display = 'flex';
+        mq.setAttribute('aria-hidden', 'false');
+        updateTelegramBack();
+        refreshQuickBookHourOptions(inp ? inp.value : minD);
+      }
+
+      function scrollToFirstFreeSlotRow() {
+        state.slotFilter = 'available';
+        document.querySelectorAll('.filter-btn[data-slot-filter]').forEach(function(b) {
+          b.classList.toggle('active', (b.getAttribute('data-slot-filter') || '') === 'available');
+        });
+        renderCalendar();
+        setTimeout(function() {
+          var el = document.querySelector('#calendarContent .slot-available');
+          if (el) {
+            try {
+              el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+            } catch (e) {
+              el.scrollIntoView(true);
+            }
+          } else {
+            showToast('На этой неделе нет свободных слотов — смените неделю или добавьте слоты.');
+          }
+        }, 80);
+      }
+
+      /** Loads services/clients and wires book modal (shared by slot-based and quick book). */
+      function runBookModalShellAndFetch() {
         state.bookModalStep = 'choice';
         document.getElementById('bookClientSearch').value = '';
         document.getElementById('bookNewPhone').value = '';
@@ -2922,6 +3844,41 @@
             applyBookModalGroupUi();
             fillTrainerArenasUI();
           });
+      }
+
+      /** Quick book from hub: date/time chosen — no slot row in state yet. */
+      function openBookModalForQuickFlow() {
+        state.bookSlotId = null;
+        state.bookFlowQuick = true;
+        state.bookPriceVariantId = null;
+        state.bookSlotIsGroup = false;
+        state.bookSlotGroupServiceId = null;
+        runBookModalShellAndFetch();
+      }
+
+      /** Opens the book-client flow for a slot id (used by calendar row and group hub). */
+      function openBookModalForSlot(slotId) {
+        state.bookFlowQuick = false;
+        state.bookSlotId = slotId;
+        state.bookPriceVariantId = null;
+        state.bookSlotIsGroup = false;
+        state.bookSlotGroupServiceId = null;
+        var slotRow = (state.slots || []).find(function(x) { return x.id === slotId; });
+        if (slotRow) {
+          var cap = (slotRow.capacity != null) ? parseInt(slotRow.capacity, 10) : 1;
+          if (isNaN(cap) || cap < 1) cap = 1;
+          state.bookSlotIsGroup = cap > 1;
+          var svcRaw = slotRow.service_id;
+          if (svcRaw != null && !isNaN(parseInt(svcRaw, 10))) {
+            state.bookSlotGroupServiceId = parseInt(svcRaw, 10);
+          }
+        }
+        if (state.bookSlotIsGroup && state.bookSlotGroupServiceId == null) {
+          showToast('У группового слота не задана услуга. Обновите слот в расписании.');
+          clearBookSlotModalState();
+          return;
+        }
+        runBookModalShellAndFetch();
       }
 
       function openGroupSlotModal(slotId) {
@@ -3113,10 +4070,17 @@
               if (!ok) return;
               fetch(apiUrlWithQuery('/schedule/slots/' + id), { method: 'DELETE', headers: headers() })
                 .then(function(r) {
-                  if (r.ok) loadSlots();
-                  else r.json().then(function(o) { alert(o.detail || 'Ошибка'); });
+                  if (r.ok) {
+                    showToast('Слот удалён');
+                    loadSlots();
+                  } else {
+                    r.json().then(function(o) {
+                      var d = o.detail || 'Ошибка';
+                      showToast(typeof d === 'string' ? d : 'Не удалось удалить');
+                    });
+                  }
                 })
-                .catch(function() { alert('Ошибка сети'); });
+                .catch(function() { showToast('Ошибка сети'); });
             });
           };
         });
@@ -3191,9 +4155,14 @@
               row.onclick = function() {
                 var clientId = parseInt(row.dataset.clientId, 10);
                 var clientName = (row.dataset.clientName || 'Клиент').replace(/&quot;/g, '"');
-                if (!state.bookSlotId) return;
-                var slot = state.slots.find(function(s) { return s.id === state.bookSlotId; });
-                var slotLabel = slot ? (formatDateKey(slot.slot_date) + ' ' + (slot.start_time || '').toString().slice(0, 5)) : '';
+                if (!state.bookSlotId && !state.bookFlowQuick) return;
+                var slotLabel = '';
+                if (state.bookFlowQuick) {
+                  slotLabel = formatQuickBookSlotLabel();
+                } else {
+                  var slot = state.slots.find(function(s) { return s.id === state.bookSlotId; });
+                  slotLabel = slot ? (formatDateKey(slot.slot_date) + ' ' + (slot.start_time || '').toString().slice(0, 5)) : '';
+                }
                 state.pendingBookClientId = clientId;
                 state.pendingBookClientName = clientName;
                 document.getElementById('modalBookConfirmText').textContent = 'Записать ' + clientName + ' на ' + slotLabel + '?';
@@ -3218,7 +4187,7 @@
       }
       function doConfirmBookClient() {
         var clientId = state.pendingBookClientId;
-        if (clientId == null || !state.bookSlotId) return;
+        if (clientId == null || (!state.bookSlotId && !state.bookFlowQuick)) return;
         var serviceId = state.bookServiceId != null ? state.bookServiceId : (state.bookServices.length ? state.bookServices[0].id : null);
         if (serviceId == null) {
           alert('Выберите услугу. Если услуг нет — добавьте услугу в профиле.');
@@ -3228,20 +4197,28 @@
         updateTelegramBack();
         state.pendingBookClientId = null;
         state.pendingBookClientName = null;
-        fetch(apiUrlWithQuery('/trainer/booking'), {
+        var url = state.bookFlowQuick ? '/trainer/booking/quick' : '/trainer/booking';
+        var payload = state.bookFlowQuick ? trainerQuickBookingPayload(clientId, serviceId) : trainerBookingPayload(clientId, serviceId);
+        var wasQuick = state.bookFlowQuick;
+        fetch(apiUrlWithQuery(url), {
           method: 'POST',
           headers: headers(),
-          body: JSON.stringify(trainerBookingPayload(clientId, serviceId)),
+          body: JSON.stringify(payload),
         })
           .then(function(r) {
             if (r.ok) {
               document.getElementById('modalBookClient').style.display = 'none';
               clearBookSlotModalState();
               loadSlots();
+              if (wasQuick) showToast('Запись создана');
               updateTelegramBack();
               return;
             }
-            return r.json().then(function(o) { throw new Error(o.detail || 'Ошибка'); });
+            return r.json().then(function(o) {
+              var d = o.detail;
+              var msg = Array.isArray(d) ? (d[0] && d[0].msg) || 'Ошибка' : (d || 'Ошибка');
+              throw new Error(typeof msg === 'string' ? msg : 'Ошибка');
+            });
           })
           .catch(function(e) { alert(e.message || 'Ошибка сети'); });
       }
@@ -3259,6 +4236,144 @@
         state.bookModalStep = 'choice';
         updateTelegramBack();
       };
+
+      function runQuickBookContinue(sd, startMinutes, dm, mq) {
+        var hourSel = document.getElementById('quickBookHourSelect');
+        var opt = hourSel && hourSel.options[hourSel.selectedIndex];
+        if (opt && opt.disabled) {
+          showToast('Выберите свободное время');
+          return;
+        }
+        var btn = document.getElementById('btnQuickBookContinue');
+        function finishBtn() {
+          if (btn) btn.disabled = false;
+        }
+        if (btn) btn.disabled = true;
+        fetch(
+          apiUrlWithQuery('/schedule?from_date=' + encodeURIComponent(sd) + '&to_date=' + encodeURIComponent(sd)),
+          { headers: headers() }
+        )
+          .then(function(r) {
+            return r.ok ? r.json() : Promise.reject(new Error('schedule'));
+          })
+          .then(function(data) {
+            var slots = (data && data.slots) ? data.slots : [];
+            var slotsForDay = slots.filter(function(s) {
+              var d = s.slot_date;
+              return d === sd || String(d) === sd;
+            });
+            var av = quickBookSlotAvailability(slotsForDay, startMinutes, dm, sd);
+            if (av === 'past') {
+              showToast('Это время уже прошло');
+              refreshQuickBookHourOptions(sd).finally(finishBtn);
+              return;
+            }
+            if (av === 'busy') {
+              showToast('Это время уже занято. Выберите другое время.');
+              refreshQuickBookHourOptions(sd).finally(finishBtn);
+              return;
+            }
+            if (av === 'group') {
+              showToast('На это время есть групповой слот — откройте расписание.');
+              finishBtn();
+              return;
+            }
+            if (av === 'overlap') {
+              showToast('Пересекается с другим слотом — смените время или длительность.');
+              refreshQuickBookHourOptions(sd).finally(finishBtn);
+              return;
+            }
+            if (av === 'invalid') {
+              showToast('Слишком длинно для выбранного начала.');
+              refreshQuickBookHourOptions(sd).finally(finishBtn);
+              return;
+            }
+            state.quickBookSlotDate = sd;
+            state.quickBookStartMinutes = startMinutes;
+            state.quickBookDurationMinutes = dm;
+            if (mq) {
+              mq.style.display = 'none';
+              mq.setAttribute('aria-hidden', 'true');
+            }
+            setQuickBookHourHint('', false);
+            openBookModalForQuickFlow();
+            finishBtn();
+          })
+          .catch(function() {
+            showToast('Не удалось проверить время. Повторите попытку.');
+            finishBtn();
+          });
+      }
+
+      (function wireQuickBookDatetimeModal() {
+        var mq = document.getElementById('modalQuickBookDatetime');
+        var inpDate = document.getElementById('quickBookDateInput');
+        if (inpDate) {
+          inpDate.addEventListener('change', function() {
+            var v = (inpDate.value || '').trim();
+            if (!v) return;
+            if (inpDate.min && v < inpDate.min) return;
+            scheduleQuickBookHourRefresh();
+          });
+        }
+        var durQuick = document.getElementById('quickBookDurationSelect');
+        if (durQuick) {
+          durQuick.addEventListener('change', function() {
+            state.quickBookDurationMinutes = parseInt(durQuick.value, 10) || 60;
+            var v = inpDate && (inpDate.value || '').trim();
+            if (v) refreshQuickBookHourOptions(v);
+          });
+        }
+        var btnCont = document.getElementById('btnQuickBookContinue');
+        var btnCancel = document.getElementById('btnQuickBookCancel');
+        var btnFree = document.getElementById('btnQuickBookShowFreeSlots');
+        if (btnCont) {
+          btnCont.onclick = function() {
+            var inp = document.getElementById('quickBookDateInput');
+            var hourSel = document.getElementById('quickBookHourSelect');
+            var dur = document.getElementById('quickBookDurationSelect');
+            if (!inp || !hourSel) return;
+            var sd = (inp.value || '').trim();
+            if (!sd) {
+              showToast('Выберите дату');
+              return;
+            }
+            if (inp.min && sd < inp.min) {
+              showToast('Дата не может быть в прошлом');
+              return;
+            }
+            var startM = parseInt(hourSel.value, 10);
+            if (isNaN(startM)) {
+              showToast('Выберите время');
+              return;
+            }
+            var dm = dur ? parseInt(dur.value, 10) : 60;
+            if (isNaN(dm) || dm < 15) dm = 60;
+            runQuickBookContinue(sd, startM, dm, mq);
+          };
+        }
+        if (btnCancel) {
+          btnCancel.onclick = function() {
+            if (mq) {
+              mq.style.display = 'none';
+              mq.setAttribute('aria-hidden', 'true');
+            }
+            state.pendingBookFlowFromHub = false;
+            updateTelegramBack();
+          };
+        }
+        if (btnFree) {
+          btnFree.onclick = function() {
+            if (mq) {
+              mq.style.display = 'none';
+              mq.setAttribute('aria-hidden', 'true');
+            }
+            state.pendingBookFlowFromHub = false;
+            updateTelegramBack();
+            scrollToFirstFreeSlotRow();
+          };
+        }
+      })();
       document.getElementById('bookOptExisting').onclick = function() {
         if (!state.trainerHasBookClients) return;
         document.getElementById('bookStepChoice').classList.remove('active');
@@ -3352,7 +4467,7 @@
           firstEl.focus();
           return;
         }
-        if (!state.bookSlotId) return;
+        if (!state.bookSlotId && !state.bookFlowQuick) return;
         var btn = document.getElementById('bookNewSubmit');
         btn.disabled = true;
         fetch(apiUrlWithQuery('/trainer/clients'), {
@@ -3368,10 +4483,12 @@
             var clientId = data.client_id;
             var serviceId = state.bookServiceId != null ? state.bookServiceId : (state.bookServices.length ? state.bookServices[0].id : null);
             if (serviceId == null) throw new Error('Выберите услугу. Добавьте услугу в профиле, если списка нет.');
-            return fetch(apiUrlWithQuery('/trainer/booking'), {
+            var url = state.bookFlowQuick ? '/trainer/booking/quick' : '/trainer/booking';
+            var payload = state.bookFlowQuick ? trainerQuickBookingPayload(clientId, serviceId) : trainerBookingPayload(clientId, serviceId);
+            return fetch(apiUrlWithQuery(url), {
               method: 'POST',
               headers: headers(),
-              body: JSON.stringify(trainerBookingPayload(clientId, serviceId)),
+              body: JSON.stringify(payload),
             });
           })
           .then(function(r) {
@@ -3382,7 +4499,11 @@
               showToast('Клиент добавлен и записан на занятие.');
               return;
             }
-            return r.json().then(function(o) { throw new Error(o.detail || 'Ошибка'); });
+            return r.json().then(function(o) {
+              var d = o.detail;
+              var msg = Array.isArray(d) ? (d[0] && d[0].msg) || 'Ошибка' : (d || 'Ошибка');
+              throw new Error(typeof msg === 'string' ? msg : 'Ошибка');
+            });
           })
           .catch(function(e) {
             alert(e.message || 'Ошибка сети');
@@ -3428,18 +4549,25 @@
         state.editMode = 'template';
         state.editDay = day;
         state.editDate = null;
-        state.lockedHours = new Set();
-        state.calendarBaselineHours = null;
+        state.lockedStarts = new Set();
+        state.calendarBaselineStarts = null;
         const existing = (state.templates || []).filter(function(t) { return t.day_of_week === day; });
         if (!isGroupClassesFeatureEnabled()) {
           state.slotEditIntent = 'individual';
         } else if (state.slotEditIntent !== 'group' && state.slotEditIntent !== 'individual') {
           state.slotEditIntent = detectSlotIntentFromRows(existing);
         }
-        state.selectedHours = new Set(existing.map(function(t) {
-          const p = (t.start_time || '').split(':');
-          return parseInt(p[0], 10);
+        state.selectedStarts = new Set(existing.map(function(t) {
+          return parseStartToMinutes(t.start_time);
         }));
+        var durTpl = document.getElementById('slotDurationSelect');
+        if (durTpl) {
+          var dms = existing.map(function(t) { return parseInt(t.duration_minutes, 10); }).filter(function(x) { return !isNaN(x); });
+          var fallbackDur = state.defaultSlotDurationMinutes || 60;
+          var dval = dms.length && dms.every(function(x) { return x === dms[0]; }) ? dms[0] : fallbackDur;
+          durTpl.value = String(normalizeDurationToScheduleSelect(Math.min(480, Math.max(15, dval))));
+        }
+        syncDurationUIFromScheduleGrid();
         var cgw = document.getElementById('calendarGroupServiceWrap');
         var cawCal = document.getElementById('calendarGroupArenaWrap');
         var tgar = document.getElementById('templateGroupArenaWrap');
@@ -3448,11 +4576,13 @@
         document.querySelector('.tabs').style.display = 'none';
         document.getElementById('tabCalendar').style.display = 'none';
         document.getElementById('tabTemplate').style.display = 'none';
-        document.getElementById('editTitle').textContent = DAYS[day] + ': часы в шаблоне';
+        document.getElementById('editTitle').textContent = DAYS[day] + ': время в шаблоне';
         var useTplGroup = slotIntentUseGroupUi();
         document.getElementById('editHint').textContent = useTplGroup
-          ? 'Групповые слоты: места, услуга и площадка задаются один раз — для всех отмеченных часов.'
-          : 'Индивидуальные слоты. Отметьте часы — «Готово» сохранит шаблон на этот день.';
+          ? 'Групповые слоты: места, услуга и площадка задаются один раз — для всех отмеченных начал.'
+          : scheduleGridFixedDurationMinutes() != null
+            ? 'Индивидуальные слоты. ' + scheduleGridHintSuffix() + ' — «Готово» сохранит шаблон на этот день.'
+            : 'Индивидуальные слоты. ' + scheduleGridHintSuffix() + ' и длительность — «Готово» сохранит шаблон на этот день.';
         var capWrap = document.getElementById('slotCapacityWrap');
         if (capWrap) capWrap.style.display = 'none';
         var tdef = document.getElementById('templateDefaultCapacityInput');
@@ -3497,9 +4627,11 @@
                 tgar.style.display = 'none';
               }
             }
+            pruneSelectedStartsForOverlap(getEditDurationMinutes());
             renderHourGrid();
           });
         } else {
+          pruneSelectedStartsForOverlap(getEditDurationMinutes());
           renderHourGrid();
         }
         updateTelegramBack();
@@ -3515,23 +4647,32 @@
         } else if (state.slotEditIntent !== 'group' && state.slotEditIntent !== 'individual') {
           state.slotEditIntent = detectSlotIntentFromRows(daySlots);
         }
-        state.selectedHours = new Set();
-        state.lockedHours = new Set();
+        state.selectedStarts = new Set();
+        state.lockedStarts = new Set();
         daySlots.forEach(function(s) {
-          const h = parseInt((s.start_time || '').split(':')[0], 10);
-          state.selectedHours.add(h);
-          const occ = (s.active_bookings != null) ? parseInt(s.active_bookings, 10) : 0;
-          if ((s.status || '') === 'booked' || occ > 0) state.lockedHours.add(h);
+          var m = parseStartToMinutes(s.start_time);
+          state.selectedStarts.add(m);
+          var occ = (s.active_bookings != null) ? parseInt(s.active_bookings, 10) : 0;
+          if ((s.status || '') === 'booked' || occ > 0) state.lockedStarts.add(m);
         });
-        state.calendarBaselineHours = new Set(state.selectedHours);
+        state.calendarBaselineStarts = new Set(state.selectedStarts);
+        var durElCal = document.getElementById('slotDurationSelect');
+        if (durElCal && daySlots.length) {
+          var durs = daySlots.map(slotDurationFromRow);
+          var dcal = durs.length && durs.every(function(x) { return x === durs[0]; }) ? durs[0] : 60;
+          durElCal.value = String(Math.min(480, Math.max(15, dcal)));
+        } else if (durElCal) {
+          durElCal.value = String(normalizeDurationToScheduleSelect(state.defaultSlotDurationMinutes || 60));
+        }
+        syncDurationUIFromScheduleGrid();
         document.querySelector('.tabs').style.display = 'none';
         document.getElementById('tabCalendar').style.display = 'none';
         document.getElementById('tabTemplate').style.display = 'none';
         document.getElementById('editTitle').textContent = 'Слоты на ' + formatDateKey(slotDate);
         var useCalGroup = slotIntentUseGroupUi();
         document.getElementById('editHint').textContent = useCalGroup
-          ? 'Групповые слоты: «Мест в слоте» и услуга — для новых часов. Уже открытые часы снять нельзя. «Готово» — после выбора хотя бы одного нового часа.'
-          : 'Индивидуальные слоты. Уже открытые и занятые часы снять нельзя. «Готово» — после выбора хотя бы одного нового часа.';
+          ? 'Групповые слоты: «Мест в слоте» и услуга — для новых начал. Уже открытые слоты снять нельзя. «Готово» — после выбора хотя бы одного нового времени.'
+          : 'Индивидуальные слоты. Уже открытые и занятые слоты снять нельзя. «Готово» — после выбора хотя бы одного нового времени.';
         var capWrap = document.getElementById('slotCapacityWrap');
         var capInput = document.getElementById('slotCapacityInput');
         if (capInput) capInput.setAttribute('min', useCalGroup ? '2' : '1');
@@ -3599,52 +4740,84 @@
           }
         }
         document.getElementById('screenEdit').style.display = 'block';
+        pruneSelectedStartsForOverlap(getEditDurationMinutes());
         renderHourGrid();
         updateTelegramBack();
       }
 
       function renderHourGrid() {
         const grid = document.getElementById('hourGrid');
+        if (!grid) return;
+        const durationMinutes = getEditDurationMinutes();
+        const preset = state.scheduleGridPreset || defaultScheduleGridPreset();
+        var h0 = Math.max(0, Math.min(23, parseInt(preset.hour_start, 10)));
+        if (isNaN(h0)) h0 = 8;
+        var h1 = Math.max(0, Math.min(23, parseInt(preset.hour_end, 10)));
+        if (isNaN(h1)) h1 = 21;
+        if (h1 < h0) {
+          var hx = h0;
+          h0 = h1;
+          h1 = hx;
+        }
+        const list = allowedStartMinutesFromScheduleGridPreset(preset);
         let html = '';
-        for (let h = 8; h <= 20; h++) {
-          const selected = state.selectedHours.has(h);
-          const locked = state.lockedHours.has(h);
-          const pinned =
-            state.editMode === 'calendar' &&
-            state.calendarBaselineHours &&
-            state.calendarBaselineHours.has(h) &&
-            selected &&
-            !locked;
-          const label = String(h);
+        for (let h = h0; h <= h1; h++) {
+          const chips = list.filter(function(m) {
+            return Math.floor(m / 60) === h;
+          });
+          if (!chips.length) continue;
+          html += '<div class="schedule-hour-row" role="row">';
           html +=
-            '<button type="button" class="hour-chip' +
-            (selected ? ' selected' : '') +
-            (locked ? ' locked' : '') +
-            (pinned ? ' pinned' : '') +
-            '" data-hour="' +
-            h +
-            '"' +
-            (locked ? ' disabled title="Есть записи — убрать нельзя"' : '') +
-            (pinned ? ' title="Уже в расписании — убрать нельзя"' : '') +
-            '>' +
-            label +
-            '</button>';
+            '<div class="schedule-hour-row__rail" aria-hidden="true"><span class="schedule-hour-row__label">' +
+            String(h).padStart(2, '0') +
+            '</span></div>';
+          html += '<div class="schedule-hour-row__chips" role="group">';
+          for (let ci = 0; ci < chips.length; ci++) {
+            const m = chips[ci];
+            const selected = state.selectedStarts.has(m);
+            const locked = state.lockedStarts.has(m);
+            const pinned =
+              state.editMode === 'calendar' &&
+              state.calendarBaselineStarts &&
+              state.calendarBaselineStarts.has(m) &&
+              selected &&
+              !locked;
+            const blockedByOverlap =
+              !selected && isStartMinuteBlockedByOthers(m, durationMinutes, state.selectedStarts);
+            const labelFull = formatMinuteClock(m);
+            const labelShort = ':' + String(m % 60).padStart(2, '0');
+            var btnAttrs = ' aria-label="' + escapeHtml(labelFull) + '"';
+            if (blockedByOverlap) {
+              btnAttrs +=
+                ' disabled title="Пересекается с уже выбранным слотом при этой длительности"';
+            } else if (locked) {
+              btnAttrs += ' disabled title="Есть записи — убрать нельзя"';
+            } else if (pinned) {
+              btnAttrs += ' title="Уже в расписании — убрать нельзя"';
+            }
+            html +=
+              '<button type="button" class="hour-chip' +
+              (selected ? ' selected' : '') +
+              (locked ? ' locked' : '') +
+              (pinned ? ' pinned' : '') +
+              (blockedByOverlap ? ' duration-blocked' : '') +
+              '" data-minute="' +
+              m +
+              '"' +
+              btnAttrs +
+              '>' +
+              labelShort +
+              '</button>';
+          }
+          html += '</div></div>';
         }
         grid.innerHTML = html;
-        grid.querySelectorAll('.hour-chip:not(.locked):not(.pinned)').forEach(function(btn) {
+        grid.querySelectorAll('.hour-chip:not(.locked):not(.pinned):not(.duration-blocked)').forEach(function(btn) {
           btn.onclick = function() {
-            const h = parseInt(btn.dataset.hour, 10);
-            if (state.editMode === 'template' && slotIntentUseGroupUi()) {
-              if (state.selectedHours.has(h)) state.selectedHours.delete(h);
-              else state.selectedHours.add(h);
-              btn.classList.toggle('selected', state.selectedHours.has(h));
-              updateEditDoneButton();
-              return;
-            }
-            if (state.selectedHours.has(h)) state.selectedHours.delete(h);
-            else state.selectedHours.add(h);
-            btn.classList.toggle('selected', state.selectedHours.has(h));
-            updateEditDoneButton();
+            const m = parseInt(btn.dataset.minute, 10);
+            if (state.selectedStarts.has(m)) state.selectedStarts.delete(m);
+            else state.selectedStarts.add(m);
+            renderHourGrid();
           };
         });
         if (!(state.editMode === 'template' && slotIntentUseGroupUi())) {
@@ -3654,11 +4827,22 @@
         updateEditDoneButton();
       }
 
+      (function wireSlotDurationOverlap() {
+        var sel = document.getElementById('slotDurationSelect');
+        if (!sel) return;
+        sel.addEventListener('change', function() {
+          var d = getEditDurationMinutes();
+          pruneSelectedStartsForOverlap(d);
+          renderHourGrid();
+        });
+      })();
+
       document.getElementById('editDone').onclick = function() {
-        if (state.editMode === 'calendar' && state.calendarBaselineHours && !hasCalendarNewSlotSelection()) {
+        if (state.editMode === 'calendar' && state.calendarBaselineStarts && !hasCalendarNewSlotSelection()) {
           return;
         }
-        const hours = Array.from(state.selectedHours).sort(function(a, b) { return a - b; });
+        var durationMinutes = getEditDurationMinutes();
+        const startsSorted = Array.from(state.selectedStarts).sort(function(a, b) { return a - b; });
         if (state.editMode === 'template') {
           var slotsPayload;
           var templateBody;
@@ -3685,18 +4869,25 @@
               }
               groupArenaPayload = aid;
             }
-            slotsPayload = hours.map(function(h) {
-              return { hour: h, capacity: c, service_id: gid };
+            slotsPayload = startsSorted.map(function(m0) {
+              return { hour: Math.floor(m0 / 60), minute: m0 % 60, capacity: c, service_id: gid };
             });
             templateBody = {
               day_of_week: state.editDay,
               slots: slotsPayload,
-              duration_minutes: 60,
+              duration_minutes: durationMinutes,
               group_arena_id: groupArenaPayload,
             };
           } else {
-            slotsPayload = hours.map(function(h) { return { hour: h, capacity: 1 }; });
-            templateBody = { day_of_week: state.editDay, slots: slotsPayload, duration_minutes: 60, group_arena_id: null };
+            slotsPayload = startsSorted.map(function(m0) {
+              return { hour: Math.floor(m0 / 60), minute: m0 % 60, capacity: 1 };
+            });
+            templateBody = {
+              day_of_week: state.editDay,
+              slots: slotsPayload,
+              duration_minutes: durationMinutes,
+              group_arena_id: null,
+            };
           }
           fetch(apiUrlWithQuery('/schedule/templates/day'), {
             method: 'PUT',
@@ -3704,10 +4895,17 @@
             body: JSON.stringify(templateBody),
           })
             .then(function(r) {
-              if (r.ok) { showMain(); }
-              else r.json().then(function(o) { alert(o.detail || 'Ошибка'); });
+              if (r.ok) {
+                showToast('Шаблон сохранён');
+                showMain();
+              } else {
+                r.json().then(function(o) {
+                  var d = o.detail || 'Ошибка';
+                  showToast(typeof d === 'string' ? d : 'Ошибка сохранения');
+                });
+              }
             })
-            .catch(function() { alert('Ошибка сети'); });
+            .catch(function() { showToast('Ошибка сети'); });
         } else {
           var capRaw = parseInt(document.getElementById('slotCapacityInput').value, 10);
           var capacity = (isNaN(capRaw) || capRaw < 1) ? 1 : Math.min(500, capRaw);
@@ -3716,7 +4914,12 @@
           } else {
             capacity = 1;
           }
-          var postBody = { slot_date: state.editDate, start_hours: hours, duration_minutes: 60, capacity: capacity };
+          var postBody = {
+            slot_date: state.editDate,
+            start_times: startsSorted.map(function(m0) { return formatMinuteClock(m0); }),
+            duration_minutes: durationMinutes,
+            capacity: capacity,
+          };
           if (slotIntentUseGroupUi() && capacity > 1) {
             var gsel = document.getElementById('calendarGroupServiceSelect');
             var gid = gsel ? parseInt(gsel.value, 10) : NaN;
@@ -3748,10 +4951,32 @@
             body: JSON.stringify(postBody),
           })
             .then(function(r) {
-              if (r.ok) { showMain(); }
-              else r.json().then(function(o) { alert(o.detail || 'Ошибка'); });
+              if (r.ok) {
+                // Only count starts added in this session (not slots that were already on the day).
+                var nNew = 0;
+                if (state.calendarBaselineStarts) {
+                  startsSorted.forEach(function(m) {
+                    if (!state.calendarBaselineStarts.has(m)) nNew++;
+                  });
+                } else {
+                  nNew = startsSorted.length;
+                }
+                var msg =
+                  nNew === 0
+                    ? 'Расписание на день обновлено'
+                    : nNew === 1
+                      ? 'Добавлен новый слот'
+                      : 'Добавлено новых слотов: ' + nNew;
+                showToast(msg);
+                showMain();
+              } else {
+                r.json().then(function(o) {
+                  var d = o.detail || 'Ошибка';
+                  showToast(typeof d === 'string' ? d : 'Ошибка сохранения');
+                });
+              }
             })
-            .catch(function() { alert('Ошибка сети'); });
+            .catch(function() { showToast('Ошибка сети'); });
         }
       };
 
@@ -3806,11 +5031,14 @@
           .then(function(data) {
             if (data.ok) {
               const n = data.slots_created != null ? data.slots_created : 0;
-              alert('Готово. Создано слотов: ' + n + '.');
+              showToast('Шаблон применён. Создано слотов: ' + n, 3600);
               loadSlots();
-            } else alert(data.detail || 'Ошибка');
+            } else {
+              var err = data.detail || 'Ошибка';
+              showToast(typeof err === 'string' ? err : 'Не удалось применить шаблон');
+            }
           })
-          .catch(function() { alert('Ошибка сети'); });
+          .catch(function() { showToast('Ошибка сети'); });
       };
 
       document.getElementById('btnAddSlots').onclick = function() {
@@ -3831,11 +5059,6 @@
       };
       document.getElementById('btnSlotIntentCancel').onclick = function() {
         cancelSlotIntentModal();
-      };
-
-      document.getElementById('dayPickBack').onclick = function() {
-        document.getElementById('screenDayPick').style.display = 'none';
-        showMain();
       };
 
       document.getElementById('weekPrev').onclick = function() {

@@ -419,6 +419,66 @@ CLIENT_BOOKING_DECLINED_BY_TRAINER = (
     "Комментарий тренера: {reason}\n\n"
     "Можно выбрать другое время или тренера в каталоге."
 )
+def _ru_sessions_word(n: int) -> str:
+    """Russian plural for «N занятий» (1 занятие / 2 занятия / 5 занятий)."""
+    n = abs(int(n))
+    if 11 <= (n % 100) <= 14:
+        return "занятий"
+    m = n % 10
+    if m == 1:
+        return "занятие"
+    if m in (2, 3, 4):
+        return "занятия"
+    return "занятий"
+
+
+def format_client_pass_issued_html(
+    *,
+    product_name: str,
+    sessions_total: int,
+    sessions_remaining: int,
+    trainer_name: str,
+    service_name: str | None,
+) -> str:
+    """
+    Telegram HTML for client when trainer issues a pass (external payment).
+    Trainer/product/service names are escaped.
+    """
+    pn = html.escape((product_name or "").strip() or "Абонемент")
+    tn = html.escape((trainer_name or "").strip() or "Тренер")
+    st = int(sessions_total) if sessions_total is not None else 0
+    sr = int(sessions_remaining) if sessions_remaining is not None else st
+    w_st = _ru_sessions_word(st)
+    w_sr = _ru_sessions_word(sr)
+    sn = (service_name or "").strip()
+    if sn:
+        scope = f"🎯 Услуга: <b>{html.escape(sn)}</b>\n<i>Списывается при занятиях по этой услуге.</i>"
+    else:
+        scope = "🎯 На <b>все услуги</b> тренера — подходит любая запись к нему из каталога"
+
+    if st == sr:
+        balance_line = f"🔢 В пакете: <b>{st}</b> {w_st} — всё доступно для записи."
+    else:
+        balance_line = (
+            f"🔢 Всего в пакете: <b>{st}</b> {w_st}\n"
+            f"📊 Осталось: <b>{sr}</b> {w_sr}"
+        )
+
+    return (
+        "🎫 <b>Вам выдали абонемент!</b>\n\n"
+        f"Тренер <b>{tn}</b> оформил для вас пакет занятий — можно записываться и ходить на тренировки.\n\n"
+        f"📦 <b>{pn}</b>\n"
+        f"{balance_line}\n\n"
+        f"{scope}\n\n"
+        "<b>Как пользоваться</b>\n"
+        "• Новую запись к тренеру оформляйте через <b>каталог</b> (кнопка «Главная» в меню бота). В «Мои записи» — только уже созданные записи, там нельзя записаться заново.\n"
+        "• С абонемента списывается занятие автоматически после того, как ваше занятие по записи считается проведённым в системе.\n"
+        "• Актуальный остаток — в разделе ниже.\n\n"
+        "Приятных тренировок! 💪"
+    )
+
+
+# Backwards compat (tests / old imports); prefer format_client_pass_issued_html
 CLIENT_PASS_ISSUED = (
     "<b>Абонемент выдан</b>\n\n"
     "<b>{product_name}</b>\n"

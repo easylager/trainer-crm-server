@@ -326,6 +326,8 @@ async def issue_pass_to_client(
         "status": row[6],
         "product_name": product["name"],
         "price_cents": product["price_cents"],
+        "service_name": product.get("service_name"),
+        "service_id": product.get("service_id"),
     }
 
 
