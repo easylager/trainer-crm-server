@@ -419,7 +419,7 @@ async def test_post_schedule_slots_with_start_times_strings(
     app_use_test_db,
     db_session,
 ) -> None:
-    """POST /schedule/slots accepts start_times HH:MM."""
+    """POST /schedule/slots accepts start_times HH:MM (on quarter_15 grid when no arena preset)."""
     tg = _fresh_trainer_telegram_id()
     trainer_id = await _create_active_trainer(db_session, tg, with_crm=True)
     d = date.today() + timedelta(days=40)
@@ -431,7 +431,8 @@ async def test_post_schedule_slots_with_start_times_strings(
                 headers={"X-Telegram-Init-Data": "mock", "Content-Type": "application/json"},
                 json={
                     "slot_date": d.isoformat(),
-                    "start_times": ["10:10", "11:45"],
+                    # 10:10 is not on 15‑minute grid; use 10:15 + 11:45
+                    "start_times": ["10:15", "11:45"],
                     "duration_minutes": 70,
                 },
             )
@@ -445,7 +446,7 @@ async def test_post_schedule_slots_with_start_times_strings(
     )
     rows = r.fetchall()
     assert len(rows) == 2
-    assert rows[0][0] == time(10, 10)
+    assert rows[0][0] == time(10, 15)
     assert rows[1][0] == time(11, 45)
 
 

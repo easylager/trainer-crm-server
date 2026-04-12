@@ -937,5 +937,6 @@ async def test_webapp_client_home_page_served() -> None:
         resp = await client.get("/webapp/client-home")
     assert resp.status_code == 200
     body = resp.text
-    assert "pickHeroScenario" in body
+    assert "data-client-hub" in body
+    assert "setupQuickGrid" in body
     assert "Главная" in body
