@@ -22,6 +22,7 @@ from src.application.booking_use_cases import (
     mark_reminder_sent,
 )
 from src.infrastructure.db.session import async_session_factory
+from src.infrastructure.repositories import TrainerRepository
 
 
 async def _create_trainer_and_slot(
@@ -345,6 +346,28 @@ async def test_group_slot_second_booking_then_booked(db_session: AsyncSession) -
     assert await create_booking(db_session, slot_id, trainer_id, c2, service_id=service_id) is not None
     r = await db_session.execute(text("SELECT status FROM slots WHERE id = :id"), {"id": slot_id})
     assert r.scalar() == "booked"
+
+
+@pytest.mark.asyncio
+async def test_group_slot_booking_price_uses_group_override(db_session: AsyncSession) -> None:
+    """Group slot snapshot uses COALESCE(group_price_cents, anchor), not tier variants."""
+    tomorrow = date.today() + timedelta(days=1)
+    trainer_id, slot_id, service_id = await _create_trainer_and_slot(
+        db_session, tomorrow, time(10, 0), time(11, 0), capacity=2
+    )
+    repo = TrainerRepository(db_session)
+    await repo.set_trainer_services(
+        trainer_id,
+        [(service_id, [("adult", 8000), ("child", 5000)], None, 3500)],
+    )
+    await db_session.commit()
+    client_id = await _create_client(db_session, unique_test_telegram_id())
+    bid = await create_booking(db_session, slot_id, trainer_id, client_id, service_id=service_id)
+    assert bid is not None
+    r = await db_session.execute(
+        text("SELECT booking_price_cents FROM bookings WHERE id = :id"), {"id": bid}
+    )
+    assert int(r.scalar()) == 3500
 
 
 @pytest.mark.asyncio

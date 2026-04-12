@@ -5,6 +5,7 @@ import logging
 from io import BytesIO
 from typing import Any
 
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.infrastructure import s3
@@ -102,9 +103,17 @@ def _service_description_from_payload(s: dict[str, Any]) -> str | None:
     return t if t else None
 
 
-def _services_to_entries(services: list[dict[str, Any]]) -> list[tuple[int, list[tuple[str, int]], str | None]]:
+def _group_price_cents_from_service_payload(s: dict[str, Any]) -> int | None:
+    raw = s.get("group_price_byn")
+    if raw is None:
+        return None
+    return int(round(float(raw) * 100))
+
+
+def _services_to_entries(services: list[dict[str, Any]]) -> list[tuple[int, list[tuple[str, int]], str | None, int | None]]:
     """
-    Convert API services to repo entries: (service_id, [(tier_kind, price_cents), ...], description).
+    Convert API services to repo entries:
+    (service_id, [(tier_kind, price_cents), ...], description, group_price_cents|None).
     """
     from src.shared.price_tier_kind import (
         PRICE_TIER_ADULT,
@@ -113,10 +122,11 @@ def _services_to_entries(services: list[dict[str, Any]]) -> list[tuple[int, list
         price_tier_sort_key,
     )
 
-    result: list[tuple[int, list[tuple[str, int]], str | None]] = []
+    result: list[tuple[int, list[tuple[str, int]], str | None, int | None]] = []
     for s in services:
         sid = int(s["service_id"])
         desc = _service_description_from_payload(s)
+        group_pc = _group_price_cents_from_service_payload(s)
         tiers_raw = s.get("price_tiers")
         if isinstance(tiers_raw, list) and len(tiers_raw) > 0:
             merged: dict[str, int] = {}
@@ -132,7 +142,7 @@ def _services_to_entries(services: list[dict[str, Any]]) -> list[tuple[int, list
                     continue
                 merged[tk] = cents
             ordered = sorted(merged.items(), key=lambda x: price_tier_sort_key(x[0]))
-            result.append((sid, ordered, desc))
+            result.append((sid, ordered, desc, group_pc))
             continue
         price_byn = s.get("price_byn")
         child_byn = s.get("price_child_byn")
@@ -142,7 +152,7 @@ def _services_to_entries(services: list[dict[str, Any]]) -> list[tuple[int, list
         if child_byn is not None:
             tiers.append((PRICE_TIER_CHILD, int(round(float(child_byn) * 100))))
         tiers.sort(key=lambda x: price_tier_sort_key(x[0]))
-        result.append((sid, tiers, desc))
+        result.append((sid, tiers, desc, group_pc))
     return result
 
 
@@ -167,6 +177,77 @@ async def _demote_status_if_profile_incomplete(session: AsyncSession, trainer_id
         logger.info("Trainer %d demoted to pending_profile (profile incomplete)", trainer_id)
         return True
     return False
+
+
+async def ensure_trainer_services_replace_allowed(
+    session: AsyncSession,
+    trainer_id: int,
+    new_service_ids: set[int],
+) -> None:
+    """
+    Block removing a service from the trainer catalog while it is still referenced by
+    schedule slots, active bookings, weekly templates, or training groups — avoids orphan slots / broken booking flow.
+    """
+    r = await session.execute(
+        text("SELECT service_id FROM trainer_services WHERE trainer_id = :tid"),
+        {"tid": trainer_id},
+    )
+    old_ids = {int(row[0]) for row in r.fetchall()}
+    removed = old_ids - set(new_service_ids)
+    if not removed:
+        return
+    ids_sql = ",".join(str(int(x)) for x in removed)
+
+    async def _has_row(sql: str) -> bool:
+        rr = await session.execute(text(sql), {"tid": trainer_id})
+        return rr.fetchone() is not None
+
+    if await _has_row(
+        f"SELECT 1 FROM slots WHERE trainer_id = :tid AND status != 'cancelled' "
+        f"AND service_id IS NOT NULL AND service_id IN ({ids_sql}) LIMIT 1"
+    ):
+        raise ValueError(
+            "Нельзя убрать услугу: есть слоты в расписании, привязанные к ней. "
+            "Сначала удалите слоты или смените у них услугу."
+        )
+    if await _has_row(
+        f"SELECT 1 FROM bookings WHERE trainer_id = :tid AND status IN ('pending', 'confirmed') "
+        f"AND service_id IN ({ids_sql}) LIMIT 1"
+    ):
+        raise ValueError(
+            "Нельзя убрать услугу: есть активные записи (ожидают подтверждения или подтверждены). "
+            "Сначала отмените или перенесите их."
+        )
+    if await _has_row(
+        f"SELECT 1 FROM trainer_schedule_templates WHERE trainer_id = :tid AND service_id IS NOT NULL "
+        f"AND service_id IN ({ids_sql}) LIMIT 1"
+    ):
+        raise ValueError(
+            "Нельзя убрать услугу: она указана в шаблоне расписания. Сначала измените или удалите шаблон."
+        )
+    if await _has_row(
+        f"SELECT 1 FROM training_groups WHERE trainer_id = :tid AND service_id IN ({ids_sql}) LIMIT 1"
+    ):
+        raise ValueError(
+            "Нельзя убрать услугу: она привязана к группе в разделе «Группы». Сначала смените услугу у группы."
+        )
+
+
+async def _apply_trainer_services_update(
+    repo: TrainerRepository,
+    session: AsyncSession,
+    trainer_id: int,
+    services: list[dict[str, Any]] | None,
+    service_ids: list[int] | None,
+) -> None:
+    if services is not None:
+        new_set = {int(s["service_id"]) for s in services}
+        await ensure_trainer_services_replace_allowed(session, trainer_id, new_set)
+        await repo.set_trainer_services(trainer_id, _services_to_entries(services))
+    elif service_ids is not None:
+        new_set = {int(x) for x in service_ids}
+        await ensure_trainer_services_replace_allowed(session, trainer_id, new_set)
+        await repo.set_trainer_services(trainer_id, [(sid, []) for sid in service_ids])
 
 
 async def create_trainer(
@@ -353,9 +434,9 @@ async def update_trainer_profile(
             await repo.set_profile_pending(trainer_id, new_pending)
             await repo.mark_queued_for_moderation_review(trainer_id)
         if services is not None:
-            await repo.set_trainer_services(trainer_id, _services_to_entries(services))
+            await _apply_trainer_services_update(repo, session, trainer_id, services, None)
         elif service_ids is not None:
-            await repo.set_trainer_services(trainer_id, [(sid, []) for sid in service_ids])
+            await _apply_trainer_services_update(repo, session, trainer_id, None, service_ids)
         if arena_ids is not None:
             await repo.set_trainer_arenas(trainer_id, arena_ids)
             await repo.reconcile_primary_arena(trainer_id)
@@ -381,9 +462,9 @@ async def update_trainer_profile(
         await repo.ensure_trainer_profile_row(trainer_id)
         await repo.update_profile(trainer_id, **updates)
     if services is not None:
-        await repo.set_trainer_services(trainer_id, _services_to_entries(services))
+        await _apply_trainer_services_update(repo, session, trainer_id, services, None)
     elif service_ids is not None:
-        await repo.set_trainer_services(trainer_id, [(sid, []) for sid in service_ids])
+        await _apply_trainer_services_update(repo, session, trainer_id, None, service_ids)
     if arena_ids is not None:
         await repo.set_trainer_arenas(trainer_id, arena_ids)
         await repo.reconcile_primary_arena(trainer_id)

@@ -495,7 +495,7 @@
       align-items: center;
       gap: 6px;
       padding: 6px 4px 12px 0;
-      margin: -4px 0 4px -2px;
+      margin: -4px 0 4px 0;
       border: none;
       background: none;
       color: var(--tg-theme-hint-color);
@@ -1291,7 +1291,7 @@
     .modal.book-flow-modal {
       position: relative;
       max-width: 360px;
-      padding: 22px 20px 20px;
+      padding: 22px 22px 20px;
       border-radius: 22px;
       overflow-x: hidden;
       box-shadow:
@@ -1997,7 +1997,7 @@
           <svg class="book-modal-back-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
           Назад
         </button>
-        <div class="book-field-stack">
+        <div class="book-field-stack" id="bookServiceStackExisting">
           <label class="book-field-label" for="bookServiceSelect">Услуга</label>
           <select id="bookServiceSelect" class="input book-service-select"></select>
         </div>
@@ -2020,7 +2020,7 @@
           <svg class="book-modal-back-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
           Назад
         </button>
-        <div class="book-field-stack">
+        <div class="book-field-stack" id="bookServiceStackNew">
           <label class="book-field-label" for="bookServiceSelectNew">Услуга</label>
           <select id="bookServiceSelectNew" class="input book-service-select"></select>
         </div>
@@ -2243,7 +2243,35 @@
         window.location.href = u;
       }
 
+      function navigateToTrainerHomeWithReopenGroup(slotId) {
+        var sid = parseInt(String(slotId), 10);
+        if (isNaN(sid) || sid <= 0) {
+          navigateToTrainerHomeSafe();
+          return;
+        }
+        if (typeof window.navigateTrainerHome === 'function') {
+          window.navigateTrainerHome({ reopenGroupSlot: sid });
+          return;
+        }
+        var pth = window.location.pathname || '';
+        var base = pth.replace(/[^/]+$/, '') || '/webapp/';
+        var u = base + 'trainer-home?reopen_group_slot=' + encodeURIComponent(String(sid));
+        if (tg && tg.initData) u += '&init_data=' + encodeURIComponent(tg.initData);
+        window.location.href = u;
+      }
+
       function goBackFromBookingDetail() {
+        if (state.bookingDetailReturn === 'hub_group') {
+          var hsid = state.hubGroupSlotReturnId;
+          state.bookingDetailReturn = null;
+          state.hubGroupSlotReturnId = null;
+          if (hsid != null && !isNaN(parseInt(String(hsid), 10))) {
+            navigateToTrainerHomeWithReopenGroup(hsid);
+          } else {
+            navigateToTrainerHomeSafe();
+          }
+          return;
+        }
         if (state.bookingDetailReturn === 'hub') {
           state.bookingDetailReturn = null;
           navigateToTrainerHomeSafe();
@@ -2269,6 +2297,18 @@
 
       /** After confirm/decline/cancel: same return target as «Назад» (hub vs schedule). */
       function leaveDetailAfterMutation() {
+        if (state.bookingDetailReturn === 'hub_group') {
+          var hgid = state.hubGroupSlotReturnId;
+          state.bookingDetailReturn = null;
+          state.hubGroupSlotReturnId = null;
+          state.pendingReloadAfterPop = false;
+          if (hgid != null && !isNaN(parseInt(String(hgid), 10))) {
+            navigateToTrainerHomeWithReopenGroup(hgid);
+          } else {
+            navigateToTrainerHomeSafe();
+          }
+          return;
+        }
         if (state.bookingDetailReturn === 'hub') {
           state.bookingDetailReturn = null;
           state.pendingReloadAfterPop = false;
@@ -2400,7 +2440,7 @@
       }
 
       function openBookingDetail(bookingId) {
-        if (state.bookingDetailReturn !== 'hub' && state.bookingDetailReturn !== 'group') {
+        if (state.bookingDetailReturn !== 'hub' && state.bookingDetailReturn !== 'group' && state.bookingDetailReturn !== 'hub_group') {
           state.bookingDetailReturn = 'schedule';
         }
         state.selectedBooking = null;
@@ -2420,7 +2460,7 @@
             var pathBase = (window.location.pathname || '').replace(/[^/]+$/, '') || '/webapp/';
             var profileUrl = pathBase + 'trainer-clients?client_id=' + encodeURIComponent(String(b.client_id));
             profileUrl += '&return_booking=' + encodeURIComponent(String(b.id));
-            var retFrom = (state.bookingDetailReturn === 'hub') ? 'hub' : 'schedule';
+            var retFrom = (state.bookingDetailReturn === 'hub' || state.bookingDetailReturn === 'hub_group') ? 'hub' : 'schedule';
             profileUrl += '&return_from=' + encodeURIComponent(retFrom);
             if (tg && tg.initData) profileUrl += (profileUrl.indexOf('?') >= 0 ? '&' : '?') + 'init_data=' + encodeURIComponent(tg.initData);
             html += '<div class="bd-client bd-client--profile">';
@@ -2612,12 +2652,16 @@
         deepLinkClientId: null,
         /** 'hub' when opened via /schedule-editor?open_booking=&from=hub (return to trainer-home). */
         bookingDetailReturn: null,
+        /** When opened from hub group modal: reopen that modal on back (see hub_group_slot URL param). */
+        hubGroupSlotReturnId: null,
         /** When opening booking detail from group hub: reopen hub on back. */
         groupHubSlotId: null,
         /** After history.back / loadSlots: reopen group modal. */
         pendingOpenGroupSlotId: null,
         /** schedule-editor?flow=book from trainer hub — quick datetime modal, then book client. */
         pendingBookFlowFromHub: false,
+        /** schedule-editor?book_group_slot=&anchor_date= from hub — open book-client for that slot after load. */
+        pendingBookGroupSlotId: null,
         /** True while booking via POST /trainer/booking/quick (no pre-existing slot). */
         bookFlowQuick: false,
         /** Slots for selected quick-book day (from GET /schedule); used to mark busy hours. */
@@ -2763,11 +2807,15 @@
       }
 
       function applyBookModalGroupUi() {
-        var dis = !!(state.bookSlotIsGroup && state.bookSlotGroupServiceId != null);
+        var hideSvc = !!(state.bookSlotIsGroup && state.bookSlotGroupServiceId != null);
         ['bookServiceSelect', 'bookServiceSelectNew'].forEach(function(id) {
           var el = document.getElementById(id);
-          if (el) el.disabled = dis;
+          if (el) el.disabled = hideSvc;
         });
+        var se = document.getElementById('bookServiceStackExisting');
+        var sn = document.getElementById('bookServiceStackNew');
+        if (se) se.style.display = hideSvc ? 'none' : '';
+        if (sn) sn.style.display = hideSvc ? 'none' : '';
       }
 
       function clearBookSlotModalState() {
@@ -2783,6 +2831,10 @@
           var el = document.getElementById(id);
           if (el) el.disabled = false;
         });
+        var se = document.getElementById('bookServiceStackExisting');
+        var sn = document.getElementById('bookServiceStackNew');
+        if (se) se.style.display = '';
+        if (sn) sn.style.display = '';
       }
 
       var PRICE_TIER_LABEL_RU = {
@@ -3538,6 +3590,16 @@
               }, 80);
             }
             flushPendingGroupHubModal();
+            if (state.pendingBookGroupSlotId) {
+              var sidPb = state.pendingBookGroupSlotId;
+              state.pendingBookGroupSlotId = null;
+              var slotRowPb = (state.slots || []).find(function(x) { return x.id === sidPb; });
+              if (slotRowPb) {
+                setTimeout(function() { openBookModalForSlot(sidPb); }, 60);
+              } else {
+                showToast('Слот на другой неделе — перелистните календарь или откройте запись из расписания.');
+              }
+            }
           })
           .catch(function(err) {
             if (err === 'retry-init') {
@@ -3804,6 +3866,16 @@
                 opt.textContent = s.name || '—';
                 selEl.appendChild(opt);
               });
+              if (
+                state.bookSlotIsGroup &&
+                state.bookSlotGroupServiceId != null &&
+                !state.bookServices.some(function(s) { return s.id === state.bookSlotGroupServiceId; })
+              ) {
+                var optG = document.createElement('option');
+                optG.value = String(state.bookSlotGroupServiceId);
+                optG.textContent = 'Услуга слота';
+                selEl.appendChild(optG);
+              }
               selEl.value = state.bookServiceId != null ? String(state.bookServiceId) : '';
             }
             fillServiceSelect(document.getElementById('bookServiceSelect'));
@@ -5101,10 +5173,23 @@
         var clientIdFromUrl = cidRaw ? parseInt(cidRaw, 10) : null;
         var ob = p.get('open_booking');
         var fromHub = (p.get('from') || '') === 'hub';
+        var hubGroupSlotRaw = p.get('hub_group_slot');
         var flowBook = (p.get('flow') || '') === 'book';
+        var anchorDate = (p.get('anchor_date') || '').trim();
+        var bgsRaw = p.get('book_group_slot');
+        if (anchorDate && /^\d{4}-\d{2}-\d{2}$/.test(anchorDate)) {
+          var ad = new Date(anchorDate + 'T12:00:00');
+          if (!isNaN(ad.getTime())) {
+            state.weekStart = getMonday(ad);
+          }
+        }
+        if (bgsRaw) {
+          var sidBg = parseInt(bgsRaw, 10);
+          if (sidBg) state.pendingBookGroupSlotId = sidBg;
+        }
         if (clientIdFromUrl || ob) {
           try { history.replaceState({}, '', window.location.pathname); } catch (e) {}
-        } else if (flowBook) {
+        } else if (flowBook || bgsRaw) {
           try { history.replaceState({}, '', window.location.pathname); } catch (e) {}
         }
         if (flowBook && !ob) {
@@ -5114,9 +5199,22 @@
           state.deepLinkClientId = clientIdFromUrl;
         }
         if (ob) {
+          state.pendingBookGroupSlotId = null;
           var bid = parseInt(ob, 10);
           if (bid) {
-            state.bookingDetailReturn = fromHub ? 'hub' : 'schedule';
+            if (fromHub && hubGroupSlotRaw) {
+              var hg = parseInt(hubGroupSlotRaw, 10);
+              if (!isNaN(hg) && hg > 0) {
+                state.bookingDetailReturn = 'hub_group';
+                state.hubGroupSlotReturnId = hg;
+              } else {
+                state.bookingDetailReturn = fromHub ? 'hub' : 'schedule';
+                state.hubGroupSlotReturnId = null;
+              }
+            } else {
+              state.bookingDetailReturn = fromHub ? 'hub' : 'schedule';
+              state.hubGroupSlotReturnId = null;
+            }
             document.getElementById('detailBookingContent').innerHTML = '<div class="loading">Загрузка...</div>';
             document.getElementById('detailBookingActions').innerHTML = '';
             showBookingStack('detail');

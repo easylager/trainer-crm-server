@@ -98,6 +98,11 @@ class TrainerServiceItem(BaseModel):
         max_length=LEN_TRAINER_SERVICE_DESCRIPTION,
         description="Optional short text shown to clients for this trainer's offering of the service.",
     )
+    group_price_byn: float | None = Field(
+        default=None,
+        ge=0,
+        description="Optional per-seat price for group slots (capacity>1). If omitted, anchor price applies.",
+    )
 
     @field_validator("description", mode="before")
     @classmethod

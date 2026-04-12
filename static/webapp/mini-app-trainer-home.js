@@ -16,8 +16,9 @@
   }
 
   /**
-   * @param { { subscriptionCelebrationHint?: boolean } } [opts]
+   * @param { { subscriptionCelebrationHint?: boolean, reopenGroupSlot?: number|string } } [opts]
    *   subscriptionCelebrationHint: append hub_celebrate=1 so hub can show banner if sessionStorage was cleared (Telegram WebView).
+   *   reopenGroupSlot: trainer-home reopens group modal (return from booking detail opened from hub modal).
    */
   function navigateTrainerHome(opts) {
     opts = opts || {};
@@ -25,6 +26,12 @@
     var url = withInit(webappBasePath() + 'trainer-home');
     if (opts.subscriptionCelebrationHint) {
       url += (url.indexOf('?') >= 0 ? '&' : '?') + 'hub_celebrate=1';
+    }
+    if (opts.reopenGroupSlot != null && opts.reopenGroupSlot !== '') {
+      var sid = parseInt(String(opts.reopenGroupSlot), 10);
+      if (!isNaN(sid) && sid > 0) {
+        url += (url.indexOf('?') >= 0 ? '&' : '?') + 'reopen_group_slot=' + encodeURIComponent(String(sid));
+      }
     }
     window.location.href = url;
   }

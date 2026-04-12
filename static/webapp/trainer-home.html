@@ -619,6 +619,65 @@
       background: rgba(255, 159, 10, 0.22);
       color: #ff9500;
     }
+    /* Group slot preview — same language as schedule-editor (no client name in list) */
+    .hub-bookings-stack .slot-row.slot-group-hub-preview {
+      border-color: color-mix(in srgb, var(--tg-theme-button-color) 42%, transparent);
+    }
+    .hub-bookings-stack .slot-row.slot-group-hub-preview:active { opacity: 0.92; }
+    .hub-bookings-stack .slot-group-catalog-meta {
+      margin-top: 4px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      max-width: 100%;
+    }
+    .hub-bookings-stack .slot-group-meta-line {
+      font-size: 11px;
+      line-height: 1.35;
+      color: var(--tg-theme-hint-color);
+      font-weight: 500;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+    .hub-bookings-stack .slot-group-meter-wrap {
+      margin-top: 8px;
+      height: 5px;
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--tg-theme-hint-color) 22%, transparent);
+      overflow: hidden;
+    }
+    .hub-bookings-stack .slot-group-meter-fill {
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, color-mix(in srgb, var(--tg-theme-button-color) 75%, transparent), var(--tg-theme-button-color));
+      min-width: 6%;
+      transition: width 0.2s ease;
+    }
+    .hub-bookings-stack .slot-group-chip {
+      font-size: 12px;
+      font-weight: 700;
+      padding: 5px 10px;
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--tg-theme-button-color) 18%, transparent);
+      color: var(--tg-theme-text-color);
+      border: 1px solid color-mix(in srgb, var(--tg-theme-button-color) 35%, transparent);
+    }
+    .hub-bookings-stack .slot-row .slot-meta.slot-meta--group {
+      flex-direction: row;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+      max-width: 46%;
+    }
+    .hub-bookings-stack .hub-group-spots-pill {
+      font-size: 11px;
+      padding: 4px 8px;
+    }
+    .hub-bookings-stack .slot-status.booked.hub-group-spots-pill {
+      background: rgba(255, 149, 0, 0.2);
+      color: #ff9500;
+    }
     .hub-bookings-cap {
       margin-top: 14px;
       font-size: 12px;
@@ -626,6 +685,303 @@
       color: var(--tg-theme-hint-color);
       text-align: center;
     }
+    /* Group slot modal: viewport-fixed (sibling of .hub-shell, not inside transformed shell); list scrolls inside */
+    #hubModalGroupSlot.hub-group-modal-overlay.modal-overlay {
+      position: fixed;
+      left: 0;
+      right: 0;
+      top: 0;
+      bottom: 0;
+      width: 100%;
+      height: 100%;
+      max-height: none;
+      box-sizing: border-box;
+      align-items: center;
+      justify-content: center;
+      padding: max(10px, env(safe-area-inset-top)) 14px max(14px, env(safe-area-inset-bottom));
+      background: rgba(26, 26, 26, 0.42);
+      -webkit-backdrop-filter: blur(12px);
+      backdrop-filter: blur(12px);
+      z-index: 250;
+    }
+    .hub-group-modal-inner {
+      display: flex;
+      flex-direction: column;
+      background: var(--tg-theme-bg-color);
+      border-radius: 16px;
+      padding: 14px 16px 16px;
+      max-width: 420px;
+      width: 100%;
+      max-height: min(86vh, 500px);
+      overflow: hidden;
+      box-sizing: border-box;
+    }
+    .hub-group-modal-inner .book-modal-title {
+      margin: 0 0 2px;
+      font-size: 1.05rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      line-height: 1.25;
+      color: var(--tg-theme-text-color);
+      flex-shrink: 0;
+    }
+    #hubModalGroupSlot .group-slot-sub {
+      font-size: 13px;
+      color: var(--tg-theme-hint-color);
+      margin: 4px 0 0;
+      line-height: 1.35;
+      flex-shrink: 0;
+    }
+    #hubModalGroupSlot .group-slot-list {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      margin: 8px 0 0;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .hub-group-slot-actions {
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 12px;
+      padding-top: 2px;
+    }
+    .hub-group-slot-actions .btn-block {
+      margin: 0;
+    }
+    #hubModalGroupSlot .group-slot-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: none;
+      text-align: left;
+      font: inherit;
+      background: var(--tg-theme-secondary-bg-color);
+      color: var(--tg-theme-text-color);
+      cursor: pointer;
+      box-sizing: border-box;
+    }
+    #hubModalGroupSlot .group-slot-row:active { opacity: 0.9; }
+    #hubModalGroupSlot .group-slot-row .g-name { font-weight: 600; font-size: 15px; }
+    #hubModalGroupSlot .group-slot-row .g-st {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--tg-theme-hint-color);
+    }
+    /* Book into group slot on hub (same flow as schedule-editor; viewport-fixed overlay). */
+    #hubModalBookGroupSlot.hub-book-flow-overlay,
+    #hubModalBookGroupConfirm.hub-book-flow-overlay {
+      position: fixed;
+      left: 0;
+      right: 0;
+      top: 0;
+      bottom: 0;
+      width: 100%;
+      height: 100%;
+      max-height: none;
+      box-sizing: border-box;
+      z-index: 260;
+      align-items: center;
+      justify-content: center;
+      padding: max(16px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom));
+      background: rgba(26, 26, 26, 0.42);
+      -webkit-backdrop-filter: blur(12px);
+      backdrop-filter: blur(12px);
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    #hubModalBookGroupSlot .hub-book-modal.modal.book-flow-modal,
+    #hubModalBookGroupConfirm .hub-book-modal.modal.book-flow-modal {
+      position: relative;
+      max-width: 360px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 22px 22px 20px;
+      border-radius: 22px;
+      overflow-x: hidden;
+      max-height: 85vh;
+      overflow-y: auto;
+      background: var(--tg-theme-bg-color);
+      box-shadow:
+        0 0 0 1px rgba(247, 166, 0, 0.14),
+        0 24px 48px -12px rgba(0, 0, 0, 0.28);
+    }
+    #hubModalBookGroupSlot .book-modal-title,
+    #hubModalBookGroupConfirm .book-confirm-title {
+      margin: 0 0 4px;
+      font-size: 1.125rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: var(--tg-theme-text-color);
+    }
+    #hubModalBookGroupConfirm .book-confirm-text {
+      margin: 0 0 20px;
+      font-size: 14px;
+      line-height: 1.45;
+      color: var(--tg-theme-hint-color);
+    }
+    #hubModalBookGroupSlot .book-choice-lead {
+      margin: 0 0 18px;
+      font-size: 14px;
+      line-height: 1.45;
+      color: var(--tg-theme-hint-color);
+    }
+    #hubModalBookGroupSlot .btn-book-option {
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      gap: 14px;
+      width: 100%;
+      padding: 14px 14px 14px 12px;
+      margin-bottom: 10px;
+      border: none;
+      border-radius: 16px;
+      background: var(--tg-theme-secondary-bg-color);
+      color: var(--tg-theme-text-color);
+      text-align: left;
+      cursor: pointer;
+      font: inherit;
+      box-sizing: border-box;
+    }
+    #hubModalBookGroupSlot .btn-book-option-media {
+      flex-shrink: 0;
+      width: 48px;
+      height: 48px;
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(145deg, rgba(247, 166, 0, 0.28), rgba(247, 166, 0, 0.09));
+      color: #c77800;
+    }
+    #hubModalBookGroupSlot .btn-book-option-media svg {
+      width: 22px;
+      height: 22px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 2;
+    }
+    #hubModalBookGroupSlot .btn-book-option-body { flex: 1; min-width: 0; text-align: left; }
+    #hubModalBookGroupSlot .btn-book-option-text { font-size: 15px; font-weight: 600; display: block; }
+    #hubModalBookGroupSlot .btn-book-option-hint { font-size: 12px; color: var(--tg-theme-hint-color); display: block; margin-top: 3px; }
+    #hubModalBookGroupSlot .btn-book-option-arrow { flex-shrink: 0; font-size: 22px; color: var(--tg-theme-hint-color); opacity: 0.45; }
+    #hubModalBookGroupSlot .btn-book-cancel {
+      margin-top: 16px !important;
+      width: 100%;
+      padding: 13px 16px !important;
+      border-radius: 14px !important;
+      font-weight: 600 !important;
+      background: transparent !important;
+      color: var(--tg-theme-hint-color) !important;
+      border: 1px solid rgba(128, 128, 128, 0.22) !important;
+      cursor: pointer;
+      font: inherit;
+      box-sizing: border-box;
+    }
+    #hubModalBookGroupSlot .book-modal-back {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 4px 12px 0;
+      margin: 0 0 8px 0;
+      border: none;
+      background: none;
+      color: var(--tg-theme-hint-color);
+      font-size: 14px;
+      cursor: pointer;
+      font: inherit;
+    }
+    #hubModalBookGroupSlot .book-modal-back-icon {
+      width: 18px;
+      height: 18px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 2.2;
+    }
+    #hubModalBookGroupSlot .book-field-label {
+      display: block;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--tg-theme-hint-color);
+      margin: 0 0 8px;
+    }
+    #hubModalBookGroupSlot .book-field-stack { margin-bottom: 16px; }
+    #hubModalBookGroupSlot .book-search-input {
+      width: 100%;
+      padding: 13px 14px;
+      border-radius: 14px;
+      border: none;
+      font-size: 15px;
+      box-sizing: border-box;
+      background: var(--tg-theme-secondary-bg-color);
+      color: var(--tg-theme-text-color);
+    }
+    #hubModalBookGroupSlot .book-client-list {
+      max-height: 220px;
+      overflow-y: auto;
+      margin-top: 8px;
+    }
+    #hubModalBookGroupSlot .book-client-list .client-row {
+      width: 100%;
+      margin-bottom: 8px;
+      padding: 14px 16px;
+      border-radius: 14px;
+      border: none;
+      background: var(--tg-theme-secondary-bg-color);
+      color: var(--tg-theme-text-color);
+      text-align: left;
+      font: inherit;
+      cursor: pointer;
+      box-sizing: border-box;
+    }
+    #hubModalBookGroupSlot .client-row .phone { font-size: 13px; color: var(--tg-theme-hint-color); }
+    #hubModalBookGroupSlot .book-modal-divider {
+      margin: 8px 0 0;
+      padding: 18px 16px 16px;
+      border-radius: 16px;
+      background: var(--tg-theme-secondary-bg-color);
+    }
+    #hubModalBookGroupSlot .book-modal-divider .label {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--tg-theme-hint-color);
+      margin: 0 0 14px;
+    }
+    #hubModalBookGroupSlot .book-new-client .input {
+      width: 100%;
+      padding: 13px 14px;
+      border-radius: 14px;
+      border: none;
+      margin-bottom: 10px;
+      font-size: 15px;
+      box-sizing: border-box;
+      background: var(--tg-theme-bg-color);
+      color: var(--tg-theme-text-color);
+    }
+    #hubModalBookGroupSlot .book-phone-hint {
+      font-size: 12px;
+      color: var(--tg-theme-hint-color);
+      margin: -2px 0 10px;
+    }
+    #hubModalBookGroupSlot .book-req { color: #c62828; font-weight: 700; }
+    #hubModalBookGroupConfirm .modal-actions {
+      display: flex;
+      gap: 10px;
+    }
+    #hubModalBookGroupConfirm .modal-actions .btn-block { flex: 1; }
     /* Enhanced Navigation Grid */
     .hub-grid {
       display: grid;
@@ -1154,6 +1510,23 @@
   </style>
 </head>
 <body class="hub-body">
+  <script>
+    /* Avoid one frame of hub content before group modal loads (return from schedule-editor). */
+    (function () {
+      try {
+        var p = new URLSearchParams(window.location.search || '');
+        if (!p.get('reopen_group_slot')) return;
+        document.documentElement.classList.add('hub-reopen-group-pending');
+        var c = document.createElement('div');
+        c.id = 'hubReopenGroupCover';
+        c.setAttribute('aria-hidden', 'true');
+        c.style.cssText =
+          'position:fixed;inset:0;z-index:240;background:var(--tg-theme-bg-color);' +
+          '-webkit-backface-visibility:hidden;backface-visibility:hidden;';
+        document.body.appendChild(c);
+      } catch (e) { /* */ }
+    })();
+  </script>
   <div class="hub-shell" id="hubShell">
     <header class="hub-header">
       <div class="hub-header-text">
@@ -1203,7 +1576,7 @@
           </svg>
           <div class="hub-quick-text">
             <div class="hub-quick-label">Записать клиента</div>
-            <div class="hub-quick-hint">Слот создаётся в календаре · сетка 15 мин</div>
+            <div class="hub-quick-hint">Если слота нет — создастся в календаре автоматически</div>
           </div>
         </button>
       </div>
@@ -1323,6 +1696,90 @@
       <div style="font-size: 11px; line-height: 1.6;">
         Команды в чате бота: <strong>/guide</strong> — помощь, <strong>/home</strong> — эта страница.
         Все разделы синхронизированы в реальном времени.
+      </div>
+    </div>
+  </div>
+
+  <!-- Outside .hub-shell: fixed overlay must not sit under transformed ancestor (hub-enter), or it scrolls with the page. -->
+  <div id="hubModalGroupSlot" class="modal-overlay hub-group-modal-overlay" style="display: none;" aria-hidden="true">
+    <div class="hub-group-modal-inner">
+      <h3 id="hubGroupSlotTitle" class="book-modal-title">Группа</h3>
+      <p id="hubGroupSlotSub" class="group-slot-sub"></p>
+      <div id="hubGroupSlotList" class="group-slot-list"></div>
+      <div class="hub-group-slot-actions">
+        <button type="button" class="btn-block btn-primary" id="hubGroupSlotAddBtn" style="display: none;">Добавить участника</button>
+        <button type="button" class="btn-block btn-secondary" id="hubGroupSlotCloseBtn">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="hubModalBookGroupSlot" class="modal-overlay hub-book-flow-overlay" style="display: none;" aria-hidden="true">
+    <div class="modal book-flow-modal hub-book-modal">
+      <h3 class="book-modal-title">Записать клиента</h3>
+      <div id="hubBookStepChoice" class="book-step">
+        <p class="book-choice-lead">Кого записать на занятие?</p>
+        <button type="button" class="btn-book-option" id="hubBookOptExisting">
+          <span class="btn-book-option-media" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.5"/><path d="M5 20v-1a5 5 0 0 1 5-5h4a5 5 0 0 1 5 5v1"/></svg>
+          </span>
+          <span class="btn-book-option-body">
+            <span class="btn-book-option-text">Выбрать из списка</span>
+            <span class="btn-book-option-hint">Существующий клиент</span>
+          </span>
+          <span class="btn-book-option-arrow" aria-hidden="true">›</span>
+        </button>
+        <button type="button" class="btn-book-option" id="hubBookOptNew">
+          <span class="btn-book-option-media" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+          </span>
+          <span class="btn-book-option-body">
+            <span class="btn-book-option-text">Добавить нового</span>
+            <span class="btn-book-option-hint">Телефон, имя — и записать</span>
+          </span>
+          <span class="btn-book-option-arrow" aria-hidden="true">›</span>
+        </button>
+        <button type="button" class="btn-block btn-book-cancel" id="hubBookCancel">Отмена</button>
+      </div>
+      <div id="hubBookStepExisting" style="display: none;">
+        <button type="button" class="book-modal-back" id="hubBookBackFromExisting">
+          <svg class="book-modal-back-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+          Назад
+        </button>
+        <div class="book-field-stack">
+          <label class="book-field-label" for="hubBookClientSearch">Поиск по имени или телефону</label>
+          <input type="text" id="hubBookClientSearch" class="book-search-input" placeholder="Имя или телефон..." autocomplete="off">
+        </div>
+        <div id="hubBookClientList" class="client-list book-client-list"></div>
+      </div>
+      <div id="hubBookStepNew" style="display: none;">
+        <button type="button" class="book-modal-back" id="hubBookBackFromNew">
+          <svg class="book-modal-back-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+          Назад
+        </button>
+        <div class="book-modal-divider">
+          <div class="label">Новый клиент</div>
+          <div class="book-new-client">
+            <label class="book-field-label" for="hubBookNewPhone">Телефон <span class="book-req" aria-hidden="true">*</span></label>
+            <input type="tel" id="hubBookNewPhone" class="input" placeholder="+375 29 123 45 67" autocomplete="tel" inputmode="tel" maxlength="32" aria-required="true">
+            <p class="book-phone-hint">Номер в формате +375 XX XXX XX XX</p>
+            <label class="book-field-label" for="hubBookNewFirstName">Имя <span class="book-req" aria-hidden="true">*</span></label>
+            <input type="text" id="hubBookNewFirstName" class="input" placeholder="Иван" autocomplete="given-name" maxlength="120" aria-required="true">
+            <label class="book-field-label" for="hubBookNewLastName">Фамилия</label>
+            <input type="text" id="hubBookNewLastName" class="input" placeholder="По желанию" autocomplete="family-name" maxlength="120">
+            <button type="button" class="btn-block btn-primary" id="hubBookNewSubmit">Добавить и записать</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="hubModalBookGroupConfirm" class="modal-overlay hub-book-flow-overlay" style="display: none;" aria-hidden="true">
+    <div class="modal book-flow-modal hub-book-modal">
+      <h3 class="book-confirm-title">Подтверждение</h3>
+      <p id="hubBookConfirmText" class="book-confirm-text"></p>
+      <div class="modal-actions">
+        <button type="button" class="btn-block btn-secondary" id="hubBookConfirmNo">Отмена</button>
+        <button type="button" class="btn-block btn-primary" id="hubBookConfirmYes">Записать</button>
       </div>
     </div>
   </div>
@@ -2121,6 +2578,47 @@
         var statusLabel = pending ? 'к подтверждению' : 'подтверждено';
         var statusClass = pending ? 'booked booked-pending' : 'booked booked-confirmed';
         var rowMod = pending ? 'slot-booking-pending' : 'slot-booking-confirmed';
+        var cap = parseInt(String(b.slot_capacity != null ? b.slot_capacity : '1'), 10);
+        if (isNaN(cap) || cap < 1) cap = 1;
+
+        /* Group slot: match schedule-editor group hub — occupancy meter + chip; no client name in preview */
+        if (cap > 1) {
+          var occ = parseInt(String(b.slot_active_bookings != null ? b.slot_active_bookings : ''), 10);
+          if (isNaN(occ) || occ < 0) occ = 1;
+          occ = Math.min(occ, cap);
+          var spotsLeft = Math.max(0, cap - occ);
+          var pct = cap > 0 ? Math.min(100, Math.round((occ / cap) * 100)) : 0;
+          var svc = (b.services_str || '').trim();
+          var ar = (b.arenas_str || '').trim();
+          var metaHtml = '';
+          if (svc || ar) {
+            metaHtml += '<div class="slot-group-catalog-meta">';
+            if (svc) metaHtml += '<div class="slot-group-meta-line">' + escapeHtml(svc) + '</div>';
+            if (ar) metaHtml += '<div class="slot-group-meta-line">' + escapeHtml(ar) + '</div>';
+            metaHtml += '</div>';
+          }
+          var spotsPill = spotsLeft > 0
+            ? '<span class="slot-status available hub-group-spots-pill">ещё места</span>'
+            : '<span class="slot-status booked hub-group-spots-pill">полная</span>';
+          var pendingExtra = pending
+            ? '<span class="slot-status booked-pending hub-group-spots-pill">' + statusLabel + '</span>'
+            : '';
+          return (
+            '<div class="slot-row slot-booked-click slot-group-hub-preview ' + rowMod + '" data-bid="' + String(b.id) + '" data-slot-id="' + String(b.slot_id != null ? b.slot_id : '') + '" data-slot-date="' + escapeHtml(b.slot_date || '') + '" role="button" tabindex="0">' +
+              '<div class="slot-row-left">' +
+                '<span class="slot-time">' + escapeHtml(timeRange) + '</span>' +
+                metaHtml +
+                '<div class="slot-group-meter-wrap" aria-hidden="true"><div class="slot-group-meter-fill" style="width:' + pct + '%"></div></div>' +
+              '</div>' +
+              '<div class="slot-meta slot-meta--group">' +
+                '<span class="slot-group-chip">' + occ + '/' + cap + '</span>' +
+                spotsPill +
+                pendingExtra +
+              '</div>' +
+            '</div>'
+          );
+        }
+
         var arena = (b.arenas_str || '').trim();
         var venueInner = arena
           ? escapeHtml(arena)
@@ -2150,6 +2648,453 @@
             '</div>' +
           '</div>'
         );
+      }
+
+      function closeHubGroupSlotModal() {
+        var mgr = document.getElementById('hubModalGroupSlot');
+        if (!mgr) return;
+        mgr.style.display = 'none';
+        mgr.setAttribute('aria-hidden', 'true');
+      }
+
+      /** Removes full-screen cover shown while reopening group modal from URL (see body inline script). */
+      function releaseHubReopenGroupCover() {
+        try {
+          var c = document.getElementById('hubReopenGroupCover');
+          if (c) c.remove();
+          document.documentElement.classList.remove('hub-reopen-group-pending');
+        } catch (e) { /* */ }
+      }
+
+      /** Group slot hub: same UX as schedule-editor openGroupSlotModal (list + add participant). */
+      function openHubGroupSlotModal(slotId, slotDateFallback) {
+        var id = parseInt(String(slotId), 10);
+        if (isNaN(id)) return;
+        fetch(apiUrlWithQuery('/trainer/slots/' + id + '/group-hub'), { headers: headersJson() })
+          .then(function(r) {
+            if (r.status === 404) {
+              if (tg && tg.showAlert) tg.showAlert('Слот не найден или не групповой.');
+              return Promise.reject(null);
+            }
+            if (!r.ok) return Promise.reject(new Error('bad'));
+            return r.json();
+          })
+          .then(function(d) {
+            if (!d) {
+              releaseHubReopenGroupCover();
+              return;
+            }
+            var mgr = document.getElementById('hubModalGroupSlot');
+            if (!mgr) {
+              releaseHubReopenGroupCover();
+              return;
+            }
+            mgr.style.display = 'flex';
+            mgr.setAttribute('aria-hidden', 'false');
+            releaseHubReopenGroupCover();
+            var cap = parseInt(String(d.capacity), 10) || 1;
+            var occ = parseInt(String(d.active_bookings), 10);
+            if (isNaN(occ)) occ = 0;
+            var spotsLeft = d.spots_left != null ? parseInt(String(d.spots_left), 10) : Math.max(0, cap - occ);
+            if (isNaN(spotsLeft)) spotsLeft = Math.max(0, cap - occ);
+            document.getElementById('hubGroupSlotTitle').textContent = (d.start_time || '') + '–' + (d.end_time || '');
+            var sub = 'Занято ' + occ + ' из ' + cap;
+            if (spotsLeft > 0) sub += ' · свободно мест: ' + spotsLeft;
+            else sub += ' · группа набрана';
+            document.getElementById('hubGroupSlotSub').textContent = sub;
+            var listEl = document.getElementById('hubGroupSlotList');
+            listEl.innerHTML = '';
+            var bookings = d.bookings || [];
+            bookings.forEach(function(bk) {
+              var st = (bk.status || '').toLowerCase();
+              var stLabel = st === 'pending' ? 'Ожидает подтверждения' : 'Подтверждено';
+              var bid = parseInt(bk.booking_id, 10);
+              var btn = document.createElement('button');
+              btn.type = 'button';
+              btn.className = 'group-slot-row';
+              btn.innerHTML =
+                '<span><span class="g-name">' +
+                escapeHtml(String(bk.client_preview || 'Клиент')) +
+                '</span><br><span class="g-st">' +
+                stLabel +
+                '</span></span><span aria-hidden="true" style="color:var(--tg-theme-hint-color);font-size:18px;">›</span>';
+              btn.onclick = function(ev) {
+                ev.stopPropagation();
+                closeHubGroupSlotModal();
+                navigateTo(
+                  'schedule-editor?open_booking=' +
+                    encodeURIComponent(bid) +
+                    '&from=hub&hub_group_slot=' +
+                    encodeURIComponent(String(id))
+                );
+              };
+              listEl.appendChild(btn);
+            });
+            var addBtn = document.getElementById('hubGroupSlotAddBtn');
+            var anchorDate = (d.slot_date || slotDateFallback || '').toString().slice(0, 10);
+            if (spotsLeft > 0) {
+              addBtn.style.display = 'block';
+              addBtn.onclick = function() {
+                closeHubGroupSlotModal();
+                openHubBookGroupSlotModal(id, d.service_id, (d.start_time || '') + '–' + (d.end_time || ''));
+              };
+            } else {
+              addBtn.style.display = 'none';
+              addBtn.onclick = null;
+            }
+          })
+          .catch(function(e) {
+            releaseHubReopenGroupCover();
+            if (e === null) return;
+            if (tg && tg.showAlert) tg.showAlert('Не удалось загрузить группу.');
+          });
+      }
+
+      /** Belarus phone — aligned with schedule-editor (POST /trainer/clients). */
+      var HUB_PHONE_MAX = 32;
+      var PHONE_BY_RE_HUB = /^\+375\d{9}$/;
+      function normalizePhoneHub(s) {
+        var raw = String(s || '').trim();
+        if (!raw) return '';
+        var d = raw.replace(/\D/g, '');
+        if (!d) return raw.slice(0, HUB_PHONE_MAX);
+        if (d.length === 12 && d.indexOf('375') === 0) return '+' + d;
+        if (d.length === 11 && d.indexOf('80') === 0) return '+375' + d.slice(2);
+        if (d.length === 9) return '+375' + d;
+        return raw.replace(/\s+/g, '').replace(/-/g, '').replace(/\(/g, '').replace(/\)/g, '').replace(/\./g, '').slice(0, HUB_PHONE_MAX);
+      }
+      function validatePhoneHubMsg(normalized) {
+        var t = normalized;
+        if (!t) return 'Укажите номер телефона.';
+        if (t.length > HUB_PHONE_MAX) return 'Телефон: не длиннее 32 символов.';
+        if (!PHONE_BY_RE_HUB.test(t)) return 'Укажите корректный номер телефона.';
+        return null;
+      }
+
+      function hubToast(msg) {
+        if (tg && tg.showAlert) tg.showAlert(msg);
+        else alert(msg);
+      }
+
+      var hubBookSlotId = null;
+      var hubBookServiceId = null;
+      var hubBookSlotWhenLabel = '';
+      var hubBookPendingClientId = null;
+      var hubBookPendingClientName = '';
+
+      function setHubBookOptExistingVisible(show) {
+        var btn = document.getElementById('hubBookOptExisting');
+        if (!btn) return;
+        btn.style.display = show ? '' : 'none';
+        btn.setAttribute('aria-hidden', show ? 'false' : 'true');
+      }
+
+      function closeHubBookGroupModals() {
+        var m = document.getElementById('hubModalBookGroupSlot');
+        var c = document.getElementById('hubModalBookGroupConfirm');
+        if (m) {
+          m.style.display = 'none';
+          m.setAttribute('aria-hidden', 'true');
+        }
+        if (c) {
+          c.style.display = 'none';
+          c.setAttribute('aria-hidden', 'true');
+        }
+        hubBookPendingClientId = null;
+        hubBookPendingClientName = null;
+      }
+
+      function resetHubBookSlotState() {
+        hubBookSlotId = null;
+        hubBookServiceId = null;
+        hubBookSlotWhenLabel = '';
+      }
+
+      function resetHubBookSteps() {
+        var ch = document.getElementById('hubBookStepChoice');
+        var ex = document.getElementById('hubBookStepExisting');
+        var nw = document.getElementById('hubBookStepNew');
+        if (ch) ch.style.display = 'block';
+        if (ex) ex.style.display = 'none';
+        if (nw) nw.style.display = 'none';
+      }
+
+      function hubBookClientsUrl(q) {
+        var path = '/trainer/clients';
+        if (q && String(q).trim()) path += '?q=' + encodeURIComponent(String(q).trim());
+        return apiUrlWithQuery(path);
+      }
+
+      function loadHubBookClients(q) {
+        fetch(hubBookClientsUrl(q), { headers: headersJson() })
+          .then(function(r) {
+            return r.json();
+          })
+          .then(function(data) {
+            var list = document.getElementById('hubBookClientList');
+            var clients = data.clients || [];
+            if (clients.length === 0) {
+              list.innerHTML =
+                '<p style="padding:8px 0;font-size:14px;color:var(--tg-theme-hint-color);">Нет клиентов по поиску. Добавьте нового ниже.</p>';
+              return;
+            }
+            var html = '';
+            clients.forEach(function(c) {
+              var name = ((c.first_name || '') + ' ' + (c.last_name || '')).trim() || 'Клиент';
+              var phone = (c.phone || '').trim();
+              var noBot = !c.telegram_id;
+              html +=
+                '<button type="button" class="client-row" data-client-id="' +
+                c.id +
+                '" data-client-name="' +
+                escapeHtml(name).replace(/"/g, '&quot;') +
+                '">' +
+                escapeHtml(name) +
+                (phone ? '<br><span class="phone">' + escapeHtml(phone) + '</span>' : '') +
+                (noBot ? '<br><span style="font-size:11px;color:var(--tg-theme-hint-color);">Без бота</span>' : '') +
+                '</button>';
+            });
+            list.innerHTML = html;
+            list.querySelectorAll('.client-row').forEach(function(row) {
+              row.onclick = function() {
+                var clientId = parseInt(row.getAttribute('data-client-id'), 10);
+                var clientName = (row.getAttribute('data-client-name') || 'Клиент').replace(/&quot;/g, '"');
+                hubBookPendingClientId = clientId;
+                hubBookPendingClientName = clientName;
+                var txt = document.getElementById('hubBookConfirmText');
+                if (txt) {
+                  txt.textContent = 'Записать ' + clientName + ' на ' + (hubBookSlotWhenLabel || 'слот') + '?';
+                }
+                var m = document.getElementById('hubModalBookGroupSlot');
+                if (m) {
+                  m.style.display = 'none';
+                  m.setAttribute('aria-hidden', 'true');
+                }
+                var cf = document.getElementById('hubModalBookGroupConfirm');
+                if (cf) {
+                  cf.style.display = 'flex';
+                  cf.setAttribute('aria-hidden', 'false');
+                }
+              };
+            });
+          })
+          .catch(function() {
+            document.getElementById('hubBookClientList').innerHTML =
+              '<p style="color:#c62828;padding:8px;">Ошибка загрузки</p>';
+          });
+      }
+
+      function openHubBookGroupSlotModal(slotId, serviceId, whenLabel) {
+        var sid = parseInt(String(slotId), 10);
+        var svc = serviceId != null ? parseInt(String(serviceId), 10) : NaN;
+        if (isNaN(sid) || isNaN(svc)) {
+          hubToast('У группового слота не задана услуга. Укажите услугу в расписании.');
+          return;
+        }
+        hubBookSlotId = sid;
+        hubBookServiceId = svc;
+        hubBookSlotWhenLabel = (whenLabel || '').trim();
+        var si = document.getElementById('hubBookClientSearch');
+        if (si) si.value = '';
+        var p = document.getElementById('hubBookNewPhone');
+        var f = document.getElementById('hubBookNewFirstName');
+        var l = document.getElementById('hubBookNewLastName');
+        if (p) p.value = '';
+        if (f) f.value = '';
+        if (l) l.value = '';
+        document.getElementById('hubBookClientList').innerHTML = '';
+        resetHubBookSteps();
+        var cfm = document.getElementById('hubModalBookGroupConfirm');
+        if (cfm) {
+          cfm.style.display = 'none';
+          cfm.setAttribute('aria-hidden', 'true');
+        }
+        var m = document.getElementById('hubModalBookGroupSlot');
+        m.style.display = 'flex';
+        m.setAttribute('aria-hidden', 'false');
+        fetch(apiUrlWithQuery('/trainer/clients'), { headers: headersJson() })
+          .then(function(r) {
+            return r.json();
+          })
+          .then(function(data) {
+            var has = !!(data.clients && data.clients.length);
+            setHubBookOptExistingVisible(has);
+          })
+          .catch(function() {
+            setHubBookOptExistingVisible(false);
+          });
+      }
+
+      function hubApiErrorMessage(o) {
+        var d = o && o.detail;
+        if (typeof d === 'string') return d;
+        if (Array.isArray(d) && d[0] && d[0].msg) return d[0].msg;
+        return 'Ошибка';
+      }
+
+      function hubPostBooking(clientId) {
+        var payload = { slot_id: hubBookSlotId, client_id: clientId, service_id: hubBookServiceId };
+        return fetch(apiUrlWithQuery('/trainer/booking'), {
+          method: 'POST',
+          headers: headersJson(),
+          body: JSON.stringify(payload),
+        }).then(function(r) {
+          if (r.ok) return { ok: true };
+          return r.json().then(
+            function(o) {
+              throw new Error(hubApiErrorMessage(o));
+            },
+            function() {
+              throw new Error('Ошибка записи');
+            }
+          );
+        });
+      }
+
+      function wireHubBookGroupModal() {
+        var cancel = document.getElementById('hubBookCancel');
+        if (cancel) {
+          cancel.onclick = function() {
+            document.getElementById('hubModalBookGroupSlot').style.display = 'none';
+            closeHubBookGroupModals();
+            resetHubBookSlotState();
+          };
+        }
+        var bo = document.getElementById('hubBookOptExisting');
+        if (bo) {
+          bo.onclick = function() {
+            document.getElementById('hubBookStepChoice').style.display = 'none';
+            document.getElementById('hubBookStepExisting').style.display = 'block';
+            document.getElementById('hubBookClientList').innerHTML =
+              '<p style="text-align:center;padding:16px;color:var(--tg-theme-hint-color);">Загрузка…</p>';
+            loadHubBookClients('');
+          };
+        }
+        var bn = document.getElementById('hubBookOptNew');
+        if (bn) {
+          bn.onclick = function() {
+            document.getElementById('hubBookStepChoice').style.display = 'none';
+            document.getElementById('hubBookStepNew').style.display = 'block';
+          };
+        }
+        var be = document.getElementById('hubBookBackFromExisting');
+        if (be) {
+          be.onclick = function() {
+            resetHubBookSteps();
+          };
+        }
+        var bwn = document.getElementById('hubBookBackFromNew');
+        if (bwn) {
+          bwn.onclick = function() {
+            resetHubBookSteps();
+          };
+        }
+        var bsearch = document.getElementById('hubBookClientSearch');
+        var tmr = null;
+        if (bsearch) {
+          bsearch.oninput = function() {
+            var q = bsearch.value.trim();
+            if (tmr) clearTimeout(tmr);
+            tmr = setTimeout(function() {
+              loadHubBookClients(q);
+            }, 300);
+          };
+        }
+        var cno = document.getElementById('hubBookConfirmNo');
+        if (cno) {
+          cno.onclick = function() {
+            document.getElementById('hubModalBookGroupConfirm').style.display = 'none';
+            document.getElementById('hubModalBookGroupSlot').style.display = 'flex';
+            hubBookPendingClientId = null;
+          };
+        }
+        var cyes = document.getElementById('hubBookConfirmYes');
+        if (cyes) {
+          cyes.onclick = function() {
+            var cid = hubBookPendingClientId;
+            if (cid == null) return;
+            hubPostBooking(cid)
+              .then(function() {
+                closeHubBookGroupModals();
+                resetHubBookSlotState();
+                hubToast('Клиент записан в группу.');
+                loadBookings();
+              })
+              .catch(function(e) {
+                hubToast(e.message || 'Ошибка');
+              });
+          };
+        }
+        var sub = document.getElementById('hubBookNewSubmit');
+        if (sub) {
+          sub.onclick = function() {
+            var phoneEl = document.getElementById('hubBookNewPhone');
+            var firstEl = document.getElementById('hubBookNewFirstName');
+            var lastEl = document.getElementById('hubBookNewLastName');
+            var phoneRaw = (phoneEl.value || '').trim();
+            var first = (firstEl.value || '').trim() || null;
+            var last = (lastEl.value || '').trim() || null;
+            if (!/[\d]/.test(phoneRaw)) {
+              hubToast('Введите номер телефона (цифры).');
+              return;
+            }
+            var phone = normalizePhoneHub(phoneRaw);
+            var err = validatePhoneHubMsg(phone);
+            if (err) {
+              hubToast(err);
+              return;
+            }
+            first = (first || '').trim();
+            if (!first) {
+              hubToast('Укажите имя клиента.');
+              return;
+            }
+            sub.disabled = true;
+            fetch(apiUrlWithQuery('/trainer/clients'), {
+              method: 'POST',
+              headers: headersJson(),
+              body: JSON.stringify({ phone: phone, first_name: first, last_name: last || '' }),
+            })
+              .then(function(r) {
+                if (!r.ok) return r.json().then(function(o) { throw new Error(hubApiErrorMessage(o)); });
+                return r.json();
+              })
+              .then(function(data) {
+                return hubPostBooking(data.client_id);
+              })
+              .then(function() {
+                closeHubBookGroupModals();
+                resetHubBookSlotState();
+                hubToast('Клиент добавлен и записан на занятие.');
+                loadBookings();
+              })
+              .catch(function(e) {
+                hubToast(e.message || 'Ошибка');
+              })
+              .finally(function() {
+                sub.disabled = false;
+              });
+          };
+        }
+        var ov = document.getElementById('hubModalBookGroupSlot');
+        if (ov) {
+          ov.onclick = function(ev) {
+            if (ev.target === ov) {
+              ov.style.display = 'none';
+              closeHubBookGroupModals();
+              resetHubBookSlotState();
+            }
+          };
+        }
+        var ovc = document.getElementById('hubModalBookGroupConfirm');
+        if (ovc) {
+          ovc.onclick = function(ev) {
+            if (ev.target === ovc) {
+              ovc.style.display = 'none';
+              document.getElementById('hubModalBookGroupSlot').style.display = 'flex';
+            }
+          };
+        }
       }
 
       /**
@@ -2208,24 +3153,60 @@
         applyHubLockedState();
       }
 
+      /**
+       * Hub «Ближайшие записи»: API returns one row per participant on group slots — collapse to one card per slot_id
+       * (aligned with schedule group rows). If any participant is pending, the merged row is pending.
+       */
+      function dedupeHubDayBookings(bookings) {
+        var seenSlot = Object.create(null);
+        var out = [];
+        (bookings || []).forEach(function(b) {
+          if (!b) return;
+          var cap = parseInt(String(b.slot_capacity != null ? b.slot_capacity : '1'), 10);
+          if (isNaN(cap) || cap < 1) cap = 1;
+          if (cap > 1 && b.slot_id != null && b.slot_id !== '') {
+            var sk = String(b.slot_id);
+            if (seenSlot[sk]) {
+              var prev = seenSlot[sk];
+              if (String(b.status || '').toLowerCase() === 'pending') prev.status = 'pending';
+              return;
+            }
+            var row = Object.assign({}, b);
+            seenSlot[sk] = row;
+            out.push(row);
+            return;
+          }
+          out.push(b);
+        });
+        return out;
+      }
+
+      function dedupeHubBookingsDays(days) {
+        return (days || []).map(function(d) {
+          return Object.assign({}, d, { bookings: dedupeHubDayBookings(d.bookings || []) });
+        });
+      }
+
       function renderBookings(days) {
-        hubLastBookingsDays = days || [];
+        var daysForHub = dedupeHubBookingsDays(days || []);
+        hubLastBookingsDays = daysForHub;
         var block = document.getElementById('bookingsBlock');
-        var total = 0;
         var todayCount = 0;
         var weekCount = 0;
-        
+
         var today = new Date();
-        var todayStr = today.getFullYear() + '-' + 
-          String(today.getMonth() + 1).padStart(2, '0') + '-' + 
+        var todayStr =
+          today.getFullYear() +
+          '-' +
+          String(today.getMonth() + 1).padStart(2, '0') +
+          '-' +
           String(today.getDate()).padStart(2, '0');
-        
+
         var pending = 0;
-        (days || []).forEach(function(d) {
+        daysForHub.forEach(function(d) {
           var dayBookings = (d.bookings || []).length;
-          total += dayBookings;
           weekCount += dayBookings;
-          
+
           if (d.date === todayStr) {
             todayCount = dayBookings;
           }
@@ -2237,7 +3218,7 @@
 
         var firstWhen = '';
         var flatFirst = null;
-        (days || []).some(function(d) {
+        daysForHub.some(function(d) {
           var bs = d.bookings || [];
           if (bs.length) {
             flatFirst = { day: d, booking: bs[0] };
@@ -2245,7 +3226,7 @@
           }
           return false;
         });
-        
+
         if (flatFirst) {
           var b0 = flatFirst.booking;
           firstWhen = (b0.start_time || '').slice(0, 5);
@@ -2257,14 +3238,14 @@
 
         var maxN = HUB_UPCOMING_BOOKINGS_MAX;
         var totalBookings = 0;
-        (days || []).forEach(function(day) {
+        daysForHub.forEach(function(day) {
           totalBookings += (day.bookings || []).length;
         });
 
         var count = 0;
         var parts = [];
 
-        (days || []).forEach(function(day) {
+        daysForHub.forEach(function(day) {
           if (count >= maxN) return;
           var bs = day.bookings || [];
           if (!bs.length) return;
@@ -2287,6 +3268,7 @@
           block.innerHTML = buildEmptyBookingsHtml();
           block.onclick = null;
           wireEmptyScheduleButton();
+          tryOpenHubGroupModalFromUrl();
           return;
         }
         var capHint = '';
@@ -2302,11 +3284,23 @@
             openTelegramDmMiniApp(msgBtn.getAttribute('data-dm-un'), msgBtn.getAttribute('data-dm-tid'));
             return;
           }
+          var rowGroup = ev.target && ev.target.closest && ev.target.closest('.slot-row.slot-group-hub-preview[data-slot-id]');
+          if (rowGroup) {
+            var sid = rowGroup.getAttribute('data-slot-id');
+            var sdate = rowGroup.getAttribute('data-slot-date') || '';
+            if (sid) {
+              ev.preventDefault();
+              ev.stopPropagation();
+              openHubGroupSlotModal(sid, sdate);
+              return;
+            }
+          }
           var row = ev.target && ev.target.closest && ev.target.closest('.slot-row.slot-booked-click[data-bid]');
           if (!row) return;
           var bid = row.getAttribute('data-bid');
           if (bid) navigateTo('schedule-editor?open_booking=' + encodeURIComponent(bid) + '&from=hub');
         };
+        tryOpenHubGroupModalFromUrl();
       }
 
       /** Upcoming bookings: friendly onboarding instead of red «network» when account not active yet. */
@@ -2514,6 +3508,27 @@
         } catch (e) { /* */ }
       }
 
+      /** After booking detail «Назад»: reopen group modal via ?reopen_group_slot= (strip from URL once). */
+      function tryOpenHubGroupModalFromUrl() {
+        try {
+          var params = new URLSearchParams(window.location.search || '');
+          var rg = params.get('reopen_group_slot');
+          if (!rg) return;
+          params.delete('reopen_group_slot');
+          var ns = params.toString();
+          var clean = window.location.pathname + (ns ? '?' + ns : '') + (window.location.hash || '');
+          window.history.replaceState({}, '', clean);
+          var sid = parseInt(String(rg), 10);
+          if (isNaN(sid) || sid <= 0) {
+            releaseHubReopenGroupCover();
+            return;
+          }
+          openHubGroupSlotModal(String(sid), '');
+        } catch (e) {
+          releaseHubReopenGroupCover();
+        }
+      }
+
       /** Same mapping as mini-app-trainer-celebration.js if that script failed to load. */
       function hubCelebrationFeaturesFromUnlocked(unlocked) {
         if (window.TrainerHubCelebration && typeof window.TrainerHubCelebration.featuresFromUnlockedList === 'function') {
@@ -2673,6 +3688,18 @@
           runHubAfterAccess();
         });
       }
+
+      (function wireHubGroupModal() {
+        var closeBtn = document.getElementById('hubGroupSlotCloseBtn');
+        var overlay = document.getElementById('hubModalGroupSlot');
+        if (closeBtn) closeBtn.onclick = closeHubGroupSlotModal;
+        if (overlay) {
+          overlay.onclick = function(ev) {
+            if (ev.target === overlay) closeHubGroupSlotModal();
+          };
+        }
+      })();
+      wireHubBookGroupModal();
     })();
   </script>
 </body>

@@ -36,6 +36,7 @@ from src.application.booking_use_cases import (
     count_trainer_client_upcoming,
     create_booking,
     create_trainer_quick_booking,
+    explain_trainer_booking_failure,
     decline_booking,
     generate_reminders_for_booking,
     get_booking_no_pass_notify_payload,
@@ -45,6 +46,7 @@ from src.application.booking_use_cases import (
     get_trainer_booking_detail_payload,
     get_trainer_client_next_booking,
     get_trainer_client_for_card,
+    get_trainer_group_slot_hub,
     is_slot_end_in_past_local,
     list_bookings_for_client,
     list_bookings_for_trainer,
@@ -1428,6 +1430,7 @@ def _serialize_booking(b: dict) -> dict:
         "arenas_str": b.get("arenas_str"),
         "status": (b.get("status") or "confirmed").strip(),
         "slot_capacity": max(1, int(b.get("slot_capacity") or 1)),
+        "slot_active_bookings": max(0, int(b.get("slot_active_bookings") or 0)),
     }
 
 
@@ -2896,6 +2899,27 @@ async def get_trainer_bookings(
     return {"days": days_list}
 
 
+@router.get("/trainer/slots/{slot_id:int}/group-hub")
+async def get_trainer_group_slot_hub_api(
+    slot_id: int,
+    init_data: str | None = Query(None),
+    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    session: AsyncSession = Depends(get_session),
+):
+    """Group slot summary + booking rows (trainer hub modal). Auth: trainer initData."""
+    raw = init_data or x_telegram_init_data
+    if not raw:
+        raise HTTPException(status_code=401, detail="Missing init data")
+    telegram_id = _trainer_telegram_id(raw)
+    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+    hub = await get_trainer_group_slot_hub(session, trainer_id, slot_id)
+    if not hub:
+        raise HTTPException(status_code=404, detail="Slot not found or not a group slot")
+    return hub
+
+
 @router.get("/trainer/bookings/{booking_id:int}")
 async def get_trainer_booking_detail(
     booking_id: int,
@@ -3761,7 +3785,11 @@ async def post_trainer_booking(
     allow_ob = bool(body.allow_overbook) and cap_slot > 1
     if st_raw == "cancelled":
         raise HTTPException(status_code=400, detail="Slot not found or not available")
-    if st_raw != "available":
+    # Group slots: status may be 'booked' while seats remain (sync semantics); allow both until create_booking checks capacity.
+    if cap_slot > 1:
+        if st_raw not in ("available", "booked"):
+            raise HTTPException(status_code=400, detail="Slot not found or not available")
+    elif st_raw != "available":
         if not (allow_ob and st_raw == "booked"):
             raise HTTPException(status_code=400, detail="Slot not found or not available")
     arena_id: int | None = body.arena_id
@@ -3787,7 +3815,8 @@ async def post_trainer_booking(
         allow_overbook=allow_ob,
     )
     if not booking_id:
-        raise HTTPException(status_code=400, detail="Slot not available")
+        detail_ru = await explain_trainer_booking_failure(session, trainer_id, body.slot_id, body.service_id)
+        raise HTTPException(status_code=400, detail=detail_ru)
     if not is_slot_end_in_past_local(slot.get("slot_date"), slot.get("end_time")):
         await generate_reminders_for_booking(session, booking_id)
     return {"success": True, "booking_id": booking_id}

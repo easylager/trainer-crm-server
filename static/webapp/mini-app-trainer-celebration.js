@@ -9,7 +9,7 @@
     crm: { label: 'CRM и клиентская база', icon: '📋' },
     online: { label: 'Онлайн-запись клиентов', icon: '🌐' },
     analytics: { label: 'Аналитика и отчёты', icon: '📊' },
-    groups: { label: 'Группы (когорты)', icon: '👥' },
+    groups: { label: 'Группы', icon: '👥' },
   };
 
   /**

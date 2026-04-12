@@ -216,3 +216,38 @@ async def test_set_trainer_services_stores_description(db_session: AsyncSession)
     svcs = loaded.get("services") or []
     assert len(svcs) == 1
     assert svcs[0].get("description") == "Индивидуально, 60 мин."
+
+
+@pytest.mark.asyncio
+async def test_set_trainer_services_stores_group_price_override(db_session: AsyncSession) -> None:
+    service_id = await require_seed_service_id(db_session)
+    r = await db_session.execute(text("INSERT INTO trainers (status) VALUES ('active') RETURNING id"))
+    (trainer_id,) = r.fetchone()
+    repo = TrainerRepository(db_session)
+    await repo.set_trainer_services(
+        trainer_id,
+        [
+            (
+                service_id,
+                [("adult", 8000), ("child", 5000)],
+                None,
+                3500,
+            )
+        ],
+    )
+    await db_session.commit()
+    r = await db_session.execute(
+        text(
+            "SELECT price_cents, group_price_cents FROM trainer_services WHERE trainer_id = :t AND service_id = :s"
+        ),
+        {"t": trainer_id, "s": service_id},
+    )
+    anchor, gpc = r.fetchone()
+    assert int(anchor) == 8000
+    assert int(gpc) == 3500
+    loaded = await repo.get_by_id(trainer_id)
+    assert loaded is not None
+    svcs = loaded.get("services") or []
+    assert len(svcs) == 1
+    assert svcs[0].get("group_price_cents") == 3500
+    assert svcs[0].get("group_price_byn") == 35.0

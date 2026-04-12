@@ -92,13 +92,13 @@ async def _resolve_trainer_group_slot_booking_price(
     service_id: int,
 ) -> tuple[int | None, int | None, str | None]:
     """
-    Any booking into a group slot (trainer or client catalog): no tier — snapshot is
-    trainer_services.price_cents only (per-seat; child/adult variants do not apply).
+    Group slot (capacity>1): no child/adult tier on the booking row — per-seat snapshot is
+    COALESCE(group_price_cents, price_cents) on trainer_services (optional group override, else anchor).
     """
     r = await session.execute(
         text(
             """
-            SELECT price_cents FROM trainer_services
+            SELECT price_cents, group_price_cents FROM trainer_services
             WHERE trainer_id = :tid AND service_id = :sid
             """
         ),
@@ -107,8 +107,10 @@ async def _resolve_trainer_group_slot_booking_price(
     row = r.fetchone()
     if not row:
         return (None, None, None)
-    pc = row[0]
-    booking_price_cents = int(pc) if pc is not None else None
+    anchor = row[0]
+    group_pc = row[1] if len(row) > 1 else None
+    effective = group_pc if group_pc is not None else anchor
+    booking_price_cents = int(effective) if effective is not None else None
     return (None, booking_price_cents, None)
 
 
@@ -289,7 +291,7 @@ async def create_booking(
         return None
     try:
         if capacity > 1:
-            # Group slot: one seat price from trainer_services base row; catalog tiers (child/adult) do not apply.
+            # Group slot: per-seat price from COALESCE(group_price_cents, anchor); catalog tiers do not apply.
             variant_id_resolved, booking_price_cents, price_tier_kind = (
                 await _resolve_trainer_group_slot_booking_price(session, trainer_id, service_id)
             )
@@ -823,7 +825,10 @@ async def list_bookings_for_trainer(
                        """
             + SQL_BOOKING_ARENA_DISPLAY
             + """ AS arenas_str,
-                       s.capacity AS slot_capacity
+                       s.capacity AS slot_capacity,
+                       (SELECT COUNT(*)::int FROM bookings bocc
+                        WHERE bocc.slot_id = b.slot_id
+                          AND bocc.status IN ('pending', 'confirmed')) AS slot_active_bookings  -- hub group preview: occ/cap meter
                 FROM bookings b
                 JOIN clients c ON c.id = b.client_id
                 JOIN slots s ON s.id = b.slot_id
@@ -833,7 +838,7 @@ async def list_bookings_for_trainer(
             )
             SELECT id, slot_id, telegram_id, telegram_username, phone, client_first_name, client_last_name,
                    client_comment, created_at, slot_date, start_time, end_time,
-                   session_num, services_str, arenas_str, status, slot_capacity
+                   session_num, services_str, arenas_str, status, slot_capacity, slot_active_bookings
             FROM upcoming
             ORDER BY slot_date ASC, start_time ASC
             LIMIT :lim
@@ -860,9 +865,91 @@ async def list_bookings_for_trainer(
             "arenas_str": _normalize_trainer_arenas_display(row[14] if len(row) > 14 else None),
             "status": (row[15] or "confirmed").strip() if len(row) > 15 else "confirmed",
             "slot_capacity": max(1, int(row[16])) if len(row) > 16 and row[16] is not None else 1,
+            "slot_active_bookings": max(0, int(row[17])) if len(row) > 17 and row[17] is not None else 0,
         }
         for row in rows
     ]
+
+
+async def get_trainer_group_slot_hub(
+    session: AsyncSession,
+    trainer_id: int,
+    slot_id: int,
+) -> dict | None:
+    """
+    One group slot (capacity > 1): occupancy + per-booking rows for hub / schedule group modal.
+    Returns None if slot missing, wrong trainer, or capacity is 1.
+    """
+    r = await session.execute(
+        text(
+            """
+            SELECT s.slot_date, s.start_time, s.end_time, s.capacity, s.service_id
+            FROM slots s
+            WHERE s.id = :sid AND s.trainer_id = :tid AND s.status IN ('available', 'booked')
+            """
+        ),
+        {"sid": slot_id, "tid": trainer_id},
+    )
+    row = r.fetchone()
+    if not row:
+        return None
+    cap = max(1, int(row[3] or 1))
+    if cap <= 1:
+        return None
+
+    r2 = await session.execute(
+        text(
+            """
+            SELECT b.id, COALESCE(b.status, 'confirmed'),
+                   c.first_name, c.last_name, c.phone
+            FROM bookings b
+            JOIN clients c ON c.id = b.client_id
+            WHERE b.slot_id = :sid AND b.trainer_id = :tid
+              AND b.status IN ('pending', 'confirmed')
+            ORDER BY b.id
+            """
+        ),
+        {"sid": slot_id, "tid": trainer_id},
+    )
+    booking_rows = r2.fetchall()
+    entries: list[dict] = []
+    for br in booking_rows:
+        st_raw = (br[1] or "confirmed").strip()
+        fn = (br[2] or "").strip() if br[2] else ""
+        ln = (br[3] or "").strip() if br[3] else ""
+        ph = (br[4] or "").strip() if br[4] else ""
+        name = " ".join(p for p in (fn, ln) if p).strip()
+        entries.append(
+            {
+                "booking_id": int(br[0]),
+                "client_preview": name or ph or "Клиент",
+                "status": st_raw,
+            }
+        )
+
+    occ = len(entries)
+    spots_left = max(0, cap - occ)
+    sd = row[0]
+    st_t = row[1]
+    et_t = row[2]
+    svc_id = row[4]
+
+    def _hm(t: object) -> str:
+        if hasattr(t, "strftime"):
+            return t.strftime("%H:%M")  # type: ignore[union-attr]
+        return str(t)[:5]
+
+    return {
+        "slot_id": slot_id,
+        "slot_date": sd.isoformat() if hasattr(sd, "isoformat") else str(sd),
+        "start_time": _hm(st_t),
+        "end_time": _hm(et_t),
+        "capacity": cap,
+        "active_bookings": occ,
+        "spots_left": spots_left,
+        "service_id": int(svc_id) if svc_id is not None else None,
+        "bookings": entries,
+    }
 
 
 async def active_booking_summaries_by_slot_for_trainer_range(
@@ -2191,3 +2278,57 @@ async def mark_inactive_notification_sent(
         {"cid": client_id, "kind": kind},
     )
     await session.commit()
+
+
+async def explain_trainer_booking_failure(
+    session: AsyncSession,
+    trainer_id: int,
+    slot_id: int,
+    service_id: int,
+) -> str:
+    """
+    Human-readable reason when create_booking returned None (trainer Mini App).
+    Group slots may stay status='booked' while seats remain; route allows that; failure is elsewhere.
+    """
+    from src.application.trainer_schedule_use_cases import get_slot
+
+    slot = await get_slot(session, slot_id)
+    if not slot or slot.get("trainer_id") != trainer_id:
+        return "Слот не найден или недоступен"
+    cap = max(1, int(slot.get("capacity") or 1))
+    r = await session.execute(
+        text(
+            """
+            SELECT COUNT(*) FROM bookings
+            WHERE slot_id = :sid AND status IN ('pending', 'confirmed')
+            """
+        ),
+        {"sid": slot_id},
+    )
+    cnt = int(r.scalar() or 0)
+    if cnt >= cap:
+        return "Группа заполнена"
+    slot_svc = slot.get("service_id")
+    if cap > 1:
+        if slot_svc is None:
+            return "У группового слота не задана услуга в расписании"
+        if int(slot_svc) != int(service_id):
+            return "Услуга не совпадает со слотом"
+    r2 = await session.execute(
+        text("SELECT 1 FROM trainer_services WHERE trainer_id = :tid AND service_id = :sid"),
+        {"tid": trainer_id, "sid": service_id},
+    )
+    if not r2.fetchone():
+        return "Услуга не подключена в профиле или удалена"
+    arena_id = slot.get("arena_id")
+    if cap > 1 and arena_id is not None:
+        r3 = await session.execute(
+            text("SELECT 1 FROM trainer_arenas WHERE trainer_id = :tid AND arena_id = :aid"),
+            {"tid": trainer_id, "aid": int(arena_id)},
+        )
+        if not r3.fetchone():
+            return "Площадка слота не привязана к профилю — обновите привязку арен"
+    return (
+        "Не удалось создать запись. Если групповое занятие уже есть — проверьте миграции БД "
+        "(несколько записей на один слот). Иначе откройте слот в расписании и сохраните снова."
+    )

@@ -20,20 +20,25 @@ from src.shared.trainer_status import normalize_trainer_status_value
 # Legacy display; DB column `label` kept for compatibility; tier_kind is source of truth.
 TRAINER_SERVICE_DEFAULT_TIER_LABEL = "Основной"
 
-# set_trainer_services accepts (service_id, tiers) or (service_id, tiers, description) for tests/backward compat.
+# set_trainer_services: (service_id, tiers) | +description | +group_price_cents (optional override for group slots).
 TrainerServiceWriteEntry = (
-    tuple[int, list[tuple[str, int]]] | tuple[int, list[tuple[str, int]], str | None]
+    tuple[int, list[tuple[str, int]]]
+    | tuple[int, list[tuple[str, int]], str | None]
+    | tuple[int, list[tuple[str, int]], str | None, int | None]
 )
 
 
 def _normalize_trainer_service_write_entry(
     entry: TrainerServiceWriteEntry,
-) -> tuple[int, list[tuple[str, int]], str | None]:
+) -> tuple[int, list[tuple[str, int]], str | None, int | None]:
     if len(entry) == 2:
         sid, tiers = entry
-        return sid, tiers, None
-    sid, tiers, desc = entry
-    return sid, tiers, desc
+        return sid, tiers, None, None
+    if len(entry) == 3:
+        sid, tiers, desc = entry
+        return sid, tiers, desc, None
+    sid, tiers, desc, gpc = entry
+    return sid, tiers, desc, gpc
 
 
 def _sql_public_catalog_education_predicate(table_alias: str = "e") -> str:
@@ -142,6 +147,7 @@ class TrainerRepository:
         (tier_kind, price_cents) — up to one row per fixed tariff code (see price_tier_kind.py).
         Empty tiers => trainer_services with price_cents NULL.
         Anchor price on trainer_services: adult tier if present, else cheapest tier by display order.
+        group_price_cents: optional per-seat override for capacity>1 slots; NULL => use anchor (price_cents).
         """
         await self._session.execute(text("DELETE FROM trainer_services WHERE trainer_id = :tid"), {"tid": trainer_id})
 
@@ -154,7 +160,7 @@ class TrainerRepository:
             return sorted_tiers[0][1]
 
         for raw in entries:
-            sid, tiers, svc_description = _normalize_trainer_service_write_entry(raw)
+            sid, tiers, svc_description, group_price_cents = _normalize_trainer_service_write_entry(raw)
             merged: dict[str, int] = {}
             for tier_kind, pc in tiers:
                 tk = normalize_price_tier_kind(tier_kind)
@@ -165,10 +171,16 @@ class TrainerRepository:
             anchor = _anchor_cents(clean_tiers)
             await self._session.execute(
                 text("""
-                    INSERT INTO trainer_services (trainer_id, service_id, price_cents, description)
-                    VALUES (:tid, :sid, :price_cents, :descr)
+                    INSERT INTO trainer_services (trainer_id, service_id, price_cents, description, group_price_cents)
+                    VALUES (:tid, :sid, :price_cents, :descr, :group_pc)
                 """),
-                {"tid": trainer_id, "sid": sid, "price_cents": anchor, "descr": svc_description},
+                {
+                    "tid": trainer_id,
+                    "sid": sid,
+                    "price_cents": anchor,
+                    "descr": svc_description,
+                    "group_pc": group_price_cents,
+                },
             )
             for order, (tk, pc) in enumerate(clean_tiers):
                 lbl = (price_tier_label_ru(tk) or TRAINER_SERVICE_DEFAULT_TIER_LABEL)[:64]
@@ -285,7 +297,9 @@ class TrainerRepository:
         )
         out["photos"] = [{"file_key": r[0], "file_key_list": r[1], "sort_order": r[2]} for r in rph.fetchall()]
         rsv = await self._session.execute(
-            text("SELECT service_id, price_cents, description FROM trainer_services WHERE trainer_id = :id ORDER BY service_id"),
+            text(
+                "SELECT service_id, price_cents, description, group_price_cents FROM trainer_services WHERE trainer_id = :id ORDER BY service_id"
+            ),
             {"id": trainer_id},
         )
         service_rows = rsv.fetchall()
@@ -340,6 +354,7 @@ class TrainerRepository:
                     s = str(r[2]).strip()
                     if s:
                         svc_desc = s
+                gpc_row = int(r[3]) if len(r) > 3 and r[3] is not None else None
                 if tiers:
                     prices = [t["price_cents"] for t in tiers]
                     p_min, p_max = min(prices), max(prices)
@@ -347,18 +362,19 @@ class TrainerRepository:
                     price_byn_max = round(p_max / 100, 2)
                 else:
                     price_byn_min = price_byn_max = (round(pc_row / 100, 2) if pc_row is not None else None)
-                out["services"].append(
-                    {
-                        "service_id": sid,
-                        "service_name": name_by_sid.get(sid, "—"),
-                        "price_cents": pc_row,
-                        "price_byn": round(pc_row / 100, 2) if pc_row is not None else None,
-                        "price_byn_min": price_byn_min,
-                        "price_byn_max": price_byn_max,
-                        "price_tiers": tiers,
-                        "description": svc_desc,
-                    }
-                )
+                svc_dict: dict[str, Any] = {
+                    "service_id": sid,
+                    "service_name": name_by_sid.get(sid, "—"),
+                    "price_cents": pc_row,
+                    "price_byn": round(pc_row / 100, 2) if pc_row is not None else None,
+                    "price_byn_min": price_byn_min,
+                    "price_byn_max": price_byn_max,
+                    "price_tiers": tiers,
+                    "description": svc_desc,
+                    "group_price_cents": gpc_row,
+                    "group_price_byn": round(gpc_row / 100, 2) if gpc_row is not None else None,
+                }
+                out["services"].append(svc_dict)
         else:
             out["services"] = []
         rec = await self._session.execute(
@@ -1148,7 +1164,7 @@ class TrainerRepository:
             })
         rsv = await self._session.execute(
             text(
-                f"SELECT trainer_id, service_id, price_cents, description FROM trainer_services WHERE trainer_id IN ({placeholders}) ORDER BY trainer_id, service_id"
+                f"SELECT trainer_id, service_id, price_cents, description, group_price_cents FROM trainer_services WHERE trainer_id IN ({placeholders}) ORDER BY trainer_id, service_id"
             ),
             id_params,
         )
@@ -1157,7 +1173,7 @@ class TrainerRepository:
         services_detail_by_id: dict[int, list[dict[str, Any]]] = {i: [] for i in ids}
         all_sids: set[int] = set()
         for row in service_rows:
-            tid, sid, price_cents = row[0], row[1], row[2]
+            tid, sid = row[0], row[1]
             services_by_id[tid].append(sid)
             all_sids.add(sid)
         service_names_by_id: dict[int, str] = {}
@@ -1206,6 +1222,7 @@ class TrainerRepository:
                 s = str(row[3]).strip()
                 if s:
                     svc_desc_row = s
+            gpc_row = int(row[4]) if len(row) > 4 and row[4] is not None else None
             tiers = tiers_by_tid_sid.get((tid, sid), [])
             if tiers:
                 prices = [t["price_cents"] for t in tiers]
@@ -1224,6 +1241,8 @@ class TrainerRepository:
                     "price_byn_max": price_byn_max,
                     "price_tiers": tiers,
                     "description": svc_desc_row,
+                    "group_price_cents": gpc_row,
+                    "group_price_byn": round(gpc_row / 100, 2) if gpc_row is not None else None,
                 }
             )
         rar = await self._session.execute(

@@ -29,7 +29,7 @@ async def _trainer_services_with_prices_batch(
     rsv = await session.execute(
         text(
             f"""
-            SELECT trainer_id, service_id, price_cents, description
+            SELECT trainer_id, service_id, price_cents, description, group_price_cents
             FROM trainer_services
             WHERE trainer_id IN ({placeholders})
             ORDER BY trainer_id, service_id
@@ -89,6 +89,7 @@ async def _trainer_services_with_prices_batch(
         pc = int(price_cents) if price_cents is not None else None
         price_byn = round(float(price_cents) / 100.0, 2) if price_cents is not None else None
         sid_int = int(sid) if sid is not None else None
+        gpc = int(row[4]) if len(row) > 4 and row[4] is not None else None
         tiers = tiers_by_tid_sid.get((int(tid), int(sid)), [])
         if tiers:
             prices = [t["price_cents"] for t in tiers]
@@ -107,6 +108,8 @@ async def _trainer_services_with_prices_batch(
                 "price_byn_max": price_byn_max,
                 "price_tiers": tiers,
                 "description": svc_desc,
+                "group_price_cents": gpc,
+                "group_price_byn": round(gpc / 100.0, 2) if gpc is not None else None,
             }
         )
     return out
