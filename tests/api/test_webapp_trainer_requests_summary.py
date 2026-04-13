@@ -11,6 +11,7 @@ from tests.api.test_webapp_trainer_schedule_integration import (
     _fresh_trainer_telegram_id,
     patch_trainer_webapp_init,
 )
+from tests.db_catalog_helpers import require_seed_city_id, require_seed_service_id
 
 
 async def _fresh_client_id(db_session) -> int:
@@ -55,10 +56,8 @@ async def test_trainer_requests_summary_personalized_unanswered(app_use_test_db,
     """Personalized request (r.trainer_id set) without response counts as 1."""
     tg = _fresh_trainer_telegram_id()
     trainer_id = await _create_active_trainer(db_session, tg, with_crm=False)
-    r = await db_session.execute(text("SELECT id FROM cities ORDER BY id LIMIT 1"))
-    city_id = r.scalar_one()
-    r = await db_session.execute(text("SELECT id FROM services ORDER BY id LIMIT 1"))
-    service_id = r.scalar_one()
+    city_id = await require_seed_city_id(db_session)
+    service_id = await require_seed_service_id(db_session)
     client_id = await _fresh_client_id(db_session)
     await db_session.execute(
         text(
