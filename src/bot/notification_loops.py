@@ -346,30 +346,63 @@ async def process_completed_feedback_batch(
             if start_time and hasattr(start_time, "strftime")
             else "—"
         )
-        text = msg.TRAINER_BOOKING_COMPLETED.format(
-            date=date_str, day=day_str, time=time_str
+        text = msg.format_trainer_booking_completed_html(
+            client_name=p.get("client_name") or "Клиент",
+            date=date_str,
+            day=day_str,
+            time=time_str,
+            service_name=p.get("service_name"),
+            price_tier_label=p.get("price_tier_label"),
+            arena_display=p.get("arenas_str"),
         )
-        row: list[InlineKeyboardButton] = [
-            InlineKeyboardButton(
-                text=msg.TRAINER_BUTTON_LEAVE_FEEDBACK,
-                callback_data=f"feedback_booking_trainer:{p['booking_id']}",
-            ),
+        rows: list[list[InlineKeyboardButton]] = [
+            [
+                InlineKeyboardButton(
+                    text=msg.TRAINER_BUTTON_LEAVE_FEEDBACK,
+                    callback_data=f"feedback_booking_trainer:{p['booking_id']}",
+                ),
+            ],
         ]
+        if slot_date and start_time:
+            sd = (
+                slot_date.date() if hasattr(slot_date, "date") else slot_date
+            )
+            target_d = sd + timedelta(days=7)
+            st_norm = (
+                start_time.replace(second=0, microsecond=0)
+                if hasattr(start_time, "replace")
+                else start_time
+            )
+            status_next, _ = await get_slot_status_on_date(
+                session, p["trainer_id"], target_d, st_norm
+            )
+            if status_next != "booked":
+                rows.append(
+                    [
+                        InlineKeyboardButton(
+                            text=msg.TRAINER_BUTTON_BOOK_SAME_TIME_NEXT_WEEK,
+                            callback_data=f"trainer_repeat_week:{p['booking_id']}",
+                        ),
+                    ],
+                )
         client_id = p.get("client_id")
         if (
             webapp_https
             and client_id is not None
             and await trainer_has_crm_access(session, p["trainer_id"])
         ):
-            row.append(
-                InlineKeyboardButton(
-                    text=msg.TRAINER_BUTTON_CLIENT_CARD_WEBAPP,
-                    web_app=WebAppInfo(
-                        url=f"{base}/webapp/trainer-clients?client_id={int(client_id)}"
+            # One button per row: full labels on narrow screens.
+            rows.append(
+                [
+                    InlineKeyboardButton(
+                        text=msg.TRAINER_BUTTON_CLIENT_CARD_WEBAPP,
+                        web_app=WebAppInfo(
+                            url=f"{base}/webapp/trainer-clients?client_id={int(client_id)}"
+                        ),
                     ),
-                )
+                ],
             )
-        kb = InlineKeyboardMarkup(inline_keyboard=[row])
+        kb = InlineKeyboardMarkup(inline_keyboard=rows)
         try:
             await trainer_bot.send_message(
                 chat_id=trainer_tid, text=text, reply_markup=kb

@@ -187,6 +187,33 @@ async def test_schedule_get_returns_slots_in_range_and_shape(
 
 
 @pytest.mark.asyncio
+async def test_schedule_get_view_list_compact_slots_only(
+    app_use_test_db,
+    db_session,
+) -> None:
+    """view=list: read-only Mini App schedule screen — smaller JSON (no grid / profile extras)."""
+    tg = _fresh_trainer_telegram_id()
+    trainer_id = await _create_active_trainer(db_session, tg, with_crm=False)
+    d0 = date.today() + timedelta(days=3)
+    slot_id = await _insert_slot(db_session, trainer_id, d0, 10, 11, "available")
+
+    with patch_trainer_webapp_init(tg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.get(
+                f"/api/webapp/schedule?from_date={d0.isoformat()}&to_date={d0.isoformat()}&view=list",
+                headers={"X-Telegram-Init-Data": "mock"},
+            )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert list(data.keys()) == ["slots"]
+    assert "schedule_grid" not in data
+    assert len(data["slots"]) >= 1
+    s0 = next((x for x in data["slots"] if x.get("id") == slot_id), None)
+    assert s0 is not None
+    assert s0["slot_date"] == d0.isoformat()
+
+
+@pytest.mark.asyncio
 async def test_schedule_get_schedule_grid_zamok_hourly_when_primary(
     app_use_test_db,
     db_session,

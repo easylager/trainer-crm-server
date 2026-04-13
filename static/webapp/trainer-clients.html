@@ -1007,6 +1007,8 @@
         allClients: [],
         filteredClients: [],
         selectedClientId: null,
+        /** True after we handled ?client_id= via /card prefetch (avoid waiting for full list). */
+        deepLinkPrefetchDone: false,
         /** From schedule-editor: reopen same booking after visiting profile. */
         returnBookingId: null,
         returnFromHub: false,
@@ -1776,30 +1778,97 @@
           });
       }
 
-      function loadClients() {
+      function mergeFullClientList(data) {
+        state.allClients = data.clients || [];
+        state.filteredClients = state.allClients.slice();
+        renderList();
+      }
+
+      function loadClientsInternal() {
         if (window.TrainerMiniAppGate && window.TrainerMiniAppGate.shouldBlockFeatureFetch()) return;
         setStateMessage('Загрузка клиентов…', 'loading');
         var base = '/api/webapp/trainer/clients';
         var url = withInit(base);
-        fetch(url, {
-          headers: {}
-        }).then(function(r) {
-          return r.json().then(function(data) {
-            if (!r.ok) {
-              throw new Error(data.detail || r.statusText);
-            }
-            return data;
+        fetch(url, { headers: {} })
+          .then(function(r) {
+            return r.json().then(function(data) {
+              if (!r.ok) throw new Error(data.detail || r.statusText);
+              return data;
+            });
+          })
+          .then(function(data) {
+            state.allClients = data.clients || [];
+            state.filteredClients = state.allClients.slice();
+            setStateMessage('');
+            renderList();
+            tryOpenClientFromQuery();
+          })
+          .catch(function(err) {
+            console.error(err);
+            setStateMessage('Не удалось загрузить клиентов. Попробуйте ещё раз.', 'error');
           });
-        }).then(function(data) {
-          state.allClients = data.clients || [];
-          state.filteredClients = state.allClients.slice();
-          setStateMessage('');
-          renderList();
-          tryOpenClientFromQuery();
-        }).catch(function(err) {
-          console.error(err);
-          setStateMessage('Не удалось загрузить клиентов. Попробуйте ещё раз.', 'error');
-        });
+      }
+
+      /**
+       * If URL has ?client_id=, load that card first (fast path). Otherwise full list first.
+       * Fixes long "Загрузка…" and flaky deep link when the list API is slow.
+       */
+      function loadClients() {
+        if (window.TrainerMiniAppGate && window.TrainerMiniAppGate.shouldBlockFeatureFetch()) return;
+        var p = new URLSearchParams(window.location.search || '');
+        var cidRaw = p.get('client_id');
+        if (cidRaw && !state.deepLinkPrefetchDone) {
+          var idFromUrl = parseInt(cidRaw, 10);
+          if (idFromUrl && !isNaN(idFromUrl)) {
+            state.deepLinkPrefetchDone = true;
+            setStateMessage('Открываем карточку…', 'loading');
+            var cardUrl = withInit('/api/webapp/trainer/clients/' + encodeURIComponent(idFromUrl) + '/card');
+            var hdrs = { Accept: 'application/json', 'Content-Type': 'application/json' };
+            if (initData) hdrs['X-Telegram-Init-Data'] = initData;
+            fetch(cardUrl, { headers: hdrs })
+              .then(function(r) {
+                return r.json().then(function(data) {
+                  if (!r.ok) throw new Error((data && data.detail) || r.statusText || 'Ошибка');
+                  return data;
+                });
+              })
+              .then(function(data) {
+                var c = data && data.client;
+                if (!c || c.id == null) throw new Error('Нет данных клиента');
+                try {
+                  history.replaceState({}, '', window.location.pathname);
+                } catch (e) {}
+                state.allClients = state.allClients.filter(function(x) { return x.id !== c.id; });
+                state.allClients.unshift(c);
+                state.filteredClients = state.allClients.slice();
+                renderList();
+                openClientDetail(idFromUrl);
+                setStateMessage('');
+                var base = '/api/webapp/trainer/clients';
+                fetch(withInit(base), { headers: {} })
+                  .then(function(r2) {
+                    return r2.json().then(function(d2) {
+                      if (!r2.ok) throw new Error(d2.detail || r2.statusText);
+                      return d2;
+                    });
+                  })
+                  .then(function(d2) {
+                    mergeFullClientList(d2);
+                  })
+                  .catch(function() { /* keep partial list from card */ });
+              })
+              .catch(function(err) {
+                try {
+                  history.replaceState({}, '', window.location.pathname);
+                } catch (e2) {}
+                state.deepLinkPrefetchDone = false;
+                setStateMessage(err.message || 'Клиент недоступен', 'error');
+                loadClientsInternal();
+              });
+            return;
+          }
+        }
+        loadClientsInternal();
       }
 
       window.addEventListener('popstate', syncTrainerClientsHeaderBack);

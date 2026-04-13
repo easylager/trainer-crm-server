@@ -34,6 +34,7 @@ from src.application.booking_use_cases import (
     list_bookings_for_trainer,
     list_trainer_clients,
     set_booking_trainer_review,
+    trainer_repeat_booking_same_time_next_week,
 )
 from src.application.trainer_invite_links import build_trainer_invite_links
 from src.application.recurring_use_cases import (
@@ -162,6 +163,7 @@ REQUEST_BOOK_CLIENT_PREFIX = "request_book:"
 REQUEST_REMIND_SLOTS_PREFIX = "request_remind_slots:"
 REQUEST_BOOK_SLOT_PREFIX = "request_book_slot:"
 FEEDBACK_BOOKING_TRAINER_PREFIX = "feedback_booking_trainer:"
+TRAINER_REPEAT_WEEK_PREFIX = "trainer_repeat_week:"
 GUIDE_CALLBACK = "guide"
 TRAINER_SUPPORT_CALLBACK = "trainer:support"
 TRAINER_FAQ_CALLBACK = "trainer:faq"
@@ -1745,6 +1747,50 @@ async def on_decline_booking_start(callback: CallbackQuery) -> None:
         return
     _booking_decline_state[telegram_id] = booking_id
     await callback.message.answer(msg.TRAINER_BOOKING_DECLINE_PROMPT)
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith(TRAINER_REPEAT_WEEK_PREFIX))
+async def on_trainer_repeat_week(callback: CallbackQuery) -> None:
+    """Book same client on the same interval one calendar week after the completed session (trainer push)."""
+    await callback.answer()
+    raw = (callback.data or "").replace(TRAINER_REPEAT_WEEK_PREFIX, "").strip()
+    booking_id = safe_parse_id(raw)
+    if booking_id is None:
+        return
+    telegram_id = callback.from_user.id if callback.from_user else 0
+    async with async_session_factory() as session:
+        trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    if not trainer_id:
+        await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
+        return
+    async with async_session_factory() as session:
+        out = await trainer_repeat_booking_same_time_next_week(session, booking_id, trainer_id)
+    if not out.get("success"):
+        err = out.get("error") or "create_failed"
+        if err == "not_found":
+            text = msg.TRAINER_REPEAT_BOOKING_NOT_FOUND
+        elif err == "slot_booked":
+            text = msg.TRAINER_REPEAT_BOOKING_SLOT_BOOKED
+        elif err == "no_service":
+            text = msg.TRAINER_REPEAT_BOOKING_NO_SERVICE
+        elif err == "price_tier_required":
+            text = msg.TRAINER_REPEAT_BOOKING_PRICE_TIER
+        elif err == "schedule_error":
+            detail = (out.get("message") or "—").strip()
+            text = msg.TRAINER_REPEAT_BOOKING_SCHEDULE_ERROR.format(detail=html.escape(detail))
+        else:
+            text = msg.TRAINER_REPEAT_BOOKING_CREATE_FAILED
+        await callback.message.answer(text)
+        return
+    sd = out.get("slot_date")
+    tm = out.get("start_time")
+    date_str = sd.strftime("%d.%m") if sd and hasattr(sd, "strftime") else "—"
+    day_str = msg.TRAINER_DAYS[sd.weekday()] if sd and hasattr(sd, "weekday") else ""
+    time_str = tm.strftime("%H:%M") if tm and hasattr(tm, "strftime") else "—"
+    await callback.message.answer(
+        msg.TRAINER_REPEAT_BOOKING_OK.format(date=date_str, day=day_str, time=time_str),
+        parse_mode=ParseMode.HTML,
+    )
 
 
 @router.callback_query(lambda c: c.data and c.data.startswith(FEEDBACK_BOOKING_TRAINER_PREFIX))

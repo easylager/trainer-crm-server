@@ -176,10 +176,40 @@ async def run_once() -> None:
             date_str = slot_date.strftime("%d.%m") if slot_date and hasattr(slot_date, "strftime") else "—"
             day_str = msg.TRAINER_DAYS[slot_date.weekday()] if slot_date and hasattr(slot_date, "weekday") else ""
             time_str = start_time.strftime("%H:%M") if start_time and hasattr(start_time, "strftime") else "—"
-            text_trainer = msg.TRAINER_BOOKING_COMPLETED.format(date=date_str, day=day_str, time=time_str)
-            kb = InlineKeyboardMarkup(inline_keyboard=[
+            text_trainer = msg.format_trainer_booking_completed_html(
+                client_name=p.get("client_name") or "Клиент",
+                date=date_str,
+                day=day_str,
+                time=time_str,
+                service_name=p.get("service_name"),
+                price_tier_label=p.get("price_tier_label"),
+                arena_display=p.get("arenas_str"),
+            )
+            rows_tr = [
                 [InlineKeyboardButton(text=msg.TRAINER_BUTTON_LEAVE_FEEDBACK, callback_data=f"feedback_booking_trainer:{p['booking_id']}")],
-            ])
+            ]
+            if slot_date and start_time:
+                sd = slot_date.date() if hasattr(slot_date, "date") else slot_date
+                target_d = sd + timedelta(days=7)
+                st_norm = (
+                    start_time.replace(second=0, microsecond=0)
+                    if hasattr(start_time, "replace")
+                    else start_time
+                )
+                async with async_session_factory() as chk_s:
+                    status_next, _ = await get_slot_status_on_date(
+                        chk_s, p["trainer_id"], target_d, st_norm
+                    )
+                if status_next != "booked":
+                    rows_tr.append(
+                        [
+                            InlineKeyboardButton(
+                                text=msg.TRAINER_BUTTON_BOOK_SAME_TIME_NEXT_WEEK,
+                                callback_data=f"trainer_repeat_week:{p['booking_id']}",
+                            ),
+                        ],
+                    )
+            kb = InlineKeyboardMarkup(inline_keyboard=rows_tr)
             try:
                 await trainer_bot.send_message(chat_id=trainer_tid, text=text_trainer, reply_markup=kb)
                 print(f"[trigger_complete] Trainer notification sent to {trainer_tid} (booking_id={p['booking_id']})")

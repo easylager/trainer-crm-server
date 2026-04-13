@@ -600,11 +600,225 @@ CLIENT_FEEDBACK_RATE_PROMPT = "Поставьте оценку тренеру о
 CLIENT_FEEDBACK_REVIEW_PROMPT = "Напишите отзыв (необязательно) или нажмите «Пропустить»:"
 CLIENT_FEEDBACK_SKIP = "Пропустить"
 CLIENT_FEEDBACK_THANKS = "Спасибо за отзыв!"
-TRAINER_BOOKING_COMPLETED = (
-    "<b>Занятие завершено</b>\n\n"
-    "Было: <b>{date}</b> ({day}) в {time}\n\n"
-    "О клиенте — отзыв по желанию (кнопка ниже)."
-)
+
+
+def format_trainer_booking_completed_html(
+    *,
+    client_name: str,
+    date: str,
+    day: str,
+    time: str,
+    service_name: str | None,
+    price_tier_label: str | None,
+    arena_display: str | None,
+) -> str:
+    """Telegram HTML for trainer push after a session is marked completed."""
+    cn = html.escape((client_name or "").strip() or "Клиент")
+    ds = html.escape(date)
+    dy = html.escape(day)
+    ts = html.escape(time)
+    svc = (service_name or "").strip()
+    service_line = ""
+    if svc and svc != "—":
+        tier = (price_tier_label or "").strip()
+        if tier:
+            service_line = (
+                f"🎯 Услуга: <b>{html.escape(svc)}</b> · тариф: <b>{html.escape(tier)}</b>\n"
+            )
+        else:
+            service_line = f"🎯 Услуга: <b>{html.escape(svc)}</b>\n"
+    arena_line = ""
+    ar = (arena_display or "").strip()
+    if ar and ar != "—":
+        arena_line = f"🏟 Площадка: <b>{html.escape(ar)}</b>\n"
+    return (
+        "<b>Занятие завершено</b>\n\n"
+        f"👤 <b>{cn}</b>\n"
+        f"📅 <b>{ds}</b> ({dy}) в {ts}\n"
+        f"{service_line}"
+        f"{arena_line}"
+        "\n"
+        "О клиенте — отзыв по желанию (кнопка ниже)."
+    )
+
+
+def format_trainer_booking_problem_ack_html(
+    *,
+    client_name: str,
+    preset_summary_ru: str,
+    payment_class: str,
+    date: str,
+    day: str,
+    time: str,
+    service_name: str | None,
+) -> str:
+    """Trainer push: problem report saved — must not read like happy-path completion (E5 / FR-12)."""
+    cn = html.escape((client_name or "").strip() or "Клиент")
+    ps = html.escape((preset_summary_ru or "").strip() or "отчёт")
+    ds = html.escape(date)
+    dy = html.escape(day)
+    ts = html.escape(time)
+    pc_line = ""
+    pc = (payment_class or "").strip().upper()
+    if pc == "PASS":
+        pc_line = "💳 <b>Контекст оплаты:</b> абонемент\n"
+    elif pc == "CERT":
+        pc_line = "💳 <b>Контекст оплаты:</b> сертификат\n"
+    elif pc == "NONE":
+        pc_line = "💳 <b>Контекст оплаты:</b> без абонемента / сертификата\n"
+    svc = (service_name or "").strip()
+    service_line = ""
+    if svc and svc != "—":
+        service_line = f"🎯 Услуга: <b>{html.escape(svc)}</b>\n"
+    return (
+        "<b>Отчёт о проблеме сохранён</b>\n\n"
+        f"👤 <b>{cn}</b>\n"
+        f"⚠️ Ситуация: <b>{ps}</b>\n"
+        f"{pc_line}"
+        f"{service_line}"
+        f"📅 <b>{ds}</b> ({dy}) в {ts}\n"
+    )
+
+
+def format_client_booking_problem_notice_html(
+    *,
+    date: str,
+    day: str,
+    time: str,
+) -> str:
+    """Client push after trainer problem report — no «great job» tone (E5 / FR-12)."""
+    ds = html.escape(date)
+    dy = html.escape(day)
+    ts = html.escape(time)
+    return (
+        "<b>Обновление по записи</b>\n\n"
+        f"По записи на <b>{ds}</b> ({dy}) в {ts} тренер зафиксировал в CRM ситуацию "
+        "<b>вне обычного успешного занятия</b>.\n\n"
+        "Это не сообщение о том, что всё прошло идеально — при вопросах свяжитесь с тренером напрямую.\n\n"
+        "Подробности — в <b>«Мои записи»</b> (кнопка ниже)."
+    )
+
+
+def format_trainer_client_no_show_ack_html(
+    *,
+    client_name: str,
+    outcome_line_ru: str,
+    payment_class: str,
+    date: str,
+    day: str,
+    time: str,
+    service_name: str | None,
+) -> str:
+    """Trainer push after PASS/CERT «Клиент не пришёл» (booking_client_no_show)."""
+    cn = html.escape((client_name or "").strip() or "Клиент")
+    ol = html.escape((outcome_line_ru or "").strip())
+    ds = html.escape(date)
+    dy = html.escape(day)
+    ts = html.escape(time)
+    pc_line = ""
+    pc = (payment_class or "").strip().upper()
+    if pc == "PASS":
+        pc_line = "💳 <b>Оплата:</b> абонемент\n"
+    elif pc == "CERT":
+        pc_line = "💳 <b>Оплата:</b> сертификат\n"
+    svc = (service_name or "").strip()
+    service_line = ""
+    if svc and svc != "—":
+        service_line = f"🎯 Услуга: <b>{html.escape(svc)}</b>\n"
+    return (
+        "<b>Отметка «Клиент не пришёл» сохранена</b>\n\n"
+        f"👤 <b>{cn}</b>\n"
+        f"{pc_line}"
+        f"{service_line}"
+        f"📅 <b>{ds}</b> ({dy}) в {ts}\n\n"
+        f"ℹ️ {ol}"
+    )
+
+
+def format_client_booking_no_show_notice_html(
+    *,
+    variant: str,
+    payment_class: str,
+    date: str,
+    day: str,
+    time: str,
+    service_name: str | None,
+) -> str:
+    """
+    Client push after trainer saves PASS/CERT no-show + deduct choice.
+    variant: skip_before | skip_after | redeem_before | redeem_after
+    """
+    ds = html.escape(date)
+    dy = html.escape(day)
+    ts = html.escape(time)
+    pc = (payment_class or "").strip().upper()
+    svc = (service_name or "").strip()
+    service_line = ""
+    if svc and svc != "—":
+        service_line = f"🎯 Услуга: <b>{html.escape(svc)}</b>\n"
+
+    if variant == "skip_before":
+        title = "Запись без списания"
+        if pc == "PASS":
+            body = (
+                "Тренер отметил, что вы не пришли на занятие.\n\n"
+                "По этой записи занятие <b>не будет списано</b> с абонемента — это отразится в вашем учёте."
+            )
+        else:
+            body = (
+                "Тренер отметил, что вы не пришли на занятие.\n\n"
+                "По этой записи сумма <b>не будет списана</b> с сертификата — это отразится в вашем учёте."
+            )
+    elif variant == "skip_after":
+        title = "Занятие возвращено"
+        if pc == "PASS":
+            body = (
+                "Тренер <b>вернул занятие</b> на ваш абонемент: списание по этой записи отменено, "
+                "занятие снова доступно вам в счёт абонемента."
+            )
+        else:
+            body = (
+                "Тренер <b>вернул средства</b> на баланс сертификата по этой записи: списание отменено."
+            )
+    elif variant == "redeem_before":
+        title = "Вас не было на занятии"
+        if pc == "PASS":
+            body = (
+                "Тренер отметил, что вас не было на занятии. Когда запись закроется как проведённая, занятие спишется с абонемента "
+                "— как обычно, если человек не пришёл на слот."
+            )
+        else:
+            body = (
+                "Тренер отметил, что вас не было на занятии. Когда запись закроется как проведённая, сумма спишется с сертификата "
+                "— как обычно при отсутствии на занятии."
+            )
+    elif variant == "redeem_after":
+        title = "Отсутствие на занятии учтено"
+        if pc == "PASS":
+            body = (
+                "Тренер зафиксировал, что вас не было. Списание с абонемента по этой записи <b>оставлено</b> "
+                "— занятие учтено как использованное."
+            )
+        else:
+            body = (
+                "Тренер зафиксировал, что вас не было. Списание с сертификата по этой записи <b>оставлено</b> "
+                "— сумма по занятию учтена."
+            )
+    else:
+        title = "Обновление по записи"
+        body = "Тренер обновил учёт по записи. Подробности — в «Мои записи»."
+
+    tb = html.escape(title)
+    return (
+        f"<b>{tb}</b>\n\n"
+        f"{body}\n\n"
+        f"📅 <b>{ds}</b> ({dy}) в {ts}\n"
+        f"{service_line}"
+        "\nОткрыть — в <b>«Мои записи»</b> (кнопка ниже)."
+    )
+
+
+TRAINER_BUTTON_OPEN_SCHEDULE_PROBLEM = "📋 Открыть запись"
 TRAINER_NO_PASS_FOR_SERVICE = (
     "<b>Без списания абонемента</b>\n\n"
     "У клиента нет подходящего абонемента по этой услуге — занятие закрыто без списания.\n\n"
@@ -613,7 +827,23 @@ TRAINER_NO_PASS_FOR_SERVICE = (
     "Услуга: {service_name}"
 )
 TRAINER_BUTTON_LEAVE_FEEDBACK = "✍️ Оставить отзыв"
-TRAINER_BUTTON_CLIENT_CARD_WEBAPP = "👤 Карточка и заметка"
+TRAINER_BUTTON_BOOK_SAME_TIME_NEXT_WEEK = "📅 Записать на то же время"
+TRAINER_BUTTON_CLIENT_CARD_WEBAPP = "👤 Карточка"
+TRAINER_REPEAT_BOOKING_OK = (
+    "✅ Клиент записан на <b>{date}</b> ({day}) в {time}."
+)
+TRAINER_REPEAT_BOOKING_NOT_FOUND = "Запись не найдена или уже недоступна."
+TRAINER_REPEAT_BOOKING_SLOT_BOOKED = (
+    "На это время через неделю слот уже занят — откройте расписание в приложении."
+)
+TRAINER_REPEAT_BOOKING_NO_SERVICE = (
+    "Не удалось подобрать услугу для записи. Добавьте услугу в профиле или запишите из расписания."
+)
+TRAINER_REPEAT_BOOKING_CREATE_FAILED = "Не удалось создать запись. Попробуйте из расписания."
+TRAINER_REPEAT_BOOKING_PRICE_TIER = (
+    "Для этой услуги несколько тарифов — запишите клиента из расписания в мини-приложении."
+)
+TRAINER_REPEAT_BOOKING_SCHEDULE_ERROR = "Не удалось создать слот: {detail}"
 TRAINER_FEEDBACK_PROMPT = "Напиши отзыв о занятии (необязательно, можно коротко):"
 TRAINER_FEEDBACK_THANKS = "Спасибо! Отзыв сохранён."
 TRAINER_START_WELCOME = (
@@ -846,9 +1076,36 @@ TRAINER_CANCEL_IDLE = "Нечего отменять. Профиль — в ме
 ADMIN_START = (
     "Привет! Это админ-бот для модерации тренеров.\n\n"
     "Команды:\n"
-    "/pending — показать тренеров на модерацию."
+    "/pending — показать тренеров на модерацию.\n"
+    "/problem_reports — аудит отчётов «проблема с клиентом» (E6)."
 )
 ADMIN_NO_ACCESS = "У вас нет доступа к этому боту."
+ADMIN_PROBLEM_REPORTS_TITLE = "📋 <b>Отчёты «проблема с клиентом»</b> (аудит, E6)\n\n"
+ADMIN_PROBLEM_REPORTS_FILTER_BLACKLIST = "Фильтр: только кандидаты в чёрный список.\n\n"
+ADMIN_PROBLEM_REPORTS_EMPTY = "Записей нет."
+ADMIN_PROBLEM_REPORTS_LINE = (
+    "{n}. отчёт <code>{rid}</code> · запись <code>{bid}</code> · тренер <code>{tid}</code>\n"
+    "   {preset} · {pclass} · {bl} · {status}\n"
+    "   слот {slot} · {created}\n"
+)
+ADMIN_PROBLEM_REPORTS_FOOTER = (
+    "\n<i>Показано {shown} из {total}. Параметры: "
+    "<code>/problem_reports</code> — все; "
+    "<code>/problem_reports blacklist</code> — кандидаты blacklist; "
+    "число в конце — смещение (offset) для листинга.</i>"
+)
+ADMIN_VERSION_TITLE = "🔧 <b>Версия и health</b>\n"
+ADMIN_VERSION_DEPLOY = "• Деплой: <code>{deploy}</code>"
+ADMIN_VERSION_SENTRY_ENV = "• Sentry environment: <code>{env}</code>"
+ADMIN_VERSION_API_HEALTH = (
+    "• API <code>GET /health</code>:\n"
+    "  status=<code>{status}</code>, db=<code>{db}</code>, s3=<code>{s3}</code>"
+)
+ADMIN_VERSION_API_ERROR = "• API: <b>недоступен</b> — {error}"
+ADMIN_VERSION_NOTIFICATION_SERVICE = (
+    "• Notification-service: отдельный процесс без HTTP; пульс в боте не показывается "
+    "(логи/панель хостинга)."
+)
 ADMIN_PENDING_EMPTY = "Нет тренеров в очереди на модерацию."
 # Legacy short card (moderation UI uses src.bot.admin_moderation_card.format_admin_trainer_moderation_caption).
 ADMIN_TRAINER_CARD = (

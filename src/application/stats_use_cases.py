@@ -3,7 +3,8 @@ Stats for trainers (subscription value) and platform (admin).
 Read-only aggregates; no side effects.
 """
 from calendar import monthrange
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import text
 from sqlalchemy.exc import ProgrammingError
@@ -14,6 +15,9 @@ from src.infrastructure.db.models import SUBSCRIPTION_STATUS_ACTIVE, SUBSCRIPTIO
 
 # Short day names for charts (Mon–Sun)
 STATS_DAY_NAMES = ("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс")
+
+# Align hub MTD «today» with slot_date / trainer-facing calendar (Belarus).
+HUB_REVENUE_TZ = ZoneInfo("Europe/Minsk")
 
 
 def _month_start(d: date) -> date:
@@ -184,6 +188,16 @@ async def get_trainer_revenue_breakdown_for_range(
         "paid_sessions_count": paid_sessions_count,
         "avg_check_cents": avg_check_cents,
     }
+
+
+async def get_trainer_hub_revenue_month_to_date(session: AsyncSession, trainer_id: int) -> dict:
+    """
+    Hub «Доход»: same accrual rules as `get_trainer_revenue_breakdown_for_range`, period [1st of month, today]
+    inclusive in Europe/Minsk calendar (sessions by slot_date; passes/certs by issue UTC date).
+    """
+    today = datetime.now(HUB_REVENUE_TZ).date()
+    d_start = _month_start(today)
+    return await get_trainer_revenue_breakdown_for_range(session, trainer_id, d_start, today)
 
 
 async def get_trainer_stats(session: AsyncSession, trainer_id: int) -> dict:

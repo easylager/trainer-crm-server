@@ -172,6 +172,10 @@ class TrainerProfile(Base):
     group_classes_enabled: Mapped[bool] = mapped_column(
         nullable=False, server_default="false"
     )  # When false, schedule UI/API disallow capacity > 1 (opt-in for group slots)
+    # P1/P2 (PRD): redeem — auto write-off on no-show for pass/cert; skip — do not redeem.
+    pass_cert_no_show_policy: Mapped[str] = mapped_column(
+        String(16), nullable=False, server_default="redeem"
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
@@ -308,6 +312,7 @@ class Client(Base):
     phone_normalized: Mapped[Optional[str]] = mapped_column(String(32), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    problematic: Mapped[bool] = mapped_column(nullable=False, server_default="false")
 
     bookings: Mapped[list["Booking"]] = relationship(back_populates="client", lazy="raise")
     client_requests: Mapped[list["ClientRequest"]] = relationship(back_populates="client", lazy="raise")
@@ -520,7 +525,9 @@ class Booking(Base):
     )
     booking_price_cents: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     price_tier_kind: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)  # tariff code snapshot
-    status: Mapped[str] = mapped_column(String(32), nullable=False, server_default="pending")
+    status: Mapped[str] = mapped_column(
+        String(32), nullable=False, server_default="pending"
+    )  # pending|confirmed|completed|cancelled|declined|no_show|payment_dispute
 
     client: Mapped["Client"] = relationship(back_populates="bookings", lazy="raise")
 

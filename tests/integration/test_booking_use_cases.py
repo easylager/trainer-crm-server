@@ -272,6 +272,79 @@ async def test_list_bookings_to_complete_and_mark_completed(db_session: AsyncSes
 
 
 @pytest.mark.asyncio
+async def test_list_bookings_to_complete_excludes_booking_problem_report(
+    db_session: AsyncSession,
+) -> None:
+    """E4 T4.5: reported problems must not enter auto-complete queue."""
+    yesterday = date.today() - timedelta(days=1)
+    trainer_id, slot_id, service_id = await _create_trainer_and_slot(
+        db_session, yesterday, time(9, 0), time(10, 0), status="booked"
+    )
+    client_id = await _create_client(db_session, unique_test_telegram_id())
+    r = await db_session.execute(
+        text("""
+            INSERT INTO bookings (slot_id, trainer_id, client_id, service_id, status)
+            VALUES (:sid, :tid, :cid, :svc_id, 'pending')
+            RETURNING id
+        """),
+        {"sid": slot_id, "tid": trainer_id, "cid": client_id, "svc_id": service_id},
+    )
+    (booking_id,) = r.fetchone()
+    await db_session.execute(
+        text(
+            """
+            INSERT INTO booking_problem_reports
+                (booking_id, trainer_id, client_id, preset_id, payment_class, note, source)
+            VALUES (:bid, :tid, :cid, 'A1', 'NONE', NULL, 'test')
+            """
+        ),
+        {"bid": booking_id, "tid": trainer_id, "cid": client_id},
+    )
+    await db_session.commit()
+
+    to_complete = await list_bookings_to_complete(db_session)
+    ids = [b["id"] for b in to_complete]
+    assert booking_id not in ids
+
+
+@pytest.mark.asyncio
+async def test_mark_booking_completed_skips_when_problem_report_exists(db_session: AsyncSession) -> None:
+    """E4: completion worker must not treat bookings that already have a problem report."""
+    yesterday = date.today() - timedelta(days=1)
+    trainer_id, slot_id, service_id = await _create_trainer_and_slot(
+        db_session, yesterday, time(9, 0), time(10, 0), status="booked"
+    )
+    client_id = await _create_client(db_session, unique_test_telegram_id())
+    r = await db_session.execute(
+        text(
+            """
+            INSERT INTO bookings (slot_id, trainer_id, client_id, service_id, status)
+            VALUES (:sid, :tid, :cid, :svc_id, 'pending')
+            RETURNING id
+            """
+        ),
+        {"sid": slot_id, "tid": trainer_id, "cid": client_id, "svc_id": service_id},
+    )
+    (booking_id,) = r.fetchone()
+    await db_session.execute(
+        text(
+            """
+            INSERT INTO booking_problem_reports
+                (booking_id, trainer_id, client_id, preset_id, payment_class, note, source)
+            VALUES (:bid, :tid, :cid, 'A1', 'NONE', NULL, 'test')
+            """
+        ),
+        {"bid": booking_id, "tid": trainer_id, "cid": client_id},
+    )
+    await db_session.commit()
+
+    result = await mark_booking_completed_and_notify(db_session, booking_id)
+    assert result is False
+    r = await db_session.execute(text("SELECT status FROM bookings WHERE id = :id"), {"id": booking_id})
+    assert r.scalar() == "pending"
+
+
+@pytest.mark.asyncio
 async def test_trainer_created_booking_not_in_trainer_pending_notification_queue(
     db_session: AsyncSession,
 ) -> None:

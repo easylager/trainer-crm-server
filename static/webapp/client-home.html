@@ -419,6 +419,69 @@
       border-color: rgba(245, 166, 35, 0.45);
       color: #c27800;
     }
+    /* Premium loading: token-based shimmer (aligned with trainer-home hub); no arbitrary page bg hex */
+    .hub-bookings-skel {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .hub-skel-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 14px;
+      border-radius: 12px;
+      border: 1px solid rgba(128, 128, 128, 0.12);
+      background: var(--tg-theme-secondary-bg-color);
+      min-height: 56px;
+      box-sizing: border-box;
+    }
+    .hub-skel-row .hub-skel-line--time {
+      width: 48px;
+      height: 18px;
+      border-radius: 8px;
+      flex-shrink: 0;
+    }
+    .hub-skel-row .hub-skel-line--primary {
+      width: 70%;
+      height: 14px;
+      border-radius: 7px;
+    }
+    .hub-skel-row .hub-skel-line--secondary {
+      width: 44%;
+      height: 11px;
+      border-radius: 6px;
+      margin-top: 8px;
+    }
+    .hub-skel-shimmer {
+      background: linear-gradient(
+        110deg,
+        var(--tg-theme-secondary-bg-color) 0%,
+        color-mix(in srgb, var(--tg-theme-button-color) 14%, var(--tg-theme-secondary-bg-color)) 46%,
+        var(--tg-theme-secondary-bg-color) 100%
+      );
+      background-size: 200% 100%;
+      animation: client-hub-skel-shimmer 1.2s ease-in-out infinite;
+    }
+    @keyframes client-hub-skel-shimmer {
+      0% { background-position: 100% 0; }
+      100% { background-position: -100% 0; }
+    }
+    .hub-stats--loading .hub-stat-label {
+      opacity: 0.45;
+    }
+    .hub-stat-value.hub-stat-skel {
+      min-height: 22px;
+      border-radius: 8px;
+      line-height: 22px;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .hub-skel-shimmer {
+        animation: none !important;
+        background: var(--tg-theme-secondary-bg-color) !important;
+        opacity: 0.88;
+      }
+    }
   </style>
 </head>
 <body class="hub-body">
@@ -584,12 +647,38 @@
         return out;
       }
 
+      function clearClientHubStatsSkeleton() {
+        var wrap = document.getElementById('hubStats');
+        if (!wrap) return;
+        wrap.classList.remove('hub-stats--loading');
+        ['statTodayValue', 'statWeekValue', 'statRequestsValue'].forEach(function(id) {
+          var el = document.getElementById(id);
+          if (el) el.classList.remove('hub-skel-shimmer', 'hub-stat-skel');
+        });
+      }
+
+      function showClientHubStatsSkeleton() {
+        var wrap = document.getElementById('hubStats');
+        if (!wrap || !initData) return;
+        wrap.style.display = 'grid';
+        wrap.setAttribute('aria-hidden', 'true');
+        wrap.classList.add('hub-stats--loading');
+        ['statTodayValue', 'statWeekValue', 'statRequestsValue'].forEach(function(id) {
+          var el = document.getElementById(id);
+          if (el) {
+            el.textContent = '\u00a0';
+            el.classList.add('hub-skel-shimmer', 'hub-stat-skel');
+          }
+        });
+      }
+
       function setStats(todayCount, weekCount, requestCount) {
         var wrap = document.getElementById('hubStats');
         if (!wrap || !initData) {
           if (wrap) wrap.style.display = 'none';
           return;
         }
+        clearClientHubStatsSkeleton();
         wrap.style.display = 'grid';
         wrap.setAttribute('aria-hidden', 'false');
         document.getElementById('statTodayValue').textContent = String(todayCount);
@@ -779,15 +868,39 @@
         el.style.display = 'block';
       }
 
+      /** Skeleton rows while client bookings + requests load (same pattern as trainer-home hub). */
+      function buildClientHubBookingsSkeletonHtml() {
+        var parts = [
+          '<div class="hub-bookings-skel" role="status" aria-busy="true" aria-label="Загрузка записей">',
+        ];
+        for (var i = 0; i < 3; i++) {
+          parts.push(
+            '<div class="hub-skel-row">' +
+              '<div class="hub-skel-line hub-skel-line--time hub-skel-shimmer" aria-hidden="true"></div>' +
+              '<div style="flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center;">' +
+                '<div class="hub-skel-line hub-skel-line--primary hub-skel-shimmer" aria-hidden="true"></div>' +
+                '<div class="hub-skel-line hub-skel-line--secondary hub-skel-shimmer" aria-hidden="true"></div>' +
+              '</div>' +
+            '</div>'
+          );
+        }
+        parts.push('</div>');
+        return parts.join('');
+      }
+
       function loadAll() {
         if (!initData) {
           setStateMessage('', '');
+          clearClientHubStatsSkeleton();
+          document.getElementById('hubStats').style.display = 'none';
           document.getElementById('bookingsBlock').innerHTML = '<div class="hub-empty">Авторизация Telegram недоступна в этом режиме.</div>';
           renderTiles();
           setupQuickGrid();
           return;
         }
-        setStateMessage('Загрузка…', '');
+        setStateMessage('', '');
+        document.getElementById('bookingsBlock').innerHTML = buildClientHubBookingsSkeletonHtml();
+        showClientHubStatsSkeleton();
         Promise.all([
           fetch(apiUrl('/client/bookings'), { headers: headersJson() }).then(function(r) {
             return r.json().then(function(d) { if (!r.ok) throw new Error(d.detail || r.statusText); return d; });
@@ -808,6 +921,11 @@
           setupQuickGrid();
         }).catch(function() {
           setStateMessage('Не удалось загрузить данные. Проверьте сеть и откройте страницу из клиентского бота.', 'error');
+          document.getElementById('bookingsBlock').innerHTML = '';
+          var hs = document.getElementById('hubStats');
+          clearClientHubStatsSkeleton();
+          hs.style.display = 'none';
+          hs.setAttribute('aria-hidden', 'true');
         });
       }
 

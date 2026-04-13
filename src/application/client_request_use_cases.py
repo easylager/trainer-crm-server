@@ -473,6 +473,38 @@ async def list_requests_for_trainer(
     ]
 
 
+async def count_unanswered_requests_for_trainer(session: AsyncSession, trainer_id: int) -> int:
+    """
+    Count visible client_requests where the trainer has not yet responded.
+    Same visibility rules as list_requests_for_trainer; no row limit (full count).
+    """
+    r = await session.execute(
+        text("""
+            SELECT COUNT(*)
+            FROM client_requests r
+            INNER JOIN clients cl ON cl.id = r.client_id
+            INNER JOIN cities c ON c.id = r.city_id
+            INNER JOIN services s ON s.id = r.service_id
+            WHERE r.status = 'new'
+              AND NOT EXISTS (SELECT 1 FROM client_request_declines d
+                              WHERE d.client_request_id = r.id AND d.trainer_id = :tid)
+              AND (
+                r.trainer_id = :tid
+                OR (r.trainer_id IS NULL
+                    AND EXISTS (SELECT 1 FROM trainer_profiles p WHERE p.trainer_id = :tid AND p.city_id = r.city_id)
+                    AND EXISTS (SELECT 1 FROM trainer_services ts WHERE ts.trainer_id = :tid AND ts.service_id = r.service_id))
+              )
+              AND NOT EXISTS (
+                  SELECT 1 FROM client_request_responses resp
+                  WHERE resp.client_request_id = r.id AND resp.trainer_id = :tid
+              )
+        """),
+        {"tid": trainer_id},
+    )
+    row = r.fetchone()
+    return int(row[0] or 0) if row else 0
+
+
 async def get_request_client_for_trainer_booking(
     session: AsyncSession, request_id: int, trainer_id: int
 ) -> dict | None:

@@ -77,6 +77,57 @@
       background: #F7A600;
       border-radius: 2px;
     }
+    /* Collapsible profile blocks (education, services) — same visual rhythm as .section-title */
+    details.profile-collapse {
+      margin: 24px 0 0;
+      border: none;
+      padding: 0;
+    }
+    .profile-collapse > summary.profile-collapse__summary {
+      list-style: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--tg-theme-hint-color);
+      margin: 0 0 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .profile-collapse > summary.profile-collapse__summary::-webkit-details-marker {
+      display: none;
+    }
+    .profile-collapse > summary.profile-collapse__summary::before {
+      content: '';
+      flex: 0 0 3px;
+      height: 14px;
+      background: #F7A600;
+      border-radius: 2px;
+    }
+    .profile-collapse__title {
+      flex: 1 1 auto;
+      min-width: 0;
+      text-align: left;
+    }
+    .profile-collapse > summary.profile-collapse__summary::after {
+      content: '';
+      width: 8px;
+      height: 8px;
+      border-right: 2px solid var(--tg-theme-hint-color);
+      border-bottom: 2px solid var(--tg-theme-hint-color);
+      transform: rotate(45deg);
+      opacity: 0.65;
+      flex-shrink: 0;
+      transition: transform 0.2s ease;
+    }
+    .profile-collapse[open] > summary.profile-collapse__summary::after {
+      transform: rotate(-135deg);
+      margin-top: 4px;
+    }
     .card {
       background: var(--tg-theme-secondary-bg-color);
       border-radius: 16px;
@@ -1620,20 +1671,28 @@
         </div>
       </div>
 
-      <div class="section-title">Подробное образование</div>
-      <div class="card" id="educationEntriesWrap">
-        <p class="hint" style="margin: 0 0 14px;">Чтобы в карточке было видно, где вы учились: диплом, курс или сертификат. Например: БГУФК, CrossFit L1, курс по реабилитации…</p>
-        <div id="educationEntries"></div>
-        <div id="educationNewWrap" style="display:none; margin-top:14px; padding-top:14px; border-top:1px solid rgba(128,128,128,0.15);"></div>
-        <button type="button" class="filter-btn" id="btnEducationAdd" style="margin-top:14px; width: 100%; justify-content: center;">+ Добавить запись</button>
-      </div>
+      <details class="profile-collapse" id="profileEducationCollapse">
+        <summary class="profile-collapse__summary">
+          <span class="profile-collapse__title">Подробное образование</span>
+        </summary>
+        <div class="card" id="educationEntriesWrap">
+          <p class="hint" style="margin: 0 0 14px;">Чтобы в карточке было видно, где вы учились: диплом, курс или сертификат. Например: БГУФК, CrossFit L1, курс по реабилитации…</p>
+          <div id="educationEntries"></div>
+          <div id="educationNewWrap" style="display:none; margin-top:14px; padding-top:14px; border-top:1px solid rgba(128,128,128,0.15);"></div>
+          <button type="button" class="filter-btn" id="btnEducationAdd" style="margin-top:14px; width: 100%; justify-content: center;">+ Добавить запись</button>
+        </div>
+      </details>
 
-      <div class="section-title">Услуги и цены</div>
-      <div class="card">
-        <p class="hint" style="margin: 0 0 14px;">Выберите услуги и укажите цену в белорусских рублях (BYN)</p>
-        <div id="servicesWrap"></div>
-        <p class="field-error" id="err_services" role="status" hidden style="margin:14px 0 0;"></p>
-      </div>
+      <details class="profile-collapse" id="profileServicesCollapse">
+        <summary class="profile-collapse__summary">
+          <span class="profile-collapse__title">Услуги и цены</span>
+        </summary>
+        <div class="card">
+          <p class="hint" style="margin: 0 0 14px;">Выберите услуги и укажите цену в белорусских рублях (BYN)</p>
+          <div id="servicesWrap"></div>
+          <p class="field-error" id="err_services" role="status" hidden style="margin:14px 0 0;"></p>
+        </div>
+      </details>
 
       <div class="section-title">Арены</div>
       <div class="card">
@@ -1710,6 +1769,12 @@
       function apiUrl(path) {
         var q = initData() ? ('?init_data=' + encodeURIComponent(initData())) : '';
         return '/api/webapp' + path + q;
+      }
+      /** Ensures fields inside <details.profile-collapse> are visible (focus / validation). */
+      function openProfileCollapseContaining(el) {
+        if (!el || !el.closest) return;
+        var det = el.closest('details.profile-collapse');
+        if (det && !det.open) det.open = true;
       }
       function haptic(kind) {
         try {
@@ -2205,9 +2270,11 @@
           if (!descOk) {
             errEl.textContent = 'Описание услуги не длиннее ' + MAX_SERVICE_DESCRIPTION_CHARS + ' символов.';
             errEl.hidden = false;
+            openProfileCollapseContaining(errEl);
           } else if (!svcOk && (parsed.services || []).length > 0) {
             errEl.textContent = 'Для каждой выбранной услуги отметьте хотя бы один тариф и укажите цену.';
             errEl.hidden = false;
+            openProfileCollapseContaining(errEl);
           } else {
             errEl.textContent = '';
             errEl.hidden = true;
@@ -2251,6 +2318,7 @@
             if (es) {
               es.textContent = pair[1];
               es.hidden = false;
+              openProfileCollapseContaining(es);
             }
           } else if (pair[0] === 'primary_arena') {
             var ep = document.getElementById('err_primary_arena');
@@ -2487,6 +2555,7 @@
 
         function focusEl(el) {
           if (!el) return;
+          openProfileCollapseContaining(el);
           try {
             el.scrollIntoView({ behavior: 'smooth', block: 'center' });
           } catch (e) {}

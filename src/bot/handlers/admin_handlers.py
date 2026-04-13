@@ -22,6 +22,10 @@ from src.application.support_use_cases import (
     reply_support_message,
 )
 from src.application.trainer_profile_completeness import is_profile_complete_for_moderation
+from src.application.booking_problem_admin_use_cases import (
+    count_booking_problem_reports_for_admin,
+    list_booking_problem_reports_for_admin,
+)
 from src.application.platform_settings_use_cases import (
     WELCOME_TRIAL_PERIOD_DAYS_KEY,
     set_platform_int,
@@ -54,6 +58,7 @@ from src.bot.admin_moderation_card import (
     format_admin_trainer_moderation_caption,
     split_photo_caption_if_needed,
 )
+from src.bot.admin_health import fetch_api_health, format_admin_version_message
 from src.bot.client_api import resolve_trainer_photo_bytes
 from src.bot.handlers.trainer_handlers import _trainer_profile_footer_hint, _trainer_profile_keyboard
 from sqlalchemy import text
@@ -260,7 +265,8 @@ async def cmd_start(message: Message) -> None:
         return
     # No keyboard: all actions via menu commands (/pending, /stats, /support, /dicts)
     await message.answer(
-        msg.ADMIN_START + "\n\nИспользуйте команды из меню (слева от поля ввода):\n/pending — модерация\n/stats — статистика\n/support — поддержка\n/dicts — города и арены"
+        msg.ADMIN_START
+        + "\n\nИспользуйте команды из меню (слева от поля ввода):\n/pending — модерация\n/stats — статистика\n/support — поддержка\n/dicts — города и арены\n/problem_reports — аудит отчётов о проблемах"
     )
 
 
@@ -430,6 +436,117 @@ async def cmd_support(message: Message) -> None:
         "\n".join(parts),
         reply_markup=InlineKeyboardMarkup(inline_keyboard=kb_rows),
     )
+
+
+@router.message(Command("version"))
+async def cmd_version(message: Message) -> None:
+    """Deploy label + GET /health (API + DB + S3)."""
+    if not _is_admin(message.from_user.id if message.from_user else 0):
+        await message.answer(msg.ADMIN_NO_ACCESS)
+        return
+    settings = Settings()
+    health = await fetch_api_health()
+    text = format_admin_version_message(settings, health)
+    await message.answer(text, parse_mode=ParseMode.HTML)
+
+
+def _admin_problem_report_slot_and_created(it: dict) -> tuple[str, str]:
+    sd, st, et = it.get("slot_date"), it.get("start_time"), it.get("end_time")
+    slot_s = "—"
+    if sd is not None:
+        dpart = sd.strftime("%d.%m.%y") if hasattr(sd, "strftime") else str(sd)
+        t1 = st.strftime("%H:%M") if st and hasattr(st, "strftime") else ""
+        t2 = et.strftime("%H:%M") if et and hasattr(et, "strftime") else ""
+        slot_s = f"{dpart} {t1}–{t2}".strip()
+    ca = it.get("created_at")
+    if ca is not None and hasattr(ca, "isoformat"):
+        created_s = ca.isoformat(timespec="seconds")
+    else:
+        created_s = str(ca or "—")
+    return slot_s, created_s
+
+
+@router.message(Command("problem_reports"))
+async def cmd_problem_reports(message: Message) -> None:
+    """E6 T6.2: list immutable problem reports (optional blacklist candidates, offset pagination)."""
+    if not _is_admin(message.from_user.id if message.from_user else 0):
+        await message.answer(msg.ADMIN_NO_ACCESS)
+        return
+    parts = (message.text or "").split()
+    blacklist_only = False
+    offset = 0
+    if len(parts) >= 2:
+        if parts[1].lower() == "blacklist":
+            blacklist_only = True
+            if len(parts) >= 3:
+                try:
+                    offset = max(0, int(parts[2]))
+                except ValueError:
+                    await message.answer("Смещение: целое число, напр. <code>/problem_reports blacklist 15</code>.")
+                    return
+        else:
+            try:
+                offset = max(0, int(parts[1]))
+            except ValueError:
+                await message.answer("Некорректный аргумент. См. <code>/problem_reports</code>.")
+                return
+
+    page_limit = 12
+    async with async_session_factory() as session:
+        total = await count_booking_problem_reports_for_admin(session, blacklist_only=blacklist_only)
+        items = await list_booking_problem_reports_for_admin(
+            session,
+            limit=page_limit,
+            offset=offset,
+            blacklist_only=blacklist_only,
+        )
+
+    head = msg.ADMIN_PROBLEM_REPORTS_TITLE
+    if blacklist_only:
+        head += msg.ADMIN_PROBLEM_REPORTS_FILTER_BLACKLIST
+    if not items:
+        await message.answer(
+            head + msg.ADMIN_PROBLEM_REPORTS_EMPTY,
+            parse_mode=ParseMode.HTML,
+        )
+        return
+
+    audit_log(
+        "admin_problem_reports_list_viewed",
+        ACTOR_ADMIN_BOT,
+        message.from_user.id if message.from_user else 0,
+        payload={
+            "blacklist_only": blacklist_only,
+            "offset": offset,
+            "rows_returned": len(items),
+        },
+    )
+
+    lines: list[str] = [head]
+    for i, it in enumerate(items, start=1):
+        bl_lbl = "канд. blacklist" if it.get("blacklist_candidate") else "—"
+        pol = (it.get("policy_breach_code") or "").strip()
+        bl_extra = f"{bl_lbl} ({pol})" if pol else bl_lbl
+        slot_s, created_s = _admin_problem_report_slot_and_created(it)
+        lines.append(
+            msg.ADMIN_PROBLEM_REPORTS_LINE.format(
+                n=i,
+                rid=it["id"],
+                bid=it["booking_id"],
+                tid=it["trainer_id"],
+                preset=html.escape(it.get("preset_id") or ""),
+                pclass=html.escape(it.get("payment_class") or ""),
+                bl=html.escape(bl_extra),
+                status=html.escape(it.get("booking_status") or ""),
+                slot=html.escape(slot_s),
+                created=html.escape(created_s),
+            )
+        )
+    footer = msg.ADMIN_PROBLEM_REPORTS_FOOTER.format(shown=len(items), total=total)
+    out = "".join(lines) + footer
+    if len(out) > 4090:
+        out = out[:4070] + "\n\n<i>…обрезано (лимит Telegram)</i>"
+    await message.answer(out, parse_mode=ParseMode.HTML)
 
 
 @router.message(Command("stats"))

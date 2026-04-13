@@ -540,6 +540,47 @@
     .hub-bookings-stack .slot-row:active { opacity: 0.92; }
     .hub-bookings-stack .slot-row .slot-row-left { flex: 1; min-width: 0; }
     .hub-bookings-stack .slot-row .slot-time { font-weight: 600; font-size: 15px; }
+    .hub-bookings-stack .hub-slot-time-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px 10px;
+    }
+    .hub-bookings-stack .hub-session-now-pill {
+      display: inline-block;
+      margin-left: 8px;
+      padding: 2px 8px;
+      border-radius: 8px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      vertical-align: middle;
+      background: linear-gradient(135deg, rgba(245, 166, 35, 0.22), rgba(245, 166, 35, 0.08));
+      color: var(--tg-theme-button-color, #f5a623);
+      border: 1px solid rgba(245, 166, 35, 0.35);
+    }
+    .hub-is-dark .hub-bookings-stack .hub-session-now-pill {
+      background: linear-gradient(135deg, rgba(245, 166, 35, 0.18), rgba(245, 166, 35, 0.06));
+      border-color: rgba(245, 166, 35, 0.42);
+    }
+    .hub-bookings-stack .hub-problem-pill {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 8px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      vertical-align: middle;
+      color: var(--tg-theme-hint-color);
+      background: color-mix(in srgb, var(--tg-theme-secondary-bg-color) 85%, var(--tg-theme-hint-color) 15%);
+      border: 1px solid color-mix(in srgb, var(--tg-theme-hint-color) 28%, transparent);
+    }
+    @supports not (color: color-mix(in srgb, red, blue)) {
+      .hub-bookings-stack .hub-problem-pill {
+        background: var(--tg-theme-secondary-bg-color);
+        border-color: rgba(128, 128, 128, 0.2);
+      }
+    }
     .hub-bookings-stack .slot-row .slot-venue {
       font-size: 13px;
       color: var(--tg-theme-hint-color);
@@ -1126,6 +1167,92 @@
     html:not(.hub-is-dark) .hub-tile-hint { 
       color: var(--tg-theme-hint-color); 
     }
+    /* Premium loading: token-based shimmer (see trainer-stats .skeleton-block); no arbitrary page bg hex */
+    .hub-tile.hub-tile--skeleton {
+      cursor: default;
+      pointer-events: none;
+    }
+    .hub-tile.hub-tile--skeleton:hover {
+      transform: none;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    }
+    .hub-is-dark .hub-tile.hub-tile--skeleton:hover {
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    }
+    .hub-tile--skeleton .hub-skel-line {
+      border-radius: 10px;
+      min-height: 14px;
+      max-width: 100%;
+    }
+    .hub-tile--skeleton .hub-skel-line--icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 12px;
+    }
+    .hub-tile--skeleton .hub-skel-line--title {
+      width: 58%;
+      height: 16px;
+      margin-bottom: 10px;
+    }
+    .hub-tile--skeleton .hub-skel-line--hint {
+      width: 82%;
+      height: 12px;
+      opacity: 0.9;
+    }
+    .hub-bookings-skel {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .hub-skel-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 14px;
+      border-radius: 12px;
+      border: 1px solid rgba(128, 128, 128, 0.12);
+      background: var(--tg-theme-secondary-bg-color);
+      min-height: 56px;
+      box-sizing: border-box;
+    }
+    .hub-skel-row .hub-skel-line--time {
+      width: 48px;
+      height: 18px;
+      border-radius: 8px;
+      flex-shrink: 0;
+    }
+    .hub-skel-row .hub-skel-line--primary {
+      width: 70%;
+      height: 14px;
+      border-radius: 7px;
+    }
+    .hub-skel-row .hub-skel-line--secondary {
+      width: 44%;
+      height: 11px;
+      border-radius: 6px;
+      margin-top: 8px;
+    }
+    .hub-skel-shimmer {
+      background: linear-gradient(
+        110deg,
+        var(--tg-theme-secondary-bg-color) 0%,
+        color-mix(in srgb, var(--tg-theme-button-color) 14%, var(--tg-theme-secondary-bg-color)) 46%,
+        var(--tg-theme-secondary-bg-color) 100%
+      );
+      background-size: 200% 100%;
+      animation: hub-skel-shimmer-move 1.2s ease-in-out infinite;
+    }
+    @keyframes hub-skel-shimmer-move {
+      0% { background-position: 100% 0; }
+      100% { background-position: -100% 0; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .hub-skel-shimmer {
+        animation: none !important;
+        background: var(--tg-theme-secondary-bg-color);
+        opacity: 0.88;
+      }
+    }
     .state-panel {
       padding: 16px;
       border-radius: 16px;
@@ -1629,7 +1756,7 @@
           <path d="M7 12l4-4 4 4 6-6"/>
         </svg>
         <div class="hub-stat-value" id="statRevenueValue">—</div>
-        <div class="hub-stat-label">Доход</div>
+        <div class="hub-stat-label">С 1-го числа</div>
         <div class="hub-stat-trend" id="statRevenueTrend" style="display: none;">+15%</div>
       </div>
     </div>
@@ -1818,6 +1945,13 @@
       };
       /** Cap upcoming booking cards so the hub never renders an unbounded list. */
       var HUB_UPCOMING_BOOKINGS_MAX = 5;
+      /** Row cap for GET /trainer/bookings (server); higher than HUB_UPCOMING_BOOKINGS_MAX for group-slot dedupe across days. */
+      var HUB_BOOKINGS_FETCH_LIMIT = 32;
+
+      /** Debounce visibility refresh (Telegram WebView tab switches). */
+      var hubVisibilityDebounceTimer = null;
+      /** Last loadBookings fetch — aborted when a newer load starts. */
+      var hubBookingsAbort = null;
 
       /** Mirrors server gate on GET /trainer/stats (SUBSCRIPTION_TIER_ANALYTICS). */
       var hasAnalyticsAccess = false;
@@ -1834,11 +1968,15 @@
       var hubLastUpcomingListCount = 0;
       /** Bookings with status pending — drives summary hint + week card highlight. */
       var hubLastPendingCount = 0;
-      /** Client requests without trainer response (GET /trainer/requests). */
+      /** Formatted revenue for hub «С 1-го числа» (MTD API), or null. */
+      var hubMtdRevenueText = null;
+      /** Client requests without trainer response (GET /trainer/requests/summary). */
       var hubLastNewRequestsCount = 0;
       var hubRequestsStatReady = false;
       /** From trainer profile — show «Группы» tile before «Заявки» when enabled. */
       var hubGroupClassesEnabled = false;
+      /** False until first GET /trainer/subscription/status completes (initData only) — drives Stats placeholder tile. */
+      var hubSubscriptionStatusReady = false;
 
       function syncHubHeroCompact() {
         var el = document.querySelector('.hub-hero');
@@ -1941,7 +2079,7 @@
         var locked = !canOpenTrainerSectionsSync();
         var grid = document.getElementById('hubGrid');
         if (grid) {
-          grid.querySelectorAll('.hub-tile').forEach(function(btn) {
+          grid.querySelectorAll('.hub-tile:not(.hub-tile--skeleton)').forEach(function(btn) {
             var path = btn.getAttribute('data-path') || '';
             var isLocked = locked && path !== 'trainer-profile';
             btn.classList.toggle('hub-tile--locked', isLocked);
@@ -2236,21 +2374,25 @@
         }
         document.addEventListener('visibilitychange', function() {
           if (document.hidden) return;
-          loadOnboardingChecklist();
-          if (!initData || !window.TrainerMiniAppGate) return;
-          Promise.all([
-            window.TrainerMiniAppGate.fetchAccess(initData).catch(function() {
-              return null;
-            }),
-            fetchTrainerProfileForHub(),
-          ]).then(function(results) {
-            var a = results[0];
-            var prof = results[1];
-            if (a) trainerAccessSnapshot = a;
-            mergeHubAccessFromProfilePayload(prof);
-            applyHubLockedState();
-            if (trainerAccessSnapshot && window.TrainerMiniAppGate.isActive(trainerAccessSnapshot)) loadBookings();
-          });
+          if (hubVisibilityDebounceTimer) clearTimeout(hubVisibilityDebounceTimer);
+          hubVisibilityDebounceTimer = setTimeout(function() {
+            hubVisibilityDebounceTimer = null;
+            loadOnboardingChecklist();
+            if (!initData || !window.TrainerMiniAppGate) return;
+            Promise.all([
+              window.TrainerMiniAppGate.fetchAccess(initData).catch(function() {
+                return null;
+              }),
+              fetchTrainerProfileForHub(),
+            ]).then(function(results) {
+              var a = results[0];
+              var prof = results[1];
+              if (a) trainerAccessSnapshot = a;
+              mergeHubAccessFromProfilePayload(prof);
+              applyHubLockedState();
+              if (trainerAccessSnapshot && window.TrainerMiniAppGate.isActive(trainerAccessSnapshot)) loadBookings();
+            });
+          }, 400);
         });
       }
 
@@ -2310,7 +2452,7 @@
           renderHubSummaryHints();
           return Promise.resolve();
         }
-        return fetch(apiUrlWithQuery('/trainer/requests'), { headers: headersJson() })
+        return fetch(apiUrlWithQuery('/trainer/requests/summary'), { headers: headersJson() })
           .then(function(r) {
             return r.json().then(function(data) {
               return { status: r.status, ok: r.ok, data: data };
@@ -2321,10 +2463,8 @@
             if (!o.ok || o.status === 401 || o.status === 403) {
               hubLastNewRequestsCount = 0;
             } else {
-              var items = (o.data && o.data.items) || [];
-              hubLastNewRequestsCount = items.filter(function(x) {
-                return x && !x.has_responded;
-              }).length;
+              var n = o.data && o.data.unanswered_count;
+              hubLastNewRequestsCount = typeof n === 'number' && !isNaN(n) ? n : 0;
             }
             renderHubSummaryHints();
           })
@@ -2402,7 +2542,61 @@
         });
       }
 
-      function setStats(todayCount, weekCount, revenue) {
+      function formatHubMoneyCents(cents) {
+        var n = Number(cents);
+        if (!isFinite(n) || n < 0) return '0 BYN';
+        var v = n / 100;
+        return v.toFixed(v % 1 === 0 ? 0 : 2) + ' BYN';
+      }
+
+      /** Loads accrual MTD (sessions + pass + cert sales); updates hubMtdRevenueText and hero. */
+      function fetchHubMtdRevenue() {
+        if (!initData) return;
+        if (
+          trainerAccessSnapshot &&
+          window.TrainerMiniAppGate &&
+          !window.TrainerMiniAppGate.isActive(trainerAccessSnapshot)
+        ) {
+          hubMtdRevenueText = null;
+          return;
+        }
+        fetch(apiUrlWithQuery('/trainer/hub/revenue-mtd'), { headers: headersJson() })
+          .then(function(r) {
+            if (!r.ok) {
+              hubMtdRevenueText = null;
+              return null;
+            }
+            return r.json();
+          })
+          .then(function(d) {
+            var revCard = document.getElementById('statRevenue');
+            if (!d || d.revenue_total_cents == null) {
+              hubMtdRevenueText = null;
+              if (revCard) {
+                revCard.removeAttribute('title');
+              }
+            } else {
+              hubMtdRevenueText = formatHubMoneyCents(d.revenue_total_cents);
+              if (
+                revCard &&
+                d.period_start &&
+                d.period_end
+              ) {
+                revCard.setAttribute(
+                  'title',
+                  'Начислено с ' + String(d.period_start) + ' по ' + String(d.period_end) + ': занятия, абонементы, сертификаты'
+                );
+              }
+            }
+            applyHubHero();
+          })
+          .catch(function() {
+            hubMtdRevenueText = null;
+            applyHubHero();
+          });
+      }
+
+      function setStats(todayCount, weekCount) {
         var wrap = document.getElementById('hubStats');
         var todayValue = document.getElementById('statTodayValue');
         var weekValue = document.getElementById('statWeekValue');
@@ -2425,7 +2619,8 @@
         
         todayValue.textContent = todayCount === 0 ? '0' : String(todayCount);
         weekValue.textContent = weekCount === 0 ? '0' : String(weekCount);
-        revenueValue.textContent = revenue || '—';
+        revenueValue.textContent =
+          hubMtdRevenueText != null && hubMtdRevenueText !== '' ? hubMtdRevenueText : '—';
         
         // Highlight today's card if there are bookings
         var todayCard = document.getElementById('statToday');
@@ -2471,7 +2666,7 @@
         if (!initData) {
           title.textContent = 'Войдите через бота';
           subtitle.textContent = 'Откройте экран из бота тренера — подтянутся записи и быстрый доступ к разделам.';
-          setStats(0, 0, null);
+          setStats(0, 0);
           syncHubHeroScheduleClick();
           return;
         }
@@ -2486,7 +2681,7 @@
           subtitle.textContent = firstLine
             ? 'Первая в ' + firstLine + ' — карточки на сегодня в списке выше.'
             : 'Сегодняшние занятия перечислены в блоке выше.';
-          setStats(count, weekCount || 0, null);
+          setStats(count, weekCount || 0);
           syncHubHeroScheduleClick();
           return;
         }
@@ -2495,7 +2690,7 @@
         if (!onb) {
           title.textContent = 'Ваш день';
           subtitle.textContent = 'Предстоящих записей на сегодня нет.';
-          setStats(0, weekCount || 0, null);
+          setStats(0, weekCount || 0);
           syncHubHeroScheduleClick();
           return;
         }
@@ -2504,7 +2699,7 @@
           title.textContent = 'Сначала анкета';
           subtitle.textContent =
             'Ниже в блоке «Первые шаги» заполните профиль и отправьте анкету на проверку — после одобрения откроются расписание и заявки.';
-          setStats(0, weekCount || 0, null);
+          setStats(0, weekCount || 0);
           syncHubHeroScheduleClick();
           return;
         }
@@ -2513,7 +2708,7 @@
           title.textContent = 'Скоро полный доступ';
           subtitle.textContent =
             'Ниже в блоке «Первые шаги» видно статус активации — расписание и записи откроются после активации аккаунта.';
-          setStats(0, weekCount || 0, null);
+          setStats(0, weekCount || 0);
           syncHubHeroScheduleClick();
           return;
         }
@@ -2526,7 +2721,7 @@
           subtitle.textContent =
             'Записей на сегодня нет — когда клиенты запишутся, они появятся здесь.';
         }
-        setStats(0, weekCount || 0, null);
+        setStats(0, weekCount || 0);
         syncHubHeroScheduleClick();
       }
 
@@ -2571,6 +2766,20 @@
         return (tid != null && tid !== '') || !!un;
       }
 
+      /** PRD E1: backend marks row as inside [start,end); compact label for current session. */
+      function hubSessionNowPillHtml(b) {
+        if (!b || !b.hub_in_session) return '';
+        return (
+          '<span class="hub-session-now-pill" role="status" aria-label="Текущее занятие">сейчас</span>'
+        );
+      }
+
+      /** After E2 report, hub list shows a discreet hint (same API as detail). */
+      function hubProblemReportPillHtml(b) {
+        if (!b || !b.problem_reported) return '';
+        return '<span class="hub-problem-pill" role="status">отчёт отправлен</span>';
+      }
+
       /** Same labels/classes as schedule-editor calendar rows (booked slots). */
       function hubBookingSlotRowHtml(b, timeRange) {
         var bst = String(b.status || 'confirmed').toLowerCase();
@@ -2606,7 +2815,10 @@
           return (
             '<div class="slot-row slot-booked-click slot-group-hub-preview ' + rowMod + '" data-bid="' + String(b.id) + '" data-slot-id="' + String(b.slot_id != null ? b.slot_id : '') + '" data-slot-date="' + escapeHtml(b.slot_date || '') + '" role="button" tabindex="0">' +
               '<div class="slot-row-left">' +
+                '<div class="hub-slot-time-row">' +
                 '<span class="slot-time">' + escapeHtml(timeRange) + '</span>' +
+                hubSessionNowPillHtml(b) + hubProblemReportPillHtml(b) +
+                '</div>' +
                 metaHtml +
                 '<div class="slot-group-meter-wrap" aria-hidden="true"><div class="slot-group-meter-fill" style="width:' + pct + '%"></div></div>' +
               '</div>' +
@@ -2638,7 +2850,10 @@
         return (
           '<div class="slot-row slot-booked-click ' + rowMod + '" data-bid="' + String(b.id) + '" role="button" tabindex="0">' +
             '<div class="slot-row-left">' +
+              '<div class="hub-slot-time-row">' +
               '<span class="slot-time">' + escapeHtml(timeRange) + '</span>' +
+              hubSessionNowPillHtml(b) + hubProblemReportPillHtml(b) +
+              '</div>' +
               '<div class="slot-venue">📍 ' + venueInner + '</div>' +
               '<div class="slot-client-hint">' + escapeHtml(clientLabel(b)) + '</div>' +
             '</div>' +
@@ -3101,6 +3316,9 @@
        * Hub grid order (2 columns): Клиенты → [Группы если включены] → Заявки → Расписание → Профиль → остальное.
        * `feature: 'groups'` — tile only when hubGroupClassesEnabled (profile.group_classes_enabled).
        */
+      /** Synthetic grid item: placeholder while subscription status loads (same cell size as «Статистика»). */
+      var HUB_TILE_SKELETON_ANALYTICS = { _hubTileSkeleton: true, tier: 'analytics' };
+
       var TILES = [
         { path: 'trainer-clients', label: 'Клиенты', hint: 'База и заметки', icon: 'users', badge: null },
         {
@@ -3121,16 +3339,39 @@
       ];
 
       function tilesToRender() {
-        return TILES.filter(function(t) {
-          if (t.feature === 'groups' && !hubGroupClassesEnabled) return false;
-          if (t.tier === 'analytics' && !hasAnalyticsAccess) return false;
-          return true;
+        var out = [];
+        TILES.forEach(function(t) {
+          if (t.feature === 'groups' && !hubGroupClassesEnabled) return;
+          if (t.tier === 'analytics') {
+            if (initData && !hubSubscriptionStatusReady) {
+              out.push(HUB_TILE_SKELETON_ANALYTICS);
+              return;
+            }
+            if (!hasAnalyticsAccess) return;
+          }
+          out.push(t);
         });
+        return out;
       }
 
       function renderTiles() {
         var grid = document.getElementById('hubGrid');
         grid.innerHTML = tilesToRender().map(function(t) {
+          if (t._hubTileSkeleton) {
+            return (
+              '<div class="hub-tile hub-tile--skeleton" role="status" aria-busy="true" aria-label="Загрузка">' +
+                '<div class="hub-tile-inner">' +
+                  '<div class="hub-tile-top">' +
+                    '<div class="hub-skel-line hub-skel-line--icon hub-skel-shimmer" aria-hidden="true"></div>' +
+                  '</div>' +
+                  '<div class="hub-tile-content">' +
+                    '<div class="hub-skel-line hub-skel-line--title hub-skel-shimmer" aria-hidden="true"></div>' +
+                    '<div class="hub-skel-line hub-skel-line--hint hub-skel-shimmer" aria-hidden="true"></div>' +
+                  '</div>' +
+                '</div>' +
+              '</div>'
+            );
+          }
           var ic = ICONS[t.icon] || ICONS.cal;
           var badgeHtml = t.badge ? '<div class="hub-tile-badge">' + escapeHtml(t.badge) + '</div>' : '';
           return (
@@ -3145,12 +3386,32 @@
             '</button>'
           );
         }).join('');
-        grid.querySelectorAll('.hub-tile').forEach(function(btn) {
+        grid.querySelectorAll('.hub-tile:not(.hub-tile--skeleton)').forEach(function(btn) {
           btn.onclick = function() {
             navigateTo(btn.getAttribute('data-path'));
           };
         });
         applyHubLockedState();
+      }
+
+      /** Skeleton rows while GET /trainer/bookings is in flight (active trainer). */
+      function buildHubBookingsSkeletonHtml() {
+        var parts = [
+          '<div class="hub-bookings-skel" role="status" aria-busy="true" aria-label="Загрузка записей">',
+        ];
+        for (var i = 0; i < 3; i++) {
+          parts.push(
+            '<div class="hub-skel-row">' +
+              '<div class="hub-skel-line hub-skel-line--time hub-skel-shimmer" aria-hidden="true"></div>' +
+              '<div style="flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center;">' +
+                '<div class="hub-skel-line hub-skel-line--primary hub-skel-shimmer" aria-hidden="true"></div>' +
+                '<div class="hub-skel-line hub-skel-line--secondary hub-skel-shimmer" aria-hidden="true"></div>' +
+              '</div>' +
+            '</div>'
+          );
+        }
+        parts.push('</div>');
+        return parts.join('');
       }
 
       /**
@@ -3312,6 +3573,7 @@
         hubLastWeekCount = 0;
         hubLastUpcomingListCount = 0;
         hubLastPendingCount = 0;
+        hubMtdRevenueText = null;
         syncHubHeroCompact();
         applyHubHero();
         var bb = document.getElementById('bookingsBlock');
@@ -3336,6 +3598,7 @@
           hubLastWeekCount = 0;
           hubLastUpcomingListCount = 0;
           hubLastPendingCount = 0;
+          hubMtdRevenueText = null;
           syncHubHeroCompact();
           applyHubHero();
           document.getElementById('bookingsBlock').innerHTML =
@@ -3350,8 +3613,23 @@
           renderBookingsOnboardingBlock(trainerAccessSnapshot);
           return;
         }
-        setStateMessage('Загрузка…', '');
-        fetch(apiUrlWithQuery('/trainer/bookings'), { headers: headersJson() })
+        setStateMessage('', '');
+        document.getElementById('bookingsBlock').innerHTML = buildHubBookingsSkeletonHtml();
+        fetchHubMtdRevenue();
+        if (typeof AbortController !== 'undefined') {
+          if (hubBookingsAbort) {
+            try {
+              hubBookingsAbort.abort();
+            } catch (eAbort) {}
+          }
+          hubBookingsAbort = new AbortController();
+        }
+        var bookingsFetchOpts = { headers: headersJson() };
+        if (hubBookingsAbort) bookingsFetchOpts.signal = hubBookingsAbort.signal;
+        fetch(
+          apiUrlWithQuery('/trainer/bookings?limit=' + encodeURIComponent(String(HUB_BOOKINGS_FETCH_LIMIT))),
+          bookingsFetchOpts
+        )
           .then(function(r) {
             return r.json().then(function(data) {
               return { status: r.status, ok: r.ok, data: data };
@@ -3383,6 +3661,7 @@
               hubLastWeekCount = 0;
               hubLastUpcomingListCount = 0;
               hubLastPendingCount = 0;
+              hubMtdRevenueText = null;
               syncHubHeroCompact();
               applyHubHero();
               document.getElementById('bookingsBlock').innerHTML =
@@ -3392,7 +3671,8 @@
             setStateMessage('');
             renderBookings((o.data && o.data.days) || []);
           })
-          .catch(function() {
+          .catch(function(err) {
+            if (err && err.name === 'AbortError') return;
             setStateMessage('', '');
             /* Offline / timeout: if account likely not active, avoid scary copy */
             if (window.TrainerMiniAppGate && initData) {
@@ -3409,6 +3689,7 @@
                     hubLastWeekCount = 0;
                     hubLastUpcomingListCount = 0;
                     hubLastPendingCount = 0;
+                    hubMtdRevenueText = null;
                     syncHubHeroCompact();
                     applyHubHero();
                     document.getElementById('bookingsBlock').innerHTML =
@@ -3422,6 +3703,7 @@
                   hubLastWeekCount = 0;
                   hubLastUpcomingListCount = 0;
                   hubLastPendingCount = 0;
+                  hubMtdRevenueText = null;
                   syncHubHeroCompact();
                   applyHubHero();
                   document.getElementById('bookingsBlock').innerHTML =
@@ -3434,6 +3716,7 @@
               hubLastWeekCount = 0;
               hubLastUpcomingListCount = 0;
               hubLastPendingCount = 0;
+              hubMtdRevenueText = null;
               syncHubHeroCompact();
               applyHubHero();
               document.getElementById('bookingsBlock').innerHTML =
@@ -3462,6 +3745,7 @@
 
       function loadSubscriptionStatus() {
         if (!initData) {
+          hubSubscriptionStatusReady = true;
           hasAnalyticsAccess = false;
           renderTiles();
           setupQuickActions();
@@ -3480,12 +3764,14 @@
             } else {
               hasAnalyticsAccess = false;
             }
+            hubSubscriptionStatusReady = true;
             renderTiles();
             setupQuickActions();
           })
           .catch(function() {
             hubLastSubscriptionStatus = null;
             hasAnalyticsAccess = false;
+            hubSubscriptionStatusReady = true;
             renderTiles();
             setupQuickActions();
           });
@@ -3660,6 +3946,11 @@
 
       wireOnboardingHub();
       function runHubAfterAccess() {
+        if (initData) {
+          hubSubscriptionStatusReady = false;
+          renderTiles();
+          setupQuickActions();
+        }
         loadSubscriptionStatus().then(function() {
           showHubSubscriptionCelebrationIfPending();
         });

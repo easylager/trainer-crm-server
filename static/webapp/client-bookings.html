@@ -235,6 +235,16 @@
       border-color: rgba(255, 59, 48, 0.35);
       color: var(--app-danger);
     }
+    /* PASS/CERT: where the client can act (cancel) — same rule as pass footnotes */
+    .cb-booking-policy-hint {
+      font-size: 13px;
+      line-height: 1.45;
+      color: var(--tg-theme-hint-color);
+      margin: 0 0 14px;
+      padding: 12px 14px;
+      border-radius: 12px;
+      background: var(--tg-theme-secondary-bg-color);
+    }
   </style>
   <link rel="stylesheet" href="mini-app-client-nav.css" />
 </head>
@@ -323,6 +333,10 @@
           </div>
         </div>
       </div>
+
+      <p class="cb-booking-policy-hint" id="detailPolicyHint">
+        Если тренировка оплачена абонементом или сертификатом, занятие списывается автоматически, когда запись считается проведённой. Чтобы не потерять занятие, отмените запись заранее — кнопка ниже.
+      </p>
 
       <div class="bd-actions-wrap client-booking-actions">
         <button type="button" class="btn-secondary btn-block" id="detailMapBtn" style="display:none;">

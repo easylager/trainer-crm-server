@@ -113,3 +113,11 @@ class Settings(BaseSettings):
     sentry_release: str | None = None
     sentry_traces_sample_rate: float = 0.0
     sentry_profiles_sample_rate: float = 0.0
+    # Optional deploy label for admin /version (e.g. Railway: set to RAILWAY_GIT_COMMIT_SHA).
+    app_deploy_version: str | None = None
+
+    # PRD E7: «Проблема с клиентом» — поэтапный rollout (Mini App + API).
+    # off = выключено; pilot = только BOOKING_PROBLEM_PILOT_TRAINER_IDS; full = все тренеры.
+    booking_problem_rollout: str = "full"
+    # JSON-массив internal trainer_id, например [12, 34] — при rollout=pilot.
+    booking_problem_pilot_trainer_ids: list[int] | None = None

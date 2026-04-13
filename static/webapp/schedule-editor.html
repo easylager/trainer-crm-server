@@ -1678,6 +1678,279 @@
     #modalBookingCancel .modal .actions { display: flex; gap: 8px; margin-top: 16px; }
     #modalBookingCancel .modal .actions button { flex: 1; padding: 12px; border-radius: 10px; border: none; font-weight: 600; cursor: pointer; background: var(--app-cta-fill) !important; color: var(--app-cta-text) !important; }
     .no-bot { font-size: 11px; color: var(--tg-theme-hint-color, #666); font-style: italic; margin-left: 4px; }
+
+    /* Client problem flow (PRD E2): same overlay language as modalBookingCancel */
+    #modalClientProblem.modal-overlay {
+      padding-bottom: max(28px, calc(12px + env(safe-area-inset-bottom, 0px)));
+    }
+    #modalClientProblem .modal.modal-client-problem {
+      max-width: 420px;
+      width: 100%;
+      max-height: min(88vh, 640px);
+      max-height: min(92dvh, 680px);
+      display: flex;
+      flex-direction: column;
+      padding: 16px 16px 14px;
+      overflow: hidden;
+      min-height: 0;
+      box-sizing: border-box;
+    }
+    #modalClientProblem .modal.modal-client-problem > h3 {
+      flex-shrink: 0;
+    }
+    #modalClientProblem .modal.modal-client-problem.client-problem-modal--confirm {
+      max-height: min(92vh, 680px);
+      max-height: min(96dvh, 720px);
+    }
+    #modalClientProblem .modal-client-problem-body {
+      flex: 1 1 0%;
+      min-height: 0;
+      overflow-y: auto;
+      overflow-x: hidden;
+      -webkit-overflow-scrolling: touch;
+      margin-top: 10px;
+    }
+    #modalClientProblem .client-problem-preset-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    #modalClientProblem .client-problem-preset {
+      text-align: left;
+      font-weight: 600;
+      line-height: 1.35;
+    }
+    #modalClientProblem .client-problem-conseq {
+      font-size: 14px;
+      line-height: 1.45;
+      color: var(--tg-theme-text-color);
+      padding: 14px 14px;
+      border-radius: 14px;
+      background: var(--tg-theme-secondary-bg-color);
+      border: 1px solid rgba(128, 128, 128, 0.12);
+      margin-bottom: 14px;
+    }
+    #modalClientProblem .client-problem-conseq .client-problem-conseq-line {
+      margin: 0 0 12px 0;
+      font-size: 15px;
+      line-height: 1.55;
+      letter-spacing: 0.01em;
+    }
+    #modalClientProblem .client-problem-conseq .client-problem-conseq-line:last-child {
+      margin-bottom: 0;
+    }
+    /* Confirm: summary scrolls in body; comment lives in comment-wrap (always visible above buttons). */
+    #modalClientProblem .client-problem-confirm .client-problem-conseq {
+      margin-bottom: 0;
+      padding: 16px 16px;
+    }
+    #modalClientProblem .modal-client-problem-comment-wrap {
+      flex: 0 0 auto;
+      width: 100%;
+      box-sizing: border-box;
+      padding: 14px 0 8px;
+    }
+    #modalClientProblem .modal-client-problem-comment-wrap[hidden] {
+      display: none !important;
+    }
+    #modalClientProblem .modal.modal-client-problem.client-problem-modal--confirm .modal-client-problem-footer {
+      margin-top: 8px;
+      padding-top: 4px;
+    }
+    #modalClientProblem .modal-client-problem-footer {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 14px;
+      flex-shrink: 0;
+    }
+    #modalClientProblem .modal-client-problem-footer .btn-primary,
+    #modalClientProblem .modal-client-problem-footer .btn-secondary {
+      width: 100%;
+    }
+    .bd-problem-sent-hint {
+      font-size: 13px;
+      color: var(--tg-theme-hint-color);
+      margin: 0 0 10px;
+      line-height: 1.4;
+    }
+    #modalClientProblem .client-problem-pass-hint {
+      margin: 0 0 12px;
+      font-size: 13px;
+      line-height: 1.4;
+      color: var(--tg-theme-hint-color, #8e8e93);
+    }
+    #modalClientProblem .client-problem-deduct-hint {
+      margin: 0 0 14px;
+      font-size: 14px;
+      line-height: 1.45;
+      color: var(--tg-theme-hint-color);
+    }
+    #modalClientProblem .client-problem-preset-secondary {
+      display: block;
+      width: 100%;
+      margin-top: 14px;
+      padding: 12px 14px;
+      font-size: 15px;
+      font-weight: 500;
+      cursor: pointer;
+      border-radius: 12px;
+      border: 1px solid color-mix(in srgb, var(--tg-theme-hint-color) 55%, transparent);
+      background: transparent;
+      color: var(--tg-theme-text-color, #000);
+      font-family: var(--app-font-sans, -apple-system, sans-serif);
+      box-sizing: border-box;
+    }
+    .client-problem-lead {
+      margin: 0 0 12px;
+      font-size: 14px;
+      line-height: 1.45;
+      color: var(--tg-theme-hint-color);
+    }
+    #modalClientProblem .client-problem-reporting-kicker {
+      margin: 12px 0 8px 4px;
+    }
+    #modalClientProblem .client-problem-reporting-note {
+      margin: 0 0 14px;
+      padding: 12px 14px;
+      border-radius: 14px;
+      font-size: 13px;
+      line-height: 1.5;
+      color: var(--tg-theme-text-color);
+      background: var(--tg-theme-secondary-bg-color);
+      border: 1px solid rgba(128, 128, 128, 0.12);
+    }
+    #modalClientProblem .client-problem-body-inner {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      gap: 0;
+    }
+    #modalClientProblem .client-problem-warn-lead {
+      margin: 0 0 12px;
+      font-size: 15px;
+      line-height: 1.55;
+      color: var(--tg-theme-text-color);
+      letter-spacing: 0.01em;
+    }
+    #modalClientProblem .client-problem-body-inner.client-problem-warn {
+      padding: 0 2px;
+    }
+    #modalClientProblem .client-problem-outcome-hint {
+      margin: 0 0 12px;
+      font-size: 13px;
+      line-height: 1.45;
+      color: var(--tg-theme-hint-color);
+    }
+    #modalClientProblem .client-problem-outcome-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+    /* Default path: one clear primary control */
+    #modalClientProblem button.client-problem-outcome--hero {
+      padding: 16px 16px;
+      border-radius: 14px;
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      line-height: 1.3;
+      border: 2px solid rgba(245, 166, 35, 0.35);
+      background: rgba(245, 166, 35, 0.1);
+      color: var(--tg-theme-text-color);
+    }
+    #modalClientProblem button.client-problem-outcome--hero .client-problem-outcome-sub {
+      margin-top: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      line-height: 1.45;
+      letter-spacing: 0;
+      color: var(--tg-theme-hint-color);
+    }
+    #modalClientProblem button.client-problem-outcome--hero.is-selected {
+      border-color: var(--tg-theme-button-color);
+      background: rgba(245, 166, 35, 0.16);
+      box-shadow: 0 0 0 1px var(--tg-theme-button-color);
+    }
+    /* Rare alternatives: visually quieter */
+    #modalClientProblem .client-problem-outcome-secondary-block {
+      margin-top: 18px;
+      padding-top: 16px;
+      border-top: 1px solid rgba(128, 128, 128, 0.2);
+    }
+    #modalClientProblem .client-problem-outcome-secondary-kicker {
+      margin: 0 0 10px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--tg-theme-hint-color);
+      line-height: 1.35;
+    }
+    #modalClientProblem .client-problem-outcome-secondary-row {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    @media (min-width: 360px) {
+      #modalClientProblem .client-problem-outcome-secondary-row {
+        flex-direction: row;
+        align-items: stretch;
+      }
+      #modalClientProblem .client-problem-outcome-secondary-row .client-problem-outcome--muted {
+        flex: 1;
+        min-width: 0;
+      }
+    }
+    #modalClientProblem button.client-problem-outcome {
+      display: block;
+      width: 100%;
+      box-sizing: border-box;
+      text-align: left;
+      cursor: pointer;
+      font-family: var(--app-font-sans, -apple-system, sans-serif);
+      transition: border-color 0.12s ease, background 0.12s ease, opacity 0.12s ease;
+    }
+    #modalClientProblem button.client-problem-outcome--muted {
+      padding: 9px 11px;
+      border-radius: 10px;
+      font-size: 12px;
+      line-height: 1.35;
+      font-weight: 600;
+      border: 1px solid rgba(128, 128, 128, 0.18);
+      background: transparent;
+      color: var(--tg-theme-hint-color);
+    }
+    #modalClientProblem button.client-problem-outcome--muted .client-problem-outcome-muted-title {
+      display: block;
+      color: var(--tg-theme-text-color);
+      opacity: 0.82;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    #modalClientProblem button.client-problem-outcome--muted.is-selected {
+      border-color: rgba(245, 166, 35, 0.45);
+      background: rgba(245, 166, 35, 0.06);
+      color: var(--tg-theme-text-color);
+    }
+    #modalClientProblem button.client-problem-outcome--muted.is-selected .client-problem-outcome-muted-title {
+      color: var(--tg-theme-text-color);
+      opacity: 1;
+    }
+    #modalClientProblem button.client-problem-outcome .client-problem-outcome-sub {
+      display: block;
+      margin-top: 4px;
+      font-size: 12px;
+      font-weight: 500;
+      line-height: 1.35;
+      color: var(--tg-theme-hint-color);
+    }
+    #modalClientProblemTitle {
+      font-family: inherit;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: var(--tg-theme-text-color);
+    }
   </style>
   <link rel="stylesheet" href="mini-app-trainer-nav.css" />
 </head>
@@ -1796,6 +2069,15 @@
         <button type="button" class="btn-primary" id="modalBookingCancelNo">Нет</button>
         <button type="button" class="btn-primary" id="modalBookingCancelYes">Да, отменить</button>
       </div>
+    </div>
+  </div>
+
+  <div id="modalClientProblem" class="modal-overlay" style="display:none;" aria-hidden="true">
+    <div class="modal modal-client-problem" role="dialog" aria-labelledby="modalClientProblemTitle">
+      <h3 id="modalClientProblemTitle" style="margin:0;font-size:18px;">Проблема с клиентом</h3>
+      <div class="modal-client-problem-body" id="modalClientProblemBody"></div>
+      <div class="modal-client-problem-comment-wrap" id="modalClientProblemCommentWrap" hidden></div>
+      <div class="modal-client-problem-footer" id="modalClientProblemFooter"></div>
     </div>
   </div>
 
@@ -2087,7 +2369,8 @@
         xCircle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>',
         cancelOutline: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>',
         userPlus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>',
-        linkOff: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M10 13a5 5 0 0 1 7.54.54 3 3 0 0 0 1.3 1.38"/><path d="M14 11a5 5 0 0 1 4.95 5.47"/><path d="M16 16a5 5 0 0 1-4.95 5"/><path d="M2 2l20 20"/><path d="M7.7 7.7A4 4 0 0 0 6 11c0 1.22.52 2.33 1.36 3.11"/><path d="M8.6 8.6A4 4 0 0 1 12 8a4 4 0 0 1 3.17 6.27"/></svg>'
+        linkOff: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M10 13a5 5 0 0 1 7.54.54 3 3 0 0 0 1.3 1.38"/><path d="M14 11a5 5 0 0 1 4.95 5.47"/><path d="M16 16a5 5 0 0 1-4.95 5"/><path d="M2 2l20 20"/><path d="M7.7 7.7A4 4 0 0 0 6 11c0 1.22.52 2.33 1.36 3.11"/><path d="M8.6 8.6A4 4 0 0 1 12 8a4 4 0 0 1 3.17 6.27"/></svg>',
+        alert: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>'
       };
 
       function bookingInitials(displayName) {
@@ -2145,10 +2428,23 @@
         try { tg.ready(); } catch (e) {}
       }
 
+      function _detailMessageFromBody(j, fallback) {
+        var msg = fallback || 'Ошибка запроса';
+        if (!j) return msg;
+        if (typeof j.detail === 'string') return j.detail;
+        if (Array.isArray(j.detail)) {
+          var parts = j.detail.map(function(x) { return (x && x.msg) ? String(x.msg) : ''; }).filter(Boolean);
+          if (parts.length) return parts.join('; ');
+        }
+        return msg;
+      }
+
       function getJsonTrainer(path) {
         return fetch(apiUrlWithQuery(path), { headers: headers() }).then(function(r) {
-          if (!r.ok) throw new Error(r.statusText);
-          return r.json();
+          return r.json().catch(function() { return {}; }).then(function(j) {
+            if (r.ok) return j;
+            throw new Error(_detailMessageFromBody(j, r.statusText || 'Ошибка загрузки'));
+          });
         });
       }
 
@@ -2158,9 +2454,9 @@
           headers: headers(),
           body: body ? JSON.stringify(body) : undefined,
         }).then(function(r) {
-          return r.json().then(function(j) {
-            if (!r.ok) throw new Error((j && j.detail) || 'Request failed');
-            return j;
+          return r.json().catch(function() { return {}; }).then(function(j) {
+            if (r.ok) return j;
+            throw new Error(_detailMessageFromBody(j, r.statusText || 'Ошибка'));
           });
         });
       }
@@ -2195,9 +2491,10 @@
         var mGroup = document.getElementById('modalGroupSlot') && document.getElementById('modalGroupSlot').style.display === 'flex';
         var mBookConf = document.getElementById('modalBookConfirm').style.display === 'flex';
         var mCancelB = document.getElementById('modalBookingCancel').style.display === 'flex';
+        var mClientProb = document.getElementById('modalClientProblem') && document.getElementById('modalClientProblem').style.display === 'flex';
         var mTpl = document.getElementById('modalConfirm').style.display === 'flex';
         var mIntent = document.getElementById('modalSlotIntent') && document.getElementById('modalSlotIntent').style.display === 'flex';
-        btn.hidden = !(booking || decline || edit || dayPick || mQuick || mBook || mGroup || mBookConf || mCancelB || mTpl || mIntent);
+        btn.hidden = !(booking || decline || edit || dayPick || mQuick || mBook || mGroup || mBookConf || mCancelB || mClientProb || mTpl || mIntent);
       }
 
       function refreshCalendarChrome() {
@@ -2364,6 +2661,11 @@
           updateTelegramBack();
           return;
         }
+        var mcp = document.getElementById('modalClientProblem');
+        if (mcp && mcp.style.display === 'flex') {
+          closeClientProblemModal();
+          return;
+        }
         var mc = document.getElementById('modalConfirm');
         if (mc && mc.style.display === 'flex') {
           mc.style.display = 'none';
@@ -2415,6 +2717,22 @@
       window.addEventListener('popstate', function() {
         var mbc = document.getElementById('modalBookingCancel');
         if (mbc && mbc.style.display === 'flex') mbc.style.display = 'none';
+        var mcp = document.getElementById('modalClientProblem');
+        if (mcp && mcp.style.display === 'flex') {
+          mcp.style.display = 'none';
+          mcp.setAttribute('aria-hidden', 'true');
+          _clientProblemSubmitting = false;
+          _clientProblemWizard = {
+            bookingId: null,
+            step: 'pick',
+            options: null,
+            selected: null,
+            passCertDeduct: null,
+            isPassCertFlow: false,
+            skipPassCertPick: false,
+            client_action: null,
+          };
+        }
         if (document.getElementById('screenBookingDecline').classList.contains('active')) {
           showBookingStack('detail');
           return;
@@ -2439,11 +2757,342 @@
           .catch(function() {});
       }
 
+      var _clientProblemWizard = {
+        bookingId: null,
+        step: 'pick',
+        options: null,
+        selected: null,
+        passCertDeduct: null,
+        isPassCertFlow: false,
+        skipPassCertPick: false,
+        client_action: null,
+      };
+      var _clientProblemSubmitting = false;
+
+      function _clientProblemModalCardEl() {
+        return document.querySelector('#modalClientProblem .modal.modal-client-problem');
+      }
+      function _setClientProblemConfirmModal(on) {
+        var card = _clientProblemModalCardEl();
+        if (!card) return;
+        card.classList.toggle('client-problem-modal--confirm', !!on);
+      }
+      function _detachClientProblemViewportScroll() {}
+      function _hideClientProblemCommentWrap() {
+        var cw = document.getElementById('modalClientProblemCommentWrap');
+        if (cw) {
+          cw.innerHTML = '';
+          cw.setAttribute('hidden', '');
+        }
+      }
+
+      function setClientProblemModalTitle(text) {
+        var h = document.getElementById('modalClientProblemTitle');
+        if (h) h.textContent = text || 'Проблема с клиентом';
+      }
+
+      function closeClientProblemModal() {
+        _detachClientProblemViewportScroll();
+        _hideClientProblemCommentWrap();
+        _setClientProblemConfirmModal(false);
+        setClientProblemModalTitle('Проблема с клиентом');
+        var m = document.getElementById('modalClientProblem');
+        if (m) {
+          m.style.display = 'none';
+          m.setAttribute('aria-hidden', 'true');
+        }
+        _clientProblemSubmitting = false;
+        _clientProblemWizard = {
+          bookingId: null,
+          step: 'pick',
+          options: null,
+          selected: null,
+          passCertDeduct: null,
+          isPassCertFlow: false,
+          skipPassCertPick: false,
+          client_action: null,
+        };
+        updateTelegramBack();
+      }
+
+      function submitClientNoShow(bookingId, choice, btns) {
+        if (_clientProblemSubmitting) return;
+        _clientProblemSubmitting = true;
+        var p = btns && btns.primary;
+        var s = btns && btns.secondary;
+        if (p) p.disabled = true;
+        if (s) s.disabled = true;
+        postJsonTrainer('/trainer/bookings/' + bookingId + '/client-no-show', {
+          choice: choice,
+          source: 'schedule_editor',
+        }).then(function() {
+          showToast('Сохранено');
+          closeClientProblemModal();
+          if (state.selectedBooking && state.selectedBooking.id === bookingId) {
+            openBookingDetail(bookingId);
+          }
+        }).catch(function(e) {
+          showToast((e && e.message) ? e.message : 'Не удалось сохранить');
+          _clientProblemSubmitting = false;
+          if (p) p.disabled = false;
+          if (s) s.disabled = false;
+        });
+      }
+
+      function _htmlClientNoShowOptionsBody(o) {
+        var lead = o.lead || '';
+        var parts = lead.split(/\n\s*\n/).map(function(s) { return String(s || '').trim(); }).filter(Boolean);
+        var leadHtml = parts.length
+          ? parts.map(function(p) {
+              return '<p class="client-problem-lead">' + escapeHtml(p) + '</p>';
+            }).join('')
+          : '<p class="client-problem-lead">' + escapeHtml(lead) + '</p>';
+        var note = (o.reporting_note && String(o.reporting_note).trim()) ? String(o.reporting_note).trim() : '';
+        var noteHtml = note
+          ? '<div class="bd-section-label client-problem-reporting-kicker">Для себя</div>' +
+            '<p class="client-problem-reporting-note">' + escapeHtml(note) + '</p>'
+          : '';
+        return '<div class="client-problem-body-inner">' + leadHtml + noteHtml + '</div>';
+      }
+
+      function openClientNoShowModal(bookingId) {
+        _detachClientProblemViewportScroll();
+        _hideClientProblemCommentWrap();
+        _setClientProblemConfirmModal(false);
+        _clientProblemSubmitting = false;
+        var m = document.getElementById('modalClientProblem');
+        var body = document.getElementById('modalClientProblemBody');
+        var foot = document.getElementById('modalClientProblemFooter');
+        if (!m || !body || !foot) return;
+        m.style.display = 'flex';
+        m.setAttribute('aria-hidden', 'false');
+        updateTelegramBack();
+        body.innerHTML = '<div class="loading">Загрузка…</div>';
+        foot.innerHTML = '';
+        getJsonTrainer('/trainer/bookings/' + bookingId + '/client-no-show-options').then(function(o) {
+          if (!o) return;
+          setClientProblemModalTitle(o.title || 'Клиент не пришёл');
+          if (o.already_recorded) {
+            body.innerHTML = '<div class="client-problem-body-inner"><p class="client-problem-lead">' + escapeHtml(o.lead || '') + '</p></div>';
+            foot.innerHTML = '<button type="button" class="btn-primary" id="btnNoShowClose">Закрыть</button>';
+            var cl = document.getElementById('btnNoShowClose');
+            if (cl) cl.onclick = closeClientProblemModal;
+            return;
+          }
+          body.innerHTML = _htmlClientNoShowOptionsBody(o);
+          var pl = o.primary_label || 'Оставить списание';
+          var sl = o.secondary_label || 'Не списывать';
+          foot.innerHTML =
+            '<button type="button" class="btn-secondary" id="btnNoShowSecondary">' + escapeHtml(sl) + '</button>' +
+            '<button type="button" class="btn-primary" id="btnNoShowPrimary">' + escapeHtml(pl) + '</button>';
+          var bp = document.getElementById('btnNoShowPrimary');
+          var bs = document.getElementById('btnNoShowSecondary');
+          var pk = o.primary_choice || 'keep_redeem';
+          var sk = o.secondary_choice || 'skip_redeem';
+          if (bp) {
+            bp.onclick = function() {
+              submitClientNoShow(bookingId, pk, { primary: bp, secondary: bs });
+            };
+          }
+          if (bs) {
+            bs.onclick = function() {
+              submitClientNoShow(bookingId, sk, { primary: bp, secondary: bs });
+            };
+          }
+        }).catch(function(err) {
+          body.innerHTML = '<p class="screen-hint">' + escapeHtml((err && err.message) ? String(err.message) : 'Не удалось загрузить.') + '</p>';
+          foot.innerHTML = '<button type="button" class="btn-primary" id="btnNoShowErr">Закрыть</button>';
+          var eb = document.getElementById('btnNoShowErr');
+          if (eb) eb.onclick = closeClientProblemModal;
+        });
+      }
+
+      function renderClientProblemPick() {
+        _detachClientProblemViewportScroll();
+        _hideClientProblemCommentWrap();
+        _setClientProblemConfirmModal(false);
+        setClientProblemModalTitle('Проблема с клиентом');
+        var o = _clientProblemWizard.options;
+        _clientProblemWizard.isPassCertFlow = false;
+        var presets = (o && o.presets) || [];
+        var body = document.getElementById('modalClientProblemBody');
+        var foot = document.getElementById('modalClientProblemFooter');
+        var html = '<p class="client-problem-lead">Что случилось?</p>';
+        html += '<div class="client-problem-preset-list">';
+        presets.forEach(function(p) {
+          html += '<button type="button" class="btn-block btn-outline client-problem-preset" data-preset-id="' + escapeHtml(p.id) + '">' + escapeHtml(p.label) + '</button>';
+        });
+        html += '</div>';
+        body.innerHTML = html;
+        foot.innerHTML = '<button type="button" class="btn-secondary" id="btnClientProblemCancelPick">Отмена</button>';
+        var cancelBtn = document.getElementById('btnClientProblemCancelPick');
+        if (cancelBtn) cancelBtn.onclick = closeClientProblemModal;
+        body.querySelectorAll('.client-problem-preset').forEach(function(btn) {
+          btn.onclick = function() {
+            var pid = btn.getAttribute('data-preset-id');
+            var preset = presets.find(function(x) { return String(x.id) === String(pid); });
+            if (!preset) return;
+            _clientProblemWizard.selected = preset;
+            _clientProblemWizard.step = 'warn';
+            renderClientProblemShortWarn();
+          };
+        });
+      }
+
+      /** A1: choose mark / blacklist / absence only. A2: explicit blacklist consent. */
+      function renderClientProblemShortWarn() {
+        var p = _clientProblemWizard.selected;
+        var body = document.getElementById('modalClientProblemBody');
+        var foot = document.getElementById('modalClientProblemFooter');
+        if (!p || !body || !foot) return;
+        _detachClientProblemViewportScroll();
+        _hideClientProblemCommentWrap();
+        _setClientProblemConfirmModal(false);
+        _clientProblemWizard.step = 'warn';
+        setClientProblemModalTitle(p.label || 'Проблема с клиентом');
+        var pid = String(p.id || '');
+        var inner;
+        if (pid === 'A1') {
+          _clientProblemWizard.client_action = 'absence_only';
+          inner = '<div class="client-problem-outcome-list" id="clientProblemOutcomeList" role="listbox" aria-label="Как отметить отсутствие клиента">';
+          inner += '<button type="button" class="client-problem-outcome client-problem-outcome--hero is-selected" data-action="absence_only" role="option" aria-selected="true">';
+          inner += '<span>Просто отсутствие</span>';
+          inner += '<span class="client-problem-outcome-sub">В записи будет видно, что клиента не было.</span>';
+          inner += '</button>';
+          inner += '<div class="client-problem-outcome-secondary-block">';
+          inner += '<div class="client-problem-outcome-secondary-row">';
+          inner += '<button type="button" class="client-problem-outcome client-problem-outcome--muted" data-action="attention" role="option" aria-selected="false"><span class="client-problem-outcome-muted-title">Пометка «требует внимания»</span></button>';
+          inner += '<button type="button" class="client-problem-outcome client-problem-outcome--muted" data-action="blacklist" role="option" aria-selected="false"><span class="client-problem-outcome-muted-title">Чёрный список</span></button>';
+          inner += '</div></div></div>';
+        } else if (pid === 'A2') {
+          inner = '<p class="client-problem-warn-lead">Клиента <b>занесём в чёрный список</b>. Отменить одной кнопкой нельзя.</p>';
+        } else {
+          inner = '<p class="client-problem-warn-lead">Подтвердить действие?</p>';
+        }
+        body.innerHTML = '<div class="client-problem-body-inner client-problem-warn">' + inner + '</div>';
+        var confirmLabel = pid === 'A2' ? 'Занести в чёрный список' : 'Подтвердить';
+        foot.innerHTML =
+          '<button type="button" class="btn-secondary" id="btnClientProblemBackWarn">Назад</button>' +
+          '<button type="button" class="btn-primary" id="btnClientProblemConfirm">' + escapeHtml(confirmLabel) + '</button>';
+        var backBtn = document.getElementById('btnClientProblemBackWarn');
+        var okBtn = document.getElementById('btnClientProblemConfirm');
+        if (backBtn) {
+          backBtn.onclick = function() {
+            _clientProblemWizard.step = 'pick';
+            _clientProblemWizard.selected = null;
+            _clientProblemWizard.client_action = null;
+            renderClientProblemPick();
+          };
+        }
+        if (okBtn) okBtn.onclick = submitClientProblemReport;
+        if (pid === 'A1') {
+          var list = document.getElementById('clientProblemOutcomeList');
+          if (list) {
+            list.querySelectorAll('.client-problem-outcome').forEach(function(ob) {
+              ob.onclick = function() {
+                list.querySelectorAll('.client-problem-outcome').forEach(function(x) {
+                  x.classList.remove('is-selected');
+                  x.setAttribute('aria-selected', 'false');
+                });
+                ob.classList.add('is-selected');
+                ob.setAttribute('aria-selected', 'true');
+                _clientProblemWizard.client_action = ob.getAttribute('data-action') || 'absence_only';
+              };
+            });
+          }
+        }
+      }
+
+      function submitClientProblemReport() {
+        var bid = _clientProblemWizard.bookingId;
+        var pr = _clientProblemWizard.selected;
+        if (!bid || !pr || _clientProblemSubmitting) return;
+        var btn = document.getElementById('btnClientProblemConfirm');
+        var back = document.getElementById('btnClientProblemBackWarn');
+        _clientProblemSubmitting = true;
+        if (btn) btn.disabled = true;
+        if (back) back.disabled = true;
+        var payload = {
+          preset_id: pr.id,
+          note: null,
+          source: 'schedule_editor',
+        };
+        if (String(pr.id) === 'A1') {
+          payload.client_action = _clientProblemWizard.client_action || 'absence_only';
+        }
+        postJsonTrainer('/trainer/bookings/' + bid + '/problem', payload).then(function() {
+          showToast('Готово');
+          closeClientProblemModal();
+          if (state.selectedBooking && state.selectedBooking.id === bid) {
+            openBookingDetail(bid);
+          }
+        }).catch(function(e) {
+          showToast((e && e.message) ? e.message : 'Не удалось отправить');
+          _clientProblemSubmitting = false;
+          if (btn) btn.disabled = false;
+          if (back) back.disabled = false;
+        });
+      }
+
+      function openClientProblemWizard(bookingId) {
+        _detachClientProblemViewportScroll();
+        _hideClientProblemCommentWrap();
+        _setClientProblemConfirmModal(false);
+        _clientProblemWizard = {
+          bookingId: bookingId,
+          step: 'pick',
+          options: null,
+          selected: null,
+          passCertDeduct: null,
+          isPassCertFlow: false,
+          skipPassCertPick: false,
+          client_action: null,
+        };
+        var m = document.getElementById('modalClientProblem');
+        var body = document.getElementById('modalClientProblemBody');
+        var foot = document.getElementById('modalClientProblemFooter');
+        if (!m || !body || !foot) return;
+        m.style.display = 'flex';
+        m.setAttribute('aria-hidden', 'false');
+        updateTelegramBack();
+        body.innerHTML = '<div class="loading">Загрузка…</div>';
+        foot.innerHTML = '';
+        getJsonTrainer('/trainer/bookings/' + bookingId + '/problem-options').then(function(o) {
+          _clientProblemWizard.options = o;
+          if (o && o.already_reported) {
+            _hideClientProblemCommentWrap();
+            body.innerHTML = '<p class="screen-hint">По этой записи отчёт уже отправлен.</p>';
+            foot.innerHTML = '<button type="button" class="btn-primary" id="btnClientProblemCloseDup">Закрыть</button>';
+            var cb = document.getElementById('btnClientProblemCloseDup');
+            if (cb) cb.onclick = closeClientProblemModal;
+            return;
+          }
+          renderClientProblemPick();
+        }).catch(function(err) {
+          _hideClientProblemCommentWrap();
+          var msg = (err && err.message) ? String(err.message) : 'Не удалось загрузить варианты.';
+          body.innerHTML = '<p class="screen-hint">' + escapeHtml(msg) + '</p>';
+          foot.innerHTML = '<button type="button" class="btn-primary" id="btnClientProblemCloseErr">Закрыть</button>';
+          var ce = document.getElementById('btnClientProblemCloseErr');
+          if (ce) ce.onclick = closeClientProblemModal;
+        });
+      }
+
+      (function wireClientProblemModalBackdrop() {
+        var el = document.getElementById('modalClientProblem');
+        if (!el) return;
+        el.addEventListener('click', function(ev) {
+          if (ev.target === el && !_clientProblemSubmitting) closeClientProblemModal();
+        });
+      })();
+
       function openBookingDetail(bookingId) {
         if (state.bookingDetailReturn !== 'hub' && state.bookingDetailReturn !== 'group' && state.bookingDetailReturn !== 'hub_group') {
           state.bookingDetailReturn = 'schedule';
         }
         state.selectedBooking = null;
+        var _openProblemAfter = !!state.openClientProblemAfterDetail;
+        state.openClientProblemAfterDetail = false;
         getJsonTrainer('/trainer/bookings/' + bookingId).then(function(b) {
           state.selectedBooking = b;
           var client = [b.client_first_name, b.client_last_name].filter(Boolean).join(' ') || b.client_phone || 'Клиент';
@@ -2513,6 +3162,22 @@
           if (tid && b.client_has_telegram !== false) {
             actions.innerHTML += '<button type="button" class="bd-btn bd-btn--surface" data-baction="write_client">' + BD_ICONS.send + ' Написать клиенту</button>';
           }
+          var stRaw = (b.status || '').toLowerCase();
+          var canReportProblem = stRaw !== 'cancelled' && stRaw !== 'declined';
+          // E7: false when rollout=off or pilot excludes this trainer (API sets problem_flow_enabled).
+          var problemFlowOk = (b.problem_flow_enabled !== false);
+          if (canReportProblem && problemFlowOk) {
+            var ppc = b.problem_payment_class || '';
+            var isPassCert = (ppc === 'PASS' || ppc === 'CERT');
+            if (b.problem_reported) {
+              actions.innerHTML += '<p class="bd-problem-sent-hint">Отчёт о проблеме с клиентом уже отправлен.</p>';
+            } else if (b.client_no_show_recorded && isPassCert) {
+              actions.innerHTML += '<p class="bd-problem-sent-hint">Отметка «Клиент не пришёл» сохранена.</p>';
+            } else {
+              var probBtnLabel = isPassCert ? 'Клиент не пришёл' : 'Проблема с клиентом';
+              actions.innerHTML += '<button type="button" class="bd-btn bd-btn--surface" data-baction="client_problem">' + BD_ICONS.alert + ' ' + probBtnLabel + '</button>';
+            }
+          }
           if (!completed) {
             if (b.recurring_id) {
               actions.innerHTML += '<button type="button" class="bd-btn bd-btn--soft" data-baction="remove_recurring" data-recurring-id="' + b.recurring_id + '">' + BD_ICONS.linkOff + ' Снять регулярность</button>';
@@ -2525,6 +3190,12 @@
             btn.onclick = function() {
               var act = btn.getAttribute('data-baction');
               if (act === 'write_client') return;
+              if (act === 'client_problem') {
+                var ppc2 = b.problem_payment_class || '';
+                if (ppc2 === 'PASS' || ppc2 === 'CERT') openClientNoShowModal(b.id);
+                else openClientProblemWizard(b.id);
+                return;
+              }
               if (act === 'confirm') confirmTrainerBooking(b.id);
               else if (act === 'decline') {
                 showBookingStack('decline');
@@ -2544,6 +3215,14 @@
           try {
             history.pushState({ ui: 'sched-detail' }, '', window.location.pathname);
           } catch (e) { /* ignore */ }
+          if (_openProblemAfter) {
+            setTimeout(function() {
+              var sb = state.selectedBooking;
+              var oppc = sb && sb.problem_payment_class;
+              if (oppc === 'PASS' || oppc === 'CERT') openClientNoShowModal(bookingId);
+              else openClientProblemWizard(bookingId);
+            }, 0);
+          }
         }).catch(function() {
           alert('Ошибка загрузки');
           showBookingStack('main');
@@ -2650,6 +3329,8 @@
         bookArenaId: null,
         /** From CRM: /schedule-editor?client_id= — preselect client when booking a slot. */
         deepLinkClientId: null,
+        /** Open «Проблема с клиентом» after load (schedule-editor?open_booking=&open_client_problem=1). */
+        openClientProblemAfterDetail: false,
         /** 'hub' when opened via /schedule-editor?open_booking=&from=hub (return to trainer-home). */
         bookingDetailReturn: null,
         /** When opened from hub group modal: reopen that modal on back (see hub_group_slot URL param). */
@@ -5175,6 +5856,7 @@
         var fromHub = (p.get('from') || '') === 'hub';
         var hubGroupSlotRaw = p.get('hub_group_slot');
         var flowBook = (p.get('flow') || '') === 'book';
+        var openClientProblem = (p.get('open_client_problem') || '') === '1';
         var anchorDate = (p.get('anchor_date') || '').trim();
         var bgsRaw = p.get('book_group_slot');
         if (anchorDate && /^\d{4}-\d{2}-\d{2}$/.test(anchorDate)) {
@@ -5202,6 +5884,7 @@
           state.pendingBookGroupSlotId = null;
           var bid = parseInt(ob, 10);
           if (bid) {
+            if (openClientProblem) state.openClientProblemAfterDetail = true;
             if (fromHub && hubGroupSlotRaw) {
               var hg = parseInt(hubGroupSlotRaw, 10);
               if (!isNaN(hg) && hg > 0) {

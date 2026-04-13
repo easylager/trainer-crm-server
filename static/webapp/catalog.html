@@ -1788,12 +1788,58 @@
 
       var prefetch = {
         firstPageKey: null,
-        firstPageData: null,
-        inflightByKey: {}
+        firstPageData: null
       };
-      // First-page list cache disabled: after moderation, names/photos must refresh immediately.
+      /** Monotonic id: ignore stale list responses after city/service/mode/filter changes. */
+      var catalogListReqId = 0;
+      /** One shared in-flight Promise per first-page key so prefetch and loadCatalogList never duplicate GET.
+       *  Manual smoke: open summary with city+service — Network should show one GET /api/public/trainers (or training-groups) for page 1 when prefetch races loadCatalogList. */
+      var catalogFirstPageInflight = {};
+      function fetchCatalogFirstPage(path, params, key) {
+        if (catalogFirstPageInflight[key]) {
+          return catalogFirstPageInflight[key];
+        }
+        var p = getJson(path, params).then(function(data) {
+          return data;
+        }).finally(function() {
+          delete catalogFirstPageInflight[key];
+        });
+        catalogFirstPageInflight[key] = p;
+        return p;
+      }
+      /** Skip optional second-page warmup on save-data / 2G — cheap heuristic. */
+      function shouldSkipCatalogConnectionHeavyPrefetch() {
+        var c = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+        if (c && c.saveData) return true;
+        if (c && (c.effectiveType === 'slow-2g' || c.effectiveType === '2g')) return true;
+        return false;
+      }
+      /** Defer non-critical catalog fetches until the browser is idle (fallback: timeout). */
+      function scheduleCatalogIdlePrefetch(run, timeoutMs) {
+        var t = timeoutMs != null ? timeoutMs : 2500;
+        var ric = window.requestIdleCallback;
+        if (typeof ric === 'function') {
+          return ric(function() { run(); }, { timeout: t });
+        }
+        return setTimeout(function() { run(); }, t > 0 ? t : 2000);
+      }
+      // First-page list cache: TTL=0 disables sessionStorage; when TTL>0, clear keys on filter/mode/booking via clearCatalogSessionStorageCache().
       var CATALOG_CACHE_PREFIX = 'tcb_catalog_trainers_v1_';
       var CATALOG_CACHE_TTL_MS = 0;
+      function clearCatalogSessionStorageCache() {
+        if (!CATALOG_CACHE_TTL_MS) return;
+        try {
+          var rm = [];
+          var i;
+          for (i = 0; i < sessionStorage.length; i++) {
+            var k = sessionStorage.key(i);
+            if (k && k.indexOf(CATALOG_CACHE_PREFIX) === 0) rm.push(k);
+          }
+          for (i = 0; i < rm.length; i++) {
+            sessionStorage.removeItem(rm[i]);
+          }
+        } catch (e) { /* ignore */ }
+      }
       function readCatalogFirstPageFromStorage(listKey) {
         if (!CATALOG_CACHE_TTL_MS) return null;
         try {
@@ -2073,6 +2119,7 @@
         state.offset = 0;
         prefetch.firstPageKey = null;
         prefetch.firstPageData = null;
+        clearCatalogSessionStorageCache();
         loadCatalogList();
       }
 
@@ -2094,12 +2141,12 @@
         updateFilterSummary();
       }
 
-      function loadCatalogList() {
+      function loadCatalogList(opts) {
         updateCatalogModeUi();
         if (state.catalogMode === 'groups') {
-          loadTrainingGroupsCatalog();
+          loadTrainingGroupsCatalog(opts);
         } else {
-          loadTrainers();
+          loadTrainers(opts);
         }
       }
 
@@ -2122,6 +2169,7 @@
             state.offset = 0;
             prefetch.firstPageKey = null;
             prefetch.firstPageData = null;
+            clearCatalogSessionStorageCache();
             loadCatalogList();
           });
         });
@@ -2239,11 +2287,10 @@
           warmupCatalogImagesFromItems(cached.items || [], 16);
           return;
         }
-        if (prefetch.inflightByKey[key]) return;
-        prefetch.inflightByKey[key] = true;
         var path = state.catalogMode === 'groups' ? '/training-groups' : '/trainers';
         var params = state.catalogMode === 'groups' ? makeGroupListParams(0) : makeTrainerListParams(0);
-        getJson(path, params).then(function(data) {
+        fetchCatalogFirstPage(path, params, key).then(function(data) {
+          if (makeFirstPageKey() !== key) return;
           prefetch.firstPageKey = key;
           prefetch.firstPageData = data;
           writeCatalogFirstPageToStorage(key, data);
@@ -2251,8 +2298,6 @@
           warmupCatalogImagesFromItems(items, 16);
         }).catch(function() {
           // ignore prefetch failures: must never block UX
-        }).finally(function() {
-          delete prefetch.inflightByKey[key];
         });
       }
 
@@ -2634,6 +2679,9 @@
             });
           })
           .then(function() {
+            prefetch.firstPageKey = null;
+            prefetch.firstPageData = null;
+            clearCatalogSessionStorageCache();
             alert('Вы добавлены в группу. Тренер увидит вас в списке участников.');
           })
           .catch(function(e) {
@@ -2712,6 +2760,7 @@
             btn.onclick = function() {
               state.cityId = parseInt(btn.dataset.id, 10);
               state.cityName = btn.dataset.name || '';
+              clearCatalogSessionStorageCache();
               if (state.returnToSummary) {
                 state.returnToSummary = false;
                 state.serviceId = null; state.serviceName = '';
@@ -2753,6 +2802,7 @@
             btn.onclick = function() {
               state.serviceId = parseInt(btn.dataset.id, 10);
               state.serviceName = btn.dataset.name || '';
+              clearCatalogSessionStorageCache();
               if (state.returnToSummary) {
                 state.returnToSummary = false;
                 state.arenaId = null; state.arenaName = 'Любая';
@@ -2792,6 +2842,7 @@
               state.arenaId = btn.dataset.id ? parseInt(btn.dataset.id, 10) : null;
               state.arenaName = btn.dataset.name || 'Любая';
               state.offset = 0;
+              clearCatalogSessionStorageCache();
               if (state.returnToSummary) {
                 state.returnToSummary = false;
                 state.trainerId = null; state.trainerName = '';
@@ -2824,9 +2875,13 @@
         return (v === Math.floor(v) ? v : v.toFixed(2)) + ' BYN';
       }
 
-      function loadTrainingGroupsCatalog() {
-        document.getElementById('trainerList').innerHTML = '<div class="loading">Загрузка...</div>';
-        document.getElementById('pagination').innerHTML = '';
+      function loadTrainingGroupsCatalog(opts) {
+        opts = opts || {};
+        var myReq = ++catalogListReqId;
+        if (!opts.silent) {
+          document.getElementById('trainerList').innerHTML = '<div class="loading">Загрузка...</div>';
+          document.getElementById('pagination').innerHTML = '';
+        }
         initializeFilterHandlers();
         initCatalogModeToggle();
         updateCatalogModeUi();
@@ -2844,10 +2899,13 @@
         }
         if (state.offset === 0 && prefetch.firstPageKey === firstPageKey && prefetch.firstPageData) {
           request = Promise.resolve(prefetch.firstPageData);
+        } else if (state.offset === 0) {
+          request = fetchCatalogFirstPage('/training-groups', params, firstPageKey);
         } else {
           request = getJson('/training-groups', params);
         }
         request.then(function(data) {
+          if (myReq !== catalogListReqId) return;
           var items = data.items || [];
           var total = data.total != null ? data.total : items.length;
           state.groupCatalogItems = items;
@@ -2855,6 +2913,7 @@
           state.photoSource = data._photo_source || 'proxy';
           updateResultsCount(total);
           if (!items.length) {
+            if (myReq !== catalogListReqId) return;
             document.getElementById('trainerList').innerHTML =
               '<div class="empty">Групп с набором по вашему запросу пока нет.</div>' +
               '<div class="empty-state-request">' +
@@ -2874,6 +2933,7 @@
             prefetch.firstPageData = data;
           }
           warmupCatalogImagesFromItems(items, 16);
+          if (myReq !== catalogListReqId) return;
           var html = items.map(function(g, idx) {
             var tr = g.trainer || {};
             var p = tr.profile || {};
@@ -2906,6 +2966,7 @@
               '<div class="cg-actions">' + joinBtn + profileBtn + '</div>' +
               '</div></div>';
           }).join('');
+          if (myReq !== catalogListReqId) return;
           document.getElementById('trainerList').innerHTML = html;
           document.querySelectorAll('#trainerList .cg-photo-wrap img.cg-photo').forEach(function(img) {
             function showLoaded() {
@@ -2968,14 +3029,39 @@
           document.getElementById('trainerListFooter').style.display = 'block';
           var linkG = document.getElementById('linkGeneralRequestFromGroupList');
           if (linkG) linkG.onclick = openGeneralRequestForm;
+          if (state.offset === 0 && !shouldSkipCatalogConnectionHeavyPrefetch()) {
+            var sk = firstPageKey;
+            var mr = myReq;
+            scheduleCatalogIdlePrefetch(function() {
+              if (mr !== catalogListReqId) return;
+              if (makeFirstPageKey() !== sk) return;
+              if (state.offset !== 0) return;
+              var nextPageParams = makeGroupListParams(state.limit);
+              getJson('/training-groups', nextPageParams).then(function(nextData) {
+                if (mr !== catalogListReqId) return;
+                var nextItems = nextData && nextData.items ? nextData.items : [];
+                warmupImageUrls(nextItems.slice(0, 6).map(function(g) {
+                  var tr = g.trainer || {};
+                  var photo = tr.photos && tr.photos[0];
+                  return photoSrcList(photo) || (photo ? photoUrl(photo.file_key_list || photo.file_key) : '');
+                }).filter(Boolean));
+              }).catch(function() { /* no-op */ });
+            }, 2500);
+          }
         }).catch(function() {
+          if (myReq !== catalogListReqId) return;
+          if (opts.silent) return;
           document.getElementById('trainerList').innerHTML = '<div class="error">Ошибка загрузки</div>';
         });
       }
 
-      function loadTrainers() {
-        document.getElementById('trainerList').innerHTML = '<div class="loading">Загрузка...</div>';
-        document.getElementById('pagination').innerHTML = '';
+      function loadTrainers(opts) {
+        opts = opts || {};
+        var myReq = ++catalogListReqId;
+        if (!opts.silent) {
+          document.getElementById('trainerList').innerHTML = '<div class="loading">Загрузка...</div>';
+          document.getElementById('pagination').innerHTML = '';
+        }
         
         // Initialize filter handlers if not already done
         initializeFilterHandlers();
@@ -2997,10 +3083,13 @@
         }
         if (state.offset === 0 && prefetch.firstPageKey === firstPageKey && prefetch.firstPageData) {
           request = Promise.resolve(prefetch.firstPageData);
+        } else if (state.offset === 0) {
+          request = fetchCatalogFirstPage('/trainers', params, firstPageKey);
         } else {
           request = getJson('/trainers', params);
         }
         request.then(function(data) {
+          if (myReq !== catalogListReqId) return;
           var items = data.items || [];
           var total = data.total != null ? data.total : items.length;
           state.trainers = items;
@@ -3008,6 +3097,7 @@
           state.photoSource = data._photo_source || 'proxy';
           updateResultsCount(total);
           if (!items.length) {
+            if (myReq !== catalogListReqId) return;
             document.getElementById('trainerList').innerHTML =
               '<div class="empty">Тренеров по вашему запросу пока нет.</div>' +
               '<div class="empty-state-request">' +
@@ -3026,6 +3116,7 @@
             prefetch.firstPageKey = firstPageKey;
             prefetch.firstPageData = data;
           }
+          if (myReq !== catalogListReqId) return;
           document.querySelectorAll('link[data-tcb-catalog-preload]').forEach(function(el) { el.remove(); });
           for (var pi = 0; pi < Math.min(3, items.length); pi++) {
             var p0p = items[pi].photos && items[pi].photos[0];
@@ -3051,8 +3142,10 @@
           warmupCatalogImagesFromItems(items, 16);
           var runIdle = window.requestIdleCallback || function(cb) { return setTimeout(function() { cb({}); }, 400); };
           runIdle(function() {
+            if (myReq !== catalogListReqId) return;
             warmupCatalogImagesFromItems(items, 50);
           }, { timeout: 2500 });
+          if (myReq !== catalogListReqId) return;
           var html = items.map(function(t, idx) {
             var photo = t.photos && t.photos[0];
             var src = photoSrcList(photo);
@@ -3119,6 +3212,7 @@
               '<div class="trainer-list-card__main">' + infoHtml + groupBadgeHtml + '</div>' +
               '<span class="arrow">→</span></button>';
           }).join('');
+          if (myReq !== catalogListReqId) return;
           document.getElementById('trainerList').innerHTML = html;
           document.querySelectorAll('#trainerList .trainer-card-img').forEach(function(img) {
             function showLoaded() {
@@ -3162,17 +3256,26 @@
           document.getElementById('trainerListFooter').style.display = 'block';
           var linkReq = document.getElementById('linkGeneralRequestFromList');
           if (linkReq) linkReq.onclick = openGeneralRequestForm;
-          if (state.offset === 0) {
-            // Preload second page data and lead images while user browses first page.
-            var nextPageParams = makeTrainerListParams(state.limit);
-            getJson('/trainers', nextPageParams).then(function(nextData) {
-              var nextItems = nextData && nextData.items ? nextData.items : [];
-              warmupImageUrls(nextItems.slice(0, 6).map(function(t) {
-                return photoSrcList(t.photos && t.photos[0]) || photoSrcDetail(t.photos && t.photos[0]);
-              }));
-            }).catch(function() { /* no-op */ });
+          if (state.offset === 0 && !shouldSkipCatalogConnectionHeavyPrefetch()) {
+            var sk = firstPageKey;
+            var mr = myReq;
+            scheduleCatalogIdlePrefetch(function() {
+              if (mr !== catalogListReqId) return;
+              if (makeFirstPageKey() !== sk) return;
+              if (state.offset !== 0) return;
+              var nextPageParams = makeTrainerListParams(state.limit);
+              getJson('/trainers', nextPageParams).then(function(nextData) {
+                if (mr !== catalogListReqId) return;
+                var nextItems = nextData && nextData.items ? nextData.items : [];
+                warmupImageUrls(nextItems.slice(0, 6).map(function(t) {
+                  return photoSrcList(t.photos && t.photos[0]) || photoSrcDetail(t.photos && t.photos[0]);
+                }));
+              }).catch(function() { /* no-op */ });
+            }, 2500);
           }
         }).catch(function() {
+          if (myReq !== catalogListReqId) return;
+          if (opts.silent) return;
           document.getElementById('trainerList').innerHTML = '<div class="error">Ошибка загрузки</div>';
         });
       }
@@ -3655,6 +3758,9 @@
               if (data.used_primary_venue_for_online_booking) {
                 okMsg += '<br><span style="color: var(--tg-theme-hint-color); font-size: 14px; display: inline-block; margin-top: 10px;">Запись создана на <strong>основную площадку</strong> тренера. Чтобы заниматься на площадке из вашего фильтра — оставьте заявку, тренер согласует место.</span>';
               }
+              prefetch.firstPageKey = null;
+              prefetch.firstPageData = null;
+              clearCatalogSessionStorageCache();
               document.getElementById('successText').innerHTML = okMsg;
               showScreen('screenSuccess');
               getClientSession().then(function(session) {
@@ -3779,6 +3885,9 @@
         }).then(function(r) {
           return r.json().then(function(data) {
             if (r.ok && data.success) {
+              prefetch.firstPageKey = null;
+              prefetch.firstPageData = null;
+              clearCatalogSessionStorageCache();
               document.getElementById('successText').innerHTML =
                 '✅ <b>Заявка отправлена</b>.<br><br>Когда появится подходящий тренер — напишем вам в боте.';
               showScreen('screenSuccess');
@@ -3958,6 +4067,24 @@
           loadCities();
           showScreen('screenCity');
         });
+
+      var catalogVisibilityDebounceTimer = null;
+      document.addEventListener('visibilitychange', function() {
+        if (document.hidden) return;
+        if (catalogVisibilityDebounceTimer) clearTimeout(catalogVisibilityDebounceTimer);
+        catalogVisibilityDebounceTimer = setTimeout(function() {
+          catalogVisibilityDebounceTimer = null;
+          var sum = document.getElementById('screenSummary');
+          if (!sum || !sum.classList.contains('active')) return;
+          if (state.activeTab !== 'catalog') return;
+          getClientSession().then(function(session) {
+            applySessionToState(session);
+            if (state.cityId && state.serviceId) {
+              loadCatalogList({ silent: true });
+            }
+          }).catch(function() {});
+        }, 400);
+      });
 
       // Keep first-page prefetch hot while user is on summary and updates filters.
       document.addEventListener('click', function(e) {

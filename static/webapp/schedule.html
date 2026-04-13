@@ -146,6 +146,14 @@
       /** After confirm/decline/cancel we pop history; popstate refreshes the list. */
       var pendingReloadAfterPop = false;
 
+      /** In-flight GET /schedule: abort when a newer fetch starts; timeout vs replace distinguished per call. */
+      var scheduleFetchAbort = null;
+      var scheduleTimeoutId = null;
+      var scheduleLoadSeq = 0;
+      var scheduleVisibilityDebounceTimer = null;
+      /** Compact JSON from API (slots only) — see GET /schedule view=list. */
+      var SCHEDULE_VIEW_LIST = 'view=list';
+
       function getMonday(d) {
         const date = new Date(d);
         const day = date.getDay();
@@ -286,18 +294,57 @@
       async function fetchSchedule(fromDate, toDate) {
         const from = fromDate.toISOString().slice(0, 10);
         const to = toDate.toISOString().slice(0, 10);
-        const url = '/api/webapp/schedule?from_date=' + encodeURIComponent(from) + '&to_date=' + encodeURIComponent(to);
-        const controller = new AbortController();
-        const timeoutId = setTimeout(function() { controller.abort(); }, 15000);
+        var url =
+          '/api/webapp/schedule?from_date=' +
+          encodeURIComponent(from) +
+          '&to_date=' +
+          encodeURIComponent(to) +
+          '&' +
+          SCHEDULE_VIEW_LIST;
+        var myTimeoutFired = false;
+        if (typeof AbortController !== 'undefined') {
+          if (scheduleFetchAbort) {
+            try {
+              scheduleFetchAbort.abort();
+            } catch (eAbort) {}
+          }
+          scheduleFetchAbort = new AbortController();
+        }
+        if (scheduleTimeoutId) {
+          clearTimeout(scheduleTimeoutId);
+          scheduleTimeoutId = null;
+        }
+        scheduleTimeoutId = setTimeout(function() {
+          scheduleTimeoutId = null;
+          myTimeoutFired = true;
+          if (scheduleFetchAbort) {
+            try {
+              scheduleFetchAbort.abort();
+            } catch (eT) {}
+          }
+        }, 15000);
+        var fetchOpts = { headers: authHeader() };
+        if (scheduleFetchAbort) fetchOpts.signal = scheduleFetchAbort.signal;
         let res;
         try {
-          res = await fetch(url, { headers: authHeader(), signal: controller.signal });
+          res = await fetch(url, fetchOpts);
         } catch (e) {
-          clearTimeout(timeoutId);
-          if (e.name === 'AbortError') throw new Error('Превышено время ожидания. Проверьте интернет и откройте снова.');
+          if (scheduleTimeoutId) {
+            clearTimeout(scheduleTimeoutId);
+            scheduleTimeoutId = null;
+          }
+          if (e.name === 'AbortError') {
+            if (myTimeoutFired) {
+              throw new Error('Превышено время ожидания. Проверьте интернет и откройте снова.');
+            }
+            throw new Error('__SCHEDULE_ABORTED__');
+          }
           throw new Error(e.message || 'Ошибка сети');
         }
-        clearTimeout(timeoutId);
+        if (scheduleTimeoutId) {
+          clearTimeout(scheduleTimeoutId);
+          scheduleTimeoutId = null;
+        }
         if (!res.ok) {
           const err = await res.json().catch(function() { return { detail: res.statusText }; });
           throw new Error(err.detail || res.statusText);
@@ -403,6 +450,7 @@
 
       async function loadSchedule(opts) {
         opts = opts || {};
+        var mySeq = ++scheduleLoadSeq;
         const el = document.getElementById('scheduleContent');
         if (!opts.silent) {
           el.innerHTML = '<div class="loading">Загрузка...</div>';
@@ -411,21 +459,15 @@
         weekEnd.setDate(weekEnd.getDate() + 6);
         try {
           const data = await fetchSchedule(state.currentWeekStart, weekEnd);
+          if (mySeq !== scheduleLoadSeq) return;
           state.allSlots = data.slots || [];
           document.getElementById('weekLabel').textContent = formatWeekLabel(state.currentWeekStart);
           renderSchedule();
         } catch (e) {
+          if (e && e.message === '__SCHEDULE_ABORTED__') return;
+          if (mySeq !== scheduleLoadSeq) return;
           el.innerHTML = '<div class="error">' + escapeHtml(e.message || 'Ошибка загрузки') + '</div>';
         }
-      }
-
-      function prefetchScheduleInBackground() {
-        const weekEnd = new Date(state.currentWeekStart);
-        weekEnd.setDate(weekEnd.getDate() + 6);
-        return fetchSchedule(state.currentWeekStart, weekEnd).then(function(data) {
-          state.allSlots = data.slots || [];
-          document.getElementById('weekLabel').textContent = formatWeekLabel(state.currentWeekStart);
-        }).catch(function() { /* list loads on back if still empty */ });
       }
 
       function openDetail(bookingId) {
@@ -607,6 +649,20 @@
         };
       });
 
+      document.addEventListener('visibilitychange', function() {
+        if (document.hidden) return;
+        if (scheduleVisibilityDebounceTimer) clearTimeout(scheduleVisibilityDebounceTimer);
+        scheduleVisibilityDebounceTimer = setTimeout(function() {
+          scheduleVisibilityDebounceTimer = null;
+          var sched = document.getElementById('screenSchedule');
+          if (!sched || !sched.classList.contains('active')) return;
+          var modal = document.getElementById('modalCancel');
+          if (modal && modal.style.display === 'flex') return;
+          if (document.getElementById('screenDecline').classList.contains('active')) return;
+          loadSchedule({ silent: true });
+        }, 400);
+      });
+
       (function init() {
         var p = new URLSearchParams(window.location.search);
         var ob = p.get('open_booking');
@@ -620,7 +676,6 @@
             document.getElementById('detailActions').innerHTML = '';
             showScreen('screenDetail');
             openDetail(bid);
-            prefetchScheduleInBackground();
             return;
           }
         }

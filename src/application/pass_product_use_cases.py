@@ -334,13 +334,17 @@ async def issue_pass_to_client(
 async def redeem_pass_session_for_booking(
     session: AsyncSession,
     booking_id: int,
+    *,
+    allow_booking_statuses: frozenset[str] | None = None,
 ) -> bool:
     """
     Deduct one pass session for a completed booking. Called when booking status becomes completed.
     Finds an active pass_instance for this client+trainer (service match or product.service_id IS NULL),
     decrements sessions_remaining; if 0, sets status to used_up. If no suitable pass, returns False (no error).
+    ``allow_booking_statuses`` extends the default (``completed`` only), e.g. ``no_show`` for problem E4 redemption.
     Returns True if a session was redeemed.
     """
+    allowed = allow_booking_statuses if allow_booking_statuses is not None else frozenset({"completed"})
     r = await session.execute(
         text("""
             SELECT id, client_id, trainer_id, service_id, status
@@ -349,7 +353,7 @@ async def redeem_pass_session_for_booking(
         {"bid": booking_id},
     )
     row = r.fetchone()
-    if not row or (row[4] or "").strip() != "completed":
+    if not row or (row[4] or "").strip().lower() not in allowed:
         return False
     client_id, trainer_id, service_id = row[1], row[2], row[3]
     # Pick one active pass: same trainer, service match or product.service_id IS NULL, sessions_remaining > 0

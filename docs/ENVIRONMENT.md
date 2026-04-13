@@ -24,6 +24,7 @@
 | `DATABASE_URL_SYNC` | Sync URL для Alembic (`postgresql+psycopg://...`). |
 | `S3_*`, `LOCAL_STORAGE_PATH` | Объектное хранилище или локальная папка для загрузок. |
 | `API_BASE_URL` | Базовый URL API для ботов и клиентов (например `https://…railway.app`). |
+| `APP_DEPLOY_VERSION` | (Опционально) Строка версии/деплоя для команды `/version` в админ-боте; на Railway можно подставить `RAILWAY_GIT_COMMIT_SHA`. Если не задано — показывается `SENTRY_RELEASE` или «не задано». |
 | `WEBAPP_BASE_URL` | Базовый URL для Telegram Web App (HTTPS на проде). |
 | `PHOTO_BASE_URL`, `PHOTO_CDN_BASE_URL`, `PHOTO_PRESIGNED_EXPIRES_SEC` | Раздача фото каталога. |
 | `PHOTO_UPLOAD_PRESIGN_EXPIRES_SEC` | Срок presigned PUT для прямой загрузки фото в S3 (по умолчанию 600 с). |
@@ -40,6 +41,8 @@
 | `SMTP_*` | Отправка писем (сертификаты); если не заданы — отправка отключена. |
 | `TELEGRAM_WEBAPP_INIT_DATA_MAX_AGE_SEC` | Окно свежести `auth_date` в Mini App `initData` (секунды), по умолчанию `86400`. |
 | `TELEGRAM_WEBAPP_INIT_DATA_CLOCK_SKEW_SEC` | Допустимый сдвиг «в будущее» для `auth_date` (секунды), по умолчанию `300`. |
+| `BOOKING_PROBLEM_ROLLOUT` | Поэтапный запуск «Проблема с клиентом»: `full` (по умолчанию), `pilot` или `off`. |
+| `BOOKING_PROBLEM_PILOT_TRAINER_IDS` | При `pilot` — JSON-массив числовых `trainers.id` с доступом к сценарию. |
 
 Подробнее про угрозы и проверки: **[TELEGRAM_WEBAPP_INITDATA.md](TELEGRAM_WEBAPP_INITDATA.md)**.
 

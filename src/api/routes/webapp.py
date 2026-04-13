@@ -26,6 +26,20 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from src.api.deps import get_session
 from src.shared.price_tier_kind import normalize_price_tier_kind, price_tier_label_ru, sql_order_case_tier_kind
 from src.shared.profile_phone import coerce_required_belarus_phone
+from src.application.booking_problem_notifications import send_booking_problem_telegram_notifications
+from src.application.booking_problem_rollout import booking_problem_api_allowed_for_trainer
+from src.application.booking_problem_use_cases import (
+    classify_booking_problem_payment_class,
+    get_trainer_booking_problem_options,
+    submit_trainer_booking_problem,
+)
+from src.application.booking_client_no_show_notifications import (
+    send_booking_client_no_show_telegram_notifications,
+)
+from src.application.booking_no_show_use_cases import (
+    get_trainer_booking_client_no_show_options,
+    submit_trainer_booking_client_no_show,
+)
 from src.application.booking_use_cases import (
     ServicePriceVariantRequired,
     active_booking_summaries_by_slot_for_trainer_range,
@@ -73,6 +87,7 @@ from src.application.client_request_use_cases import (
     get_client_request_for_booking,
     get_request_client_for_trainer_booking,
     list_my_requests_with_responses,
+    count_unanswered_requests_for_trainer,
     list_requests_for_trainer,
     replace_client_request_with_new,
 )
@@ -100,6 +115,7 @@ from src.application.welcome_link_use_cases import (
 )
 from src.application.stats_use_cases import (
     get_platform_stats,
+    get_trainer_hub_revenue_month_to_date,
     get_trainer_revenue_breakdown_for_range,
     get_trainer_stats_dashboard,
 )
@@ -307,6 +323,10 @@ async def get_trainer_access_for_webapp(
 async def get_schedule(
     from_date: date | None = Query(None, description="YYYY-MM-DD"),
     to_date: date | None = Query(None, description="YYYY-MM-DD"),
+    view: Literal["list"] | None = Query(
+        None,
+        description="view=list: slots only (compact JSON for read-only schedule screen; omits schedule_grid).",
+    ),
     init_data: str | None = Query(None, description="Telegram Web App initData (if header stripped by proxy)"),
     x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
     session: AsyncSession = Depends(get_session),
@@ -333,10 +353,6 @@ async def get_schedule(
     slots = await list_slots(session, trainer_id, from_date, to_date)
     summaries = await active_booking_summaries_by_slot_for_trainer_range(
         session, trainer_id, from_date, to_date
-    )
-    trainer_row = await get_trainer(session, trainer_id)
-    group_classes_enabled = bool(
-        (trainer_row.get("profile") or {}).get("group_classes_enabled")
     )
     out_slots: list[dict[str, Any]] = []
     for s in slots:
@@ -373,6 +389,13 @@ async def get_schedule(
             if bsum.get("bookings") is not None:
                 row["bookings"] = bsum["bookings"]
         out_slots.append(row)
+    if view == "list":
+        return {"slots": out_slots}
+
+    trainer_row = await get_trainer(session, trainer_id)
+    group_classes_enabled = bool(
+        (trainer_row.get("profile") or {}).get("group_classes_enabled")
+    )
     profile = trainer_row.get("profile") or {}
     session_duration_minutes = profile.get("session_duration_minutes")
     grid_preset = await get_schedule_grid_preset_for_trainer(session, trainer_id)
@@ -1407,12 +1430,12 @@ async def delete_client_request_route(
 TRAINER_DAYS = ("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс")
 
 
-def _serialize_booking(b: dict) -> dict:
+def _serialize_booking(b: dict, *, problem_flow_enabled: bool | None = None) -> dict:
     """Booking dict to JSON-safe (date/time as string)."""
     slot_date = b.get("slot_date")
     start_time = b.get("start_time")
     end_time = b.get("end_time")
-    return {
+    out = {
         "id": b["id"],
         "slot_id": b.get("slot_id"),
         "client_telegram_id": b.get("client_telegram_id"),
@@ -1431,7 +1454,13 @@ def _serialize_booking(b: dict) -> dict:
         "status": (b.get("status") or "confirmed").strip(),
         "slot_capacity": max(1, int(b.get("slot_capacity") or 1)),
         "slot_active_bookings": max(0, int(b.get("slot_active_bookings") or 0)),
+        "hub_in_session": bool(b.get("hub_in_session")),
+        "problem_reported": bool(b.get("problem_reported")),
+        "client_no_show_recorded": bool(b.get("client_no_show_recorded")),
     }
+    if problem_flow_enabled is not None:
+        out["problem_flow_enabled"] = bool(problem_flow_enabled)
+    return out
 
 
 def _serialize_trainer_dashboard(data: dict) -> dict:
@@ -1485,6 +1514,23 @@ async def get_trainer_revenue_range_api(
         return await get_trainer_revenue_breakdown_for_range(session, trainer_id, period_from, period_to)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@router.get("/trainer/hub/revenue-mtd")
+async def get_trainer_hub_revenue_mtd(
+    init_data: str | None = Query(None),
+    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    session: AsyncSession = Depends(get_session),
+):
+    """Hub KPI: accrual revenue from the 1st of the current month through today (Europe/Minsk). No analytics module gate."""
+    raw = init_data or x_telegram_init_data
+    if not raw:
+        raise HTTPException(status_code=401, detail="Missing init data")
+    telegram_id = _trainer_telegram_id(raw)
+    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+    return await get_trainer_hub_revenue_month_to_date(session, trainer_id)
 
 
 # --- Support: client/trainer send message; admin list and reply ---
@@ -2866,6 +2912,12 @@ async def get_client_certificate_products(
 @router.get("/trainer/bookings")
 async def get_trainer_bookings(
     init_data: str | None = Query(None),
+    limit: int | None = Query(
+        None,
+        ge=1,
+        le=100,
+        description="Max booking rows (hub may pass a smaller value; default 100).",
+    ),
     x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
     session: AsyncSession = Depends(get_session),
 ):
@@ -2878,7 +2930,9 @@ async def get_trainer_bookings(
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
 
-    bookings = await list_bookings_for_trainer(session, trainer_id)
+    flow_ok = booking_problem_api_allowed_for_trainer(trainer_id)
+    lim = 100 if limit is None else limit
+    bookings = await list_bookings_for_trainer(session, trainer_id, limit=lim)
     today = date.today()
     if not bookings:
         return {"days": []}
@@ -2893,7 +2947,7 @@ async def get_trainer_bookings(
         days_list.append({
             "date": date_str,
             "day_label": day_label,
-            "bookings": [_serialize_booking(b) for b in day_bookings],
+            "bookings": [_serialize_booking(b, problem_flow_enabled=flow_ok) for b in day_bookings],
         })
     # Only days that have at least one booking (no empty "today" slot)
     return {"days": days_list}
@@ -2939,7 +2993,8 @@ async def get_trainer_booking_detail(
     b = await get_trainer_booking_detail_payload(session, booking_id, trainer_id)
     if not b:
         raise HTTPException(status_code=404, detail="Booking not found")
-    detail = _serialize_booking(b)
+    flow_ok = booking_problem_api_allowed_for_trainer(trainer_id)
+    detail = _serialize_booking(b, problem_flow_enabled=flow_ok)
     slot_date = b.get("slot_date")
     if hasattr(slot_date, "weekday"):
         detail["day_label"] = TRAINER_DAYS[slot_date.weekday()]
@@ -2955,7 +3010,154 @@ async def get_trainer_booking_detail(
             b["slot_date"].weekday(), b["start_time"],
         )
     detail["recurring_id"] = recurring["id"] if recurring else None
+    ppc = await classify_booking_problem_payment_class(session, booking_id, trainer_id)
+    detail["problem_payment_class"] = ppc
+    if ppc == "PASS":
+        detail["pass_cert_instrument_hint"] = "абонемент"
+    elif ppc == "CERT":
+        detail["pass_cert_instrument_hint"] = "сертификат"
+    else:
+        detail["pass_cert_instrument_hint"] = None
+
     return detail
+
+
+@router.get("/trainer/bookings/{booking_id:int}/client-no-show-options")
+async def get_trainer_booking_client_no_show_options_route(
+    booking_id: int,
+    init_data: str | None = Query(None),
+    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    session: AsyncSession = Depends(get_session),
+):
+    """PASS/CERT: copy for «Клиент не пришёл» modal (no booking_problem_reports)."""
+    raw = init_data or x_telegram_init_data
+    if not raw:
+        raise HTTPException(status_code=401, detail="Missing init data")
+    telegram_id = _trainer_telegram_id(raw)
+    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+    if not booking_problem_api_allowed_for_trainer(trainer_id):
+        raise HTTPException(status_code=403, detail="booking_problem_rollout")
+    data = await get_trainer_booking_client_no_show_options(session, booking_id, trainer_id)
+    if not data:
+        raise HTTPException(status_code=404, detail="Not found")
+    return data
+
+
+class TrainerClientNoShowBody(BaseModel):
+    choice: str = Field(..., min_length=8, max_length=32)
+    source: str | None = Field(None, max_length=32)
+
+
+@router.post("/trainer/bookings/{booking_id:int}/client-no-show")
+async def post_trainer_booking_client_no_show_route(
+    booking_id: int,
+    body: TrainerClientNoShowBody,
+    init_data: str | None = Query(None),
+    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    session: AsyncSession = Depends(get_session),
+):
+    raw = init_data or x_telegram_init_data
+    if not raw:
+        raise HTTPException(status_code=401, detail="Missing init data")
+    telegram_id = _trainer_telegram_id(raw)
+    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+    if not booking_problem_api_allowed_for_trainer(trainer_id):
+        raise HTTPException(status_code=403, detail="booking_problem_rollout")
+    err, msg = await submit_trainer_booking_client_no_show(
+        session,
+        booking_id,
+        trainer_id,
+        body.choice,
+        source=body.source or "mini_app",
+    )
+    if err == "not_found":
+        raise HTTPException(status_code=404, detail=msg or "Not found")
+    if err == "bad_state":
+        raise HTTPException(status_code=400, detail=msg or "Invalid state")
+    if err == "conflict":
+        raise HTTPException(status_code=409, detail=msg or "Conflict")
+    if err == "bad_request":
+        raise HTTPException(status_code=400, detail=msg or "Bad request")
+    await send_booking_client_no_show_telegram_notifications(session, booking_id)
+    return {"success": True}
+
+
+class TrainerBookingProblemBody(BaseModel):
+    preset_id: str = Field(..., min_length=1, max_length=32)
+    note: str | None = Field(None, max_length=4000)
+    source: str | None = Field(None, max_length=32)
+    # PASS/CERT + B1: explicit redeem|skip from Mini App (overrides trainer default when sent).
+    pass_cert_no_show_choice: str | None = Field(None, max_length=16)
+    # Preset A1 only: attention | blacklist | absence_only (how to reflect no-show on the client).
+    client_action: str | None = Field(None, max_length=24)
+
+
+@router.get("/trainer/bookings/{booking_id:int}/problem-options")
+async def get_trainer_booking_problem_options_route(
+    booking_id: int,
+    init_data: str | None = Query(None),
+    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    session: AsyncSession = Depends(get_session),
+):
+    """Presets + payment class + pass/cert no-show policy (PRD E3); copy for trainer consent (E2)."""
+    raw = init_data or x_telegram_init_data
+    if not raw:
+        raise HTTPException(status_code=401, detail="Missing init data")
+    telegram_id = _trainer_telegram_id(raw)
+    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+    if not booking_problem_api_allowed_for_trainer(trainer_id):
+        raise HTTPException(status_code=403, detail="booking_problem_rollout")
+    data = await get_trainer_booking_problem_options(session, booking_id, trainer_id)
+    if not data:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    return data
+
+
+@router.post("/trainer/bookings/{booking_id:int}/problem")
+async def post_trainer_booking_problem_route(
+    booking_id: int,
+    body: TrainerBookingProblemBody,
+    init_data: str | None = Query(None),
+    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    session: AsyncSession = Depends(get_session),
+):
+    raw = init_data or x_telegram_init_data
+    if not raw:
+        raise HTTPException(status_code=401, detail="Missing init data")
+    telegram_id = _trainer_telegram_id(raw)
+    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+    if not booking_problem_api_allowed_for_trainer(trainer_id):
+        raise HTTPException(status_code=403, detail="booking_problem_rollout")
+    err, msg = await submit_trainer_booking_problem(
+        session,
+        booking_id,
+        trainer_id,
+        body.preset_id,
+        body.note,
+        body.source or "mini_app",
+        pass_cert_no_show_choice=body.pass_cert_no_show_choice,
+        client_action=body.client_action,
+    )
+    if err == "not_found":
+        raise HTTPException(status_code=404, detail=msg or "Not found")
+    if err == "bad_state":
+        raise HTTPException(status_code=400, detail=msg or "Invalid state")
+    if err == "conflict":
+        raise HTTPException(status_code=409, detail=msg or "Already reported")
+    if err == "bad_preset":
+        raise HTTPException(status_code=400, detail=msg or "Invalid preset")
+    if err == "bad_request":
+        raise HTTPException(status_code=400, detail=msg or "Bad request")
+    await send_booking_problem_telegram_notifications(session, booking_id)
+    return {"success": True}
 
 
 class DeclineBody(BaseModel):
@@ -4034,6 +4236,24 @@ async def trainer_requests_ping(step: str | None = Query(None)):
     """Diagnostic: no auth, just log. step=img|script|loadList to trace where page execution reaches."""
     logger.info("trainer_requests_ping step=%s", step or "none")
     return {"ok": True}
+
+
+@router.get("/trainer/requests/summary")
+async def get_trainer_requests_summary(
+    init_data: str | None = Query(None),
+    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    session: AsyncSession = Depends(get_session),
+):
+    """Lightweight hub: count of requests the trainer has not answered yet. Auth: trainer initData."""
+    raw = init_data or x_telegram_init_data
+    if not raw:
+        raise HTTPException(status_code=401, detail="Missing init data")
+    telegram_id = _trainer_telegram_id(raw)
+    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+    n = await count_unanswered_requests_for_trainer(session, trainer_id)
+    return {"unanswered_count": n}
 
 
 @router.get("/trainer/requests")

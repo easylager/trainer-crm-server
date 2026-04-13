@@ -27,6 +27,10 @@ except ImportError:
 # Seats counted toward slot capacity (group lessons).
 BOOKING_STATUSES_OCCUPYING_SEAT = ("pending", "confirmed")
 
+# Trainer-reported problem terminal outcomes (PRD E4); not «successful» completed sessions for analytics/notifications.
+BOOKING_STATUS_NO_SHOW = "no_show"
+BOOKING_STATUS_PAYMENT_DISPUTE = "payment_dispute"
+
 # Correlated subquery for trainer-facing "Арена" text (aliases `b` = booking, `s` = slot).
 # Prefer booking.arena_id, then slot.arena_id (group / fixed-venue slots), else all trainer_arenas (legacy).
 class ServicePriceVariantRequired(Exception):
@@ -463,6 +467,120 @@ async def create_trainer_quick_booking(
     return (booking_id, slot_id)
 
 
+def _booking_interval_duration_minutes(start_time: time, end_time: time) -> int:
+    """Length of [start, end) on the same calendar day (match slot interval when repeating)."""
+    try:
+        if start_time and end_time and hasattr(start_time, "hour") and hasattr(end_time, "hour"):
+            delta = datetime.combine(date.today(), end_time) - datetime.combine(date.today(), start_time)
+            return max(15, int(delta.total_seconds() // 60))
+    except (TypeError, ValueError):
+        pass
+    return 45
+
+
+async def trainer_repeat_booking_same_time_next_week(
+    session: AsyncSession,
+    booking_id: int,
+    trainer_id: int,
+) -> dict:
+    """
+    Trainer taps «same time next week» after a completed session: book same client on slot_date+7
+    at the same clock interval, creating an individual slot via create_trainer_quick_booking if needed.
+
+    Returns:
+        {"success": True, "new_booking_id": int, "slot_date": date, "start_time": time}
+        {"success": False, "error": str, ...} — not_found, slot_booked, no_service,
+        create_failed, price_tier_required, schedule_error (optional "message" for ValueError text).
+    """
+    from src.application.recurring_use_cases import get_slot_status_on_date
+
+    r = await session.execute(
+        text("""
+            SELECT b.client_id, b.service_id, b.service_price_variant_id, b.arena_id,
+                   s.slot_date, s.start_time, s.end_time, s.arena_id AS slot_arena_id
+            FROM bookings b
+            JOIN slots s ON s.id = b.slot_id
+            WHERE b.id = :bid AND b.trainer_id = :tid AND b.status = 'completed'
+        """),
+        {"bid": booking_id, "tid": trainer_id},
+    )
+    row = r.fetchone()
+    if not row:
+        return {"success": False, "error": "not_found"}
+
+    client_id = int(row[0])
+    service_id = int(row[1]) if row[1] is not None else None
+    spv_id = int(row[2]) if row[2] is not None else None
+    booking_arena = int(row[3]) if row[3] is not None else None
+    slot_date_val = row[4]
+    start_time = row[5]
+    end_time = row[6]
+    slot_arena_id = int(row[7]) if row[7] is not None else None
+
+    if hasattr(slot_date_val, "date"):
+        slot_d = slot_date_val.date()
+    else:
+        slot_d = slot_date_val
+
+    st = start_time.replace(second=0, microsecond=0) if hasattr(start_time, "replace") else start_time
+    target_date = slot_d + timedelta(days=7)
+
+    status_next, _ = await get_slot_status_on_date(session, trainer_id, target_date, st)
+    if status_next == "booked":
+        return {"success": False, "error": "slot_booked"}
+
+    if service_id is None:
+        service_id = await get_first_service_id_for_trainer(session, trainer_id)
+    if service_id is None:
+        return {"success": False, "error": "no_service"}
+
+    start_minutes = st.hour * 60 + st.minute
+    duration_minutes = _booking_interval_duration_minutes(st, end_time)
+
+    resolved_arena = booking_arena if booking_arena is not None else slot_arena_id
+
+    try:
+        result = await create_trainer_quick_booking(
+            session,
+            trainer_id,
+            target_date,
+            start_minutes,
+            duration_minutes,
+            client_id,
+            service_id,
+            arena_id=resolved_arena,
+            service_price_variant_id=spv_id,
+        )
+    except ServicePriceVariantRequired:
+        return {"success": False, "error": "price_tier_required"}
+    except ValueError as e:
+        return {"success": False, "error": "schedule_error", "message": str(e)}
+
+    if not result:
+        return {"success": False, "error": "create_failed"}
+
+    new_booking_id, _ = result
+    await generate_reminders_for_booking(session, new_booking_id)
+    r2 = await session.execute(
+        text("""
+            SELECT s.slot_date, s.start_time
+            FROM bookings b
+            JOIN slots s ON s.id = b.slot_id
+            WHERE b.id = :bid
+        """),
+        {"bid": new_booking_id},
+    )
+    row2 = r2.fetchone()
+    slot_out = row2[0] if row2 else target_date
+    time_out = row2[1] if row2 else st
+    return {
+        "success": True,
+        "new_booking_id": new_booking_id,
+        "slot_date": slot_out,
+        "start_time": time_out,
+    }
+
+
 async def get_trainer_primary_arena_resolved(session: AsyncSession, trainer_id: int) -> int | None:
     """primary_arena_id from trainers, or MIN(arena_id) from trainer_arenas as fallback."""
     r = await session.execute(
@@ -762,7 +880,9 @@ async def get_trainer_booking_detail_payload(
                    srv.name AS services_str,
                    """
             + SQL_BOOKING_ARENA_DISPLAY
-            + """ AS arenas_str
+            + """ AS arenas_str,
+                   EXISTS (SELECT 1 FROM booking_problem_reports pr WHERE pr.booking_id = b.id) AS problem_reported,
+                   EXISTS (SELECT 1 FROM booking_client_no_show cns WHERE cns.booking_id = b.id) AS client_no_show_recorded
             FROM bookings b
             JOIN clients c ON c.id = b.client_id
             JOIN slots s ON s.id = b.slot_id
@@ -792,6 +912,8 @@ async def get_trainer_booking_detail_payload(
         "status": (row[13] or "confirmed").strip(),
         "services_str": (row[14] or "").strip() or None,
         "arenas_str": _normalize_trainer_arenas_display(row[15] if len(row) > 15 else None),
+        "problem_reported": bool(row[16]),
+        "client_no_show_recorded": bool(row[17]),
     }
 
 
@@ -801,9 +923,12 @@ async def list_bookings_for_trainer(
     limit: int = 100,
 ) -> list[dict]:
     """
-    List active upcoming bookings for trainer (slot_date >= today, slot still booked).
-    Sorted nearest first (slot_date ASC, start_time ASC) so first page = today, next = tomorrow, etc.
-    No past days — trainer sees only current day and future.
+    Trainer hub: pending/confirmed bookings on open slots whose session end is still in the future.
+
+    Session window uses slot_date + start/end in the DB session timezone (align with schedule storage).
+    Rows where start_time <= now < end_time are sorted first (current slot), then by date/time.
+
+    PRD E1: bookings stay listed until slot end, not merely until start_time.
     """
     # session_num = ordinal among all (past + upcoming) non-cancelled sessions for this trainer+client
     r = await session.execute(
@@ -828,19 +953,31 @@ async def list_bookings_for_trainer(
                        s.capacity AS slot_capacity,
                        (SELECT COUNT(*)::int FROM bookings bocc
                         WHERE bocc.slot_id = b.slot_id
-                          AND bocc.status IN ('pending', 'confirmed')) AS slot_active_bookings  -- hub group preview: occ/cap meter
+                          AND bocc.status IN ('pending', 'confirmed')) AS slot_active_bookings,  -- hub group preview: occ/cap meter
+                       CASE
+                         WHEN (s.slot_date + s.start_time) <= CURRENT_TIMESTAMP
+                          AND (s.slot_date + s.end_time) > CURRENT_TIMESTAMP
+                         THEN 0
+                         ELSE 1
+                       END AS hub_sort_in_session,
+                       ((s.slot_date + s.start_time) <= CURRENT_TIMESTAMP
+                        AND (s.slot_date + s.end_time) > CURRENT_TIMESTAMP) AS hub_in_session,
+                       EXISTS (SELECT 1 FROM booking_problem_reports pr WHERE pr.booking_id = b.id) AS problem_reported,
+                       EXISTS (SELECT 1 FROM booking_client_no_show cns WHERE cns.booking_id = b.id) AS client_no_show_recorded
                 FROM bookings b
                 JOIN clients c ON c.id = b.client_id
                 JOIN slots s ON s.id = b.slot_id
                 JOIN services srv ON srv.id = b.service_id
-                WHERE b.trainer_id = :tid AND s.status IN ('available', 'booked') AND s.slot_date >= CURRENT_DATE
+                WHERE b.trainer_id = :tid
+                  AND s.status IN ('available', 'booked')
                   AND b.status IN ('pending', 'confirmed')
+                  AND (s.slot_date + s.end_time) > CURRENT_TIMESTAMP
             )
             SELECT id, slot_id, telegram_id, telegram_username, phone, client_first_name, client_last_name,
                    client_comment, created_at, slot_date, start_time, end_time,
-                   session_num, services_str, arenas_str, status, slot_capacity, slot_active_bookings
+                   session_num, services_str, arenas_str, status, slot_capacity, slot_active_bookings, hub_in_session, problem_reported, client_no_show_recorded
             FROM upcoming
-            ORDER BY slot_date ASC, start_time ASC
+            ORDER BY hub_sort_in_session ASC, slot_date ASC, start_time ASC
             LIMIT :lim
         """),
         {"tid": trainer_id, "lim": limit},
@@ -866,6 +1003,9 @@ async def list_bookings_for_trainer(
             "status": (row[15] or "confirmed").strip() if len(row) > 15 else "confirmed",
             "slot_capacity": max(1, int(row[16])) if len(row) > 16 and row[16] is not None else 1,
             "slot_active_bookings": max(0, int(row[17])) if len(row) > 17 and row[17] is not None else 0,
+            "hub_in_session": bool(row[18]) if len(row) > 18 else False,
+            "problem_reported": bool(row[19]) if len(row) > 19 else False,
+            "client_no_show_recorded": bool(row[20]) if len(row) > 20 else False,
         }
         for row in rows
     ]
@@ -981,7 +1121,7 @@ async def active_booking_summaries_by_slot_for_trainer_range(
             WHERE b.trainer_id = :tid
               AND s.slot_date >= :from_d AND s.slot_date <= :to_d
               AND s.status IN ('available', 'booked')
-              AND b.status IN ('pending', 'confirmed', 'completed')
+              AND b.status IN ('pending', 'confirmed', 'completed', 'no_show', 'payment_dispute')
             ORDER BY b.slot_id, b.id
         """),
         {"tid": trainer_id, "from_d": from_date, "to_d": to_date},
@@ -1009,7 +1149,7 @@ async def active_booking_summaries_by_slot_for_trainer_range(
         booking_entries: list[dict] = []
         for r_ in rows:
             st_raw = (r_[2] or "confirmed").strip()
-            if st_raw.lower() not in ("pending", "confirmed"):
+            if st_raw.lower() not in ("pending", "confirmed", "no_show", "payment_dispute"):
                 continue
             bid = int(r_[1])
             fn = (r_[5] or "").strip() if r_[5] else ""
@@ -1896,6 +2036,116 @@ async def mark_booking_cancel_notification_sent(session: AsyncSession, notificat
 # Rule (3.1): One pass session is redeemed when booking status becomes completed. All code paths
 # that set status to 'completed' must call redeem_pass_session_for_booking in the same transaction.
 
+
+async def undo_completed_booking_pass_cert_ledger(session: AsyncSession, booking_id: int) -> bool:
+    """
+    When status is completed: remove pending completion notifications and restore pass/cert ledger rows.
+    Does not change booking status — caller sets terminal status (e.g. confirmed or no_show).
+    Returns True if the booking was completed; False if nothing to undo (wrong status).
+    """
+    r = await session.execute(
+        text("SELECT status FROM bookings WHERE id = :bid"),
+        {"bid": booking_id},
+    )
+    row = r.fetchone()
+    if not row or (row[0] or "").strip().lower() != "completed":
+        return False
+
+    await session.execute(
+        text("DELETE FROM booking_completed_notifications WHERE booking_id = :bid"),
+        {"bid": booking_id},
+    )
+
+    rpr = await session.execute(
+        text("SELECT pass_instance_id FROM pass_redemptions WHERE booking_id = :bid"),
+        {"bid": booking_id},
+    )
+    pr = rpr.fetchone()
+    if pr:
+        inst_id = int(pr[0])
+        await session.execute(
+            text("DELETE FROM pass_redemptions WHERE booking_id = :bid"),
+            {"bid": booking_id},
+        )
+        rpi = await session.execute(
+            text("SELECT sessions_remaining, status FROM pass_instances WHERE id = :id"),
+            {"id": inst_id},
+        )
+        pi = rpi.fetchone()
+        if pi:
+            rem, st = int(pi[0]), (pi[1] or "").strip().lower()
+            new_rem = rem + 1
+            new_st = "active" if st == "used_up" and new_rem > 0 else st
+            await session.execute(
+                text(
+                    """
+                    UPDATE pass_instances
+                    SET sessions_remaining = :rem, status = :st
+                    WHERE id = :id
+                    """
+                ),
+                {"rem": new_rem, "st": new_st, "id": inst_id},
+            )
+
+    rcc = await session.execute(
+        text(
+            """
+            SELECT certificate_instance_id, amount_cents
+            FROM certificate_booking_credits WHERE booking_id = :bid
+            """
+        ),
+        {"bid": booking_id},
+    )
+    crc = rcc.fetchone()
+    if crc:
+        cert_id, amt = int(crc[0]), int(crc[1])
+        await session.execute(
+            text("DELETE FROM certificate_booking_credits WHERE booking_id = :bid"),
+            {"bid": booking_id},
+        )
+        rci = await session.execute(
+            text(
+                "SELECT COALESCE(amount_remaining_cents, 0), status FROM certificate_instances WHERE id = :id"
+            ),
+            {"id": cert_id},
+        )
+        ci = rci.fetchone()
+        if ci:
+            cur_amt, st = int(ci[0]), (ci[1] or "").strip().lower()
+            new_bal = cur_amt + amt
+            new_st = st
+            if st == "redeemed" and new_bal > 0:
+                new_st = "active"
+            await session.execute(
+                text(
+                    """
+                    UPDATE certificate_instances
+                    SET amount_remaining_cents = :nb,
+                        status = :st,
+                        redeemed_at = CASE WHEN :nb > 0 THEN NULL ELSE redeemed_at END
+                    WHERE id = :id
+                    """
+                ),
+                {"nb": new_bal, "st": new_st, "id": cert_id},
+            )
+
+    return True
+
+
+async def reverse_booking_completion_for_problem_report(session: AsyncSession, booking_id: int) -> None:
+    """
+    Undo completion side effects when a trainer files a problem report after auto-complete (E4 T4.5).
+    Restores pass/cert ledger rows and drops pending booking_completed_notifications; sets status to confirmed.
+    Does not unsend Telegram pushes already delivered (known limitation).
+    """
+    if not await undo_completed_booking_pass_cert_ledger(session, booking_id):
+        return
+    await session.execute(
+        text("UPDATE bookings SET status = 'confirmed' WHERE id = :bid"),
+        {"bid": booking_id},
+    )
+
+
 async def list_bookings_to_complete(session: AsyncSession, limit: int = 50) -> list[dict]:
     """Bookings with status in ('pending', 'confirmed') and slot (date + end_time) already in the past."""
     r = await session.execute(
@@ -1907,6 +2157,7 @@ async def list_bookings_to_complete(session: AsyncSession, limit: int = 50) -> l
             JOIN slots s ON s.id = b.slot_id
             WHERE b.status IN ('pending', 'confirmed') AND s.status IN ('available', 'booked')
               AND (s.slot_date + s.end_time) < CURRENT_TIMESTAMP
+              AND NOT EXISTS (SELECT 1 FROM booking_problem_reports pr WHERE pr.booking_id = b.id)
             ORDER BY s.slot_date, s.end_time
             LIMIT :lim
         """),
@@ -1980,6 +2231,12 @@ async def mark_booking_completed_and_notify(
     booking_id: int,
 ) -> bool:
     """Set booking status to completed, redeem one pass session if applicable, insert row for trainer feedback notification. Returns True if a pass was redeemed."""
+    pr = await session.execute(
+        text("SELECT 1 FROM booking_problem_reports WHERE booking_id = :bid"),
+        {"bid": booking_id},
+    )
+    if pr.fetchone():
+        return False
     await session.execute(
         text("UPDATE bookings SET status = 'completed' WHERE id = :bid"),
         {"bid": booking_id},
@@ -2061,6 +2318,12 @@ async def mark_booking_completed_by_trainer(
     row = r.fetchone()
     if not row or (row[1] or "").strip() != "confirmed":
         return None
+    pr = await session.execute(
+        text("SELECT 1 FROM booking_problem_reports WHERE booking_id = :bid"),
+        {"bid": booking_id},
+    )
+    if pr.fetchone():
+        return None
     await session.execute(
         text("UPDATE bookings SET status = 'completed' WHERE id = :bid"),
         {"bid": booking_id},
@@ -2087,10 +2350,18 @@ async def get_pending_completed_for_trainer(session: AsyncSession, limit: int = 
         text("""
             SELECT n.id, n.booking_id, n.trainer_id, n.client_telegram_id,
                    b.client_id,
-                   s.slot_date, s.start_time
+                   s.slot_date, s.start_time,
+                   TRIM(COALESCE(c.first_name, '') || ' ' || COALESCE(c.last_name, '')) AS client_name,
+                   COALESCE(srv.name, '—') AS service_name,
+                   b.price_tier_kind,
+                   """
+        + SQL_BOOKING_ARENA_DISPLAY
+        + """ AS arenas_str
             FROM booking_completed_notifications n
             JOIN bookings b ON b.id = n.booking_id
+            JOIN clients c ON c.id = b.client_id
             JOIN slots s ON s.id = b.slot_id
+            LEFT JOIN services srv ON srv.id = b.service_id
             WHERE n.trainer_sent_at IS NULL
             ORDER BY n.id
             LIMIT :lim
@@ -2098,18 +2369,27 @@ async def get_pending_completed_for_trainer(session: AsyncSession, limit: int = 
         {"lim": limit},
     )
     rows = r.fetchall()
-    return [
-        {
-            "id": row[0],
-            "booking_id": row[1],
-            "trainer_id": row[2],
-            "client_telegram_id": row[3],
-            "client_id": row[4],
-            "slot_date": row[5],
-            "start_time": row[6],
-        }
-        for row in rows
-    ]
+    out: list[dict] = []
+    for row in rows:
+        ptk = normalize_price_tier_kind(row[9])
+        tier_label = price_tier_label_ru(ptk) if ptk else None
+        arena_raw = _normalize_trainer_arenas_display(row[10])
+        out.append(
+            {
+                "id": row[0],
+                "booking_id": row[1],
+                "trainer_id": row[2],
+                "client_telegram_id": row[3],
+                "client_id": row[4],
+                "slot_date": row[5],
+                "start_time": row[6],
+                "client_name": ((row[7] or "").strip() or "Клиент"),
+                "service_name": ((row[8] or "—").strip()),
+                "price_tier_label": tier_label,
+                "arenas_str": arena_raw,
+            }
+        )
+    return out
 
 
 async def mark_trainer_completed_sent(session: AsyncSession, notification_id: int) -> None:
