@@ -1,0 +1,1634 @@
+    /* Genius Trainer Hub: Elevated design with sophisticated micro-interactions */
+    body.hub-body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: var(--app-font-sans);
+      color: var(--tg-theme-text-color);
+      /* Enhanced ambient glow with depth layers */
+      background:
+        radial-gradient(ellipse 140% 100% at 50% -30%, rgba(247, 166, 0, 0.18) 0%, rgba(247, 166, 0, 0.08) 40%, transparent 70%),
+        radial-gradient(ellipse 80% 60% at 80% 100%, rgba(247, 166, 0, 0.06) 0%, transparent 50%),
+        var(--tg-theme-bg-color) !important;
+      padding: 16px calc(16px + env(safe-area-inset-right)) calc(32px + env(safe-area-inset-bottom)) calc(16px + env(safe-area-inset-left));
+      overflow-x: hidden;
+    }
+    .hub-shell {
+      animation: hub-enter 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+      max-width: 540px;
+      margin: 0 auto;
+      position: relative;
+    }
+    
+    @keyframes hub-enter {
+      from { 
+        opacity: 0; 
+        transform: translateY(20px) scale(0.98);
+      }
+      to { 
+        opacity: 1; 
+        transform: translateY(0) scale(1);
+      }
+    }
+    
+    @keyframes float-gentle {
+      0%, 100% { transform: translateY(0px); }
+      50% { transform: translateY(-2px); }
+    }
+    
+    @keyframes pulse-glow {
+      0%, 100% { box-shadow: 0 0 20px rgba(247, 166, 0, 0.15); }
+      50% { box-shadow: 0 0 30px rgba(247, 166, 0, 0.25); }
+    }
+    
+    @keyframes stat-card-enter {
+      from { 
+        opacity: 0; 
+        transform: translateY(10px) scale(0.95);
+      }
+      to { 
+        opacity: 1; 
+        transform: translateY(0) scale(1);
+      }
+    }
+    
+    .hub-stat-card {
+      animation: stat-card-enter 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+    
+    .hub-stat-card:nth-child(1) { animation-delay: 0.1s; }
+    .hub-stat-card:nth-child(2) { animation-delay: 0.2s; }
+    .hub-stat-card:nth-child(3) { animation-delay: 0.3s; }
+    /* Elevated Header with Sophisticated Branding */
+    .hub-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 24px;
+      position: relative;
+    }
+    
+    .hub-header-text { 
+      min-width: 0; 
+      flex: 1;
+    }
+    
+    .hub-header-kicker {
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--app-cta-fill);
+      margin: 0 0 8px;
+      opacity: 0.9;
+    }
+    
+    .hub-header-title {
+      margin: 0;
+      font-size: clamp(24px, 6.5vw, 30px);
+      font-weight: 700;
+      letter-spacing: -0.04em;
+      line-height: 1.1;
+      color: var(--tg-theme-text-color);
+      background: linear-gradient(135deg, var(--tg-theme-text-color) 0%, var(--app-cta-fill) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    /* Genius Hero Block with Live Intelligence */
+    .hub-hero { 
+      margin-bottom: 24px;
+      position: relative;
+    }
+    
+    button.hub-hero-main {
+      width: 100%;
+      margin: 0;
+      display: block;
+      text-align: left;
+      font: inherit;
+      -webkit-tap-highlight-color: transparent;
+      cursor: default;
+    }
+    button.hub-hero-main:disabled {
+      cursor: default;
+    }
+    button.hub-hero-main.hub-hero-main--nav {
+      cursor: pointer;
+    }
+    button.hub-hero-main.hub-hero-main--nav:active {
+      opacity: 0.96;
+      transform: scale(0.995);
+    }
+    button.hub-hero-main.hub-hero-main--nav:focus-visible {
+      outline: 2px solid var(--app-cta-fill);
+      outline-offset: 3px;
+    }
+
+    .hub-hero-main {
+      position: relative;
+      border-radius: 24px;
+      padding: 28px 24px 32px;
+      margin-bottom: 20px;
+      overflow: hidden;
+      background: 
+        linear-gradient(155deg, rgba(247, 166, 0, 0.16) 0%, rgba(247, 166, 0, 0.06) 48%, transparent 100%),
+        var(--tg-theme-secondary-bg-color);
+      border: 1px solid rgba(247, 166, 0, 0.35);
+      box-shadow: 
+        0 12px 40px rgba(0, 0, 0, 0.15),
+        0 4px 16px rgba(247, 166, 0, 0.1);
+      animation: pulse-glow 4s ease-in-out infinite;
+    }
+    
+    .hub-is-dark .hub-hero-main {
+      box-shadow: 
+        0 16px 50px rgba(0, 0, 0, 0.4),
+        0 6px 20px rgba(247, 166, 0, 0.15);
+    }
+    
+    .hub-hero-main::before {
+      content: '';
+      position: absolute;
+      top: -50%;
+      right: -30%;
+      width: 70%;
+      height: 150%;
+      background: radial-gradient(ellipse, rgba(247, 166, 0, 0.25) 0%, rgba(247, 166, 0, 0.1) 40%, transparent 70%);
+      pointer-events: none;
+      animation: float-gentle 6s ease-in-out infinite;
+    }
+    
+    .hub-hero-inner { 
+      position: relative; 
+      z-index: 1; 
+    }
+    
+    .hub-hero-greeting {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--app-cta-fill);
+      margin-bottom: 12px;
+      letter-spacing: 0.02em;
+    }
+    
+    .hub-hero-title {
+      font-size: clamp(28px, 7vw, 36px);
+      font-weight: 700;
+      letter-spacing: -0.05em;
+      line-height: 1.1;
+      color: var(--tg-theme-text-color);
+      margin-bottom: 16px;
+    }
+    
+    .hub-hero-subtitle {
+      font-size: 15px;
+      font-weight: 500;
+      color: var(--tg-theme-hint-color);
+      line-height: 1.5;
+      max-width: 32em;
+    }
+    /* Smart Analytics Dashboard */
+    .hub-stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 12px;
+      margin-bottom: 28px;
+    }
+    
+    .hub-stat-card {
+      position: relative;
+      padding: 18px 16px 20px;
+      border-radius: 18px;
+      background: var(--tg-theme-secondary-bg-color);
+      border: 1px solid rgba(128, 128, 128, 0.12);
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+      transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+      overflow: hidden;
+    }
+    
+    .hub-is-dark .hub-stat-card {
+      box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25);
+    }
+    
+    .hub-stat-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: linear-gradient(90deg, var(--app-cta-fill) 0%, rgba(247, 166, 0, 0.6) 100%);
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+    
+    .hub-stat-card.stat-highlight::before { opacity: 1; }
+    
+    .hub-stat-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 28px rgba(0, 0, 0, 0.15);
+    }
+    
+    .hub-is-dark .hub-stat-card:hover {
+      box-shadow: 0 10px 36px rgba(0, 0, 0, 0.35);
+    }
+    
+    .hub-stat-icon {
+      width: 24px;
+      height: 24px;
+      margin-bottom: 12px;
+      color: var(--app-cta-fill);
+      opacity: 0.9;
+    }
+    
+    .hub-stat-value {
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--tg-theme-text-color);
+      line-height: 1.1;
+      margin-bottom: 4px;
+    }
+    
+    .hub-stat-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--tg-theme-hint-color);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+    
+    .hub-stat-trend {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 4px 8px;
+      border-radius: 8px;
+      background: rgba(52, 199, 89, 0.15);
+      color: var(--app-success);
+    }
+    
+    .hub-stat-trend.trend-down {
+      background: rgba(255, 59, 48, 0.15);
+      color: var(--app-danger);
+    }
+
+    /* Contextual hints under «Сводка» — pending bookings / unanswered requests (see renderHubSummaryHints). */
+    .hub-summary-hints {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin: 0 0 24px;
+    }
+    .hub-summary-hints[hidden] {
+      display: none !important;
+    }
+    .hub-summary-hint {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      width: 100%;
+      padding: 12px 14px;
+      border-radius: 14px;
+      border: 1px solid rgba(128, 128, 128, 0.14);
+      background: var(--tg-theme-secondary-bg-color);
+      text-align: left;
+      font-size: 14px;
+      font-weight: 600;
+      line-height: 1.35;
+      color: var(--tg-theme-text-color);
+      cursor: pointer;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .hub-is-dark .hub-summary-hint {
+      border-color: rgba(255, 255, 255, 0.08);
+    }
+    .hub-summary-hint:active {
+      transform: scale(0.99);
+    }
+    .hub-summary-hint--urgent {
+      border-color: rgba(245, 166, 35, 0.45);
+      background: linear-gradient(135deg, rgba(245, 166, 35, 0.14), var(--tg-theme-secondary-bg-color));
+    }
+    .hub-summary-hint--info {
+      border-color: rgba(90, 160, 255, 0.28);
+    }
+    .hub-summary-hint__chev {
+      flex-shrink: 0;
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--tg-theme-hint-color);
+      line-height: 1;
+    }
+
+    .hub-priority-actions {
+      margin-bottom: 20px;
+    }
+    /* Shared with priority strip (schedule / book client) — not the removed «Остальное» block. */
+    .hub-quick-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 12px;
+    }
+    .hub-quick-grid--priority {
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    @media (max-width: 360px) {
+      .hub-quick-grid--priority {
+        grid-template-columns: 1fr;
+      }
+    }
+    .hub-section-head--bookings-top {
+      margin-top: 0;
+      margin-bottom: 12px;
+    }
+    .hub-section-head--stats {
+      margin-top: 6px;
+      margin-bottom: 12px;
+    }
+    .hub-hero.hub-hero--compact .hub-hero-main {
+      padding: 18px 20px 22px;
+      margin-bottom: 14px;
+    }
+    .hub-hero.hub-hero--compact .hub-hero-title {
+      font-size: clamp(22px, 5.5vw, 28px);
+    }
+    .hub-hero.hub-hero--compact .hub-hero-subtitle {
+      font-size: 14px;
+    }
+    .hub-quick-action {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 16px 18px;
+      border-radius: 16px;
+      background: var(--tg-theme-secondary-bg-color);
+      border: 1px solid rgba(128, 128, 128, 0.1);
+      cursor: pointer;
+      transition: all 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+      overflow: hidden;
+    }
+    .hub-quick-action::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, rgba(247, 166, 0, 0.08) 0%, transparent 100%);
+      opacity: 0;
+      transition: opacity 0.25s ease;
+    }
+    .hub-quick-action:hover {
+      transform: translateY(-1px);
+      border-color: rgba(247, 166, 0, 0.3);
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+    }
+    .hub-quick-action:hover::before { opacity: 1; }
+    .hub-quick-action:active {
+      transform: scale(0.98);
+    }
+    .hub-quick-action.hub-quick-action--locked {
+      opacity: 0.55;
+    }
+    .hub-quick-action.hub-quick-action--locked:hover {
+      transform: none;
+    }
+    .hub-quick-icon {
+      width: 28px;
+      height: 28px;
+      flex-shrink: 0;
+      color: var(--app-cta-fill);
+      position: relative;
+      z-index: 1;
+    }
+    .hub-quick-text {
+      flex: 1;
+      position: relative;
+      z-index: 1;
+    }
+    .hub-quick-label {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--tg-theme-text-color);
+      line-height: 1.2;
+      margin-bottom: 2px;
+    }
+    .hub-quick-hint {
+      font-size: 11px;
+      color: var(--tg-theme-hint-color);
+      line-height: 1.3;
+    }
+    /* Section Headers */
+    .hub-section-head {
+      margin: 32px 0 16px;
+      position: relative;
+    }
+    
+    .hub-section-head:first-of-type { margin-top: 8px; }
+    
+    .hub-section-title {
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--tg-theme-hint-color);
+      position: relative;
+      padding-left: 20px;
+    }
+    
+    .hub-section-title::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 12px;
+      height: 2px;
+      background: var(--app-cta-fill);
+      border-radius: 1px;
+    }
+    .hub-day-label {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--tg-theme-hint-color);
+      margin: 14px 0 8px;
+      letter-spacing: 0.02em;
+    }
+    .hub-day-label:first-child { margin-top: 0; }
+    /* Same slot row model as schedule-editor (calendar list) — cream/dark chip + green/amber border */
+    .hub-bookings-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+    .hub-bookings-stack .slot-row {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+      width: 100%;
+      box-sizing: border-box;
+      margin: 0 0 6px;
+      padding: 12px 14px;
+      border-radius: 12px;
+      border: 2px solid transparent;
+      background: #fff3cc !important;
+      color: #1a1a1a !important;
+      text-align: left;
+      font: inherit;
+      cursor: pointer;
+      -webkit-appearance: none;
+      appearance: none;
+    }
+    .hub-is-dark .hub-bookings-stack .slot-row {
+      background: #2a2a2a !important;
+      color: #f5f5f5 !important;
+    }
+    .hub-bookings-stack .slot-row:last-child { margin-bottom: 0; }
+    .hub-bookings-stack .slot-row.slot-booked-click {
+      border-color: rgba(247, 166, 0, 0.45);
+    }
+    .hub-bookings-stack .slot-row.slot-booked-click.slot-booking-pending {
+      border-color: rgba(255, 159, 10, 0.55);
+    }
+    .hub-bookings-stack .slot-row.slot-booked-click.slot-booking-confirmed {
+      border-color: rgba(52, 199, 89, 0.45);
+    }
+    .hub-bookings-stack .slot-row:active { opacity: 0.92; }
+    .hub-bookings-stack .slot-row .slot-row-left { flex: 1; min-width: 0; }
+    .hub-bookings-stack .slot-row .slot-time { font-weight: 600; font-size: 15px; }
+    .hub-bookings-stack .hub-slot-time-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px 10px;
+    }
+    .hub-bookings-stack .hub-session-now-pill {
+      display: inline-block;
+      margin-left: 8px;
+      padding: 2px 8px;
+      border-radius: 8px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      vertical-align: middle;
+      background: linear-gradient(135deg, rgba(245, 166, 35, 0.22), rgba(245, 166, 35, 0.08));
+      color: var(--tg-theme-button-color, #f5a623);
+      border: 1px solid rgba(245, 166, 35, 0.35);
+    }
+    .hub-is-dark .hub-bookings-stack .hub-session-now-pill {
+      background: linear-gradient(135deg, rgba(245, 166, 35, 0.18), rgba(245, 166, 35, 0.06));
+      border-color: rgba(245, 166, 35, 0.42);
+    }
+    .hub-bookings-stack .hub-problem-pill {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 8px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      vertical-align: middle;
+      color: var(--tg-theme-hint-color);
+      background: color-mix(in srgb, var(--tg-theme-secondary-bg-color) 85%, var(--tg-theme-hint-color) 15%);
+      border: 1px solid color-mix(in srgb, var(--tg-theme-hint-color) 28%, transparent);
+    }
+    @supports not (color: color-mix(in srgb, red, blue)) {
+      .hub-bookings-stack .hub-problem-pill {
+        background: var(--tg-theme-secondary-bg-color);
+        border-color: rgba(128, 128, 128, 0.2);
+      }
+    }
+    .hub-bookings-stack .slot-row .slot-venue {
+      font-size: 13px;
+      color: var(--tg-theme-hint-color);
+      margin-top: 4px;
+      line-height: 1.35;
+    }
+    .hub-bookings-stack .slot-row .slot-venue .venue-muted { font-style: italic; }
+    .hub-bookings-stack .slot-row .slot-client-hint {
+      font-size: 12px;
+      color: var(--tg-theme-hint-color);
+      margin-top: 2px;
+    }
+    .hub-bookings-stack .slot-row .slot-meta {
+      display: inline-flex;
+      flex-direction: column;
+      align-items: flex-end;
+      justify-content: flex-start;
+      gap: 6px;
+      flex-shrink: 0;
+      max-width: 46%;
+      min-width: 0;
+    }
+    /* Иконка «чат в Telegram» под бейджем — компактно, без текстовой ссылки */
+    .hub-bookings-stack .hub-slot-msg {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
+      padding: 0;
+      margin: 0;
+      border: 1px solid color-mix(in srgb, var(--tg-theme-button-color) 32%, transparent);
+      border-radius: 10px;
+      background: color-mix(in srgb, var(--tg-theme-button-color) 12%, transparent);
+      color: var(--tg-theme-button-color);
+      cursor: pointer;
+      font-family: inherit;
+      line-height: 0;
+      -webkit-appearance: none;
+      appearance: none;
+      flex-shrink: 0;
+      transition: background 0.2s ease, border-color 0.2s ease, transform 0.12s ease;
+    }
+    .hub-bookings-stack .hub-slot-msg:hover {
+      background: color-mix(in srgb, var(--tg-theme-button-color) 22%, transparent);
+      border-color: color-mix(in srgb, var(--tg-theme-button-color) 48%, transparent);
+    }
+    .hub-bookings-stack .hub-slot-msg:active {
+      transform: scale(0.96);
+      opacity: 0.92;
+    }
+    .hub-bookings-stack .hub-slot-msg:focus-visible {
+      outline: 2px solid color-mix(in srgb, var(--tg-theme-button-color) 55%, transparent);
+      outline-offset: 2px;
+    }
+    .hub-bookings-stack .hub-slot-msg-icon {
+      width: 16px;
+      height: 16px;
+      flex-shrink: 0;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    .hub-bookings-stack .slot-row .slot-status {
+      font-size: 12px;
+      padding: 4px 10px;
+      border-radius: 8px;
+      flex-shrink: 0;
+    }
+    .hub-bookings-stack .slot-row .slot-status.booked-confirmed {
+      background: rgba(52, 199, 89, 0.2);
+      color: #34c759;
+    }
+    .hub-bookings-stack .slot-row .slot-status.booked-pending {
+      background: rgba(255, 159, 10, 0.22);
+      color: #ff9500;
+    }
+    /* Group slot preview — same language as schedule-editor (no client name in list) */
+    .hub-bookings-stack .slot-row.slot-group-hub-preview {
+      border-color: color-mix(in srgb, var(--tg-theme-button-color) 42%, transparent);
+    }
+    .hub-bookings-stack .slot-row.slot-group-hub-preview:active { opacity: 0.92; }
+    .hub-bookings-stack .slot-group-catalog-meta {
+      margin-top: 4px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      max-width: 100%;
+    }
+    .hub-bookings-stack .slot-group-meta-line {
+      font-size: 11px;
+      line-height: 1.35;
+      color: var(--tg-theme-hint-color);
+      font-weight: 500;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+    .hub-bookings-stack .slot-group-meter-wrap {
+      margin-top: 8px;
+      height: 5px;
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--tg-theme-hint-color) 22%, transparent);
+      overflow: hidden;
+    }
+    .hub-bookings-stack .slot-group-meter-fill {
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, color-mix(in srgb, var(--tg-theme-button-color) 75%, transparent), var(--tg-theme-button-color));
+      min-width: 6%;
+      transition: width 0.2s ease;
+    }
+    .hub-bookings-stack .slot-group-chip {
+      font-size: 12px;
+      font-weight: 700;
+      padding: 5px 10px;
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--tg-theme-button-color) 18%, transparent);
+      color: var(--tg-theme-text-color);
+      border: 1px solid color-mix(in srgb, var(--tg-theme-button-color) 35%, transparent);
+    }
+    .hub-bookings-stack .slot-row .slot-meta.slot-meta--group {
+      flex-direction: row;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+      max-width: 46%;
+    }
+    .hub-bookings-stack .hub-group-spots-pill {
+      font-size: 11px;
+      padding: 4px 8px;
+    }
+    .hub-bookings-stack .slot-status.booked.hub-group-spots-pill {
+      background: rgba(255, 149, 0, 0.2);
+      color: #ff9500;
+    }
+    .hub-bookings-cap {
+      margin-top: 14px;
+      font-size: 12px;
+      line-height: 1.4;
+      color: var(--tg-theme-hint-color);
+      text-align: center;
+    }
+    /* Group slot modal: viewport-fixed (sibling of .hub-shell, not inside transformed shell); list scrolls inside */
+    #hubModalGroupSlot.hub-group-modal-overlay.modal-overlay {
+      position: fixed;
+      left: 0;
+      right: 0;
+      top: 0;
+      bottom: 0;
+      width: 100%;
+      height: 100%;
+      max-height: none;
+      box-sizing: border-box;
+      align-items: center;
+      justify-content: center;
+      padding: max(10px, env(safe-area-inset-top)) 14px max(14px, env(safe-area-inset-bottom));
+      background: rgba(26, 26, 26, 0.42);
+      -webkit-backdrop-filter: blur(12px);
+      backdrop-filter: blur(12px);
+      z-index: 250;
+    }
+    .hub-group-modal-inner {
+      display: flex;
+      flex-direction: column;
+      background: var(--tg-theme-bg-color);
+      border-radius: 16px;
+      padding: 14px 16px 16px;
+      max-width: 420px;
+      width: 100%;
+      max-height: min(86vh, 500px);
+      overflow: hidden;
+      box-sizing: border-box;
+    }
+    .hub-group-modal-inner .book-modal-title {
+      margin: 0 0 2px;
+      font-size: 1.05rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      line-height: 1.25;
+      color: var(--tg-theme-text-color);
+      flex-shrink: 0;
+    }
+    #hubModalGroupSlot .group-slot-sub {
+      font-size: 13px;
+      color: var(--tg-theme-hint-color);
+      margin: 4px 0 0;
+      line-height: 1.35;
+      flex-shrink: 0;
+    }
+    #hubModalGroupSlot .group-slot-list {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      margin: 8px 0 0;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .hub-group-slot-actions {
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 12px;
+      padding-top: 2px;
+    }
+    .hub-group-slot-actions .btn-block {
+      margin: 0;
+    }
+    #hubModalGroupSlot .group-slot-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: none;
+      text-align: left;
+      font: inherit;
+      background: var(--tg-theme-secondary-bg-color);
+      color: var(--tg-theme-text-color);
+      cursor: pointer;
+      box-sizing: border-box;
+    }
+    #hubModalGroupSlot .group-slot-row:active { opacity: 0.9; }
+    #hubModalGroupSlot .group-slot-row .g-name { font-weight: 600; font-size: 15px; }
+    #hubModalGroupSlot .group-slot-row .g-st {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--tg-theme-hint-color);
+    }
+    /* Book into group slot on hub (same flow as schedule-editor; viewport-fixed overlay). */
+    #hubModalBookGroupSlot.hub-book-flow-overlay,
+    #hubModalBookGroupConfirm.hub-book-flow-overlay {
+      position: fixed;
+      left: 0;
+      right: 0;
+      top: 0;
+      bottom: 0;
+      width: 100%;
+      height: 100%;
+      max-height: none;
+      box-sizing: border-box;
+      z-index: 260;
+      align-items: center;
+      justify-content: center;
+      padding: max(16px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom));
+      background: rgba(26, 26, 26, 0.42);
+      -webkit-backdrop-filter: blur(12px);
+      backdrop-filter: blur(12px);
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    #hubModalBookGroupSlot .hub-book-modal.modal.book-flow-modal,
+    #hubModalBookGroupConfirm .hub-book-modal.modal.book-flow-modal {
+      position: relative;
+      max-width: 360px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 22px 22px 20px;
+      border-radius: 22px;
+      overflow-x: hidden;
+      max-height: 85vh;
+      overflow-y: auto;
+      background: var(--tg-theme-bg-color);
+      box-shadow:
+        0 0 0 1px rgba(247, 166, 0, 0.14),
+        0 24px 48px -12px rgba(0, 0, 0, 0.28);
+    }
+    #hubModalBookGroupSlot .book-modal-title,
+    #hubModalBookGroupConfirm .book-confirm-title {
+      margin: 0 0 4px;
+      font-size: 1.125rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: var(--tg-theme-text-color);
+    }
+    #hubModalBookGroupConfirm .book-confirm-text {
+      margin: 0 0 20px;
+      font-size: 14px;
+      line-height: 1.45;
+      color: var(--tg-theme-hint-color);
+    }
+    #hubModalBookGroupSlot .book-choice-lead {
+      margin: 0 0 18px;
+      font-size: 14px;
+      line-height: 1.45;
+      color: var(--tg-theme-hint-color);
+    }
+    #hubModalBookGroupSlot .btn-book-option {
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      gap: 14px;
+      width: 100%;
+      padding: 14px 14px 14px 12px;
+      margin-bottom: 10px;
+      border: none;
+      border-radius: 16px;
+      background: var(--tg-theme-secondary-bg-color);
+      color: var(--tg-theme-text-color);
+      text-align: left;
+      cursor: pointer;
+      font: inherit;
+      box-sizing: border-box;
+    }
+    #hubModalBookGroupSlot .btn-book-option-media {
+      flex-shrink: 0;
+      width: 48px;
+      height: 48px;
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(145deg, rgba(247, 166, 0, 0.28), rgba(247, 166, 0, 0.09));
+      color: #c77800;
+    }
+    #hubModalBookGroupSlot .btn-book-option-media svg {
+      width: 22px;
+      height: 22px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 2;
+    }
+    #hubModalBookGroupSlot .btn-book-option-body { flex: 1; min-width: 0; text-align: left; }
+    #hubModalBookGroupSlot .btn-book-option-text { font-size: 15px; font-weight: 600; display: block; }
+    #hubModalBookGroupSlot .btn-book-option-hint { font-size: 12px; color: var(--tg-theme-hint-color); display: block; margin-top: 3px; }
+    #hubModalBookGroupSlot .btn-book-option-arrow { flex-shrink: 0; font-size: 22px; color: var(--tg-theme-hint-color); opacity: 0.45; }
+    #hubModalBookGroupSlot .btn-book-cancel {
+      margin-top: 16px !important;
+      width: 100%;
+      padding: 13px 16px !important;
+      border-radius: 14px !important;
+      font-weight: 600 !important;
+      background: transparent !important;
+      color: var(--tg-theme-hint-color) !important;
+      border: 1px solid rgba(128, 128, 128, 0.22) !important;
+      cursor: pointer;
+      font: inherit;
+      box-sizing: border-box;
+    }
+    #hubModalBookGroupSlot .book-modal-back {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 4px 12px 0;
+      margin: 0 0 8px 0;
+      border: none;
+      background: none;
+      color: var(--tg-theme-hint-color);
+      font-size: 14px;
+      cursor: pointer;
+      font: inherit;
+    }
+    #hubModalBookGroupSlot .book-modal-back-icon {
+      width: 18px;
+      height: 18px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 2.2;
+    }
+    #hubModalBookGroupSlot .book-field-label {
+      display: block;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--tg-theme-hint-color);
+      margin: 0 0 8px;
+    }
+    #hubModalBookGroupSlot .book-field-stack { margin-bottom: 16px; }
+    #hubModalBookGroupSlot .book-search-input {
+      width: 100%;
+      padding: 13px 14px;
+      border-radius: 14px;
+      border: none;
+      font-size: 15px;
+      box-sizing: border-box;
+      background: var(--tg-theme-secondary-bg-color);
+      color: var(--tg-theme-text-color);
+    }
+    #hubModalBookGroupSlot .book-client-list {
+      max-height: 220px;
+      overflow-y: auto;
+      margin-top: 8px;
+    }
+    #hubModalBookGroupSlot .book-client-list .client-row {
+      width: 100%;
+      margin-bottom: 8px;
+      padding: 14px 16px;
+      border-radius: 14px;
+      border: none;
+      background: var(--tg-theme-secondary-bg-color);
+      color: var(--tg-theme-text-color);
+      text-align: left;
+      font: inherit;
+      cursor: pointer;
+      box-sizing: border-box;
+    }
+    #hubModalBookGroupSlot .client-row .phone { font-size: 13px; color: var(--tg-theme-hint-color); }
+    #hubModalBookGroupSlot .book-modal-divider {
+      margin: 8px 0 0;
+      padding: 18px 16px 16px;
+      border-radius: 16px;
+      background: var(--tg-theme-secondary-bg-color);
+    }
+    #hubModalBookGroupSlot .book-modal-divider .label {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--tg-theme-hint-color);
+      margin: 0 0 14px;
+    }
+    #hubModalBookGroupSlot .book-new-client .input {
+      width: 100%;
+      padding: 13px 14px;
+      border-radius: 14px;
+      border: none;
+      margin-bottom: 10px;
+      font-size: 15px;
+      box-sizing: border-box;
+      background: var(--tg-theme-bg-color);
+      color: var(--tg-theme-text-color);
+    }
+    #hubModalBookGroupSlot .book-phone-hint {
+      font-size: 12px;
+      color: var(--tg-theme-hint-color);
+      margin: -2px 0 10px;
+    }
+    #hubModalBookGroupSlot .book-req { color: #c62828; font-weight: 700; }
+    #hubModalBookGroupConfirm .modal-actions {
+      display: flex;
+      gap: 10px;
+    }
+    #hubModalBookGroupConfirm .modal-actions .btn-block { flex: 1; }
+    /* Enhanced Navigation Grid */
+    .hub-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 14px;
+    }
+    /* Tiles: cream “chip” surface on dark (reference); warm secondary on light */
+    .hub-tile {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      justify-content: space-between;
+      min-height: 120px;
+      padding: 20px 18px 18px;
+      border-radius: 20px;
+      overflow: hidden;
+      border: 1px solid rgba(245, 166, 35, 0.2);
+      font: inherit;
+      cursor: pointer;
+      text-align: left;
+      transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+      background: var(--tg-theme-secondary-bg-color);
+    }
+    .hub-is-dark .hub-tile {
+      background: 
+        linear-gradient(165deg, rgba(255, 251, 235, 0.96) 0%, rgba(255, 243, 214, 0.92) 100%);
+      color: #1a1a1a;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+      border-color: rgba(245, 166, 35, 0.4);
+    }
+    
+    html:not(.hub-is-dark) .hub-tile {
+      background: 
+        linear-gradient(165deg, rgba(255, 243, 204, 0.6) 0%, var(--tg-theme-secondary-bg-color) 100%);
+      color: var(--tg-theme-text-color);
+    }
+    .hub-tile::before {
+      content: '';
+      position: absolute;
+      top: -20%;
+      right: -20%;
+      width: 60%;
+      height: 80%;
+      background: radial-gradient(ellipse, rgba(247, 166, 0, 0.18) 0%, rgba(247, 166, 0, 0.08) 50%, transparent 80%);
+      pointer-events: none;
+      transition: all 0.4s ease;
+    }
+    
+    .hub-tile:hover {
+      transform: translateY(-4px) scale(1.02);
+      border-color: rgba(247, 166, 0, 0.5);
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
+    }
+    
+    .hub-is-dark .hub-tile:hover {
+      box-shadow: 0 16px 50px rgba(0, 0, 0, 0.4);
+    }
+    
+    .hub-tile:hover::before {
+      background: radial-gradient(ellipse, rgba(247, 166, 0, 0.25) 0%, rgba(247, 166, 0, 0.12) 50%, transparent 80%);
+    }
+    
+    .hub-tile:active { 
+      transform: translateY(-2px) scale(0.98); 
+    }
+    .hub-tile.hub-tile--locked {
+      opacity: 0.58;
+    }
+    .hub-tile.hub-tile--locked:hover {
+      transform: none;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    }
+    .hub-is-dark .hub-tile.hub-tile--locked:hover {
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    }
+    
+    .hub-tile-inner { 
+      position: relative; 
+      z-index: 1; 
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+    
+    .hub-tile-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      width: 100%;
+      margin-bottom: 12px;
+    }
+    .hub-tile-icon {
+      width: 32px;
+      height: 32px;
+      flex-shrink: 0;
+    }
+    
+    .hub-is-dark .hub-tile-icon { 
+      color: #c27800; 
+    }
+    
+    html:not(.hub-is-dark) .hub-tile-icon { 
+      color: var(--app-cta-fill); 
+    }
+    
+    .hub-tile-badge {
+      font-size: 10px;
+      font-weight: 700;
+      padding: 4px 8px;
+      border-radius: 8px;
+      background: rgba(247, 166, 0, 0.2);
+      color: var(--app-cta-fill);
+      line-height: 1;
+    }
+    
+    .hub-tile-content {
+      flex: 1;
+    }
+    
+    .hub-tile-label { 
+      font-weight: 700; 
+      font-size: 15px; 
+      line-height: 1.2; 
+      letter-spacing: -0.02em;
+      margin-bottom: 6px;
+    }
+    
+    .hub-tile-hint { 
+      font-size: 12px; 
+      line-height: 1.4; 
+      opacity: 0.8;
+    }
+    
+    .hub-is-dark .hub-tile-hint { 
+      color: #4a4a4a; 
+    }
+    
+    html:not(.hub-is-dark) .hub-tile-hint { 
+      color: var(--tg-theme-hint-color); 
+    }
+    /* Premium loading: token-based shimmer (see trainer-stats .skeleton-block); no arbitrary page bg hex */
+    .hub-tile.hub-tile--skeleton {
+      cursor: default;
+      pointer-events: none;
+    }
+    .hub-tile.hub-tile--skeleton:hover {
+      transform: none;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    }
+    .hub-is-dark .hub-tile.hub-tile--skeleton:hover {
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    }
+    .hub-tile--skeleton .hub-skel-line {
+      border-radius: 10px;
+      min-height: 14px;
+      max-width: 100%;
+    }
+    .hub-tile--skeleton .hub-skel-line--icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 12px;
+    }
+    .hub-tile--skeleton .hub-skel-line--title {
+      width: 58%;
+      height: 16px;
+      margin-bottom: 10px;
+    }
+    .hub-tile--skeleton .hub-skel-line--hint {
+      width: 82%;
+      height: 12px;
+      opacity: 0.9;
+    }
+    .hub-bookings-skel {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .hub-skel-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 14px;
+      border-radius: 12px;
+      border: 1px solid rgba(128, 128, 128, 0.12);
+      background: var(--tg-theme-secondary-bg-color);
+      min-height: 56px;
+      box-sizing: border-box;
+    }
+    .hub-skel-row .hub-skel-line--time {
+      width: 48px;
+      height: 18px;
+      border-radius: 8px;
+      flex-shrink: 0;
+    }
+    .hub-skel-row .hub-skel-line--primary {
+      width: 70%;
+      height: 14px;
+      border-radius: 7px;
+    }
+    .hub-skel-row .hub-skel-line--secondary {
+      width: 44%;
+      height: 11px;
+      border-radius: 6px;
+      margin-top: 8px;
+    }
+    .hub-skel-shimmer {
+      background: linear-gradient(
+        110deg,
+        var(--tg-theme-secondary-bg-color) 0%,
+        color-mix(in srgb, var(--tg-theme-button-color) 14%, var(--tg-theme-secondary-bg-color)) 46%,
+        var(--tg-theme-secondary-bg-color) 100%
+      );
+      background-size: 200% 100%;
+      animation: hub-skel-shimmer-move 1.2s ease-in-out infinite;
+    }
+    @keyframes hub-skel-shimmer-move {
+      0% { background-position: 100% 0; }
+      100% { background-position: -100% 0; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .hub-skel-shimmer {
+        animation: none !important;
+        background: var(--tg-theme-secondary-bg-color);
+        opacity: 0.88;
+      }
+    }
+    .state-panel {
+      padding: 16px;
+      border-radius: 16px;
+      background: var(--tg-theme-secondary-bg-color);
+      border: 1px solid rgba(128, 128, 128, 0.12);
+      font-size: 14px;
+      line-height: 1.45;
+    }
+    .state-panel.error { border-color: rgba(255, 59, 48, 0.4); color: var(--tg-theme-text-color); }
+    .state-panel.loading { color: var(--tg-theme-hint-color); }
+    .hub-empty {
+      text-align: center;
+      padding: 28px 16px 8px;
+      color: var(--tg-theme-hint-color);
+      font-size: 15px;
+      line-height: 1.5;
+    }
+    .hub-empty-actions { margin-top: 16px; }
+    .hub-footnote {
+      margin-top: 32px;
+      padding: 20px 22px;
+      border-radius: 18px;
+      font-size: 12px;
+      line-height: 1.55;
+      color: var(--tg-theme-hint-color);
+      background: 
+        linear-gradient(135deg, rgba(247, 166, 0, 0.04) 0%, var(--tg-theme-secondary-bg-color) 100%);
+      border: 1px solid rgba(245, 166, 35, 0.2);
+      box-shadow: 0 3px 16px rgba(0, 0, 0, 0.06);
+      position: relative;
+      overflow: hidden;
+    }
+    
+    .hub-footnote::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, var(--app-cta-fill) 0%, rgba(247, 166, 0, 0.4) 100%);
+    }
+    
+    .hub-is-dark .hub-footnote {
+      box-shadow: 0 6px 24px rgba(0, 0, 0, 0.2);
+      background: 
+        linear-gradient(135deg, rgba(247, 166, 0, 0.06) 0%, var(--tg-theme-secondary-bg-color) 100%);
+    }
+    
+    .hub-footnote strong { 
+      color: var(--tg-theme-text-color); 
+      font-weight: 600; 
+    }
+
+    /* Onboarding checklist (same tokens as trainer-profile; constitution surfaces) */
+    .onboarding-strip {
+      margin-bottom: 20px;
+      padding: 14px 16px 16px;
+      border-radius: 18px;
+      border: 1px solid rgba(128, 128, 128, 0.14);
+      background: var(--tg-theme-secondary-bg-color);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    }
+    .hub-is-dark .onboarding-strip { box-shadow: 0 4px 18px rgba(0, 0, 0, 0.22); }
+    .onboarding-strip-head {
+      margin-bottom: 12px;
+    }
+    .onboarding-strip-title {
+      margin: 0;
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: var(--tg-theme-text-color);
+    }
+    .onboarding-strip-lead {
+      margin: 4px 0 0;
+      font-size: 12px;
+      font-weight: 500;
+      line-height: 1.4;
+      color: var(--tg-theme-hint-color);
+    }
+    .onboarding-steps {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .onboarding-step {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 14px;
+      background: var(--tg-theme-bg-color);
+      border: 1px solid rgba(128, 128, 128, 0.1);
+    }
+    .onboarding-step-icon {
+      flex-shrink: 0;
+      width: 24px;
+      height: 24px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      font-weight: 700;
+      background: color-mix(in srgb, var(--tg-theme-button-color) 16%, transparent);
+      color: var(--tg-theme-text-color);
+    }
+    .onboarding-step.done .onboarding-step-icon {
+      background: color-mix(in srgb, var(--app-success) 22%, transparent);
+      color: var(--app-success);
+    }
+    .onboarding-step.locked .onboarding-step-icon { opacity: 0.75; }
+    .onboarding-step-body { flex: 1; min-width: 0; }
+    .onboarding-step-name {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--tg-theme-text-color);
+      line-height: 1.3;
+    }
+    .onboarding-step-hint {
+      margin: 4px 0 0;
+      font-size: 12px;
+      color: var(--tg-theme-hint-color);
+      line-height: 1.35;
+    }
+    .onboarding-step-cta {
+      flex-shrink: 0;
+      align-self: center;
+      padding: 8px 12px;
+      border-radius: 10px;
+      border: none;
+      font-size: 12px;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      background: var(--app-cta-fill);
+      color: var(--app-cta-text);
+    }
+    .onboarding-step-cta:disabled {
+      opacity: 0.45;
+      cursor: default;
+    }
+    .onboarding-faq-row {
+      margin-top: 12px;
+      padding-top: 10px;
+      border-top: 1px solid rgba(128, 128, 128, 0.1);
+      text-align: center;
+    }
+    .onboarding-faq-link {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--tg-theme-button-color);
+      text-decoration: none;
+      cursor: pointer;
+      border: none;
+      background: none;
+      font-family: inherit;
+      padding: 4px 8px;
+    }
+
+    /* Post-purchase celebration — constitution gradients + --app-success accent */
+    .hub-sub-celebration {
+      margin: 0 0 22px;
+      position: relative;
+      border-radius: 22px;
+      overflow: hidden;
+      background: linear-gradient(155deg, rgba(247, 166, 0, 0.18) 0%, rgba(247, 166, 0, 0.06) 42%, transparent 100%);
+      border: 1px solid rgba(247, 166, 0, 0.3);
+      box-shadow:
+        0 8px 32px rgba(0, 0, 0, 0.1),
+        0 0 0 1px rgba(255, 255, 255, 0.04) inset;
+      animation: hub-sub-cele-enter 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+    .hub-sub-celebration[hidden] {
+      display: none !important;
+    }
+    @keyframes hub-sub-cele-enter {
+      from {
+        opacity: 0;
+        transform: translateY(16px) scale(0.97);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
+    @keyframes hub-sub-feature-in {
+      from {
+        opacity: 0;
+        transform: translateX(-8px);
+      }
+      to {
+        opacity: 1;
+        transform: translateX(0);
+      }
+    }
+    .hub-sub-celebration::before {
+      content: '';
+      position: absolute;
+      top: -40%;
+      right: -12%;
+      width: 58%;
+      height: 115%;
+      background: radial-gradient(ellipse, rgba(247, 166, 0, 0.22) 0%, transparent 68%);
+      pointer-events: none;
+    }
+    .hub-sub-celebration::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(247, 166, 0, 0.35), transparent);
+      pointer-events: none;
+    }
+    .hub-sub-celebration__inner {
+      position: relative;
+      z-index: 1;
+      padding: 20px 46px 20px 20px;
+    }
+    .hub-sub-celebration__close {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      width: 34px;
+      height: 34px;
+      border: none;
+      border-radius: 12px;
+      background: color-mix(in srgb, var(--tg-theme-secondary-bg-color) 90%, transparent);
+      color: var(--tg-theme-hint-color);
+      font-size: 20px;
+      line-height: 1;
+      cursor: pointer;
+      padding: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform 0.15s ease, background 0.15s ease;
+    }
+    .hub-sub-celebration__close:active {
+      transform: scale(0.94);
+      opacity: 0.9;
+    }
+    .hub-sub-celebration__hero {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0;
+      margin-bottom: 14px;
+    }
+    .hub-sub-celebration__badge {
+      width: 52px;
+      height: 52px;
+      border-radius: 50%;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(145deg, #34c759 0%, #28a745 55%, #1e8e3e 100%);
+      box-shadow:
+        0 4px 16px rgba(52, 199, 89, 0.35),
+        0 0 0 3px color-mix(in srgb, var(--tg-theme-bg-color) 70%, transparent);
+    }
+    .hub-sub-celebration__badge svg {
+      width: 26px;
+      height: 26px;
+      stroke: #fff;
+      fill: none;
+      stroke-width: 2.5;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    .hub-sub-celebration__kicker {
+      margin: 0 0 6px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--tg-theme-hint-color);
+    }
+    .hub-sub-celebration__title {
+      margin: 0 0 8px;
+      font-size: clamp(20px, 4.8vw, 24px);
+      font-weight: 700;
+      letter-spacing: -0.035em;
+      line-height: 1.15;
+      color: var(--tg-theme-text-color);
+    }
+    .hub-sub-celebration__sub {
+      margin: 0;
+      font-size: 14px;
+      line-height: 1.5;
+      font-weight: 500;
+      color: var(--tg-theme-hint-color);
+      max-width: 36em;
+    }
+    .hub-sub-celebration__chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+    .hub-sub-celebration__chip {
+      display: inline-flex;
+      align-items: center;
+      padding: 7px 12px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      background: var(--tg-theme-secondary-bg-color);
+      color: var(--tg-theme-text-color);
+      border: 1px solid rgba(128, 128, 128, 0.12);
+    }
+    .hub-sub-celebration__chip--accent {
+      border-color: rgba(247, 166, 0, 0.35);
+      background: color-mix(in srgb, var(--tg-theme-secondary-bg-color) 85%, rgba(247, 166, 0, 0.12));
+    }
+    .hub-sub-celebration__section-label {
+      margin: 0 0 10px;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--tg-theme-hint-color);
+    }
+    .hub-sub-celebration__features {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .hub-sub-celebration__feature {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 14px;
+      border-radius: 16px;
+      background: var(--tg-theme-secondary-bg-color);
+      border: 1px solid rgba(128, 128, 128, 0.1);
+      font-size: 14px;
+      font-weight: 600;
+      line-height: 1.35;
+      color: var(--tg-theme-text-color);
+      animation: hub-sub-feature-in 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+    .hub-sub-celebration__feature:nth-child(1) { animation-delay: 0.06s; }
+    .hub-sub-celebration__feature:nth-child(2) { animation-delay: 0.12s; }
+    .hub-sub-celebration__feature:nth-child(3) { animation-delay: 0.18s; }
+    .hub-sub-celebration__feature:nth-child(4) { animation-delay: 0.24s; }
+    .hub-sub-celebration__feature-icon {
+      flex-shrink: 0;
+      width: 36px;
+      height: 36px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      background: linear-gradient(145deg, rgba(247, 166, 0, 0.2) 0%, rgba(247, 166, 0, 0.06) 100%);
+      border: 1px solid rgba(247, 166, 0, 0.22);
+    }
+    .hub-sub-celebration__hint {
+      margin: 16px 0 0;
+      font-size: 12px;
+      line-height: 1.45;
+      color: var(--tg-theme-hint-color);
+    }
+    /* WebView: less main-thread work when user prefers reduced motion (shell, stats, hero, celebration). */
+    @media (prefers-reduced-motion: reduce) {
+      .hub-sub-celebration,
+      .hub-sub-celebration__feature {
+        animation: none !important;
+      }
+      .hub-shell {
+        animation: none;
+      }
+      .hub-stat-card {
+        animation: none !important;
+        transition: none;
+      }
+      .hub-stat-card:nth-child(1),
+      .hub-stat-card:nth-child(2),
+      .hub-stat-card:nth-child(3) {
+        animation-delay: 0s !important;
+      }
+      .hub-hero-main {
+        animation: none;
+      }
+      .hub-hero-main::before {
+        animation: none;
+      }
+    }
+
+    /*
+     * Modals: backdrop-filter is expensive in Telegram WebView; use solid scrim when user
+     * prefers reduced motion or reduced transparency (constitution: keep --tg-theme tokens for modal card).
+     */
+    @media (prefers-reduced-motion: reduce), (prefers-reduced-transparency: reduce) {
+      #hubModalGroupSlot.hub-group-modal-overlay.modal-overlay,
+      #hubModalBookGroupSlot.hub-book-flow-overlay,
+      #hubModalBookGroupConfirm.hub-book-flow-overlay {
+        -webkit-backdrop-filter: none;
+        backdrop-filter: none;
+        background: rgba(0, 0, 0, 0.5);
+      }
+      html.hub-is-dark #hubModalGroupSlot.hub-group-modal-overlay.modal-overlay,
+      html.hub-is-dark #hubModalBookGroupSlot.hub-book-flow-overlay,
+      html.hub-is-dark #hubModalBookGroupConfirm.hub-book-flow-overlay {
+        background: rgba(0, 0, 0, 0.72);
+      }
+    }

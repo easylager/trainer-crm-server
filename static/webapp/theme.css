@@ -2,7 +2,7 @@
  * Mini App design tokens — Trainer CRM Belarus (constitution § VIII).
  *
  * Глобальная гамма: правьте только этот файл. Все HTML мини-приложений должны:
- *   <link rel="stylesheet" href="theme.css" />
+ *   <link rel="stylesheet" href="theme.css" /> — для долгого кэша в проде: theme.css?v=… (см. app.py).
  *   <link rel="stylesheet" href="mini-app-components.css" />
  * и в стилях использовать var(--tg-theme-*) или var(--app-*), без «жёстких» #hex
  * на body/карточках (локальные акценты в макетах — по необходимости).

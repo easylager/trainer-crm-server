@@ -9,6 +9,7 @@ GET /api/webapp/trainer/onboarding/moderation-readiness — edit before and afte
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Query, UploadFile
@@ -17,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.deps import get_session
 from src.api.schemas import (
+    TRAINER_EDUCATION_OPTIONS,
     PhotoRegisterBody,
     TrainerEducationCreateBody,
     TrainerEducationPatchBody,
@@ -29,6 +31,7 @@ from src.application.trainer_profile_pending import (
     trainer_has_pending_text_revision,
     trainer_has_photo_pending_revision,
 )
+from src.application.catalog_use_cases import list_cities, list_services
 from src.application.trainer_use_cases import (
     TrainerPhotoFileKeyError,
     create_trainer_education,
@@ -69,28 +72,11 @@ async def _require_linked_trainer_id(session: AsyncSession, init_raw: str | None
     return trainer_id
 
 
-class WebappTrainerPhotoPresignBody(BaseModel):
-    content_type: str = Field(default="image/jpeg", max_length=128)
-
-
-@router.get("/trainer/profile")
-async def get_trainer_profile_for_webapp(
-    init_data: str | None = Query(None, description="Telegram initData if not sent as header"),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
-    session: AsyncSession = Depends(get_session),
-):
+async def build_trainer_profile_webapp_payload(session: AsyncSession, trainer_id: int) -> dict:
     """
-    Full trainer aggregate for the profile Mini App editor.
-
-    Includes: same shape as ``get_trainer`` (profile, photos, services, arena_ids, status, moderation fields),
-    photo preview URLs when CDN/presign available, structured education rows, and ``moderation_readiness``
-    (same rules as ``GET /api/webapp/trainer/onboarding/moderation-readiness`` / ``moderation_readiness_dict``).
-
-    **Who can call:** any trainer whose Telegram account is linked (``trainers.telegram_id``), including
-    ``pending_profile`` and ``active`` — product rule: edit before moderation approval and after.
+    Same JSON shape as GET /trainer/profile.
+    Used by trainer hub bootstrap to avoid an extra HTTP round-trip.
     """
-    raw = init_data or x_telegram_init_data
-    trainer_id = await _require_linked_trainer_id(session, raw)
     trainer = await get_trainer(session, trainer_id)
     if not trainer:
         raise HTTPException(status_code=404, detail="Trainer not found")
@@ -130,6 +116,85 @@ async def get_trainer_profile_for_webapp(
         "has_pending_photo_revision": trainer_has_photo_pending_revision(trainer),
         "moderation_readiness": readiness,
         "education_entries": education_entries,
+    }
+
+
+async def build_trainer_hub_profile_bootstrap_payload(session: AsyncSession, trainer_id: int) -> dict:
+    """
+    Minimal profile JSON for GET /trainer/hub/bootstrap — only fields used by trainer-home
+    (mergeHubAccessFromProfilePayload: trainer id, status, profile.group_classes_enabled).
+    Avoids photos, education, moderation aggregates, and presign work from the full profile payload.
+    """
+    trainer = await get_trainer(session, trainer_id)
+    if not trainer:
+        raise HTTPException(status_code=404, detail="Trainer not found")
+    pub = trainer.get("profile") if isinstance(trainer.get("profile"), dict) else {}
+    pen = trainer.get("profile_pending") if isinstance(trainer.get("profile_pending"), dict) else None
+    merged_profile = merge_profile_pending_for_editor(pub, pen)
+    gce = False
+    if isinstance(merged_profile, dict):
+        gce = bool(merged_profile.get("group_classes_enabled"))
+    st = (trainer.get("status") or "").strip()
+    return {
+        "trainer": {
+            "id": trainer.get("id"),
+            "status": st,
+            "profile": {
+                "group_classes_enabled": gce,
+            },
+        },
+    }
+
+
+class WebappTrainerPhotoPresignBody(BaseModel):
+    content_type: str = Field(default="image/jpeg", max_length=128)
+
+
+@router.get("/trainer/profile")
+async def get_trainer_profile_for_webapp(
+    init_data: str | None = Query(None, description="Telegram initData if not sent as header"),
+    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    session: AsyncSession = Depends(get_session),
+):
+    """
+    Full trainer aggregate for the profile Mini App editor.
+
+    Includes: same shape as ``get_trainer`` (profile, photos, services, arena_ids, status, moderation fields),
+    photo preview URLs when CDN/presign available, structured education rows, and ``moderation_readiness``
+    (same rules as ``GET /api/webapp/trainer/onboarding/moderation-readiness`` / ``moderation_readiness_dict``).
+
+    **Who can call:** any trainer whose Telegram account is linked (``trainers.telegram_id``), including
+    ``pending_profile`` and ``active`` — product rule: edit before moderation approval and after.
+    """
+    raw = init_data or x_telegram_init_data
+    trainer_id = await _require_linked_trainer_id(session, raw)
+    return await build_trainer_profile_webapp_payload(session, trainer_id)
+
+
+@router.get("/trainer/profile/page-bootstrap")
+async def get_trainer_profile_page_bootstrap(
+    init_data: str | None = Query(None, description="Telegram initData if not sent as header"),
+    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    session: AsyncSession = Depends(get_session),
+):
+    """
+    Single response for the profile Mini App first paint: full ``GET /trainer/profile`` payload plus
+    cities, services, and education select options (otherwise 4 parallel HTTP requests from the client).
+    """
+    raw = init_data or x_telegram_init_data
+    trainer_id = await _require_linked_trainer_id(session, raw)
+    cities, services, profile_payload = await asyncio.gather(
+        list_cities(session),
+        list_services(session),
+        build_trainer_profile_webapp_payload(session, trainer_id),
+    )
+    return {
+        **profile_payload,
+        "refs": {
+            "cities": {"items": cities},
+            "services": {"items": services},
+            "education_options": {"items": list(TRAINER_EDUCATION_OPTIONS)},
+        },
     }
 
 

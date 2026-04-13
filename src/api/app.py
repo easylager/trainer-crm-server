@@ -7,6 +7,7 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
+from starlette.middleware.gzip import GZipMiddleware
 from starlette.staticfiles import StaticFiles
 
 logger = logging.getLogger(__name__)
@@ -36,6 +37,7 @@ app.add_middleware(ApiRateLimitMiddleware)
 app.add_middleware(MaxBodySizeMiddleware)
 
 # Mini Apps open in Telegram WebView; origin may be tunnel URL or telegram.org. Allow all so fetch() works.
+# SEC-G3: keep allow_credentials=False with allow_origins=["*"] — combining True + "*" is invalid per spec and unsafe.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -43,6 +45,9 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
+# Epic D: gzip JSON/HTML/CSS/JS when client sends Accept-Encoding: gzip (nginx can add brotli in front).
+# Last added = outermost on the stack — compresses the final response body.
+app.add_middleware(GZipMiddleware, minimum_size=800, compresslevel=6)
 
 
 @app.exception_handler(RequestValidationError)
@@ -57,12 +62,24 @@ async def _validation_exception_handler(_request, exc: RequestValidationError):
 # Telegram Web App: trainer schedule (Mini App)
 _WEBAPP_DIR = Path(__file__).resolve().parent.parent.parent / "static" / "webapp"
 
+# SEC-G2: discourage MIME sniffing on all Mini App responses using these header sets (HTML + JS/CSS).
+_WEBAPP_SNIFFING = {"X-Content-Type-Options": "nosniff"}
+
 # No-cache for Mini App HTML: one extra request per open, but users always get latest after deploy.
 # Alternative: max-age=60 (cache 1 min) — faster repeat opens, may see stale version once after deploy.
+# Full CSP is not applied here: pages mix inline scripts (theme, SDK) and many external script/style URLs — a safe policy would be page-specific.
 _WEBAPP_NO_CACHE_HEADERS = {
     "Cache-Control": "no-cache, no-store, must-revalidate",
     "Pragma": "no-cache",
     "Expires": "0",
+    **_WEBAPP_SNIFFING,
+}
+
+# Long-lived cache for split hub assets (HTML stays no-store).
+# trainer-home.html links these with ?v=… — bump the query in HTML when the file changes so clients refresh.
+_WEBAPP_IMMUTABLE_CACHE_HEADERS = {
+    "Cache-Control": "public, max-age=31536000, immutable",
+    **_WEBAPP_SNIFFING,
 }
 
 
@@ -72,6 +89,13 @@ def _webapp_file_response(path: Path):
         media_type="text/html",
         headers=_WEBAPP_NO_CACHE_HEADERS,
     )
+
+
+def _webapp_versioned_asset_cache_headers(request: Request) -> dict[str, str]:
+    """Long cache only when the client sends ?v= (version bump in HTML); else avoid stale immutable for legacy links."""
+    if request.query_params.get("v"):
+        return _WEBAPP_IMMUTABLE_CACHE_HEADERS
+    return _WEBAPP_NO_CACHE_HEADERS
 
 
 @app.get("/webapp/schedule")
@@ -338,30 +362,68 @@ def webapp_client_passes_certificates_page():
 
 
 @app.get("/webapp/theme.css")
-def webapp_theme_css():
-    """Serve theme.css for Mini Apps."""
+def webapp_theme_css(request: Request):
+    """Serve theme.css for Mini Apps. Prefer ``?v=…`` in HTML for long-lived cache after deploy."""
     path = _WEBAPP_DIR / "theme.css"
     if not path.is_file():
         raise HTTPException(status_code=404, detail="CSS file not found")
-    return FileResponse(path, media_type="text/css")
+    return FileResponse(
+        path,
+        media_type="text/css",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
 
 
 @app.get("/webapp/mini-app-components.css")
-def webapp_components_css():
-    """Serve mini-app-components.css for Mini Apps."""
+def webapp_components_css(request: Request):
+    """Serve mini-app-components.css for Mini Apps. Prefer ``?v=…`` in HTML for long-lived cache after deploy."""
     path = _WEBAPP_DIR / "mini-app-components.css"
     if not path.is_file():
         raise HTTPException(status_code=404, detail="CSS file not found")
-    return FileResponse(path, media_type="text/css")
+    return FileResponse(
+        path,
+        media_type="text/css",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/mini-app-trainer-hub.css")
+def webapp_trainer_hub_css(request: Request):
+    """Trainer hub-only styles (trainer-home.html); use ``?v=…`` for long-lived cache."""
+    path = _WEBAPP_DIR / "mini-app-trainer-hub.css"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="CSS file not found")
+    return FileResponse(
+        path,
+        media_type="text/css",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
 
 
 @app.get("/webapp/mini-app-trainer-nav.css")
-def webapp_trainer_nav_css():
-    """Trainer header buttons — must load after per-page <style> (mobile WebView)."""
+def webapp_trainer_nav_css(request: Request):
+    """Trainer header buttons. Use ``?v=…`` for long-lived cache (schedule-editor, etc.)."""
     path = _WEBAPP_DIR / "mini-app-trainer-nav.css"
     if not path.is_file():
         raise HTTPException(status_code=404, detail="CSS file not found")
-    return FileResponse(path, media_type="text/css")
+    return FileResponse(
+        path,
+        media_type="text/css",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/mini-app-schedule-editor.css")
+def webapp_schedule_editor_css(request: Request):
+    """Schedule editor page styles (split from schedule-editor.html). Use ``?v=…`` for cache."""
+    path = _WEBAPP_DIR / "mini-app-schedule-editor.css"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="CSS file not found")
+    return FileResponse(
+        path,
+        media_type="text/css",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
 
 
 @app.get("/webapp/mini-app-telegram-chrome.js")
@@ -429,6 +491,240 @@ def webapp_mini_app_trainer_celebration_js():
     )
 
 
+@app.get("/webapp/trainer-home-main.js")
+def webapp_trainer_home_main_js(request: Request):
+    """Trainer hub page logic (split from trainer-home.html for cache + smaller HTML parse). Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "trainer-home-main.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/schedule-editor-main.js")
+def webapp_schedule_editor_main_js(request: Request):
+    """Schedule editor page logic (split from schedule-editor.html). Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "schedule-editor-main.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/mini-app-catalog.css")
+def webapp_catalog_css(request: Request):
+    """Client catalog Mini App styles (split from catalog.html). Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "mini-app-catalog.css"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="CSS file not found")
+    return FileResponse(
+        path,
+        media_type="text/css",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/catalog-main.js")
+def webapp_catalog_main_js(request: Request):
+    """Client catalog page logic (split from catalog.html). Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "catalog-main.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/mini-app-trainer-groups.css")
+def webapp_trainer_groups_css(request: Request):
+    """Trainer training-groups Mini App styles (split from trainer-groups.html). Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "mini-app-trainer-groups.css"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="CSS file not found")
+    return FileResponse(
+        path,
+        media_type="text/css",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/trainer-groups-main.js")
+def webapp_trainer_groups_main_js(request: Request):
+    """Trainer training-groups page logic (split from trainer-groups.html). Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "trainer-groups-main.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/mini-app-trainer-stats.css")
+def webapp_trainer_stats_css(request: Request):
+    """Trainer stats Mini App styles (split from trainer-stats.html). Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "mini-app-trainer-stats.css"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="CSS file not found")
+    return FileResponse(
+        path,
+        media_type="text/css",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/trainer-stats-main.js")
+def webapp_trainer_stats_main_js(request: Request):
+    """Trainer stats page logic (split from trainer-stats.html). Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "trainer-stats-main.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/mini-app-trainer-clients.css")
+def webapp_trainer_clients_css(request: Request):
+    """Trainer clients list styles (split from trainer-clients.html). Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "mini-app-trainer-clients.css"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="CSS file not found")
+    return FileResponse(
+        path,
+        media_type="text/css",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/trainer-clients-main.js")
+def webapp_trainer_clients_main_js(request: Request):
+    """Trainer clients list logic (split from trainer-clients.html). Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "trainer-clients-main.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/mini-app-trainer-pass-products.css")
+def webapp_trainer_pass_products_css(request: Request):
+    """Trainer pass products styles (split from trainer-pass-products.html). Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "mini-app-trainer-pass-products.css"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="CSS file not found")
+    return FileResponse(
+        path,
+        media_type="text/css",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/trainer-pass-products-main.js")
+def webapp_trainer_pass_products_main_js(request: Request):
+    """Trainer pass products logic (split from trainer-pass-products.html). Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "trainer-pass-products-main.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/mini-app-client-requests.css")
+def webapp_client_requests_css(request: Request):
+    """Client requests page styles (split from client-requests.html). Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "mini-app-client-requests.css"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="CSS file not found")
+    return FileResponse(
+        path,
+        media_type="text/css",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/client-requests-main.js")
+def webapp_client_requests_main_js(request: Request):
+    """Client requests page logic (split from client-requests.html). Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "client-requests-main.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/mini-app-client-home.css")
+def webapp_client_home_page_css(request: Request):
+    """Client hub page styles (split from client-home.html). Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "mini-app-client-home.css"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="CSS file not found")
+    return FileResponse(
+        path,
+        media_type="text/css",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/client-home-main.js")
+def webapp_client_home_main_js(request: Request):
+    """Client hub page logic (split from client-home.html). Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "client-home-main.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/mini-app-trainer-profile.css")
+def webapp_trainer_profile_css(request: Request):
+    """Trainer profile page styles (split from trainer-profile.html). Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "mini-app-trainer-profile.css"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="CSS file not found")
+    return FileResponse(
+        path,
+        media_type="text/css",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/trainer-profile-main.js")
+def webapp_trainer_profile_main_js(request: Request):
+    """Trainer profile page logic (split from trainer-profile.html). Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "trainer-profile-main.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
 @app.get("/webapp/mini-app-client-home.js")
 def webapp_mini_app_client_home_js():
     """Client hub navigation (init_data preserved); loaded by client Mini App pages."""
@@ -443,12 +739,16 @@ def webapp_mini_app_client_home_js():
 
 
 @app.get("/webapp/mini-app-client-nav.css")
-def webapp_mini_app_client_nav_css():
-    """Client header — Главная button; load after page inline styles."""
+def webapp_mini_app_client_nav_css(request: Request):
+    """Client header — Главная button. Use ``?v=…`` for long-lived cache (catalog, etc.)."""
     path = _WEBAPP_DIR / "mini-app-client-nav.css"
     if not path.is_file():
         raise HTTPException(status_code=404, detail="CSS file not found")
-    return FileResponse(path, media_type="text/css")
+    return FileResponse(
+        path,
+        media_type="text/css",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
 
 
 @app.get("/webapp/mini-app-confirm.js")
@@ -503,5 +803,19 @@ webapp_router.include_router(webapp_trainer_profile_router)
 app.include_router(webapp_router)
 app.include_router(webhooks_router)
 
-# Alias for repo path static/webapp — same files as explicit /webapp/* routes above.
+
+@app.middleware("http")
+async def _static_webapp_cache_align(request: Request, call_next):
+    """
+    Epic C: same Cache-Control as explicit /webapp/<file> handlers — immutable when ``?v=`` is set,
+    else no-store. Without this, Starlette StaticFiles default differs from versioned FileResponse routes.
+    """
+    response = await call_next(request)
+    if request.url.path.startswith("/static/webapp"):
+        for k, v in _webapp_versioned_asset_cache_headers(request).items():
+            response.headers[k] = v
+    return response
+
+
+# Alias for repo path static/webapp — same files as explicit /webapp/* routes above (cache via middleware).
 app.mount("/static/webapp", StaticFiles(directory=str(_WEBAPP_DIR)), name="static_webapp")

@@ -6,6 +6,7 @@ import html
 import logging
 import uuid
 from datetime import date, datetime, timedelta
+from itertools import groupby
 from typing import Any, Literal
 
 logger = logging.getLogger(__name__)
@@ -171,6 +172,7 @@ from src.application.subscription_tier_use_cases import (
     trainer_has_crm_access,
     update_subscription_tier_pricing,
 )
+from src.infrastructure.db import async_session_factory
 from src.infrastructure.db.models import SUBSCRIPTION_TIERS, TRAINER_STATUS_ACTIVE
 from src.billing.payment_gateway import create_checkout
 from src.application.arena_schedule_preset import (
@@ -1116,8 +1118,7 @@ async def get_client_requests(
     if not raw:
         raise HTTPException(status_code=401, detail="Missing init data")
     telegram_id = _client_telegram_id(raw)
-    items = await list_my_requests_with_responses(session, telegram_id)
-    return {"items": [_serialize_client_request(r) for r in items]}
+    return await _client_requests_list_payload(session, telegram_id)
 
 
 # --- Client pass products (buy) and my passes ---
@@ -1177,6 +1178,33 @@ async def get_client_pass_products(
 CLIENT_DAYS = ("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс")
 
 
+async def _client_bookings_days_payload(session: AsyncSession, telegram_id: int) -> dict:
+    """Shared JSON body for GET /client/bookings and client hub bootstrap."""
+    bookings = await list_bookings_for_client(session, telegram_id)
+    if not bookings:
+        return {"days": []}
+    from itertools import groupby
+
+    days_list = []
+    for slot_date, group in groupby(bookings, key=lambda b: b["slot_date"]):
+        day_bookings = list(group)
+        date_str = slot_date.isoformat() if hasattr(slot_date, "isoformat") else str(slot_date)
+        dow = slot_date.weekday() if hasattr(slot_date, "weekday") else 0
+        day_label = CLIENT_DAYS[dow] if dow < len(CLIENT_DAYS) else ""
+        days_list.append({
+            "date": date_str,
+            "day_label": day_label,
+            "bookings": [_serialize_client_booking(b) for b in day_bookings],
+        })
+    return {"days": days_list}
+
+
+async def _client_requests_list_payload(session: AsyncSession, telegram_id: int) -> dict:
+    """Shared JSON body for GET /client/requests and client hub bootstrap."""
+    items = await list_my_requests_with_responses(session, telegram_id)
+    return {"items": [_serialize_client_request(r) for r in items]}
+
+
 def _serialize_client_booking(b: dict) -> dict:
     """Client booking to JSON: date/time strings, arena, service, optional tier snapshot."""
     slot_date = b.get("slot_date")
@@ -1219,22 +1247,33 @@ async def get_client_bookings(
     if not raw:
         raise HTTPException(status_code=401, detail="Missing init data")
     telegram_id = _client_telegram_id(raw)
-    bookings = await list_bookings_for_client(session, telegram_id)
-    if not bookings:
-        return {"days": []}
-    from itertools import groupby
-    days_list = []
-    for slot_date, group in groupby(bookings, key=lambda b: b["slot_date"]):
-        day_bookings = list(group)
-        date_str = slot_date.isoformat() if hasattr(slot_date, "isoformat") else str(slot_date)
-        dow = slot_date.weekday() if hasattr(slot_date, "weekday") else 0
-        day_label = CLIENT_DAYS[dow] if dow < len(CLIENT_DAYS) else ""
-        days_list.append({
-            "date": date_str,
-            "day_label": day_label,
-            "bookings": [_serialize_client_booking(b) for b in day_bookings],
-        })
-    return {"days": days_list}
+    return await _client_bookings_days_payload(session, telegram_id)
+
+
+@router.get("/client/hub/bootstrap")
+async def get_client_hub_bootstrap(
+    init_data: str | None = Query(None),
+    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+):
+    """
+    Single round-trip for client home: bookings by day + requests list (same shapes as
+    ``GET /client/bookings`` and ``GET /client/requests``). Parallel DB reads on separate sessions.
+    """
+    raw = init_data or x_telegram_init_data
+    if not raw:
+        raise HTTPException(status_code=401, detail="Missing init data")
+    telegram_id = _client_telegram_id(raw)
+
+    async def _bookings() -> dict:
+        async with async_session_factory() as s:
+            return await _client_bookings_days_payload(s, telegram_id)
+
+    async def _requests() -> dict:
+        async with async_session_factory() as s:
+            return await _client_requests_list_payload(s, telegram_id)
+
+    bookings, requests = await asyncio.gather(_bookings(), _requests())
+    return {"bookings": bookings, "requests": requests}
 
 
 @router.get("/client/passes")
@@ -1463,6 +1502,34 @@ def _serialize_booking(b: dict, *, problem_flow_enabled: bool | None = None) -> 
     return out
 
 
+async def _trainer_bookings_grouped_days_payload(
+    session: AsyncSession,
+    trainer_id: int,
+    *,
+    limit: int,
+) -> dict[str, Any]:
+    """Same shape as GET /trainer/bookings: ``{\"days\": [...]}``."""
+    flow_ok = booking_problem_api_allowed_for_trainer(trainer_id)
+    lim = max(1, min(100, limit))
+    bookings = await list_bookings_for_trainer(session, trainer_id, limit=lim)
+    if not bookings:
+        return {"days": []}
+    days_list: list[dict[str, Any]] = []
+    for slot_date, group in groupby(bookings, key=lambda b: b["slot_date"]):
+        day_bookings = list(group)
+        date_str = slot_date.isoformat() if hasattr(slot_date, "isoformat") else str(slot_date)
+        dow = slot_date.weekday() if hasattr(slot_date, "weekday") else 0
+        day_label = TRAINER_DAYS[dow] if dow < len(TRAINER_DAYS) else ""
+        days_list.append(
+            {
+                "date": date_str,
+                "day_label": day_label,
+                "bookings": [_serialize_booking(b, problem_flow_enabled=flow_ok) for b in day_bookings],
+            }
+        )
+    return {"days": days_list}
+
+
 def _serialize_trainer_dashboard(data: dict) -> dict:
     """JSON-serializable dashboard: dates to ISO strings."""
     out = {**data}
@@ -1531,6 +1598,150 @@ async def get_trainer_hub_revenue_mtd(
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     return await get_trainer_hub_revenue_month_to_date(session, trainer_id)
+
+
+@router.get("/trainer/hub/bootstrap")
+async def get_trainer_hub_bootstrap(
+    init_data: str | None = Query(None),
+    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    bookings_limit: int = Query(32, ge=1, le=100),
+    session: AsyncSession = Depends(get_session),
+):
+    """
+    Single round-trip for trainer hub home: access + profile + onboarding + requests + revenue + bookings + subscription.
+    Profile is a minimal slice (hub gates), not the full GET /trainer/profile aggregate.
+    Returns null for sections that do not apply (e.g. active-only APIs when account not active).
+    ``partial_errors`` lists non-fatal failures so the client can fall back to legacy GETs.
+    """
+    from src.api.routes.webapp_trainer_profile import build_trainer_hub_profile_bootstrap_payload
+
+    raw = init_data or x_telegram_init_data
+    if not raw:
+        raise HTTPException(status_code=401, detail="Missing init data")
+    telegram_id = _trainer_telegram_id(raw)
+    partial_errors: dict[str, str] = {}
+
+    state, trainer_row = await get_trainer_access_state(session, telegram_id)
+    tid = int(trainer_row["id"]) if trainer_row and trainer_row.get("id") is not None else None
+    norm_status = normalize_trainer_status_value(trainer_row.get("status") if trainer_row else None)
+    is_active = (state == TrainerAccessState.ACTIVE) or (norm_status == TRAINER_STATUS_ACTIVE)
+    access: dict[str, Any] = {
+        "access_state": state.value,
+        "trainer_id": tid,
+        "trainer_status": norm_status,
+        "is_active": is_active,
+    }
+
+    # Same semantics as get_trainer_id_linked_any_status / get_trainer_id_by_telegram_id without extra queries
+    # (get_trainer_access_state already resolved the trainer row).
+    trainer_id_linked = tid
+    trainer_id_active = tid if norm_status == TRAINER_STATUS_ACTIVE else None
+
+    profile: dict[str, Any] | None = None
+    onboarding_checklist: dict[str, Any] | None = None
+    requests_summary: dict[str, Any] | None = None
+    revenue_mtd: dict[str, Any] | None = None
+    bookings: dict[str, Any] | None = None
+    subscription_status: dict[str, Any] | None = None
+
+    if trainer_id_linked:
+        tid_l = trainer_id_linked
+
+        # Parallel reads use separate sessions: one AsyncSession must not run concurrent operations.
+        async def _hub_profile() -> dict[str, Any]:
+            async with async_session_factory() as s:
+                return await build_trainer_hub_profile_bootstrap_payload(s, tid_l)
+
+        async def _hub_onboarding() -> dict[str, Any] | None:
+            async with async_session_factory() as s:
+                od = await get_trainer_onboarding_checklist(s, tid_l)
+                return od if od else None
+
+        if trainer_id_active:
+            tid_act = trainer_id_active
+
+            async def _hub_req_count() -> int:
+                async with async_session_factory() as s:
+                    return await count_unanswered_requests_for_trainer(s, tid_act)
+
+            async def _hub_revenue() -> dict[str, Any]:
+                async with async_session_factory() as s:
+                    return await get_trainer_hub_revenue_month_to_date(s, tid_act)
+
+            async def _hub_bookings() -> dict[str, Any]:
+                async with async_session_factory() as s:
+                    return await _trainer_bookings_grouped_days_payload(s, tid_act, limit=bookings_limit)
+
+            async def _hub_subscription() -> dict[str, Any]:
+                async with async_session_factory() as s:
+                    return await get_trainer_subscription_status(s, tid_act)
+
+            p_res, o_res, r_req, r_rev, r_book, r_sub = await asyncio.gather(
+                _hub_profile(),
+                _hub_onboarding(),
+                _hub_req_count(),
+                _hub_revenue(),
+                _hub_bookings(),
+                _hub_subscription(),
+                return_exceptions=True,
+            )
+            if isinstance(p_res, BaseException):
+                if isinstance(p_res, HTTPException):
+                    det = p_res.detail
+                    partial_errors["profile"] = det if isinstance(det, str) else str(det)
+                else:
+                    raise p_res
+            else:
+                profile = p_res
+            if isinstance(o_res, BaseException):
+                partial_errors["onboarding_checklist"] = str(o_res)
+            else:
+                onboarding_checklist = o_res
+            if isinstance(r_req, BaseException):
+                partial_errors["requests_summary"] = str(r_req)
+            else:
+                requests_summary = {"unanswered_count": r_req}
+            if isinstance(r_rev, BaseException):
+                partial_errors["revenue_mtd"] = str(r_rev)
+            else:
+                revenue_mtd = r_rev
+            if isinstance(r_book, BaseException):
+                partial_errors["bookings"] = str(r_book)
+            else:
+                bookings = r_book
+            if isinstance(r_sub, BaseException):
+                partial_errors["subscription_status"] = str(r_sub)
+            else:
+                subscription_status = r_sub
+        else:
+            p_res, o_res = await asyncio.gather(
+                _hub_profile(),
+                _hub_onboarding(),
+                return_exceptions=True,
+            )
+            if isinstance(p_res, BaseException):
+                if isinstance(p_res, HTTPException):
+                    det = p_res.detail
+                    partial_errors["profile"] = det if isinstance(det, str) else str(det)
+                else:
+                    raise p_res
+            else:
+                profile = p_res
+            if isinstance(o_res, BaseException):
+                partial_errors["onboarding_checklist"] = str(o_res)
+            else:
+                onboarding_checklist = o_res
+
+    return {
+        "access": access,
+        "profile": profile,
+        "onboarding_checklist": onboarding_checklist,
+        "requests_summary": requests_summary,
+        "revenue_mtd": revenue_mtd,
+        "bookings": bookings,
+        "subscription_status": subscription_status,
+        "partial_errors": partial_errors or None,
+    }
 
 
 # --- Support: client/trainer send message; admin list and reply ---
@@ -2930,27 +3141,8 @@ async def get_trainer_bookings(
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
 
-    flow_ok = booking_problem_api_allowed_for_trainer(trainer_id)
     lim = 100 if limit is None else limit
-    bookings = await list_bookings_for_trainer(session, trainer_id, limit=lim)
-    today = date.today()
-    if not bookings:
-        return {"days": []}
-
-    from itertools import groupby
-    days_list = []
-    for slot_date, group in groupby(bookings, key=lambda b: b["slot_date"]):
-        day_bookings = list(group)
-        date_str = slot_date.isoformat() if hasattr(slot_date, "isoformat") else str(slot_date)
-        dow = slot_date.weekday() if hasattr(slot_date, "weekday") else 0
-        day_label = TRAINER_DAYS[dow] if dow < len(TRAINER_DAYS) else ""
-        days_list.append({
-            "date": date_str,
-            "day_label": day_label,
-            "bookings": [_serialize_booking(b, problem_flow_enabled=flow_ok) for b in day_bookings],
-        })
-    # Only days that have at least one booking (no empty "today" slot)
-    return {"days": days_list}
+    return await _trainer_bookings_grouped_days_payload(session, trainer_id, limit=lim)
 
 
 @router.get("/trainer/slots/{slot_id:int}/group-hub")
