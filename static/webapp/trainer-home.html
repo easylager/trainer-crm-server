@@ -7,8 +7,8 @@
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script src="mini-app-telegram-chrome.js"></script>
   <!-- Bump ?v= when theme.css / mini-app-components.css change (immutable cache on /webapp/…). -->
-  <link rel="stylesheet" href="theme.css?v=20260416" />
-  <link rel="stylesheet" href="mini-app-components.css?v=20260416" />
+  <link rel="stylesheet" href="theme.css?v=20260425" />
+  <link rel="stylesheet" href="mini-app-components.css?v=20260425" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <!-- DM Sans: non-blocking (media=print → all) + display=optional to reduce render contention vs swap. -->
@@ -51,9 +51,9 @@
     })();
   </script>
   <!-- Bump ?v= when mini-app-trainer-hub.css changes (immutable cache on /webapp/…). -->
-  <link rel="stylesheet" href="mini-app-trainer-hub.css?v=20260416" />
+  <link rel="stylesheet" href="mini-app-trainer-hub.css?v=20260425" />
   <!-- Early download of main hub script (defer runs at end of body); improves time-to-interactive vs. discover-at-bottom. -->
-  <link rel="preload" href="trainer-home-main.js?v=20260416" as="script" />
+  <link rel="preload" href="trainer-home-main.js?v=20260425" as="script" />
 
 </head>
 <body class="hub-body">
@@ -132,7 +132,32 @@
     <div class="hub-section-head hub-section-head--bookings-top">
       <div class="hub-section-title">Ближайшие записи</div>
     </div>
-    <div id="bookingsBlock"></div>
+    <!-- Placeholder until deferred JS + bootstrap (same markup as buildHubBookingsSkeletonHtml). -->
+    <div id="bookingsBlock">
+      <div class="hub-bookings-skel" role="status" aria-busy="true" aria-label="Загрузка записей">
+        <div class="hub-skel-row">
+          <div class="hub-skel-line hub-skel-line--time hub-skel-shimmer" aria-hidden="true"></div>
+          <div style="flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center;">
+            <div class="hub-skel-line hub-skel-line--primary hub-skel-shimmer" aria-hidden="true"></div>
+            <div class="hub-skel-line hub-skel-line--secondary hub-skel-shimmer" aria-hidden="true"></div>
+          </div>
+        </div>
+        <div class="hub-skel-row">
+          <div class="hub-skel-line hub-skel-line--time hub-skel-shimmer" aria-hidden="true"></div>
+          <div style="flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center;">
+            <div class="hub-skel-line hub-skel-line--primary hub-skel-shimmer" aria-hidden="true"></div>
+            <div class="hub-skel-line hub-skel-line--secondary hub-skel-shimmer" aria-hidden="true"></div>
+          </div>
+        </div>
+        <div class="hub-skel-row">
+          <div class="hub-skel-line hub-skel-line--time hub-skel-shimmer" aria-hidden="true"></div>
+          <div style="flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center;">
+            <div class="hub-skel-line hub-skel-line--primary hub-skel-shimmer" aria-hidden="true"></div>
+            <div class="hub-skel-line hub-skel-line--secondary hub-skel-shimmer" aria-hidden="true"></div>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <!-- Hero (приветствие) — скрыт, логика applyHubHero / syncHubHeroScheduleClick сохранена -->
     <section class="hub-hero" id="hubHeroBanner" hidden aria-hidden="true">
@@ -334,6 +359,6 @@
   <script src="mini-app-trainer-gate.js"></script>
   <script src="mini-app-trainer-celebration.js"></script>
   <!-- Bump ?v= when trainer-home-main.js changes (immutable cache on /webapp/…). -->
-  <script defer src="trainer-home-main.js?v=20260416"></script>
+  <script defer src="trainer-home-main.js?v=20260425"></script>
 </body>
 </html>

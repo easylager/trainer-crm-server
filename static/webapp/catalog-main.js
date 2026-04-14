@@ -2244,14 +2244,6 @@
         });
       }
 
-      document.getElementById('backFromRequestForm').onclick = function() {
-        if (state.requestFormOpenedFrom === 'trainerDetail') {
-          showScreen('screenTrainerDetail');
-        } else {
-          showScreen('screenTrainers');
-        }
-      };
-
       function submitRequestFromForm(comment) {
         var btn = document.getElementById('btnSubmitRequestWithComment');
         btn.disabled = true;

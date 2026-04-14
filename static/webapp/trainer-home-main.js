@@ -464,6 +464,7 @@
           hubVisibilityDebounceTimer = setTimeout(function() {
             hubVisibilityDebounceTimer = null;
             if (!initData) return;
+            ensureHubBookingsPlaceholder();
             /* One bootstrap round-trip instead of access + profile + bookings (same as cold start). */
             fetch(
               apiUrlWithQuery(
@@ -1544,6 +1545,15 @@
         return parts.join('');
       }
 
+      /** Cold bootstrap: HTML may be cached without skeleton; keep placeholder until renderBookings / loadBookings. */
+      function ensureHubBookingsPlaceholder() {
+        if (!initData) return;
+        var bb = document.getElementById('bookingsBlock');
+        if (!bb || bb.querySelector('.hub-bookings-skel')) return;
+        if (bb.querySelector('.slot-row, .bd-trainer-gate, .hub-empty')) return;
+        bb.innerHTML = buildHubBookingsSkeletonHtml();
+      }
+
       /**
        * Hub «Ближайшие записи»: API returns one row per participant on group slots — collapse to one card per slot_id
        * (aligned with schedule group rows). If any participant is pending, the merged row is pending.
@@ -2169,6 +2179,7 @@
       if (!initData) {
         runHubAfterAccess({});
       } else {
+        ensureHubBookingsPlaceholder();
         fetch(
           apiUrlWithQuery(
             '/trainer/hub/bootstrap?bookings_limit=' + encodeURIComponent(String(HUB_BOOKINGS_FETCH_LIMIT))

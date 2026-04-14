@@ -719,7 +719,7 @@
     <div id="screenEmpty" class="empty empty-with-hint" style="display: none;">
       <div class="empty-visual" aria-hidden="true">✉️</div>
       <p id="emptyStateText">Пока нет заявок по вашему профилю (город + услуги).</p>
-      <p id="emptyStateHint" class="empty-state-hint">Заявки показываются только если в вашем профиле тренера указаны те же город и услуга, что в заявке. Заполните профиль на сайте или подождите заявки по вашим направлениям.</p>
+      <p id="emptyStateHint" class="empty-state-hint">Заявки показываются только если в вашем профиле тренера указаны те же город и услуга, что в заявке.</p>
     </div>
     <div id="screenAuthError" class="empty auth-error-block" style="display: none;">
       <p id="authErrorText"></p>
@@ -973,7 +973,7 @@
         document.getElementById('screenAuthError').style.display = 'none';
         if (total === 0) {
           document.getElementById('emptyStateText').textContent = 'Пока нет заявок по вашему профилю (город + услуги).';
-          document.getElementById('emptyStateHint').textContent = 'Заявки показываются только если в вашем профиле тренера указаны те же город и услуга, что в заявке. Заполните профиль на сайте или подождите заявки по вашим направлениям.';
+          document.getElementById('emptyStateHint').textContent = 'Заявки показываются только если в вашем профиле тренера указаны те же город и услуга, что в заявке.';
           emptyEl.style.display = 'block';
           sectionNew.style.display = 'none';
           sectionInProgress.style.display = 'none';
