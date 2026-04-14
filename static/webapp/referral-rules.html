@@ -35,12 +35,6 @@
       --tg-theme-secondary-bg-color: #2a2a2a;
     }
     .rules-shell { max-width: 600px; margin: 0 auto; }
-    .rules-title {
-      font-size: 22px;
-      font-weight: 700;
-      margin: 0 0 8px;
-      letter-spacing: -0.02em;
-    }
     .rules-updated {
       font-size: 12px;
       color: var(--tg-theme-hint-color);
@@ -72,11 +66,37 @@
       border-left: 3px solid #F7A600;
     }
     .rules-highlight p { margin: 0; }
+    /* Same header row as trainer-referral.html */
+    .rules-page-header-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 16px;
+      min-height: 44px;
+    }
+    .rules-page-header-title {
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin: 0;
+      line-height: 1.25;
+      color: var(--tg-theme-text-color);
+      flex: 1;
+      min-width: 0;
+    }
   </style>
+  <link rel="stylesheet" href="mini-app-trainer-nav.css" />
 </head>
 <body class="rules-page">
   <div class="rules-shell">
-    <h1 class="rules-title">Правила реферальной программы</h1>
+    <header class="rules-page-header-row" aria-label="Раздел">
+      <h1 class="rules-page-header-title">Правила реферальной программы</h1>
+      <div class="trainer-app-topbar trainer-mini-nav">
+        <button type="button" class="btn-app-home" id="btnHome">Главная</button>
+        <button type="button" class="btn-app-back" id="btnBack" hidden>Назад</button>
+      </div>
+    </header>
     <p class="rules-updated">Редакция от 5 апреля 2026 г.</p>
 
     <section class="rules-section">
@@ -134,6 +154,7 @@
     </section>
   </div>
 
+  <script src="mini-app-trainer-home.js"></script>
   <script>
     (function() {
       var tg = window.Telegram && window.Telegram.WebApp;

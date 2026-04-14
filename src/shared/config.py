@@ -127,3 +127,8 @@ class Settings(BaseSettings):
     trainer_bot_benchmark_log: bool = False
     # If set, also log WARNING for updates with total_ms >= threshold (can use without full log).
     trainer_bot_benchmark_slow_ms: int | None = None
+
+    # Trainer webapp benchmark (FastAPI): logger ``trainer_webapp.bench``, grep ``BENCH trainer_webapp``.
+    # Logs kind=api (trainer JSON API), kind=page (GET /webapp/* HTML), kind=asset (GET js/css/fonts/… under /webapp/ + /static/webapp/).
+    trainer_webapp_benchmark_log: bool = False
+    trainer_webapp_benchmark_slow_ms: int | None = None

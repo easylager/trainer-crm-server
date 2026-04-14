@@ -1426,6 +1426,10 @@
     #screenBookingDetail {
       font-family: var(--app-font-sans);
     }
+    /* Last CTA was flush to the window bottom; body safe-area is separate — add fixed air below the stack */
+    #screenBookingDetail #detailBookingActions.bd-actions-wrap {
+      margin-bottom: 28px;
+    }
     .booking-detail-screen-header {
       margin-bottom: 12px;
       position: sticky;

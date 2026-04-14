@@ -24,13 +24,23 @@ from src.api.routes import (
 from src.api.routes.webapp_trainer_profile import router as webapp_trainer_profile_router
 from src.infrastructure.db import async_session_factory
 from src.api.middleware.http_limits import ApiRateLimitMiddleware, MaxBodySizeMiddleware
+from src.api.middleware.trainer_webapp_benchmark import TrainerWebappBenchmarkMiddleware
 from src.shared.config import Settings
 from src.shared.logging_redact import sanitize_validation_errors_for_log
 from src.shared.sentry_init import init_sentry
 
-init_sentry(Settings(), "api")
+_settings_for_bench = Settings()
+init_sentry(_settings_for_bench, "api")
 
 app = FastAPI(title="Trainer CRM API")
+
+if _settings_for_bench.trainer_webapp_benchmark_log or _settings_for_bench.trainer_webapp_benchmark_slow_ms is not None:
+    logger.info(
+        "Trainer webapp benchmark enabled: log_every=%s slow_ms=%s — api=/api/webapp/trainer/* "
+        "page=GET /webapp/* HTML asset=GET *.js|*.css|… under /webapp/ and /static/webapp/ (grep BENCH trainer_webapp)",
+        _settings_for_bench.trainer_webapp_benchmark_log,
+        _settings_for_bench.trainer_webapp_benchmark_slow_ms,
+    )
 
 # Epic D: rate limit /api (except webhooks), body size when Content-Length is set (inner runs first on request).
 app.add_middleware(ApiRateLimitMiddleware)
@@ -48,6 +58,8 @@ app.add_middleware(
 # Epic D: gzip JSON/HTML/CSS/JS when client sends Accept-Encoding: gzip (nginx can add brotli in front).
 # Last added = outermost on the stack — compresses the final response body.
 app.add_middleware(GZipMiddleware, minimum_size=800, compresslevel=6)
+# Outermost: full wall time for trainer Mini App API (after gzip/CORS/body/rate-limit stack).
+app.add_middleware(TrainerWebappBenchmarkMiddleware)
 
 
 @app.exception_handler(RequestValidationError)
