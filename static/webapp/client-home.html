@@ -10,8 +10,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=optional" media="print" onload="this.media='all'" />
   <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=optional" /></noscript>
-  <link rel="stylesheet" href="theme.css?v=20260422" />
-  <link rel="stylesheet" href="mini-app-components.css?v=20260422" />
+  <link rel="stylesheet" href="theme.css?v=20260424" />
+  <link rel="stylesheet" href="mini-app-components.css?v=20260424" />
   <script src="client-mini-app-theme.js"></script>
   <script>
     (function () {
@@ -29,8 +29,8 @@
       window.__applyClientHubTheme = applyClientHubTheme;
     })();
   </script>
-  <link rel="preload" href="client-home-main.js?v=20260422" as="script" />
-  <link rel="stylesheet" href="mini-app-client-home.css?v=20260422" />
+  <link rel="preload" href="client-home-main.js?v=20260424" as="script" />
+  <link rel="stylesheet" href="mini-app-client-home.css?v=20260424" />
 </head>
 <body class="hub-body">
   <div class="hub-shell" id="hubShell">
@@ -71,7 +71,32 @@
     <div class="hub-section-head">
       <div class="hub-section-title">Ближайшие записи</div>
     </div>
-    <div id="bookingsBlock"></div>
+    <!-- Skeleton before deferred client-home-main.js runs (avoids empty block + layout jump). Mirrors buildClientHubBookingsSkeletonHtml(). -->
+    <div id="bookingsBlock">
+      <div class="hub-bookings-skel" role="status" aria-busy="true" aria-label="Загрузка записей">
+        <div class="hub-skel-row">
+          <div class="hub-skel-line hub-skel-line--time hub-skel-shimmer" aria-hidden="true"></div>
+          <div style="flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center;">
+            <div class="hub-skel-line hub-skel-line--primary hub-skel-shimmer" aria-hidden="true"></div>
+            <div class="hub-skel-line hub-skel-line--secondary hub-skel-shimmer" aria-hidden="true"></div>
+          </div>
+        </div>
+        <div class="hub-skel-row">
+          <div class="hub-skel-line hub-skel-line--time hub-skel-shimmer" aria-hidden="true"></div>
+          <div style="flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center;">
+            <div class="hub-skel-line hub-skel-line--primary hub-skel-shimmer" aria-hidden="true"></div>
+            <div class="hub-skel-line hub-skel-line--secondary hub-skel-shimmer" aria-hidden="true"></div>
+          </div>
+        </div>
+        <div class="hub-skel-row">
+          <div class="hub-skel-line hub-skel-line--time hub-skel-shimmer" aria-hidden="true"></div>
+          <div style="flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center;">
+            <div class="hub-skel-line hub-skel-line--primary hub-skel-shimmer" aria-hidden="true"></div>
+            <div class="hub-skel-line hub-skel-line--secondary hub-skel-shimmer" aria-hidden="true"></div>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <div class="hub-section-head">
       <div class="hub-section-title">Все разделы</div>
@@ -82,6 +107,6 @@
       <strong>Подсказка:</strong> команды в чате — <strong>/guide</strong> (помощь), <strong>/home</strong> (эта страница). Меню слева от поля ввода тоже ведёт сюда, если у бота включена веб-кнопка.
     </div>
   </div>
-  <script defer src="client-home-main.js?v=20260422"></script>
+  <script defer src="client-home-main.js?v=20260424"></script>
 </body>
 </html>

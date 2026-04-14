@@ -112,7 +112,7 @@
       function clearClientHubStatsSkeleton() {
         var wrap = document.getElementById('hubStats');
         if (!wrap) return;
-        wrap.classList.remove('hub-stats--loading');
+        wrap.classList.remove('hub-stats--loading', 'hub-stats--reveal');
         ['statTodayValue', 'statWeekValue', 'statRequestsValue'].forEach(function(id) {
           var el = document.getElementById(id);
           if (el) el.classList.remove('hub-skel-shimmer', 'hub-stat-skel');
@@ -122,6 +122,7 @@
       function showClientHubStatsSkeleton() {
         var wrap = document.getElementById('hubStats');
         if (!wrap || !initData) return;
+        wrap.classList.remove('hub-stats--reveal');
         wrap.style.display = 'grid';
         wrap.setAttribute('aria-hidden', 'true');
         wrap.classList.add('hub-stats--loading');
@@ -146,6 +147,25 @@
         document.getElementById('statTodayValue').textContent = String(todayCount);
         document.getElementById('statWeekValue').textContent = String(weekCount);
         document.getElementById('statRequestsValue').textContent = String(requestCount);
+        requestAnimationFrame(function() {
+          requestAnimationFrame(function() {
+            wrap.classList.add('hub-stats--reveal');
+          });
+        });
+      }
+
+      /** Fade + slight lift when replacing skeleton with bookings / empty state (perceived smoothness). */
+      function revealBookingsBlock(innerHtml) {
+        var block = document.getElementById('bookingsBlock');
+        if (!block) return;
+        block.innerHTML = '<div class="hub-bookings-mount">' + innerHtml + '</div>';
+        var mount = block.firstElementChild;
+        if (!mount) return;
+        requestAnimationFrame(function() {
+          requestAnimationFrame(function() {
+            mount.classList.add('hub-bookings-mount--visible');
+          });
+        });
       }
 
       function addDaysToYmd(ymd, deltaDays) {
@@ -212,6 +232,7 @@
 
       function renderBookingsStrip(days) {
         var block = document.getElementById('bookingsBlock');
+        if (!block) return;
         var flat = flattenBookings(days);
         var count = 0;
         var parts = [];
@@ -259,7 +280,9 @@
           parts.push('</div>');
         });
         if (!count) {
-          block.innerHTML = '<div class="hub-empty">Нет предстоящих записей.<br><button type="button" class="bd-btn bd-btn--primary" id="btnHubToCatalog" style="margin-top:14px">Найти тренера</button></div>';
+          revealBookingsBlock(
+            '<div class="hub-empty">Нет предстоящих записей.<br><button type="button" class="bd-btn bd-btn--primary" id="btnHubToCatalog" style="margin-top:14px">Найти тренера</button></div>'
+          );
           block.onclick = null;
           var bc = document.getElementById('btnHubToCatalog');
           if (bc) bc.onclick = function() { navigateTo('catalog'); };
@@ -270,7 +293,7 @@
         if (total > HUB_UPCOMING_MAX) {
           cap = '<div class="hub-bookings-cap">Показаны ' + HUB_UPCOMING_MAX + ' из ' + total + ' записей</div>';
         }
-        block.innerHTML = parts.join('') + cap;
+        revealBookingsBlock(parts.join('') + cap);
         block.onclick = function(ev) {
           var msgBtn = ev.target && ev.target.closest && ev.target.closest('button.hub-slot-msg[data-hub-dm]');
           if (msgBtn) {
