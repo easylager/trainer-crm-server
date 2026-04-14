@@ -121,3 +121,9 @@ class Settings(BaseSettings):
     booking_problem_rollout: str = "full"
     # JSON-массив internal trainer_id, например [12, 34] — при rollout=pilot.
     booking_problem_pilot_trainer_ids: list[int] | None = None
+
+    # Trainer bot: performance (logger ``trainer_bot.bench``, grep ``BENCH trainer_``).
+    # Full log: every update + inner gate/menu DB phase timings.
+    trainer_bot_benchmark_log: bool = False
+    # If set, also log WARNING for updates with total_ms >= threshold (can use without full log).
+    trainer_bot_benchmark_slow_ms: int | None = None

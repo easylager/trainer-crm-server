@@ -15,8 +15,10 @@ from aiogram.enums import ParseMode
 from aiogram.types import MenuButtonCommands, MenuButtonWebApp, WebAppInfo
 
 from src.bot import messages as msg
+from src.bot import trainer_benchmark_config as bench_cfg
 from src.bot.schedule_notifications import set_client_bot
 from src.bot.handlers.trainer_handlers import router as trainer_router
+from src.bot.middlewares.trainer_benchmark_middleware import TrainerBenchmarkMiddleware
 from src.bot.middlewares.rate_limit_middleware import RateLimitMiddleware
 from src.bot.middlewares.trainer_gate_middleware import TrainerGateMiddleware
 from src.bot.middlewares.trainer_menu_sync_middleware import TrainerMenuSyncMiddleware
@@ -70,12 +72,23 @@ async def main() -> None:
     )
     set_client_bot(client_bot)
     await setup_menu_and_commands(bot)
+    bench_cfg.configure(
+        log_every_update=settings.trainer_bot_benchmark_log,
+        slow_total_ms=settings.trainer_bot_benchmark_slow_ms,
+    )
+    if bench_cfg.is_active():
+        logger.info(
+            "Trainer bot benchmark: log_every=%s slow_ms=%s (grep logger trainer_bot.bench for BENCH)",
+            settings.trainer_bot_benchmark_log,
+            settings.trainer_bot_benchmark_slow_ms,
+        )
     dp = Dispatcher(storage=MemoryStorage())
     limiter = RateLimiter(
         max_requests=settings.rate_limit_requests,
         window_sec=settings.rate_limit_window_sec,
     )
     dp.update.outer_middleware(RateLimitMiddleware(limiter, bot))
+    dp.update.outer_middleware(TrainerBenchmarkMiddleware())
     trainer_router.message.middleware(TrainerGateMiddleware())
     trainer_router.message.middleware(TrainerMenuSyncMiddleware())
     trainer_router.callback_query.middleware(TrainerGateMiddleware())

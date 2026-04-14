@@ -3,6 +3,8 @@ Blocks trainer bot work features until profile is complete and trainer is active
 Allows: /start, /guide, /profile, /myprofile, /cancel, support flow, guide/support/faq callbacks, profwiz:* (legacy inline buttons → Mini App stub).
 Other callbacks (e.g. trainer:invite) require ACTIVE — same as non-allowlisted commands.
 """
+import logging
+import time
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -12,9 +14,12 @@ from aiogram.types import CallbackQuery, Message, TelegramObject
 
 from src.application.trainer_access_state import TrainerAccessState, get_trainer_access_state
 from src.bot import messages as msg
+from src.bot import trainer_benchmark_config as bench_cfg
 from src.bot.trainer_bot_state import trainer_support_awaiting
 from src.bot.trainer_gate_text import trainer_gate_message
 from src.infrastructure.db import async_session_factory
+
+bench_log = logging.getLogger("trainer_bot.bench")
 
 
 def _command_root(text: str | None) -> str | None:
@@ -76,8 +81,15 @@ class TrainerGateMiddleware(BaseMiddleware):
         if _is_allowed_command(event.text):
             return await handler(event, data)
 
+        t0 = time.perf_counter()
         async with async_session_factory() as session:
             state, trainer = await get_trainer_access_state(session, uid)
+        if bench_cfg.log_inner_phases():
+            bench_log.info(
+                "BENCH trainer_gate kind=message user_id=%s gate_db_ms=%.1f",
+                uid,
+                (time.perf_counter() - t0) * 1000,
+            )
         if state == TrainerAccessState.ACTIVE:
             return await handler(event, data)
         await event.answer(trainer_gate_message(state, trainer))
@@ -93,8 +105,15 @@ class TrainerGateMiddleware(BaseMiddleware):
         if _callback_allowed(event.data):
             return await handler(event, data)
 
+        t0 = time.perf_counter()
         async with async_session_factory() as session:
             state, trainer = await get_trainer_access_state(session, uid)
+        if bench_cfg.log_inner_phases():
+            bench_log.info(
+                "BENCH trainer_gate kind=callback user_id=%s gate_db_ms=%.1f",
+                uid,
+                (time.perf_counter() - t0) * 1000,
+            )
         if state == TrainerAccessState.ACTIVE:
             return await handler(event, data)
         await event.answer(msg.TRAINER_GATE_CALLBACK_BLOCKED, show_alert=True)
