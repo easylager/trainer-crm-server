@@ -938,5 +938,5 @@ async def test_webapp_client_home_page_served() -> None:
     assert resp.status_code == 200
     body = resp.text
     assert "data-client-hub" in body
-    assert "setupQuickGrid" in body
+    assert "client-home-main.js" in body
     assert "Главная" in body
