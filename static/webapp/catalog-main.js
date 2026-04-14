@@ -1288,11 +1288,84 @@
         return (v === Math.floor(v) ? v : v.toFixed(2)) + ' BYN';
       }
 
+      /** Rows while /trainers or /training-groups fetch — matches list card layout (photo + text + arrow). */
+      var CATALOG_LIST_SKELETON_ROWS = 5;
+
+      function buildCatalogTrainerListSkeletonHtml() {
+        var parts = [
+          '<div class="catalog-trainer-list-skel" role="status" aria-busy="true" aria-label="Загрузка тренеров">',
+        ];
+        for (var i = 0; i < CATALOG_LIST_SKELETON_ROWS; i++) {
+          parts.push(
+            '<div class="catalog-trainer-skel-card" aria-hidden="true">' +
+              '<div class="catalog-trainer-skel-card__photo catalog-skel-shimmer"></div>' +
+              '<div class="catalog-trainer-skel-card__main">' +
+                '<div class="catalog-skel-line catalog-skel-line--title catalog-skel-shimmer"></div>' +
+                '<div class="catalog-skel-line catalog-skel-line--meta catalog-skel-shimmer"></div>' +
+                '<div class="catalog-skel-line catalog-skel-line--meta2 catalog-skel-shimmer"></div>' +
+              '</div>' +
+              '<span class="catalog-trainer-skel-card__arrow catalog-skel-shimmer"></span>' +
+            '</div>'
+          );
+        }
+        parts.push('</div>');
+        return parts.join('');
+      }
+
+      function buildCatalogGroupListSkeletonHtml() {
+        var parts = [
+          '<div class="catalog-group-list-skel" role="status" aria-busy="true" aria-label="Загрузка групп">',
+        ];
+        for (var j = 0; j < CATALOG_LIST_SKELETON_ROWS; j++) {
+          parts.push(
+            '<div class="catalog-group-skel-card" aria-hidden="true">' +
+              '<div class="catalog-group-skel-card__photo catalog-skel-shimmer"></div>' +
+              '<div class="catalog-group-skel-card__body">' +
+                '<div class="catalog-skel-line catalog-skel-line--group-title catalog-skel-shimmer"></div>' +
+                '<div class="catalog-skel-line catalog-skel-line--group-meta catalog-skel-shimmer"></div>' +
+                '<div class="catalog-skel-line catalog-skel-line--group-meta2 catalog-skel-shimmer"></div>' +
+                '<div class="catalog-group-skel-card__actions">' +
+                  '<div class="catalog-skel-line catalog-skel-line--btn catalog-skel-shimmer"></div>' +
+                  '<div class="catalog-skel-line catalog-skel-line--btn catalog-skel-line--btn--secondary catalog-skel-shimmer"></div>' +
+                '</div>' +
+              '</div>' +
+            '</div>'
+          );
+        }
+        parts.push('</div>');
+        return parts.join('');
+      }
+
+      function setCatalogListLoadingPlaceholder() {
+        var listEl = document.getElementById('trainerList');
+        var footEl = document.getElementById('trainerListFooter');
+        if (!listEl) return;
+        listEl.innerHTML =
+          state.catalogMode === 'groups'
+            ? buildCatalogGroupListSkeletonHtml()
+            : buildCatalogTrainerListSkeletonHtml();
+        if (footEl) footEl.style.display = 'none';
+      }
+
+      /** Fade + slight lift when replacing skeleton (or prior list) with loaded content — mirrors client hub bookings. */
+      function revealCatalogListContent(innerHtml) {
+        var block = document.getElementById('trainerList');
+        if (!block) return;
+        block.innerHTML = '<div class="catalog-list-mount">' + innerHtml + '</div>';
+        var mount = block.firstElementChild;
+        if (!mount) return;
+        requestAnimationFrame(function() {
+          requestAnimationFrame(function() {
+            mount.classList.add('catalog-list-mount--visible');
+          });
+        });
+      }
+
       function loadTrainingGroupsCatalog(opts) {
         opts = opts || {};
         var myReq = ++catalogListReqId;
         if (!opts.silent) {
-          document.getElementById('trainerList').innerHTML = '<div class="loading">Загрузка...</div>';
+          setCatalogListLoadingPlaceholder();
           document.getElementById('pagination').innerHTML = '';
         }
         initializeFilterHandlers();
@@ -1327,12 +1400,13 @@
           updateResultsCount(total);
           if (!items.length) {
             if (myReq !== catalogListReqId) return;
-            document.getElementById('trainerList').innerHTML =
+            revealCatalogListContent(
               '<div class="empty">Групп с набором по вашему запросу пока нет.</div>' +
-              '<div class="empty-state-request">' +
-              '<p class="empty-state-text">Попробуйте другие дни или арену — или оставьте заявку.</p>' +
-              '<button type="button" class="btn-block btn-leave-request" id="btnEmptyStateRequestGroups">Оставить заявку</button>' +
-              '</div>';
+                '<div class="empty-state-request">' +
+                '<p class="empty-state-text">Попробуйте другие дни или арену — или оставьте заявку.</p>' +
+                '<button type="button" class="btn-block btn-leave-request" id="btnEmptyStateRequestGroups">Оставить заявку</button>' +
+                '</div>'
+            );
             document.getElementById('pagination').innerHTML = '';
             var btnEg = document.getElementById('btnEmptyStateRequestGroups');
             if (btnEg) btnEg.onclick = openGeneralRequestForm;
@@ -1380,7 +1454,7 @@
               '</div></div>';
           }).join('');
           if (myReq !== catalogListReqId) return;
-          document.getElementById('trainerList').innerHTML = html;
+          revealCatalogListContent(html);
           document.querySelectorAll('#trainerList .cg-photo-wrap img.cg-photo').forEach(function(img) {
             function showLoaded() {
               img.classList.add('loaded');
@@ -1464,7 +1538,7 @@
         }).catch(function() {
           if (myReq !== catalogListReqId) return;
           if (opts.silent) return;
-          document.getElementById('trainerList').innerHTML = '<div class="error">Ошибка загрузки</div>';
+          revealCatalogListContent('<div class="error">Ошибка загрузки</div>');
         });
       }
 
@@ -1472,7 +1546,7 @@
         opts = opts || {};
         var myReq = ++catalogListReqId;
         if (!opts.silent) {
-          document.getElementById('trainerList').innerHTML = '<div class="loading">Загрузка...</div>';
+          setCatalogListLoadingPlaceholder();
           document.getElementById('pagination').innerHTML = '';
         }
         
@@ -1511,12 +1585,13 @@
           updateResultsCount(total);
           if (!items.length) {
             if (myReq !== catalogListReqId) return;
-            document.getElementById('trainerList').innerHTML =
+            revealCatalogListContent(
               '<div class="empty">Тренеров по вашему запросу пока нет.</div>' +
-              '<div class="empty-state-request">' +
-              '<p class="empty-state-text">Оставьте заявку — подберём вариант и напишем в боте.</p>' +
-              '<button type="button" class="btn-block btn-leave-request" id="btnEmptyStateRequest">Оставить заявку</button>' +
-              '</div>';
+                '<div class="empty-state-request">' +
+                '<p class="empty-state-text">Оставьте заявку — подберём вариант и напишем в боте.</p>' +
+                '<button type="button" class="btn-block btn-leave-request" id="btnEmptyStateRequest">Оставить заявку</button>' +
+                '</div>'
+            );
             document.getElementById('pagination').innerHTML = '';
             var btnEmpty = document.getElementById('btnEmptyStateRequest');
             if (btnEmpty) btnEmpty.onclick = openGeneralRequestForm;
@@ -1611,7 +1686,7 @@
               '<span class="arrow">→</span></button>';
           }).join('');
           if (myReq !== catalogListReqId) return;
-          document.getElementById('trainerList').innerHTML = html;
+          revealCatalogListContent(html);
           document.querySelectorAll('#trainerList .trainer-card-img').forEach(function(img) {
             function showLoaded() {
               img.classList.add('loaded');
@@ -1674,7 +1749,7 @@
         }).catch(function() {
           if (myReq !== catalogListReqId) return;
           if (opts.silent) return;
-          document.getElementById('trainerList').innerHTML = '<div class="error">Ошибка загрузки</div>';
+          revealCatalogListContent('<div class="error">Ошибка загрузки</div>');
         });
       }
 

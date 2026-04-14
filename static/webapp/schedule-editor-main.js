@@ -121,6 +121,130 @@
         return s;
       }
 
+      /** Skeleton HTML for calendar column — mirrors day-block + slot-row density. */
+      function buildCalendarSkeletonHtml() {
+        var sk = 'ma-skel-shimmer';
+        function slotRow() {
+          return (
+            '<div class="ma-cal-skel-slot" aria-hidden="true">' +
+              '<div class="ma-cal-skel-slot-left">' +
+                '<div class="ma-schedule-skel-line--time ' + sk + '"></div>' +
+                '<div class="ma-schedule-skel-line--sub ' + sk + '" style="margin-top:8px;width:78%"></div>' +
+              '</div>' +
+              '<div class="ma-cal-skel-pill ' + sk + '"></div>' +
+            '</div>'
+          );
+        }
+        function dayBlock() {
+          return (
+            '<div class="day-block ma-cal-skel-day">' +
+              '<div class="day-title"><span class="ma-schedule-skel-day-title ' + sk + '"></span></div>' +
+              slotRow() + slotRow() + slotRow() +
+            '</div>'
+          );
+        }
+        return (
+          '<div class="ma-schedule-skel" role="status" aria-busy="true" aria-label="Загрузка расписания">' +
+            dayBlock() + dayBlock() +
+          '</div>'
+        );
+      }
+
+      function buildTemplateListSkeletonHtml() {
+        var sk = 'ma-skel-shimmer';
+        var rows = '';
+        for (var d = 0; d < 7; d++) {
+          rows +=
+            '<div class="template-day-card template-skel-card" aria-hidden="true">' +
+            '<span class="day-name">' +
+            DAYS[d] +
+            '</span>' +
+            '<span class="day-slots empty"><span class="template-skel-text ' +
+            sk +
+            '"></span></span>' +
+            '<span class="arrow" style="visibility:hidden">→</span></div>';
+        }
+        return '<div role="status" aria-busy="true" aria-label="Загрузка шаблона">' + rows + '</div>';
+      }
+
+      function buildBookingDetailSkeletonHtml() {
+        var sk = 'ma-skel-shimmer';
+        return (
+          '<div class="bd-skel-booking" role="status" aria-busy="true" aria-label="Загрузка записи">' +
+            '<div class="bd-skel-hero-placeholder ' +
+            sk +
+            '"></div>' +
+            '<div class="bd-skel-client-row">' +
+            '<div class="bd-skel-av ' +
+            sk +
+            '"></div>' +
+            '<div class="bd-skel-client-lines">' +
+            '<div class="bd-skel-line bd-skel-line--name ' +
+            sk +
+            '"></div>' +
+            '<div class="bd-skel-line bd-skel-line--tel ' +
+            sk +
+            '"></div>' +
+            '</div>' +
+            '</div>' +
+            '<div class="bd-skel-section-label ' +
+            sk +
+            '"></div>' +
+            '<div class="bd-skel-rows">' +
+            '<div class="bd-skel-row-pad">' +
+            '<div class="bd-skel-row-line bd-skel-row-line--w1 ' +
+            sk +
+            '"></div>' +
+            '<div class="bd-skel-row-line bd-skel-row-line--w2 ' +
+            sk +
+            '"></div>' +
+            '</div>' +
+            '<div class="bd-skel-row-pad">' +
+            '<div class="bd-skel-row-line ' +
+            sk +
+            '" style="width:52%;height:14px;border-radius:7px;"></div>' +
+            '</div>' +
+            '</div>' +
+            '</div>'
+        );
+      }
+
+      function buildBookClientListSkeletonHtml() {
+        var sk = 'ma-skel-shimmer';
+        var rows = '';
+        for (var i = 0; i < 5; i++) {
+          rows +=
+            '<div class="book-client-skel-row" aria-hidden="true">' +
+            '<div class="book-client-skel-line ' +
+            sk +
+            '"></div>' +
+            '<div class="book-client-skel-line book-client-skel-line--sm ' +
+            sk +
+            '"></div>' +
+            '</div>';
+        }
+        return (
+          '<div class="book-client-skel" role="status" aria-busy="true" aria-label="Загрузка клиентов">' + rows + '</div>'
+        );
+      }
+
+      function buildModalProblemBodySkeletonHtml() {
+        var sk = 'ma-skel-shimmer';
+        return (
+          '<div class="modal-problem-skel" role="status" aria-busy="true">' +
+            '<div class="modal-problem-skel-line ' +
+            sk +
+            '" style="width:92%;height:18px;border-radius:9px;"></div>' +
+            '<div class="modal-problem-skel-line ' +
+            sk +
+            '" style="width:76%;"></div>' +
+            '<div class="modal-problem-skel-line ' +
+            sk +
+            '" style="width:58%;"></div>' +
+          '</div>'
+        );
+      }
+
       function showBookingStack(view) {
         var main = document.getElementById('screenMain');
         var det = document.getElementById('screenBookingDetail');
@@ -519,7 +643,7 @@
         m.style.display = 'flex';
         m.setAttribute('aria-hidden', 'false');
         updateTelegramBack();
-        body.innerHTML = '<div class="loading">Загрузка…</div>';
+        body.innerHTML = buildModalProblemBodySkeletonHtml();
         foot.innerHTML = '';
         getJsonTrainer('/trainer/bookings/' + bookingId + '/client-no-show-options').then(function(o) {
           if (!o) return;
@@ -707,7 +831,7 @@
         m.style.display = 'flex';
         m.setAttribute('aria-hidden', 'false');
         updateTelegramBack();
-        body.innerHTML = '<div class="loading">Загрузка…</div>';
+        body.innerHTML = buildModalProblemBodySkeletonHtml();
         foot.innerHTML = '';
         getJsonTrainer('/trainer/bookings/' + bookingId + '/problem-options').then(function(o) {
           _clientProblemWizard.options = o;
@@ -745,6 +869,9 @@
         state.selectedBooking = null;
         var _openProblemAfter = !!state.openClientProblemAfterDetail;
         state.openClientProblemAfterDetail = false;
+        document.getElementById('detailBookingContent').innerHTML = buildBookingDetailSkeletonHtml();
+        document.getElementById('detailBookingActions').innerHTML = '';
+        showBookingStack('detail');
         getJsonTrainer('/trainer/bookings/' + bookingId).then(function(b) {
           state.selectedBooking = b;
           var client = [b.client_first_name, b.client_last_name].filter(Boolean).join(' ') || b.client_phone || 'Клиент';
@@ -863,7 +990,6 @@
             };
           });
 
-          showBookingStack('detail');
           try {
             history.pushState({ ui: 'sched-detail' }, '', window.location.pathname);
           } catch (e) { /* ignore */ }
@@ -1872,7 +1998,7 @@
         if (tg && !tg.initData) {
           loadSlots._waitInit = (loadSlots._waitInit || 0) + 1;
           if (loadSlots._waitInit < 200) {
-            document.getElementById('calendarContent').innerHTML = '<div class="loading">Подключение к Telegram…</div>';
+            document.getElementById('calendarContent').innerHTML = buildCalendarSkeletonHtml();
             setTimeout(function() {
               callReadyWhenInitDataReady();
               loadSlots();
@@ -1895,7 +2021,7 @@
         document.getElementById('weekLabel').textContent = formatWeekLabel(start);
         var pastWrap = document.getElementById('calendarPastRevealWrap');
         if (pastWrap) pastWrap.hidden = true;
-        document.getElementById('calendarContent').innerHTML = '<div class="loading">Загрузка...</div>';
+        document.getElementById('calendarContent').innerHTML = buildCalendarSkeletonHtml();
         fetch(apiUrlWithQuery('/schedule?from_date=' + encodeURIComponent(from) + '&to_date=' + encodeURIComponent(to)), { headers: headers() })
           .then(function(r) {
             if (!r.ok) {
@@ -1945,7 +2071,7 @@
 
       function loadTemplates() {
         if (window.TrainerMiniAppGate && window.TrainerMiniAppGate.shouldBlockFeatureFetch()) return;
-        document.getElementById('templateList').innerHTML = '<div class="loading">Загрузка...</div>';
+        document.getElementById('templateList').innerHTML = buildTemplateListSkeletonHtml();
         fetch(apiUrlWithQuery('/schedule/templates'), { headers: headers() })
           .then(function(r) { return r.json(); })
           .then(function(data) {
@@ -2233,7 +2359,7 @@
               var selPre = document.getElementById('bookServiceSelect');
               if (selPre && state.bookServiceId != null) selPre.value = String(state.bookServiceId);
               document.getElementById('bookClientSearch').value = '';
-              document.getElementById('bookClientList').innerHTML = '<p class="book-list-loading">Загрузка…</p>';
+              document.getElementById('bookClientList').innerHTML = buildBookClientListSkeletonHtml();
               loadBookClients('', state.deepLinkClientId);
             }
           })
@@ -2787,7 +2913,7 @@
         document.getElementById('bookStepExisting').classList.add('active');
         var sel = document.getElementById('bookServiceSelect');
         if (sel && state.bookServiceId != null) sel.value = String(state.bookServiceId);
-        document.getElementById('bookClientList').innerHTML = '<p class="book-list-loading">Загрузка…</p>';
+        document.getElementById('bookClientList').innerHTML = buildBookClientListSkeletonHtml();
         loadBookClients();
       };
       document.getElementById('bookOptNew').onclick = function() {
@@ -3550,9 +3676,6 @@
               state.bookingDetailReturn = fromHub ? 'hub' : 'schedule';
               state.hubGroupSlotReturnId = null;
             }
-            document.getElementById('detailBookingContent').innerHTML = '<div class="loading">Загрузка...</div>';
-            document.getElementById('detailBookingActions').innerHTML = '';
-            showBookingStack('detail');
             openBookingDetail(bid);
             prefetchSlotsInBackground();
             return;

@@ -78,7 +78,10 @@ async def main() -> None:
     )
     if bench_cfg.is_active():
         logger.info(
-            "Trainer bot benchmark: log_every=%s slow_ms=%s (grep logger trainer_bot.bench for BENCH)",
+            "Trainer bot benchmark: log_every=%s slow_ms=%s — "
+            "lines BENCH trainer_* come from logger trainer_bot.bench on each Telegram update "
+            "(message/callback/etc.). Mini App opens /api/webapp/* on the API process; "
+            "that uses trainer_webapp.bench if TRAINER_WEBAPP_BENCHMARK_LOG is set there, not here.",
             settings.trainer_bot_benchmark_log,
             settings.trainer_bot_benchmark_slow_ms,
         )

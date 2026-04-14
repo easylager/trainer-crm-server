@@ -5,8 +5,8 @@ Trainer Mini App + Web App shell (FastAPI): wall-clock timing for:
 - ``kind=page`` — GET ``/webapp/...`` HTML entry points (trainer-home, schedule-editor, …)
 - ``kind=asset`` — GET static ``/webapp/*`` and ``/static/webapp/*`` (.js, .css, fonts, images, …)
 
-Grep logs: ``BENCH trainer_webapp`` (logger ``trainer_webapp.bench``).
-Env: TRAINER_WEBAPP_BENCHMARK_LOG, TRAINER_WEBAPP_BENCHMARK_SLOW_MS
+Grep logs for ``BENCH trainer_webapp`` (logger name is this module, e.g. ``src.api.middleware.trainer_webapp_benchmark``).
+Env (on the **API** process only): ``TRAINER_WEBAPP_BENCHMARK_LOG``, ``TRAINER_WEBAPP_BENCHMARK_SLOW_MS``.
 """
 from __future__ import annotations
 
@@ -19,7 +19,9 @@ from starlette.responses import Response
 
 from src.shared.config import Settings
 
-bench_log = logging.getLogger("trainer_webapp.bench")
+# Use module logger so Uvicorn/root config shows the same lines as other app code (not a custom dot-logger).
+bench_log = logging.getLogger(__name__)
+bench_log.setLevel(logging.INFO)
 
 # File extensions served as static Mini App assets (not HTML shells).
 _STATIC_EXT = frozenset({

@@ -36,8 +36,9 @@ app = FastAPI(title="Trainer CRM API")
 
 if _settings_for_bench.trainer_webapp_benchmark_log or _settings_for_bench.trainer_webapp_benchmark_slow_ms is not None:
     logger.info(
-        "Trainer webapp benchmark enabled: log_every=%s slow_ms=%s — api=/api/webapp/trainer/* "
-        "page=GET /webapp/* HTML asset=GET *.js|*.css|… under /webapp/ and /static/webapp/ (grep BENCH trainer_webapp)",
+        "Trainer webapp benchmark enabled: log_every=%s slow_ms=%s — this API process only; "
+        "set TRAINER_WEBAPP_BENCHMARK_LOG on the Uvicorn/Railway service that serves /api and /webapp, then redeploy. "
+        "Lines: BENCH trainer_webapp kind=api|page|asset (grep BENCH trainer_webapp).",
         _settings_for_bench.trainer_webapp_benchmark_log,
         _settings_for_bench.trainer_webapp_benchmark_slow_ms,
     )

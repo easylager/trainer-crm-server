@@ -889,7 +889,7 @@
       width: 100%;
       padding: 13px 14px;
       border-radius: var(--app-radius-md);
-      border: 1px solid rgba(128, 128, 128, 0.2);
+      border: 1px solid rgba(128, 128, 128, 0.28);
       background: var(--tg-theme-bg-color);
       color: var(--tg-theme-text-color);
       font-size: 16px;
@@ -897,9 +897,18 @@
       box-sizing: border-box;
       transition: border-color 0.18s ease, box-shadow 0.18s ease;
     }
-    .tg-form-card .form-block input:focus,
+    .tg-form-card .form-block input:focus {
+      outline: none;
+      border-color: rgba(247, 166, 0, 0.55);
+      box-shadow: 0 0 0 3px rgba(247, 166, 0, 0.12);
+    }
+    /* Selects: avoid one field looking "active" while the sibling looks flat (WebKit focus ring). */
     .tg-form-card .form-block select.tg-select:focus {
       outline: none;
+      border-color: rgba(128, 128, 128, 0.32);
+      box-shadow: none;
+    }
+    .tg-form-card .form-block select.tg-select:focus-visible {
       border-color: rgba(247, 166, 0, 0.55);
       box-shadow: 0 0 0 3px rgba(247, 166, 0, 0.12);
     }
@@ -914,7 +923,7 @@
       cursor: pointer;
     }
     .tg-form-card .form-block textarea {
-      border: 1px solid rgba(128, 128, 128, 0.22);
+      border: 1px solid rgba(128, 128, 128, 0.28);
       background: var(--tg-theme-bg-color);
       border-radius: var(--app-radius-md);
       transition: border-color 0.18s ease, box-shadow 0.18s ease;
@@ -964,7 +973,7 @@
       flex: 0 0 auto;
       padding: 8px 12px;
       border-radius: 10px;
-      border: 1px solid rgba(128, 128, 128, 0.22);
+      border: 1px solid rgba(128, 128, 128, 0.28);
       background: var(--tg-theme-bg-color);
       color: var(--tg-theme-text-color);
       font-size: 13px;
@@ -984,22 +993,24 @@
     .tg-weekday {
       display: grid;
       grid-template-columns: repeat(7, minmax(0, 1fr));
-      gap: 6px;
+      gap: 8px;
       width: 100%;
     }
+    /* Unselected: contrast vs form card (same bg as page made labels unreadable in dark Telegram). */
     .tg-weekday .wd {
       width: 100%;
       max-width: none;
       aspect-ratio: 1;
       height: auto;
-      min-height: 36px;
+      min-height: 38px;
       padding: 0;
       border-radius: 50%;
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      border: 1px solid rgba(128, 128, 128, 0.22);
+      border: 1px solid rgba(128, 128, 128, 0.28);
       background: var(--tg-theme-bg-color);
+      color: var(--tg-theme-hint-color);
       font-size: 12px;
       font-weight: 700;
       font-family: inherit;
@@ -1008,7 +1019,12 @@
       user-select: none;
       appearance: none;
       -webkit-appearance: none;
-      transition: transform 0.12s ease, border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+      transition: transform 0.12s ease, border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease, color 0.15s ease;
+    }
+    .tg-weekday .wd:focus-visible {
+      outline: none;
+      border-color: rgba(247, 166, 0, 0.55);
+      box-shadow: 0 0 0 3px rgba(247, 166, 0, 0.12);
     }
     .tg-weekday .wd:active {
       transform: scale(0.94);
@@ -1020,6 +1036,11 @@
       box-shadow: 0 2px 12px rgba(247, 166, 0, 0.2);
     }
     @media (prefers-color-scheme: dark) {
+      .tg-weekday .wd:not(.on) {
+        background: color-mix(in srgb, var(--tg-theme-bg-color) 55%, var(--tg-theme-secondary-bg-color));
+        color: color-mix(in srgb, var(--tg-theme-text-color) 78%, var(--tg-theme-hint-color));
+        border-color: color-mix(in srgb, var(--tg-theme-text-color) 16%, transparent);
+      }
       .tg-weekday .wd.on {
         box-shadow: 0 4px 16px rgba(247, 166, 0, 0.18);
       }

@@ -1939,3 +1939,66 @@
       letter-spacing: -0.02em;
       color: var(--tg-theme-text-color);
     }
+
+    /* Calendar / template / book-client skeletons (schedule-editor-main.js) — uses .ma-skel-shimmer from mini-app-components.css */
+    #calendarContent { contain: layout; }
+    .ma-cal-skel-slot {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 12px 14px;
+      margin-bottom: 8px;
+      border-radius: 12px;
+      background: var(--tg-theme-secondary-bg-color);
+      pointer-events: none;
+    }
+    .ma-cal-skel-slot-left { flex: 1; min-width: 0; }
+    .ma-cal-skel-pill {
+      width: 56px;
+      height: 26px;
+      border-radius: 8px;
+      flex-shrink: 0;
+      align-self: center;
+    }
+    .ma-cal-skel-day .ma-cal-skel-slot:nth-child(2) .ma-schedule-skel-line--time { width: 38%; }
+    .ma-cal-skel-day .ma-cal-skel-slot:nth-child(3) .ma-schedule-skel-line--time { width: 44%; }
+    .ma-cal-skel-day .ma-cal-skel-slot:nth-child(4) .ma-schedule-skel-line--time { width: 34%; }
+    .ma-cal-skel-day .ma-cal-skel-slot:nth-child(3) .ma-schedule-skel-line--sub { width: 78%; }
+    .ma-cal-skel-day .ma-cal-skel-slot:nth-child(4) .ma-schedule-skel-line--sub { width: 62%; }
+    .template-skel-card {
+      pointer-events: none;
+      opacity: 1;
+    }
+    .template-skel-card .template-skel-text {
+      display: block;
+      height: 14px;
+      width: 72%;
+      border-radius: 7px;
+      margin: 2px 0 0;
+    }
+    .book-client-skel-row {
+      padding: 14px 16px;
+      margin-bottom: 8px;
+      border-radius: 14px;
+      background: var(--tg-theme-secondary-bg-color);
+      pointer-events: none;
+      box-shadow: 0 1px 0 rgba(0, 0, 0, 0.04);
+    }
+    .book-client-skel-line {
+      height: 15px;
+      border-radius: 7px;
+      margin-bottom: 8px;
+      width: 72%;
+    }
+    .book-client-skel-line--sm {
+      height: 12px;
+      width: 48%;
+      margin-bottom: 0;
+    }
+    .modal-problem-skel-line {
+      height: 16px;
+      border-radius: 8px;
+      margin-bottom: 12px;
+    }
+    .modal-problem-skel-line:last-child { margin-bottom: 0; }

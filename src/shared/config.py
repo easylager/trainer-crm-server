@@ -1,7 +1,22 @@
 """
 App settings loaded from env (.env + os.environ). Single entry point for config.
 """
+from typing import Annotated, Any
+
+from pydantic import BeforeValidator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def _env_bool_benchmark(v: Any) -> bool:
+    """Railway/hosting sometimes exposes flags as strings; accept common truthy tokens."""
+    if isinstance(v, bool):
+        return v
+    if isinstance(v, str):
+        return v.strip().lower() in ("1", "true", "yes", "y", "on")
+    return bool(v)
+
+
+BenchmarkLogFlag = Annotated[bool, BeforeValidator(_env_bool_benchmark)]
 
 
 class Settings(BaseSettings):
@@ -9,6 +24,7 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         extra="ignore",
+        case_sensitive=False,
     )
 
     # Telegram: two bots in one repo (client + trainer), separate processes
@@ -124,11 +140,12 @@ class Settings(BaseSettings):
 
     # Trainer bot: performance (logger ``trainer_bot.bench``, grep ``BENCH trainer_``).
     # Full log: every update + inner gate/menu DB phase timings.
-    trainer_bot_benchmark_log: bool = False
+    trainer_bot_benchmark_log: BenchmarkLogFlag = False
     # If set, also log WARNING for updates with total_ms >= threshold (can use without full log).
     trainer_bot_benchmark_slow_ms: int | None = None
 
-    # Trainer webapp benchmark (FastAPI): logger ``trainer_webapp.bench``, grep ``BENCH trainer_webapp``.
+    # Trainer webapp benchmark (FastAPI): grep ``BENCH trainer_webapp`` (middleware module logger).
     # Logs kind=api (trainer JSON API), kind=page (GET /webapp/* HTML), kind=asset (GET js/css/fonts/… under /webapp/ + /static/webapp/).
-    trainer_webapp_benchmark_log: bool = False
+    # Env must be set on the API process (not the Telegram bot). Redeploy after changing Railway variables.
+    trainer_webapp_benchmark_log: BenchmarkLogFlag = False
     trainer_webapp_benchmark_slow_ms: int | None = None

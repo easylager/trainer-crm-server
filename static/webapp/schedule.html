@@ -6,8 +6,8 @@
   <title>Моё расписание</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script src="mini-app-telegram-chrome.js"></script>
-  <link rel="stylesheet" href="theme.css" />
-  <link rel="stylesheet" href="mini-app-components.css" />
+  <link rel="stylesheet" href="theme.css?v=20260429" />
+  <link rel="stylesheet" href="mini-app-components.css?v=20260429" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet" />
@@ -38,9 +38,7 @@
       <span id="weekLabel">—</span>
       <button type="button" id="nextWeek" aria-label="Вперёд">›</button>
     </div>
-    <div id="scheduleContent">
-      <div class="loading">Загрузка...</div>
-    </div>
+    <div id="scheduleContent"></div>
   </div>
 
   <div id="screenDetail" data-screen>
@@ -95,6 +93,60 @@
         userPlus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>',
         linkOff: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M10 13a5 5 0 0 1 7.54.54 3 3 0 0 0 1.3 1.38"/><path d="M14 11a5 5 0 0 1 4.95 5.47"/><path d="M16 16a5 5 0 0 1-4.95 5"/><path d="M2 2l20 20"/><path d="M7.7 7.7A4 4 0 0 0 6 11c0 1.22.52 2.33 1.36 3.11"/><path d="M8.6 8.6A4 4 0 0 1 12 8a4 4 0 0 1 3.17 6.27"/></svg>'
       };
+
+      function buildScheduleListSkeletonHtml() {
+        var sk = 'ma-skel-shimmer';
+        function slotRow() {
+          return (
+            '<div class="ma-schedule-skel-slot" aria-hidden="true">' +
+              '<div class="ma-schedule-skel-slot-main">' +
+                '<div class="ma-schedule-skel-line--time ' + sk + '"></div>' +
+                '<div class="ma-schedule-skel-line--sub ' + sk + '"></div>' +
+              '</div>' +
+              '<div class="ma-schedule-skel-pill ' + sk + '"></div>' +
+            '</div>'
+          );
+        }
+        function dayBlock() {
+          return (
+            '<div class="ma-schedule-skel-day">' +
+              '<div class="day-title" style="margin-bottom:10px"><span class="ma-schedule-skel-day-title ' + sk + '"></span></div>' +
+              slotRow() + slotRow() + slotRow() +
+            '</div>'
+          );
+        }
+        return (
+          '<div class="ma-schedule-skel" role="status" aria-busy="true" aria-label="Загрузка расписания">' +
+            dayBlock() + dayBlock() +
+          '</div>'
+        );
+      }
+
+      function buildScheduleDetailSkeletonHtml() {
+        var sk = 'ma-skel-shimmer';
+        return (
+          '<div class="bd-skel-booking" role="status" aria-busy="true" aria-label="Загрузка записи">' +
+            '<div class="bd-skel-hero-placeholder ' + sk + '"></div>' +
+            '<div class="bd-skel-client-row">' +
+              '<div class="bd-skel-av ' + sk + '"></div>' +
+              '<div class="bd-skel-client-lines">' +
+                '<div class="bd-skel-line bd-skel-line--name ' + sk + '"></div>' +
+                '<div class="bd-skel-line bd-skel-line--tel ' + sk + '"></div>' +
+              '</div>' +
+            '</div>' +
+            '<div class="bd-skel-section-label ' + sk + '"></div>' +
+            '<div class="bd-skel-rows">' +
+              '<div class="bd-skel-row-pad">' +
+                '<div class="bd-skel-row-line bd-skel-row-line--w1 ' + sk + '"></div>' +
+                '<div class="bd-skel-row-line bd-skel-row-line--w2 ' + sk + '"></div>' +
+              '</div>' +
+              '<div class="bd-skel-row-pad">' +
+                '<div class="bd-skel-row-line ' + sk + '" style="width:52%;height:14px;border-radius:7px;"></div>' +
+              '</div>' +
+            '</div>' +
+          '</div>'
+        );
+      }
 
       function bookingInitials(displayName) {
         var s = (displayName || '').trim();
@@ -453,7 +505,7 @@
         var mySeq = ++scheduleLoadSeq;
         const el = document.getElementById('scheduleContent');
         if (!opts.silent) {
-          el.innerHTML = '<div class="loading">Загрузка...</div>';
+          el.innerHTML = buildScheduleListSkeletonHtml();
         }
         const weekEnd = new Date(state.currentWeekStart);
         weekEnd.setDate(weekEnd.getDate() + 6);
@@ -472,6 +524,9 @@
 
       function openDetail(bookingId) {
         state.selectedBooking = null;
+        document.getElementById('detailContent').innerHTML = buildScheduleDetailSkeletonHtml();
+        document.getElementById('detailActions').innerHTML = '';
+        showScreen('screenDetail');
         getJson('/api/webapp/trainer/bookings/' + bookingId).then(function(b) {
           state.selectedBooking = b;
           const client = [b.client_first_name, b.client_last_name].filter(Boolean).join(' ') || b.client_phone || 'Клиент';
@@ -542,7 +597,6 @@
             };
           });
 
-          showScreen('screenDetail');
           try {
             history.pushState({ ui: 'sched-detail' }, '', window.location.pathname);
           } catch (e) { /* ignore */ }
@@ -672,13 +726,11 @@
             try {
               history.replaceState({}, '', window.location.pathname);
             } catch (e) { /* ignore */ }
-            document.getElementById('detailContent').innerHTML = '<div class="loading">Загрузка...</div>';
-            document.getElementById('detailActions').innerHTML = '';
-            showScreen('screenDetail');
             openDetail(bid);
             return;
           }
         }
+        document.getElementById('scheduleContent').innerHTML = buildScheduleListSkeletonHtml();
         loadSchedule();
       })();
     })();
