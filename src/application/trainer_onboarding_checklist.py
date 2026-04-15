@@ -42,6 +42,7 @@ async def get_trainer_onboarding_checklist(session: AsyncSession, trainer_id: in
         "has_future_available_slots": False,
         "has_future_slots": False,
         "has_any_booking": False,
+        "has_confirmed_booking": False,
         "slots_locked_reason": None,
         "bookings_locked_reason": None,
     }
@@ -99,4 +100,18 @@ async def get_trainer_onboarding_checklist(session: AsyncSession, trainer_id: in
         {"tid": trainer_id},
     )
     out["has_any_booking"] = bool(r2.scalar())
+
+    r3 = await session.execute(
+        text(
+            """
+            SELECT EXISTS(
+                SELECT 1 FROM bookings
+                WHERE trainer_id = :tid
+                  AND status IN ('confirmed', 'completed')
+            )
+            """
+        ),
+        {"tid": trainer_id},
+    )
+    out["has_confirmed_booking"] = bool(r3.scalar())
     return out

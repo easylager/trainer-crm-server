@@ -37,8 +37,8 @@
       window.__applyTrainerClientsTheme = applyTrainerClientsTheme;
     })();
   </script>
-  <link rel="preload" href="trainer-clients-main.js?v=20260422" as="script" />
-  <link rel="stylesheet" href="mini-app-trainer-clients.css?v=20260422" />
+  <link rel="preload" href="trainer-clients-main.js?v=20260427" as="script" />
+  <link rel="stylesheet" href="mini-app-trainer-clients.css?v=20260427" />
   <link rel="stylesheet" href="mini-app-trainer-nav.css?v=20260422" />
 </head>
 <body>
@@ -55,10 +55,22 @@
     <input id="searchInput" class="search-input" type="search" placeholder="Поиск по имени или телефону">
   </div>
   <div id="clientsSection">
-    <div id="clientsList"></div>
+    <div id="clientsList">
+      <div class="tc-clients-skel" role="status" aria-busy="true" aria-label="Загрузка клиентов">
+        <div class="tc-client-skel-card"><div class="tc-client-skel-av ma-skel-shimmer" aria-hidden="true"></div><div class="tc-client-skel-main"><div class="tc-client-skel-line tc-client-skel-line--name ma-skel-shimmer" aria-hidden="true"></div><div class="tc-client-skel-line tc-client-skel-line--meta ma-skel-shimmer" aria-hidden="true"></div><div class="tc-client-skel-line tc-client-skel-line--meta2 ma-skel-shimmer" aria-hidden="true"></div></div><div class="tc-client-skel-arrow ma-skel-shimmer" aria-hidden="true"></div></div>
+        <div class="tc-client-skel-card"><div class="tc-client-skel-av ma-skel-shimmer" aria-hidden="true"></div><div class="tc-client-skel-main"><div class="tc-client-skel-line tc-client-skel-line--name ma-skel-shimmer" aria-hidden="true"></div><div class="tc-client-skel-line tc-client-skel-line--meta ma-skel-shimmer" aria-hidden="true"></div><div class="tc-client-skel-line tc-client-skel-line--meta2 ma-skel-shimmer" aria-hidden="true"></div></div><div class="tc-client-skel-arrow ma-skel-shimmer" aria-hidden="true"></div></div>
+        <div class="tc-client-skel-card"><div class="tc-client-skel-av ma-skel-shimmer" aria-hidden="true"></div><div class="tc-client-skel-main"><div class="tc-client-skel-line tc-client-skel-line--name ma-skel-shimmer" aria-hidden="true"></div><div class="tc-client-skel-line tc-client-skel-line--meta ma-skel-shimmer" aria-hidden="true"></div><div class="tc-client-skel-line tc-client-skel-line--meta2 ma-skel-shimmer" aria-hidden="true"></div></div><div class="tc-client-skel-arrow ma-skel-shimmer" aria-hidden="true"></div></div>
+        <div class="tc-client-skel-card"><div class="tc-client-skel-av ma-skel-shimmer" aria-hidden="true"></div><div class="tc-client-skel-main"><div class="tc-client-skel-line tc-client-skel-line--name ma-skel-shimmer" aria-hidden="true"></div><div class="tc-client-skel-line tc-client-skel-line--meta ma-skel-shimmer" aria-hidden="true"></div><div class="tc-client-skel-line tc-client-skel-line--meta2 ma-skel-shimmer" aria-hidden="true"></div></div><div class="tc-client-skel-arrow ma-skel-shimmer" aria-hidden="true"></div></div>
+        <div class="tc-client-skel-card"><div class="tc-client-skel-av ma-skel-shimmer" aria-hidden="true"></div><div class="tc-client-skel-main"><div class="tc-client-skel-line tc-client-skel-line--name ma-skel-shimmer" aria-hidden="true"></div><div class="tc-client-skel-line tc-client-skel-line--meta ma-skel-shimmer" aria-hidden="true"></div><div class="tc-client-skel-line tc-client-skel-line--meta2 ma-skel-shimmer" aria-hidden="true"></div></div><div class="tc-client-skel-arrow ma-skel-shimmer" aria-hidden="true"></div></div>
+      </div>
+    </div>
     <div class="invite-link-section invite-card">
       <div class="section-title">Пригласить клиента (вне системы)</div>
-      <p class="invite-hint">Отправьте ссылку человеку — он перейдёт в бота с вами выбранным (город и услуга подставятся). Ссылка одноразовая.</p>
+      <p class="invite-hint">Отправьте ссылку человеку — он перейдёт в бота с вами выбранным (город и услуга подставятся). Ссылка одноразовая. Если у вас несколько услуг — выберите, для какой именно выдавать ссылку.</p>
+      <div id="inviteServiceRow" class="invite-service-row" hidden>
+        <div class="invite-service-label">Услуга для ссылки</div>
+        <select id="inviteServiceSelect" class="invite-service-select" aria-label="Услуга для пригласительной ссылки"></select>
+      </div>
       <button type="button" class="btn btn-secondary" id="btnShowInviteLink">Получить пригласительную ссылку</button>
       <div id="inviteLinkBlock" class="invite-link-block" style="display:none;">
         <div class="invite-link-label">Ссылка</div>
@@ -76,7 +88,7 @@
   </div>
 
   <script src="mini-app-trainer-gate.js"></script>
-  <script defer src="trainer-clients-main.js?v=20260422"></script>
+  <script defer src="trainer-clients-main.js?v=20260427"></script>
   <script defer src="mini-app-trainer-home.js"></script>
 </body>
 </html>

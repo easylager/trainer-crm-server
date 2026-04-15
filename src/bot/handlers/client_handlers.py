@@ -25,7 +25,11 @@ from aiogram.types import (
     WebAppInfo,
 )
 
-from src.application.booking_use_cases import get_trainer_default_city_and_service
+from src.application.booking_use_cases import (
+    get_trainer_default_city_and_service,
+    resolve_welcome_session_city_service,
+    trainer_has_access_to_client,
+)
 from src.application.subscription_tier_use_cases import trainer_allows_online_booking
 from src.application.certificate_use_cases import activate_certificate_by_code
 from src.application.client_use_cases import (
@@ -33,6 +37,7 @@ from src.application.client_use_cases import (
     attach_telegram_id_to_client,
     get_client_by_phone,
     get_client_id_by_telegram_id,
+    get_client_telegram_id,
     get_or_create_client,
     get_client_profile_basic,
 )
@@ -85,6 +90,7 @@ from src.application.group_attendance_use_cases import (
 )
 from src.application.welcome_link_use_cases import (
     WELCOME_TOKEN_TYPE_CERT,
+    WELCOME_TOKEN_TYPE_CLIENT_BIND,
     WELCOME_TOKEN_TYPE_GENERIC,
     WELCOME_TOKEN_TYPE_PASS,
     consume_welcome_link_token,
@@ -409,11 +415,59 @@ async def cmd_start(message: Message) -> None:
         if not trainer_id:
             await message.answer(msg.CLIENT_WELCOME_LINK_USED)
             return
+        preferred_svc = payload_data.get("service_id")
+        if token_type == WELCOME_TOKEN_TYPE_CLIENT_BIND:
+            bind_client_id = payload_data.get("client_id")
+            if bind_client_id is None:
+                await message.answer(msg.CLIENT_WELCOME_LINK_USED)
+                return
+            uname = None
+            if message.from_user and (message.from_user.username or "").strip():
+                uname = (message.from_user.username or "").strip()[:64]
+            async with async_session_factory() as db_session:
+                allowed = await trainer_has_access_to_client(
+                    db_session, int(trainer_id), int(bind_client_id)
+                )
+                row_tg = await get_client_telegram_id(db_session, int(bind_client_id))
+                other = await get_client_id_by_telegram_id(db_session, telegram_id)
+            if not allowed:
+                await message.answer(msg.CLIENT_WELCOME_BIND_FAILED)
+                return
+            if row_tg is None:
+                if other is not None and int(other) != int(bind_client_id):
+                    await message.answer(msg.CLIENT_WELCOME_BIND_OTHER_PROFILE)
+                    return
+                async with async_session_factory() as db_session:
+                    ok = await attach_telegram_id_to_client(
+                        db_session, int(bind_client_id), telegram_id
+                    )
+                    if ok:
+                        await get_or_create_client(
+                            db_session, telegram_id, telegram_username=uname
+                        )
+                    await db_session.commit()
+                if not ok:
+                    await message.answer(msg.CLIENT_WELCOME_BIND_FAILED)
+                    return
+            else:
+                if int(row_tg) != telegram_id:
+                    await message.answer(msg.CLIENT_WELCOME_LINK_USED)
+                    return
+                async with async_session_factory() as db_session:
+                    await get_or_create_client(
+                        db_session, telegram_id, telegram_username=uname
+                    )
+                    await db_session.commit()
+        else:
+            async with async_session_factory() as db_session:
+                await get_or_create_client(db_session, telegram_id)
+                await db_session.commit()
         async with async_session_factory() as db_session:
-            await get_or_create_client(db_session, telegram_id)
-            await db_session.commit()
-        async with async_session_factory() as db_session:
-            city_id, service_id = await get_trainer_default_city_and_service(db_session, trainer_id)
+            city_id, service_id = await resolve_welcome_session_city_service(
+                db_session,
+                trainer_id,
+                preferred_service_id=preferred_svc,
+            )
             if city_id is not None:
                 await set_city(telegram_id, city_id, db_session)
             if service_id is not None:
@@ -1220,7 +1274,7 @@ async def _finish_booking(
             last_name=last_name,
             telegram_username=username,
         )
-        booking_id = await create_booking(
+        booking_id, _ = await create_booking(
             db_session, slot_id, trainer_id, client_id, service_id=service_id, client_comment=comment,
             client_request_id=client_request_id,
         )
@@ -1468,7 +1522,7 @@ async def on_repeat_booking(callback: CallbackQuery) -> None:
                 service_id = await get_first_service_id_for_trainer(db_session, trainer_id)
         if service_id:
             async with async_session_factory() as db_session:
-                new_booking_id = await create_booking(
+                new_booking_id, _ = await create_booking(
                     db_session,
                     slot_info["slot_id"],
                     trainer_id,
@@ -1562,7 +1616,7 @@ async def on_make_recurring(callback: CallbackQuery) -> None:
         slot_info = await find_available_slot_next_week(db_session, trainer_id, day_of_week, start_time)
     if slot_info and service_id:
         async with async_session_factory() as db_session:
-            new_booking_id = await create_booking(
+            new_booking_id, _ = await create_booking(
                 db_session,
                 slot_info["slot_id"],
                 trainer_id,
@@ -1605,7 +1659,7 @@ async def on_book_available_slot(callback: CallbackQuery) -> None:
         if not service_id:
             await callback.message.answer(msg.CLIENT_ERROR_BOOKING_UNAVAILABLE)
             return
-        new_booking_id = await create_booking(
+        new_booking_id, _ = await create_booking(
             db_session, slot_id, trainer_id, client_id, service_id=service_id, client_comment=None
         )
     if not new_booking_id:

@@ -24,8 +24,8 @@
       href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=optional"
     />
   </noscript>
-  <link rel="preload" href="schedule-editor-main.js?v=20260429" as="script" />
-  <link rel="stylesheet" href="mini-app-schedule-editor.css?v=20260429" />
+  <link rel="preload" href="schedule-editor-main.js?v=20260433" as="script" />
+  <link rel="stylesheet" href="mini-app-schedule-editor.css?v=20260435" />
   <link rel="stylesheet" href="mini-app-trainer-nav.css?v=20260429" />
 </head>
 <body>
@@ -286,7 +286,7 @@
     <div class="modal book-flow-modal" style="max-width: 420px;">
       <p class="quick-book-kicker">Быстрая запись</p>
       <h3 class="book-modal-title">Когда занятие?</h3>
-      <p class="book-choice-lead quick-book-lead">Слот в календаре будет создан автоматически. Сетка стартов и длительность — как в редакторе расписания (занятые интервалы недоступны).</p>
+      <p class="book-choice-lead quick-book-lead">Слот в календаре будет создан автоматически.</p>
       <div class="quick-book-fields">
         <div class="book-field-stack">
           <label class="book-field-label" for="quickBookDateInput">Дата</label>
@@ -317,6 +317,32 @@
         <button type="button" class="btn-block btn-primary" id="btnQuickBookContinue">Далее — выбрать клиента</button>
         <button type="button" class="btn-block btn-secondary" id="btnQuickBookShowFreeSlots">Показать свободные слоты</button>
         <button type="button" class="btn-block btn-book-cancel" id="btnQuickBookCancel">Отмена</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="modalQuickBookService" class="modal-overlay book-flow-overlay" style="display: none;" aria-hidden="true">
+    <div class="modal book-flow-modal" style="max-width: 420px;">
+      <p class="quick-book-kicker">Быстрая запись</p>
+      <h3 class="book-modal-title">Услуга и тариф</h3>
+      <p class="book-choice-lead quick-book-lead">Клиент уже выбран. По умолчанию — услуга и тариф с последнего проведённого занятия; при необходимости измените.</p>
+      <div class="quick-book-fields">
+        <div class="book-field-stack">
+          <label class="book-field-label" for="quickBookProfileServiceSelect">Услуга</label>
+          <select id="quickBookProfileServiceSelect" class="book-service-select"></select>
+        </div>
+        <div class="book-field-stack" id="quickBookProfileArenaWrap" style="display: none;">
+          <label class="book-field-label" for="quickBookProfileArenaSelect">Площадка</label>
+          <select id="quickBookProfileArenaSelect" class="book-service-select"></select>
+        </div>
+        <div class="book-field-stack" id="quickBookProfilePriceTierWrap" style="display: none;">
+          <label class="book-field-label">Тариф</label>
+          <div id="quickBookProfilePriceTierRadios" class="book-price-tier-radios"></div>
+        </div>
+      </div>
+      <div class="quick-book-actions">
+        <button type="button" class="btn-block btn-primary" id="btnQuickBookProfileContinue">Далее</button>
+        <button type="button" class="btn-block btn-secondary" id="btnQuickBookProfileBack">Назад к времени</button>
       </div>
     </div>
   </div>
@@ -365,7 +391,7 @@
           <label class="book-field-label" for="bookArenaSelect">Площадка</label>
           <select id="bookArenaSelect" class="input book-service-select"></select>
         </div>
-        <div class="book-field-stack">
+        <div class="book-field-stack" id="bookClientSearchWrap">
           <label class="book-field-label" for="bookClientSearch">Поиск по имени или телефону</label>
           <input type="text" id="bookClientSearch" class="input book-search-input" placeholder="Имя или телефон...">
         </div>
@@ -416,9 +442,19 @@
     </div>
   </div>
 
+  <div id="modalFirstBookingMilestone" class="modal-overlay book-flow-overlay" style="display: none;" aria-hidden="true">
+    <div class="modal book-flow-modal" role="dialog" aria-labelledby="modalFirstBookingMilestoneTitle">
+      <h3 id="modalFirstBookingMilestoneTitle" class="book-modal-title">Отличный старт</h3>
+      <div id="modalFirstBookingMilestoneBody" class="book-confirm-text"></div>
+      <div class="modal-actions" style="margin-top: 16px;">
+        <button type="button" class="btn-block btn-primary" id="modalFirstBookingMilestoneOk">Понятно</button>
+      </div>
+    </div>
+  </div>
+
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
   <script src="mini-app-trainer-home.js"></script>
-  <script defer src="schedule-editor-main.js?v=20260429"></script>
+  <script defer src="schedule-editor-main.js?v=20260415b"></script>
 </body>
 </html>

@@ -58,7 +58,7 @@ async def test_cancel_batch_marks_sent_only_after_telegram_ok(db_session) -> Non
     )
     tid = unique_test_telegram_id()
     client_id = await _create_client(db_session, tid)
-    booking_id = await create_booking(
+    booking_id, _ = await create_booking(
         db_session,
         slot_id=slot_id,
         trainer_id=trainer_id,
@@ -233,7 +233,7 @@ async def test_completed_feedback_marks_sent_only_after_telegram_ok(db_session) 
     )
     tid = unique_test_telegram_id()
     client_id = await _create_client(db_session, tid)
-    booking_id = await create_booking(
+    booking_id, _ = await create_booking(
         db_session,
         slot_id=slot_id,
         trainer_id=trainer_id,
@@ -283,7 +283,7 @@ async def test_booking_complete_round_sets_client_push_timestamp_after_send(db_s
     )
     tid = unique_test_telegram_id()
     client_id = await _create_client(db_session, tid)
-    booking_id = await create_booking(
+    booking_id, _ = await create_booking(
         db_session,
         slot_id=slot_id,
         trainer_id=trainer_id,

@@ -65,7 +65,188 @@
         servicesCatalog: [],
         arenasList: [],
         snapshot: null,
+        scheduleSettings: null,
+        scheduleGridSelectedStep: 15,
       };
+
+      var SCHEDULE_GRID_STEPS = [10, 15, 30, 60];
+
+      function buildScheduleGridPreviewInner(step) {
+        var totalMin = 4 * 60;
+        var n = Math.floor(totalMin / step);
+        var segs = '';
+        for (var i = 0; i < n; i++) {
+          segs += '<span class="grid-step-preview-seg"></span>';
+        }
+        return (
+          '<div class="grid-step-preview-bar">' +
+          segs +
+          '</div>' +
+          '<div class="grid-step-preview-axis"><span>08:00</span><span>12:00</span></div>'
+        );
+      }
+
+      function syncScheduleGridSaveButton() {
+        var btn = document.getElementById('btnSaveScheduleGrid');
+        if (!btn || !state.scheduleSettings) return;
+        var locked = !!state.scheduleSettings.arena_grid_locked;
+        var saved = parseInt(state.scheduleSettings.schedule_grid_step_minutes, 10);
+        if (isNaN(saved) || SCHEDULE_GRID_STEPS.indexOf(saved) < 0) saved = 15;
+        var dirty = !locked && state.scheduleGridSelectedStep !== saved;
+        btn.disabled = !dirty;
+      }
+
+      function renderScheduleSettingsPanel() {
+        var ss = state.scheduleSettings;
+        if (!ss) return;
+        var locked = !!ss.arena_grid_locked;
+        var arenaShell = document.getElementById('scheduleGridArenaLockShell');
+        var trainerShell = document.getElementById('scheduleGridTrainerShell');
+
+        if (locked) {
+          if (trainerShell) trainerShell.style.display = 'none';
+          if (arenaShell) {
+            arenaShell.hidden = false;
+            var mainEl = document.getElementById('scheduleGridArenaLockMainText');
+            var subEl = document.getElementById('scheduleGridArenaLockSubText');
+            var arenaName = ss.primary_arena_name ? String(ss.primary_arena_name).trim() : '';
+            if (mainEl) {
+              if (arenaName) {
+                mainEl.textContent =
+                  'Сетка начала слотов задаётся пресетом основной арены «' +
+                  arenaName +
+                  '». Выбор шага 10–60 минут здесь не используется — так вы не путаете «свой» шаг с правилами площадки.';
+              } else {
+                mainEl.textContent =
+                  'Сетка начала слотов задаётся пресетом вашей основной арены. Персональный шаг сетки на этом экране не применяется.';
+              }
+            }
+            if (subEl) {
+              var eff = ss.effective_schedule_grid || {};
+              var kind = (eff.kind || '').toString();
+              var line = '';
+              if (kind === 'hourly_minute') {
+                var mo = eff.minute_offset != null ? String(eff.minute_offset).padStart(2, '0') : '00';
+                line = 'Как сейчас у площадки: допустимые начала — в :' + mo + ' каждый час.';
+              } else if (eff.step_minutes != null) {
+                line = 'Как сейчас у площадки: шаг ' + eff.step_minutes + ' минут между допустимыми началами.';
+              } else {
+                line = 'Точные слоты всегда видны в редакторе расписания.';
+              }
+              subEl.textContent = line;
+            }
+          }
+          syncScheduleGridSaveButton();
+          return;
+        }
+
+        if (arenaShell) arenaShell.hidden = true;
+        if (trainerShell) trainerShell.style.display = '';
+
+        var saved = parseInt(ss.schedule_grid_step_minutes, 10);
+        if (isNaN(saved) || SCHEDULE_GRID_STEPS.indexOf(saved) < 0) saved = 15;
+        if (isNaN(state.scheduleGridSelectedStep) || SCHEDULE_GRID_STEPS.indexOf(state.scheduleGridSelectedStep) < 0) {
+          state.scheduleGridSelectedStep = saved;
+        }
+
+        var chipsWrap = document.getElementById('gridStepChips');
+        if (!chipsWrap) return;
+        chipsWrap.innerHTML = '';
+        SCHEDULE_GRID_STEPS.forEach(function(step) {
+          var b = document.createElement('button');
+          b.type = 'button';
+          b.className = 'grid-step-chip' + (state.scheduleGridSelectedStep === step ? ' selected' : '');
+          b.textContent = step + ' мин';
+          b.disabled = locked;
+          b.setAttribute('data-step', String(step));
+          b.addEventListener('click', function() {
+            if (locked) return;
+            state.scheduleGridSelectedStep = step;
+            renderScheduleSettingsPanel();
+            syncScheduleGridSaveButton();
+          });
+          chipsWrap.appendChild(b);
+        });
+
+        var prevWrap = document.getElementById('gridStepPreviewWrap');
+        if (!prevWrap) return;
+        prevWrap.innerHTML = '';
+        SCHEDULE_GRID_STEPS.forEach(function(step) {
+          var card = document.createElement('div');
+          card.className =
+            'grid-step-preview-card' + (state.scheduleGridSelectedStep === step ? ' is-active' : '');
+          card.innerHTML =
+            '<div class="grid-step-preview-label">' +
+            step +
+            ' мин</div>' +
+            buildScheduleGridPreviewInner(step);
+          prevWrap.appendChild(card);
+        });
+        syncScheduleGridSaveButton();
+      }
+
+      function wireSessionDurationQuickChips() {
+        var wrap = document.getElementById('sessionDurationQuickChips');
+        if (!wrap || wrap.dataset.wired === '1') return;
+        wrap.dataset.wired = '1';
+        [45, 60, 90].forEach(function(m) {
+          var b = document.createElement('button');
+          b.type = 'button';
+          b.className = 'settings-duration-chip';
+          b.textContent = m + ' мин';
+          b.addEventListener('click', function() {
+            var inp = document.getElementById('session_duration_minutes');
+            if (!inp) return;
+            inp.value = String(m);
+            validateFieldRealtime('session_duration_minutes');
+            setDirty();
+            markFieldValid('session_duration_minutes');
+          });
+          wrap.appendChild(b);
+        });
+      }
+
+      function saveScheduleGridSettings() {
+        var err = document.getElementById('err_schedule_grid');
+        if (err) {
+          err.hidden = true;
+          err.textContent = '';
+        }
+        var btn = document.getElementById('btnSaveScheduleGrid');
+        if (!btn || btn.disabled || !state.scheduleSettings) return;
+        btn.classList.add('saving');
+        fetch(apiUrl('/trainer/profile'), {
+          method: 'PATCH',
+          headers: headersJson(),
+          body: JSON.stringify({ schedule_grid_step_minutes: state.scheduleGridSelectedStep }),
+        })
+          .then(parseJsonResponse)
+          .then(function(o) {
+            btn.classList.remove('saving');
+            if (!o.ok) {
+              if (err) {
+                err.hidden = false;
+                err.textContent = friendlyApiMsg(o.data && o.data.detail ? o.data.detail : '');
+              }
+              if (o.status === 422) haptic('warning');
+              syncScheduleGridSaveButton();
+              return;
+            }
+            state.scheduleSettings.schedule_grid_step_minutes = state.scheduleGridSelectedStep;
+            if (state.trainer) state.trainer.schedule_grid_step_minutes = state.scheduleGridSelectedStep;
+            syncScheduleGridSaveButton();
+            showSaveToast('Сохранено', 'Сетка расписания обновлена');
+            haptic('success');
+          })
+          .catch(function() {
+            btn.classList.remove('saving');
+            if (err) {
+              err.hidden = false;
+              err.textContent = 'Ошибка сети.';
+            }
+            syncScheduleGridSaveButton();
+          });
+      }
       /** Fixed tariff codes (must match server price_tier_kind). */
       var SERVICE_TIER_ORDER = ['child', 'adult', 'two_children', 'two_adults', 'adult_and_child'];
       var SERVICE_TIER_DEFS = [
@@ -142,6 +323,8 @@
         'first_name', 'last_name', 'age', 'city_id', 'phone', 'contacts', 'description',
         'experience_years', 'education', 'session_duration_minutes', 'min_hours_before_booking',
       ];
+      /** Fields shown on «Настройки» tab — used to switch tab on validation errors. */
+      var SETTINGS_FORMAT_FIELD_IDS = ['session_duration_minutes', 'min_hours_before_booking'];
       var PHONE_MAX_LEN = 32;
       /** Aligned with server: Belarus E.164 `+375` + 9 digits after country code. */
       var PHONE_BY_RE = /^\+375\d{9}$/;
@@ -545,6 +728,22 @@
       }
 
       /** Client-side checks (mirror server rules) before PATCH. */
+      /** First tab to show when save validation fails (profile vs settings). */
+      function pickTabForValidationErrors(parsed) {
+        var pe = collectProfileFieldErrors(parsed);
+        var i;
+        for (i = 0; i < pe.length; i++) {
+          if (SETTINGS_FORMAT_FIELD_IDS.indexOf(pe[i][0]) >= 0) return 'settings';
+        }
+        if (!servicesPricesValid(parsed) || !serviceDescriptionsLengthOk(parsed)) return 'form';
+        if (parsed.arena_ids && parsed.arena_ids.length >= 2) {
+          if (!parsed.primary_arena_id || parsed.arena_ids.indexOf(parsed.primary_arena_id) < 0) {
+            return 'form';
+          }
+        }
+        return 'form';
+      }
+
       function clientValidateProfile(parsed) {
         var errs = collectProfileFieldErrors(parsed);
         if (!servicesPricesValid(parsed)) {
@@ -767,8 +966,10 @@
         // Inline JS UI state: keep existing business logic untouched.
         var formPane = document.getElementById('tab-form');
         var moderationPane = document.getElementById('tab-moderation');
+        var settingsPane = document.getElementById('tab-settings');
         if (formPane) formPane.classList.toggle('active', tab === 'form');
         if (moderationPane) moderationPane.classList.toggle('active', tab === 'moderation');
+        if (settingsPane) settingsPane.classList.toggle('active', tab === 'settings');
 
         var btns = document.querySelectorAll('#profileFilters .filter-btn');
         btns.forEach(function(b) {
@@ -783,8 +984,12 @@
             if (window.location.hash !== '#moderation') {
               history.replaceState(null, '', window.location.pathname + window.location.search + '#moderation');
             }
+          } else if (tab === 'settings') {
+            if (window.location.hash !== '#settings') {
+              history.replaceState(null, '', window.location.pathname + window.location.search + '#settings');
+            }
           } else {
-            if (window.location.hash === '#moderation') {
+            if (window.location.hash === '#moderation' || window.location.hash === '#settings') {
               history.replaceState(null, '', window.location.pathname + window.location.search);
             }
           }
@@ -886,9 +1091,11 @@
               el = document.getElementById('experience_years');
               break;
             case 'session_duration_minutes':
+              setTab('settings');
               el = document.getElementById('session_duration_minutes');
               break;
             case 'min_hours_before_booking':
+              setTab('settings');
               el = document.getElementById('min_hours_before_booking');
               break;
             case 'services': {
@@ -927,6 +1134,7 @@
           });
         });
         if (window.location.hash === '#moderation') setTab('moderation');
+        else if (window.location.hash === '#settings') setTab('settings');
         else setTab('form');
       })();
 
@@ -2261,6 +2469,13 @@
             var eduOpts = (refs.education_options && refs.education_options.items) ? refs.education_options.items : [];
             applyRefsToDom(eduOpts);
             state.trainer = data.trainer;
+            state.scheduleSettings = data.schedule_settings || null;
+            state.scheduleGridSelectedStep =
+              state.scheduleSettings && state.scheduleSettings.schedule_grid_step_minutes != null
+                ? parseInt(state.scheduleSettings.schedule_grid_step_minutes, 10)
+                : 15;
+            if (isNaN(state.scheduleGridSelectedStep)) state.scheduleGridSelectedStep = 15;
+            renderScheduleSettingsPanel();
             state.moderation_readiness = data.moderation_readiness;
             state.education_entries = data.education_entries || [];
             renderEducationEntries();
@@ -2275,6 +2490,12 @@
                 setTab('moderation');
                 setTimeout(function() {
                   var el = document.getElementById('moderation');
+                  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }, 300);
+              } else if (window.location.hash === '#settings') {
+                setTab('settings');
+                setTimeout(function() {
+                  var el = document.getElementById('tab-settings');
                   if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 }, 300);
               }
@@ -2296,6 +2517,13 @@
               return Promise.resolve();
             }
             state.trainer = o.data.trainer;
+            state.scheduleSettings = o.data.schedule_settings || null;
+            state.scheduleGridSelectedStep =
+              state.scheduleSettings && state.scheduleSettings.schedule_grid_step_minutes != null
+                ? parseInt(state.scheduleSettings.schedule_grid_step_minutes, 10)
+                : 15;
+            if (isNaN(state.scheduleGridSelectedStep)) state.scheduleGridSelectedStep = 15;
+            renderScheduleSettingsPanel();
             state.moderation_readiness = o.data.moderation_readiness;
             state.education_entries = o.data.education_entries || [];
             renderEducationEntries();
@@ -2310,6 +2538,12 @@
                 setTab('moderation');
                 setTimeout(function() {
                   var el = document.getElementById('moderation');
+                  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }, 300);
+              } else if (window.location.hash === '#settings') {
+                setTab('settings');
+                setTimeout(function() {
+                  var el = document.getElementById('tab-settings');
                   if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 }, 300);
               }
@@ -2393,13 +2627,19 @@
         clearFormErrors();
         if (!clientValidateProfile(parsed)) {
           haptic('error');
-          setTab('form');
+          var vtab = pickTabForValidationErrors(parsed);
+          setTab(vtab);
           syncServicesValidationUi();
-          var inv = document.querySelector('#tab-form .field-invalid');
+          var pane = vtab === 'settings' ? '#tab-settings' : '#tab-form';
+          var inv = document.querySelector(pane + ' .field-invalid');
           if (inv) inv.scrollIntoView({ behavior: 'smooth', block: 'center' });
           else {
-            var es = document.getElementById('err_services');
-            if (es && !es.hidden) es.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            var fe = document.querySelector(pane + ' .field-error:not([hidden])');
+            if (fe) fe.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            else {
+              var es = document.getElementById('err_services');
+              if (es && !es.hidden) es.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
           }
           return;
         }
@@ -2461,8 +2701,16 @@
             haptic('error');
             if (o.status === 422 && o.data && o.data.detail) {
               applyValidationDetail(o.data.detail);
-              setTab('form');
-              var firstErr = document.querySelector('#tab-form .field-error:not([hidden])');
+              var stErr =
+                SETTINGS_FORMAT_FIELD_IDS.some(function(fid) {
+                  var e = document.getElementById('err_' + fid);
+                  return e && !e.hidden;
+                }) ? 'settings'
+                : 'form';
+              setTab(stErr);
+              var firstErr =
+                document.querySelector('#tab-settings .field-error:not([hidden])') ||
+                document.querySelector('#tab-form .field-error:not([hidden])');
               if (firstErr) firstErr.scrollIntoView({ behavior: 'smooth', block: 'center' });
               return Promise.resolve();
             }
@@ -2666,6 +2914,8 @@
       }
 
       document.getElementById('btnSave').onclick = save;
+      var btnSaveScheduleGrid = document.getElementById('btnSaveScheduleGrid');
+      if (btnSaveScheduleGrid) btnSaveScheduleGrid.onclick = saveScheduleGridSettings;
       
       var photoInput = document.getElementById('photoInput');
       var heroPhotoDropZone = document.getElementById('heroPhotoDropZone');
@@ -2759,10 +3009,12 @@
           markFieldValid(id);
         });
         el.addEventListener('focus', function() {
-          el.parentElement.classList.add('field-focused');
+          var fw = el.closest ? el.closest('.field') : null;
+          if (fw) fw.classList.add('field-focused');
         });
         el.addEventListener('blur', function() {
-          el.parentElement.classList.remove('field-focused');
+          var fw = el.closest ? el.closest('.field') : null;
+          if (fw) fw.classList.remove('field-focused');
         });
       });
       (function() {
@@ -2834,5 +3086,6 @@
         });
       }
 
+      wireSessionDurationQuickChips();
       loadInitial();
     })();

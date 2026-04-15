@@ -18,6 +18,7 @@ from src.shared.price_tier_kind import (
     sql_order_case_tier_kind,
 )
 from src.shared.ttl_cache import invalidate_slots_for_trainer
+from src.application.trainer_first_booking_milestone import try_claim_first_booking_milestones
 
 try:
     from zoneinfo import ZoneInfo
@@ -227,6 +228,72 @@ async def get_trainer_default_city_and_service(
     return (city_id, service_id)
 
 
+async def resolve_welcome_session_city_service(
+    session: AsyncSession,
+    trainer_id: int,
+    *,
+    preferred_service_id: int | None,
+) -> tuple[int | None, int | None]:
+    """
+    Prefill city from profile; use preferred_service_id when the trainer offers it, else first service.
+    Used for one-time welcome tokens (legacy tokens have no preferred id).
+    """
+    city_id, default_service_id = await get_trainer_default_city_and_service(session, trainer_id)
+    if preferred_service_id is None:
+        return (city_id, default_service_id)
+    chk = await session.execute(
+        text(
+            "SELECT 1 FROM trainer_services WHERE trainer_id = :tid AND service_id = :sid"
+        ),
+        {"tid": trainer_id, "sid": preferred_service_id},
+    )
+    if chk.fetchone():
+        return (city_id, preferred_service_id)
+    return (city_id, default_service_id)
+
+
+async def list_trainer_services_for_welcome_link(
+    session: AsyncSession, trainer_id: int
+) -> list[dict]:
+    """Ordered id+name for generic welcome-link UI when trainer offers multiple services."""
+    r = await session.execute(
+        text("""
+            SELECT ts.service_id, s.name
+            FROM trainer_services ts
+            JOIN services s ON s.id = ts.service_id
+            WHERE ts.trainer_id = :tid
+            ORDER BY ts.service_id
+        """),
+        {"tid": trainer_id},
+    )
+    return [{"id": row[0], "name": (row[1] or "").strip() or f"Услуга #{row[0]}"} for row in r.fetchall()]
+
+
+async def resolve_service_id_for_generic_welcome_link(
+    session: AsyncSession,
+    trainer_id: int,
+    requested_service_id: int | None,
+) -> tuple[int | None, str | None]:
+    """
+    Choose which service_id to embed in a new generic welcome token.
+    Returns (service_id, error_key) where error_key is None, or no_services / service_required / invalid_service.
+    """
+    rows = await list_trainer_services_for_welcome_link(session, trainer_id)
+    ids = [r["id"] for r in rows]
+    if not ids:
+        return None, "no_services"
+    if len(ids) == 1:
+        only = ids[0]
+        if requested_service_id is not None and requested_service_id != only:
+            return None, "invalid_service"
+        return only, None
+    if requested_service_id is None:
+        return None, "service_required"
+    if requested_service_id not in ids:
+        return None, "invalid_service"
+    return requested_service_id, None
+
+
 async def create_booking(
     session: AsyncSession,
     slot_id: int,
@@ -241,7 +308,7 @@ async def create_booking(
     strict_service_price_variant: bool = False,
     *,
     allow_overbook: bool = False,
-) -> int | None:
+) -> tuple[int | None, tuple[bool, bool]]:
     """
     Create booking: insert row; slot becomes 'booked' only when pending+confirmed count reaches capacity.
     service_id required (must be in trainer_services).
@@ -254,7 +321,9 @@ async def create_booking(
     null so client bot sends "trainer booked you"; when False (client booked themselves) set it to now()
     to avoid duplicate notification.
 
-    Returns booking id or None if slot not available / wrong trainer / service not offered by trainer.
+    Returns (booking_id, (first_booking_milestone_claimed, share_catalog_tip_claimed)).
+    Milestone flags are True only when this insert was the trainer's first confirmed/completed booking
+    and profile timestamps were claimed in the follow-up commit.
 
     Concurrency: two parallel bookings on the same slot are serialized with FOR UPDATE on the slot row
     (pessimistic lock until commit). Second client waits, then sees full capacity and returns None.
@@ -269,21 +338,21 @@ async def create_booking(
     )
     slot_row = r.fetchone()
     if not slot_row:
-        return None
+        return (None, (False, False))
     capacity = max(1, int(slot_row[1]))
     if (slot_row[2] or "").strip().lower() == "cancelled":
-        return None
+        return (None, (False, False))
     slot_service_id = slot_row[3]
     slot_arena_id: int | None = int(slot_row[4]) if slot_row[4] is not None else None
     if capacity > 1:
         if slot_service_id is None:
-            return None
+            return (None, (False, False))
         if int(service_id) != int(slot_service_id):
-            return None
+            return (None, (False, False))
     cnt = await _count_occupying_bookings(session, slot_id)
     if cnt >= capacity:
         if not (allow_overbook and created_by_trainer and capacity > 1):
-            return None
+            return (None, (False, False))
     r = await session.execute(
         text("""
             SELECT 1 FROM trainer_services
@@ -292,7 +361,7 @@ async def create_booking(
         {"tid": trainer_id, "sid": service_id},
     )
     if not r.fetchone():
-        return None
+        return (None, (False, False))
     try:
         if capacity > 1:
             # Group slot: per-seat price from COALESCE(group_price_cents, anchor); catalog tiers do not apply.
@@ -311,7 +380,7 @@ async def create_booking(
         raise
     if not (created_by_trainer and capacity > 1):
         if service_price_variant_id is not None and variant_id_resolved is None:
-            return None
+            return (None, (False, False))
     # Group slots: venue is fixed on the slot (set when the trainer created the slot); ignore request arena/session.
     if capacity > 1:
         resolved_arena = slot_arena_id
@@ -334,7 +403,7 @@ async def create_booking(
                 {"tid": trainer_id, "aid": resolved_arena},
             )
             if not rchk.fetchone():
-                return None
+                return (None, (False, False))
     else:
         resolved_arena: int | None = arena_id
         if resolved_arena is None:
@@ -356,7 +425,7 @@ async def create_booking(
                 {"tid": trainer_id, "aid": resolved_arena},
             )
             if not rchk.fetchone():
-                return None
+                return (None, (False, False))
     try:
         r = await session.execute(
             text("""
@@ -386,7 +455,7 @@ async def create_booking(
         (booking_id,) = r.fetchone()
     except IntegrityError:
         await session.rollback()
-        return None
+        return (None, (False, False))
     await sync_slot_status_for_occupancy(session, slot_id)
     r_sd = await session.execute(
         text("SELECT slot_date, end_time FROM slots WHERE id = :sid"),
@@ -416,8 +485,14 @@ async def create_booking(
         )
     await session.commit()
     # Client catalog caches GET /client/slots; pending bookings still use status=booked on slot.
+    mile_flags: tuple[bool, bool] = (False, False)
+    if created_by_trainer:
+        ms, tip = await try_claim_first_booking_milestones(session, trainer_id)
+        if ms or tip:
+            await session.commit()
+        mile_flags = (ms, tip)
     invalidate_slots_for_trainer(trainer_id)
-    return booking_id
+    return (booking_id, mile_flags)
 
 
 async def create_trainer_quick_booking(
@@ -431,7 +506,7 @@ async def create_trainer_quick_booking(
     *,
     arena_id: int | None = None,
     service_price_variant_id: int | None = None,
-) -> tuple[int, int] | None:
+) -> tuple[int, int, bool, bool] | None:
     """
     Create an individual slot at date/start_minutes (15 min grid) if needed, then a trainer-initiated booking.
 
@@ -444,7 +519,7 @@ async def create_trainer_quick_booking(
         session, trainer_id, slot_date, start_minutes, duration_minutes
     )
     try:
-        booking_id = await create_booking(
+        booking_id, mile = await create_booking(
             session,
             slot_id=slot_id,
             trainer_id=trainer_id,
@@ -464,7 +539,8 @@ async def create_trainer_quick_booking(
     if booking_id is None:
         await session.rollback()
         return None
-    return (booking_id, slot_id)
+    m1, m2 = mile
+    return (booking_id, slot_id, m1, m2)
 
 
 def _booking_interval_duration_minutes(start_time: time, end_time: time) -> int:
@@ -559,7 +635,7 @@ async def trainer_repeat_booking_same_time_next_week(
     if not result:
         return {"success": False, "error": "create_failed"}
 
-    new_booking_id, _ = result
+    new_booking_id = result[0]
     await generate_reminders_for_booking(session, new_booking_id)
     r2 = await session.execute(
         text("""
@@ -849,6 +925,80 @@ async def get_booking_with_slot(
         "end_time": row[10],
         "status": (row[11] or "confirmed").strip(),
         "service_name": (row[12] or "").strip() or "—",
+    }
+
+
+async def get_booking_milestone_display_for_trainer(
+    session: AsyncSession,
+    booking_id: int,
+    trainer_id: int,
+) -> dict | None:
+    """
+    Read-only row for trainer milestone card (same projection as post-confirm notify payload).
+    """
+    r2 = await session.execute(
+        text(
+            """
+            SELECT b.id, b.slot_id, b.client_id, c.telegram_id, COALESCE(c.phone, '') AS client_phone,
+                   TRIM(COALESCE(c.first_name, '') || ' ' || COALESCE(c.last_name, '')) AS client_name,
+                   b.client_comment, b.created_at, s.slot_date, s.start_time, s.end_time,
+                   COALESCE(NULLIF(TRIM(srv.name), ''), '') AS service_name,
+                   COALESCE(b.booking_price_cents, ts.price_cents) AS price_cents_effective,
+                   b.price_tier_kind,
+                   ar.name AS arena_name,
+                   ar.address AS arena_address,
+                   ar.latitude AS arena_lat,
+                   ar.longitude AS arena_lon,
+                   (SELECT t.telegram_id FROM trainers t WHERE t.id = b.trainer_id) AS trainer_telegram_id
+            FROM bookings b
+            JOIN clients c ON c.id = b.client_id
+            JOIN slots s ON s.id = b.slot_id
+            JOIN services srv ON srv.id = b.service_id
+            LEFT JOIN trainer_services ts ON ts.trainer_id = b.trainer_id AND ts.service_id = b.service_id
+            LEFT JOIN LATERAL (
+                SELECT a.name, a.address, a.latitude, a.longitude
+                FROM arenas a
+                WHERE a.id = COALESCE(
+                    b.arena_id,
+                    s.arena_id,
+                    (SELECT t.primary_arena_id FROM trainers t WHERE t.id = b.trainer_id),
+                    (SELECT MIN(ta.arena_id) FROM trainer_arenas ta WHERE ta.trainer_id = b.trainer_id)
+                )
+            ) ar ON true
+            WHERE b.id = :bid AND b.trainer_id = :tid
+            """
+        ),
+        {"bid": booking_id, "tid": trainer_id},
+    )
+    row2 = r2.fetchone()
+    if not row2:
+        return None
+    ptk = normalize_price_tier_kind(row2[13])
+    tier_label = price_tier_label_ru(ptk) if ptk else None
+    sn = (row2[11] or "").strip() if row2[11] else ""
+    price_cents = row2[12]
+    cn_raw = (row2[5] or "").strip() if row2[5] else ""
+    an = (row2[14] or "").strip() if row2[14] else ""
+    aa = (row2[15] or "").strip() if row2[15] else ""
+    trainer_tid = row2[18]
+    return {
+        "id": row2[0],
+        "slot_id": row2[1],
+        "client_id": row2[2],
+        "client_telegram_id": row2[3],
+        "client_phone": row2[4] or "",
+        "client_name": cn_raw or None,
+        "client_comment": row2[6],
+        "created_at": row2[7],
+        "slot_date": row2[8],
+        "start_time": row2[9],
+        "end_time": row2[10],
+        "service_name": sn or None,
+        "booking_price_cents": int(price_cents) if price_cents is not None else None,
+        "price_tier_label": tier_label,
+        "arena_name": an or None,
+        "arena_address": aa or None,
+        "trainer_telegram_id": int(trainer_tid) if trainer_tid is not None else None,
     }
 
 
@@ -1244,6 +1394,37 @@ async def list_trainer_clients(
     ]
 
 
+async def trainer_has_access_to_client(
+    session: AsyncSession,
+    trainer_id: int,
+    client_id: int,
+) -> bool:
+    """
+    True if this trainer may manage this client (non-cancelled booking or active/trial group member).
+    Same rule as get_trainer_client_for_card visibility.
+    """
+    r = await session.execute(
+        text(
+            """
+            SELECT EXISTS (
+                SELECT 1 FROM bookings b
+                WHERE b.trainer_id = :tid AND b.client_id = :cid
+                  AND b.status NOT IN ('cancelled', 'declined')
+            )
+            OR EXISTS (
+                SELECT 1 FROM training_group_members m
+                INNER JOIN training_groups g ON g.id = m.training_group_id
+                WHERE g.trainer_id = :tid AND m.client_id = :cid
+                  AND m.status IN ('active', 'trial')
+            )
+            """
+        ),
+        {"tid": trainer_id, "cid": client_id},
+    )
+    row = r.fetchone()
+    return bool(row and row[0])
+
+
 async def get_trainer_client_for_card(
     session: AsyncSession,
     trainer_id: int,
@@ -1324,6 +1505,31 @@ async def get_trainer_client_for_card(
         "last_start": d[1] if d else None,
         "first_date": d[2] if d else None,
     }
+
+
+async def get_trainer_client_last_completed_booking_service_defaults(
+    session: AsyncSession,
+    trainer_id: int,
+    client_id: int,
+) -> tuple[int | None, int | None]:
+    """service_id and service_price_variant_id from the latest completed session (trainer + client)."""
+    r = await session.execute(
+        text(
+            """
+            SELECT b.service_id, b.service_price_variant_id
+            FROM bookings b
+            JOIN slots s ON s.id = b.slot_id
+            WHERE b.trainer_id = :tid AND b.client_id = :cid AND b.status = 'completed'
+            ORDER BY s.slot_date DESC, s.start_time DESC NULLS LAST
+            LIMIT 1
+            """
+        ),
+        {"tid": trainer_id, "cid": client_id},
+    )
+    row = r.fetchone()
+    if not row:
+        return None, None
+    return row[0], row[1]
 
 
 async def list_bookings_for_client(
@@ -1793,6 +1999,9 @@ async def confirm_booking(session: AsyncSession, booking_id: int, trainer_id: in
     await session.commit()
     if not row2:
         return None
+    ms, st_tip = await try_claim_first_booking_milestones(session, trainer_id)
+    if ms or st_tip:
+        await session.commit()
     arena_lat, arena_lon = row2[16], row2[17]
     trainer_tid = row2[18]
     map_link: str | None = None
@@ -1828,6 +2037,8 @@ async def confirm_booking(session: AsyncSession, booking_id: int, trainer_id: in
         "arena_address": aa or None,
         "map_link": map_link,
         "trainer_telegram_id": int(trainer_tid) if trainer_tid is not None else None,
+        "first_booking_milestone": ms,
+        "share_catalog_tip": st_tip,
     }
 
 

@@ -594,7 +594,7 @@
       color: var(--tg-theme-text-color);
     }
     #modalQuickBookDatetime .quick-book-lead {
-      margin: 0;
+      margin: 0 0 16px;
       font-size: 13px;
       line-height: 1.45;
       color: var(--tg-theme-hint-color);
@@ -613,6 +613,9 @@
       margin: 0;
       padding: 12px 14px;
       border-bottom: 1px solid rgba(128, 128, 128, 0.08);
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
     }
     #modalQuickBookDatetime .quick-book-fields .book-field-stack:last-child {
       border-bottom: none;
@@ -630,12 +633,17 @@
     }
     #modalQuickBookDatetime .quick-book-fields .book-service-select {
       width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      min-height: 48px;
       padding: 13px 40px 13px 14px;
       border-radius: 14px;
       border: none;
       margin-bottom: 0;
       font-size: 15px;
       font-variant-numeric: tabular-nums;
+      box-sizing: border-box;
+      display: block;
       background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%238e8e93' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
       background-repeat: no-repeat;
       background-position: right 12px center;
@@ -643,14 +651,28 @@
     }
     #modalQuickBookDatetime .quick-book-date-input {
       width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      min-height: 48px;
       padding: 13px 14px;
       border-radius: 14px;
       border: none;
       font-size: 15px;
       font-variant-numeric: tabular-nums;
       box-sizing: border-box;
+      display: block;
       font-family: inherit;
       color-scheme: light dark;
+    }
+    /* WebKit (iOS/Telegram): native date control keeps intrinsic width unless inner edit stretches */
+    #modalQuickBookDatetime .quick-book-date-input::-webkit-datetime-edit-fields-wrapper {
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+    }
+    #modalQuickBookDatetime .quick-book-date-input::-webkit-datetime-edit {
+      width: 100%;
+      padding: 0;
     }
     #modalQuickBookDatetime .quick-book-date-input:focus-visible,
     #modalQuickBookDatetime .quick-book-fields .book-service-select:focus-visible {
@@ -697,6 +719,110 @@
     #modalQuickBookDatetime #quickBookHourSelect:disabled {
       opacity: 0.72;
     }
+
+    /* Stack above datetime modal during handoff (same z-index would rely on DOM order). */
+    #modalQuickBookService.modal-overlay.book-flow-overlay {
+      z-index: 101;
+    }
+
+    /* Profile quick book: service + tariff step (same card chrome as datetime modal) */
+    #modalQuickBookService .quick-book-kicker {
+      margin: 0 0 8px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--tg-theme-hint-color);
+    }
+    #modalQuickBookService .book-modal-title {
+      margin: 0 0 8px;
+      font-size: 1.1875rem;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1.2;
+      color: var(--tg-theme-text-color);
+    }
+    #modalQuickBookService .quick-book-lead {
+      margin: 0 0 16px;
+      font-size: 13px;
+      line-height: 1.45;
+      color: var(--tg-theme-hint-color);
+    }
+    #modalQuickBookService .quick-book-fields {
+      position: relative;
+      z-index: 1;
+      margin: 0 0 18px;
+      border-radius: 16px;
+      background: var(--tg-theme-secondary-bg-color);
+      border: 1px solid rgba(128, 128, 128, 0.12);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+      overflow: hidden;
+    }
+    #modalQuickBookService .quick-book-fields .book-field-stack {
+      margin: 0;
+      padding: 12px 14px;
+      border-bottom: 1px solid rgba(128, 128, 128, 0.08);
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+    }
+    #modalQuickBookService .quick-book-fields .book-field-stack:last-child {
+      border-bottom: none;
+    }
+    #modalQuickBookService .quick-book-fields .book-field-label {
+      margin-bottom: 6px;
+    }
+    #modalQuickBookService .quick-book-fields .book-service-select {
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      min-height: 48px;
+      padding: 13px 40px 13px 14px;
+      border-radius: 14px;
+      border: none;
+      margin-bottom: 0;
+      font-size: 15px;
+      font-variant-numeric: tabular-nums;
+      box-sizing: border-box;
+      display: block;
+      background-color: var(--tg-theme-bg-color);
+      color: var(--tg-theme-text-color);
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%238e8e93' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 12px center;
+      appearance: none;
+      box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.06);
+    }
+    #modalQuickBookService .quick-book-fields .book-service-select:focus-visible {
+      outline: none;
+      box-shadow:
+        0 0 0 3px color-mix(in srgb, var(--tg-theme-button-color) 30%, transparent),
+        inset 0 1px 2px rgba(0, 0, 0, 0.06);
+    }
+    #modalQuickBookService .quick-book-actions {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    #modalQuickBookService .quick-book-actions .btn-block {
+      border-radius: 14px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      min-height: 48px;
+    }
+    #modalQuickBookService .quick-book-actions .btn-primary {
+      margin-top: 0 !important;
+      box-shadow: var(--app-btn-shadow-cta);
+    }
+    #modalQuickBookService .quick-book-actions .btn-primary:active {
+      transform: scale(0.985);
+    }
+    #modalQuickBookService .quick-book-actions .btn-secondary:active {
+      transform: scale(0.99);
+    }
+
     .book-service-select {
       width: 100%;
       padding: 13px 40px 13px 14px;

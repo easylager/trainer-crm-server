@@ -366,7 +366,7 @@ async def respond_attendance_rsvp(
             return True, "Вы уже записаны на это занятие."
 
     async with db_module.async_session_factory() as s_book:
-        bid = await create_booking(
+        bid, _ = await create_booking(
             s_book,
             slot_id,
             trainer_id,

@@ -12,6 +12,7 @@ from sqlalchemy import (
     Enum,
     ForeignKey,
     Integer,
+    SmallInteger,
     String,
     Table,
     Text,
@@ -84,6 +85,10 @@ class Trainer(Base):
     # Default venue for online booking when client did not pick a specific arena ("any").
     primary_arena_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("arenas.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    # When primary arena has no row in arena_schedule_presets, schedule editor uses this step (10/15/30/60).
+    schedule_grid_step_minutes: Mapped[int] = mapped_column(
+        SmallInteger(), nullable=False, default=15, server_default="15"
     )
     # Stable short code for referral deep links (e.g. t.me/bot?start=ref_ABC123)
     referral_code: Mapped[Optional[str]] = mapped_column(String(16), nullable=True, unique=True, index=True)
@@ -172,6 +177,13 @@ class TrainerProfile(Base):
     group_classes_enabled: Mapped[bool] = mapped_column(
         nullable=False, server_default="false"
     )  # When false, schedule UI/API disallow capacity > 1 (opt-in for group slots)
+    # One-time onboarding funnel: first confirmed/completed booking + share-link tip (never repeat after cancel).
+    first_booking_milestone_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    share_catalog_tip_sent_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     # P1/P2 (PRD): redeem — auto write-off on no-show for pass/cert; skip — do not redeem.
     pass_cert_no_show_policy: Mapped[str] = mapped_column(
         String(16), nullable=False, server_default="redeem"

@@ -255,6 +255,25 @@ class TrainerProfilePatchBody(BaseModel):
         ge=1,
         description="Основная площадка для онлайн-записи при выборе «Любая арена» в каталоге.",
     )
+    schedule_grid_step_minutes: int | None = Field(
+        default=None,
+        description="Шаг сетки расписания, если у основной арены нет пресета в arena_schedule_presets.",
+    )
+
+    @field_validator("schedule_grid_step_minutes")
+    @classmethod
+    def _schedule_grid_step_minutes(cls, v: object) -> int | None:
+        if v is None:
+            return None
+        if isinstance(v, bool):
+            raise ValueError("Некорректное значение.")
+        try:
+            iv = int(v)
+        except (TypeError, ValueError):
+            raise ValueError("Шаг сетки — целое число минут.")
+        if iv not in (10, 15, 30, 60):
+            raise ValueError("Шаг сетки: 10, 15, 30 или 60 минут.")
+        return iv
 
 
 class PhotoRegisterBody(BaseModel):

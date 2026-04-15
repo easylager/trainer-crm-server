@@ -25,8 +25,17 @@
     #screenCreate .tg-create-form {
       animation: bd-enter 0.38s cubic-bezier(0.22, 1, 0.36, 1) both;
     }
-    .tg-create-hero {
-      margin-bottom: 16px;
+    /* Compact hero on «Новая группа» — less vertical stretch */
+    #screenCreate .tg-create-hero.bd-hero {
+      padding: 14px 16px 16px;
+      margin-bottom: 10px;
+    }
+    #screenCreate .tg-create-hero .bd-hero-kicker {
+      margin-bottom: 6px;
+    }
+    #screenCreate .tg-create-hero .bd-hero-date {
+      margin-top: 6px;
+      line-height: 1.35;
     }
     .tg-create-hero .bd-hero-time {
       font-size: clamp(20px, 5.5vw, 26px);
@@ -516,24 +525,131 @@
       pointer-events: none;
       cursor: default;
     }
-    .group-card-skeleton .sk-line {
-      height: 11px;
-      border-radius: 6px;
-      background: rgba(128, 128, 128, 0.18);
-      animation: pulse 1.3s ease-in-out infinite;
+    /* List skeleton — line heights match .group-card-tg typography (17/14/15/11 px) */
+    .tg-groups-skel {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
     }
-    .group-card-skeleton .sk-line + .sk-line {
-      margin-top: 8px;
+    .group-card-skeleton .group-card-tg__top {
+      align-items: center;
+      min-height: 30px;
     }
-    .group-card-skeleton .sk-line--lg {
+    .group-card-skeleton .tg-group-skel-title {
+      flex: 1;
+      min-width: 0;
+      /* ~17px title × 1.25 line-height */
+      height: 28px;
+      border-radius: 10px;
+      max-width: 82%;
+    }
+    .group-card-skeleton .tg-group-skel-pill {
+      width: 84px;
+      height: 28px;
+      border-radius: 999px;
+      flex-shrink: 0;
+      box-sizing: border-box;
+    }
+    .group-card-skeleton .tg-group-skel-open {
+      width: 28px;
+      height: 28px;
+      border-radius: 999px;
+      flex-shrink: 0;
+      box-sizing: border-box;
+    }
+    .group-card-skeleton .tg-group-skel-meta-row {
+      margin-top: 2px;
+      align-items: center;
+      min-height: 22px;
+    }
+    .group-card-skeleton .tg-group-skel-meta-ico {
+      width: 16px;
       height: 16px;
-      width: 52%;
+      border-radius: 5px;
+      flex-shrink: 0;
     }
-    .group-card-skeleton .sk-line--md {
-      width: 72%;
+    .group-card-skeleton .tg-group-skel-meta-line {
+      flex: 1;
+      min-width: 0;
+      /* 14px meta × 1.4 line-height */
+      height: 20px;
+      border-radius: 10px;
     }
-    .group-card-skeleton .sk-line--sm {
-      width: 38%;
+    .group-card-skeleton .tg-group-skel-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 10px;
+      margin-bottom: 12px;
+    }
+    .group-card-skeleton .tg-group-skel-chip {
+      height: 28px;
+      border-radius: 999px;
+      min-width: 104px;
+      width: 104px;
+      box-sizing: border-box;
+    }
+    .group-card-skeleton .tg-group-skel-chip:nth-child(2) {
+      width: 124px;
+      min-width: 124px;
+    }
+    .group-card-skeleton .tg-group-skel-label {
+      display: block;
+      width: min(100%, 168px);
+      height: 13px;
+      border-radius: 6px;
+    }
+    .group-card-skeleton .tg-group-skel-next {
+      /* 15px semibold line */
+      height: 22px;
+      border-radius: 10px;
+      width: 100%;
+      max-width: 100%;
+      box-sizing: border-box;
+    }
+    .group-card-skeleton .tg-group-skel-cap {
+      width: 64px;
+      height: 18px;
+      border-radius: 8px;
+      margin-left: auto;
+    }
+    .group-card-skeleton .tg-group-skel-hint {
+      width: 88px;
+      height: 12px;
+      border-radius: 6px;
+      margin-left: auto;
+    }
+    .group-card-skeleton .tg-group-skel-meter {
+      display: block;
+      height: 100%;
+      border-radius: 6px;
+    }
+    .tg-groups-skel .group-card-skeleton:nth-child(1) .tg-group-skel-title {
+      max-width: 70%;
+    }
+    .tg-groups-skel .group-card-skeleton:nth-child(2) .tg-group-skel-title {
+      max-width: 62%;
+    }
+    .tg-groups-skel .group-card-skeleton:nth-child(2) .tg-group-skel-meta-line {
+      max-width: 78%;
+    }
+    .tg-groups-skel .group-card-skeleton:nth-child(3) .tg-group-skel-title {
+      max-width: 82%;
+    }
+    .tg-groups-skel .group-card-skeleton:nth-child(3) .tg-group-skel-meta-line {
+      max-width: 66%;
+    }
+    .tg-groups-skel .group-card-skeleton:nth-child(4) .tg-group-skel-title {
+      max-width: 58%;
+    }
+    .tg-groups-skel .group-card-skeleton:nth-child(4) .tg-group-skel-meta-line {
+      max-width: 84%;
+    }
+    .tg-groups-skel .group-card-skeleton:nth-child(5) .tg-group-skel-title {
+      max-width: 76%;
+    }
+    .tg-groups-skel .group-card-skeleton:nth-child(5) .tg-group-skel-meta-line {
+      max-width: 72%;
     }
     .tg-detail-head-meta {
       display: flex;
@@ -843,6 +959,75 @@
       max-height: min(92vh, 720px);
       overflow-y: auto;
     }
+    .tg-modal-edit-schedule__intro {
+      position: relative;
+      z-index: 1;
+      margin: 0 0 12px;
+      padding: 10px 12px;
+      border-radius: 14px;
+      background: var(--tg-theme-secondary-bg-color);
+      border: 1px solid rgba(128, 128, 128, 0.12);
+      font-size: 13px;
+      line-height: 1.45;
+      color: var(--tg-theme-hint-color);
+    }
+    .tg-modal-edit-schedule__form {
+      position: relative;
+      z-index: 1;
+      margin-bottom: 4px;
+    }
+    .tg-modal-edit-schedule__form .form-block {
+      margin-bottom: 14px;
+    }
+    .tg-modal-edit-schedule__form .form-block:last-child {
+      margin-bottom: 0;
+    }
+    .tg-edit-schedule-time {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      width: 100%;
+      align-items: stretch;
+    }
+    @media (max-width: 320px) {
+      .tg-edit-schedule-time {
+        grid-template-columns: 1fr;
+      }
+    }
+    .tg-edit-schedule-time__field {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+    .tg-edit-schedule-time__lbl {
+      display: block;
+      margin: 0 0 4px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--tg-theme-hint-color);
+    }
+    .tg-modal-edit-schedule__actions {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .tg-modal-edit-schedule__actions .btn-primary {
+      margin-top: 0;
+    }
+    .tg-modal-edit-schedule__actions .btn-book-cancel {
+      margin-top: 0 !important;
+    }
+    .tg-modal-edit-schedule__err {
+      position: relative;
+      z-index: 1;
+      margin-top: 12px;
+      margin-bottom: 0;
+    }
     .tg-req-actions {
       display: flex;
       gap: 8px;
@@ -858,8 +1043,8 @@
       border-radius: 10px;
     }
     .tg-form-card {
-      border-radius: 20px;
-      padding: 20px 18px 22px;
+      border-radius: 18px;
+      padding: 14px 14px 16px;
       background: var(--tg-theme-secondary-bg-color);
       border: 1px solid rgba(128, 128, 128, 0.12);
       box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
@@ -870,16 +1055,18 @@
       }
     }
     .tg-form-card .bd-section-label {
-      margin-top: 0;
-      margin-bottom: 12px;
+      margin: 0 0 8px 2px;
     }
     .tg-form-card .bd-section-label:not(:first-child) {
-      margin-top: 8px;
+      margin-top: 4px;
+    }
+    .tg-form-card .form-block {
+      margin-bottom: 12px;
     }
     .tg-form-divider {
       border: none;
       height: 1px;
-      margin: 18px 0;
+      margin: 12px 0;
       background: linear-gradient(90deg, transparent, rgba(128, 128, 128, 0.14) 15%, rgba(128, 128, 128, 0.14) 85%, transparent);
     }
     .tg-form-card .form-block input[type="text"],
@@ -887,7 +1074,8 @@
     .tg-form-card .form-block input[type="date"],
     .tg-form-card .form-block select.tg-select {
       width: 100%;
-      padding: 13px 14px;
+      padding: 10px 12px;
+      min-height: 42px;
       border-radius: var(--app-radius-md);
       border: 1px solid rgba(128, 128, 128, 0.28);
       background: var(--tg-theme-bg-color);
@@ -896,6 +1084,15 @@
       font-family: inherit;
       box-sizing: border-box;
       transition: border-color 0.18s ease, box-shadow 0.18s ease;
+    }
+    .tg-form-card .form-block input[type="number"]::-webkit-outer-spin-button,
+    .tg-form-card .form-block input[type="number"]::-webkit-inner-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
+    .tg-form-card .form-block input[type="number"] {
+      appearance: textfield;
+      -moz-appearance: textfield;
     }
     .tg-form-card .form-block input:focus {
       outline: none;
@@ -915,11 +1112,11 @@
     .tg-form-card .form-block select.tg-select {
       appearance: none;
       -webkit-appearance: none;
-      padding-right: 42px;
+      padding-right: 36px;
       background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%23f5a623' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
       background-repeat: no-repeat;
-      background-position: right 12px center;
-      background-size: 18px;
+      background-position: right 10px center;
+      background-size: 16px;
       cursor: pointer;
     }
     .tg-form-card .form-block textarea {
@@ -927,6 +1124,11 @@
       background: var(--tg-theme-bg-color);
       border-radius: var(--app-radius-md);
       transition: border-color 0.18s ease, box-shadow 0.18s ease;
+      padding: 11px 12px;
+      min-height: 80px;
+      font-size: 15px;
+      line-height: 1.4;
+      box-sizing: border-box;
     }
     .tg-form-card .form-block textarea:focus {
       outline: none;
@@ -934,6 +1136,7 @@
       box-shadow: 0 0 0 3px rgba(247, 166, 0, 0.12);
     }
     .tg-form-card .form-block .form-label {
+      margin-bottom: 5px;
       color: var(--tg-theme-hint-color);
       letter-spacing: 0.08em;
     }
@@ -956,7 +1159,7 @@
     .tg-form-row-2 {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 12px;
+      gap: 8px;
     }
     @media (max-width: 360px) {
       .tg-form-row-2 {
@@ -966,17 +1169,17 @@
     .tg-quick-dates {
       display: flex;
       flex-wrap: wrap;
-      gap: 8px;
-      margin-top: 10px;
+      gap: 6px;
+      margin-top: 6px;
     }
     .tg-chip-btn {
       flex: 0 0 auto;
-      padding: 8px 12px;
+      padding: 6px 10px;
       border-radius: 10px;
       border: 1px solid rgba(128, 128, 128, 0.28);
       background: var(--tg-theme-bg-color);
       color: var(--tg-theme-text-color);
-      font-size: 13px;
+      font-size: 12px;
       font-weight: 500;
       font-family: inherit;
       cursor: pointer;
@@ -993,7 +1196,7 @@
     .tg-weekday {
       display: grid;
       grid-template-columns: repeat(7, minmax(0, 1fr));
-      gap: 8px;
+      gap: 6px;
       width: 100%;
     }
     /* Unselected: contrast vs form card (same bg as page made labels unreadable in dark Telegram). */
@@ -1002,7 +1205,7 @@
       max-width: none;
       aspect-ratio: 1;
       height: auto;
-      min-height: 38px;
+      min-height: 34px;
       padding: 0;
       border-radius: 50%;
       display: inline-flex;
@@ -1011,7 +1214,7 @@
       border: 1px solid rgba(128, 128, 128, 0.28);
       background: var(--tg-theme-bg-color);
       color: var(--tg-theme-hint-color);
-      font-size: 12px;
+      font-size: 11px;
       font-weight: 700;
       font-family: inherit;
       letter-spacing: -0.02em;
@@ -1149,11 +1352,6 @@
         height: 38px;
       }
     }
-    @keyframes pulse {
-      0% { opacity: 0.6; }
-      50% { opacity: 0.3; }
-      100% { opacity: 0.6; }
-    }
     .tg-members-hint {
       font-size: 13px;
       line-height: 1.45;
@@ -1216,6 +1414,44 @@
       height: 18px;
       opacity: 0.45;
       color: var(--tg-theme-hint-color);
+    }
+    /* Edit schedule + slot actions: centered sheet + blur (parity with add-member / schedule-editor) */
+    #modalEditSchedule.modal-overlay.book-flow-overlay,
+    #modalSlotActions.modal-overlay.book-flow-overlay {
+      align-items: center;
+      justify-content: center;
+      padding: max(16px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom));
+      background: rgba(26, 26, 26, 0.42);
+      -webkit-backdrop-filter: blur(12px);
+      backdrop-filter: blur(12px);
+    }
+    #modalEditSchedule .modal.book-flow-modal,
+    #modalSlotActions .modal.book-flow-modal {
+      position: relative;
+      max-width: 360px;
+      max-height: min(92vh, 720px);
+      overflow-y: auto;
+      padding: 22px 20px 20px;
+      border-radius: 22px;
+      overflow-x: hidden;
+      background: var(--tg-theme-bg-color);
+      box-shadow:
+        0 0 0 1px rgba(247, 166, 0, 0.14),
+        0 24px 48px -12px rgba(0, 0, 0, 0.28);
+    }
+    #modalEditSchedule .modal.book-flow-modal::before,
+    #modalSlotActions .modal.book-flow-modal::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      pointer-events: none;
+      background: linear-gradient(165deg, rgba(247, 166, 0, 0.07) 0%, transparent 42%);
+    }
+    #modalEditSchedule .modal.book-flow-modal > *,
+    #modalSlotActions .modal.book-flow-modal > * {
+      position: relative;
+      z-index: 1;
     }
     /* Add-member flow — same visual system as schedule-editor «Записать клиента» */
     #modalAddMember.modal-overlay.book-flow-overlay {
@@ -1517,4 +1753,44 @@
       margin-top: 4px !important;
       font-weight: 700 !important;
       letter-spacing: -0.01em;
+    }
+
+    /* Success / info toast (create group, add member) */
+    .tg-app-toast {
+      position: fixed;
+      left: 12px;
+      right: 12px;
+      bottom: calc(16px + env(safe-area-inset-bottom, 0));
+      max-width: 400px;
+      margin-left: auto;
+      margin-right: auto;
+      padding: 14px 18px;
+      border-radius: 16px;
+      font-family: var(--app-font-sans);
+      font-size: 14px;
+      font-weight: 600;
+      line-height: 1.4;
+      text-align: center;
+      color: var(--tg-theme-text-color);
+      background: var(--tg-theme-secondary-bg-color);
+      border: 1px solid rgba(247, 166, 0, 0.38);
+      box-shadow:
+        0 0 0 1px rgba(247, 166, 0, 0.1),
+        0 12px 36px rgba(0, 0, 0, 0.22);
+      z-index: 20050;
+      opacity: 0;
+      transform: translateY(16px);
+      pointer-events: none;
+      transition: opacity 0.28s ease, transform 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    .tg-app-toast.tg-app-toast--visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    @media (prefers-color-scheme: dark) {
+      .tg-app-toast {
+        box-shadow:
+          0 0 0 1px rgba(247, 166, 0, 0.12),
+          0 16px 40px rgba(0, 0, 0, 0.45);
+      }
     }

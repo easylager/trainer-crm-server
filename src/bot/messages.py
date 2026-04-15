@@ -361,6 +361,7 @@ def format_client_booking_confirmed_by_trainer_text(
     price_tier_label: str | None,
     arena_name: str | None,
     arena_address: str | None,
+    trainer_first_booking_milestone: bool = False,
 ) -> str:
     """HTML for ParseMode.HTML; escapes user-controlled and venue strings."""
     tn = html.escape((trainer_name or "").strip() or "Тренер")
@@ -368,12 +369,14 @@ def format_client_booking_confirmed_by_trainer_text(
         service_name, booking_price_cents, price_tier_label
     )
     venue = _format_client_booking_confirmed_venue_block(arena_name, arena_address)
+    extra = CLIENT_BOOKING_CONFIRMED_FIRST_FOR_TRAINER_LINE if trainer_first_booking_milestone else ""
     return (
         "✅ <b>Запись подтверждена</b>\n\n"
         f"Когда: <b>{html.escape(date)}</b> ({html.escape(day)}) {html.escape(time)}\n"
         f"Тренер: {tn}\n"
         f"{svc_price}"
         f"{venue}"
+        f"{extra}"
     )
 
 
@@ -518,6 +521,13 @@ CLIENT_PASS_WELCOME = (
 )
 CLIENT_BUTTON_BUY_PASS = "Купить абонемент"
 CLIENT_WELCOME_LINK_USED = "Эта ссылка уже использована или недействительна. Попросите тренера прислать новую ссылку."
+CLIENT_WELCOME_BIND_OTHER_PROFILE = (
+    "Этот Telegram уже привязан к другому профилю в системе. "
+    "Если это ошибка — обратитесь к тренеру или в поддержку."
+)
+CLIENT_WELCOME_BIND_FAILED = (
+    "Не удалось привязать профиль. Попросите тренера отправить новую пригласительную ссылку."
+)
 CLIENT_CERT_CODE_INVALID = "Код сертификата не найден или уже использован другим пользователем. Проверьте ссылку или обратитесь к тренеру."
 CLIENT_MY_CERTIFICATES_INTRO = "🎁 Ваши сертификаты: номинал, код, статус. Нажмите кнопку ниже."
 # Reminders: fixed date/time (no "через" — notifications may be delayed by poll interval).
@@ -1162,6 +1172,49 @@ TRAINER_SCHEDULE_TITLE = (
 TRAINER_SCHEDULE_EMPTY = "Шаблон пуст. Ниже добавь слоты в шаблон или сразу на выбранную неделю."
 TRAINER_SCHEDULE_ROW = "{day} {time} — {duration} мин"
 TRAINER_DAYS = ("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс")
+
+
+def format_client_group_series_schedule_updated_html(
+    *,
+    trainer_name: str,
+    group_name: str,
+    service_name: str,
+    arena_name: str | None,
+    season_start_date: str | None,
+    rules: list[dict],
+) -> str:
+    """Telegram HTML (client bot): trainer replaced recurring schedule for a training group cohort."""
+    tn = html.escape((trainer_name or "").strip() or "Тренер")
+    gn = html.escape((group_name or "").strip() or "Группа")
+    sn = html.escape((service_name or "").strip() or "—")
+    arena_line = ""
+    if (arena_name or "").strip():
+        arena_line = f"\nПлощадка: <b>{html.escape(arena_name.strip())}</b>"
+    season_line = ""
+    if (season_start_date or "").strip():
+        season_line = f"\nСтарт сезона: <b>{html.escape(season_start_date.strip())}</b>"
+    rule_lines: list[str] = []
+    for r in rules:
+        dow = int(r.get("day_of_week", 0))
+        day_short = TRAINER_DAYS[dow] if 0 <= dow <= 6 else "?"
+        st_raw = r.get("start_time")
+        if st_raw is not None and hasattr(st_raw, "strftime"):
+            st = st_raw.strftime("%H:%M")
+        else:
+            st = str(st_raw or "")[:5]
+        dur = int(r.get("duration_minutes") or 60)
+        rule_lines.append(f"• {day_short} — <b>{html.escape(st)}</b> ({dur} мин)")
+    rules_block = "\n".join(rule_lines) if rule_lines else "—"
+    return (
+        "📅 <b>Обновлено расписание группового потока</b>\n\n"
+        f"Тренер: <b>{tn}</b>\n"
+        f"Группа: <b>{gn}</b>\n"
+        f"Услуга: {sn}{arena_line}{season_line}\n\n"
+        f"<b>Новое расписание:</b>\n{rules_block}\n\n"
+        "Актуальные даты смотрите в <b>«Мои записи»</b> или на <b>Главной</b> в боте."
+    )
+
+
 TRAINER_BUTTON_ADD_SLOT = "➕ Добавить слоты вручную на неделю"
 TRAINER_SCHEDULE_ADD_TO_TEMPLATE_BUTTON = "В шаблон (для быстрого применения)"
 # Short labels for narrow mobile screens (dates appended in code)
@@ -1315,6 +1368,107 @@ TRAINER_BOOKING_CONFIRMED = (
     "Кто: <b>{client_name}</b>\n"
     "{phone_block}"
     "Когда: <b>{date}</b> ({day}) в <b>{time}</b>"
+)
+TRAINER_FIRST_BOOKING_MILESTONE_FOOTER_HTML = (
+    "<i>Напоминания и заметки по клиенту — прямо здесь, без отдельной CRM.</i>"
+)
+
+
+def _milestone_service_tariff_price_html(
+    service_name: str | None,
+    price_tier_label: str | None,
+    booking_price_cents: int | None,
+) -> str:
+    """Inner HTML lines for service / tariff / price (ParseMode.HTML safe)."""
+    lines: list[str] = []
+    svc = (service_name or "").strip()
+    if svc:
+        if (price_tier_label or "").strip():
+            tl = html.escape(price_tier_label.strip())
+            lines.append(f"Услуга: <b>{html.escape(svc)}</b> · тариф: <b>{tl}</b>")
+        else:
+            lines.append(f"Услуга: <b>{html.escape(svc)}</b>")
+    elif (price_tier_label or "").strip():
+        lines.append(f"Тариф: <b>{html.escape(price_tier_label.strip())}</b>")
+    if booking_price_cents is not None:
+        byn = booking_price_cents / 100.0
+        ps = f"{int(byn)} BYN" if byn == int(byn) else f"{byn:.2f} BYN"
+        lines.append(f"Цена: <b>{html.escape(ps)}</b>")
+    if not lines:
+        return ""
+    return "\n".join(lines) + "\n"
+
+
+def format_trainer_first_booking_milestone_rich_html(
+    *,
+    client_name: str,
+    client_phone: str,
+    date_str: str,
+    day_label: str,
+    time_str: str,
+    arena_name: str | None,
+    arena_address: str | None,
+    service_name: str | None,
+    price_tier_label: str | None,
+    booking_price_cents: int | None,
+) -> str:
+    """
+    Rich «первая запись» card for trainer bot (HTML). Escapes user-controlled fields.
+    """
+    cn = html.escape((client_name or "").strip() or "Клиент")
+    phone = (client_phone or "").strip()
+    phone_line = f"Телефон: <b>{html.escape(phone)}</b>\n" if phone else ""
+
+    an = (arena_name or "").strip()
+    aa = (arena_address or "").strip()
+    if an or aa:
+        venue_body = ""
+        if an:
+            venue_body += f"<b>{html.escape(an)}</b>\n"
+        if aa:
+            venue_body += f"{html.escape(aa)}\n"
+        venue_block = f"📍 <b>Где</b>\n{venue_body}"
+    else:
+        venue_block = "📍 <b>Где</b>\n<i>Арена не указана — уточните у клиента или в карточке слота.</i>\n"
+
+    svc_block = _milestone_service_tariff_price_html(service_name, price_tier_label, booking_price_cents)
+    service_section = ""
+    if svc_block.strip():
+        service_section = f"🎯 <b>Услуга</b>\n{svc_block}"
+
+    when_line = f"<b>{html.escape(date_str)}</b> ({html.escape(day_label)}) · <b>{html.escape(time_str)}</b>"
+
+    blocks: list[str] = [
+        "🎉 <b>Поздравляем — первая запись подтверждена!</b>",
+        "👤 <b>Клиент</b>\n" f"ФИО: <b>{cn}</b>\n" + phone_line.rstrip("\n"),
+        venue_block.rstrip("\n"),
+        f"📅 <b>Когда</b>\n{when_line}",
+    ]
+    if service_section:
+        blocks.append(service_section.rstrip("\n"))
+    blocks.append(TRAINER_FIRST_BOOKING_MILESTONE_FOOTER_HTML)
+    return "\n\n".join(blocks)
+TRAINER_SHARE_CATALOG_TIP_BOTH_HTML = (
+    "📣 <b>Следующий шаг</b>\n\n"
+    "Поделитесь ссылкой — клиент сможет записаться сам, когда ему удобно.\n\n"
+    "<b>Ссылка в бота (на вас и услугу):</b>\n<code>{deep_link}</code>\n\n"
+    "<b>Страница каталога:</b>\n<code>{catalog_url}</code>"
+)
+TRAINER_SHARE_CATALOG_TIP_DEEP_ONLY_HTML = (
+    "📣 <b>Следующий шаг</b>\n\n"
+    "Поделитесь персональной ссылкой на запись к вам:\n\n"
+    "<code>{deep_link}</code>"
+)
+TRAINER_SHARE_CATALOG_TIP_NO_CLIENT_BOT = (
+    "📣 <b>Следующий шаг:</b> попросите администратора указать имя клиентского бота в настройках — "
+    "тогда здесь появится готовая ссылка для клиентов."
+)
+TRAINER_SHARE_CATALOG_TIP_PROFILE_INCOMPLETE = (
+    "📣 <b>Следующий шаг:</b> в профиле укажите город и услугу — тогда мы сможем собрать для вас "
+    "готовую ссылку на запись и на каталог."
+)
+CLIENT_BOOKING_CONFIRMED_FIRST_FOR_TRAINER_LINE = (
+    "\n\nСпасибо, что выбрали этого тренера — для него это первая подтверждённая запись в сервисе."
 )
 TRAINER_BOOKING_DECLINE_PROMPT = (
     "Напиши короткий комментарий, почему не получается провести это занятие.\n\n"

@@ -142,9 +142,13 @@
     editWeekdays: [2, 4],
     editScheduleOriginalSeason: '',
     editScheduleGroupId: null,
-    search: ''
+    search: '',
+    lastAddMemberPickName: null,
+    /** GET /training-groups in flight — list shows layout-matched skeleton. */
+    groupsListLoading: false
   };
   var addMemberSearchTimer = null;
+  var tgAppToastTimer = null;
   loadPersistedListState();
 
   function loadPersistedListState() {
@@ -209,6 +213,24 @@
     });
   }
 
+  function showTrainerGroupsToast(text) {
+    var el = document.getElementById('tgAppToast');
+    if (!el) return;
+    el.textContent = text || '';
+    el.classList.add('tg-app-toast--visible');
+    clearTimeout(tgAppToastTimer);
+    if (tg && tg.HapticFeedback && typeof tg.HapticFeedback.notificationOccurred === 'function') {
+      try {
+        tg.HapticFeedback.notificationOccurred('success');
+      } catch (e1) {
+        /* ignore */
+      }
+    }
+    tgAppToastTimer = setTimeout(function () {
+      el.classList.remove('tg-app-toast--visible');
+    }, 3200);
+  }
+
   function showAddMemberStep(step) {
     var choice = document.getElementById('addMemberStepChoice');
     var existing = document.getElementById('addMemberStepExisting');
@@ -222,6 +244,7 @@
     state.addMemberGroupId = null;
     state.addMemberSlotId = null;
     state.addMemberServiceId = null;
+    state.lastAddMemberPickName = null;
     var ttl = document.getElementById('addMemberTitle');
     if (ttl) ttl.textContent = 'Добавить участника';
     showAddMemberStep('choice');
@@ -269,6 +292,7 @@
     if (ln) ln.value = '';
     var list = document.getElementById('addMemberClientList');
     if (list) list.innerHTML = '';
+    state.lastAddMemberPickName = null;
   }
 
   function closeSlotActionsModal() {
@@ -335,6 +359,8 @@
         Array.prototype.forEach.call(host.querySelectorAll('.client-row'), function (btn) {
           btn.addEventListener('click', function () {
             var cid = parseInt(btn.getAttribute('data-id'), 10);
+            var nameEl = btn.querySelector('div');
+            state.lastAddMemberPickName = nameEl ? nameEl.textContent.trim() : '';
             postAddMember({ client_id: cid });
           });
         });
@@ -370,15 +396,18 @@
       });
     }
 
-    function finishOk() {
+    function finishOk(toastMsg) {
       closeAddMemberModal();
+      if (toastMsg) showTrainerGroupsToast(toastMsg);
       openDetail(gid);
     }
 
     // One-off slot booking: does NOT add client to group roster (same as schedule).
     if (slotId && svcId) {
       if (payload.client_id != null) {
-        bookSlotOnly(payload.client_id).then(finishOk).catch(function (e) {
+        bookSlotOnly(payload.client_id).then(function () {
+          finishOk('Запись на занятие создана');
+        }).catch(function (e) {
           alert(e.message || String(e));
         });
         return;
@@ -396,7 +425,9 @@
           if (!clientId) throw new Error('Не удалось создать клиента');
           return bookSlotOnly(clientId);
         })
-        .then(finishOk)
+        .then(function () {
+          finishOk('Клиент создан и записан на занятие');
+        })
         .catch(function (e) {
           alert(e.message || String(e));
         });
@@ -426,9 +457,21 @@
     p.then(function (res) {
       var clientId = cid != null ? cid : (res && res.client_id);
       if (!clientId) throw new Error('Не удалось определить клиента');
+      var toastMsg = '';
+      if (payload.client_id != null) {
+        toastMsg = state.lastAddMemberPickName
+          ? '«' + state.lastAddMemberPickName + '» добавлен в группу'
+          : 'Участник добавлен в группу';
+      } else {
+        var fn0 = ((payload.first_name || '') + '').trim();
+        var ln0 = ((payload.last_name || '') + '').trim();
+        var disp = [fn0, ln0].filter(Boolean).join(' ').trim();
+        toastMsg = disp ? ('«' + disp + '» добавлен в группу') : 'Участник добавлен в группу';
+      }
+      state.lastAddMemberPickName = null;
+      finishOk(toastMsg);
       return clientId;
     })
-      .then(finishOk)
       .catch(function (e) {
         alert(e.message || String(e));
       });
@@ -574,18 +617,19 @@
     var elErr = document.getElementById('listError');
     elErr.style.display = 'none';
     if (!currentInit()) {
+      state.groupsListLoading = false;
       elErr.textContent = 'Данные сессии Telegram не переданы. Откройте «Группы» из мини-приложения тренера в боте.';
       elErr.style.display = 'block';
       document.getElementById('groupList').innerHTML = '';
       document.getElementById('fabNew').style.display = 'none';
       return Promise.resolve();
     }
-    document.getElementById('groupList').innerHTML = renderListSkeleton();
+    state.groupsListLoading = true;
+    renderList();
     setRefreshButtonLoading(true);
     return fetchJson(apiUrlWithQuery('/trainer/training-groups'))
       .then(function (data) {
         state.groups = data.groups || [];
-        renderList();
         showScreen('list');
       })
       .catch(function (e) {
@@ -595,6 +639,8 @@
         elErr.style.display = 'block';
       })
       .finally(function () {
+        state.groupsListLoading = false;
+        renderList();
         setRefreshButtonLoading(false);
       });
   }
@@ -739,17 +785,51 @@
   }
 
   function renderListSkeleton() {
-    var card =
-      '<article class="group-card-tg group-card-skeleton" aria-hidden="true">' +
-        '<div class="sk-line sk-line--lg"></div>' +
-        '<div class="sk-line sk-line--md"></div>' +
-        '<div class="sk-line sk-line--sm"></div>' +
-      '</article>';
-    return card + card + card;
+    var sk = 'ma-skel-shimmer';
+    function oneCard() {
+      return (
+        '<article class="group-card-tg group-card-skeleton" data-status="draft" aria-hidden="true">' +
+          '<div class="group-card-tg__top">' +
+            '<div class="tg-group-skel-title ' + sk + '"></div>' +
+            '<div class="group-card-tg__top-end">' +
+              '<span class="tg-group-skel-pill ' + sk + '"></span>' +
+              '<span class="tg-group-skel-open ' + sk + '"></span>' +
+            '</div>' +
+          '</div>' +
+          '<div class="group-card-tg__meta tg-group-skel-meta-row">' +
+            '<span class="tg-group-skel-meta-ico ' + sk + '"></span>' +
+            '<div class="tg-group-skel-meta-line ' + sk + '"></div>' +
+          '</div>' +
+          '<div class="group-card-tg__chips tg-group-skel-chips">' +
+            '<span class="tg-group-skel-chip ' + sk + '"></span>' +
+            '<span class="tg-group-skel-chip ' + sk + '"></span>' +
+          '</div>' +
+          '<div class="group-card-tg__bottom">' +
+            '<div class="group-card-tg__next-block">' +
+              '<div class="group-card-tg__next-label"><span class="tg-group-skel-label ' + sk + '"></span></div>' +
+              '<div class="group-card-tg__next tg-group-skel-next ' + sk + '"></div>' +
+            '</div>' +
+            '<div class="group-card-tg__cap-block">' +
+              '<div class="group-card-tg__cap-text tg-group-skel-cap ' + sk + '"></div>' +
+              '<div class="group-card-tg__cap-hint tg-group-skel-hint ' + sk + '"></div>' +
+              '<div class="group-card-tg__meter"><span class="tg-group-skel-meter ' + sk + '" style="width:58%"></span></div>' +
+            '</div>' +
+          '</div>' +
+        '</article>'
+      );
+    }
+    var parts = ['<div class="tg-groups-skel" role="status" aria-busy="true" aria-label="Загрузка групп">'];
+    for (var i = 0; i < 5; i++) parts.push(oneCard());
+    parts.push('</div>');
+    return parts.join('');
   }
 
   function renderList() {
     var box = document.getElementById('groupList');
+    if (state.groupsListLoading) {
+      box.innerHTML = renderListSkeleton();
+      return;
+    }
     // First apply search, then status filter so chip counters match search scope.
     var rowsBySearch = state.groups.filter(groupMatchesSearch);
     var rows = rowsBySearch.filter(groupMatchesFilter).filter(groupMatchesOnlyFreeSeats);
@@ -1140,10 +1220,11 @@
     var btn = document.getElementById('btnSubmitCreate');
     btn.disabled = true;
     fetchJson(apiUrlWithQuery('/trainer/training-groups'), { method: 'POST', body: JSON.stringify(body) })
-      .then(function (g) {
+      .then(function () {
         showScreen('list');
-        var newId = g && g.id;
-        return loadList().then(function () { if (newId) openDetail(newId); });
+        return loadList().then(function () {
+          showTrainerGroupsToast('Группа «' + name + '» создана');
+        });
       })
       .catch(function (e) {
         err.textContent = e.message || String(e);
@@ -1634,6 +1715,32 @@
     else window.location.href = '/webapp/trainer-home';
   });
   document.getElementById('btnBackCreate').addEventListener('click', function () { showScreen('list'); });
+
+  /** Mini App / WebView: tap outside fields to blur textarea & hide keyboard (catalog comment, etc.). */
+  (function bindCreateScreenBlurOnOutsidePointer() {
+    var screen = document.getElementById('screenCreate');
+    if (!screen) return;
+    screen.addEventListener(
+      'pointerdown',
+      function (e) {
+        var t = e.target;
+        if (t && t.nodeType === 3) t = t.parentElement;
+        if (!t || t.nodeType !== 1) return;
+        var tag = (t.tagName || '').toUpperCase();
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+        if (t.closest && t.closest('button')) return;
+        if (t.closest && t.closest('a')) return;
+        if (t.closest && t.closest('.wd')) return;
+        if (t.closest && t.closest('.tg-chip-btn')) return;
+        if (t.closest && t.closest('textarea, input, select')) return;
+        var ae = document.activeElement;
+        if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.tagName === 'SELECT')) {
+          ae.blur();
+        }
+      },
+      false
+    );
+  })();
   document.getElementById('btnHomeDetail').addEventListener('click', function () {
     if (window.navigateTrainerHome) window.navigateTrainerHome();
     else window.location.href = '/webapp/trainer-home';

@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.deps import get_session
 from src.application.trainer_link import get_trainer_id_by_telegram_id
+from src.application.training_group_series_notifications import notify_clients_group_series_schedule_updated
 from src.application.training_group_use_cases import (
     TG_ACTIVE,
     TG_ARCHIVED,
@@ -284,6 +285,7 @@ async def put_trainer_training_group_schedule_rules(
         raise HTTPException(status_code=409, detail=e.message) from None
     except ValueError:
         raise HTTPException(status_code=404, detail="Not found") from None
+    await notify_clients_group_series_schedule_updated(trainer_id, group_id)
     return {"ok": True}
 
 

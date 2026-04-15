@@ -219,6 +219,12 @@ class TrainerRepository:
             {"tid": trainer_id, "aid": arena_id},
         )
 
+    async def set_schedule_grid_step_minutes(self, trainer_id: int, step_minutes: int) -> None:
+        await self._session.execute(
+            text("UPDATE trainers SET schedule_grid_step_minutes = :step WHERE id = :tid"),
+            {"tid": trainer_id, "step": step_minutes},
+        )
+
     async def reconcile_primary_arena(self, trainer_id: int) -> None:
         """If primary is missing or not in trainer_arenas, set to MIN(arena_id). Clears primary if no arenas."""
         r = await self._session.execute(
@@ -239,7 +245,7 @@ class TrainerRepository:
         """Load trainer with profile, photos, service_ids; None if not found."""
         r = await self._session.execute(
             text(
-                "SELECT id, telegram_id, status, created_at, moderation_feedback, moderation_submitted_at, profile_pending, photo_pending, primary_arena_id "
+                "SELECT id, telegram_id, status, created_at, moderation_feedback, moderation_submitted_at, profile_pending, photo_pending, primary_arena_id, schedule_grid_step_minutes "
                 "FROM trainers WHERE id = :id"
             ),
             {"id": trainer_id},
@@ -269,6 +275,7 @@ class TrainerRepository:
             "profile_pending": raw_pending if isinstance(raw_pending, dict) else None,
             "photo_pending": raw_photo_pend if isinstance(raw_photo_pend, dict) else None,
             "primary_arena_id": row[8] if len(row) > 8 else None,
+            "schedule_grid_step_minutes": int(row[9]) if len(row) > 9 and row[9] is not None else 15,
         }
         rp = await self._session.execute(
             text(

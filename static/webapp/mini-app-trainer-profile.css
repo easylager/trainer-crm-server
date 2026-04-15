@@ -1439,15 +1439,248 @@
       opacity: 0.7;
     }
 
+    /* Schedule grid: arena overrides trainer (settings tab) */
+    .schedule-grid-arena-only {
+      text-align: left;
+    }
+    .schedule-grid-arena-only__title {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--tg-theme-text-color);
+      margin: 0 0 10px;
+      line-height: 1.35;
+    }
+    .schedule-grid-arena-only__text {
+      font-size: 14px;
+      line-height: 1.45;
+      color: var(--tg-theme-text-color);
+      margin: 0 0 12px;
+    }
+    .schedule-grid-arena-only__sub {
+      font-size: 13px;
+      line-height: 1.4;
+      color: var(--tg-theme-hint-color);
+    }
+
+    /* Settings tab — «Формат занятий» (compact, demonstrative) */
+    .settings-format-card {
+      padding: 14px 16px 16px;
+    }
+    .settings-format-field {
+      margin: 0;
+    }
+    .settings-format-row {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+    }
+    .settings-format-glyph {
+      flex: 0 0 40px;
+      width: 40px;
+      height: 40px;
+      border-radius: 12px;
+      margin-top: 2px;
+      background: linear-gradient(
+        145deg,
+        color-mix(in srgb, var(--tg-theme-button-color) 72%, var(--tg-theme-secondary-bg-color)) 0%,
+        color-mix(in srgb, var(--tg-theme-button-color) 38%, var(--tg-theme-secondary-bg-color)) 100%
+      );
+      box-shadow: 0 2px 8px color-mix(in srgb, var(--tg-theme-button-color) 22%, transparent);
+    }
+    .settings-format-glyph--clock {
+      background: linear-gradient(
+        145deg,
+        color-mix(in srgb, var(--tg-theme-button-color) 55%, var(--tg-theme-secondary-bg-color)) 0%,
+        color-mix(in srgb, var(--tg-theme-button-color) 28%, var(--tg-theme-secondary-bg-color)) 100%
+      );
+    }
+    .settings-format-main {
+      flex: 1;
+      min-width: 0;
+    }
+    .settings-format-label {
+      display: block;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--tg-theme-text-color);
+      line-height: 1.3;
+    }
+    .settings-format-inline {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      margin-top: 8px;
+    }
+    .settings-format-inline--lead {
+      align-items: baseline;
+    }
+    .settings-format-lead {
+      font-size: 13px;
+      color: var(--tg-theme-hint-color);
+      white-space: nowrap;
+    }
+    .settings-format-num {
+      width: 88px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: 1px solid color-mix(in srgb, var(--tg-theme-hint-color) 35%, transparent);
+      background: var(--tg-theme-bg-color);
+      color: var(--tg-theme-text-color);
+      font-size: 16px;
+      font-weight: 600;
+      text-align: center;
+    }
+    .settings-format-num--narrow {
+      width: 64px;
+    }
+    .settings-format-unit {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--tg-theme-hint-color);
+    }
+    .settings-format-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 10px;
+    }
+    .settings-duration-chip {
+      padding: 6px 12px;
+      border-radius: 999px;
+      border: 1px solid color-mix(in srgb, var(--tg-theme-button-color) 40%, transparent);
+      background: color-mix(in srgb, var(--tg-theme-button-color) 12%, var(--tg-theme-bg-color));
+      color: var(--tg-theme-text-color);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .settings-duration-chip:active {
+      transform: scale(0.97);
+    }
+    .settings-format-micro {
+      margin: 8px 0 0;
+      font-size: 12px;
+      line-height: 1.35;
+      color: var(--tg-theme-hint-color);
+    }
+    .settings-format-micro--toggle {
+      margin: 6px 0 0 28px;
+    }
+    .settings-format-divider {
+      height: 1px;
+      margin: 16px 0;
+      background: color-mix(in srgb, var(--tg-theme-hint-color) 22%, transparent);
+    }
+    .settings-format-toggle {
+      margin: 0;
+      padding-top: 2px;
+    }
+
+    /* Schedule grid step (settings tab) */
+    .grid-step-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .grid-step-chip {
+      flex: 1;
+      min-width: 72px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: 1px solid color-mix(in srgb, var(--tg-theme-button-color) 35%, transparent);
+      background: var(--tg-theme-bg-color);
+      color: var(--tg-theme-text-color);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+    .grid-step-chip:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+    .grid-step-chip:not(:disabled):active {
+      transform: scale(0.98);
+    }
+    .grid-step-chip.selected {
+      background: linear-gradient(
+        145deg,
+        color-mix(in srgb, var(--tg-theme-button-color) 88%, var(--tg-theme-bg-color)) 0%,
+        color-mix(in srgb, var(--tg-theme-button-color) 55%, var(--tg-theme-bg-color)) 100%
+      );
+      border-color: color-mix(in srgb, var(--tg-theme-button-color) 55%, transparent);
+      color: #1a1a1a;
+      box-shadow: 0 2px 10px color-mix(in srgb, var(--tg-theme-button-color) 28%, transparent);
+    }
+    .grid-step-preview-wrap {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 12px;
+    }
+    @media (min-width: 400px) {
+      .grid-step-preview-wrap {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+    .grid-step-preview-card {
+      border-radius: 14px;
+      padding: 12px;
+      background: var(--tg-theme-secondary-bg-color);
+      border: 1px solid color-mix(in srgb, var(--tg-theme-button-color) 16%, transparent);
+    }
+    .grid-step-preview-card.is-active {
+      border-color: color-mix(in srgb, var(--tg-theme-button-color) 45%, transparent);
+      box-shadow: 0 2px 12px color-mix(in srgb, var(--tg-theme-button-color) 15%, transparent);
+    }
+    .grid-step-preview-label {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--tg-theme-hint-color);
+      margin-bottom: 8px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    .grid-step-preview-bar {
+      display: flex;
+      gap: 2px;
+      height: 32px;
+      align-items: stretch;
+    }
+    .grid-step-preview-seg {
+      flex: 1;
+      border-radius: 4px;
+      min-width: 2px;
+      background: linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--tg-theme-button-color) 55%, var(--tg-theme-secondary-bg-color)) 0%,
+        color-mix(in srgb, var(--tg-theme-button-color) 28%, var(--tg-theme-secondary-bg-color)) 100%
+      );
+      opacity: 0.92;
+    }
+    .grid-step-preview-axis {
+      display: flex;
+      justify-content: space-between;
+      font-size: 10px;
+      color: var(--tg-theme-hint-color);
+      margin-top: 6px;
+    }
+    .settings-inline-save {
+      margin-top: 18px;
+    }
+    .settings-inline-save .btn-save {
+      width: 100%;
+    }
+
     /* JUSTSKATE.BY — перебиваем тему Telegram, как в расписании */
     body { background: #FFFBEB !important; color: #1a1a1a !important; }
-    .filter-btn, .card, .edu-readonly, .profile-hero {
+    .filter-btn, .card, .edu-readonly, .profile-hero, .grid-step-preview-card, .schedule-grid-arena-only, .settings-format-card {
       background: #fff5e1 !important;
       color: #1a1a1a !important;
     }
     .filters { background: #fff5e1 !important; }
     .profile-hero { background: linear-gradient(135deg, #fff5e1 0%, rgba(245, 166, 35, 0.12) 100%) !important; }
-    .field input, .field textarea, .field select {
+    .field input, .field textarea, .field select, .settings-format-num {
       background: #FFFBEB !important;
       color: #1a1a1a !important;
     }
@@ -1468,16 +1701,19 @@
     }
     @media (prefers-color-scheme: dark) {
       body { background: #1a1a1a !important; color: #f5f5f5 !important; }
-      .filter-btn, .card, .edu-readonly {
+      .filter-btn, .card, .edu-readonly, .grid-step-preview-card, .schedule-grid-arena-only, .settings-format-card {
         background: #2a2a2a !important;
         color: #f5f5f5 !important;
+      }
+      .schedule-grid-arena-only__sub {
+        color: #a8a8a8 !important;
       }
       .filters { background: #252525 !important; }
       .profile-hero {
         background: linear-gradient(135deg, #2a2a2a 0%, rgba(247, 166, 0, 0.1) 100%) !important;
         color: #f5f5f5 !important;
       }
-      .field input, .field textarea, .field select {
+      .field input, .field textarea, .field select, .settings-format-num {
         background: #1a1a1a !important;
         color: #f5f5f5 !important;
       }
@@ -1491,6 +1727,11 @@
         background: #1a1a1a !important;
         color: #F7A600 !important;
         border: 1px solid rgba(247, 166, 0, 0.5) !important;
+      }
+      .settings-duration-chip {
+        background: rgba(247, 166, 0, 0.12) !important;
+        border-color: rgba(247, 166, 0, 0.45) !important;
+        color: #f5f5f5 !important;
       }
       .save-toast {
         background: rgba(42, 42, 42, 0.98) !important;

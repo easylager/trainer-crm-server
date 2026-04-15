@@ -112,7 +112,7 @@ async def test_create_booking_success(db_session: AsyncSession) -> None:
         db_session, tomorrow, time(10, 0), time(11, 0)
     )
     client_id = await _create_client(db_session, unique_test_telegram_id())
-    booking_id = await create_booking(
+    booking_id, _ = await create_booking(
         db_session,
         slot_id=slot_id,
         trainer_id=trainer_id,
@@ -133,7 +133,7 @@ async def test_create_booking_wrong_slot_returns_none(db_session: AsyncSession) 
     )
     client_id = await _create_client(db_session, unique_test_telegram_id())
     wrong_slot_id = slot_id + 10_000
-    booking_id = await create_booking(
+    booking_id, _ = await create_booking(
         db_session,
         slot_id=wrong_slot_id,
         trainer_id=trainer_id,
@@ -152,11 +152,11 @@ async def test_create_booking_same_slot_twice_second_fails(db_session: AsyncSess
     )
     client_id_1 = await _create_client(db_session, unique_test_telegram_id())
     client_id_2 = await _create_client(db_session, unique_test_telegram_id())
-    first = await create_booking(
+    first, _ = await create_booking(
         db_session, slot_id, trainer_id, client_id_1, service_id=service_id
     )
     assert first is not None
-    second = await create_booking(
+    second, _ = await create_booking(
         db_session, slot_id, trainer_id, client_id_2, service_id=service_id
     )
     assert second is None
@@ -181,13 +181,14 @@ async def test_create_booking_concurrent_same_slot_two_sessions_one_wins() -> No
 
     async def _attempt(client_id: int) -> int | None:
         async with async_session_factory() as session:
-            return await create_booking(
+            bid, _flags = await create_booking(
                 session,
                 slot_id,
                 trainer_id,
                 client_id,
                 service_id=service_id,
             )
+            return bid
 
     results = await asyncio.gather(_attempt(client_id_1), _attempt(client_id_2))
     successes = [r for r in results if r is not None]
@@ -204,7 +205,7 @@ async def test_generate_reminders_and_list_pending(db_session: AsyncSession) -> 
     )
     client_tg = unique_test_telegram_id()
     client_id = await _create_client(db_session, client_tg)
-    booking_id = await create_booking(
+    booking_id, _ = await create_booking(
         db_session, slot_id, trainer_id, client_id, service_id=service_id
     )
     assert booking_id is not None
@@ -354,7 +355,7 @@ async def test_trainer_created_booking_not_in_trainer_pending_notification_queue
         db_session, tomorrow, time(10, 0), time(11, 0)
     )
     client_id = await _create_client(db_session, unique_test_telegram_id())
-    bid_trainer = await create_booking(
+    bid_trainer, _ = await create_booking(
         db_session,
         slot_id=slot_id,
         trainer_id=trainer_id,
@@ -376,7 +377,7 @@ async def test_trainer_created_booking_not_in_trainer_pending_notification_queue
     (slot_id_2,) = r.fetchone()
     await db_session.commit()
     client_id_2 = await _create_client(db_session, unique_test_telegram_id())
-    bid_client = await create_booking(
+    bid_client, _ = await create_booking(
         db_session,
         slot_id=slot_id_2,
         trainer_id=trainer_id,
@@ -400,7 +401,7 @@ async def test_group_slot_first_booking_keeps_slot_available(db_session: AsyncSe
         db_session, tomorrow, time(10, 0), time(11, 0), capacity=2
     )
     client_id = await _create_client(db_session, unique_test_telegram_id())
-    bid = await create_booking(db_session, slot_id, trainer_id, client_id, service_id=service_id)
+    bid, _ = await create_booking(db_session, slot_id, trainer_id, client_id, service_id=service_id)
     assert bid is not None
     r = await db_session.execute(text("SELECT status FROM slots WHERE id = :id"), {"id": slot_id})
     assert r.scalar() == "available"
@@ -415,8 +416,8 @@ async def test_group_slot_second_booking_then_booked(db_session: AsyncSession) -
     )
     c1 = await _create_client(db_session, unique_test_telegram_id())
     c2 = await _create_client(db_session, unique_test_telegram_id())
-    assert await create_booking(db_session, slot_id, trainer_id, c1, service_id=service_id) is not None
-    assert await create_booking(db_session, slot_id, trainer_id, c2, service_id=service_id) is not None
+    assert (await create_booking(db_session, slot_id, trainer_id, c1, service_id=service_id))[0] is not None
+    assert (await create_booking(db_session, slot_id, trainer_id, c2, service_id=service_id))[0] is not None
     r = await db_session.execute(text("SELECT status FROM slots WHERE id = :id"), {"id": slot_id})
     assert r.scalar() == "booked"
 
@@ -435,7 +436,7 @@ async def test_group_slot_booking_price_uses_group_override(db_session: AsyncSes
     )
     await db_session.commit()
     client_id = await _create_client(db_session, unique_test_telegram_id())
-    bid = await create_booking(db_session, slot_id, trainer_id, client_id, service_id=service_id)
+    bid, _ = await create_booking(db_session, slot_id, trainer_id, client_id, service_id=service_id)
     assert bid is not None
     r = await db_session.execute(
         text("SELECT booking_price_cents FROM bookings WHERE id = :id"), {"id": bid}
@@ -453,9 +454,9 @@ async def test_group_slot_third_booking_rejected(db_session: AsyncSession) -> No
     c1 = await _create_client(db_session, unique_test_telegram_id())
     c2 = await _create_client(db_session, unique_test_telegram_id())
     c3 = await _create_client(db_session, unique_test_telegram_id())
-    assert await create_booking(db_session, slot_id, trainer_id, c1, service_id=service_id) is not None
-    assert await create_booking(db_session, slot_id, trainer_id, c2, service_id=service_id) is not None
-    third = await create_booking(db_session, slot_id, trainer_id, c3, service_id=service_id)
+    assert (await create_booking(db_session, slot_id, trainer_id, c1, service_id=service_id))[0] is not None
+    assert (await create_booking(db_session, slot_id, trainer_id, c2, service_id=service_id))[0] is not None
+    third, _ = await create_booking(db_session, slot_id, trainer_id, c3, service_id=service_id)
     assert third is None
 
 
@@ -469,8 +470,8 @@ async def test_group_slot_cancel_frees_space(db_session: AsyncSession) -> None:
     c1 = await _create_client(db_session, unique_test_telegram_id())
     c2 = await _create_client(db_session, unique_test_telegram_id())
     c3 = await _create_client(db_session, unique_test_telegram_id())
-    assert await create_booking(db_session, slot_id, trainer_id, c1, service_id=service_id) is not None
-    bid2 = await create_booking(db_session, slot_id, trainer_id, c2, service_id=service_id)
+    assert (await create_booking(db_session, slot_id, trainer_id, c1, service_id=service_id))[0] is not None
+    bid2, _ = await create_booking(db_session, slot_id, trainer_id, c2, service_id=service_id)
     assert bid2 is not None
     r = await db_session.execute(text("SELECT status FROM slots WHERE id = :id"), {"id": slot_id})
     assert r.scalar() == "booked"
@@ -478,5 +479,5 @@ async def test_group_slot_cancel_frees_space(db_session: AsyncSession) -> None:
     assert ok is True
     r = await db_session.execute(text("SELECT status FROM slots WHERE id = :id"), {"id": slot_id})
     assert r.scalar() == "available"
-    third = await create_booking(db_session, slot_id, trainer_id, c3, service_id=service_id)
+    third, _ = await create_booking(db_session, slot_id, trainer_id, c3, service_id=service_id)
     assert third is not None

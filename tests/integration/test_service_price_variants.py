@@ -131,7 +131,7 @@ async def test_create_booking_with_variant_id_snapshots_price(db_session: AsyncS
     (client_id,) = r2.fetchone()
     await db_session.commit()
 
-    bid = await create_booking(
+    bid, _ = await create_booking(
         db_session,
         slot_id=slot_id,
         trainer_id=trainer_id,

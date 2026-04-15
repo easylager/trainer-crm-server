@@ -14,6 +14,7 @@ import logging
 
 from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Query, UploadFile
 from pydantic import BaseModel, Field
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.deps import get_session
@@ -32,6 +33,11 @@ from src.application.trainer_profile_pending import (
     trainer_has_photo_pending_revision,
 )
 from src.application.catalog_use_cases import list_cities, list_services
+from src.application.arena_schedule_preset import (
+    get_schedule_grid_preset_for_trainer,
+    normalize_trainer_schedule_grid_step,
+    schedule_grid_preset_to_api,
+)
 from src.application.trainer_use_cases import (
     TrainerPhotoFileKeyError,
     create_trainer_education,
@@ -72,6 +78,30 @@ async def _require_linked_trainer_id(session: AsyncSession, init_raw: str | None
     return trainer_id
 
 
+async def trainer_schedule_settings_payload(session: AsyncSession, trainer_id: int) -> dict:
+    """Mini App «Настройки»: saved step + whether primary arena's preset overrides the trainer."""
+    trainer = await get_trainer(session, trainer_id)
+    preset = await get_schedule_grid_preset_for_trainer(session, trainer_id)
+    step = normalize_trainer_schedule_grid_step((trainer or {}).get("schedule_grid_step_minutes"))
+    locked = preset.get("arena_id") is not None
+    primary_arena_name: str | None = None
+    if locked and preset.get("arena_id") is not None:
+        r = await session.execute(
+            text("SELECT name FROM arenas WHERE id = :aid"),
+            {"aid": int(preset["arena_id"])},
+        )
+        row = r.fetchone()
+        if row and row[0] is not None:
+            n = str(row[0]).strip()
+            primary_arena_name = n or None
+    return {
+        "schedule_grid_step_minutes": step,
+        "arena_grid_locked": locked,
+        "primary_arena_name": primary_arena_name,
+        "effective_schedule_grid": schedule_grid_preset_to_api(preset),
+    }
+
+
 async def build_trainer_profile_webapp_payload(session: AsyncSession, trainer_id: int) -> dict:
     """
     Same JSON shape as GET /trainer/profile.
@@ -108,6 +138,7 @@ async def build_trainer_profile_webapp_payload(session: AsyncSession, trainer_id
     education_entries = await list_trainer_education(session, trainer_id, public_only=False)
     if education_entries is None:
         education_entries = []
+    schedule_settings = await trainer_schedule_settings_payload(session, trainer_id)
     return {
         "trainer": trainer_for_editor,
         "profile_catalog_published": pub,
@@ -116,6 +147,7 @@ async def build_trainer_profile_webapp_payload(session: AsyncSession, trainer_id
         "has_pending_photo_revision": trainer_has_photo_pending_revision(trainer),
         "moderation_readiness": readiness,
         "education_entries": education_entries,
+        "schedule_settings": schedule_settings,
     }
 
 
@@ -215,6 +247,7 @@ async def patch_trainer_profile_for_webapp(
     profile = body.profile.model_dump(exclude_unset=True) if body.profile else {}
     services_payload = [s.model_dump() for s in body.services] if body.services is not None else None
     primary_set = "primary_arena_id" in body.model_fields_set
+    step_set = "schedule_grid_step_minutes" in body.model_fields_set
     try:
         ok = await update_trainer_profile(
             session,
@@ -225,6 +258,8 @@ async def patch_trainer_profile_for_webapp(
             arena_ids=body.arena_ids,
             primary_arena_id=body.primary_arena_id,
             primary_arena_id_set=primary_set,
+            schedule_grid_step_minutes=body.schedule_grid_step_minutes,
+            schedule_grid_step_minutes_set=step_set,
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc

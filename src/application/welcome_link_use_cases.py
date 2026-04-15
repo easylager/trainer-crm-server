@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 WELCOME_TOKEN_TYPE_CERT = "cert"
 WELCOME_TOKEN_TYPE_PASS = "pass"
 WELCOME_TOKEN_TYPE_GENERIC = "generic"
+WELCOME_TOKEN_TYPE_CLIENT_BIND = "client_bind"
 
 
 async def create_welcome_link_token(
@@ -17,16 +18,24 @@ async def create_welcome_link_token(
     *,
     cert_code: str | None = None,
     pass_product_id: int | None = None,
+    service_id: int | None = None,
+    client_id: int | None = None,
 ) -> uuid.UUID:
     """
     Create a one-time token for a welcome link. Returns token id (UUID) to embed in link.
-    type: cert | pass | generic. For cert pass cert_code; for pass pass pass_product_id.
+    type: cert | pass | generic | client_bind. For cert pass cert_code; for pass pass pass_product_id.
+    For generic, optional service_id pins catalog/service prefill when trainer has several services.
+    For client_bind, pass client_id (Telegram attached on first open to that row).
     """
     token_id = uuid.uuid4()
     await session.execute(
         text("""
-            INSERT INTO welcome_link_tokens (id, type, trainer_id, cert_code, pass_product_id)
-            VALUES (:id, :type, :trainer_id, :cert_code, :pass_product_id)
+            INSERT INTO welcome_link_tokens (
+                id, type, trainer_id, cert_code, pass_product_id, service_id, client_id
+            )
+            VALUES (
+                :id, :type, :trainer_id, :cert_code, :pass_product_id, :service_id, :client_id
+            )
         """),
         {
             "id": token_id,
@@ -34,6 +43,8 @@ async def create_welcome_link_token(
             "trainer_id": trainer_id,
             "cert_code": cert_code,
             "pass_product_id": pass_product_id,
+            "service_id": service_id,
+            "client_id": client_id,
         },
     )
     await session.commit()
@@ -45,7 +56,8 @@ async def consume_welcome_link_token(
     token_id: uuid.UUID,
 ) -> dict | None:
     """
-    Consume (burn) token if not yet used. Returns payload dict: type, trainer_id, cert_code?, pass_product_id?.
+    Consume (burn) token if not yet used. Returns payload dict: type, trainer_id, cert_code?,
+    pass_product_id?, service_id?.
     Returns None if token invalid or already used.
     """
     r = await session.execute(
@@ -53,7 +65,7 @@ async def consume_welcome_link_token(
             UPDATE welcome_link_tokens
             SET used_at = now()
             WHERE id = :id AND used_at IS NULL
-            RETURNING type, trainer_id, cert_code, pass_product_id
+            RETURNING type, trainer_id, cert_code, pass_product_id, service_id, client_id
         """),
         {"id": token_id},
     )
@@ -66,4 +78,6 @@ async def consume_welcome_link_token(
         "trainer_id": row[1],
         "cert_code": (row[2] or "").strip() or None,
         "pass_product_id": row[3],
+        "service_id": row[4],
+        "client_id": row[5],
     }

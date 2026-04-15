@@ -11,6 +11,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.infrastructure import s3
 
 from src.application.admin_moderation_notify import notify_admins_trainer_queued_for_moderation
+from src.application.arena_schedule_preset import (
+    get_schedule_grid_preset_for_trainer,
+    normalize_trainer_schedule_grid_step,
+)
 from src.application.subscription_use_cases import create_trial_subscription
 from src.application.trainer_profile_pending import (
     PROFILE_KEYS_FOR_PUBLISHED_UPDATE,
@@ -401,6 +405,8 @@ async def update_trainer_profile(
     arena_ids: list[int] | None = None,
     primary_arena_id: int | None = None,
     primary_arena_id_set: bool = False,
+    schedule_grid_step_minutes: int | None = None,
+    schedule_grid_step_minutes_set: bool = False,
 ) -> bool:
     """
     Patch profile and/or services (with prices) and/or arena_ids. Returns False if trainer not found.
@@ -448,6 +454,16 @@ async def update_trainer_profile(
                 if primary_arena_id not in aids:
                     raise ValueError("primary_arena_id must be among trainer arenas")
                 await repo.set_trainer_primary_arena(trainer_id, primary_arena_id)
+        if schedule_grid_step_minutes_set:
+            await session.flush()
+            preset = await get_schedule_grid_preset_for_trainer(session, trainer_id)
+            if preset.get("arena_id") is not None:
+                raise ValueError(
+                    "Сетка расписания для этой арены задаётся правилами площадки. Изменить её в профиле нельзя."
+                )
+            await repo.set_schedule_grid_step_minutes(
+                trainer_id, normalize_trainer_schedule_grid_step(schedule_grid_step_minutes)
+            )
         await session.commit()
         if revision_patch:
             try:
@@ -476,6 +492,16 @@ async def update_trainer_profile(
             if primary_arena_id not in aids:
                 raise ValueError("primary_arena_id must be among trainer arenas")
             await repo.set_trainer_primary_arena(trainer_id, primary_arena_id)
+    if schedule_grid_step_minutes_set:
+        await session.flush()
+        preset = await get_schedule_grid_preset_for_trainer(session, trainer_id)
+        if preset.get("arena_id") is not None:
+            raise ValueError(
+                "Сетка расписания для этой арены задаётся правилами площадки. Изменить её в профиле нельзя."
+            )
+        await repo.set_schedule_grid_step_minutes(
+            trainer_id, normalize_trainer_schedule_grid_step(schedule_grid_step_minutes)
+        )
     dirty = bool(updates) or services is not None or service_ids is not None or arena_ids is not None or primary_arena_id_set
     if dirty:
         await repo.clear_moderation_submitted_at(trainer_id)

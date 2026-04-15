@@ -173,7 +173,8 @@ async def test_schedule_get_returns_slots_in_range_and_shape(
     assert "session_duration_minutes" in data
     assert "schedule_grid" in data
     sg = data["schedule_grid"]
-    assert sg.get("kind") == "quarter_15"
+    assert sg.get("kind") == "uniform_step"
+    assert sg.get("step_minutes") == 15
     assert sg.get("slot_duration_minutes") is None
     assert int(sg.get("hour_start", -1)) >= 0
     assert len(data["slots"]) >= 1
@@ -494,7 +495,8 @@ async def test_schedule_templates_get_empty_then_put_day(
             assert g0.status_code == 200
             assert g0.json().get("templates") == []
             sg0 = g0.json().get("schedule_grid") or {}
-            assert sg0.get("kind") == "quarter_15"
+            assert sg0.get("kind") == "uniform_step"
+            assert sg0.get("step_minutes") == 15
             assert sg0.get("slot_duration_minutes") is None
 
             put = await client.put(

@@ -252,7 +252,7 @@ async def apply_recurring_bookings_for_week(
         )
         if not slot_id:
             continue
-        bid = await create_booking(
+        bid, _ = await create_booking(
             session, slot_id, trainer_id, rec["client_id"], service_id=service_id, client_comment=None, client_request_id=None
         )
         if bid:

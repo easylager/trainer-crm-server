@@ -253,7 +253,9 @@
       function onboardingAllComplete(data) {
         if (!data || !data.profile_complete || !data.is_active) return false;
         var slotsOk = !!(data.has_future_slots || data.has_any_booking);
-        return slotsOk && !!data.has_any_booking;
+        var bookingOk =
+          'has_confirmed_booking' in data ? !!data.has_confirmed_booking : !!data.has_any_booking;
+        return slotsOk && bookingOk;
       }
 
       function applyOnboardingChecklist(data) {
@@ -332,7 +334,10 @@
           ctaS.textContent = slotsDone ? 'Готово' : 'Расписание';
         }
 
-        var bookDone = active && !!(data && data.has_any_booking);
+        var bookingStepDone =
+          data &&
+          ('has_confirmed_booking' in data ? !!data.has_confirmed_booking : !!data.has_any_booking);
+        var bookDone = active && !!bookingStepDone;
         var bookLocked = !active;
         var stepB = document.getElementById('onboardingStepBooking');
         var iconB = document.getElementById('onboardingIconBooking');
@@ -347,7 +352,7 @@
           hintB.textContent = bookLocked
             ? (data && data.bookings_locked_reason) || 'Станет доступно после активации аккаунта.'
             : bookDone
-              ? 'Есть хотя бы одна запись (не отменённая).'
+              ? 'Есть подтверждённая или завершённая запись.'
               : 'Создайте запись на свободный слот в редакторе расписания.';
         }
         if (ctaB) {
@@ -1285,19 +1290,53 @@
           headers: headersJson(),
           body: JSON.stringify(payload),
         }).then(function(r) {
-          if (r.ok) return { ok: true };
-          return r.json().then(
-            function(o) {
-              throw new Error(hubApiErrorMessage(o));
-            },
-            function() {
-              throw new Error('Ошибка записи');
-            }
-          );
+          return r.json().then(function(d) {
+            if (r.ok) return { ok: true, booking: d };
+            throw new Error(hubApiErrorMessage(d));
+          });
         });
       }
 
+      function closeHubFirstBookingMilestoneModal() {
+        var ov = document.getElementById('hubModalFirstBookingMilestone');
+        if (!ov) return;
+        ov.style.display = 'none';
+        ov.setAttribute('aria-hidden', 'true');
+      }
+
+      function openHubFirstBookingMilestoneModal(apiResult) {
+        var r = apiResult || {};
+        if (!r.first_booking_milestone && !r.share_catalog_tip) return;
+        var parts = [];
+        if (r.first_booking_milestone) {
+          parts.push(
+            '<p style="margin:0 0 12px;"><strong>Поздравляем — первая запись подтверждена!</strong></p>' +
+              '<p style="margin:0;color:var(--tg-theme-hint-color);">Напоминания и заметки по клиенту — здесь, в Telegram, без отдельной CRM.</p>'
+          );
+        }
+        if (r.share_catalog_tip) {
+          parts.push(
+            '<p style="margin:16px 0 0;"><strong>Следующий шаг</strong></p>' +
+              '<p style="margin:0;color:var(--tg-theme-hint-color);">Поделитесь ссылкой на запись к вам или на каталог: в боте тренера откройте «Пригласить клиента»; если ссылки нет — укажите в профиле город и услугу.</p>'
+          );
+        }
+        var body = document.getElementById('hubFirstBookingMilestoneBody');
+        var ov = document.getElementById('hubModalFirstBookingMilestone');
+        if (!body || !ov) return;
+        body.innerHTML = parts.join('');
+        ov.style.display = 'flex';
+        ov.setAttribute('aria-hidden', 'false');
+      }
+
       function wireHubBookGroupModal() {
+        var milOk = document.getElementById('hubFirstBookingMilestoneOk');
+        if (milOk) milOk.onclick = function() { closeHubFirstBookingMilestoneModal(); };
+        var milOv = document.getElementById('hubModalFirstBookingMilestone');
+        if (milOv) {
+          milOv.onclick = function(ev) {
+            if (ev.target === milOv) closeHubFirstBookingMilestoneModal();
+          };
+        }
         var cancel = document.getElementById('hubBookCancel');
         if (cancel) {
           cancel.onclick = function() {
@@ -1360,11 +1399,13 @@
             var cid = hubBookPendingClientId;
             if (cid == null) return;
             hubPostBooking(cid)
-              .then(function() {
+              .then(function(res) {
                 closeHubBookGroupModals();
                 resetHubBookSlotState();
                 hubToast('Клиент записан в группу.');
                 loadBookings();
+                loadOnboardingChecklist();
+                openHubFirstBookingMilestoneModal(res.booking);
               })
               .catch(function(e) {
                 hubToast(e.message || 'Ошибка');
@@ -1408,11 +1449,13 @@
               .then(function(data) {
                 return hubPostBooking(data.client_id);
               })
-              .then(function() {
+              .then(function(res) {
                 closeHubBookGroupModals();
                 resetHubBookSlotState();
                 hubToast('Клиент добавлен и записан на занятие.');
                 loadBookings();
+                loadOnboardingChecklist();
+                openHubFirstBookingMilestoneModal(res.booking);
               })
               .catch(function(e) {
                 hubToast(e.message || 'Ошибка');

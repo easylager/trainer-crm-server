@@ -56,11 +56,14 @@ from src.application.booking_use_cases import (
     generate_reminders_for_booking,
     get_booking_no_pass_notify_payload,
     get_trainer_default_city_and_service,
+    list_trainer_services_for_welcome_link,
+    resolve_service_id_for_generic_welcome_link,
     mark_booking_completed_by_trainer,
     get_booking_with_slot,
     get_trainer_booking_detail_payload,
     get_trainer_client_next_booking,
     get_trainer_client_for_card,
+    get_trainer_client_last_completed_booking_service_defaults,
     get_trainer_group_slot_hub,
     is_slot_end_in_past_local,
     list_bookings_for_client,
@@ -110,6 +113,7 @@ from src.shared.trainer_status import normalize_trainer_status_value
 from src.application.trainer_link import get_trainer_id_by_telegram_id, get_trainer_id_linked_any_status
 from src.application.welcome_link_use_cases import (
     WELCOME_TOKEN_TYPE_CERT,
+    WELCOME_TOKEN_TYPE_CLIENT_BIND,
     WELCOME_TOKEN_TYPE_GENERIC,
     WELCOME_TOKEN_TYPE_PASS,
     create_welcome_link_token,
@@ -901,7 +905,7 @@ async def post_client_booking(
             arena_for_booking = resolved
 
     try:
-        booking_id = await create_booking(
+        booking_id, _ = await create_booking(
             session,
             body.slot_id,
             trainer_id,
@@ -2952,8 +2956,32 @@ async def get_trainer_certificate_file(
         headers={"Content-Disposition": 'attachment; filename="certificate.pdf"'},
     )
 
+@router.get("/trainer/welcome-link/eligibility")
+async def get_trainer_welcome_link_eligibility(
+    init_data: str | None = Query(None),
+    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    session: AsyncSession = Depends(get_session),
+):
+    """Services list and whether trainer must pick one for generic welcome link."""
+    raw = init_data or x_telegram_init_data
+    if not raw:
+        raise HTTPException(status_code=401, detail="Missing init data")
+    telegram_id = _trainer_telegram_id(raw)
+    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+    services = await list_trainer_services_for_welcome_link(session, trainer_id)
+    return {
+        "require_service_choice": len(services) > 1,
+        "services": services,
+    }
+
+
 @router.get("/trainer/welcome-link")
 async def get_trainer_welcome_link(
+    service_id: int | None = Query(
+        None, description="Required when trainer has multiple services; pins catalog prefill"
+    ),
     init_data: str | None = Query(None),
     x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
     session: AsyncSession = Depends(get_session),
@@ -2966,11 +2994,91 @@ async def get_trainer_welcome_link(
     trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+    resolved_service_id, err = await resolve_service_id_for_generic_welcome_link(
+        session, trainer_id, service_id
+    )
+    if err == "no_services":
+        raise HTTPException(
+            status_code=400,
+            detail="В профиле нет услуг — добавьте услугу в профиле.",
+        )
+    if err == "service_required":
+        raise HTTPException(
+            status_code=400,
+            detail="Укажите услугу — у вас несколько услуг в каталоге.",
+        )
+    if err == "invalid_service":
+        raise HTTPException(status_code=400, detail="Неверная услуга.")
+    assert resolved_service_id is not None
     settings = Settings()
     if not settings.client_bot_username:
         return {"welcome_link": None}
     token_id = await create_welcome_link_token(
-        session, WELCOME_TOKEN_TYPE_GENERIC, trainer_id
+        session,
+        WELCOME_TOKEN_TYPE_GENERIC,
+        trainer_id,
+        service_id=resolved_service_id,
+    )
+    link = (
+        f"https://t.me/{settings.client_bot_username.lstrip('@')}?start=welcome_t_{token_id}"
+    )
+    return {"welcome_link": link}
+
+
+@router.get("/trainer/clients/{client_id:int}/welcome-link")
+async def get_trainer_client_welcome_link(
+    client_id: int,
+    service_id: int | None = Query(
+        None, description="Required when trainer has multiple services; pins catalog prefill"
+    ),
+    init_data: str | None = Query(None),
+    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    session: AsyncSession = Depends(get_session),
+):
+    """
+    One-time welcome link that binds the opening Telegram account to this existing client row
+    (trainer-created client without telegram_id). Same service_id rules as generic welcome link.
+    """
+    raw = init_data or x_telegram_init_data
+    if not raw:
+        raise HTTPException(status_code=401, detail="Missing init data")
+    telegram_id = _trainer_telegram_id(raw)
+    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+    client = await get_trainer_client_for_card(session, trainer_id, client_id)
+    if not client:
+        raise HTTPException(status_code=404, detail="Клиент не найден или нет доступа")
+    if client.get("telegram_id") is not None:
+        raise HTTPException(
+            status_code=400,
+            detail="Клиент уже подключён к Telegram — персональная ссылка не нужна.",
+        )
+    resolved_service_id, err = await resolve_service_id_for_generic_welcome_link(
+        session, trainer_id, service_id
+    )
+    if err == "no_services":
+        raise HTTPException(
+            status_code=400,
+            detail="В профиле нет услуг — добавьте услугу в профиле.",
+        )
+    if err == "service_required":
+        raise HTTPException(
+            status_code=400,
+            detail="Укажите услугу — у вас несколько услуг в каталоге.",
+        )
+    if err == "invalid_service":
+        raise HTTPException(status_code=400, detail="Неверная услуга.")
+    assert resolved_service_id is not None
+    settings = Settings()
+    if not settings.client_bot_username:
+        return {"welcome_link": None}
+    token_id = await create_welcome_link_token(
+        session,
+        WELCOME_TOKEN_TYPE_CLIENT_BIND,
+        trainer_id,
+        service_id=resolved_service_id,
+        client_id=client_id,
     )
     link = (
         f"https://t.me/{settings.client_bot_username.lstrip('@')}?start=welcome_t_{token_id}"
@@ -3398,6 +3506,7 @@ async def post_trainer_booking_confirm(
             price_tier_label=info.get("price_tier_label"),
             arena_name=info.get("arena_name"),
             arena_address=info.get("arena_address"),
+            trainer_first_booking_milestone=bool(info.get("first_booking_milestone")),
         )
         reply_markup = msg.build_client_booking_confirmed_inline_keyboard(
             map_url=info.get("map_link"),
@@ -3411,7 +3520,11 @@ async def post_trainer_booking_confirm(
             )
         finally:
             await client_bot.session.close()
-    return {"success": True}
+    return {
+        "success": True,
+        "first_booking_milestone": bool(info.get("first_booking_milestone")),
+        "share_catalog_tip": bool(info.get("share_catalog_tip")),
+    }
 
 
 @router.post("/trainer/bookings/{booking_id:int}/decline")
@@ -3727,6 +3840,33 @@ async def get_trainer_client_card(
     if not client:
         raise HTTPException(status_code=404, detail="Клиент не найден или нет доступа")
     return {"client": client}
+
+
+@router.get("/trainer/clients/{client_id:int}/booking-defaults")
+async def get_trainer_client_booking_defaults(
+    client_id: int,
+    init_data: str | None = Query(None),
+    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Defaults for quick book from client profile: last completed service/tier + client name."""
+    raw = init_data or x_telegram_init_data
+    if not raw:
+        raise HTTPException(status_code=401, detail="Missing init data")
+    telegram_id = _trainer_telegram_id(raw)
+    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+    client = await get_trainer_client_for_card(session, trainer_id, client_id)
+    if not client:
+        raise HTTPException(status_code=404, detail="Клиент не найден или нет доступа")
+    sid, vid = await get_trainer_client_last_completed_booking_service_defaults(session, trainer_id, client_id)
+    return {
+        "service_id": sid,
+        "service_price_variant_id": vid,
+        "client_first_name": (client.get("first_name") or "").strip() or None,
+        "client_last_name": (client.get("last_name") or "").strip() or None,
+    }
 
 
 @router.get("/trainer/clients/{client_id:int}/history")
@@ -4194,7 +4334,7 @@ async def post_trainer_booking(
         )
         if not rchk.fetchone():
             raise HTTPException(status_code=400, detail="Площадка не привязана к вашему профилю")
-    booking_id = await create_booking(
+    booking_id, (first_booking_milestone, share_catalog_tip) = await create_booking(
         session,
         slot_id=body.slot_id,
         trainer_id=trainer_id,
@@ -4213,7 +4353,12 @@ async def post_trainer_booking(
         raise HTTPException(status_code=400, detail=detail_ru)
     if not is_slot_end_in_past_local(slot.get("slot_date"), slot.get("end_time")):
         await generate_reminders_for_booking(session, booking_id)
-    return {"success": True, "booking_id": booking_id}
+    return {
+        "success": True,
+        "booking_id": booking_id,
+        "first_booking_milestone": first_booking_milestone,
+        "share_catalog_tip": share_catalog_tip,
+    }
 
 
 @router.post("/trainer/booking/quick")
@@ -4268,11 +4413,17 @@ async def post_trainer_booking_quick(
         ) from None
     if result is None:
         raise HTTPException(status_code=400, detail="Не удалось создать запись")
-    booking_id, slot_id = result
+    booking_id, slot_id, first_booking_milestone, share_catalog_tip = result
     slot = await get_slot(session, slot_id)
     if slot and not is_slot_end_in_past_local(slot.get("slot_date"), slot.get("end_time")):
         await generate_reminders_for_booking(session, booking_id)
-    return {"success": True, "booking_id": booking_id, "slot_id": slot_id}
+    return {
+        "success": True,
+        "booking_id": booking_id,
+        "slot_id": slot_id,
+        "first_booking_milestone": first_booking_milestone,
+        "share_catalog_tip": share_catalog_tip,
+    }
 
 
 @router.post("/trainer/bookings/{booking_id:int}/make_regular")
@@ -4607,7 +4758,7 @@ async def post_trainer_request_book(
     client_info = await get_request_client_for_trainer_booking(session, request_id, trainer_id)
     if not client_info:
         raise HTTPException(status_code=404, detail="Request not found or not responded")
-    booking_id = await create_booking(
+    booking_id, (first_booking_milestone, share_catalog_tip) = await create_booking(
         session,
         slot_id=body.slot_id,
         trainer_id=trainer_id,
@@ -4625,7 +4776,12 @@ async def post_trainer_request_book(
     slot_row = await get_slot(session, body.slot_id)
     if slot_row and not is_slot_end_in_past_local(slot_row.get("slot_date"), slot_row.get("end_time")):
         await generate_reminders_for_booking(session, booking_id)
-    return {"success": True, "booking_id": booking_id}
+    return {
+        "success": True,
+        "booking_id": booking_id,
+        "first_booking_milestone": first_booking_milestone,
+        "share_catalog_tip": share_catalog_tip,
+    }
 
 
 # --- Referral program (B2B: trainer invites trainer) ---

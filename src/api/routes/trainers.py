@@ -176,6 +176,7 @@ async def patch_profile(
     profile = body.profile.model_dump(exclude_unset=True) if body.profile else {}
     services_payload = [s.model_dump() for s in body.services] if body.services is not None else None
     primary_set = "primary_arena_id" in body.model_fields_set
+    step_set = "schedule_grid_step_minutes" in body.model_fields_set
     try:
         ok = await update_trainer_profile(
             session,
@@ -186,6 +187,8 @@ async def patch_profile(
             arena_ids=body.arena_ids,
             primary_arena_id=body.primary_arena_id,
             primary_arena_id_set=primary_set,
+            schedule_grid_step_minutes=body.schedule_grid_step_minutes,
+            schedule_grid_step_minutes_set=step_set,
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc

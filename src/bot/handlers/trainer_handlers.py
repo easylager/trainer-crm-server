@@ -27,6 +27,7 @@ from src.application.booking_use_cases import (
     decline_booking,
     generate_reminders_for_booking,
     get_booking_for_trainer_feedback,
+    get_booking_milestone_display_for_trainer,
     get_booking_with_slot,
     get_first_service_id_for_trainer,
     get_trainer_default_city_and_service,
@@ -490,6 +491,81 @@ async def _send_trainer_invite_package(chat_message: Message, telegram_id: int) 
         plain = msg.TRAINER_INVITE_PLAIN_CLIENT_NO_CATALOG.format(deep_link=links.client_bot_deep_link)
     await chat_message.answer(msg.TRAINER_INVITE_INTRO_HTML)
     await chat_message.answer(plain, parse_mode=None)
+
+
+def _format_milestone_rich_html_from_booking_info(info: dict) -> str:
+    """Build HTML card for first-booking milestone from confirm_booking / get_booking_milestone_display row."""
+    d = info.get("slot_date")
+    st = info.get("start_time")
+    date_str = d.strftime("%d.%m") if d and hasattr(d, "strftime") else "—"
+    day_str = msg.TRAINER_DAYS[d.weekday()] if d and hasattr(d, "weekday") else ""
+    time_str = _format_time(st)
+    return msg.format_trainer_first_booking_milestone_rich_html(
+        client_name=(info.get("client_name") or "").strip() or "Клиент",
+        client_phone=(info.get("client_phone") or "").strip(),
+        date_str=date_str,
+        day_label=day_str,
+        time_str=time_str,
+        arena_name=info.get("arena_name"),
+        arena_address=info.get("arena_address"),
+        service_name=info.get("service_name"),
+        price_tier_label=info.get("price_tier_label"),
+        booking_price_cents=info.get("booking_price_cents"),
+    )
+
+
+async def _send_first_booking_milestone_followups(
+    chat_message: Message,
+    trainer_id: int,
+    *,
+    milestone: bool,
+    share_tip: bool,
+    milestone_booking_info: dict | None = None,
+    milestone_booking_id: int | None = None,
+) -> None:
+    """One-time celebration + share-link tip (DB flags already set in booking use case)."""
+    if not milestone:
+        return
+    info_for_card = milestone_booking_info
+    if info_for_card is None and milestone_booking_id is not None:
+        async with async_session_factory() as session:
+            info_for_card = await get_booking_milestone_display_for_trainer(
+                session, milestone_booking_id, trainer_id
+            )
+    if info_for_card:
+        card_html = _format_milestone_rich_html_from_booking_info(info_for_card)
+    else:
+        card_html = (
+            "🎉 <b>Поздравляем — первая запись подтверждена!</b>\n\n"
+            + msg.TRAINER_FIRST_BOOKING_MILESTONE_FOOTER_HTML
+        )
+    await chat_message.answer(card_html, parse_mode=ParseMode.HTML)
+    if not share_tip:
+        return
+    settings = Settings()
+    async with async_session_factory() as session:
+        city_id, service_id = await get_trainer_default_city_and_service(session, trainer_id)
+    links, err = build_trainer_invite_links(
+        webapp_base_url=settings.webapp_base_url,
+        client_bot_username=settings.client_bot_username,
+        city_id=city_id,
+        service_id=service_id,
+        trainer_id=trainer_id,
+    )
+    if err == "missing_username":
+        await chat_message.answer(msg.TRAINER_SHARE_CATALOG_TIP_NO_CLIENT_BOT, parse_mode=ParseMode.HTML)
+        return
+    if err == "missing_city_or_service":
+        await chat_message.answer(msg.TRAINER_SHARE_CATALOG_TIP_PROFILE_INCOMPLETE, parse_mode=ParseMode.HTML)
+        return
+    assert links is not None
+    deep_esc = html.escape(links.client_bot_deep_link)
+    if links.catalog_page_url:
+        cat_esc = html.escape(links.catalog_page_url)
+        tip = msg.TRAINER_SHARE_CATALOG_TIP_BOTH_HTML.format(deep_link=deep_esc, catalog_url=cat_esc)
+    else:
+        tip = msg.TRAINER_SHARE_CATALOG_TIP_DEEP_ONLY_HTML.format(deep_link=deep_esc)
+    await chat_message.answer(tip, parse_mode=ParseMode.HTML)
 
 
 @router.message(Command("home"))
@@ -1364,7 +1440,7 @@ async def schedule_create_booking_finalize(callback: CallbackQuery) -> None:
         if not service_id:
             await callback.message.answer(msg.TRAINER_ERROR_NO_SERVICES)
             return
-        booking_id = await create_booking(
+        booking_id, booking_milestones = await create_booking(
             session,
             slot_id=slot_id,
             trainer_id=trainer_id,
@@ -1393,6 +1469,14 @@ async def schedule_create_booking_finalize(callback: CallbackQuery) -> None:
             day=day_str,
             time=time_str,
         )
+    )
+    m_first, m_tip = booking_milestones
+    await _send_first_booking_milestone_followups(
+        callback.message,
+        trainer_id,
+        milestone=m_first,
+        share_tip=m_tip,
+        milestone_booking_id=booking_id,
     )
 
 
@@ -1621,45 +1705,55 @@ async def on_confirm_booking(callback: CallbackQuery) -> None:
         time=html.escape(time_str),
     )
     await callback.message.answer(text_trainer, parse_mode=ParseMode.HTML)
+    m_first = bool(info.get("first_booking_milestone"))
+    m_tip = bool(info.get("share_catalog_tip"))
     # Notify client via client bot (separate token)
     client_tid = info.get("client_telegram_id")
-    if not client_tid:
-        return
-    async with async_session_factory() as session:
-        trainer_obj = await get_trainer(session, trainer_id)
-    profile = (trainer_obj or {}).get("profile") or {}
-    trainer_name = (
-        ((profile.get("first_name") or "") + " " + (profile.get("last_name") or "")).strip()
-        or "Тренер"
-    )
-    settings = Settings()
-    client_bot = Bot(
-        token=settings.telegram_bot_token_client,
-        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
-    )
-    text_client = msg.format_client_booking_confirmed_by_trainer_text(
-        date=date_str,
-        day=dow,
-        time=time_str,
-        trainer_name=trainer_name,
-        service_name=info.get("service_name"),
-        booking_price_cents=info.get("booking_price_cents"),
-        price_tier_label=info.get("price_tier_label"),
-        arena_name=info.get("arena_name"),
-        arena_address=info.get("arena_address"),
-    )
-    reply_markup = msg.build_client_booking_confirmed_inline_keyboard(
-        map_url=info.get("map_link"),
-        trainer_telegram_id=info.get("trainer_telegram_id"),
-    )
-    try:
-        await client_bot.send_message(
-            chat_id=client_tid,
-            text=text_client,
-            reply_markup=reply_markup,
+    if client_tid:
+        async with async_session_factory() as session:
+            trainer_obj = await get_trainer(session, trainer_id)
+        profile = (trainer_obj or {}).get("profile") or {}
+        trainer_name = (
+            ((profile.get("first_name") or "") + " " + (profile.get("last_name") or "")).strip()
+            or "Тренер"
         )
-    finally:
-        await client_bot.session.close()
+        settings = Settings()
+        client_bot = Bot(
+            token=settings.telegram_bot_token_client,
+            default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+        )
+        text_client = msg.format_client_booking_confirmed_by_trainer_text(
+            date=date_str,
+            day=dow,
+            time=time_str,
+            trainer_name=trainer_name,
+            service_name=info.get("service_name"),
+            booking_price_cents=info.get("booking_price_cents"),
+            price_tier_label=info.get("price_tier_label"),
+            arena_name=info.get("arena_name"),
+            arena_address=info.get("arena_address"),
+            trainer_first_booking_milestone=m_first,
+        )
+        reply_markup = msg.build_client_booking_confirmed_inline_keyboard(
+            map_url=info.get("map_link"),
+            trainer_telegram_id=info.get("trainer_telegram_id"),
+        )
+        try:
+            await client_bot.send_message(
+                chat_id=client_tid,
+                text=text_client,
+                reply_markup=reply_markup,
+            )
+        finally:
+            await client_bot.session.close()
+    await _send_first_booking_milestone_followups(
+        callback.message,
+        trainer_id,
+        milestone=m_first,
+        share_tip=m_tip,
+        milestone_booking_info=info,
+    )
+
 
 @router.callback_query(lambda c: c.data and c.data.startswith(CANCEL_BOOKING_PREFIX))
 async def show_cancel_booking_confirm(callback: CallbackQuery) -> None:
@@ -2164,7 +2258,7 @@ async def on_request_book_slot(callback: CallbackQuery) -> None:
         await callback.message.answer(msg.TRAINER_ERROR_REQUEST_GONE)
         return
     async with async_session_factory() as session:
-        booking_id = await create_booking(
+        booking_id, booking_milestones = await create_booking(
             session,
             slot_id=slot_id,
             trainer_id=trainer_id,
@@ -2187,6 +2281,14 @@ async def on_request_book_slot(callback: CallbackQuery) -> None:
         async with async_session_factory() as session:
             await generate_reminders_for_booking(session, booking_id)
     await callback.message.answer(msg.TRAINER_REQUEST_BOOK_SUCCESS)
+    m_first, m_tip = booking_milestones
+    await _send_first_booking_milestone_followups(
+        callback.message,
+        trainer_id,
+        milestone=m_first,
+        share_tip=m_tip,
+        milestone_booking_id=booking_id,
+    )
     audit_log("request.trainer_booked_client", ACTOR_TRAINER_BOT, telegram_id, {"request_id": request_id, "trainer_id": trainer_id, "booking_id": booking_id})
 
 
