@@ -24,8 +24,8 @@
       href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=optional"
     />
   </noscript>
-  <link rel="preload" href="trainer-profile-main.js?v=20260419" as="script" />
-  <link rel="stylesheet" href="mini-app-trainer-profile.css?v=20260419" />
+  <link rel="preload" href="trainer-profile-main.js?v=20260444" as="script" />
+  <link rel="stylesheet" href="mini-app-trainer-profile.css?v=20260444" />
   <link rel="stylesheet" href="mini-app-trainer-nav.css?v=20260419" />
 </head>
 <body>
@@ -92,104 +92,134 @@
     </div>
 
     <div class="filters" id="profileFilters">
-      <button type="button" class="filter-btn active" data-tab="form">Профиль</button>
+      <button type="button" class="filter-btn active" data-tab="form">Анкета</button>
       <button type="button" class="filter-btn" data-tab="moderation">Статус</button>
       <button type="button" class="filter-btn" data-tab="settings">Настройки</button>
     </div>
+    <p id="profileTabExplainer" class="profile-tab-explainer" role="note"></p>
+    <nav id="profileFormNav" class="profile-form-nav" aria-label="Разделы анкеты" hidden>
+      <button type="button" class="profile-form-nav__chip" data-profile-scroll="anketaStart">Основное</button>
+      <button type="button" class="profile-form-nav__chip" data-profile-scroll="profileNavContacts">Контакты</button>
+      <button type="button" class="profile-form-nav__chip" data-profile-scroll="profileNavAbout">О себе</button>
+      <button type="button" class="profile-form-nav__chip" data-profile-scroll="profileNavExp">Опыт</button>
+      <button type="button" class="profile-form-nav__chip" data-profile-scroll="profileEducationCollapse">Образование</button>
+      <button type="button" class="profile-form-nav__chip" data-profile-scroll="profileServicesCollapse">Услуги</button>
+      <button type="button" class="profile-form-nav__chip" data-profile-scroll="profileNavArenas">Арены</button>
+    </nav>
 
     <div id="tab-form" class="tab-pane active">
-      <div class="section-title" id="anketaStart">Основное</div>
-      <div class="card">
-        <div class="field">
-          <label for="first_name"><span class="required-dot"></span>Имя</label>
-          <input id="first_name" type="text" autocomplete="given-name" maxlength="64" placeholder="Как вас зовут" />
-        </div>
-        <div class="field">
-          <label for="last_name"><span class="required-dot"></span>Фамилия</label>
-          <input id="last_name" type="text" autocomplete="family-name" maxlength="64" placeholder="Ваша фамилия" />
-        </div>
-        <div class="field">
-          <label for="age"><span class="required-dot"></span>Возраст</label>
-          <input id="age" type="number" step="1" inputmode="numeric" placeholder="Полных лет" />
-        </div>
-        <div class="field">
-          <label for="city_id"><span class="required-dot"></span>Город</label>
-          <select id="city_id"><option value="">Выберите город</option></select>
-        </div>
-      </div>
-
-      <div class="section-title">Контакты</div>
-      <div class="card">
-        <div class="field">
-          <label for="phone"><span class="required-dot"></span>Телефон</label>
-          <div class="phone-input-wrap">
-            <span class="phone-prefix">+375</span>
-            <input id="phone" type="tel" autocomplete="tel" maxlength="32" placeholder="29 123 45 67" inputmode="tel" />
+      <details class="profile-collapse" id="anketaStart" open>
+        <summary class="profile-collapse__summary">
+          <span class="profile-collapse__title">Основное</span>
+        </summary>
+        <div class="card">
+          <div class="field">
+            <label for="first_name"><span class="required-dot"></span>Имя</label>
+            <input id="first_name" type="text" autocomplete="given-name" maxlength="64" placeholder="Как вас зовут" />
           </div>
-          <div class="field-hint">Номер в формате +375 XX XXX XX XX</div>
-        </div>
-        <div class="field">
-          <label for="contacts">Другие контакты</label>
-          <input id="contacts" type="text" placeholder="Telegram, Instagram, email…" maxlength="5000" />
-          <div class="field-hint">Необязательно — дополнительные способы связи</div>
-        </div>
-      </div>
-
-      <div class="section-title">О себе</div>
-      <div class="card">
-        <div class="field">
-          <label for="description"><span class="required-dot"></span>Описание</label>
-          <textarea id="description" placeholder="Расскажите о себе, своём опыте и подходе к тренировкам…" maxlength="5000"></textarea>
-          <div class="field-hint" id="descriptionMeta">
-            <span id="descCharCount">0</span> / 5000
-            <div class="char-progress"><div class="char-progress-bar" id="descProgressBar" style="width: 0%;"></div></div>
-            <span id="descMinHint">мин. 25 символов</span>
+          <div class="field">
+            <label for="last_name"><span class="required-dot"></span>Фамилия</label>
+            <input id="last_name" type="text" autocomplete="family-name" maxlength="64" placeholder="Ваша фамилия" />
+          </div>
+          <div class="field">
+            <label for="age"><span class="required-dot"></span>Возраст</label>
+            <input id="age" type="number" step="1" inputmode="numeric" placeholder="Полных лет" />
+          </div>
+          <div class="field">
+            <label for="city_id"><span class="required-dot"></span>Город</label>
+            <select id="city_id"><option value="">Выберите город</option></select>
           </div>
         </div>
-      </div>
+      </details>
 
-      <div class="section-title">Опыт и квалификация</div>
-      <div class="card">
-        <div class="field">
-          <label for="experience_years"><span class="required-dot"></span>Опыт работы, лет</label>
-          <input id="experience_years" type="number" min="0" max="80" inputmode="numeric" placeholder="Сколько лет тренируете" />
+      <details class="profile-collapse" id="profileNavContacts" open>
+        <summary class="profile-collapse__summary">
+          <span class="profile-collapse__title">Контакты</span>
+        </summary>
+        <div class="card">
+          <div class="field">
+            <label for="phone"><span class="required-dot"></span>Телефон</label>
+            <div class="phone-input-wrap">
+              <span class="phone-prefix">+375</span>
+              <input id="phone" type="tel" autocomplete="tel" maxlength="32" placeholder="29 123 45 67" inputmode="tel" />
+            </div>
+            <div class="field-hint">Номер в формате +375 XX XXX XX XX</div>
+          </div>
+          <div class="field">
+            <label for="contacts">Другие контакты</label>
+            <input id="contacts" type="text" placeholder="Telegram, Instagram, email…" maxlength="5000" />
+            <div class="field-hint">Необязательно — дополнительные способы связи</div>
+          </div>
         </div>
-        <div class="field">
-          <label for="education"><span class="required-dot"></span>Образование</label>
-          <select id="education"><option value="">Выберите категорию</option></select>
+      </details>
+
+      <details class="profile-collapse" id="profileNavAbout" open>
+        <summary class="profile-collapse__summary">
+          <span class="profile-collapse__title">О себе</span>
+        </summary>
+        <div class="card">
+          <div class="field">
+            <label for="description"><span class="required-dot"></span>Описание</label>
+            <textarea id="description" placeholder="Расскажите о себе, своём опыте и подходе к тренировкам…" maxlength="5000"></textarea>
+            <div class="field-hint" id="descriptionMeta">
+              <span id="descCharCount">0</span> / 5000
+              <div class="char-progress"><div class="char-progress-bar" id="descProgressBar" style="width: 0%;"></div></div>
+              <span id="descMinHint">мин. 25 символов</span>
+            </div>
+          </div>
         </div>
-      </div>
+      </details>
+
+      <details class="profile-collapse" id="profileNavExp" open>
+        <summary class="profile-collapse__summary">
+          <span class="profile-collapse__title">Опыт и квалификация</span>
+        </summary>
+        <div class="card">
+          <div class="field">
+            <label for="experience_years"><span class="required-dot"></span>Опыт работы, лет</label>
+            <input id="experience_years" type="number" min="0" max="80" inputmode="numeric" placeholder="Сколько лет тренируете" />
+          </div>
+          <div class="field">
+            <label for="education"><span class="required-dot"></span>Образование</label>
+            <select id="education"><option value="">Выберите категорию</option></select>
+          </div>
+        </div>
+      </details>
 
       <details class="profile-collapse" id="profileEducationCollapse">
         <summary class="profile-collapse__summary">
           <span class="profile-collapse__title">Подробное образование</span>
         </summary>
         <div class="card" id="educationEntriesWrap">
-          <p class="hint" style="margin: 0 0 14px;">Чтобы в карточке было видно, где вы учились: диплом, курс или сертификат. Например: БГУФК, CrossFit L1, курс по реабилитации…</p>
+          <p class="hint" style="margin: 0 0 14px;">По желанию: вуз, курсы, сертификаты — для карточки в каталоге.</p>
           <div id="educationEntries"></div>
           <div id="educationNewWrap" style="display:none; margin-top:14px; padding-top:14px; border-top:1px solid rgba(128,128,128,0.15);"></div>
           <button type="button" class="filter-btn" id="btnEducationAdd" style="margin-top:14px; width: 100%; justify-content: center;">+ Добавить запись</button>
         </div>
       </details>
 
-      <details class="profile-collapse" id="profileServicesCollapse">
+      <details class="profile-collapse" id="profileServicesCollapse" open>
         <summary class="profile-collapse__summary">
           <span class="profile-collapse__title">Услуги и цены</span>
         </summary>
         <div class="card">
-          <p class="hint" style="margin: 0 0 14px;">Выберите услуги и укажите цену в белорусских рублях (BYN)</p>
+          <p class="hint" style="margin: 0 0 14px;">Услуги и цены в BYN. «Важно для клиента» — по желанию: кнопки-пресеты собирают строку «В стоимость не входит: …» для каталога; можно дописать вручную.</p>
           <div id="servicesWrap"></div>
           <p class="field-error" id="err_services" role="status" hidden style="margin:14px 0 0;"></p>
         </div>
       </details>
 
-      <div class="section-title">Арены</div>
-      <div class="card">
-        <p class="hint" id="arenaHint">Выберите город — появится список доступных арен.</p>
-        <div id="arenasWrap"></div>
-        <div id="primaryArenaWrap" style="display:none; margin-top:12px;"></div>
-        <p class="field-error" id="err_primary_arena" role="status" hidden style="margin-top:8px;"></p>
-      </div>
+      <details class="profile-collapse" id="profileNavArenas" open>
+        <summary class="profile-collapse__summary">
+          <span class="profile-collapse__title">Арены</span>
+        </summary>
+        <div class="card">
+          <p class="hint" id="arenaHint">Выберите город — появится список доступных арен.</p>
+          <div id="arenasWrap"></div>
+          <div id="primaryArenaWrap" style="display:none; margin-top:12px;"></div>
+          <p class="field-error" id="err_primary_arena" role="status" hidden style="margin-top:8px;"></p>
+        </div>
+      </details>
     </div>
 
     <div id="tab-moderation" class="tab-pane">
@@ -209,7 +239,15 @@
       <div class="card settings-format-card">
         <div class="field settings-format-field">
           <div class="settings-format-row">
-            <div class="settings-format-glyph" aria-hidden="true"></div>
+            <div class="settings-format-icon" aria-hidden="true" title="Длительность">
+              <svg class="settings-format-svg" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M10 2h4" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" />
+                <path d="M12 4v1" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" />
+                <rect x="7" y="6" width="10" height="14" rx="2" stroke="currentColor" stroke-width="1.75" />
+                <path d="M12 10v3" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" />
+                <path d="M12 16h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+              </svg>
+            </div>
             <div class="settings-format-main">
               <label class="settings-format-label" for="session_duration_minutes"><span class="required-dot"></span>Длительность по умолчанию</label>
               <div class="settings-format-inline">
@@ -234,7 +272,12 @@
         <div class="settings-format-divider" role="presentation"></div>
         <div class="field settings-format-field">
           <div class="settings-format-row">
-            <div class="settings-format-glyph settings-format-glyph--clock" aria-hidden="true"></div>
+            <div class="settings-format-icon" aria-hidden="true" title="Окно записи">
+              <svg class="settings-format-svg" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.75" />
+                <path d="M12 7v5l3 2" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+            </div>
             <div class="settings-format-main">
               <label class="settings-format-label" for="min_hours_before_booking"><span class="required-dot"></span>Окно записи</label>
               <div class="settings-format-inline settings-format-inline--lead">
@@ -257,12 +300,15 @@
           </div>
         </div>
         <div class="settings-format-divider" role="presentation"></div>
-        <div class="field field-toggle settings-format-toggle">
-          <label class="toggle-label" for="group_classes_enabled">
-            <input type="checkbox" id="group_classes_enabled" />
-            <span class="toggle-text">Группы в расписании</span>
+        <div class="settings-group-toggle">
+          <input type="checkbox" id="group_classes_enabled" class="settings-group-toggle__input" />
+          <label for="group_classes_enabled" class="settings-group-toggle__label">
+            <span class="settings-group-toggle__copy">
+              <span class="settings-group-toggle__title">Группы в расписании</span>
+              <span class="settings-group-toggle__hint">Несколько мест в одном слоте · одно место тоже можно</span>
+            </span>
+            <span class="settings-group-toggle__switch" aria-hidden="true"></span>
           </label>
-          <p class="settings-format-micro settings-format-micro--toggle">Несколько мест в одном слоте · 1 место тоже можно</p>
         </div>
       </div>
 
@@ -281,13 +327,9 @@
         <p class="field-error" id="err_schedule_grid" role="status" hidden style="margin: 10px 0 0;"></p>
         <div class="section-title" style="margin-top: 20px;">Превью (08:00–12:00)</div>
         <div id="gridStepPreviewWrap" class="grid-step-preview-wrap"></div>
-        <div class="settings-inline-save">
-          <button type="button" class="btn-save" id="btnSaveScheduleGrid" disabled>
-            <span class="spinner"></span>
-            <span class="btn-save-text">Сохранить настройку</span>
-            <span class="btn-save-saving">Сохраняем…</span>
-          </button>
-        </div>
+        <p class="hint" id="scheduleGridSaveHint" style="margin: 14px 0 0;">
+          Чтобы применить шаг сетки, нажмите «Сохранить изменения» внизу экрана.
+        </p>
       </div>
     </div>
   </div>
@@ -325,7 +367,7 @@
     </div>
   </div>
 
-  <script defer src="trainer-profile-main.js?v=20260419"></script>
+  <script defer src="trainer-profile-main.js?v=20260444"></script>
   <script defer src="mini-app-trainer-home.js"></script>
 </body>
 </html>

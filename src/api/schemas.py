@@ -26,6 +26,7 @@ LEN_FIRST_LAST = 64
 LEN_PHONE = PHONE_MAX_LEN
 LEN_DESCRIPTION = 5000
 LEN_TRAINER_SERVICE_DESCRIPTION = 800
+LEN_TRAINER_SERVICE_CLIENT_NOTICE = 400
 LEN_FILE_KEY = 512
 MAX_EDUCATION_DOCUMENT_PHOTOS = 12
 
@@ -98,6 +99,11 @@ class TrainerServiceItem(BaseModel):
         max_length=LEN_TRAINER_SERVICE_DESCRIPTION,
         description="Optional short text shown to clients for this trainer's offering of the service.",
     )
+    client_notice: str | None = Field(
+        default=None,
+        max_length=LEN_TRAINER_SERVICE_CLIENT_NOTICE,
+        description="Optional 'not included' / logistics note for clients (e.g. skates rental, arena ticket).",
+    )
     group_price_byn: float | None = Field(
         default=None,
         ge=0,
@@ -111,6 +117,16 @@ class TrainerServiceItem(BaseModel):
             return None
         if not isinstance(v, str):
             raise ValueError("Описание услуги: строка или пусто.")
+        s = v.strip()
+        return s if s else None
+
+    @field_validator("client_notice", mode="before")
+    @classmethod
+    def _strip_service_client_notice(cls, v: object) -> str | None:
+        if v is None:
+            return None
+        if not isinstance(v, str):
+            raise ValueError("Важно для клиента: строка или пусто.")
         s = v.strip()
         return s if s else None
 

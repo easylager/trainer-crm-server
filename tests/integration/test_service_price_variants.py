@@ -219,6 +219,38 @@ async def test_set_trainer_services_stores_description(db_session: AsyncSession)
 
 
 @pytest.mark.asyncio
+async def test_set_trainer_services_stores_client_notice(db_session: AsyncSession) -> None:
+    service_id = await require_seed_service_id(db_session)
+    r = await db_session.execute(text("INSERT INTO trainers (status) VALUES ('active') RETURNING id"))
+    (trainer_id,) = r.fetchone()
+    repo = TrainerRepository(db_session)
+    notice = "Коньки и билет на лёд — на кассе арены, не входят в стоимость занятия."
+    await repo.set_trainer_services(
+        trainer_id,
+        [
+            (
+                service_id,
+                [("adult", 5000)],
+                "Индивидуально, 60 мин.",
+                None,
+                notice,
+            )
+        ],
+    )
+    await db_session.commit()
+    r = await db_session.execute(
+        text("SELECT client_notice FROM trainer_services WHERE trainer_id = :t AND service_id = :s"),
+        {"t": trainer_id, "s": service_id},
+    )
+    assert (r.scalar() or "").strip() == notice
+    loaded = await repo.get_by_id(trainer_id)
+    assert loaded is not None
+    svcs = loaded.get("services") or []
+    assert len(svcs) == 1
+    assert svcs[0].get("client_notice") == notice
+
+
+@pytest.mark.asyncio
 async def test_set_trainer_services_stores_group_price_override(db_session: AsyncSession) -> None:
     service_id = await require_seed_service_id(db_session)
     r = await db_session.execute(text("INSERT INTO trainers (status) VALUES ('active') RETURNING id"))

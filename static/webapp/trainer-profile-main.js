@@ -86,14 +86,30 @@
         );
       }
 
-      function syncScheduleGridSaveButton() {
-        var btn = document.getElementById('btnSaveScheduleGrid');
-        if (!btn || !state.scheduleSettings) return;
-        var locked = !!state.scheduleSettings.arena_grid_locked;
-        var saved = parseInt(state.scheduleSettings.schedule_grid_step_minutes, 10);
-        if (isNaN(saved) || SCHEDULE_GRID_STEPS.indexOf(saved) < 0) saved = 15;
-        var dirty = !locked && state.scheduleGridSelectedStep !== saved;
-        btn.disabled = !dirty;
+      /** Step included in dirty snapshot; when arena locks grid, DOM cannot diverge from server. */
+      function normScheduleGridStepSnapshot() {
+        var ss = state.scheduleSettings;
+        if (ss && ss.arena_grid_locked) {
+          var n = parseInt(ss.schedule_grid_step_minutes, 10);
+          if (!isNaN(n) && SCHEDULE_GRID_STEPS.indexOf(n) >= 0) return n;
+          return 15;
+        }
+        var v = state.trainer && state.trainer.schedule_grid_step_minutes;
+        var m = parseInt(v, 10);
+        if (!isNaN(m) && SCHEDULE_GRID_STEPS.indexOf(m) >= 0) return m;
+        return 15;
+      }
+
+      function readScheduleGridStepSnapshot() {
+        var ss = state.scheduleSettings;
+        if (ss && ss.arena_grid_locked) {
+          var n = parseInt(ss.schedule_grid_step_minutes, 10);
+          if (!isNaN(n) && SCHEDULE_GRID_STEPS.indexOf(n) >= 0) return n;
+          return 15;
+        }
+        var s = state.scheduleGridSelectedStep;
+        if (!isNaN(s) && SCHEDULE_GRID_STEPS.indexOf(s) >= 0) return s;
+        return 15;
       }
 
       function renderScheduleSettingsPanel() {
@@ -136,7 +152,7 @@
               subEl.textContent = line;
             }
           }
-          syncScheduleGridSaveButton();
+          setDirty();
           return;
         }
 
@@ -163,7 +179,6 @@
             if (locked) return;
             state.scheduleGridSelectedStep = step;
             renderScheduleSettingsPanel();
-            syncScheduleGridSaveButton();
           });
           chipsWrap.appendChild(b);
         });
@@ -182,7 +197,7 @@
             buildScheduleGridPreviewInner(step);
           prevWrap.appendChild(card);
         });
-        syncScheduleGridSaveButton();
+        setDirty();
       }
 
       function wireSessionDurationQuickChips() {
@@ -206,47 +221,6 @@
         });
       }
 
-      function saveScheduleGridSettings() {
-        var err = document.getElementById('err_schedule_grid');
-        if (err) {
-          err.hidden = true;
-          err.textContent = '';
-        }
-        var btn = document.getElementById('btnSaveScheduleGrid');
-        if (!btn || btn.disabled || !state.scheduleSettings) return;
-        btn.classList.add('saving');
-        fetch(apiUrl('/trainer/profile'), {
-          method: 'PATCH',
-          headers: headersJson(),
-          body: JSON.stringify({ schedule_grid_step_minutes: state.scheduleGridSelectedStep }),
-        })
-          .then(parseJsonResponse)
-          .then(function(o) {
-            btn.classList.remove('saving');
-            if (!o.ok) {
-              if (err) {
-                err.hidden = false;
-                err.textContent = friendlyApiMsg(o.data && o.data.detail ? o.data.detail : '');
-              }
-              if (o.status === 422) haptic('warning');
-              syncScheduleGridSaveButton();
-              return;
-            }
-            state.scheduleSettings.schedule_grid_step_minutes = state.scheduleGridSelectedStep;
-            if (state.trainer) state.trainer.schedule_grid_step_minutes = state.scheduleGridSelectedStep;
-            syncScheduleGridSaveButton();
-            showSaveToast('Сохранено', 'Сетка расписания обновлена');
-            haptic('success');
-          })
-          .catch(function() {
-            btn.classList.remove('saving');
-            if (err) {
-              err.hidden = false;
-              err.textContent = 'Ошибка сети.';
-            }
-            syncScheduleGridSaveButton();
-          });
-      }
       /** Fixed tariff codes (must match server price_tier_kind). */
       var SERVICE_TIER_ORDER = ['child', 'adult', 'two_children', 'two_adults', 'adult_and_child'];
       var SERVICE_TIER_DEFS = [
@@ -333,6 +307,40 @@
       var MAX_DESCRIPTION_CHARS = 5000;
       /** Per-service blurb in «Услуги и цены»; aligned with LEN_TRAINER_SERVICE_DESCRIPTION on the server. */
       var MAX_SERVICE_DESCRIPTION_CHARS = 800;
+      var MAX_SERVICE_CLIENT_NOTICE_CHARS = 400;
+      /** Saved text shown in the catalog must start with this line (trainers may append after presets). */
+      var SERVICE_NOTICE_PREFIX = 'В стоимость не входит:';
+      /** Quick-add chips in profile → compose `SERVICE_NOTICE_PREFIX` + comma-separated fragments + '.'. */
+      var SERVICE_NOTICE_PRESETS = [
+        { id: 'skates', label: 'Коньки', fragment: 'аренда коньков' },
+        { id: 'ticket', label: 'Билет / вход', fragment: 'билет на лёд или вход на арену' },
+        { id: 'rollers', label: 'Ролики', fragment: 'аренда роликов' },
+      ];
+
+      function buildTrainerServiceNoticeFromPresetIds(ids) {
+        if (!ids || !ids.length) return '';
+        var parts = [];
+        SERVICE_NOTICE_PRESETS.forEach(function(pr) {
+          if (ids.indexOf(pr.id) >= 0) parts.push(pr.fragment);
+        });
+        if (!parts.length) return '';
+        return SERVICE_NOTICE_PREFIX + ' ' + parts.join(', ') + '.';
+      }
+
+      /** Infer which preset chips match the current notice text (substring match after optional prefix). */
+      function inferTrainerNoticePresetIds(text) {
+        var t = (text || '').trim();
+        if (!t) return [];
+        var re = new RegExp('^' + SERVICE_NOTICE_PREFIX.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*', 'i');
+        var probe = re.test(t) ? t.replace(re, '').replace(/\.\s*$/, '').trim() : t;
+        var low = probe.toLowerCase();
+        var out = [];
+        SERVICE_NOTICE_PRESETS.forEach(function(pr) {
+          if (low.indexOf(pr.fragment.toLowerCase()) >= 0) out.push(pr.id);
+        });
+        return out;
+      }
+
       /** Fallback if API omits field; must match MODERATION_CRITERIA_TOTAL on the server. */
       var MODERATION_CRITERIA_TOTAL_FALLBACK = 12;
       var MAX_EDUCATION_DOCUMENT_PHOTOS = 12;
@@ -410,6 +418,11 @@
           epa.textContent = '';
           epa.hidden = true;
         }
+        var esc = document.getElementById('err_schedule_grid');
+        if (esc) {
+          esc.textContent = '';
+          esc.hidden = true;
+        }
       }
 
       function showFieldError(fieldId, message) {
@@ -423,6 +436,10 @@
       /** Map FastAPI/Pydantic loc to form field id (profile.*) or 'general'. */
       function locToProfileFieldId(loc) {
         if (!loc || !loc.length) return 'general';
+        var si;
+        for (si = 0; si < loc.length; si++) {
+          if (loc[si] === 'schedule_grid_step_minutes') return 'schedule_grid';
+        }
         var j = -1;
         for (var i = 0; i < loc.length; i++) {
           if (loc[i] === 'profile') {
@@ -651,6 +668,8 @@
         for (i = 0; i < services.length; i++) {
           var d = services[i].description;
           if (d != null && String(d).length > MAX_SERVICE_DESCRIPTION_CHARS) return false;
+          var cn = services[i].client_notice;
+          if (cn != null && String(cn).length > MAX_SERVICE_CLIENT_NOTICE_CHARS) return false;
         }
         return true;
       }
@@ -698,7 +717,12 @@
         if (errEl) {
           var descOk = serviceDescriptionsLengthOk(parsed);
           if (!descOk) {
-            errEl.textContent = 'Описание услуги не длиннее ' + MAX_SERVICE_DESCRIPTION_CHARS + ' символов.';
+            errEl.textContent =
+              'Описание — до ' +
+              MAX_SERVICE_DESCRIPTION_CHARS +
+              ' символов; блок «Важно» — до ' +
+              MAX_SERVICE_CLIENT_NOTICE_CHARS +
+              '.';
             errEl.hidden = false;
             openProfileCollapseContaining(errEl);
           } else if (!svcOk && (parsed.services || []).length > 0) {
@@ -750,7 +774,14 @@
           errs.push(['services', 'Для каждой выбранной услуги отметьте хотя бы один тариф и укажите цену.']);
         }
         if (!serviceDescriptionsLengthOk(parsed)) {
-          errs.push(['services', 'Описание услуги не длиннее ' + MAX_SERVICE_DESCRIPTION_CHARS + ' символов.']);
+          errs.push([
+            'services',
+            'Описание — до ' +
+              MAX_SERVICE_DESCRIPTION_CHARS +
+              ' символов; «Важно для клиента» — до ' +
+              MAX_SERVICE_CLIENT_NOTICE_CHARS +
+              '.',
+          ]);
         }
         if (parsed.arena_ids && parsed.arena_ids.length >= 2) {
           if (!parsed.primary_arena_id || parsed.arena_ids.indexOf(parsed.primary_arena_id) < 0) {
@@ -825,9 +856,12 @@
           });
           var descOut = null;
           if (s.description != null && String(s.description).trim()) descOut = String(s.description).trim();
+          var noticeOut = null;
+          if (s.client_notice != null && String(s.client_notice).trim()) noticeOut = String(s.client_notice).trim();
           var gpOut = null;
           if (s.group_price_byn != null && !isNaN(Number(s.group_price_byn))) gpOut = Number(s.group_price_byn);
           var row = { service_id: s.service_id, price_tiers: tiers, description: descOut };
+          if (noticeOut != null) row.client_notice = noticeOut;
           if (gpOut != null) row.group_price_byn = gpOut;
           return row;
         }).sort(function(a, b) { return a.service_id - b.service_id; });
@@ -852,6 +886,7 @@
           arena_ids: arena_ids,
           primary_arena_id: primary_arena_id,
           education: buildEducationSnapshotFromState(),
+          schedule_grid_step_minutes: normScheduleGridStepSnapshot(),
         });
       }
 
@@ -897,6 +932,9 @@
               var sdEl = document.getElementById('svc_desc_' + s.id);
               var sdRaw = sdEl ? sdEl.value.trim() : '';
               svcObj.description = sdRaw ? sdRaw : null;
+              var cnEl = document.getElementById('svc_client_notice_' + s.id);
+              var cnRaw = cnEl ? cnEl.value.trim() : '';
+              svcObj.client_notice = cnRaw ? cnRaw : null;
               var gpel = document.getElementById('price_group_' + s.id);
               if (gpel && gpel.value.trim() !== '') {
                 var gpg = Number(gpel.value);
@@ -944,6 +982,7 @@
           arena_ids: arena_ids,
           primary_arena_id: primary_arena_id,
           education: buildEducationSnapshotFromDom(),
+          schedule_grid_step_minutes: readScheduleGridStepSnapshot(),
         });
       }
 
@@ -960,6 +999,44 @@
         var m = document.getElementById('mainContent');
         m.style.display = 'block';
         requestAnimationFrame(function() { m.classList.add('visible'); });
+      }
+
+      /** One-line hint under tabs: what belongs where (onboarding clarity). */
+      function syncProfileTabExplainer(tab) {
+        var el = document.getElementById('profileTabExplainer');
+        if (!el) return;
+        if (tab === 'form') {
+          el.textContent =
+            '«Статус» — готовность к каталогу и что ещё не заполнено; «Настройки» — длительность занятия, окно записи и шаг сетки в расписании.';
+        } else if (tab === 'moderation') {
+          el.textContent = 'Статус проверки и список того, что ещё стоит дополнить в анкете.';
+        } else if (tab === 'settings') {
+          el.textContent =
+            'Настройки — только правила CRM: формат занятий и сетка расписания. Текст анкеты и цены — во вкладке «Анкета».';
+        } else {
+          el.textContent = '';
+        }
+      }
+
+      function syncProfileFormNavVisibility(tab) {
+        var nav = document.getElementById('profileFormNav');
+        if (!nav) return;
+        nav.hidden = tab !== 'form';
+      }
+
+      function profileNavScrollTo(targetId) {
+        var el = document.getElementById(targetId);
+        if (!el) return;
+        if (el.tagName && el.tagName.toLowerCase() === 'details' && !el.open) {
+          el.open = true;
+        }
+        try {
+          el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } catch (e2) {
+          try {
+            el.scrollIntoView();
+          } catch (e3) {}
+        }
       }
 
       function setTab(tab) {
@@ -994,6 +1071,9 @@
             }
           }
         } catch (e) {}
+
+        syncProfileTabExplainer(tab);
+        syncProfileFormNavVisibility(tab);
       }
 
       /**
@@ -1136,6 +1216,17 @@
         if (window.location.hash === '#moderation') setTab('moderation');
         else if (window.location.hash === '#settings') setTab('settings');
         else setTab('form');
+
+        var profileFormNav = document.getElementById('profileFormNav');
+        if (profileFormNav) {
+          profileFormNav.addEventListener('click', function(ev) {
+            var t = ev.target;
+            var btn = t && t.closest ? t.closest('[data-profile-scroll]') : null;
+            if (!btn || !profileFormNav.contains(btn)) return;
+            var tid = btn.getAttribute('data-profile-scroll');
+            if (tid) profileNavScrollTo(tid);
+          });
+        }
       })();
 
       function fillFormFromTrainer() {
@@ -1427,7 +1518,7 @@
         
         if (titleEl && subtitleEl) {
           if (percent === 100) {
-            titleEl.textContent = 'Профиль готов!';
+            titleEl.textContent = 'Анкета готова!';
             subtitleEl.textContent = 'Все ' + totalCriteria + ' критериев готовности выполнены';
           } else if (percent >= 75) {
             titleEl.textContent = 'Почти готово';
@@ -2082,6 +2173,19 @@
         return '';
       }
 
+      /** Optional logistics / not-included note (trainer_services.client_notice). */
+      function getServiceClientNotice(serviceId) {
+        var list = state.trainer.services || [];
+        var i;
+        for (i = 0; i < list.length; i++) {
+          if (list[i].service_id === serviceId) {
+            var n = list[i].client_notice;
+            return n != null ? String(n) : '';
+          }
+        }
+        return '';
+      }
+
       /** Optional group per-seat price (trainer_services.group_price_cents); empty = fall back to tier anchor. */
       function getGroupPriceValue(serviceId) {
         var list = state.trainer.services || [];
@@ -2165,6 +2269,82 @@
           descBlock.appendChild(descLabel);
           descBlock.appendChild(descTa);
           descBlock.appendChild(descCount);
+
+          var noticeWrap = document.createElement('div');
+          noticeWrap.className = 'svc-client-notice-wrap';
+          var noticeKicker = document.createElement('div');
+          noticeKicker.className = 'svc-client-notice-kicker';
+          noticeKicker.textContent = 'Важно для клиента';
+          var noticeHint = document.createElement('p');
+          noticeHint.className = 'hint svc-client-notice-hint';
+          noticeHint.textContent = 'Что не входит в стоимость?';
+          var presetBar = document.createElement('div');
+          presetBar.className = 'svc-client-notice-presets';
+          presetBar.id = 'svc_notice_presets_' + id;
+          presetBar.setAttribute('role', 'group');
+          presetBar.setAttribute('aria-label', 'Что не входит в стоимость');
+          var initialNotice = getServiceClientNotice(id);
+          var selectedPresetIds = inferTrainerNoticePresetIds(initialNotice);
+
+          var noticeTa = document.createElement('textarea');
+          noticeTa.className = 'svc-desc-textarea';
+          noticeTa.id = 'svc_client_notice_' + id;
+          noticeTa.rows = 3;
+          noticeTa.maxLength = MAX_SERVICE_CLIENT_NOTICE_CHARS;
+          noticeTa.setAttribute('aria-label', 'В стоимость не входит');
+          noticeTa.placeholder =
+            SERVICE_NOTICE_PREFIX + ' аренда коньков, билет на лёд или вход на арену. (или соберите кнопками выше)';
+          noticeTa.value = initialNotice;
+          noticeTa.disabled = !isSelected;
+          var noticeCount = document.createElement('div');
+          noticeCount.className = 'svc-desc-count';
+          noticeCount.id = 'svc_client_notice_count_' + id;
+          function refreshClientNoticeCount() {
+            var nlen = (noticeTa.value || '').length;
+            noticeCount.textContent = nlen + ' / ' + MAX_SERVICE_CLIENT_NOTICE_CHARS;
+          }
+          function rebuildNoticeFromPresetSelection() {
+            var ids = [];
+            presetBar.querySelectorAll('button.svc-notice-preset-chip').forEach(function(btn) {
+              if (btn.classList.contains('selected')) ids.push(btn.getAttribute('data-preset-id'));
+            });
+            noticeTa.value = buildTrainerServiceNoticeFromPresetIds(ids);
+            refreshClientNoticeCount();
+            setDirty();
+          }
+          function syncPresetChipsFromNoticeText() {
+            var ids = inferTrainerNoticePresetIds(noticeTa.value);
+            presetBar.querySelectorAll('button.svc-notice-preset-chip').forEach(function(btn) {
+              var pid = btn.getAttribute('data-preset-id');
+              btn.classList.toggle('selected', ids.indexOf(pid) >= 0);
+            });
+          }
+          SERVICE_NOTICE_PRESETS.forEach(function(pr) {
+            var pb = document.createElement('button');
+            pb.type = 'button';
+            pb.className = 'svc-notice-preset-chip' + (selectedPresetIds.indexOf(pr.id) >= 0 ? ' selected' : '');
+            pb.setAttribute('data-preset-id', pr.id);
+            pb.textContent = pr.label;
+            pb.disabled = !isSelected;
+            pb.addEventListener('click', function() {
+              if (noticeTa.disabled) return;
+              pb.classList.toggle('selected');
+              rebuildNoticeFromPresetSelection();
+            });
+            presetBar.appendChild(pb);
+          });
+          refreshClientNoticeCount();
+          noticeTa.addEventListener('input', function() {
+            refreshClientNoticeCount();
+            setDirty();
+          });
+          noticeTa.addEventListener('change', setDirty);
+          noticeTa.addEventListener('blur', syncPresetChipsFromNoticeText);
+          noticeWrap.appendChild(noticeKicker);
+          noticeWrap.appendChild(noticeHint);
+          noticeWrap.appendChild(presetBar);
+          noticeWrap.appendChild(noticeTa);
+          noticeWrap.appendChild(noticeCount);
 
           var tierWrap = document.createElement('div');
           tierWrap.className = 'svc-tier-grid' + (isSelected ? '' : ' is-disabled');
@@ -2267,6 +2447,7 @@
           gInp.addEventListener('change', setDirty);
 
           tierBody.appendChild(descBlock);
+          tierBody.appendChild(noticeWrap);
           tierBody.appendChild(tierWrap);
           tierBody.appendChild(groupWrap);
 
@@ -2295,6 +2476,20 @@
               }
               var sdc = document.getElementById('svc_desc_count_' + id);
               if (sdc) sdc.textContent = '0 / ' + MAX_SERVICE_DESCRIPTION_CHARS;
+              var sne = document.getElementById('svc_client_notice_' + id);
+              if (sne) {
+                sne.value = '';
+                sne.disabled = true;
+              }
+              var snc = document.getElementById('svc_client_notice_count_' + id);
+              if (snc) snc.textContent = '0 / ' + MAX_SERVICE_CLIENT_NOTICE_CHARS;
+              var spBar = document.getElementById('svc_notice_presets_' + id);
+              if (spBar) {
+                spBar.querySelectorAll('button.svc-notice-preset-chip').forEach(function(b) {
+                  b.classList.remove('selected');
+                  b.disabled = true;
+                });
+              }
               SERVICE_TIER_ORDER.forEach(function(code) {
                 var tcb = document.getElementById('svc_tier_' + id + '_' + code);
                 var pel = document.getElementById('price_tier_' + id + '_' + code);
@@ -2309,6 +2504,14 @@
             } else {
               var sdeOn = document.getElementById('svc_desc_' + id);
               if (sdeOn) sdeOn.disabled = false;
+              var sneOn = document.getElementById('svc_client_notice_' + id);
+              if (sneOn) sneOn.disabled = false;
+              var spBarOn = document.getElementById('svc_notice_presets_' + id);
+              if (spBarOn) {
+                spBarOn.querySelectorAll('button.svc-notice-preset-chip').forEach(function(b) {
+                  b.disabled = false;
+                });
+              }
               SERVICE_TIER_ORDER.forEach(function(code) {
                 var pel = document.getElementById('price_tier_' + id + '_' + code);
                 var tcb = document.getElementById('svc_tier_' + id + '_' + code);
@@ -2668,6 +2871,19 @@
           body.primary_arena_id = parsed.primary_arena_id;
         }
 
+        var snapObj = null;
+        try {
+          snapObj = state.snapshot ? JSON.parse(state.snapshot) : null;
+        } catch (e) {}
+        if (
+          state.scheduleSettings &&
+          !state.scheduleSettings.arena_grid_locked &&
+          snapObj &&
+          parsed.schedule_grid_step_minutes !== snapObj.schedule_grid_step_minutes
+        ) {
+          body.schedule_grid_step_minutes = parsed.schedule_grid_step_minutes;
+        }
+
         fetch(apiUrl('/trainer/profile'), {
           method: 'PATCH',
           headers: headersJson(),
@@ -2705,7 +2921,12 @@
                 SETTINGS_FORMAT_FIELD_IDS.some(function(fid) {
                   var e = document.getElementById('err_' + fid);
                   return e && !e.hidden;
-                }) ? 'settings'
+                }) ||
+                (function() {
+                  var eg = document.getElementById('err_schedule_grid');
+                  return eg && !eg.hidden;
+                })()
+                ? 'settings'
                 : 'form';
               setTab(stErr);
               var firstErr =
@@ -2914,9 +3135,7 @@
       }
 
       document.getElementById('btnSave').onclick = save;
-      var btnSaveScheduleGrid = document.getElementById('btnSaveScheduleGrid');
-      if (btnSaveScheduleGrid) btnSaveScheduleGrid.onclick = saveScheduleGridSettings;
-      
+
       var photoInput = document.getElementById('photoInput');
       var heroPhotoDropZone = document.getElementById('heroPhotoDropZone');
       var heroPhotoTap = document.getElementById('heroPhotoTap');

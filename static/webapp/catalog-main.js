@@ -1031,6 +1031,54 @@
         if (s == null || s === undefined) return '';
         return String(s).replace(/"/g, '&quot;');
       }
+
+      var CATALOG_NOTICE_PREFIX = 'В стоимость не входит:';
+
+      /** Text after the fixed prefix for display (or full text if prefix missing — still shown under the same lead). */
+      function parseCatalogClientNoticeItems(raw) {
+        var s = (raw || '').trim();
+        if (!s) return '';
+        var re = /^В стоимость не входит:\s*/i;
+        if (re.test(s)) return s.replace(re, '').replace(/\.\s*$/, '').trim();
+        return s;
+      }
+
+      /** Prominent block for the service selected in the catalog filter. */
+      function catalogImportantNoticeBlockHtml(raw) {
+        var items = parseCatalogClientNoticeItems(raw);
+        if (!items) return '';
+        var esc = escapeHtml(items).replace(/\n/g, '<br>');
+        return (
+          '<div class="trainer-detail-service-important-callout" role="region" aria-label="Важно">' +
+          '<div class="trainer-detail-service-important-kicker">Важно!</div>' +
+          '<div class="trainer-detail-service-important-lead">' +
+          escapeHtml(CATALOG_NOTICE_PREFIX) +
+          '</div>' +
+          '<div class="trainer-detail-service-important-items">' +
+          esc +
+          '</div>' +
+          '</div>'
+        );
+      }
+
+      /** Compact block for other services in the list (selected row uses the large callout only). */
+      function catalogServiceRowNoticeHtml(raw) {
+        var items = parseCatalogClientNoticeItems(raw);
+        if (!items) return '';
+        var esc = escapeHtml(items).replace(/\n/g, '<br>');
+        return (
+          '<div class="trainer-detail-service-notice trainer-detail-service-notice--stacked" role="note">' +
+          '<div class="trainer-detail-service-notice-kicker">Важно!</div>' +
+          '<div class="trainer-detail-service-notice-lead">' +
+          escapeHtml(CATALOG_NOTICE_PREFIX) +
+          '</div>' +
+          '<div class="trainer-detail-service-notice-items">' +
+          esc +
+          '</div>' +
+          '</div>'
+        );
+      }
+
       function formatCatalogGroupDow(dow) {
         var labels = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
         if (dow == null || dow < 0 || dow > 6) return '—';
@@ -1049,7 +1097,10 @@
         getJson('/trainers/' + trainer.id + '/training-groups').then(function(data) {
           var groups = (data && data.groups) || [];
           if (!groups.length) return;
-          var html = '<div class="trainer-detail-groups-title">Набор в группы</div>';
+          var html =
+            '<details class="trainer-detail-groups-details">' +
+            '<summary class="trainer-detail-groups-summary">Набор в группы</summary>' +
+            '<div class="trainer-detail-groups-inner">';
           groups.forEach(function(g) {
             var sched = formatCatalogGroupRules(g.schedule_rules);
             html += '<div class="trainer-detail-group-card">';
@@ -1063,6 +1114,7 @@
             html += '<button type="button" class="btn-primary btn-block catalog-group-join" data-group-id="' + g.id + '">Вступить в группу</button>';
             html += '</div>';
           });
+          html += '</div></details>';
           el.innerHTML = html;
           el.querySelectorAll('.catalog-group-join').forEach(function(btn) {
             btn.onclick = function() {
@@ -1396,7 +1448,6 @@
           var total = data.total != null ? data.total : items.length;
           state.groupCatalogItems = items;
           state.total = total;
-          state.photoSource = data._photo_source || 'proxy';
           updateResultsCount(total);
           if (!items.length) {
             if (myReq !== catalogListReqId) return;
@@ -1510,8 +1561,6 @@
           var nextG = document.getElementById('pageNextGroups');
           if (nextG) nextG.onclick = function() { state.offset += state.limit; loadTrainingGroupsCatalog(); };
           var footerHtml = 'Не нашли группу? <span class="link" id="linkGeneralRequestFromGroupList">Оставить заявку</span>';
-          var photoSourceLabel = state.photoSource === 'cdn' ? 'через CDN' : (state.photoSource === 'direct' ? 'напрямую с S3' : 'через сервер');
-          footerHtml += '<div class="photo-source-hint">Фото: ' + photoSourceLabel + '</div>';
           document.getElementById('trainerListFooter').innerHTML = footerHtml;
           document.getElementById('trainerListFooter').style.display = 'block';
           var linkG = document.getElementById('linkGeneralRequestFromGroupList');
@@ -1581,7 +1630,6 @@
           var total = data.total != null ? data.total : items.length;
           state.trainers = items;
           state.total = total;
-          state.photoSource = data._photo_source || 'proxy';
           updateResultsCount(total);
           if (!items.length) {
             if (myReq !== catalogListReqId) return;
@@ -1723,8 +1771,6 @@
           var nextBtn = document.getElementById('pageNext');
           if (nextBtn) nextBtn.onclick = function() { state.offset += state.limit; loadCatalogList(); };
           var footerHtml = 'Не нашли подходящего? <span class="link" id="linkGeneralRequestFromList">Оставить заявку</span>';
-          var photoSourceLabel = state.photoSource === 'cdn' ? 'через CDN' : (state.photoSource === 'direct' ? 'напрямую с S3' : 'через сервер');
-          footerHtml += '<div class="photo-source-hint">Фото: ' + photoSourceLabel + '</div>';
           document.getElementById('trainerListFooter').innerHTML = footerHtml;
           document.getElementById('trainerListFooter').style.display = 'block';
           var linkReq = document.getElementById('linkGeneralRequestFromList');
@@ -1928,6 +1974,7 @@
         
         if (services.length > 0) {
           var selectedServiceDescEscaped = '';
+          var selectedServiceNoticeEscaped = '';
           if (state.serviceId != null) {
             var selSvcId = Number(state.serviceId);
             var sj;
@@ -1936,12 +1983,18 @@
               if (sx.service_id == null || Number(sx.service_id) !== selSvcId) continue;
               var rawDesc = sx.description && String(sx.description).trim();
               if (rawDesc) selectedServiceDescEscaped = escapeHtml(rawDesc).replace(/\n/g, '<br>');
+              var rawNotice = sx.client_notice && String(sx.client_notice).trim();
+              if (rawNotice) selectedServiceNoticeEscaped = rawNotice;
               break;
             }
           }
+          // Extra-cost notice before marketing copy — faster go / no-go.
+          if (selectedServiceNoticeEscaped) {
+            html += catalogImportantNoticeBlockHtml(selectedServiceNoticeEscaped);
+          }
           if (selectedServiceDescEscaped) {
-            html += '<div class="trainer-detail-service-callout" role="region" aria-label="О выбранной услуге">';
-            html += '<div class="trainer-detail-service-callout-kicker">К вашему выбору в каталоге</div>';
+            html += '<div class="trainer-detail-service-callout" role="region" aria-label="Описание услуги">';
+            html += '<div class="trainer-detail-service-callout-kicker">Описание услуги</div>';
             html += '<div class="trainer-detail-service-callout-body">' + selectedServiceDescEscaped + '</div>';
             html += '</div>';
           }
@@ -1960,6 +2013,10 @@
             html += '<span class="trainer-detail-service-name">' + escapeHtml(serviceName) + '</span>';
             html += '<span class="trainer-detail-service-price">' + escapeHtml(priceText) + '</span>';
             html += '</div>';
+            var rowNotice = s.client_notice && String(s.client_notice).trim();
+            if (rowNotice && !matchCatalog) {
+              html += catalogServiceRowNoticeHtml(rowNotice);
+            }
             html += '</div>';
           });
           html += '</div>';
@@ -1975,41 +2032,50 @@
         if (eduRows && eduRows.length > 0 && profileEduDetail && isProfileEducationCategoryOnly(profileEduDetail)) {
           profileExtraForDetail = '';
         }
+        var eduSectionInner = '';
         if (eduRows.length > 0) {
-          html += '<div class="trainer-detail-education">';
-          html += '<div class="trainer-detail-education-title">Образование</div>';
-          html += '<p class="trainer-detail-education-hint">Нажмите на запись, чтобы раскрыть детали и фото документов.</p>';
+          eduSectionInner += '<p class="trainer-detail-education-hint">Нажмите на запись, чтобы раскрыть детали и фото документов.</p>';
           var eduAnyHtml = '';
           eduRows.forEach(function(edu) {
             var itemHtml = buildCatalogEducationItemHtml(edu);
             if (itemHtml) eduAnyHtml += itemHtml;
           });
           if (eduAnyHtml) {
-            html += eduAnyHtml;
+            eduSectionInner += eduAnyHtml;
           } else if (profileEduDetail) {
-            html += '<div class="trainer-detail-education-body-line">' + escapeHtml(profileEduDetail).replace(/\n/g, '<br>') + '</div>';
+            eduSectionInner += '<div class="trainer-detail-education-body-line">' + escapeHtml(profileEduDetail).replace(/\n/g, '<br>') + '</div>';
           }
           if (profileExtraForDetail) {
-            html += '<div class="trainer-detail-education-extra">';
-            html += '<div class="trainer-detail-education-extra-label">Дополнительно</div>';
-            html += '<div class="trainer-detail-education-extra-body">' + escapeHtml(profileExtraForDetail).replace(/\n/g, '<br>') + '</div>';
-            html += '</div>';
+            eduSectionInner += '<div class="trainer-detail-education-extra">';
+            eduSectionInner += '<div class="trainer-detail-education-extra-label">Дополнительно</div>';
+            eduSectionInner +=
+              '<div class="trainer-detail-education-extra-body">' + escapeHtml(profileExtraForDetail).replace(/\n/g, '<br>') + '</div>';
+            eduSectionInner += '</div>';
           }
-          html += '</div>';
         } else if (profileEduDetail) {
-          html += '<div class="trainer-detail-education">';
-          html += '<div class="trainer-detail-education-title">Образование</div>';
-          html += '<div class="trainer-detail-education-extra">';
-          html += '<div class="trainer-detail-education-extra-body">' + escapeHtml(profileEduDetail).replace(/\n/g, '<br>') + '</div>';
-          html += '</div>';
-          html += '</div>';
+          eduSectionInner += '<div class="trainer-detail-education-extra">';
+          eduSectionInner +=
+            '<div class="trainer-detail-education-extra-body">' + escapeHtml(profileEduDetail).replace(/\n/g, '<br>') + '</div>';
+          eduSectionInner += '</div>';
         }
-        
+        if (eduSectionInner) {
+          html +=
+            '<details class="trainer-detail-section-details">' +
+            '<summary class="trainer-detail-section-summary">Образование</summary>' +
+            '<div class="trainer-detail-section-panel"><div class="trainer-detail-education">' +
+            eduSectionInner +
+            '</div></div></details>';
+        }
+
         if (desc !== '—') {
-          html += '<div class="trainer-detail-desc">' + escapeHtml(desc).replace(/\n/g, '<br>') + '</div>';
+          html +=
+            '<details class="trainer-detail-section-details">' +
+            '<summary class="trainer-detail-section-summary">О тренере</summary>' +
+            '<div class="trainer-detail-section-panel">' +
+            '<div class="trainer-detail-desc">' +
+            escapeHtml(desc).replace(/\n/g, '<br>') +
+            '</div></div></details>';
         }
-        var photoSourceLabel = (detailPhoto && detailPhoto._source === 'cdn') ? 'Фото: через CDN' : (detailPhoto && detailPhoto._source === 'direct') ? 'Фото: напрямую с S3' : 'Фото: через сервер';
-        html += '<div class="photo-source-hint trainer-detail-photo-source">' + photoSourceLabel + '</div>';
         document.getElementById('trainerDetailTop').innerHTML = htmlTop;
         document.getElementById('trainerDetailRest').innerHTML = html;
         document.querySelectorAll('#trainerDetailRest .trainer-detail-education-doc').forEach(function(linkEl) {

@@ -507,6 +507,70 @@
       font-weight: 600;
       color: var(--tg-theme-button-color);
     }
+    .trainer-detail-service-notice {
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid rgba(128, 128, 128, 0.12);
+      font-size: 12px;
+      line-height: 1.45;
+      color: var(--tg-theme-text-color);
+    }
+    .trainer-detail-service-notice--stacked {
+      padding: 10px 12px;
+      margin-top: 10px;
+      border-radius: 12px;
+      border: 1px solid color-mix(in srgb, var(--tg-theme-button-color) 22%, transparent);
+      background: color-mix(in srgb, var(--tg-theme-button-color) 6%, var(--tg-theme-secondary-bg-color));
+    }
+    .trainer-detail-service-notice-kicker {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--tg-theme-button-color);
+      margin-bottom: 6px;
+    }
+    .trainer-detail-service-notice-lead {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--tg-theme-text-color);
+      margin-bottom: 4px;
+      line-height: 1.35;
+    }
+    .trainer-detail-service-notice-items {
+      font-size: 13px;
+      font-weight: 500;
+      line-height: 1.45;
+      color: var(--tg-theme-text-color);
+    }
+    .trainer-detail-service-important-callout {
+      margin-bottom: 16px;
+      padding: 12px 14px;
+      border-radius: 14px;
+      border: 1px solid color-mix(in srgb, var(--tg-theme-button-color) 35%, transparent);
+      background: color-mix(in srgb, var(--tg-theme-button-color) 8%, var(--tg-theme-secondary-bg-color));
+    }
+    .trainer-detail-service-important-kicker {
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--tg-theme-button-color);
+      margin-bottom: 10px;
+    }
+    .trainer-detail-service-important-lead {
+      font-size: 16px;
+      font-weight: 700;
+      line-height: 1.35;
+      color: var(--tg-theme-text-color);
+      margin-bottom: 8px;
+    }
+    .trainer-detail-service-important-items {
+      font-size: 15px;
+      font-weight: 600;
+      line-height: 1.5;
+      color: var(--tg-theme-text-color);
+    }
     .trainer-detail-education {
       margin-bottom: 20px;
     }
@@ -1276,13 +1340,100 @@
       margin-top: 8px;
       margin-bottom: 4px;
     }
-    .trainer-detail-groups-title {
+    .trainer-detail-groups-details {
+      margin-top: 8px;
+      margin-bottom: 4px;
+    }
+    .trainer-detail-groups-summary {
+      list-style: none;
+      cursor: pointer;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
       font-size: 13px;
       font-weight: 600;
       color: var(--tg-theme-hint-color);
-      margin-bottom: 10px;
+      margin-bottom: 0;
+      padding: 4px 0 10px;
       text-transform: uppercase;
       letter-spacing: 0.06em;
+    }
+    .trainer-detail-groups-summary::-webkit-details-marker {
+      display: none;
+    }
+    .trainer-detail-groups-summary::after {
+      content: '';
+      width: 8px;
+      height: 8px;
+      border-right: 2px solid var(--tg-theme-hint-color);
+      border-bottom: 2px solid var(--tg-theme-hint-color);
+      transform: rotate(45deg);
+      opacity: 0.7;
+      flex-shrink: 0;
+      transition: transform 0.2s ease;
+    }
+    .trainer-detail-groups-details[open] > .trainer-detail-groups-summary::after {
+      transform: rotate(-135deg);
+      margin-top: 4px;
+    }
+    .trainer-detail-groups-details[open] > .trainer-detail-groups-summary {
+      margin-bottom: 10px;
+    }
+    .trainer-detail-groups-inner {
+      padding-top: 2px;
+    }
+    /* Education + long bio: collapsed by default so slots/actions stay in view. */
+    .trainer-detail-section-details {
+      margin-top: 14px;
+      margin-bottom: 4px;
+    }
+    .trainer-detail-section-summary {
+      list-style: none;
+      cursor: pointer;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--tg-theme-hint-color);
+      margin-bottom: 0;
+      padding: 4px 0 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+    .trainer-detail-section-summary::-webkit-details-marker {
+      display: none;
+    }
+    .trainer-detail-section-summary::after {
+      content: '';
+      width: 8px;
+      height: 8px;
+      border-right: 2px solid var(--tg-theme-hint-color);
+      border-bottom: 2px solid var(--tg-theme-hint-color);
+      transform: rotate(45deg);
+      opacity: 0.7;
+      flex-shrink: 0;
+      transition: transform 0.2s ease;
+    }
+    .trainer-detail-section-details[open] > .trainer-detail-section-summary::after {
+      transform: rotate(-135deg);
+      margin-top: 4px;
+    }
+    .trainer-detail-section-details[open] > .trainer-detail-section-summary {
+      margin-bottom: 4px;
+    }
+    .trainer-detail-section-panel {
+      padding-top: 0;
+    }
+    /* .trainer-detail-desc has margin: 20px 0 — inside <details> that doubles visual gap under summary. */
+    .trainer-detail-section-panel .trainer-detail-desc {
+      margin-top: 0;
     }
     .trainer-detail-group-card {
       border-radius: 16px;
@@ -1568,13 +1719,6 @@
     }
     .trainer-list-footer .link { color: var(--tg-theme-button-color); cursor: pointer; }
     .trainer-list-footer .link:active { opacity: 0.8; }
-    .photo-source-hint {
-      margin-top: 8px;
-      font-size: 11px;
-      color: var(--tg-theme-hint-color);
-      opacity: 0.85;
-    }
-    .trainer-detail-photo-source { margin-top: 10px; margin-bottom: 0; }
     .empty-state-request {
       margin-top: 20px;
       padding: 20px;

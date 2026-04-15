@@ -107,6 +107,16 @@ def _service_description_from_payload(s: dict[str, Any]) -> str | None:
     return t if t else None
 
 
+def _service_client_notice_from_payload(s: dict[str, Any]) -> str | None:
+    raw = s.get("client_notice")
+    if raw is None:
+        return None
+    if not isinstance(raw, str):
+        return None
+    t = raw.strip()
+    return t if t else None
+
+
 def _group_price_cents_from_service_payload(s: dict[str, Any]) -> int | None:
     raw = s.get("group_price_byn")
     if raw is None:
@@ -114,10 +124,12 @@ def _group_price_cents_from_service_payload(s: dict[str, Any]) -> int | None:
     return int(round(float(raw) * 100))
 
 
-def _services_to_entries(services: list[dict[str, Any]]) -> list[tuple[int, list[tuple[str, int]], str | None, int | None]]:
+def _services_to_entries(
+    services: list[dict[str, Any]],
+) -> list[tuple[int, list[tuple[str, int]], str | None, int | None, str | None]]:
     """
     Convert API services to repo entries:
-    (service_id, [(tier_kind, price_cents), ...], description, group_price_cents|None).
+    (service_id, [(tier_kind, price_cents), ...], description, group_price_cents|None, client_notice|None).
     """
     from src.shared.price_tier_kind import (
         PRICE_TIER_ADULT,
@@ -126,11 +138,12 @@ def _services_to_entries(services: list[dict[str, Any]]) -> list[tuple[int, list
         price_tier_sort_key,
     )
 
-    result: list[tuple[int, list[tuple[str, int]], str | None, int | None]] = []
+    result: list[tuple[int, list[tuple[str, int]], str | None, int | None, str | None]] = []
     for s in services:
         sid = int(s["service_id"])
         desc = _service_description_from_payload(s)
         group_pc = _group_price_cents_from_service_payload(s)
+        notice = _service_client_notice_from_payload(s)
         tiers_raw = s.get("price_tiers")
         if isinstance(tiers_raw, list) and len(tiers_raw) > 0:
             merged: dict[str, int] = {}
@@ -146,7 +159,7 @@ def _services_to_entries(services: list[dict[str, Any]]) -> list[tuple[int, list
                     continue
                 merged[tk] = cents
             ordered = sorted(merged.items(), key=lambda x: price_tier_sort_key(x[0]))
-            result.append((sid, ordered, desc, group_pc))
+            result.append((sid, ordered, desc, group_pc, notice))
             continue
         price_byn = s.get("price_byn")
         child_byn = s.get("price_child_byn")
@@ -156,7 +169,7 @@ def _services_to_entries(services: list[dict[str, Any]]) -> list[tuple[int, list
         if child_byn is not None:
             tiers.append((PRICE_TIER_CHILD, int(round(float(child_byn) * 100))))
         tiers.sort(key=lambda x: price_tier_sort_key(x[0]))
-        result.append((sid, tiers, desc, group_pc))
+        result.append((sid, tiers, desc, group_pc, notice))
     return result
 
 

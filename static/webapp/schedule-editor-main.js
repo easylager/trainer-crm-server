@@ -121,6 +121,39 @@
         return s;
       }
 
+      /** Network / 5xx / parse failure: short copy + retry (tunnel drops show as fetch errors). */
+      function renderCalendarLoadFailure() {
+        var el = document.getElementById('calendarContent');
+        if (!el) return;
+        el.innerHTML =
+          '<div class="schedule-reload-panel">' +
+          '<p class="schedule-reload-panel__msg">Не удалось загрузить расписание. Проверьте соединение и попробуйте снова.</p>' +
+          '<button type="button" class="btn-secondary schedule-reload-panel__btn" id="btnScheduleCalendarReload">Обновить</button>' +
+          '</div>';
+        var btn = document.getElementById('btnScheduleCalendarReload');
+        if (btn) {
+          btn.onclick = function() {
+            loadSlots();
+          };
+        }
+      }
+
+      function renderTemplateLoadFailure() {
+        var el = document.getElementById('templateList');
+        if (!el) return;
+        el.innerHTML =
+          '<div class="schedule-reload-panel">' +
+          '<p class="schedule-reload-panel__msg">Не удалось загрузить шаблон недели. Проверьте соединение и попробуйте снова.</p>' +
+          '<button type="button" class="btn-secondary schedule-reload-panel__btn" id="btnScheduleTemplatesReload">Обновить</button>' +
+          '</div>';
+        var btn = document.getElementById('btnScheduleTemplatesReload');
+        if (btn) {
+          btn.onclick = function() {
+            loadTemplates();
+          };
+        }
+      }
+
       /** Skeleton HTML for calendar column — mirrors day-block + slot-row density. */
       function buildCalendarSkeletonHtml() {
         var sk = 'ma-skel-shimmer';
@@ -2225,7 +2258,7 @@
               setTimeout(loadSlots, 100);
               return;
             }
-            document.getElementById('calendarContent').innerHTML = '<div class="error">Ошибка загрузки</div>';
+            renderCalendarLoadFailure();
           });
       }
 
@@ -2240,7 +2273,7 @@
             renderTemplate();
           })
           .catch(function() {
-            document.getElementById('templateList').innerHTML = '<div class="error">Ошибка загрузки</div>';
+            renderTemplateLoadFailure();
           });
       }
 
