@@ -987,18 +987,20 @@
           actions.innerHTML = '';
           var pending = (b.status || '') === 'pending';
           var completed = (b.status || '') === 'completed';
+          var stRaw = (b.status || '').toLowerCase();
+          var bookingEnded = isSlotEndedInPast(b);
+          var canCancelBooking = stRaw === 'confirmed' && !bookingEnded;
           var tid = b.client_telegram_id;
 
           if (pending) {
             actions.innerHTML += '<button type="button" class="bd-btn bd-btn--confirm" data-baction="confirm">' + BD_ICONS.check + ' Подтвердить</button>';
             actions.innerHTML += '<button type="button" class="bd-btn bd-btn--decline" data-baction="decline">' + BD_ICONS.xCircle + ' Отклонить</button>';
-          } else if (!completed) {
+          } else if (canCancelBooking) {
             actions.innerHTML += '<button type="button" class="bd-btn bd-btn--outline-danger" data-baction="cancel">' + BD_ICONS.cancelOutline + ' Отменить запись</button>';
           }
           if (tid && b.client_has_telegram !== false) {
             actions.innerHTML += '<button type="button" class="bd-btn bd-btn--surface" data-baction="write_client">' + BD_ICONS.send + ' Написать клиенту</button>';
           }
-          var stRaw = (b.status || '').toLowerCase();
           var canReportProblem = stRaw !== 'cancelled' && stRaw !== 'declined';
           // E7: false when rollout=off or pilot excludes this trainer (API sets problem_flow_enabled).
           var problemFlowOk = (b.problem_flow_enabled !== false);
@@ -1435,6 +1437,14 @@
         return PRICE_TIER_LABEL_RU[k] || tier.label || 'Тариф';
       }
 
+      /** When several tiers exist, prefer single adult over API/display order (often child first). */
+      function pickDefaultBookPriceTierId(tiers) {
+        if (!tiers || !tiers.length) return null;
+        if (tiers.length === 1) return tiers[0].id;
+        var adult = tiers.filter(function(t) { return (t.tier_kind || '').toLowerCase() === 'adult'; })[0];
+        return adult ? adult.id : tiers[0].id;
+      }
+
       function syncBookPriceTierRadios(which) {
         var wrapE = document.getElementById('bookPriceTierWrapExisting');
         var wrapN = document.getElementById('bookPriceTierWrapNew');
@@ -1477,10 +1487,11 @@
           });
           host.appendChild(lab);
         });
-        var first = host.querySelector('input');
-        if (first) {
-          first.checked = true;
-          state.bookPriceVariantId = parseInt(first.value, 10);
+        var preferredId = pickDefaultBookPriceTierId(tiers);
+        var pickInp = preferredId != null ? host.querySelector('input[value="' + String(preferredId) + '"]') : null;
+        if (pickInp) {
+          pickInp.checked = true;
+          state.bookPriceVariantId = parseInt(pickInp.value, 10);
         }
       }
 
@@ -1530,10 +1541,11 @@
           matched.checked = true;
           state.bookPriceVariantId = parseInt(matched.value, 10);
         } else {
-          var first = host.querySelector('input');
-          if (first) {
-            first.checked = true;
-            state.bookPriceVariantId = parseInt(first.value, 10);
+          var pid = pickDefaultBookPriceTierId(tiers);
+          var pickInp = pid != null ? host.querySelector('input[value="' + String(pid) + '"]') : null;
+          if (pickInp) {
+            pickInp.checked = true;
+            state.bookPriceVariantId = parseInt(pickInp.value, 10);
           }
         }
       }
@@ -2853,7 +2865,10 @@
         }
         let html = '';
         days.forEach(function(dateKey) {
-          const daySlots = byDay[dateKey].sort(function(a, b) { return (a.start_time || '').localeCompare(b.start_time || ''); });
+          const daySlots = byDay[dateKey]
+            .filter(function(s) { return !s.training_group_id; })
+            .sort(function(a, b) { return (a.start_time || '').localeCompare(b.start_time || ''); });
+          if (!daySlots.length) return;
           html += '<div class="day-block"><div class="day-title">' + escapeHtml(formatDateKey(dateKey)) + '</div>';
           daySlots.forEach(function(s) {
             const status = s.status || 'available';
@@ -2952,6 +2967,15 @@
           });
           html += '</div>';
         });
+        if (!html) {
+          if (state.slotFilter === 'all' && hiddenPastN > 0 && !state.showPastThisWeek) {
+            content.innerHTML = '<div class="empty calendar-past-nudge">Слоты прошедших дней на этой неделе скрыты. Откройте список кнопкой выше — можно записать клиента задним числом или поправить слоты.</div>';
+          } else {
+            content.innerHTML = '<div class="empty">На эту неделю слотов нет. Добавьте слоты или примените шаблон.</div>';
+          }
+          updatePastRevealChrome();
+          return;
+        }
         content.innerHTML = html;
         content.querySelectorAll('.btn-slot-del').forEach(function(btn) {
           btn.onclick = function(e) {
@@ -3541,9 +3565,14 @@
         } else if (state.slotEditIntent !== 'group' && state.slotEditIntent !== 'individual') {
           state.slotEditIntent = detectSlotIntentFromRows(existing);
         }
-        state.selectedStarts = new Set(existing.map(function(t) {
-          return parseStartToMinutes(t.start_time);
-        }));
+        var allowedTemplateStarts = new Set(
+          allowedStartMinutesFromScheduleGridPreset(state.scheduleGridPreset || defaultScheduleGridPreset())
+        );
+        state.selectedStarts = new Set(
+          existing
+            .map(function(t) { return parseStartToMinutes(t.start_time); })
+            .filter(function(m) { return allowedTemplateStarts.has(m); })
+        );
         var durTpl = document.getElementById('slotDurationSelect');
         if (durTpl) {
           var dms = existing.map(function(t) { return parseInt(t.duration_minutes, 10); }).filter(function(x) { return !isNaN(x); });
@@ -3625,16 +3654,23 @@
         state.editMode = 'calendar';
         state.editDay = null;
         state.editDate = slotDate;
-        const daySlots = (state.slots || []).filter(function(s) { return s.slot_date === slotDate; });
+        // Group-generated slots belong to the Groups flow and must not affect manual day editing.
+        const daySlots = (state.slots || []).filter(function(s) {
+          return s.slot_date === slotDate && !s.training_group_id;
+        });
         if (!isGroupClassesFeatureEnabled()) {
           state.slotEditIntent = 'individual';
         } else if (state.slotEditIntent !== 'group' && state.slotEditIntent !== 'individual') {
           state.slotEditIntent = detectSlotIntentFromRows(daySlots);
         }
+        var allowedCalendarStarts = new Set(
+          allowedStartMinutesFromScheduleGridPreset(state.scheduleGridPreset || defaultScheduleGridPreset())
+        );
         state.selectedStarts = new Set();
         state.lockedStarts = new Set();
         daySlots.forEach(function(s) {
           var m = parseStartToMinutes(s.start_time);
+          if (!allowedCalendarStarts.has(m)) return;
           state.selectedStarts.add(m);
           var occ = (s.active_bookings != null) ? parseInt(s.active_bookings, 10) : 0;
           if ((s.status || '') === 'booked' || occ > 0) state.lockedStarts.add(m);
@@ -3951,6 +3987,11 @@
                     : nNew === 1
                       ? 'Добавлен новый слот'
                       : 'Добавлено новых слотов: ' + nNew;
+                var todayStr = dateToStr(new Date());
+                if (state.editDate && state.editDate < todayStr) {
+                  // After saving on a past day, reveal past rows immediately so the new slot is visible.
+                  state.showPastThisWeek = true;
+                }
                 showToast(msg);
                 showMain();
               } else {

@@ -203,6 +203,13 @@ def _parse_client_start(payload: str) -> tuple[int, int, int] | None:
         return None
 
 
+def _certificate_amount_display(cents: int | None) -> str:
+    if cents is None:
+        return "—"
+    v = int(cents) / 100.0
+    return f"{int(v)} BYN" if v == int(v) else f"{v:.2f} BYN"
+
+
 def _trainer_name(trainer: dict) -> str:
     """Short name for trainer from profile."""
     profile = trainer.get("profile") or {}
@@ -244,6 +251,26 @@ def _invite_welcome_text(trainer: dict | None, base: str) -> str:
         else msg.CLIENT_WELCOME_INVITE_CTA_INLINE
     )
     return msg.CLIENT_WELCOME_INVITE.format(name=name, cta=cta)
+
+
+def _bind_first_impression_markup(base: str) -> InlineKeyboardMarkup:
+    """Primary onboarding actions after client-bind link: home first, then bookings."""
+    b = (base or "").rstrip("/")
+    if b.startswith("https://"):
+        return InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text=msg.CLIENT_MENU_BUTTON_HUB, web_app=WebAppInfo(url=f"{b}/webapp/client-home"))],
+                [InlineKeyboardButton(text=msg.CLIENT_BUTTON_MY_BOOKINGS, web_app=WebAppInfo(url=f"{b}/webapp/client-bookings"))],
+                [InlineKeyboardButton(text="Тренеры и запись", web_app=WebAppInfo(url=f"{b}/webapp/catalog"))],
+            ]
+        )
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=msg.CLIENT_MENU_BUTTON_HUB, callback_data=HOME_CALLBACK)],
+            [InlineKeyboardButton(text=msg.CLIENT_BUTTON_MY_BOOKINGS, callback_data=MY_BOOKINGS_CALLBACK)],
+            [InlineKeyboardButton(text="Тренеры и запись", callback_data=CATALOG_CALLBACK)],
+        ]
+    )
 
 
 def _request_list_button_label(req: dict) -> str:
@@ -473,7 +500,17 @@ async def cmd_start(message: Message) -> None:
             if service_id is not None:
                 await set_service(telegram_id, service_id, db_session)
             await set_selected_trainer(telegram_id, trainer_id, db_session)
-        if token_type == WELCOME_TOKEN_TYPE_CERT:
+        if token_type == WELCOME_TOKEN_TYPE_CLIENT_BIND:
+            async with async_session_factory() as db_session:
+                trainer = await get_trainer(db_session, int(trainer_id))
+            base = (Settings().webapp_base_url or "").rstrip("/")
+            name = html.escape(_trainer_name(trainer) if trainer else "Тренер")
+            await message.answer(
+                msg.CLIENT_WELCOME_BIND_FIRST_IMPRESSION.format(name=name),
+                parse_mode=ParseMode.HTML,
+                reply_markup=_bind_first_impression_markup(base),
+            )
+        elif token_type == WELCOME_TOKEN_TYPE_CERT:
             cert_code = payload_data.get("cert_code")
             if cert_code:
                 async with async_session_factory() as db_session:
@@ -487,13 +524,49 @@ async def cmd_start(message: Message) -> None:
                         await db_session.commit()
                 if bound:
                     base = (Settings().webapp_base_url or "").rstrip("/")
-                    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                        [InlineKeyboardButton(
-                            text=msg.CLIENT_BUTTON_MY_PASSES_AND_CERTIFICATES,
-                            web_app=WebAppInfo(url=client_passes_certificates_webapp_url(base, certificates_tab=True)),
-                        )],
-                    ] + _trainer_book_rows(base, trainer_id))
-                    await message.answer(msg.CLIENT_CERT_BOUND, reply_markup=keyboard)
+                    async with async_session_factory() as db_session:
+                        trainer = await get_trainer(db_session, int(trainer_id))
+                    tname = _trainer_name(trainer) if trainer else "Тренер"
+                    cert_body = msg.format_client_certificate_bound_html(
+                        amount_display=_certificate_amount_display(bound.get("amount_cents")),
+                        code=str(cert_code).strip(),
+                        trainer_name=tname,
+                    )
+                    cert_rows: list[list[InlineKeyboardButton]] = []
+                    if base.lower().startswith("https://"):
+                        cert_rows.append(
+                            [
+                                InlineKeyboardButton(
+                                    text=msg.CLIENT_BUTTON_BOOK,
+                                    web_app=WebAppInfo(url=f"{base}/webapp/catalog"),
+                                ),
+                            ]
+                        )
+                    cert_rows.append(
+                        [
+                            InlineKeyboardButton(
+                                text=msg.CLIENT_BUTTON_MY_PASSES_AND_CERTIFICATES,
+                                web_app=WebAppInfo(
+                                    url=client_passes_certificates_webapp_url(base, certificates_tab=True)
+                                ),
+                            ),
+                        ],
+                    )
+                    if base.lower().startswith("https://"):
+                        cert_rows.append(
+                            [
+                                InlineKeyboardButton(
+                                    text=msg.CLIENT_PASS_ISSUED_BTN_TERMS,
+                                    web_app=WebAppInfo(
+                                        url=client_passes_certificates_webapp_url(base, certificates_tab=True)
+                                    ),
+                                ),
+                            ]
+                        )
+                    keyboard = InlineKeyboardMarkup(
+                        inline_keyboard=cert_rows + _trainer_book_rows(base, trainer_id)
+                    )
+                    await message.answer(cert_body, reply_markup=keyboard, parse_mode=ParseMode.HTML)
                 else:
                     await message.answer(msg.CLIENT_CERT_CODE_INVALID)
             else:
@@ -550,13 +623,49 @@ async def cmd_start(message: Message) -> None:
                     await set_service(telegram_id, service_id, db_session)
                 await set_selected_trainer(telegram_id, trainer_id, db_session)
             base = (Settings().webapp_base_url or "").rstrip("/")
-            keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(
-                    text=msg.CLIENT_BUTTON_MY_PASSES_AND_CERTIFICATES,
-                    web_app=WebAppInfo(url=client_passes_certificates_webapp_url(base, certificates_tab=True)),
-                )],
-            ] + _trainer_book_rows(base, trainer_id))
-            await message.answer(msg.CLIENT_CERT_BOUND, reply_markup=keyboard)
+            async with async_session_factory() as db_session:
+                trainer = await get_trainer(db_session, int(trainer_id))
+            tname = _trainer_name(trainer) if trainer else "Тренер"
+            cert_body = msg.format_client_certificate_bound_html(
+                amount_display=_certificate_amount_display(bound.get("amount_cents")),
+                code=str(cert_code).strip(),
+                trainer_name=tname,
+            )
+            cert_rows2: list[list[InlineKeyboardButton]] = []
+            if base.lower().startswith("https://"):
+                cert_rows2.append(
+                    [
+                        InlineKeyboardButton(
+                            text=msg.CLIENT_BUTTON_BOOK,
+                            web_app=WebAppInfo(url=f"{base}/webapp/catalog"),
+                        ),
+                    ]
+                )
+            cert_rows2.append(
+                [
+                    InlineKeyboardButton(
+                        text=msg.CLIENT_BUTTON_MY_PASSES_AND_CERTIFICATES,
+                        web_app=WebAppInfo(
+                            url=client_passes_certificates_webapp_url(base, certificates_tab=True)
+                        ),
+                    ),
+                ],
+            )
+            if base.lower().startswith("https://"):
+                cert_rows2.append(
+                    [
+                        InlineKeyboardButton(
+                            text=msg.CLIENT_PASS_ISSUED_BTN_TERMS,
+                            web_app=WebAppInfo(
+                                url=client_passes_certificates_webapp_url(base, certificates_tab=True)
+                            ),
+                        ),
+                    ]
+                )
+            keyboard = InlineKeyboardMarkup(
+                inline_keyboard=cert_rows2 + _trainer_book_rows(base, trainer_id)
+            )
+            await message.answer(cert_body, reply_markup=keyboard, parse_mode=ParseMode.HTML)
         else:
             # Optional: preselected trainer from link (ref) so user can still book
             if ref_trainer_id:

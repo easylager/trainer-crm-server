@@ -66,9 +66,11 @@ from src.application.subscription_use_cases import (
 )
 from src.bot import messages as msg
 from src.bot.handlers.trainer_handlers import REQUEST_DECLINE_PREFIX, REQUEST_RESPOND_PREFIX
+from src.bot.schedule_notifications import REQUESTS_CALLBACK
 from src.bot.trainer_cancel_client_notify import send_cancel_notification_payload
 from src.infrastructure.db import async_session_factory
 from src.shared.config import Settings
+from src.shared.map_links import build_yandex_by_map_url
 from src.shared.notification_hours import is_within_notification_hours
 
 logger = logging.getLogger(__name__)
@@ -120,7 +122,7 @@ async def _send_client_booking_completed_push(
     b: dict,
 ) -> None:
     """
-    Send CLIENT_BOOKING_COMPLETED; mark client_booking_completed_push_sent_at only after Telegram OK.
+    Send completion notice; mark client_booking_completed_push_sent_at only after Telegram OK.
     No telegram_id: mark sent so we do not spin on retries.
     """
     chat_id = b.get("client_telegram_id")
@@ -131,8 +133,14 @@ async def _send_client_booking_completed_push(
     date_str, day_str, time_str = _slot_display_strings(
         b.get("slot_date"), b.get("start_time")
     )
-    text = msg.CLIENT_BOOKING_COMPLETED.format(
-        date=date_str, day=day_str, time=time_str
+    duration = _reminder_duration_minutes(b.get("start_time"), b.get("end_time"))
+    text = msg.format_client_booking_completed_notice_html(
+        date=date_str,
+        day=day_str,
+        time=time_str,
+        duration_minutes=b.get("duration_minutes") if b.get("duration_minutes") is not None else duration,
+        trainer_name=(b.get("trainer_name") or "Тренер"),
+        service_name=b.get("service_name"),
     )
     slot_date_val = b["slot_date"]
     target_date = (
@@ -142,30 +150,15 @@ async def _send_client_booking_completed_push(
         status_next, _ = await get_slot_status_on_date(
             check_session, b["trainer_id"], target_date, b["start_time"]
         )
-    rows = [
-        [
-            InlineKeyboardButton(
-                text=msg.CLIENT_BUTTON_LEAVE_FEEDBACK,
-                callback_data=f"feedback_booking:{booking_id}",
-            )
-        ],
-    ]
-    if status_next != "booked":
-        rows.append(
-            [
-                InlineKeyboardButton(
-                    text=msg.CLIENT_BUTTON_REPEAT_SAME_TIME,
-                    callback_data=f"repeat_booking:{booking_id}",
-                ),
-                InlineKeyboardButton(
-                    text=msg.CLIENT_BUTTON_BECOME_REGULAR,
-                    callback_data=f"make_recurring:{booking_id}",
-                ),
-            ]
-        )
-    kb = InlineKeyboardMarkup(inline_keyboard=rows)
+    kb = msg.build_client_booking_completed_inline_keyboard(
+        booking_id=booking_id,
+        trainer_telegram_id=b.get("trainer_telegram_id"),
+        show_repeat_row=(status_next != "booked"),
+    )
     try:
-        await client_bot.send_message(chat_id=chat_id, text=text, reply_markup=kb)
+        await client_bot.send_message(
+            chat_id=chat_id, text=text, reply_markup=kb, parse_mode="HTML"
+        )
         await mark_client_booking_completion_push_sent(session, booking_id)
     except Exception as e:
         logger.warning(
@@ -199,10 +192,14 @@ async def process_booking_complete_round(client_bot: Bot, trainer_bot: Bot) -> N
                 if no_pass_payload and no_pass_payload.get("trainer_telegram_id"):
                     try:
                         text = msg.TRAINER_NO_PASS_FOR_SERVICE.format(
-                            client_name=no_pass_payload["client_name"],
-                            date=no_pass_payload["date"],
-                            time=no_pass_payload["time"],
-                            service_name=no_pass_payload["service_name"],
+                            client_name=html_lib.escape(
+                                (no_pass_payload.get("client_name") or "Клиент").strip() or "Клиент"
+                            ),
+                            date=html_lib.escape(str(no_pass_payload.get("date") or "")),
+                            time=html_lib.escape(str(no_pass_payload.get("time") or "")),
+                            service_name=html_lib.escape(
+                                str(no_pass_payload.get("service_name") or "—").strip()
+                            ),
                         )
                         await trainer_bot.send_message(
                             chat_id=no_pass_payload["trainer_telegram_id"],
@@ -231,8 +228,8 @@ async def process_response_notifications_batch(client_bot: Bot, session: AsyncSe
             continue
         if p.get("trainer_comment"):
             text = msg.CLIENT_RESPONSE_NOTIFICATION_WITH_COMMENT.format(
-                responder_name=p.get("responder_name") or "Тренер",
-                comment=p.get("trainer_comment"),
+                responder_name=html_lib.escape(str(p.get("responder_name") or "Тренер")),
+                comment=html_lib.escape(str(p.get("trainer_comment") or "")),
             )
         else:
             text = msg.CLIENT_RESPONSE_NOTIFICATION
@@ -285,14 +282,14 @@ async def process_request_notifications_batch(
         comment = (p.get("comment") or "").strip()
         if comment:
             text = msg.TRAINER_REQUEST_NOTIFICATION.format(
-                city=p["city_name"],
-                service=p["service_name"],
-                comment=comment,
+                city=html_lib.escape(str(p.get("city_name") or "")),
+                service=html_lib.escape(str(p.get("service_name") or "")),
+                comment=html_lib.escape(comment),
             )
         else:
             text = msg.TRAINER_REQUEST_NOTIFICATION_NO_COMMENT.format(
-                city=p["city_name"],
-                service=p["service_name"],
+                city=html_lib.escape(str(p.get("city_name") or "")),
+                service=html_lib.escape(str(p.get("service_name") or "")),
             )
         kb = InlineKeyboardMarkup(
             inline_keyboard=[
@@ -346,11 +343,14 @@ async def process_completed_feedback_batch(
             if start_time and hasattr(start_time, "strftime")
             else "—"
         )
+        end_time = p.get("end_time")
+        duration_done = _reminder_duration_minutes(start_time, end_time)
         text = msg.format_trainer_booking_completed_html(
             client_name=p.get("client_name") or "Клиент",
             date=date_str,
             day=day_str,
             time=time_str,
+            duration_minutes=duration_done,
             service_name=p.get("service_name"),
             price_tier_label=p.get("price_tier_label"),
             arena_display=p.get("arenas_str"),
@@ -363,6 +363,15 @@ async def process_completed_feedback_batch(
                 ),
             ],
         ]
+        if p.get("client_telegram_id"):
+            rows.append(
+                [
+                    InlineKeyboardButton(
+                        text=msg.TRAINER_BOOKING_CONFIRMED_BTN_WRITE,
+                        url=f"tg://user?id={int(p['client_telegram_id'])}",
+                    ),
+                ],
+            )
         if slot_date and start_time:
             sd = (
                 slot_date.date() if hasattr(slot_date, "date") else slot_date
@@ -436,16 +445,45 @@ async def run_reminder_loop(client_bot: Bot) -> None:
                     )
                     duration = _reminder_duration_minutes(p.get("start_time"), p.get("end_time"))
                     kind = p.get("kind") or ""
-                    if kind == "before_24h":
-                        text = msg.CLIENT_REMINDER_24H.format(
-                            date=date_str, day=day_str, time=time_str, duration=duration
+                    text = msg.format_client_booking_reminder_text(
+                        is_soon=(kind != "before_24h"),
+                        date=date_str,
+                        day=day_str,
+                        time=time_str,
+                        duration=duration,
+                        service_name=p.get("service_name"),
+                        booking_price_cents=p.get("booking_price_cents"),
+                        arena_name=p.get("arena_name"),
+                        arena_address=p.get("arena_address"),
+                    )
+                    arena_payload = {
+                        "latitude": p.get("arena_latitude"),
+                        "longitude": p.get("arena_longitude"),
+                        "address": p.get("arena_address"),
+                    }
+                    map_url = build_yandex_by_map_url(arena_payload)
+                    row: list[InlineKeyboardButton] = []
+                    if p.get("trainer_telegram_id"):
+                        row.append(
+                            InlineKeyboardButton(
+                                text=msg.CLIENT_REMINDER_BTN_WRITE_TRAINER,
+                                url=f"tg://user?id={int(p['trainer_telegram_id'])}",
+                            )
                         )
-                    else:
-                        text = msg.CLIENT_REMINDER_2H.format(
-                            date=date_str, day=day_str, time=time_str, duration=duration
+                    if map_url:
+                        row.append(
+                            InlineKeyboardButton(
+                                text=msg.CLIENT_REMINDER_BTN_SHOW_ON_MAP,
+                                url=map_url,
+                            )
                         )
+                    kb = InlineKeyboardMarkup(inline_keyboard=[row]) if row else None
                     try:
-                        await client_bot.send_message(chat_id=chat_id, text=text)
+                        await client_bot.send_message(
+                            chat_id=chat_id,
+                            text=text,
+                            reply_markup=kb,
+                        )
                         await mark_reminder_sent(session, p["id"])
                     except Exception as e:
                         logger.warning("Reminder send to client %s (reminder_id=%s): %s", chat_id, p["id"], e)
@@ -582,8 +620,14 @@ async def run_no_response_reminder_loop(client_bot: Bot) -> None:
                     if not client_tid:
                         continue
                     try:
+                        settings_nr = Settings()
+                        kb_nr = msg.build_client_no_response_catalog_keyboard(
+                            webapp_base_url=settings_nr.webapp_base_url,
+                        )
                         await client_bot.send_message(
-                            chat_id=client_tid, text=msg.CLIENT_NO_RESPONSE_REMINDER
+                            chat_id=client_tid,
+                            text=msg.CLIENT_NO_RESPONSE_REMINDER,
+                            reply_markup=kb_nr,
                         )
                         await mark_no_response_reminder_sent(session, p["request_id"])
                     except Exception as e:
@@ -614,14 +658,33 @@ async def run_trainer_booked_notifier_loop(client_bot: Bot) -> None:
                     date_str, day_str, time_str = _slot_display_strings(
                         p.get("slot_date"), p.get("start_time")
                     )
-                    text = msg.CLIENT_TRAINER_BOOKED_YOU.format(
-                        name=p.get("trainer_name") or "Тренер",
+                    text = msg.format_client_trainer_booked_you_html(
                         date=date_str,
                         day=day_str,
                         time=time_str,
+                        trainer_name=str(p.get("trainer_name") or "Тренер"),
+                        service_name=p.get("service_name"),
+                        booking_price_cents=p.get("booking_price_cents"),
+                        price_tier_label=p.get("price_tier_label"),
+                        arena_name=p.get("arena_name"),
+                        arena_address=p.get("arena_address"),
+                        duration_minutes=p.get("duration_minutes"),
+                        map_link=p.get("map_link"),
                     )
+                    kb = None
+                    if p.get("map_link"):
+                        kb = InlineKeyboardMarkup(
+                            inline_keyboard=[
+                                [
+                                    InlineKeyboardButton(
+                                        text=msg.CLIENT_BUTTON_SHOW_ON_MAP,
+                                        url=p["map_link"],
+                                    )
+                                ],
+                            ]
+                        )
                     try:
-                        await client_bot.send_message(chat_id=chat_id, text=text)
+                        await client_bot.send_message(chat_id=chat_id, text=text, reply_markup=kb)
                         await mark_trainer_booked_notified(session, p["booking_id"])
                     except Exception as e:
                         logger.warning(
@@ -653,14 +716,35 @@ async def run_inactive_client_loop(client_bot: Bot) -> None:
                         if kind == INACTIVE_KIND_10_DAYS
                         else msg.CLIENT_INACTIVE_30_DAYS
                     )
-                    kb = InlineKeyboardMarkup(inline_keyboard=[
-                        [
-                            InlineKeyboardButton(
-                                text=msg.CLIENT_BUTTON_BOOK,
-                                callback_data="catalog",
-                            )
-                        ],
-                    ])
+                    settings_ia = Settings()
+                    base_ia = (settings_ia.webapp_base_url or "").rstrip("/")
+                    if base_ia.lower().startswith("https://"):
+                        inactive_label = (
+                            msg.CLIENT_INACTIVE_BTN_BOOK_NOW
+                            if kind == INACTIVE_KIND_10_DAYS
+                            else msg.CLIENT_BUTTON_OPEN_CATALOG_WEBAPP
+                        )
+                        kb = InlineKeyboardMarkup(
+                            inline_keyboard=[
+                                [
+                                    InlineKeyboardButton(
+                                        text=inactive_label,
+                                        web_app=WebAppInfo(url=f"{base_ia}/webapp/catalog"),
+                                    ),
+                                ],
+                            ]
+                        )
+                    else:
+                        kb = InlineKeyboardMarkup(
+                            inline_keyboard=[
+                                [
+                                    InlineKeyboardButton(
+                                        text=msg.CLIENT_BUTTON_BOOK,
+                                        callback_data="catalog",
+                                    )
+                                ],
+                            ]
+                        )
                     for c in clients:
                         chat_id = c.get("telegram_id")
                         if not chat_id:
@@ -717,6 +801,9 @@ async def run_booking_notifier_loop(trainer_bot: Bot) -> None:
                         f"{b['start_time'].strftime('%H:%M') if hasattr(b['start_time'], 'strftime') else b['start_time']}"
                         f"–{b['end_time'].strftime('%H:%M') if hasattr(b['end_time'], 'strftime') else b['end_time']}"
                     )
+                    duration = _reminder_duration_minutes(
+                        b.get("start_time"), b.get("end_time")
+                    )
                     phone = b.get("client_phone") or "—"
                     comment = (b.get("client_comment") or "").strip()
                     client_name = b.get("client_name") or "Клиент"
@@ -725,26 +812,28 @@ async def run_booking_notifier_loop(trainer_bot: Bot) -> None:
                     arenas = b.get("arenas_str") or "—"
                     if comment:
                         text = msg.TRAINER_BOOKING_NOTIFICATION.format(
-                            date=date_str,
-                            day=dow,
-                            time=time_str,
-                            client_name=client_name,
-                            phone=phone,
-                            service=service,
-                            city=city,
-                            arenas=arenas,
-                            comment=comment,
+                            date=html_lib.escape(date_str),
+                            day=html_lib.escape(dow),
+                            time=html_lib.escape(time_str),
+                            duration=duration,
+                            client_name=html_lib.escape(client_name),
+                            phone=html_lib.escape(phone),
+                            service=html_lib.escape(service),
+                            city=html_lib.escape(city),
+                            arenas=html_lib.escape(arenas),
+                            comment=html_lib.escape(comment),
                         )
                     else:
                         text = msg.TRAINER_BOOKING_NOTIFICATION_NO_COMMENT.format(
-                            date=date_str,
-                            day=dow,
-                            time=time_str,
-                            client_name=client_name,
-                            phone=phone,
-                            service=service,
-                            city=city,
-                            arenas=arenas,
+                            date=html_lib.escape(date_str),
+                            day=html_lib.escape(dow),
+                            time=html_lib.escape(time_str),
+                            duration=duration,
+                            client_name=html_lib.escape(client_name),
+                            phone=html_lib.escape(phone),
+                            service=html_lib.escape(service),
+                            city=html_lib.escape(city),
+                            arenas=html_lib.escape(arenas),
                         )
                     kb = InlineKeyboardMarkup(
                         inline_keyboard=[
@@ -796,27 +885,42 @@ async def run_booking_notifier_loop(trainer_bot: Bot) -> None:
                         if hasattr(start_time2, "strftime")
                         else str(start_time2)[:5]
                     )
-                    client_display = r.get("client_phone") or "клиент"
+                    cn_rem = (r.get("client_name") or "").strip()
+                    ph_rem = (r.get("client_phone") or "").strip()
+                    if cn_rem and ph_rem:
+                        client_display = f"{cn_rem} ({ph_rem})"
+                    elif cn_rem:
+                        client_display = cn_rem
+                    else:
+                        client_display = ph_rem or "клиент"
                     text2 = msg.TRAINER_BOOKING_CONFIRM_REMINDER.format(
-                        client_display=client_display,
-                        date=date_str2,
-                        day=dow2,
-                        time=time_str2,
+                        client_display=html_lib.escape(str(client_display)),
+                        date=html_lib.escape(date_str2),
+                        day=html_lib.escape(dow2),
+                        time=html_lib.escape(time_str2),
                     )
-                    kb2 = InlineKeyboardMarkup(
-                        inline_keyboard=[
+                    row_confirm = [
+                        InlineKeyboardButton(
+                            text=msg.TRAINER_BOOKINGS_BUTTON_CONFIRM,
+                            callback_data=f"confirm_booking:{r['booking_id']}",
+                        ),
+                        InlineKeyboardButton(
+                            text=msg.TRAINER_BOOKINGS_BUTTON_DECLINE,
+                            callback_data=f"decline_booking:{r['booking_id']}",
+                        ),
+                    ]
+                    rows2: list[list[InlineKeyboardButton]] = [row_confirm]
+                    ctid_rem = r.get("client_telegram_id")
+                    if ctid_rem:
+                        rows2.append(
                             [
                                 InlineKeyboardButton(
-                                    text=msg.TRAINER_BOOKINGS_BUTTON_CONFIRM,
-                                    callback_data=f"confirm_booking:{r['booking_id']}",
-                                ),
-                                InlineKeyboardButton(
-                                    text=msg.TRAINER_BOOKINGS_BUTTON_DECLINE,
-                                    callback_data=f"decline_booking:{r['booking_id']}",
+                                    text=msg.TRAINER_BOOKING_CONFIRMED_BTN_WRITE,
+                                    url=f"tg://user?id={int(ctid_rem)}",
                                 ),
                             ],
-                        ]
-                    )
+                        )
+                    kb2 = InlineKeyboardMarkup(inline_keyboard=rows2)
                     try:
                         await trainer_bot.send_message(
                             chat_id=trainer_tid, text=text2, reply_markup=kb2
@@ -882,8 +986,20 @@ async def run_daily_request_reminder_loop(trainer_bot: Bot) -> None:
                         count=count,
                         requests_word=_requests_word(count),
                     )
+                    daily_kb = InlineKeyboardMarkup(
+                        inline_keyboard=[
+                            [
+                                InlineKeyboardButton(
+                                    text=msg.TRAINER_BUTTON_REQUESTS,
+                                    callback_data=REQUESTS_CALLBACK,
+                                ),
+                            ],
+                        ]
+                    )
                     try:
-                        await trainer_bot.send_message(chat_id=tid, text=text)
+                        await trainer_bot.send_message(
+                            chat_id=tid, text=text, reply_markup=daily_kb
+                        )
                         await mark_trainer_daily_request_reminder_sent(
                             session, p["trainer_id"]
                         )
@@ -921,6 +1037,7 @@ async def run_subscription_expire_and_reminder_loop(trainer_bot: Bot) -> None:
                 due = await get_subscriptions_reminder_due(session, days_ahead=days_ahead)
                 base = (Settings().webapp_base_url or "").rstrip("/")
                 pay_url = base + "/webapp/trainer-pay-subscription" if base else None
+                tariffs_url = base + "/webapp/trainer-subscription?v=20260448" if base else None
                 for sub in due:
                     tid = sub.get("trainer_telegram_id")
                     if not tid:
@@ -932,10 +1049,21 @@ async def run_subscription_expire_and_reminder_loop(trainer_bot: Bot) -> None:
                     else:
                         text = msg.TRAINER_SUBSCRIPTION_REMINDER.format(expires_date=expires_date)
                     kb = None
-                    if pay_url:
-                        kb = InlineKeyboardMarkup(inline_keyboard=[
-                            [InlineKeyboardButton(text=msg.TRAINER_BUTTON_PAY_SUBSCRIPTION, url=pay_url)],
-                        ])
+                    if pay_url and tariffs_url and base.lower().startswith("https://"):
+                        kb = InlineKeyboardMarkup(
+                            inline_keyboard=[
+                                [
+                                    InlineKeyboardButton(
+                                        text=msg.TRAINER_SUBSCRIPTION_PUSH_BTN_PAY_NOW,
+                                        url=pay_url,
+                                    ),
+                                    InlineKeyboardButton(
+                                        text=msg.TRAINER_SUBSCRIPTION_PUSH_BTN_TARIFFS,
+                                        url=tariffs_url,
+                                    ),
+                                ],
+                            ]
+                        )
                     try:
                         await trainer_bot.send_message(
                             chat_id=tid,

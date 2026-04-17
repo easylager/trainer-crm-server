@@ -1,7 +1,7 @@
 """
 App settings loaded from env (.env + os.environ). Single entry point for config.
 """
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from pydantic import BeforeValidator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -102,6 +102,16 @@ class Settings(BaseSettings):
     # Checkout API base, e.g. https://checkout.bepaid.by (sandbox may differ)
     bepaid_checkout_base_url: str = "https://checkout.bepaid.by"
     payment_sandbox: bool = True
+    # Trainer subscription Mini App: auto | sandbox | bepaid | invoice
+    # auto = sandbox if payment_sandbox; elif bePaid shop+secret then bepaid; else invoice (ERIP / manual confirm).
+    trainer_subscription_checkout_mode: str = "auto"
+    # Optional: shown in Mini App when checkout is invoice (client escapes HTML).
+    subscription_invoice_legal_name: str | None = None
+    subscription_invoice_unp: str | None = None
+    subscription_invoice_iban: str | None = None
+    subscription_invoice_bank_hint_ru: str | None = None
+    subscription_invoice_extra_hint_ru: str | None = None
+    subscription_support_url: str | None = None
 
     # Group cohort RSVP: hours before slot to ask «Буду?» in client bot (disabled if unset or 0).
     group_attendance_prompt_hours: int | None = None
@@ -149,3 +159,16 @@ class Settings(BaseSettings):
     # Env must be set on the API process (not the Telegram bot). Redeploy after changing Railway variables.
     trainer_webapp_benchmark_log: BenchmarkLogFlag = False
     trainer_webapp_benchmark_slow_ms: int | None = None
+
+    def resolved_trainer_subscription_checkout_mode(self) -> Literal["sandbox", "bepaid", "invoice"]:
+        """How trainer-subscription Mini App should behave for paid checkout."""
+        m = (self.trainer_subscription_checkout_mode or "auto").strip().lower()
+        if m in ("sandbox", "bepaid", "invoice"):
+            return m  # type: ignore[return-value]
+        if self.payment_sandbox:
+            return "sandbox"
+        if self.bepaid_shop_id and str(self.bepaid_shop_id).strip() and self.bepaid_secret_key and str(
+            self.bepaid_secret_key
+        ).strip():
+            return "bepaid"
+        return "invoice"

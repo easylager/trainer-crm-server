@@ -344,6 +344,7 @@ class TrainerClientNote(Base):
     goals: Mapped[Optional[str]] = mapped_column(Text(), nullable=True)
     limitations: Mapped[Optional[str]] = mapped_column(Text(), nullable=True)
     level: Mapped[Optional[str]] = mapped_column(Text(), nullable=True)
+    season_goal: Mapped[Optional[str]] = mapped_column(Text(), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -843,6 +844,10 @@ class TrainerInvoice(Base):
     status: Mapped[str] = mapped_column(String(32), nullable=False)  # draft, sent, paid, overdue, cancelled
     paid_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     payment_external_id: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    # When set, paid catalog checkout (tier/constructor): confirm applies modules + billing_period_months to trainer_subscriptions.
+    checkout_modules: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    checkout_billing_period_months: Mapped[Optional[int]] = mapped_column(Integer(), nullable=True)
+    checkout_bundle_tier: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
 
 
 class SubscriptionTierPricing(Base):

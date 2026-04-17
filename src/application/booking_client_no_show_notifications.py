@@ -85,12 +85,12 @@ def _client_notice_variant(deduct_resolution: str, completed_at_submit: bool) ->
 
 def _trainer_outcome_line_ru(deduct_resolution: str, completed_at_submit: bool) -> str:
     if deduct_resolution == RESOLUTION_SKIP and not completed_at_submit:
-        return "Клиент получит уведомление: по записи не будет списания с абонемента или сертификата."
+        return "По записи не будет списания с абонемента или сертификата."
     if deduct_resolution == RESOLUTION_SKIP and completed_at_submit:
-        return "Клиент получит уведомление: занятие возвращено на абонемент или средства — на сертификат."
+        return "Занятие возвращено на абонемент или средства на сертификат."
     if deduct_resolution == RESOLUTION_REDEEM and not completed_at_submit:
-        return "Клиент получит уведомление: при закрытии записи спишется занятие, как если клиента не было на тренировке."
-    return "Клиент получит уведомление: списание по записи оставлено в учёте."
+        return "При закрытии записи спишется занятие (как при отсутствии клиента на тренировке)."
+    return "Списание по записи оставлено в учёте."
 
 
 async def send_booking_client_no_show_telegram_notifications(
@@ -129,6 +129,7 @@ async def send_booking_client_no_show_telegram_notifications(
     completed = bool(payload.get("completed_at_submit"))
     outcome_line = _trainer_outcome_line_ru(dr, completed)
     pc = str(payload.get("payment_class") or "")
+    ack_variant = _client_notice_variant(dr, completed)
 
     # --- Trainer ---
     trainer_tid = payload.get("trainer_telegram_id")
@@ -141,6 +142,7 @@ async def send_booking_client_no_show_telegram_notifications(
             day=dy,
             time=ts,
             service_name=payload.get("service_name"),
+            variant=ack_variant,
         )
         rows: list[list[InlineKeyboardButton]] = []
         if webapp_https:
@@ -200,7 +202,7 @@ async def send_booking_client_no_show_telegram_notifications(
         client_rows.append(
             [
                 InlineKeyboardButton(
-                    text=msg.CLIENT_BUTTON_MY_BOOKINGS,
+                    text=msg.CLIENT_BOOKING_CONFIRMED_BTN_DETAILS,
                     web_app=WebAppInfo(
                         url=f"{base}/webapp/client-bookings?open_booking={booking_id}"
                     ),

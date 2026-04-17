@@ -4,13 +4,14 @@ Extends the simple note into a full client information system.
 """
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
-# --- Profile (goals, limitations, level, legacy note) ---
+# --- Profile (goals, limitations, level, season goal, legacy note) ---
 
 
 async def get_client_dossier_profile(
@@ -21,7 +22,7 @@ async def get_client_dossier_profile(
     """Get profile fields for a client. Returns empty strings if no record."""
     r = await session.execute(
         text("""
-            SELECT id, note, goals, limitations, level
+            SELECT id, note, goals, limitations, level, season_goal
             FROM trainer_client_notes
             WHERE trainer_id = :tid AND client_id = :cid
         """),
@@ -29,13 +30,20 @@ async def get_client_dossier_profile(
     )
     row = r.fetchone()
     if not row:
-        return {"note": "", "goals": "", "limitations": "", "level": ""}
+        return {
+            "note": "",
+            "goals": "",
+            "limitations": "",
+            "level": "",
+            "season_goal": "",
+        }
     return {
         "id": row[0],
         "note": row[1] or "",
         "goals": row[2] or "",
         "limitations": row[3] or "",
         "level": row[4] or "",
+        "season_goal": row[5] or "",
     }
 
 
@@ -48,6 +56,7 @@ async def upsert_client_dossier_profile(
     goals: str | None = None,
     limitations: str | None = None,
     level: str | None = None,
+    season_goal: str | None = None,
 ) -> dict[str, Any]:
     """Update profile fields. Only provided fields are updated (None = keep existing)."""
     existing = await get_client_dossier_profile(session, trainer_id, client_id)
@@ -56,17 +65,25 @@ async def upsert_client_dossier_profile(
     final_goals = goals.strip() if goals is not None else existing.get("goals", "")
     final_limitations = limitations.strip() if limitations is not None else existing.get("limitations", "")
     final_level = level.strip() if level is not None else existing.get("level", "")
-    
+    final_season = (
+        season_goal.strip()
+        if season_goal is not None
+        else existing.get("season_goal", "")
+    )
+
     await session.execute(
         text("""
-            INSERT INTO trainer_client_notes (trainer_id, client_id, note, goals, limitations, level)
-            VALUES (:tid, :cid, :note, :goals, :limitations, :level)
+            INSERT INTO trainer_client_notes (
+                trainer_id, client_id, note, goals, limitations, level, season_goal
+            )
+            VALUES (:tid, :cid, :note, :goals, :limitations, :level, :season_goal)
             ON CONFLICT (trainer_id, client_id)
             DO UPDATE SET 
                 note = EXCLUDED.note,
                 goals = EXCLUDED.goals,
                 limitations = EXCLUDED.limitations,
                 level = EXCLUDED.level,
+                season_goal = EXCLUDED.season_goal,
                 updated_at = now()
         """),
         {
@@ -76,6 +93,7 @@ async def upsert_client_dossier_profile(
             "goals": final_goals,
             "limitations": final_limitations,
             "level": final_level,
+            "season_goal": final_season,
         },
     )
     await session.commit()
@@ -140,6 +158,41 @@ async def add_client_entry(
     }
 
 
+async def add_client_entry_with_date(
+    session: AsyncSession,
+    trainer_id: int,
+    client_id: int,
+    content: str,
+    *,
+    entry_date: datetime,
+) -> dict[str, Any]:
+    """Add a timeline entry bound to the provided lesson datetime."""
+    trimmed = (content or "").strip()
+    if not trimmed:
+        raise ValueError("Entry content cannot be empty")
+
+    r = await session.execute(
+        text("""
+            INSERT INTO trainer_client_entries (trainer_id, client_id, content, created_at)
+            VALUES (:tid, :cid, :content, :created_at)
+            RETURNING id, content, created_at
+        """),
+        {
+            "tid": trainer_id,
+            "cid": client_id,
+            "content": trimmed,
+            "created_at": entry_date,
+        },
+    )
+    row = r.fetchone()
+    await session.commit()
+    return {
+        "id": row[0],
+        "content": row[1],
+        "created_at": row[2].isoformat() if hasattr(row[2], "isoformat") else str(row[2]),
+    }
+
+
 async def delete_client_entry(
     session: AsyncSession,
     trainer_id: int,
@@ -167,6 +220,7 @@ TAG_CATEGORIES = {
     "goal": "Цели",
     "level": "Уровень",
     "schedule": "Расписание",
+    "skills": "Навыки",
     "custom": "Другое",
 }
 
@@ -182,6 +236,26 @@ SUGGESTED_TAGS = [
     {"tag": "Только утро", "category": "schedule"},
     {"tag": "Только вечер", "category": "schedule"},
     {"tag": "Выходные", "category": "schedule"},
+    {"tag": "Прыжки", "category": "skills"},
+    {"tag": "Скольжение", "category": "skills"},
+    {"tag": "Вращения", "category": "skills"},
+    {"tag": "Баланс", "category": "skills"},
+    {"tag": "Техника торможения", "category": "skills"},
+    {"tag": "ОФП", "category": "skills"},
+    {"tag": "Растяжка", "category": "skills"},
+    {"tag": "Программа", "category": "skills"},
+    {"tag": "Подготовка к соревнованиям", "category": "skills"},
+]
+
+# Quick picks for profile "Цель сезона" (stored as free text; trainer may edit).
+SUGGESTED_SEASON_GOALS = [
+    "Подготовка к соревнованиям",
+    "Постановка программы",
+    "Восстановление после перерыва",
+    "Научиться кататься с нуля",
+    "Подготовка к тестам / разряду",
+    "Улучшить технику",
+    "Просто кататься для себя",
 ]
 
 
@@ -290,4 +364,5 @@ async def get_full_client_dossier(
         "tags": tags,
         "entries": entries,
         "suggested_tags": SUGGESTED_TAGS,
+        "suggested_season_goals": SUGGESTED_SEASON_GOALS,
     }

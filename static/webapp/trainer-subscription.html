@@ -245,6 +245,38 @@
       margin: 8px 0 0;
       line-height: 1.4;
     }
+    .invoice-hints-panel {
+      margin-top: 12px;
+      margin-bottom: 8px;
+      padding: 14px 16px;
+      border-radius: 14px;
+      background: var(--tg-theme-secondary-bg-color);
+      border: 1px solid rgba(247, 166, 0, 0.22);
+      font-size: 14px;
+      line-height: 1.45;
+      color: var(--tg-theme-text-color);
+    }
+    .invoice-hints-panel .inv-hint-title {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--tg-theme-hint-color);
+      margin: 0 0 10px;
+    }
+    .invoice-hints-panel .inv-hint-row { margin: 6px 0; }
+    .invoice-hints-panel .inv-hint-k { color: var(--tg-theme-hint-color); font-size: 12px; display: block; margin-bottom: 2px; }
+    .invoice-hints-panel .inv-hint-v { font-weight: 600; word-break: break-word; }
+    .invoice-request-meta {
+      text-align: left;
+      margin: 16px 0 20px;
+      padding: 14px 16px;
+      border-radius: 14px;
+      background: var(--tg-theme-secondary-bg-color);
+      font-size: 14px;
+      line-height: 1.5;
+      color: var(--tg-theme-text-color);
+    }
     .status-badge {
       display: inline-flex;
       align-items: center;
@@ -956,6 +988,7 @@
 
     <div id="trialStrip"></div>
     <div id="realPayBanner" class="trial-strip" style="display:none;" role="status" aria-live="polite"></div>
+    <div id="invoiceHintsPanel" class="invoice-hints-panel" style="display:none;" role="region" aria-label="Реквизиты и оплата"></div>
     <div id="currentStatus"></div>
     
     <div class="period-selector" role="group" aria-label="Период оплаты">
@@ -977,6 +1010,22 @@
 
     <p class="preset-hint">Готовые пакеты</p>
     <div id="tiersContainer" class="tiers-container"></div>
+  </div>
+
+  <!-- Invoice requested (ERIP / manual) — no instant activation -->
+  <div id="screenInvoiceRequested" class="screen">
+    <div class="success-container sub-head">
+      <div class="success-hero">
+        <div class="success-hero-inner">
+          <div class="success-icon" aria-hidden="true">📋</div>
+          <div class="success-title">Запрос принят</div>
+          <div class="success-subtitle" id="invoiceRequestSubtitle">Мы подготовим счёт и отправим реквизиты в Telegram. Подписка продлится после поступления оплаты.</div>
+        </div>
+      </div>
+      <div class="invoice-request-meta" id="invoiceRequestMeta"></div>
+      <button type="button" class="btn-secondary btn-block" id="btnInvoiceSupport" style="display:none;">Написать в поддержку</button>
+      <button type="button" class="btn-primary btn-block" id="btnCloseInvoiceRequest">Понятно</button>
+    </div>
   </div>
 
   <!-- Success screen -->
@@ -1003,7 +1052,7 @@
         <span class="value" id="summaryTier">—</span>
       </div>
       <div class="summary-row">
-        <span class="label">К оплате</span>
+        <span class="label" id="summaryAmountLabel">К оплате</span>
         <span class="value" id="summaryPrice">—</span>
       </div>
       <button type="button" class="btn-primary btn-block" id="btnPay" disabled>Оплатить (демо)</button>
@@ -1059,8 +1108,18 @@
 
       /** Last mock-checkout API payload for hub celebration (set in showSuccess). */
       var lastCheckoutResponse = null;
-      /** False when payment_sandbox is off — mock activation disabled; use bePaid page. */
-      var mockCheckoutEnabled = true;
+      /** sandbox | bepaid | invoice — from GET /trainer/subscription/catalog */
+      var paymentCheckoutMode = 'sandbox';
+      var invoiceHints = {};
+
+      function escapeHtml(s) {
+        if (s == null || s === '') return '';
+        return String(s)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;');
+      }
 
       function periodLabelFromMonths(m) {
         if (m === 1) return '1 мес.';
@@ -1069,19 +1128,54 @@
         return String(m) + ' мес.';
       }
 
-      function applyMockCheckoutMode() {
+      function renderInvoiceHintsPanel() {
+        var panel = document.getElementById('invoiceHintsPanel');
+        if (!panel) return;
+        if (paymentCheckoutMode !== 'invoice') {
+          panel.style.display = 'none';
+          panel.innerHTML = '';
+          return;
+        }
+        var h = invoiceHints || {};
+        var parts = [];
+        parts.push('<p class="inv-hint-title">Оплата по счёту / ЕРИП</p>');
+        parts.push('<p class="trial-strip-hint" style="margin-top:0;">Выберите тариф и нажмите «Запросить счёт». После поступления оплаты мы продлим подписку — доступ в приложении обновится автоматически.</p>');
+        if (h.legal_name) {
+          parts.push('<div class="inv-hint-row"><span class="inv-hint-k">Получатель</span><span class="inv-hint-v">' + escapeHtml(h.legal_name) + '</span></div>');
+        }
+        if (h.unp) {
+          parts.push('<div class="inv-hint-row"><span class="inv-hint-k">УНП</span><span class="inv-hint-v">' + escapeHtml(h.unp) + '</span></div>');
+        }
+        if (h.iban) {
+          parts.push('<div class="inv-hint-row"><span class="inv-hint-k">IBAN / счёт</span><span class="inv-hint-v">' + escapeHtml(h.iban) + '</span></div>');
+        }
+        if (h.bank_hint_ru) {
+          parts.push('<div class="inv-hint-row"><span class="inv-hint-k">Банк</span><span class="inv-hint-v">' + escapeHtml(h.bank_hint_ru).replace(/\n/g, '<br>') + '</span></div>');
+        }
+        if (h.extra_hint_ru) {
+          parts.push('<div class="inv-hint-row"><span class="inv-hint-k">Назначение платежа</span><span class="inv-hint-v">' + escapeHtml(h.extra_hint_ru).replace(/\n/g, '<br>') + '</span></div>');
+        }
+        if (!h.legal_name && !h.unp && !h.iban && !h.bank_hint_ru && !h.extra_hint_ru) {
+          parts.push('<p class="trial-strip-hint">Реквизиты и инструкцию пришлём в Telegram после запроса счёта.</p>');
+        }
+        panel.innerHTML = parts.join('');
+        panel.style.display = 'block';
+      }
+
+      function applyCheckoutModeUI() {
         var banner = document.getElementById('realPayBanner');
         if (banner) {
-          if (!mockCheckoutEnabled) {
+          if (paymentCheckoutMode === 'bepaid') {
             banner.style.display = 'block';
             banner.innerHTML =
               '<p class="trial-strip-title">Оплата</p>' +
-              '<p class="trial-strip-body">Демо-активация отключена. Нажмите кнопку ниже — откроется страница оплаты через bePaid.</p>';
+              '<p class="trial-strip-body">Нажмите кнопку ниже — откроется страница оплаты картой (bePaid).</p>';
           } else {
             banner.innerHTML = '';
             banner.style.display = 'none';
           }
         }
+        renderInvoiceHintsPanel();
       }
 
       function navigateToRealSubscriptionPayment() {
@@ -1303,13 +1397,14 @@
           
           catalog = catalogData.tiers;
           constructor = catalogData.constructor || null;
-          mockCheckoutEnabled = catalogData.mock_checkout_enabled !== false;
+          paymentCheckoutMode = catalogData.checkout_mode || (catalogData.mock_checkout_enabled !== false ? 'sandbox' : 'bepaid');
+          invoiceHints = catalogData.invoice_hints || {};
           status = statusData;
           renderTiers();
           renderConstructor();
           initPeriodSelector();
           refreshPeriodBadges();
-          applyMockCheckoutMode();
+          applyCheckoutModeUI();
           updateCheckoutButton();
           showScreen('screenMain');
         })
@@ -1495,7 +1590,17 @@
 
       // Update checkout button and summary
       function updateCheckoutButton() {
-        if (!mockCheckoutEnabled) {
+        function applyInvoicePayButtonLabel() {
+          if (paymentCheckoutMode !== 'invoice') return;
+          var b = document.getElementById('btnPay');
+          if (!b || b.disabled) return;
+          if (b.textContent.indexOf('Оплатить') === 0) {
+            b.textContent = b.textContent.replace(/^Оплатить(\s)/, 'Запросить счёт$1');
+          }
+        }
+        var amtLabel = document.getElementById('summaryAmountLabel');
+        if (amtLabel) amtLabel.textContent = paymentCheckoutMode === 'invoice' ? 'Сумма по счёту' : 'К оплате';
+        if (paymentCheckoutMode === 'bepaid') {
           document.getElementById('summaryTier').textContent = 'Оплата на следующей странице';
           document.getElementById('summaryPrice').textContent = '—';
           document.getElementById('btnPay').disabled = false;
@@ -1521,6 +1626,7 @@
           document.getElementById('btnPay').disabled = false;
           var periodText = selectedPeriod === 1 ? 'мес' : selectedPeriod === 3 ? '3 мес' : 'год';
           document.getElementById('btnPay').textContent = 'Оплатить ' + Math.round(totalPrice) + ' BYN (' + periodText + ')';
+          applyInvoicePayButtonLabel();
           return;
         }
 
@@ -1543,11 +1649,44 @@
         document.getElementById('btnPay').textContent = totalPrice != null
           ? ('Оплатить ' + Math.round(totalPrice) + ' BYN (' + periodText + ')')
           : 'Нет цены для периода';
+        applyInvoicePayButtonLabel();
       }
 
-      // Mock checkout
+      function showInvoiceRequested(data) {
+        var meta = document.getElementById('invoiceRequestMeta');
+        var lines = [];
+        if (data && data.invoice_id != null) {
+          lines.push('<div class="inv-hint-row"><span class="inv-hint-k">Номер счёта (заявка)</span><span class="inv-hint-v">№ ' + escapeHtml(String(data.invoice_id)) + '</span></div>');
+        }
+        if (data && data.amount_cents != null) {
+          lines.push('<div class="inv-hint-row"><span class="inv-hint-k">Сумма</span><span class="inv-hint-v">' + Math.round(data.amount_cents / 100) + ' BYN</span></div>');
+        }
+        if (data && data.plan_name) {
+          lines.push('<div class="inv-hint-row"><span class="inv-hint-k">Позиция</span><span class="inv-hint-v">' + escapeHtml(data.plan_name) + '</span></div>');
+        }
+        meta.innerHTML = lines.join('') || '<p class="trial-strip-hint">Счёт будет сформирован вручную — следите за сообщениями в боте.</p>';
+        var sup = document.getElementById('btnInvoiceSupport');
+        var url = invoiceHints && invoiceHints.support_url;
+        if (sup && url) {
+          sup.style.display = 'block';
+          sup.onclick = function() {
+            if (tg && typeof tg.openLink === 'function') tg.openLink(url);
+            else window.open(url, '_blank');
+          };
+        } else if (sup) {
+          sup.style.display = 'none';
+        }
+        showScreen('screenInvoiceRequested');
+        haptic('success');
+      }
+
+      function relabelPayButtonAfterError() {
+        updateCheckoutButton();
+      }
+
+      // Checkout: sandbox (mock) | bePaid redirect | invoice request
       function doCheckout() {
-        if (!mockCheckoutEnabled) {
+        if (paymentCheckoutMode === 'bepaid') {
           haptic('light');
           navigateToRealSubscriptionPayment();
           return;
@@ -1557,19 +1696,54 @@
         } else if (!selectedTier) {
           return;
         }
-        
+
         var btn = document.getElementById('btnPay');
         btn.disabled = true;
-        btn.textContent = 'Обработка…';
-        
-        var url = '/api/webapp/trainer/subscription/mock-checkout' + (initData() ? '?init_data=' + encodeURIComponent(initData()) : '');
+        btn.textContent = 'Отправка…';
+
         var payload = { period_months: selectedPeriod };
         if (checkoutMode === 'constructor') {
           payload.modules = selectedModules;
         } else {
           payload.tier = selectedTier;
         }
-        
+
+        if (paymentCheckoutMode === 'invoice') {
+          var urlInv = '/api/webapp/trainer/subscription/invoice-request' + (initData() ? '?init_data=' + encodeURIComponent(initData()) : '');
+          fetch(urlInv, {
+            method: 'POST',
+            headers: Object.assign(headers(), { 'Content-Type': 'application/json' }),
+            body: JSON.stringify(payload)
+          })
+            .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
+            .then(function(res) {
+              if (res.ok && res.data.ok) {
+                showInvoiceRequested(res.data);
+                btn.disabled = false;
+                relabelPayButtonAfterError();
+              } else {
+                haptic('error');
+                alert(res.data.detail || 'Не удалось создать заявку');
+                btn.disabled = false;
+                relabelPayButtonAfterError();
+              }
+            })
+            .catch(function() {
+              haptic('error');
+              alert('Ошибка сети');
+              btn.disabled = false;
+              relabelPayButtonAfterError();
+            });
+          return;
+        }
+
+        if (paymentCheckoutMode !== 'sandbox') {
+          btn.disabled = false;
+          relabelPayButtonAfterError();
+          return;
+        }
+
+        var url = '/api/webapp/trainer/subscription/mock-checkout' + (initData() ? '?init_data=' + encodeURIComponent(initData()) : '');
         fetch(url, {
           method: 'POST',
           headers: Object.assign(headers(), { 'Content-Type': 'application/json' }),
@@ -1584,14 +1758,14 @@
             haptic('error');
             alert(res.data.detail || 'Ошибка оплаты');
             btn.disabled = false;
-            btn.textContent = 'Оплатить (демо)';
+            relabelPayButtonAfterError();
           }
         })
         .catch(function() {
           haptic('error');
           alert('Ошибка сети');
           btn.disabled = false;
-          btn.textContent = 'Оплатить (демо)';
+          relabelPayButtonAfterError();
         });
       }
 
@@ -1660,6 +1834,8 @@
       document.getElementById('btnRetry').onclick = loadData;
       document.getElementById('btnPay').onclick = doCheckout;
       document.getElementById('btnCloseSuccess').onclick = goToHubAfterSuccess;
+      var btnCloseInv = document.getElementById('btnCloseInvoiceRequest');
+      if (btnCloseInv) btnCloseInv.onclick = closeApp;
 
       // Initialize
       if (initData() && window.TrainerMiniAppGate) {

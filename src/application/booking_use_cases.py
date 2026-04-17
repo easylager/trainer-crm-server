@@ -13,6 +13,7 @@ from src.application.certificate_use_cases import redeem_certificate_for_booking
 from src.application.pass_product_use_cases import redeem_pass_session_for_booking
 from src.shared.notification_hours import NOTIFICATION_TZ
 from src.shared.price_tier_kind import (
+    PRICE_TIER_ADULT,
     normalize_price_tier_kind,
     price_tier_label_ru,
     sql_order_case_tier_kind,
@@ -74,8 +75,14 @@ async def _resolve_service_booking_price(
             return (int(rows[0][0]), int(rows[0][1]), ptk)
         if strict_variant:
             raise ServicePriceVariantRequired()
-        ptk0 = normalize_price_tier_kind(rows[0][2])
-        return (int(rows[0][0]), int(rows[0][1]), ptk0)
+        # Trainer-side / non-strict: ambiguous tier — prefer single adult seat over display order (child first).
+        adult_row = next(
+            (row for row in rows if normalize_price_tier_kind(row[2]) == PRICE_TIER_ADULT),
+            None,
+        )
+        pick = adult_row if adult_row is not None else rows[0]
+        ptk0 = normalize_price_tier_kind(pick[2])
+        return (int(pick[0]), int(pick[1]), ptk0)
     r2 = await session.execute(
         text(
             """
@@ -205,6 +212,43 @@ async def get_first_service_id_for_trainer(session: AsyncSession, trainer_id: in
     )
     row = r.fetchone()
     return row[0] if row else None
+
+
+async def list_trainer_service_price_variants(
+    session: AsyncSession,
+    trainer_id: int,
+    service_id: int,
+) -> list[dict]:
+    """Ordered price tiers for trainer service (first row is default)."""
+    r = await session.execute(
+        text(
+            f"""
+            SELECT id, price_cents, tier_kind, label
+            FROM trainer_service_price_variants
+            WHERE trainer_id = :tid AND service_id = :sid
+            ORDER BY {sql_order_case_tier_kind("tier_kind")},
+                     sort_order, id
+            """
+        ),
+        {"tid": trainer_id, "sid": service_id},
+    )
+    out: list[dict] = []
+    for row in r.fetchall():
+        tier_kind = normalize_price_tier_kind(row[2])
+        human_label = (
+            price_tier_label_ru(tier_kind)
+            or ((row[3] or "").strip() if row[3] is not None else "")
+            or "Тариф"
+        )
+        out.append(
+            {
+                "id": int(row[0]),
+                "price_cents": int(row[1]) if row[1] is not None else None,
+                "tier_kind": tier_kind,
+                "label": human_label,
+            }
+        )
+    return out
 
 
 async def get_trainer_default_city_and_service(
@@ -554,6 +598,18 @@ def _booking_interval_duration_minutes(start_time: time, end_time: time) -> int:
     return 45
 
 
+def _map_link(latitude: object, longitude: object) -> str | None:
+    """Build a stable external map URL from arena coordinates."""
+    try:
+        if latitude is None or longitude is None:
+            return None
+        lat = float(latitude)
+        lon = float(longitude)
+    except (TypeError, ValueError):
+        return None
+    return f"https://maps.google.com/?q={lat},{lon}"
+
+
 async def trainer_repeat_booking_same_time_next_week(
     session: AsyncSession,
     booking_id: int,
@@ -792,24 +848,36 @@ async def generate_reminders_for_booking(session: AsyncSession, booking_id: int)
     await session.commit()
 
 
-async def get_pending_trainer_booked_notifications(session: AsyncSession, limit: int = 50) -> list[dict]:
+async def get_pending_trainer_booked_notifications(
+    session: AsyncSession, limit: int = 50
+) -> list[dict]:
     """
-    Bookings created by trainer with client_request_id, client not yet notified.
-    Returns: booking_id, client_telegram_id, trainer_name, slot_date, start_time.
+    Bookings created by trainer: client not yet notified by CLIENT_TRAINER_BOOKED_YOU push.
+    Returns: booking_id, client_telegram_id, trainer_name, slot_date, start_time, end_time,
+             service_name, booking_price_cents, price_tier_label, arena_name, arena_address.
     """
     r = await session.execute(
         text("""
             SELECT b.id, c.telegram_id,
-                   COALESCE(TRIM(CONCAT(tp.first_name, ' ', tp.last_name)), 'Тренер'),
-                   s.slot_date, s.start_time
+                   COALESCE(TRIM(CONCAT(tp.first_name, ' ', tp.last_name)), 'Тренер') AS trainer_name,
+                   s.slot_date, s.start_time, s.end_time,
+                   srv.name AS service_name,
+                   COALESCE(b.booking_price_cents, spv.price_cents, ts.price_cents) AS price_cents_effective,
+                   price_tier_kind,
+                   a.name AS arena_name, a.address AS arena_address,
+                   a.latitude, a.longitude
             FROM bookings b
             JOIN clients c ON c.id = b.client_id
             JOIN slots s ON s.id = b.slot_id
             JOIN trainers t ON t.id = b.trainer_id
             LEFT JOIN trainer_profiles tp ON tp.trainer_id = t.id
-            WHERE b.client_request_id IS NOT NULL
-              AND b.client_notified_trainer_booked_at IS NULL
+            LEFT JOIN services srv ON srv.id = b.service_id
+            LEFT JOIN trainer_service_price_variants spv ON spv.id = b.service_price_variant_id
+            LEFT JOIN trainer_services ts ON ts.trainer_id = b.trainer_id AND ts.service_id = b.service_id
+            LEFT JOIN arenas a ON a.id = COALESCE(b.arena_id, s.arena_id)
+            WHERE b.client_notified_trainer_booked_at IS NULL
               AND c.telegram_id IS NOT NULL
+              AND b.status = 'confirmed' -- Only confirmed bookings get this push.
             LIMIT :lim
         """),
         {"lim": limit},
@@ -822,6 +890,14 @@ async def get_pending_trainer_booked_notifications(session: AsyncSession, limit:
             "trainer_name": (row[2] or "Тренер").strip(),
             "slot_date": row[3],
             "start_time": row[4],
+            "end_time": row[5],
+            "service_name": (row[6] or "").strip() or None,
+            "booking_price_cents": row[7],
+            "price_tier_label": price_tier_label_ru(row[8]),
+            "arena_name": (row[9] or "").strip() or None,
+            "arena_address": (row[10] or "").strip() or None,
+            "map_link": _map_link(row[11], row[12]),
+            "duration_minutes": _booking_interval_duration_minutes(row[4], row[5]),
         }
         for row in rows
     ]
@@ -839,14 +915,24 @@ async def mark_trainer_booked_notified(session: AsyncSession, booking_id: int) -
 async def list_pending_reminders(session: AsyncSession, limit: int = 100) -> list[dict]:
     """
     Reminders due to send: status=pending, send_at <= now.
-    Only for non-cancelled bookings. Returns list of dicts with id, client_telegram_id, kind, slot_date, start_time.
+    Only for non-cancelled bookings.
+    Includes service/price/venue/trainer contact to render rich reminder card in client bot.
     """
     r = await session.execute(
         text("""
-            SELECT r.id, r.client_telegram_id, r.kind, s.slot_date, s.start_time, s.end_time
+            SELECT r.id, r.client_telegram_id, r.kind, s.slot_date, s.start_time, s.end_time,
+                   srv.name AS service_name,
+                   COALESCE(b.booking_price_cents, spv.price_cents, ts.price_cents) AS price_cents_effective,
+                   a.name AS arena_name, a.address AS arena_address, a.latitude, a.longitude,
+                   t.telegram_id AS trainer_telegram_id
             FROM reminders r
             JOIN bookings b ON b.id = r.booking_id
             JOIN slots s ON s.id = b.slot_id
+            JOIN services srv ON srv.id = b.service_id
+            JOIN trainers t ON t.id = b.trainer_id
+            LEFT JOIN trainer_service_price_variants spv ON spv.id = b.service_price_variant_id
+            LEFT JOIN trainer_services ts ON ts.trainer_id = b.trainer_id AND ts.service_id = b.service_id
+            LEFT JOIN arenas a ON a.id = COALESCE(b.arena_id, s.arena_id)
             WHERE r.status = 'pending'
               AND r.send_at <= now()
               AND b.status NOT IN ('cancelled', 'declined')
@@ -864,6 +950,13 @@ async def list_pending_reminders(session: AsyncSession, limit: int = 100) -> lis
             "slot_date": row[3],
             "start_time": row[4],
             "end_time": row[5],
+            "service_name": (row[6] or "").strip() or None,
+            "booking_price_cents": int(row[7]) if row[7] is not None else None,
+            "arena_name": (row[8] or "").strip() or None,
+            "arena_address": (row[9] or "").strip() or None,
+            "arena_latitude": row[10],
+            "arena_longitude": row[11],
+            "trainer_telegram_id": int(row[12]) if row[12] is not None else None,
         }
         for row in rows
     ]
@@ -1864,15 +1957,17 @@ async def cancel_booking_by_client(
 ) -> dict | None:
     """
     Cancel booking by client: slot freed, status cancelled, reminders cancelled, reason stored.
-    Returns payload for trainer notification (trainer_telegram_id, slot_date, start_time, client_name, reason)
-    or None if booking not found / not owned by client.
+    Returns payload for trainer notification:
+    trainer_telegram_id, slot_date, start_time, client_name, reason,
+    client_id, client_telegram_id, booking_id — or None if booking not found / not owned by client.
     """
     reason_val = (reason or "").strip() or None
     # Load trainer + slot + client for notification before updating
     r = await session.execute(
         text("""
             SELECT t.telegram_id, b.trainer_id, s.slot_date, s.start_time,
-                   TRIM(COALESCE(c.first_name, '') || ' ' || COALESCE(c.last_name, '')) AS client_name
+                   TRIM(COALESCE(c.first_name, '') || ' ' || COALESCE(c.last_name, '')) AS client_name,
+                   c.id, c.telegram_id
             FROM bookings b
             JOIN clients c ON c.id = b.client_id AND c.telegram_id = :ctid
             JOIN slots s ON s.id = b.slot_id
@@ -1892,6 +1987,8 @@ async def cancel_booking_by_client(
         row[3],
         (row[4] or "").strip() or "Клиент",
     )
+    client_id = int(row[5]) if row[5] is not None else None
+    client_tid = int(row[6]) if row[6] is not None else None
 
     r = await session.execute(
         text("""
@@ -1926,6 +2023,9 @@ async def cancel_booking_by_client(
         "start_time": start_time,
         "client_name": client_name,
         "reason": reason_val,
+        "client_id": client_id,
+        "client_telegram_id": client_tid,
+        "booking_id": booking_id,
     }
 
 
@@ -2018,6 +2118,17 @@ async def confirm_booking(session: AsyncSession, booking_id: int, trainer_id: in
     sn = (row2[11] or "").strip() if row2[11] else ""
     price_cents = row2[12]
     cn_raw = (row2[5] or "").strip() if row2[5] else ""
+    st_t, en_t = row2[9], row2[10]
+    duration_minutes: int | None = None
+    try:
+        if st_t is not None and en_t is not None and hasattr(st_t, "hour") and hasattr(en_t, "hour"):
+            from datetime import datetime, date as date_cls
+
+            d0 = date_cls.today()
+            delta = datetime.combine(d0, en_t) - datetime.combine(d0, st_t)
+            duration_minutes = max(0, int(delta.total_seconds() // 60))
+    except (TypeError, ValueError):
+        duration_minutes = None
     return {
         "id": row2[0],
         "slot_id": row2[1],
@@ -2030,6 +2141,7 @@ async def confirm_booking(session: AsyncSession, booking_id: int, trainer_id: in
         "slot_date": row2[8],
         "start_time": row2[9],
         "end_time": row2[10],
+        "duration_minutes": duration_minutes,
         "service_name": sn or None,
         "booking_price_cents": int(price_cents) if price_cents is not None else None,
         "price_tier_label": tier_label,
@@ -2134,7 +2246,8 @@ async def list_bookings_pending_confirm_reminder(
     """
     Bookings that are still pending confirmation and start within the next 2 hours,
     for which we have not yet sent a 'please confirm/decline' reminder to the trainer.
-    Returns: booking_id, trainer_id, client_phone, slot_date, start_time.
+    Returns: booking_id, trainer_id, client_phone, client_name, client_telegram_id, slot_date, start_time
+    (client_name / client_telegram_id for clearer reminder copy + «Написать» button).
     """
     r = await session.execute(
         text(
@@ -2143,6 +2256,8 @@ async def list_bookings_pending_confirm_reminder(
                 b.id,
                 b.trainer_id,
                 COALESCE(c.phone, '') AS client_phone,
+                TRIM(COALESCE(c.first_name, '') || ' ' || COALESCE(c.last_name, '')) AS client_name,
+                c.telegram_id AS client_telegram_id,
                 s.slot_date,
                 s.start_time
             FROM bookings b
@@ -2165,8 +2280,10 @@ async def list_bookings_pending_confirm_reminder(
             "booking_id": row[0],
             "trainer_id": row[1],
             "client_phone": row[2] or "",
-            "slot_date": row[3],
-            "start_time": row[4],
+            "client_name": ((row[3] or "").strip() or None),
+            "client_telegram_id": int(row[4]) if row[4] is not None else None,
+            "slot_date": row[5],
+            "start_time": row[6],
         }
         for row in rows
     ]
@@ -2362,10 +2479,17 @@ async def list_bookings_to_complete(session: AsyncSession, limit: int = 50) -> l
     r = await session.execute(
         text("""
             SELECT b.id, c.telegram_id, b.trainer_id,
-                   s.slot_date, s.start_time, s.end_time
+                   s.slot_date, s.start_time, s.end_time,
+                   (EXTRACT(EPOCH FROM (s.end_time - s.start_time)) / 60)::int AS duration_minutes,
+                   COALESCE(NULLIF(TRIM(srv.name), ''), '') AS service_name,
+                   COALESCE(NULLIF(TRIM(CONCAT(COALESCE(p.first_name, ''), ' ', COALESCE(p.last_name, ''))), ''), 'Тренер') AS trainer_name,
+                   t.telegram_id AS trainer_telegram_id
             FROM bookings b
             JOIN clients c ON c.id = b.client_id
             JOIN slots s ON s.id = b.slot_id
+            JOIN services srv ON srv.id = b.service_id
+            JOIN trainers t ON t.id = b.trainer_id
+            LEFT JOIN trainer_profiles p ON p.trainer_id = b.trainer_id
             WHERE b.status IN ('pending', 'confirmed') AND s.status IN ('available', 'booked')
               AND (s.slot_date + s.end_time) < CURRENT_TIMESTAMP
               AND NOT EXISTS (SELECT 1 FROM booking_problem_reports pr WHERE pr.booking_id = b.id)
@@ -2383,6 +2507,10 @@ async def list_bookings_to_complete(session: AsyncSession, limit: int = 50) -> l
             "slot_date": row[3],
             "start_time": row[4],
             "end_time": row[5],
+            "duration_minutes": int(row[6]) if row[6] is not None else None,
+            "service_name": (row[7] or "").strip() or None,
+            "trainer_name": (row[8] or "").strip() or "Тренер",
+            "trainer_telegram_id": int(row[9]) if row[9] is not None else None,
         }
         for row in rows
     ]
@@ -2398,10 +2526,17 @@ async def list_bookings_pending_client_completion_push(
     r = await session.execute(
         text("""
             SELECT b.id, c.telegram_id, b.trainer_id,
-                   s.slot_date, s.start_time, s.end_time
+                   s.slot_date, s.start_time, s.end_time,
+                   (EXTRACT(EPOCH FROM (s.end_time - s.start_time)) / 60)::int AS duration_minutes,
+                   COALESCE(NULLIF(TRIM(srv.name), ''), '') AS service_name,
+                   COALESCE(NULLIF(TRIM(CONCAT(COALESCE(p.first_name, ''), ' ', COALESCE(p.last_name, ''))), ''), 'Тренер') AS trainer_name,
+                   t.telegram_id AS trainer_telegram_id
             FROM bookings b
             JOIN clients c ON c.id = b.client_id
             JOIN slots s ON s.id = b.slot_id
+            JOIN services srv ON srv.id = b.service_id
+            JOIN trainers t ON t.id = b.trainer_id
+            LEFT JOIN trainer_profiles p ON p.trainer_id = b.trainer_id
             WHERE b.status = 'completed'
               AND b.client_booking_completed_push_sent_at IS NULL
               AND c.telegram_id IS NOT NULL
@@ -2419,6 +2554,10 @@ async def list_bookings_pending_client_completion_push(
             "slot_date": row[3],
             "start_time": row[4],
             "end_time": row[5],
+            "duration_minutes": int(row[6]) if row[6] is not None else None,
+            "service_name": (row[7] or "").strip() or None,
+            "trainer_name": (row[8] or "").strip() or "Тренер",
+            "trainer_telegram_id": int(row[9]) if row[9] is not None else None,
         }
         for row in rows
     ]
@@ -2561,7 +2700,7 @@ async def get_pending_completed_for_trainer(session: AsyncSession, limit: int = 
         text("""
             SELECT n.id, n.booking_id, n.trainer_id, n.client_telegram_id,
                    b.client_id,
-                   s.slot_date, s.start_time,
+                   s.slot_date, s.start_time, s.end_time,
                    TRIM(COALESCE(c.first_name, '') || ' ' || COALESCE(c.last_name, '')) AS client_name,
                    COALESCE(srv.name, '—') AS service_name,
                    b.price_tier_kind,
@@ -2582,9 +2721,9 @@ async def get_pending_completed_for_trainer(session: AsyncSession, limit: int = 
     rows = r.fetchall()
     out: list[dict] = []
     for row in rows:
-        ptk = normalize_price_tier_kind(row[9])
+        ptk = normalize_price_tier_kind(row[10])
         tier_label = price_tier_label_ru(ptk) if ptk else None
-        arena_raw = _normalize_trainer_arenas_display(row[10])
+        arena_raw = _normalize_trainer_arenas_display(row[11])
         out.append(
             {
                 "id": row[0],
@@ -2594,8 +2733,9 @@ async def get_pending_completed_for_trainer(session: AsyncSession, limit: int = 
                 "client_id": row[4],
                 "slot_date": row[5],
                 "start_time": row[6],
-                "client_name": ((row[7] or "").strip() or "Клиент"),
-                "service_name": ((row[8] or "—").strip()),
+                "end_time": row[7],
+                "client_name": ((row[8] or "").strip() or "Клиент"),
+                "service_name": ((row[9] or "—").strip()),
                 "price_tier_label": tier_label,
                 "arenas_str": arena_raw,
             }

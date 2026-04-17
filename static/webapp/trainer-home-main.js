@@ -57,8 +57,10 @@
       /** Client requests without trainer response (GET /trainer/requests/summary). */
       var hubLastNewRequestsCount = 0;
       var hubRequestsStatReady = false;
-      /** From trainer profile — show «Группы» tile before «Заявки» when enabled. */
+      /** From trainer profile — group classes switch in trainer form. */
       var hubGroupClassesEnabled = false;
+      /** From subscription status — groups module gate (must be enabled in paid modules). */
+      var hubGroupsModuleEnabled = false;
       /** False until first GET /trainer/subscription/status completes (initData only) — drives Stats placeholder tile. */
       var hubSubscriptionStatusReady = false;
       /** When hub bootstrap included MTD revenue, skip duplicate GET /trainer/hub/revenue-mtd in loadBookings. */
@@ -113,6 +115,22 @@
         trainerAccessSnapshot.access_state = 'active';
         trainerAccessSnapshot.trainer_status = 'active';
         if (tr.id != null) trainerAccessSnapshot.trainer_id = tr.id;
+      }
+
+      function syncHubGroupsModuleAccessFromSubscription(status) {
+        if (!status || typeof status !== 'object') {
+          hubGroupsModuleEnabled = false;
+          return;
+        }
+        if (status.modules && typeof status.modules === 'object') {
+          hubGroupsModuleEnabled = !!status.modules.groups;
+          return;
+        }
+        if (Array.isArray(status.unlocked_features)) {
+          hubGroupsModuleEnabled = status.unlocked_features.indexOf('groups') !== -1;
+          return;
+        }
+        hubGroupsModuleEnabled = false;
       }
 
       function webappBasePath() {
@@ -248,6 +266,30 @@
         url = withInit(url);
         if (hash) url += '#' + String(hash).replace(/^#/, '');
         window.location.href = url;
+      }
+
+      /** Reuses the same access refresh path as navigateTo, but runs a callback instead of route switch. */
+      function ensureTrainerSectionsAccess(onAllowed) {
+        if (canOpenTrainerSectionsSync()) {
+          onAllowed();
+          return;
+        }
+        if (!initData || !window.TrainerMiniAppGate) {
+          showTrainerOnboardingNavAlert();
+          return;
+        }
+        Promise.all([
+          window.TrainerMiniAppGate.fetchAccess(initData).catch(function() {
+            return null;
+          }),
+          fetchTrainerProfileForHub(),
+        ]).then(function(results) {
+          trainerAccessSnapshot = results[0];
+          mergeHubAccessFromProfilePayload(results[1]);
+          applyHubLockedState();
+          if (trainerAccessSnapshot && window.TrainerMiniAppGate.isActive(trainerAccessSnapshot)) onAllowed();
+          else showTrainerOnboardingNavAlert();
+        });
       }
 
       function onboardingAllComplete(data) {
@@ -1129,6 +1171,13 @@
 
       var hubBookSlotId = null;
       var hubBookServiceId = null;
+      /** Quick-book only: chosen catalog tier (POST service_price_variant_id). */
+      var hubBookPriceVariantId = null;
+      var hubBookQuickPayload = null;
+      var hubBookQuickServices = [];
+      var hubQuickBookScheduleGrid = null;
+      var hubQuickBookSlotsForDay = [];
+      var hubQuickBookRefreshTimer = null;
       var hubBookSlotWhenLabel = '';
       var hubBookPendingClientId = null;
       var hubBookPendingClientName = '';
@@ -1158,7 +1207,13 @@
       function resetHubBookSlotState() {
         hubBookSlotId = null;
         hubBookServiceId = null;
+        hubBookPriceVariantId = null;
+        hubBookQuickPayload = null;
+        hubBookQuickServices = [];
+        hubQuickBookSlotsForDay = [];
         hubBookSlotWhenLabel = '';
+        setHubBookServiceVisibility(false);
+        fillHubBookServiceSelect([]);
       }
 
       function resetHubBookSteps() {
@@ -1174,6 +1229,405 @@
         var path = '/trainer/clients';
         if (q && String(q).trim()) path += '?q=' + encodeURIComponent(String(q).trim());
         return apiUrlWithQuery(path);
+      }
+
+      function setHubBookServiceVisibility(show) {
+        var wrap = document.getElementById('hubBookServiceWrap');
+        if (!wrap) return;
+        wrap.style.display = show ? 'block' : 'none';
+      }
+
+      function fillHubBookServiceSelect(services) {
+        var sel = document.getElementById('hubBookServiceSelect');
+        if (!sel) return;
+        sel.innerHTML = '';
+        (services || []).forEach(function(s) {
+          var opt = document.createElement('option');
+          opt.value = String(s.id);
+          opt.textContent = String(s.name || 'Услуга');
+          sel.appendChild(opt);
+        });
+        if (hubBookServiceId != null) sel.value = String(hubBookServiceId);
+      }
+
+      var HUB_PRICE_TIER_LABEL_RU = {
+        child: 'Детский',
+        adult: 'Взрослый',
+        two_children: '2 ребенка',
+        two_adults: '2 взрослых',
+        adult_and_child: 'Взрослый + ребенок',
+      };
+      function hubPriceTierLabelRu(tier) {
+        var k = (tier.tier_kind || '').toLowerCase();
+        return HUB_PRICE_TIER_LABEL_RU[k] || tier.label || 'Тариф';
+      }
+
+      /** Prefer single-adult tier when API lists child first (same idea as schedule-editor). */
+      function hubPickDefaultPriceTierId(tiers) {
+        if (!tiers || !tiers.length) return null;
+        if (tiers.length === 1) return tiers[0].id;
+        var adult = tiers.filter(function(t) { return (t.tier_kind || '').toLowerCase() === 'adult'; })[0];
+        return adult ? adult.id : tiers[0].id;
+      }
+
+      function syncHubBookPriceTierRadios() {
+        var wrap = document.getElementById('hubBookPriceTierWrap');
+        var host = document.getElementById('hubBookPriceTierRadios');
+        if (!wrap || !host) return;
+        if (!hubBookQuickPayload) {
+          wrap.style.display = 'none';
+          host.innerHTML = '';
+          hubBookPriceVariantId = null;
+          return;
+        }
+        var sid = hubBookServiceId;
+        var svc = (hubBookQuickServices || []).filter(function(x) { return x.id === sid; })[0];
+        var tiers = (svc && svc.price_tiers) ? svc.price_tiers : [];
+        if (tiers.length <= 1) {
+          wrap.style.display = 'none';
+          host.innerHTML = '';
+          hubBookPriceVariantId = tiers.length === 1 ? tiers[0].id : null;
+          return;
+        }
+        wrap.style.display = 'block';
+        host.innerHTML = '';
+        var gname = 'hub_bpt_' + String(sid || 0);
+        var preferredId = hubPickDefaultPriceTierId(tiers);
+        tiers.forEach(function(tier) {
+          var lab = document.createElement('label');
+          lab.style.display = 'flex';
+          lab.style.alignItems = 'center';
+          lab.style.gap = '10px';
+          lab.style.marginBottom = '8px';
+          var inp = document.createElement('input');
+          inp.type = 'radio';
+          inp.name = gname;
+          inp.value = String(tier.id);
+          var pb = tier.price_byn;
+          var priceStr = (pb === Math.floor(pb) ? pb : Number(pb).toFixed(2)) + ' BYN';
+          lab.appendChild(inp);
+          lab.appendChild(document.createTextNode(hubPriceTierLabelRu(tier) + ' — ' + priceStr));
+          inp.addEventListener('change', function() {
+            hubBookPriceVariantId = parseInt(inp.value, 10);
+          });
+          host.appendChild(lab);
+        });
+        var prefInp = host.querySelector('input[value="' + String(preferredId) + '"]');
+        if (prefInp) {
+          prefInp.checked = true;
+          hubBookPriceVariantId = parseInt(prefInp.value, 10);
+        }
+      }
+
+      function resetHubBookFormFields() {
+        var si = document.getElementById('hubBookClientSearch');
+        if (si) si.value = '';
+        var p = document.getElementById('hubBookNewPhone');
+        var f = document.getElementById('hubBookNewFirstName');
+        var l = document.getElementById('hubBookNewLastName');
+        if (p) p.value = '';
+        if (f) f.value = '';
+        if (l) l.value = '';
+        var list = document.getElementById('hubBookClientList');
+        if (list) list.innerHTML = '';
+      }
+
+      function openHubBookModalShell() {
+        resetHubBookFormFields();
+        resetHubBookSteps();
+        var cfm = document.getElementById('hubModalBookGroupConfirm');
+        if (cfm) {
+          cfm.style.display = 'none';
+          cfm.setAttribute('aria-hidden', 'true');
+        }
+        var m = document.getElementById('hubModalBookGroupSlot');
+        if (!m) return false;
+        m.style.display = 'flex';
+        m.setAttribute('aria-hidden', 'false');
+        return true;
+      }
+
+      function todayIsoLocal() {
+        var d = new Date();
+        var m = String(d.getMonth() + 1);
+        var day = String(d.getDate());
+        if (m.length < 2) m = '0' + m;
+        if (day.length < 2) day = '0' + day;
+        return String(d.getFullYear()) + '-' + m + '-' + day;
+      }
+
+      function parseStartToMinutesHub(startTime) {
+        var s = (startTime == null ? '' : String(startTime)).trim();
+        var parts = s.split(':');
+        var h = parseInt(parts[0], 10);
+        var min = parts.length > 1 ? parseInt(parts[1], 10) : 0;
+        if (isNaN(h)) h = 0;
+        if (isNaN(min)) min = 0;
+        return h * 60 + min;
+      }
+
+      function formatMinuteClockHub(totalMinutes) {
+        var m = Math.max(0, Math.floor(totalMinutes));
+        var h = Math.floor(m / 60);
+        var rem = m % 60;
+        return String(h).padStart(2, '0') + ':' + String(rem).padStart(2, '0');
+      }
+
+      function intervalsOverlapAbsoluteHub(a0, a1, b0, b1) {
+        return a0 < b1 && b0 < a1;
+      }
+
+      function slotIntervalMinutesFromRowHub(s) {
+        var sm = parseStartToMinutesHub(s.start_time);
+        var em = parseStartToMinutesHub(s.end_time);
+        if (em <= sm) em = sm + 60;
+        return { start: sm, end: em };
+      }
+
+      function hubDefaultScheduleGrid() {
+        return {
+          kind: 'uniform_step',
+          minute_offset: 0,
+          hour_start: 8,
+          hour_end: 21,
+          step_minutes: 15,
+        };
+      }
+
+      function hubApplyQuickBookScheduleGrid(data) {
+        if (data && data.schedule_grid) hubQuickBookScheduleGrid = data.schedule_grid;
+        else if (!hubQuickBookScheduleGrid) hubQuickBookScheduleGrid = hubDefaultScheduleGrid();
+      }
+
+      function hubAllowedStartMinutesFromGrid() {
+        var preset = hubQuickBookScheduleGrid || hubDefaultScheduleGrid();
+        var kind = (preset.kind || 'uniform_step').toString().trim();
+        var h0 = Math.max(0, Math.min(23, parseInt(preset.hour_start, 10)));
+        if (isNaN(h0)) h0 = 8;
+        var h1 = Math.max(0, Math.min(23, parseInt(preset.hour_end, 10)));
+        if (isNaN(h1)) h1 = 21;
+        if (h1 < h0) {
+          var swap = h0;
+          h0 = h1;
+          h1 = swap;
+        }
+        var out = [];
+        if (kind === 'hourly_minute') {
+          var mo = Math.max(0, Math.min(59, parseInt(preset.minute_offset, 10) || 0));
+          for (var h = h0; h <= h1; h++) out.push(h * 60 + mo);
+          return out;
+        }
+        var step = 15;
+        if (kind === 'uniform_step') {
+          var s = parseInt(preset.step_minutes, 10);
+          if (!isNaN(s) && s >= 5) step = s;
+        }
+        for (var m = h0 * 60; m <= h1 * 60; m += step) out.push(m);
+        return out;
+      }
+
+      function setHubQuickBookHint(text, visible) {
+        var el = document.getElementById('hubQuickBookHint');
+        if (!el) return;
+        if (!visible || !text) {
+          el.style.display = 'none';
+          el.textContent = '';
+          return;
+        }
+        el.style.display = 'block';
+        el.textContent = text;
+      }
+
+      function hubQuickBookSlotAvailability(slotsForDay, startMinutes, durationMinutes, isoDate) {
+        var dm = durationMinutes || 60;
+        var newEnd = startMinutes + dm;
+        if (newEnd > 24 * 60) return 'invalid';
+        var todayStr = todayIsoLocal();
+        if (isoDate === todayStr) {
+          var now = new Date();
+          var nowM = now.getHours() * 60 + now.getMinutes();
+          if (startMinutes < nowM) return 'past';
+        }
+        var rows = (slotsForDay || []).filter(function(s) {
+          return (s.status || '').toLowerCase() !== 'cancelled';
+        });
+        for (var i = 0; i < rows.length; i++) {
+          var row = rows[i];
+          var iv = slotIntervalMinutesFromRowHub(row);
+          if (!intervalsOverlapAbsoluteHub(startMinutes, newEnd, iv.start, iv.end)) continue;
+          var cap = row.capacity != null ? parseInt(row.capacity, 10) : 1;
+          if (isNaN(cap) || cap < 1) cap = 1;
+          var occ = row.active_bookings != null ? parseInt(row.active_bookings, 10) : 0;
+          if (cap > 1) return 'group';
+          if (iv.start === startMinutes && iv.end === newEnd) {
+            if (occ >= 1) return 'busy';
+            return 'free';
+          }
+          if (occ >= 1) return 'busy';
+          return 'overlap';
+        }
+        return 'free';
+      }
+
+      function hubRefreshQuickBookTimeOptions(isoDate) {
+        var sel = document.getElementById('hubQuickBookTime');
+        var durEl = document.getElementById('hubQuickBookDuration');
+        var btnGo = document.getElementById('hubQuickBookContinue');
+        if (!sel || !isoDate) return Promise.resolve();
+        var dm = durEl ? parseInt(durEl.value, 10) : 60;
+        if (isNaN(dm) || dm < 15) dm = 60;
+        sel.disabled = true;
+        if (btnGo) btnGo.disabled = true;
+        setHubQuickBookHint('Загрузка сетки расписания…', true);
+        return fetch(
+          apiUrlWithQuery('/schedule?from_date=' + encodeURIComponent(isoDate) + '&to_date=' + encodeURIComponent(isoDate)),
+          { headers: headersJson() }
+        )
+          .then(function(r) {
+            if (!r.ok) return Promise.reject(new Error('schedule'));
+            return r.json();
+          })
+          .then(function(data) {
+            hubApplyQuickBookScheduleGrid(data);
+            var slots = (data && data.slots) ? data.slots : [];
+            hubQuickBookSlotsForDay = slots.filter(function(s) {
+              var d = s.slot_date;
+              return d === isoDate || String(d) === isoDate;
+            });
+            var prev = sel.value;
+            sel.innerHTML = '';
+            var anyFree = false;
+            var mins = hubAllowedStartMinutesFromGrid();
+            mins.forEach(function(m) {
+              var opt = document.createElement('option');
+              var availability = hubQuickBookSlotAvailability(hubQuickBookSlotsForDay, m, dm, isoDate);
+              opt.value = String(m);
+              if (availability === 'free') {
+                opt.textContent = formatMinuteClockHub(m);
+                anyFree = true;
+              } else if (availability === 'past') {
+                opt.textContent = formatMinuteClockHub(m) + ' — прошло';
+                opt.disabled = true;
+              } else if (availability === 'busy') {
+                opt.textContent = formatMinuteClockHub(m) + ' — занято';
+                opt.disabled = true;
+              } else if (availability === 'group') {
+                opt.textContent = formatMinuteClockHub(m) + ' — группа';
+                opt.disabled = true;
+              } else if (availability === 'overlap') {
+                opt.textContent = formatMinuteClockHub(m) + ' — пересечение';
+                opt.disabled = true;
+              } else {
+                opt.textContent = formatMinuteClockHub(m) + ' — не влезает';
+                opt.disabled = true;
+              }
+              sel.appendChild(opt);
+            });
+            var prevOpt = sel.querySelector('option[value="' + prev + '"]:not([disabled])');
+            if (prevOpt) sel.value = prev;
+            else {
+              var firstOk = sel.querySelector('option:not([disabled])');
+              if (firstOk) sel.value = firstOk.value;
+            }
+            sel.disabled = false;
+            if (btnGo) btnGo.disabled = !anyFree;
+            if (!anyFree) {
+              setHubQuickBookHint('Нет доступного времени для выбранной длительности.', true);
+            } else {
+              setHubQuickBookHint('', false);
+            }
+          })
+          .catch(function() {
+            hubApplyQuickBookScheduleGrid(null);
+            sel.disabled = false;
+            sel.innerHTML = '';
+            hubAllowedStartMinutesFromGrid().forEach(function(m) {
+              var opt = document.createElement('option');
+              opt.value = String(m);
+              opt.textContent = formatMinuteClockHub(m);
+              sel.appendChild(opt);
+            });
+            if (btnGo) btnGo.disabled = false;
+            setHubQuickBookHint('Не удалось проверить занятость. Время можно выбрать вручную.', true);
+          });
+      }
+
+      function scheduleHubQuickBookRefresh() {
+        if (hubQuickBookRefreshTimer) clearTimeout(hubQuickBookRefreshTimer);
+        hubQuickBookRefreshTimer = setTimeout(function() {
+          hubQuickBookRefreshTimer = null;
+          var dateEl = document.getElementById('hubQuickBookDate');
+          var iso = dateEl ? String(dateEl.value || '').trim() : '';
+          if (iso) hubRefreshQuickBookTimeOptions(iso);
+        }, 250);
+      }
+
+      function closeHubQuickBookDatetimeModal() {
+        var m = document.getElementById('hubModalQuickBookDatetime');
+        if (!m) return;
+        m.style.display = 'none';
+        m.setAttribute('aria-hidden', 'true');
+      }
+
+      function openHubQuickBookDatetimeModal() {
+        var modal = document.getElementById('hubModalQuickBookDatetime');
+        var dateEl = document.getElementById('hubQuickBookDate');
+        var timeEl = document.getElementById('hubQuickBookTime');
+        var durEl = document.getElementById('hubQuickBookDuration');
+        if (!modal || !dateEl || !timeEl || !durEl) {
+          hubToast('Не удалось открыть форму записи. Обновите страницу.');
+          return;
+        }
+        var today = todayIsoLocal();
+        dateEl.min = today;
+        if (!dateEl.value || dateEl.value < today) dateEl.value = today;
+        if (!durEl.value) durEl.value = '60';
+        setHubQuickBookHint('', false);
+        modal.style.display = 'flex';
+        modal.setAttribute('aria-hidden', 'false');
+        hubRefreshQuickBookTimeOptions(dateEl.value || today);
+      }
+
+      function openHubQuickBookClientFlow(slotDate, startTime, durationMinutes) {
+        if (!openHubBookModalShell()) return;
+        hubBookSlotId = null;
+        hubBookPriceVariantId = null;
+        hubBookQuickPayload = {
+          slot_date: slotDate,
+          start_time: startTime,
+          duration_minutes: durationMinutes,
+        };
+        hubBookSlotWhenLabel = slotDate + ' ' + startTime;
+        Promise.all([
+          fetch(apiUrlWithQuery('/trainer/my-services'), { headers: headersJson() }).then(function(r) {
+            return r.ok ? r.json() : Promise.reject(new Error('services'));
+          }),
+          fetch(apiUrlWithQuery('/trainer/clients'), { headers: headersJson() }).then(function(r) {
+            return r.json();
+          }),
+        ])
+          .then(function(results) {
+            var servicePayload = results[0] || {};
+            var clientsPayload = results[1] || {};
+            hubBookQuickServices = servicePayload.services || [];
+            if (!hubBookQuickServices.length) {
+              closeHubBookGroupModals();
+              resetHubBookSlotState();
+              hubToast('Добавьте услугу в профиле, чтобы записывать клиентов.');
+              return;
+            }
+            hubBookServiceId = hubBookQuickServices[0].id;
+            fillHubBookServiceSelect(hubBookQuickServices);
+            setHubBookServiceVisibility(true);
+            syncHubBookPriceTierRadios();
+            var hasClients = !!(clientsPayload.clients && clientsPayload.clients.length);
+            setHubBookOptExistingVisible(hasClients);
+          })
+          .catch(function() {
+            closeHubBookGroupModals();
+            resetHubBookSlotState();
+            hubToast('Не удалось подготовить форму записи. Повторите попытку.');
+          });
       }
 
       function loadHubBookClients(q) {
@@ -1244,25 +1698,13 @@
         }
         hubBookSlotId = sid;
         hubBookServiceId = svc;
+        hubBookQuickPayload = null;
+        hubBookQuickServices = [];
         hubBookSlotWhenLabel = (whenLabel || '').trim();
-        var si = document.getElementById('hubBookClientSearch');
-        if (si) si.value = '';
-        var p = document.getElementById('hubBookNewPhone');
-        var f = document.getElementById('hubBookNewFirstName');
-        var l = document.getElementById('hubBookNewLastName');
-        if (p) p.value = '';
-        if (f) f.value = '';
-        if (l) l.value = '';
-        document.getElementById('hubBookClientList').innerHTML = '';
-        resetHubBookSteps();
-        var cfm = document.getElementById('hubModalBookGroupConfirm');
-        if (cfm) {
-          cfm.style.display = 'none';
-          cfm.setAttribute('aria-hidden', 'true');
-        }
-        var m = document.getElementById('hubModalBookGroupSlot');
-        m.style.display = 'flex';
-        m.setAttribute('aria-hidden', 'false');
+        setHubBookServiceVisibility(false);
+        fillHubBookServiceSelect([]);
+        if (!openHubBookModalShell()) return;
+        syncHubBookPriceTierRadios();
         fetch(apiUrlWithQuery('/trainer/clients'), { headers: headersJson() })
           .then(function(r) {
             return r.json();
@@ -1284,8 +1726,25 @@
       }
 
       function hubPostBooking(clientId) {
-        var payload = { slot_id: hubBookSlotId, client_id: clientId, service_id: hubBookServiceId };
-        return fetch(apiUrlWithQuery('/trainer/booking'), {
+        var url = '/trainer/booking';
+        var payload;
+        if (hubBookQuickPayload) {
+          if (hubBookServiceId == null) return Promise.reject(new Error('Выберите услугу.'));
+          url = '/trainer/booking/quick';
+          payload = {
+            slot_date: hubBookQuickPayload.slot_date,
+            start_time: hubBookQuickPayload.start_time,
+            duration_minutes: hubBookQuickPayload.duration_minutes,
+            client_id: clientId,
+            service_id: hubBookServiceId,
+          };
+          if (hubBookPriceVariantId != null) {
+            payload.service_price_variant_id = hubBookPriceVariantId;
+          }
+        } else {
+          payload = { slot_id: hubBookSlotId, client_id: clientId, service_id: hubBookServiceId };
+        }
+        return fetch(apiUrlWithQuery(url), {
           method: 'POST',
           headers: headersJson(),
           body: JSON.stringify(payload),
@@ -1345,6 +1804,13 @@
             resetHubBookSlotState();
           };
         }
+        var selSvc = document.getElementById('hubBookServiceSelect');
+        if (selSvc) {
+          selSvc.onchange = function() {
+            hubBookServiceId = this.value ? parseInt(this.value, 10) : null;
+            syncHubBookPriceTierRadios();
+          };
+        }
         var bo = document.getElementById('hubBookOptExisting');
         if (bo) {
           bo.onclick = function() {
@@ -1398,11 +1864,12 @@
           cyes.onclick = function() {
             var cid = hubBookPendingClientId;
             if (cid == null) return;
+            var successText = hubBookQuickPayload ? 'Запись успешно создана.' : 'Клиент записан в группу.';
             hubPostBooking(cid)
               .then(function(res) {
                 closeHubBookGroupModals();
                 resetHubBookSlotState();
-                hubToast('Клиент записан в группу.');
+                hubToast(successText);
                 loadBookings();
                 loadOnboardingChecklist();
                 openHubFirstBookingMilestoneModal(res.booking);
@@ -1450,9 +1917,12 @@
                 return hubPostBooking(data.client_id);
               })
               .then(function(res) {
+                var successText = hubBookQuickPayload
+                  ? 'Клиент добавлен и запись успешно создана.'
+                  : 'Клиент добавлен и записан на занятие.';
                 closeHubBookGroupModals();
                 resetHubBookSlotState();
-                hubToast('Клиент добавлен и записан на занятие.');
+                hubToast(successText);
                 loadBookings();
                 loadOnboardingChecklist();
                 openHubFirstBookingMilestoneModal(res.booking);
@@ -1484,11 +1954,70 @@
             }
           };
         }
+        var qCancel = document.getElementById('hubQuickBookCancel');
+        if (qCancel) qCancel.onclick = function() { closeHubQuickBookDatetimeModal(); };
+        var qContinue = document.getElementById('hubQuickBookContinue');
+        if (qContinue) {
+          qContinue.onclick = function() {
+            var dateEl = document.getElementById('hubQuickBookDate');
+            var timeEl = document.getElementById('hubQuickBookTime');
+            var durEl = document.getElementById('hubQuickBookDuration');
+            if (!dateEl || !timeEl || !durEl) return;
+            var slotDate = String(dateEl.value || '').trim();
+            var startMinutes = parseInt(String(timeEl.value || ''), 10);
+            var duration = parseInt(String(durEl.value || '60'), 10);
+            if (!slotDate) {
+              hubToast('Выберите дату.');
+              return;
+            }
+            if (isNaN(startMinutes)) {
+              hubToast('Выберите время начала.');
+              return;
+            }
+            if (isNaN(duration) || duration < 15) duration = 60;
+            var availability = hubQuickBookSlotAvailability(
+              hubQuickBookSlotsForDay || [],
+              startMinutes,
+              duration,
+              slotDate
+            );
+            if (availability !== 'free') {
+              if (availability === 'past') hubToast('Это время уже прошло.');
+              else if (availability === 'busy') hubToast('Это время занято. Выберите другое.');
+              else if (availability === 'group') hubToast('На это время есть групповой слот.');
+              else if (availability === 'overlap') hubToast('Время пересекается со слотом.');
+              else hubToast('Слот не подходит по длительности.');
+              scheduleHubQuickBookRefresh();
+              return;
+            }
+            var startTime = formatMinuteClockHub(startMinutes);
+            closeHubQuickBookDatetimeModal();
+            openHubQuickBookClientFlow(slotDate, startTime, duration);
+          };
+        }
+        var qDate = document.getElementById('hubQuickBookDate');
+        if (qDate) {
+          qDate.onchange = function() {
+            scheduleHubQuickBookRefresh();
+          };
+        }
+        var qDuration = document.getElementById('hubQuickBookDuration');
+        if (qDuration) {
+          qDuration.onchange = function() {
+            scheduleHubQuickBookRefresh();
+          };
+        }
+        var qOverlay = document.getElementById('hubModalQuickBookDatetime');
+        if (qOverlay) {
+          qOverlay.onclick = function(ev) {
+            if (ev.target === qOverlay) closeHubQuickBookDatetimeModal();
+          };
+        }
       }
 
       /**
-       * Hub grid order (2 columns): Клиенты → [Группы если включены] → Заявки → Расписание → Профиль → остальное.
-       * `feature: 'groups'` — tile only when hubGroupClassesEnabled (profile.group_classes_enabled).
+       * Hub grid order (2 columns): Клиенты → [Группы если включены в профиле и подписке] → Заявки → Расписание → Профиль → остальное.
+       * `feature: 'groups'` — tile only when profile.group_classes_enabled && subscription.modules.groups.
        */
       /** Synthetic grid item: placeholder while subscription status loads (same cell size as «Статистика»). */
       var HUB_TILE_SKELETON_ANALYTICS = { _hubTileSkeleton: true, tier: 'analytics' };
@@ -1507,7 +2036,7 @@
         { path: 'schedule-editor', label: 'Расписание', hint: 'Слоты и записи', icon: 'cal', badge: null },
         { path: 'trainer-profile', label: 'Профиль', hint: 'Анкета и модерация', icon: 'user', badge: null },
         { path: 'trainer-pass-products', label: 'Абонементы', hint: 'Продукты и выдача', icon: 'ticket', badge: null },
-        { path: 'trainer-subscription', label: 'Подписка', hint: 'Тариф и оплата', icon: 'card', badge: null },
+        { path: 'trainer-subscription?v=20260448', label: 'Подписка', hint: 'Тариф и оплата', icon: 'card', badge: null },
         { path: 'trainer-stats', label: 'Статистика', hint: 'Показатели и динамика', icon: 'chart', badge: null, tier: 'analytics' },
         { path: 'trainer-referral', label: 'Рефералы', hint: 'Пригласи коллегу', icon: 'gift', badge: 'NEW' },
       ];
@@ -1515,7 +2044,7 @@
       function tilesToRender() {
         var out = [];
         TILES.forEach(function(t) {
-          if (t.feature === 'groups' && !hubGroupClassesEnabled) return;
+          if (t.feature === 'groups' && (!hubGroupClassesEnabled || !hubGroupsModuleEnabled)) return;
           if (t.tier === 'analytics') {
             if (initData && !hubSubscriptionStatusReady) {
               out.push(HUB_TILE_SKELETON_ANALYTICS);
@@ -1772,6 +2301,28 @@
         }
       }
 
+      function buildBookingsRetryBlockHtml(message) {
+        return (
+          '<div class="hub-empty">' +
+          escapeHtml(String(message || 'Не удалось обновить список. Попробуйте снова.')) +
+          '<div class="hub-empty-actions">' +
+          '<button type="button" class="btn-block btn-secondary" id="hubBookingsRetryBtn">Обновить</button>' +
+          '</div>' +
+          '</div>'
+        );
+      }
+
+      function wireBookingsRetryButton() {
+        var btn = document.getElementById('hubBookingsRetryBtn');
+        if (!btn) return;
+        btn.onclick = function() {
+          if (btn.disabled) return;
+          btn.disabled = true;
+          btn.textContent = 'Обновляем...';
+          loadBookings();
+        };
+      }
+
       function loadBookings() {
         if (!initData) {
           setStateMessage('', '');
@@ -1847,8 +2398,10 @@
               hubMtdRevenueText = null;
               syncHubHeroCompact();
               applyHubHero();
-              document.getElementById('bookingsBlock').innerHTML =
-                '<div class="hub-empty">Не удалось обновить список. Попробуйте закрыть экран и открыть «Обзор» снова.</div>';
+              document.getElementById('bookingsBlock').innerHTML = buildBookingsRetryBlockHtml(
+                'Не удалось обновить список. Проверьте соединение и попробуйте снова.'
+              );
+              wireBookingsRetryButton();
               return;
             }
             setStateMessage('');
@@ -1875,8 +2428,10 @@
                     hubMtdRevenueText = null;
                     syncHubHeroCompact();
                     applyHubHero();
-                    document.getElementById('bookingsBlock').innerHTML =
-                      '<div class="hub-empty">Не удалось обновить список. Проверьте соединение и попробуйте снова.</div>';
+                    document.getElementById('bookingsBlock').innerHTML = buildBookingsRetryBlockHtml(
+                      'Не удалось обновить список. Проверьте соединение и попробуйте снова.'
+                    );
+                    wireBookingsRetryButton();
                   }
                 })
                 .catch(function() {
@@ -1889,8 +2444,10 @@
                   hubMtdRevenueText = null;
                   syncHubHeroCompact();
                   applyHubHero();
-                  document.getElementById('bookingsBlock').innerHTML =
-                    '<div class="hub-empty">Не удалось обновить список. Проверьте соединение и попробуйте снова.</div>';
+                  document.getElementById('bookingsBlock').innerHTML = buildBookingsRetryBlockHtml(
+                    'Не удалось обновить список. Проверьте соединение и попробуйте снова.'
+                  );
+                  wireBookingsRetryButton();
                 });
             } else {
               hubLastBookingsDays = null;
@@ -1902,8 +2459,10 @@
               hubMtdRevenueText = null;
               syncHubHeroCompact();
               applyHubHero();
-              document.getElementById('bookingsBlock').innerHTML =
-                '<div class="hub-empty">Не удалось обновить список. Попробуйте снова.</div>';
+              document.getElementById('bookingsBlock').innerHTML = buildBookingsRetryBlockHtml(
+                'Не удалось обновить список. Проверьте соединение и попробуйте снова.'
+              );
+              wireBookingsRetryButton();
             }
           });
       }
@@ -1919,7 +2478,9 @@
         var btnBook = document.getElementById('hubBtnBookClient');
         if (btnBook) {
           btnBook.onclick = function() {
-            navigateTo('schedule-editor?flow=book');
+            ensureTrainerSectionsAccess(function() {
+              openHubQuickBookDatetimeModal();
+            });
           };
         }
 
@@ -1942,6 +2503,7 @@
           })
           .then(function(o) {
             hubLastSubscriptionStatus = o.ok && o.data ? o.data : null;
+            syncHubGroupsModuleAccessFromSubscription(hubLastSubscriptionStatus);
             if (o.ok && o.data && Array.isArray(o.data.unlocked_features)) {
               hasAnalyticsAccess = o.data.unlocked_features.indexOf('analytics') !== -1;
             } else {
@@ -1953,6 +2515,7 @@
           })
           .catch(function() {
             hubLastSubscriptionStatus = null;
+            hubGroupsModuleEnabled = false;
             hasAnalyticsAccess = false;
             hubSubscriptionStatusReady = true;
             renderTiles();
@@ -2137,6 +2700,7 @@
         if (payload.onboarding_checklist) applyOnboardingChecklist(payload.onboarding_checklist);
         if (payload.subscription_status) {
           hubLastSubscriptionStatus = payload.subscription_status;
+          syncHubGroupsModuleAccessFromSubscription(payload.subscription_status);
           if (Array.isArray(payload.subscription_status.unlocked_features)) {
             hasAnalyticsAccess = payload.subscription_status.unlocked_features.indexOf('analytics') !== -1;
           } else {

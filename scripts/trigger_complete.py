@@ -138,7 +138,24 @@ async def run_once() -> None:
             chat_id = b.get("client_telegram_id")
             if chat_id:
                 date_str, day_str, time_str = _slot_display_strings(b.get("slot_date"), b.get("start_time"))
-                text_client = msg.CLIENT_BOOKING_COMPLETED.format(date=date_str, day=day_str, time=time_str)
+                dur_m = b.get("duration_minutes")
+                if dur_m is None and b.get("start_time") and b.get("end_time"):
+                    try:
+                        from datetime import date as date_cls, datetime as dt_cls
+
+                        d0 = date_cls.today()
+                        delta = dt_cls.combine(d0, b["end_time"]) - dt_cls.combine(d0, b["start_time"])
+                        dur_m = max(0, int(delta.total_seconds() // 60))
+                    except (TypeError, ValueError):
+                        dur_m = None
+                text_client = msg.format_client_booking_completed_notice_html(
+                    date=date_str,
+                    day=day_str,
+                    time=time_str,
+                    duration_minutes=dur_m,
+                    trainer_name=b.get("trainer_name") or "Тренер",
+                    service_name=b.get("service_name"),
+                )
                 # Same as client_app: hide Repeat/Become regular if same day+time in 7 days is already reserved
                 slot_date_val = b["slot_date"]
                 target_date = (slot_date_val.date() if hasattr(slot_date_val, "date") else slot_date_val) + timedelta(days=7)
@@ -146,15 +163,11 @@ async def run_once() -> None:
                     status_next, _ = await get_slot_status_on_date(
                         check_session, b["trainer_id"], target_date, b["start_time"]
                     )
-                rows = [
-                    [InlineKeyboardButton(text=msg.CLIENT_BUTTON_LEAVE_FEEDBACK, callback_data=f"feedback_booking:{b['id']}")],
-                ]
-                if status_next != "booked":
-                    rows.append([
-                        InlineKeyboardButton(text=msg.CLIENT_BUTTON_REPEAT_SAME_TIME, callback_data=f"repeat_booking:{b['id']}"),
-                        InlineKeyboardButton(text=msg.CLIENT_BUTTON_BECOME_REGULAR, callback_data=f"make_recurring:{b['id']}"),
-                    ])
-                kb = InlineKeyboardMarkup(inline_keyboard=rows)
+                kb = msg.build_client_booking_completed_inline_keyboard(
+                    booking_id=int(b["id"]),
+                    trainer_telegram_id=b.get("trainer_telegram_id"),
+                    show_repeat_row=(status_next != "booked"),
+                )
                 try:
                     await client_bot.send_message(chat_id=chat_id, text=text_client, reply_markup=kb)
                     print(f"[trigger_complete] Client notification sent to {chat_id} (booking_id={b['id']})")
@@ -176,11 +189,23 @@ async def run_once() -> None:
             date_str = slot_date.strftime("%d.%m") if slot_date and hasattr(slot_date, "strftime") else "—"
             day_str = msg.TRAINER_DAYS[slot_date.weekday()] if slot_date and hasattr(slot_date, "weekday") else ""
             time_str = start_time.strftime("%H:%M") if start_time and hasattr(start_time, "strftime") else "—"
+            end_time = p.get("end_time")
+            dur_min = None
+            try:
+                if start_time and end_time and hasattr(start_time, "hour") and hasattr(end_time, "hour"):
+                    delta = datetime.combine(date.today(), end_time) - datetime.combine(
+                        date.today(), start_time
+                    )
+                    dm = int(delta.total_seconds() // 60)
+                    dur_min = dm if dm > 0 else None
+            except Exception:
+                dur_min = None
             text_trainer = msg.format_trainer_booking_completed_html(
                 client_name=p.get("client_name") or "Клиент",
                 date=date_str,
                 day=day_str,
                 time=time_str,
+                duration_minutes=dur_min,
                 service_name=p.get("service_name"),
                 price_tier_label=p.get("price_tier_label"),
                 arena_display=p.get("arenas_str"),

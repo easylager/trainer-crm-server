@@ -756,6 +756,47 @@ async def test_post_schedule_slots_replaces_day_and_preserves_booked(
 
 
 @pytest.mark.asyncio
+async def test_post_schedule_slots_400_when_new_slot_overlaps_existing_kept_slot(
+    app_use_test_db,
+    db_session,
+) -> None:
+    """When a selected existing slot stays on day, API must reject overlapping new intervals."""
+    tg = _fresh_trainer_telegram_id()
+    trainer_id = await _create_active_trainer(db_session, tg, with_crm=True)
+    d = date.today() + timedelta(days=21)
+    await _insert_slot(db_session, trainer_id, d, 19, 20, "available")
+
+    with patch_trainer_webapp_init(tg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post(
+                "/api/webapp/schedule/slots",
+                headers={"X-Telegram-Init-Data": "mock", "Content-Type": "application/json"},
+                json={
+                    "slot_date": d.isoformat(),
+                    "start_times": ["19:00", "19:30"],
+                    "duration_minutes": 60,
+                },
+            )
+    assert resp.status_code == 400
+    assert "пересека" in (resp.json().get("detail") or "").lower()
+
+    r = await db_session.execute(
+        text(
+            """
+            SELECT start_time, end_time FROM slots
+            WHERE trainer_id = :tid AND slot_date = :d AND status = 'available'
+            ORDER BY start_time
+            """
+        ),
+        {"tid": trainer_id, "d": d},
+    )
+    rows = r.fetchall()
+    assert len(rows) == 1
+    assert rows[0][0] == time(19, 0)
+    assert rows[0][1] == time(20, 0)
+
+
+@pytest.mark.asyncio
 async def test_post_schedule_slots_200_group_slots_when_profile_enabled(
     app_use_test_db,
     db_session,

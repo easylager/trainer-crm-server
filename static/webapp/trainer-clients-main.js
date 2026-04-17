@@ -341,10 +341,11 @@
 
       /* --- Dossier state and helpers --- */
       var dossierState = {
-        profile: { note: '', goals: '', limitations: '', level: '' },
+        profile: { note: '', goals: '', limitations: '', level: '', season_goal: '' },
         tags: [],
         entries: [],
         suggestedTags: [],
+        suggestedSeasonGoals: [],
         editingField: null,
         showNewEntry: false,
       };
@@ -377,6 +378,12 @@
           { key: 'goals', label: 'Цели', placeholder: 'Чего хочет достичь клиент?' },
           { key: 'limitations', label: 'Ограничения / Травмы', placeholder: 'Травмы, противопоказания, на что обратить внимание' },
           { key: 'level', label: 'Уровень', placeholder: 'Текущий уровень, опыт, стаж' },
+          {
+            key: 'season_goal',
+            label: 'Цель сезона',
+            placeholder:
+              'Фокус сезона: соревнования, программа, возврат после перерыва, тесты, техника…',
+          },
           { key: 'note', label: 'Общая заметка', placeholder: 'Любая другая информация о клиенте' },
         ];
         var hasContent = fields.some(function(f) { return (dossierState.profile[f.key] || '').trim(); });
@@ -396,6 +403,25 @@
             html += '<div class="dossier-field-value' + (!val ? ' empty' : '') + '" data-field="' + f.key + '">' + (val ? escapeHtml(val) : 'Нажмите, чтобы добавить') + '</div>';
           }
           html += '</div>';
+          if (f.key === 'season_goal' && dossierState.suggestedSeasonGoals.length) {
+            var cur = (dossierState.profile.season_goal || '').trim().toLowerCase();
+            var chipHtml = '';
+            dossierState.suggestedSeasonGoals.forEach(function(lbl) {
+              if (cur && cur === String(lbl).trim().toLowerCase()) return;
+              chipHtml +=
+                '<button type="button" class="dossier-season-chip" data-season-text="' +
+                escapeHtml(lbl) +
+                '">' +
+                escapeHtml(lbl) +
+                '</button>';
+            });
+            if (chipHtml) {
+              html +=
+                '<div class="dossier-season-goal-chips" role="group" aria-label="Быстрый выбор цели сезона">' +
+                chipHtml +
+                '</div>';
+            }
+          }
         });
         html += '</div></div>';
         return html;
@@ -488,15 +514,28 @@
             deleteEntry(entryId);
           };
         });
+        document.querySelectorAll('.dossier-season-chip').forEach(function(btn) {
+          btn.onclick = function() {
+            var t = btn.getAttribute('data-season-text');
+            if (t) saveProfileField('season_goal', t);
+          };
+        });
       }
 
       function loadDossier(clientId) {
         var url = withInit('/api/webapp/trainer/clients/' + encodeURIComponent(clientId) + '/dossier');
         fetch(url).then(function(r) { return r.json(); }).then(function(data) {
-          dossierState.profile = data.profile || { note: '', goals: '', limitations: '', level: '' };
+          dossierState.profile = data.profile || {
+            note: '',
+            goals: '',
+            limitations: '',
+            level: '',
+            season_goal: '',
+          };
           dossierState.tags = data.tags || [];
           dossierState.entries = data.entries || [];
           dossierState.suggestedTags = data.suggested_tags || [];
+          dossierState.suggestedSeasonGoals = data.suggested_season_goals || [];
           dossierState.editingField = null;
           dossierState.showNewEntry = false;
           renderDossier();
@@ -506,10 +545,15 @@
         });
       }
 
-      function saveProfileField(fieldKey) {
-        var textarea = document.querySelector('.dossier-field-edit[data-field="' + fieldKey + '"]');
-        if (!textarea) return;
-        var value = textarea.value || '';
+      function saveProfileField(fieldKey, optValue) {
+        var value;
+        if (typeof optValue === 'string') {
+          value = optValue;
+        } else {
+          var textarea = document.querySelector('.dossier-field-edit[data-field="' + fieldKey + '"]');
+          if (!textarea) return;
+          value = textarea.value || '';
+        }
         var body = {};
         body[fieldKey] = value;
         var url = withInit('/api/webapp/trainer/clients/' + encodeURIComponent(state.selectedClientId) + '/dossier/profile');
@@ -590,6 +634,7 @@
           level: { title: 'Уровень', tags: [] },
           goal: { title: 'Цели', tags: [] },
           schedule: { title: 'Расписание', tags: [] },
+          skills: { title: 'Навыки', tags: [] },
         };
         dossierState.suggestedTags.forEach(function(s) {
           if (existingTags.indexOf(s.tag.toLowerCase()) === -1 && categories[s.category]) {

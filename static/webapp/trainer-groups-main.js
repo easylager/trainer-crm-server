@@ -65,6 +65,14 @@
     return u;
   }
 
+  function trainerHubUrl() {
+    var path = (window.location.pathname || '').replace(/[^/]+$/, '') || '/webapp/';
+    var u = path + 'trainer-home';
+    var raw = currentInit();
+    if (raw) u += (u.indexOf('?') >= 0 ? '&' : '?') + 'init_data=' + encodeURIComponent(raw);
+    return u;
+  }
+
   function apiHeaders() {
     var raw = currentInit();
     var h = {};
@@ -635,6 +643,11 @@
       .catch(function (e) {
         var m = e.message || String(e);
         if (/missing init data/i.test(m)) m = 'Откройте раздел из Telegram (мини-приложение тренера).';
+        if (/subscription module required:\s*groups/i.test(m)) {
+          // Access denied by subscription: hide groups screen and route back to hub.
+          window.location.replace(trainerHubUrl());
+          return;
+        }
         elErr.textContent = m;
         elErr.style.display = 'block';
       })

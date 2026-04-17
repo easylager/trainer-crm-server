@@ -5,6 +5,7 @@ Run once when trainer applies template or adds slots — notify (1) clients wait
 Called from trainer_handlers; client_bot is injected by trainer_app so we can send to clients.
 """
 import asyncio
+import html
 import logging
 
 from aiogram import Bot
@@ -77,7 +78,10 @@ async def run_after_schedule_changed(trainer_id: int, trainer_bot: Bot) -> None:
                     day_str = msg.TRAINER_DAYS[slot_date.weekday()] if slot_date and hasattr(slot_date, "weekday") else ""
                     time_str = start_time.strftime("%H:%M") if start_time and hasattr(start_time, "strftime") else "—"
                     message_text = msg.CLIENT_SLOT_AVAILABLE.format(
-                        date=date_str, day=day_str, time=time_str, trainer_name=trainer_name,
+                        date=html.escape(date_str),
+                        day=html.escape(day_str),
+                        time=html.escape(time_str),
+                        trainer_name=html.escape(trainer_name),
                     )
                     kb = InlineKeyboardMarkup(inline_keyboard=[
                         [InlineKeyboardButton(

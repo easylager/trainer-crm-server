@@ -30,7 +30,14 @@ from src.application.platform_settings_use_cases import (
     WELCOME_TRIAL_PERIOD_DAYS_KEY,
     set_platform_int,
 )
-from src.application.subscription_use_cases import get_resolved_welcome_trial_days_for_display
+from src.application.subscription_invoice_admin_notify import (
+    format_catalog_modules_short,
+    trainer_contact_link_html,
+)
+from src.application.subscription_use_cases import (
+    get_resolved_welcome_trial_days_for_display,
+    list_pending_catalog_subscription_invoices,
+)
 from src.application.trainer_link_token_use_cases import (
     DEFAULT_TRAINER_LINK_EXPIRE_DAYS,
     create_trainer_and_issue_welcome_link_token,
@@ -118,12 +125,17 @@ async def _notify_trainer_education_moderation(
     settings = Settings()
     if not settings.telegram_bot_token_trainer:
         return
-    bot = Bot(token=settings.telegram_bot_token_trainer)
+    bot = Bot(
+        token=settings.telegram_bot_token_trainer,
+        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+    )
     try:
         if decision == "approved":
             text = msg.TRAINER_EDUCATION_MODERATION_APPROVED
         else:
-            text = msg.TRAINER_EDUCATION_MODERATION_REJECTED.format(reason=html.escape((reason or "").strip() or "Причина не указана"))
+            text = msg.TRAINER_EDUCATION_MODERATION_REJECTED.format(
+                reason=html.escape((reason or "").strip() or "Причина не указана")
+            )
         await bot.send_message(chat_id=telegram_id, text=text)
     except Exception:
         pass
@@ -266,7 +278,7 @@ async def cmd_start(message: Message) -> None:
     # No keyboard: all actions via menu commands (/pending, /stats, /support, /dicts)
     await message.answer(
         msg.ADMIN_START
-        + "\n\nИспользуйте команды из меню (слева от поля ввода):\n/pending — модерация\n/stats — статистика\n/support — поддержка\n/dicts — города и арены\n/problem_reports — аудит отчётов о проблемах"
+        + "\n\nИспользуйте команды из меню (слева от поля ввода):\n/pending — модерация\n/stats — статистика\n/support — поддержка\n/dicts — города и арены\n/subscription_invoices — счета по подписке (ERIP)\n/problem_reports — аудит отчётов о проблемах"
     )
 
 
@@ -610,6 +622,69 @@ async def cmd_subscription_tiers(message: Message) -> None:
     )
 
 
+@router.message(Command("subscription_invoices"))
+async def cmd_subscription_invoices(message: Message) -> None:
+    """List unpaid catalog subscription invoices (ERIP / manual checkout)."""
+    user_id = message.from_user.id if message.from_user else 0
+    if not _is_admin(user_id):
+        await message.answer(msg.ADMIN_NO_ACCESS)
+        return
+    async with async_session_factory() as session:
+        items = await list_pending_catalog_subscription_invoices(session, limit=40)
+    audit_log(
+        "admin_subscription_invoices_list_viewed",
+        ACTOR_ADMIN_BOT,
+        user_id,
+        payload={"rows_returned": len(items)},
+    )
+    if not items:
+        await message.answer(
+            msg.ADMIN_SUBSCRIPTION_INVOICES_TITLE + msg.ADMIN_SUBSCRIPTION_INVOICES_EMPTY,
+            parse_mode=ParseMode.HTML,
+        )
+        return
+    lines: list[str] = [msg.ADMIN_SUBSCRIPTION_INVOICES_TITLE]
+    for i, it in enumerate(items, start=1):
+        tid = int(it["trainer_id"])
+        fn = (it.get("first_name") or "").strip()
+        ln = (it.get("last_name") or "").strip()
+        name_plain = " ".join([fn, ln]).strip() or f"id{tid}"
+        bundle = it.get("checkout_bundle_tier")
+        bpm = it.get("checkout_billing_period_months")
+        if bundle:
+            plan_short = html.escape(f"пакет {bundle} · {bpm} мес.")
+        else:
+            plan_short = html.escape(
+                f"конструктор · {bpm} мес. · {format_catalog_modules_short(it.get('checkout_modules'))}"
+            )
+        amt = int(it["amount_cents"]) / 100
+        amt_s = str(int(amt)) if amt == int(amt) else f"{amt:.2f}"
+        ps = it.get("period_start")
+        pe = it.get("period_end")
+        ps_s = ps.strftime("%d.%m.%y") if hasattr(ps, "strftime") else str(ps)[:10]
+        pe_s = pe.strftime("%d.%m.%y") if hasattr(pe, "strftime") else str(pe)[:10]
+        link = trainer_contact_link_html(it.get("telegram_id"), it.get("telegram_username"))
+        lines.append(
+            msg.ADMIN_SUBSCRIPTION_INVOICES_LINE.format(
+                n=i,
+                iid=it["invoice_id"],
+                tid=tid,
+                name=html.escape(name_plain),
+                plan_short=plan_short,
+                amt=amt_s,
+                ps=html.escape(ps_s),
+                pe=html.escape(pe_s),
+                st=html.escape(str(it.get("status") or "")),
+                link=link,
+            )
+        )
+    lines.append(msg.ADMIN_SUBSCRIPTION_INVOICES_FOOTER)
+    out = "".join(lines)
+    if len(out) > 4090:
+        out = out[:4070] + "\n\n<i>…обрезано (лимит Telegram)</i>"
+    await message.answer(out, parse_mode=ParseMode.HTML)
+
+
 @router.message(Command("welcome_trial_days"))
 async def cmd_welcome_trial_days(message: Message) -> None:
     """Show or set welcome-link trial length (days, max tier). Env TRIAL_PERIOD_DAYS overrides."""
@@ -895,13 +970,34 @@ async def on_admin_message(message: Message) -> None:
             settings = Settings()
             from_role = ticket.get("from_role") or "client"
             token = settings.telegram_bot_token_trainer if from_role == "trainer" else settings.telegram_bot_token_client
-            bot = Bot(token=token)
+            bot = Bot(token=token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+            reply_html = msg.TRAINER_SUPPORT_REPLY_INTRO_HTML + html.escape(text)
+            reply_kb: InlineKeyboardMarkup | None = None
+            if from_role == "trainer":
+                base = (settings.webapp_base_url or "").rstrip("/")
+                if base.lower().startswith("https://"):
+                    reply_kb = InlineKeyboardMarkup(
+                        inline_keyboard=[
+                            [
+                                InlineKeyboardButton(
+                                    text=msg.TRAINER_SUPPORT_REPLY_GO_PAY,
+                                    web_app=WebAppInfo(
+                                        url=f"{base}/webapp/trainer-pay-subscription"
+                                    ),
+                                ),
+                            ],
+                        ]
+                    )
             try:
-                reply_text = f"📩 <b>Ответ поддержки:</b>\n\n{html.escape(text)}"
-                await bot.send_message(chat_id=ticket["from_telegram_id"], text=reply_text)
+                await bot.send_message(
+                    chat_id=int(ticket["from_telegram_id"]),
+                    text=reply_html,
+                    reply_markup=reply_kb,
+                )
             except Exception:
                 pass
-            await bot.session.close()
+            finally:
+                await bot.session.close()
         await message.answer(msg.ADMIN_SUPPORT_REPLY_SENT)
         return
 

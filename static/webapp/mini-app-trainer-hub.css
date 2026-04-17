@@ -779,6 +779,7 @@
       color: var(--tg-theme-hint-color);
     }
     /* Book into group slot on hub (same flow as schedule-editor; viewport-fixed overlay). */
+    #hubModalQuickBookDatetime.hub-book-flow-overlay,
     #hubModalBookGroupSlot.hub-book-flow-overlay,
     #hubModalBookGroupConfirm.hub-book-flow-overlay {
       position: fixed;
@@ -800,6 +801,7 @@
       overflow-y: auto;
       -webkit-overflow-scrolling: touch;
     }
+    #hubModalQuickBookDatetime .hub-book-modal.modal.book-flow-modal,
     #hubModalBookGroupSlot .hub-book-modal.modal.book-flow-modal,
     #hubModalBookGroupConfirm .hub-book-modal.modal.book-flow-modal {
       position: relative;
@@ -816,6 +818,7 @@
         0 0 0 1px rgba(247, 166, 0, 0.14),
         0 24px 48px -12px rgba(0, 0, 0, 0.28);
     }
+    #hubModalQuickBookDatetime .book-modal-title,
     #hubModalBookGroupSlot .book-modal-title,
     #hubModalBookGroupConfirm .book-confirm-title {
       margin: 0 0 4px;
@@ -830,6 +833,7 @@
       line-height: 1.45;
       color: var(--tg-theme-hint-color);
     }
+    #hubModalQuickBookDatetime .book-choice-lead,
     #hubModalBookGroupSlot .book-choice-lead {
       margin: 0 0 18px;
       font-size: 14px;
@@ -908,6 +912,7 @@
       fill: none;
       stroke-width: 2.2;
     }
+    #hubModalQuickBookDatetime .book-field-label,
     #hubModalBookGroupSlot .book-field-label {
       display: block;
       font-size: 11px;
@@ -917,7 +922,59 @@
       color: var(--tg-theme-hint-color);
       margin: 0 0 8px;
     }
+    #hubModalQuickBookDatetime .book-field-stack,
     #hubModalBookGroupSlot .book-field-stack { margin-bottom: 16px; }
+    #hubModalQuickBookDatetime .input,
+    #hubModalQuickBookDatetime select.input {
+      width: 100%;
+      padding: 13px 14px;
+      border-radius: 14px;
+      border: none;
+      font-size: 15px;
+      box-sizing: border-box;
+      background: var(--tg-theme-secondary-bg-color);
+      color: var(--tg-theme-text-color);
+      display: block;
+      min-height: 48px;
+    }
+    #hubModalQuickBookDatetime .hub-modal-select-wrap,
+    #hubModalBookGroupSlot .hub-modal-select-wrap {
+      position: relative;
+    }
+    #hubModalQuickBookDatetime .hub-modal-select-wrap::after,
+    #hubModalBookGroupSlot .hub-modal-select-wrap::after {
+      content: '';
+      position: absolute;
+      right: 14px;
+      top: 50%;
+      width: 8px;
+      height: 8px;
+      margin-top: -6px;
+      border-right: 2px solid var(--tg-theme-hint-color);
+      border-bottom: 2px solid var(--tg-theme-hint-color);
+      transform: rotate(45deg);
+      pointer-events: none;
+      opacity: 0.85;
+    }
+    #hubModalQuickBookDatetime select.input,
+    #hubModalBookGroupSlot select.input {
+      -webkit-appearance: none;
+      appearance: none;
+      padding-right: 36px;
+      background-image: none;
+    }
+    #hubModalBookGroupSlot select.input {
+      width: 100%;
+      padding: 13px 14px;
+      border-radius: 14px;
+      border: none;
+      font-size: 15px;
+      box-sizing: border-box;
+      background: var(--tg-theme-secondary-bg-color);
+      color: var(--tg-theme-text-color);
+      display: block;
+      min-height: 48px;
+    }
     #hubModalBookGroupSlot .book-search-input {
       width: 100%;
       padding: 13px 14px;
@@ -978,10 +1035,12 @@
       margin: -2px 0 10px;
     }
     #hubModalBookGroupSlot .book-req { color: #c62828; font-weight: 700; }
+    #hubModalQuickBookDatetime .modal-actions,
     #hubModalBookGroupConfirm .modal-actions {
       display: flex;
       gap: 10px;
     }
+    #hubModalQuickBookDatetime .modal-actions .btn-block,
     #hubModalBookGroupConfirm .modal-actions .btn-block { flex: 1; }
     /* Enhanced Navigation Grid */
     .hub-grid {

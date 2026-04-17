@@ -243,10 +243,19 @@ async def run_evidence(notify_chat_id: int | None) -> bool:
                 token=settings.telegram_bot_token_client,
                 default=DefaultBotProperties(parse_mode=ParseMode.HTML),
             )
-            text_client = msg.CLIENT_BOOKING_COMPLETED.format(date=date_str, day=day_str, time=time_str)
-            kb_client = InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text=msg.CLIENT_BUTTON_LEAVE_FEEDBACK, callback_data=f"feedback_booking:{booking_id}")],
-            ])
+            text_client = msg.format_client_booking_completed_notice_html(
+                date=date_str,
+                day=day_str,
+                time=time_str,
+                duration_minutes=60,
+                trainer_name="Тренер (тест)",
+                service_name="Услуга (тест)",
+            )
+            kb_client = msg.build_client_booking_completed_inline_keyboard(
+                booking_id=int(booking_id),
+                trainer_telegram_id=None,
+                show_repeat_row=False,
+            )
             await bot_client.send_message(chat_id=notify_chat_id, text=text_client, reply_markup=kb_client)
             await bot_client.session.close()
             log(f"EVIDENCE step 7b: sent client-bot 'completed' to chat_id={notify_chat_id}")

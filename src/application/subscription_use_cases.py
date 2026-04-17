@@ -13,18 +13,35 @@ from src.application.platform_settings_use_cases import (
     get_platform_int,
 )
 from src.shared.config import Settings
+from src.application.subscription_tier_use_cases import (
+    SUBSCRIPTION_BILLING_PERIOD_MONTHS,
+    SUBSCRIPTION_MODULE_ANALYTICS,
+    SUBSCRIPTION_MODULE_ONLINE,
+    SUBSCRIPTION_MODULES,
+    SUBSCRIPTION_TIER_ANALYTICS,
+    SUBSCRIPTION_TIER_CRM,
+    SUBSCRIPTION_TIER_ONLINE,
+    SUBSCRIPTION_TIERS,
+    default_modules_dict,
+    get_module_period_pricing,
+    get_tier_period_pricing,
+    normalize_modules_dict,
+)
 from src.infrastructure.db.models import (
+    INVOICE_STATUS_CANCELLED,
     INVOICE_STATUS_OVERDUE,
     INVOICE_STATUS_PAID,
     INVOICE_STATUS_SENT,
     SUBSCRIPTION_STATUS_ACTIVE,
     SUBSCRIPTION_STATUS_PAST_DUE,
     SUBSCRIPTION_STATUS_TRIAL,
-    SUBSCRIPTION_TIER_CRM,
 )
 
 # Welcome / trial: full product access — CRM base + all paid modules (incl. cohorts).
 _TRIAL_MODULES_JSON = json.dumps({"online": True, "analytics": True, "groups": True}, ensure_ascii=False)
+_DEFAULT_PAID_MODULES_JSON = json.dumps(
+    {"online": False, "analytics": False, "groups": False}, ensure_ascii=False
+)
 
 
 async def trainer_has_active_subscription(session: AsyncSession, trainer_id: int) -> bool:
@@ -405,6 +422,195 @@ async def get_pending_subscription_invoice(session: AsyncSession, trainer_id: in
     }
 
 
+async def cancel_pending_catalog_subscription_invoices(session: AsyncSession, trainer_id: int) -> None:
+    """Invalidate unpaid catalog (tier/constructor) invoices before issuing a new request."""
+    await session.execute(
+        text("""
+            UPDATE trainer_invoices SET status = :cancelled
+            WHERE trainer_id = :tid AND status IN (:sent, :overdue)
+              AND checkout_modules IS NOT NULL AND checkout_billing_period_months IS NOT NULL
+        """),
+        {
+            "cancelled": INVOICE_STATUS_CANCELLED,
+            "tid": trainer_id,
+            "sent": INVOICE_STATUS_SENT,
+            "overdue": INVOICE_STATUS_OVERDUE,
+        },
+    )
+
+
+async def create_catalog_subscription_invoice_for_trainer(
+    session: AsyncSession,
+    trainer_id: int,
+    *,
+    tier: str | None,
+    modules: dict | None,
+    period_months: int,
+) -> dict | None:
+    """
+    Unpaid invoice for Mini App catalog selection (tier bundle or CRM+modules constructor).
+    Payment via ERIP / manual: ops confirm with confirm_subscription_invoice_after_payment.
+    """
+    if period_months not in SUBSCRIPTION_BILLING_PERIOD_MONTHS:
+        return None
+    bundle_tier: str | None = None
+    mods = default_modules_dict()
+    if tier is not None:
+        if tier not in SUBSCRIPTION_TIERS:
+            return None
+        bundle_tier = tier
+        if tier == SUBSCRIPTION_TIER_ONLINE:
+            mods[SUBSCRIPTION_MODULE_ONLINE] = True
+        elif tier == SUBSCRIPTION_TIER_ANALYTICS:
+            mods[SUBSCRIPTION_MODULE_ONLINE] = True
+            mods[SUBSCRIPTION_MODULE_ANALYTICS] = True
+    elif modules is not None:
+        mods = normalize_modules_dict(modules)
+    else:
+        return None
+
+    if bundle_tier is not None:
+        tp = await get_tier_period_pricing(session, bundle_tier, period_months)  # type: ignore[arg-type]
+        if not tp:
+            return None
+        total_cents = int(tp["price_cents"])
+        period_days = int(tp["period_days"])
+        plan_label = str(tp.get("name_ru") or bundle_tier)
+    else:
+        base = await get_tier_period_pricing(session, SUBSCRIPTION_TIER_CRM, period_months)
+        if not base:
+            return None
+        total_cents = int(base["price_cents"])
+        period_days = int(base["period_days"])
+        for key in SUBSCRIPTION_MODULES:
+            if not mods.get(key):
+                continue
+            mp = await get_module_period_pricing(session, key, period_months)
+            if not mp:
+                return None
+            total_cents += int(mp["price_cents"])
+        plan_label = "Конструктор подписки"
+
+    now = datetime.now(timezone.utc)
+    result = await session.execute(
+        text("""
+            SELECT expires_at FROM trainer_subscriptions
+            WHERE trainer_id = :tid
+              AND expires_at > :now
+              AND status IN (:s1, :s2)
+            ORDER BY expires_at DESC
+            LIMIT 1
+        """),
+        {
+            "tid": trainer_id,
+            "now": now,
+            "s1": SUBSCRIPTION_STATUS_TRIAL,
+            "s2": SUBSCRIPTION_STATUS_ACTIVE,
+        },
+    )
+    row = result.fetchone()
+    period_start = row[0] if row and row[0] and row[0] > now else now
+    period_end = period_start + timedelta(days=period_days)
+    due_date = period_end
+
+    plan_result = await session.execute(
+        text("SELECT id, name FROM subscription_plans WHERE is_trial = false ORDER BY sort_order LIMIT 1")
+    )
+    plan_row = plan_result.fetchone()
+    if not plan_row:
+        return None
+    plan_id, plan_name_fallback = plan_row[0], plan_row[1]
+
+    mods_json = json.dumps(mods, ensure_ascii=False)
+    await cancel_pending_catalog_subscription_invoices(session, trainer_id)
+
+    r3 = await session.execute(
+        text("""
+            INSERT INTO trainer_invoices
+            (trainer_id, subscription_plan_id, amount_cents, period_start, period_end, due_date, status,
+             checkout_modules, checkout_billing_period_months, checkout_bundle_tier)
+            VALUES (:tid, :pid, :amount, :period_start, :period_end, :due_date, :status,
+                    CAST(:mods AS jsonb), :bpm, :bundle)
+            RETURNING id, amount_cents, period_start, period_end
+        """),
+        {
+            "tid": trainer_id,
+            "pid": plan_id,
+            "amount": total_cents,
+            "period_start": period_start,
+            "period_end": period_end,
+            "due_date": due_date,
+            "status": INVOICE_STATUS_SENT,
+            "mods": mods_json,
+            "bpm": period_months,
+            "bundle": bundle_tier,
+        },
+    )
+    row3 = r3.fetchone()
+    await session.commit()
+    return {
+        "invoice_id": row3[0],
+        "amount_cents": row3[1],
+        "period_start": row3[2],
+        "period_end": row3[3],
+        "plan_name": plan_label or plan_name_fallback,
+        "checkout_modules": mods,
+        "checkout_billing_period_months": period_months,
+        "checkout_bundle_tier": bundle_tier,
+    }
+
+
+async def list_pending_catalog_subscription_invoices(
+    session: AsyncSession,
+    *,
+    limit: int = 40,
+) -> list[dict]:
+    """
+    Catalog (tier/constructor) invoices awaiting payment: status sent/overdue, checkout snapshot set.
+    Newest first. For admin bot / ops.
+    """
+    lim = max(1, min(int(limit), 80))
+    r = await session.execute(
+        text("""
+            SELECT ti.id, ti.trainer_id, ti.amount_cents, ti.period_start, ti.period_end, ti.status,
+                   ti.checkout_bundle_tier, ti.checkout_billing_period_months, ti.checkout_modules,
+                   sp.name AS plan_row_name,
+                   t.telegram_id, t.telegram_username, tp.first_name, tp.last_name
+            FROM trainer_invoices ti
+            INNER JOIN trainers t ON t.id = ti.trainer_id
+            INNER JOIN subscription_plans sp ON sp.id = ti.subscription_plan_id
+            LEFT JOIN trainer_profiles tp ON tp.trainer_id = t.id
+            WHERE ti.checkout_modules IS NOT NULL
+              AND ti.checkout_billing_period_months IS NOT NULL
+              AND ti.status IN (:sent, :overdue)
+            ORDER BY ti.id DESC
+            LIMIT :lim
+        """),
+        {"sent": INVOICE_STATUS_SENT, "overdue": INVOICE_STATUS_OVERDUE, "lim": lim},
+    )
+    out: list[dict] = []
+    for row in r.fetchall():
+        out.append(
+            {
+                "invoice_id": row[0],
+                "trainer_id": row[1],
+                "amount_cents": row[2],
+                "period_start": row[3],
+                "period_end": row[4],
+                "status": row[5],
+                "checkout_bundle_tier": row[6],
+                "checkout_billing_period_months": row[7],
+                "checkout_modules": row[8],
+                "plan_row_name": row[9],
+                "telegram_id": int(row[10]) if row[10] is not None else None,
+                "telegram_username": row[11],
+                "first_name": row[12],
+                "last_name": row[13],
+            }
+        )
+    return out
+
+
 async def confirm_subscription_invoice_after_payment(
     session: AsyncSession,
     invoice_id: int,
@@ -414,11 +620,15 @@ async def confirm_subscription_invoice_after_payment(
     On gateway success for subscription: mark invoice paid, create trainer_subscriptions
     (active) for the period. Idempotent: if invoice already paid, return True without duplicate.
 
+    Catalog invoices (checkout_modules set): insert row with tier=crm + modules JSON + billing period.
+    Legacy invoices: same entitlement shape (CRM base + default modules).
+
     Also triggers referral credit grant if this is the trainer's first paid subscription.
     """
     r = await session.execute(
         text("""
-            SELECT id, trainer_id, subscription_plan_id, amount_cents, period_start, period_end, status
+            SELECT trainer_id, subscription_plan_id, amount_cents, period_start, period_end, status,
+                   checkout_modules, checkout_billing_period_months, checkout_bundle_tier
             FROM trainer_invoices WHERE id = :iid
         """),
         {"iid": invoice_id},
@@ -426,11 +636,28 @@ async def confirm_subscription_invoice_after_payment(
     row = r.fetchone()
     if not row:
         return False
-    tid, plan_id, amount, period_start, period_end, status = row[1], row[2], row[3], row[4], row[5], row[6]
+    (
+        tid,
+        plan_id,
+        _amount,
+        period_start,
+        period_end,
+        status,
+        checkout_modules,
+        checkout_billing_period_months,
+        _checkout_bundle_tier,
+    ) = row
     if status == INVOICE_STATUS_PAID:
         return True
     if status not in (INVOICE_STATUS_SENT, INVOICE_STATUS_OVERDUE):
         return False
+    catalog_checkout = (
+        checkout_modules is not None and checkout_billing_period_months is not None
+    )
+    mods_for_insert = (
+        normalize_modules_dict(checkout_modules) if checkout_modules is not None else None
+    )
+    bpm = checkout_billing_period_months if checkout_billing_period_months is not None else None
     # Check if this is the trainer's first paid subscription (for referral credit)
     r_first = await session.execute(
         text("""
@@ -450,22 +677,48 @@ async def confirm_subscription_invoice_after_payment(
         """),
         {"paid": INVOICE_STATUS_PAID, "now": now, "ext_id": payment_external_id[:256], "iid": invoice_id},
     )
-    await session.execute(
-        text("""
-            INSERT INTO trainer_subscriptions (trainer_id, plan_id, started_at, expires_at, status)
-            VALUES (:tid, :pid, :started_at, :expires_at, :status)
-        """),
-        {
-            "tid": tid,
-            "pid": plan_id,
-            "started_at": period_start,
-            "expires_at": period_end,
-            "status": SUBSCRIPTION_STATUS_ACTIVE,
-        },
-    )
+    if catalog_checkout and mods_for_insert is not None and bpm is not None:
+        mods_json = json.dumps(mods_for_insert, ensure_ascii=False)
+        await session.execute(
+            text("""
+                INSERT INTO trainer_subscriptions
+                    (trainer_id, plan_id, tier, modules, billing_period_months, started_at, expires_at, status)
+                VALUES
+                    (:tid, :pid, :tier, CAST(:mods AS jsonb), :bpm, :started_at, :expires_at, :status)
+            """),
+            {
+                "tid": tid,
+                "pid": plan_id,
+                "tier": SUBSCRIPTION_TIER_CRM,
+                "mods": mods_json,
+                "bpm": int(bpm),
+                "started_at": period_start,
+                "expires_at": period_end,
+                "status": SUBSCRIPTION_STATUS_ACTIVE,
+            },
+        )
+    else:
+        await session.execute(
+            text("""
+                INSERT INTO trainer_subscriptions
+                    (trainer_id, plan_id, tier, modules, billing_period_months, started_at, expires_at, status)
+                VALUES
+                    (:tid, :pid, :tier, CAST(:mods AS jsonb), NULL, :started_at, :expires_at, :status)
+            """),
+            {
+                "tid": tid,
+                "pid": plan_id,
+                "tier": SUBSCRIPTION_TIER_CRM,
+                "mods": _DEFAULT_PAID_MODULES_JSON,
+                "started_at": period_start,
+                "expires_at": period_end,
+                "status": SUBSCRIPTION_STATUS_ACTIVE,
+            },
+        )
     await session.commit()
     # Referral credit: grant to referrer if this is first paid subscription
     if is_first_paid:
         from src.application.referral_use_cases import grant_referral_credit_if_eligible
+
         await grant_referral_credit_if_eligible(session, tid)
     return True

@@ -194,6 +194,8 @@ from src.application.trainer_schedule_use_cases import (
     trainer_offers_service,
 )
 from src.application.recurring_use_cases import apply_recurring_bookings_for_week
+from src.application.welcome_link_use_cases import WELCOME_TOKEN_TYPE_CLIENT_BIND, create_welcome_link_token
+from src.application.trainer_invite_links import build_trainer_invite_links
 from src.application.client_notes_use_cases import (
     get_trainer_client_note,
     upsert_trainer_client_note,
@@ -296,6 +298,162 @@ def _admin_telegram_id(init_data: str) -> int:
     if tid not in admin_ids:
         raise HTTPException(status_code=403, detail="Not an admin")
     return tid
+
+
+# --- Trainer bookings Mini App (initData validated with trainer bot token) ---
+
+TRAINER_DAYS = ("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс")
+BOOKING_ADD_NOTE_PREFIX = "booking_add_note:"
+BOOKING_INVITE_CLIENT_PREFIX = "booking_invite_client:"
+
+
+def _format_time_hhmm(t) -> str:
+    if hasattr(t, "strftime"):
+        return t.strftime("%H:%M")
+    s = str(t or "").strip()
+    return s[:5] if len(s) >= 5 else (s or "—")
+
+
+def _build_client_reminder_plan_text_for_trainer(
+    slot_date,
+    start_time,
+    *,
+    client_has_telegram: bool,
+) -> str:
+    """Human-readable reminder schedule for trainer post-action message."""
+    if not client_has_telegram:
+        return "не запланированы: у клиента не привязан Telegram"
+    if slot_date is None or start_time is None:
+        return "запланируем автоматически после синхронизации слота"
+    try:
+        local_tz = ZoneInfo(NOTIFICATION_TZ)
+        now_local = datetime.now(local_tz)
+        slot_dt_local = datetime.combine(slot_date, start_time).replace(tzinfo=local_tz)
+    except Exception:
+        return "запланируем автоматически по правилам напоминаний"
+    if slot_dt_local <= now_local:
+        return "не ставим: слот уже начался или в прошлом"
+
+    def _is_quiet_hours(dt: datetime) -> bool:
+        return 0 <= dt.hour < 8
+
+    candidates: list[tuple[str, datetime]] = []
+    t24 = slot_dt_local - timedelta(hours=24)
+    t2 = slot_dt_local - timedelta(hours=2)
+    if now_local.date() < slot_date:
+        if t24 > now_local and t24 < slot_dt_local and not _is_quiet_hours(t24):
+            candidates.append(("за 24 ч", t24))
+        if t2 > now_local and t2 < slot_dt_local and not _is_quiet_hours(t2):
+            candidates.append(("за 2 ч", t2))
+    else:
+        if now_local < t2 and t2 < slot_dt_local and not _is_quiet_hours(t2):
+            candidates.append(("за 2 ч", t2))
+    if not candidates:
+        return "не планируются: поздняя запись или время попало в тихие часы"
+    return ", ".join(f"{dt.strftime('%d.%m %H:%M')} ({label})" for label, dt in candidates)
+
+
+async def _send_trainer_post_booking_feedback(
+    *,
+    session: AsyncSession,
+    trainer_id: int,
+    trainer_telegram_id: int,
+    booking_id: int,
+    client_id: int,
+    slot_date,
+    start_time,
+) -> None:
+    """Best-effort trainer post-action push after trainer-created booking from Mini App."""
+    client_card = await get_trainer_client_for_card(session, trainer_id, client_id)
+    first_name = (client_card or {}).get("first_name") or ""
+    last_name = (client_card or {}).get("last_name") or ""
+    client_name = f"{first_name} {last_name}".strip() or "Клиент"
+    client_tg_id_raw = (client_card or {}).get("telegram_id")
+    client_tg_id = int(client_tg_id_raw) if client_tg_id_raw else None
+
+    date_str = slot_date.strftime("%d.%m") if slot_date and hasattr(slot_date, "strftime") else "—"
+    day_str = TRAINER_DAYS[slot_date.weekday()] if slot_date and hasattr(slot_date, "weekday") else ""
+    time_str = _format_time_hhmm(start_time)
+    reminder_plan = _build_client_reminder_plan_text_for_trainer(
+        slot_date,
+        start_time,
+        client_has_telegram=bool(client_tg_id),
+    )
+
+    client_confirmation = "не применимо: у клиента не привязан Telegram"
+    if client_tg_id:
+        trainer_obj = await get_trainer(session, trainer_id)
+        profile = (trainer_obj or {}).get("profile") or {}
+        trainer_name = (
+            ((profile.get("first_name") or "") + " " + (profile.get("last_name") or "")).strip()
+            or "Тренер"
+        )
+        settings = Settings()
+        client_bot = Bot(
+            token=settings.telegram_bot_token_client,
+            default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+        )
+        try:
+            await client_bot.send_message(
+                chat_id=client_tg_id,
+                text=msg.CLIENT_TRAINER_BOOKED_YOU.format(
+                    name=trainer_name,
+                    date=date_str,
+                    day=day_str,
+                    time=time_str,
+                ),
+            )
+            client_confirmation = "отправили клиенту в Telegram"
+        except Exception as e:
+            logger.warning(
+                "MiniApp trainer booking: failed client confirmation (booking_id=%s client_tg_id=%s): %s",
+                booking_id,
+                client_tg_id,
+                e,
+            )
+            client_confirmation = "не отправили (ошибка доставки), запись сохранена"
+        finally:
+            await client_bot.session.close()
+
+    trainer_bot = Bot(
+        token=Settings().telegram_bot_token_trainer,
+        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+    )
+    buttons_row: list[InlineKeyboardButton] = [
+        InlineKeyboardButton(
+            text=msg.TRAINER_BUTTON_ADD_BOOKING_NOTE,
+            callback_data=f"{BOOKING_ADD_NOTE_PREFIX}{booking_id}",
+        )
+    ]
+    if not client_tg_id:
+        buttons_row.append(
+            InlineKeyboardButton(
+                text=msg.TRAINER_BUTTON_INVITE_CLIENT_TO_BOT,
+                callback_data=f"{BOOKING_INVITE_CLIENT_PREFIX}{booking_id}",
+            )
+        )
+    try:
+        await trainer_bot.send_message(
+            chat_id=trainer_telegram_id,
+            text=msg.TRAINER_CREATE_BOOKING_DONE.format(
+                client_name=html.escape(client_name),
+                date=date_str,
+                day=day_str,
+                time=time_str,
+                reminder_plan=html.escape(reminder_plan),
+                client_confirmation=html.escape(client_confirmation),
+            ),
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[buttons_row]),
+        )
+    except Exception as e:
+        logger.warning(
+            "MiniApp trainer booking: failed trainer post-action push (booking_id=%s trainer_tg_id=%s): %s",
+            booking_id,
+            trainer_telegram_id,
+            e,
+        )
+    finally:
+        await trainer_bot.session.close()
 
 
 @router.get("/trainer/access")
@@ -3696,6 +3854,10 @@ class TrainerCreateClientBody(BaseModel):
         return str(v).strip()
 
 
+class TrainerBookingInviteClientBody(BaseModel):
+    booking_id: int
+
+
 @router.get("/trainer/my-services")
 async def get_trainer_my_services(
     init_data: str | None = Query(None),
@@ -4353,6 +4515,15 @@ async def post_trainer_booking(
         raise HTTPException(status_code=400, detail=detail_ru)
     if not is_slot_end_in_past_local(slot.get("slot_date"), slot.get("end_time")):
         await generate_reminders_for_booking(session, booking_id)
+    await _send_trainer_post_booking_feedback(
+        session=session,
+        trainer_id=trainer_id,
+        trainer_telegram_id=telegram_id,
+        booking_id=int(booking_id),
+        client_id=int(body.client_id),
+        slot_date=(slot or {}).get("slot_date"),
+        start_time=(slot or {}).get("start_time"),
+    )
     return {
         "success": True,
         "booking_id": booking_id,
@@ -4417,6 +4588,15 @@ async def post_trainer_booking_quick(
     slot = await get_slot(session, slot_id)
     if slot and not is_slot_end_in_past_local(slot.get("slot_date"), slot.get("end_time")):
         await generate_reminders_for_booking(session, booking_id)
+    await _send_trainer_post_booking_feedback(
+        session=session,
+        trainer_id=trainer_id,
+        trainer_telegram_id=telegram_id,
+        booking_id=int(booking_id),
+        client_id=int(body.client_id),
+        slot_date=(slot or {}).get("slot_date"),
+        start_time=(slot or {}).get("start_time"),
+    )
     return {
         "success": True,
         "booking_id": booking_id,

@@ -406,11 +406,13 @@ async def replace_slots_for_day(
     """
     Set slots for one calendar day.
 
-    - Removes only **available** slots whose start time is **not** in ``start_minutes`` (minutes from
-      midnight). Booked slots are never removed.
+    - Removes only **available individual** slots whose start time is **not** in ``start_minutes``
+      (minutes from midnight). Booked slots are never removed.
     - Inserts a slot for each minute key in ``start_minutes`` that does not yet exist, using ``capacity``.
     - **Does not** change ``capacity`` on slots that already exist — avoids turning every slot
       into a group slot when the trainer edits the day and only wants new times to use the form value.
+    - Slots materialized from training groups (``training_group_id IS NOT NULL``) are intentionally
+      outside this flow and are not touched or used for overlap checks here.
     For ``capacity`` > 1, ``group_service_id`` must be set (group slot is tied to that service).
     """
     cap = max(1, min(int(capacity), 500))
@@ -437,6 +439,7 @@ async def replace_slots_for_day(
                 """
             DELETE FROM slots
             WHERE trainer_id = :tid AND slot_date = :d AND status = 'available'
+              AND training_group_id IS NULL
             """
                 + booking_guard
             ),
@@ -451,6 +454,7 @@ async def replace_slots_for_day(
             f"""
             DELETE FROM slots
             WHERE trainer_id = :tid AND slot_date = :d AND status = 'available'
+              AND training_group_id IS NULL
             """
             + booking_guard
             + f"""
@@ -466,13 +470,46 @@ async def replace_slots_for_day(
             SELECT EXTRACT(HOUR FROM start_time)::int * 60 + EXTRACT(MINUTE FROM start_time)::int
             FROM slots
             WHERE trainer_id = :tid AND slot_date = :d
+              AND training_group_id IS NULL
         """),
         {"tid": trainer_id, "d": slot_date},
     )
     existing_minutes = {int(row[0]) for row in r.fetchall()}
+    r_iv = await session.execute(
+        text(
+            """
+            SELECT
+              (EXTRACT(HOUR FROM start_time)::int * 60 + EXTRACT(MINUTE FROM start_time)::int) AS sm,
+              (EXTRACT(HOUR FROM end_time)::int * 60 + EXTRACT(MINUTE FROM end_time)::int) AS em
+            FROM slots
+            WHERE trainer_id = :tid AND slot_date = :d
+              AND status != 'cancelled'
+              AND training_group_id IS NULL
+            ORDER BY start_time, id
+            """
+        ),
+        {"tid": trainer_id, "d": slot_date},
+    )
+    existing_intervals: list[tuple[int, int]] = []
+    for row in r_iv.fetchall():
+        sm = int(row[0])
+        em = int(row[1])
+        if em < sm:
+            em = sm + 24 * 60
+        existing_intervals.append((sm, em))
+    # Track intervals inserted in this transaction to guard against overlaps inside payload itself.
+    new_intervals: list[tuple[int, int]] = []
     for m in minute_list:
         if int(m) in existing_minutes:
             continue
+        start_m = int(m)
+        end_m = start_m + int(duration_minutes)
+        for sm, em in existing_intervals:
+            if _intervals_overlap_half_open(start_m, end_m, sm, em):
+                raise ValueError("Время пересекается с другим слотом в расписании.")
+        for sm, em in new_intervals:
+            if _intervals_overlap_half_open(start_m, end_m, sm, em):
+                raise ValueError("Время пересекается с другим слотом в расписании.")
         start_time = time_from_minutes(int(m))
         end_time = _time_end(start_time, duration_minutes)
         svc = int(group_service_id) if cap > 1 else None
@@ -491,6 +528,7 @@ async def replace_slots_for_day(
                 "aid": arena_for_new_slots,
             },
         )
+        new_intervals.append((start_m, end_m))
     await session.commit()
 
 

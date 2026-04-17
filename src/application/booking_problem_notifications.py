@@ -193,7 +193,7 @@ async def send_booking_problem_telegram_notifications(
             client_rows.append(
                 [
                     InlineKeyboardButton(
-                        text=msg.CLIENT_BUTTON_MY_BOOKINGS,
+                        text=msg.CLIENT_BOOKING_CONFIRMED_BTN_DETAILS,
                         web_app=WebAppInfo(
                             url=f"{base}/webapp/client-bookings?open_booking={booking_id}"
                         ),

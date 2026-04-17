@@ -153,6 +153,88 @@ async def test_create_booking_with_variant_id_snapshots_price(db_session: AsyncS
 
 
 @pytest.mark.asyncio
+async def test_create_booking_trainer_non_strict_prefers_adult_when_ambiguous(db_session: AsyncSession) -> None:
+    """SQL tier order lists child first; trainer CRM without explicit variant_id should pick adult."""
+    service_id = await require_seed_service_id(db_session)
+    r = await db_session.execute(text("INSERT INTO trainers (status) VALUES ('active') RETURNING id"))
+    (trainer_id,) = r.fetchone()
+    await db_session.execute(
+        text(
+            "INSERT INTO trainer_profiles (trainer_id, first_name, last_name, age) VALUES (:tid, 'T', 'T', 30)"
+        ),
+        {"tid": trainer_id},
+    )
+    await db_session.execute(
+        text(
+            "INSERT INTO trainer_services (trainer_id, service_id, price_cents) VALUES (:tid, :sid, 5000)"
+        ),
+        {"tid": trainer_id, "sid": service_id},
+    )
+    await db_session.execute(
+        text(
+            """
+            INSERT INTO trainer_service_price_variants (trainer_id, service_id, label, price_cents, sort_order, tier_kind)
+            VALUES (:tid, :sid, 'Детский', 3000, 0, 'child'), (:tid, :sid, 'Взрослый', 5000, 1, 'adult')
+            """
+        ),
+        {"tid": trainer_id, "sid": service_id},
+    )
+    rva = await db_session.execute(
+        text(
+            """
+            SELECT id FROM trainer_service_price_variants
+            WHERE trainer_id = :tid AND service_id = :sid AND tier_kind = 'adult'
+            """
+        ),
+        {"tid": trainer_id, "sid": service_id},
+    )
+    (adult_variant_id,) = rva.fetchone()
+    tomorrow = date.today() + timedelta(days=1)
+    r = await db_session.execute(
+        text("""
+            INSERT INTO slots (trainer_id, slot_date, start_time, end_time, status)
+            VALUES (:tid, :d, '12:00', '13:00', 'available')
+            RETURNING id
+        """),
+        {"tid": trainer_id, "d": tomorrow},
+    )
+    (slot_id,) = r.fetchone()
+    ctg = unique_test_telegram_id()
+    phone, phone_normalized = belarus_test_phone(ctg)
+    r2 = await db_session.execute(
+        text("""
+            INSERT INTO clients (telegram_id, first_name, last_name, phone, phone_normalized)
+            VALUES (:tg, 'C', 'C', :phone, :pn)
+            RETURNING id
+        """),
+        {"tg": ctg, "phone": phone, "pn": phone_normalized},
+    )
+    (client_id,) = r2.fetchone()
+    await db_session.commit()
+
+    bid, _ = await create_booking(
+        db_session,
+        slot_id=slot_id,
+        trainer_id=trainer_id,
+        client_id=client_id,
+        service_id=service_id,
+        created_by_trainer=True,
+        service_price_variant_id=None,
+        strict_service_price_variant=False,
+    )
+    assert bid is not None
+    r3 = await db_session.execute(
+        text(
+            "SELECT booking_price_cents, service_price_variant_id FROM bookings WHERE id = :id"
+        ),
+        {"id": bid},
+    )
+    bpc, vid = r3.fetchone()
+    assert int(bpc) == 5000
+    assert int(vid) == int(adult_variant_id)
+
+
+@pytest.mark.asyncio
 async def test_set_trainer_services_writes_tiers_and_anchor(db_session: AsyncSession) -> None:
     service_id = await require_seed_service_id(db_session)
     r = await db_session.execute(text("INSERT INTO trainers (status) VALUES ('active') RETURNING id"))
