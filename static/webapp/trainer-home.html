@@ -51,9 +51,9 @@
     })();
   </script>
   <!-- Bump ?v= when mini-app-trainer-hub.css changes (immutable cache on /webapp/…). -->
-  <link rel="stylesheet" href="mini-app-trainer-hub.css?v=20260426c" />
+  <link rel="stylesheet" href="mini-app-trainer-hub.css?v=20260426d" />
   <!-- Early download of main hub script (defer runs at end of body); improves time-to-interactive vs. discover-at-bottom. -->
-  <link rel="preload" href="trainer-home-main.js?v=20260417c" as="script" />
+  <link rel="preload" href="trainer-home-main.js?v=20260417e" as="script" />
 
 </head>
 <body class="hub-body">
@@ -79,6 +79,21 @@
       <div class="hub-header-text">
         <p class="hub-header-kicker">Тренерский кабинет</p>
         <h1 class="hub-header-title" id="hubPageTitle">Главная</h1>
+      </div>
+      <div class="hub-header-actions">
+        <button
+          type="button"
+          class="hub-link-share-btn"
+          id="hubShareBookingLinkBtn"
+          aria-label="Публичная ссылка на запись"
+          title="Публичная ссылка на запись"
+          hidden
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="M11 13a5 5 0 0 0 7.07 0l1.41-1.41a5 5 0 0 0-7.07-7.07L11.9 5.93" />
+            <path d="M13 11a5 5 0 0 0-7.07 0L4.51 12.41a5 5 0 1 0 7.07 7.07l1.41-1.41" />
+          </svg>
+        </button>
       </div>
     </header>
 
@@ -319,6 +334,29 @@
     </div>
   </div>
 
+  <div id="hubModalShareBookingLink" class="modal-overlay hub-book-flow-overlay hub-share-link-overlay" style="display:none;" aria-hidden="true">
+    <div class="modal hub-share-link-modal" role="dialog" aria-labelledby="hubShareLinkTitle">
+      <h3 id="hubShareLinkTitle" class="book-modal-title">Ссылка на запись</h3>
+      <p class="book-choice-lead">Выберите услугу и получите публичную ссылку для клиентов.</p>
+      <div id="hubShareLinkServiceWrap" class="book-field-stack" style="display:none;">
+        <label class="book-field-label" for="hubShareLinkServiceSelect">Услуга</label>
+        <div class="hub-modal-select-wrap">
+          <select id="hubShareLinkServiceSelect" class="input"></select>
+        </div>
+      </div>
+      <p id="hubShareLinkError" class="book-phone-hint" style="display:none;"></p>
+      <div id="hubShareLinkPreviewWrap" class="book-field-stack" style="display:none;">
+        <label class="book-field-label" for="hubShareLinkPreview">Ссылка</label>
+        <input type="text" id="hubShareLinkPreview" class="input" readonly />
+        <p class="book-phone-hint">Если копирование не сработало, выделите ссылку и скопируйте вручную.</p>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn-block btn-secondary" id="hubShareLinkCancel">Отмена</button>
+        <button type="button" class="btn-block btn-primary" id="hubShareLinkCopy">Скопировать ссылку</button>
+      </div>
+    </div>
+  </div>
+
   <div id="hubModalBookGroupSlot" class="modal-overlay hub-book-flow-overlay" style="display: none;" aria-hidden="true">
     <div class="modal book-flow-modal hub-book-modal">
       <h3 class="book-modal-title">Записать клиента</h3>
@@ -413,6 +451,6 @@
   <script src="mini-app-trainer-gate.js"></script>
   <script src="mini-app-trainer-celebration.js"></script>
   <!-- Bump ?v= when trainer-home-main.js changes (immutable cache on /webapp/…). -->
-  <script defer src="trainer-home-main.js?v=20260417d"></script>
+  <script defer src="trainer-home-main.js?v=20260417e"></script>
 </body>
 </html>

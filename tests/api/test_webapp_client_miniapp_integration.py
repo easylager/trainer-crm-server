@@ -384,8 +384,10 @@ async def test_slots_respects_min_working_hours_window(app_use_test_db, db_sessi
 
 @pytest.mark.asyncio
 async def test_booking_happy_path_and_list_grouped_by_day(app_use_test_db, db_session) -> None:
-    ref_day, ref_now = _minsk_monday_reference()
-    slot_day = ref_day + timedelta(days=4)
+    # list_bookings_for_client filters by real DB time — slot must be in the future vs CURRENT_TIMESTAMP.
+    slot_day = date.today() + timedelta(days=14)
+    ref_day = slot_day - timedelta(days=slot_day.weekday())
+    ref_now = datetime.combine(ref_day, time(10, 0))
     trainer_id, service_id, slot_id = await _create_trainer_online_with_slot(
         db_session, slot_date=slot_day, start_hours={18}
     )
@@ -429,6 +431,74 @@ async def test_booking_happy_path_and_list_grouped_by_day(app_use_test_db, db_se
     assert found is not None
     assert found.get("service_name"), "client bookings list must include service_name"
     assert "service_id" in found
+
+
+@pytest.mark.asyncio
+async def test_booking_with_existing_offline_client_phone_links_telegram_silently(
+    app_use_test_db, db_session
+) -> None:
+    ref_day, ref_now = _minsk_monday_reference()
+    slot_day = ref_day + timedelta(days=4)
+    _trainer_id, service_id, slot_id = await _create_trainer_online_with_slot(
+        db_session, slot_date=slot_day, start_hours={18}
+    )
+    ctg = _fresh_client_telegram_id()
+    phone, phone_norm = belarus_test_phone(ctg)
+    r_offline = await db_session.execute(
+        text(
+            """
+            INSERT INTO clients (telegram_id, first_name, last_name, phone, phone_normalized)
+            VALUES (NULL, 'Офлайн', 'Клиент', :phone, :pn)
+            RETURNING id
+            """
+        ),
+        {"phone": phone, "pn": phone_norm},
+    )
+    offline_client_id = int(r_offline.fetchone()[0])
+    await db_session.commit()
+
+    with patch_client_init_auth(ctg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            with patch("src.api.routes.webapp.datetime") as mock_dt, patch(
+                "src.api.routes.webapp.date"
+            ) as mock_date:
+                mock_date.today.return_value = ref_day
+                mock_dt.now.return_value = ref_now
+                mock_dt.combine = datetime.combine
+                book = await client.post(
+                    "/api/webapp/client/booking",
+                    json={
+                        "slot_id": slot_id,
+                        "phone": phone,
+                        "service_id": service_id,
+                        "first_name": "Алексей",
+                    },
+                    headers={"X-Telegram-Init-Data": "mock"},
+                )
+    assert book.status_code == 200
+    booking_id = int(book.json()["booking_id"])
+
+    r_clients = await db_session.execute(
+        text(
+            """
+            SELECT id, telegram_id
+            FROM clients
+            WHERE phone_normalized = :pn
+            ORDER BY id
+            """
+        ),
+        {"pn": phone_norm},
+    )
+    rows = r_clients.fetchall()
+    assert len(rows) == 1
+    assert int(rows[0][0]) == offline_client_id
+    assert int(rows[0][1]) == ctg
+
+    r_booking = await db_session.execute(
+        text("SELECT client_id FROM bookings WHERE id = :bid"),
+        {"bid": booking_id},
+    )
+    assert int(r_booking.scalar()) == offline_client_id
 
 
 @pytest.mark.asyncio

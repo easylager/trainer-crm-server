@@ -18,6 +18,7 @@ from src.application.client_use_cases import (
     get_client_id_by_telegram_id,
     get_client_telegram_id,
 )
+from src.application.subscription_use_cases import create_trial_subscription
 from src.application.welcome_link_use_cases import (
     WELCOME_TOKEN_TYPE_CLIENT_BIND,
     consume_welcome_link_token,
@@ -59,6 +60,63 @@ async def _trainer_service_and_slot(
     (slot_id,) = r.fetchone()
     await db_session.commit()
     return slot_id
+
+
+async def _ensure_online_subscription(db_session, trainer_id: int) -> None:
+    """Active CRM subscription row with online module enabled (same entitlement as production gate)."""
+    sub = await create_trial_subscription(db_session, trainer_id)
+    if sub is None:
+        r_exists = await db_session.execute(
+            text(
+                """
+                SELECT 1
+                FROM trainer_subscriptions
+                WHERE trainer_id = :tid
+                  AND expires_at > NOW()
+                  AND status IN ('active', 'trial')
+                LIMIT 1
+                """
+            ),
+            {"tid": trainer_id},
+        )
+        if r_exists.fetchone() is None:
+            r_plan = await db_session.execute(text("SELECT id FROM subscription_plans ORDER BY id LIMIT 1"))
+            plan_id = r_plan.scalar()
+            if plan_id is None:
+                pytest.skip("need subscription_plans seed")
+            await db_session.execute(
+                text(
+                    """
+                    INSERT INTO trainer_subscriptions
+                        (trainer_id, plan_id, started_at, expires_at, status, tier, modules)
+                    VALUES (
+                        :tid,
+                        :pid,
+                        NOW(),
+                        NOW() + INTERVAL '400 days',
+                        'active',
+                        'crm',
+                        CAST(:mods AS jsonb)
+                    )
+                    """
+                ),
+                {
+                    "tid": trainer_id,
+                    "pid": plan_id,
+                    "mods": '{"online": true, "analytics": false, "groups": false}',
+                },
+            )
+    await db_session.execute(
+        text(
+            """
+            UPDATE trainer_subscriptions
+            SET tier = 'crm', modules = CAST(:mods AS jsonb)
+            WHERE trainer_id = :tid
+            """
+        ),
+        {"tid": trainer_id, "mods": '{"online": true, "analytics": false, "groups": false}'},
+    )
+    await db_session.commit()
 
 
 @pytest.mark.asyncio
@@ -326,3 +384,100 @@ async def test_client_bind_token_attach_telegram_to_existing_row(
     assert await get_client_telegram_id(db_session, client_id) == client_telegram
     r_count = await db_session.execute(text("SELECT COUNT(*) FROM clients WHERE phone_normalized = :pn"), {"pn": phone_norm})
     assert r_count.fetchone()[0] == 1
+
+
+@pytest.mark.asyncio
+async def test_trainer_public_booking_link_403_without_online_module(
+    app_use_test_db,
+    db_session,
+) -> None:
+    tg = _fresh_trainer_telegram_id()
+    r_city = await db_session.execute(text("SELECT id FROM cities ORDER BY id LIMIT 1"))
+    city_id = r_city.scalar()
+    if city_id is None:
+        pytest.skip("need seed cities")
+    service_id = await require_seed_service_id(db_session)
+    r = await db_session.execute(text("INSERT INTO trainers (status) VALUES ('active') RETURNING id"))
+    trainer_id = r.fetchone()[0]
+    await db_session.execute(
+        text("UPDATE trainers SET telegram_id = :tg WHERE id = :id"),
+        {"tg": tg, "id": trainer_id},
+    )
+    await db_session.execute(
+        text(
+            """
+            INSERT INTO trainer_profiles (trainer_id, first_name, last_name, age, city_id)
+            VALUES (:tid, 'No', 'Online', 30, :city_id)
+            """
+        ),
+        {"tid": trainer_id, "city_id": int(city_id)},
+    )
+    await db_session.execute(
+        text("INSERT INTO trainer_services (trainer_id, service_id, price_cents) VALUES (:tid, :sid, 5000)"),
+        {"tid": trainer_id, "sid": service_id},
+    )
+    await db_session.commit()
+
+    with patch_trainer_webapp_init(tg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.get(
+                f"/api/webapp/trainer/public-booking-link?service_id={service_id}",
+                headers={"X-Telegram-Init-Data": "mock"},
+            )
+    assert resp.status_code == 403
+    assert "онлайн-запись" in (resp.json().get("detail") or "")
+
+
+@pytest.mark.asyncio
+async def test_trainer_public_booking_link_200_returns_reusable_deep_link(
+    app_use_test_db,
+    db_session,
+) -> None:
+    tg = _fresh_trainer_telegram_id()
+    r_city = await db_session.execute(text("SELECT id FROM cities ORDER BY id LIMIT 1"))
+    city_id = r_city.scalar()
+    if city_id is None:
+        pytest.skip("need seed cities")
+    service_id = await require_seed_service_id(db_session)
+    r = await db_session.execute(text("INSERT INTO trainers (status) VALUES ('active') RETURNING id"))
+    trainer_id = r.fetchone()[0]
+    await db_session.execute(
+        text("UPDATE trainers SET telegram_id = :tg WHERE id = :id"),
+        {"tg": tg, "id": trainer_id},
+    )
+    await db_session.execute(
+        text(
+            """
+            INSERT INTO trainer_profiles (trainer_id, first_name, last_name, age, city_id)
+            VALUES (:tid, 'Public', 'Link', 30, :city_id)
+            """
+        ),
+        {"tid": trainer_id, "city_id": int(city_id)},
+    )
+    await db_session.execute(
+        text("INSERT INTO trainer_services (trainer_id, service_id, price_cents) VALUES (:tid, :sid, 5000)"),
+        {"tid": trainer_id, "sid": service_id},
+    )
+    await db_session.commit()
+    await _ensure_online_subscription(db_session, int(trainer_id))
+
+    with patch_trainer_webapp_init(tg), patch("src.api.routes.webapp.Settings") as ms:
+        ms.return_value.client_bot_username = "PublicBookBot"
+        ms.return_value.webapp_base_url = "https://example.test"
+        ms.return_value.telegram_bot_token_trainer = Settings().telegram_bot_token_trainer
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            eligibility = await client.get(
+                "/api/webapp/trainer/public-booking-link/eligibility",
+                headers={"X-Telegram-Init-Data": "mock"},
+            )
+            resp = await client.get(
+                f"/api/webapp/trainer/public-booking-link?service_id={service_id}",
+                headers={"X-Telegram-Init-Data": "mock"},
+            )
+    assert eligibility.status_code == 200
+    meta = eligibility.json()
+    assert meta.get("city_configured") is True
+    assert meta.get("require_service_choice") is False
+    assert resp.status_code == 200
+    link = (resp.json().get("booking_link") or "").strip()
+    assert link == f"https://t.me/PublicBookBot?start=client_{int(city_id)}_{int(service_id)}_{int(trainer_id)}"

@@ -95,6 +95,48 @@
       -webkit-text-fill-color: transparent;
       background-clip: text;
     }
+    .hub-header-actions {
+      display: flex;
+      align-items: flex-start;
+      justify-content: flex-end;
+      flex-shrink: 0;
+    }
+    .hub-link-share-btn {
+      width: 42px;
+      height: 42px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+      border-radius: 14px;
+      border: 1px solid color-mix(in srgb, var(--tg-theme-button-color) 28%, transparent);
+      background: color-mix(in srgb, var(--tg-theme-secondary-bg-color) 82%, var(--tg-theme-button-color) 18%);
+      color: var(--tg-theme-button-color);
+      cursor: pointer;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+      transition: transform 0.15s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .hub-link-share-btn[hidden] {
+      display: none !important;
+    }
+    .hub-link-share-btn svg {
+      width: 19px;
+      height: 19px;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    .hub-link-share-btn:hover {
+      border-color: color-mix(in srgb, var(--tg-theme-button-color) 45%, transparent);
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.14);
+    }
+    .hub-link-share-btn:active {
+      transform: scale(0.96);
+    }
+    .hub-link-share-btn:focus-visible {
+      outline: 2px solid color-mix(in srgb, var(--tg-theme-button-color) 58%, transparent);
+      outline-offset: 2px;
+    }
     /* Genius Hero Block with Live Intelligence */
     .hub-hero { 
       margin-bottom: 24px;
@@ -781,7 +823,8 @@
     /* Book into group slot on hub (same flow as schedule-editor; viewport-fixed overlay). */
     #hubModalQuickBookDatetime.hub-book-flow-overlay,
     #hubModalBookGroupSlot.hub-book-flow-overlay,
-    #hubModalBookGroupConfirm.hub-book-flow-overlay {
+    #hubModalBookGroupConfirm.hub-book-flow-overlay,
+    #hubModalShareBookingLink.hub-book-flow-overlay {
       position: fixed;
       left: 0;
       right: 0;
@@ -803,7 +846,8 @@
     }
     #hubModalQuickBookDatetime .hub-book-modal.modal.book-flow-modal,
     #hubModalBookGroupSlot .hub-book-modal.modal.book-flow-modal,
-    #hubModalBookGroupConfirm .hub-book-modal.modal.book-flow-modal {
+    #hubModalBookGroupConfirm .hub-book-modal.modal.book-flow-modal,
+    #hubModalShareBookingLink .hub-share-link-modal.modal {
       position: relative;
       max-width: 360px;
       width: 100%;
@@ -820,7 +864,8 @@
     }
     #hubModalQuickBookDatetime .book-modal-title,
     #hubModalBookGroupSlot .book-modal-title,
-    #hubModalBookGroupConfirm .book-confirm-title {
+    #hubModalBookGroupConfirm .book-confirm-title,
+    #hubModalShareBookingLink .book-modal-title {
       margin: 0 0 4px;
       font-size: 1.125rem;
       font-weight: 700;
@@ -834,7 +879,8 @@
       color: var(--tg-theme-hint-color);
     }
     #hubModalQuickBookDatetime .book-choice-lead,
-    #hubModalBookGroupSlot .book-choice-lead {
+    #hubModalBookGroupSlot .book-choice-lead,
+    #hubModalShareBookingLink .book-choice-lead {
       margin: 0 0 18px;
       font-size: 14px;
       line-height: 1.45;
@@ -913,7 +959,8 @@
       stroke-width: 2.2;
     }
     #hubModalQuickBookDatetime .book-field-label,
-    #hubModalBookGroupSlot .book-field-label {
+    #hubModalBookGroupSlot .book-field-label,
+    #hubModalShareBookingLink .book-field-label {
       display: block;
       font-size: 11px;
       font-weight: 700;
@@ -923,9 +970,12 @@
       margin: 0 0 8px;
     }
     #hubModalQuickBookDatetime .book-field-stack,
-    #hubModalBookGroupSlot .book-field-stack { margin-bottom: 16px; }
+    #hubModalBookGroupSlot .book-field-stack,
+    #hubModalShareBookingLink .book-field-stack { margin-bottom: 16px; }
     #hubModalQuickBookDatetime .input,
-    #hubModalQuickBookDatetime select.input {
+    #hubModalQuickBookDatetime select.input,
+    #hubModalShareBookingLink .input,
+    #hubModalShareBookingLink select.input {
       width: 100%;
       padding: 13px 14px;
       border-radius: 14px;
@@ -938,11 +988,13 @@
       min-height: 48px;
     }
     #hubModalQuickBookDatetime .hub-modal-select-wrap,
-    #hubModalBookGroupSlot .hub-modal-select-wrap {
+    #hubModalBookGroupSlot .hub-modal-select-wrap,
+    #hubModalShareBookingLink .hub-modal-select-wrap {
       position: relative;
     }
     #hubModalQuickBookDatetime .hub-modal-select-wrap::after,
-    #hubModalBookGroupSlot .hub-modal-select-wrap::after {
+    #hubModalBookGroupSlot .hub-modal-select-wrap::after,
+    #hubModalShareBookingLink .hub-modal-select-wrap::after {
       content: '';
       position: absolute;
       right: 14px;
@@ -957,7 +1009,8 @@
       opacity: 0.85;
     }
     #hubModalQuickBookDatetime select.input,
-    #hubModalBookGroupSlot select.input {
+    #hubModalBookGroupSlot select.input,
+    #hubModalShareBookingLink select.input {
       -webkit-appearance: none;
       appearance: none;
       padding-right: 36px;
@@ -1036,12 +1089,32 @@
     }
     #hubModalBookGroupSlot .book-req { color: #c62828; font-weight: 700; }
     #hubModalQuickBookDatetime .modal-actions,
-    #hubModalBookGroupConfirm .modal-actions {
+    #hubModalBookGroupConfirm .modal-actions,
+    #hubModalShareBookingLink .modal-actions {
       display: flex;
       gap: 10px;
     }
     #hubModalQuickBookDatetime .modal-actions .btn-block,
-    #hubModalBookGroupConfirm .modal-actions .btn-block { flex: 1; }
+    #hubModalBookGroupConfirm .modal-actions .btn-block,
+    #hubModalShareBookingLink .modal-actions .btn-block { flex: 1; }
+    #hubModalShareBookingLink .book-phone-hint {
+      margin: 0;
+      font-size: 12px;
+      color: var(--tg-theme-hint-color);
+      line-height: 1.4;
+    }
+    #hubModalShareBookingLink #hubShareLinkError {
+      color: var(--app-danger);
+      margin: -6px 0 12px;
+    }
+    #hubModalShareBookingLink #hubShareLinkPreview {
+      font-size: 13px;
+      line-height: 1.4;
+      word-break: break-all;
+    }
+    #hubModalShareBookingLink #hubShareLinkPreviewWrap {
+      margin-top: 4px;
+    }
     /* Enhanced Navigation Grid */
     .hub-grid {
       display: grid;
@@ -1680,14 +1753,16 @@
     @media (prefers-reduced-motion: reduce), (prefers-reduced-transparency: reduce) {
       #hubModalGroupSlot.hub-group-modal-overlay.modal-overlay,
       #hubModalBookGroupSlot.hub-book-flow-overlay,
-      #hubModalBookGroupConfirm.hub-book-flow-overlay {
+      #hubModalBookGroupConfirm.hub-book-flow-overlay,
+      #hubModalShareBookingLink.hub-book-flow-overlay {
         -webkit-backdrop-filter: none;
         backdrop-filter: none;
         background: rgba(0, 0, 0, 0.5);
       }
       html.hub-is-dark #hubModalGroupSlot.hub-group-modal-overlay.modal-overlay,
       html.hub-is-dark #hubModalBookGroupSlot.hub-book-flow-overlay,
-      html.hub-is-dark #hubModalBookGroupConfirm.hub-book-flow-overlay {
+      html.hub-is-dark #hubModalBookGroupConfirm.hub-book-flow-overlay,
+      html.hub-is-dark #hubModalShareBookingLink.hub-book-flow-overlay {
         background: rgba(0, 0, 0, 0.72);
       }
     }

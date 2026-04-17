@@ -353,7 +353,7 @@
     <h1 class="header-title" id="headerTitle">📅 Запись</h1>
     <div class="client-mini-nav">
       <button type="button" class="btn-app-home" id="btnHome">Главная</button>
-      <button type="button" class="btn-app-back" id="btnBack" hidden>Назад</button>
+      <button type="button" class="btn-app-back" id="btnBack" hidden data-skip-history-back="true">Назад</button>
     </div>
   </div>
   <div id="screenSlots">
@@ -734,6 +734,16 @@
       }
 
       document.getElementById('btnBackForm').onclick = goToTrainerCatalogCard;
+      (function wireBookHeaderBackToTrainerCard() {
+        var headerBack = document.getElementById('btnBack');
+        if (!headerBack) return;
+        if (!trainerId) {
+          headerBack.hidden = true;
+          return;
+        }
+        headerBack.hidden = false;
+        headerBack.onclick = goToTrainerCatalogCard;
+      })();
 
       document.getElementById('prevWeek').onclick = function() {
         if (currentWeekStart.getTime() <= thisMonday.getTime()) return;

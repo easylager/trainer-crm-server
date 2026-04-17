@@ -102,9 +102,9 @@ async def test_hub_sorts_in_session_booking_before_later_same_day(db_session) ->
             INSERT INTO slots (trainer_id, slot_date, start_time, end_time, status)
             VALUES (
                 :tid,
-                CURRENT_DATE,
-                (CURRENT_TIMESTAMP - INTERVAL '45 minutes')::time,
-                (CURRENT_TIMESTAMP + INTERVAL '2 hours')::time,
+                (CURRENT_TIMESTAMP AT TIME ZONE 'Europe/Minsk')::date,
+                ((CURRENT_TIMESTAMP AT TIME ZONE 'Europe/Minsk') - INTERVAL '45 minutes')::time,
+                ((CURRENT_TIMESTAMP AT TIME ZONE 'Europe/Minsk') + INTERVAL '2 hours')::time,
                 'booked'
             )
             RETURNING id
@@ -116,7 +116,13 @@ async def test_hub_sorts_in_session_booking_before_later_same_day(db_session) ->
     r = await db_session.execute(
         text("""
             INSERT INTO slots (trainer_id, slot_date, start_time, end_time, status)
-            VALUES (:tid, CURRENT_DATE, TIME '23:00', TIME '23:45', 'booked')
+            VALUES (
+                :tid,
+                (CURRENT_TIMESTAMP AT TIME ZONE 'Europe/Minsk')::date,
+                TIME '23:00',
+                TIME '23:45',
+                'booked'
+            )
             RETURNING id
         """),
         {"tid": trainer_id},

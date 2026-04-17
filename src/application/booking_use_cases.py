@@ -29,6 +29,10 @@ except ImportError:
 # Seats counted toward slot capacity (group lessons).
 BOOKING_STATUSES_OCCUPYING_SEAT = ("pending", "confirmed")
 
+# Hub / reminders: slot_date + start_time|end_time are Europe/Minsk wall clock (not DB session TZ).
+_SQL_SLOT_START_TS = f"((s.slot_date + s.start_time) AT TIME ZONE '{NOTIFICATION_TZ}')"
+_SQL_SLOT_END_TS = f"((s.slot_date + s.end_time) AT TIME ZONE '{NOTIFICATION_TZ}')"
+
 # Trainer-reported problem terminal outcomes (PRD E4); not «successful» completed sessions for analytics/notifications.
 BOOKING_STATUS_NO_SHOW = "no_show"
 BOOKING_STATUS_PAYMENT_DISPUTE = "payment_dispute"
@@ -1168,7 +1172,7 @@ async def list_bookings_for_trainer(
     """
     Trainer hub: pending/confirmed bookings on open slots whose session end is still in the future.
 
-    Session window uses slot_date + start/end in the DB session timezone (align with schedule storage).
+    Session window compares slot_date + start/end as Europe/Minsk wall time (same as reminders / webapp).
     Rows where start_time <= now < end_time are sorted first (current slot), then by date/time.
 
     PRD E1: bookings stay listed until slot end, not merely until start_time.
@@ -1198,13 +1202,13 @@ async def list_bookings_for_trainer(
                         WHERE bocc.slot_id = b.slot_id
                           AND bocc.status IN ('pending', 'confirmed')) AS slot_active_bookings,  -- hub group preview: occ/cap meter
                        CASE
-                         WHEN (s.slot_date + s.start_time) <= CURRENT_TIMESTAMP
-                          AND (s.slot_date + s.end_time) > CURRENT_TIMESTAMP
+                         WHEN """ + _SQL_SLOT_START_TS + """ <= CURRENT_TIMESTAMP
+                          AND """ + _SQL_SLOT_END_TS + """ > CURRENT_TIMESTAMP
                          THEN 0
                          ELSE 1
                        END AS hub_sort_in_session,
-                       ((s.slot_date + s.start_time) <= CURRENT_TIMESTAMP
-                        AND (s.slot_date + s.end_time) > CURRENT_TIMESTAMP) AS hub_in_session,
+                       (""" + _SQL_SLOT_START_TS + """ <= CURRENT_TIMESTAMP
+                        AND """ + _SQL_SLOT_END_TS + """ > CURRENT_TIMESTAMP) AS hub_in_session,
                        EXISTS (SELECT 1 FROM booking_problem_reports pr WHERE pr.booking_id = b.id) AS problem_reported,
                        EXISTS (SELECT 1 FROM booking_client_no_show cns WHERE cns.booking_id = b.id) AS client_no_show_recorded
                 FROM bookings b
@@ -1214,7 +1218,7 @@ async def list_bookings_for_trainer(
                 WHERE b.trainer_id = :tid
                   AND s.status IN ('available', 'booked')
                   AND b.status IN ('pending', 'confirmed')
-                  AND (s.slot_date + s.end_time) > CURRENT_TIMESTAMP
+                  AND """ + _SQL_SLOT_END_TS + """ > CURRENT_TIMESTAMP
             )
             SELECT id, slot_id, telegram_id, telegram_username, phone, client_first_name, client_last_name,
                    client_comment, created_at, slot_date, start_time, end_time,
@@ -1630,7 +1634,9 @@ async def list_bookings_for_client(
     client_telegram_id: int,
     limit: int = 50,
 ) -> list[dict]:
-    """List client's active (upcoming) bookings only — pending, not completed/cancelled; slot still booked.
+    """List client's active (upcoming) bookings only — pending, not completed/cancelled; slot end still in the future.
+
+    Slot end uses Europe/Minsk wall time (same as trainer hub / reminders), not DB session timezone.
     Arena: booking.arena_id, then slot.arena_id, then trainer primary / MIN(trainer_arenas); not arbitrary ta row."""
     r = await session.execute(
         text(
@@ -1664,6 +1670,7 @@ async def list_bookings_for_client(
             WHERE c.telegram_id = :ctid
               AND s.status IN ('available', 'booked')
               AND b.status IN ('pending', 'confirmed')
+              AND """ + _SQL_SLOT_END_TS + """ > CURRENT_TIMESTAMP
             ORDER BY s.slot_date ASC, s.start_time ASC
             LIMIT :lim
         """

@@ -61,6 +61,8 @@
       var hubGroupClassesEnabled = false;
       /** From subscription status — groups module gate (must be enabled in paid modules). */
       var hubGroupsModuleEnabled = false;
+      /** From subscription status — controls public booking link feature on hub header. */
+      var hubOnlineBookingEnabled = false;
       /** False until first GET /trainer/subscription/status completes (initData only) — drives Stats placeholder tile. */
       var hubSubscriptionStatusReady = false;
       /** When hub bootstrap included MTD revenue, skip duplicate GET /trainer/hub/revenue-mtd in loadBookings. */
@@ -131,6 +133,22 @@
           return;
         }
         hubGroupsModuleEnabled = false;
+      }
+
+      function syncHubOnlineBookingAccessFromSubscription(status) {
+        if (!status || typeof status !== 'object') {
+          hubOnlineBookingEnabled = false;
+          return;
+        }
+        if (status.modules && typeof status.modules === 'object') {
+          hubOnlineBookingEnabled = !!status.modules.online;
+          return;
+        }
+        if (Array.isArray(status.unlocked_features)) {
+          hubOnlineBookingEnabled = status.unlocked_features.indexOf('online') !== -1;
+          return;
+        }
+        hubOnlineBookingEnabled = false;
       }
 
       function webappBasePath() {
@@ -2467,6 +2485,258 @@
           });
       }
 
+      var hubShareBookingLinkMeta = null;
+      /** Last fetched link for modal copy — avoids async clipboard after fetch (Telegram WebView often blocks that). */
+      var hubShareBookingLinkPrefetch = null;
+
+      /**
+       * Sync copy fallback for Mini App WebViews where Clipboard API fails or loses user activation after await/fetch.
+       */
+      function copyTextViaExecCommandHub(text) {
+        if (!text) return false;
+        try {
+          var ta = document.createElement('textarea');
+          ta.value = text;
+          ta.setAttribute('readonly', '');
+          ta.setAttribute('aria-hidden', 'true');
+          ta.style.position = 'fixed';
+          ta.style.left = '0';
+          ta.style.top = '0';
+          ta.style.width = '1px';
+          ta.style.height = '1px';
+          ta.style.opacity = '0';
+          ta.style.padding = '0';
+          ta.style.border = 'none';
+          ta.style.margin = '0';
+          document.body.appendChild(ta);
+          ta.focus();
+          ta.select();
+          ta.setSelectionRange(0, text.length);
+          var ok = false;
+          try {
+            ok = document.execCommand('copy');
+          } catch (eExec) {}
+          document.body.removeChild(ta);
+          return !!ok;
+        } catch (e) {
+          return false;
+        }
+      }
+
+      function copyTextToClipboardHub(value) {
+        if (!value) return Promise.resolve(false);
+        if (copyTextViaExecCommandHub(value)) return Promise.resolve(true);
+        if (!(navigator.clipboard && navigator.clipboard.writeText)) {
+          return Promise.resolve(false);
+        }
+        return navigator.clipboard.writeText(value).then(function() {
+          return true;
+        }).catch(function() {
+          return false;
+        });
+      }
+
+      function applyHubShareButtonVisibility() {
+        var btn = document.getElementById('hubShareBookingLinkBtn');
+        if (!btn) return;
+        var allowed = !!initData && hubOnlineBookingEnabled;
+        btn.hidden = !allowed;
+        btn.disabled = !allowed;
+      }
+
+      function loadHubPublicBookingLinkMeta() {
+        if (hubShareBookingLinkMeta) return Promise.resolve(hubShareBookingLinkMeta);
+        return fetch(apiUrlWithQuery('/trainer/public-booking-link/eligibility'), { headers: headersJson() })
+          .then(function(r) {
+            return r.json().then(function(data) {
+              if (!r.ok) throw new Error((data && data.detail) || r.statusText || 'Ошибка');
+              return data;
+            });
+          })
+          .then(function(meta) {
+            hubShareBookingLinkMeta = meta || null;
+            return hubShareBookingLinkMeta;
+          });
+      }
+
+      function requestHubPublicBookingLink(serviceId) {
+        var url = apiUrlWithQuery('/trainer/public-booking-link');
+        if (serviceId != null) {
+          url += '&service_id=' + encodeURIComponent(String(serviceId));
+        }
+        return fetch(url, { headers: headersJson() }).then(function(r) {
+          return r.json().then(function(data) {
+            if (!r.ok) throw new Error((data && data.detail) || r.statusText || 'Ошибка');
+            return data;
+          });
+        });
+      }
+
+      function closeHubShareBookingLinkModal() {
+        var ov = document.getElementById('hubModalShareBookingLink');
+        if (!ov) return;
+        hubShareBookingLinkPrefetch = null;
+        ov.style.display = 'none';
+        ov.setAttribute('aria-hidden', 'true');
+      }
+
+      function scheduleHubShareBookingLinkPrefetch(serviceSelect) {
+        if (!serviceSelect) return;
+        var sid = parseInt(serviceSelect.value || '', 10);
+        if (isNaN(sid) || sid <= 0) return;
+        hubShareBookingLinkPrefetch = null;
+        requestHubPublicBookingLink(sid)
+          .then(function(payload) {
+            var link = payload && payload.booking_link ? String(payload.booking_link).trim() : '';
+            if (link) hubShareBookingLinkPrefetch = { sid: sid, link: link };
+          })
+          .catch(function() {
+            hubShareBookingLinkPrefetch = null;
+          });
+      }
+
+      function setHubShareBookingLinkError(text, isError) {
+        var errEl = document.getElementById('hubShareLinkError');
+        if (!errEl) return;
+        if (!text) {
+          errEl.style.display = 'none';
+          errEl.textContent = '';
+          errEl.style.color = '';
+          return;
+        }
+        errEl.textContent = text;
+        errEl.style.display = 'block';
+        errEl.style.color = isError ? 'var(--app-danger)' : 'var(--tg-theme-hint-color)';
+      }
+
+      function showHubShareLinkManualCopy(link, hint) {
+        var previewWrap = document.getElementById('hubShareLinkPreviewWrap');
+        var preview = document.getElementById('hubShareLinkPreview');
+        if (previewWrap) previewWrap.style.display = 'block';
+        if (preview) {
+          preview.value = link || '';
+          try {
+            preview.focus();
+            preview.select();
+          } catch (eFocus) {}
+        }
+        setHubShareBookingLinkError(hint || 'Не удалось скопировать автоматически. Скопируйте ссылку вручную.', true);
+      }
+
+      function openHubShareBookingLinkModal(meta) {
+        var overlay = document.getElementById('hubModalShareBookingLink');
+        var serviceWrap = document.getElementById('hubShareLinkServiceWrap');
+        var serviceSelect = document.getElementById('hubShareLinkServiceSelect');
+        var previewWrap = document.getElementById('hubShareLinkPreviewWrap');
+        if (!overlay || !serviceWrap || !serviceSelect || !previewWrap) return;
+        var services = (meta && meta.services) || [];
+        serviceSelect.innerHTML = '';
+        services.forEach(function(s) {
+          var sid = parseInt(String(s && s.id), 10);
+          if (!sid) return;
+          var opt = document.createElement('option');
+          opt.value = String(sid);
+          opt.textContent = (s && s.name) ? s.name : ('Услуга #' + sid);
+          serviceSelect.appendChild(opt);
+        });
+        serviceWrap.style.display = services.length > 1 ? '' : 'none';
+        previewWrap.style.display = 'none';
+        setHubShareBookingLinkError('', false);
+        var copyBtn = document.getElementById('hubShareLinkCopy');
+        if (copyBtn) {
+          copyBtn.disabled = false;
+          copyBtn.textContent = 'Скопировать ссылку';
+        }
+        overlay.style.display = 'flex';
+        overlay.setAttribute('aria-hidden', 'false');
+        serviceSelect.onchange = function() {
+          scheduleHubShareBookingLinkPrefetch(serviceSelect);
+        };
+        scheduleHubShareBookingLinkPrefetch(serviceSelect);
+      }
+
+      function copyHubPublicBookingLinkDirect(link) {
+        return copyTextToClipboardHub(link).then(function(ok) {
+          if (ok) {
+            hubToast('Ссылка на запись скопирована. Отправьте её клиентам.');
+            return;
+          }
+          hubToast('Не удалось скопировать автоматически. Скопируйте ссылку вручную:\n' + link);
+        });
+      }
+
+      function wireHubShareBookingLinkModal() {
+        var overlay = document.getElementById('hubModalShareBookingLink');
+        var cancelBtn = document.getElementById('hubShareLinkCancel');
+        var copyBtn = document.getElementById('hubShareLinkCopy');
+        var serviceSelect = document.getElementById('hubShareLinkServiceSelect');
+        if (cancelBtn) cancelBtn.onclick = closeHubShareBookingLinkModal;
+        if (overlay) {
+          overlay.onclick = function(ev) {
+            if (ev.target === overlay) closeHubShareBookingLinkModal();
+          };
+        }
+        if (copyBtn) {
+          copyBtn.onclick = function() {
+            var sid = serviceSelect ? parseInt(serviceSelect.value || '', 10) : NaN;
+            if (isNaN(sid) || sid <= 0) {
+              setHubShareBookingLinkError('Выберите услугу.', true);
+              return;
+            }
+            setHubShareBookingLinkError('', false);
+            var pf = hubShareBookingLinkPrefetch;
+            if (pf && pf.sid === sid && pf.link) {
+              if (copyTextViaExecCommandHub(pf.link)) {
+                closeHubShareBookingLinkModal();
+                hubToast('Ссылка на запись скопирована. Отправьте её клиентам.');
+                return;
+              }
+              copyBtn.disabled = true;
+              copyBtn.textContent = 'Копируем...';
+              copyTextToClipboardHub(pf.link)
+                .then(function(ok) {
+                  if (ok) {
+                    closeHubShareBookingLinkModal();
+                    hubToast('Ссылка на запись скопирована. Отправьте её клиентам.');
+                    return;
+                  }
+                  showHubShareLinkManualCopy(pf.link);
+                })
+                .finally(function() {
+                  copyBtn.disabled = false;
+                  copyBtn.textContent = 'Скопировать ссылку';
+                });
+              return;
+            }
+            copyBtn.disabled = true;
+            copyBtn.textContent = 'Готовим...';
+            requestHubPublicBookingLink(sid)
+              .then(function(payload) {
+                var link = payload && payload.booking_link ? String(payload.booking_link).trim() : '';
+                if (!link) {
+                  throw new Error('Ссылка недоступна. Обратитесь в поддержку или откройте из бота тренера.');
+                }
+                hubShareBookingLinkPrefetch = { sid: sid, link: link };
+                return copyTextToClipboardHub(link).then(function(ok) {
+                  if (ok) {
+                    closeHubShareBookingLinkModal();
+                    hubToast('Ссылка на запись скопирована. Отправьте её клиентам.');
+                    return;
+                  }
+                  showHubShareLinkManualCopy(link);
+                });
+              })
+              .catch(function(err) {
+                setHubShareBookingLinkError(err.message || 'Не удалось сформировать ссылку.', true);
+              })
+              .finally(function() {
+                copyBtn.disabled = false;
+                copyBtn.textContent = 'Скопировать ссылку';
+              });
+          };
+        }
+      }
+
       // Quick Actions handlers
       function setupQuickActions() {
         var btnSched = document.getElementById('hubBtnSchedule');
@@ -2483,7 +2753,43 @@
             });
           };
         }
-
+        var btnShare = document.getElementById('hubShareBookingLinkBtn');
+        if (btnShare) {
+          btnShare.onclick = function() {
+            ensureTrainerSectionsAccess(function() {
+              if (!hubOnlineBookingEnabled) {
+                hubToast('Функция доступна на тарифе с онлайн-записью.');
+                return;
+              }
+              loadHubPublicBookingLinkMeta()
+                .then(function(meta) {
+                  var services = (meta && meta.services) || [];
+                  if (!services.length) {
+                    throw new Error('В профиле нет услуг — добавьте услугу в профиле.');
+                  }
+                  if (!(meta && meta.city_configured)) {
+                    throw new Error('Укажите город в профиле, чтобы сформировать ссылку.');
+                  }
+                  if (!meta.require_service_choice || services.length === 1) {
+                    return requestHubPublicBookingLink(services[0].id).then(function(payload) {
+                      var link = payload && payload.booking_link ? String(payload.booking_link).trim() : '';
+                      if (!link) {
+                        throw new Error('Ссылка недоступна. Обратитесь в поддержку или откройте из бота тренера.');
+                      }
+                      return copyHubPublicBookingLinkDirect(link);
+                    });
+                  }
+                  openHubShareBookingLinkModal(meta);
+                })
+                .catch(function(err) {
+                  if (err && err.message) hubToast(err.message);
+                  else hubToast('Не удалось сформировать ссылку.');
+                });
+            });
+          };
+        }
+        wireHubShareBookingLinkModal();
+        applyHubShareButtonVisibility();
         applyHubLockedState();
       }
 
@@ -2491,6 +2797,7 @@
         if (!initData) {
           hubSubscriptionStatusReady = true;
           hasAnalyticsAccess = false;
+          hubOnlineBookingEnabled = false;
           renderTiles();
           setupQuickActions();
           return Promise.resolve();
@@ -2504,6 +2811,7 @@
           .then(function(o) {
             hubLastSubscriptionStatus = o.ok && o.data ? o.data : null;
             syncHubGroupsModuleAccessFromSubscription(hubLastSubscriptionStatus);
+            syncHubOnlineBookingAccessFromSubscription(hubLastSubscriptionStatus);
             if (o.ok && o.data && Array.isArray(o.data.unlocked_features)) {
               hasAnalyticsAccess = o.data.unlocked_features.indexOf('analytics') !== -1;
             } else {
@@ -2516,6 +2824,7 @@
           .catch(function() {
             hubLastSubscriptionStatus = null;
             hubGroupsModuleEnabled = false;
+            hubOnlineBookingEnabled = false;
             hasAnalyticsAccess = false;
             hubSubscriptionStatusReady = true;
             renderTiles();
@@ -2701,6 +3010,7 @@
         if (payload.subscription_status) {
           hubLastSubscriptionStatus = payload.subscription_status;
           syncHubGroupsModuleAccessFromSubscription(payload.subscription_status);
+          syncHubOnlineBookingAccessFromSubscription(payload.subscription_status);
           if (Array.isArray(payload.subscription_status.unlocked_features)) {
             hasAnalyticsAccess = payload.subscription_status.unlocked_features.indexOf('analytics') !== -1;
           } else {

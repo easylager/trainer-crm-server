@@ -3249,6 +3249,103 @@ async def get_trainer_welcome_link_eligibility(
     }
 
 
+@router.get("/trainer/public-booking-link/eligibility")
+async def get_trainer_public_booking_link_eligibility(
+    init_data: str | None = Query(None),
+    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    session: AsyncSession = Depends(get_session),
+):
+    """Services list for reusable public booking link. Auth: trainer initData."""
+    raw = init_data or x_telegram_init_data
+    if not raw:
+        raise HTTPException(status_code=401, detail="Missing init data")
+    telegram_id = _trainer_telegram_id(raw)
+    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+    if not await trainer_allows_online_booking(session, trainer_id):
+        raise HTTPException(
+            status_code=403,
+            detail="Публичная ссылка доступна только на тарифе с онлайн-записью.",
+        )
+    services = await list_trainer_services_for_welcome_link(session, trainer_id)
+    city_id, _ = await get_trainer_default_city_and_service(session, trainer_id)
+    return {
+        "require_service_choice": len(services) > 1,
+        "services": services,
+        "city_configured": city_id is not None,
+    }
+
+
+@router.get("/trainer/public-booking-link")
+async def get_trainer_public_booking_link(
+    service_id: int | None = Query(
+        None, description="Required when trainer has multiple services; pins booking to service"
+    ),
+    init_data: str | None = Query(None),
+    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    session: AsyncSession = Depends(get_session),
+):
+    """
+    Reusable public link for Instagram/social posts.
+    Deep-link payload matches client bot /start client_{city}_{service}_{trainer}.
+    """
+    raw = init_data or x_telegram_init_data
+    if not raw:
+        raise HTTPException(status_code=401, detail="Missing init data")
+    telegram_id = _trainer_telegram_id(raw)
+    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+    if not await trainer_allows_online_booking(session, trainer_id):
+        raise HTTPException(
+            status_code=403,
+            detail="Публичная ссылка доступна только на тарифе с онлайн-записью.",
+        )
+    resolved_service_id, err = await resolve_service_id_for_generic_welcome_link(
+        session, trainer_id, service_id
+    )
+    if err == "no_services":
+        raise HTTPException(
+            status_code=400,
+            detail="В профиле нет услуг — добавьте услугу в профиле.",
+        )
+    if err == "service_required":
+        raise HTTPException(
+            status_code=400,
+            detail="Укажите услугу — у вас несколько услуг в каталоге.",
+        )
+    if err == "invalid_service":
+        raise HTTPException(status_code=400, detail="Неверная услуга.")
+    city_id, _ = await get_trainer_default_city_and_service(session, trainer_id)
+    if city_id is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Укажите город в профиле, чтобы сформировать публичную ссылку.",
+        )
+    assert resolved_service_id is not None
+    settings = Settings()
+    links, build_err = build_trainer_invite_links(
+        webapp_base_url=settings.webapp_base_url,
+        client_bot_username=settings.client_bot_username,
+        city_id=city_id,
+        service_id=resolved_service_id,
+        trainer_id=trainer_id,
+    )
+    if build_err == "missing_username":
+        return {"booking_link": None}
+    if build_err == "missing_city_or_service":
+        raise HTTPException(
+            status_code=400,
+            detail="Укажите город и услугу в профиле, чтобы сформировать публичную ссылку.",
+        )
+    assert links is not None
+    return {
+        "booking_link": links.client_bot_deep_link,
+        "service_id": resolved_service_id,
+    }
+
+
 @router.get("/trainer/welcome-link")
 async def get_trainer_welcome_link(
     service_id: int | None = Query(
