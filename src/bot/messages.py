@@ -49,6 +49,12 @@ CLIENT_TRAINER_CARD_NO_RATING = "—"
 CLIENT_TRAINER_CARD_NO_EXPERIENCE = "Опыт: не указан"
 CLIENT_BUTTON_SELECT_TRAINER = "Выбрать"
 CLIENT_TRAINER_SELECTED = "Выбран: <b>{name}</b>. Что дальше?"
+# Public invite link (t.me/...?start=client_...) — no «another trainer»; service from link.
+CLIENT_DEEP_LINK_BOOK_INVITE = (
+    "Привет! Тебя пригласил записаться тренер <b>{trainer}</b>.\n\n"
+    "Выбранная услуга: <b>{service}</b>.\n\n"
+    "Нажми кнопку ниже, чтобы выбрать удобное время."
+)
 # Tier < online: no self-booking in catalog — same UX as Mini App can_book=false
 CLIENT_TRAINER_SELECTED_NO_SELF_BOOK = (
     "Выбран: <b>{name}</b>.\n\n"

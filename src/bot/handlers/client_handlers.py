@@ -109,6 +109,8 @@ from src.bot.client_api import (
     fetch_photo_bytes,
     fetch_services,
 )
+from sqlalchemy import text
+
 from src.infrastructure.db import async_session_factory
 from src.shared.map_links import build_yandex_by_map_url, build_yandex_by_map_url_all_arenas
 
@@ -217,11 +219,18 @@ def _trainer_name(trainer: dict) -> str:
     return name.strip() or "Тренер"
 
 
-def _trainer_book_rows(base: str, trainer_id: int) -> list[list[InlineKeyboardButton]]:
+def _trainer_book_rows(
+    base: str,
+    trainer_id: int,
+    *,
+    service_id: int | None = None,
+) -> list[list[InlineKeyboardButton]]:
     """Primary booking CTA: Mini App when HTTPS is configured, else legacy callback."""
     b = (base or "").rstrip("/")
     if b.startswith("https://"):
         url = f"{b}/webapp/book?trainer_id={trainer_id}"
+        if service_id is not None:
+            url += f"&service_id={int(service_id)}"
         return [[InlineKeyboardButton(text=msg.CLIENT_BUTTON_BOOK, web_app=WebAppInfo(url=url))]]
     return [[InlineKeyboardButton(text=msg.CLIENT_BUTTON_BOOK, callback_data="book")]]
 
@@ -231,9 +240,10 @@ def _trainer_book_markup(
     trainer_id: int,
     *,
     include_catalog_alternative: bool = False,
+    service_id: int | None = None,
 ) -> InlineKeyboardMarkup:
     """Inline keyboard: book (+ optional «другой тренер» for catalog flows)."""
-    rows = _trainer_book_rows(base, trainer_id)
+    rows = _trainer_book_rows(base, trainer_id, service_id=service_id)
     if include_catalog_alternative:
         rows = rows + [
             [InlineKeyboardButton(text=msg.CLIENT_BUTTON_ANOTHER_TRAINER, callback_data=CATALOG_CALLBACK)],
@@ -564,7 +574,8 @@ async def cmd_start(message: Message) -> None:
                             ]
                         )
                     keyboard = InlineKeyboardMarkup(
-                        inline_keyboard=cert_rows + _trainer_book_rows(base, trainer_id)
+                        inline_keyboard=cert_rows
+                        + _trainer_book_rows(base, trainer_id, service_id=service_id)
                     )
                     await message.answer(cert_body, reply_markup=keyboard, parse_mode=ParseMode.HTML)
                 else:
@@ -573,28 +584,40 @@ async def cmd_start(message: Message) -> None:
                 async with async_session_factory() as db_session:
                     trainer = await get_trainer(db_session, trainer_id)
                 base = (Settings().webapp_base_url or "").rstrip("/")
-                text = _invite_welcome_text(trainer, base)
+                welcome_body = _invite_welcome_text(trainer, base)
                 await message.answer(
-                    text,
-                    reply_markup=_trainer_book_markup(base, trainer_id, include_catalog_alternative=False),
+                    welcome_body,
+                    reply_markup=_trainer_book_markup(
+                        base, trainer_id, include_catalog_alternative=False, service_id=service_id
+                    ),
                 )
         elif token_type == WELCOME_TOKEN_TYPE_PASS:
             async with async_session_factory() as db_session:
                 trainer = await get_trainer(db_session, trainer_id)
             name = html.escape(_trainer_name(trainer) if trainer else "Тренер")
             base = (Settings().webapp_base_url or "").rstrip("/")
-            keyboard = InlineKeyboardMarkup(inline_keyboard=_trainer_book_rows(base, trainer_id) + [
-                [InlineKeyboardButton(text=msg.CLIENT_BUTTON_BUY_PASS, web_app=WebAppInfo(url=f"{base}/webapp/client-buy-pass"))],
-            ])
+            keyboard = InlineKeyboardMarkup(
+                inline_keyboard=_trainer_book_rows(base, trainer_id, service_id=service_id)
+                + [
+                    [
+                        InlineKeyboardButton(
+                            text=msg.CLIENT_BUTTON_BUY_PASS,
+                            web_app=WebAppInfo(url=f"{base}/webapp/client-buy-pass"),
+                        )
+                    ],
+                ]
+            )
             await message.answer(msg.CLIENT_PASS_WELCOME.format(name=name), reply_markup=keyboard)
         else:
             async with async_session_factory() as db_session:
                 trainer = await get_trainer(db_session, trainer_id)
             base = (Settings().webapp_base_url or "").rstrip("/")
-            text = _invite_welcome_text(trainer, base)
+            welcome_body = _invite_welcome_text(trainer, base)
             await message.answer(
-                text,
-                reply_markup=_trainer_book_markup(base, trainer_id, include_catalog_alternative=False),
+                welcome_body,
+                reply_markup=_trainer_book_markup(
+                    base, trainer_id, include_catalog_alternative=False, service_id=service_id
+                ),
             )
         return
 
@@ -663,7 +686,7 @@ async def cmd_start(message: Message) -> None:
                     ]
                 )
             keyboard = InlineKeyboardMarkup(
-                inline_keyboard=cert_rows2 + _trainer_book_rows(base, trainer_id)
+                inline_keyboard=cert_rows2 + _trainer_book_rows(base, trainer_id, service_id=service_id)
             )
             await message.answer(cert_body, reply_markup=keyboard, parse_mode=ParseMode.HTML)
         else:
@@ -689,10 +712,12 @@ async def cmd_start(message: Message) -> None:
             await set_selected_trainer(telegram_id, trainer_id_ref, db_session)
             trainer = await get_trainer(db_session, trainer_id_ref)
         base = (Settings().webapp_base_url or "").rstrip("/")
-        text = _invite_welcome_text(trainer, base)
+        welcome_body = _invite_welcome_text(trainer, base)
         await message.answer(
-            text,
-            reply_markup=_trainer_book_markup(base, trainer_id_ref, include_catalog_alternative=False),
+            welcome_body,
+            reply_markup=_trainer_book_markup(
+                base, trainer_id_ref, include_catalog_alternative=False, service_id=service_id
+            ),
         )
         return
 
@@ -712,9 +737,17 @@ async def cmd_start(message: Message) -> None:
             trainer = await get_trainer(db_session, pass_trainer_id)
         name = html.escape(_trainer_name(trainer) if trainer else "Тренер")
         base = (Settings().webapp_base_url or "").rstrip("/")
-        keyboard = InlineKeyboardMarkup(inline_keyboard=_trainer_book_rows(base, pass_trainer_id) + [
-            [InlineKeyboardButton(text=msg.CLIENT_BUTTON_BUY_PASS, web_app=WebAppInfo(url=f"{base}/webapp/client-buy-pass"))],
-        ])
+        keyboard = InlineKeyboardMarkup(
+            inline_keyboard=_trainer_book_rows(base, pass_trainer_id, service_id=service_id)
+            + [
+                [
+                    InlineKeyboardButton(
+                        text=msg.CLIENT_BUTTON_BUY_PASS,
+                        web_app=WebAppInfo(url=f"{base}/webapp/client-buy-pass"),
+                    )
+                ],
+            ]
+        )
         await message.answer(msg.CLIENT_PASS_WELCOME.format(name=name), reply_markup=keyboard)
         return
 
@@ -726,11 +759,23 @@ async def cmd_start(message: Message) -> None:
             await set_service(telegram_id, service_id, db_session)
             await set_selected_trainer(telegram_id, trainer_id, db_session)
             trainer = await get_trainer(db_session, trainer_id)
-        name = html.escape(_trainer_name(trainer) if trainer else "Тренер")
+            rsvc = await db_session.execute(
+                text(
+                    "SELECT COALESCE(NULLIF(TRIM(name), ''), 'Услуга') FROM services WHERE id = :sid LIMIT 1"
+                ),
+                {"sid": service_id},
+            )
+            srow = rsvc.fetchone()
+            service_label = ((srow[0] or "Услуга").strip() if srow else None) or "Услуга"
+        trainer_name_html = html.escape(_trainer_name(trainer) if trainer else "Тренер")
+        service_name_html = html.escape(service_label)
         base = (Settings().webapp_base_url or "").rstrip("/")
         await message.answer(
-            msg.CLIENT_TRAINER_SELECTED.format(name=name),
-            reply_markup=_trainer_book_markup(base, trainer_id, include_catalog_alternative=True),
+            msg.CLIENT_DEEP_LINK_BOOK_INVITE.format(trainer=trainer_name_html, service=service_name_html),
+            parse_mode=ParseMode.HTML,
+            reply_markup=_trainer_book_markup(
+                base, trainer_id, include_catalog_alternative=False, service_id=service_id
+            ),
         )
         return
     await message.answer(msg.CLIENT_START_WELCOME)
@@ -1173,6 +1218,9 @@ async def on_book(callback: CallbackQuery) -> None:
     base = (Settings().webapp_base_url or "").rstrip("/")
     if base.startswith("https://") and keyboard is not None:
         book_url = f"{base}/webapp/book?trainer_id={trainer_id}"
+        sess_sid = (session_data or {}).get("selected_service_id")
+        if sess_sid is not None:
+            book_url += f"&service_id={int(sess_sid)}"
         kb = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text=msg.CLIENT_BUTTON_BOOK, web_app=WebAppInfo(url=book_url))],
             [InlineKeyboardButton(text=msg.CLIENT_BOOK_BUTTON_BACK, callback_data=CATALOG_CALLBACK)],

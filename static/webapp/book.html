@@ -261,38 +261,38 @@
       width: 100%;
       margin-top: 12px;
     }
+    /* Success: centered block (was left-aligned with orphan primary button below). */
+    #screenSuccess {
+      display: none;
+      flex-direction: column;
+      align-items: stretch;
+      justify-content: center;
+      min-height: min(72vh, calc(100dvh - 96px));
+      padding: 20px 0 32px;
+      box-sizing: border-box;
+    }
+    #screenSuccess .success-inner {
+      width: 100%;
+      max-width: 100%;
+      margin: 0 auto;
+    }
     .success-msg {
       text-align: center;
-      padding: 32px 20px;
+      padding: 28px 20px;
       font-size: 16px;
-      line-height: 1.5;
+      line-height: 1.55;
       background: rgba(52, 199, 89, 0.08);
       border-radius: 16px;
       border: 1px solid rgba(52, 199, 89, 0.2);
-      margin-bottom: 20px;
+      margin: 0;
     }
-    .back-link {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      margin-top: 16px;
-      padding: 10px 0;
-      font-size: 14px;
-      font-weight: 500;
+    .success-hint {
+      margin: 16px 0 0;
+      text-align: center;
+      font-size: 13px;
+      line-height: 1.45;
       color: var(--tg-theme-hint-color);
-      cursor: pointer;
-      border: none;
-      background: none;
-      font-family: inherit;
-      transition: opacity 0.12s ease;
     }
-    .back-link .back-link-chevron { 
-      flex-shrink: 0; 
-      width: 16px; 
-      height: 16px; 
-      color: inherit; 
-    }
-    .back-link:active { opacity: 0.7; }
     
     /* Анимации появления */
     @keyframes card-enter {
@@ -387,11 +387,12 @@
       <textarea id="comment" placeholder="Напишите тренеру, если нужно"></textarea>
     </div>
     <button type="button" class="btn-primary" id="btnSubmit">Записаться</button>
-    <button type="button" class="back-link" id="btnBackForm"><svg class="back-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>К карточке тренера</button>
   </div>
   <div id="screenSuccess" style="display: none;">
-    <div class="success-msg" id="successMsgBody"></div>
-    <button type="button" class="btn-primary" id="btnCloseSuccess">Готово</button>
+    <div class="success-inner">
+      <div class="success-msg" id="successMsgBody"></div>
+      <p class="success-hint">Окно можно закрыть крестиком вверху Telegram.</p>
+    </div>
   </div>
 
   <script>
@@ -432,18 +433,14 @@
       const requestIdParam = params.get('request_id');
       const requestId = requestIdParam ? parseInt(requestIdParam, 10) : null;
       const serviceIdParam = params.get('service_id');
-      const serviceIdFromUrl = serviceIdParam ? parseInt(serviceIdParam, 10) : null;
+      const parsedUrlServiceId = serviceIdParam ? parseInt(serviceIdParam, 10) : NaN;
+      const serviceIdFromUrl = Number.isFinite(parsedUrlServiceId) ? parsedUrlServiceId : null;
       if (!trainerId) {
         document.getElementById('content').innerHTML = '<div class="error">Не указан тренер. Откройте запись из бота.</div>';
         document.getElementById('prevWeek').style.display = 'none';
         document.getElementById('nextWeek').style.display = 'none';
         document.getElementById('weekLabel').textContent = '';
       }
-
-      function dismissSuccessOrExit() {
-        if (tg) tg.close(); else window.close();
-      }
-      document.getElementById('btnCloseSuccess').onclick = dismissSuccessOrExit;
 
       function getMonday(d) {
         const date = new Date(d);
@@ -457,6 +454,13 @@
         end.setDate(end.getDate() + 6);
         const fmt = function(d) { return d.getDate() + ' ' + MONTHS[d.getMonth()]; };
         return fmt(start) + ' – ' + fmt(end);
+      }
+
+      /** Calendar date in device local TZ — do not use toISOString().slice(0,10) (UTC shift breaks week filter). */
+      function localYmd(d) {
+        return d.getFullYear() + '-' +
+          String(d.getMonth() + 1).padStart(2, '0') + '-' +
+          String(d.getDate()).padStart(2, '0');
       }
 
       function formatDateKey(dateStr) {
@@ -586,8 +590,9 @@
         let q = 'trainer_id=' + encodeURIComponent(trainerId);
         const sidForSlots = serviceIdFromUrl != null ? serviceIdFromUrl : sessionServiceId;
         if (sidForSlots != null) q += '&service_id=' + encodeURIComponent(sidForSlots);
-        if (initData) q += '&init_data=' + encodeURIComponent(initData);
-        const res = await fetch('/api/webapp/client/slots?' + q);
+        var hdr = { Accept: 'application/json' };
+        if (initData) hdr['X-Telegram-Init-Data'] = initData;
+        const res = await fetch('/api/webapp/client/slots?' + q, { headers: hdr, cache: 'no-store' });
         if (!res.ok) {
           const err = await res.json().catch(function() { return { detail: res.statusText }; });
           throw new Error(err.detail || res.statusText);
@@ -596,10 +601,10 @@
       }
 
       function slotsInWeek(slots, weekStart) {
-        const start = weekStart.toISOString().slice(0, 10);
+        const start = localYmd(weekStart);
         const end = new Date(weekStart);
         end.setDate(end.getDate() + 6);
-        const endStr = end.toISOString().slice(0, 10);
+        const endStr = localYmd(end);
         return slots.filter(function(s) { return s.slot_date >= start && s.slot_date <= endStr; });
       }
 
@@ -733,7 +738,6 @@
           });
       }
 
-      document.getElementById('btnBackForm').onclick = goToTrainerCatalogCard;
       (function wireBookHeaderBackToTrainerCard() {
         var headerBack = document.getElementById('btnBack');
         if (!headerBack) return;
@@ -807,7 +811,7 @@
               var successFoot = '<br><span style="color: var(--tg-theme-hint-color); font-size: 14px; display: inline-block; margin-top: 10px;">Детали, адрес и отмена — в «Мои записи» в меню бота.</span>';
               document.getElementById('successMsgBody').innerHTML = successMain + successCtx + successFoot;
               document.getElementById('screenForm').style.display = 'none';
-              document.getElementById('screenSuccess').style.display = 'block';
+              document.getElementById('screenSuccess').style.display = 'flex';
               fetchClientSession().then(function() { updateBookNameFields(); }).catch(function() {});
             } else {
               alert(data.detail || 'Ошибка. Попробуйте ещё раз.');

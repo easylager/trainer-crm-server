@@ -383,6 +383,56 @@ async def test_slots_respects_min_working_hours_window(app_use_test_db, db_sessi
 
 
 @pytest.mark.asyncio
+async def test_slots_include_group_when_service_from_session_and_query_omits_service_id(
+    app_use_test_db, db_session
+) -> None:
+    """
+    Каталог передаёт service_id в query; кнопка «Записаться» из welcome/бота может открывать book
+    только с trainer_id. Тогда /client/slots должен взять selected_service_id из client_sessions
+    при совпадении selected_trainer_id — иначе групповые слоты пропадают.
+    """
+    ref_day, ref_now = _minsk_monday_reference()
+    slot_day = ref_day + timedelta(days=3)
+    trainer_id, sid, _ = await _create_trainer_online_with_slot(
+        db_session, slot_date=slot_day, start_hours={11}, tier=SUBSCRIPTION_TIER_ONLINE
+    )
+    await replace_slots_for_day(
+        db_session, trainer_id, slot_day, {9 * 60}, 60, capacity=4, group_service_id=sid
+    )
+    ctg = _fresh_client_telegram_id()
+    seed_sid, cid, aid = await _require_seed_ids(db_session)
+    assert int(sid) == int(seed_sid)
+    with patch_client_init_auth(ctg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            post = await client.post(
+                "/api/webapp/client/session",
+                json={
+                    "city_id": cid,
+                    "service_id": sid,
+                    "arena_id": aid,
+                    "trainer_id": trainer_id,
+                },
+                headers={"X-Telegram-Init-Data": "mock"},
+            )
+            assert post.status_code == 200
+            with (
+                patch("src.api.routes.webapp.get_slots_cached", return_value=None),
+                patch("src.api.routes.webapp.datetime") as mock_dt,
+                patch("src.api.routes.webapp.date") as mock_date,
+            ):
+                mock_date.today.return_value = ref_day
+                mock_dt.now.return_value = ref_now
+                mock_dt.combine = datetime.combine
+                resp = await client.get(
+                    f"/api/webapp/client/slots?trainer_id={trainer_id}",
+                    headers={"X-Telegram-Init-Data": "mock"},
+                )
+    assert resp.status_code == 200
+    slots = resp.json().get("slots") or []
+    assert any(int(s.get("capacity") or 1) > 1 for s in slots), slots
+
+
+@pytest.mark.asyncio
 async def test_booking_happy_path_and_list_grouped_by_day(app_use_test_db, db_session) -> None:
     # list_bookings_for_client filters by real DB time — slot must be in the future vs CURRENT_TIMESTAMP.
     slot_day = date.today() + timedelta(days=14)

@@ -97,6 +97,7 @@ from src.application.client_request_use_cases import (
 )
 from src.application.client_session_use_cases import (
     get_or_create_session as get_client_session,
+    get_session as read_client_bot_session,
     set_arena,
     set_city,
     set_selected_trainer,
@@ -863,12 +864,14 @@ async def get_client_slots(
     Available slots for a trainer (client view). Pass min_hours and trainer_name from
     catalog when opening card to avoid extra get_trainer round-trip.
     Pass service_id from catalog filter so group slots are scoped to that service.
-    Without service_id, only individual (capacity 1) slots are returned.
+    Without service_id, only individual (capacity 1) slots are returned — unless the
+    client's bot session already pins the same trainer and a service (welcome link,
+    book button without query param): then group slots for that service are included.
     """
     raw = init_data or x_telegram_init_data
     if not raw:
         raise HTTPException(status_code=401, detail="Missing init data")
-    _client_telegram_id(raw)  # auth only
+    client_telegram_id = _client_telegram_id(raw)
 
     if not await trainer_allows_online_booking(session, trainer_id):
         trainer_row = await get_trainer(session, trainer_id)
@@ -895,6 +898,16 @@ async def get_client_slots(
             trainer_name_val = (first + " " + last).strip() or trainer_name_val
 
     filter_service_id = int(service_id) if service_id is not None else None
+    if filter_service_id is None:
+        sess_row = await read_client_bot_session(client_telegram_id, session)
+        sess_tid = sess_row.get("selected_trainer_id") if sess_row else None
+        sess_sid = sess_row.get("selected_service_id") if sess_row else None
+        if (
+            sess_tid is not None
+            and sess_sid is not None
+            and int(sess_tid) == int(trainer_id)
+        ):
+            filter_service_id = int(sess_sid)
 
     cached_slots = get_slots_cached(trainer_id, min_hours_val, filter_service_id)
     if cached_slots is not None:
@@ -911,12 +924,17 @@ async def get_client_slots(
         if working_hours_between(now_minsk, s["slot_date"], s["start_time"]) >= min_hours_val
     ]
     if filter_service_id is not None:
-        available = [
-            s
-            for s in available
-            if max(1, int(s.get("capacity") or 1)) == 1
-            or int(s.get("service_id") or 0) == filter_service_id
-        ]
+        # Individual slots (cap 1) are not tied to a service in the UI. Group slots use service_id;
+        # capacity>1 with NULL service_id still counts as «open» and must not disappear when link pins a service.
+        filtered: list[dict] = []
+        for s in available:
+            cap = max(1, int(s.get("capacity") or 1))
+            sid = s.get("service_id")
+            if cap == 1:
+                filtered.append(s)
+            elif sid is None or int(sid) == filter_service_id:
+                filtered.append(s)
+        available = filtered
     else:
         available = [s for s in available if max(1, int(s.get("capacity") or 1)) == 1]
     serialized = [
