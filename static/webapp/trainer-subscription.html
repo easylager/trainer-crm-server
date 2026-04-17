@@ -1178,15 +1178,6 @@
         renderInvoiceHintsPanel();
       }
 
-      function navigateToRealSubscriptionPayment() {
-        var p = window.location.pathname || '';
-        var base = p.replace(/[^/]+$/, '') || '/webapp/';
-        var url = base + 'trainer-pay-subscription';
-        var id = initData();
-        if (id) url += (url.indexOf('?') === -1 ? '?' : '&') + 'init_data=' + encodeURIComponent(id);
-        window.location.href = url;
-      }
-
       /** Same URL rules as mini-app-trainer-home.js — used if external script order/load fails. */
       function navigateTrainerHomeInline() {
         var p = window.location.pathname || '';
@@ -1402,6 +1393,9 @@
           status = statusData;
           renderTiers();
           renderConstructor();
+          if (constructor && constructor.base && selectedTier == null) {
+            checkoutMode = 'constructor';
+          }
           initPeriodSelector();
           refreshPeriodBadges();
           applyCheckoutModeUI();
@@ -1686,11 +1680,6 @@
 
       // Checkout: sandbox (mock) | bePaid redirect | invoice request
       function doCheckout() {
-        if (paymentCheckoutMode === 'bepaid') {
-          haptic('light');
-          navigateToRealSubscriptionPayment();
-          return;
-        }
         if (checkoutMode === 'constructor') {
           if (!constructor || !constructor.base) return;
         } else if (!selectedTier) {
@@ -1698,15 +1687,45 @@
         }
 
         var btn = document.getElementById('btnPay');
-        btn.disabled = true;
-        btn.textContent = 'Отправка…';
-
         var payload = { period_months: selectedPeriod };
         if (checkoutMode === 'constructor') {
           payload.modules = selectedModules;
         } else {
           payload.tier = selectedTier;
         }
+
+        if (paymentCheckoutMode === 'bepaid') {
+          haptic('light');
+          btn.disabled = true;
+          btn.textContent = 'Подготовка…';
+          var urlBp = '/api/webapp/trainer/subscription/bepaid-checkout' + (initData() ? '?init_data=' + encodeURIComponent(initData()) : '');
+          fetch(urlBp, {
+            method: 'POST',
+            headers: Object.assign(headers(), { 'Content-Type': 'application/json' }),
+            body: JSON.stringify(payload),
+          })
+            .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
+            .then(function(res) {
+              if (res.ok && res.data.payment_url) {
+                window.location.href = res.data.payment_url;
+                return;
+              }
+              haptic('error');
+              alert((res.data && res.data.detail) || 'Не удалось открыть оплату');
+              btn.disabled = false;
+              relabelPayButtonAfterError();
+            })
+            .catch(function() {
+              haptic('error');
+              alert('Ошибка сети');
+              btn.disabled = false;
+              relabelPayButtonAfterError();
+            });
+          return;
+        }
+
+        btn.disabled = true;
+        btn.textContent = 'Отправка…';
 
         if (paymentCheckoutMode === 'invoice') {
           var urlInv = '/api/webapp/trainer/subscription/invoice-request' + (initData() ? '?init_data=' + encodeURIComponent(initData()) : '');

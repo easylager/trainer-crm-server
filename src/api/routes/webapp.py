@@ -156,8 +156,10 @@ from src.application.certificate_use_cases import (
     update_certificate_email_sent_at,
     update_certificate_product,
 )
+from src.application.subscription_invoice_admin_notify import notify_admins_new_catalog_subscription_invoice
 from src.application.subscription_use_cases import (
     confirm_subscription_invoice_after_payment,
+    create_catalog_subscription_invoice_for_trainer,
     create_subscription_invoice,
     get_paid_plan_id,
     get_pending_subscription_invoice,
@@ -382,38 +384,8 @@ async def _send_trainer_post_booking_feedback(
 
     client_confirmation = "не применимо: у клиента не привязан Telegram"
     if client_tg_id:
-        trainer_obj = await get_trainer(session, trainer_id)
-        profile = (trainer_obj or {}).get("profile") or {}
-        trainer_name = (
-            ((profile.get("first_name") or "") + " " + (profile.get("last_name") or "")).strip()
-            or "Тренер"
-        )
-        settings = Settings()
-        client_bot = Bot(
-            token=settings.telegram_bot_token_client,
-            default=DefaultBotProperties(parse_mode=ParseMode.HTML),
-        )
-        try:
-            await client_bot.send_message(
-                chat_id=client_tg_id,
-                text=msg.CLIENT_TRAINER_BOOKED_YOU.format(
-                    name=trainer_name,
-                    date=date_str,
-                    day=day_str,
-                    time=time_str,
-                ),
-            )
-            client_confirmation = "отправили клиенту в Telegram"
-        except Exception as e:
-            logger.warning(
-                "MiniApp trainer booking: failed client confirmation (booking_id=%s client_tg_id=%s): %s",
-                booking_id,
-                client_tg_id,
-                e,
-            )
-            client_confirmation = "не отправили (ошибка доставки), запись сохранена"
-        finally:
-            await client_bot.session.close()
+        # Single rich notification via notification_service (run_trainer_booked_notifier_loop).
+        client_confirmation = msg.TRAINER_CREATE_BOOKING_CLIENT_CONFIRMATION_QUEUED
 
     trainer_bot = Bot(
         token=Settings().telegram_bot_token_trainer,
@@ -2161,8 +2133,15 @@ async def get_trainer_subscription_tier_catalog(
     tiers = await get_subscription_tier_catalog(session)
     constructor = await get_subscription_constructor_catalog(session)
     # Same flag as stub-confirm: no free activation when real payments are enforced.
-    mock_enabled = Settings().payment_sandbox
-    return {"tiers": tiers, "constructor": constructor, "mock_checkout_enabled": mock_enabled}
+    settings_cat = Settings()
+    mock_enabled = settings_cat.payment_sandbox
+    checkout_mode = settings_cat.resolved_trainer_subscription_checkout_mode()
+    return {
+        "tiers": tiers,
+        "constructor": constructor,
+        "mock_checkout_enabled": mock_enabled,
+        "checkout_mode": checkout_mode,
+    }
 
 
 @router.get("/trainer/subscription/status")
@@ -2195,6 +2174,141 @@ class SubscriptionConstructorCheckoutBody(BaseModel):
     period_months: Literal[1, 3, 12]
     tier: str | None = None
     modules: dict | None = None
+
+
+@router.post("/trainer/subscription/bepaid-checkout")
+async def post_trainer_subscription_bepaid_checkout(
+    body: SubscriptionConstructorCheckoutBody,
+    init_data: str | None = Query(None),
+    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    session: AsyncSession = Depends(get_session),
+):
+    """
+    bePaid: create catalog invoice for tier bundle or CRM+modules constructor, return gateway checkout URL.
+    Mini App uses this instead of trainer-pay-subscription (legacy plan_id list) when checkout_mode=bepaid.
+    """
+    raw = init_data or x_telegram_init_data
+    if not raw:
+        raise HTTPException(status_code=401, detail="Missing init data")
+    settings = Settings()
+    if settings.payment_sandbox:
+        raise HTTPException(
+            status_code=400,
+            detail="Режим песочницы: оплата через демо на странице подписки, не через bePaid.",
+        )
+    if settings.resolved_trainer_subscription_checkout_mode() != "bepaid":
+        raise HTTPException(
+            status_code=400,
+            detail="Оплата картой (bePaid) сейчас недоступна — проверьте режим подписки в настройках.",
+        )
+    telegram_id = _trainer_telegram_id(raw)
+    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+
+    if body.tier is not None and body.modules is not None:
+        raise HTTPException(status_code=400, detail="Send either tier or modules, not both")
+    if body.tier is None and body.modules is None:
+        raise HTTPException(status_code=400, detail="Specify tier or modules")
+
+    inv = await create_catalog_subscription_invoice_for_trainer(
+        session,
+        trainer_id,
+        tier=body.tier,
+        modules=body.modules,
+        period_months=int(body.period_months),
+    )
+    if not inv:
+        raise HTTPException(status_code=400, detail="Could not create payment for this selection")
+
+    invoice_id = int(inv["invoice_id"])
+    amount_cents = int(inv["amount_cents"])
+    period_start = inv["period_start"]
+    period_end = inv["period_end"]
+    plan_name = str(inv.get("plan_name") or "Подписка")
+
+    webapp_base = (settings.webapp_base_url or "").rstrip("/")
+    api_base = (settings.api_base_url or webapp_base).rstrip("/")
+    return_url = f"{webapp_base}/webapp/trainer-pay-subscription?payment_success=1"
+    notification_url = f"{api_base}/api/webhooks/bepaid"
+    tracking_id = f"inv_{invoice_id}"
+    result = await create_checkout(
+        amount_cents=amount_cents,
+        currency="BYN",
+        description=plan_name[:255],
+        tracking_id=tracking_id,
+        return_url=return_url,
+        notification_url=notification_url,
+        success_url=return_url,
+    )
+
+    def _date_str(d):
+        if d is None:
+            return None
+        return d.isoformat()[:10] if hasattr(d, "isoformat") else str(d)[:10]
+
+    return {
+        "payment_url": result["payment_url"],
+        "invoice_id": invoice_id,
+        "amount_cents": amount_cents,
+        "plan_name": plan_name,
+        "period_start": _date_str(period_start),
+        "period_end": _date_str(period_end),
+    }
+
+
+@router.post("/trainer/subscription/invoice-request")
+async def post_trainer_subscription_invoice_request(
+    body: SubscriptionConstructorCheckoutBody,
+    init_data: str | None = Query(None),
+    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    session: AsyncSession = Depends(get_session),
+):
+    """
+    ERIP / manual: create unpaid catalog invoice (tier or constructor) and notify admins.
+    Mini App calls this when checkout_mode=invoice (not bePaid, not sandbox demo).
+    """
+    raw = init_data or x_telegram_init_data
+    if not raw:
+        raise HTTPException(status_code=401, detail="Missing init data")
+    settings = Settings()
+    if settings.resolved_trainer_subscription_checkout_mode() != "invoice":
+        raise HTTPException(
+            status_code=400,
+            detail="Запрос счёта доступен только в режиме «счёт / ЕРИП» (invoice).",
+        )
+    telegram_id = _trainer_telegram_id(raw)
+    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+
+    if body.tier is not None and body.modules is not None:
+        raise HTTPException(status_code=400, detail="Send either tier or modules, not both")
+    if body.tier is None and body.modules is None:
+        raise HTTPException(status_code=400, detail="Specify tier or modules")
+
+    inv = await create_catalog_subscription_invoice_for_trainer(
+        session,
+        trainer_id,
+        tier=body.tier,
+        modules=body.modules,
+        period_months=int(body.period_months),
+    )
+    if not inv:
+        raise HTTPException(status_code=400, detail="Could not create invoice for this selection")
+
+    invoice_id = int(inv["invoice_id"])
+    try:
+        await notify_admins_new_catalog_subscription_invoice(invoice_id)
+    except Exception:
+        logger.exception("subscription invoice-request: admin notify failed invoice_id=%s", invoice_id)
+
+    return {
+        "ok": True,
+        "invoice_id": invoice_id,
+        "amount_cents": int(inv["amount_cents"]),
+        "plan_name": str(inv.get("plan_name") or "Подписка"),
+    }
 
 
 @router.post("/trainer/subscription/mock-checkout")

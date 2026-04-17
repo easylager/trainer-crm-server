@@ -512,7 +512,7 @@ async def create_booking(
         and created_by_trainer
         and is_slot_end_in_past_local(row_sd[0], row_sd[1])
     ):
-        # Retro booking from request: do not enqueue CLIENT_TRAINER_BOOKED_YOU for a past session.
+        # Retro booking from request: skip client «trainer booked you» push for a past session.
         await session.execute(
             text("UPDATE bookings SET client_notified_trainer_booked_at = NOW() WHERE id = :id"),
             {"id": booking_id},
@@ -852,7 +852,7 @@ async def get_pending_trainer_booked_notifications(
     session: AsyncSession, limit: int = 50
 ) -> list[dict]:
     """
-    Bookings created by trainer: client not yet notified by CLIENT_TRAINER_BOOKED_YOU push.
+    Bookings created by trainer: client not yet notified (rich «Вас записали…» in client bot loop).
     Returns: booking_id, client_telegram_id, trainer_name, slot_date, start_time, end_time,
              service_name, booking_price_cents, price_tier_label, arena_name, arena_address.
     """

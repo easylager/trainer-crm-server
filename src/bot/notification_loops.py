@@ -651,6 +651,7 @@ async def run_trainer_booked_notifier_loop(client_bot: Bot) -> None:
                 continue
             async with async_session_factory() as session:
                 pending = await get_pending_trainer_booked_notifications(session)
+                settings_tb = Settings()
                 for p in pending:
                     chat_id = p.get("client_telegram_id")
                     if not chat_id:
@@ -671,18 +672,11 @@ async def run_trainer_booked_notifier_loop(client_bot: Bot) -> None:
                         duration_minutes=p.get("duration_minutes"),
                         map_link=p.get("map_link"),
                     )
-                    kb = None
-                    if p.get("map_link"):
-                        kb = InlineKeyboardMarkup(
-                            inline_keyboard=[
-                                [
-                                    InlineKeyboardButton(
-                                        text=msg.CLIENT_BUTTON_SHOW_ON_MAP,
-                                        url=p["map_link"],
-                                    )
-                                ],
-                            ]
-                        )
+                    kb = msg.build_client_trainer_booked_you_inline_keyboard(
+                        booking_id=int(p["booking_id"]),
+                        map_url=p.get("map_link"),
+                        webapp_base_url=settings_tb.webapp_base_url,
+                    )
                     try:
                         await client_bot.send_message(chat_id=chat_id, text=text, reply_markup=kb)
                         await mark_trainer_booked_notified(session, p["booking_id"])
@@ -1037,7 +1031,7 @@ async def run_subscription_expire_and_reminder_loop(trainer_bot: Bot) -> None:
                 due = await get_subscriptions_reminder_due(session, days_ahead=days_ahead)
                 base = (Settings().webapp_base_url or "").rstrip("/")
                 pay_url = base + "/webapp/trainer-pay-subscription" if base else None
-                tariffs_url = base + "/webapp/trainer-subscription?v=20260448" if base else None
+                tariffs_url = base + "/webapp/trainer-subscription?v=20260450" if base else None
                 for sub in due:
                     tid = sub.get("trainer_telegram_id")
                     if not tid:

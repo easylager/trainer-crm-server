@@ -235,7 +235,7 @@ def _post_welcome_link_keyboard(*, for_active_menu: bool) -> InlineKeyboardMarku
             [
                 InlineKeyboardButton(
                     text=msg.TRAINER_BUTTON_SUBSCRIPTION_CONSTRUCTOR,
-                    web_app=WebAppInfo(url=f"{base}/webapp/trainer-subscription?v=20260448"),
+                    web_app=WebAppInfo(url=f"{base}/webapp/trainer-subscription?v=20260450"),
                 )
             ]
         )
@@ -1265,7 +1265,7 @@ async def cmd_subscription(message: Message) -> None:
         await message.answer(msg.TRAINER_ONLY_VIA_SITE)
         return
     base = (Settings().webapp_base_url or "").rstrip("/")
-    constructor_url = f"{base}/webapp/trainer-subscription?v=20260448" if base and base.startswith("https://") else None
+    constructor_url = f"{base}/webapp/trainer-subscription?v=20260450" if base and base.startswith("https://") else None
     async with async_session_factory() as session:
         tier_status = await get_trainer_subscription_status(session, trainer_id)
         eff = (tier_status.get("effective_tier") or "none").strip().lower()
@@ -1557,33 +1557,7 @@ async def _complete_schedule_create_booking(
     )
     client_confirmation = "не применимо: у клиента не привязан Telegram"
     if client_tg_id:
-        async with async_session_factory() as session:
-            trainer_obj = await get_trainer(session, trainer_id)
-        profile = (trainer_obj or {}).get("profile") or {}
-        trainer_name = (
-            ((profile.get("first_name") or "") + " " + (profile.get("last_name") or "")).strip()
-            or "Тренер"
-        )
-        settings = Settings()
-        client_bot = Bot(
-            token=settings.telegram_bot_token_client,
-            default=DefaultBotProperties(parse_mode=ParseMode.HTML),
-        )
-        try:
-            await client_bot.send_message(
-                chat_id=client_tg_id,
-                text=msg.CLIENT_TRAINER_BOOKED_YOU.format(
-                    name=trainer_name,
-                    date=date_str,
-                    day=day_str,
-                    time=time_str,
-                ),
-            )
-            client_confirmation = "отправили клиенту в Telegram"
-        except Exception:
-            client_confirmation = "не отправили (ошибка доставки), запись сохранена"
-        finally:
-            await client_bot.session.close()
+        client_confirmation = msg.TRAINER_CREATE_BOOKING_CLIENT_CONFIRMATION_QUEUED
 
     await callback.message.answer(
         msg.TRAINER_CREATE_BOOKING_DONE.format(

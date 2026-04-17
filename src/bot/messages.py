@@ -266,7 +266,7 @@ CLIENT_TRAINER_BOOKED_YOU = (
     "📅 <b>Вас записали на занятие</b>\n\n"
     "👤 <b>Тренер:</b> <b>{name}</b>\n"
     "📅 <b>Когда:</b> <b>{date}</b> ({day}) · {time}\n\n"
-    "Адрес, отмена и детали — в <b>«Мои записи»</b> (меню бота)."
+    "Адрес, отмена и детали — в <b>«Мои записи»</b>."
 )
 
 
@@ -322,10 +322,38 @@ def format_client_trainer_booked_you_html(
         venue_lines.append("📍 <b>Место:</b> уточните у тренера")
     parts.append("\n" + "\n".join(venue_lines) + "\n")
 
-    parts.append(
-        "\nАдрес, отмена и детали — в <b>«Мои записи»</b> (меню бота)."
-    )
+    parts.append("\nАдрес, отмена и детали — в <b>«Мои записи»</b>.")
     return "".join(parts)
+
+
+def build_client_trainer_booked_you_inline_keyboard(
+    *,
+    booking_id: int,
+    map_url: str | None,
+    webapp_base_url: str | None,
+):
+    """After trainer books the client: open «Мои записи» in Mini App + optional map (ParseMode.HTML message)."""
+    from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
+
+    base = (webapp_base_url or "").rstrip("/")
+    web_ok = base.lower().startswith("https://")
+    rows: list[list[InlineKeyboardButton]] = []
+    if web_ok:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=CLIENT_BUTTON_MY_BOOKINGS,
+                    web_app=WebAppInfo(
+                        url=f"{base}/webapp/client-bookings?open_booking={int(booking_id)}"
+                    ),
+                ),
+            ]
+        )
+    if map_url:
+        rows.append([InlineKeyboardButton(text=CLIENT_BUTTON_SHOW_ON_MAP, url=map_url)])
+    return InlineKeyboardMarkup(inline_keyboard=rows) if rows else None
+
+
 TRAINER_RESPOND_SUCCESS = "Отклик отправлен. Клиент увидит тебя в списке и сможет записаться или написать."
 TRAINER_RESPOND_PROMPT_COMMENT = (
     "Напиши комментарий для клиента (необязательно).\n\n"
@@ -1587,6 +1615,10 @@ TRAINER_CREATE_BOOKING_DONE = (
     "⏰ <b>Напоминания клиенту:</b> {reminder_plan}\n"
     "📩 <b>Подтверждение клиенту:</b> {client_confirmation}\n"
     "📝 <b>Заметка:</b> можно добавить сразу кнопкой ниже."
+)
+# Rich push is sent by notification_service (trainer_booked loop), not inline from API/bot handlers.
+TRAINER_CREATE_BOOKING_CLIENT_CONFIRMATION_QUEUED = (
+    "клиент получит подробное уведомление в боте в ближайшее время (услуга, цена, адрес и кнопка «Мои записи»)"
 )
 TRAINER_BUTTON_ADD_BOOKING_NOTE = "📝 Добавить заметку"
 TRAINER_BUTTON_INVITE_CLIENT_TO_BOT = "📣 Пригласить в бота"
