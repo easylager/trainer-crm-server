@@ -345,6 +345,24 @@
     .day-block:nth-child(5) { animation-delay: 0.5s; }
     .day-block:nth-child(6) { animation-delay: 0.6s; }
     .day-block:nth-child(7) { animation-delay: 0.7s; }
+
+    .book-venue-hint {
+      margin: 0 0 16px;
+      padding: 12px 14px;
+      border-radius: 14px;
+      background: var(--tg-theme-secondary-bg-color);
+      border: 1px solid rgba(247, 166, 0, 0.22);
+      font-size: 14px;
+      line-height: 1.45;
+      color: var(--tg-theme-text-color);
+    }
+    .book-venue-hint .book-venue-title { margin-bottom: 6px; }
+    .book-venue-hint .book-venue-map { margin-top: 10px; }
+    .book-venue-hint .book-venue-map a {
+      color: var(--tg-theme-button-color);
+      font-weight: 600;
+      text-decoration: none;
+    }
   </style>
   <link rel="stylesheet" href="mini-app-client-nav.css" />
 </head>
@@ -368,6 +386,7 @@
   </div>
   <div id="screenForm" style="display: none;">
     <div id="selectedSlotLabel" style="margin-bottom: 20px; padding: 16px 18px; background: var(--tg-theme-secondary-bg-color); border-radius: 16px; border: 1px solid rgba(247, 166, 0, 0.28); font-size: 15px; font-weight: 600; text-align: center; box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);"></div>
+    <div id="bookVenueHint" class="book-venue-hint" style="display: none;" aria-live="polite"></div>
     <div id="priceTierBlock" class="form-block" style="display: none;">
       <label>Категория цены</label>
       <div id="priceTierRadios" class="price-tier-radios"></div>
@@ -499,6 +518,67 @@
           if (res.ok) bookTrainerDetailCache = await res.json();
         } catch (e) {}
         return bookTrainerDetailCache;
+      }
+
+      function escapeHtmlBook(s) {
+        return String(s)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;');
+      }
+
+      function primaryVenueFromPublicTrainer(t) {
+        if (!t) return '';
+        var pn = (t.primary_arena_name && String(t.primary_arena_name).trim()) || '';
+        if (pn) return pn;
+        var names = t.arena_names || [];
+        var ids = t.arena_ids || [];
+        var pid = t.primary_arena_id;
+        if (pid != null && ids && names && ids.length) {
+          var ix = ids.indexOf(pid);
+          if (ix >= 0 && names[ix]) return String(names[ix]).trim();
+        }
+        return (names[0] && String(names[0]).trim()) || '';
+      }
+
+      function syncBookVenueHint(slot) {
+        var el = document.getElementById('bookVenueHint');
+        if (!el) return;
+        var name = slot && slot.arena_name && String(slot.arena_name).trim();
+        var addr = slot && slot.arena_address && String(slot.arena_address).trim();
+        var city = slot && slot.arena_city_name && String(slot.arena_city_name).trim();
+        var mapLink = slot && slot.map_link && String(slot.map_link).trim();
+        var parts = [];
+        if (name || addr || city) {
+          var loc = [name, addr].filter(Boolean).join(' — ');
+          if (city) loc = loc ? loc + ' · ' + city : city;
+          parts.push('<div class="book-venue-title"><strong>Где</strong></div>');
+          parts.push('<div>' + escapeHtmlBook(loc) + '</div>');
+        } else {
+          var fb = primaryVenueFromPublicTrainer(bookTrainerDetailCache);
+          if (fb) {
+            parts.push(
+              '<div><strong>' +
+                escapeHtmlBook(fb) +
+                '</strong> — точный адрес пришлёт тренер после подтверждения.</div>'
+            );
+          }
+        }
+        if (mapLink && /^https:\/\//i.test(mapLink)) {
+          parts.push(
+            '<div class="book-venue-map"><a href="' +
+              escapeHtmlBook(mapLink) +
+              '" target="_blank" rel="noopener noreferrer">Открыть на карте</a></div>'
+          );
+        }
+        if (!parts.length) {
+          el.style.display = 'none';
+          el.innerHTML = '';
+          return;
+        }
+        el.innerHTML = parts.join('');
+        el.style.display = 'block';
       }
 
       function renderPriceTierUi(effServiceId) {
@@ -697,9 +777,15 @@
           }
         }
         document.getElementById('selectedSlotLabel').textContent = 'Выбрано: ' + slotLine;
+        syncBookVenueHint(selSlot);
       }
 
       function showSlots() {
+        var vh = document.getElementById('bookVenueHint');
+        if (vh) {
+          vh.style.display = 'none';
+          vh.innerHTML = '';
+        }
         document.getElementById('screenForm').style.display = 'none';
         document.getElementById('screenSuccess').style.display = 'none';
         document.getElementById('screenSlots').style.display = 'block';

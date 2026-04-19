@@ -1068,8 +1068,8 @@
       }
 
       function confirmTrainerBooking(bookingId) {
-        postJsonTrainer('/trainer/bookings/' + bookingId + '/confirm', null).then(function(data) {
-          openFirstBookingMilestoneModal(data || {});
+        postJsonTrainer('/trainer/bookings/' + bookingId + '/confirm', null).then(function() {
+          showToast('Запись подтверждена');
           leaveDetailAfterMutation();
         }).catch(function() { alert('Ошибка'); });
       }
@@ -1137,51 +1137,51 @@
         }, ms);
       }
 
-      function closeFirstBookingMilestoneModal() {
-        var ov = document.getElementById('modalFirstBookingMilestone');
-        if (!ov) return;
-        ov.style.display = 'none';
-        ov.setAttribute('aria-hidden', 'true');
-        updateTelegramBack();
+      function scheduleFirstApplyWeekShareToastKey(trainerId) {
+        if (trainerId == null || trainerId === '' || isNaN(Number(trainerId))) return null;
+        return 'schedule_editor_first_apply_week_share_toast_v1_' + String(trainerId);
       }
 
-      /** One-time funnel: API returns first_booking_milestone / share_catalog_tip after POST booking or confirm. */
-      function openFirstBookingMilestoneModal(apiResult) {
-        var r = apiResult || {};
-        if (!r.first_booking_milestone && !r.share_catalog_tip) return;
-        var parts = [];
-        if (r.first_booking_milestone) {
-          parts.push(
-            '<p style="margin:0 0 12px;"><strong>Поздравляем — первая запись подтверждена!</strong></p>' +
-              '<p style="margin:0;color:var(--tg-theme-hint-color);">Напоминания и заметки по клиенту — здесь, в Telegram, без отдельной CRM.</p>'
-          );
+      /** One-time nudge after first successful «apply template to week» (localStorage per trainer). */
+      function showFirstApplyWeekShareToastIfNeeded(trainerIdFromApi) {
+        var tidRaw = trainerIdFromApi != null ? trainerIdFromApi : state.trainerId;
+        var tid = parseInt(String(tidRaw), 10);
+        if (isNaN(tid) || tid < 1) return;
+        if (state.trainerId == null) state.trainerId = tid;
+        var key = scheduleFirstApplyWeekShareToastKey(tid);
+        if (!key) return;
+        var already = false;
+        try {
+          already = localStorage.getItem(key) === '1';
+        } catch (e) {
+          already = false;
         }
-        if (r.share_catalog_tip) {
-          parts.push(
-            '<p style="margin:16px 0 0;"><strong>Следующий шаг</strong></p>' +
-              '<p style="margin:0;color:var(--tg-theme-hint-color);">Поделитесь ссылкой на запись к вам или на каталог: в боте тренера откройте «Пригласить клиента»; если ссылки нет — укажите в профиле город и услугу.</p>'
-          );
+        if (already) return;
+        try {
+          localStorage.setItem(key, '1');
+        } catch (e) {
+          /* quota / private mode: toast still shown this once */
         }
-        var body = document.getElementById('modalFirstBookingMilestoneBody');
-        var ov = document.getElementById('modalFirstBookingMilestone');
-        if (!body || !ov) return;
-        body.innerHTML = parts.join('');
-        ov.style.display = 'flex';
-        ov.setAttribute('aria-hidden', 'false');
-        updateTelegramBack();
+        showToast(
+          'Слоты на месте — можно поделиться ссылкой на запись: в боте тренера откройте «Пригласить клиента».',
+          4500
+        );
       }
 
-      function applyTrainerBookingCreateSuccess(apiData, toastMsg) {
+      function applyTrainerBookingCreateSuccess(_apiData, toastMsg) {
         document.getElementById('modalBookClient').style.display = 'none';
         clearBookSlotModalState();
         loadSlots();
-        if (toastMsg) showToast(toastMsg);
+        showToast(toastMsg || 'Запись создана');
         updateTelegramBack();
-        openFirstBookingMilestoneModal(apiData || {});
       }
 
       let state = {
         tab: 'calendar',
+        /** From GET /schedule or POST /schedule/apply-week — for one-time toasts keyed in localStorage. */
+        trainerId: null,
+        /** Opened from hub hint `?tab=template` — applied on first schedule load after access. */
+        pendingOpenTemplateTab: false,
         weekStart: null,
         slots: [],
         /** True after successful fetch (or prefetch) for current UI; avoids full refetch on back from booking detail. */
@@ -1237,11 +1237,11 @@
         quickBookSlotDate: null,
         /** Minutes from midnight for quick book (15 min grid, 08:00–21:00). */
         quickBookStartMinutes: null,
-        quickBookDurationMinutes: 60,
+        quickBookDurationMinutes: 45,
         /** From GET /schedule + /schedule/templates: arena-based grid (kind, hour window, optional :MM offset). */
         scheduleGridPreset: null,
         /** From GET /schedule: profile session_duration_minutes → default duration select when adding slots. */
-        defaultSlotDurationMinutes: 60,
+        defaultSlotDurationMinutes: 45,
         /** From GET /schedule: allow capacity > 1 in POST /schedule/slots (profile opt-in). */
         groupClassesEnabled: false,
         /** 'individual' | 'group' — set before opening calendar/template editor when group classes are enabled. */
@@ -1361,7 +1361,7 @@
         var o = {
           slot_date: state.quickBookSlotDate,
           start_time: formatMinuteClock(state.quickBookStartMinutes),
-          duration_minutes: state.quickBookDurationMinutes || 60,
+          duration_minutes: state.quickBookDurationMinutes || 45,
           client_id: clientId,
           service_id: serviceId
         };
@@ -1392,7 +1392,7 @@
         state.quickBookSlotDate = null;
         state.quickBookStartMinutes = null;
         state.quickBookSlotsForDay = null;
-        state.quickBookDurationMinutes = state.defaultSlotDurationMinutes || 60;
+        state.quickBookDurationMinutes = state.defaultSlotDurationMinutes || 45;
         state.bookSlotIsGroup = false;
         state.bookSlotGroupServiceId = null;
         ['bookServiceSelect', 'bookServiceSelectNew'].forEach(function(id) {
@@ -1611,7 +1611,7 @@
 
       function slotDurationFromRow(row) {
         var d = row && row.duration_minutes != null ? parseInt(row.duration_minutes, 10) : NaN;
-        return !isNaN(d) ? d : 60;
+        return !isNaN(d) ? d : 45;
       }
 
       var SCHEDULE_DURATION_OPTIONS = [45, 50, 60, 70, 75, 90, 105, 120, 180];
@@ -1620,10 +1620,10 @@
       function normalizeDurationToScheduleSelect(minutes) {
         var allowed = SCHEDULE_DURATION_OPTIONS;
         var n = parseInt(minutes, 10);
-        if (isNaN(n) || n < 15) return 60;
+        if (isNaN(n) || n < 15) return 45;
         n = Math.min(480, Math.max(15, n));
         if (allowed.indexOf(n) >= 0) return n;
-        var best = 60;
+        var best = 45;
         var bestD = 999;
         for (var i = 0; i < allowed.length; i++) {
           var d = Math.abs(allowed[i] - n);
@@ -1638,7 +1638,7 @@
       /** Called when GET /schedule returns session_duration_minutes (trainer profile). */
       function applyScheduleDefaultDurationFromProfile(rawMinutes) {
         var n = rawMinutes != null && rawMinutes !== '' ? parseInt(rawMinutes, 10) : NaN;
-        state.defaultSlotDurationMinutes = !isNaN(n) ? normalizeDurationToScheduleSelect(n) : 60;
+        state.defaultSlotDurationMinutes = !isNaN(n) ? normalizeDurationToScheduleSelect(n) : 45;
         state.quickBookDurationMinutes = state.defaultSlotDurationMinutes;
         var qbd = document.getElementById('quickBookDurationSelect');
         if (qbd) qbd.value = String(state.defaultSlotDurationMinutes);
@@ -1805,8 +1805,8 @@
         var fixed = scheduleGridFixedDurationMinutes();
         if (fixed != null) return fixed;
         var durSel = document.getElementById('slotDurationSelect');
-        var d = durSel ? parseInt(durSel.value, 10) : 60;
-        if (isNaN(d) || d < 15) d = 60;
+        var d = durSel ? parseInt(durSel.value, 10) : 45;
+        if (isNaN(d) || d < 15) d = 45;
         return Math.min(480, Math.max(15, d));
       }
 
@@ -2242,6 +2242,9 @@
           })
           .then(function(data) {
             state.slots = (data && data.slots) ? data.slots : [];
+            if (data && data.trainer_id != null && !isNaN(parseInt(String(data.trainer_id), 10))) {
+              state.trainerId = parseInt(String(data.trainer_id), 10);
+            }
             state.groupClassesEnabled = !!(data && data.group_classes_enabled);
             applyScheduleDefaultDurationFromProfile(data && data.session_duration_minutes);
             applyScheduleGridFromApi(data);
@@ -2300,7 +2303,7 @@
        * past — уже прошло; overlap — пересечение с другим слотом при этой длительности; invalid — не влезает в сутки.
        */
       function quickBookSlotAvailability(slotsForDay, startMinutes, durationMinutes, isoDate) {
-        var dm = durationMinutes || 60;
+        var dm = durationMinutes || 45;
         var newEnd = startMinutes + dm;
         if (newEnd > 24 * 60) return 'invalid';
         var todayStr = dateToStr(new Date());
@@ -2347,8 +2350,8 @@
         var hourSel = document.getElementById('quickBookHourSelect');
         var durEl = document.getElementById('quickBookDurationSelect');
         if (!hourSel || !isoDate) return Promise.resolve();
-        var dm = durEl ? parseInt(durEl.value, 10) : 60;
-        if (isNaN(dm) || dm < 15) dm = 60;
+        var dm = durEl ? parseInt(durEl.value, 10) : 45;
+        if (isNaN(dm) || dm < 15) dm = 45;
         hourSel.disabled = true;
         var btnGo = document.getElementById('btnQuickBookContinue');
         if (btnGo) btnGo.disabled = true;
@@ -2458,7 +2461,7 @@
           inp.value = minD;
         }
         var dur = document.getElementById('quickBookDurationSelect');
-        if (dur) dur.value = String(state.defaultSlotDurationMinutes || 60);
+        if (dur) dur.value = String(state.defaultSlotDurationMinutes || 45);
         syncDurationUIFromScheduleGrid();
         mq.style.display = 'flex';
         mq.setAttribute('aria-hidden', 'false');
@@ -3149,17 +3152,6 @@
       };
       document.getElementById('modalBookConfirmYes').onclick = doConfirmBookClient;
 
-      (function wireFirstBookingMilestoneModal() {
-        var ok = document.getElementById('modalFirstBookingMilestoneOk');
-        if (ok) ok.onclick = function() { closeFirstBookingMilestoneModal(); };
-        var ov = document.getElementById('modalFirstBookingMilestone');
-        if (ov) {
-          ov.onclick = function(ev) {
-            if (ev.target === ov) closeFirstBookingMilestoneModal();
-          };
-        }
-      })();
-
       document.getElementById('modalBookCancel').onclick = function() {
         document.getElementById('modalBookClient').style.display = 'none';
         clearBookSlotModalState();
@@ -3254,7 +3246,7 @@
         var durQuick = document.getElementById('quickBookDurationSelect');
         if (durQuick) {
           durQuick.addEventListener('change', function() {
-            state.quickBookDurationMinutes = parseInt(durQuick.value, 10) || 60;
+            state.quickBookDurationMinutes = parseInt(durQuick.value, 10) || 45;
             var v = inpDate && (inpDate.value || '').trim();
             if (v) refreshQuickBookHourOptions(v);
           });
@@ -3282,8 +3274,8 @@
               showToast('Выберите время');
               return;
             }
-            var dm = dur ? parseInt(dur.value, 10) : 60;
-            if (isNaN(dm) || dm < 15) dm = 60;
+            var dm = dur ? parseInt(dur.value, 10) : 45;
+            if (isNaN(dm) || dm < 15) dm = 45;
             runQuickBookContinue(sd, startM, dm, mq);
           };
         }
@@ -3576,7 +3568,7 @@
         var durTpl = document.getElementById('slotDurationSelect');
         if (durTpl) {
           var dms = existing.map(function(t) { return parseInt(t.duration_minutes, 10); }).filter(function(x) { return !isNaN(x); });
-          var fallbackDur = state.defaultSlotDurationMinutes || 60;
+          var fallbackDur = state.defaultSlotDurationMinutes || 45;
           var dval = dms.length && dms.every(function(x) { return x === dms[0]; }) ? dms[0] : fallbackDur;
           durTpl.value = String(normalizeDurationToScheduleSelect(Math.min(480, Math.max(15, dval))));
         }
@@ -3679,10 +3671,10 @@
         var durElCal = document.getElementById('slotDurationSelect');
         if (durElCal && daySlots.length) {
           var durs = daySlots.map(slotDurationFromRow);
-          var dcal = durs.length && durs.every(function(x) { return x === durs[0]; }) ? durs[0] : 60;
+          var dcal = durs.length && durs.every(function(x) { return x === durs[0]; }) ? durs[0] : 45;
           durElCal.value = String(Math.min(480, Math.max(15, dcal)));
         } else if (durElCal) {
-          durElCal.value = String(normalizeDurationToScheduleSelect(state.defaultSlotDurationMinutes || 60));
+          durElCal.value = String(normalizeDurationToScheduleSelect(state.defaultSlotDurationMinutes || 45));
         }
         syncDurationUIFromScheduleGrid();
         document.querySelector('.tabs').style.display = 'none';
@@ -4056,7 +4048,10 @@
           .then(function(data) {
             if (data.ok) {
               const n = data.slots_created != null ? data.slots_created : 0;
-              showToast('Шаблон применён. Создано слотов: ' + n, 3600);
+              showToast('Шаблон применён. Создано слотов: ' + n, 2800);
+              setTimeout(function() {
+                showFirstApplyWeekShareToastIfNeeded(data.trainer_id);
+              }, 2600);
               loadSlots();
             } else {
               var err = data.detail || 'Ошибка';
@@ -4128,9 +4123,16 @@
         var fromHub = (p.get('from') || '') === 'hub';
         var hubGroupSlotRaw = p.get('hub_group_slot');
         var flowBook = (p.get('flow') || '') === 'book';
+        var tabParam = (p.get('tab') || '').trim().toLowerCase();
         var openClientProblem = (p.get('open_client_problem') || '') === '1';
         var anchorDate = (p.get('anchor_date') || '').trim();
         var bgsRaw = p.get('book_group_slot');
+        if (tabParam === 'template') {
+          state.pendingOpenTemplateTab = true;
+          try {
+            history.replaceState({}, '', window.location.pathname);
+          } catch (e) { /* ignore */ }
+        }
         if (anchorDate && /^\d{4}-\d{2}-\d{2}$/.test(anchorDate)) {
           var ad = new Date(anchorDate + 'T12:00:00');
           if (!isNaN(ad.getTime())) {
@@ -4176,6 +4178,11 @@
           }
         }
         function startScheduleLoads() {
+          if (state.pendingOpenTemplateTab) {
+            state.pendingOpenTemplateTab = false;
+            setActiveTab('template');
+            return;
+          }
           loadSlots();
         }
         if (tg && tg.initData && window.TrainerMiniAppGate) {

@@ -39,6 +39,14 @@
       }
       function apiUrl(path) { return '/api/webapp' + path; }
 
+      function postClientInviteLinkFirstCopyRecorded() {
+        if (!initData) return;
+        fetch(apiUrl('/trainer/welcome-link/first-copy') + initDataParam(), {
+          method: 'POST',
+          headers: headers(),
+        }).catch(function() {});
+      }
+
       function showScreen(id) {
         document.querySelectorAll('[data-screen]').forEach(function(el) { el.classList.remove('active'); });
         var el = document.getElementById(id);
@@ -622,7 +630,10 @@
         var link = document.getElementById('passWelcomeLinkUrl').textContent;
         if (!link) return;
         if (navigator.clipboard && navigator.clipboard.writeText) {
-          navigator.clipboard.writeText(link).then(function() { alert('Ссылка скопирована'); }).catch(function() { alert(link); });
+          navigator.clipboard.writeText(link).then(function() {
+            postClientInviteLinkFirstCopyRecorded();
+            alert('Ссылка скопирована');
+          }).catch(function() { alert(link); });
         } else { alert(link); }
       };
 

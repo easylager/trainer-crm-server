@@ -207,6 +207,31 @@ def time_from_minutes(m: int) -> time:
     return time(m // 60, m % 60)
 
 
+async def trainer_has_slot_overlapping_interval(
+    session: AsyncSession,
+    trainer_id: int,
+    slot_date: date,
+    start_t: time,
+    end_t: time,
+) -> bool:
+    """True if any non-cancelled slot on that calendar day intersects [start_t, end_t)."""
+    r = await session.execute(
+        text(
+            """
+            SELECT 1 FROM slots
+            WHERE trainer_id = :tid
+              AND slot_date = :d
+              AND status != 'cancelled'
+              AND start_time < :end_t
+              AND end_time > :start_t
+            LIMIT 1
+            """
+        ),
+        {"tid": trainer_id, "d": slot_date, "start_t": start_t, "end_t": end_t},
+    )
+    return r.fetchone() is not None
+
+
 async def generate_slots_for_week(
     session: AsyncSession, trainer_id: int, week_start: date
 ) -> int:
@@ -244,14 +269,7 @@ async def generate_slots_for_week(
                 continue
             tmpl_arena = t.get("arena_id")
             slot_arena = int(tmpl_arena) if tmpl_arena is not None else default_arena
-            r = await session.execute(
-                text("""
-                    SELECT 1 FROM slots
-                    WHERE trainer_id = :tid AND slot_date = :d AND start_time = :st AND status != 'cancelled'
-                """),
-                {"tid": trainer_id, "d": d, "st": start_time},
-            )
-            if r.fetchone():
+            if await trainer_has_slot_overlapping_interval(session, trainer_id, d, start_time, end_time):
                 continue
             await session.execute(
                 text("""
@@ -281,7 +299,8 @@ async def replace_week_with_template(
 ) -> int:
     """
     Overwrite week with template: delete all available slots in the week range,
-    then create slots from template. Booked slots are left unchanged.
+    then create slots from template. Booked (and other non-deleted) slots stay;
+    new rows are skipped when the interval would overlap an existing non-cancelled slot.
     Returns number of slots created.
     """
     preset = await get_schedule_grid_preset_for_trainer(session, trainer_id)
@@ -326,6 +345,9 @@ async def replace_week_with_template(
                 continue
             tmpl_arena = t.get("arena_id")
             slot_arena = int(tmpl_arena) if tmpl_arena is not None else default_arena
+            # Booked / past sessions keep rows with status != 'available'; do not stack a template slot on top.
+            if await trainer_has_slot_overlapping_interval(session, trainer_id, d, start_time, end_time):
+                continue
             await session.execute(
                 text("""
                     INSERT INTO slots (trainer_id, slot_date, start_time, end_time, status, capacity, service_id, arena_id)
@@ -368,14 +390,7 @@ async def add_slots_for_week(
     for m in sorted(start_minutes):
         start_time = time_from_minutes(int(m))
         end_time = _time_end(start_time, duration_minutes)
-        r = await session.execute(
-            text("""
-                SELECT 1 FROM slots
-                WHERE trainer_id = :tid AND slot_date = :d AND start_time = :st AND status != 'cancelled'
-            """),
-            {"tid": trainer_id, "d": slot_date, "st": start_time},
-        )
-        if r.fetchone():
+        if await trainer_has_slot_overlapping_interval(session, trainer_id, slot_date, start_time, end_time):
             continue
         await session.execute(
             text("""
@@ -390,7 +405,7 @@ async def add_slots_for_week(
     return created
 
 
-DEFAULT_SLOT_DURATION_MINUTES = 60
+DEFAULT_SLOT_DURATION_MINUTES = 45
 
 
 async def replace_slots_for_day(
@@ -643,12 +658,17 @@ async def list_slots(
                    s.arena_id, s.training_group_id, tg.name,
                    sv.name AS service_name,
                    ar.name AS arena_name,
+                   ar.address AS arena_address,
+                   ar.latitude AS arena_latitude,
+                   ar.longitude AS arena_longitude,
+                   ac.name AS arena_city_name,
                    (SELECT COUNT(*)::int FROM bookings b
                     WHERE b.slot_id = s.id AND b.status IN ('pending', 'confirmed')) AS active_bookings
             FROM slots s
             LEFT JOIN training_groups tg ON tg.id = s.training_group_id
             LEFT JOIN services sv ON sv.id = s.service_id
             LEFT JOIN arenas ar ON ar.id = s.arena_id
+            LEFT JOIN cities ac ON ac.id = ar.city_id
             WHERE s.trainer_id = :tid AND s.slot_date >= :from_d AND s.slot_date <= :to_d
               AND (
                 s.training_group_id IS NULL
@@ -673,7 +693,11 @@ async def list_slots(
             "training_group_name": (row[9] or "").strip() if row[8] is not None else None,
             "service_name": (row[10] or "").strip() if row[10] else None,
             "arena_name": (row[11] or "").strip() if row[11] else None,
-            "active_bookings": int(row[12] or 0),
+            "arena_address": (row[12] or "").strip() if row[12] else None,
+            "arena_latitude": (float(row[13]) if row[13] is not None else None),
+            "arena_longitude": (float(row[14]) if row[14] is not None else None),
+            "arena_city_name": (row[15] or "").strip() if row[15] else None,
+            "active_bookings": int(row[16] or 0),
         }
         for row in rows
     ]

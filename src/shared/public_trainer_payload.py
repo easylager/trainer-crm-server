@@ -14,6 +14,7 @@ PUBLIC_CATALOG_TRAINER_DROP_KEYS = frozenset(
         "created_at",
         "profile_pending",
         "photo_pending",
+        "is_catalog_visible",
     }
 )
 

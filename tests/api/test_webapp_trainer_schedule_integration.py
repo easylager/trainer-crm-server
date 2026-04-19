@@ -170,6 +170,7 @@ async def test_schedule_get_returns_slots_in_range_and_shape(
     assert resp.status_code == 200
     data = resp.json()
     assert "slots" in data
+    assert data.get("trainer_id") == trainer_id
     assert "session_duration_minutes" in data
     assert "schedule_grid" in data
     sg = data["schedule_grid"]
@@ -206,7 +207,8 @@ async def test_schedule_get_view_list_compact_slots_only(
             )
     assert resp.status_code == 200
     data = resp.json()
-    assert list(data.keys()) == ["slots"]
+    assert set(data.keys()) == {"slots", "trainer_id"}
+    assert data.get("trainer_id") == trainer_id
     assert "schedule_grid" not in data
     assert len(data["slots"]) >= 1
     s0 = next((x for x in data["slots"] if x.get("id") == slot_id), None)
@@ -219,7 +221,7 @@ async def test_schedule_get_schedule_grid_zamok_hourly_when_primary(
     app_use_test_db,
     db_session,
 ) -> None:
-    """Primary arena ТЦ Замок → GET /schedule exposes hourly :10 grid from arena_schedule_presets."""
+    """Primary arena ТЦ Замок → GET /schedule exposes hourly :15 grid from arena_schedule_presets (from 10:15)."""
     r = await db_session.execute(text("SELECT id FROM arenas WHERE name = 'ТЦ Замок' LIMIT 1"))
     row = r.fetchone()
     if row is None:
@@ -249,8 +251,10 @@ async def test_schedule_get_schedule_grid_zamok_hourly_when_primary(
         text(
             """
             UPDATE arena_schedule_presets
-            SET slot_duration_minutes = 45
-            WHERE arena_id = :aid AND slot_duration_minutes IS NULL
+            SET minute_offset = 15,
+                hour_start = 10,
+                slot_duration_minutes = COALESCE(slot_duration_minutes, 45)
+            WHERE arena_id = :aid
             """
         ),
         {"aid": zamok_id},
@@ -277,7 +281,8 @@ async def test_schedule_get_schedule_grid_zamok_hourly_when_primary(
     assert resp.status_code == 200
     sg = resp.json().get("schedule_grid") or {}
     assert sg.get("kind") == "hourly_minute"
-    assert int(sg.get("minute_offset", -1)) == 10
+    assert int(sg.get("minute_offset", -1)) == 15
+    assert int(sg.get("hour_start", -1)) == 10
     assert sg.get("slot_duration_minutes") == 45
 
 
@@ -1067,6 +1072,7 @@ async def test_apply_week_creates_slots_from_template(
     assert body.get("ok") is True
     assert isinstance(body.get("slots_created"), int)
     assert body["slots_created"] >= 1
+    assert body.get("trainer_id") == trainer_id
 
     r2 = await db_session.execute(
         text(
@@ -1079,6 +1085,94 @@ async def test_apply_week_creates_slots_from_template(
     )
     starts = [row[0] for row in r2.fetchall()]
     assert any((hasattr(t, "hour") and t.hour == 15) or str(t).startswith("15:") for t in starts)
+
+
+@pytest.mark.asyncio
+async def test_apply_week_does_not_duplicate_booked_slot_same_interval(
+    app_use_test_db,
+    db_session,
+) -> None:
+    """Applying template must not INSERT a free slot on top of an existing booked interval."""
+    from tests.db_catalog_helpers import require_seed_service_id
+
+    tg = _fresh_trainer_telegram_id()
+    trainer_id = await _create_active_trainer(db_session, tg, with_crm=True)
+    svc_id = await require_seed_service_id(db_session)
+    await db_session.execute(
+        text(
+            "INSERT INTO trainer_services (trainer_id, service_id, price_cents) VALUES (:tid, :sid, 1000)"
+        ),
+        {"tid": trainer_id, "sid": svc_id},
+    )
+    r_client = await db_session.execute(
+        text(
+            "INSERT INTO clients (telegram_id, first_name) VALUES (:tg, 'Клиент') RETURNING id"
+        ),
+        {"tg": _fresh_trainer_telegram_id()},
+    )
+    client_id = r_client.fetchone()[0]
+    mon = _monday_on_or_before(date.today() + timedelta(days=30))
+    sun = mon + timedelta(days=6)
+    r_slot = await db_session.execute(
+        text(
+            """
+            INSERT INTO slots (trainer_id, slot_date, start_time, end_time, status, capacity)
+            VALUES (:tid, :d, TIME '17:15', TIME '18:00', 'booked', 1)
+            RETURNING id
+            """
+        ),
+        {"tid": trainer_id, "d": sun},
+    )
+    slot_id = r_slot.fetchone()[0]
+    await db_session.execute(
+        text(
+            """
+            INSERT INTO bookings (slot_id, trainer_id, client_id, service_id, status)
+            VALUES (:sid, :tid, :cid, :svc, 'confirmed')
+            """
+        ),
+        {"sid": slot_id, "tid": trainer_id, "cid": client_id, "svc": svc_id},
+    )
+    await db_session.commit()
+
+    with patch_trainer_webapp_init(tg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            put = await client.put(
+                "/api/webapp/schedule/templates/day",
+                headers={"X-Telegram-Init-Data": "mock", "Content-Type": "application/json"},
+                json={
+                    "day_of_week": 6,
+                    "duration_minutes": 45,
+                    "slots": [{"hour": 17, "minute": 15, "capacity": 1}],
+                },
+            )
+    assert put.status_code == 200
+
+    async def _noop_notify(*_a, **_kw):
+        return None
+
+    with patch_trainer_webapp_init(tg):
+        with patch("src.api.routes.webapp.run_after_schedule_changed", _noop_notify):
+            with patch("src.api.routes.webapp.Bot", return_value=MagicMock()):
+                async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                    resp = await client.post(
+                        "/api/webapp/schedule/apply-week",
+                        headers={"X-Telegram-Init-Data": "mock", "Content-Type": "application/json"},
+                        json={"week_start": mon.isoformat()},
+                    )
+    assert resp.status_code == 200
+
+    r_cnt = await db_session.execute(
+        text(
+            """
+            SELECT COUNT(*)::int FROM slots
+            WHERE trainer_id = :tid AND slot_date = :d AND status != 'cancelled'
+              AND start_time < TIME '18:00' AND end_time > TIME '17:15'
+            """
+        ),
+        {"tid": trainer_id, "d": sun},
+    )
+    assert int(r_cnt.scalar() or 0) == 1
 
 
 @pytest.mark.asyncio
@@ -1516,7 +1610,7 @@ async def test_trainer_booking_quick_400_overlap_empty_slot(
                 },
             )
     assert resp.status_code == 400
-    assert "пересеч" in (resp.json().get("detail") or "").lower()
+    assert "пересека" in (resp.json().get("detail") or "").lower()
 
 
 @pytest.mark.asyncio

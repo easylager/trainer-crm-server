@@ -92,6 +92,12 @@ class Trainer(Base):
     )
     # Stable short code for referral deep links (e.g. t.me/bot?start=ref_ABC123)
     referral_code: Mapped[Optional[str]] = mapped_column(String(16), nullable=True, unique=True, index=True)
+    # Public client catalog (/api/public/trainers): when false, trainer stays active but is hidden from browse + card.
+    is_catalog_visible: Mapped[bool] = mapped_column(nullable=False, default=True, server_default="true")
+    # First time trainer copied a client-facing invite or booking link in Mini App (growth funnel).
+    client_invite_link_first_copied_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     link_tokens: Mapped[list["TrainerLinkToken"]] = relationship(back_populates="trainer", lazy="raise")
     profile: Mapped[Optional["TrainerProfile"]] = relationship(back_populates="trainer", uselist=False, lazy="raise")

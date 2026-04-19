@@ -47,6 +47,33 @@ def test_blocked_profile_when_pending_and_incomplete_trainer() -> None:
     assert resolve_trainer_access_state(status=TRAINER_STATUS_PENDING_PROFILE, trainer=t) == TrainerAccessState.BLOCKED_PROFILE
 
 
+def _trainer_tt_minimal_only() -> dict:
+    """7-field TTV gate: no photo/description/education required."""
+    return {
+        "id": 2,
+        "status": TRAINER_STATUS_PENDING_PROFILE,
+        "profile": {
+            "first_name": "Sam",
+            "last_name": "Lee",
+            "phone": "+375291112233",
+            "city_id": 1,
+            "session_duration_minutes": 60,
+            "min_hours_before_booking": 3,
+        },
+        "photos": [],
+        "service_ids": [1],
+        "arena_ids": [1],
+        "education_entries_count": 0,
+    }
+
+
+def test_booking_ready_when_pending_and_tt_minimal_not_submission_complete() -> None:
+    assert (
+        resolve_trainer_access_state(status=TRAINER_STATUS_PENDING_PROFILE, trainer=_trainer_tt_minimal_only())
+        == TrainerAccessState.BOOKING_READY
+    )
+
+
 def test_pending_moderation_when_pending_and_complete_trainer() -> None:
     assert (
         resolve_trainer_access_state(status=TRAINER_STATUS_PENDING_PROFILE, trainer=_trainer_moderation_complete())

@@ -81,6 +81,11 @@ async def main() -> None:
         service_name="Персональная тренировка",
         price_tier_label="Взрослый",
         booking_price_cents=5000,
+        arena_city_name="Минск",
+        duration_minutes=60,
+        map_link="https://yandex.ru/maps/?text=%D0%9C%D0%B8%D0%BD%D1%81%D0%BA",
+        client_comment="Первый раз, нужны кроссовки",
+        client_has_telegram=False,
     )
     await bot.send_message(chat_id=chat_id, text=rich)
 

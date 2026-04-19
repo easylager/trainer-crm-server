@@ -63,7 +63,9 @@ async def test_webapp_trainer_profile_get_returns_trainer_and_readiness(
     assert data["trainer"]["id"] == trainer_id
     assert "moderation_readiness" in data
     assert "complete" in data["moderation_readiness"]
-    assert data["moderation_readiness"].get("moderation_criteria_total") == 12
+    assert data["moderation_readiness"].get("moderation_criteria_total") == 8
+    assert "full_profile_complete" in data["moderation_readiness"]
+    assert data["moderation_readiness"].get("full_profile_criteria_total") == 12
     assert "education_entries" in data
     assert isinstance(data["education_entries"], list)
 
@@ -286,3 +288,83 @@ async def test_webapp_trainer_education_delete(
     assert get_prof.status_code == 200
     entries = get_prof.json().get("education_entries") or []
     assert len(entries) == 0
+
+
+@pytest.mark.asyncio
+async def test_webapp_trainer_catalog_visibility_patch_401_without_init_data(app_use_test_db) -> None:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.patch(
+            "/api/webapp/trainer/catalog-visibility",
+            json={"is_catalog_visible": False},
+        )
+    assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_webapp_trainer_catalog_visibility_patch_403_when_not_active(
+    app_use_test_db,
+    db_session,
+) -> None:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        create_resp = await client.post(
+            "/api/trainers",
+            json={"profile": {"first_name": "Не", "last_name": "Актив", "age": 29}},
+        )
+        trainer_id = create_resp.json()["id"]
+    tg = _fresh_trainer_telegram_id()
+    await db_session.execute(
+        text("UPDATE trainers SET telegram_id = :tg WHERE id = :id"),
+        {"tg": tg, "id": trainer_id},
+    )
+    await db_session.commit()
+
+    with patch("src.api.routes.webapp_trainer_profile.require_telegram_user_id", return_value=tg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.patch(
+                "/api/webapp/trainer/catalog-visibility",
+                headers={"X-Telegram-Init-Data": "mock"},
+                json={"is_catalog_visible": False},
+            )
+    assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_webapp_trainer_catalog_visibility_patch_ok_for_active_trainer(
+    app_use_test_db,
+    db_session,
+) -> None:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        create_resp = await client.post(
+            "/api/trainers",
+            json={"profile": {"first_name": "Кат", "last_name": "Алог", "age": 31}},
+        )
+        trainer_id = create_resp.json()["id"]
+        st = await client.patch(f"/api/trainers/{trainer_id}/status", json={"status": "active"})
+        assert st.status_code == 200
+    tg = _fresh_trainer_telegram_id()
+    await db_session.execute(
+        text("UPDATE trainers SET telegram_id = :tg WHERE id = :id"),
+        {"tg": tg, "id": trainer_id},
+    )
+    await db_session.commit()
+
+    with patch("src.api.routes.webapp_trainer_profile.require_telegram_user_id", return_value=tg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            patch_resp = await client.patch(
+                "/api/webapp/trainer/catalog-visibility",
+                headers={"X-Telegram-Init-Data": "mock"},
+                json={"is_catalog_visible": False},
+            )
+            assert patch_resp.status_code == 200
+            assert patch_resp.json() == {"ok": True}
+            get_prof = await client.get(
+                "/api/webapp/trainer/profile",
+                headers={"X-Telegram-Init-Data": "mock"},
+            )
+    assert get_prof.status_code == 200
+    assert get_prof.json()["trainer"]["is_catalog_visible"] is False
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        get_rest = await client.get(f"/api/trainers/{trainer_id}")
+    assert get_rest.status_code == 200
+    assert get_rest.json().get("is_catalog_visible") is False

@@ -13,9 +13,11 @@ from tests.db_catalog_helpers import require_seed_service_id
 
 from src.application.booking_use_cases import (
     cancel_booking,
+    confirm_booking,
     create_booking,
     generate_reminders_for_booking,
     get_bookings_pending_notification,
+    get_pending_trainer_booked_notifications,
     list_bookings_to_complete,
     list_pending_reminders,
     mark_booking_completed_and_notify,
@@ -481,3 +483,96 @@ async def test_group_slot_cancel_frees_space(db_session: AsyncSession) -> None:
     assert r.scalar() == "available"
     third, _ = await create_booking(db_session, slot_id, trainer_id, c3, service_id=service_id)
     assert third is not None
+
+
+@pytest.mark.asyncio
+async def test_confirm_pending_sets_client_trainer_booked_notified_no_duplicate_queue(
+    db_session: AsyncSession,
+) -> None:
+    """Trainer confirm sends rich client push elsewhere; do not enqueue «Вас записали» loop for same booking."""
+    tomorrow = date.today() + timedelta(days=1)
+    trainer_id, slot_id, service_id = await _create_trainer_and_slot(
+        db_session, tomorrow, time(10, 0), time(11, 0)
+    )
+    client_id = await _create_client(db_session, unique_test_telegram_id())
+    booking_id, _ = await create_booking(
+        db_session,
+        slot_id,
+        trainer_id,
+        client_id,
+        service_id=service_id,
+        created_by_trainer=False,
+    )
+    assert booking_id is not None
+    r0 = await db_session.execute(
+        text("SELECT client_notified_trainer_booked_at FROM bookings WHERE id = :id"),
+        {"id": booking_id},
+    )
+    assert r0.scalar() is None
+    info = await confirm_booking(db_session, booking_id, trainer_id)
+    assert info is not None
+    r1 = await db_session.execute(
+        text("SELECT client_notified_trainer_booked_at FROM bookings WHERE id = :id"),
+        {"id": booking_id},
+    )
+    assert r1.scalar() is not None
+    pending = await get_pending_trainer_booked_notifications(db_session, limit=50)
+    assert all(int(p["booking_id"]) != int(booking_id) for p in pending)
+
+
+@pytest.mark.asyncio
+async def test_trainer_booked_queue_skips_when_trainer_was_notified_pending(
+    db_session: AsyncSession,
+) -> None:
+    """If booking went through trainer pending push (notified_at set), never queue «Вас записали…»."""
+    tomorrow = date.today() + timedelta(days=1)
+    trainer_id, slot_id, service_id = await _create_trainer_and_slot(
+        db_session, tomorrow, time(15, 15), time(16, 0)
+    )
+    client_id = await _create_client(db_session, unique_test_telegram_id())
+    booking_id, _ = await create_booking(
+        db_session,
+        slot_id,
+        trainer_id,
+        client_id,
+        service_id=service_id,
+        created_by_trainer=False,
+    )
+    assert booking_id is not None
+    await db_session.execute(
+        text(
+            """
+            UPDATE bookings
+            SET status = 'confirmed', notified_at = NOW(), client_notified_trainer_booked_at = NULL
+            WHERE id = :id
+            """
+        ),
+        {"id": booking_id},
+    )
+    await db_session.commit()
+    pending = await get_pending_trainer_booked_notifications(db_session, limit=50)
+    assert all(int(p["booking_id"]) != int(booking_id) for p in pending)
+
+
+@pytest.mark.asyncio
+async def test_trainer_booked_queue_includes_trainer_created_confirmed(
+    db_session: AsyncSession,
+) -> None:
+    """Trainer-initiated confirmed row: no pending push → notified_at NULL → queue until client push sent."""
+    tomorrow = date.today() + timedelta(days=1)
+    trainer_id, slot_id, service_id = await _create_trainer_and_slot(
+        db_session, tomorrow, time(16, 30), time(17, 15)
+    )
+    client_id = await _create_client(db_session, unique_test_telegram_id())
+    booking_id, _ = await create_booking(
+        db_session,
+        slot_id,
+        trainer_id,
+        client_id,
+        service_id=service_id,
+        created_by_trainer=True,
+    )
+    assert booking_id is not None
+    pending = await get_pending_trainer_booked_notifications(db_session, limit=50)
+    ids = [int(p["booking_id"]) for p in pending]
+    assert int(booking_id) in ids

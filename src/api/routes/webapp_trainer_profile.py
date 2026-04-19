@@ -21,6 +21,7 @@ from src.api.deps import get_session
 from src.api.schemas import (
     TRAINER_EDUCATION_OPTIONS,
     PhotoRegisterBody,
+    TrainerCatalogVisibilityPatchBody,
     TrainerEducationCreateBody,
     TrainerEducationPatchBody,
     TrainerProfilePatchBody,
@@ -45,6 +46,7 @@ from src.application.trainer_use_cases import (
     get_trainer,
     list_trainer_education,
     register_photo,
+    set_trainer_catalog_visibility,
     update_trainer_education,
     update_trainer_profile,
     upload_trainer_education_document_photo_from_bytes,
@@ -52,6 +54,7 @@ from src.application.trainer_use_cases import (
 )
 from src.application.trainer_profile_completeness import moderation_readiness_dict
 from src.infrastructure import s3
+from src.infrastructure.db.models import TRAINER_STATUS_ACTIVE
 from src.shared.audit import ACTOR_API, audit_log
 from src.shared.config import Settings
 from src.shared.telegram_webapp import InitDataAuthError, require_telegram_user_id
@@ -266,6 +269,39 @@ async def patch_trainer_profile_for_webapp(
     if not ok:
         raise HTTPException(status_code=404, detail="Trainer not found")
     audit_log("trainer.profile_updated", ACTOR_API, "webapp_trainer_profile", {"trainer_id": trainer_id})
+    return {"ok": True}
+
+
+@router.patch("/trainer/catalog-visibility")
+async def patch_trainer_catalog_visibility_for_webapp(
+    body: TrainerCatalogVisibilityPatchBody,
+    init_data: str | None = Query(None),
+    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, bool]:
+    """
+    Show or hide the trainer in the public client catalog. Only ``status=active`` trainers may change
+    this from the Mini App (onboarding accounts are not listed anyway).
+    """
+    raw = init_data or x_telegram_init_data
+    trainer_id = await _require_linked_trainer_id(session, raw)
+    trainer = await get_trainer(session, trainer_id)
+    if not trainer:
+        raise HTTPException(status_code=404, detail="Trainer not found")
+    if (trainer.get("status") or "").strip() != TRAINER_STATUS_ACTIVE:
+        raise HTTPException(
+            status_code=403,
+            detail="Настройка каталога доступна после активации профиля",
+        )
+    ok = await set_trainer_catalog_visibility(session, trainer_id, visible=body.is_catalog_visible)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Trainer not found")
+    audit_log(
+        "trainer.catalog_visibility_updated",
+        ACTOR_API,
+        "webapp_trainer_profile",
+        {"trainer_id": trainer_id, "is_catalog_visible": body.is_catalog_visible},
+    )
     return {"ok": True}
 
 

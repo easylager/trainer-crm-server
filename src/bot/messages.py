@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import html
 
+from src.shared.validation import truncate_text
+
 # --- Client bot ---
 CLIENT_START_WELCOME = (
     "👋 Привет! Здесь можно найти тренера и записаться на занятие. "
@@ -1218,6 +1220,11 @@ TRAINER_AFTER_LINK_STEP_BLOCKED = (
     "Сначала заполни анкету в мини-приложении (<b>«Профиль»</b>) — без этого не откроются расписание и заявки.\n\n"
     "Кнопка <b>«Обзор»</b> ниже."
 )
+TRAINER_AFTER_LINK_STEP_BOOKING_READY = (
+    "<b>Сейчас</b>: базовый профиль готов — в мини-приложении уже можно настроить слоты и сделать тестовую запись. "
+    "Дополни анкету позже и отправь на проверку, когда захочешь попасть в каталог.\n\n"
+    "Открой <b>«Обзор»</b> ниже."
+)
 TRAINER_AFTER_LINK_STEP_INVITE_SUBMIT = (
     "<b>Сейчас</b>: анкета почти готова — открой <b>«Обзор»</b>, зайди в <b>«Профиль»</b> в мини-приложении "
     "и сохрани анкету: заявка на проверку уйдёт автоматически. Обычно ответ в течение рабочего дня."
@@ -1372,6 +1379,11 @@ TRAINER_GATE_CALLBACK_BLOCKED = (
 TRAINER_GATE_BLOCKED_PROFILE = (
     "Расписание, заявки и записи закрыты: в анкете не хватает обязательных полей.\n\n"
     "Открой профиль в мини-приложении (кнопка «Профиль» в меню) — там видно, что добить."
+)
+TRAINER_GATE_BOOKING_READY = (
+    "В <b>мини-приложении</b> уже можно открыть расписание и сделать первые записи. "
+    "Команды меню бота до активации профиля пока недоступны — это нормально.\n\n"
+    "Открой <b>«Обзор»</b> или <b>«Профиль»</b> в меню слева."
 )
 # Полная анкета, но заявка на модерацию ещё не ушла (moderation_submitted_at пустой): в Mini App отправка после «Сохранить».
 TRAINER_GATE_INVITE_SUBMIT = (
@@ -1709,6 +1721,10 @@ TRAINER_BOOKINGS_CANCEL_CONFIRM_YES = "Да, отменить"
 TRAINER_BOOKINGS_CANCEL_CONFIRM_NO = "Нет, вернуться"
 TRAINER_BOOKINGS_CANCELLED = "Запись отменена. Слот снова свободен."
 TRAINER_BOOKINGS_BUTTON_WRITE_LINK = "✉️ Написать в Telegram"
+# Prefix for the first trainer_bot push about a client-initiated pending booking (HTML).
+TRAINER_FIRST_ONLINE_BOOKING_NOTIFICATION_PREFIX = (
+    "✨ <b>Первая онлайн-запись</b> — клиент записался сам, подтвердите ниже.\n\n"
+)
 TRAINER_BOOKING_NOTIFICATION = (
     "🔔 <b>Новая запись</b> — нужно ваше решение\n\n"
     "👤 <b>Клиент:</b> {client_name}\n"
@@ -1833,7 +1849,15 @@ def build_trainer_booking_confirmed_echo_reply_markup(
 
 
 TRAINER_FIRST_BOOKING_MILESTONE_FOOTER_HTML = (
-    "<i>Спасибо, что начали с нами! 🚀 Вся информация под рукой — без лишних CRM.</i>"
+    "<i>Дальше — рутина на автопилоте: напоминания, история клиента и расписание в одном месте. "
+    "Вы уже сделали главное. 🚀</i>"
+)
+TRAINER_FIRST_BOOKING_NO_TG_NUDGE_HTML = (
+    "✨ <b>Клиент ещё не в Telegram-боте</b> — нажмите «Пригласить в бота», и он сможет получать напоминания и "
+    "подтверждения в мессенджере (пока достаточно звонка или SMS)."
+)
+TRAINER_FIRST_BOOKING_TG_OK_LINE_HTML = (
+    "✅ Клиент в боте — напоминания и подтверждение уйдут автоматически."
 )
 
 
@@ -1874,6 +1898,11 @@ def format_trainer_first_booking_milestone_rich_html(
     service_name: str | None,
     price_tier_label: str | None,
     booking_price_cents: int | None,
+    arena_city_name: str | None = None,
+    duration_minutes: int | None = None,
+    map_link: str | None = None,
+    client_comment: str | None = None,
+    client_has_telegram: bool | None = None,
 ) -> str:
     """
     Rich «первая запись» card for trainer bot (HTML). Escapes user-controlled fields.
@@ -1882,36 +1911,182 @@ def format_trainer_first_booking_milestone_rich_html(
     phone = (client_phone or "").strip()
     phone_line = f"📞 <b>Телефон:</b> {html.escape(phone)}\n" if phone else ""
 
+    city = (arena_city_name or "").strip()
     an = (arena_name or "").strip()
     aa = (arena_address or "").strip()
+    city_line = ""
+    if city:
+        city_line = f"🏙 <b>Город:</b> {html.escape(city)}\n"
     if an or aa:
         venue_body = ""
         if an:
             venue_body += f"<b>{html.escape(an)}</b>\n"
         if aa:
             venue_body += f"{html.escape(aa)}\n"
-        venue_block = f"📍 <b>Где</b>\n{venue_body}"
+        venue_block = f"📍 <b>Площадка</b>\n{city_line}{venue_body}".rstrip("\n")
     else:
-        venue_block = "📍 <b>Где</b>\n<i>Арена не указана — уточните у клиента или в карточке слота.</i>\n"
+        fallback_city = f"{city_line}" if city_line else ""
+        venue_block = (
+            "📍 <b>Площадка</b>\n"
+            f"{fallback_city}"
+            "<i>Арена не привязана к слоту — уточните у клиента или в расписании.</i>"
+        ).rstrip("\n")
 
     svc_block = _milestone_service_tariff_price_html(service_name, price_tier_label, booking_price_cents)
     service_section = ""
     if svc_block.strip():
-        service_section = f"🎯 <b>Что</b>\n{svc_block}"
+        service_section = f"🎯 <b>Услуга и оплата</b>\n{svc_block}"
 
-    when_line = f"{html.escape(date_str)} ({html.escape(day_label)}) · {html.escape(time_str)}"
+    dur = int(duration_minutes) if duration_minutes is not None else None
+    dur_suffix = f" · {dur} мин" if dur and dur > 0 else ""
+    when_line = f"{html.escape(date_str)} ({html.escape(day_label)}) · {html.escape(time_str)}{dur_suffix}"
+
+    map_section = ""
+    ml = (map_link or "").strip()
+    if ml:
+        esc = html.escape(ml, quote=True)
+        map_section = f"🗺 <b>Карта:</b> <a href=\"{esc}\">открыть в Яндекс.Картах</a>"
+
+    comment_raw = (client_comment or "").strip()
+    comment_section = ""
+    if comment_raw:
+        comment_section = f"💬 <b>Комментарий клиента</b>\n{html.escape(truncate_text(comment_raw, 400))}"
+
+    tg_line = ""
+    if client_has_telegram is True:
+        tg_line = TRAINER_FIRST_BOOKING_TG_OK_LINE_HTML
+    elif client_has_telegram is False:
+        tg_line = TRAINER_FIRST_BOOKING_NO_TG_NUDGE_HTML
 
     blocks: list[str] = [
-        "🎉 <b>Первая запись подтверждена!</b>\n\n"
-        "Вы подтвердили первое занятие — отличный старт.",
+        "🎉 <b>Старт засчитан: это ваша первая запись в Trainer CRM!</b>\n\n"
+        "Вы только что перевели занятие в понятный план — с датой, местом и контекстом.",
         "👤 <b>Клиент</b>\n" f"ФИО: <b>{cn}</b>\n" + phone_line.rstrip("\n"),
-        venue_block.rstrip("\n"),
-        f"📅 <b>Когда</b>\n{when_line}",
+        venue_block,
+        f"📅 <b>Время</b>\n{when_line}",
     ]
     if service_section:
         blocks.append(service_section.rstrip("\n"))
+    if map_section:
+        blocks.append(map_section)
+    if comment_section:
+        blocks.append(comment_section)
+    if tg_line:
+        blocks.append(tg_line)
     blocks.append(TRAINER_FIRST_BOOKING_MILESTONE_FOOTER_HTML)
     return "\n\n".join(blocks)
+
+
+def build_trainer_first_booking_milestone_reply_markup(
+    *,
+    webapp_base: str,
+    booking_id: int,
+    client_telegram_id: int | None,
+):
+    """
+    Inline keyboard for the first-booking celebration (must match trainer bot callback prefixes).
+    """
+    from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
+
+    # Keep in sync with trainer_handlers / webapp route push (same callback_data strings).
+    booking_add_note_prefix = "booking_add_note:"
+    booking_invite_prefix = "booking_invite_client:"
+    rows: list[list[InlineKeyboardButton]] = []
+    base = (webapp_base or "").rstrip("/")
+    if base.lower().startswith("https://"):
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=TRAINER_BOOKING_CONFIRMED_BTN_DETAILS,
+                    web_app=WebAppInfo(
+                        url=f"{base}/webapp/schedule-editor?open_booking={int(booking_id)}"
+                    ),
+                ),
+            ]
+        )
+    if client_telegram_id:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=TRAINER_BOOKING_CONFIRMED_BTN_WRITE,
+                    url=f"tg://user?id={int(client_telegram_id)}",
+                ),
+            ]
+        )
+    rows.append(
+        [
+            InlineKeyboardButton(
+                text=TRAINER_BUTTON_ADD_BOOKING_NOTE,
+                callback_data=f"{booking_add_note_prefix}{int(booking_id)}",
+            ),
+        ]
+    )
+    if not client_telegram_id:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=TRAINER_BUTTON_INVITE_CLIENT_TO_BOT,
+                    callback_data=f"{booking_invite_prefix}{int(booking_id)}",
+                ),
+            ]
+        )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def _trainer_slot_time_hhmm(t: object) -> str:
+    if t is None:
+        return "—"
+    if hasattr(t, "strftime"):
+        return t.strftime("%H:%M")
+    s = str(t).strip()
+    return s[:5] if len(s) >= 5 else (s or "—")
+
+
+def format_trainer_first_booking_milestone_from_booking_row(info: dict) -> str:
+    """HTML card from `get_booking_milestone_display_for_trainer` / `confirm_booking` payload dict."""
+    d = info.get("slot_date")
+    st = info.get("start_time")
+    date_str = d.strftime("%d.%m") if d and hasattr(d, "strftime") else "—"
+    day_str = TRAINER_DAYS[d.weekday()] if d and hasattr(d, "weekday") else ""
+    time_str = _trainer_slot_time_hhmm(st)
+    raw_tid = info.get("client_telegram_id")
+    has_tg = bool(raw_tid)
+    return format_trainer_first_booking_milestone_rich_html(
+        client_name=(info.get("client_name") or "").strip() or "Клиент",
+        client_phone=(info.get("client_phone") or "").strip(),
+        date_str=date_str,
+        day_label=day_str,
+        time_str=time_str,
+        arena_name=info.get("arena_name"),
+        arena_address=info.get("arena_address"),
+        service_name=info.get("service_name"),
+        price_tier_label=info.get("price_tier_label"),
+        booking_price_cents=info.get("booking_price_cents"),
+        arena_city_name=info.get("arena_city_name"),
+        duration_minutes=info.get("duration_minutes"),
+        map_link=info.get("map_link"),
+        client_comment=info.get("client_comment"),
+        client_has_telegram=has_tg,
+    )
+
+
+# After first booking: trainer may still be pending activation — catalog listing requires active + visibility.
+TRAINER_SHARE_FIRST_BOOKING_CATALOG_PATH_HTML = (
+    "🎯 <b>Что дальше?</b>\n\n"
+    "Мы помогаем вам по шагам разобраться в системе — вы не одни. Пока аккаунт не <b>активирован</b> после модерации, вас нет в <b>общем каталоге</b> на сайте: "
+    "так устроено для всех новых тренеров, чтобы клиенты видели в списке только проверенные профили.\n\n"
+    "Ваш следующий шаг: дополните профиль и отправьте заявку из приложения (или дождитесь ответа администратора, если она уже в очереди).\n\n"
+    "<b>Персональная ссылка на запись</b> к вам <b>уже работает</b> — смело делитесь ею с клиентами:\n"
+    "<code>{deep_link}</code>\n\n"
+    "<i>Общую страницу каталога удобнее отправлять, когда профиль станет активным — тогда вы появитесь в общем списке тренеров.</i>"
+)
+TRAINER_SHARE_FIRST_BOOKING_ACTIVE_HIDDEN_FROM_CATALOG_HTML = (
+    "👁 <b>Профиль активен, но вы скрыты из каталога</b>\n\n"
+    "В приложении в профиле включите <b>«Показать в каталоге»</b> — иначе клиенты не увидят вас в общем списке.\n\n"
+    "Ссылки для записи:\n\n"
+    "1️⃣ <b>Персональная ссылка в бота</b> (на вас и услугу):\n<code>{deep_link}</code>\n\n"
+    "2️⃣ <b>Страница каталога:</b>\n<code>{catalog_url}</code>"
+)
 TRAINER_SHARE_CATALOG_TIP_BOTH_HTML = (
     "📣 <b>Следующий шаг к новым клиентам</b>\n\n"
     "Чтобы клиенты записывались к вам сами, поделитесь ссылками:\n\n"
@@ -2024,6 +2199,12 @@ TRAINER_BUTTON_PASSES = "📦 Абонементы/Сертификаты"
 
 # Admin: /stats — platform overview (current + 7d + 30d + signals)
 ADMIN_STATS_TITLE = "📊 <b>Статистика платформы</b>\n\n"
+ADMIN_STATS_SECTION_NORTH_STAR = "🎯 <b>North Star</b> — подтверждённые записи за неделю слота\n{lines}\n"
+ADMIN_STATS_NORTH_STAR_CURRENT = "• Эта неделя ({d0}—{d1}): <b>{n}</b>"
+ADMIN_STATS_NORTH_STAR_PREV = "• Прошлая неделя: <b>{n}</b>"
+ADMIN_STATS_SECTION_ACTIVATION = "🪜 <b>Активация тренеров</b>\n{lines}\n"
+ADMIN_STATS_ACTIVATION_STAGE = "• {label}: {n}"
+ADMIN_STATS_ACTIVATION_HINT = "<i>Подробный список по тренерам — в мини-приложении «Панель админа».</i>"
 ADMIN_STATS_SECTION_NOW = "🟢 <b>Сейчас</b>\n{lines}\n"
 ADMIN_STATS_SECTION_7D = "📆 <b>За 7 дней</b>\n{lines}\n"
 ADMIN_STATS_SECTION_30D = "📆 <b>За 30 дней</b>\n{lines}\n"

@@ -37,6 +37,14 @@
         return url + (url.indexOf('?') === -1 ? '?' : '&') + 'init_data=' + encodeURIComponent(initData);
       }
 
+      function postClientInviteLinkFirstCopyRecorded() {
+        if (!initData) return;
+        fetch(withInit('/api/webapp/trainer/welcome-link/first-copy'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        }).catch(function() {});
+      }
+
       var state = {
         allClients: [],
         filteredClients: [],
@@ -831,6 +839,7 @@
                 navigator.clipboard
                   .writeText(link)
                   .then(function() {
+                    postClientInviteLinkFirstCopyRecorded();
                     alert('Ссылка скопирована');
                   })
                   .catch(function() {
@@ -1225,7 +1234,10 @@
         var link = document.getElementById('inviteLinkUrl').textContent;
         if (!link) return;
         if (navigator.clipboard && navigator.clipboard.writeText) {
-          navigator.clipboard.writeText(link).then(function() { alert('Ссылка скопирована'); }).catch(function() { alert(link); });
+          navigator.clipboard.writeText(link).then(function() {
+            postClientInviteLinkFirstCopyRecorded();
+            alert('Ссылка скопирована');
+          }).catch(function() { alert(link); });
         } else { alert(link); }
       };
 

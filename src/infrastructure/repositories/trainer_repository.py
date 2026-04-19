@@ -250,7 +250,7 @@ class TrainerRepository:
         """Load trainer with profile, photos, service_ids; None if not found."""
         r = await self._session.execute(
             text(
-                "SELECT id, telegram_id, status, created_at, moderation_feedback, moderation_submitted_at, profile_pending, photo_pending, primary_arena_id, schedule_grid_step_minutes "
+                "SELECT id, telegram_id, status, created_at, moderation_feedback, moderation_submitted_at, profile_pending, photo_pending, primary_arena_id, schedule_grid_step_minutes, is_catalog_visible "
                 "FROM trainers WHERE id = :id"
             ),
             {"id": trainer_id},
@@ -281,6 +281,7 @@ class TrainerRepository:
             "photo_pending": raw_photo_pend if isinstance(raw_photo_pend, dict) else None,
             "primary_arena_id": row[8] if len(row) > 8 else None,
             "schedule_grid_step_minutes": int(row[9]) if len(row) > 9 and row[9] is not None else 15,
+            "is_catalog_visible": bool(row[10]) if len(row) > 10 and row[10] is not None else True,
         }
         rp = await self._session.execute(
             text(
@@ -940,6 +941,14 @@ class TrainerRepository:
         )
         return r.rowcount > 0
 
+    async def set_is_catalog_visible(self, trainer_id: int, visible: bool) -> bool:
+        """Show or hide trainer in /api/public catalog while status may stay active."""
+        r = await self._session.execute(
+            text("UPDATE trainers SET is_catalog_visible = :vis WHERE id = :id"),
+            {"id": trainer_id, "vis": visible},
+        )
+        return r.rowcount > 0
+
     async def set_moderation_feedback(self, trainer_id: int, feedback: str | None) -> bool:
         """Set or clear moderation_feedback (e.g. for 'needs edit'). Returns True if trainer exists."""
         r = await self._session.execute(
@@ -1057,7 +1066,7 @@ class TrainerRepository:
             FROM trainers t
             LEFT JOIN trainer_profiles p ON p.trainer_id = t.id
         """
-        where = " WHERE t.status = 'active'"
+        where = " WHERE t.status = 'active' AND t.is_catalog_visible = true"
         where += """ AND EXISTS (
             SELECT 1 FROM trainer_subscriptions ts
             WHERE ts.trainer_id = t.id

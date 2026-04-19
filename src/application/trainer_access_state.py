@@ -8,7 +8,10 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.trainer_link import get_trainer_row_by_telegram_id
-from src.application.trainer_profile_completeness import is_profile_complete_for_moderation
+from src.application.trainer_profile_completeness import (
+    is_profile_complete_for_moderation,
+    is_tt_minimal_profile_complete,
+)
 from src.application.trainer_use_cases import get_trainer
 from src.shared.trainer_status import normalize_trainer_status_value
 from src.infrastructure.db.models import (
@@ -26,6 +29,8 @@ class TrainerAccessState(str, Enum):
     NOT_LINKED = "not_linked"
     ACTIVE = "active"
     BLOCKED_PROFILE = "blocked_profile"
+    # pending_profile + TTV minimal: Mini App schedule/bookings; bot stays gated until active.
+    BOOKING_READY = "booking_ready"
     PENDING_MODERATION = "pending_moderation"
     DEACTIVATED = "deactivated"
 
@@ -42,6 +47,8 @@ def resolve_trainer_access_state(*, status: str, trainer: dict[str, Any] | None)
     if st == TRAINER_STATUS_PENDING_PROFILE:
         if trainer is not None and is_profile_complete_for_moderation(trainer):
             return TrainerAccessState.PENDING_MODERATION
+        if trainer is not None and is_tt_minimal_profile_complete(trainer):
+            return TrainerAccessState.BOOKING_READY
         return TrainerAccessState.BLOCKED_PROFILE
     return TrainerAccessState.PENDING_MODERATION
 

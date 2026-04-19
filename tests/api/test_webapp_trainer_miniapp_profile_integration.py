@@ -119,9 +119,18 @@ async def test_moderation_readiness_matches_between_profile_and_onboarding_endpo
         "trainer_status",
         "already_submitted_for_moderation",
         "moderation_criteria_total",
+        "full_profile_complete",
+        "full_profile_missing_fields",
+        "full_profile_missing_labels_ru",
+        "full_profile_criteria_total",
+        "tt_minimal_complete",
+        "tt_minimal_missing_fields",
+        "tt_minimal_missing_labels_ru",
+        "tt_minimal_criteria_total",
     ):
         assert key in standalone
-    assert standalone.get("moderation_criteria_total") == 12
+    assert standalone.get("moderation_criteria_total") == 8
+    assert standalone.get("full_profile_criteria_total") == 12
 
 
 @pytest.mark.asyncio
@@ -152,11 +161,15 @@ async def test_onboarding_checklist_inactive_trainer_slots_and_bookings_locked(
     assert resp.status_code == 200
     data = resp.json()
     assert data.get("is_active") is False
+    assert "full_profile_complete" in data
     assert data.get("has_future_available_slots") is False
     assert data.get("has_future_slots") is False
     assert data.get("has_any_booking") is False
+    assert data.get("has_upcoming_booking") is False
+    assert data.get("weekly_template_count") == 0
     assert data.get("slots_locked_reason")
     assert data.get("bookings_locked_reason")
+    assert data.get("schedule_unlocked") is False
 
 
 @pytest.mark.asyncio
@@ -190,9 +203,12 @@ async def test_onboarding_checklist_active_future_available_slot(
     assert empty.status_code == 200
     ej = empty.json()
     assert ej.get("is_active") is True
+    assert ej.get("schedule_unlocked") is True
+    assert ej.get("weekly_template_count") == 0
     assert ej.get("slots_locked_reason") is None
     assert ej.get("has_future_available_slots") is False
     assert ej.get("has_future_slots") is False
+    assert ej.get("has_upcoming_booking") is False
 
     slot_day = date.today() + timedelta(days=14)
     await db_session.execute(
@@ -216,6 +232,7 @@ async def test_onboarding_checklist_active_future_available_slot(
     fj = filled.json()
     assert fj.get("has_future_available_slots") is True
     assert fj.get("has_future_slots") is True
+    assert fj.get("has_upcoming_booking") is False
 
 
 @pytest.mark.asyncio
@@ -260,6 +277,90 @@ async def test_onboarding_checklist_booked_future_slot_counts_for_slots_step(
     data = resp.json()
     assert data.get("has_future_available_slots") is False
     assert data.get("has_future_slots") is True
+    assert data.get("has_upcoming_booking") is False
+
+
+@pytest.mark.asyncio
+async def test_onboarding_checklist_has_upcoming_booking_uses_hub_upcoming_filter(
+    app_use_test_db,
+    db_session,
+) -> None:
+    """Upcoming booking flag should match hub list logic (pending/confirmed + slot end in future)."""
+    tg = _fresh_trainer_telegram_id()
+    r = await db_session.execute(text("INSERT INTO trainers (status) VALUES ('active') RETURNING id"))
+    tid = r.fetchone()[0]
+    await db_session.execute(
+        text("UPDATE trainers SET telegram_id = :tg WHERE id = :id"),
+        {"tg": tg, "id": tid},
+    )
+    await db_session.execute(
+        text(
+            "INSERT INTO trainer_profiles (trainer_id, first_name, last_name, age) "
+            "VALUES (:tid, 'Апкоминг', 'Чеклист', 31)"
+        ),
+        {"tid": tid},
+    )
+    svc_name = "Test service " + uuid.uuid4().hex[:8]
+    r_service = await db_session.execute(
+        text("INSERT INTO services (name) VALUES (:name) RETURNING id"),
+        {"name": svc_name},
+    )
+    service_id = r_service.fetchone()[0]
+    r_client = await db_session.execute(
+        text(
+            "INSERT INTO clients (telegram_id, first_name) VALUES (:tg, 'Клиент') RETURNING id"
+        ),
+        {"tg": _fresh_trainer_telegram_id()},
+    )
+    client_id = r_client.fetchone()[0]
+    slot_day = date.today() + timedelta(days=2)
+    r_slot = await db_session.execute(
+        text(
+            """
+            INSERT INTO slots (trainer_id, slot_date, start_time, end_time, status)
+            VALUES (:tid, :d, :st, :en, 'available')
+            RETURNING id
+            """
+        ),
+        {"tid": tid, "d": slot_day, "st": time(10, 0), "en": time(11, 0)},
+    )
+    slot_id = r_slot.fetchone()[0]
+    await db_session.execute(
+        text(
+            """
+            INSERT INTO bookings (slot_id, trainer_id, client_id, service_id, status)
+            VALUES (:sid, :tid, :cid, :svc, 'pending')
+            """
+        ),
+        {"sid": slot_id, "tid": tid, "cid": client_id, "svc": service_id},
+    )
+    await db_session.commit()
+
+    with patch_trainer_init_auth(tg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.get(
+                "/api/webapp/trainer/onboarding/checklist",
+                headers={"X-Telegram-Init-Data": "mock"},
+            )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data.get("has_upcoming_booking") is True
+
+    await db_session.execute(
+        text("UPDATE slots SET slot_date = :d WHERE id = :sid"),
+        {"d": date.today() - timedelta(days=1), "sid": slot_id},
+    )
+    await db_session.commit()
+
+    with patch_trainer_init_auth(tg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp2 = await client.get(
+                "/api/webapp/trainer/onboarding/checklist",
+                headers={"X-Telegram-Init-Data": "mock"},
+            )
+    assert resp2.status_code == 200
+    data2 = resp2.json()
+    assert data2.get("has_upcoming_booking") is False
 
 
 @pytest.mark.asyncio
@@ -813,6 +914,82 @@ async def test_submit_for_moderation_success_when_profile_complete(
     assert resp.status_code == 200
     assert resp.json().get("submitted") is True
     assert notified == [trainer_id]
+
+
+@pytest.mark.asyncio
+async def test_submit_for_moderation_succeeds_with_submission_tier_only_profile(
+    app_use_test_db,
+    db_session,
+    monkeypatch,
+) -> None:
+    """Bio block optional for queue: no age/description/education/experience when core 8 are set."""
+    r = await db_session.execute(text("SELECT id FROM services ORDER BY id LIMIT 1"))
+    sid = r.scalar()
+    r2 = await db_session.execute(text("SELECT id FROM cities ORDER BY id LIMIT 1"))
+    cid = r2.scalar()
+    r3 = await db_session.execute(text("SELECT id FROM arenas ORDER BY id LIMIT 1"))
+    aid = r3.scalar()
+    if sid is None or cid is None or aid is None:
+        pytest.skip("need seed services, cities, and arenas")
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        create_resp = await client.post(
+            "/api/trainers",
+            json={
+                "profile": {
+                    "first_name": "Короткий",
+                    "last_name": "Путь",
+                    "age": 0,
+                    "phone": "+375291112233",
+                    "city_id": cid,
+                    "session_duration_minutes": 60,
+                },
+                "service_ids": [sid],
+                "arena_ids": [aid],
+            },
+        )
+        assert create_resp.status_code == 200, create_resp.text
+        trainer_id = create_resp.json()["id"]
+    await db_session.execute(
+        text(
+            "INSERT INTO trainer_photos (trainer_id, file_key, sort_order) VALUES (:tid, :fk, 0)"
+        ),
+        {"tid": trainer_id, "fk": f"trainers/{trainer_id}/thin.jpg"},
+    )
+    await db_session.execute(
+        text(
+            "UPDATE trainer_profiles SET min_hours_before_booking = 12 "
+            "WHERE trainer_id = :tid"
+        ),
+        {"tid": trainer_id},
+    )
+    tg = _fresh_trainer_telegram_id()
+    await db_session.execute(
+        text("UPDATE trainers SET telegram_id = :tg WHERE id = :id"),
+        {"tg": tg, "id": trainer_id},
+    )
+    await db_session.commit()
+
+    monkeypatch.setattr(
+        "src.application.trainer_use_cases.notify_admins_trainer_queued_for_moderation",
+        lambda _tid: None,
+    )
+
+    with patch_trainer_init_auth(tg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            prof = await client.get(
+                "/api/webapp/trainer/profile",
+                headers={"X-Telegram-Init-Data": "mock"},
+            )
+            mr = prof.json()["moderation_readiness"]
+            assert mr["complete"] is True
+            assert mr["full_profile_complete"] is False
+            resp = await client.post(
+                "/api/webapp/trainer/onboarding/submit-for-moderation",
+                headers={"X-Telegram-Init-Data": "mock"},
+            )
+    assert resp.status_code == 200
+    assert resp.json().get("submitted") is True
 
 
 @pytest.mark.asyncio

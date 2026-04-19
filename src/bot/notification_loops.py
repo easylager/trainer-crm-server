@@ -829,6 +829,8 @@ async def run_booking_notifier_loop(trainer_bot: Bot) -> None:
                             city=html_lib.escape(city),
                             arenas=html_lib.escape(arenas),
                         )
+                    if b.get("is_first_client_online_booking"):
+                        text = msg.TRAINER_FIRST_ONLINE_BOOKING_NOTIFICATION_PREFIX + text
                     kb = InlineKeyboardMarkup(
                         inline_keyboard=[
                             [
@@ -851,7 +853,10 @@ async def run_booking_notifier_loop(trainer_bot: Bot) -> None:
                     )
                     try:
                         await trainer_bot.send_message(
-                            chat_id=trainer_tid, text=text, reply_markup=kb
+                            chat_id=trainer_tid,
+                            text=text,
+                            reply_markup=kb,
+                            parse_mode="HTML",
                         )
                         await mark_booking_notified(session, b["id"])
                     except Exception as e:

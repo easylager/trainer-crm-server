@@ -365,9 +365,101 @@
       color: var(--tg-theme-hint-color);
       line-height: 1;
     }
+    .hub-inline-toast {
+      position: fixed;
+      left: 12px;
+      right: 12px;
+      bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+      z-index: 160;
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 12px 12px 12px 14px;
+      border-radius: 14px;
+      border: 1px solid rgba(245, 166, 35, 0.35);
+      background: var(--tg-theme-secondary-bg-color);
+      box-shadow: 0 10px 28px rgba(0, 0, 0, 0.2);
+      transform: translateY(14px);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s ease, transform 0.2s ease;
+    }
+    .hub-inline-toast[hidden] { display: none !important; }
+    .hub-inline-toast.hub-inline-toast--show {
+      transform: translateY(0);
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .hub-inline-toast--success {
+      border-color: rgba(245, 166, 35, 0.38);
+      background:
+        linear-gradient(135deg, rgba(245, 166, 35, 0.12) 0%, transparent 100%),
+        var(--tg-theme-secondary-bg-color);
+    }
+    .hub-inline-toast--warning {
+      border-color: rgba(255, 164, 0, 0.45);
+    }
+    .hub-inline-toast__body {
+      flex: 1;
+      min-width: 0;
+    }
+    .hub-inline-toast__title {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--tg-theme-text-color);
+      line-height: 1.25;
+    }
+    .hub-inline-toast__text {
+      margin-top: 3px;
+      font-size: 12px;
+      line-height: 1.35;
+      color: var(--tg-theme-hint-color);
+    }
+    .hub-inline-toast__actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+    .hub-inline-toast__action {
+      border: 1px solid rgba(245, 166, 35, 0.35);
+      background: color-mix(in srgb, var(--tg-theme-bg-color) 75%, var(--tg-theme-button-color) 25%);
+      color: var(--tg-theme-text-color);
+      border-radius: 9px;
+      padding: 6px 8px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .hub-inline-toast__close {
+      border: none;
+      background: transparent;
+      color: var(--tg-theme-hint-color);
+      font-size: 16px;
+      line-height: 1;
+      cursor: pointer;
+      padding: 2px 4px;
+      border-radius: 6px;
+      font-family: inherit;
+    }
+    .hub-inline-toast__close:active {
+      transform: scale(0.94);
+    }
 
     .hub-priority-actions {
       margin-bottom: 20px;
+    }
+    .hub-priority-actions--booking-focus .hub-quick-action[data-priority-action="schedule"] {
+      opacity: 0.7;
+      border-style: dashed;
+    }
+    .hub-priority-actions--booking-focus .hub-quick-action[data-priority-action="book"] {
+      border-color: rgba(245, 166, 35, 0.42);
+      box-shadow: 0 10px 26px rgba(245, 166, 35, 0.18);
+      background:
+        linear-gradient(135deg, rgba(245, 166, 35, 0.1) 0%, transparent 100%),
+        var(--tg-theme-secondary-bg-color);
     }
     /* Shared with priority strip (schedule / book client) — not the removed «Остальное» block. */
     .hub-quick-grid {
@@ -434,9 +526,12 @@
     }
     .hub-quick-action.hub-quick-action--locked {
       opacity: 0.55;
+      cursor: not-allowed;
+      border-style: dashed;
     }
     .hub-quick-action.hub-quick-action--locked:hover {
       transform: none;
+      box-shadow: none;
     }
     .hub-quick-icon {
       width: 28px;
@@ -492,6 +587,41 @@
       background: var(--app-cta-fill);
       border-radius: 1px;
     }
+    /* One-line «wow» for the trainer’s first client-initiated pending booking (API flag). */
+    .hub-first-online-hint {
+      margin: 0 0 12px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      font-size: 13px;
+      font-weight: 600;
+      line-height: 1.35;
+      letter-spacing: 0.01em;
+      color: var(--tg-theme-text-color);
+      background: linear-gradient(
+        135deg,
+        rgba(247, 166, 0, 0.22) 0%,
+        rgba(247, 166, 0, 0.06) 55%,
+        rgba(255, 255, 255, 0.04) 100%
+      );
+      border: 1px solid rgba(247, 166, 0, 0.35);
+      box-shadow: 0 4px 18px rgba(0, 0, 0, 0.06);
+      animation: hub-first-online-pop 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+    @keyframes hub-first-online-pop {
+      from {
+        opacity: 0;
+        transform: translateY(6px) scale(0.98);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
+    .hub-is-dark .hub-first-online-hint {
+      border-color: rgba(247, 166, 0, 0.28);
+      box-shadow: 0 4px 22px rgba(0, 0, 0, 0.2);
+    }
+
     .hub-day-label {
       font-size: 13px;
       font-weight: 600;
@@ -538,6 +668,25 @@
     }
     .hub-bookings-stack .slot-row.slot-booked-click.slot-booking-confirmed {
       border-color: rgba(52, 199, 89, 0.45);
+    }
+    .hub-bookings-stack .slot-row.hub-booking-row--new {
+      animation: hub-booking-row-new 1.8s ease;
+      border-color: rgba(245, 166, 35, 0.62);
+      box-shadow: 0 0 0 2px rgba(245, 166, 35, 0.18);
+    }
+    @keyframes hub-booking-row-new {
+      0% {
+        transform: scale(0.992);
+        box-shadow: 0 0 0 0 rgba(245, 166, 35, 0.36);
+      }
+      50% {
+        transform: scale(1.004);
+        box-shadow: 0 0 0 3px rgba(245, 166, 35, 0.28);
+      }
+      100% {
+        transform: scale(1);
+        box-shadow: 0 0 0 2px rgba(245, 166, 35, 0.18);
+      }
     }
     .hub-bookings-stack .slot-row:active { opacity: 0.92; }
     .hub-bookings-stack .slot-row .slot-row-left { flex: 1; min-width: 0; }
@@ -925,6 +1074,54 @@
     #hubModalBookGroupSlot .btn-book-option-text { font-size: 15px; font-weight: 600; display: block; }
     #hubModalBookGroupSlot .btn-book-option-hint { font-size: 12px; color: var(--tg-theme-hint-color); display: block; margin-top: 3px; }
     #hubModalBookGroupSlot .btn-book-option-arrow { flex-shrink: 0; font-size: 22px; color: var(--tg-theme-hint-color); opacity: 0.45; }
+    /* Service choice: avoid native <select> wheel/menu — it mis-anchors under backdrop-filter + scrollable modal in Telegram/iOS WebKit. */
+    #hubModalBookGroupSlot .hub-book-service-select-native {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      clip-path: inset(50%);
+      border: 0;
+      white-space: nowrap;
+    }
+    #hubModalBookGroupSlot .hub-book-service-picklist {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    #hubModalBookGroupSlot .hub-book-service-pick {
+      width: 100%;
+      text-align: left;
+      padding: 13px 14px;
+      border-radius: 14px;
+      border: none;
+      font: inherit;
+      font-size: 15px;
+      font-weight: 600;
+      box-sizing: border-box;
+      background: var(--tg-theme-secondary-bg-color);
+      color: var(--tg-theme-text-color);
+      cursor: pointer;
+      outline: none;
+      box-shadow: inset 0 0 0 1px transparent;
+      transition: box-shadow 160ms ease, background-color 160ms ease, opacity 160ms ease;
+    }
+    #hubModalBookGroupSlot .hub-book-service-pick:active {
+      opacity: 0.92;
+    }
+    #hubModalBookGroupSlot .hub-book-service-pick.is-selected {
+      box-shadow:
+        inset 0 0 0 1px rgba(247, 166, 0, 0.55),
+        0 0 0 3px rgba(247, 166, 0, 0.12);
+    }
+    #hubModalBookGroupSlot .hub-book-service-pick:focus-visible {
+      box-shadow:
+        inset 0 0 0 1px rgba(247, 166, 0, 0.55),
+        0 0 0 3px rgba(247, 166, 0, 0.12);
+    }
     #hubModalBookGroupSlot .btn-book-cancel {
       margin-top: 16px !important;
       width: 100%;
@@ -972,6 +1169,25 @@
     #hubModalQuickBookDatetime .book-field-stack,
     #hubModalBookGroupSlot .book-field-stack,
     #hubModalShareBookingLink .book-field-stack { margin-bottom: 16px; }
+    #hubModalBookGroupSlot #hubBookServiceWrap {
+      position: relative;
+    }
+    /* Reserve hint line height so duration-driven refreshes don't vertically "jump" the modal. */
+    #hubModalQuickBookDatetime #hubQuickBookHint.hub-quickbook-hint {
+      margin: 2px 0 10px;
+      min-height: 2.6em;
+      font-size: 12px;
+      line-height: 1.35;
+      color: var(--tg-theme-hint-color);
+      opacity: 0;
+      transform: translateY(1px);
+      transition: opacity 160ms ease, transform 160ms ease, color 160ms ease;
+      pointer-events: none;
+    }
+    #hubModalQuickBookDatetime #hubQuickBookHint.hub-quickbook-hint.is-on {
+      opacity: 1;
+      transform: translateY(0);
+    }
     #hubModalQuickBookDatetime .input,
     #hubModalQuickBookDatetime select.input,
     #hubModalShareBookingLink .input,
@@ -986,6 +1202,18 @@
       color: var(--tg-theme-text-color);
       display: block;
       min-height: 48px;
+      outline: none;
+      /* Use inset shadow instead of border width changes to avoid 1px layout shifts on focus. */
+      box-shadow: inset 0 0 0 1px transparent;
+      transition: box-shadow 160ms ease, background-color 160ms ease;
+    }
+    #hubModalQuickBookDatetime select.input:focus,
+    #hubModalQuickBookDatetime select.input:focus-visible,
+    #hubModalQuickBookDatetime .input:focus,
+    #hubModalQuickBookDatetime .input:focus-visible {
+      box-shadow:
+        inset 0 0 0 1px rgba(247, 166, 0, 0.55),
+        0 0 0 3px rgba(247, 166, 0, 0.12);
     }
     #hubModalQuickBookDatetime .hub-modal-select-wrap,
     #hubModalBookGroupSlot .hub-modal-select-wrap,
@@ -1097,6 +1325,22 @@
     #hubModalQuickBookDatetime .modal-actions .btn-block,
     #hubModalBookGroupConfirm .modal-actions .btn-block,
     #hubModalShareBookingLink .modal-actions .btn-block { flex: 1; }
+    /* «Ссылка на запись»: нижний ряд не на всю «маркетинговую» высоту тач-цели. */
+    #hubModalShareBookingLink .modal-actions {
+      gap: 8px;
+      margin-top: 14px;
+    }
+    #hubModalShareBookingLink .modal-actions .btn-block.btn-primary,
+    #hubModalShareBookingLink .modal-actions .btn-block.btn-secondary {
+      padding: 10px 12px;
+      font-size: 14px;
+      font-weight: 600;
+      line-height: 1.25;
+      border-radius: 12px;
+    }
+    #hubModalShareBookingLink .modal-actions .btn-block.btn-secondary {
+      border-width: 1.5px;
+    }
     #hubModalShareBookingLink .book-phone-hint {
       margin: 0;
       font-size: 12px;
@@ -1400,9 +1644,14 @@
     }
 
     /* Onboarding checklist (same tokens as trainer-profile; constitution surfaces) */
+    /* Hub: strip sits under header — avoid double gap with .hub-header margin-bottom */
+    .onboarding-strip.onboarding-strip--hub-top {
+      margin-top: 0;
+      margin-bottom: 16px;
+    }
     .onboarding-strip {
       margin-bottom: 20px;
-      padding: 14px 16px 16px;
+      padding: 12px 14px 14px;
       border-radius: 18px;
       border: 1px solid rgba(128, 128, 128, 0.14);
       background: var(--tg-theme-secondary-bg-color);
@@ -1410,20 +1659,20 @@
     }
     .hub-is-dark .onboarding-strip { box-shadow: 0 4px 18px rgba(0, 0, 0, 0.22); }
     .onboarding-strip-head {
-      margin-bottom: 12px;
+      margin-bottom: 10px;
     }
     .onboarding-strip-title {
       margin: 0;
-      font-size: 15px;
+      font-size: 14px;
       font-weight: 700;
       letter-spacing: -0.02em;
       color: var(--tg-theme-text-color);
     }
     .onboarding-strip-lead {
-      margin: 4px 0 0;
-      font-size: 12px;
+      margin: 3px 0 0;
+      font-size: 11px;
       font-weight: 500;
-      line-height: 1.4;
+      line-height: 1.35;
       color: var(--tg-theme-hint-color);
     }
     .onboarding-steps {
@@ -1432,14 +1681,14 @@
       padding: 0;
       display: flex;
       flex-direction: column;
-      gap: 10px;
+      gap: 8px;
     }
     .onboarding-step {
       display: flex;
       align-items: flex-start;
-      gap: 10px;
-      padding: 10px 12px;
-      border-radius: 14px;
+      gap: 8px;
+      padding: 9px 10px;
+      border-radius: 12px;
       background: var(--tg-theme-bg-color);
       border: 1px solid rgba(128, 128, 128, 0.1);
     }
@@ -1463,29 +1712,29 @@
     .onboarding-step.locked .onboarding-step-icon { opacity: 0.75; }
     .onboarding-step-body { flex: 1; min-width: 0; }
     .onboarding-step-name {
-      font-size: 14px;
+      font-size: 13px;
       font-weight: 600;
       color: var(--tg-theme-text-color);
-      line-height: 1.3;
+      line-height: 1.25;
     }
     .onboarding-step-hint {
-      margin: 4px 0 0;
-      font-size: 12px;
+      margin: 2px 0 0;
+      font-size: 11px;
       color: var(--tg-theme-hint-color);
       line-height: 1.35;
     }
     .onboarding-step-cta {
       flex-shrink: 0;
       align-self: center;
-      padding: 8px 12px;
+      padding: 7px 10px;
       border-radius: 10px;
-      border: none;
-      font-size: 12px;
+      border: 1px solid rgba(245, 166, 35, 0.35);
+      font-size: 11px;
       font-weight: 600;
       font-family: inherit;
       cursor: pointer;
-      background: var(--app-cta-fill);
-      color: var(--app-cta-text);
+      background: color-mix(in srgb, var(--tg-theme-secondary-bg-color) 78%, var(--tg-theme-button-color) 22%);
+      color: var(--tg-theme-text-color);
     }
     .onboarding-step-cta:disabled {
       opacity: 0.45;
@@ -1507,6 +1756,75 @@
       background: none;
       font-family: inherit;
       padding: 4px 8px;
+    }
+
+    /* Optional post-onboarding nudge: weekly template (dismissible, one row). */
+    .hub-schedule-rhythm-hint {
+      display: none;
+      flex-wrap: wrap;
+      align-items: flex-start;
+      gap: 10px 14px;
+      margin: 0 0 16px;
+      padding: 12px 14px;
+      border-radius: 14px;
+      border: 1px solid rgba(128, 128, 128, 0.16);
+      background: color-mix(in srgb, var(--tg-theme-secondary-bg-color) 92%, transparent);
+    }
+    .hub-schedule-rhythm-hint[hidden] {
+      display: none !important;
+    }
+    .hub-schedule-rhythm-hint__text {
+      flex: 1 1 200px;
+      margin: 0;
+      font-size: 13px;
+      line-height: 1.45;
+      color: var(--tg-theme-text-color);
+    }
+    .hub-schedule-rhythm-hint__text strong {
+      font-weight: 700;
+    }
+    .hub-schedule-rhythm-hint__actions {
+      flex: 0 0 auto;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+    }
+    .hub-schedule-rhythm-hint__actions .btn-sm {
+      padding: 8px 12px;
+      font-size: 12px;
+      border-radius: 10px;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      font-family: inherit;
+    }
+    .hub-schedule-rhythm-hint__actions .btn-sm.btn-primary {
+      background: var(--tg-theme-button-color);
+      color: var(--tg-theme-button-text-color);
+    }
+    .hub-schedule-rhythm-hint__dismiss {
+      width: 32px;
+      height: 32px;
+      border-radius: 10px;
+      border: none;
+      background: transparent;
+      color: var(--tg-theme-hint-color);
+      font-size: 20px;
+      line-height: 1;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .hub-schedule-rhythm-hint__dismiss:active {
+      opacity: 0.7;
+    }
+
+    /* Same layout as rhythm hint; subtle «online» accent so growth step reads distinct from template nudge. */
+    .hub-share-link-growth-hint {
+      border-color: rgba(80, 160, 255, 0.28);
+    }
+    .hub-is-dark .hub-share-link-growth-hint {
+      border-color: rgba(120, 185, 255, 0.32);
     }
 
     /* Post-purchase celebration — constitution gradients + --app-success accent */

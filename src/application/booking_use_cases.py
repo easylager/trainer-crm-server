@@ -32,6 +32,13 @@ BOOKING_STATUSES_OCCUPYING_SEAT = ("pending", "confirmed")
 # Hub / reminders: slot_date + start_time|end_time are Europe/Minsk wall clock (not DB session TZ).
 _SQL_SLOT_START_TS = f"((s.slot_date + s.start_time) AT TIME ZONE '{NOTIFICATION_TZ}')"
 _SQL_SLOT_END_TS = f"((s.slot_date + s.end_time) AT TIME ZONE '{NOTIFICATION_TZ}')"
+# Booking rows for this trainer already delivered via trainer_bot pending-booking notifier (notified_at set).
+_SQL_PRIOR_TRAINER_NOTIFIED_BOOKING_COUNT = """(
+    SELECT COUNT(*)::int FROM bookings b0
+    WHERE b0.trainer_id = b.trainer_id
+      AND b0.id < b.id
+      AND b0.notified_at IS NOT NULL
+)"""
 
 # Trainer-reported problem terminal outcomes (PRD E4); not «successful» completed sessions for analytics/notifications.
 BOOKING_STATUS_NO_SHOW = "no_show"
@@ -614,6 +621,38 @@ def _map_link(latitude: object, longitude: object) -> str | None:
     return f"https://maps.google.com/?q={lat},{lon}"
 
 
+def _arena_yandex_map_link(
+    arena_lat: object,
+    arena_lon: object,
+    arena_address: str | None,
+    arena_name: str | None,
+) -> str | None:
+    """Trainer-facing map deep link (same rules as post-confirm notifications)."""
+    if arena_lat is not None and arena_lon is not None:
+        try:
+            return f"https://yandex.ru/maps/?pt={float(arena_lon)},{float(arena_lat)}&z=16"
+        except (TypeError, ValueError):
+            pass
+    aa = (arena_address or "").strip()
+    if aa:
+        return f"https://yandex.ru/maps/?text={quote(aa)}"
+    an = (arena_name or "").strip()
+    if an:
+        return f"https://yandex.ru/maps/?text={quote(an)}"
+    return None
+
+
+def _slot_wall_duration_minutes(start_t: object, end_t: object) -> int | None:
+    """Calendar length of [start, end) on one day; None if times unusable."""
+    try:
+        if start_t is not None and end_t is not None and hasattr(start_t, "hour") and hasattr(end_t, "hour"):
+            delta = datetime.combine(date.today(), end_t) - datetime.combine(date.today(), start_t)
+            return max(0, int(delta.total_seconds() // 60))
+    except (TypeError, ValueError):
+        return None
+    return None
+
+
 async def trainer_repeat_booking_same_time_next_week(
     session: AsyncSession,
     booking_id: int,
@@ -856,9 +895,13 @@ async def get_pending_trainer_booked_notifications(
     session: AsyncSession, limit: int = 50
 ) -> list[dict]:
     """
-    Bookings created by trainer: client not yet notified (rich «Вас записали…» in client bot loop).
-    Returns: booking_id, client_telegram_id, trainer_name, slot_date, start_time, end_time,
-             service_name, booking_price_cents, price_tier_label, arena_name, arena_address.
+    Client not yet sent the rich «Вас записали…» push (notification_service loop).
+
+    Intended for **trainer-initiated** confirmed rows: ``notified_at`` stays NULL because the booking
+    never entered the trainer_bot «new pending request» queue. Online client bookings get
+    ``notified_at`` when that push is delivered; they must not also receive «Вас записали…» after
+    «Ваша запись подтверждена!» — ``confirm_booking`` sets ``client_notified_trainer_booked_at``;
+    ``notified_at IS NULL`` is an extra guard if that column was not backfilled on older deploys.
     """
     r = await session.execute(
         text("""
@@ -880,6 +923,7 @@ async def get_pending_trainer_booked_notifications(
             LEFT JOIN trainer_services ts ON ts.trainer_id = b.trainer_id AND ts.service_id = b.service_id
             LEFT JOIN arenas a ON a.id = COALESCE(b.arena_id, s.arena_id)
             WHERE b.client_notified_trainer_booked_at IS NULL
+              AND b.notified_at IS NULL
               AND c.telegram_id IS NOT NULL
               AND b.status = 'confirmed' -- Only confirmed bookings get this push.
             LIMIT :lim
@@ -1046,6 +1090,7 @@ async def get_booking_milestone_display_for_trainer(
                    ar.address AS arena_address,
                    ar.latitude AS arena_lat,
                    ar.longitude AS arena_lon,
+                   ar.arena_city_name,
                    (SELECT t.telegram_id FROM trainers t WHERE t.id = b.trainer_id) AS trainer_telegram_id
             FROM bookings b
             JOIN clients c ON c.id = b.client_id
@@ -1053,8 +1098,9 @@ async def get_booking_milestone_display_for_trainer(
             JOIN services srv ON srv.id = b.service_id
             LEFT JOIN trainer_services ts ON ts.trainer_id = b.trainer_id AND ts.service_id = b.service_id
             LEFT JOIN LATERAL (
-                SELECT a.name, a.address, a.latitude, a.longitude
+                SELECT a.name, a.address, a.latitude, a.longitude, ac.name AS arena_city_name
                 FROM arenas a
+                LEFT JOIN cities ac ON ac.id = a.city_id
                 WHERE a.id = COALESCE(
                     b.arena_id,
                     s.arena_id,
@@ -1077,7 +1123,11 @@ async def get_booking_milestone_display_for_trainer(
     cn_raw = (row2[5] or "").strip() if row2[5] else ""
     an = (row2[14] or "").strip() if row2[14] else ""
     aa = (row2[15] or "").strip() if row2[15] else ""
-    trainer_tid = row2[18]
+    arena_lat, arena_lon = row2[16], row2[17]
+    city_raw = (row2[18] or "").strip() if row2[18] else ""
+    trainer_tid = row2[19]
+    duration_minutes = _slot_wall_duration_minutes(row2[9], row2[10])
+    map_link = _arena_yandex_map_link(arena_lat, arena_lon, aa or None, an or None)
     return {
         "id": row2[0],
         "slot_id": row2[1],
@@ -1090,11 +1140,14 @@ async def get_booking_milestone_display_for_trainer(
         "slot_date": row2[8],
         "start_time": row2[9],
         "end_time": row2[10],
+        "duration_minutes": duration_minutes,
         "service_name": sn or None,
         "booking_price_cents": int(price_cents) if price_cents is not None else None,
         "price_tier_label": tier_label,
         "arena_name": an or None,
         "arena_address": aa or None,
+        "arena_city_name": city_raw or None,
+        "map_link": map_link,
         "trainer_telegram_id": int(trainer_tid) if trainer_tid is not None else None,
     }
 
@@ -1210,7 +1263,12 @@ async def list_bookings_for_trainer(
                        (""" + _SQL_SLOT_START_TS + """ <= CURRENT_TIMESTAMP
                         AND """ + _SQL_SLOT_END_TS + """ > CURRENT_TIMESTAMP) AS hub_in_session,
                        EXISTS (SELECT 1 FROM booking_problem_reports pr WHERE pr.booking_id = b.id) AS problem_reported,
-                       EXISTS (SELECT 1 FROM booking_client_no_show cns WHERE cns.booking_id = b.id) AS client_no_show_recorded
+                       EXISTS (SELECT 1 FROM booking_client_no_show cns WHERE cns.booking_id = b.id) AS client_no_show_recorded,
+                       (COALESCE(b.status, 'confirmed') = 'pending'
+                        AND b.notified_at IS NULL
+                        AND """
+            + _SQL_PRIOR_TRAINER_NOTIFIED_BOOKING_COUNT
+            + """ = 0) AS first_client_online_pending
                 FROM bookings b
                 JOIN clients c ON c.id = b.client_id
                 JOIN slots s ON s.id = b.slot_id
@@ -1222,7 +1280,8 @@ async def list_bookings_for_trainer(
             )
             SELECT id, slot_id, telegram_id, telegram_username, phone, client_first_name, client_last_name,
                    client_comment, created_at, slot_date, start_time, end_time,
-                   session_num, services_str, arenas_str, status, slot_capacity, slot_active_bookings, hub_in_session, problem_reported, client_no_show_recorded
+                   session_num, services_str, arenas_str, status, slot_capacity, slot_active_bookings, hub_in_session, problem_reported, client_no_show_recorded,
+                   first_client_online_pending
             FROM upcoming
             ORDER BY hub_sort_in_session ASC, slot_date ASC, start_time ASC
             LIMIT :lim
@@ -1253,6 +1312,7 @@ async def list_bookings_for_trainer(
             "hub_in_session": bool(row[18]) if len(row) > 18 else False,
             "problem_reported": bool(row[19]) if len(row) > 19 else False,
             "client_no_show_recorded": bool(row[20]) if len(row) > 20 else False,
+            "first_client_online_pending": bool(row[21]) if len(row) > 21 else False,
         }
         for row in rows
     ]
@@ -1882,7 +1942,10 @@ async def get_bookings_pending_notification(session: AsyncSession) -> list[dict]
                    COALESCE(ci.name, ci2.name, '—') AS city_name,
                    """
             + SQL_BOOKING_ARENA_DISPLAY
-            + """ AS arenas_str
+            + """ AS arenas_str,
+                   """
+            + _SQL_PRIOR_TRAINER_NOTIFIED_BOOKING_COUNT
+            + """ AS prior_notified_push_count
             FROM bookings b
             JOIN clients c ON c.id = b.client_id
             JOIN slots s ON s.id = b.slot_id
@@ -1912,6 +1975,9 @@ async def get_bookings_pending_notification(session: AsyncSession) -> list[dict]
             "service_name": (row[10] or "—").strip(),
             "city_name": (row[11] or "—").strip(),
             "arenas_str": (row[12] or "").strip() or "—",
+            "is_first_client_online_booking": (
+                int(row[13]) == 0 if len(row) > 13 and row[13] is not None else False
+            ),
         }
         for row in rows
     ]
@@ -2046,13 +2112,17 @@ async def confirm_booking(session: AsyncSession, booking_id: int, trainer_id: in
 
     On success set status='confirmed' and return booking + slot + client contact info
     for notification flows. Returns None when booking is not confirmable (not found / wrong trainer / wrong status).
+
+    Sets ``client_notified_trainer_booked_at`` so ``get_pending_trainer_booked_notifications`` does not send
+    the separate «Вас записали…» push: the client already receives «Ваша запись подтверждена!» from the bot/API.
     """
     # PostgreSQL: UPDATE ... FROM ... RETURNING can only return columns from the updated table
     r = await session.execute(
         text(
             """
             UPDATE bookings b
-            SET status = 'confirmed'
+            SET status = 'confirmed',
+                client_notified_trainer_booked_at = CURRENT_TIMESTAMP
             FROM slots s
             WHERE b.slot_id = s.id
               AND b.id = :bid
@@ -2081,6 +2151,7 @@ async def confirm_booking(session: AsyncSession, booking_id: int, trainer_id: in
                    ar.address AS arena_address,
                    ar.latitude AS arena_lat,
                    ar.longitude AS arena_lon,
+                   ar.arena_city_name,
                    (SELECT t.telegram_id FROM trainers t WHERE t.id = b.trainer_id) AS trainer_telegram_id
             FROM bookings b
             JOIN clients c ON c.id = b.client_id
@@ -2088,8 +2159,9 @@ async def confirm_booking(session: AsyncSession, booking_id: int, trainer_id: in
             JOIN services srv ON srv.id = b.service_id
             LEFT JOIN trainer_services ts ON ts.trainer_id = b.trainer_id AND ts.service_id = b.service_id
             LEFT JOIN LATERAL (
-                SELECT a.name, a.address, a.latitude, a.longitude
+                SELECT a.name, a.address, a.latitude, a.longitude, ac.name AS arena_city_name
                 FROM arenas a
+                LEFT JOIN cities ac ON ac.id = a.city_id
                 WHERE a.id = COALESCE(
                     b.arena_id,
                     s.arena_id,
@@ -2110,32 +2182,18 @@ async def confirm_booking(session: AsyncSession, booking_id: int, trainer_id: in
     if ms or st_tip:
         await session.commit()
     arena_lat, arena_lon = row2[16], row2[17]
-    trainer_tid = row2[18]
-    map_link: str | None = None
-    if arena_lat is not None and arena_lon is not None:
-        map_link = f"https://yandex.ru/maps/?pt={arena_lon},{arena_lat}&z=16"
+    trainer_tid = row2[19]
     an = (row2[14] or "").strip() if row2[14] else ""
     aa = (row2[15] or "").strip() if row2[15] else ""
-    if not map_link and aa:
-        map_link = f"https://yandex.ru/maps/?text={quote(aa)}"
-    elif not map_link and an:
-        map_link = f"https://yandex.ru/maps/?text={quote(an)}"
+    city_raw = (row2[18] or "").strip() if row2[18] else ""
+    map_link = _arena_yandex_map_link(arena_lat, arena_lon, aa or None, an or None)
     ptk = normalize_price_tier_kind(row2[13])
     tier_label = price_tier_label_ru(ptk) if ptk else None
     sn = (row2[11] or "").strip() if row2[11] else ""
     price_cents = row2[12]
     cn_raw = (row2[5] or "").strip() if row2[5] else ""
     st_t, en_t = row2[9], row2[10]
-    duration_minutes: int | None = None
-    try:
-        if st_t is not None and en_t is not None and hasattr(st_t, "hour") and hasattr(en_t, "hour"):
-            from datetime import datetime, date as date_cls
-
-            d0 = date_cls.today()
-            delta = datetime.combine(d0, en_t) - datetime.combine(d0, st_t)
-            duration_minutes = max(0, int(delta.total_seconds() // 60))
-    except (TypeError, ValueError):
-        duration_minutes = None
+    duration_minutes = _slot_wall_duration_minutes(st_t, en_t)
     return {
         "id": row2[0],
         "slot_id": row2[1],
@@ -2154,6 +2212,7 @@ async def confirm_booking(session: AsyncSession, booking_id: int, trainer_id: in
         "price_tier_label": tier_label,
         "arena_name": an or None,
         "arena_address": aa or None,
+        "arena_city_name": city_raw or None,
         "map_link": map_link,
         "trainer_telegram_id": int(trainer_tid) if trainer_tid is not None else None,
         "first_booking_milestone": ms,

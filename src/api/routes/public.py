@@ -27,6 +27,15 @@ from src.shared.public_trainer_payload import sanitize_trainer_for_public_catalo
 router = APIRouter(prefix="/api/public", tags=["public"])
 
 
+def _trainer_public_catalog_exposed(trainer: dict | None) -> bool:
+    """Active trainer row may be hidden from client browse until is_catalog_visible is true."""
+    if not trainer:
+        return False
+    if (trainer.get("status") or "").strip().lower() != "active":
+        return False
+    return bool(trainer.get("is_catalog_visible", True))
+
+
 def _photo_url_from_cdn(file_key: str) -> str | None:
     """Build CDN URL for file_key if photo_cdn_base_url is set."""
     base = (Settings().photo_cdn_base_url or "").strip().rstrip("/")
@@ -146,7 +155,7 @@ async def list_active_trainers(
     Active trainers; optional city, service, arena. order_by: rating (Bayesian) or id.
     
     Each trainer includes `can_book` flag: True if clients can self-book (tier >= online).
-    Trainers are always visible in catalog if status=active, regardless of subscription tier.
+    Trainers appear when status=active, is_catalog_visible=true, and subscription rules apply.
     """
     # Parse filter parameters
     days_filter = None
@@ -267,14 +276,14 @@ async def get_one_active_trainer(
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     """
-    Single active trainer for catalog. Visible if status=active (regardless of subscription).
+    Single trainer for catalog: status=active and is_catalog_visible=true (subscription still applies to list).
     
     Returns `can_book` flag: True if clients can self-book (tier >= online).
     Without online tier, trainer is visible but clients must contact directly.
     """
     response.headers["Cache-Control"] = "no-store"
     trainer = await get_trainer(session, trainer_id)
-    if not trainer or (trainer.get("status") or "").strip().lower() != "active":
+    if not trainer or not _trainer_public_catalog_exposed(trainer):
         raise HTTPException(status_code=404, detail="Trainer not found")
 
     trainer = sanitize_trainer_for_public_catalog(trainer)
@@ -301,7 +310,7 @@ async def list_trainer_training_groups_public(
     """Open cohorts with catalog_visible + recruiting (for client catalog)."""
     response.headers["Cache-Control"] = "no-store"
     trainer = await get_trainer(session, trainer_id)
-    if not trainer or (trainer.get("status") or "").strip().lower() != "active":
+    if not trainer or not _trainer_public_catalog_exposed(trainer):
         raise HTTPException(status_code=404, detail="Trainer not found")
     groups = await list_open_training_groups_public(session, trainer_id)
     return {"groups": groups}
@@ -331,7 +340,7 @@ async def get_trainer_education_public(
 ) -> dict[str, list]:
     """Public education list: same visibility as catalog (pending + approved snapshots; see repository predicate)."""
     trainer = await get_trainer(session, trainer_id)
-    if not trainer or (trainer.get("status") or "").strip().lower() != "active":
+    if not trainer or not _trainer_public_catalog_exposed(trainer):
         raise HTTPException(status_code=404, detail="Trainer not found")
     items = await list_trainer_education(session, trainer_id, public_only=True)
     return {"items": items or []}

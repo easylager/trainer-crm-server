@@ -1,23 +1,23 @@
 """
-Single source of truth: when a trainer profile is complete enough to enter the admin moderation queue.
+Single source of truth: trainer profile completeness for moderation submit vs full dossier.
 
-Product rules (strict — submit-for-moderation only when all of the below hold):
-- Full name: non-empty first_name and last_name (trimmed).
-- Age: present and > 0.
-- Phone: non-empty (trimmed). Extra «contacts» (messengers, etc.) is optional.
-- Short bio: description length >= MIN_DESCRIPTION_CHARS.
-- Photo: at least one trainer_photos row with a non-empty file_key.
-- City: city_id set.
-- Education: non-empty profile.education text OR at least one trainer_education row
-  (education_entries_count > 0 on the aggregate).
-- Experience: experience_years set and >= 0.
-- Session length: session_duration_minutes in [15, 240] (must be set in DB — no implicit default for gate).
-- Booking window: min_hours_before_booking in [0, 168].
-- At least one service and at least one arena (trainer_arenas).
+Two tiers (same aggregate shape as get_trainer() / TrainerRepository.get_by_id):
 
-Partial PATCH is allowed: profile may stay incomplete; moderation submission stays blocked until complete.
+**A — Submission readiness (queue / submit-for-moderation):** 8 checks — all full-profile rules
+except optional-for-submit fields: age, description, education, experience_years.
 
-Computed from the same aggregate dict as get_trainer() / TrainerRepository.get_by_id — no DB flag.
+**B — Full profile (catalog trust / dossier):** 12 checks — strict «about the trainer» bar:
+full name, age > 0, phone, bio length >= MIN_DESCRIPTION_CHARS, photo, city, education
+(text or structured entries), experience_years >= 0, session length [15,240],
+booking window [0,168], at least one service and one arena.
+
+**C — TTV minimal (time-to-value):** 7 checks — enough to open schedule + trial booking in Mini App
+while status is still pending_profile (no photo/bio/education/age/experience required).
+Progressive profiling fills the rest toward tier A/B later.
+
+Partial PATCH is allowed; submit stays blocked until tier A is satisfied.
+
+Computed from the aggregate dict — no DB flag for completeness.
 """
 from __future__ import annotations
 
@@ -25,11 +25,21 @@ from typing import Any
 
 from src.infrastructure.db.models import TRAINER_STATUS_PENDING_PROFILE
 
-# Minimum visible "about me" text for moderation (characters after strip).
+# Minimum visible "about me" text for full-profile tier (characters after strip).
 MIN_DESCRIPTION_CHARS = 25
 
-# Distinct checks in analyze_moderation_profile_completeness (progress ring / copy must stay in sync).
+# Distinct checks in analyze_moderation_profile_completeness (full dossier / catalog bar).
 MODERATION_CRITERIA_TOTAL = 12
+
+# Submission tier: full checks minus these keys (still validated in full tier).
+SUBMIT_OPTIONAL_PROFILE_FIELD_KEYS: frozenset[str] = frozenset(
+    {"age", "description", "education", "experience_years"}
+)
+
+MODERATION_SUBMISSION_CRITERIA_TOTAL = MODERATION_CRITERIA_TOTAL - len(SUBMIT_OPTIONAL_PROFILE_FIELD_KEYS)
+
+# TTV gate: schedule + first booking before moderation (pending_profile only on access layer).
+TT_MINIMAL_CRITERIA_TOTAL = 7
 
 # Stable keys for API, tests, and i18n.
 MISSING_FIELD_LABELS_RU: dict[str, str] = {
@@ -50,7 +60,8 @@ MISSING_FIELD_LABELS_RU: dict[str, str] = {
 
 def analyze_moderation_profile_completeness(trainer: dict[str, Any]) -> tuple[bool, list[str]]:
     """
-    Return (is_complete, missing_field_keys).
+    Full-profile tier (12 criteria): dossier / catalog trust bar.
+
     `trainer` must match get_trainer shape: profile, photos, service_ids, arena_ids,
     and optional education_entries_count.
     """
@@ -134,9 +145,75 @@ def analyze_moderation_profile_completeness(trainer: dict[str, Any]) -> tuple[bo
     return len(missing) == 0, missing
 
 
-def is_profile_complete_for_moderation(trainer: dict[str, Any]) -> bool:
-    ok, _ = analyze_moderation_profile_completeness(trainer)
+def analyze_tt_minimal_profile_readiness(trainer: dict[str, Any]) -> tuple[bool, list[str]]:
+    """
+    Minimal profile to unlock trainer Mini App schedule + bookings while pending_profile.
+
+    Intentionally excludes: photo, long description, education text/entries, age, experience_years.
+    """
+    missing: list[str] = []
+    profile = trainer.get("profile")
+    if not isinstance(profile, dict):
+        profile = {}
+
+    fn = (profile.get("first_name") or "").strip()
+    ln = (profile.get("last_name") or "").strip()
+    if not fn or not ln:
+        missing.append("full_name")
+
+    phone = (profile.get("phone") or "").strip()
+    if not phone:
+        missing.append("phone")
+
+    if profile.get("city_id") is None:
+        missing.append("city")
+
+    sd = profile.get("session_duration_minutes")
+    try:
+        sd_ok = sd is not None and 15 <= int(sd) <= 240
+    except (TypeError, ValueError):
+        sd_ok = False
+    if not sd_ok:
+        missing.append("session_duration_minutes")
+
+    mh = profile.get("min_hours_before_booking")
+    try:
+        mh_ok = mh is not None and 0 <= int(mh) <= 168
+    except (TypeError, ValueError):
+        mh_ok = False
+    if not mh_ok:
+        missing.append("min_hours_before_booking")
+
+    sids = trainer.get("service_ids")
+    if not sids:
+        missing.append("services")
+
+    aids = trainer.get("arena_ids")
+    if not aids:
+        missing.append("arenas")
+
+    return len(missing) == 0, missing
+
+
+def is_tt_minimal_profile_complete(trainer: dict[str, Any]) -> bool:
+    ok, _ = analyze_tt_minimal_profile_readiness(trainer)
     return ok
+
+
+def analyze_moderation_submission_readiness(trainer: dict[str, Any]) -> tuple[bool, list[str]]:
+    """Submission tier (8 criteria): enough to enter moderation queue, relaxed bio block."""
+    _, full_missing = analyze_moderation_profile_completeness(trainer)
+    submit_missing = [k for k in full_missing if k not in SUBMIT_OPTIONAL_PROFILE_FIELD_KEYS]
+    return len(submit_missing) == 0, submit_missing
+
+
+def is_ready_for_moderation_submission(trainer: dict[str, Any]) -> bool:
+    ok, _ = analyze_moderation_submission_readiness(trainer)
+    return ok
+
+
+# Legacy name: same as submission tier (8 criteria). Keeps imports/bot reloads from breaking.
+is_profile_complete_for_moderation = is_ready_for_moderation_submission
 
 
 def missing_labels_ru(missing_keys: list[str]) -> list[str]:
@@ -145,13 +222,23 @@ def missing_labels_ru(missing_keys: list[str]) -> list[str]:
 
 
 def moderation_readiness_dict(trainer: dict[str, Any], *, trainer_status: str | None = None) -> dict[str, Any]:
-    """API / Mini App payload: completeness + optional status echo."""
-    complete, missing = analyze_moderation_profile_completeness(trainer)
+    """API / Mini App: submission tier in legacy keys; full tier in full_profile_* keys."""
+    full_ok, full_missing = analyze_moderation_profile_completeness(trainer)
+    submit_ok, submit_missing = analyze_moderation_submission_readiness(trainer)
+    tt_ok, tt_missing = analyze_tt_minimal_profile_readiness(trainer)
     out: dict[str, Any] = {
-        "complete": complete,
-        "missing_fields": missing,
-        "missing_labels_ru": missing_labels_ru(missing),
-        "moderation_criteria_total": MODERATION_CRITERIA_TOTAL,
+        "complete": submit_ok,
+        "missing_fields": submit_missing,
+        "missing_labels_ru": missing_labels_ru(submit_missing),
+        "moderation_criteria_total": MODERATION_SUBMISSION_CRITERIA_TOTAL,
+        "full_profile_complete": full_ok,
+        "full_profile_missing_fields": full_missing,
+        "full_profile_missing_labels_ru": missing_labels_ru(full_missing),
+        "full_profile_criteria_total": MODERATION_CRITERIA_TOTAL,
+        "tt_minimal_complete": tt_ok,
+        "tt_minimal_missing_fields": tt_missing,
+        "tt_minimal_missing_labels_ru": missing_labels_ru(tt_missing),
+        "tt_minimal_criteria_total": TT_MINIMAL_CRITERIA_TOTAL,
     }
     if trainer_status is not None:
         out["trainer_status"] = trainer_status
@@ -160,6 +247,6 @@ def moderation_readiness_dict(trainer: dict[str, Any], *, trainer_status: str | 
     fb_empty = fb is None or (isinstance(fb, str) and not str(fb).strip())
     sub_at = trainer.get("moderation_submitted_at")
     out["already_submitted_for_moderation"] = bool(
-        st == TRAINER_STATUS_PENDING_PROFILE and complete and fb_empty and sub_at is not None
+        st == TRAINER_STATUS_PENDING_PROFILE and submit_ok and fb_empty and sub_at is not None
     )
     return out

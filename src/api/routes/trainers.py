@@ -11,6 +11,7 @@ from src.api.schemas import (
     TrainerEducationPatchBody,
     TrainerProfilePatchBody,
     TrainerStatusPatchBody,
+    TrainerCatalogVisibilityPatchBody,
     TrainerTermsCreateBody,
 )
 from src.application.trainer_use_cases import (
@@ -25,6 +26,7 @@ from src.application.trainer_use_cases import (
     update_trainer_education,
     update_trainer_profile,
     update_trainer_status,
+    set_trainer_catalog_visibility,
 )
 from src.application.legal_use_cases import (
     accept_trainer_terms,
@@ -212,6 +214,25 @@ async def patch_status(
     return {"ok": True}
 
 
+@router.patch("/{trainer_id}/catalog-visibility")
+async def patch_catalog_visibility(
+    trainer_id: int,
+    body: TrainerCatalogVisibilityPatchBody,
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, bool]:
+    """Show or hide trainer in public client catalog (/api/public/trainers). Auth at gateway; trainers use webapp PATCH."""
+    ok = await set_trainer_catalog_visibility(session, trainer_id, visible=body.is_catalog_visible)
+    if not ok:
+        raise _NOT_FOUND
+    audit_log(
+        "trainer.catalog_visibility_updated",
+        ACTOR_API,
+        "api",
+        {"trainer_id": trainer_id, "is_catalog_visible": body.is_catalog_visible},
+    )
+    return {"ok": True}
+
+
 @router.post("/admin/legal/trainer-terms")
 async def admin_create_trainer_terms(
     body: TrainerTermsCreateBody,
@@ -259,7 +280,7 @@ async def get_moderation_readiness(
     trainer_id: int,
     session: AsyncSession = Depends(get_session),
 ) -> dict:
-    """Completeness checklist for onboarding UI (caller must enforce ownership). See trainer_profile_completeness."""
+    """Submission + full-profile readiness (see trainer_profile_completeness); caller must enforce ownership."""
     data = await get_trainer_moderation_readiness(session, trainer_id)
     if not data:
         raise _NOT_FOUND
@@ -271,7 +292,7 @@ async def post_submit_for_moderation(
     trainer_id: int,
     session: AsyncSession = Depends(get_session),
 ) -> dict:
-    """422 if profile incomplete. Queues for admin review (status stays pending_profile); see try_submit_trainer_for_moderation_review."""
+    """422 if submission tier (8 criteria) incomplete. Queues for admin review; see try_submit_trainer_for_moderation_review."""
     result = await try_submit_trainer_for_moderation_review(session, trainer_id)
     if result.get("error") == "not_found":
         raise _NOT_FOUND
@@ -279,7 +300,7 @@ async def post_submit_for_moderation(
         raise HTTPException(
             status_code=422,
             detail={
-                "message": "Profile incomplete for moderation",
+                "message": "Profile incomplete for moderation submission (8 criteria)",
                 "missing_fields": result.get("missing_fields", []),
                 "missing_labels_ru": result.get("missing_labels_ru", []),
             },

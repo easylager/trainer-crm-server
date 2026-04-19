@@ -1182,7 +1182,7 @@
     document.getElementById('fMax').value = '8';
     document.getElementById('fStartHour').value = '18';
     document.getElementById('fStartMin').value = '0';
-    document.getElementById('fDur').value = '60';
+    document.getElementById('fDur').value = '45';
     document.getElementById('fSeason').value = '';
     setSeasonDateMin();
     document.getElementById('fCatalog').checked = true;
@@ -1296,7 +1296,7 @@
           for (var u = 0; u < rules.length; u++) {
             var tmU = ((rules[u].start_time || '') + '').slice(0, 5) || '—';
             var durU = Number(rules[u].duration_minutes);
-            if (!isFinite(durU) || durU <= 0) durU = 60;
+            if (!isFinite(durU) || durU <= 0) durU = 45;
             var sig = tmU + '|' + durU;
             if (u === 0) firstSig = sig;
             else if (sig !== firstSig) uniform = false;
@@ -1304,7 +1304,7 @@
           var first = rules[0];
           var tm = ((first.start_time || '') + '').slice(0, 5) || '—';
           var duration = Number(first.duration_minutes);
-          if (!isFinite(duration) || duration <= 0) duration = 60;
+          if (!isFinite(duration) || duration <= 0) duration = 45;
           if (uniform) {
             return days.join(', ') + ' · ' + tm + ' · ' + duration + ' мин';
           }
@@ -1315,7 +1315,7 @@
             var lb = DOW_SHORT[dix] || String(dix);
             var tj = ((r.start_time || '') + '').slice(0, 5) || '—';
             var dj = Number(r.duration_minutes);
-            if (!isFinite(dj) || dj <= 0) dj = 60;
+            if (!isFinite(dj) || dj <= 0) dj = 45;
             line.push(lb + ' ' + tj + ' (' + dj + ' мин)');
           }
           return line.join(', ');

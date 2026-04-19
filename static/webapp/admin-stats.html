@@ -18,8 +18,24 @@
       padding: 16px;
       padding-bottom: calc(24px + env(safe-area-inset-bottom, 0));
     }
-    .header { margin-bottom: 20px; }
-    .header h1 { margin: 0; font-size: 22px; font-weight: 700; }
+    .header { margin-bottom: 16px; }
+    .header h1 { margin: 0 0 12px; font-size: 22px; font-weight: 700; }
+    .north-star-banner {
+      border-radius: 14px;
+      padding: 14px 16px;
+      border: 1px solid rgba(250, 204, 21, 0.35);
+      background: rgba(250, 204, 21, 0.1);
+    }
+    .north-star-banner .ns-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #fde68a; margin-bottom: 6px; }
+    .north-star-banner .ns-value { font-size: 28px; font-weight: 800; line-height: 1.1; }
+    .north-star-banner .ns-sub { font-size: 12px; color: var(--tg-theme-hint-color); margin-top: 6px; line-height: 1.35; }
+    .act-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .act-table th, .act-table td { padding: 8px 10px; text-align: left; vertical-align: top; }
+    .act-table th { background: rgba(0,0,0,0.12); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--tg-theme-hint-color); }
+    .act-table td { border-top: 1px solid rgba(255,255,255,0.06); }
+    .act-table td.num { text-align: right; white-space: nowrap; }
+    .act-table td.center { text-align: center; }
+    .act-scroll { max-height: min(52vh, 320px); overflow: auto; -webkit-overflow-scrolling: touch; }
     .loading, .error { text-align: center; padding: 32px 16px; color: var(--tg-theme-hint-color); }
     .error { color: var(--app-danger); }
     .section { margin-bottom: 20px; }
@@ -60,6 +76,7 @@
 <body>
   <div class="header">
     <h1>📊 Панель админа</h1>
+    <div id="north-star-slot"></div>
   </div>
   <div id="content">
     <div class="loading">Загрузка…</div>
@@ -90,8 +107,62 @@
           return r.json();
         });
       }
+      function escapeHtml(s) {
+        if (s == null) return '';
+        return String(s)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;');
+      }
+      function renderNorthStar(d) {
+        var cur = d.north_star_completed_booking_cycles_week != null ? d.north_star_completed_booking_cycles_week : 0;
+        var prev = d.north_star_completed_booking_cycles_prev_week != null ? d.north_star_completed_booking_cycles_prev_week : 0;
+        var ws = escapeHtml(d.week_start || '');
+        var we = escapeHtml(d.week_end || '');
+        var pws = escapeHtml(d.prev_week_start || '');
+        var pwe = escapeHtml(d.prev_week_end || '');
+        var h = '';
+        h += '<div class="north-star-banner">';
+        h += '<div class="ns-title">North Star · завершённых циклов записи</div>';
+        h += '<div class="ns-value">' + cur + '</div>';
+        h += '<div class="ns-sub">Неделя слота: ' + ws + ' — ' + we + '</div>';
+        h += '<div class="ns-sub">Прошлая неделя (' + pws + ' — ' + pwe + '): ' + prev + '</div>';
+        h += '<div class="ns-sub">Подтверждённые или завершённые записи по дате слота (включая созданные тренером).</div>';
+        h += '</div>';
+        return h;
+      }
       function render(d) {
         var html = '';
+        html += '<div class="section"><div class="section-title">Активация тренеров</div>';
+        html += '<div class="card">';
+        html += '<div class="row-list">';
+        var order = d.activation_stage_order || [];
+        var labels = d.activation_stage_labels_ru || {};
+        var counts = d.activation_stage_counts || {};
+        order.forEach(function(key) {
+          var lbl = labels[key] || key;
+          html += '<div><span>' + escapeHtml(lbl) + ':</span> <span>' + (counts[key] || 0) + '</span></div>';
+        });
+        html += '</div></div>';
+        html += '<div class="card" style="margin-top:10px;padding:0;">';
+        html += '<div class="act-scroll">';
+        html += '<table class="act-table"><thead><tr>';
+        html += '<th>Тренер</th><th>Этап</th><th class="num">Шаблоны</th><th class="center">Приглашение</th><th class="center">Была запись</th>';
+        html += '</tr></thead><tbody>';
+        (d.trainers_activation || []).forEach(function(row) {
+          var hb = row.has_booking ? 'да' : 'нет';
+          var inv = row.client_invite_link_first_copied_at;
+          var invCell = inv ? escapeHtml(String(inv).slice(0, 10)) : 'нет';
+          html += '<tr>';
+          html += '<td>' + escapeHtml(row.display_name || '') + ' <span style="opacity:.55">#' + row.trainer_id + '</span></td>';
+          html += '<td>' + escapeHtml(row.stage_label_ru || '') + '</td>';
+          html += '<td class="num">' + (row.weekly_template_count != null ? row.weekly_template_count : 0) + '</td>';
+          html += '<td class="center">' + invCell + '</td>';
+          html += '<td class="center">' + hb + '</td>';
+          html += '</tr>';
+        });
+        html += '</tbody></table></div></div></div>';
         html += '<div class="section"><div class="section-title">Сейчас</div>';
         html += '<div class="kpi-grid">';
         html += '<div class="kpi-card"><div class="kpi-label">Записей сегодня</div><div class="kpi-value">' + (d.bookings_today || 0) + '</div></div>';
@@ -147,7 +218,7 @@
         } else {
           alerts.forEach(function(a) {
             var cls = a.type === 'support' ? 'alert-card support' : 'alert-card';
-            html += '<div class="' + cls + '"><div class="alert-title">' + (a.title || '') + '</div><div class="alert-desc">' + (a.description || '') + '</div></div>';
+            html += '<div class="' + cls + '"><div class="alert-title">' + escapeHtml(a.title || '') + '</div><div class="alert-desc">' + escapeHtml(a.description || '') + '</div></div>';
           });
         }
         html += '</div>';
@@ -159,6 +230,7 @@
         return html;
       }
       getJson('/api/webapp/admin/stats').then(function(data) {
+        document.getElementById('north-star-slot').innerHTML = renderNorthStar(data);
         document.getElementById('content').innerHTML = render(data);
       }).catch(function(e) {
         var msg = (e && e.message) ? e.message : 'Ошибка сети или таймаут. Проверьте tunnel и откройте из бота снова.';

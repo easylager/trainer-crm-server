@@ -93,6 +93,7 @@ from src.bot.trainer_cancel_client_notify import send_trainer_cancel_notificatio
 from src.bot.trainer_bot_state import trainer_support_awaiting
 from src.bot.trainer_gate_text import trainer_first_link_onboarding_html, trainer_gate_message
 from src.bot.trainer_menu_commands import sync_trainer_menu_commands
+from src.bot.share_catalog_tip import send_trainer_share_catalog_tip_to_chat
 from src.shared.config import Settings
 from src.shared.notification_hours import NOTIFICATION_TZ
 
@@ -439,9 +440,10 @@ async def cmd_start(message: Message) -> None:
                 if pending_referrer_id:
                     await record_referral_attribution(session, pending_referrer_id, trainer_id)
                 state, trainer = await get_trainer_access_state(session, user_id)
+                async with async_session_factory() as s2:
+                    await ensure_trainer_welcome_trial(s2, trainer_id)
                 if state == TrainerAccessState.ACTIVE:
                     async with async_session_factory() as s2:
-                        await ensure_trainer_welcome_trial(s2, trainer_id)
                         sub_st = await get_trainer_subscription_status(s2, trainer_id)
                     if (
                         sub_st.get("is_active")
@@ -560,27 +562,6 @@ async def _send_trainer_invite_package(chat_message: Message, telegram_id: int) 
     await chat_message.answer(plain, parse_mode=None)
 
 
-def _format_milestone_rich_html_from_booking_info(info: dict) -> str:
-    """Build HTML card for first-booking milestone from confirm_booking / get_booking_milestone_display row."""
-    d = info.get("slot_date")
-    st = info.get("start_time")
-    date_str = d.strftime("%d.%m") if d and hasattr(d, "strftime") else "—"
-    day_str = msg.TRAINER_DAYS[d.weekday()] if d and hasattr(d, "weekday") else ""
-    time_str = _format_time(st)
-    return msg.format_trainer_first_booking_milestone_rich_html(
-        client_name=(info.get("client_name") or "").strip() or "Клиент",
-        client_phone=(info.get("client_phone") or "").strip(),
-        date_str=date_str,
-        day_label=day_str,
-        time_str=time_str,
-        arena_name=info.get("arena_name"),
-        arena_address=info.get("arena_address"),
-        service_name=info.get("service_name"),
-        price_tier_label=info.get("price_tier_label"),
-        booking_price_cents=info.get("booking_price_cents"),
-    )
-
-
 async def _send_first_booking_milestone_followups(
     chat_message: Message,
     trainer_id: int,
@@ -589,50 +570,33 @@ async def _send_first_booking_milestone_followups(
     share_tip: bool,
     milestone_booking_info: dict | None = None,
     milestone_booking_id: int | None = None,
+    skip_milestone_card: bool = False,
 ) -> None:
     """One-time celebration + share-link tip (DB flags already set in booking use case)."""
-    if not milestone:
+    if not milestone and not share_tip:
         return
-    info_for_card = milestone_booking_info
-    if info_for_card is None and milestone_booking_id is not None:
-        async with async_session_factory() as session:
-            info_for_card = await get_booking_milestone_display_for_trainer(
-                session, milestone_booking_id, trainer_id
+    if milestone and not skip_milestone_card:
+        info_for_card = milestone_booking_info
+        if info_for_card is None and milestone_booking_id is not None:
+            async with async_session_factory() as session:
+                info_for_card = await get_booking_milestone_display_for_trainer(
+                    session, milestone_booking_id, trainer_id
+                )
+        if info_for_card:
+            card_html = msg.format_trainer_first_booking_milestone_from_booking_row(info_for_card)
+        else:
+            card_html = (
+                "🎉 <b>Старт засчитан: это ваша первая запись в Trainer CRM!</b>\n\n"
+                + msg.TRAINER_FIRST_BOOKING_MILESTONE_FOOTER_HTML
             )
-    if info_for_card:
-        card_html = _format_milestone_rich_html_from_booking_info(info_for_card)
-    else:
-        card_html = (
-            "🎉 <b>Поздравляем — первая запись подтверждена!</b>\n\n"
-            + msg.TRAINER_FIRST_BOOKING_MILESTONE_FOOTER_HTML
-        )
-    await chat_message.answer(card_html, parse_mode=ParseMode.HTML)
+        await chat_message.answer(card_html, parse_mode=ParseMode.HTML)
     if not share_tip:
         return
-    settings = Settings()
-    async with async_session_factory() as session:
-        city_id, service_id = await get_trainer_default_city_and_service(session, trainer_id)
-    links, err = build_trainer_invite_links(
-        webapp_base_url=settings.webapp_base_url,
-        client_bot_username=settings.client_bot_username,
-        city_id=city_id,
-        service_id=service_id,
+    await send_trainer_share_catalog_tip_to_chat(
+        bot=chat_message.bot,
+        chat_id=chat_message.chat.id,
         trainer_id=trainer_id,
     )
-    if err == "missing_username":
-        await chat_message.answer(msg.TRAINER_SHARE_CATALOG_TIP_NO_CLIENT_BOT, parse_mode=ParseMode.HTML)
-        return
-    if err == "missing_city_or_service":
-        await chat_message.answer(msg.TRAINER_SHARE_CATALOG_TIP_PROFILE_INCOMPLETE, parse_mode=ParseMode.HTML)
-        return
-    assert links is not None
-    deep_esc = html.escape(links.client_bot_deep_link)
-    if links.catalog_page_url:
-        cat_esc = html.escape(links.catalog_page_url)
-        tip = msg.TRAINER_SHARE_CATALOG_TIP_BOTH_HTML.format(deep_link=deep_esc, catalog_url=cat_esc)
-    else:
-        tip = msg.TRAINER_SHARE_CATALOG_TIP_DEEP_ONLY_HTML.format(deep_link=deep_esc)
-    await chat_message.answer(tip, parse_mode=ParseMode.HTML)
 
 
 @router.message(Command("home"))
@@ -1536,47 +1500,67 @@ async def _complete_schedule_create_booking(
     client_tg_id_raw = (client_card or {}).get("telegram_id")
     client_tg_id = int(client_tg_id_raw) if client_tg_id_raw else None
 
-    buttons_row: list[InlineKeyboardButton] = [
-        InlineKeyboardButton(
-            text=msg.TRAINER_BUTTON_ADD_BOOKING_NOTE,
-            callback_data=f"{BOOKING_ADD_NOTE_PREFIX}{booking_id}",
-        )
-    ]
-    if not client_tg_id:
-        buttons_row.append(
-            InlineKeyboardButton(
-                text=msg.TRAINER_BUTTON_INVITE_CLIENT_TO_BOT,
-                callback_data=f"{BOOKING_INVITE_CLIENT_PREFIX}{booking_id}",
-            )
-        )
-
-    reminder_plan = _build_client_reminder_plan_text(
-        slot_date,
-        start_time,
-        client_has_telegram=bool(client_tg_id),
-    )
-    client_confirmation = "не применимо: у клиента не привязан Telegram"
-    if client_tg_id:
-        client_confirmation = msg.TRAINER_CREATE_BOOKING_CLIENT_CONFIRMATION_QUEUED
-
-    await callback.message.answer(
-        msg.TRAINER_CREATE_BOOKING_DONE.format(
-            client_name=html.escape(client_name),
-            date=date_str,
-            day=day_str,
-            time=time_str,
-            reminder_plan=html.escape(reminder_plan),
-            client_confirmation=html.escape(client_confirmation),
-        ),
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=[buttons_row]),
-    )
     m_first, m_tip = booking_milestones
+    settings_w = Settings()
+    if m_first:
+        async with async_session_factory() as session:
+            info_for_card = await get_booking_milestone_display_for_trainer(
+                session, booking_id, trainer_id
+            )
+        if info_for_card:
+            card_html = msg.format_trainer_first_booking_milestone_from_booking_row(info_for_card)
+        else:
+            card_html = (
+                "🎉 <b>Старт засчитан: это ваша первая запись в Trainer CRM!</b>\n\n"
+                + msg.TRAINER_FIRST_BOOKING_MILESTONE_FOOTER_HTML
+            )
+        milestone_kb = msg.build_trainer_first_booking_milestone_reply_markup(
+            webapp_base=settings_w.webapp_base_url or "",
+            booking_id=booking_id,
+            client_telegram_id=client_tg_id,
+        )
+        await callback.message.answer(card_html, parse_mode=ParseMode.HTML, reply_markup=milestone_kb)
+    else:
+        buttons_row: list[InlineKeyboardButton] = [
+            InlineKeyboardButton(
+                text=msg.TRAINER_BUTTON_ADD_BOOKING_NOTE,
+                callback_data=f"{BOOKING_ADD_NOTE_PREFIX}{booking_id}",
+            )
+        ]
+        if not client_tg_id:
+            buttons_row.append(
+                InlineKeyboardButton(
+                    text=msg.TRAINER_BUTTON_INVITE_CLIENT_TO_BOT,
+                    callback_data=f"{BOOKING_INVITE_CLIENT_PREFIX}{booking_id}",
+                )
+            )
+        reminder_plan = _build_client_reminder_plan_text(
+            slot_date,
+            start_time,
+            client_has_telegram=bool(client_tg_id),
+        )
+        client_confirmation = "не применимо: у клиента не привязан Telegram"
+        if client_tg_id:
+            client_confirmation = msg.TRAINER_CREATE_BOOKING_CLIENT_CONFIRMATION_QUEUED
+
+        await callback.message.answer(
+            msg.TRAINER_CREATE_BOOKING_DONE.format(
+                client_name=html.escape(client_name),
+                date=date_str,
+                day=day_str,
+                time=time_str,
+                reminder_plan=html.escape(reminder_plan),
+                client_confirmation=html.escape(client_confirmation),
+            ),
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[buttons_row]),
+        )
     await _send_first_booking_milestone_followups(
         callback.message,
         trainer_id,
         milestone=m_first,
         share_tip=m_tip,
         milestone_booking_id=booking_id,
+        skip_milestone_card=m_first,
     )
 
 
@@ -1901,33 +1885,42 @@ async def on_confirm_booking(callback: CallbackQuery) -> None:
     time_str = _format_time(start_time)
     client_name_raw = (info.get("client_name") or "").strip() or "Клиент"
     phone = (info.get("client_phone") or "").strip()
-    dur_min = _slot_duration_minutes(d, info.get("start_time"), info.get("end_time"))
-    text_trainer = msg.format_trainer_booking_confirmed_echo_html(
-        client_name=client_name_raw,
-        client_phone=phone or None,
-        date=date_str,
-        day=dow,
-        time=time_str,
-        duration_minutes=dur_min,
-        service_name=info.get("service_name"),
-        booking_price_cents=info.get("booking_price_cents"),
-        price_tier_label=info.get("price_tier_label"),
-        arena_name=info.get("arena_name"),
-        arena_address=info.get("arena_address"),
-    )
-    settings_echo = Settings()
-    echo_kb = msg.build_trainer_booking_confirmed_echo_reply_markup(
-        webapp_base=settings_echo.webapp_base_url or "",
-        booking_id=booking_id,
-        client_telegram_id=info.get("client_telegram_id"),
-    )
-    await callback.message.answer(
-        text_trainer,
-        parse_mode=ParseMode.HTML,
-        reply_markup=echo_kb,
-    )
     m_first = bool(info.get("first_booking_milestone"))
     m_tip = bool(info.get("share_catalog_tip"))
+    settings_echo = Settings()
+    if not m_first:
+        dur_min = _slot_duration_minutes(d, info.get("start_time"), info.get("end_time"))
+        text_trainer = msg.format_trainer_booking_confirmed_echo_html(
+            client_name=client_name_raw,
+            client_phone=phone or None,
+            date=date_str,
+            day=dow,
+            time=time_str,
+            duration_minutes=dur_min,
+            service_name=info.get("service_name"),
+            booking_price_cents=info.get("booking_price_cents"),
+            price_tier_label=info.get("price_tier_label"),
+            arena_name=info.get("arena_name"),
+            arena_address=info.get("arena_address"),
+        )
+        echo_kb = msg.build_trainer_booking_confirmed_echo_reply_markup(
+            webapp_base=settings_echo.webapp_base_url or "",
+            booking_id=booking_id,
+            client_telegram_id=info.get("client_telegram_id"),
+        )
+        await callback.message.answer(
+            text_trainer,
+            parse_mode=ParseMode.HTML,
+            reply_markup=echo_kb,
+        )
+    else:
+        card_html = msg.format_trainer_first_booking_milestone_from_booking_row(info)
+        milestone_kb = msg.build_trainer_first_booking_milestone_reply_markup(
+            webapp_base=settings_echo.webapp_base_url or "",
+            booking_id=booking_id,
+            client_telegram_id=info.get("client_telegram_id"),
+        )
+        await callback.message.answer(card_html, parse_mode=ParseMode.HTML, reply_markup=milestone_kb)
     # Notify client via client bot (separate token)
     client_tid = info.get("client_telegram_id")
     if client_tid:
@@ -1978,6 +1971,7 @@ async def on_confirm_booking(callback: CallbackQuery) -> None:
         milestone=m_first,
         share_tip=m_tip,
         milestone_booking_info=info,
+        skip_milestone_card=m_first,
     )
 
 

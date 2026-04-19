@@ -24,8 +24,8 @@ from src.application.trainer_profile_pending import (
     split_active_trainer_profile_patch,
 )
 from src.application.trainer_profile_completeness import (
-    analyze_moderation_profile_completeness,
-    is_profile_complete_for_moderation,
+    analyze_moderation_submission_readiness,
+    is_ready_for_moderation_submission,
     missing_labels_ru,
     moderation_readiness_dict,
 )
@@ -175,16 +175,16 @@ def _services_to_entries(
 
 async def _demote_status_if_profile_incomplete(session: AsyncSession, trainer_id: int) -> bool:
     """
-    Check profile completeness; demote to pending_profile if incomplete and currently active/contract/payment.
-    Returns True if status was demoted.
+    Demote to pending_profile if submission readiness (8 criteria) fails while status is
+    active / pending_contract / pending_payment. Returns True if status was demoted.
     """
     repo = TrainerRepository(session)
     trainer = await get_trainer(session, trainer_id)
     if not trainer:
         return False
     st = (trainer.get("status") or "").strip()
-    complete, _ = analyze_moderation_profile_completeness(trainer)
-    if not complete and st in (
+    submit_ok, _ = analyze_moderation_submission_readiness(trainer)
+    if not submit_ok and st in (
         TRAINER_STATUS_ACTIVE,
         TRAINER_STATUS_PENDING_CONTRACT,
         TRAINER_STATUS_PENDING_PAYMENT,
@@ -311,14 +311,14 @@ async def ensure_trainer_profile_row(session: AsyncSession, trainer_id: int) -> 
 
 async def reconcile_trainer_moderation_queue_if_incomplete(session: AsyncSession, trainer_id: int) -> None:
     """
-    Invariant: moderation_feedback + moderation_submitted_at only apply when the aggregate is
-    complete enough for moderation. If the profile is incomplete and status is pending_profile,
+    Invariant: moderation_feedback + moderation_submitted_at only apply when the aggregate meets
+    submission readiness (8 criteria). If submission is incomplete and status is pending_profile,
     clear both so partial drafts never look «in moderation» or retain stale moderator comments.
     """
     trainer = await get_trainer(session, trainer_id)
     if not trainer:
         return
-    if is_profile_complete_for_moderation(trainer):
+    if is_ready_for_moderation_submission(trainer):
         return
     st = (trainer.get("status") or "").strip()
     if st != TRAINER_STATUS_PENDING_PROFILE:
@@ -547,6 +547,17 @@ async def update_trainer_status(session: AsyncSession, trainer_id: int, status: 
     return True
 
 
+async def set_trainer_catalog_visibility(session: AsyncSession, trainer_id: int, *, visible: bool) -> bool:
+    """Toggle public catalog listing; trainer may remain status=active."""
+    repo = TrainerRepository(session)
+    if not await repo.exists(trainer_id):
+        return False
+    if not await repo.set_is_catalog_visible(trainer_id, visible):
+        return False
+    await session.commit()
+    return True
+
+
 async def set_trainer_moderation_feedback(
     session: AsyncSession, trainer_id: int, feedback: str | None
 ) -> bool:
@@ -567,7 +578,7 @@ async def try_submit_trainer_for_moderation_review(
     audit_actor_id: str | int = "api",
 ) -> dict[str, Any]:
     """
-    Queue trainer for admin profile moderation (same rules as Mini App / REST).
+    Queue trainer for admin profile moderation (submission tier: 8 criteria, same as Mini App / REST).
 
     Trainer row stays status=pending_profile (admin /pending lists this). We stamp
     moderation_submitted_at to avoid duplicate admin pings until the trainer changes
@@ -578,7 +589,7 @@ async def try_submit_trainer_for_moderation_review(
     trainer = await get_trainer(session, trainer_id)
     if not trainer:
         return {"ok": False, "error": "not_found"}
-    complete, missing = analyze_moderation_profile_completeness(trainer)
+    complete, missing = analyze_moderation_submission_readiness(trainer)
     if not complete:
         return {
             "ok": False,
@@ -620,7 +631,7 @@ async def try_submit_trainer_for_moderation_review(
 
 
 async def get_trainer_moderation_readiness(session: AsyncSession, trainer_id: int) -> dict[str, Any] | None:
-    """Completeness payload for GET endpoints; None if trainer missing."""
+    """moderation_readiness_dict for GET endpoints (submission + full_profile_*); None if trainer missing."""
     trainer = await get_trainer(session, trainer_id)
     if not trainer:
         return None
@@ -687,6 +698,8 @@ async def list_public_trainer_reviews(
     """
     trainer = await get_trainer(session, trainer_id)
     if not trainer or (trainer.get("status") or "").strip().lower() != "active":
+        return None
+    if not bool(trainer.get("is_catalog_visible", True)):
         return None
     return await TrainerRepository(session).list_public_ratings_for_trainer(
         trainer_id, limit=limit, offset=offset

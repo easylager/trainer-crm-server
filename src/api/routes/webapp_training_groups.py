@@ -62,7 +62,7 @@ def _client_tid(init_data: str) -> int:
 class ScheduleRuleIn(BaseModel):
     day_of_week: int = Field(..., ge=0, le=6)
     start_time: str = Field(..., description="HH:MM")
-    duration_minutes: int = Field(default=60, ge=15, le=480)
+    duration_minutes: int = Field(default=45, ge=15, le=480)
 
 
 class CreateTrainingGroupBody(BaseModel):

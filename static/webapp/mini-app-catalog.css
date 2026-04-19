@@ -1704,6 +1704,33 @@
       border-radius: 12px;
       background: var(--tg-theme-secondary-bg-color);
     }
+    .booking-venue-slot-title {
+      margin-bottom: 6px;
+      font-size: 13px;
+      letter-spacing: 0.02em;
+    }
+    .booking-venue-slot-lines {
+      font-size: 14px;
+      line-height: 1.4;
+    }
+    .booking-venue-slot-map {
+      margin-top: 10px;
+    }
+    .booking-venue-slot-map a {
+      color: var(--tg-theme-button-color);
+      font-weight: 600;
+      text-decoration: none;
+    }
+    .booking-venue-slot-map a:active {
+      opacity: 0.85;
+    }
+    .booking-venue-filter-alert {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid rgba(128, 128, 128, 0.2);
+      font-size: 13px;
+      line-height: 1.4;
+    }
     .booking-venue-hint--alert {
       border: 1px solid color-mix(in srgb, var(--tg-theme-button-color) 35%, transparent);
       background: color-mix(in srgb, var(--tg-theme-button-color) 10%, var(--tg-theme-secondary-bg-color));

@@ -17,6 +17,7 @@ def _env_bool_benchmark(v: Any) -> bool:
 
 
 BenchmarkLogFlag = Annotated[bool, BeforeValidator(_env_bool_benchmark)]
+NotificationQuietHoursBypassFlag = Annotated[bool, BeforeValidator(_env_bool_benchmark)]
 
 
 class Settings(BaseSettings):
@@ -115,6 +116,9 @@ class Settings(BaseSettings):
 
     # Group cohort RSVP: hours before slot to ask «Буду?» in client bot (disabled if unset or 0).
     group_attendance_prompt_hours: int | None = None
+
+    # notification_service only: if True, send user-facing Telegram pushes 24/7 (default window is 08:00–22:00 Europe/Minsk).
+    notification_disable_quiet_hours: NotificationQuietHoursBypassFlag = False
 
     # Trainer subscription: trial and reminders
     # Trial: if set, overrides DB platform_settings.welcome_trial_period_days and subscription_plans.period_days

@@ -15,13 +15,13 @@ from src.application.referral_use_cases import (
     get_referral_credit_balance,
     get_referral_stats_for_trainer,
 )
-from src.application.stats_use_cases import get_platform_stats
+from src.application.stats_use_cases import ACTIVATION_STAGE_LABEL_RU, ACTIVATION_STAGE_ORDER, get_platform_stats
 from src.application.support_use_cases import (
     get_support_message,
     list_support_messages,
     reply_support_message,
 )
-from src.application.trainer_profile_completeness import is_profile_complete_for_moderation
+from src.application.trainer_profile_completeness import is_ready_for_moderation_submission
 from src.application.booking_problem_admin_use_cases import (
     count_booking_problem_reports_for_admin,
     list_booking_problem_reports_for_admin,
@@ -286,6 +286,19 @@ def _admin_stats_message(s: dict) -> str:
     """Build full admin stats message: current state, 7d, 30d, trainers, signals."""
     parts = [msg.ADMIN_STATS_TITLE]
 
+    ws, we = s["week_start"], s["week_end"]
+    d0 = ws.isoformat() if hasattr(ws, "isoformat") else str(ws)
+    d1 = we.isoformat() if hasattr(we, "isoformat") else str(we)
+    ns_lines = [
+        msg.ADMIN_STATS_NORTH_STAR_CURRENT.format(
+            d0=d0,
+            d1=d1,
+            n=s.get("north_star_completed_booking_cycles_week", 0),
+        ),
+        msg.ADMIN_STATS_NORTH_STAR_PREV.format(n=s.get("north_star_completed_booking_cycles_prev_week", 0)),
+    ]
+    parts.append(msg.ADMIN_STATS_SECTION_NORTH_STAR.format(lines="\n".join(ns_lines)))
+
     # Section: Сейчас
     now_lines = [
         msg.ADMIN_STATS_ROW.format(label=msg.ADMIN_STATS_NOW_BOOKINGS_TODAY, value=s["bookings_today"]),
@@ -324,6 +337,15 @@ def _admin_stats_message(s: dict) -> str:
     ]
     status_lines += [msg.ADMIN_STATS_ROW.format(label=TRAINER_STATUS_LABELS.get(k, k), value=v) for k, v in sorted(by_status.items())]
     parts.append(msg.ADMIN_STATS_SECTION_TRAINERS.format(lines="\n".join(status_lines)))
+
+    act_counts = s.get("activation_stage_counts") or {}
+    labels = s.get("activation_stage_labels_ru") or ACTIVATION_STAGE_LABEL_RU
+    act_lines = [
+        msg.ADMIN_STATS_ACTIVATION_STAGE.format(label=labels.get(k, k), n=int(act_counts.get(k, 0) or 0))
+        for k in ACTIVATION_STAGE_ORDER
+    ]
+    act_lines.append(msg.ADMIN_STATS_ACTIVATION_HINT)
+    parts.append(msg.ADMIN_STATS_SECTION_ACTIVATION.format(lines="\n".join(act_lines)))
 
     # Section: Абонементы и сертификаты
     cert_byn = (s.get("cert_balance_cents_total") or 0) / 100
@@ -573,7 +595,7 @@ async def cmd_stats(message: Message) -> None:
     if not url:
         async with async_session_factory() as session:
             s = await get_platform_stats(session)
-        await message.answer(_admin_stats_message(s))
+        await message.answer(_admin_stats_message(s), parse_mode=ParseMode.HTML)
         return
     stats_kb = [[InlineKeyboardButton(text="Открыть дашборд", web_app=WebAppInfo(url=url))]]
     if tiers_url:
@@ -835,7 +857,7 @@ async def cmd_pending(message: Message) -> None:
                 )
                 if has_queue:
                     eligible_ids.append(int(tid))
-            elif st == TRAINER_STATUS_PENDING_PROFILE and is_profile_complete_for_moderation(full):
+            elif st == TRAINER_STATUS_PENDING_PROFILE and is_ready_for_moderation_submission(full):
                 eligible_ids.append(int(tid))
     if not eligible_ids:
         await message.answer(msg.ADMIN_PENDING_EMPTY)

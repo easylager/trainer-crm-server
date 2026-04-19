@@ -56,6 +56,14 @@
           'Заполните профиль в разделе «Профиль» и отправьте анкету на проверку. После активации откроются расписание, заявки и остальные разделы — это не ошибка сети.',
       };
     }
+    if (st === 'booking_ready') {
+      return {
+        icon: '🚀',
+        title: 'Почти готово',
+        hint:
+          'Базовый профиль достаточен: откройте «Расписание» или «Обзор» и сделайте первую тестовую запись. Полную анкету для каталога можно дополнить позже в «Профиле».',
+      };
+    }
     if (st === 'pending_moderation') {
       return {
         icon: '⏳',
@@ -151,6 +159,8 @@
       /* Strict JSON boolean; tolerate string/number if a proxy mangles the payload. */
       if (a.is_active === true || a.is_active === 'true' || a.is_active === 1) return true;
       if (a.access_state === 'active') return true;
+      if (a.schedule_unlocked === true || a.schedule_unlocked === 'true' || a.schedule_unlocked === 1) return true;
+      if (a.access_state === 'booking_ready') return true;
       var ts = String(a.trainer_status || '')
         .trim()
         .toLowerCase();

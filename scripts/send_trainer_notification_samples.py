@@ -577,6 +577,10 @@ async def main() -> None:
             service_name="Индивидуальная консультация",
             price_tier_label="Стандарт",
             booking_price_cents=4500,
+            arena_city_name="Минск",
+            duration_minutes=45,
+            map_link="https://yandex.ru/maps/?text=mock",
+            client_has_telegram=False,
         )
         await bot.send_message(chat_id=chat_id, text=rich)
         deep_esc = html.escape("https://t.me/mock_client_bot?start=mock")

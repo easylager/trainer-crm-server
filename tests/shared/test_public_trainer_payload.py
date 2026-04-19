@@ -12,6 +12,9 @@ def test_sanitize_drops_internal_fields() -> None:
         "moderation_feedback": "secret",
         "moderation_submitted_at": "2020-01-01",
         "created_at": "2019-01-01",
+        "profile_pending": {},
+        "photo_pending": {},
+        "is_catalog_visible": False,
         "profile": {"first_name": "A"},
     }
     out = sanitize_trainer_for_public_catalog(t)

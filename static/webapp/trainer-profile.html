@@ -24,8 +24,8 @@
       href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=optional"
     />
   </noscript>
-  <link rel="preload" href="trainer-profile-main.js?v=20260444" as="script" />
-  <link rel="stylesheet" href="mini-app-trainer-profile.css?v=20260444" />
+  <link rel="preload" href="trainer-profile-main.js?v=20260462" as="script" />
+  <link rel="stylesheet" href="mini-app-trainer-profile.css?v=20260436" />
   <link rel="stylesheet" href="mini-app-trainer-nav.css?v=20260419" />
 </head>
 <body>
@@ -81,7 +81,7 @@
         </div>
         <div class="progress-ring-info">
           <div class="progress-ring-title" id="progressTitle">Заполнение профиля</div>
-          <div class="progress-ring-subtitle" id="progressSubtitle">Критерии готовности к модерации (как в админ-боте)</div>
+          <div class="progress-ring-subtitle" id="progressSubtitle">Заполните базовые поля, чтобы быстрее сделать первую запись.</div>
         </div>
       </div>
     </div>
@@ -108,6 +108,19 @@
     </nav>
 
     <div id="tab-form" class="tab-pane active">
+      <div id="profileBlockTourBar" class="profile-block-tour-bar" hidden>
+        <div class="profile-block-tour-bar__inner">
+          <div class="profile-block-tour-bar__copy">
+            <div class="profile-block-tour-bar__title" id="profileBlockTourStepLabel"></div>
+            <p class="profile-block-tour-bar__hint" id="profileBlockTourHint"></p>
+          </div>
+          <div class="profile-block-tour-bar__actions">
+            <button type="button" class="profile-block-tour-bar__btn profile-block-tour-bar__btn--ghost" id="profileBlockTourExit">Закрыть</button>
+            <button type="button" class="profile-block-tour-bar__btn profile-block-tour-bar__btn--secondary" id="profileBlockTourFocus">К полю</button>
+            <button type="button" class="profile-block-tour-bar__btn profile-block-tour-bar__btn--primary" id="profileBlockTourNext">Дальше</button>
+          </div>
+        </div>
+      </div>
       <details class="profile-collapse" id="anketaStart" open>
         <summary class="profile-collapse__summary">
           <span class="profile-collapse__title">Основное</span>
@@ -121,7 +134,7 @@
             <label for="last_name"><span class="required-dot"></span>Фамилия</label>
             <input id="last_name" type="text" autocomplete="family-name" maxlength="64" placeholder="Ваша фамилия" />
           </div>
-          <div class="field">
+          <div class="field field--age">
             <label for="age"><span class="required-dot"></span>Возраст</label>
             <input id="age" type="number" step="1" inputmode="numeric" placeholder="Полных лет" />
           </div>
@@ -258,7 +271,7 @@
                   min="15"
                   max="240"
                   step="1"
-                  placeholder="60"
+                  placeholder="45"
                   inputmode="numeric"
                 />
                 <span class="settings-format-unit">мин</span>
@@ -306,6 +319,20 @@
             <span class="settings-group-toggle__copy">
               <span class="settings-group-toggle__title">Группы в расписании</span>
               <span class="settings-group-toggle__hint">Несколько мест в одном слоте · одно место тоже можно</span>
+            </span>
+            <span class="settings-group-toggle__switch" aria-hidden="true"></span>
+          </label>
+        </div>
+      </div>
+
+      <div id="catalogVisibilityShell" class="section-title" style="margin-top: 22px;" hidden>Каталог клиентов</div>
+      <div id="catalogVisibilityCard" class="card" hidden>
+        <div class="settings-group-toggle">
+          <input type="checkbox" id="is_catalog_visible" class="settings-group-toggle__input" />
+          <label for="is_catalog_visible" class="settings-group-toggle__label">
+            <span class="settings-group-toggle__copy">
+              <span class="settings-group-toggle__title">Показывать в каталоге</span>
+              <span class="settings-group-toggle__hint">Скрытый профиль не ищется в каталоге клиентов, но остаётся активным</span>
             </span>
             <span class="settings-group-toggle__switch" aria-hidden="true"></span>
           </label>
@@ -367,7 +394,7 @@
     </div>
   </div>
 
-  <script defer src="trainer-profile-main.js?v=20260444"></script>
+  <script defer src="trainer-profile-main.js?v=20260462"></script>
   <script defer src="mini-app-trainer-home.js"></script>
 </body>
 </html>

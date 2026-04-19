@@ -2,6 +2,9 @@
 Working hours for user notifications: send only between 08:00 and 22:00 (Europe/Minsk).
 Outside this window, notifier loops skip sending; next run after 08:00 will deliver.
 Also used for "min hours before booking": only time inside this window counts.
+
+Bypass (24/7 pushes): set env ``NOTIFICATION_DISABLE_QUIET_HOURS=1`` (see Settings) and restart
+``notification_service`` — ``notification_service`` calls ``set_notification_quiet_hours_bypass`` on startup.
 """
 from datetime import date, datetime, time, timedelta
 try:
@@ -13,9 +16,20 @@ NOTIFICATION_TZ = "Europe/Minsk"
 NOTIFICATION_START_HOUR = 8   # 08:00 inclusive
 NOTIFICATION_END_HOUR = 22    # 22:00 exclusive (up to 21:59:59)
 
+# Set by notification_service from Settings (or tests); when True, all notifier loops may send anytime.
+_bypass_quiet_hours: bool = False
+
+
+def set_notification_quiet_hours_bypass(disable_quiet_hours: bool) -> None:
+    """When True, ``is_within_notification_hours()`` always returns True (no night pause)."""
+    global _bypass_quiet_hours
+    _bypass_quiet_hours = bool(disable_quiet_hours)
+
 
 def is_within_notification_hours() -> bool:
-    """True if current time in NOTIFICATION_TZ is in [08:00, 22:00)."""
+    """True if current time in NOTIFICATION_TZ is in [08:00, 22:00), or quiet hours are bypassed."""
+    if _bypass_quiet_hours:
+        return True
     now = datetime.now(ZoneInfo(NOTIFICATION_TZ)).time()
     return time(NOTIFICATION_START_HOUR, 0) <= now < time(NOTIFICATION_END_HOUR, 0)
 

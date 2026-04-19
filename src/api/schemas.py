@@ -1,6 +1,6 @@
 """API request/response DTOs. All inputs validated (length, range) before use.
 
-Trainer onboarding completeness for the moderation queue is defined in code as
+Trainer profile completeness (submission 8 vs full 12) lives in
 `src.application.trainer_profile_completeness` (not every optional field here is required for PATCH).
 """
 from __future__ import annotations
@@ -303,6 +303,12 @@ class PresignBody(BaseModel):
 
 class TrainerStatusPatchBody(BaseModel):
     status: TrainerStatus
+
+
+class TrainerCatalogVisibilityPatchBody(BaseModel):
+    """Toggle listing in GET /api/public/trainers (trainer Mini App or admin REST)."""
+
+    is_catalog_visible: bool
 
 
 class TrainerTermsCreateBody(BaseModel):

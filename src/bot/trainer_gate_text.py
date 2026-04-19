@@ -29,6 +29,8 @@ def _after_link_step_html(state: TrainerAccessState, trainer: dict[str, Any] | N
         return msg.TRAINER_ONLY_VIA_SITE
     if state == TrainerAccessState.BLOCKED_PROFILE:
         return msg.TRAINER_AFTER_LINK_STEP_BLOCKED
+    if state == TrainerAccessState.BOOKING_READY:
+        return msg.TRAINER_AFTER_LINK_STEP_BOOKING_READY
     if state == TrainerAccessState.PENDING_MODERATION:
         t = trainer or {}
         st = (t.get("status") or "").strip()
@@ -52,6 +54,8 @@ def trainer_gate_message(state: TrainerAccessState, trainer: dict[str, Any] | No
         return msg.TRAINER_ONLY_VIA_SITE
     if state == TrainerAccessState.BLOCKED_PROFILE:
         return msg.TRAINER_GATE_BLOCKED_PROFILE
+    if state == TrainerAccessState.BOOKING_READY:
+        return msg.TRAINER_GATE_BOOKING_READY
     if state == TrainerAccessState.PENDING_MODERATION:
         t = trainer or {}
         st = (t.get("status") or "").strip()

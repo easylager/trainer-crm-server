@@ -17,6 +17,20 @@
         var q = initData() ? ('?init_data=' + encodeURIComponent(initData())) : '';
         return '/api/webapp' + path + q;
       }
+      function webappBasePath() {
+        var p = window.location.pathname || '';
+        return p.replace(/[^/]+$/, '') || '/webapp/';
+      }
+      function webappPageUrl(pathWithQuery) {
+        var url = webappBasePath() + String(pathWithQuery || '').replace(/^\//, '');
+        if (initData()) {
+          url += (url.indexOf('?') >= 0 ? '&' : '?') + 'init_data=' + encodeURIComponent(initData());
+        }
+        return url;
+      }
+      function navigateToTrainerHubAfterMinimalTour() {
+        window.location.href = webappPageUrl('trainer-home?from=minimal_profile_done');
+      }
       /** Ensures fields inside <details.profile-collapse> are visible (focus / validation). */
       function openProfileCollapseContaining(el) {
         if (!el || !el.closest) return;
@@ -32,12 +46,29 @@
       }
 
       var saveToastTimer = null;
-      /** Visible confirmation — title + short subtitle for clarity in WebView. */
-      function showSaveToast(title, description) {
+      /**
+       * Toast under save bar: kind drives icon + colors so «warning» never shows a green checkmark.
+       * kind: 'success' | 'warning' | 'error' (default success).
+       */
+      function showSaveToast(title, description, kind) {
         var el = document.getElementById('saveToast');
         var tEl = document.getElementById('saveToastTitle');
         var dEl = document.getElementById('saveToastDesc');
+        var mark = el ? el.querySelector('.save-toast-mark') : null;
         if (!el || !tEl || !dEl) return;
+        kind = kind || 'success';
+        el.classList.remove('save-toast--success', 'save-toast--warning', 'save-toast--error');
+        el.classList.add('save-toast--' + kind);
+        if (mark) {
+          if (kind === 'success') {
+            mark.textContent = '✓';
+          } else if (kind === 'error') {
+            mark.textContent = '×';
+          } else {
+            mark.textContent = '!';
+          }
+        }
+        el.setAttribute('role', kind === 'success' ? 'status' : 'alert');
         tEl.textContent = title || 'Готово';
         if (description) {
           dEl.textContent = description;
@@ -53,6 +84,9 @@
           el.classList.remove('visible');
           saveToastTimer = setTimeout(function() {
             el.hidden = true;
+            el.classList.remove('save-toast--success', 'save-toast--warning', 'save-toast--error');
+            if (mark) mark.textContent = '✓';
+            el.setAttribute('role', 'status');
           }, 320);
         }, 3200);
       }
@@ -67,9 +101,25 @@
         snapshot: null,
         scheduleSettings: null,
         scheduleGridSelectedStep: 15,
+        /** Hub «Продолжить» → ?onboarding=blocks: sticky coach over the form. */
+        profileBlockTourActive: false,
+        /** First missing TTV key before tour-triggered save — used to pick next step after PATCH. */
+        profileBlockTourAdvanceFromKey: null,
+        /** One-shot guard: avoid duplicate redirects when final minimal step closes. */
+        profileBlockTourHubRedirectScheduled: false,
       };
 
       var SCHEDULE_GRID_STEPS = [10, 15, 30, 60];
+      /** Same order as TTV minimal analysis on the server — stable step numbers in the coach UI. */
+      var PROFILE_TT_BLOCK_ORDER = [
+        'full_name',
+        'phone',
+        'city',
+        'session_duration_minutes',
+        'min_hours_before_booking',
+        'services',
+        'arenas',
+      ];
 
       function buildScheduleGridPreviewInner(step) {
         var totalMin = 4 * 60;
@@ -247,6 +297,7 @@
         st = (st || '').trim();
         d = d || {};
         if (st === 'pending_profile') {
+          if (d.tt_minimal_complete && !d.complete) return 'Минимум готов';
           if (!d.complete) return 'Не заполнен';
           if (d.already_submitted_for_moderation) return 'На модерации';
           return 'Черновик';
@@ -262,6 +313,7 @@
         if (st === 'pending_contract' || st === 'pending_payment') return 'pending';
         if (st === 'pending_profile') {
           if (d.already_submitted_for_moderation) return 'pending';
+          if (d.tt_minimal_complete && !d.complete) return 'pending';
           if (!d.complete) return 'warn';
           return 'pending';
         }
@@ -342,7 +394,7 @@
       }
 
       /** Fallback if API omits field; must match MODERATION_CRITERIA_TOTAL on the server. */
-      var MODERATION_CRITERIA_TOTAL_FALLBACK = 12;
+      var MODERATION_CRITERIA_TOTAL_FALLBACK = 8;
       var MAX_EDUCATION_DOCUMENT_PHOTOS = 12;
 
       /** Russian plural for "остался N критерий" (criteria, not form fields). */
@@ -612,7 +664,13 @@
         var errs = [];
         if (!pr.first_name || !String(pr.first_name).trim()) errs.push(['first_name', 'Укажите имя.']);
         if (!pr.last_name || !String(pr.last_name).trim()) errs.push(['last_name', 'Укажите фамилию.']);
-        if (pr.age == null || pr.age === '') errs.push(['age', 'Укажите возраст.']);
+        /* TTV block tour: age not required for «Дальше» / save (aligned with server tt_minimal). */
+        if (state.profileBlockTourActive) {
+          if (pr.age != null && pr.age !== '') {
+            var ageTour = Number(pr.age);
+            if (isNaN(ageTour) || !Number.isInteger(ageTour)) errs.push(['age', 'Укажите целое число.']);
+          }
+        } else if (pr.age == null || pr.age === '') errs.push(['age', 'Укажите возраст.']);
         else {
           var ageN = Number(pr.age);
           if (isNaN(ageN) || !Number.isInteger(ageN)) errs.push(['age', 'Укажите целое число.']);
@@ -749,6 +807,30 @@
           if (!parsed.primary_arena_id || parsed.arena_ids.indexOf(parsed.primary_arena_id) < 0) return false;
         }
         return true;
+      }
+
+      /** Plain-language reason Save is disabled (tour «Дальше» when form invalid). */
+      function profileBlockTourExplainSaveBlocked() {
+        var fallback =
+          'Заполните обязательные поля — затем нажмите «Сохранить и дальше».';
+        try {
+          var parsed = JSON.parse(readFormSnapshot());
+          clientValidateProfile(parsed);
+          var pe = collectProfileFieldErrors(parsed);
+          if (pe.length) return pe[0][1];
+          if (!servicesPricesValid(parsed)) {
+            return 'Для отмеченных услуг выберите тариф и цену — без этого сохранить нельзя.';
+          }
+          if (!serviceDescriptionsLengthOk(parsed)) {
+            return 'Сократите описание услуги или текст в блоке «Важно для клиента».';
+          }
+          if (parsed.arena_ids && parsed.arena_ids.length >= 2) {
+            if (!parsed.primary_arena_id || parsed.arena_ids.indexOf(parsed.primary_arena_id) < 0) {
+              return 'Несколько площадок — отметьте основную.';
+            }
+          }
+        } catch (e) {}
+        return fallback;
       }
 
       /** Client-side checks (mirror server rules) before PATCH. */
@@ -992,6 +1074,7 @@
         if (!btn) return;
         syncServicesValidationUi();
         btn.disabled = !dirty || !isFormValidForSave();
+        syncProfileBlockTourNextCta();
       }
 
       function showMain() {
@@ -1005,6 +1088,10 @@
       function syncProfileTabExplainer(tab) {
         var el = document.getElementById('profileTabExplainer');
         if (!el) return;
+        if (state.profileBlockTourActive && tab === 'form') {
+          el.textContent = 'Заполняйте шаг сверху: «Сохранить и дальше» автоматически переведёт к следующему полю.';
+          return;
+        }
         if (tab === 'form') {
           el.textContent =
             '«Статус» — готовность к каталогу и что ещё не заполнено; «Настройки» — длительность занятия, окно записи и шаг сетки в расписании.';
@@ -1076,38 +1163,34 @@
         syncProfileFormNavVisibility(tab);
       }
 
-      /**
-       * Scroll/focus the first field that moderation still treats as missing (same order as API missing_fields).
-       * Falls back to «Основное» if the list is empty.
-       */
-      function focusNextMissingProfileField() {
-        var d = state.moderation_readiness || {};
-        var missing = d.missing_fields || [];
-        var key = missing.length ? missing[0] : null;
-
-        function focusEl(el) {
-          if (!el) return;
-          openProfileCollapseContaining(el);
+      function focusElForProfileField(el) {
+        if (!el) return;
+        openProfileCollapseContaining(el);
+        try {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        } catch (e) {}
+        setTimeout(function() {
           try {
-            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          } catch (e) {}
-          setTimeout(function() {
+            if (el.focus) el.focus({ preventScroll: true });
+          } catch (e2) {
             try {
-              if (el.focus) el.focus({ preventScroll: true });
-            } catch (e2) {
-              try {
-                if (el.focus) el.focus();
-              } catch (e3) {}
-            }
-          }, 120);
-        }
+              if (el.focus) el.focus();
+            } catch (e3) {}
+          }
+        }, 120);
+      }
 
+      /**
+       * Scroll/focus a single readiness key (moderation / TTV / full-profile field ids).
+       * Used by «Дальше» onboarding coach and focusNextMissingProfileField.
+       */
+      function focusFormFieldForReadinessKey(key) {
         if (!key) {
           setTab('form');
           setTimeout(function() {
             var anchor = document.getElementById('anketaStart');
             if (anchor) anchor.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            focusEl(document.getElementById('first_name'));
+            focusElForProfileField(document.getElementById('first_name'));
           }, 80);
           return;
         }
@@ -1201,8 +1284,291 @@
             default:
               el = document.getElementById('anketaStart');
           }
-          if (el) focusEl(el);
+          if (el) focusElForProfileField(el);
         }, 80);
+      }
+
+      /**
+       * Scroll/focus the first missing field: submission tier first, then full-profile tier.
+       * Falls back to «Основное» if both lists are empty.
+       */
+      function focusNextMissingProfileField() {
+        var d = state.moderation_readiness || {};
+        var primary = d.missing_fields || [];
+        var secondary = d.full_profile_missing_fields || [];
+        var missing = primary.length ? primary : secondary;
+        focusFormFieldForReadinessKey(missing.length ? missing[0] : null);
+      }
+
+      function syncProfileBlockTourBar() {
+        var bar = document.getElementById('profileBlockTourBar');
+        if (!bar) return;
+        if (!state.profileBlockTourActive) {
+          bar.hidden = true;
+          document.body.classList.remove('profile-block-tour--on');
+          syncProfileBlockTourNextCta();
+          return;
+        }
+        var d = state.moderation_readiness || {};
+        var keys = d.tt_minimal_missing_fields || [];
+        if (keys.length) state.profileBlockTourHubRedirectScheduled = false;
+        if (!keys.length) {
+          state.profileBlockTourActive = false;
+          bar.hidden = true;
+          document.body.classList.remove('profile-block-tour--on');
+          syncProfileBlockTourNextCta();
+          showSaveToast(
+            'Готово',
+            'Минимальный профиль закрыт. Открываем главную, чтобы сделать первую запись.',
+            'success'
+          );
+          if (!state.profileBlockTourHubRedirectScheduled) {
+            state.profileBlockTourHubRedirectScheduled = true;
+            setTimeout(function() {
+              navigateToTrainerHubAfterMinimalTour();
+            }, 900);
+          }
+          return;
+        }
+        bar.hidden = false;
+        document.body.classList.add('profile-block-tour--on');
+        var labels = d.tt_minimal_missing_labels_ru || [];
+        var curKey = profileBlockTourCanonicalFirstMissing();
+        var labelIdx = curKey ? keys.indexOf(curKey) : -1;
+        var label0 =
+          labelIdx >= 0 && labels[labelIdx] ? labels[labelIdx] : curKey || keys[0] || '';
+        var ordKeys = profileBlockTourMissingInCanonicalOrder(keys);
+        var ord = curKey ? ordKeys.indexOf(curKey) : 0;
+        if (ord < 0) ord = 0;
+        var totalSteps = ordKeys.length || keys.length || PROFILE_TT_BLOCK_ORDER.length;
+        var stepEl = document.getElementById('profileBlockTourStepLabel');
+        var hintEl = document.getElementById('profileBlockTourHint');
+        if (stepEl) {
+          stepEl.textContent =
+            'Шаг ' + String(ord + 1) + ' из ' + String(totalSteps) + ': ' + label0;
+        }
+        if (hintEl) {
+          hintEl.textContent = profileBlockTourNeedsSave()
+            ? 'Нажмите «Сохранить и дальше» — после сохранения откроется следующий шаг.'
+            : 'Нажмите «Дальше», чтобы перейти к следующему шагу.';
+        }
+        syncProfileBlockTourNextCta();
+      }
+
+      function profileBlockTourMissingInCanonicalOrder(missingKeys) {
+        var keys = Array.isArray(missingKeys) ? missingKeys.slice() : [];
+        if (!keys.length) return [];
+        var out = [];
+        var i;
+        for (i = 0; i < PROFILE_TT_BLOCK_ORDER.length; i++) {
+          if (keys.indexOf(PROFILE_TT_BLOCK_ORDER[i]) >= 0) out.push(PROFILE_TT_BLOCK_ORDER[i]);
+        }
+        keys.forEach(function(k) {
+          if (out.indexOf(k) < 0) out.push(k);
+        });
+        return out;
+      }
+
+      function profileBlockTourNeedsSave() {
+        try {
+          return state.snapshot !== null && readFormSnapshot() !== state.snapshot;
+        } catch (e) {}
+        return false;
+      }
+
+      function syncProfileBlockTourNextCta() {
+        var nx = document.getElementById('profileBlockTourNext');
+        if (!nx) return;
+        if (!state.profileBlockTourActive) {
+          nx.textContent = 'Дальше';
+          return;
+        }
+        nx.textContent = profileBlockTourNeedsSave() ? 'Сохранить и дальше' : 'Дальше';
+      }
+
+      function profileBlockTourClearAdvanceStash() {
+        state.profileBlockTourAdvanceFromKey = null;
+      }
+
+      /** First TTV gap in canonical wizard order (same as server append order, but robust if API changes). */
+      function profileBlockTourCanonicalFirstMissing() {
+        var missing = (state.moderation_readiness && state.moderation_readiness.tt_minimal_missing_fields) || [];
+        var j;
+        for (j = 0; j < PROFILE_TT_BLOCK_ORDER.length; j++) {
+          if (missing.indexOf(PROFILE_TT_BLOCK_ORDER[j]) >= 0) return PROFILE_TT_BLOCK_ORDER[j];
+        }
+        return missing[0] || null;
+      }
+
+      /** Next TTV criterion in PROFILE_TT_BLOCK_ORDER that is still in missingKeys (after prevKey). */
+      function profileBlockTourFirstMissingAfter(prevKey, missingKeys) {
+        if (!missingKeys || !missingKeys.length) return null;
+        var start = prevKey ? PROFILE_TT_BLOCK_ORDER.indexOf(prevKey) : -1;
+        if (start < 0) start = -1;
+        var i;
+        for (i = start + 1; i < PROFILE_TT_BLOCK_ORDER.length; i++) {
+          if (missingKeys.indexOf(PROFILE_TT_BLOCK_ORDER[i]) >= 0) return PROFILE_TT_BLOCK_ORDER[i];
+        }
+        return null;
+      }
+
+      /**
+       * After advancing: if prev step still missing — stay; else focus next in canonical order or first gap.
+       */
+      function profileBlockTourFocusAfterStep(prevKey, missingKeys) {
+        if (!missingKeys || !missingKeys.length) return;
+        if (prevKey && missingKeys.indexOf(prevKey) >= 0) {
+          focusFormFieldForReadinessKey(prevKey);
+          return;
+        }
+        var nextK = prevKey ? profileBlockTourFirstMissingAfter(prevKey, missingKeys) : null;
+        if (!nextK) nextK = missingKeys[0];
+        focusFormFieldForReadinessKey(nextK);
+      }
+
+      /** GET bootstrap + fill form; no focus (caller picks next step). Returns Promise. */
+      function profileBlockTourFetchBootstrapRefresh() {
+        return fetch(apiUrl('/trainer/profile/page-bootstrap'), { headers: headers() })
+          .then(parseJsonResponse)
+          .then(function(o) {
+            if (!o.ok) return Promise.reject(new Error('bootstrap'));
+            var prev = JSON.stringify((state.moderation_readiness && state.moderation_readiness.tt_minimal_missing_fields) || []);
+            state.moderation_readiness = o.data.moderation_readiness;
+            state.trainer = o.data.trainer;
+            state.scheduleSettings = o.data.schedule_settings || null;
+            renderScheduleSettingsPanel();
+            renderModeration();
+            updateProgressRing();
+            return fillFormFromTrainer().then(function() {
+              state.snapshot = normSnapshot();
+              setDirty();
+              var next = JSON.stringify((state.moderation_readiness && state.moderation_readiness.tt_minimal_missing_fields) || []);
+              if (prev === next && next !== '[]') {
+                haptic('warning');
+                showSaveToast(
+                  'Этот шаг ещё не готов',
+                  'Дополните поля шага и нажмите «Сохранить и дальше».',
+                  'warning'
+                );
+              }
+              syncProfileBlockTourBar();
+            });
+          })
+          .catch(function() {
+            return Promise.reject();
+          });
+      }
+
+      /**
+       * «Дальше»: сохранить при наличии черновика, затем перейти к следующему блоку по порядку TTV;
+       * если форма уже сохранена — только обновить с сервера и перейти, если текущий шаг закрыт.
+       */
+      function profileBlockTourOnNextClick() {
+        if (!state.profileBlockTourActive) return;
+        var prevKey = profileBlockTourCanonicalFirstMissing();
+
+        var dirty = false;
+        try {
+          dirty = state.snapshot !== null && readFormSnapshot() !== state.snapshot;
+        } catch (e) {}
+
+        if (dirty) {
+          var btnSv = document.getElementById('btnSave');
+          if (!btnSv || btnSv.disabled) {
+            haptic('warning');
+            showSaveToast('Сначала дополните шаг', profileBlockTourExplainSaveBlocked(), 'warning');
+            return;
+          }
+          state.profileBlockTourAdvanceFromKey = prevKey;
+          /* Synthetic click is unreliable in some WebViews; call save() directly. */
+          save();
+          return;
+        }
+
+        profileBlockTourFetchBootstrapRefresh()
+          .then(function() {
+            if (!state.profileBlockTourActive) return;
+            var missing = (state.moderation_readiness && state.moderation_readiness.tt_minimal_missing_fields) || [];
+            syncProfileBlockTourBar();
+            if (!missing.length) return;
+            if (prevKey && missing.indexOf(prevKey) >= 0) {
+              haptic('warning');
+              showSaveToast(
+                'Сначала закончите этот шаг',
+                'Заполните поля шага и нажмите «Сохранить и дальше».',
+                'warning'
+              );
+              focusFormFieldForReadinessKey(prevKey);
+              return;
+            }
+            profileBlockTourFocusAfterStep(prevKey, missing);
+          })
+          .catch(function() {});
+      }
+
+      /** After PATCH profile: advance tour focus (next block after stashed step, or first missing). */
+      function profileBlockTourAfterSave() {
+        if (!state.profileBlockTourActive) return;
+        syncProfileBlockTourBar();
+        if (window.location.hash === '#moderation' || window.location.hash === '#settings') {
+          profileBlockTourClearAdvanceStash();
+          return;
+        }
+        var missing = (state.moderation_readiness && state.moderation_readiness.tt_minimal_missing_fields) || [];
+        var fromKey = state.profileBlockTourAdvanceFromKey;
+        profileBlockTourClearAdvanceStash();
+        if (!missing.length) return;
+        /* Defer past layout / nested loadProfile from maybeAutoSubmitForModeration. */
+        setTimeout(function() {
+          if (fromKey == null) {
+            focusFormFieldForReadinessKey(profileBlockTourCanonicalFirstMissing() || missing[0]);
+            return;
+          }
+          profileBlockTourFocusAfterStep(fromKey, missing);
+        }, 400);
+      }
+
+      function maybeEnterProfileBlockTourFromQuery() {
+        try {
+          var sp = new URLSearchParams(window.location.search);
+          if (sp.get('onboarding') !== 'blocks') return;
+          sp.delete('onboarding');
+          var qs = sp.toString();
+          var path = window.location.pathname + (qs ? '?' + qs : '') + (window.location.hash || '');
+          history.replaceState(null, '', path);
+        } catch (e) {}
+        state.profileBlockTourActive = true;
+        state.profileBlockTourHubRedirectScheduled = false;
+        syncProfileBlockTourBar();
+        var k0 = profileBlockTourCanonicalFirstMissing();
+        if (k0) focusFormFieldForReadinessKey(k0);
+      }
+
+      function wireProfileBlockTourBar() {
+        var ex = document.getElementById('profileBlockTourExit');
+        var nx = document.getElementById('profileBlockTourNext');
+        var fc = document.getElementById('profileBlockTourFocus');
+        if (ex && !ex.dataset.wired) {
+          ex.dataset.wired = '1';
+          ex.onclick = function() {
+            state.profileBlockTourActive = false;
+            syncProfileBlockTourBar();
+          };
+        }
+        if (nx && !nx.dataset.wired) {
+          nx.dataset.wired = '1';
+          nx.onclick = function() {
+            profileBlockTourOnNextClick();
+          };
+        }
+        if (fc && !fc.dataset.wired) {
+          fc.dataset.wired = '1';
+          fc.onclick = function() {
+            var kf = profileBlockTourCanonicalFirstMissing();
+            if (!kf) return;
+            focusFormFieldForReadinessKey(kf);
+          };
+        }
       }
 
       (function initTabs() {
@@ -1267,10 +1633,14 @@
         setv('description', p.description);
         updateDescriptionMeta();
         setv('experience_years', p.experience_years);
-        setv('session_duration_minutes', p.session_duration_minutes);
+        setv(
+          'session_duration_minutes',
+          p.session_duration_minutes != null && p.session_duration_minutes !== '' ? p.session_duration_minutes : 45
+        );
         setv('min_hours_before_booking', p.min_hours_before_booking);
         var gce = document.getElementById('group_classes_enabled');
         if (gce) gce.checked = !!p.group_classes_enabled;
+        renderCatalogVisibility();
         var citySel = document.getElementById('city_id');
         if (citySel) citySel.value = p.city_id != null ? String(p.city_id) : '';
         var eduSel = document.getElementById('education');
@@ -1289,6 +1659,24 @@
           renderArenas();
           renderHeroSummary();
         });
+      }
+
+      /** Active trainers: show catalog listing toggle (separate PATCH, not part of profile snapshot). */
+      function renderCatalogVisibility() {
+        var t = state.trainer || {};
+        var st = (t.status || '').trim();
+        var shellTitle = document.getElementById('catalogVisibilityShell');
+        var card = document.getElementById('catalogVisibilityCard');
+        var cb = document.getElementById('is_catalog_visible');
+        if (!shellTitle || !card || !cb) return;
+        if (st !== 'active') {
+          shellTitle.hidden = true;
+          card.hidden = true;
+          return;
+        }
+        shellTitle.hidden = false;
+        card.hidden = false;
+        cb.checked = t.is_catalog_visible !== false;
       }
 
       function renderModeratorFeedbackBanner() {
@@ -1323,7 +1711,10 @@
 
         if (st === 'active') {
           missTitle.style.display = 'none';
-          hint.textContent = 'Вы в каталоге — клиенты могут вас найти и записаться.';
+          var vis = state.trainer && state.trainer.is_catalog_visible !== false;
+          hint.textContent = vis
+            ? 'Вы в каталоге — клиенты могут вас найти и записаться.'
+            : 'Профиль скрыт из публичного каталога. Запись по прямой ссылке и для текущих клиентов сохраняется — включите показ в разделе «Настройки», если нужен поиск в каталоге.';
         } else if (st === 'deactivated') {
           missTitle.style.display = 'none';
           hint.textContent = 'Каталог недоступен. Восстановление — через поддержку.';
@@ -1344,7 +1735,10 @@
             hint.textContent = 'Ожидается проверка в админ-боте.';
           } else if (d.complete) {
             missTitle.style.display = 'none';
-            hint.textContent = 'Все критерии для очереди на проверку выполнены.';
+            hint.textContent =
+              d.full_profile_complete === false
+                ? 'Обязательные пункты для отправки на проверку закрыты. Для более полной карточки в каталоге дополните оставшиеся поля — список во вкладке «Статус».'
+                : 'Все пункты профиля для проверки и для каталога заполнены.';
           } else {
             missTitle.style.display = 'block';
             hint.textContent = '';
@@ -1491,13 +1885,19 @@
       function updateProgressRing() {
         var d = state.moderation_readiness || {};
         var missing = d.missing_fields || [];
+        var stTr = (state.trainer && state.trainer.status) ? String(state.trainer.status).trim().toLowerCase() : '';
         var totalCriteria =
           d.moderation_criteria_total != null && !isNaN(Number(d.moderation_criteria_total))
             ? Math.max(1, Math.floor(Number(d.moderation_criteria_total)))
             : MODERATION_CRITERIA_TOTAL_FALLBACK;
         var filledCriteria = Math.max(0, totalCriteria - missing.length);
         var percent = Math.round((filledCriteria / totalCriteria) * 100);
-        
+        var fullTotal =
+          d.full_profile_criteria_total != null && !isNaN(Number(d.full_profile_criteria_total))
+            ? Math.max(1, Math.floor(Number(d.full_profile_criteria_total)))
+            : 12;
+        var fullMissing = d.full_profile_missing_fields || [];
+
         var percentEl = document.getElementById('progressPercent');
         var titleEl = document.getElementById('progressTitle');
         var subtitleEl = document.getElementById('progressSubtitle');
@@ -1517,19 +1917,42 @@
         }
         
         if (titleEl && subtitleEl) {
-          if (percent === 100) {
-            titleEl.textContent = 'Анкета готова!';
-            subtitleEl.textContent = 'Все ' + totalCriteria + ' критериев готовности выполнены';
+          if (stTr === 'pending_profile' && d.tt_minimal_complete && !d.complete) {
+            titleEl.textContent = 'Можно открыть расписание';
+            subtitleEl.textContent =
+              'Базовый профиль для первой записи готов. Чтобы отправить анкету на проверку администратором, закройте ещё ' +
+              missing.length +
+              ' из ' +
+              totalCriteria +
+              ' пунктов — см. вкладку «Статус».';
+          } else if (percent === 100) {
+            if (d.full_profile_complete === false) {
+              titleEl.textContent = 'Готово к отправке на проверку';
+              subtitleEl.textContent =
+                'Для полноты карточки в каталоге можно дополнить ещё ' +
+                fullMissing.length +
+                ' из ' +
+                fullTotal +
+                ' — список там же.';
+            } else {
+              titleEl.textContent = 'Анкета готова!';
+              subtitleEl.textContent = 'Все ' + fullTotal + ' пунктов полного профиля выполнены';
+            }
           } else if (percent >= 75) {
             titleEl.textContent = 'Почти готово';
-            subtitleEl.textContent = ruOstalosCriteria(missing.length);
+            subtitleEl.textContent =
+              (ruOstalosCriteria(missing.length) || 'Остались пункты по списку') +
+              ' до отправки анкеты на проверку — см. «Статус»';
           } else if (percent >= 50) {
             titleEl.textContent = 'Хороший прогресс';
-            subtitleEl.textContent = 'Готово ' + filledCriteria + ' из ' + totalCriteria + ' критериев';
+            subtitleEl.textContent =
+              'Заполнено ' + filledCriteria + ' из ' + totalCriteria + ' пунктов для отправки анкеты на проверку — см. «Статус»';
           } else {
             titleEl.textContent = 'Заполнение профиля';
             subtitleEl.textContent =
-              'Нужно закрыть до ' + totalCriteria + ' критериев (как в модерации) — см. вкладку «Статус»';
+              'Заполните пункты по списку во вкладке «Статус»: нужно ' +
+              totalCriteria +
+              ' обязательных полей, чтобы отправить анкету администратору на проверку';
           }
         }
       }
@@ -1835,7 +2258,7 @@
               if (o.ok) {
                 haptic('success');
                 return loadProfile().then(function() {
-                  showSaveToast('Запись удалена', 'Список образования обновлён.');
+                  showSaveToast('Запись удалена', 'Список образования обновлён.', 'success');
                 }).then(function() { return maybeAutoSubmitForModeration(); });
               }
               haptic('error');
@@ -2701,6 +3124,8 @@
                   var el = document.getElementById('tab-settings');
                   if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 }, 300);
+              } else {
+                maybeEnterProfileBlockTourFromQuery();
               }
             });
           })
@@ -2749,6 +3174,8 @@
                   var el = document.getElementById('tab-settings');
                   if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 }, 300);
+              } else {
+                syncProfileBlockTourBar();
               }
             });
           })
@@ -2824,12 +3251,14 @@
           parsed = JSON.parse(readFormSnapshot());
         } catch (e) {
           haptic('error');
+          profileBlockTourClearAdvanceStash();
           alert('Ошибка формы. Обновите страницу.');
           return;
         }
         clearFormErrors();
         if (!clientValidateProfile(parsed)) {
           haptic('error');
+          profileBlockTourClearAdvanceStash();
           var vtab = pickTabForValidationErrors(parsed);
           setTab(vtab);
           syncServicesValidationUi();
@@ -2896,10 +3325,19 @@
               clearFormErrors();
               return saveEducationFromDom().then(function() {
                 return loadProfile().then(function() {
-                  showSaveToast('Сохранено', 'Изменения успешно применены');
-                  return maybeAutoSubmitForModeration();
+                  var tourNextSave = state.profileBlockTourAdvanceFromKey != null;
+                  if (!tourNextSave) {
+                    showSaveToast('Сохранено', 'Изменения применены.', 'success');
+                  } else {
+                    showSaveToast('Сохранено', 'Переходим к следующему шагу.', 'success');
+                  }
+                  /* Run tour focus after moderation auto-submit (may call loadProfile again). */
+                  return maybeAutoSubmitForModeration().finally(function() {
+                    profileBlockTourAfterSave();
+                  });
                 });
               }).catch(function(eduErr) {
+                profileBlockTourClearAdvanceStash();
                 if (eduErr && eduErr.kind === 'edu_validation' && eduErr.card) {
                   haptic('error');
                   setTab('form');
@@ -2915,6 +3353,7 @@
               });
             }
             haptic('error');
+            profileBlockTourClearAdvanceStash();
             if (o.status === 422 && o.data && o.data.detail) {
               applyValidationDetail(o.data.detail);
               var stErr =
@@ -2942,6 +3381,7 @@
           })
           .catch(function(err) {
             haptic('error');
+            profileBlockTourClearAdvanceStash();
             console.error(err);
             showFieldError('general', 'Ошибка сети. Проверьте подключение и попробуйте снова.');
           })
@@ -3083,7 +3523,7 @@
               /* Do not await maybeAutoSubmitForModeration: it may chain a second loadProfile()
                * and block .finally() → hero spinner stays forever if that request hangs. */
               return loadProfile().then(function() {
-                showSaveToast('Фото загружено', 'Новое изображение отображается в профиле');
+                showSaveToast('Фото загружено', 'Новое изображение отображается в профиле.', 'success');
                 maybeAutoSubmitForModeration();
               });
             }
@@ -3244,6 +3684,52 @@
           });
         }
       })();
+      (function wireCatalogVisibilityToggle() {
+        var cb = document.getElementById('is_catalog_visible');
+        if (!cb) return;
+        var busy = false;
+        cb.addEventListener('change', function() {
+          if (busy) return;
+          var want = !!cb.checked;
+          busy = true;
+          cb.disabled = true;
+          fetch(apiUrl('/trainer/catalog-visibility'), {
+            method: 'PATCH',
+            headers: headersJson(),
+            body: JSON.stringify({ is_catalog_visible: want }),
+          })
+            .then(parseJsonResponse)
+            .then(function(o) {
+              busy = false;
+              cb.disabled = false;
+              if (!o.ok) {
+                cb.checked = !want;
+                haptic('error');
+                var msg =
+                  o.data && o.data.detail
+                    ? String(o.data.detail)
+                    : 'Не удалось обновить настройку каталога.';
+                alert(msg);
+                return;
+              }
+              if (state.trainer) state.trainer.is_catalog_visible = want;
+              haptic('success');
+              renderModeration();
+              showSaveToast(
+                'Каталог',
+                want ? 'Профиль снова виден в каталоге клиентов' : 'Профиль скрыт из каталога клиентов',
+                'success'
+              );
+            })
+            .catch(function() {
+              busy = false;
+              cb.disabled = false;
+              cb.checked = !want;
+              haptic('error');
+              alert('Ошибка сети. Попробуйте снова.');
+            });
+        });
+      })();
       
       function formatPhoneInput(el) {
         var val = el.value.replace(/\D/g, '');
@@ -3306,5 +3792,6 @@
       }
 
       wireSessionDurationQuickChips();
+      wireProfileBlockTourBar();
       loadInitial();
     })();

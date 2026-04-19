@@ -65,7 +65,8 @@ async def test_moderation_feedback_cleared_when_profile_becomes_incomplete(db_se
     assert (row.get("moderation_feedback") or "").strip() == "Исправьте описание"
 
     await update_trainer_status(db_session, tid, TRAINER_STATUS_ACTIVE)
-    await update_trainer_profile(db_session, tid, profile={"first_name": ""})
+    # Immediate published field (not revision_pending): breaks submission tier so demote + reconcile run.
+    await update_trainer_profile(db_session, tid, profile={"session_duration_minutes": 5})
 
     row2 = await get_trainer(db_session, tid)
     assert row2 is not None

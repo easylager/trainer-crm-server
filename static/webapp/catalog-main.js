@@ -89,27 +89,68 @@
         state.arenaName = label || 'Основная площадка';
         return true;
       }
+      /** Slot row from /client/slots: arena + address + map (server builds map_link). */
+      function buildSlotVenueBlockHtml(slot) {
+        if (!slot) return '';
+        var name = (slot.arena_name && String(slot.arena_name).trim()) || '';
+        var addr = (slot.arena_address && String(slot.arena_address).trim()) || '';
+        var city = (slot.arena_city_name && String(slot.arena_city_name).trim()) || '';
+        var mapLink = (slot.map_link && String(slot.map_link).trim()) || '';
+        var parts = [];
+        if (name || addr || city) {
+          var loc = [name, addr].filter(Boolean).join(' — ');
+          if (city) loc = loc ? loc + ' · ' + city : city;
+          parts.push('<div class="booking-venue-slot-title"><strong>Где</strong></div>');
+          parts.push('<div class="booking-venue-slot-lines">' + escapeHtml(loc) + '</div>');
+        } else {
+          var fb = primaryVenueLabel(state.selectedTrainer);
+          if (fb) {
+            parts.push(
+              '<div class="booking-venue-slot-lines">Площадка: <strong>' +
+                escapeHtml(fb) +
+                '</strong>. Адрес пришлёт тренер после подтверждения или смотрите в «Мои записи».</div>'
+            );
+          }
+        }
+        if (mapLink && /^https:\/\//i.test(mapLink)) {
+          parts.push(
+            '<div class="booking-venue-slot-map"><a href="' +
+              escapeHtml(mapLink) +
+              '" target="_blank" rel="noopener noreferrer">Открыть на карте</a></div>'
+          );
+        }
+        return parts.length ? '<div class="booking-venue-slot">' + parts.join('') + '</div>' : '';
+      }
+
       function updateBookingVenueHint() {
         var el = document.getElementById('bookingVenueHint');
         if (!el) return;
+        var slot = state.selectedSlot;
+        var slotHtml = buildSlotVenueBlockHtml(slot);
         var label = primaryVenueLabel(state.selectedTrainer);
         var nonPrimary = isNonPrimaryArenaFilter();
+        var chunks = [];
+        if (slotHtml) chunks.push(slotHtml);
+        if (nonPrimary && label) {
+          var filterName = (state.arenaName && state.arenaName !== 'Любая') ? state.arenaName : 'другой арене';
+          chunks.push(
+            '<div class="booking-venue-filter-alert">Вы смотрите тренера по фильтру «' +
+              escapeHtml(filterName) +
+              '». <strong>Онлайн-запись оформляется на основную площадку: ' +
+              escapeHtml(label) +
+              '.</strong> Чтобы заниматься на площадке из фильтра — оставьте заявку: тренер согласует место и запишет вас сам.</div>'
+          );
+        } else if (!slotHtml && label) {
+          chunks.push('<div class="booking-venue-slot-lines">Площадка: ' + escapeHtml(label) + '</div>');
+        }
         el.className = 'booking-venue-hint' + (nonPrimary ? ' booking-venue-hint--alert' : '');
-        if (!label && !nonPrimary) {
+        if (!chunks.length) {
           el.style.display = 'none';
-          el.textContent = '';
+          el.innerHTML = '';
           return;
         }
         el.style.display = 'block';
-        if (nonPrimary && label) {
-          var filterName = (state.arenaName && state.arenaName !== 'Любая') ? state.arenaName : 'другой арене';
-          el.innerHTML = 'Вы смотрите тренера по фильтру «' + escapeHtml(filterName) + '». <strong>Онлайн-запись оформляется на основную площадку: ' + escapeHtml(label) + '.</strong> Чтобы заниматься на площадке из фильтра — оставьте заявку: тренер согласует место и запишет вас сам.';
-        } else if (label) {
-          el.textContent = 'Площадка: ' + label;
-        } else {
-          el.textContent = '';
-          el.style.display = 'none';
-        }
+        el.innerHTML = chunks.join('');
       }
 
       var CATALOG_PRICE_TIER_LABELS = {

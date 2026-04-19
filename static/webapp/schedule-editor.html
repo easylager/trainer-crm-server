@@ -24,7 +24,7 @@
       href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=optional"
     />
   </noscript>
-  <link rel="preload" href="schedule-editor-main.js?v=20260437" as="script" />
+  <link rel="preload" href="schedule-editor-main.js?v=20260455" as="script" />
   <link rel="stylesheet" href="mini-app-schedule-editor.css?v=20260436" />
   <link rel="stylesheet" href="mini-app-trainer-nav.css?v=20260429" />
 </head>
@@ -162,9 +162,9 @@
       <div class="slot-flow-field slot-flow-field--wide">
         <label for="slotDurationSelect" class="slot-flow-label">Длительность</label>
         <select id="slotDurationSelect" class="slot-flow-select schedule-duration-select" aria-describedby="slotDurationHelp slotDurationFixedNote">
-          <option value="45">45 мин</option>
+          <option value="45" selected>45 мин</option>
           <option value="50">50 мин</option>
-          <option value="60" selected>60 мин</option>
+          <option value="60">60 мин</option>
           <option value="70">70 мин</option>
           <option value="75">75 мин</option>
           <option value="90">90 мин</option>
@@ -300,9 +300,9 @@
         <div class="book-field-stack" id="quickBookDurationWrap">
           <label class="book-field-label" for="quickBookDurationSelect">Длительность</label>
           <select id="quickBookDurationSelect" class="book-service-select" aria-describedby="quickBookDurationFixedHint">
-            <option value="45">45 мин</option>
+            <option value="45" selected>45 мин</option>
             <option value="50">50 мин</option>
-            <option value="60" selected>60 мин</option>
+            <option value="60">60 мин</option>
             <option value="70">70 мин</option>
             <option value="75">75 мин</option>
             <option value="90">90 мин</option>
@@ -442,19 +442,9 @@
     </div>
   </div>
 
-  <div id="modalFirstBookingMilestone" class="modal-overlay book-flow-overlay" style="display: none;" aria-hidden="true">
-    <div class="modal book-flow-modal" role="dialog" aria-labelledby="modalFirstBookingMilestoneTitle">
-      <h3 id="modalFirstBookingMilestoneTitle" class="book-modal-title">Отличный старт</h3>
-      <div id="modalFirstBookingMilestoneBody" class="book-confirm-text"></div>
-      <div class="modal-actions" style="margin-top: 16px;">
-        <button type="button" class="btn-block btn-primary" id="modalFirstBookingMilestoneOk">Понятно</button>
-      </div>
-    </div>
-  </div>
-
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
   <script src="mini-app-trainer-home.js"></script>
-  <script defer src="schedule-editor-main.js?v=20260437"></script>
+  <script defer src="schedule-editor-main.js?v=20260455"></script>
 </body>
 </html>

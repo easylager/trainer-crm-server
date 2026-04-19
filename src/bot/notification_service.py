@@ -30,6 +30,7 @@ from src.bot.notification_loops import (
     run_trainer_booked_notifier_loop,
 )
 from src.shared.config import Settings
+from src.shared.notification_hours import set_notification_quiet_hours_bypass
 from src.shared.sentry_init import init_sentry
 
 logging.basicConfig(
@@ -41,6 +42,12 @@ logger = logging.getLogger(__name__)
 
 async def main() -> None:
     settings = Settings()
+    set_notification_quiet_hours_bypass(settings.notification_disable_quiet_hours)
+    if settings.notification_disable_quiet_hours:
+        logger.warning(
+            "notification_disable_quiet_hours=True: pushes run 24/7 (no 08:00–22:00 Europe/Minsk pause). "
+            "Unset NOTIFICATION_DISABLE_QUIET_HOURS and restart for normal behavior."
+        )
     init_sentry(settings, "notification-service")
     client_bot = Bot(
         token=settings.telegram_bot_token_client,

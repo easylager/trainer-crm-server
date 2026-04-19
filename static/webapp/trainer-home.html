@@ -51,9 +51,9 @@
     })();
   </script>
   <!-- Bump ?v= when mini-app-trainer-hub.css changes (immutable cache on /webapp/…). -->
-  <link rel="stylesheet" href="mini-app-trainer-hub.css?v=20260426d" />
+  <link rel="stylesheet" href="mini-app-trainer-hub.css?v=20260457" />
   <!-- Early download of main hub script (defer runs at end of body); improves time-to-interactive vs. discover-at-bottom. -->
-  <link rel="preload" href="trainer-home-main.js?v=20260417e" as="script" />
+  <link rel="preload" href="trainer-home-main.js?v=20260461" as="script" />
 
 </head>
 <body class="hub-body">
@@ -85,8 +85,8 @@
           type="button"
           class="hub-link-share-btn"
           id="hubShareBookingLinkBtn"
-          aria-label="Публичная ссылка на запись"
-          title="Публичная ссылка на запись"
+          aria-label="Ссылка на запись для клиента"
+          title="Ссылка на онлайн-запись (значок двух звеньев цепи)"
           hidden
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -96,6 +96,54 @@
         </button>
       </div>
     </header>
+
+    <!-- Onboarding first: visible without scrolling (TTV); same id for trainer-home-main.js -->
+    <div id="onboardingStrip" class="onboarding-strip onboarding-strip--hub-top" style="display:none;" hidden>
+      <div class="onboarding-strip-head">
+        <h2 class="onboarding-strip-title">Первые шаги</h2>
+        <p class="onboarding-strip-lead">2 шага до первой ценности: минимальный профиль → первая запись.</p>
+      </div>
+      <ol class="onboarding-steps">
+        <li class="onboarding-step" id="onboardingStepProfile">
+          <span class="onboarding-step-icon" id="onboardingIconProfile">1</span>
+          <div class="onboarding-step-body">
+            <div class="onboarding-step-name">Профиль по блокам</div>
+            <p class="onboarding-step-hint" id="onboardingHintProfile">Мастер в профиле проведёт по обязательным полям.</p>
+          </div>
+          <button type="button" class="onboarding-step-cta" id="onboardingCtaProfile">Продолжить</button>
+        </li>
+        <li class="onboarding-step" id="onboardingStepBooking">
+          <span class="onboarding-step-icon" id="onboardingIconBooking">2</span>
+          <div class="onboarding-step-body">
+            <div class="onboarding-step-name">Тестовая запись</div>
+            <p class="onboarding-step-hint" id="onboardingHintBooking">Нажмите «Записать клиента» — слот создастся автоматически, если его нет.</p>
+          </div>
+          <button type="button" class="onboarding-step-cta" id="onboardingCtaBooking">Записать клиента</button>
+        </li>
+      </ol>
+    </div>
+
+    <div id="hubScheduleRhythmHint" class="hub-schedule-rhythm-hint" hidden aria-live="polite">
+      <p class="hub-schedule-rhythm-hint__text">
+        <strong>Ритм недели.</strong>
+        Добавьте часы в <b>шаблон</b> расписания — клиентам проще выбрать время, а неделю можно накатить из шаблона за пару шагов.
+      </p>
+      <div class="hub-schedule-rhythm-hint__actions">
+        <button type="button" class="btn-sm btn-primary" id="hubScheduleRhythmOpen">Шаблон в расписании</button>
+        <button type="button" class="hub-schedule-rhythm-hint__dismiss" id="hubScheduleRhythmDismiss" aria-label="Скрыть подсказку">×</button>
+      </div>
+    </div>
+
+    <div id="hubShareLinkGrowthHint" class="hub-schedule-rhythm-hint hub-share-link-growth-hint" hidden aria-live="polite">
+      <p class="hub-schedule-rhythm-hint__text">
+        <strong>Ссылка на запись.</strong>
+        Слоты уже есть — поделитесь ссылкой, чтобы клиенты записывались сами: кнопка с цепочкой справа вверху или «Получить ссылку» ниже в этом блоке.
+      </p>
+      <div class="hub-schedule-rhythm-hint__actions">
+        <button type="button" class="btn-sm btn-primary" id="hubShareLinkGrowthOpen">Получить ссылку</button>
+        <button type="button" class="hub-schedule-rhythm-hint__dismiss" id="hubShareLinkGrowthDismiss" aria-label="Скрыть подсказку">×</button>
+      </div>
+    </div>
 
     <section id="hubSubscriptionCelebration" class="hub-sub-celebration" hidden aria-live="polite">
       <div class="hub-sub-celebration__inner">
@@ -138,7 +186,7 @@
           </svg>
           <div class="hub-quick-text">
             <div class="hub-quick-label">Записать клиента</div>
-            <div class="hub-quick-hint">Если слота нет — создастся в календаре автоматически</div>
+            <div class="hub-quick-hint">Слот создастся автоматически</div>
           </div>
         </button>
       </div>
@@ -228,42 +276,6 @@
       hidden
     ></div>
 
-    <div id="onboardingStrip" class="onboarding-strip" style="display:none;" hidden>
-      <div class="onboarding-strip-head">
-        <h2 class="onboarding-strip-title">Первые шаги</h2>
-        <p class="onboarding-strip-lead">Профиль → слоты → первая запись. Статус каждого шага — на этом экране.</p>
-      </div>
-      <ol class="onboarding-steps">
-        <li class="onboarding-step" id="onboardingStepProfile">
-          <span class="onboarding-step-icon" id="onboardingIconProfile">1</span>
-          <div class="onboarding-step-body">
-            <div class="onboarding-step-name">Профиль и модерация</div>
-            <p class="onboarding-step-hint" id="onboardingHintProfile">Заполните анкету по критериям проверки.</p>
-          </div>
-          <button type="button" class="onboarding-step-cta" id="onboardingCtaProfile">Открыть</button>
-        </li>
-        <li class="onboarding-step" id="onboardingStepSlots">
-          <span class="onboarding-step-icon" id="onboardingIconSlots">2</span>
-          <div class="onboarding-step-body">
-            <div class="onboarding-step-name">Слоты в расписании</div>
-            <p class="onboarding-step-hint" id="onboardingHintSlots">Добавьте доступное время, чтобы клиенты могли записаться.</p>
-          </div>
-          <button type="button" class="onboarding-step-cta" id="onboardingCtaSlots">Расписание</button>
-        </li>
-        <li class="onboarding-step" id="onboardingStepBooking">
-          <span class="onboarding-step-icon" id="onboardingIconBooking">3</span>
-          <div class="onboarding-step-body">
-            <div class="onboarding-step-name">Первая запись</div>
-            <p class="onboarding-step-hint" id="onboardingHintBooking">Создайте запись на свободный слот в редакторе.</p>
-          </div>
-          <button type="button" class="onboarding-step-cta" id="onboardingCtaBooking">К слотам</button>
-        </li>
-      </ol>
-      <div class="onboarding-faq-row">
-        <button type="button" class="onboarding-faq-link" id="onboardingFaqBtn">Справка и FAQ</button>
-      </div>
-    </div>
-
     <div id="stateMessage" class="state-panel loading" style="display:none;" role="status"></div>
 
     <div class="hub-section-head">
@@ -319,14 +331,14 @@
         <div class="hub-modal-select-wrap">
           <select id="hubQuickBookDuration" class="input">
             <option value="30">30 минут</option>
-            <option value="45">45 минут</option>
-            <option value="60" selected>60 минут</option>
+            <option value="45" selected>45 минут</option>
+            <option value="60">60 минут</option>
             <option value="90">90 минут</option>
             <option value="120">120 минут</option>
           </select>
         </div>
       </div>
-      <p id="hubQuickBookHint" class="book-phone-hint" style="margin-top:-2px;display:none;"></p>
+      <p id="hubQuickBookHint" class="hub-quickbook-hint" aria-hidden="true"></p>
       <div class="modal-actions">
         <button type="button" class="btn-block btn-secondary" id="hubQuickBookCancel">Отмена</button>
         <button type="button" class="btn-block btn-primary" id="hubQuickBookContinue">Далее</button>
@@ -337,7 +349,7 @@
   <div id="hubModalShareBookingLink" class="modal-overlay hub-book-flow-overlay hub-share-link-overlay" style="display:none;" aria-hidden="true">
     <div class="modal hub-share-link-modal" role="dialog" aria-labelledby="hubShareLinkTitle">
       <h3 id="hubShareLinkTitle" class="book-modal-title">Ссылка на запись</h3>
-      <p class="book-choice-lead">Выберите услугу и получите публичную ссылку для клиентов.</p>
+      <p id="hubShareLinkLead" class="book-choice-lead"></p>
       <div id="hubShareLinkServiceWrap" class="book-field-stack" style="display:none;">
         <label class="book-field-label" for="hubShareLinkServiceSelect">Услуга</label>
         <div class="hub-modal-select-wrap">
@@ -348,7 +360,6 @@
       <div id="hubShareLinkPreviewWrap" class="book-field-stack" style="display:none;">
         <label class="book-field-label" for="hubShareLinkPreview">Ссылка</label>
         <input type="text" id="hubShareLinkPreview" class="input" readonly />
-        <p class="book-phone-hint">Если копирование не сработало, выделите ссылку и скопируйте вручную.</p>
       </div>
       <div class="modal-actions">
         <button type="button" class="btn-block btn-secondary" id="hubShareLinkCancel">Отмена</button>
@@ -363,16 +374,21 @@
       <div id="hubBookStepChoice" class="book-step">
         <p class="book-choice-lead">Кого записать на занятие?</p>
         <div id="hubBookServiceWrap" class="book-field-stack" style="display: none;">
-          <label class="book-field-label" for="hubBookServiceSelect">Услуга</label>
-          <div class="hub-modal-select-wrap">
-            <select id="hubBookServiceSelect" class="input"></select>
-          </div>
+          <div id="hubBookServiceFieldLabel" class="book-field-label">Услуга</div>
+          <div
+            id="hubBookServicePickList"
+            class="hub-book-service-picklist"
+            role="listbox"
+            aria-labelledby="hubBookServiceFieldLabel"
+          ></div>
+          <!-- Native <select> UI mis-anchors under modal blur + overflow in Telegram/iOS WebKit; keep for sync only. -->
+          <select id="hubBookServiceSelect" class="hub-book-service-select-native" tabindex="-1" aria-hidden="true"></select>
         </div>
         <div id="hubBookPriceTierWrap" class="book-field-stack" style="display: none;">
           <label class="book-field-label">Тариф</label>
           <div id="hubBookPriceTierRadios" class="book-price-tier-radios"></div>
         </div>
-        <button type="button" class="btn-book-option" id="hubBookOptExisting">
+        <button type="button" class="btn-book-option" id="hubBookOptExisting" style="display: none;" aria-hidden="true">
           <span class="btn-book-option-media" aria-hidden="true">
             <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.5"/><path d="M5 20v-1a5 5 0 0 1 5-5h4a5 5 0 0 1 5 5v1"/></svg>
           </span>
@@ -438,19 +454,20 @@
     </div>
   </div>
 
-  <div id="hubModalFirstBookingMilestone" class="modal-overlay hub-book-flow-overlay" style="display: none;" aria-hidden="true">
-    <div class="modal book-flow-modal hub-book-modal" role="dialog" aria-labelledby="hubFirstBookingMilestoneTitle">
-      <h3 id="hubFirstBookingMilestoneTitle" class="book-modal-title">Отличный старт</h3>
-      <div id="hubFirstBookingMilestoneBody" class="book-confirm-text"></div>
-      <div class="modal-actions" style="margin-top: 16px;">
-        <button type="button" class="btn-block btn-primary" id="hubFirstBookingMilestoneOk">Понятно</button>
-      </div>
+  <div id="hubInlineToast" class="hub-inline-toast" role="status" aria-live="polite" hidden>
+    <div class="hub-inline-toast__body">
+      <div id="hubInlineToastTitle" class="hub-inline-toast__title"></div>
+      <div id="hubInlineToastText" class="hub-inline-toast__text"></div>
+    </div>
+    <div class="hub-inline-toast__actions">
+      <button type="button" id="hubInlineToastAction" class="hub-inline-toast__action" hidden></button>
+      <button type="button" id="hubInlineToastClose" class="hub-inline-toast__close" aria-label="Закрыть">×</button>
     </div>
   </div>
 
   <script src="mini-app-trainer-gate.js"></script>
   <script src="mini-app-trainer-celebration.js"></script>
   <!-- Bump ?v= when trainer-home-main.js changes (immutable cache on /webapp/…). -->
-  <script defer src="trainer-home-main.js?v=20260417e"></script>
+  <script defer src="trainer-home-main.js?v=20260461"></script>
 </body>
 </html>

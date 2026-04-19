@@ -54,6 +54,7 @@ from src.application.booking_use_cases import (
     explain_trainer_booking_failure,
     decline_booking,
     generate_reminders_for_booking,
+    get_booking_milestone_display_for_trainer,
     get_booking_no_pass_notify_payload,
     get_trainer_default_city_and_service,
     list_trainer_services_for_welcome_link,
@@ -111,7 +112,11 @@ from src.application.recurring_use_cases import (
 )
 from src.application.trainer_access_state import TrainerAccessState, get_trainer_access_state
 from src.shared.trainer_status import normalize_trainer_status_value
-from src.application.trainer_link import get_trainer_id_by_telegram_id, get_trainer_id_linked_any_status
+from src.application.trainer_link import (
+    get_trainer_id_by_telegram_id,
+    get_trainer_id_for_webapp_trainer_operations,
+    get_trainer_id_linked_any_status,
+)
 from src.application.welcome_link_use_cases import (
     WELCOME_TOKEN_TYPE_CERT,
     WELCOME_TOKEN_TYPE_CLIENT_BIND,
@@ -162,6 +167,7 @@ from src.application.subscription_use_cases import (
     confirm_subscription_invoice_after_payment,
     create_catalog_subscription_invoice_for_trainer,
     create_subscription_invoice,
+    ensure_trainer_welcome_trial,
     get_paid_plan_id,
     get_pending_subscription_invoice,
     list_paid_subscription_plans,
@@ -211,9 +217,11 @@ from src.application.trainer_use_cases import (
     try_submit_trainer_for_moderation_review,
 )
 from src.bot import messages as msg
+from src.bot.share_catalog_tip import send_trainer_share_catalog_tip_to_chat
 from src.bot.trainer_cancel_client_notify import send_trainer_cancel_notification_for_booking_now
 from src.shared.ttl_cache import get_slots_cached, set_slots_cached
 from src.shared.config import Settings
+from src.shared.map_links import build_yandex_by_map_url
 from src.shared.notification_hours import NOTIFICATION_TZ, working_hours_between
 from src.shared.telegram_webapp import InitDataAuthError, parse_user_json_from_init_data, require_telegram_user_id
 
@@ -365,6 +373,8 @@ async def _send_trainer_post_booking_feedback(
     client_id: int,
     slot_date,
     start_time,
+    first_booking_milestone: bool = False,
+    share_catalog_tip: bool = False,
 ) -> None:
     """Best-effort trainer post-action push after trainer-created booking from Mini App."""
     client_card = await get_trainer_client_for_card(session, trainer_id, client_id)
@@ -377,47 +387,72 @@ async def _send_trainer_post_booking_feedback(
     date_str = slot_date.strftime("%d.%m") if slot_date and hasattr(slot_date, "strftime") else "—"
     day_str = TRAINER_DAYS[slot_date.weekday()] if slot_date and hasattr(slot_date, "weekday") else ""
     time_str = _format_time_hhmm(start_time)
-    reminder_plan = _build_client_reminder_plan_text_for_trainer(
-        slot_date,
-        start_time,
-        client_has_telegram=bool(client_tg_id),
-    )
-
-    client_confirmation = "не применимо: у клиента не привязан Telegram"
-    if client_tg_id:
-        # Single rich notification via notification_service (run_trainer_booked_notifier_loop).
-        client_confirmation = msg.TRAINER_CREATE_BOOKING_CLIENT_CONFIRMATION_QUEUED
 
     trainer_bot = Bot(
         token=Settings().telegram_bot_token_trainer,
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
     )
-    buttons_row: list[InlineKeyboardButton] = [
-        InlineKeyboardButton(
-            text=msg.TRAINER_BUTTON_ADD_BOOKING_NOTE,
-            callback_data=f"{BOOKING_ADD_NOTE_PREFIX}{booking_id}",
-        )
-    ]
-    if not client_tg_id:
-        buttons_row.append(
-            InlineKeyboardButton(
-                text=msg.TRAINER_BUTTON_INVITE_CLIENT_TO_BOT,
-                callback_data=f"{BOOKING_INVITE_CLIENT_PREFIX}{booking_id}",
-            )
-        )
+    settings_push = Settings()
     try:
-        await trainer_bot.send_message(
-            chat_id=trainer_telegram_id,
-            text=msg.TRAINER_CREATE_BOOKING_DONE.format(
-                client_name=html.escape(client_name),
-                date=date_str,
-                day=day_str,
-                time=time_str,
-                reminder_plan=html.escape(reminder_plan),
-                client_confirmation=html.escape(client_confirmation),
-            ),
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[buttons_row]),
-        )
+        if first_booking_milestone:
+            info_for_card = await get_booking_milestone_display_for_trainer(session, booking_id, trainer_id)
+            if info_for_card:
+                card_html = msg.format_trainer_first_booking_milestone_from_booking_row(info_for_card)
+            else:
+                card_html = (
+                    "🎉 <b>Старт засчитан: это ваша первая запись в Trainer CRM!</b>\n\n"
+                    + msg.TRAINER_FIRST_BOOKING_MILESTONE_FOOTER_HTML
+                )
+            milestone_kb = msg.build_trainer_first_booking_milestone_reply_markup(
+                webapp_base=settings_push.webapp_base_url or "",
+                booking_id=booking_id,
+                client_telegram_id=client_tg_id,
+            )
+            await trainer_bot.send_message(
+                chat_id=trainer_telegram_id,
+                text=card_html,
+                reply_markup=milestone_kb,
+            )
+        else:
+            reminder_plan = _build_client_reminder_plan_text_for_trainer(
+                slot_date,
+                start_time,
+                client_has_telegram=bool(client_tg_id),
+            )
+            client_confirmation = "не применимо: у клиента не привязан Telegram"
+            if client_tg_id:
+                client_confirmation = msg.TRAINER_CREATE_BOOKING_CLIENT_CONFIRMATION_QUEUED
+            buttons_row: list[InlineKeyboardButton] = [
+                InlineKeyboardButton(
+                    text=msg.TRAINER_BUTTON_ADD_BOOKING_NOTE,
+                    callback_data=f"{BOOKING_ADD_NOTE_PREFIX}{booking_id}",
+                )
+            ]
+            if not client_tg_id:
+                buttons_row.append(
+                    InlineKeyboardButton(
+                        text=msg.TRAINER_BUTTON_INVITE_CLIENT_TO_BOT,
+                        callback_data=f"{BOOKING_INVITE_CLIENT_PREFIX}{booking_id}",
+                    )
+                )
+            await trainer_bot.send_message(
+                chat_id=trainer_telegram_id,
+                text=msg.TRAINER_CREATE_BOOKING_DONE.format(
+                    client_name=html.escape(client_name),
+                    date=date_str,
+                    day=day_str,
+                    time=time_str,
+                    reminder_plan=html.escape(reminder_plan),
+                    client_confirmation=html.escape(client_confirmation),
+                ),
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[buttons_row]),
+            )
+        if share_catalog_tip:
+            await send_trainer_share_catalog_tip_to_chat(
+                bot=trainer_bot,
+                chat_id=trainer_telegram_id,
+                trainer_id=trainer_id,
+            )
     except Exception as e:
         logger.warning(
             "MiniApp trainer booking: failed trainer post-action push (booking_id=%s trainer_tg_id=%s): %s",
@@ -445,14 +480,18 @@ async def get_trainer_access_for_webapp(
     telegram_id = _trainer_telegram_id(raw)
     state, trainer = await get_trainer_access_state(session, telegram_id)
     tid = int(trainer["id"]) if trainer and trainer.get("id") is not None else None
+    if tid is not None:
+        await ensure_trainer_welcome_trial(session, tid)
     norm_status = normalize_trainer_status_value(trainer.get("status") if trainer else None)
     # Belt-and-suspenders: state machine + raw status (drivers may have returned non-str before normalize in repo).
     is_active = (state == TrainerAccessState.ACTIVE) or (norm_status == TRAINER_STATUS_ACTIVE)
+    schedule_unlocked = state in (TrainerAccessState.ACTIVE, TrainerAccessState.BOOKING_READY)
     return {
         "access_state": state.value,
         "trainer_id": tid,
         "trainer_status": norm_status,
         "is_active": is_active,
+        "schedule_unlocked": schedule_unlocked,
     }
 
 
@@ -476,7 +515,7 @@ async def get_schedule(
     if not raw:
         raise HTTPException(status_code=401, detail="Missing init data (header or init_data query)")
     telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
 
@@ -527,7 +566,7 @@ async def get_schedule(
                 row["bookings"] = bsum["bookings"]
         out_slots.append(row)
     if view == "list":
-        return {"slots": out_slots}
+        return {"trainer_id": trainer_id, "slots": out_slots}
 
     trainer_row = await get_trainer(session, trainer_id)
     group_classes_enabled = bool(
@@ -537,6 +576,7 @@ async def get_schedule(
     session_duration_minutes = profile.get("session_duration_minutes")
     grid_preset = await get_schedule_grid_preset_for_trainer(session, trainer_id)
     return {
+        "trainer_id": trainer_id,
         "slots": out_slots,
         "group_classes_enabled": group_classes_enabled,
         "session_duration_minutes": session_duration_minutes,
@@ -557,7 +597,7 @@ async def get_schedule_templates(
     if not raw:
         raise HTTPException(status_code=401, detail="Missing init data")
     telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     templates = await list_templates(session, trainer_id)
@@ -588,7 +628,7 @@ class ScheduleTemplateSlotBody(BaseModel):
 
 class ScheduleTemplateDayBody(BaseModel):
     day_of_week: int  # 0=Mon .. 6=Sun
-    duration_minutes: int = Field(default=60, ge=15, le=480)
+    duration_minutes: int = Field(default=45, ge=15, le=480)
     start_hours: list[int] | None = None  # legacy: all capacity 1, :00 only
     slots: list[ScheduleTemplateSlotBody] | None = None  # preferred: per-slot capacity + minute
     group_arena_id: int | None = Field(
@@ -616,7 +656,7 @@ async def put_schedule_templates_day(
     if not raw:
         raise HTTPException(status_code=401, detail="Missing init data")
     telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     # Require CRM tier to edit templates
@@ -708,7 +748,7 @@ class ScheduleSlotsDayBody(BaseModel):
     slot_date: str  # YYYY-MM-DD
     start_hours: list[int] | None = None  # legacy: whole hours only
     start_times: list[str] | None = None  # preferred: "HH:MM" starts
-    duration_minutes: int = Field(default=60, ge=15, le=480)
+    duration_minutes: int = Field(default=45, ge=15, le=480)
     capacity: int = Field(default=1, ge=1, le=500)
     group_service_id: int | None = Field(default=None, description="services.id for group slots (capacity > 1)")
     arena_id: int | None = Field(default=None, description="Venue for new group slots (capacity > 1); fixed on slot")
@@ -732,7 +772,7 @@ async def post_schedule_slots(
     if not raw:
         raise HTTPException(status_code=401, detail="Missing init data")
     telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     # Require CRM tier to create/update slots
@@ -804,7 +844,7 @@ async def post_schedule_apply_week(
     if not raw:
         raise HTTPException(status_code=401, detail="Missing init data")
     telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     # Require CRM tier to apply template and recurring bookings
@@ -821,7 +861,7 @@ async def post_schedule_apply_week(
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
     )
     asyncio.create_task(run_after_schedule_changed(trainer_id, trainer_bot))
-    return {"ok": True, "slots_created": count}
+    return {"ok": True, "slots_created": count, "trainer_id": trainer_id}
 
 
 @router.delete("/schedule/slots/{slot_id:int}")
@@ -836,7 +876,7 @@ async def delete_schedule_slot(
     if not raw:
         raise HTTPException(status_code=401, detail="Missing init data")
     telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     deleted = await schedule_delete_slot(session, trainer_id, slot_id)
@@ -846,6 +886,23 @@ async def delete_schedule_slot(
 
 
 # --- Client booking Mini App (initData validated with client bot token) ---
+
+
+def _client_catalog_slot_map_link(s: dict) -> str | None:
+    """Map link for client booking UI: prefer coordinates, else Yandex search by venue line."""
+    name = (s.get("arena_name") or "").strip()
+    addr = (s.get("arena_address") or "").strip()
+    city = (s.get("arena_city_name") or "").strip()
+    parts = [p for p in (name, addr, city) if p]
+    text = ", ".join(parts) if parts else None
+    return build_yandex_by_map_url(
+        {
+            "latitude": s.get("arena_latitude"),
+            "longitude": s.get("arena_longitude"),
+            "address": text,
+        }
+    )
+
 
 @router.get("/client/slots")
 async def get_client_slots(
@@ -937,21 +994,36 @@ async def get_client_slots(
         available = filtered
     else:
         available = [s for s in available if max(1, int(s.get("capacity") or 1)) == 1]
-    serialized = [
-        {
-            "id": s["id"],
-            "slot_date": s["slot_date"].isoformat() if hasattr(s["slot_date"], "isoformat") else str(s["slot_date"]),
-            "start_time": s["start_time"].strftime("%H:%M") if hasattr(s["start_time"], "strftime") else str(s["start_time"])[:5],
-            "end_time": s["end_time"].strftime("%H:%M") if hasattr(s["end_time"], "strftime") else str(s["end_time"])[:5],
-            "capacity": max(1, int(s.get("capacity") or 1)),
-            "spots_left": max(
-                0,
-                max(1, int(s.get("capacity") or 1)) - int(s.get("active_bookings") or 0),
-            ),
-            "service_id": s.get("service_id"),
-        }
-        for s in available
-    ]
+    serialized = []
+    for s in available:
+        an = (s.get("arena_name") or "").strip() or None
+        aa = (s.get("arena_address") or "").strip() or None
+        acn = (s.get("arena_city_name") or "").strip() or None
+        serialized.append(
+            {
+                "id": s["id"],
+                "slot_date": s["slot_date"].isoformat()
+                if hasattr(s["slot_date"], "isoformat")
+                else str(s["slot_date"]),
+                "start_time": s["start_time"].strftime("%H:%M")
+                if hasattr(s["start_time"], "strftime")
+                else str(s["start_time"])[:5],
+                "end_time": s["end_time"].strftime("%H:%M")
+                if hasattr(s["end_time"], "strftime")
+                else str(s["end_time"])[:5],
+                "capacity": max(1, int(s.get("capacity") or 1)),
+                "spots_left": max(
+                    0,
+                    max(1, int(s.get("capacity") or 1)) - int(s.get("active_bookings") or 0),
+                ),
+                "service_id": s.get("service_id"),
+                "arena_id": s.get("arena_id"),
+                "arena_name": an,
+                "arena_address": aa,
+                "arena_city_name": acn,
+                "map_link": _client_catalog_slot_map_link(s),
+            }
+        )
     set_slots_cached(trainer_id, min_hours_val, serialized, filter_service_id)
     return {"trainer_name": trainer_name_val, "slots": serialized, "online_booking_available": True}
 
@@ -1648,6 +1720,7 @@ def _serialize_booking(b: dict, *, problem_flow_enabled: bool | None = None) -> 
         "hub_in_session": bool(b.get("hub_in_session")),
         "problem_reported": bool(b.get("problem_reported")),
         "client_no_show_recorded": bool(b.get("client_no_show_recorded")),
+        "first_client_online_pending": bool(b.get("first_client_online_pending")),
     }
     if problem_flow_enabled is not None:
         out["problem_flow_enabled"] = bool(problem_flow_enabled)
@@ -1774,14 +1847,18 @@ async def get_trainer_hub_bootstrap(
     partial_errors: dict[str, str] = {}
 
     state, trainer_row = await get_trainer_access_state(session, telegram_id)
+    if trainer_row and trainer_row.get("id") is not None:
+        await ensure_trainer_welcome_trial(session, int(trainer_row["id"]))
     tid = int(trainer_row["id"]) if trainer_row and trainer_row.get("id") is not None else None
     norm_status = normalize_trainer_status_value(trainer_row.get("status") if trainer_row else None)
     is_active = (state == TrainerAccessState.ACTIVE) or (norm_status == TRAINER_STATUS_ACTIVE)
+    schedule_unlocked = state in (TrainerAccessState.ACTIVE, TrainerAccessState.BOOKING_READY)
     access: dict[str, Any] = {
         "access_state": state.value,
         "trainer_id": tid,
         "trainer_status": norm_status,
         "is_active": is_active,
+        "schedule_unlocked": schedule_unlocked,
     }
 
     # Same semantics as get_trainer_id_linked_any_status / get_trainer_id_by_telegram_id without extra queries
@@ -1883,6 +1960,17 @@ async def get_trainer_hub_bootstrap(
                 partial_errors["onboarding_checklist"] = str(o_res)
             else:
                 onboarding_checklist = o_res
+            if state == TrainerAccessState.BOOKING_READY and trainer_id_linked:
+
+                async def _hub_sub_ttv() -> dict[str, Any]:
+                    async with async_session_factory() as s:
+                        return await get_trainer_subscription_status(s, trainer_id_linked)
+
+                r_sub_ttv = await _hub_sub_ttv()
+                if isinstance(r_sub_ttv, BaseException):
+                    partial_errors["subscription_status"] = str(r_sub_ttv)
+                else:
+                    subscription_status = r_sub_ttv
 
     return {
         "access": access,
@@ -1950,6 +2038,12 @@ async def get_admin_stats(
         "week_start": data["week_start"].isoformat() if hasattr(data["week_start"], "isoformat") else str(data["week_start"]),
         "week_end": data["week_end"].isoformat() if hasattr(data["week_end"], "isoformat") else str(data["week_end"]),
         "today": data["today"].isoformat() if hasattr(data["today"], "isoformat") else str(data["today"]),
+        "prev_week_start": data["prev_week_start"].isoformat()
+        if hasattr(data["prev_week_start"], "isoformat")
+        else str(data["prev_week_start"]),
+        "prev_week_end": data["prev_week_end"].isoformat()
+        if hasattr(data["prev_week_end"], "isoformat")
+        else str(data["prev_week_end"]),
     }
 
 
@@ -2144,9 +2238,10 @@ async def get_trainer_subscription_tier_catalog(
     if not raw:
         raise HTTPException(status_code=401, detail="Missing init data")
     telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    trainer_id = await get_trainer_id_linked_any_status(session, telegram_id)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+    await ensure_trainer_welcome_trial(session, trainer_id)
     
     tiers = await get_subscription_tier_catalog(session)
     constructor = await get_subscription_constructor_catalog(session)
@@ -2178,10 +2273,11 @@ async def get_trainer_subscription_tier_status(
     if not raw:
         raise HTTPException(status_code=401, detail="Missing init data")
     telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    trainer_id = await get_trainer_id_linked_any_status(session, telegram_id)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
-    
+    await ensure_trainer_welcome_trial(session, trainer_id)
+
     status = await get_trainer_subscription_status(session, trainer_id)
     return status
 
@@ -3412,6 +3508,29 @@ async def get_trainer_welcome_link(
     return {"welcome_link": link}
 
 
+@router.post("/trainer/welcome-link/first-copy")
+async def post_trainer_welcome_link_first_copy(
+    init_data: str | None = Query(None),
+    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    session: AsyncSession = Depends(get_session),
+):
+    """
+    Idempotent: record first time trainer copied a client-facing link (welcome, bind, public booking, pass).
+    Fire-and-forget from Mini App after successful clipboard write.
+    """
+    from src.application.trainer_client_invite_tracking import record_trainer_client_invite_link_first_copy
+
+    raw = init_data or x_telegram_init_data
+    if not raw:
+        raise HTTPException(status_code=401, detail="Missing init data")
+    telegram_id = _trainer_telegram_id(raw)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+    ts = await record_trainer_client_invite_link_first_copy(session, trainer_id)
+    return {"first_copied_at": ts.isoformat() if ts else None}
+
+
 @router.get("/trainer/clients/{client_id:int}/welcome-link")
 async def get_trainer_client_welcome_link(
     client_id: int,
@@ -3632,7 +3751,7 @@ async def get_trainer_bookings(
     if not raw:
         raise HTTPException(status_code=401, detail="Missing init data")
     telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
 
@@ -3652,7 +3771,7 @@ async def get_trainer_group_slot_hub_api(
     if not raw:
         raise HTTPException(status_code=401, detail="Missing init data")
     telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     hub = await get_trainer_group_slot_hub(session, trainer_id, slot_id)
@@ -3673,7 +3792,7 @@ async def get_trainer_booking_detail(
     if not raw:
         raise HTTPException(status_code=401, detail="Missing init data")
     telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
 
@@ -3721,7 +3840,7 @@ async def get_trainer_booking_client_no_show_options_route(
     if not raw:
         raise HTTPException(status_code=401, detail="Missing init data")
     telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     if not booking_problem_api_allowed_for_trainer(trainer_id):
@@ -3749,7 +3868,7 @@ async def post_trainer_booking_client_no_show_route(
     if not raw:
         raise HTTPException(status_code=401, detail="Missing init data")
     telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     if not booking_problem_api_allowed_for_trainer(trainer_id):
@@ -3795,7 +3914,7 @@ async def get_trainer_booking_problem_options_route(
     if not raw:
         raise HTTPException(status_code=401, detail="Missing init data")
     telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     if not booking_problem_api_allowed_for_trainer(trainer_id):
@@ -3818,7 +3937,7 @@ async def post_trainer_booking_problem_route(
     if not raw:
         raise HTTPException(status_code=401, detail="Missing init data")
     telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     if not booking_problem_api_allowed_for_trainer(trainer_id):
@@ -3862,7 +3981,7 @@ async def post_trainer_booking_confirm(
     if not raw:
         raise HTTPException(status_code=401, detail="Missing init data")
     telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     info = await confirm_booking(session, booking_id, trainer_id)
@@ -3926,7 +4045,7 @@ async def post_trainer_booking_decline(
     if not raw:
         raise HTTPException(status_code=401, detail="Missing init data")
     telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     comment = (body.comment or "").strip()
@@ -3973,7 +4092,7 @@ async def post_trainer_booking_cancel(
     if not raw:
         raise HTTPException(status_code=401, detail="Missing init data")
     telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     ok = await cancel_booking(session, booking_id, trainer_id)
@@ -4005,7 +4124,7 @@ async def post_trainer_booking_complete(
     if not raw:
         raise HTTPException(status_code=401, detail="Missing init data")
     telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     result = await mark_booking_completed_by_trainer(session, booking_id, trainer_id)
@@ -4057,7 +4176,7 @@ class TrainerQuickBookingBody(BaseModel):
     slot_date: str  # YYYY-MM-DD
     start_time: str | None = Field(default=None, description="HH:MM (15 min grid; preferred)")
     start_hour: int | None = Field(default=None, ge=0, le=23, description="legacy: same as HH:00")
-    duration_minutes: int = Field(default=60, ge=15, le=24 * 60)
+    duration_minutes: int = Field(default=45, ge=15, le=24 * 60)
     client_id: int
     service_id: int
     arena_id: int | None = None
@@ -4098,7 +4217,7 @@ async def get_trainer_my_services(
     if not raw:
         raise HTTPException(status_code=401, detail="Missing init data")
     telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     r = await session.execute(
@@ -4195,7 +4314,7 @@ async def get_trainer_clients(
     if not raw:
         raise HTTPException(status_code=401, detail="Missing init data")
     telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     clients = await list_trainer_clients(session, trainer_id, limit=100)
@@ -4224,7 +4343,7 @@ async def get_trainer_client_card(
     if not raw:
         raise HTTPException(status_code=401, detail="Missing init data")
     telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     client = await get_trainer_client_for_card(session, trainer_id, client_id)
@@ -4245,7 +4364,7 @@ async def get_trainer_client_booking_defaults(
     if not raw:
         raise HTTPException(status_code=401, detail="Missing init data")
     telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     client = await get_trainer_client_for_card(session, trainer_id, client_id)
@@ -4273,7 +4392,7 @@ async def get_trainer_client_history(
     if not raw:
         raise HTTPException(status_code=401, detail="Missing init data")
     telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     items = await list_trainer_client_history(session, trainer_id, client_id, limit=limit)
@@ -4293,7 +4412,7 @@ async def get_trainer_client_next_booking_route(
     if not raw:
         raise HTTPException(status_code=401, detail="Missing init data")
     telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     next_booking = await get_trainer_client_next_booking(session, trainer_id, client_id)
@@ -4313,7 +4432,7 @@ async def get_trainer_client_passes(
     if not raw:
         raise HTTPException(status_code=401, detail="Missing init data")
     telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     items = await list_pass_instances_for_trainer_client(session, trainer_id, client_id)
@@ -4332,7 +4451,7 @@ async def get_trainer_client_certificates(
     if not raw:
         raise HTTPException(status_code=401, detail="Missing init data")
     telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     items = await list_certificate_instances_for_trainer_client(session, trainer_id, client_id)
@@ -4356,7 +4475,7 @@ async def post_trainer_client_pass_issue(
     if not raw:
         raise HTTPException(status_code=401, detail="Missing init data")
     telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     try:
@@ -4427,7 +4546,7 @@ async def get_trainer_client_note_route(
     if not raw:
         raise HTTPException(status_code=401, detail="Missing init data")
     telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     note = await get_trainer_client_note(session, trainer_id, client_id)
@@ -4447,7 +4566,7 @@ async def post_trainer_client_note_route(
     if not raw:
         raise HTTPException(status_code=401, detail="Missing init data")
     telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     result = await upsert_trainer_client_note(session, trainer_id, client_id, body.note)
@@ -4497,7 +4616,7 @@ async def get_client_dossier_route(
     if not raw:
         raise HTTPException(status_code=401, detail="Missing init data")
     telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     return await get_full_client_dossier(session, trainer_id, client_id)
@@ -4516,7 +4635,7 @@ async def update_client_dossier_profile_route(
     if not raw:
         raise HTTPException(status_code=401, detail="Missing init data")
     telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     return await upsert_client_dossier_profile(
@@ -4541,7 +4660,7 @@ async def list_client_entries_route(
     if not raw:
         raise HTTPException(status_code=401, detail="Missing init data")
     telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     entries = await list_client_entries(session, trainer_id, client_id, limit=limit)
@@ -4561,7 +4680,7 @@ async def add_client_entry_route(
     if not raw:
         raise HTTPException(status_code=401, detail="Missing init data")
     telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     try:
@@ -4584,7 +4703,7 @@ async def delete_client_entry_route(
     if not raw:
         raise HTTPException(status_code=401, detail="Missing init data")
     telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     deleted = await delete_client_entry(session, trainer_id, entry_id)
@@ -4605,7 +4724,7 @@ async def list_client_tags_route(
     if not raw:
         raise HTTPException(status_code=401, detail="Missing init data")
     telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     tags = await list_client_tags(session, trainer_id, client_id)
@@ -4625,7 +4744,7 @@ async def add_client_tag_route(
     if not raw:
         raise HTTPException(status_code=401, detail="Missing init data")
     telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     try:
@@ -4650,7 +4769,7 @@ async def remove_client_tag_route(
     if not raw:
         raise HTTPException(status_code=401, detail="Missing init data")
     telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     deleted = await remove_client_tag(session, trainer_id, tag_id)
@@ -4671,7 +4790,7 @@ async def post_trainer_clients(
     if not raw:
         raise HTTPException(status_code=401, detail="Missing init data")
     telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     try:
@@ -4699,7 +4818,7 @@ async def post_trainer_booking(
     if not raw:
         raise HTTPException(status_code=401, detail="Missing init data")
     telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     slot = await get_slot(session, body.slot_id)
@@ -4752,6 +4871,8 @@ async def post_trainer_booking(
         client_id=int(body.client_id),
         slot_date=(slot or {}).get("slot_date"),
         start_time=(slot or {}).get("start_time"),
+        first_booking_milestone=first_booking_milestone,
+        share_catalog_tip=share_catalog_tip,
     )
     return {
         "success": True,
@@ -4773,7 +4894,7 @@ async def post_trainer_booking_quick(
     if not raw:
         raise HTTPException(status_code=401, detail="Missing init data")
     telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     if not await trainer_has_crm_access(session, trainer_id):
@@ -4825,6 +4946,8 @@ async def post_trainer_booking_quick(
         client_id=int(body.client_id),
         slot_date=(slot or {}).get("slot_date"),
         start_time=(slot or {}).get("start_time"),
+        first_booking_milestone=first_booking_milestone,
+        share_catalog_tip=share_catalog_tip,
     )
     return {
         "success": True,
@@ -4846,7 +4969,7 @@ async def post_trainer_booking_make_regular(
     if not raw:
         raise HTTPException(status_code=401, detail="Missing init data")
     telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     booking = await get_booking_with_slot(session, booking_id, trainer_id)
@@ -4870,7 +4993,7 @@ async def post_trainer_recurring_remove(
     if not raw:
         raise HTTPException(status_code=401, detail="Missing init data")
     telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     ok = await cancel_recurring_client_slot(session, trainer_id, recurring_id)
@@ -4913,7 +5036,7 @@ async def webapp_trainer_moderation_readiness(
     x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
     session: AsyncSession = Depends(get_session),
 ):
-    """Profile completeness for moderation queue; works for linked trainers before active (onboarding Mini App)."""
+    """Submission + full-profile completeness for Mini App (same dict as embedded profile moderation_readiness)."""
     raw = init_data or x_telegram_init_data
     if not raw:
         raise HTTPException(status_code=401, detail="Missing init data")
@@ -4953,7 +5076,7 @@ async def webapp_trainer_submit_for_moderation(
     x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
     session: AsyncSession = Depends(get_session),
 ):
-    """Reject incomplete profiles with 422 + missing field list; otherwise same rules as REST submit."""
+    """422 if submission tier (8 criteria) incomplete; otherwise same rules as REST submit-for-moderation."""
     raw = init_data or x_telegram_init_data
     if not raw:
         raise HTTPException(status_code=401, detail="Missing init data")
@@ -4968,7 +5091,7 @@ async def webapp_trainer_submit_for_moderation(
         raise HTTPException(
             status_code=422,
             detail={
-                "message": "Profile incomplete for moderation",
+                "message": "Profile incomplete for moderation submission (8 criteria)",
                 "missing_fields": result.get("missing_fields", []),
                 "missing_labels_ru": result.get("missing_labels_ru", []),
             },

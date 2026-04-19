@@ -375,8 +375,8 @@ async def test_public_list_requires_active_subscription_detail_is_active_only(
     app_use_test_db, db_session
 ) -> None:
     """
-    Список каталога требует неистёкшую подписку; карточка по id доступна при status=active
-    (как в docstring public.py — видимость вне зависимости от tier/подписки).
+    Список каталога требует неистёкшую подписку; карточка по id остаётся доступной при status=active
+    даже без подписки (но скрывается при is_catalog_visible=false — см. отдельный тест).
     """
     sid, cid, _ = await _require_seed_ids(db_session)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
@@ -396,6 +396,41 @@ async def test_public_list_requires_active_subscription_detail_is_active_only(
     assert tid not in {it["id"] for it in lst.json()["items"]}
     assert one.status_code == 200
     assert one.json()["id"] == tid
+
+
+@pytest.mark.asyncio
+async def test_public_catalog_respects_is_catalog_visible(
+    app_use_test_db,
+    db_session,
+) -> None:
+    """Список и карточка /api/public/trainers* скрывают активного тренера при is_catalog_visible=false."""
+    sid, cid, _ = await _require_seed_ids(db_session)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        tid = await _create_active_trainer_via_api(client, city_id=cid, service_ids=[sid])
+        await _ensure_trainer_subscription_tier(db_session, tid, SUBSCRIPTION_TIER_ONLINE)
+
+    await db_session.execute(
+        text("UPDATE trainers SET is_catalog_visible = false WHERE id = :tid"),
+        {"tid": tid},
+    )
+    await db_session.commit()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        lst = await client.get("/api/public/trainers", params={"city_id": cid, "limit": 500})
+        one = await client.get(f"/api/public/trainers/{tid}")
+    assert lst.status_code == 200
+    assert tid not in {it["id"] for it in lst.json()["items"]}
+    assert one.status_code == 404
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        vis = await client.patch(
+            f"/api/trainers/{tid}/catalog-visibility",
+            json={"is_catalog_visible": True},
+        )
+        assert vis.status_code == 200, vis.text
+        one2 = await client.get(f"/api/public/trainers/{tid}")
+    assert one2.status_code == 200
+    assert one2.json()["id"] == tid
 
 
 @pytest.mark.asyncio

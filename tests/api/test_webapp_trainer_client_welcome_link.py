@@ -481,3 +481,42 @@ async def test_trainer_public_booking_link_200_returns_reusable_deep_link(
     assert resp.status_code == 200
     link = (resp.json().get("booking_link") or "").strip()
     assert link == f"https://t.me/PublicBookBot?start=client_{int(city_id)}_{int(service_id)}_{int(trainer_id)}"
+
+
+@pytest.mark.asyncio
+async def test_trainer_welcome_link_first_copy_idempotent(
+    app_use_test_db,
+    db_session,
+) -> None:
+    """POST /trainer/welcome-link/first-copy sets trainers.client_invite_link_first_copied_at once."""
+    tg = _fresh_trainer_telegram_id()
+    r = await db_session.execute(text("INSERT INTO trainers (status) VALUES ('active') RETURNING id"))
+    trainer_id = int(r.fetchone()[0])
+    await db_session.execute(
+        text("UPDATE trainers SET telegram_id = :tg WHERE id = :id"),
+        {"tg": tg, "id": trainer_id},
+    )
+    await db_session.commit()
+
+    with patch_trainer_webapp_init(tg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp1 = await client.post(
+                "/api/webapp/trainer/welcome-link/first-copy",
+                headers={"X-Telegram-Init-Data": "mock"},
+            )
+            resp2 = await client.post(
+                "/api/webapp/trainer/welcome-link/first-copy",
+                headers={"X-Telegram-Init-Data": "mock"},
+            )
+    assert resp1.status_code == 200
+    assert resp2.status_code == 200
+    t1 = resp1.json().get("first_copied_at")
+    t2 = resp2.json().get("first_copied_at")
+    assert t1 and t1 == t2
+
+    rdb = await db_session.execute(
+        text("SELECT client_invite_link_first_copied_at FROM trainers WHERE id = :id"),
+        {"id": trainer_id},
+    )
+    row = rdb.fetchone()
+    assert row is not None and row[0] is not None

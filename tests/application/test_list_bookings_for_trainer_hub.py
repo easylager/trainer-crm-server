@@ -192,3 +192,89 @@ async def test_hub_tomorrow_still_listed(db_session) -> None:
     bookings = await list_bookings_for_trainer(db_session, trainer_id, limit=50)
     assert len(bookings) == 1
     assert bookings[0]["hub_in_session"] is False
+
+
+@pytest.mark.asyncio
+async def test_hub_first_client_online_pending_only_before_any_notified_push(db_session) -> None:
+    """Hub flag: pending + no notified_at yet + no prior booking already pushed to trainer."""
+    trainer_id, service_id = await _seed_trainer_with_service(db_session)
+    tomorrow = date.today() + timedelta(days=1)
+    tg_a = unique_test_telegram_id()
+    phone_a, phone_n_a = belarus_test_phone(tg_a)
+    r = await db_session.execute(
+        text(
+            """
+            INSERT INTO clients (telegram_id, first_name, last_name, phone, phone_normalized)
+            VALUES (:tg, 'A', 'One', :phone, :pn) RETURNING id
+            """
+        ),
+        {"tg": tg_a, "phone": phone_a, "pn": phone_n_a},
+    )
+    (client_a,) = r.fetchone()
+    tg_b = unique_test_telegram_id()
+    phone_b, phone_n_b = belarus_test_phone(tg_b)
+    r = await db_session.execute(
+        text(
+            """
+            INSERT INTO clients (telegram_id, first_name, last_name, phone, phone_normalized)
+            VALUES (:tg, 'B', 'Two', :phone, :pn) RETURNING id
+            """
+        ),
+        {"tg": tg_b, "phone": phone_b, "pn": phone_n_b},
+    )
+    (client_b,) = r.fetchone()
+
+    r = await db_session.execute(
+        text("""
+            INSERT INTO slots (trainer_id, slot_date, start_time, end_time, status)
+            VALUES (:tid, :d, TIME '10:00', TIME '11:00', 'available')
+            RETURNING id
+        """),
+        {"tid": trainer_id, "d": tomorrow},
+    )
+    (slot_a,) = r.fetchone()
+    r = await db_session.execute(
+        text("""
+            INSERT INTO slots (trainer_id, slot_date, start_time, end_time, status)
+            VALUES (:tid, :d, TIME '12:00', TIME '13:00', 'available')
+            RETURNING id
+        """),
+        {"tid": trainer_id, "d": tomorrow},
+    )
+    (slot_b,) = r.fetchone()
+
+    r = await db_session.execute(
+        text("""
+            INSERT INTO bookings (slot_id, trainer_id, client_id, service_id, status)
+            VALUES (:sid, :tid, :cid, :svc, 'pending')
+            RETURNING id
+        """),
+        {"sid": slot_a, "tid": trainer_id, "cid": client_a, "svc": service_id},
+    )
+    (bid_first,) = r.fetchone()
+    r = await db_session.execute(
+        text("""
+            INSERT INTO bookings (slot_id, trainer_id, client_id, service_id, status)
+            VALUES (:sid, :tid, :cid, :svc, 'pending')
+            RETURNING id
+        """),
+        {"sid": slot_b, "tid": trainer_id, "cid": client_b, "svc": service_id},
+    )
+    (bid_second,) = r.fetchone()
+    await db_session.commit()
+
+    rows = await list_bookings_for_trainer(db_session, trainer_id, limit=50)
+    by_id = {b["id"]: b for b in rows}
+    assert by_id[bid_first]["first_client_online_pending"] is True
+    assert by_id[bid_second]["first_client_online_pending"] is True
+
+    await db_session.execute(
+        text("UPDATE bookings SET notified_at = NOW() WHERE id = :id"),
+        {"id": bid_first},
+    )
+    await db_session.commit()
+
+    rows2 = await list_bookings_for_trainer(db_session, trainer_id, limit=50)
+    by_id2 = {b["id"]: b for b in rows2}
+    assert by_id2[bid_first]["first_client_online_pending"] is False
+    assert by_id2[bid_second]["first_client_online_pending"] is False

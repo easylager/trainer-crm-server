@@ -16,6 +16,50 @@ from src.infrastructure.db.models import SUBSCRIPTION_STATUS_ACTIVE, SUBSCRIPTIO
 # Short day names for charts (Mon–Sun)
 STATS_DAY_NAMES = ("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс")
 
+# Admin dashboard: coarse activation funnel (SQL CASE must stay in sync with keys below).
+_TRAINER_ACTIVATION_STAGE_CASE = """
+CASE
+  WHEN t.status = 'active' THEN 'active'
+  WHEN t.status = 'deactivated' THEN 'deactivated'
+  WHEN t.status IN ('pending_contract', 'pending_payment') THEN 'contract_or_payment'
+  WHEN t.status = 'pending_profile' AND t.moderation_submitted_at IS NOT NULL THEN 'moderation_queue'
+  WHEN t.status = 'pending_profile' AND EXISTS (
+    SELECT 1 FROM trainer_schedule_templates tpl WHERE tpl.trainer_id = t.id
+  ) AND t.client_invite_link_first_copied_at IS NOT NULL THEN 'pending_template_invite_ready'
+  WHEN t.status = 'pending_profile' AND EXISTS (
+    SELECT 1 FROM trainer_schedule_templates tpl WHERE tpl.trainer_id = t.id
+  ) THEN 'pending_with_template'
+  WHEN t.status = 'pending_profile' AND t.client_invite_link_first_copied_at IS NOT NULL THEN 'pending_invite_only'
+  WHEN t.status = 'pending_profile' THEN 'pending_profile'
+  ELSE 'other'
+END
+"""
+
+ACTIVATION_STAGE_LABEL_RU: dict[str, str] = {
+    "active": "Активен",
+    "deactivated": "Деактивирован",
+    "contract_or_payment": "Ожидает договор / оплату",
+    "moderation_queue": "На проверке у администратора",
+    "pending_template_invite_ready": "Профиль: шаблон + ссылка для клиентов скопирована",
+    "pending_with_template": "Профиль: шаблон, ссылку ещё не копировали",
+    "pending_invite_only": "Профиль: ссылка скопирована, шаблона недели нет",
+    "pending_profile": "Профиль: без шаблона и без копирования ссылки",
+    "other": "Прочее",
+}
+
+# Funnel order for admin UI (coarse stages; keys must match ACTIVATION_STAGE_LABEL_RU).
+ACTIVATION_STAGE_ORDER: tuple[str, ...] = (
+    "pending_profile",
+    "pending_invite_only",
+    "pending_with_template",
+    "pending_template_invite_ready",
+    "moderation_queue",
+    "contract_or_payment",
+    "active",
+    "deactivated",
+    "other",
+)
+
 # Align hub MTD «today» with slot_date / trainer-facing calendar (Belarus).
 HUB_REVENUE_TZ = ZoneInfo("Europe/Minsk")
 
@@ -1132,6 +1176,103 @@ async def get_platform_stats(session: AsyncSession) -> dict:
     except ProgrammingError:
         pass
 
+    prev_week_start = week_start - timedelta(days=7)
+    prev_week_end = week_end - timedelta(days=7)
+
+    # North star: confirmed/completed bookings whose session falls in the ISO calendar week
+    # (includes trainer-created bookings that start as confirmed).
+    r_ns = await session.execute(
+        text(
+            """
+            SELECT COUNT(*) FROM bookings b
+            JOIN slots s ON s.id = b.slot_id
+            WHERE b.status IN ('confirmed', 'completed')
+              AND s.slot_date >= :ws AND s.slot_date <= :we
+            """
+        ),
+        {"ws": week_start, "we": week_end},
+    )
+    north_star_completed_booking_cycles_week = int((r_ns.fetchone() or (0,))[0] or 0)
+
+    r_ns2 = await session.execute(
+        text(
+            """
+            SELECT COUNT(*) FROM bookings b
+            JOIN slots s ON s.id = b.slot_id
+            WHERE b.status IN ('confirmed', 'completed')
+              AND s.slot_date >= :ws AND s.slot_date <= :we
+            """
+        ),
+        {"ws": prev_week_start, "we": prev_week_end},
+    )
+    north_star_completed_booking_cycles_prev_week = int((r_ns2.fetchone() or (0,))[0] or 0)
+
+    activation_stage_counts: dict[str, int] = {k: 0 for k in ACTIVATION_STAGE_LABEL_RU}
+    r_st = await session.execute(
+        text(
+            f"""
+            SELECT sub.stage_key, COUNT(*)::int
+            FROM (
+                SELECT t.id, {_TRAINER_ACTIVATION_STAGE_CASE.strip()} AS stage_key
+                FROM trainers t
+            ) sub
+            GROUP BY sub.stage_key
+            """
+        ),
+    )
+    for sk, cnt in r_st.fetchall():
+        k = str(sk or "other")
+        activation_stage_counts[k] = int(cnt or 0)
+
+    trainers_activation: list[dict] = []
+    r_rows = await session.execute(
+        text(
+            f"""
+            SELECT
+                t.id,
+                t.status,
+                NULLIF(TRIM(CONCAT(COALESCE(p.first_name, ''), ' ', COALESCE(p.last_name, ''))), '')
+                    AS display_name,
+                (SELECT COUNT(*)::int FROM trainer_schedule_templates tpl WHERE tpl.trainer_id = t.id) AS template_count,
+                EXISTS(
+                    SELECT 1 FROM bookings b
+                    WHERE b.trainer_id = t.id AND b.status NOT IN ('cancelled', 'declined')
+                ) AS has_booking,
+                t.client_invite_link_first_copied_at AS invite_copied_at,
+                ({_TRAINER_ACTIVATION_STAGE_CASE.strip()}) AS stage_key
+            FROM trainers t
+            LEFT JOIN trainer_profiles p ON p.trainer_id = t.id
+            ORDER BY t.id DESC
+            LIMIT 400
+            """
+        ),
+    )
+    for row in r_rows.fetchall():
+        tid, st, name, tpl_cnt, has_book, invite_at, stage_key = row[0], row[1], row[2], row[3], row[4], row[5], row[6]
+        sk = str(stage_key or "other")
+        invite_iso = invite_at.isoformat() if invite_at is not None else None
+        base_label = ACTIVATION_STAGE_LABEL_RU.get(sk, ACTIVATION_STAGE_LABEL_RU["other"])
+        # Active trainers are one bucket in SQL; spell out invite tracking so admin sees full picture.
+        if sk == "active":
+            # Not client clicks — only trainer copy action in Mini App (hub / clients / passes).
+            base_label = (
+                f"{base_label} · ссылку для клиентов копировали в приложении"
+                if invite_iso
+                else f"{base_label} · копирование ссылки в приложении не зафиксировано"
+            )
+        trainers_activation.append(
+            {
+                "trainer_id": int(tid),
+                "status": str(st or ""),
+                "display_name": (name or f"Тренер #{tid}").strip(),
+                "stage_key": sk,
+                "stage_label_ru": base_label,
+                "weekly_template_count": int(tpl_cnt or 0),
+                "has_booking": bool(has_book),
+                "client_invite_link_first_copied_at": invite_iso,
+            }
+        )
+
     return {
         "trainers_by_status": trainers_by_status,
         "trainers_total": trainers_total,
@@ -1172,4 +1313,12 @@ async def get_platform_stats(session: AsyncSession) -> dict:
         "subscription_trainers_with_tier": subscription_trainers_with_tier,
         "subscription_expiring_7d": subscription_expiring_7d,
         "subscription_active_trainers_no_tier": subscription_active_trainers_no_tier,
+        "north_star_completed_booking_cycles_week": north_star_completed_booking_cycles_week,
+        "north_star_completed_booking_cycles_prev_week": north_star_completed_booking_cycles_prev_week,
+        "prev_week_start": prev_week_start,
+        "prev_week_end": prev_week_end,
+        "activation_stage_counts": activation_stage_counts,
+        "trainers_activation": trainers_activation,
+        "activation_stage_labels_ru": ACTIVATION_STAGE_LABEL_RU,
+        "activation_stage_order": list(ACTIVATION_STAGE_ORDER),
     }

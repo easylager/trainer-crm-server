@@ -138,3 +138,27 @@ async def get_trainer_id_linked_any_status(session: AsyncSession, telegram_id: i
     )
     row = r.fetchone()
     return row[0] if row else None
+
+
+async def get_trainer_id_for_webapp_trainer_operations(session: AsyncSession, telegram_id: int) -> int | None:
+    """
+    Trainer Mini App: schedule, slots, trainer-side bookings — active, or pending_profile with TTV minimal profile.
+
+    Payments, catalog products, and other CRM surfaces still use ``get_trainer_id_by_telegram_id`` (active only).
+    """
+    from src.application.trainer_profile_completeness import is_tt_minimal_profile_complete
+    from src.application.trainer_use_cases import get_trainer
+    from src.infrastructure.db.models import TRAINER_STATUS_ACTIVE, TRAINER_STATUS_PENDING_PROFILE
+
+    row = await get_trainer_row_by_telegram_id(session, telegram_id)
+    if not row:
+        return None
+    tid = int(row["id"])
+    st = (row.get("status") or "").strip().lower()
+    if st == TRAINER_STATUS_ACTIVE:
+        return tid
+    if st == TRAINER_STATUS_PENDING_PROFILE:
+        trainer = await get_trainer(session, tid)
+        if trainer and is_tt_minimal_profile_complete(trainer):
+            return tid
+    return None
