@@ -162,6 +162,12 @@ async def test_onboarding_checklist_inactive_trainer_slots_and_bookings_locked(
     data = resp.json()
     assert data.get("is_active") is False
     assert "full_profile_complete" in data
+    assert data.get("slots_this_week_count") == 0
+    assert data.get("slots_next_week_count") == 0
+    assert data.get("available_slots_this_week_count") == 0
+    assert data.get("available_slots_next_week_count") == 0
+    assert data.get("bookings_this_week_count") == 0
+    assert data.get("bookings_next_week_count") == 0
     assert data.get("has_future_available_slots") is False
     assert data.get("has_future_slots") is False
     assert data.get("has_any_booking") is False
@@ -205,6 +211,12 @@ async def test_onboarding_checklist_active_future_available_slot(
     assert ej.get("is_active") is True
     assert ej.get("schedule_unlocked") is True
     assert ej.get("weekly_template_count") == 0
+    assert ej.get("slots_this_week_count") == 0
+    assert ej.get("slots_next_week_count") == 0
+    assert ej.get("available_slots_this_week_count") == 0
+    assert ej.get("available_slots_next_week_count") == 0
+    assert ej.get("bookings_this_week_count") == 0
+    assert ej.get("bookings_next_week_count") == 0
     assert ej.get("slots_locked_reason") is None
     assert ej.get("has_future_available_slots") is False
     assert ej.get("has_future_slots") is False
@@ -278,6 +290,126 @@ async def test_onboarding_checklist_booked_future_slot_counts_for_slots_step(
     assert data.get("has_future_available_slots") is False
     assert data.get("has_future_slots") is True
     assert data.get("has_upcoming_booking") is False
+
+
+@pytest.mark.asyncio
+async def test_onboarding_checklist_week_slot_counters(
+    app_use_test_db,
+    db_session,
+) -> None:
+    """Checklist returns separate slot counters for this week (from today) and next week."""
+    tg = _fresh_trainer_telegram_id()
+    r = await db_session.execute(text("INSERT INTO trainers (status) VALUES ('active') RETURNING id"))
+    tid = r.fetchone()[0]
+    await db_session.execute(
+        text("UPDATE trainers SET telegram_id = :tg WHERE id = :id"),
+        {"tg": tg, "id": tid},
+    )
+    await db_session.execute(
+        text(
+            "INSERT INTO trainer_profiles (trainer_id, first_name, last_name, age) "
+            "VALUES (:tid, 'Неделя', 'Счётчик', 30)"
+        ),
+        {"tid": tid},
+    )
+    today = date.today()
+    week_end = today + timedelta(days=(6 - today.weekday()))
+    next_week_start = week_end + timedelta(days=1)
+    next_week_day = next_week_start + timedelta(days=1)
+    await db_session.execute(
+        text(
+            """
+            INSERT INTO slots (trainer_id, slot_date, start_time, end_time, status)
+            VALUES
+              (:tid, :d_this, TIME '10:00', TIME '11:00', 'available'),
+              (:tid, :d_next, TIME '12:00', TIME '13:00', 'booked')
+            """
+        ),
+        {"tid": tid, "d_this": today, "d_next": next_week_day},
+    )
+    await db_session.commit()
+
+    with patch_trainer_init_auth(tg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.get(
+                "/api/webapp/trainer/onboarding/checklist",
+                headers={"X-Telegram-Init-Data": "mock"},
+            )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data.get("slots_this_week_count") == 1
+    assert data.get("slots_next_week_count") == 1
+    assert data.get("available_slots_this_week_count") == 1
+    assert data.get("available_slots_next_week_count") == 0
+    assert data.get("bookings_this_week_count") == 0
+    assert data.get("bookings_next_week_count") == 0
+
+
+@pytest.mark.asyncio
+async def test_onboarding_checklist_bookings_this_week_count(
+    app_use_test_db,
+    db_session,
+) -> None:
+    """bookings_this_week_count counts non-cancelled bookings in the current week window."""
+    tg = _fresh_trainer_telegram_id()
+    r = await db_session.execute(text("INSERT INTO trainers (status) VALUES ('active') RETURNING id"))
+    tid = r.fetchone()[0]
+    await db_session.execute(
+        text("UPDATE trainers SET telegram_id = :tg WHERE id = :id"),
+        {"tg": tg, "id": tid},
+    )
+    await db_session.execute(
+        text(
+            "INSERT INTO trainer_profiles (trainer_id, first_name, last_name, age) "
+            "VALUES (:tid, 'Букинг', 'Неделя', 31)"
+        ),
+        {"tid": tid},
+    )
+    svc_name = "Test service " + uuid.uuid4().hex[:8]
+    r_service = await db_session.execute(
+        text("INSERT INTO services (name) VALUES (:name) RETURNING id"),
+        {"name": svc_name},
+    )
+    service_id = r_service.fetchone()[0]
+    r_client = await db_session.execute(
+        text("INSERT INTO clients (telegram_id, first_name) VALUES (:tg, 'Клиент') RETURNING id"),
+        {"tg": _fresh_trainer_telegram_id()},
+    )
+    client_id = r_client.fetchone()[0]
+    today = date.today()
+    week_end = today + timedelta(days=(6 - today.weekday()))
+    r_slot = await db_session.execute(
+        text(
+            """
+            INSERT INTO slots (trainer_id, slot_date, start_time, end_time, status)
+            VALUES (:tid, :d, TIME '10:00', TIME '11:00', 'booked')
+            RETURNING id
+            """
+        ),
+        {"tid": tid, "d": today},
+    )
+    slot_id = r_slot.fetchone()[0]
+    await db_session.execute(
+        text(
+            """
+            INSERT INTO bookings (slot_id, trainer_id, client_id, service_id, status)
+            VALUES (:sid, :tid, :cid, :svc, 'confirmed')
+            """
+        ),
+        {"sid": slot_id, "tid": tid, "cid": client_id, "svc": service_id},
+    )
+    await db_session.commit()
+
+    with patch_trainer_init_auth(tg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.get(
+                "/api/webapp/trainer/onboarding/checklist",
+                headers={"X-Telegram-Init-Data": "mock"},
+            )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data.get("bookings_this_week_count") == 1
+    assert data.get("bookings_next_week_count") == 0
 
 
 @pytest.mark.asyncio

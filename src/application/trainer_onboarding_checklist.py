@@ -7,6 +7,10 @@ Trainer onboarding checklist: submission readiness, full-profile flag, future sl
 ``last_completed_booking_client_id`` = ``client_id`` of the latest completed row by ``bookings.id`` (deep link).
 ``schedule_unlocked`` mirrors Mini App access (active or pending TTV + CRM trial).
 ``weekly_template_count`` = rows in ``trainer_schedule_templates`` (hub nudge after onboarding complete).
+``slots_this_week_count`` = available/booked slots from today till end of current week.
+``slots_next_week_count`` = available/booked slots for the next full week.
+``available_slots_this_week_count`` / ``available_slots_next_week_count`` = free slots only (hub rhythm).
+``bookings_this_week_count`` / ``bookings_next_week_count`` = non-cancelled bookings in that week window.
 """
 from __future__ import annotations
 
@@ -56,6 +60,12 @@ async def get_trainer_onboarding_checklist(session: AsyncSession, trainer_id: in
         "full_profile_complete": full_profile_complete,
         "tt_minimal_complete": tt_minimal_complete,
         "weekly_template_count": 0,
+        "slots_this_week_count": 0,
+        "slots_next_week_count": 0,
+        "available_slots_this_week_count": 0,
+        "available_slots_next_week_count": 0,
+        "bookings_this_week_count": 0,
+        "bookings_next_week_count": 0,
         "has_future_available_slots": False,
         "has_future_slots": False,
         "has_any_booking": False,
@@ -78,6 +88,7 @@ async def get_trainer_onboarding_checklist(session: AsyncSession, trainer_id: in
         out["slots_locked_reason"] = reason
         out["bookings_locked_reason"] = reason
         out["schedule_unlocked"] = False
+        out["trainer_id"] = trainer_id
         return out
 
     r_tpl = await session.execute(
@@ -88,7 +99,95 @@ async def get_trainer_onboarding_checklist(session: AsyncSession, trainer_id: in
     out["weekly_template_count"] = int(tpl_row[0]) if tpl_row and tpl_row[0] is not None else 0
 
     today = date.today()
+    week_end = today + timedelta(days=(6 - today.weekday()))
+    next_week_start = week_end + timedelta(days=1)
+    next_week_end = next_week_start + timedelta(days=6)
     horizon = today + timedelta(days=_SLOT_HORIZON_DAYS)
+
+    r_week = await session.execute(
+        text(
+            """
+            SELECT
+                COUNT(*) FILTER (
+                    WHERE slot_date >= :d_this_from
+                      AND slot_date <= :d_this_to
+                      AND status IN ('available', 'booked')
+                )::int AS this_week_cnt,
+                COUNT(*) FILTER (
+                    WHERE slot_date >= :d_next_from
+                      AND slot_date <= :d_next_to
+                      AND status IN ('available', 'booked')
+                )::int AS next_week_cnt
+            FROM slots
+            WHERE trainer_id = :tid
+            """
+        ),
+        {
+            "tid": trainer_id,
+            "d_this_from": today,
+            "d_this_to": week_end,
+            "d_next_from": next_week_start,
+            "d_next_to": next_week_end,
+        },
+    )
+    row_week = r_week.fetchone()
+    if row_week:
+        out["slots_this_week_count"] = int(row_week[0] or 0)
+        out["slots_next_week_count"] = int(row_week[1] or 0)
+
+    r_avail_book = await session.execute(
+        text(
+            """
+            SELECT
+                (
+                    SELECT COUNT(*)::int FROM slots
+                    WHERE trainer_id = :tid
+                      AND slot_date >= :d_this_from
+                      AND slot_date <= :d_this_to
+                      AND status = 'available'
+                ) AS avail_this,
+                (
+                    SELECT COUNT(*)::int FROM slots
+                    WHERE trainer_id = :tid
+                      AND slot_date >= :d_next_from
+                      AND slot_date <= :d_next_to
+                      AND status = 'available'
+                ) AS avail_next,
+                (
+                    SELECT COUNT(*)::int
+                    FROM bookings b
+                    JOIN slots s ON s.id = b.slot_id
+                    WHERE b.trainer_id = :tid
+                      AND b.status NOT IN ('cancelled', 'declined')
+                      AND s.slot_date >= :d_this_from
+                      AND s.slot_date <= :d_this_to
+                ) AS bookings_this,
+                (
+                    SELECT COUNT(*)::int
+                    FROM bookings b
+                    JOIN slots s ON s.id = b.slot_id
+                    WHERE b.trainer_id = :tid
+                      AND b.status NOT IN ('cancelled', 'declined')
+                      AND s.slot_date >= :d_next_from
+                      AND s.slot_date <= :d_next_to
+                ) AS bookings_next
+            """
+        ),
+        {
+            "tid": trainer_id,
+            "d_this_from": today,
+            "d_this_to": week_end,
+            "d_next_from": next_week_start,
+            "d_next_to": next_week_end,
+        },
+    )
+    row_ab = r_avail_book.fetchone()
+    if row_ab:
+        out["available_slots_this_week_count"] = int(row_ab[0] or 0)
+        out["available_slots_next_week_count"] = int(row_ab[1] or 0)
+        out["bookings_this_week_count"] = int(row_ab[2] or 0)
+        out["bookings_next_week_count"] = int(row_ab[3] or 0)
+
     r = await session.execute(
         text(
             """
@@ -200,4 +299,5 @@ async def get_trainer_onboarding_checklist(session: AsyncSession, trainer_id: in
     )
 
     out["schedule_unlocked"] = bool(is_active or pending_ttv_unlock)
+    out["trainer_id"] = trainer_id
     return out

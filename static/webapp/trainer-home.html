@@ -53,7 +53,7 @@
   <!-- Bump ?v= when mini-app-trainer-hub.css changes (immutable cache on /webapp/…). -->
   <link rel="stylesheet" href="mini-app-trainer-hub.css?v=20260460" />
   <!-- Early download of main hub script (defer runs at end of body); improves time-to-interactive vs. discover-at-bottom. -->
-  <link rel="preload" href="trainer-home-main.js?v=20260467" as="script" />
+  <link rel="preload" href="trainer-home-main.js?v=20260470" as="script" />
 
 </head>
 <body class="hub-body">
@@ -86,7 +86,7 @@
           class="hub-link-share-btn"
           id="hubShareBookingLinkBtn"
           aria-label="Ссылка на запись для клиента"
-          title="Ссылка на онлайн-запись (значок двух звеньев цепи)"
+          title="Ссылка на онлайн-запись к вам"
           hidden
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -123,6 +123,7 @@
       </ol>
     </div>
 
+    <!-- Legacy rhythm cards: populated only by JS fallback; primary UI uses hubRhythmSlot0/1. -->
     <div id="hubScheduleRhythmHint" class="hub-schedule-rhythm-hint" hidden aria-live="polite">
       <p class="hub-schedule-rhythm-hint__text">
         Добавьте часы в шаблон расписания — потом неделю можно накатить из шаблона за пару шагов.
@@ -150,6 +151,21 @@
       <div class="hub-schedule-rhythm-hint__actions">
         <button type="button" class="btn-sm btn-primary" id="hubClientNotesRhythmOpen">Профиль клиента</button>
         <button type="button" class="hub-schedule-rhythm-hint__dismiss" id="hubClientNotesRhythmDismiss" aria-label="Скрыть подсказку">×</button>
+      </div>
+    </div>
+
+    <div id="hubRhythmSlot0" class="hub-schedule-rhythm-hint" hidden aria-live="polite">
+      <p class="hub-schedule-rhythm-hint__text" id="hubRhythmSlot0Text"></p>
+      <div class="hub-schedule-rhythm-hint__actions">
+        <button type="button" class="btn-sm btn-primary" id="hubRhythmSlot0Cta" data-hub-rhythm-cta="1"></button>
+        <button type="button" class="hub-schedule-rhythm-hint__dismiss" id="hubRhythmSlot0Dismiss" data-hub-rhythm-dismiss="1" aria-label="Скрыть подсказку">×</button>
+      </div>
+    </div>
+    <div id="hubRhythmSlot1" class="hub-schedule-rhythm-hint" hidden aria-live="polite">
+      <p class="hub-schedule-rhythm-hint__text" id="hubRhythmSlot1Text"></p>
+      <div class="hub-schedule-rhythm-hint__actions">
+        <button type="button" class="btn-sm btn-primary" id="hubRhythmSlot1Cta" data-hub-rhythm-cta="1"></button>
+        <button type="button" class="hub-schedule-rhythm-hint__dismiss" id="hubRhythmSlot1Dismiss" data-hub-rhythm-dismiss="1" aria-label="Скрыть подсказку">×</button>
       </div>
     </div>
 
@@ -476,6 +492,6 @@
   <script src="mini-app-trainer-gate.js"></script>
   <script src="mini-app-trainer-celebration.js"></script>
   <!-- Bump ?v= when trainer-home-main.js changes (immutable cache on /webapp/…). -->
-  <script defer src="trainer-home-main.js?v=20260467"></script>
+  <script defer src="trainer-home-main.js?v=20260470"></script>
 </body>
 </html>

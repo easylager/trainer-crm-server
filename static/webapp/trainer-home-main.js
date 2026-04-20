@@ -72,6 +72,14 @@
       var hubInlineToastActionHandler = null;
       /** One-shot visual highlight for freshly created booking in «Ближайшие записи». */
       var hubPendingHighlightBookingId = null;
+      /** When false, the hubSummaryHints strip is not shown (applyHubRhythmResolver still runs). */
+      var HUB_NEXT_BEST_HINT_UI_ENABLED = false;
+      /** Rhythm hints shown in hubRhythmSlot0/1 — used to avoid duplicating the same message in hubSummaryHints when enabled. */
+      var hubActiveRhythmHintIds = [];
+      /** Last picked candidates per slot (CTA wiring). */
+      var hubLastRhythmPicked = [null, null];
+      /** «Мало записей» vs свободные слоты (aligned with product). */
+      var HUB_RHYTHM_BOOKINGS_LOW_THRESHOLD = 6;
 
       function syncHubHeroCompact() {
         var el = document.querySelector('.hub-hero');
@@ -353,72 +361,38 @@
         return false;
       }
 
-      function hubRhythmHintStorageKey() {
+      function parseNonNegativeInt(v) {
+        var n = typeof v === 'number' && !isNaN(v) ? v : parseInt(String(v == null ? '' : v), 10);
+        if (isNaN(n) || n < 0) return 0;
+        return n;
+      }
+
+      function getHubSlotCoverage(onb) {
+        var thisWeekCount = parseNonNegativeInt(onb && onb.slots_this_week_count);
+        var nextWeekCount = parseNonNegativeInt(onb && onb.slots_next_week_count);
+        return { thisWeekCount: thisWeekCount, nextWeekCount: nextWeekCount };
+      }
+
+      function hubRhythmHintStorageKeyBase() {
         var id = trainerAccessSnapshot && trainerAccessSnapshot.trainer_id;
         if (id == null || id === '' || isNaN(Number(id))) return null;
-        return 'trainer_hub_dismiss_rhythm_hint_v1_' + String(id);
+        return 'trainer_hub_schedule_rhythm_v2_' + String(id);
       }
 
-      /** Dismissible hub strips after onboarding (template, share link, client notes). */
-      function syncHubWeekRhythmPanel() {
-        syncHubScheduleRhythmHint();
-        syncHubShareLinkGrowthHint();
-        syncHubClientNotesRhythmHint();
+      function hubRhythmHintDismissUntilStorageKey() {
+        var base = hubRhythmHintStorageKeyBase();
+        return base ? base + '_dismiss_until' : null;
       }
 
-      /** After core onboarding: soft nudge toward weekly template (dismissible per trainer). */
-      function syncHubScheduleRhythmHint() {
-        var el = document.getElementById('hubScheduleRhythmHint');
-        if (!el) return;
-        var d = hubOnboardingData;
-        if (!d) {
-          el.setAttribute('hidden', 'hidden');
-          el.style.display = 'none';
-          return;
-        }
-        var wcRaw = d.weekly_template_count;
-        var wd = typeof wcRaw === 'number' && !isNaN(wcRaw) ? wcRaw : parseInt(String(wcRaw || '0'), 10);
-        if (isNaN(wd)) wd = 0;
-        var active = !!d.is_active;
-        var complete = onboardingAllComplete(d);
-        var key = hubRhythmHintStorageKey();
-        var dismissed = false;
-        try {
-          dismissed = !!(key && localStorage.getItem(key) === '1');
-        } catch (e) {
-          dismissed = false;
-        }
-        var show = active && complete && wd === 0 && !dismissed;
-        if (show) {
-          el.removeAttribute('hidden');
-          el.style.display = 'flex';
-        } else {
-          el.setAttribute('hidden', 'hidden');
-          el.style.display = 'none';
-        }
+      function hubRhythmHintLastShownStorageKey() {
+        var base = hubRhythmHintStorageKeyBase();
+        return base ? base + '_last_shown' : null;
       }
 
-      function wireHubScheduleRhythmHint() {
-        var dBtn = document.getElementById('hubScheduleRhythmDismiss');
-        var oBtn = document.getElementById('hubScheduleRhythmOpen');
-        if (dBtn && !dBtn.dataset.wiredRhythm) {
-          dBtn.dataset.wiredRhythm = '1';
-          dBtn.onclick = function() {
-            var key = hubRhythmHintStorageKey();
-            try {
-              if (key) localStorage.setItem(key, '1');
-            } catch (e) { /* ignore */ }
-            syncHubWeekRhythmPanel();
-          };
-        }
-        if (oBtn && !oBtn.dataset.wiredRhythm) {
-          oBtn.dataset.wiredRhythm = '1';
-          oBtn.onclick = function() {
-            ensureTrainerSectionsAccess(function() {
-              navigateTo('schedule-editor?tab=template');
-            });
-          };
-        }
+      function hubRhythmDismissKey(hintId) {
+        var id = trainerAccessSnapshot && trainerAccessSnapshot.trainer_id;
+        if (id == null || id === '' || isNaN(Number(id))) return null;
+        return 'trainer_hub_rhythm_dismiss_v1_' + String(id) + '_' + String(hintId);
       }
 
       function hubShareLinkGrowthHintStorageKey() {
@@ -427,58 +401,330 @@
         return 'trainer_hub_dismiss_share_link_growth_v1_' + String(id);
       }
 
+      function hubClientNotesRhythmHintStorageKey() {
+        var id = trainerAccessSnapshot && trainerAccessSnapshot.trainer_id;
+        if (id == null || id === '' || isNaN(Number(id))) return null;
+        return 'trainer_hub_dismiss_client_notes_rhythm_v1_' + String(id);
+      }
+
       /**
-       * Share-link strip after onboarding: show when online booking is on and the trainer already has
-       * something to offer (saved weekly template rows OR slots/bookings on the horizon). Rolling a week
-       * from the editor may not bump weekly_template_count — do not gate only on that.
+       * Unified dismiss timestamp per hint id; merges legacy keys (template v2, share link, client notes).
        */
-      function syncHubShareLinkGrowthHint() {
-        var el = document.getElementById('hubShareLinkGrowthHint');
-        if (!el) return;
-        var d = hubOnboardingData;
-        if (!d || !hubOnlineBookingEnabled) {
-          el.setAttribute('hidden', 'hidden');
-          el.style.display = 'none';
-          return;
+      function getRhythmDismissUntilMs(hintId) {
+        var k = hubRhythmDismissKey(hintId);
+        var now = Date.now();
+        var fromNew = 0;
+        try {
+          if (k) fromNew = parseInt(String(localStorage.getItem(k) || '0'), 10);
+        } catch (e) {
+          fromNew = 0;
         }
-        var wcRaw = d.weekly_template_count;
-        var wd = typeof wcRaw === 'number' && !isNaN(wcRaw) ? wcRaw : parseInt(String(wcRaw || '0'), 10);
-        if (isNaN(wd)) wd = 0;
+        if (!isNaN(fromNew) && fromNew > now) return fromNew;
+
+        if (hintId === 'template') {
+          var dk = hubRhythmHintDismissUntilStorageKey();
+          try {
+            if (dk) {
+              var v = parseInt(String(localStorage.getItem(dk) || '0'), 10);
+              if (!isNaN(v) && v > now) return v;
+            }
+          } catch (e2) { /* */ }
+        }
+        if (hintId === 'share_link') {
+          try {
+            var sk = hubShareLinkGrowthHintStorageKey();
+            if (sk && localStorage.getItem(sk) === '1') return 8e15;
+          } catch (e3) { /* */ }
+        }
+        if (hintId === 'client_notes') {
+          try {
+            var ck = hubClientNotesRhythmHintStorageKey();
+            if (ck && localStorage.getItem(ck) === '1') return 8e15;
+          } catch (e4) { /* */ }
+        }
+        return 0;
+      }
+
+      function setRhythmDismissUntilMs(hintId, untilMs) {
+        var k = hubRhythmDismissKey(hintId);
+        try {
+          if (k) localStorage.setItem(k, String(untilMs));
+        } catch (e) { /* */ }
+        if (hintId === 'template') {
+          var dk = hubRhythmHintDismissUntilStorageKey();
+          try {
+            if (dk) localStorage.setItem(dk, String(untilMs));
+          } catch (e2) { /* */ }
+        }
+        if (hintId === 'share_link') {
+          var sk = hubShareLinkGrowthHintStorageKey();
+          try {
+            if (sk) localStorage.setItem(sk, '1');
+          } catch (e3) { /* */ }
+        }
+        if (hintId === 'client_notes') {
+          var ck = hubClientNotesRhythmHintStorageKey();
+          try {
+            if (ck) localStorage.setItem(ck, '1');
+          } catch (e4) { /* */ }
+        }
+      }
+
+      function isRhythmHintDismissed(hintId) {
+        return getRhythmDismissUntilMs(hintId) > Date.now();
+      }
+
+      function hideLegacyRhythmHintCards() {
+        ['hubScheduleRhythmHint', 'hubShareLinkGrowthHint', 'hubClientNotesRhythmHint'].forEach(function(id) {
+          var el = document.getElementById(id);
+          if (el) {
+            el.setAttribute('hidden', 'hidden');
+            el.style.display = 'none';
+          }
+        });
+      }
+
+      /**
+       * Builds rhythm hint candidates (priority desc). Max two shown after dismiss filter.
+       */
+      function buildHubRhythmCandidates() {
+        var out = [];
+        var d = hubOnboardingData;
+        if (!d || !initData) return out;
         var active = !!d.is_active;
         var complete = onboardingAllComplete(d);
-        var key = hubShareLinkGrowthHintStorageKey();
-        var dismissed = false;
-        try {
-          dismissed = !!(key && localStorage.getItem(key) === '1');
-        } catch (e) {
-          dismissed = false;
+        if (!active || !complete) return out;
+
+        var availThis = parseNonNegativeInt(d.available_slots_this_week_count);
+        var availNext = parseNonNegativeInt(d.available_slots_next_week_count);
+        var bookThis = parseNonNegativeInt(d.bookings_this_week_count);
+        var bookNext = parseNonNegativeInt(d.bookings_next_week_count);
+        var slotsNext = parseNonNegativeInt(d.slots_next_week_count);
+        var wd = parseNonNegativeInt(d.weekly_template_count);
+        var coverage = getHubSlotCoverage(d);
+        var thisWeekReady = coverage.thisWeekCount > 0;
+        var nextWeekReady = coverage.nextWeekCount > 0;
+
+        if (availThis === 0 && bookThis < HUB_RHYTHM_BOOKINGS_LOW_THRESHOLD) {
+          out.push({
+            id: 'slots_this_week',
+            priority: 100,
+            text: 'На этой неделе нет свободных слотов. Добавьте окна, чтобы клиенты могли записаться.',
+            ctaLabel: 'Добавить слоты',
+            action: 'schedule',
+          });
         }
-        var hasSomethingToShare =
-          wd >= 1 ||
-          !!d.has_future_slots ||
-          !!d.has_future_available_slots ||
-          !!d.has_any_booking ||
-          !!d.has_upcoming_booking ||
-          !!d.has_confirmed_booking;
-        /* Summary hint can show «ссылка» under looser rules; align top strip so it does not require profile_complete for active trainers who already have bookings. */
-        var eligibleForShareStrip =
-          complete || (!!d.is_active && onboardingBookingStepDone(d));
-        var show = active && eligibleForShareStrip && hasSomethingToShare && !dismissed;
-        if (show) {
-          el.removeAttribute('hidden');
-          el.style.display = 'flex';
-        } else {
-          el.setAttribute('hidden', 'hidden');
-          el.style.display = 'none';
+
+        var nextWeekGap =
+          slotsNext === 0 || (availNext === 0 && bookNext < HUB_RHYTHM_BOOKINGS_LOW_THRESHOLD);
+        if (nextWeekGap) {
+          out.push({
+            id: 'slots_next_week',
+            priority: 90,
+            text: 'На следующей неделе пока нет слотов. Заполните расписание заранее.',
+            ctaLabel: 'Добавить слоты',
+            action: 'schedule',
+          });
+        }
+
+        if (hubOnlineBookingEnabled) {
+          var hasSomethingToShare =
+            wd >= 1 ||
+            !!d.has_future_slots ||
+            !!d.has_future_available_slots ||
+            !!d.has_any_booking ||
+            !!d.has_upcoming_booking ||
+            !!d.has_confirmed_booking;
+          var eligibleForShare =
+            complete || (!!d.is_active && onboardingBookingStepDone(d));
+          if (eligibleForShare && hasSomethingToShare) {
+            out.push({
+              id: 'share_link',
+              priority: 60,
+              text:
+                'Поделитесь ссылкой, чтобы клиенты записывались сами: кнопка с цепочкой справа вверху или «Получить ссылку» ниже в этом блоке.',
+              ctaLabel: 'Получить ссылку',
+              action: 'share_link',
+            });
+          }
+        }
+
+        var now = Date.now();
+        var recentlyShown = false;
+        var tenDaysMs = 10 * 24 * 60 * 60 * 1000;
+        try {
+          var shownKey = hubRhythmHintLastShownStorageKey();
+          var lastShownRaw = shownKey ? parseInt(String(localStorage.getItem(shownKey) || '0'), 10) : 0;
+          var lastShown = isNaN(lastShownRaw) ? 0 : lastShownRaw;
+          recentlyShown = lastShown > 0 && now - lastShown < tenDaysMs;
+        } catch (e) {
+          recentlyShown = false;
+        }
+        if (
+          wd === 0 &&
+          thisWeekReady &&
+          nextWeekReady &&
+          !isRhythmHintDismissed('template') &&
+          !recentlyShown
+        ) {
+          out.push({
+            id: 'template',
+            priority: 50,
+            text:
+              'Добавьте часы в шаблон расписания — потом неделю можно накатить из шаблона за пару шагов.',
+            ctaLabel: 'Шаблон в расписании',
+            action: 'template',
+          });
+        }
+
+        if (!!d.has_completed_booking && !isRhythmHintDismissed('client_notes')) {
+          out.push({
+            id: 'client_notes',
+            priority: 40,
+            text:
+              'После завершённой записи можно кратко зафиксировать заметки в карточке клиента — так проще вести следующие занятия.',
+            ctaLabel: 'Профиль клиента',
+            action: 'client_notes',
+          });
+        }
+
+        return out;
+      }
+
+      function runRhythmCandidateAction(cand) {
+        if (!cand || !cand.action) return;
+        if (cand.action === 'schedule') {
+          ensureTrainerSectionsAccess(function() {
+            navigateTo('schedule-editor');
+          });
+          return;
+        }
+        if (cand.action === 'template') {
+          ensureTrainerSectionsAccess(function() {
+            navigateTo('schedule-editor?tab=template');
+          });
+          return;
+        }
+        if (cand.action === 'share_link') {
+          ensureTrainerSectionsAccess(function() {
+            var headBtn = document.getElementById('hubShareBookingLinkBtn');
+            if (headBtn) headBtn.click();
+          });
+          return;
+        }
+        if (cand.action === 'client_notes') {
+          ensureTrainerSectionsAccess(function() {
+            var od = hubOnboardingData;
+            var raw = od && od.last_completed_booking_client_id;
+            var cid =
+              raw != null && raw !== '' && !isNaN(Number(raw)) ? parseInt(String(raw), 10) : NaN;
+            if (!isNaN(cid) && cid > 0) {
+              navigateTo('trainer-clients?client_id=' + encodeURIComponent(String(cid)));
+            } else {
+              navigateTo('trainer-clients');
+            }
+          });
+        }
+      }
+
+      /** Renders up to two priority rhythm hints; hides legacy fixed strips. */
+      function applyHubRhythmResolver() {
+        hideLegacyRhythmHintCards();
+        var candidates = buildHubRhythmCandidates();
+        candidates.sort(function(a, b) {
+          return b.priority - a.priority;
+        });
+        var picked = [];
+        for (var i = 0; i < candidates.length && picked.length < 2; i++) {
+          if (!isRhythmHintDismissed(candidates[i].id)) picked.push(candidates[i]);
+        }
+        hubActiveRhythmHintIds = picked.map(function(p) {
+          return p.id;
+        });
+        hubLastRhythmPicked = [picked[0] || null, picked[1] || null];
+
+        for (var s = 0; s < 2; s++) {
+          var container = document.getElementById('hubRhythmSlot' + s);
+          var cand = picked[s];
+          if (!container) continue;
+          if (!cand) {
+            container.setAttribute('hidden', 'hidden');
+            container.style.display = 'none';
+            container.dataset.hubRhythmHintId = '';
+            continue;
+          }
+          container.dataset.hubRhythmHintId = cand.id;
+          container.removeAttribute('hidden');
+          container.style.display = 'flex';
+          var txt = document.getElementById('hubRhythmSlot' + s + 'Text');
+          var cta = document.getElementById('hubRhythmSlot' + s + 'Cta');
+          if (txt) txt.textContent = cand.text;
+          if (cta) cta.textContent = cand.ctaLabel;
+          if (cand.id === 'template') {
+            try {
+              var sk = hubRhythmHintLastShownStorageKey();
+              if (sk) localStorage.setItem(sk, String(Date.now()));
+            } catch (e) { /* ignore */ }
+          }
+        }
+      }
+
+      function syncHubWeekRhythmPanel() {
+        applyHubRhythmResolver();
+      }
+
+      function wireHubRhythmSlots() {
+        [0, 1].forEach(function(ix) {
+          var prefix = 'hubRhythmSlot' + ix;
+          var dismissBtn = document.getElementById(prefix + 'Dismiss');
+          var ctaBtn = document.getElementById(prefix + 'Cta');
+          if (dismissBtn && !dismissBtn.dataset.wiredRhythmSlot) {
+            dismissBtn.dataset.wiredRhythmSlot = '1';
+            dismissBtn.onclick = function() {
+              var container = document.getElementById(prefix);
+              var hid = container && container.dataset.hubRhythmHintId;
+              if (hid) {
+                var days =
+                  hid === 'share_link' || hid === 'template' || hid === 'client_notes' ? 14 : 7;
+                setRhythmDismissUntilMs(hid, Date.now() + days * 24 * 60 * 60 * 1000);
+              }
+              applyHubRhythmResolver();
+              renderHubSummaryHints();
+            };
+          }
+          if (ctaBtn && !ctaBtn.dataset.wiredRhythmSlot) {
+            ctaBtn.dataset.wiredRhythmSlot = '1';
+            ctaBtn.onclick = function() {
+              var cand = hubLastRhythmPicked[ix];
+              runRhythmCandidateAction(cand);
+            };
+          }
+        });
+      }
+
+      function wireHubScheduleRhythmHint() {
+        var dBtn = document.getElementById('hubScheduleRhythmDismiss');
+        var oBtn = document.getElementById('hubScheduleRhythmOpen');
+        if (dBtn && !dBtn.dataset.wiredRhythm) {
+          dBtn.dataset.wiredRhythm = '1';
+          dBtn.onclick = function() {
+            setRhythmDismissUntilMs('template', Date.now() + 14 * 24 * 60 * 60 * 1000);
+            syncHubWeekRhythmPanel();
+            renderHubSummaryHints();
+          };
+        }
+        if (oBtn && !oBtn.dataset.wiredRhythm) {
+          oBtn.dataset.wiredRhythm = '1';
+          oBtn.onclick = function() {
+            runRhythmCandidateAction({ action: 'template' });
+          };
         }
       }
 
       /** Same storage as «×» on growth strip — call after successful copy or dismiss. */
       function dismissHubShareLinkGrowthHintPersisted() {
-        var key = hubShareLinkGrowthHintStorageKey();
-        try {
-          if (key) localStorage.setItem(key, '1');
-        } catch (e) { /* ignore */ }
+        setRhythmDismissUntilMs('share_link', Date.now() + 365 * 24 * 60 * 60 * 1000);
+        applyHubRhythmResolver();
         renderHubSummaryHints();
       }
 
@@ -494,47 +740,8 @@
         if (oBtn && !oBtn.dataset.wiredShareGrowth) {
           oBtn.dataset.wiredShareGrowth = '1';
           oBtn.onclick = function() {
-            ensureTrainerSectionsAccess(function() {
-              var headBtn = document.getElementById('hubShareBookingLinkBtn');
-              if (headBtn) headBtn.click();
-            });
+            runRhythmCandidateAction({ action: 'share_link' });
           };
-        }
-      }
-
-      function hubClientNotesRhythmHintStorageKey() {
-        var id = trainerAccessSnapshot && trainerAccessSnapshot.trainer_id;
-        if (id == null || id === '' || isNaN(Number(id))) return null;
-        return 'trainer_hub_dismiss_client_notes_rhythm_v1_' + String(id);
-      }
-
-      /** After first completed booking: dossier notes (dismissible); CTA opens trainer-clients for last completed client. */
-      function syncHubClientNotesRhythmHint() {
-        var el = document.getElementById('hubClientNotesRhythmHint');
-        if (!el) return;
-        var d = hubOnboardingData;
-        if (!d) {
-          el.setAttribute('hidden', 'hidden');
-          el.style.display = 'none';
-          return;
-        }
-        var active = !!d.is_active;
-        var complete = onboardingAllComplete(d);
-        var hasDone = !!d.has_completed_booking;
-        var key = hubClientNotesRhythmHintStorageKey();
-        var dismissed = false;
-        try {
-          dismissed = !!(key && localStorage.getItem(key) === '1');
-        } catch (e) {
-          dismissed = false;
-        }
-        var show = active && complete && hasDone && !dismissed;
-        if (show) {
-          el.removeAttribute('hidden');
-          el.style.display = 'flex';
-        } else {
-          el.setAttribute('hidden', 'hidden');
-          el.style.display = 'none';
         }
       }
 
@@ -544,33 +751,25 @@
         if (dBtn && !dBtn.dataset.wiredClientNotesRhythm) {
           dBtn.dataset.wiredClientNotesRhythm = '1';
           dBtn.onclick = function() {
-            var key = hubClientNotesRhythmHintStorageKey();
-            try {
-              if (key) localStorage.setItem(key, '1');
-            } catch (e) { /* ignore */ }
+            setRhythmDismissUntilMs('client_notes', Date.now() + 365 * 24 * 60 * 60 * 1000);
             syncHubWeekRhythmPanel();
+            renderHubSummaryHints();
           };
         }
         if (oBtn && !oBtn.dataset.wiredClientNotesRhythm) {
           oBtn.dataset.wiredClientNotesRhythm = '1';
           oBtn.onclick = function() {
-            ensureTrainerSectionsAccess(function() {
-              var od = hubOnboardingData;
-              var raw = od && od.last_completed_booking_client_id;
-              var cid =
-                raw != null && raw !== '' && !isNaN(Number(raw)) ? parseInt(String(raw), 10) : NaN;
-              if (!isNaN(cid) && cid > 0) {
-                navigateTo('trainer-clients?client_id=' + encodeURIComponent(String(cid)));
-              } else {
-                navigateTo('trainer-clients');
-              }
-            });
+            runRhythmCandidateAction({ action: 'client_notes' });
           };
         }
       }
 
       function applyOnboardingChecklist(data) {
         hubOnboardingData = data;
+        if (data && data.trainer_id != null && data.trainer_id !== '') {
+          trainerAccessSnapshot = trainerAccessSnapshot || {};
+          trainerAccessSnapshot.trainer_id = data.trainer_id;
+        }
         /* Checklist loads async after GET /trainer/access — can show activation before snapshot was refreshed. */
         var tsCh = data && String(data.trainer_status || '')
           .trim()
@@ -940,6 +1139,13 @@
           });
       }
 
+      function rhythmHintActiveInHub(id) {
+        return hubActiveRhythmHintIds.indexOf(id) !== -1;
+      }
+
+      /**
+       * Fallback strip below stats — avoid repeating what hubRhythmSlot0/1 already shows.
+       */
       function buildHubNextBestHint() {
         var onb = hubOnboardingData;
         if (!onb) return null;
@@ -971,7 +1177,51 @@
             href: 'trainer-profile',
           };
         }
-        if (hubOnlineBookingEnabled) {
+
+        var availThis = parseNonNegativeInt(onb.available_slots_this_week_count);
+        var bookThis = parseNonNegativeInt(onb.bookings_this_week_count);
+        var availNext = parseNonNegativeInt(onb.available_slots_next_week_count);
+        var bookNext = parseNonNegativeInt(onb.bookings_next_week_count);
+        var slotsNext = parseNonNegativeInt(onb.slots_next_week_count);
+        var coverage = getHubSlotCoverage(onb);
+
+        if (!rhythmHintActiveInHub('slots_this_week')) {
+          if (availThis === 0 && bookThis < HUB_RHYTHM_BOOKINGS_LOW_THRESHOLD) {
+            return {
+              type: 'info',
+              text: 'На этой неделе нет свободных слотов. Добавьте окна в расписании.',
+              href: 'schedule-editor',
+            };
+          }
+          if (coverage.thisWeekCount === 0) {
+            return {
+              type: 'info',
+              text: 'На этой неделе нет слотов. Добавьте ближайшие окна, чтобы не терять записи.',
+              href: 'schedule-editor',
+            };
+          }
+        }
+
+        var nextWeekGap =
+          slotsNext === 0 || (availNext === 0 && bookNext < HUB_RHYTHM_BOOKINGS_LOW_THRESHOLD);
+        if (!rhythmHintActiveInHub('slots_next_week')) {
+          if (nextWeekGap) {
+            return {
+              type: 'info',
+              text: 'На следующей неделе пока нет слотов. Обновите расписание заранее.',
+              href: 'schedule-editor',
+            };
+          }
+          if (coverage.nextWeekCount === 0) {
+            return {
+              type: 'info',
+              text: 'На следующей неделе пока нет слотов. Обновите расписание заранее.',
+              href: 'schedule-editor',
+            };
+          }
+        }
+
+        if (!rhythmHintActiveInHub('share_link') && hubOnlineBookingEnabled) {
           return {
             type: 'info',
             text: 'Поделитесь ссылкой на запись: клиенты смогут записываться сами.',
@@ -1010,15 +1260,21 @@
 
       /** Renders one next-best-action hint (plus urgent operational states). */
       function renderHubSummaryHints() {
+        applyHubRhythmResolver();
         var el = document.getElementById('hubSummaryHints');
         if (!el) {
-          syncHubWeekRhythmPanel();
           return;
         }
+        if (!HUB_NEXT_BEST_HINT_UI_ENABLED) {
+          el.setAttribute('hidden', '');
+          el.innerHTML = '';
+          el.setAttribute('aria-hidden', 'true');
+          return;
+        }
+        el.removeAttribute('aria-hidden');
         if (!initData) {
           el.setAttribute('hidden', '');
           el.innerHTML = '';
-          syncHubWeekRhythmPanel();
           return;
         }
         var hint = null;
@@ -1056,7 +1312,6 @@
         if (!hint) {
           el.setAttribute('hidden', '');
           el.innerHTML = '';
-          syncHubWeekRhythmPanel();
           return;
         }
         var mod = hint.type === 'urgent' ? 'urgent' : 'info';
@@ -1074,13 +1329,11 @@
           '</button>';
         var btn = el.querySelector('[data-hub-hint-href]');
         if (!btn) {
-          syncHubWeekRhythmPanel();
           return;
         }
         btn.onclick = function() {
           runHubHintAction(btn.getAttribute('data-hub-hint-href'));
         };
-        syncHubWeekRhythmPanel();
       }
 
       function formatHubMoneyCents(cents) {
@@ -3586,6 +3839,7 @@
       wireHubSubscriptionCelebrationClose();
 
       wireOnboardingHub();
+      wireHubRhythmSlots();
       wireHubScheduleRhythmHint();
       wireHubShareLinkGrowthHint();
       wireHubClientNotesRhythmHint();
