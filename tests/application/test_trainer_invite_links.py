@@ -56,14 +56,31 @@ def test_build_links_missing_username() -> None:
     assert err == "missing_username"
 
 
-def test_build_links_missing_city_or_service() -> None:
-    for city, svc in ((None, 1), (1, None), (0, 1), (1, 0)):
+def test_build_links_missing_city_or_invalid_trainer() -> None:
+    """City and trainer_id must be positive; service is optional (encoded as 0 in /start payload)."""
+    for city, tid in ((None, 1), (0, 1), (1, 0)):
         links, err = build_trainer_invite_links(
             webapp_base_url="https://x.com",
             client_bot_username="B",
             city_id=city,
-            service_id=svc,
-            trainer_id=1,
+            service_id=1,
+            trainer_id=tid,
         )
         assert links is None
         assert err == "missing_city_or_service"
+
+
+def test_build_links_service_optional_zero_in_payload() -> None:
+    """Missing or zero service_id still builds a deep link with service segment 0."""
+    for svc in (None, 0):
+        links, err = build_trainer_invite_links(
+            webapp_base_url="https://x.com",
+            client_bot_username="B",
+            city_id=1,
+            service_id=svc,
+            trainer_id=1,
+        )
+        assert err is None
+        assert links is not None
+        assert links.client_bot_deep_link == "https://t.me/B?start=client_1_0_1"
+        assert links.catalog_page_url == "https://x.com/webapp/catalog"

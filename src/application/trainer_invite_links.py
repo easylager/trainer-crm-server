@@ -38,7 +38,7 @@ def build_trainer_invite_links(
     """
     Returns (links, error) where error is None or:
     - missing_username — CLIENT_BOT_USERNAME not set
-    - missing_city_or_service — trainer profile has no city for deep link
+    - missing_city_or_service — no valid city_id or trainer_id for deep link (service optional → 0 in payload)
     """
     u = normalize_client_bot_username(client_bot_username)
     if not u:
