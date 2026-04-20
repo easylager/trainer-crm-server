@@ -3402,7 +3402,8 @@ async def get_trainer_public_booking_link(
 ):
     """
     Reusable public link for Instagram/social posts.
-    Deep-link payload matches client bot /start client_{city}_{service}_{trainer}.
+    Deep-link payload matches client bot /start client_{city}_{service_or_0}_{trainer}.
+    When service_id is omitted, client first chooses service in the booking flow.
     """
     raw = init_data or x_telegram_init_data
     if not raw:
@@ -3416,28 +3417,22 @@ async def get_trainer_public_booking_link(
             status_code=403,
             detail="Публичная ссылка доступна только на тарифе с онлайн-записью.",
         )
-    resolved_service_id, err = await resolve_service_id_for_generic_welcome_link(
-        session, trainer_id, service_id
-    )
-    if err == "no_services":
+    services = await list_trainer_services_for_welcome_link(session, trainer_id)
+    service_ids = {int(s["id"]) for s in services if s.get("id") is not None}
+    if not service_ids:
         raise HTTPException(
             status_code=400,
             detail="В профиле нет услуг — добавьте услугу в профиле.",
         )
-    if err == "service_required":
-        raise HTTPException(
-            status_code=400,
-            detail="Укажите услугу — у вас несколько услуг в каталоге.",
-        )
-    if err == "invalid_service":
+    if service_id is not None and int(service_id) not in service_ids:
         raise HTTPException(status_code=400, detail="Неверная услуга.")
+    resolved_service_id = int(service_id) if service_id is not None else None
     city_id, _ = await get_trainer_default_city_and_service(session, trainer_id)
     if city_id is None:
         raise HTTPException(
             status_code=400,
             detail="Укажите город в профиле, чтобы сформировать публичную ссылку.",
         )
-    assert resolved_service_id is not None
     settings = Settings()
     links, build_err = build_trainer_invite_links(
         webapp_base_url=settings.webapp_base_url,

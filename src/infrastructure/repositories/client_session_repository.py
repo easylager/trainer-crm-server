@@ -104,6 +104,19 @@ class ClientSessionRepository:
             {"tid": telegram_id},
         )
 
+    async def clear_selected_service(self, telegram_id: int) -> None:
+        """Set selected_service_id = NULL (e.g. deep link without explicit service)."""
+        await self._session.execute(
+            text(
+                """
+                UPDATE client_sessions
+                SET selected_service_id = NULL, updated_at = now()
+                WHERE telegram_id = :tid
+                """
+            ),
+            {"tid": telegram_id},
+        )
+
     async def clear_choices(self, telegram_id: int) -> None:
         """Set state=idle and clear city, service, arena, trainer (explicit NULL)."""
         await self._session.execute(

@@ -42,6 +42,7 @@ from src.application.client_use_cases import (
     get_client_profile_basic,
 )
 from src.application.client_session_use_cases import (
+    clear_selected_service,
     clear_choices,
     clear_pending_request_id,
     get_or_create_session,
@@ -188,8 +189,8 @@ BOOK_AVAILABLE_SLOT_PREFIX = "book_available_slot:"
 _feedback_state: dict[int, dict] = {}
 
 
-def _parse_client_start(payload: str) -> tuple[int, int, int] | None:
-    """Parse client_<city_id>_<service_id>_<trainer_id>. Returns (city_id, service_id, trainer_id) or None."""
+def _parse_client_start(payload: str) -> tuple[int, int | None, int] | None:
+    """Parse client_<city_id>_<service_id_or_0>_<trainer_id>. Returns (city_id, service_id|None, trainer_id) or None."""
     if not payload or not payload.startswith(CLIENT_START_PREFIX):
         return None
     rest = payload[len(CLIENT_START_PREFIX) :].strip()
@@ -197,9 +198,10 @@ def _parse_client_start(payload: str) -> tuple[int, int, int] | None:
     if len(parts) != 3:
         return None
     try:
-        city_id, service_id, trainer_id = int(parts[0]), int(parts[1]), int(parts[2])
-        if city_id <= 0 or service_id <= 0 or trainer_id <= 0:
+        city_id, service_id_raw, trainer_id = int(parts[0]), int(parts[1]), int(parts[2])
+        if city_id <= 0 or service_id_raw < 0 or trainer_id <= 0:
             return None
+        service_id = service_id_raw if service_id_raw > 0 else None
         return (city_id, service_id, trainer_id)
     except ValueError:
         return None
@@ -228,9 +230,12 @@ def _trainer_book_rows(
     """Primary booking CTA: Mini App when HTTPS is configured, else legacy callback."""
     b = (base or "").rstrip("/")
     if b.startswith("https://"):
-        url = f"{b}/webapp/book?trainer_id={trainer_id}"
+        url = f"{b}/webapp/book?trainer_id={trainer_id}&v=20260420d"
         if service_id is not None:
             url += f"&service_id={int(service_id)}"
+        else:
+            # Deep links without explicit service must start from service picker, not stale client session.
+            url += "&force_service_choice=1"
         return [[InlineKeyboardButton(text=msg.CLIENT_BUTTON_BOOK, web_app=WebAppInfo(url=url))]]
     return [[InlineKeyboardButton(text=msg.CLIENT_BUTTON_BOOK, callback_data="book")]]
 
@@ -756,22 +761,35 @@ async def cmd_start(message: Message) -> None:
         city_id, service_id, trainer_id = parsed
         async with async_session_factory() as db_session:
             await set_city(telegram_id, city_id, db_session)
-            await set_service(telegram_id, service_id, db_session)
+            if service_id is not None:
+                await set_service(telegram_id, service_id, db_session)
+            else:
+                # Deep link client_<city>_0_<trainer>: force explicit service choice in client flow.
+                await clear_selected_service(telegram_id, db_session)
             await set_selected_trainer(telegram_id, trainer_id, db_session)
             trainer = await get_trainer(db_session, trainer_id)
-            rsvc = await db_session.execute(
-                text(
-                    "SELECT COALESCE(NULLIF(TRIM(name), ''), 'Услуга') FROM services WHERE id = :sid LIMIT 1"
-                ),
-                {"sid": service_id},
-            )
-            srow = rsvc.fetchone()
-            service_label = ((srow[0] or "Услуга").strip() if srow else None) or "Услуга"
+            service_label = None
+            if service_id is not None:
+                rsvc = await db_session.execute(
+                    text(
+                        "SELECT COALESCE(NULLIF(TRIM(name), ''), 'Услуга') FROM services WHERE id = :sid LIMIT 1"
+                    ),
+                    {"sid": service_id},
+                )
+                srow = rsvc.fetchone()
+                service_label = ((srow[0] or "Услуга").strip() if srow else None) or "Услуга"
         trainer_name_html = html.escape(_trainer_name(trainer) if trainer else "Тренер")
-        service_name_html = html.escape(service_label)
         base = (Settings().webapp_base_url or "").rstrip("/")
+        body = (
+            msg.CLIENT_DEEP_LINK_BOOK_INVITE.format(
+                trainer=trainer_name_html,
+                service=html.escape(service_label or "Услуга"),
+            )
+            if service_id is not None
+            else msg.CLIENT_DEEP_LINK_BOOK_INVITE_PICK_SERVICE.format(trainer=trainer_name_html)
+        )
         await message.answer(
-            msg.CLIENT_DEEP_LINK_BOOK_INVITE.format(trainer=trainer_name_html, service=service_name_html),
+            body,
             parse_mode=ParseMode.HTML,
             reply_markup=_trainer_book_markup(
                 base, trainer_id, include_catalog_alternative=False, service_id=service_id

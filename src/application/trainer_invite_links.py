@@ -1,7 +1,7 @@
 """
 Shareable links for trainers to onboard clients from DMs into the client bot + catalog.
 
-Deep link payload matches client_handlers: /start client_{city_id}_{service_id}_{trainer_id}.
+Deep link payload matches client_handlers: /start client_{city_id}_{service_id_or_0}_{trainer_id}.
 """
 from __future__ import annotations
 
@@ -20,8 +20,11 @@ def normalize_client_bot_username(username: str | None) -> str:
     return (username or "").strip().lstrip("@")
 
 
-def build_client_start_payload(city_id: int, service_id: int, trainer_id: int) -> str:
-    return f"client_{city_id}_{service_id}_{trainer_id}"
+def build_client_start_payload(
+    city_id: int, service_id: int | None, trainer_id: int
+) -> str:
+    sid = int(service_id) if service_id is not None and int(service_id) > 0 else 0
+    return f"client_{city_id}_{sid}_{trainer_id}"
 
 
 def build_trainer_invite_links(
@@ -35,20 +38,15 @@ def build_trainer_invite_links(
     """
     Returns (links, error) where error is None or:
     - missing_username — CLIENT_BOT_USERNAME not set
-    - missing_city_or_service — trainer profile has no city or no service for deep link
+    - missing_city_or_service — trainer profile has no city for deep link
     """
     u = normalize_client_bot_username(client_bot_username)
     if not u:
         return None, "missing_username"
-    if (
-        city_id is None
-        or service_id is None
-        or int(city_id) <= 0
-        or int(service_id) <= 0
-        or int(trainer_id) <= 0
-    ):
+    if city_id is None or int(city_id) <= 0 or int(trainer_id) <= 0:
         return None, "missing_city_or_service"
-    cid, sid, tid = int(city_id), int(service_id), int(trainer_id)
+    cid, tid = int(city_id), int(trainer_id)
+    sid = int(service_id) if service_id is not None and int(service_id) > 0 else None
     payload = build_client_start_payload(cid, sid, tid)
     deep = f"https://t.me/{u}?start={payload}"
     base = (webapp_base_url or "").rstrip("/")

@@ -51,9 +51,9 @@
     })();
   </script>
   <!-- Bump ?v= when mini-app-trainer-hub.css changes (immutable cache on /webapp/…). -->
-  <link rel="stylesheet" href="mini-app-trainer-hub.css?v=20260457" />
+  <link rel="stylesheet" href="mini-app-trainer-hub.css?v=20260460" />
   <!-- Early download of main hub script (defer runs at end of body); improves time-to-interactive vs. discover-at-bottom. -->
-  <link rel="preload" href="trainer-home-main.js?v=20260461" as="script" />
+  <link rel="preload" href="trainer-home-main.js?v=20260467" as="script" />
 
 </head>
 <body class="hub-body">
@@ -125,8 +125,7 @@
 
     <div id="hubScheduleRhythmHint" class="hub-schedule-rhythm-hint" hidden aria-live="polite">
       <p class="hub-schedule-rhythm-hint__text">
-        <strong>Ритм недели.</strong>
-        Добавьте часы в <b>шаблон</b> расписания — клиентам проще выбрать время, а неделю можно накатить из шаблона за пару шагов.
+        Добавьте часы в шаблон расписания — потом неделю можно накатить из шаблона за пару шагов.
       </p>
       <div class="hub-schedule-rhythm-hint__actions">
         <button type="button" class="btn-sm btn-primary" id="hubScheduleRhythmOpen">Шаблон в расписании</button>
@@ -134,14 +133,23 @@
       </div>
     </div>
 
-    <div id="hubShareLinkGrowthHint" class="hub-schedule-rhythm-hint hub-share-link-growth-hint" hidden aria-live="polite">
+    <div id="hubShareLinkGrowthHint" class="hub-schedule-rhythm-hint" hidden aria-live="polite">
       <p class="hub-schedule-rhythm-hint__text">
-        <strong>Ссылка на запись.</strong>
-        Слоты уже есть — поделитесь ссылкой, чтобы клиенты записывались сами: кнопка с цепочкой справа вверху или «Получить ссылку» ниже в этом блоке.
+        Поделитесь ссылкой, чтобы клиенты записывались сами: кнопка с цепочкой справа вверху или «Получить ссылку» ниже в этом блоке.
       </p>
       <div class="hub-schedule-rhythm-hint__actions">
         <button type="button" class="btn-sm btn-primary" id="hubShareLinkGrowthOpen">Получить ссылку</button>
         <button type="button" class="hub-schedule-rhythm-hint__dismiss" id="hubShareLinkGrowthDismiss" aria-label="Скрыть подсказку">×</button>
+      </div>
+    </div>
+
+    <div id="hubClientNotesRhythmHint" class="hub-schedule-rhythm-hint" hidden aria-live="polite">
+      <p class="hub-schedule-rhythm-hint__text">
+        После завершённой записи можно кратко зафиксировать заметки в карточке клиента — так проще вести следующие занятия.
+      </p>
+      <div class="hub-schedule-rhythm-hint__actions">
+        <button type="button" class="btn-sm btn-primary" id="hubClientNotesRhythmOpen">Профиль клиента</button>
+        <button type="button" class="hub-schedule-rhythm-hint__dismiss" id="hubClientNotesRhythmDismiss" aria-label="Скрыть подсказку">×</button>
       </div>
     </div>
 
@@ -468,6 +476,6 @@
   <script src="mini-app-trainer-gate.js"></script>
   <script src="mini-app-trainer-celebration.js"></script>
   <!-- Bump ?v= when trainer-home-main.js changes (immutable cache on /webapp/…). -->
-  <script defer src="trainer-home-main.js?v=20260461"></script>
+  <script defer src="trainer-home-main.js?v=20260467"></script>
 </body>
 </html>

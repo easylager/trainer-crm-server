@@ -1758,17 +1758,17 @@
       padding: 4px 8px;
     }
 
-    /* Optional post-onboarding nudge: weekly template (dismissible, one row). */
+    /* Post-onboarding: flat one-row hints (template / link / notes) — low visual weight. */
     .hub-schedule-rhythm-hint {
       display: none;
       flex-wrap: wrap;
       align-items: flex-start;
-      gap: 10px 14px;
-      margin: 0 0 16px;
-      padding: 12px 14px;
-      border-radius: 14px;
-      border: 1px solid rgba(128, 128, 128, 0.16);
-      background: color-mix(in srgb, var(--tg-theme-secondary-bg-color) 92%, transparent);
+      gap: 10px 12px;
+      margin: 0 0 10px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: 1px solid rgba(128, 128, 128, 0.1);
+      background: color-mix(in srgb, var(--tg-theme-secondary-bg-color) 55%, transparent);
     }
     .hub-schedule-rhythm-hint[hidden] {
       display: none !important;
@@ -1778,10 +1778,7 @@
       margin: 0;
       font-size: 13px;
       line-height: 1.45;
-      color: var(--tg-theme-text-color);
-    }
-    .hub-schedule-rhythm-hint__text strong {
-      font-weight: 700;
+      color: var(--tg-theme-hint-color);
     }
     .hub-schedule-rhythm-hint__actions {
       flex: 0 0 auto;
@@ -1817,14 +1814,6 @@
     }
     .hub-schedule-rhythm-hint__dismiss:active {
       opacity: 0.7;
-    }
-
-    /* Same layout as rhythm hint; subtle «online» accent so growth step reads distinct from template nudge. */
-    .hub-share-link-growth-hint {
-      border-color: rgba(80, 160, 255, 0.28);
-    }
-    .hub-is-dark .hub-share-link-growth-hint {
-      border-color: rgba(120, 185, 255, 0.32);
     }
 
     /* Post-purchase celebration — constitution gradients + --app-success accent */

@@ -1102,24 +1102,6 @@
         );
       }
 
-      /** Compact block for other services in the list (selected row uses the large callout only). */
-      function catalogServiceRowNoticeHtml(raw) {
-        var items = parseCatalogClientNoticeItems(raw);
-        if (!items) return '';
-        var esc = escapeHtml(items).replace(/\n/g, '<br>');
-        return (
-          '<div class="trainer-detail-service-notice trainer-detail-service-notice--stacked" role="note">' +
-          '<div class="trainer-detail-service-notice-kicker">Важно!</div>' +
-          '<div class="trainer-detail-service-notice-lead">' +
-          escapeHtml(CATALOG_NOTICE_PREFIX) +
-          '</div>' +
-          '<div class="trainer-detail-service-notice-items">' +
-          esc +
-          '</div>' +
-          '</div>'
-        );
-      }
-
       function formatCatalogGroupDow(dow) {
         var labels = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
         if (dow == null || dow < 0 || dow > 6) return '—';
@@ -2054,10 +2036,6 @@
             html += '<span class="trainer-detail-service-name">' + escapeHtml(serviceName) + '</span>';
             html += '<span class="trainer-detail-service-price">' + escapeHtml(priceText) + '</span>';
             html += '</div>';
-            var rowNotice = s.client_notice && String(s.client_notice).trim();
-            if (rowNotice && !matchCatalog) {
-              html += catalogServiceRowNoticeHtml(rowNotice);
-            }
             html += '</div>';
           });
           html += '</div>';
@@ -2482,7 +2460,20 @@
         submitRequestFromForm(text);
       };
       document.getElementById('btnPickTrainer').onclick = function() {
-        if (!state.cityId || !state.serviceId) return;
+        if (!state.cityId) {
+          state.returnToSummary = true;
+          document.getElementById('backFromCityToSummary').style.display = 'block';
+          loadCities();
+          showScreen('screenCity');
+          return;
+        }
+        if (!state.serviceId) {
+          state.returnToSummary = true;
+          document.getElementById('backFromServiceToSummary').style.display = 'block';
+          loadServices();
+          showScreen('screenService');
+          return;
+        }
         state.returnToSummary = true;
         state.offset = 0;
         loadCatalogList();

@@ -484,6 +484,66 @@ async def test_trainer_public_booking_link_200_returns_reusable_deep_link(
 
 
 @pytest.mark.asyncio
+async def test_trainer_public_booking_link_without_service_allows_client_pick(
+    app_use_test_db,
+    db_session,
+) -> None:
+    tg = _fresh_trainer_telegram_id()
+    r_city = await db_session.execute(text("SELECT id FROM cities ORDER BY id LIMIT 1"))
+    city_id = r_city.scalar()
+    if city_id is None:
+        pytest.skip("need seed cities")
+    service_id_1 = await require_seed_service_id(db_session)
+    r_srv2 = await db_session.execute(
+        text("SELECT id FROM services WHERE id != :sid ORDER BY id LIMIT 1"),
+        {"sid": int(service_id_1)},
+    )
+    service_id_2 = r_srv2.scalar()
+    if service_id_2 is None:
+        pytest.skip("need at least 2 services in seed")
+    r = await db_session.execute(text("INSERT INTO trainers (status) VALUES ('active') RETURNING id"))
+    trainer_id = int(r.fetchone()[0])
+    await db_session.execute(
+        text("UPDATE trainers SET telegram_id = :tg WHERE id = :id"),
+        {"tg": tg, "id": trainer_id},
+    )
+    await db_session.execute(
+        text(
+            """
+            INSERT INTO trainer_profiles (trainer_id, first_name, last_name, age, city_id)
+            VALUES (:tid, 'Public', 'NoService', 30, :city_id)
+            """
+        ),
+        {"tid": trainer_id, "city_id": int(city_id)},
+    )
+    await db_session.execute(
+        text("INSERT INTO trainer_services (trainer_id, service_id, price_cents) VALUES (:tid, :sid, 5000)"),
+        {"tid": trainer_id, "sid": int(service_id_1)},
+    )
+    await db_session.execute(
+        text("INSERT INTO trainer_services (trainer_id, service_id, price_cents) VALUES (:tid, :sid, 6000)"),
+        {"tid": trainer_id, "sid": int(service_id_2)},
+    )
+    await db_session.commit()
+    await _ensure_online_subscription(db_session, trainer_id)
+
+    with patch_trainer_webapp_init(tg), patch("src.api.routes.webapp.Settings") as ms:
+        ms.return_value.client_bot_username = "PublicBookBot"
+        ms.return_value.webapp_base_url = "https://example.test"
+        ms.return_value.telegram_bot_token_trainer = Settings().telegram_bot_token_trainer
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.get(
+                "/api/webapp/trainer/public-booking-link",
+                headers={"X-Telegram-Init-Data": "mock"},
+            )
+    assert resp.status_code == 200
+    body = resp.json()
+    link = (body.get("booking_link") or "").strip()
+    assert link == f"https://t.me/PublicBookBot?start=client_{int(city_id)}_0_{int(trainer_id)}"
+    assert body.get("service_id") is None
+
+
+@pytest.mark.asyncio
 async def test_trainer_welcome_link_first_copy_idempotent(
     app_use_test_db,
     db_session,

@@ -3,6 +3,8 @@ Trainer onboarding checklist: submission readiness, full-profile flag, future sl
 ``profile_complete`` = moderation submission tier (8 criteria); ``full_profile_complete`` = dossier (12).
 ``tt_minimal_complete`` = 7-field TTV gate (schedule/bookings in Mini App before activation).
 ``has_upcoming_booking`` mirrors hub upcoming list logic (pending/confirmed on future-ended slots).
+``has_completed_booking`` = at least one booking with status ``completed`` (hub nudge: client notes).
+``last_completed_booking_client_id`` = ``client_id`` of the latest completed row by ``bookings.id`` (deep link).
 ``schedule_unlocked`` mirrors Mini App access (active or pending TTV + CRM trial).
 ``weekly_template_count`` = rows in ``trainer_schedule_templates`` (hub nudge after onboarding complete).
 """
@@ -59,6 +61,8 @@ async def get_trainer_onboarding_checklist(session: AsyncSession, trainer_id: in
         "has_any_booking": False,
         "has_upcoming_booking": False,
         "has_confirmed_booking": False,
+        "has_completed_booking": False,
+        "last_completed_booking_client_id": None,
         "slots_locked_reason": None,
         "bookings_locked_reason": None,
     }
@@ -166,5 +170,34 @@ async def get_trainer_onboarding_checklist(session: AsyncSession, trainer_id: in
         {"tid": trainer_id},
     )
     out["has_confirmed_booking"] = bool(r3.scalar())
+
+    r_done = await session.execute(
+        text(
+            """
+            SELECT EXISTS(
+                SELECT 1 FROM bookings
+                WHERE trainer_id = :tid AND status = 'completed'
+            )
+            """
+        ),
+        {"tid": trainer_id},
+    )
+    out["has_completed_booking"] = bool(r_done.scalar())
+    r_last_done = await session.execute(
+        text(
+            """
+            SELECT client_id FROM bookings
+            WHERE trainer_id = :tid AND status = 'completed'
+            ORDER BY id DESC
+            LIMIT 1
+            """
+        ),
+        {"tid": trainer_id},
+    )
+    row_last = r_last_done.fetchone()
+    out["last_completed_booking_client_id"] = (
+        int(row_last[0]) if row_last and row_last[0] is not None else None
+    )
+
     out["schedule_unlocked"] = bool(is_active or pending_ttv_unlock)
     return out

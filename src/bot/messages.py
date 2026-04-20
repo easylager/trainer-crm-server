@@ -57,6 +57,10 @@ CLIENT_DEEP_LINK_BOOK_INVITE = (
     "Выбранная услуга: <b>{service}</b>.\n\n"
     "Нажми кнопку ниже, чтобы выбрать удобное время."
 )
+CLIENT_DEEP_LINK_BOOK_INVITE_PICK_SERVICE = (
+    "Привет! Тебя пригласил записаться тренер <b>{trainer}</b>.\n\n"
+    "Нажми кнопку ниже: сначала выбери услугу, потом удобное время."
+)
 # Tier < online: no self-booking in catalog — same UX as Mini App can_book=false
 CLIENT_TRAINER_SELECTED_NO_SELF_BOOK = (
     "Выбран: <b>{name}</b>.\n\n"
@@ -901,7 +905,7 @@ def build_client_booking_completed_inline_keyboard(
 # Inactive: 10 / 30 days since last session — friendly nudge to book again (once per client per kind)
 CLIENT_INACTIVE_10_DAYS = (
     "👋 <b>Давно не виделись{name}!</b>\n\n"
-    "С прошлого занятия прошла больше недели — загляните в каталог и выберите удобное время.\n\n"
+    "С прошлого занятия прошло больше недели — загляните в каталог и выберите удобное время.\n\n"
     "Кнопка ниже — сразу к записи."
 )
 CLIENT_INACTIVE_30_DAYS = (

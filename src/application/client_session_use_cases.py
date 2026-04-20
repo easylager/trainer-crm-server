@@ -56,6 +56,13 @@ async def set_service(telegram_id: int, service_id: int, session: AsyncSession) 
     await session.commit()
 
 
+async def clear_selected_service(telegram_id: int, session: AsyncSession) -> None:
+    """Clear selected service when flow should start from service choice."""
+    repo = ClientSessionRepository(session)
+    await repo.clear_selected_service(telegram_id)
+    await session.commit()
+
+
 async def set_selected_trainer(
     telegram_id: int, trainer_id: int, session: AsyncSession
 ) -> None:

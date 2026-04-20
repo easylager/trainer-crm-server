@@ -363,6 +363,66 @@
       font-weight: 600;
       text-decoration: none;
     }
+    .service-pick-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 90;
+      display: none;
+      align-items: flex-end;
+      justify-content: center;
+      background: rgba(0, 0, 0, 0.4);
+      padding: 12px;
+      padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    }
+    .service-pick-sheet {
+      width: min(560px, 100%);
+      border-radius: 18px;
+      background: var(--tg-theme-secondary-bg-color);
+      border: 1px solid rgba(128, 128, 128, 0.16);
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.24);
+      padding: 14px;
+    }
+    .service-pick-title {
+      margin: 0 0 6px;
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--tg-theme-text-color);
+    }
+    .service-pick-sub {
+      margin: 0 0 12px;
+      font-size: 13px;
+      line-height: 1.4;
+      color: var(--tg-theme-hint-color);
+    }
+    .service-pick-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    .service-pick-option {
+      width: 100%;
+      text-align: left;
+      padding: 12px 14px;
+      border-radius: 12px;
+      border: 1px solid rgba(128, 128, 128, 0.18);
+      background: var(--tg-theme-bg-color);
+      color: var(--tg-theme-text-color);
+      font: inherit;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .service-pick-option:active { opacity: 0.85; }
+    .service-pick-cancel {
+      width: 100%;
+      border: none;
+      border-radius: 12px;
+      padding: 10px 12px;
+      background: transparent;
+      color: var(--tg-theme-hint-color);
+      font: inherit;
+      cursor: pointer;
+    }
   </style>
   <link rel="stylesheet" href="mini-app-client-nav.css" />
 </head>
@@ -413,6 +473,14 @@
       <p class="success-hint">Окно можно закрыть крестиком вверху Telegram.</p>
     </div>
   </div>
+  <div id="servicePickOverlay" class="service-pick-overlay" aria-hidden="true">
+    <div class="service-pick-sheet">
+      <h3 class="service-pick-title">Выберите услугу</h3>
+      <p class="service-pick-sub">После выбора покажем свободные слоты тренера.</p>
+      <div id="servicePickList" class="service-pick-list"></div>
+      <button type="button" id="servicePickCancel" class="service-pick-cancel">Отмена</button>
+    </div>
+  </div>
 
   <script>
     (function() {
@@ -454,6 +522,7 @@
       const serviceIdParam = params.get('service_id');
       const parsedUrlServiceId = serviceIdParam ? parseInt(serviceIdParam, 10) : NaN;
       const serviceIdFromUrl = Number.isFinite(parsedUrlServiceId) ? parsedUrlServiceId : null;
+      const forceServiceChoice = params.get('force_service_choice') === '1';
       if (!trainerId) {
         document.getElementById('content').innerHTML = '<div class="error">Не указан тренер. Откройте запись из бота.</div>';
         document.getElementById('prevWeek').style.display = 'none';
@@ -494,7 +563,10 @@
       let needsProfileName = true;
       let clientFirstName = '';
       let clientLastName = '';
+      let sessionCityId = null;
+      let sessionArenaId = null;
       let sessionServiceId = null;
+      let selectedServiceId = serviceIdFromUrl;
       let bookTrainerDetailCache = null;
       let selectedPriceVariantId = null;
 
@@ -645,12 +717,125 @@
             const data = await res.json();
             const raw = data.client_phone;
             clientPhone = raw != null && String(raw).trim() !== '' ? String(raw).trim() : null;
+            sessionCityId = data.city_id != null ? Number(data.city_id) : null;
+            sessionArenaId = data.arena_id != null ? Number(data.arena_id) : null;
             if (data.service_id != null) sessionServiceId = data.service_id;
             needsProfileName = !!data.needs_profile_name;
             clientFirstName = data.client_first_name != null ? String(data.client_first_name).trim() : '';
             clientLastName = data.client_last_name != null ? String(data.client_last_name).trim() : '';
           }
         } catch (e) {}
+      }
+
+      async function persistServiceSelectionInSession(serviceId) {
+        const sid = Number(serviceId);
+        const tid = Number(trainerId);
+        const initData = tg?.initData || '';
+        if (!Number.isFinite(sid) || sid <= 0) return;
+        if (!Number.isFinite(tid) || tid <= 0) return;
+        if (!Number.isFinite(Number(sessionCityId)) || Number(sessionCityId) <= 0) return;
+        if (!initData) return;
+        try {
+          await fetch('/api/webapp/client/session', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Accept: 'application/json',
+              'X-Telegram-Init-Data': initData,
+            },
+            body: JSON.stringify({
+              city_id: Number(sessionCityId),
+              service_id: sid,
+              arena_id: Number.isFinite(Number(sessionArenaId)) && Number(sessionArenaId) > 0
+                ? Number(sessionArenaId)
+                : null,
+              trainer_id: tid,
+            }),
+          });
+        } catch (e) { /* ignore */ }
+      }
+
+      function effectiveServiceId() {
+        if (selectedServiceId != null) return selectedServiceId;
+        if (serviceIdFromUrl != null) return serviceIdFromUrl;
+        if (forceServiceChoice) return null;
+        return sessionServiceId;
+      }
+
+      function openServicePicker(services) {
+        return new Promise(function(resolve, reject) {
+          const ov = document.getElementById('servicePickOverlay');
+          const list = document.getElementById('servicePickList');
+          const cancel = document.getElementById('servicePickCancel');
+          if (!ov || !list || !cancel) {
+            reject(new Error('Не удалось открыть выбор услуги.'));
+            return;
+          }
+          list.innerHTML = '';
+          (services || []).forEach(function(s) {
+            const sid = Number(s && s.service_id);
+            if (!Number.isFinite(sid) || sid <= 0) return;
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'service-pick-option';
+            btn.textContent = (s && s.service_name ? String(s.service_name).trim() : '') || ('Услуга #' + sid);
+            btn.onclick = function() {
+              selectedServiceId = sid;
+              sessionServiceId = sid;
+              persistServiceSelectionInSession(sid);
+              ov.style.display = 'none';
+              ov.setAttribute('aria-hidden', 'true');
+              resolve(sid);
+            };
+            list.appendChild(btn);
+          });
+          cancel.onclick = function() {
+            ov.style.display = 'none';
+            ov.setAttribute('aria-hidden', 'true');
+            reject(new Error('Выбор услуги отменён.'));
+          };
+          ov.onclick = function(ev) {
+            if (ev.target === ov) {
+              ov.style.display = 'none';
+              ov.setAttribute('aria-hidden', 'true');
+              reject(new Error('Выбор услуги отменён.'));
+            }
+          };
+          ov.style.display = 'flex';
+          ov.setAttribute('aria-hidden', 'false');
+        });
+      }
+
+      async function ensureServiceChoiceBeforeSlots() {
+        const t = await loadTrainerDetailForBook();
+        const servicesRaw = (t && t.services) ? t.services : [];
+        const map = new Map();
+        servicesRaw.forEach(function(s) {
+          const sid = Number(s && s.service_id);
+          if (!Number.isFinite(sid) || sid <= 0) return;
+          if (!map.has(sid)) map.set(sid, s);
+        });
+        const services = Array.from(map.values());
+        if (!services.length) {
+          throw new Error('У тренера не настроены услуги.');
+        }
+        const mustPickAtStart = requestId == null && serviceIdFromUrl == null;
+        if (mustPickAtStart && services.length > 1) {
+          // Always ask explicitly when trainer offers multiple services and link didn't pin one.
+          return openServicePicker(services);
+        }
+        const current = effectiveServiceId();
+        if (current != null) {
+          selectedServiceId = current;
+          return current;
+        }
+        if (services.length === 1) {
+          selectedServiceId = Number(services[0].service_id);
+          sessionServiceId = selectedServiceId;
+          persistServiceSelectionInSession(selectedServiceId);
+          return selectedServiceId;
+        }
+        return openServicePicker(services);
       }
 
       function updateBookNameFields() {
@@ -668,7 +853,7 @@
       async function fetchSlots() {
         const initData = tg?.initData || '';
         let q = 'trainer_id=' + encodeURIComponent(trainerId);
-        const sidForSlots = serviceIdFromUrl != null ? serviceIdFromUrl : sessionServiceId;
+        const sidForSlots = effectiveServiceId();
         if (sidForSlots != null) q += '&service_id=' + encodeURIComponent(sidForSlots);
         var hdr = { Accept: 'application/json' };
         if (initData) hdr['X-Telegram-Init-Data'] = initData;
@@ -740,7 +925,7 @@
         updateBookNameFields();
         document.getElementById('phone').value = clientPhone || '';
         await loadTrainerDetailForBook();
-        let effSid = serviceIdFromUrl || sessionServiceId;
+        let effSid = effectiveServiceId();
         if (requestId != null && effSid == null) {
           const initData = tg?.initData || '';
           const hdr = { Accept: 'application/json' };
@@ -798,6 +983,13 @@
           showSlots();
           return;
         }
+        var serviceFromBookContext =
+          selectedServiceId != null
+            ? Number(selectedServiceId)
+            : (serviceIdFromUrl != null ? Number(serviceIdFromUrl) : null);
+        if (serviceFromBookContext != null && !Number.isFinite(serviceFromBookContext)) {
+          serviceFromBookContext = null;
+        }
         var base = window.location.pathname.replace(/[^/]+$/, '');
         var initData = tg?.initData || '';
         function navigateWithQuery(q) {
@@ -815,12 +1007,22 @@
           .then(function(s) {
             var q = 'trainer_id=' + encodeURIComponent(trainerId);
             if (s && s.city_id != null) q += '&city_id=' + encodeURIComponent(s.city_id);
-            if (s && s.service_id != null) q += '&service_id=' + encodeURIComponent(s.service_id);
+            var serviceForBack = serviceFromBookContext;
+            if (serviceForBack == null && s && s.service_id != null) {
+              serviceForBack = Number(s.service_id);
+            }
+            if (serviceForBack != null && Number.isFinite(serviceForBack)) {
+              q += '&service_id=' + encodeURIComponent(String(serviceForBack));
+            }
             if (s && s.arena_id != null) q += '&arena_id=' + encodeURIComponent(s.arena_id);
             navigateWithQuery(q);
           })
           .catch(function() {
-            navigateWithQuery('trainer_id=' + encodeURIComponent(trainerId));
+            var q = 'trainer_id=' + encodeURIComponent(trainerId);
+            if (serviceFromBookContext != null && Number.isFinite(serviceFromBookContext)) {
+              q += '&service_id=' + encodeURIComponent(String(serviceFromBookContext));
+            }
+            navigateWithQuery(q);
           });
       }
 
@@ -876,7 +1078,7 @@
         }
         if (requestId) body.request_id = requestId;
         else {
-          const sid = serviceIdFromUrl || sessionServiceId;
+          const sid = effectiveServiceId();
           if (sid != null) body.service_id = sid;
         }
         if (selectedPriceVariantId != null) body.service_price_variant_id = selectedPriceVariantId;
@@ -911,6 +1113,9 @@
         updateBookNameFields();
         if (!trainerId) return;
         try {
+          if (requestId == null) {
+            await ensureServiceChoiceBeforeSlots();
+          }
           const data = await fetchSlots();
           trainerName = data.trainer_name || trainerName;
           document.getElementById('headerTitle').textContent = '📅 Запись: ' + trainerName;

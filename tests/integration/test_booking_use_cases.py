@@ -12,11 +12,13 @@ from tests.conftest import belarus_test_phone, unique_test_telegram_id
 from tests.db_catalog_helpers import require_seed_service_id
 
 from src.application.booking_use_cases import (
+    INACTIVE_KIND_10_DAYS,
     cancel_booking,
     confirm_booking,
     create_booking,
     generate_reminders_for_booking,
     get_bookings_pending_notification,
+    get_clients_for_inactive_notification,
     get_pending_trainer_booked_notifications,
     list_bookings_to_complete,
     list_pending_reminders,
@@ -576,3 +578,88 @@ async def test_trainer_booked_queue_includes_trainer_created_confirmed(
     pending = await get_pending_trainer_booked_notifications(db_session, limit=50)
     ids = [int(p["booking_id"]) for p in pending]
     assert int(booking_id) in ids
+
+
+@pytest.mark.asyncio
+async def test_inactive_client_10_days_excludes_client_with_future_booking(
+    db_session: AsyncSession,
+) -> None:
+    """Future booking means the latest session is in future, so client is active."""
+    client_id = await _create_client(db_session, unique_test_telegram_id())
+
+    trainer_past, slot_past, service_past = await _create_trainer_and_slot(
+        db_session,
+        date.today() - timedelta(days=10),
+        time(9, 0),
+        time(10, 0),
+        status="booked",
+    )
+    trainer_future, slot_future, service_future = await _create_trainer_and_slot(
+        db_session,
+        date.today() + timedelta(days=5),
+        time(11, 0),
+        time(12, 0),
+        status="booked",
+    )
+    await db_session.execute(
+        text(
+            """
+            INSERT INTO bookings (slot_id, trainer_id, client_id, service_id, status)
+            VALUES
+                (:slot_past, :trainer_past, :client_id, :service_past, 'confirmed'),
+                (:slot_future, :trainer_future, :client_id, :service_future, 'confirmed')
+            """
+        ),
+        {
+            "slot_past": slot_past,
+            "trainer_past": trainer_past,
+            "service_past": service_past,
+            "slot_future": slot_future,
+            "trainer_future": trainer_future,
+            "service_future": service_future,
+            "client_id": client_id,
+        },
+    )
+    await db_session.commit()
+
+    clients = await get_clients_for_inactive_notification(
+        db_session, INACTIVE_KIND_10_DAYS
+    )
+    ids = {int(c["client_id"]) for c in clients}
+    assert client_id not in ids
+
+
+@pytest.mark.asyncio
+async def test_inactive_client_10_days_includes_after_last_session_passes(
+    db_session: AsyncSession,
+) -> None:
+    """Client appears exactly 10 days after the latest overall session has ended."""
+    client_id = await _create_client(db_session, unique_test_telegram_id())
+    trainer_id, slot_id, service_id = await _create_trainer_and_slot(
+        db_session,
+        date.today() - timedelta(days=10),
+        time(8, 0),
+        time(9, 0),
+        status="booked",
+    )
+    await db_session.execute(
+        text(
+            """
+            INSERT INTO bookings (slot_id, trainer_id, client_id, service_id, status)
+            VALUES (:slot_id, :trainer_id, :client_id, :service_id, 'confirmed')
+            """
+        ),
+        {
+            "slot_id": slot_id,
+            "trainer_id": trainer_id,
+            "service_id": service_id,
+            "client_id": client_id,
+        },
+    )
+    await db_session.commit()
+
+    clients = await get_clients_for_inactive_notification(
+        db_session, INACTIVE_KIND_10_DAYS
+    )
+    ids = {int(c["client_id"]) for c in clients}
+    assert client_id in ids

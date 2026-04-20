@@ -44,8 +44,6 @@
 
       /** Last GET /trainer/onboarding/checklist payload — drives hero + empty list copy (avoid slots CTA before profile/active). */
       var hubOnboardingData = null;
-      /** True while the dismissible «Ссылка на запись» strip is visible (summary hint skips duplicate share line). */
-      var hubShareLinkGrowthStripActive = false;
       /** Last bookings payload from /trainer/bookings — used to refresh empty-state HTML after onboarding loads. */
       var hubLastBookingsDays = null;
       var hubLastTodayCount = 0;
@@ -361,6 +359,13 @@
         return 'trainer_hub_dismiss_rhythm_hint_v1_' + String(id);
       }
 
+      /** Dismissible hub strips after onboarding (template, share link, client notes). */
+      function syncHubWeekRhythmPanel() {
+        syncHubScheduleRhythmHint();
+        syncHubShareLinkGrowthHint();
+        syncHubClientNotesRhythmHint();
+      }
+
       /** After core onboarding: soft nudge toward weekly template (dismissible per trainer). */
       function syncHubScheduleRhythmHint() {
         var el = document.getElementById('hubScheduleRhythmHint');
@@ -369,7 +374,6 @@
         if (!d) {
           el.setAttribute('hidden', 'hidden');
           el.style.display = 'none';
-          syncHubShareLinkGrowthHint();
           return;
         }
         var wcRaw = d.weekly_template_count;
@@ -404,7 +408,7 @@
             try {
               if (key) localStorage.setItem(key, '1');
             } catch (e) { /* ignore */ }
-            syncHubScheduleRhythmHint();
+            syncHubWeekRhythmPanel();
           };
         }
         if (oBtn && !oBtn.dataset.wiredRhythm) {
@@ -423,11 +427,14 @@
         return 'trainer_hub_dismiss_share_link_growth_v1_' + String(id);
       }
 
-      /** After weekly template exists: same visual weight as «Ритм недели» (dismissible). */
+      /**
+       * Share-link strip after onboarding: show when online booking is on and the trainer already has
+       * something to offer (saved weekly template rows OR slots/bookings on the horizon). Rolling a week
+       * from the editor may not bump weekly_template_count — do not gate only on that.
+       */
       function syncHubShareLinkGrowthHint() {
         var el = document.getElementById('hubShareLinkGrowthHint');
         if (!el) return;
-        hubShareLinkGrowthStripActive = false;
         var d = hubOnboardingData;
         if (!d || !hubOnlineBookingEnabled) {
           el.setAttribute('hidden', 'hidden');
@@ -446,8 +453,17 @@
         } catch (e) {
           dismissed = false;
         }
-        var show = active && complete && wd >= 1 && !dismissed;
-        hubShareLinkGrowthStripActive = !!show;
+        var hasSomethingToShare =
+          wd >= 1 ||
+          !!d.has_future_slots ||
+          !!d.has_future_available_slots ||
+          !!d.has_any_booking ||
+          !!d.has_upcoming_booking ||
+          !!d.has_confirmed_booking;
+        /* Summary hint can show «ссылка» under looser rules; align top strip so it does not require profile_complete for active trainers who already have bookings. */
+        var eligibleForShareStrip =
+          complete || (!!d.is_active && onboardingBookingStepDone(d));
+        var show = active && eligibleForShareStrip && hasSomethingToShare && !dismissed;
         if (show) {
           el.removeAttribute('hidden');
           el.style.display = 'flex';
@@ -463,7 +479,6 @@
         try {
           if (key) localStorage.setItem(key, '1');
         } catch (e) { /* ignore */ }
-        syncHubShareLinkGrowthHint();
         renderHubSummaryHints();
       }
 
@@ -482,6 +497,73 @@
             ensureTrainerSectionsAccess(function() {
               var headBtn = document.getElementById('hubShareBookingLinkBtn');
               if (headBtn) headBtn.click();
+            });
+          };
+        }
+      }
+
+      function hubClientNotesRhythmHintStorageKey() {
+        var id = trainerAccessSnapshot && trainerAccessSnapshot.trainer_id;
+        if (id == null || id === '' || isNaN(Number(id))) return null;
+        return 'trainer_hub_dismiss_client_notes_rhythm_v1_' + String(id);
+      }
+
+      /** After first completed booking: dossier notes (dismissible); CTA opens trainer-clients for last completed client. */
+      function syncHubClientNotesRhythmHint() {
+        var el = document.getElementById('hubClientNotesRhythmHint');
+        if (!el) return;
+        var d = hubOnboardingData;
+        if (!d) {
+          el.setAttribute('hidden', 'hidden');
+          el.style.display = 'none';
+          return;
+        }
+        var active = !!d.is_active;
+        var complete = onboardingAllComplete(d);
+        var hasDone = !!d.has_completed_booking;
+        var key = hubClientNotesRhythmHintStorageKey();
+        var dismissed = false;
+        try {
+          dismissed = !!(key && localStorage.getItem(key) === '1');
+        } catch (e) {
+          dismissed = false;
+        }
+        var show = active && complete && hasDone && !dismissed;
+        if (show) {
+          el.removeAttribute('hidden');
+          el.style.display = 'flex';
+        } else {
+          el.setAttribute('hidden', 'hidden');
+          el.style.display = 'none';
+        }
+      }
+
+      function wireHubClientNotesRhythmHint() {
+        var dBtn = document.getElementById('hubClientNotesRhythmDismiss');
+        var oBtn = document.getElementById('hubClientNotesRhythmOpen');
+        if (dBtn && !dBtn.dataset.wiredClientNotesRhythm) {
+          dBtn.dataset.wiredClientNotesRhythm = '1';
+          dBtn.onclick = function() {
+            var key = hubClientNotesRhythmHintStorageKey();
+            try {
+              if (key) localStorage.setItem(key, '1');
+            } catch (e) { /* ignore */ }
+            syncHubWeekRhythmPanel();
+          };
+        }
+        if (oBtn && !oBtn.dataset.wiredClientNotesRhythm) {
+          oBtn.dataset.wiredClientNotesRhythm = '1';
+          oBtn.onclick = function() {
+            ensureTrainerSectionsAccess(function() {
+              var od = hubOnboardingData;
+              var raw = od && od.last_completed_booking_client_id;
+              var cid =
+                raw != null && raw !== '' && !isNaN(Number(raw)) ? parseInt(String(raw), 10) : NaN;
+              if (!isNaN(cid) && cid > 0) {
+                navigateTo('trainer-clients?client_id=' + encodeURIComponent(String(cid)));
+              } else {
+                navigateTo('trainer-clients');
+              }
             });
           };
         }
@@ -518,8 +600,7 @@
           applyHubLockedState();
           applyHubHero();
           refreshHubEmptyBookingsIfNeeded();
-          syncHubScheduleRhythmHint();
-          syncHubShareLinkGrowthHint();
+          syncHubWeekRhythmPanel();
           renderHubSummaryHints();
           return;
         }
@@ -612,8 +693,7 @@
         applyHubHero();
         refreshHubEmptyBookingsIfNeeded();
         syncPriorityActionFocus();
-        syncHubScheduleRhythmHint();
-        syncHubShareLinkGrowthHint();
+        syncHubWeekRhythmPanel();
         renderHubSummaryHints();
       }
 
@@ -671,8 +751,7 @@
         if (!initData) {
           strip.setAttribute('hidden', 'hidden');
           strip.style.display = 'none';
-          syncHubScheduleRhythmHint();
-          syncHubShareLinkGrowthHint();
+          syncHubWeekRhythmPanel();
           return;
         }
         fetch(apiUrlWithQuery('/trainer/onboarding/checklist'), { headers: headersJson() })
@@ -893,7 +972,6 @@
           };
         }
         if (hubOnlineBookingEnabled) {
-          if (hubShareLinkGrowthStripActive) return null;
           return {
             type: 'info',
             text: 'Поделитесь ссылкой на запись: клиенты смогут записываться сами.',
@@ -933,10 +1011,14 @@
       /** Renders one next-best-action hint (plus urgent operational states). */
       function renderHubSummaryHints() {
         var el = document.getElementById('hubSummaryHints');
-        if (!el) return;
+        if (!el) {
+          syncHubWeekRhythmPanel();
+          return;
+        }
         if (!initData) {
           el.setAttribute('hidden', '');
           el.innerHTML = '';
+          syncHubWeekRhythmPanel();
           return;
         }
         var hint = null;
@@ -974,6 +1056,7 @@
         if (!hint) {
           el.setAttribute('hidden', '');
           el.innerHTML = '';
+          syncHubWeekRhythmPanel();
           return;
         }
         var mod = hint.type === 'urgent' ? 'urgent' : 'info';
@@ -990,10 +1073,14 @@
           '<span class="hub-summary-hint__chev" aria-hidden="true">›</span>' +
           '</button>';
         var btn = el.querySelector('[data-hub-hint-href]');
-        if (!btn) return;
+        if (!btn) {
+          syncHubWeekRhythmPanel();
+          return;
+        }
         btn.onclick = function() {
           runHubHintAction(btn.getAttribute('data-hub-hint-href'));
         };
+        syncHubWeekRhythmPanel();
       }
 
       function formatHubMoneyCents(cents) {
@@ -2835,6 +2922,8 @@
             }
             setStateMessage('');
             renderBookings((o.data && o.data.days) || []);
+            /* Refresh checklist so has_completed_booking / last client id stay in sync after mark-complete in schedule. */
+            loadOnboardingChecklist();
           })
           .catch(function(err) {
             if (err && err.name === 'AbortError') return;
@@ -3116,6 +3205,35 @@
         }
         if (copyBtn) {
           copyBtn.onclick = function() {
+            var previewInDirect = document.getElementById('hubShareLinkPreview');
+            var directLink = previewInDirect ? String(previewInDirect.value || '').trim() : '';
+            if (directLink) {
+              if (copyTextViaExecCommandHub(directLink)) {
+                closeHubShareBookingLinkModal();
+                dismissHubShareLinkGrowthHintPersisted();
+                postHubClientInviteLinkFirstCopyRecorded();
+                hubToast('Ссылка на запись скопирована. Отправьте её клиентам.');
+                return;
+              }
+              copyBtn.disabled = true;
+              copyBtn.textContent = 'Копируем...';
+              copyTextToClipboardHub(directLink)
+                .then(function(ok) {
+                  if (ok) {
+                    closeHubShareBookingLinkModal();
+                    dismissHubShareLinkGrowthHintPersisted();
+                    postHubClientInviteLinkFirstCopyRecorded();
+                    hubToast('Ссылка на запись скопирована. Отправьте её клиентам.');
+                    return;
+                  }
+                  setHubShareBookingLinkError('Скопируйте ссылку вручную из поля выше.', false);
+                })
+                .finally(function() {
+                  copyBtn.disabled = false;
+                  copyBtn.textContent = 'Скопировать ссылку';
+                });
+              return;
+            }
             var sid = serviceSelect ? parseInt(serviceSelect.value || '', 10) : NaN;
             if (isNaN(sid) || sid <= 0) {
               setHubShareBookingLinkError('Выберите услугу.', true);
@@ -3221,34 +3339,32 @@
                 hubToast('Функция доступна на тарифе с онлайн-записью.');
                 return;
               }
-              loadHubPublicBookingLinkMeta()
-                .then(function(meta) {
-                  var services = (meta && meta.services) || [];
-                  if (!services.length) {
-                    throw new Error('В профиле нет услуг — добавьте услугу в профиле.');
+              requestHubPublicBookingLink()
+                .then(function(payload) {
+                  var link = payload && payload.booking_link ? String(payload.booking_link).trim() : '';
+                  if (!link) {
+                    throw new Error('Ссылка недоступна. Обратитесь в поддержку или откройте из бота тренера.');
                   }
-                  if (!(meta && meta.city_configured)) {
-                    throw new Error('Укажите город в профиле, чтобы сформировать ссылку.');
+                  if (copyTextViaExecCommandHub(link)) {
+                    dismissHubShareLinkGrowthHintPersisted();
+                    postHubClientInviteLinkFirstCopyRecorded();
+                    hubToast('Ссылка на запись скопирована. Отправьте её клиентам.');
+                    return;
                   }
-                  if (!meta.require_service_choice || services.length === 1) {
-                    var sid0 = parseInt(String(services[0].id), 10);
-                    return requestHubPublicBookingLink(sid0).then(function(payload) {
-                      var link = payload && payload.booking_link ? String(payload.booking_link).trim() : '';
-                      if (!link) {
-                        throw new Error('Ссылка недоступна. Обратитесь в поддержку или откройте из бота тренера.');
-                      }
-                      hubShareBookingLinkPrefetch = { sid: sid0, link: link };
-                      if (copyTextViaExecCommandHub(link)) {
-                        dismissHubShareLinkGrowthHintPersisted();
-                        postHubClientInviteLinkFirstCopyRecorded();
-                        hubToast('Ссылка на запись скопирована. Отправьте её клиентам.');
-                        return;
-                      }
-                      openHubShareBookingLinkModal(meta, { skipPrefetchOnce: true });
-                      showHubShareLinkManualCopy(link, '', false);
-                    });
-                  }
-                  openHubShareBookingLinkModal(meta);
+                  return copyTextToClipboardHub(link).then(function(ok) {
+                    if (ok) {
+                      dismissHubShareLinkGrowthHintPersisted();
+                      postHubClientInviteLinkFirstCopyRecorded();
+                      hubToast('Ссылка на запись скопирована. Отправьте её клиентам.');
+                      return;
+                    }
+                    openHubShareBookingLinkModal({ services: [] }, { skipPrefetchOnce: true });
+                    showHubShareLinkManualCopy(
+                      link,
+                      'Автокопирование недоступно — скопируйте ссылку вручную.',
+                      false
+                    );
+                  });
                 })
                 .catch(function(err) {
                   if (err && err.message) hubToast(err.message);
@@ -3260,7 +3376,6 @@
         wireHubShareBookingLinkModal();
         applyHubShareButtonVisibility();
         applyHubLockedState();
-        syncHubShareLinkGrowthHint();
         renderHubSummaryHints();
       }
 
@@ -3473,6 +3588,7 @@
       wireOnboardingHub();
       wireHubScheduleRhythmHint();
       wireHubShareLinkGrowthHint();
+      wireHubClientNotesRhythmHint();
 
       /** Maps GET /trainer/hub/bootstrap payload into hub globals (single round-trip). */
       function applyHubBootstrapPayload(payload) {
@@ -3510,7 +3626,6 @@
           }
           hubRevenueSkipFetchOnce = true;
         }
-        syncHubShareLinkGrowthHint();
         renderHubSummaryHints();
       }
 

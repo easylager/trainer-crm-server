@@ -364,6 +364,97 @@ async def test_onboarding_checklist_has_upcoming_booking_uses_hub_upcoming_filte
 
 
 @pytest.mark.asyncio
+async def test_onboarding_checklist_completed_booking_and_last_client_id(
+    app_use_test_db,
+    db_session,
+) -> None:
+    """Hub rhythm strip: has_completed_booking + last_completed_booking_client_id (ORDER BY booking id)."""
+    tg = _fresh_trainer_telegram_id()
+    r = await db_session.execute(text("INSERT INTO trainers (status) VALUES ('active') RETURNING id"))
+    tid = r.fetchone()[0]
+    await db_session.execute(
+        text("UPDATE trainers SET telegram_id = :tg WHERE id = :id"),
+        {"tg": tg, "id": tid},
+    )
+    await db_session.execute(
+        text(
+            "INSERT INTO trainer_profiles (trainer_id, first_name, last_name, age) "
+            "VALUES (:tid, 'Доне', 'Чеклист', 31)"
+        ),
+        {"tid": tid},
+    )
+    svc_name = "Test service " + uuid.uuid4().hex[:8]
+    r_service = await db_session.execute(
+        text("INSERT INTO services (name) VALUES (:name) RETURNING id"),
+        {"name": svc_name},
+    )
+    service_id = r_service.fetchone()[0]
+    r_c1 = await db_session.execute(
+        text("INSERT INTO clients (telegram_id, first_name) VALUES (:tg, 'A') RETURNING id"),
+        {"tg": _fresh_trainer_telegram_id()},
+    )
+    client_a = r_c1.fetchone()[0]
+    r_c2 = await db_session.execute(
+        text("INSERT INTO clients (telegram_id, first_name) VALUES (:tg, 'B') RETURNING id"),
+        {"tg": _fresh_trainer_telegram_id()},
+    )
+    client_b = r_c2.fetchone()[0]
+    slot_day = date.today() + timedelta(days=3)
+    r_slot_a = await db_session.execute(
+        text(
+            """
+            INSERT INTO slots (trainer_id, slot_date, start_time, end_time, status)
+            VALUES (:tid, :d, TIME '10:00', TIME '11:00', 'booked')
+            RETURNING id
+            """
+        ),
+        {"tid": tid, "d": slot_day},
+    )
+    slot_a = r_slot_a.fetchone()[0]
+    r_slot_b = await db_session.execute(
+        text(
+            """
+            INSERT INTO slots (trainer_id, slot_date, start_time, end_time, status)
+            VALUES (:tid, :d, TIME '12:00', TIME '13:00', 'booked')
+            RETURNING id
+            """
+        ),
+        {"tid": tid, "d": slot_day},
+    )
+    slot_b = r_slot_b.fetchone()[0]
+    await db_session.execute(
+        text(
+            """
+            INSERT INTO bookings (slot_id, trainer_id, client_id, service_id, status)
+            VALUES (:sid, :tid, :cid, :svc, 'completed')
+            """
+        ),
+        {"sid": slot_a, "tid": tid, "cid": client_a, "svc": service_id},
+    )
+    await db_session.execute(
+        text(
+            """
+            INSERT INTO bookings (slot_id, trainer_id, client_id, service_id, status)
+            VALUES (:sid, :tid, :cid, :svc, 'completed')
+            """
+        ),
+        {"sid": slot_b, "tid": tid, "cid": client_b, "svc": service_id},
+    )
+    await db_session.commit()
+
+    with patch_trainer_init_auth(tg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.get(
+                "/api/webapp/trainer/onboarding/checklist",
+                headers={"X-Telegram-Init-Data": "mock"},
+            )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data.get("has_completed_booking") is True
+    assert data.get("last_completed_booking_client_id") == int(client_b)
+
+
+@pytest.mark.asyncio
 async def test_get_profile_trainer_aggregate_shape_for_ui(
     app_use_test_db,
     db_session,

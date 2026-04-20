@@ -2923,25 +2923,27 @@ async def get_clients_for_inactive_notification(
     limit: int = 200,
 ) -> list[dict]:
     """
-    Clients whose last session (slot ended) was exactly 10 or 30 days ago and who haven't received this notification yet.
+    Clients whose latest non-cancelled session overall ended exactly 10 or 30 days ago,
+    and who haven't received this notification yet.
+    If a client has a future session, they are considered active and excluded.
     kind: INACTIVE_KIND_10_DAYS or INACTIVE_KIND_30_DAYS. Returns client_id, telegram_id, first_name.
     """
     days = 10 if kind == INACTIVE_KIND_10_DAYS else 30
     r = await session.execute(
         text("""
             WITH last_session AS (
-                SELECT b.client_id, MAX(s.slot_date) AS last_slot_date
+                SELECT b.client_id, MAX((s.slot_date + s.end_time)) AS last_session_end_at
                 FROM bookings b
                 JOIN slots s ON s.id = b.slot_id
-                WHERE (s.slot_date + s.end_time) < CURRENT_TIMESTAMP
-                  AND b.status NOT IN ('cancelled', 'declined')
+                WHERE b.status NOT IN ('cancelled', 'declined')
                 GROUP BY b.client_id
             ),
             candidates AS (
-                SELECT c.id AS client_id, c.telegram_id, c.first_name, ls.last_slot_date
+                SELECT c.id AS client_id, c.telegram_id, c.first_name, ls.last_session_end_at
                 FROM clients c
                 JOIN last_session ls ON ls.client_id = c.id
-                WHERE (CURRENT_DATE - ls.last_slot_date) = :days
+                WHERE ls.last_session_end_at < CURRENT_TIMESTAMP
+                  AND (CURRENT_DATE - DATE(ls.last_session_end_at)) = :days
             )
             SELECT ca.client_id, ca.telegram_id, ca.first_name
             FROM candidates ca
