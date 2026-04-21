@@ -24,8 +24,8 @@
       href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=optional"
     />
   </noscript>
-  <link rel="preload" href="trainer-profile-main.js?v=20260462" as="script" />
-  <link rel="stylesheet" href="mini-app-trainer-profile.css?v=20260436" />
+  <link rel="preload" href="trainer-profile-main.js?v=20260470" as="script" />
+  <link rel="stylesheet" href="mini-app-trainer-profile.css?v=20260470" />
   <link rel="stylesheet" href="mini-app-trainer-nav.css?v=20260419" />
 </head>
 <body>
@@ -313,6 +313,32 @@
           </div>
         </div>
         <div class="settings-format-divider" role="presentation"></div>
+        <div class="field settings-format-field">
+          <div class="settings-format-row">
+            <div class="settings-format-icon" aria-hidden="true" title="Уведомления">
+              <svg class="settings-format-svg" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z" fill="currentColor"/>
+              </svg>
+            </div>
+            <div class="settings-format-main">
+              <span class="settings-format-label">Пуши от бота</span>
+              <p class="settings-format-micro">Время по Минску: в каком интервале вам можно присылать уведомления о записях, заявках и подписке.</p>
+              <label class="settings-push-default">
+                <input type="checkbox" id="push_notif_use_default" class="settings-push-default__input" />
+                <span>Как у сервиса (8:00–22:00)</span>
+              </label>
+              <div id="push_notif_custom_wrap" class="settings-push-custom">
+                <span class="settings-push-custom__lead">с</span>
+                <select id="push_notification_start_hour" class="settings-push-custom__select" aria-label="Час начала"></select>
+                <span class="settings-push-custom__sep">—</span>
+                <span class="settings-push-custom__lead">до</span>
+                <select id="push_notification_end_hour" class="settings-push-custom__select" aria-label="Час окончания"></select>
+              </div>
+              <p id="err_push_notification" class="field-error" role="status" hidden></p>
+            </div>
+          </div>
+        </div>
+        <div class="settings-format-divider" role="presentation"></div>
         <div class="settings-group-toggle">
           <input type="checkbox" id="group_classes_enabled" class="settings-group-toggle__input" />
           <label for="group_classes_enabled" class="settings-group-toggle__label">
@@ -394,7 +420,7 @@
     </div>
   </div>
 
-  <script defer src="trainer-profile-main.js?v=20260462"></script>
+  <script defer src="trainer-profile-main.js?v=20260470"></script>
   <script defer src="mini-app-trainer-home.js"></script>
 </body>
 </html>

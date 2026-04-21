@@ -967,6 +967,8 @@ def format_trainer_booking_completed_html(
     service_name: str | None,
     price_tier_label: str | None,
     arena_display: str | None,
+    include_quick_rebook_line: bool = False,
+    append_no_pass_notice: bool = False,
 ) -> str:
     """Telegram HTML for trainer push after a session is marked completed."""
     cn = html.escape((client_name or "").strip() or "Клиент")
@@ -989,14 +991,79 @@ def format_trainer_booking_completed_html(
     ar = (arena_display or "").strip()
     if ar and ar != "—":
         arena_line = f"📍 {html.escape(ar)}\n"
+    rebook = ""
+    if include_quick_rebook_line:
+        rebook = (
+            "\n<b>Договорились о новом времени на месте?</b> "
+            "Кнопка «Записать снова» — быстрая запись с этим клиентом на любой день.\n"
+        )
+    no_pass_tail = ""
+    if append_no_pass_notice:
+        no_pass_tail = (
+            "\n\n"
+            "ℹ️ <b>Занятие закрыто без списания абонемента</b>\n"
+            "⚠️ <b>Причина:</b> у клиента нет активного абонемента на эту услугу."
+        )
     return (
         "🏁 <b>Занятие завершено</b>\n\n"
         f"📅 <b>{ds} ({dy}) {ts}</b>{dur_part}\n"
         f"👤 {cn}\n"
         f"{service_line}"
         f"{arena_line}"
+        f"{rebook}"
         "\n"
         "Оставьте отзыв ⭐⭐⭐⭐⭐ — кнопка ниже. При необходимости напишите клиенту."
+        f"{no_pass_tail}"
+    )
+
+
+def format_trainer_booking_session_wrapup_html(
+    *,
+    client_name: str,
+    date: str,
+    day: str,
+    time: str,
+    duration_minutes: int | None,
+    service_name: str | None,
+    price_tier_label: str | None,
+    arena_display: str | None,
+    include_quick_rebook_line: bool = False,
+) -> str:
+    """Telegram HTML for trainer push in the last minute before slot end (repeat booking CTA)."""
+    cn = html.escape((client_name or "").strip() or "Клиент")
+    ds = html.escape(date)
+    dy = html.escape(day)
+    ts = html.escape(time)
+    dur = int(duration_minutes) if duration_minutes is not None else None
+    dur_part = f" – {dur} мин." if dur and dur > 0 else ""
+    svc = (service_name or "").strip()
+    service_line = ""
+    if svc and svc != "—":
+        tier = (price_tier_label or "").strip()
+        if tier:
+            service_line = (
+                f"🎯 {html.escape(svc)} · {html.escape(tier)}\n"
+            )
+        else:
+            service_line = f"🎯 {html.escape(svc)}\n"
+    arena_line = ""
+    ar = (arena_display or "").strip()
+    if ar and ar != "—":
+        arena_line = f"📍 {html.escape(ar)}\n"
+    rebook = ""
+    if include_quick_rebook_line:
+        rebook = (
+            "\n<b>Сейчас удобный момент</b> договориться о следующем занятии и записать клиента.\n"
+        )
+    return (
+        "⏱ <b>Скоро окончание занятия</b>\n\n"
+        f"📅 <b>{ds} ({dy}) {ts}</b>{dur_part}\n"
+        f"👤 {cn}\n"
+        f"{service_line}"
+        f"{arena_line}"
+        f"{rebook}"
+        "\n"
+        "Кнопки ниже: быстрая запись и отзыв. При необходимости напишите клиенту в личку."
     )
 
 
@@ -1178,6 +1245,7 @@ TRAINER_NO_PASS_FOR_SERVICE = (
 )
 TRAINER_BUTTON_LEAVE_FEEDBACK = "🌟 Оставить отзыв"
 TRAINER_BUTTON_BOOK_SAME_TIME_NEXT_WEEK = "📅 Записать на то же время"
+TRAINER_BUTTON_BOOK_AGAIN = "📅 Записать снова"
 TRAINER_BUTTON_CLIENT_CARD_WEBAPP = "👤 Карточка"
 TRAINER_REPEAT_BOOKING_OK = (
     "✅ Клиент записан на <b>{date}</b> ({day}) в {time}."
@@ -2077,12 +2145,11 @@ def format_trainer_first_booking_milestone_from_booking_row(info: dict) -> str:
 # After first booking: trainer may still be pending activation — catalog listing requires active + visibility.
 TRAINER_SHARE_FIRST_BOOKING_CATALOG_PATH_HTML = (
     "🎯 <b>Что дальше?</b>\n\n"
-    "Мы помогаем вам по шагам разобраться в системе — вы не одни. Пока аккаунт не <b>активирован</b> после модерации, вас нет в <b>общем каталоге</b> на сайте: "
-    "так устроено для всех новых тренеров, чтобы клиенты видели в списке только проверенные профили.\n\n"
-    "Ваш следующий шаг: дополните профиль и отправьте заявку из приложения (или дождитесь ответа администратора, если она уже в очереди).\n\n"
-    "<b>Персональная ссылка на запись</b> к вам <b>уже работает</b> — смело делитесь ею с клиентами:\n"
-    "<code>{deep_link}</code>\n\n"
-    "<i>Общую страницу каталога удобнее отправлять, когда профиль станет активным — тогда вы появитесь в общем списке тренеров.</i>"
+    "С первой записью вы уже в деле — это хороший старт. В <b>общем каталоге</b> появляетесь после "
+    "активации профиля: у всех новых тренеров такой же понятный путь — так мы держим площадку "
+    "предсказуемой и для вас, и для клиентов.\n\n"
+    "Когда будет удобно, дополните профиль по кнопке ниже. После проверки вас смогут находить в каталоге. "
+    "Если что-то неясно — <code>/guide</code>: ответим в этом чате и поможем разобраться."
 )
 TRAINER_SHARE_FIRST_BOOKING_ACTIVE_HIDDEN_FROM_CATALOG_HTML = (
     "👁 <b>Профиль активен, но вы скрыты из каталога</b>\n\n"

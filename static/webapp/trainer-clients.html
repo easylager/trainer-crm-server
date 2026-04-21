@@ -37,8 +37,8 @@
       window.__applyTrainerClientsTheme = applyTrainerClientsTheme;
     })();
   </script>
-  <link rel="preload" href="trainer-clients-main.js?v=20260427" as="script" />
-  <link rel="stylesheet" href="mini-app-trainer-clients.css?v=20260427" />
+  <link rel="preload" href="trainer-clients-main.js?v=20260434" as="script" />
+  <link rel="stylesheet" href="mini-app-trainer-clients.css?v=20260434" />
   <link rel="stylesheet" href="mini-app-trainer-nav.css?v=20260422" />
 </head>
 <body>
@@ -83,12 +83,87 @@
     <div class="section-title">Карточка клиента</div>
     <div id="clientDetail"></div>
   </div>
+  <!-- Quick book: same in-page flow as trainer hub (no schedule-editor flash). -->
+  <div id="tcModalQuickBookDatetime" class="modal-overlay tc-client-qb-overlay" style="display: none;" aria-hidden="true">
+    <div class="modal tc-client-qb-card" role="dialog" aria-labelledby="tcQuickBookTitle">
+      <h3 id="tcQuickBookTitle" class="book-modal-title">Записать на занятие</h3>
+      <p class="book-choice-lead">Выберите дату и время занятия</p>
+      <div class="book-field-stack">
+        <label class="book-field-label" for="tcQuickBookDate">Дата</label>
+        <input type="date" id="tcQuickBookDate" class="input tc-qb-input" />
+      </div>
+      <div class="book-field-stack">
+        <label class="book-field-label" for="tcQuickBookTime">Время начала</label>
+        <div class="tc-qb-select-wrap">
+          <select id="tcQuickBookTime" class="input tc-qb-input"></select>
+        </div>
+      </div>
+      <div class="book-field-stack" id="tcQuickBookDurationStack">
+        <label class="book-field-label" for="tcQuickBookDuration">Длительность</label>
+        <div class="tc-qb-select-wrap">
+          <select id="tcQuickBookDuration" class="input tc-qb-input">
+            <option value="30">30 минут</option>
+            <option value="45" selected>45 минут</option>
+            <option value="60">60 минут</option>
+            <option value="90">90 минут</option>
+            <option value="120">120 минут</option>
+          </select>
+        </div>
+      </div>
+      <p id="tcQuickBookDurationFixedHint" class="tc-quickbook-hint tc-quickbook-hint--fixed" hidden aria-hidden="true"></p>
+      <p id="tcQuickBookHint" class="tc-quickbook-hint" aria-hidden="true"></p>
+      <div class="modal-actions tc-qb-actions">
+        <button type="button" class="btn-block btn-secondary" id="tcQuickBookCancel">Отмена</button>
+        <button type="button" class="btn-block btn-primary" id="tcQuickBookContinue">Далее</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="tcModalQuickBookService" class="modal-overlay tc-client-qb-overlay" style="display: none;" aria-hidden="true">
+    <div class="modal tc-client-qb-card" role="dialog" aria-labelledby="tcQbSvcTitle">
+      <p class="quick-book-kicker">Быстрая запись</p>
+      <h3 id="tcQbSvcTitle" class="book-modal-title">Услуга и тариф</h3>
+      <p class="book-choice-lead">Клиент уже выбран. По умолчанию — услуга и тариф с последнего занятия; при необходимости измените.</p>
+      <div class="book-field-stack">
+        <label class="book-field-label" for="tcQbProfileServiceSelect">Услуга</label>
+        <div class="tc-qb-select-wrap">
+          <select id="tcQbProfileServiceSelect" class="input tc-qb-input book-service-select"></select>
+        </div>
+      </div>
+      <div class="book-field-stack" id="tcQbProfileArenaWrap" style="display: none;">
+        <label class="book-field-label" for="tcQbProfileArenaSelect">Площадка</label>
+        <div class="tc-qb-select-wrap">
+          <select id="tcQbProfileArenaSelect" class="input tc-qb-input book-service-select"></select>
+        </div>
+      </div>
+      <div class="book-field-stack" id="tcQbProfilePriceTierWrap" style="display: none;">
+        <label class="book-field-label">Тариф</label>
+        <div id="tcQbProfilePriceTierRadios" class="book-price-tier-radios"></div>
+      </div>
+      <div class="modal-actions tc-qb-actions tc-qb-actions--stack">
+        <button type="button" class="btn-block btn-primary" id="tcQbProfileContinue">Далее</button>
+        <button type="button" class="btn-block btn-secondary" id="tcQbProfileBack">Назад к времени</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="tcModalBookConfirm" class="modal-overlay tc-client-qb-overlay" style="display: none;" aria-hidden="true">
+    <div class="modal tc-client-qb-card" role="dialog">
+      <h3 class="book-confirm-title">Подтверждение</h3>
+      <p id="tcBookConfirmText" class="book-confirm-text"></p>
+      <div class="modal-actions tc-qb-actions">
+        <button type="button" class="btn-block btn-secondary" id="tcBookConfirmNo">Отмена</button>
+        <button type="button" class="btn-block btn-primary" id="tcBookConfirmYes">Записать</button>
+      </div>
+    </div>
+  </div>
+
   <div id="stateMessage" class="loading state-panel" style="display:none;" role="status" aria-live="polite">
     <div class="state-panel-inner"></div>
   </div>
 
   <script src="mini-app-trainer-gate.js"></script>
-  <script defer src="trainer-clients-main.js?v=20260427"></script>
+  <script defer src="trainer-clients-main.js?v=20260434"></script>
   <script defer src="mini-app-trainer-home.js"></script>
 </body>
 </html>

@@ -161,6 +161,815 @@
         el.style.display = 'block';
       }
 
+      var tcToastHideTimer = null;
+      function showTcToast(text) {
+        var t = (text || '').trim();
+        if (!t) return;
+        var el = document.getElementById('tcToast');
+        if (!el) {
+          el = document.createElement('div');
+          el.id = 'tcToast';
+          el.className = 'tc-toast';
+          el.setAttribute('role', 'status');
+          el.setAttribute('aria-live', 'polite');
+          document.body.appendChild(el);
+        }
+        el.textContent = t;
+        el.hidden = false;
+        if (tcToastHideTimer) clearTimeout(tcToastHideTimer);
+        tcToastHideTimer = setTimeout(function() {
+          el.hidden = true;
+          tcToastHideTimer = null;
+        }, 4000);
+        try {
+          if (tg && tg.HapticFeedback && tg.HapticFeedback.notificationOccurred) {
+            tg.HapticFeedback.notificationOccurred('success');
+          }
+        } catch (e) { /* older clients */ }
+      }
+
+      /** After quick-book, refresh «Следующее» on the open client card without full reload. */
+      function refreshClientNextBookingBlock(clientId) {
+        if (clientId == null || clientId === '') return;
+        fetch(withInit('/api/webapp/trainer/clients/' + encodeURIComponent(clientId) + '/next-booking'))
+          .then(function(r) { return r.json(); })
+          .then(function(data) {
+            var nextEl = document.getElementById('clientNextBooking');
+            if (!nextEl) return;
+            var nb = data.next_booking;
+            var upcomingCount = typeof data.upcoming_count === 'number' ? data.upcoming_count : 0;
+            if (nb && nb.slot_date) {
+              var t = formatDate(nb.slot_date) + (nb.start_time ? ' ' + formatTime(nb.start_time) : '');
+              if (nb.arena_name) t += ' · ' + nb.arena_name;
+              if (upcomingCount > 1) t += ' (+' + (upcomingCount - 1) + ' ещё)';
+              nextEl.classList.remove('is-loading');
+              nextEl.textContent = t;
+            } else {
+              nextEl.classList.remove('is-loading');
+              nextEl.textContent = '—';
+            }
+          })
+          .catch(function() {
+            var nextEl = document.getElementById('clientNextBooking');
+            if (nextEl) {
+              nextEl.classList.remove('is-loading');
+              nextEl.textContent = '—';
+            }
+          });
+      }
+
+      (function tcClientQuickBookModule() {
+        /* In-page quick booking from client card (same idea as hub; no schedule-editor). */
+        var PRICE_TIER_LABEL_RU = {
+          child: 'Детский',
+          adult: 'Взрослый',
+          two_children: '2 ребенка',
+          two_adults: '2 взрослых',
+          adult_and_child: 'Взрослый + ребенок',
+        };
+      
+        function api(path) {
+          return withInit('/api/webapp' + path);
+        }
+      
+        var qb = {
+          lockedClientId: null,
+          clientDisplayName: '',
+          slotsForDay: [],
+          slotsIsoDate: null,
+          scheduleGrid: null,
+          fetchGen: 0,
+          refreshTimer: null,
+          slotDate: null,
+          startMinutes: null,
+          durationM: 45,
+          bookServices: [],
+          bookServiceId: null,
+          bookPriceVariantId: null,
+          bookArenaId: null,
+          trainerArenas: [],
+          awaitingConfirm: false,
+        };
+      
+        function todayIsoLocal() {
+          var d = new Date();
+          var m = String(d.getMonth() + 1);
+          var day = String(d.getDate());
+          if (m.length < 2) m = '0' + m;
+          if (day.length < 2) day = '0' + day;
+          return String(d.getFullYear()) + '-' + m + '-' + day;
+        }
+      
+        function parseStartToMinutes(startTime) {
+          var s = (startTime == null ? '' : String(startTime)).trim();
+          var parts = s.split(':');
+          var h = parseInt(parts[0], 10);
+          var min = parts.length > 1 ? parseInt(parts[1], 10) : 0;
+          if (isNaN(h)) h = 0;
+          if (isNaN(min)) min = 0;
+          return h * 60 + min;
+        }
+      
+        function formatMinuteClock(totalMinutes) {
+          var m = Math.max(0, Math.floor(totalMinutes));
+          var h = Math.floor(m / 60);
+          var rem = m % 60;
+          return String(h).padStart(2, '0') + ':' + String(rem).padStart(2, '0');
+        }
+      
+        function intervalsOverlapAbsolute(a0, a1, b0, b1) {
+          return a0 < b1 && b0 < a1;
+        }
+      
+        function slotIntervalMinutesFromRow(s) {
+          var sm = parseStartToMinutes(s.start_time);
+          var em = parseStartToMinutes(s.end_time);
+          if (em <= sm) em = sm + 60;
+          return { start: sm, end: em };
+        }
+      
+        function defaultScheduleGrid() {
+          return {
+            kind: 'uniform_step',
+            minute_offset: 0,
+            hour_start: 8,
+            hour_end: 21,
+            step_minutes: 15,
+            slot_duration_minutes: null,
+          };
+        }
+
+        function tcFixedSlotDurationMinutes() {
+          var p = qb.scheduleGrid || defaultScheduleGrid();
+          if (p.slot_duration_minutes == null || p.slot_duration_minutes === '') return null;
+          var n = parseInt(p.slot_duration_minutes, 10);
+          if (isNaN(n) || n < 15) return null;
+          return Math.min(24 * 60, n);
+        }
+
+        function tcEnsureDurationSelectOption(selectEl, minutes) {
+          if (!selectEl || minutes == null) return;
+          var v = String(minutes);
+          if (selectEl.querySelector('option[value="' + v + '"]')) return;
+          var o = document.createElement('option');
+          o.value = v;
+          o.textContent = minutes + ' минут';
+          selectEl.appendChild(o);
+        }
+
+        function syncTcQuickBookDurationFromGrid() {
+          var stack = document.getElementById('tcQuickBookDurationStack');
+          var hint = document.getElementById('tcQuickBookDurationFixedHint');
+          var durEl = document.getElementById('tcQuickBookDuration');
+          if (!durEl) return;
+          var fixed = tcFixedSlotDurationMinutes();
+          if (fixed != null) {
+            tcEnsureDurationSelectOption(durEl, fixed);
+            durEl.value = String(fixed);
+            durEl.disabled = true;
+            if (stack) stack.style.display = 'none';
+            if (hint) {
+              hint.removeAttribute('hidden');
+              hint.textContent = 'Длительность: ' + fixed + ' мин (зафиксировано для площадки).';
+              hint.setAttribute('aria-hidden', 'false');
+            }
+          } else {
+            durEl.disabled = false;
+            if (stack) stack.style.display = '';
+            if (hint) {
+              hint.setAttribute('hidden', 'hidden');
+              hint.textContent = '';
+              hint.setAttribute('aria-hidden', 'true');
+            }
+          }
+        }
+      
+        function applyScheduleGrid(data) {
+          if (data && data.schedule_grid) qb.scheduleGrid = data.schedule_grid;
+          else if (!qb.scheduleGrid) qb.scheduleGrid = defaultScheduleGrid();
+          syncTcQuickBookDurationFromGrid();
+        }
+      
+        function allowedStartMinutesFromGrid() {
+          var preset = qb.scheduleGrid || defaultScheduleGrid();
+          var kind = (preset.kind || 'uniform_step').toString().trim();
+          var h0 = Math.max(0, Math.min(23, parseInt(preset.hour_start, 10)));
+          if (isNaN(h0)) h0 = 8;
+          var h1 = Math.max(0, Math.min(23, parseInt(preset.hour_end, 10)));
+          if (isNaN(h1)) h1 = 21;
+          if (h1 < h0) {
+            var swap = h0;
+            h0 = h1;
+            h1 = swap;
+          }
+          var out = [];
+          if (kind === 'hourly_minute') {
+            var mo = Math.max(0, Math.min(59, parseInt(preset.minute_offset, 10) || 0));
+            for (var h = h0; h <= h1; h++) out.push(h * 60 + mo);
+            return out;
+          }
+          var step = 15;
+          if (kind === 'uniform_step') {
+            var s = parseInt(preset.step_minutes, 10);
+            if (!isNaN(s) && s >= 5) step = s;
+          }
+          for (var mm = h0 * 60; mm <= h1 * 60; mm += step) out.push(mm);
+          return out;
+        }
+      
+        function setHint(text, visible) {
+          var el = document.getElementById('tcQuickBookHint');
+          if (!el) return;
+          var on = !!(visible && text);
+          el.textContent = on ? String(text) : '';
+          el.classList.toggle('is-on', on);
+          el.setAttribute('aria-hidden', on ? 'false' : 'true');
+        }
+      
+        function quickBookSlotAvailability(slotsForDay, startMinutes, durationMinutes, isoDate) {
+          var dm = durationMinutes || 45;
+          var newEnd = startMinutes + dm;
+          if (newEnd > 24 * 60) return 'invalid';
+          var todayStr = todayIsoLocal();
+          if (isoDate === todayStr) {
+            var now = new Date();
+            var nowM = now.getHours() * 60 + now.getMinutes();
+            if (startMinutes < nowM) return 'past';
+          }
+          var rows = (slotsForDay || []).filter(function(s) {
+            return (s.status || '').toLowerCase() !== 'cancelled';
+          });
+          for (var i = 0; i < rows.length; i++) {
+            var row = rows[i];
+            var iv = slotIntervalMinutesFromRow(row);
+            if (!intervalsOverlapAbsolute(startMinutes, newEnd, iv.start, iv.end)) continue;
+            var cap = row.capacity != null ? parseInt(row.capacity, 10) : 1;
+            if (isNaN(cap) || cap < 1) cap = 1;
+            var occ = row.active_bookings != null ? parseInt(row.active_bookings, 10) : 0;
+            if (cap > 1) return 'group';
+            if (iv.start === startMinutes && iv.end === newEnd) {
+              if (occ >= 1) return 'busy';
+              return 'free';
+            }
+            if (occ >= 1) return 'busy';
+            return 'overlap';
+          }
+          return 'free';
+        }
+      
+        function rebuildTimeSelect(isoDate, dm) {
+          var sel = document.getElementById('tcQuickBookTime');
+          var btnGo = document.getElementById('tcQuickBookContinue');
+          if (!sel || !isoDate) return false;
+          var prev = sel.value;
+          sel.innerHTML = '';
+          var anyFree = false;
+          var mins = allowedStartMinutesFromGrid();
+          mins.forEach(function(m) {
+            var opt = document.createElement('option');
+            var availability = quickBookSlotAvailability(qb.slotsForDay, m, dm, isoDate);
+            opt.value = String(m);
+            if (availability === 'free') {
+              opt.textContent = formatMinuteClock(m);
+              anyFree = true;
+            } else if (availability === 'past') {
+              opt.textContent = formatMinuteClock(m) + ' — прошло';
+              opt.disabled = true;
+            } else if (availability === 'busy') {
+              opt.textContent = formatMinuteClock(m) + ' — занято';
+              opt.disabled = true;
+            } else if (availability === 'group') {
+              opt.textContent = formatMinuteClock(m) + ' — группа';
+              opt.disabled = true;
+            } else if (availability === 'overlap') {
+              opt.textContent = formatMinuteClock(m) + ' — пересечение';
+              opt.disabled = true;
+            } else {
+              opt.textContent = formatMinuteClock(m) + ' — не влезает';
+              opt.disabled = true;
+            }
+            sel.appendChild(opt);
+          });
+          var prevOpt = sel.querySelector('option[value="' + prev + '"]:not([disabled])');
+          if (prevOpt) sel.value = prev;
+          else {
+            var firstOk = sel.querySelector('option:not([disabled])');
+            if (firstOk) sel.value = firstOk.value;
+          }
+          if (btnGo) btnGo.disabled = !anyFree;
+          if (!anyFree) {
+            setHint('Нет доступного времени для выбранной длительности.', true);
+          } else {
+            setHint('', false);
+          }
+          return anyFree;
+        }
+      
+        function refreshTimeOptions(isoDate, opts) {
+          opts = opts || {};
+          var silentLoadingHint = !!opts.silentLoadingHint;
+          var sel = document.getElementById('tcQuickBookTime');
+          var durEl = document.getElementById('tcQuickBookDuration');
+          var btnGo = document.getElementById('tcQuickBookContinue');
+          if (!sel || !isoDate) return Promise.resolve();
+          var fixedDm = tcFixedSlotDurationMinutes();
+          var dm =
+            fixedDm != null
+              ? fixedDm
+              : durEl
+                ? parseInt(durEl.value, 10)
+                : 45;
+          if (fixedDm == null && (isNaN(dm) || dm < 15)) dm = 45;
+          if (qb.slotsIsoDate === isoDate) {
+            rebuildTimeSelect(isoDate, dm);
+            return Promise.resolve();
+          }
+          var fetchGen = ++qb.fetchGen;
+          sel.disabled = true;
+          if (btnGo) btnGo.disabled = true;
+          if (!silentLoadingHint) {
+            setHint('Загрузка сетки расписания…', true);
+          }
+          return fetch(
+            api('/schedule?from_date=' + encodeURIComponent(isoDate) + '&to_date=' + encodeURIComponent(isoDate)),
+            { headers: {} }
+          )
+            .then(function(r) {
+              if (!r.ok) return Promise.reject(new Error('schedule'));
+              return r.json();
+            })
+            .then(function(data) {
+              if (fetchGen !== qb.fetchGen) return;
+              applyScheduleGrid(data);
+              var slots = (data && data.slots) ? data.slots : [];
+              qb.slotsForDay = slots.filter(function(s) {
+                var d = s.slot_date;
+                return d === isoDate || String(d) === isoDate;
+              });
+              qb.slotsIsoDate = isoDate;
+              rebuildTimeSelect(isoDate, dm);
+              sel.disabled = false;
+            })
+            .catch(function() {
+              if (fetchGen !== qb.fetchGen) return;
+              applyScheduleGrid(null);
+              qb.slotsForDay = [];
+              qb.slotsIsoDate = null;
+              sel.disabled = false;
+              sel.innerHTML = '';
+              allowedStartMinutesFromGrid().forEach(function(m) {
+                var opt = document.createElement('option');
+                opt.value = String(m);
+                opt.textContent = formatMinuteClock(m);
+                sel.appendChild(opt);
+              });
+              if (btnGo) btnGo.disabled = false;
+              setHint('Не удалось проверить занятость. Время можно выбрать вручную.', true);
+            });
+        }
+      
+        function scheduleRefresh() {
+          if (qb.refreshTimer) clearTimeout(qb.refreshTimer);
+          qb.refreshTimer = setTimeout(function() {
+            qb.refreshTimer = null;
+            var dateEl = document.getElementById('tcQuickBookDate');
+            var iso = dateEl ? String(dateEl.value || '').trim() : '';
+            if (iso) refreshTimeOptions(iso);
+          }, 250);
+        }
+      
+        function closeDatetimeModal() {
+          var m = document.getElementById('tcModalQuickBookDatetime');
+          if (!m) return;
+          if (qb.refreshTimer) {
+            clearTimeout(qb.refreshTimer);
+            qb.refreshTimer = null;
+          }
+          qb.fetchGen += 1;
+          m.style.display = 'none';
+          m.setAttribute('aria-hidden', 'true');
+        }
+      
+        function closeServiceModal() {
+          var m = document.getElementById('tcModalQuickBookService');
+          if (!m) return;
+          m.style.display = 'none';
+          m.setAttribute('aria-hidden', 'true');
+        }
+      
+        function closeConfirmModal() {
+          var m = document.getElementById('tcModalBookConfirm');
+          if (!m) return;
+          m.style.display = 'none';
+          m.setAttribute('aria-hidden', 'true');
+          qb.awaitingConfirm = false;
+        }
+      
+        function closeAll() {
+          closeConfirmModal();
+          closeServiceModal();
+          closeDatetimeModal();
+          qb.lockedClientId = null;
+          qb.clientDisplayName = '';
+        }
+      
+        function priceTierLabelRu(tier) {
+          var k = (tier.tier_kind || '').toLowerCase();
+          return PRICE_TIER_LABEL_RU[k] || tier.label || 'Тариф';
+        }
+      
+        function pickDefaultBookPriceTierId(tiers) {
+          if (!tiers || !tiers.length) return null;
+          if (tiers.length === 1) return tiers[0].id;
+          var adult = tiers.filter(function(t) {
+            return (t.tier_kind || '').toLowerCase() === 'adult';
+          })[0];
+          return adult ? adult.id : tiers[0].id;
+        }
+      
+        function syncPriceTierRadios(preferredVariantId) {
+          var wrap = document.getElementById('tcQbProfilePriceTierWrap');
+          var host = document.getElementById('tcQbProfilePriceTierRadios');
+          if (!wrap || !host) return;
+          var sid = qb.bookServiceId;
+          var svc = (qb.bookServices || []).filter(function(x) {
+            return x.id === sid;
+          })[0];
+          var tiers = svc && svc.price_tiers ? svc.price_tiers : [];
+          if (tiers.length <= 1) {
+            wrap.style.display = 'none';
+            qb.bookPriceVariantId = tiers.length === 1 ? tiers[0].id : null;
+            return;
+          }
+          wrap.style.display = 'block';
+          host.innerHTML = '';
+          var gname = 'tc_qb_prof_' + String(sid || 0);
+          tiers.forEach(function(tier) {
+            var lab = document.createElement('label');
+            lab.style.display = 'flex';
+            lab.style.alignItems = 'center';
+            lab.style.gap = '10px';
+            lab.style.marginBottom = '8px';
+            var inp = document.createElement('input');
+            inp.type = 'radio';
+            inp.name = gname;
+            inp.value = String(tier.id);
+            var pb = tier.price_byn;
+            var priceStr = (pb === Math.floor(pb) ? pb : Number(pb).toFixed(2)) + ' BYN';
+            lab.appendChild(inp);
+            lab.appendChild(document.createTextNode(priceTierLabelRu(tier) + ' — ' + priceStr));
+            inp.addEventListener('change', function() {
+              qb.bookPriceVariantId = parseInt(inp.value, 10);
+            });
+            host.appendChild(lab);
+          });
+          var pref = preferredVariantId != null ? parseInt(preferredVariantId, 10) : NaN;
+          var matched = !isNaN(pref) ? host.querySelector('input[value="' + String(pref) + '"]') : null;
+          if (matched) {
+            matched.checked = true;
+            qb.bookPriceVariantId = parseInt(matched.value, 10);
+          } else {
+            var pid = pickDefaultBookPriceTierId(tiers);
+            var pickInp = pid != null ? host.querySelector('input[value="' + String(pid) + '"]') : null;
+            if (pickInp) {
+              pickInp.checked = true;
+              qb.bookPriceVariantId = parseInt(pickInp.value, 10);
+            }
+          }
+        }
+      
+        function formatSlotWhenLabel() {
+          if (!qb.slotDate || qb.startMinutes == null) return '';
+          var p = (qb.slotDate || '').split('-');
+          var ru = p.length === 3 ? p[2] + '.' + p[1] + '.' + p[0] : qb.slotDate;
+          return ru + ' ' + formatMinuteClock(qb.startMinutes);
+        }
+      
+        function openServiceStepAfterDatetime() {
+          var cid = qb.lockedClientId;
+          if (!cid) return;
+          Promise.all([
+            fetch(api('/trainer/my-services'), { headers: {} }).then(function(r) {
+              return r.ok ? r.json() : Promise.reject(new Error('svc'));
+            }),
+            fetch(api('/trainer/clients/' + encodeURIComponent(cid) + '/booking-defaults'), { headers: {} }).then(function(r) {
+              return r.ok ? r.json() : Promise.reject(new Error('def'));
+            }),
+          ])
+            .then(function(results) {
+              var servicesPayload = results[0];
+              var defaults = results[1];
+              qb.bookServices = servicesPayload.services || [];
+              if (!qb.bookServices.length) {
+                showTcToast('Добавьте услугу в профиле');
+                closeDatetimeModal();
+                return;
+              }
+              qb.trainerArenas = servicesPayload.arenas || [];
+              var arenas = qb.trainerArenas || [];
+              var primary = arenas.filter(function(a) {
+                return a.is_primary;
+              })[0];
+              qb.bookArenaId = primary ? primary.id : arenas.length ? arenas[0].id : null;
+      
+              var sel = document.getElementById('tcQbProfileServiceSelect');
+              if (!sel) return;
+              sel.innerHTML = '';
+              qb.bookServices.forEach(function(s) {
+                var opt = document.createElement('option');
+                opt.value = String(s.id);
+                opt.textContent = s.name || '—';
+                sel.appendChild(opt);
+              });
+              var defSid = defaults.service_id != null ? parseInt(defaults.service_id, 10) : NaN;
+              var picked = qb.bookServices.length ? qb.bookServices[0].id : null;
+              if (!isNaN(defSid) && qb.bookServices.some(function(s) {
+                return s.id === defSid;
+              })) {
+                picked = defSid;
+              }
+              qb.bookServiceId = picked;
+              sel.value = picked != null ? String(picked) : '';
+              sel.onchange = function() {
+                qb.bookServiceId = this.value ? parseInt(this.value, 10) : null;
+                syncPriceTierRadios(null);
+              };
+      
+              var wrapA = document.getElementById('tcQbProfileArenaWrap');
+              var selA = document.getElementById('tcQbProfileArenaSelect');
+              if (wrapA && selA) {
+                var showA = arenas.length > 1;
+                wrapA.style.display = showA ? 'block' : 'none';
+                if (showA) {
+                  selA.innerHTML = '';
+                  arenas.forEach(function(a) {
+                    var o = document.createElement('option');
+                    o.value = String(a.id);
+                    o.textContent = (a.name || '—') + (a.is_primary ? ' · основная' : '');
+                    selA.appendChild(o);
+                  });
+                  selA.value = qb.bookArenaId != null ? String(qb.bookArenaId) : '';
+                  selA.onchange = function() {
+                    qb.bookArenaId = this.value ? parseInt(this.value, 10) : null;
+                  };
+                }
+              }
+      
+              var defVid = defaults.service_price_variant_id != null ? parseInt(defaults.service_price_variant_id, 10) : null;
+              syncPriceTierRadios(defVid);
+      
+              var ms = document.getElementById('tcModalQuickBookService');
+              if (ms) {
+                ms.style.display = 'flex';
+                ms.setAttribute('aria-hidden', 'false');
+              }
+              closeDatetimeModal();
+            })
+            .catch(function() {
+              showTcToast('Не удалось загрузить услуги');
+            });
+        }
+      
+        function openConfirm() {
+          var name = qb.clientDisplayName || 'Клиент';
+          var slotLabel = formatSlotWhenLabel();
+          var txt = document.getElementById('tcBookConfirmText');
+          if (txt) txt.textContent = 'Записать ' + name + ' на ' + slotLabel + '?';
+          var m = document.getElementById('tcModalBookConfirm');
+          if (m) {
+            m.style.display = 'flex';
+            m.setAttribute('aria-hidden', 'false');
+          }
+          qb.awaitingConfirm = true;
+        }
+      
+        function postQuickBooking() {
+          var clientId = qb.lockedClientId;
+          var serviceId = qb.bookServiceId;
+          if (clientId == null || serviceId == null) return Promise.reject(new Error('Нет данных'));
+          var payload = {
+            slot_date: qb.slotDate,
+            start_time: formatMinuteClock(qb.startMinutes),
+            duration_minutes: qb.durationM || 45,
+            client_id: clientId,
+            service_id: serviceId,
+          };
+          if (qb.trainerArenas && qb.trainerArenas.length > 1 && qb.bookArenaId != null) {
+            payload.arena_id = qb.bookArenaId;
+          }
+          if (qb.bookPriceVariantId != null) {
+            payload.service_price_variant_id = qb.bookPriceVariantId;
+          }
+          return fetch(api('/trainer/booking/quick'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          }).then(function(r) {
+            return r.json().then(function(o) {
+              if (r.ok) return o;
+              var d = o.detail;
+              var msg = Array.isArray(d) ? (d[0] && d[0].msg) || 'Ошибка' : (d || 'Ошибка');
+              throw new Error(typeof msg === 'string' ? msg : 'Ошибка');
+            });
+          });
+        }
+      
+        var wired = false;
+        function wireOnce() {
+          if (wired) return;
+          wired = true;
+      
+          var qCancel = document.getElementById('tcQuickBookCancel');
+          if (qCancel) {
+            qCancel.onclick = function() {
+              closeAll();
+            };
+          }
+          var qContinue = document.getElementById('tcQuickBookContinue');
+          if (qContinue) {
+            qContinue.onclick = function() {
+              var dateEl = document.getElementById('tcQuickBookDate');
+              var timeEl = document.getElementById('tcQuickBookTime');
+              var durEl = document.getElementById('tcQuickBookDuration');
+              if (!dateEl || !timeEl || !durEl) return;
+              var slotDate = String(dateEl.value || '').trim();
+              var startMinutes = parseInt(String(timeEl.value || ''), 10);
+              var fixedDur = tcFixedSlotDurationMinutes();
+              var duration =
+                fixedDur != null ? fixedDur : parseInt(String(durEl.value || '45'), 10);
+              if (!slotDate) {
+                showTcToast('Выберите дату.');
+                return;
+              }
+              if (isNaN(startMinutes)) {
+                showTcToast('Выберите время начала.');
+                return;
+              }
+              if (fixedDur == null && (isNaN(duration) || duration < 15)) duration = 45;
+              var availability = quickBookSlotAvailability(qb.slotsForDay || [], startMinutes, duration, slotDate);
+              if (availability !== 'free') {
+                if (availability === 'past') showTcToast('Это время уже прошло.');
+                else if (availability === 'busy') showTcToast('Это время занято. Выберите другое.');
+                else if (availability === 'group') showTcToast('На это время есть групповой слот.');
+                else if (availability === 'overlap') showTcToast('Время пересекается со слотом.');
+                else showTcToast('Слот не подходит по длительности.');
+                scheduleRefresh();
+                return;
+              }
+              qb.slotDate = slotDate;
+              qb.startMinutes = startMinutes;
+              qb.durationM = duration;
+              openServiceStepAfterDatetime();
+            };
+          }
+          var qDate = document.getElementById('tcQuickBookDate');
+          if (qDate) {
+            qDate.onchange = function() {
+              scheduleRefresh();
+            };
+          }
+          var qDuration = document.getElementById('tcQuickBookDuration');
+          if (qDuration) {
+            qDuration.onchange = function() {
+              scheduleRefresh();
+            };
+          }
+          var qOverlay = document.getElementById('tcModalQuickBookDatetime');
+          if (qOverlay) {
+            qOverlay.onclick = function(ev) {
+              if (ev.target === qOverlay) closeAll();
+            };
+          }
+      
+          var btnSvcGo = document.getElementById('tcQbProfileContinue');
+          if (btnSvcGo) {
+            btnSvcGo.onclick = function() {
+              var sel = document.getElementById('tcQbProfileServiceSelect');
+              qb.bookServiceId = sel && sel.value ? parseInt(sel.value, 10) : null;
+              if (qb.bookServiceId == null) {
+                showTcToast('Выберите услугу');
+                return;
+              }
+              closeServiceModal();
+              openConfirm();
+            };
+          }
+          var btnSvcBack = document.getElementById('tcQbProfileBack');
+          if (btnSvcBack) {
+            btnSvcBack.onclick = function() {
+              closeServiceModal();
+              var mq = document.getElementById('tcModalQuickBookDatetime');
+              if (mq) {
+                mq.style.display = 'flex';
+                mq.setAttribute('aria-hidden', 'false');
+              }
+              var iso = qb.slotDate || todayIsoLocal();
+              var dateEl = document.getElementById('tcQuickBookDate');
+              if (dateEl && qb.slotDate) dateEl.value = qb.slotDate;
+              refreshTimeOptions(iso, { silentLoadingHint: true });
+            };
+          }
+          var svcOverlay = document.getElementById('tcModalQuickBookService');
+          if (svcOverlay) {
+            svcOverlay.onclick = function(ev) {
+              if (ev.target === svcOverlay) closeAll();
+            };
+          }
+      
+          var cNo = document.getElementById('tcBookConfirmNo');
+          if (cNo) {
+            cNo.onclick = function() {
+              if (qb.awaitingConfirm) {
+                closeConfirmModal();
+                var ms = document.getElementById('tcModalQuickBookService');
+                if (ms) {
+                  ms.style.display = 'flex';
+                  ms.setAttribute('aria-hidden', 'false');
+                }
+                return;
+              }
+              closeAll();
+            };
+          }
+          var cYes = document.getElementById('tcBookConfirmYes');
+          if (cYes) {
+            cYes.onclick = function() {
+              var btn = cYes;
+              var cid = qb.lockedClientId;
+              btn.disabled = true;
+              postQuickBooking()
+                .then(function() {
+                  closeAll();
+                  showTcToast('Запись создана');
+                  refreshClientNextBookingBlock(cid);
+                })
+                .catch(function(e) {
+                  alert(e.message || 'Ошибка сети');
+                })
+                .finally(function() {
+                  btn.disabled = false;
+                });
+            };
+          }
+          var cOverlay = document.getElementById('tcModalBookConfirm');
+          if (cOverlay) {
+            cOverlay.onclick = function(ev) {
+              if (ev.target !== cOverlay) return;
+              if (qb.awaitingConfirm) {
+                closeConfirmModal();
+                var ms = document.getElementById('tcModalQuickBookService');
+                if (ms) {
+                  ms.style.display = 'flex';
+                  ms.setAttribute('aria-hidden', 'false');
+                }
+                return;
+              }
+              closeAll();
+            };
+          }
+        }
+      
+        function open(clientId, displayName) {
+          wireOnce();
+          qb.lockedClientId = clientId;
+          qb.clientDisplayName = (displayName || '').trim() || 'Клиент';
+          qb.slotsForDay = [];
+          qb.slotsIsoDate = null;
+          qb.scheduleGrid = null;
+          qb.fetchGen += 1;
+          qb.slotDate = null;
+          qb.startMinutes = null;
+          qb.durationM = 45;
+          qb.bookServices = [];
+          qb.bookServiceId = null;
+          qb.bookPriceVariantId = null;
+          qb.bookArenaId = null;
+          qb.trainerArenas = [];
+          qb.awaitingConfirm = false;
+      
+          var modal = document.getElementById('tcModalQuickBookDatetime');
+          var dateEl = document.getElementById('tcQuickBookDate');
+          var durEl = document.getElementById('tcQuickBookDuration');
+          if (!modal || !dateEl || !durEl) {
+            alert('Не удалось открыть форму записи. Обновите страницу.');
+            return;
+          }
+          var today = todayIsoLocal();
+          dateEl.min = today;
+          if (!dateEl.value || dateEl.value < today) dateEl.value = today;
+          if (!durEl.value) durEl.value = '45';
+          syncTcQuickBookDurationFromGrid();
+          setHint('', false);
+          closeServiceModal();
+          closeConfirmModal();
+          modal.style.display = 'flex';
+          modal.setAttribute('aria-hidden', 'false');
+          refreshTimeOptions(dateEl.value || today, { silentLoadingHint: true });
+        }
+      
+        window.TcClientQuickBook = { open: open };
+      })();
+
       function formatDate(d) {
         if (!d) return '—';
         var dt = new Date(d);
@@ -235,6 +1044,56 @@
         return parts.join('');
       }
 
+      /** Placeholder layout for client card history block (replaced when GET /history returns). */
+      function buildClientHistorySkeletonHtml() {
+        var sk = 'ma-skel-shimmer';
+        return (
+          '<div class="tc-history-wrap tc-history-wrap--skel" role="status" aria-busy="true" aria-label="Загрузка истории">' +
+          '<div class="history-section-title">История занятий</div>' +
+          '<div class="tc-history-skel-lines">' +
+          '<div class="tc-history-skel-line ' + sk + '" aria-hidden="true"></div>' +
+          '<div class="tc-history-skel-line tc-history-skel-line--short ' + sk + '" aria-hidden="true"></div>' +
+          '<div class="tc-history-skel-line ' + sk + '" aria-hidden="true"></div>' +
+          '<div class="tc-history-skel-line tc-history-skel-line--mid ' + sk + '" aria-hidden="true"></div>' +
+          '</div></div>'
+        );
+      }
+
+      /** Mirrors dossier stack height (tags + profile bar + notes) to avoid layout jump before GET /dossier. */
+      function buildClientDossierSkeletonHtml() {
+        var sk = 'ma-skel-shimmer';
+        return (
+          '<div class="tc-dossier-skel" role="status" aria-busy="true" aria-label="Загрузка досье">' +
+          '<div class="tc-dossier-skel-tags">' +
+          '<span class="tc-dossier-skel-chip ' + sk + '" aria-hidden="true"></span>' +
+          '<span class="tc-dossier-skel-chip ' + sk + '" aria-hidden="true"></span>' +
+          '<span class="tc-dossier-skel-chip-dashed" aria-hidden="true"></span>' +
+          '</div>' +
+          '<div class="tc-dossier-skel-section" aria-hidden="true">' +
+          '<span class="tc-dossier-skel-section-title ' + sk + '"></span>' +
+          '<span class="tc-dossier-skel-chevron ' + sk + '"></span>' +
+          '</div>' +
+          '<div class="tc-dossier-skel-timeline">' +
+          '<div class="tc-dossier-skel-tl-top">' +
+          '<span class="tc-dossier-skel-tl-title ' + sk + '" aria-hidden="true"></span>' +
+          '<span class="tc-dossier-skel-pill ' + sk + '" aria-hidden="true"></span>' +
+          '</div>' +
+          '<div class="tc-dossier-skel-line ' + sk + '" aria-hidden="true"></div>' +
+          '<div class="tc-dossier-skel-line tc-dossier-skel-line--short ' + sk + '" aria-hidden="true"></div>' +
+          '</div></div>'
+        );
+      }
+
+      function buildClientPassesSkeletonHtml() {
+        var sk = 'ma-skel-shimmer';
+        return (
+          '<div class="tc-pass-skel" aria-hidden="true">' +
+          '<div class="tc-pass-skel-line ' + sk + '"></div>' +
+          '<div class="tc-pass-skel-line tc-pass-skel-line--85 ' + sk + '"></div>' +
+          '</div>'
+        );
+      }
+
       function renderList() {
         var listEl = document.getElementById('clientsList');
         if (state.clientsListLoading) {
@@ -275,11 +1134,7 @@
       }
 
       function loadClientHistory(id) {
-        var detailContainer = document.getElementById('clientDetail');
-        var loadingBlock = document.createElement('div');
-        loadingBlock.className = 'tc-history-wrap';
-        loadingBlock.innerHTML = '<div class="history-section-title">История занятий</div><div class="history-list">Загрузка…</div>';
-        detailContainer.appendChild(loadingBlock);
+        var host = document.getElementById('clientHistoryHost');
         var url = '/api/webapp/trainer/clients/' + encodeURIComponent(id) + '/history?limit=10';
         url = withInit(url);
         fetch(url).then(function(r) {
@@ -294,10 +1149,10 @@
           var totalCount = document.getElementById('clientTotalCount');
           if (totalWrap && totalCount) {
             totalCount.textContent = String(total);
-            totalWrap.style.display = 'flex';
+            totalCount.classList.remove('is-loading');
           }
           var html = '';
-          html += '<div class="tc-history-wrap"><div class="history-section-title">История занятий' + (total > 0 ? ' (' + total + ')' : '') + '</div>';
+          html += '<div class="tc-history-wrap tc-reveal-once"><div class="history-section-title">История занятий' + (total > 0 ? ' (' + total + ')' : '') + '</div>';
           if (!items.length) {
             html += '<div class="history-list">Пока нет занятий с этим клиентом.</div></div>';
           } else {
@@ -326,8 +1181,11 @@
             }
             html += '</div>';
           }
-          detailContainer.removeChild(loadingBlock);
-          detailContainer.insertAdjacentHTML('beforeend', html);
+          if (host) {
+            host.innerHTML = html;
+          } else {
+            document.getElementById('clientDetail').insertAdjacentHTML('beforeend', html);
+          }
           var toggle = document.getElementById('btnHistoryToggle');
           if (toggle) {
             toggle.onclick = function() {
@@ -339,11 +1197,18 @@
             };
           }
         }).catch(function() {
-          detailContainer.removeChild(loadingBlock);
-          detailContainer.insertAdjacentHTML(
-            'beforeend',
-            '<div class="tc-history-wrap"><div class="detail-label">История занятий</div><div class="detail-value">Не удалось загрузить историю.</div></div>'
-          );
+          var totalCount = document.getElementById('clientTotalCount');
+          if (totalCount) {
+            totalCount.textContent = '—';
+            totalCount.classList.remove('is-loading');
+          }
+          var errHtml =
+            '<div class="tc-history-wrap tc-reveal-once"><div class="detail-label">История занятий</div><div class="detail-value">Не удалось загрузить историю.</div></div>';
+          if (host) {
+            host.innerHTML = errHtml;
+          } else {
+            document.getElementById('clientDetail').insertAdjacentHTML('beforeend', errHtml);
+          }
         });
       }
 
@@ -356,6 +1221,8 @@
         suggestedSeasonGoals: [],
         editingField: null,
         showNewEntry: false,
+        /** User-toggled accordion; reset on client change — profile starts collapsed even when fields are filled. */
+        profileSectionExpanded: false,
       };
 
       function formatEntryDate(isoStr) {
@@ -394,9 +1261,8 @@
           },
           { key: 'note', label: 'Общая заметка', placeholder: 'Любая другая информация о клиенте' },
         ];
-        var hasContent = fields.some(function(f) { return (dossierState.profile[f.key] || '').trim(); });
-        // Keep expanded while editing: empty profile would otherwise re-render without .is-open and collapse the block.
-        var profileExpanded = hasContent || !!dossierState.editingField;
+        var profileExpanded =
+          !!dossierState.editingField || !!dossierState.profileSectionExpanded;
         var html = '<div class="dossier-section' + (profileExpanded ? ' is-open' : '') + '" id="dossierProfileSection">';
         html += '<div class="dossier-section-header"><span class="dossier-section-title">Профиль клиента</span>' + ICO_CHEVRON + '</div>';
         html += '<div class="dossier-section-body" id="dossierProfileBody">';
@@ -481,12 +1347,13 @@
         var profileHeader = document.querySelector('#dossierProfileSection .dossier-section-header');
         if (profileHeader) {
           profileHeader.onclick = function() {
-            var section = document.getElementById('dossierProfileSection');
-            section.classList.toggle('is-open');
+            dossierState.profileSectionExpanded = !dossierState.profileSectionExpanded;
+            renderDossier();
           };
         }
         document.querySelectorAll('.dossier-field-value').forEach(function(el) {
           el.onclick = function() {
+            dossierState.profileSectionExpanded = true;
             dossierState.editingField = el.dataset.field;
             renderDossier();
             var textarea = document.querySelector('.dossier-field-edit[data-field="' + el.dataset.field + '"]');
@@ -523,7 +1390,11 @@
           };
         });
         document.querySelectorAll('.dossier-season-chip').forEach(function(btn) {
-          btn.onclick = function() {
+          btn.onclick = function(e) {
+            if (e) {
+              e.preventDefault();
+              e.stopPropagation();
+            }
             var t = btn.getAttribute('data-season-text');
             if (t) saveProfileField('season_goal', t);
           };
@@ -546,10 +1417,15 @@
           dossierState.suggestedSeasonGoals = data.suggested_season_goals || [];
           dossierState.editingField = null;
           dossierState.showNewEntry = false;
+          dossierState.profileSectionExpanded = false;
           renderDossier();
+          var dc = document.getElementById('dossierContainer');
+          if (dc) dc.classList.add('tc-reveal-once');
         }).catch(function() {
           var container = document.getElementById('dossierContainer');
-          if (container) container.innerHTML = '<div class="dossier-empty">Не удалось загрузить досье</div>';
+          if (container) {
+            container.innerHTML = '<div class="dossier-empty tc-reveal-once">Не удалось загрузить досье</div>';
+          }
         });
       }
 
@@ -569,13 +1445,21 @@
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
-        }).then(function(r) { return r.json(); }).then(function(data) {
-          dossierState.profile = data;
-          dossierState.editingField = null;
-          renderDossier();
-        }).catch(function() {
-          alert('Ошибка сохранения');
-        });
+        })
+          .then(function(r) {
+            return r.json().then(function(data) {
+              if (!r.ok) throw new Error((data && data.detail) || r.statusText || 'save');
+              return data;
+            });
+          })
+          .then(function(data) {
+            dossierState.profile = Object.assign({}, dossierState.profile, data);
+            dossierState.editingField = null;
+            renderDossier();
+          })
+          .catch(function() {
+            alert('Ошибка сохранения');
+          });
       }
 
       function saveNewEntry() {
@@ -719,20 +1603,22 @@
           '</div>' +
           '<div class=\"tc-stats\">' +
             '<span class=\"tc-stat\"><span class=\"tc-stat-label\">Последнее</span><strong id=\"clientLastLabel\">' + escapeHtml(lastLabel) + '</strong></span>' +
-            '<span class=\"tc-stat\"><span class=\"tc-stat-label\">Следующее</span><strong id=\"clientNextBooking\">…</strong></span>' +
-            '<span class=\"tc-stat\" id=\"clientTotalWrap\" style=\"display:none;\"><span class=\"tc-stat-label\">Всего занятий</span><strong id=\"clientTotalCount\">0</strong></span>' +
+            '<span class=\"tc-stat\"><span class=\"tc-stat-label\">Следующее</span><strong id=\"clientNextBooking\" class=\"is-loading\"><span class=\"tc-stat-skel-block ma-skel-shimmer\" aria-hidden=\"true\"></span></strong></span>' +
+            '<span class=\"tc-stat\" id=\"clientTotalWrap\"><span class=\"tc-stat-label\">Всего занятий</span><strong id=\"clientTotalCount\" class=\"is-loading\"><span class=\"tc-stat-skel-narrow ma-skel-shimmer\" aria-hidden=\"true\"></span></strong></span>' +
           '</div>' +
           '<div class=\"tc-section-label\">Контакты и абонементы</div>' +
           '<div class=\"tc-rows\">' +
             '<div class=\"tc-row\"><div class=\"detail-label\">Телефон</div><div class=\"detail-value\">' + phoneDisplay + '</div></div>' +
             '<div class=\"tc-row\" id=\"clientPassesCertsBlock\">' +
               '<div class=\"detail-label\">Абонементы и сертификаты</div>' +
-              '<div class=\"detail-value\" id=\"clientPassesCertsContent\">Загрузка…</div>' +
+              '<div class=\"detail-value is-loading\" id=\"clientPassesCertsContent\">' + buildClientPassesSkeletonHtml() + '</div>' +
             '</div>' +
           '</div>' +
-          '<div id=\"dossierContainer\"><div class=\"dossier-empty\">Загрузка досье…</div></div>' +
+          '<div id=\"dossierContainer\">' + buildClientDossierSkeletonHtml() + '</div>' +
           '<div class=\"tc-actions\">' +
-            '<a href=\"#\" class=\"bd-btn bd-btn--primary\" id=\"btnBookClient\">' + ICO_CAL + ' Записать на занятие</a>' +
+            '<button type=\"button\" class=\"bd-btn bd-btn--primary\" id=\"btnBookClient\">' +
+            '<span class=\"tc-action-btn__icon\" aria-hidden=\"true\">' + ICO_CAL + '</span>' +
+            '<span class=\"tc-action-btn__label\">Записать на занятие</span></button>' +
             '<button type=\"button\" class=\"bd-btn bd-btn--secondary\" id=\"btnIssuePass\">' + ICO_TICKET + ' Выдать абонемент</button>';
         if (phone && phone !== '—') {
           detail += '<button type=\"button\" class=\"bd-btn bd-btn--surface\" id=\"btnCopyPhone\">' + ICO_PHONE + ' Скопировать телефон</button>';
@@ -748,7 +1634,10 @@
             '<button type=\"button\" class=\"bd-btn bd-btn--surface\" id=\"btnCopyClientPersonalWelcome\">Скопировать ссылку</button>' +
             '</div>';
         }
-        detail += '</div></div>';
+        detail +=
+          '</div><div id=\"clientHistoryHost\" class=\"tc-history-host\">' +
+          buildClientHistorySkeletonHtml() +
+          '</div></div>';
         document.getElementById('clientDetail').innerHTML = detail;
         document.getElementById('clientsSection').style.display = 'none';
         document.querySelector('.search-box').style.display = 'none';
@@ -889,40 +1778,24 @@
               parts.push('Сертификаты: нет активных');
             }
             if (!parts.length) parts.push('Нет активных абонементов и сертификатов');
+            contentEl.classList.remove('is-loading');
             contentEl.textContent = parts.join(' · ');
+            contentEl.classList.add('tc-reveal-once');
           }).catch(function() {
+            contentEl.classList.remove('is-loading');
             contentEl.textContent = 'Не удалось загрузить';
+            contentEl.classList.add('tc-reveal-once');
           });
         })();
-        fetch(withInit('/api/webapp/trainer/clients/' + encodeURIComponent(id) + '/next-booking'))
-          .then(function(r) { return r.json(); })
-          .then(function(data) {
-            var nextEl = document.getElementById('clientNextBooking');
-            if (!nextEl) return;
-            var nb = data.next_booking;
-            var upcomingCount = typeof data.upcoming_count === 'number' ? data.upcoming_count : 0;
-            if (nb && nb.slot_date) {
-              var t = formatDate(nb.slot_date) + (nb.start_time ? ' ' + formatTime(nb.start_time) : '');
-              if (nb.arena_name) t += ' · ' + nb.arena_name;
-              if (upcomingCount > 1) t += ' (+' + (upcomingCount - 1) + ' ещё)';
-              nextEl.textContent = t;
-            } else {
-              nextEl.textContent = '—';
-            }
-          })
-          .catch(function() {
-            var nextEl = document.getElementById('clientNextBooking');
-            if (nextEl) nextEl.textContent = '—';
-          });
+        refreshClientNextBookingBlock(id);
         var bookBtn = document.getElementById('btnBookClient');
         if (bookBtn) {
-          var path = (window.location.pathname || '').replace(/[^/]+$/, '') || '/webapp/';
-          var bookHref = path + 'schedule-editor?flow=book&client_id=' + encodeURIComponent(id);
-          if (initData) bookHref += '&init_data=' + encodeURIComponent(initData);
-          bookBtn.href = bookHref;
-          bookBtn.onclick = function(e) {
-            e.preventDefault();
-            window.location.href = bookBtn.href;
+          bookBtn.onclick = function() {
+            if (window.TcClientQuickBook && typeof window.TcClientQuickBook.open === 'function') {
+              window.TcClientQuickBook.open(id, name);
+            } else {
+              alert('Обновите страницу и попробуйте снова.');
+            }
           };
         }
         var issuePassBtn = document.getElementById('btnIssuePass');

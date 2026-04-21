@@ -51,9 +51,9 @@
     })();
   </script>
   <!-- Bump ?v= when mini-app-trainer-hub.css changes (immutable cache on /webapp/…). -->
-  <link rel="stylesheet" href="mini-app-trainer-hub.css?v=20260460" />
+  <link rel="stylesheet" href="mini-app-trainer-hub.css?v=20260479" />
   <!-- Early download of main hub script (defer runs at end of body); improves time-to-interactive vs. discover-at-bottom. -->
-  <link rel="preload" href="trainer-home-main.js?v=20260470" as="script" />
+  <link rel="preload" href="trainer-home-main.js?v=20260476" as="script" />
 
 </head>
 <body class="hub-body">
@@ -340,32 +340,56 @@
     <div class="modal book-flow-modal hub-book-modal" role="dialog" aria-labelledby="hubQuickBookTitle">
       <h3 id="hubQuickBookTitle" class="book-modal-title">Записать клиента</h3>
       <p class="book-choice-lead">Выберите дату и время занятия</p>
-      <div class="book-field-stack">
-        <label class="book-field-label" for="hubQuickBookDate">Дата</label>
-        <input type="date" id="hubQuickBookDate" class="input" />
-      </div>
-      <div class="book-field-stack">
-        <label class="book-field-label" for="hubQuickBookTime">Время начала</label>
-        <div class="hub-modal-select-wrap">
-          <select id="hubQuickBookTime" class="input"></select>
+      <div id="hubQuickBookDatetimeWrap" class="hub-quickbook-datetime-wrap">
+        <div id="hubQuickBookDatetimeSkel" class="hub-quickbook-datetime-skel" aria-hidden="true">
+          <div class="hub-qb-skel-field">
+            <div class="hub-skel-line hub-qb-skel-label hub-skel-shimmer" aria-hidden="true"></div>
+            <div class="hub-skel-line hub-qb-skel-input hub-skel-shimmer" aria-hidden="true"></div>
+          </div>
+          <div class="hub-qb-skel-field">
+            <div class="hub-skel-line hub-qb-skel-label hub-skel-shimmer" aria-hidden="true"></div>
+            <div class="hub-skel-line hub-qb-skel-input hub-skel-shimmer" aria-hidden="true"></div>
+          </div>
+          <div class="hub-qb-skel-field hub-qb-skel-field--optional">
+            <div class="hub-skel-line hub-qb-skel-label hub-skel-shimmer" aria-hidden="true"></div>
+            <div class="hub-skel-line hub-qb-skel-input hub-skel-shimmer" aria-hidden="true"></div>
+          </div>
+          <div class="hub-skel-line hub-qb-skel-hint hub-skel-shimmer" aria-hidden="true"></div>
+          <div class="hub-qb-skel-actions">
+            <div class="hub-skel-line hub-qb-skel-btn hub-skel-shimmer" aria-hidden="true"></div>
+            <div class="hub-skel-line hub-qb-skel-btn hub-qb-skel-btn--primary hub-skel-shimmer" aria-hidden="true"></div>
+          </div>
         </div>
-      </div>
-      <div class="book-field-stack">
-        <label class="book-field-label" for="hubQuickBookDuration">Длительность</label>
-        <div class="hub-modal-select-wrap">
-          <select id="hubQuickBookDuration" class="input">
-            <option value="30">30 минут</option>
-            <option value="45" selected>45 минут</option>
-            <option value="60">60 минут</option>
-            <option value="90">90 минут</option>
-            <option value="120">120 минут</option>
-          </select>
+        <div class="hub-quickbook-datetime-live">
+          <div class="book-field-stack">
+            <label class="book-field-label" for="hubQuickBookDate">Дата</label>
+            <input type="date" id="hubQuickBookDate" class="input" />
+          </div>
+          <div class="book-field-stack">
+            <label class="book-field-label" for="hubQuickBookTime">Время начала</label>
+            <div class="hub-modal-select-wrap">
+              <select id="hubQuickBookTime" class="input"></select>
+            </div>
+          </div>
+          <div class="book-field-stack" id="hubQuickBookDurationStack">
+            <label class="book-field-label" for="hubQuickBookDuration">Длительность</label>
+            <div class="hub-modal-select-wrap">
+              <select id="hubQuickBookDuration" class="input">
+                <option value="30">30 минут</option>
+                <option value="45" selected>45 минут</option>
+                <option value="60">60 минут</option>
+                <option value="90">90 минут</option>
+                <option value="120">120 минут</option>
+              </select>
+            </div>
+          </div>
+          <p id="hubQuickBookDurationFixedHint" class="hub-quickbook-hint hub-quickbook-hint--fixed" hidden aria-hidden="true"></p>
+          <p id="hubQuickBookHint" class="hub-quickbook-hint" aria-hidden="true"></p>
+          <div class="modal-actions">
+            <button type="button" class="btn-block btn-secondary" id="hubQuickBookCancel">Отмена</button>
+            <button type="button" class="btn-block btn-primary" id="hubQuickBookContinue">Далее</button>
+          </div>
         </div>
-      </div>
-      <p id="hubQuickBookHint" class="hub-quickbook-hint" aria-hidden="true"></p>
-      <div class="modal-actions">
-        <button type="button" class="btn-block btn-secondary" id="hubQuickBookCancel">Отмена</button>
-        <button type="button" class="btn-block btn-primary" id="hubQuickBookContinue">Далее</button>
       </div>
     </div>
   </div>
@@ -397,6 +421,24 @@
       <h3 class="book-modal-title">Записать клиента</h3>
       <div id="hubBookStepChoice" class="book-step">
         <p class="book-choice-lead">Кого записать на занятие?</p>
+        <div id="hubBookChoiceSkel" class="hub-book-choice-skel" hidden aria-hidden="true">
+          <div class="hub-skel-line hub-book-choice-skel-eyebrow hub-skel-shimmer" aria-hidden="true"></div>
+          <div class="hub-book-choice-skel-picks">
+            <div class="hub-skel-line hub-book-choice-skel-pill hub-skel-shimmer" aria-hidden="true"></div>
+            <div class="hub-skel-line hub-book-choice-skel-pill hub-skel-shimmer" aria-hidden="true"></div>
+          </div>
+          <div class="hub-skel-line hub-book-choice-skel-eyebrow hub-book-choice-skel-eyebrow--narrow hub-skel-shimmer" aria-hidden="true"></div>
+          <div class="hub-book-choice-skel-tiers">
+            <div class="hub-book-choice-skel-tier" aria-hidden="true">
+              <span class="hub-book-choice-skel-radio hub-skel-shimmer"></span>
+              <span class="hub-skel-line hub-book-choice-skel-tier-line hub-skel-shimmer"></span>
+            </div>
+            <div class="hub-book-choice-skel-tier" aria-hidden="true">
+              <span class="hub-book-choice-skel-radio hub-skel-shimmer"></span>
+              <span class="hub-skel-line hub-book-choice-skel-tier-line hub-skel-shimmer"></span>
+            </div>
+          </div>
+        </div>
         <div id="hubBookServiceWrap" class="book-field-stack" style="display: none;">
           <div id="hubBookServiceFieldLabel" class="book-field-label">Услуга</div>
           <div
@@ -492,6 +534,6 @@
   <script src="mini-app-trainer-gate.js"></script>
   <script src="mini-app-trainer-celebration.js"></script>
   <!-- Bump ?v= when trainer-home-main.js changes (immutable cache on /webapp/…). -->
-  <script defer src="trainer-home-main.js?v=20260470"></script>
+  <script defer src="trainer-home-main.js?v=20260476"></script>
 </body>
 </html>

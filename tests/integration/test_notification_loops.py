@@ -276,6 +276,50 @@ async def test_completed_feedback_marks_sent_only_after_telegram_ok(db_session) 
 
 
 @pytest.mark.asyncio
+async def test_completed_feedback_row_when_client_has_no_telegram(db_session) -> None:
+    """CRM-only client (no Telegram): still enqueue trainer «Занятие завершено»; no-pass alone is not enough."""
+    yesterday = date.today() - timedelta(days=1)
+    trainer_id, slot_id, service_id = await _create_trainer_and_slot(
+        db_session, yesterday, time(10, 0), time(11, 0), status="available"
+    )
+    tid = unique_test_telegram_id()
+    phone, phone_n = belarus_test_phone(tid)
+    r = await db_session.execute(
+        text(
+            """
+            INSERT INTO clients (telegram_id, first_name, last_name, phone, phone_normalized)
+            VALUES (NULL, 'No', 'Name', :phone, :pn)
+            RETURNING id
+            """
+        ),
+        {"phone": phone, "pn": phone_n},
+    )
+    (client_id,) = r.fetchone()
+    await db_session.commit()
+    booking_id, _ = await create_booking(
+        db_session,
+        slot_id=slot_id,
+        trainer_id=trainer_id,
+        client_id=client_id,
+        service_id=service_id,
+    )
+    assert booking_id is not None
+    await mark_booking_completed_and_notify(db_session, booking_id)
+    r = await db_session.execute(
+        text(
+            """
+            SELECT id, client_telegram_id FROM booking_completed_notifications
+            WHERE booking_id = :bid
+            """
+        ),
+        {"bid": booking_id},
+    )
+    row = r.fetchone()
+    assert row is not None
+    assert row[1] is None
+
+
+@pytest.mark.asyncio
 async def test_booking_complete_round_sets_client_push_timestamp_after_send(db_session) -> None:
     yesterday = date.today() - timedelta(days=1)
     trainer_id, slot_id, service_id = await _create_trainer_and_slot(

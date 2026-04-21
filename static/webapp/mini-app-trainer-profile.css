@@ -2086,3 +2086,46 @@
     body.profile-block-tour--on .field--age > label .required-dot {
       display: none;
     }
+
+    .settings-push-default {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 10px 0 12px;
+      font-size: 14px;
+      color: var(--tg-theme-text-color);
+      cursor: pointer;
+      user-select: none;
+    }
+    .settings-push-default__input {
+      width: 18px;
+      height: 18px;
+      flex-shrink: 0;
+    }
+    .settings-push-custom {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+    }
+    .settings-push-custom__lead {
+      font-size: 13px;
+      color: var(--tg-theme-hint-color);
+    }
+    .settings-push-custom__sep {
+      color: var(--tg-theme-hint-color);
+      margin: 0 2px;
+    }
+    .settings-push-custom__select {
+      flex: 1;
+      min-width: 112px;
+      max-width: 160px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: 1px solid rgba(128, 128, 128, 0.28);
+      background: var(--tg-theme-bg-color);
+      color: var(--tg-theme-text-color);
+      font-size: 15px;
+      -webkit-appearance: none;
+      appearance: none;
+    }

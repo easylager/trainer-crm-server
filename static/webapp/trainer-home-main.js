@@ -11,7 +11,23 @@
           if (typeof tg.setBackgroundColor === 'function') tg.setBackgroundColor(bgHex);
         } catch (e) {}
       }
-      var initData = tg && tg.initData ? tg.initData : '';
+      /**
+       * Never cache initData at parse time — some Telegram WebViews fill it after the first tick.
+       * Fall back to URL (in-app navigation may preserve init_data as query).
+       */
+      function initDataFromUrl() {
+        try {
+          var qs = new URLSearchParams(window.location.search || '');
+          return qs.get('init_data') || qs.get('initData') || '';
+        } catch (e) {
+          return '';
+        }
+      }
+      function getInitData() {
+        var t = window.Telegram && window.Telegram.WebApp;
+        var raw = (t && t.initData) || initDataFromUrl();
+        return raw ? String(raw) : '';
+      }
       /** Set after GET /trainer/access when initData present (onboarding vs active). */
       var trainerAccessSnapshot = null;
 
@@ -89,22 +105,25 @@
 
       function headersJson() {
         var h = { 'Content-Type': 'application/json' };
-        if (tg && tg.initData) h['X-Telegram-Init-Data'] = tg.initData;
+        var raw = getInitData();
+        if (raw) h['X-Telegram-Init-Data'] = raw;
         return h;
       }
       function withInit(url) {
-        if (!initData) return url;
-        return url + (url.indexOf('?') === -1 ? '?' : '&') + 'init_data=' + encodeURIComponent(initData);
+        var raw = getInitData();
+        if (!raw) return url;
+        return url + (url.indexOf('?') === -1 ? '?' : '&') + 'init_data=' + encodeURIComponent(raw);
       }
       function apiUrlWithQuery(path) {
         var url = '/api/webapp' + path;
-        if (tg && tg.initData) url += (url.indexOf('?') >= 0 ? '&' : '?') + 'init_data=' + encodeURIComponent(tg.initData);
+        var raw = getInitData();
+        if (raw) url += (url.indexOf('?') >= 0 ? '&' : '?') + 'init_data=' + encodeURIComponent(raw);
         return url;
       }
 
       /** Same aggregate as «Профиль»: if шапка shows «Одобрено», hub must not stay in onboarding lock. */
       function fetchTrainerProfileForHub() {
-        if (!initData) return Promise.resolve({ ok: false, data: null });
+        if (!getInitData()) return Promise.resolve({ ok: false, data: null });
         return fetch(apiUrlWithQuery('/trainer/profile'), { headers: headersJson() })
           .then(function(r) {
             return r.json().then(function(d) {
@@ -188,7 +207,7 @@
 
       /** Schedule, clients, etc. — only after trainer account is active (profile stays open for onboarding). */
       function canOpenTrainerSectionsSync() {
-        if (!initData) return false;
+        if (!getInitData()) return false;
         /* Checklist / snapshot first: same API answers user sees in Network; do NOT require TrainerMiniAppGate. */
         if (hubDataSaysTrainerActive(hubOnboardingData)) return true;
         if (hubDataSaysTrainerActive(trainerAccessSnapshot)) return true;
@@ -253,7 +272,7 @@
       function syncHubHeroScheduleClick() {
         var el = document.getElementById('heroScheduleCta');
         if (!el) return;
-        var allowed = !!initData && hubLastTodayCount === 0 && canOpenTrainerSectionsSync();
+        var allowed = !!getInitData() && hubLastTodayCount === 0 && canOpenTrainerSectionsSync();
         el.disabled = !allowed;
         el.classList.toggle('hub-hero-main--nav', allowed);
         if (allowed) {
@@ -286,12 +305,12 @@
           return;
         }
         /* After moderation, is_active flips on the server while WebView keeps stale JS state — always refetch before blocking. */
-        if (!initData || !window.TrainerMiniAppGate) {
+        if (!getInitData() || !window.TrainerMiniAppGate) {
           showTrainerOnboardingNavAlert();
           return;
         }
         Promise.all([
-          window.TrainerMiniAppGate.fetchAccess(initData).catch(function() {
+          window.TrainerMiniAppGate.fetchAccess(getInitData()).catch(function() {
             return null;
           }),
           fetchTrainerProfileForHub(),
@@ -323,12 +342,12 @@
           onAllowed();
           return;
         }
-        if (!initData || !window.TrainerMiniAppGate) {
+        if (!getInitData() || !window.TrainerMiniAppGate) {
           showTrainerOnboardingNavAlert();
           return;
         }
         Promise.all([
-          window.TrainerMiniAppGate.fetchAccess(initData).catch(function() {
+          window.TrainerMiniAppGate.fetchAccess(getInitData()).catch(function() {
             return null;
           }),
           fetchTrainerProfileForHub(),
@@ -382,11 +401,6 @@
       function hubRhythmHintDismissUntilStorageKey() {
         var base = hubRhythmHintStorageKeyBase();
         return base ? base + '_dismiss_until' : null;
-      }
-
-      function hubRhythmHintLastShownStorageKey() {
-        var base = hubRhythmHintStorageKeyBase();
-        return base ? base + '_last_shown' : null;
       }
 
       function hubRhythmDismissKey(hintId) {
@@ -490,7 +504,40 @@
       function buildHubRhythmCandidates() {
         var out = [];
         var d = hubOnboardingData;
-        if (!d || !initData) return out;
+        if (!d || !getInitData()) return out;
+
+        /* After first booking: nudge catalog path (profile / moderation / visibility) — runs even before full hub unlock. */
+        if (onboardingBookingStepDone(d) && !isRhythmHintDismissed('catalog_publication')) {
+          var catVis = d.is_catalog_visible !== false && d.is_catalog_visible !== 0;
+          var inPublicCatalog = !!d.is_active && !!d.profile_complete && !!catVis;
+          if (!inPublicCatalog) {
+            var body = '';
+            var ctaLab = 'Профиль';
+            if (!d.is_active && !d.profile_complete) {
+              body =
+                'Чтобы вас находили в общем каталоге, доведите профиль до проверки: так мы подтверждаем карточку перед публикацией.';
+            } else if (!d.is_active && d.profile_complete) {
+              body =
+                'Профиль отправлен на проверку. После активации аккаунта вас смогут найти в каталоге — это следующий шаг к новым клиентам из списка.';
+            } else if (d.is_active && !d.profile_complete) {
+              body =
+                'Для показа в каталоге закройте критерии профиля — в разделе статуса видно, что ещё важно для публикации.';
+            } else if (d.is_active && !catVis) {
+              body =
+                'Сейчас вас нет в общем списке. Включите «Показать в каталоге» в профиле, когда будете готовы к новым обращениям оттуда.';
+            }
+            if (body) {
+              out.push({
+                id: 'catalog_publication',
+                priority: 108,
+                text: body,
+                ctaLabel: ctaLab,
+                action: 'profile_catalog',
+              });
+            }
+          }
+        }
+
         var active = !!d.is_active;
         var complete = onboardingAllComplete(d);
         if (!active || !complete) return out;
@@ -504,8 +551,15 @@
         var coverage = getHubSlotCoverage(d);
         var thisWeekReady = coverage.thisWeekCount > 0;
         var nextWeekReady = coverage.nextWeekCount > 0;
+        /* Until weekly template exists, slot nudges fight onboarding — defer them while template hint is active. */
+        var slotRhythmDeferredForTemplateOnboarding =
+          wd === 0 && !isRhythmHintDismissed('template');
 
-        if (availThis === 0 && bookThis < HUB_RHYTHM_BOOKINGS_LOW_THRESHOLD) {
+        if (
+          !slotRhythmDeferredForTemplateOnboarding &&
+          availThis === 0 &&
+          bookThis < HUB_RHYTHM_BOOKINGS_LOW_THRESHOLD
+        ) {
           out.push({
             id: 'slots_this_week',
             priority: 100,
@@ -517,7 +571,7 @@
 
         var nextWeekGap =
           slotsNext === 0 || (availNext === 0 && bookNext < HUB_RHYTHM_BOOKINGS_LOW_THRESHOLD);
-        if (nextWeekGap) {
+        if (!slotRhythmDeferredForTemplateOnboarding && nextWeekGap) {
           out.push({
             id: 'slots_next_week',
             priority: 90,
@@ -549,29 +603,17 @@
           }
         }
 
-        var now = Date.now();
-        var recentlyShown = false;
-        var tenDaysMs = 10 * 24 * 60 * 60 * 1000;
-        try {
-          var shownKey = hubRhythmHintLastShownStorageKey();
-          var lastShownRaw = shownKey ? parseInt(String(localStorage.getItem(shownKey) || '0'), 10) : 0;
-          var lastShown = isNaN(lastShownRaw) ? 0 : lastShownRaw;
-          recentlyShown = lastShown > 0 && now - lastShown < tenDaysMs;
-        } catch (e) {
-          recentlyShown = false;
-        }
-        if (
-          wd === 0 &&
-          thisWeekReady &&
-          nextWeekReady &&
-          !isRhythmHintDismissed('template') &&
-          !recentlyShown
-        ) {
+        /* Weekly template: do not gate on _last_shown — that hid the candidate for 10d after any render and left only slot hints. */
+        /* Weekly template = onboarding before «maintenance» slot nudges — higher priority than slots_this/next. */
+        if (wd === 0 && !isRhythmHintDismissed('template')) {
+          var tplText =
+            thisWeekReady && nextWeekReady
+              ? 'Добавьте часы в шаблон расписания — потом неделю можно накатить из шаблона за пару шагов.'
+              : 'Создайте шаблон недели с постоянными часами — так проще держать ритм и наполнять расписание после старта.';
           out.push({
             id: 'template',
-            priority: 50,
-            text:
-              'Добавьте часы в шаблон расписания — потом неделю можно накатить из шаблона за пару шагов.',
+            priority: 104,
+            text: tplText,
             ctaLabel: 'Шаблон в расписании',
             action: 'template',
           });
@@ -624,6 +666,20 @@
               navigateTo('trainer-clients');
             }
           });
+          return;
+        }
+        if (cand.action === 'profile_catalog') {
+          var od2 = hubOnboardingData;
+          if (od2 && !od2.is_active && od2.tt_minimal_complete && !od2.profile_complete) {
+            /* TTV already done — ?onboarding=blocks would finish the tour with zero steps and redirect home. */
+            navigateToWithHash('trainer-profile', 'moderation');
+            return;
+          }
+          if (od2 && od2.is_active && !od2.profile_complete) {
+            navigateToWithHash('trainer-profile', 'moderation');
+            return;
+          }
+          navigateTo('trainer-profile');
         }
       }
 
@@ -660,12 +716,6 @@
           var cta = document.getElementById('hubRhythmSlot' + s + 'Cta');
           if (txt) txt.textContent = cand.text;
           if (cta) cta.textContent = cand.ctaLabel;
-          if (cand.id === 'template') {
-            try {
-              var sk = hubRhythmHintLastShownStorageKey();
-              if (sk) localStorage.setItem(sk, String(Date.now()));
-            } catch (e) { /* ignore */ }
-          }
         }
       }
 
@@ -685,7 +735,12 @@
               var hid = container && container.dataset.hubRhythmHintId;
               if (hid) {
                 var days =
-                  hid === 'share_link' || hid === 'template' || hid === 'client_notes' ? 14 : 7;
+                  hid === 'share_link' ||
+                  hid === 'template' ||
+                  hid === 'client_notes' ||
+                  hid === 'catalog_publication'
+                    ? 14
+                    : 7;
                 setRhythmDismissUntilMs(hid, Date.now() + days * 24 * 60 * 60 * 1000);
               }
               applyHubRhythmResolver();
@@ -947,7 +1002,7 @@
       function loadOnboardingChecklist() {
         var strip = document.getElementById('onboardingStrip');
         if (!strip) return;
-        if (!initData) {
+        if (!getInitData()) {
           strip.setAttribute('hidden', 'hidden');
           strip.style.display = 'none';
           syncHubWeekRhythmPanel();
@@ -1001,7 +1056,7 @@
           if (hubVisibilityDebounceTimer) clearTimeout(hubVisibilityDebounceTimer);
           hubVisibilityDebounceTimer = setTimeout(function() {
             hubVisibilityDebounceTimer = null;
-            if (!initData) return;
+            if (!getInitData()) return;
             ensureHubBookingsPlaceholder();
             /* One bootstrap round-trip instead of access + profile + bookings (same as cold start). */
             fetch(
@@ -1041,7 +1096,7 @@
                 loadOnboardingChecklist();
                 if (!window.TrainerMiniAppGate) return;
                 Promise.all([
-                  window.TrainerMiniAppGate.fetchAccess(initData).catch(function() {
+                  window.TrainerMiniAppGate.fetchAccess(getInitData()).catch(function() {
                     return null;
                   }),
                   fetchTrainerProfileForHub(),
@@ -1110,7 +1165,7 @@
        * Safe to call in parallel with loadBookings; re-renders hints when done.
        */
       function loadHubRequestsSummary() {
-        if (!initData || !canOpenTrainerSectionsSync()) {
+        if (!getInitData() || !canOpenTrainerSectionsSync()) {
           hubRequestsStatReady = false;
           hubLastNewRequestsCount = 0;
           renderHubSummaryHints();
@@ -1272,7 +1327,7 @@
           return;
         }
         el.removeAttribute('aria-hidden');
-        if (!initData) {
+        if (!getInitData()) {
           el.setAttribute('hidden', '');
           el.innerHTML = '';
           return;
@@ -1345,7 +1400,7 @@
 
       /** Loads accrual MTD (sessions + pass + cert sales); updates hubMtdRevenueText and hero. */
       function fetchHubMtdRevenue() {
-        if (!initData) return;
+        if (!getInitData()) return;
         if (hubRevenueSkipFetchOnce) {
           hubRevenueSkipFetchOnce = false;
           applyHubHero();
@@ -1406,7 +1461,7 @@
           return;
         }
 
-        if (!initData) {
+        if (!getInitData()) {
           wrap.setAttribute('aria-hidden', 'true');
           wrap.style.display = 'none';
           renderHubSummaryHints();
@@ -1462,7 +1517,7 @@
         else greetingText = 'Доброй ночи';
         greeting.textContent = greetingText;
 
-        if (!initData) {
+        if (!getInitData()) {
           title.textContent = 'Войдите через бота';
           subtitle.textContent = 'Откройте экран из бота тренера — подтянутся записи и быстрый доступ к разделам.';
           setStats(0, 0);
@@ -1850,16 +1905,6 @@
         hubInlineToastTimer = setTimeout(hideHubInlineToast, Math.max(1800, Number(opts.durationMs) || 4200));
       }
 
-      function scrollToHubBookingsBlock() {
-        var block = document.getElementById('bookingsBlock');
-        if (!block) return;
-        try {
-          block.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        } catch (e) {
-          block.scrollIntoView();
-        }
-      }
-
       function stashHubPendingBookingHighlight(bookingId) {
         var bid = Number(bookingId);
         hubPendingHighlightBookingId = !isNaN(bid) && bid > 0 ? bid : null;
@@ -1888,8 +1933,6 @@
           fallbackText || 'Клиент добавлен в расписание. Смотрите блок «Ближайшие записи».',
           {
             kind: 'success',
-            actionLabel: 'К записям',
-            onAction: scrollToHubBookingsBlock,
             durationMs: 5000,
           }
         );
@@ -1911,17 +1954,121 @@
       var hubBookSlotWhenLabel = '';
       var hubBookPendingClientId = null;
       var hubBookPendingClientName = '';
+      /** From last GET /trainer/clients (or prefetch). True ⇒ show «Выбрать из списка» immediately; else probing until fetch. */
+      var hubTrainerHasClientsCache = null;
+      var HUB_BOOK_OPT_EXISTING_HINT = 'Существующий клиент';
+
+      function prefetchHubTrainerClientsPresence() {
+        if (!getInitData()) return;
+        if (
+          trainerAccessSnapshot &&
+          window.TrainerMiniAppGate &&
+          !window.TrainerMiniAppGate.isActive(trainerAccessSnapshot)
+        ) {
+          return;
+        }
+        fetch(apiUrlWithQuery('/trainer/clients'), { headers: headersJson(), cache: 'no-store' })
+          .then(function(r) {
+            return r.ok ? r.json() : null;
+          })
+          .then(function(data) {
+            if (!data || !Array.isArray(data.clients)) return;
+            hubTrainerHasClientsCache = data.clients.length > 0;
+          })
+          .catch(function() {});
+      }
+
+      function hubApplyTrainerHasClientsFromPayload(clientsPayload) {
+        var list = (clientsPayload && clientsPayload.clients) || [];
+        hubTrainerHasClientsCache = list.length > 0;
+        return hubTrainerHasClientsCache;
+      }
 
       function setHubBookOptExistingVisible(show) {
         var btn = document.getElementById('hubBookOptExisting');
         if (!btn) return;
+        btn.classList.remove('hub-book-opt-existing--probing');
+        btn.disabled = false;
+        btn.removeAttribute('aria-busy');
+        var hint = btn.querySelector('.btn-book-option-hint');
+        if (hint) hint.textContent = HUB_BOOK_OPT_EXISTING_HINT;
         btn.style.display = show ? '' : 'none';
         btn.setAttribute('aria-hidden', show ? 'false' : 'true');
+      }
+
+      /** Same layout slot as the final button — no vertical reflow while clients list is loading. */
+      function setHubBookOptExistingProbing() {
+        var btn = document.getElementById('hubBookOptExisting');
+        if (!btn) return;
+        btn.style.display = '';
+        btn.setAttribute('aria-hidden', 'false');
+        btn.classList.add('hub-book-opt-existing--probing');
+        btn.disabled = true;
+        btn.setAttribute('aria-busy', 'true');
+        var hint = btn.querySelector('.btn-book-option-hint');
+        if (hint) hint.textContent = 'Загрузка…';
+      }
+
+      function syncHubBookOptExistingOnModalOpen() {
+        if (hubTrainerHasClientsCache === true) {
+          setHubBookOptExistingVisible(true);
+        } else {
+          setHubBookOptExistingProbing();
+        }
+      }
+
+      function clearHubBookChoiceQuickUi() {
+        var sk = document.getElementById('hubBookChoiceSkel');
+        if (sk) {
+          sk.hidden = true;
+          sk.setAttribute('aria-hidden', 'true');
+          sk.removeAttribute('role');
+        }
+        var newBtn = document.getElementById('hubBookOptNew');
+        if (newBtn) {
+          newBtn.disabled = false;
+          newBtn.classList.remove('hub-book-opt--awaiting-data');
+        }
+        var exBtn = document.getElementById('hubBookOptExisting');
+        if (exBtn) {
+          exBtn.disabled = false;
+          exBtn.classList.remove('hub-book-opt--awaiting-data');
+        }
+      }
+
+      function setHubBookChoiceQuickLoading(on) {
+        var sk = document.getElementById('hubBookChoiceSkel');
+        var newBtn = document.getElementById('hubBookOptNew');
+        var exBtn = document.getElementById('hubBookOptExisting');
+        if (sk) {
+          sk.hidden = !on;
+          sk.setAttribute('aria-hidden', on ? 'false' : 'true');
+          if (on) sk.setAttribute('role', 'status');
+          else sk.removeAttribute('role');
+        }
+        if (newBtn) {
+          newBtn.disabled = !!on;
+          newBtn.classList.toggle('hub-book-opt--awaiting-data', !!on);
+        }
+        if (exBtn) {
+          if (on) {
+            exBtn.disabled = true;
+            exBtn.style.display = '';
+            exBtn.setAttribute('aria-hidden', 'false');
+            exBtn.classList.remove('hub-book-opt-existing--probing');
+            exBtn.classList.add('hub-book-opt--awaiting-data');
+            var hint = exBtn.querySelector('.btn-book-option-hint');
+            if (hint) hint.textContent = HUB_BOOK_OPT_EXISTING_HINT;
+          } else {
+            exBtn.classList.remove('hub-book-opt--awaiting-data');
+          }
+        }
       }
 
       function closeHubBookGroupModals() {
         var m = document.getElementById('hubModalBookGroupSlot');
         var c = document.getElementById('hubModalBookGroupConfirm');
+        clearHubBookChoiceQuickUi();
         if (m) {
           m.style.display = 'none';
           m.setAttribute('aria-hidden', 'true');
@@ -2100,8 +2247,7 @@
       function openHubBookModalShell() {
         resetHubBookFormFields();
         resetHubBookSteps();
-        // Avoid one frame (or more) of «Выбрать из списка» before GET /trainer/clients returns hasClients=false.
-        setHubBookOptExistingVisible(false);
+        syncHubBookOptExistingOnModalOpen();
         var cfm = document.getElementById('hubModalBookGroupConfirm');
         if (cfm) {
           cfm.style.display = 'none';
@@ -2158,12 +2304,69 @@
           hour_start: 8,
           hour_end: 21,
           step_minutes: 15,
+          slot_duration_minutes: null,
         };
+      }
+
+      /** When set, GET /schedule `schedule_grid` fixes slot length (arena_schedule_presets.slot_duration_minutes). */
+      function hubFixedSlotDurationMinutes() {
+        var p = hubQuickBookScheduleGrid || hubDefaultScheduleGrid();
+        if (p.slot_duration_minutes == null || p.slot_duration_minutes === '') return null;
+        var n = parseInt(p.slot_duration_minutes, 10);
+        if (isNaN(n) || n < 15) return null;
+        return Math.min(24 * 60, n);
+      }
+
+      function hubEnsureDurationSelectOption(selectEl, minutes) {
+        if (!selectEl || minutes == null) return;
+        var v = String(minutes);
+        if (selectEl.querySelector('option[value="' + v + '"]')) return;
+        var o = document.createElement('option');
+        o.value = v;
+        o.textContent = minutes + ' минут';
+        selectEl.appendChild(o);
+      }
+
+      function hubSyncQuickBookDurationFromGrid() {
+        var stack = document.getElementById('hubQuickBookDurationStack');
+        var hint = document.getElementById('hubQuickBookDurationFixedHint');
+        var durEl = document.getElementById('hubQuickBookDuration');
+        var wrap = document.getElementById('hubQuickBookDatetimeWrap');
+        if (!durEl) return;
+        var fixed = hubFixedSlotDurationMinutes();
+        if (fixed != null) {
+          hubEnsureDurationSelectOption(durEl, fixed);
+          durEl.value = String(fixed);
+          durEl.disabled = true;
+          if (stack) stack.style.display = 'none';
+          if (hint) {
+            hint.removeAttribute('hidden');
+            hint.textContent = 'Длительность: ' + fixed + ' мин (зафиксировано для площадки).';
+            hint.setAttribute('aria-hidden', 'false');
+          }
+        } else {
+          durEl.disabled = false;
+          if (stack) stack.style.display = '';
+          if (hint) {
+            hint.setAttribute('hidden', 'hidden');
+            hint.textContent = '';
+            hint.setAttribute('aria-hidden', 'true');
+          }
+        }
+        if (wrap) wrap.classList.toggle('hub-quickbook-datetime-wrap--duration-custom', fixed == null);
+      }
+
+      function setHubQuickBookDatetimeLoading(on) {
+        var wrap = document.getElementById('hubQuickBookDatetimeWrap');
+        var modal = document.getElementById('hubModalQuickBookDatetime');
+        if (wrap) wrap.classList.toggle('hub-quickbook-datetime-wrap--loading', !!on);
+        if (modal) modal.setAttribute('aria-busy', on ? 'true' : 'false');
       }
 
       function hubApplyQuickBookScheduleGrid(data) {
         if (data && data.schedule_grid) hubQuickBookScheduleGrid = data.schedule_grid;
         else if (!hubQuickBookScheduleGrid) hubQuickBookScheduleGrid = hubDefaultScheduleGrid();
+        hubSyncQuickBookDurationFromGrid();
       }
 
       function hubAllowedStartMinutesFromGrid() {
@@ -2288,16 +2491,28 @@
         var durEl = document.getElementById('hubQuickBookDuration');
         var btnGo = document.getElementById('hubQuickBookContinue');
         if (!sel || !isoDate) return Promise.resolve();
-        var dm = durEl ? parseInt(durEl.value, 10) : 45;
-        if (isNaN(dm) || dm < 15) dm = 45;
+        var fixedDm = hubFixedSlotDurationMinutes();
+        var dm =
+          fixedDm != null
+            ? fixedDm
+            : durEl
+              ? parseInt(durEl.value, 10)
+              : 45;
+        if (fixedDm == null && (isNaN(dm) || dm < 15)) dm = 45;
         // Duration-only changes reuse cached `/schedule` payload to avoid layout "jumps" from refetch + disabled selects.
         if (hubQuickBookSlotsIsoDate === isoDate) {
           hubRebuildQuickBookTimeSelect(isoDate, dm);
+          setHubQuickBookDatetimeLoading(false);
           return Promise.resolve();
         }
+        // Paint times from preset grid immediately — empty <select> until /schedule returned caused visible flicker.
+        hubQuickBookSlotsForDay = [];
+        hubQuickBookSlotsIsoDate = null;
+        hubRebuildQuickBookTimeSelect(isoDate, dm);
         var fetchGen = ++hubQuickBookScheduleFetchGen;
         sel.disabled = true;
         if (btnGo) btnGo.disabled = true;
+        setHubQuickBookDatetimeLoading(true);
         if (!silentLoadingHint) {
           setHubQuickBookHint('Загрузка сетки расписания…', true);
         }
@@ -2320,6 +2535,7 @@
             hubQuickBookSlotsIsoDate = isoDate;
             hubRebuildQuickBookTimeSelect(isoDate, dm);
             sel.disabled = false;
+            setHubQuickBookDatetimeLoading(false);
           })
           .catch(function() {
             if (fetchGen !== hubQuickBookScheduleFetchGen) return;
@@ -2336,6 +2552,7 @@
             });
             if (btnGo) btnGo.disabled = false;
             setHubQuickBookHint('Не удалось проверить занятость. Время можно выбрать вручную.', true);
+            setHubQuickBookDatetimeLoading(false);
           });
       }
 
@@ -2357,6 +2574,7 @@
           hubQuickBookRefreshTimer = null;
         }
         hubQuickBookScheduleFetchGen += 1;
+        setHubQuickBookDatetimeLoading(false);
         m.style.display = 'none';
         m.setAttribute('aria-hidden', 'true');
       }
@@ -2370,10 +2588,12 @@
           hubToast('Не удалось открыть форму записи. Обновите страницу.');
           return;
         }
+        setHubQuickBookDatetimeLoading(false);
         var today = todayIsoLocal();
         dateEl.min = today;
         if (!dateEl.value || dateEl.value < today) dateEl.value = today;
         if (!durEl.value) durEl.value = '45';
+        hubSyncQuickBookDurationFromGrid();
         hubQuickBookSlotsForDay = [];
         hubQuickBookSlotsIsoDate = null;
         hubQuickBookScheduleFetchGen += 1;
@@ -2385,6 +2605,13 @@
 
       function openHubQuickBookClientFlow(slotDate, startTime, durationMinutes) {
         if (!openHubBookModalShell()) return;
+        setHubBookChoiceQuickLoading(true);
+        setHubBookServiceVisibility(false);
+        fillHubBookServiceSelect([]);
+        var ptHost = document.getElementById('hubBookPriceTierRadios');
+        var ptWrap = document.getElementById('hubBookPriceTierWrap');
+        if (ptHost) ptHost.innerHTML = '';
+        if (ptWrap) ptWrap.style.display = 'none';
         hubBookSlotId = null;
         hubBookPriceVariantId = null;
         hubBookQuickPayload = {
@@ -2402,10 +2629,13 @@
           }),
         ])
           .then(function(results) {
+            setHubBookChoiceQuickLoading(false);
             var servicePayload = results[0] || {};
             var clientsPayload = results[1] || {};
             hubBookQuickServices = servicePayload.services || [];
             if (!hubBookQuickServices.length) {
+              hubApplyTrainerHasClientsFromPayload(clientsPayload);
+              setHubBookOptExistingVisible(false);
               closeHubBookGroupModals();
               resetHubBookSlotState();
               hubToast('Добавьте услугу в профиле, чтобы записывать клиентов.');
@@ -2415,10 +2645,13 @@
             fillHubBookServiceSelect(hubBookQuickServices);
             setHubBookServiceVisibility(true);
             syncHubBookPriceTierRadios();
-            var hasClients = !!(clientsPayload.clients && clientsPayload.clients.length);
+            var hasClients = hubApplyTrainerHasClientsFromPayload(clientsPayload);
             setHubBookOptExistingVisible(hasClients);
           })
           .catch(function() {
+            setHubBookChoiceQuickLoading(false);
+            hubTrainerHasClientsCache = null;
+            setHubBookOptExistingVisible(false);
             closeHubBookGroupModals();
             resetHubBookSlotState();
             hubToast('Не удалось подготовить форму записи. Повторите попытку.');
@@ -2505,10 +2738,11 @@
             return r.json();
           })
           .then(function(data) {
-            var has = !!(data.clients && data.clients.length);
+            var has = hubApplyTrainerHasClientsFromPayload(data);
             setHubBookOptExistingVisible(has);
           })
           .catch(function() {
+            hubTrainerHasClientsCache = null;
             setHubBookOptExistingVisible(false);
           });
       }
@@ -2673,6 +2907,7 @@
                 return hubPostBooking(data.client_id);
               })
               .then(function(res) {
+                hubTrainerHasClientsCache = true;
                 var successText = hubBookQuickPayload
                   ? 'Клиент добавлен и запись успешно создана.'
                   : 'Клиент добавлен и записан на занятие.';
@@ -2720,7 +2955,9 @@
             if (!dateEl || !timeEl || !durEl) return;
             var slotDate = String(dateEl.value || '').trim();
             var startMinutes = parseInt(String(timeEl.value || ''), 10);
-            var duration = parseInt(String(durEl.value || '45'), 10);
+            var fixedDur = hubFixedSlotDurationMinutes();
+            var duration =
+              fixedDur != null ? fixedDur : parseInt(String(durEl.value || '45'), 10);
             if (!slotDate) {
               hubToast('Выберите дату.');
               return;
@@ -2729,7 +2966,7 @@
               hubToast('Выберите время начала.');
               return;
             }
-            if (isNaN(duration) || duration < 15) duration = 45;
+            if (fixedDur == null && (isNaN(duration) || duration < 15)) duration = 45;
             var availability = hubQuickBookSlotAvailability(
               hubQuickBookSlotsForDay || [],
               startMinutes,
@@ -2801,7 +3038,7 @@
         TILES.forEach(function(t) {
           if (t.feature === 'groups' && (!hubGroupClassesEnabled || !hubGroupsModuleEnabled)) return;
           if (t.tier === 'analytics') {
-            if (initData && !hubSubscriptionStatusReady) {
+            if (getInitData() && !hubSubscriptionStatusReady) {
               out.push(HUB_TILE_SKELETON_ANALYTICS);
               return;
             }
@@ -2874,7 +3111,7 @@
 
       /** Cold bootstrap: HTML may be cached without skeleton; keep placeholder until renderBookings / loadBookings. */
       function ensureHubBookingsPlaceholder() {
-        if (!initData) return;
+        if (!getInitData()) return;
         var bb = document.getElementById('bookingsBlock');
         if (!bb || bb.querySelector('.hub-bookings-skel')) return;
         if (bb.querySelector('.slot-row, .bd-trainer-gate, .hub-empty')) return;
@@ -3063,7 +3300,7 @@
             '<div class="bd-trainer-gate" style="margin-top:4px">' +
             window.TrainerMiniAppGate.gateCardHtml(access, true) +
             '</div>';
-          window.TrainerMiniAppGate.wireGate(bb, initData);
+          window.TrainerMiniAppGate.wireGate(bb, getInitData());
         } else {
           bb.innerHTML =
             '<div class="hub-empty">Раздел откроется после активации профиля. Заполните анкету в «Профиль» или дождитесь проверки — это не сбой сети.</div>';
@@ -3093,7 +3330,7 @@
       }
 
       function loadBookings() {
-        if (!initData) {
+        if (!getInitData()) {
           setStateMessage('', '');
           hubLastBookingsDays = null;
           hubLastTodayCount = 0;
@@ -3142,8 +3379,8 @@
             /* 401/403: API requires active trainer — same as onboarding, never blame «network». */
             if (o.status === 401 || o.status === 403) {
               setStateMessage('', '');
-              if (window.TrainerMiniAppGate && initData) {
-                return window.TrainerMiniAppGate.fetchAccess(initData)
+              if (window.TrainerMiniAppGate && getInitData()) {
+                return window.TrainerMiniAppGate.fetchAccess(getInitData())
                   .then(function(a) {
                     trainerAccessSnapshot = a;
                     applyHubLockedState();
@@ -3182,8 +3419,8 @@
             if (err && err.name === 'AbortError') return;
             setStateMessage('', '');
             /* Offline / timeout: if account likely not active, avoid scary copy */
-            if (window.TrainerMiniAppGate && initData) {
-              window.TrainerMiniAppGate.fetchAccess(initData)
+            if (window.TrainerMiniAppGate && getInitData()) {
+              window.TrainerMiniAppGate.fetchAccess(getInitData())
                 .then(function(a) {
                   trainerAccessSnapshot = a;
                   applyHubLockedState();
@@ -3291,7 +3528,7 @@
 
       /** Server-side funnel: first time trainer copied a client-facing booking/invite link. */
       function postHubClientInviteLinkFirstCopyRecorded() {
-        if (!initData) return;
+        if (!getInitData()) return;
         fetch(apiUrlWithQuery('/trainer/welcome-link/first-copy'), {
           method: 'POST',
           headers: headersJson(),
@@ -3301,7 +3538,7 @@
       function applyHubShareButtonVisibility() {
         var btn = document.getElementById('hubShareBookingLinkBtn');
         if (!btn) return;
-        var allowed = !!initData && hubOnlineBookingEnabled;
+        var allowed = !!getInitData() && hubOnlineBookingEnabled;
         btn.hidden = !allowed;
         btn.disabled = !allowed;
       }
@@ -3633,7 +3870,7 @@
       }
 
       function loadSubscriptionStatus() {
-        if (!initData) {
+        if (!getInitData()) {
           hubSubscriptionStatusReady = true;
           hasAnalyticsAccess = false;
           hubOnlineBookingEnabled = false;
@@ -3890,7 +4127,7 @@
       function runHubAfterAccess(opts) {
         opts = opts || {};
         var bs = opts.bootstrapPayload;
-        if (initData) {
+        if (getInitData()) {
           if (!bs || !bs.subscription_status) {
             hubSubscriptionStatusReady = false;
           }
@@ -3904,7 +4141,7 @@
             showHubSubscriptionCelebrationIfPending();
           });
         }
-        if (!initData) {
+        if (!getInitData()) {
           loadBookings();
           loadHubRequestsSummary();
           loadOnboardingChecklist();
@@ -3937,9 +4174,10 @@
         }
       }
 
-      if (!initData) {
-        runHubAfterAccess({});
-      } else {
+      var hubTrainerMainBootstrapDone = false;
+      function runTrainerHubMainBootstrap() {
+        if (!getInitData() || hubTrainerMainBootstrapDone) return;
+        hubTrainerMainBootstrapDone = true;
         ensureHubBookingsPlaceholder();
         fetch(
           apiUrlWithQuery(
@@ -3954,8 +4192,10 @@
           .then(function(data) {
             applyHubBootstrapPayload(data);
             runHubAfterAccess({ bootstrapPayload: data });
+            prefetchHubTrainerClientsPresence();
           })
           .catch(function() {
+            hubTrainerMainBootstrapDone = false;
             if (!window.TrainerMiniAppGate) {
               fetchTrainerProfileForHub().then(function(prof) {
                 mergeHubAccessFromProfilePayload(prof);
@@ -3963,7 +4203,7 @@
               });
             } else {
               Promise.all([
-                window.TrainerMiniAppGate.fetchAccess(initData).catch(function() {
+                window.TrainerMiniAppGate.fetchAccess(getInitData()).catch(function() {
                   return null;
                 }),
                 fetchTrainerProfileForHub(),
@@ -3976,6 +4216,15 @@
               });
             }
           });
+      }
+
+      if (!getInitData()) {
+        runHubAfterAccess({});
+        [50, 150, 300, 600, 1200].forEach(function(ms) {
+          setTimeout(runTrainerHubMainBootstrap, ms);
+        });
+      } else {
+        runTrainerHubMainBootstrap();
       }
 
       (function wireHubGroupModal() {

@@ -55,7 +55,6 @@ from src.application.booking_use_cases import (
     decline_booking,
     generate_reminders_for_booking,
     get_booking_milestone_display_for_trainer,
-    get_booking_no_pass_notify_payload,
     get_trainer_default_city_and_service,
     list_trainer_services_for_welcome_link,
     resolve_service_id_for_generic_welcome_link,
@@ -4125,34 +4124,6 @@ async def post_trainer_booking_complete(
     result = await mark_booking_completed_by_trainer(session, booking_id, trainer_id)
     if not result:
         raise HTTPException(status_code=400, detail="Booking not found or not confirmed")
-    if not result.get("pass_redeemed"):
-        payload = await get_booking_no_pass_notify_payload(session, booking_id)
-        if payload and payload.get("trainer_telegram_id"):
-            try:
-                text = msg.TRAINER_NO_PASS_FOR_SERVICE.format(
-                    client_name=payload["client_name"],
-                    date=payload["date"],
-                    time=payload["time"],
-                    service_name=payload["service_name"],
-                )
-                settings = Settings()
-                trainer_bot = Bot(
-                    token=settings.telegram_bot_token_trainer,
-                    default=DefaultBotProperties(parse_mode=ParseMode.HTML),
-                )
-                try:
-                    await trainer_bot.send_message(
-                        chat_id=payload["trainer_telegram_id"],
-                        text=text,
-                    )
-                finally:
-                    await trainer_bot.session.close()
-            except Exception as e:  # noqa: BLE001
-                logger.warning(
-                    "Failed to send no-pass notification to trainer %s: %s",
-                    payload.get("trainer_telegram_id"),
-                    e,
-                )
     return result
 
 
@@ -4588,6 +4559,7 @@ class DossierProfileBody(BaseModel):
     goals: str | None = None
     limitations: str | None = None
     level: str | None = None
+    season_goal: str | None = None
 
 
 class DossierEntryBody(BaseModel):
@@ -4639,6 +4611,7 @@ async def update_client_dossier_profile_route(
         goals=body.goals,
         limitations=body.limitations,
         level=body.level,
+        season_goal=body.season_goal,
     )
 
 

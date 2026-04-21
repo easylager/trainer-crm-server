@@ -26,7 +26,7 @@ if str(ROOT) not in sys.path:
 from aiogram import Bot
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from sqlalchemy import text
 
 from src.application.booking_use_cases import (
@@ -38,6 +38,7 @@ from src.application.booking_use_cases import (
 )
 from src.application.client_use_cases import get_or_create_client
 from src.application.recurring_use_cases import get_slot_status_on_date
+from src.application.subscription_tier_use_cases import trainer_has_crm_access
 from src.bot import messages as msg
 from src.infrastructure.db import async_session_factory
 from src.shared.config import Settings
@@ -200,6 +201,15 @@ async def run_once() -> None:
                     dur_min = dm if dm > 0 else None
             except Exception:
                 dur_min = None
+            base_url = (settings.webapp_base_url or "").rstrip("/")
+            webapp_https = base_url.startswith("https://")
+            cid = p.get("client_id")
+            async with async_session_factory() as crm_s:
+                can_rebook = (
+                    webapp_https
+                    and cid is not None
+                    and await trainer_has_crm_access(crm_s, p["trainer_id"])
+                )
             text_trainer = msg.format_trainer_booking_completed_html(
                 client_name=p.get("client_name") or "Клиент",
                 date=date_str,
@@ -209,10 +219,21 @@ async def run_once() -> None:
                 service_name=p.get("service_name"),
                 price_tier_label=p.get("price_tier_label"),
                 arena_display=p.get("arenas_str"),
+                include_quick_rebook_line=can_rebook,
+                append_no_pass_notice=bool(p.get("trainer_no_pass_footer")),
             )
-            rows_tr = [
-                [InlineKeyboardButton(text=msg.TRAINER_BUTTON_LEAVE_FEEDBACK, callback_data=f"feedback_booking_trainer:{p['booking_id']}")],
-            ]
+            rows_tr: list[list[InlineKeyboardButton]] = []
+            if can_rebook:
+                rows_tr.append(
+                    [
+                        InlineKeyboardButton(
+                            text=msg.TRAINER_BUTTON_BOOK_AGAIN,
+                            web_app=WebAppInfo(
+                                url=f"{base_url}/webapp/schedule-editor?flow=book&client_id={int(cid)}"
+                            ),
+                        ),
+                    ],
+                )
             if slot_date and start_time:
                 sd = slot_date.date() if hasattr(slot_date, "date") else slot_date
                 target_d = sd + timedelta(days=7)
@@ -234,6 +255,14 @@ async def run_once() -> None:
                             ),
                         ],
                     )
+            rows_tr.append(
+                [
+                    InlineKeyboardButton(
+                        text=msg.TRAINER_BUTTON_LEAVE_FEEDBACK,
+                        callback_data=f"feedback_booking_trainer:{p['booking_id']}",
+                    ),
+                ],
+            )
             kb = InlineKeyboardMarkup(inline_keyboard=rows_tr)
             try:
                 await trainer_bot.send_message(chat_id=trainer_tid, text=text_trainer, reply_markup=kb)

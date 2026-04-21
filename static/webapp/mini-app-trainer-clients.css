@@ -447,6 +447,264 @@
       box-sizing: border-box;
       width: 100%;
     }
+    .tc-actions .tc-action-btn__icon {
+      flex-shrink: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .tc-actions .tc-action-btn__label {
+      flex: 1 1 auto;
+      min-width: 0;
+      text-align: center;
+      line-height: 1.25;
+      white-space: normal;
+      /* WebView + flex: text node must not inherit zero/contrast bugs on nested span */
+      color: inherit;
+      overflow: visible;
+    }
+    .tc-actions .bd-btn--primary .tc-action-btn__label {
+      color: var(--app-cta-text, var(--tg-theme-button-text-color, #1a1a1a));
+    }
+    .tc-actions .bd-btn--primary .tc-action-btn__icon {
+      color: inherit;
+    }
+    /* In-page quick book (same overlay pattern as trainer hub). */
+    #tcModalQuickBookDatetime.tc-client-qb-overlay,
+    #tcModalQuickBookService.tc-client-qb-overlay,
+    #tcModalBookConfirm.tc-client-qb-overlay {
+      position: fixed;
+      left: 0;
+      right: 0;
+      top: 0;
+      bottom: 0;
+      width: 100%;
+      height: 100%;
+      max-height: none;
+      box-sizing: border-box;
+      z-index: 11000;
+      align-items: center;
+      justify-content: center;
+      padding: max(16px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom));
+      background: rgba(26, 26, 26, 0.42);
+      -webkit-backdrop-filter: blur(12px);
+      backdrop-filter: blur(12px);
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    #tcModalQuickBookDatetime .tc-client-qb-card.modal,
+    #tcModalQuickBookService .tc-client-qb-card.modal,
+    #tcModalBookConfirm .tc-client-qb-card.modal {
+      position: relative;
+      max-width: 360px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 22px 22px 20px;
+      border-radius: 22px;
+      overflow-x: hidden;
+      max-height: 85vh;
+      overflow-y: auto;
+      background: var(--tg-theme-bg-color);
+      box-shadow:
+        0 0 0 1px rgba(247, 166, 0, 0.14),
+        0 24px 48px -12px rgba(0, 0, 0, 0.28);
+    }
+    #tcModalQuickBookDatetime .book-modal-title,
+    #tcModalQuickBookService .book-modal-title {
+      margin: 0 0 4px;
+      font-size: 1.125rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: var(--tg-theme-text-color);
+    }
+    #tcModalQuickBookService .quick-book-kicker {
+      margin: 0 0 6px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--tg-theme-hint-color);
+    }
+    #tcModalQuickBookDatetime .book-choice-lead,
+    #tcModalQuickBookService .book-choice-lead {
+      margin: 0 0 18px;
+      font-size: 14px;
+      line-height: 1.45;
+      color: var(--tg-theme-hint-color);
+    }
+    #tcModalBookConfirm .book-confirm-title {
+      margin: 0 0 10px;
+      font-size: 1.05rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: var(--tg-theme-text-color);
+    }
+    #tcModalBookConfirm .book-confirm-text {
+      margin: 0 0 20px;
+      font-size: 15px;
+      line-height: 1.45;
+      color: var(--tg-theme-text-color);
+    }
+    #tcModalQuickBookDatetime .book-field-label,
+    #tcModalQuickBookService .book-field-label {
+      display: block;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--tg-theme-hint-color);
+      margin: 0 0 8px;
+    }
+    #tcModalQuickBookDatetime .book-field-stack,
+    #tcModalQuickBookService .book-field-stack {
+      margin-bottom: 16px;
+    }
+    #tcModalQuickBookDatetime #tcQuickBookHint.tc-quickbook-hint {
+      margin: 2px 0 10px;
+      min-height: 2.6em;
+      font-size: 12px;
+      line-height: 1.35;
+      color: var(--tg-theme-hint-color);
+      opacity: 0;
+      transform: translateY(1px);
+      transition: opacity 160ms ease, transform 160ms ease;
+      pointer-events: none;
+    }
+    #tcModalQuickBookDatetime #tcQuickBookHint.tc-quickbook-hint.is-on {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    #tcModalQuickBookDatetime #tcQuickBookDurationFixedHint.tc-quickbook-hint--fixed:not([hidden]) {
+      margin: 0 0 12px;
+      font-size: 13px;
+      line-height: 1.45;
+      color: var(--tg-theme-hint-color);
+      opacity: 1;
+      transform: none;
+      pointer-events: none;
+    }
+    #tcModalQuickBookDatetime .tc-qb-input,
+    #tcModalQuickBookDatetime select.tc-qb-input,
+    #tcModalQuickBookService .tc-qb-input,
+    #tcModalQuickBookService select.tc-qb-input {
+      width: 100%;
+      padding: 13px 14px;
+      border-radius: 14px;
+      border: none;
+      font-size: 15px;
+      box-sizing: border-box;
+      background: var(--tg-theme-secondary-bg-color);
+      color: var(--tg-theme-text-color);
+      display: block;
+      min-height: 48px;
+      outline: none;
+      box-shadow: inset 0 0 0 1px transparent;
+      transition: box-shadow 160ms ease, background-color 160ms ease;
+    }
+    #tcModalQuickBookDatetime .tc-qb-input:focus,
+    #tcModalQuickBookDatetime .tc-qb-input:focus-visible,
+    #tcModalQuickBookService .tc-qb-input:focus,
+    #tcModalQuickBookService .tc-qb-input:focus-visible {
+      box-shadow:
+        inset 0 0 0 1px rgba(247, 166, 0, 0.55),
+        0 0 0 3px rgba(247, 166, 0, 0.12);
+    }
+    /* Same as trainer hub: strip native select chrome (Telegram/iOS glossy dropdown). */
+    #tcModalQuickBookDatetime select.tc-qb-input,
+    #tcModalQuickBookService select.tc-qb-input {
+      -webkit-appearance: none;
+      appearance: none;
+      padding-right: 36px;
+      background-image: none;
+      font-family: inherit;
+    }
+    /* Date field: align segments with theme (hub parity). */
+    #tcModalQuickBookDatetime input#tcQuickBookDate.tc-qb-input[type='date'] {
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      display: block;
+      font-family: inherit;
+      font-variant-numeric: tabular-nums;
+      color: var(--tg-theme-text-color);
+      color-scheme: light dark;
+    }
+    #tcModalQuickBookDatetime input#tcQuickBookDate.tc-qb-input[type='date']::-webkit-date-and-time-value {
+      color: var(--tg-theme-text-color);
+    }
+    #tcModalQuickBookDatetime input#tcQuickBookDate.tc-qb-input[type='date']::-webkit-datetime-edit {
+      width: 100%;
+      min-width: 0;
+      padding: 0;
+    }
+    #tcModalQuickBookDatetime input#tcQuickBookDate.tc-qb-input[type='date']::-webkit-datetime-edit-fields-wrapper {
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+    }
+    #tcModalQuickBookDatetime input#tcQuickBookDate.tc-qb-input[type='date']::-webkit-datetime-edit-month-field,
+    #tcModalQuickBookDatetime input#tcQuickBookDate.tc-qb-input[type='date']::-webkit-datetime-edit-day-field,
+    #tcModalQuickBookDatetime input#tcQuickBookDate.tc-qb-input[type='date']::-webkit-datetime-edit-year-field,
+    #tcModalQuickBookDatetime input#tcQuickBookDate.tc-qb-input[type='date']::-webkit-datetime-edit-text {
+      color: var(--tg-theme-text-color);
+    }
+    #tcModalQuickBookDatetime input#tcQuickBookDate.tc-qb-input[type='date']::-webkit-calendar-picker-indicator {
+      opacity: 0.72;
+    }
+    #tcModalQuickBookDatetime .tc-qb-select-wrap,
+    #tcModalQuickBookService .tc-qb-select-wrap {
+      position: relative;
+    }
+    #tcModalQuickBookDatetime .tc-qb-select-wrap::after,
+    #tcModalQuickBookService .tc-qb-select-wrap::after {
+      content: '';
+      position: absolute;
+      right: 14px;
+      top: 50%;
+      width: 8px;
+      height: 8px;
+      margin-top: -6px;
+      border-right: 2px solid var(--tg-theme-hint-color);
+      border-bottom: 2px solid var(--tg-theme-hint-color);
+      transform: rotate(45deg);
+      pointer-events: none;
+      opacity: 0.65;
+    }
+    #tcModalQuickBookDatetime .tc-qb-actions,
+    #tcModalQuickBookService .tc-qb-actions,
+    #tcModalBookConfirm .tc-qb-actions {
+      display: flex;
+      flex-direction: row;
+      gap: 10px;
+      margin-top: 8px;
+    }
+    #tcModalQuickBookService .tc-qb-actions--stack {
+      flex-direction: column;
+    }
+    #tcModalQuickBookDatetime .tc-qb-actions .btn-block,
+    #tcModalQuickBookService .tc-qb-actions .btn-block,
+    #tcModalBookConfirm .tc-qb-actions .btn-block {
+      flex: 1;
+      min-width: 0;
+    }
+    .tc-toast {
+      position: fixed;
+      left: 16px;
+      right: 16px;
+      bottom: max(24px, env(safe-area-inset-bottom, 0px));
+      z-index: 10003;
+      padding: 14px 16px;
+      border-radius: 14px;
+      background: var(--tg-theme-secondary-bg-color);
+      color: var(--tg-theme-text-color);
+      box-shadow: 0 8px 28px rgba(0, 0, 0, 0.28);
+      font-size: 15px;
+      line-height: 1.35;
+      text-align: center;
+    }
+    .tc-toast[hidden] {
+      display: none !important;
+    }
     .detail-note,
     .tc-note {
       margin-top: 18px;
@@ -554,6 +812,156 @@
       border: 1px solid rgba(128, 128, 128, 0.12);
       background: var(--tg-theme-secondary-bg-color);
       box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
+    }
+    .tc-history-host {
+      margin-top: 16px;
+    }
+    .tc-history-host .tc-history-wrap {
+      margin-top: 0;
+    }
+    .tc-history-wrap--skel .tc-history-skel-lines {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      padding-top: 4px;
+    }
+    .tc-history-skel-line {
+      height: 14px;
+      border-radius: 7px;
+      width: 100%;
+    }
+    .tc-history-skel-line--short {
+      width: 62%;
+    }
+    .tc-history-skel-line--mid {
+      width: 82%;
+    }
+    .tc-stat strong.is-loading {
+      display: flex;
+      align-items: center;
+      min-height: 2.75em;
+    }
+    .tc-stat-skel-block {
+      width: 100%;
+      height: 34px;
+      border-radius: 9px;
+      flex: 1;
+    }
+    .tc-stat-skel-narrow {
+      width: 32px;
+      height: 18px;
+      border-radius: 6px;
+    }
+    .tc-pass-skel {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      padding: 2px 0 4px;
+    }
+    .tc-pass-skel-line {
+      height: 15px;
+      border-radius: 8px;
+      width: 100%;
+    }
+    .tc-pass-skel-line--85 {
+      width: 85%;
+    }
+    .detail-value.is-loading {
+      min-height: 52px;
+    }
+    .tc-dossier-skel {
+      margin-bottom: 4px;
+    }
+    .tc-dossier-skel-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+    .tc-dossier-skel-chip {
+      width: 72px;
+      height: 30px;
+      border-radius: 20px;
+      flex-shrink: 0;
+    }
+    .tc-dossier-skel-chip-dashed {
+      width: 88px;
+      height: 30px;
+      border-radius: 20px;
+      border: 1px dashed rgba(128, 128, 128, 0.35);
+      box-sizing: border-box;
+      flex-shrink: 0;
+    }
+    .tc-dossier-skel-section {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 16px;
+      margin-bottom: 16px;
+      border-radius: 16px;
+      background: var(--tg-theme-secondary-bg-color);
+      border: 1px solid rgba(128, 128, 128, 0.12);
+      box-sizing: border-box;
+    }
+    .tc-dossier-skel-section-title {
+      width: 46%;
+      max-width: 200px;
+      height: 12px;
+      border-radius: 6px;
+    }
+    .tc-dossier-skel-chevron {
+      width: 16px;
+      height: 16px;
+      border-radius: 4px;
+      flex-shrink: 0;
+    }
+    .tc-dossier-skel-timeline {
+      border-radius: 16px;
+      padding: 14px 16px 16px;
+      background: var(--tg-theme-secondary-bg-color);
+      border: 1px solid rgba(128, 128, 128, 0.12);
+      box-sizing: border-box;
+    }
+    .tc-dossier-skel-tl-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+    .tc-dossier-skel-tl-title {
+      height: 12px;
+      width: 48%;
+      max-width: 180px;
+      border-radius: 6px;
+    }
+    .tc-dossier-skel-pill {
+      width: 88px;
+      height: 30px;
+      border-radius: 10px;
+      flex-shrink: 0;
+    }
+    .tc-dossier-skel-line {
+      height: 13px;
+      border-radius: 7px;
+      width: 100%;
+      margin-bottom: 10px;
+    }
+    .tc-dossier-skel-line--short {
+      width: 70%;
+      margin-bottom: 0;
+    }
+    @keyframes tc-reveal-soft {
+      from {
+        opacity: 0.45;
+      }
+      to {
+        opacity: 1;
+      }
+    }
+    .tc-reveal-once {
+      animation: tc-reveal-soft 0.32s ease-out both;
     }
     .btn {
       flex: 1;

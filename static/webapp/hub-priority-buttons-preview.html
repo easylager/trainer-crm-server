@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>Превью: Расписание и «Записать клиента»</title>
+  <link rel="stylesheet" href="theme.css?v=20260425" />
+  <link rel="stylesheet" href="mini-app-components.css?v=20260425" />
+  <link rel="stylesheet" href="mini-app-trainer-hub.css?v=20260477" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    rel="stylesheet"
+    href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=optional"
+  />
+  <script>
+    (function () {
+      var d = document.documentElement;
+      d.style.setProperty('--tg-theme-button-color', '#f5a623', 'important');
+      d.style.setProperty('--tg-theme-button-text-color', '#1a1a1a', 'important');
+      d.style.setProperty('--tg-theme-bg-color', '#1c1c1c', 'important');
+      d.style.setProperty('--tg-theme-text-color', '#ffffff', 'important');
+      d.style.setProperty('--tg-theme-secondary-bg-color', '#2c2c2e', 'important');
+      d.style.setProperty('--tg-theme-hint-color', '#8e8e93', 'important');
+    })();
+  </script>
+  <style>
+    body {
+      margin: 0;
+      font-family: var(--app-font-sans);
+      background: var(--tg-theme-bg-color);
+      color: var(--tg-theme-text-color);
+      padding: 20px 16px 40px;
+      box-sizing: border-box;
+    }
+    .hub-pv-intro {
+      max-width: 420px;
+      margin: 0 auto 24px;
+    }
+    .hub-pv-intro h1 {
+      font-size: 18px;
+      font-weight: 700;
+      margin: 0 0 8px;
+      line-height: 1.25;
+    }
+    .hub-pv-intro p {
+      margin: 0;
+      font-size: 13px;
+      color: var(--tg-theme-hint-color);
+      line-height: 1.45;
+    }
+    .hub-pv-block {
+      max-width: 420px;
+      margin: 0 auto 32px;
+    }
+    .hub-pv-label {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--tg-theme-hint-color);
+      margin-bottom: 10px;
+    }
+    .hub-pv-caption {
+      font-size: 12px;
+      color: var(--tg-theme-hint-color);
+      margin-top: 10px;
+      line-height: 1.4;
+    }
+
+    /* Вариант A — явная обводка и лёгкое «свечение» с акцентом, фон карточки базовый */
+    .hub-pv--outline .hub-quick-action {
+      border: 1.5px solid rgba(245, 166, 35, 0.5);
+      box-shadow:
+        0 4px 18px rgba(0, 0, 0, 0.28),
+        0 0 0 1px rgba(245, 166, 35, 0.1) inset;
+      background: var(--tg-theme-secondary-bg-color);
+    }
+    .hub-pv--outline .hub-quick-action::before {
+      background: linear-gradient(135deg, rgba(245, 166, 35, 0.12) 0%, transparent 55%);
+    }
+    .hub-pv--outline .hub-quick-action:hover {
+      border-color: rgba(245, 166, 35, 0.7);
+      box-shadow:
+        0 6px 22px rgba(0, 0, 0, 0.32),
+        0 0 28px rgba(245, 166, 35, 0.18);
+    }
+
+    /* Вариант B — заливка: тёплый градиент поверх поверхности + тонкая янтарная кромка */
+    .hub-pv--fill .hub-quick-action {
+      border: 1px solid rgba(245, 166, 35, 0.38);
+      background:
+        linear-gradient(152deg, rgba(245, 166, 35, 0.2) 0%, rgba(245, 166, 35, 0.07) 48%, var(--tg-theme-secondary-bg-color) 100%);
+      box-shadow: 0 6px 22px rgba(245, 166, 35, 0.14), 0 2px 8px rgba(0, 0, 0, 0.2);
+    }
+    .hub-pv--fill .hub-quick-action::before {
+      opacity: 0;
+    }
+    .hub-pv--fill .hub-quick-action:hover {
+      border-color: rgba(245, 166, 35, 0.52);
+      box-shadow: 0 8px 26px rgba(245, 166, 35, 0.2), 0 2px 10px rgba(0, 0, 0, 0.22);
+    }
+    .hub-pv--fill .hub-quick-action:hover::before {
+      opacity: 1;
+      background: linear-gradient(152deg, rgba(245, 166, 35, 0.12) 0%, transparent 60%);
+    }
+
+    /* Вариант C — полная заливка CTA-оранжевым, тёмный текст и иконки (как основная кнопка) */
+    .hub-pv--cta .hub-quick-action {
+      background: var(--app-cta-fill);
+      border: 1px solid rgba(0, 0, 0, 0.14);
+      box-shadow:
+        0 4px 18px rgba(245, 166, 35, 0.38),
+        0 2px 8px rgba(0, 0, 0, 0.22);
+    }
+    .hub-pv--cta .hub-quick-action::before {
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.22) 0%, transparent 55%);
+      opacity: 0;
+    }
+    .hub-pv--cta .hub-quick-action:hover {
+      border-color: rgba(0, 0, 0, 0.2);
+      box-shadow:
+        0 6px 24px rgba(245, 166, 35, 0.45),
+        0 2px 10px rgba(0, 0, 0, 0.24);
+    }
+    .hub-pv--cta .hub-quick-action:hover::before {
+      opacity: 1;
+    }
+    .hub-pv--cta .hub-quick-label {
+      color: var(--app-cta-text);
+    }
+    .hub-pv--cta .hub-quick-hint {
+      color: rgba(26, 26, 26, 0.68);
+    }
+    .hub-pv--cta .hub-quick-icon {
+      color: var(--app-cta-text);
+    }
+  </style>
+</head>
+<body>
+  <div class="hub-pv-intro">
+    <h1>Превью акцентов (тёмная тема)</h1>
+    <p>
+      Три варианта для блока «Расписание» / «Записать клиента» на главной тренера. Цвета из
+      <code style="color: var(--app-cta-fill)">theme.css</code> (янтарь <code>#f5a623</code>). Выберите вариант —
+      подключим его в прод.
+    </p>
+  </div>
+
+  <section class="hub-pv-block hub-pv--outline" aria-labelledby="pv-a">
+    <div class="hub-pv-label" id="pv-a">Вариант A — обводка</div>
+    <div class="hub-priority-actions" role="group" aria-label="Расписание и запись">
+      <div class="hub-quick-grid hub-quick-grid--priority">
+        <button type="button" class="hub-quick-action" tabindex="-1">
+          <svg class="hub-quick-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <rect x="3" y="4" width="18" height="18" rx="2" />
+            <path d="M16 2v4M8 2v4M3 10h18" />
+          </svg>
+          <div class="hub-quick-text">
+            <div class="hub-quick-label">Расписание</div>
+            <div class="hub-quick-hint">Слоты и записи</div>
+          </div>
+        </button>
+        <button type="button" class="hub-quick-action" tabindex="-1">
+          <svg class="hub-quick-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+            <circle cx="9" cy="7" r="4" />
+            <line x1="19" y1="8" x2="19" y2="14" />
+            <line x1="22" y1="11" x2="16" y2="11" />
+          </svg>
+          <div class="hub-quick-text">
+            <div class="hub-quick-label">Записать клиента</div>
+            <div class="hub-quick-hint">Слот создастся автоматически</div>
+          </div>
+        </button>
+      </div>
+    </div>
+    <p class="hub-pv-caption">Толще янтарная кромка, карточки остаются «тёмно-серыми», акцент за счёт контура и тени.</p>
+  </section>
+
+  <section class="hub-pv-block hub-pv--fill" aria-labelledby="pv-b">
+    <div class="hub-pv-label" id="pv-b">Вариант B — заливка</div>
+    <div class="hub-priority-actions" role="group" aria-label="Расписание и запись">
+      <div class="hub-quick-grid hub-quick-grid--priority">
+        <button type="button" class="hub-quick-action" tabindex="-1">
+          <svg class="hub-quick-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <rect x="3" y="4" width="18" height="18" rx="2" />
+            <path d="M16 2v4M8 2v4M3 10h18" />
+          </svg>
+          <div class="hub-quick-text">
+            <div class="hub-quick-label">Расписание</div>
+            <div class="hub-quick-hint">Слоты и записи</div>
+          </div>
+        </button>
+        <button type="button" class="hub-quick-action" tabindex="-1">
+          <svg class="hub-quick-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+            <circle cx="9" cy="7" r="4" />
+            <line x1="19" y1="8" x2="19" y2="14" />
+            <line x1="22" y1="11" x2="16" y2="11" />
+          </svg>
+          <div class="hub-quick-text">
+            <div class="hub-quick-label">Записать клиента</div>
+            <div class="hub-quick-hint">Слот создастся автоматически</div>
+          </div>
+        </button>
+      </div>
+    </div>
+    <p class="hub-pv-caption">Мягкий янтарный градиент по диагонали, блок визуально «теплее» и заметнее на фоне страницы.</p>
+  </section>
+
+  <section class="hub-pv-block hub-pv--cta" aria-labelledby="pv-c">
+    <div class="hub-pv-label" id="pv-c">Вариант C — полный оранжевый CTA</div>
+    <div class="hub-priority-actions" role="group" aria-label="Расписание и запись">
+      <div class="hub-quick-grid hub-quick-grid--priority">
+        <button type="button" class="hub-quick-action" tabindex="-1">
+          <svg class="hub-quick-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <rect x="3" y="4" width="18" height="18" rx="2" />
+            <path d="M16 2v4M8 2v4M3 10h18" />
+          </svg>
+          <div class="hub-quick-text">
+            <div class="hub-quick-label">Расписание</div>
+            <div class="hub-quick-hint">Слоты и записи</div>
+          </div>
+        </button>
+        <button type="button" class="hub-quick-action" tabindex="-1">
+          <svg class="hub-quick-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+            <circle cx="9" cy="7" r="4" />
+            <line x1="19" y1="8" x2="19" y2="14" />
+            <line x1="22" y1="11" x2="16" y2="11" />
+          </svg>
+          <div class="hub-quick-text">
+            <div class="hub-quick-label">Записать клиента</div>
+            <div class="hub-quick-hint">Слот создастся автоматически</div>
+          </div>
+        </button>
+      </div>
+    </div>
+    <p class="hub-pv-caption">
+      Заливка целиком <code style="color: var(--app-cta-fill)">--app-cta-fill</code>, заголовки и иконки —
+      <code style="color: var(--app-cta-text)">--app-cta-text</code>; подзаголовок чуть приглушённый тёмный для читаемости на
+      оранжевом.
+    </p>
+  </section>
+</body>
+</html>

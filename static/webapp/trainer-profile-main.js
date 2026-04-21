@@ -350,7 +350,7 @@
         'experience_years', 'education', 'session_duration_minutes', 'min_hours_before_booking',
       ];
       /** Fields shown on «Настройки» tab — used to switch tab on validation errors. */
-      var SETTINGS_FORMAT_FIELD_IDS = ['session_duration_minutes', 'min_hours_before_booking'];
+      var SETTINGS_FORMAT_FIELD_IDS = ['session_duration_minutes', 'min_hours_before_booking', 'push_notification'];
       var PHONE_MAX_LEN = 32;
       /** Aligned with server: Belarus E.164 `+375` + 9 digits after country code. */
       var PHONE_BY_RE = /^\+375\d{9}$/;
@@ -475,9 +475,22 @@
           esc.textContent = '';
           esc.hidden = true;
         }
+        var epush = document.getElementById('err_push_notification');
+        if (epush) {
+          epush.textContent = '';
+          epush.hidden = true;
+        }
       }
 
       function showFieldError(fieldId, message) {
+        if (fieldId === 'push_notification') {
+          var epn = document.getElementById('err_push_notification');
+          if (epn) {
+            epn.textContent = message || '';
+            epn.hidden = !message;
+          }
+          return;
+        }
         var el = fieldId === 'general' ? document.getElementById('err_general') : ensureErrorEl(fieldId);
         if (!el) return;
         el.textContent = message;
@@ -491,6 +504,9 @@
         var si;
         for (si = 0; si < loc.length; si++) {
           if (loc[si] === 'schedule_grid_step_minutes') return 'schedule_grid';
+          if (loc[si] === 'push_notification_start_hour' || loc[si] === 'push_notification_end_hour') {
+            return 'push_notification';
+          }
         }
         var j = -1;
         for (var i = 0; i < loc.length; i++) {
@@ -870,6 +886,15 @@
             errs.push(['primary_arena', 'Выберите основную площадку для онлайн-записи.']);
           }
         }
+        if (!parsed.push_notif_use_default) {
+          var psh = parsed.push_notification_start_hour;
+          var peh = parsed.push_notification_end_hour;
+          if (psh == null || peh == null || isNaN(psh) || isNaN(peh)) {
+            errs.push(['push_notification', 'Укажите окно уведомлений (часы по Минску).']);
+          } else if (psh === peh) {
+            errs.push(['push_notification', 'Начало и конец окна должны различаться.']);
+          }
+        }
         if (!errs.length) return true;
         errs.forEach(function(pair) {
           if (pair[0] === 'services') {
@@ -884,6 +909,12 @@
             if (ep) {
               ep.textContent = pair[1];
               ep.hidden = false;
+            }
+          } else if (pair[0] === 'push_notification') {
+            var epu = document.getElementById('err_push_notification');
+            if (epu) {
+              epu.textContent = pair[1];
+              epu.hidden = false;
             }
           } else {
             showFieldError(pair[0], pair[1]);
@@ -918,6 +949,43 @@
           .catch(function() { return Promise.resolve(); });
       }
 
+      function _pad2(n) {
+        return n < 10 ? '0' + n : String(n);
+      }
+      function populatePushHourSelects() {
+        var s0 = document.getElementById('push_notification_start_hour');
+        var s1 = document.getElementById('push_notification_end_hour');
+        if (!s0 || !s1 || s0.options.length) return;
+        var h;
+        for (h = 0; h <= 23; h++) {
+          var o = document.createElement('option');
+          o.value = String(h);
+          o.textContent = _pad2(h) + ':00';
+          s0.appendChild(o);
+        }
+        for (h = 1; h <= 24; h++) {
+          var o2 = document.createElement('option');
+          o2.value = String(h);
+          o2.textContent = h === 24 ? '24:00' : _pad2(h) + ':00';
+          s1.appendChild(o2);
+        }
+      }
+      function syncPushNotifUiFromState() {
+        populatePushHourSelects();
+        var t = state.trainer || {};
+        var useDef = t.push_notification_start_hour == null && t.push_notification_end_hour == null;
+        var cb = document.getElementById('push_notif_use_default');
+        var wrap = document.getElementById('push_notif_custom_wrap');
+        if (cb) cb.checked = useDef;
+        if (wrap) wrap.style.display = useDef ? 'none' : 'flex';
+        var sh = useDef ? 8 : parseInt(t.push_notification_start_hour, 10);
+        var eh = useDef ? 22 : parseInt(t.push_notification_end_hour, 10);
+        var s0 = document.getElementById('push_notification_start_hour');
+        var s1 = document.getElementById('push_notification_end_hour');
+        if (s0 && !isNaN(sh)) s0.value = String(sh);
+        if (s1 && !isNaN(eh)) s1.value = String(eh);
+      }
+
       function normSnapshot() {
         var p = state.trainer && state.trainer.profile ? state.trainer.profile : {};
         var services = (state.trainer && state.trainer.services) ? state.trainer.services : [];
@@ -949,6 +1017,8 @@
         }).sort(function(a, b) { return a.service_id - b.service_id; });
         var arena_ids = (state.trainer && state.trainer.arena_ids) ? state.trainer.arena_ids.slice().sort(function(a,b){ return a-b; }) : [];
         var primary_arena_id = (state.trainer && state.trainer.primary_arena_id != null) ? Number(state.trainer.primary_arena_id) : null;
+        var tSnap = state.trainer || {};
+        var pushDef = tSnap.push_notification_start_hour == null && tSnap.push_notification_end_hour == null;
         return JSON.stringify({
           profile: {
             first_name: p.first_name || '',
@@ -969,6 +1039,11 @@
           primary_arena_id: primary_arena_id,
           education: buildEducationSnapshotFromState(),
           schedule_grid_step_minutes: normScheduleGridStepSnapshot(),
+          push_notif_use_default: pushDef,
+          push_notification_start_hour:
+            tSnap.push_notification_start_hour != null ? Number(tSnap.push_notification_start_hour) : null,
+          push_notification_end_hour:
+            tSnap.push_notification_end_hour != null ? Number(tSnap.push_notification_end_hour) : null,
         });
       }
 
@@ -1042,6 +1117,16 @@
         }
         var eduSel = document.getElementById('education');
         var eduVal = eduSel && eduSel.value ? eduSel.value : '';
+        var pushUseDef = (function() {
+          var el = document.getElementById('push_notif_use_default');
+          return !!(el && el.checked);
+        })();
+        var pushSh = null;
+        var pushEh = null;
+        if (!pushUseDef) {
+          pushSh = num('push_notification_start_hour', true);
+          pushEh = num('push_notification_end_hour', true);
+        }
         return JSON.stringify({
           profile: {
             first_name: str('first_name'),
@@ -1065,6 +1150,9 @@
           primary_arena_id: primary_arena_id,
           education: buildEducationSnapshotFromDom(),
           schedule_grid_step_minutes: readScheduleGridStepSnapshot(),
+          push_notif_use_default: pushUseDef,
+          push_notification_start_hour: pushSh,
+          push_notification_end_hour: pushEh,
         });
       }
 
@@ -1097,9 +1185,9 @@
             '«Статус» — готовность к каталогу и что ещё не заполнено; «Настройки» — длительность занятия, окно записи и шаг сетки в расписании.';
         } else if (tab === 'moderation') {
           el.textContent = 'Статус проверки и список того, что ещё стоит дополнить в анкете.';
-        } else if (tab === 'settings') {
+        } else         if (tab === 'settings') {
           el.textContent =
-            'Настройки — только правила CRM: формат занятий и сетка расписания. Текст анкеты и цены — во вкладке «Анкета».';
+            'Настройки — правила CRM, окно уведомлений от бота и сетка расписания. Анкета и цены — во вкладке «Анкета».';
         } else {
           el.textContent = '';
         }
@@ -1537,6 +1625,20 @@
           var path = window.location.pathname + (qs ? '?' + qs : '') + (window.location.hash || '');
           history.replaceState(null, '', path);
         } catch (e) {}
+        var rawKeys = (state.moderation_readiness && state.moderation_readiness.tt_minimal_missing_fields) || [];
+        var keys = Array.isArray(rawKeys) ? rawKeys : [];
+        if (!keys.length) {
+          /* TTV minimal already closed — blocks tour would hit «done» branch and bounce to hub (wrong for catalog tier). */
+          state.profileBlockTourActive = false;
+          state.profileBlockTourHubRedirectScheduled = false;
+          syncProfileBlockTourBar();
+          setTab('moderation');
+          setTimeout(function() {
+            var el = document.getElementById('moderation');
+            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }, 300);
+          return;
+        }
         state.profileBlockTourActive = true;
         state.profileBlockTourHubRedirectScheduled = false;
         syncProfileBlockTourBar();
@@ -1655,6 +1757,26 @@
         }
 
         renderServices();
+        syncPushNotifUiFromState();
+        var pcb = document.getElementById('push_notif_use_default');
+        if (pcb && !pcb._pushBound) {
+          pcb._pushBound = true;
+          pcb.addEventListener('change', function() {
+            var wrap = document.getElementById('push_notif_custom_wrap');
+            if (wrap) wrap.style.display = pcb.checked ? 'none' : 'flex';
+            setDirty();
+          });
+        }
+        var ps0 = document.getElementById('push_notification_start_hour');
+        var ps1 = document.getElementById('push_notification_end_hour');
+        if (ps0 && !ps0._pushBound) {
+          ps0._pushBound = true;
+          ps0.addEventListener('change', setDirty);
+        }
+        if (ps1 && !ps1._pushBound) {
+          ps1._pushBound = true;
+          ps1.addEventListener('change', setDirty);
+        }
         return loadArenasForCity(p.city_id).then(function() {
           renderArenas();
           renderHeroSummary();
@@ -1727,26 +1849,55 @@
         } else if (st === 'pending_profile') {
           var fbRaw = state.trainer && state.trainer.moderation_feedback;
           var fbTrim = (fbRaw != null && String(fbRaw).trim()) ? String(fbRaw).trim() : '';
-          if (fbTrim) {
-            missTitle.style.display = 'none';
-            hint.textContent = 'Модератор оставил комментарий — см. жёлтый блок выше. Внесите правки и снова сохраните анкету.';
-          } else if (d.already_submitted_for_moderation) {
-            missTitle.style.display = 'none';
-            hint.textContent = 'Ожидается проверка в админ-боте.';
-          } else if (d.complete) {
-            missTitle.style.display = 'none';
-            hint.textContent =
-              d.full_profile_complete === false
-                ? 'Обязательные пункты для отправки на проверку закрыты. Для более полной карточки в каталоге дополните оставшиеся поля — список во вкладке «Статус».'
-                : 'Все пункты профиля для проверки и для каталога заполнены.';
-          } else {
-            missTitle.style.display = 'block';
-            hint.textContent = '';
-            (d.missing_labels_ru || []).forEach(function(label) {
+          var fullGapLabels = [];
+          if (d.full_profile_complete === false) {
+            var fl = d.full_profile_missing_labels_ru;
+            if (Array.isArray(fl) && fl.length) fullGapLabels = fl.slice();
+          }
+          function appendGapListItems(labels) {
+            (labels || []).forEach(function(label) {
               var li = document.createElement('li');
               li.textContent = label;
               missList.appendChild(li);
             });
+          }
+          if (fbTrim) {
+            missTitle.style.display = 'none';
+            hint.textContent = 'Модератор оставил комментарий — см. жёлтый блок выше. Внесите правки и снова сохраните анкету.';
+          } else if (d.already_submitted_for_moderation) {
+            hint.textContent = 'Ожидается проверка в админ-боте.';
+            if (fullGapLabels.length) {
+              missTitle.style.display = 'block';
+              missTitle.textContent =
+                'По желанию до полной карточки в каталоге (можно дополнить, пока идёт проверка):';
+              appendGapListItems(fullGapLabels);
+            } else if (d.full_profile_complete === false) {
+              missTitle.style.display = 'none';
+              hint.textContent =
+                'Ожидается проверка в админ-боте. Для полноты карточки в каталоге остались необязательные поля — откройте вкладку «Анкета» и пролистайте блоки профиля.';
+            } else {
+              missTitle.style.display = 'none';
+            }
+          } else if (d.complete) {
+            if (fullGapLabels.length) {
+              missTitle.style.display = 'block';
+              missTitle.textContent =
+                'Для более полной карточки в каталоге (необязательно до первой отправки на проверку):';
+              hint.textContent =
+                'Обязательные пункты для проверки закрыты. Список ниже — что ещё можно усилить; поля во вкладке «Анкета» или отправьте анкету как есть.';
+              appendGapListItems(fullGapLabels);
+            } else {
+              missTitle.style.display = 'none';
+              hint.textContent =
+                d.full_profile_complete === false
+                  ? 'Обязательные пункты для проверки закрыты. Для полноты карточки в каталоге остались необязательные поля — откройте вкладку «Анкета».'
+                  : 'Все пункты профиля для проверки и для каталога заполнены.';
+            }
+          } else {
+            missTitle.style.display = 'block';
+            missTitle.textContent = 'Осталось заполнить:';
+            hint.textContent = '';
+            appendGapListItems(d.missing_labels_ru || []);
           }
         } else {
           missTitle.style.display = 'none';
@@ -1897,6 +2048,8 @@
             ? Math.max(1, Math.floor(Number(d.full_profile_criteria_total)))
             : 12;
         var fullMissing = d.full_profile_missing_fields || [];
+        var fullMissingLabels = d.full_profile_missing_labels_ru || [];
+        var hasFullProfileLabelList = Array.isArray(fullMissingLabels) && fullMissingLabels.length > 0;
 
         var percentEl = document.getElementById('progressPercent');
         var titleEl = document.getElementById('progressTitle');
@@ -1920,7 +2073,7 @@
           if (stTr === 'pending_profile' && d.tt_minimal_complete && !d.complete) {
             titleEl.textContent = 'Можно открыть расписание';
             subtitleEl.textContent =
-              'Базовый профиль для первой записи готов. Чтобы отправить анкету на проверку администратором, закройте ещё ' +
+              'Чтобы отправить анкету на проверку администратором, закройте ещё ' +
               missing.length +
               ' из ' +
               totalCriteria +
@@ -1928,12 +2081,17 @@
           } else if (percent === 100) {
             if (d.full_profile_complete === false) {
               titleEl.textContent = 'Готово к отправке на проверку';
-              subtitleEl.textContent =
-                'Для полноты карточки в каталоге можно дополнить ещё ' +
-                fullMissing.length +
-                ' из ' +
-                fullTotal +
-                ' — список там же.';
+              subtitleEl.textContent = hasFullProfileLabelList
+                ? 'Для полноты карточки в каталоге можно дополнить ещё ' +
+                    fullMissing.length +
+                    ' из ' +
+                    fullTotal +
+                    ' — список на вкладке «Статус», под строкой о проверке.'
+                : 'Для полноты карточки в каталоге можно дополнить ещё ' +
+                    fullMissing.length +
+                    ' из ' +
+                    fullTotal +
+                    ' — поля во вкладке «Анкета».';
             } else {
               titleEl.textContent = 'Анкета готова!';
               subtitleEl.textContent = 'Все ' + fullTotal + ' пунктов полного профиля выполнены';
@@ -3311,6 +3469,14 @@
           parsed.schedule_grid_step_minutes !== snapObj.schedule_grid_step_minutes
         ) {
           body.schedule_grid_step_minutes = parsed.schedule_grid_step_minutes;
+        }
+
+        if (parsed.push_notif_use_default) {
+          body.push_notification_start_hour = null;
+          body.push_notification_end_hour = null;
+        } else {
+          body.push_notification_start_hour = parsed.push_notification_start_hour;
+          body.push_notification_end_hour = parsed.push_notification_end_hour;
         }
 
         fetch(apiUrl('/trainer/profile'), {

@@ -86,17 +86,24 @@
     }
     .header {
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       justify-content: space-between;
       gap: 12px;
     }
+    /* Override mini-app-components.css (.header-title { ellipsis }) — long titles wrap on narrow phones. */
     .header-title {
       flex: 1;
+      min-width: 0;
+      margin: 0;
       font-size: 26px;
       font-weight: 700;
       letter-spacing: -0.03em;
-      line-height: 1.15;
+      line-height: 1.2;
       color: var(--req-text);
+      overflow: visible;
+      text-overflow: unset;
+      white-space: normal;
+      overflow-wrap: break-word;
     }
     .header-deco {
       width: 48px;

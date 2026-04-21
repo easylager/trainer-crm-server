@@ -6,6 +6,7 @@ Trainer onboarding checklist: submission readiness, full-profile flag, future sl
 ``has_completed_booking`` = at least one booking with status ``completed`` (hub nudge: client notes).
 ``last_completed_booking_client_id`` = ``client_id`` of the latest completed row by ``bookings.id`` (deep link).
 ``schedule_unlocked`` mirrors Mini App access (active or pending TTV + CRM trial).
+``is_catalog_visible`` = trainer row flag (hub rhythm: catalog publication hint when false while active).
 ``weekly_template_count`` = rows in ``trainer_schedule_templates`` (hub nudge after onboarding complete).
 ``slots_this_week_count`` = available/booked slots from today till end of current week.
 ``slots_next_week_count`` = available/booked slots for the next full week.
@@ -56,6 +57,7 @@ async def get_trainer_onboarding_checklist(session: AsyncSession, trainer_id: in
     out: dict[str, Any] = {
         "trainer_status": st,
         "is_active": is_active,
+        "is_catalog_visible": bool(trainer.get("is_catalog_visible", True)),
         "profile_complete": profile_complete,
         "full_profile_complete": full_profile_complete,
         "tt_minimal_complete": tt_minimal_complete,

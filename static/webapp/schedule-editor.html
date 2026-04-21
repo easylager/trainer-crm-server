@@ -24,11 +24,18 @@
       href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=optional"
     />
   </noscript>
-  <link rel="preload" href="schedule-editor-main.js?v=20260455" as="script" />
-  <link rel="stylesheet" href="mini-app-schedule-editor.css?v=20260436" />
+  <link rel="preload" href="schedule-editor-main.js?v=20260463" as="script" />
+  <link rel="stylesheet" href="mini-app-schedule-editor.css?v=20260445" />
   <link rel="stylesheet" href="mini-app-trainer-nav.css?v=20260429" />
 </head>
 <body>
+  <!-- Covers main UI until quick-book modal opens (schedule-editor?flow=book) — avoids calendar flash -->
+  <div id="seFlowBookBootOverlay" class="se-flow-book-boot-overlay" hidden aria-hidden="true">
+    <div class="se-flow-book-boot-overlay__card" aria-busy="true">
+      <span class="se-flow-book-boot-overlay__pulse" aria-hidden="true"></span>
+      <p class="se-flow-book-boot-overlay__text">Быстрая запись</p>
+    </div>
+  </div>
   <script>
   (function(){
     window.__applyScheduleEditorTheme = function() {
@@ -53,6 +60,25 @@
       }
     };
     window.__applyScheduleEditorTheme();
+  })();
+  </script>
+  <script>
+  /* Before first paint: quick-book opened inside trainer-clients iframe must not flash the calendar. */
+  (function () {
+    try {
+      var p = new URLSearchParams(window.location.search || '');
+      if (p.get('embed') === '1' && ((p.get('flow') || '') === 'book' || p.get('client_id'))) {
+        document.documentElement.classList.add('se-client-embed');
+      }
+      if ((p.get('flow') || '') === 'book' && !p.get('open_booking')) {
+        document.documentElement.classList.add('se-flow-book-boot');
+        var boot = document.getElementById('seFlowBookBootOverlay');
+        if (boot) {
+          boot.hidden = false;
+          boot.setAttribute('aria-hidden', 'false');
+        }
+      }
+    } catch (e) { /* ignore */ }
   })();
   </script>
   <div id="screenMain" data-screen class="active">
@@ -287,36 +313,59 @@
       <p class="quick-book-kicker">Быстрая запись</p>
       <h3 class="book-modal-title">Когда занятие?</h3>
       <p class="book-choice-lead quick-book-lead">Слот в календаре будет создан автоматически.</p>
-      <div class="quick-book-fields">
-        <div class="book-field-stack">
-          <label class="book-field-label" for="quickBookDateInput">Дата</label>
-          <input type="date" id="quickBookDateInput" class="quick-book-date-input" autocomplete="off">
+      <div id="quickBookDatetimeLoadingWrap" class="quick-book-datetime-loading-wrap quick-book-datetime-wrap--duration-custom">
+        <div id="quickBookDatetimeSkel" class="quick-book-datetime-skel" aria-hidden="true">
+          <div class="quick-book-fields quick-book-datetime-skel-card">
+            <div class="book-field-stack quick-book-datetime-skel-stack">
+              <div class="qb-skel-label ma-skel-shimmer" aria-hidden="true"></div>
+              <div class="qb-skel-input ma-skel-shimmer" aria-hidden="true"></div>
+            </div>
+            <div class="book-field-stack quick-book-datetime-skel-stack">
+              <div class="qb-skel-label ma-skel-shimmer" aria-hidden="true"></div>
+              <div class="qb-skel-input ma-skel-shimmer" aria-hidden="true"></div>
+            </div>
+            <div class="book-field-stack quick-book-datetime-skel-stack qb-skel-duration">
+              <div class="qb-skel-label ma-skel-shimmer" aria-hidden="true"></div>
+              <div class="qb-skel-input ma-skel-shimmer" aria-hidden="true"></div>
+            </div>
+          </div>
+          <div class="quick-book-datetime-skel-actions">
+            <div class="qb-skel-btn qb-skel-btn--primary ma-skel-shimmer" aria-hidden="true"></div>
+            <div class="qb-skel-btn qb-skel-btn--ghost ma-skel-shimmer" aria-hidden="true"></div>
+          </div>
         </div>
-        <div class="book-field-stack">
-          <label class="book-field-label" for="quickBookHourSelect">Время начала</label>
-          <select id="quickBookHourSelect" class="book-service-select" aria-describedby="quickBookHourHint"></select>
-          <p id="quickBookHourHint" class="quick-book-hour-hint" hidden></p>
+        <div class="quick-book-datetime-live">
+          <div class="quick-book-fields">
+            <div class="book-field-stack">
+              <label class="book-field-label" for="quickBookDateInput">Дата</label>
+              <input type="date" id="quickBookDateInput" class="quick-book-date-input" autocomplete="off">
+            </div>
+            <div class="book-field-stack">
+              <label class="book-field-label" for="quickBookHourSelect">Время начала</label>
+              <select id="quickBookHourSelect" class="book-service-select" aria-describedby="quickBookHourHint"></select>
+              <p id="quickBookHourHint" class="quick-book-hour-hint" hidden></p>
+            </div>
+            <div class="book-field-stack" id="quickBookDurationWrap">
+              <label class="book-field-label" for="quickBookDurationSelect">Длительность</label>
+              <select id="quickBookDurationSelect" class="book-service-select" aria-describedby="quickBookDurationFixedHint">
+                <option value="45" selected>45 мин</option>
+                <option value="50">50 мин</option>
+                <option value="60">60 мин</option>
+                <option value="70">70 мин</option>
+                <option value="75">75 мин</option>
+                <option value="90">90 мин</option>
+                <option value="105">105 мин</option>
+                <option value="120">120 мин</option>
+                <option value="180">180 мин</option>
+              </select>
+              <p id="quickBookDurationFixedHint" class="quick-book-hour-hint" style="margin-top:6px;" hidden></p>
+            </div>
+          </div>
+          <div class="quick-book-actions">
+            <button type="button" class="btn-block btn-primary" id="btnQuickBookContinue">Далее — выбрать клиента</button>
+            <button type="button" class="btn-block btn-book-cancel" id="btnQuickBookCancel">Отмена</button>
+          </div>
         </div>
-        <div class="book-field-stack" id="quickBookDurationWrap">
-          <label class="book-field-label" for="quickBookDurationSelect">Длительность</label>
-          <select id="quickBookDurationSelect" class="book-service-select" aria-describedby="quickBookDurationFixedHint">
-            <option value="45" selected>45 мин</option>
-            <option value="50">50 мин</option>
-            <option value="60">60 мин</option>
-            <option value="70">70 мин</option>
-            <option value="75">75 мин</option>
-            <option value="90">90 мин</option>
-            <option value="105">105 мин</option>
-            <option value="120">120 мин</option>
-            <option value="180">180 мин</option>
-          </select>
-          <p id="quickBookDurationFixedHint" class="quick-book-hour-hint" style="margin-top:6px;" hidden></p>
-        </div>
-      </div>
-      <div class="quick-book-actions">
-        <button type="button" class="btn-block btn-primary" id="btnQuickBookContinue">Далее — выбрать клиента</button>
-        <button type="button" class="btn-block btn-secondary" id="btnQuickBookShowFreeSlots">Показать свободные слоты</button>
-        <button type="button" class="btn-block btn-book-cancel" id="btnQuickBookCancel">Отмена</button>
       </div>
     </div>
   </div>
@@ -326,23 +375,58 @@
       <p class="quick-book-kicker">Быстрая запись</p>
       <h3 class="book-modal-title">Услуга и тариф</h3>
       <p class="book-choice-lead quick-book-lead">Клиент уже выбран. По умолчанию — услуга и тариф с последнего проведённого занятия; при необходимости измените.</p>
-      <div class="quick-book-fields">
-        <div class="book-field-stack">
-          <label class="book-field-label" for="quickBookProfileServiceSelect">Услуга</label>
-          <select id="quickBookProfileServiceSelect" class="book-service-select"></select>
+      <div id="quickBookServiceLoadingWrap" class="quick-book-service-loading-wrap">
+        <div id="quickBookServiceSkel" class="quick-book-service-skel" aria-hidden="true">
+          <div class="quick-book-service-skel-inner">
+            <div class="quick-book-fields quick-book-service-skel-card">
+              <div class="book-field-stack quick-book-service-skel-stack">
+                <div class="qb-skel-label ma-skel-shimmer" aria-hidden="true"></div>
+                <div class="qb-skel-input ma-skel-shimmer" aria-hidden="true"></div>
+              </div>
+              <div class="book-field-stack quick-book-service-skel-stack qb-skel-arena">
+                <div class="qb-skel-label ma-skel-shimmer" aria-hidden="true"></div>
+                <div class="qb-skel-input ma-skel-shimmer" aria-hidden="true"></div>
+              </div>
+              <div class="book-field-stack quick-book-service-skel-stack">
+                <div class="qb-skel-label qb-skel-label--short ma-skel-shimmer" aria-hidden="true"></div>
+                <div class="qb-skel-tier-rows">
+                  <div class="qb-skel-tier" aria-hidden="true">
+                    <span class="qb-skel-tier-radio ma-skel-shimmer"></span>
+                    <span class="qb-skel-tier-line ma-skel-shimmer"></span>
+                  </div>
+                  <div class="qb-skel-tier" aria-hidden="true">
+                    <span class="qb-skel-tier-radio ma-skel-shimmer"></span>
+                    <span class="qb-skel-tier-line ma-skel-shimmer"></span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="quick-book-actions quick-book-service-skel-actions" aria-hidden="true">
+              <div class="qb-skel-btn qb-skel-btn--primary ma-skel-shimmer"></div>
+              <div class="qb-skel-btn qb-skel-btn--ghost ma-skel-shimmer"></div>
+            </div>
+          </div>
         </div>
-        <div class="book-field-stack" id="quickBookProfileArenaWrap" style="display: none;">
-          <label class="book-field-label" for="quickBookProfileArenaSelect">Площадка</label>
-          <select id="quickBookProfileArenaSelect" class="book-service-select"></select>
+        <div class="quick-book-service-live">
+          <div class="quick-book-fields">
+            <div class="book-field-stack">
+              <label class="book-field-label" for="quickBookProfileServiceSelect">Услуга</label>
+              <select id="quickBookProfileServiceSelect" class="book-service-select"></select>
+            </div>
+            <div class="book-field-stack" id="quickBookProfileArenaWrap" style="display: none;">
+              <label class="book-field-label" for="quickBookProfileArenaSelect">Площадка</label>
+              <select id="quickBookProfileArenaSelect" class="book-service-select"></select>
+            </div>
+            <div class="book-field-stack" id="quickBookProfilePriceTierWrap" style="display: none;">
+              <label class="book-field-label">Тариф</label>
+              <div id="quickBookProfilePriceTierRadios" class="book-price-tier-radios"></div>
+            </div>
+          </div>
+          <div class="quick-book-actions">
+            <button type="button" class="btn-block btn-primary" id="btnQuickBookProfileContinue">Далее</button>
+            <button type="button" class="btn-block btn-secondary" id="btnQuickBookProfileBack">Назад к времени</button>
+          </div>
         </div>
-        <div class="book-field-stack" id="quickBookProfilePriceTierWrap" style="display: none;">
-          <label class="book-field-label">Тариф</label>
-          <div id="quickBookProfilePriceTierRadios" class="book-price-tier-radios"></div>
-        </div>
-      </div>
-      <div class="quick-book-actions">
-        <button type="button" class="btn-block btn-primary" id="btnQuickBookProfileContinue">Далее</button>
-        <button type="button" class="btn-block btn-secondary" id="btnQuickBookProfileBack">Назад к времени</button>
       </div>
     </div>
   </div>
@@ -445,6 +529,6 @@
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
   <script src="mini-app-trainer-home.js"></script>
-  <script defer src="schedule-editor-main.js?v=20260455"></script>
+  <script defer src="schedule-editor-main.js?v=20260463"></script>
 </body>
 </html>

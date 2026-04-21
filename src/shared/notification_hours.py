@@ -26,6 +26,11 @@ def set_notification_quiet_hours_bypass(disable_quiet_hours: bool) -> None:
     _bypass_quiet_hours = bool(disable_quiet_hours)
 
 
+def is_quiet_hours_bypass_active() -> bool:
+    """True when NOTIFICATION_DISABLE_QUIET_HOURS enabled notification_service to send 24/7."""
+    return _bypass_quiet_hours
+
+
 def is_within_notification_hours() -> bool:
     """True if current time in NOTIFICATION_TZ is in [08:00, 22:00), or quiet hours are bypassed."""
     if _bypass_quiet_hours:

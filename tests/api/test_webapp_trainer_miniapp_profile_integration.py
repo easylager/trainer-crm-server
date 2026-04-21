@@ -161,6 +161,7 @@ async def test_onboarding_checklist_inactive_trainer_slots_and_bookings_locked(
     assert resp.status_code == 200
     data = resp.json()
     assert data.get("is_active") is False
+    assert data.get("is_catalog_visible") is True
     assert "full_profile_complete" in data
     assert data.get("slots_this_week_count") == 0
     assert data.get("slots_next_week_count") == 0

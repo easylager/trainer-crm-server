@@ -39,6 +39,7 @@ from src.application.arena_schedule_preset import (
     normalize_trainer_schedule_grid_step,
     schedule_grid_preset_to_api,
 )
+from src.application.trainer_notification_prefs import validate_push_notification_window
 from src.application.trainer_use_cases import (
     TrainerPhotoFileKeyError,
     create_trainer_education,
@@ -52,6 +53,7 @@ from src.application.trainer_use_cases import (
     upload_trainer_education_document_photo_from_bytes,
     upload_trainer_photo_from_bytes,
 )
+from src.infrastructure.repositories.trainer_repository import TrainerRepository
 from src.application.trainer_profile_completeness import moderation_readiness_dict
 from src.infrastructure import s3
 from src.infrastructure.db.models import TRAINER_STATUS_ACTIVE
@@ -251,6 +253,27 @@ async def patch_trainer_profile_for_webapp(
     services_payload = [s.model_dump() for s in body.services] if body.services is not None else None
     primary_set = "primary_arena_id" in body.model_fields_set
     step_set = "schedule_grid_step_minutes" in body.model_fields_set
+    push_set = (
+        "push_notification_start_hour" in body.model_fields_set
+        or "push_notification_end_hour" in body.model_fields_set
+    )
+    if push_set:
+        repo = TrainerRepository(session)
+        sh = body.push_notification_start_hour
+        eh = body.push_notification_end_hour
+        if sh is None and eh is None:
+            await repo.clear_push_notification_window(trainer_id)
+        else:
+            if sh is None or eh is None:
+                raise HTTPException(
+                    status_code=422,
+                    detail="Укажите оба часа окна уведомлений или сбросьте к стандарту сервиса (оба null).",
+                )
+            try:
+                validate_push_notification_window(sh, eh)
+            except ValueError as exc:
+                raise HTTPException(status_code=422, detail=str(exc)) from exc
+            await repo.set_push_notification_window(trainer_id, sh, eh)
     try:
         ok = await update_trainer_profile(
             session,

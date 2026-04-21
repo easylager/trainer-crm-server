@@ -98,6 +98,9 @@ class Trainer(Base):
     client_invite_link_first_copied_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # Europe/Minsk wall-clock hours for Telegram pushes from notification_service; NULL = platform default (8–22).
+    push_notification_start_hour: Mapped[Optional[int]] = mapped_column(SmallInteger(), nullable=True)
+    push_notification_end_hour: Mapped[Optional[int]] = mapped_column(SmallInteger(), nullable=True)
 
     link_tokens: Mapped[list["TrainerLinkToken"]] = relationship(back_populates="trainer", lazy="raise")
     profile: Mapped[Optional["TrainerProfile"]] = relationship(back_populates="trainer", uselist=False, lazy="raise")

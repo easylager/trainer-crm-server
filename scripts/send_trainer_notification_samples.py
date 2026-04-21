@@ -303,8 +303,27 @@ async def main() -> None:
             service_name="Беговая подготовка",
             price_tier_label="Разовое занятие",
             arena_display="Стадион «Динамо»",
+            include_quick_rebook_line=webapp_https,
         )
-        rows: list[list[InlineKeyboardButton]] = [
+        rows: list[list[InlineKeyboardButton]] = []
+        if webapp_https:
+            rows.append(
+                [
+                    InlineKeyboardButton(
+                        text=msg.TRAINER_BUTTON_BOOK_AGAIN,
+                        web_app=WebAppInfo(
+                            url=f"{base}/webapp/schedule-editor?flow=book&client_id=1"
+                        ),
+                    ),
+                ],
+            )
+        rows += [
+            [
+                InlineKeyboardButton(
+                    text=msg.TRAINER_BUTTON_BOOK_SAME_TIME_NEXT_WEEK,
+                    callback_data=f"{TRAINER_REPEAT_WEEK_PREFIX}{MOCK_BOOKING_ID}",
+                ),
+            ],
             [
                 InlineKeyboardButton(
                     text=msg.TRAINER_BUTTON_LEAVE_FEEDBACK,
@@ -315,12 +334,6 @@ async def main() -> None:
                 InlineKeyboardButton(
                     text=msg.TRAINER_BOOKING_CONFIRMED_BTN_WRITE,
                     url=f"tg://user?id={MOCK_CLIENT_TELEGRAM_ID}",
-                ),
-            ],
-            [
-                InlineKeyboardButton(
-                    text=msg.TRAINER_BUTTON_BOOK_SAME_TIME_NEXT_WEEK,
-                    callback_data=f"{TRAINER_REPEAT_WEEK_PREFIX}{MOCK_BOOKING_ID}",
                 ),
             ],
         ]
@@ -339,15 +352,27 @@ async def main() -> None:
             reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
         )
 
-        await _section(bot, chat_id, "Закрыто без списания абонемента")
+        await _section(
+            bot,
+            chat_id,
+            "То же сообщение, если абонемент не списан (хвост в конце, без второго пуша)",
+        )
+        text_done_no_pass = msg.format_trainer_booking_completed_html(
+            client_name="Козлов Дмитрий",
+            date="15.04",
+            day=msg.TRAINER_DAYS[1],
+            time="09:00",
+            duration_minutes=60,
+            service_name="Беговая подготовка",
+            price_tier_label="Разовое занятие",
+            arena_display="Стадион «Динамо»",
+            include_quick_rebook_line=webapp_https,
+            append_no_pass_notice=True,
+        )
         await bot.send_message(
             chat_id=chat_id,
-            text=msg.TRAINER_NO_PASS_FOR_SERVICE.format(
-                client_name="Клиентов Клиент",
-                date="16.04",
-                time="14:00",
-                service_name="Массаж спины",
-            ),
+            text=text_done_no_pass,
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
         )
 
         await _section(bot, chat_id, "Слоты появились → заявки ждут записи")

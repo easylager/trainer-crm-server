@@ -489,6 +489,7 @@
           state.pendingBookClientName = null;
           if (state.quickBookProfileAwaitingConfirm) {
             state.quickBookProfileAwaitingConfirm = false;
+            setQuickBookProfileServiceLoading(false);
             var ms = document.getElementById('modalQuickBookService');
             if (ms) {
               ms.style.display = 'flex';
@@ -500,6 +501,8 @@
         }
         var mqs = document.getElementById('modalQuickBookService');
         if (mqs && mqs.style.display === 'flex') {
+          setQuickBookProfileServiceLoading(false);
+          setQuickBookDatetimeLoading(false);
           mqs.style.display = 'none';
           mqs.setAttribute('aria-hidden', 'true');
           state.quickBookProfileServiceStep = false;
@@ -513,6 +516,7 @@
         }
         var mq = document.getElementById('modalQuickBookDatetime');
         if (mq && mq.style.display === 'flex') {
+          setQuickBookDatetimeLoading(false);
           mq.style.display = 'none';
           mq.setAttribute('aria-hidden', 'true');
           state.pendingBookFlowFromHub = false;
@@ -992,14 +996,17 @@
           var canCancelBooking = stRaw === 'confirmed' && !bookingEnded;
           var tid = b.client_telegram_id;
 
+          var primaryActions = [];
+          var extraActions = [];
           if (pending) {
-            actions.innerHTML += '<button type="button" class="bd-btn bd-btn--confirm" data-baction="confirm">' + BD_ICONS.check + ' Подтвердить</button>';
-            actions.innerHTML += '<button type="button" class="bd-btn bd-btn--decline" data-baction="decline">' + BD_ICONS.xCircle + ' Отклонить</button>';
+            primaryActions.push({ cls: 'bd-btn--confirm', action: 'confirm', icon: BD_ICONS.check, label: 'Подтвердить' });
+            primaryActions.push({ cls: 'bd-btn--decline', action: 'decline', icon: BD_ICONS.xCircle, label: 'Отклонить' });
           } else if (canCancelBooking) {
-            actions.innerHTML += '<button type="button" class="bd-btn bd-btn--outline-danger" data-baction="cancel">' + BD_ICONS.cancelOutline + ' Отменить запись</button>';
+            primaryActions.push({ cls: 'bd-btn--secondary', action: 'reschedule', icon: BD_ICONS.session, label: 'Перенести запись' });
+            primaryActions.push({ cls: 'bd-btn--outline-danger', action: 'cancel', icon: BD_ICONS.cancelOutline, label: 'Отменить запись' });
           }
           if (tid && b.client_has_telegram !== false) {
-            actions.innerHTML += '<button type="button" class="bd-btn bd-btn--surface" data-baction="write_client">' + BD_ICONS.send + ' Написать клиенту</button>';
+            extraActions.push({ cls: 'bd-btn--surface', action: 'write_client', icon: BD_ICONS.send, label: 'Написать клиенту' });
           }
           var canReportProblem = stRaw !== 'cancelled' && stRaw !== 'declined';
           // E7: false when rollout=off or pilot excludes this trainer (API sets problem_flow_enabled).
@@ -1013,15 +1020,33 @@
               actions.innerHTML += '<p class="bd-problem-sent-hint">Отметка «Клиент не пришёл» сохранена.</p>';
             } else {
               var probBtnLabel = isPassCert ? 'Клиент не пришёл' : 'Проблема с клиентом';
-              actions.innerHTML += '<button type="button" class="bd-btn bd-btn--surface" data-baction="client_problem">' + BD_ICONS.alert + ' ' + probBtnLabel + '</button>';
+              extraActions.push({ cls: 'bd-btn--surface', action: 'client_problem', icon: BD_ICONS.alert, label: probBtnLabel });
             }
           }
           if (!completed) {
             if (b.recurring_id) {
-              actions.innerHTML += '<button type="button" class="bd-btn bd-btn--soft" data-baction="remove_recurring" data-recurring-id="' + b.recurring_id + '">' + BD_ICONS.linkOff + ' Снять регулярность</button>';
+              extraActions.push({
+                cls: 'bd-btn--soft',
+                action: 'remove_recurring',
+                icon: BD_ICONS.linkOff,
+                label: 'Снять регулярность',
+                recurringId: b.recurring_id,
+              });
             } else {
-              actions.innerHTML += '<button type="button" class="bd-btn bd-btn--soft" data-baction="make_regular">' + BD_ICONS.userPlus + ' Сделать постоянным клиентом</button>';
+              extraActions.push({ cls: 'bd-btn--soft', action: 'make_regular', icon: BD_ICONS.userPlus, label: 'Сделать постоянным клиентом' });
             }
+          }
+
+          function renderActionBtn(a) {
+            var rid = a.recurringId ? ' data-recurring-id="' + String(a.recurringId) + '"' : '';
+            return '<button type="button" class="bd-btn ' + a.cls + '" data-baction="' + a.action + '"' + rid + '>' + a.icon + ' ' + escapeHtml(a.label) + '</button>';
+          }
+          primaryActions.forEach(function(a) { actions.innerHTML += renderActionBtn(a); });
+          if (extraActions.length) {
+            actions.innerHTML += '<div class="bd-actions-separator" role="separator" aria-hidden="true"></div>';
+            actions.innerHTML += '<div class="bd-actions-extra" id="detailBookingExtraActions"></div>';
+            var extraWrap = document.getElementById('detailBookingExtraActions');
+            if (extraWrap) extraWrap.innerHTML = extraActions.map(renderActionBtn).join('');
           }
 
           actions.querySelectorAll('button[data-baction]').forEach(function(btn) {
@@ -1032,6 +1057,10 @@
                 var ppc2 = b.problem_payment_class || '';
                 if (ppc2 === 'PASS' || ppc2 === 'CERT') openClientNoShowModal(b.id);
                 else openClientProblemWizard(b.id);
+                return;
+              }
+              if (act === 'reschedule') {
+                startRescheduleFromBooking(b);
                 return;
               }
               if (act === 'confirm') confirmTrainerBooking(b.id);
@@ -1168,11 +1197,43 @@
         );
       }
 
+      /** When opened in trainer-clients iframe (?embed=1), tell parent to close overlay and show UX there. */
+      function notifyTrainerClientsEmbed(payload) {
+        if (!state.scheduleEditorEmbed) return false;
+        try {
+          if (window.parent && window.parent !== window) {
+            window.parent.postMessage(Object.assign({ __tcEmbed: true }, payload), window.location.origin);
+            return true;
+          }
+        } catch (e) { /* cross-origin / older WebView */ }
+        return false;
+      }
+
       function applyTrainerBookingCreateSuccess(_apiData, toastMsg) {
         document.getElementById('modalBookClient').style.display = 'none';
         clearBookSlotModalState();
+        var msg = toastMsg || 'Запись создана';
+        var oldBookingIdToCancel = state.rescheduleSourceBookingId;
+        state.rescheduleSourceBookingId = null;
+        if (notifyTrainerClientsEmbed({ type: 'quickbook_success', message: msg })) {
+          updateTelegramBack();
+          return;
+        }
+        if (oldBookingIdToCancel) {
+          postJsonTrainer('/trainer/bookings/' + oldBookingIdToCancel + '/cancel', null)
+            .then(function() {
+              loadSlots();
+              showToast('Запись перенесена');
+            })
+            .catch(function() {
+              loadSlots();
+              showToast('Новая запись создана, но старую не удалось отменить. Проверьте запись вручную.');
+            });
+          updateTelegramBack();
+          return;
+        }
         loadSlots();
-        showToast(toastMsg || 'Запись создана');
+        showToast(msg);
         updateTelegramBack();
       }
 
@@ -1232,6 +1293,10 @@
         pendingBookGroupSlotId: null,
         /** True while booking via POST /trainer/booking/quick (no pre-existing slot). */
         bookFlowQuick: false,
+        /** When quick-book starts from booking detail transfer CTA, cancel this old booking after success. */
+        rescheduleSourceBookingId: null,
+        /** schedule-editor?embed=1 — loaded inside trainer-clients iframe; parent handles success / dismiss. */
+        scheduleEditorEmbed: false,
         /** Slots for selected quick-book day (from GET /schedule); used to mark busy hours. */
         quickBookSlotsForDay: null,
         quickBookSlotDate: null,
@@ -1734,6 +1799,8 @@
             qbHint.textContent = '';
           }
         }
+        var qbDtLoad = document.getElementById('quickBookDatetimeLoadingWrap');
+        if (qbDtLoad) qbDtLoad.classList.toggle('quick-book-datetime-wrap--duration-custom', fixed == null);
       }
 
       /** Merge schedule_grid from GET /schedule or /schedule/templates into state. */
@@ -2212,6 +2279,7 @@
           }
           loadSlots._waitInit = 0;
           document.getElementById('calendarContent').innerHTML = '<div class="error">Нет данных авторизации Telegram. Закройте мини-приложение и откройте «Расписание» через меню бота (кнопка слева от поля ввода) или через кнопку под сообщением в чате.</div>';
+          hideFlowBookBootOverlay();
           return;
         }
         loadSlots._waitInit = 0;
@@ -2249,12 +2317,17 @@
             applyScheduleDefaultDurationFromProfile(data && data.session_duration_minutes);
             applyScheduleGridFromApi(data);
             state.scheduleDataLoaded = true;
-            renderCalendar();
-            if (state.pendingBookFlowFromHub) {
+            var fromHubQuickBook = state.pendingBookFlowFromHub;
+            if (fromHubQuickBook) {
               state.pendingBookFlowFromHub = false;
-              setTimeout(function() {
-                openQuickBookModalFromHub();
-              }, 80);
+              openQuickBookModalFromHub();
+            }
+            if (fromHubQuickBook) {
+              requestAnimationFrame(function() {
+                renderCalendar();
+              });
+            } else {
+              renderCalendar();
             }
             flushPendingGroupHubModal();
             if (state.pendingBookGroupSlotId) {
@@ -2273,6 +2346,7 @@
               setTimeout(loadSlots, 100);
               return;
             }
+            hideFlowBookBootOverlay();
             renderCalendarLoadFailure();
           });
       }
@@ -2345,6 +2419,31 @@
         el.textContent = text;
       }
 
+      function hideFlowBookBootOverlay() {
+        try {
+          document.documentElement.classList.remove('se-flow-book-boot');
+          var el = document.getElementById('seFlowBookBootOverlay');
+          if (el) {
+            el.hidden = true;
+            el.setAttribute('aria-hidden', 'true');
+          }
+        } catch (e) { /* ignore */ }
+      }
+
+      function setQuickBookDatetimeLoading(on) {
+        var wrap = document.getElementById('quickBookDatetimeLoadingWrap');
+        var modal = document.getElementById('modalQuickBookDatetime');
+        if (wrap) wrap.classList.toggle('quick-book-datetime-loading-wrap--loading', !!on);
+        if (modal) modal.setAttribute('aria-busy', on ? 'true' : 'false');
+      }
+
+      function setQuickBookProfileServiceLoading(on) {
+        var wrap = document.getElementById('quickBookServiceLoadingWrap');
+        var modal = document.getElementById('modalQuickBookService');
+        if (wrap) wrap.classList.toggle('quick-book-service-loading-wrap--loading', !!on);
+        if (modal) modal.setAttribute('aria-busy', on ? 'true' : 'false');
+      }
+
       /** Rebuild start-time &lt;select&gt; from arena grid (GET /schedule) + chosen duration. */
       function refreshQuickBookHourOptions(isoDate) {
         var hourSel = document.getElementById('quickBookHourSelect');
@@ -2353,9 +2452,11 @@
         var dm = durEl ? parseInt(durEl.value, 10) : 45;
         if (isNaN(dm) || dm < 15) dm = 45;
         hourSel.disabled = true;
+        hourSel.innerHTML = '';
         var btnGo = document.getElementById('btnQuickBookContinue');
         if (btnGo) btnGo.disabled = true;
-        setQuickBookHourHint('Загрузка расписания…', true);
+        setQuickBookDatetimeLoading(true);
+        setQuickBookHourHint('', false);
         return fetch(
           apiUrlWithQuery('/schedule?from_date=' + encodeURIComponent(isoDate) + '&to_date=' + encodeURIComponent(isoDate)),
           { headers: headers() }
@@ -2422,6 +2523,7 @@
             }
             var btnGo2 = document.getElementById('btnQuickBookContinue');
             if (btnGo2) btnGo2.disabled = !anyFree;
+            setQuickBookDatetimeLoading(false);
           })
           .catch(function() {
             hourSel.disabled = false;
@@ -2438,6 +2540,7 @@
             }
             setQuickBookHourHint('Не удалось проверить занятость — выберите время вручную.', true);
             showToast('Не удалось загрузить расписание');
+            setQuickBookDatetimeLoading(false);
           });
       }
 
@@ -2451,23 +2554,65 @@
         }, 300);
       }
 
-      function openQuickBookModalFromHub() {
+      function openQuickBookModalFromHub(prefill) {
         var mq = document.getElementById('modalQuickBookDatetime');
         if (!mq) return;
+        prefill = prefill || {};
         var minD = dateToStr(new Date());
         var inp = document.getElementById('quickBookDateInput');
         if (inp) {
           inp.min = minD;
-          inp.value = minD;
+          var pDate = (prefill.date || '').trim();
+          inp.value = pDate && pDate >= minD ? pDate : minD;
         }
         var dur = document.getElementById('quickBookDurationSelect');
-        if (dur) dur.value = String(state.defaultSlotDurationMinutes || 45);
+        if (dur) {
+          var pDur = parseInt(prefill.durationMinutes, 10);
+          dur.value = String(!isNaN(pDur) && pDur >= 15 ? pDur : (state.defaultSlotDurationMinutes || 45));
+        }
         syncDurationUIFromScheduleGrid();
+        setQuickBookDatetimeLoading(true);
         mq.style.display = 'flex';
         mq.setAttribute('aria-hidden', 'false');
+        hideFlowBookBootOverlay();
         updateTelegramBack();
         syncQuickBookContinueButtonLabel();
-        refreshQuickBookHourOptions(inp ? inp.value : minD);
+        var dateToLoad = inp ? inp.value : minD;
+        var preStart = parseInt(prefill.startMinutes, 10);
+        refreshQuickBookHourOptions(dateToLoad).then(function() {
+          if (isNaN(preStart)) return;
+          var hourSel = document.getElementById('quickBookHourSelect');
+          if (!hourSel) return;
+          var wanted = String(preStart);
+          var opt = hourSel.querySelector('option[value="' + wanted + '"]:not([disabled])');
+          if (opt) hourSel.value = wanted;
+        });
+      }
+
+      function bookingDurationMinutes(b) {
+        var sm = parseStartToMinutes(b && b.start_time);
+        var em = parseStartToMinutes(b && b.end_time);
+        var dm = em - sm;
+        return dm >= 15 ? dm : 45;
+      }
+
+      function startRescheduleFromBooking(b) {
+        if (!b || !b.client_id) {
+          showToast('Нельзя перенести: клиент не найден.');
+          return;
+        }
+        state.rescheduleSourceBookingId = b.id;
+        state.deepLinkClientId = b.client_id;
+        state.quickBookProfileClientName = (b.client_name || '').trim() || 'Клиент';
+        var slotDate = (b.slot_date || '').toString().slice(0, 10);
+        var dm = bookingDurationMinutes(b);
+        var startM = parseStartToMinutes(b.start_time);
+        state.quickBookDurationMinutes = dm;
+        openQuickBookModalFromHub({
+          date: slotDate,
+          durationMinutes: dm,
+          startMinutes: startM
+        });
       }
 
       /**
@@ -2485,6 +2630,19 @@
         state.bookFlowQuick = true;
         state.quickBookProfileServiceStep = true;
         state.quickBookLockedClientId = cid;
+        hideFlowBookBootOverlay();
+        var ms = document.getElementById('modalQuickBookService');
+        setQuickBookProfileServiceLoading(true);
+        if (ms) {
+          ms.style.display = 'flex';
+          ms.setAttribute('aria-hidden', 'false');
+        }
+        if (mqDatetime) {
+          mqDatetime.style.display = 'none';
+          mqDatetime.setAttribute('aria-hidden', 'true');
+        }
+        setQuickBookDatetimeLoading(false);
+        updateTelegramBack();
         Promise.all([
           fetch(apiUrlWithQuery('/trainer/my-services'), { headers: headers() }).then(function(r) {
             return r.ok ? r.json() : Promise.reject(new Error('svc'));
@@ -2494,6 +2652,7 @@
           }),
         ])
           .then(function(results) {
+            setQuickBookProfileServiceLoading(false);
             var servicesPayload = results[0];
             var defaults = results[1];
             state.bookServices = servicesPayload.services || [];
@@ -2502,6 +2661,10 @@
               state.quickBookProfileServiceStep = false;
               state.quickBookLockedClientId = null;
               showToast('Добавьте услугу в профиле');
+              if (ms) {
+                ms.style.display = 'none';
+                ms.setAttribute('aria-hidden', 'true');
+              }
               if (mqDatetime) {
                 mqDatetime.style.display = 'flex';
                 mqDatetime.setAttribute('aria-hidden', 'false');
@@ -2565,24 +2728,19 @@
             var defVid = defaults.service_price_variant_id != null ? parseInt(defaults.service_price_variant_id, 10) : null;
             syncQuickBookProfilePriceTierRadios(defVid);
 
-            var ms = document.getElementById('modalQuickBookService');
-            /* Show service overlay first, then hide datetime — no frame without a modal (calendar flash). */
-            if (ms) {
-              ms.style.display = 'flex';
-              ms.setAttribute('aria-hidden', 'false');
-            }
-            if (mqDatetime) {
-              mqDatetime.style.display = 'none';
-              mqDatetime.setAttribute('aria-hidden', 'true');
-            }
             updateTelegramBack();
             if (finishBtn) finishBtn();
           })
           .catch(function() {
+            setQuickBookProfileServiceLoading(false);
             state.bookFlowQuick = false;
             state.quickBookProfileServiceStep = false;
             state.quickBookLockedClientId = null;
             showToast('Не удалось загрузить услуги');
+            if (ms) {
+              ms.style.display = 'none';
+              ms.setAttribute('aria-hidden', 'true');
+            }
             if (mqDatetime) {
               mqDatetime.style.display = 'flex';
               mqDatetime.setAttribute('aria-hidden', 'false');
@@ -3135,11 +3293,17 @@
         state.pendingBookClientName = null;
         if (state.quickBookProfileAwaitingConfirm) {
           state.quickBookProfileAwaitingConfirm = false;
+          setQuickBookProfileServiceLoading(false);
           var ms = document.getElementById('modalQuickBookService');
           if (ms) {
             ms.style.display = 'flex';
             ms.setAttribute('aria-hidden', 'false');
           }
+          updateTelegramBack();
+          return;
+        }
+        if (state.scheduleEditorEmbed && state.bookFlowQuick) {
+          notifyTrainerClientsEmbed({ type: 'quickbook_dismiss' });
           updateTelegramBack();
           return;
         }
@@ -3169,8 +3333,10 @@
         var btn = document.getElementById('btnQuickBookContinue');
         function finishBtn() {
           if (btn) btn.disabled = false;
+          setQuickBookDatetimeLoading(false);
         }
         if (btn) btn.disabled = true;
+        setQuickBookDatetimeLoading(true);
         fetch(
           apiUrlWithQuery('/schedule?from_date=' + encodeURIComponent(sd) + '&to_date=' + encodeURIComponent(sd)),
           { headers: headers() }
@@ -3215,7 +3381,6 @@
             state.quickBookDurationMinutes = dm;
             setQuickBookHourHint('', false);
             if (state.deepLinkClientId) {
-              /* Keep datetime overlay until service step is ready — avoids a flash of the calendar. */
               openQuickBookProfileServiceStep(mq, finishBtn);
             } else {
               if (mq) {
@@ -3253,7 +3418,6 @@
         }
         var btnCont = document.getElementById('btnQuickBookContinue');
         var btnCancel = document.getElementById('btnQuickBookCancel');
-        var btnFree = document.getElementById('btnQuickBookShowFreeSlots');
         if (btnCont) {
           btnCont.onclick = function() {
             var inp = document.getElementById('quickBookDateInput');
@@ -3281,27 +3445,19 @@
         }
         if (btnCancel) {
           btnCancel.onclick = function() {
+            setQuickBookDatetimeLoading(false);
             if (mq) {
               mq.style.display = 'none';
               mq.setAttribute('aria-hidden', 'true');
             }
             state.pendingBookFlowFromHub = false;
+            state.rescheduleSourceBookingId = null;
             state.quickBookLockedClientId = null;
             state.quickBookProfileServiceStep = false;
-            updateTelegramBack();
-          };
-        }
-        if (btnFree) {
-          btnFree.onclick = function() {
-            if (mq) {
-              mq.style.display = 'none';
-              mq.setAttribute('aria-hidden', 'true');
+            if (state.scheduleEditorEmbed) {
+              notifyTrainerClientsEmbed({ type: 'quickbook_dismiss' });
             }
-            state.pendingBookFlowFromHub = false;
-            state.quickBookLockedClientId = null;
-            state.quickBookProfileServiceStep = false;
             updateTelegramBack();
-            scrollToFirstFreeSlotRow();
           };
         }
       })();
@@ -3334,6 +3490,7 @@
         }
         if (btnBack) {
           btnBack.onclick = function() {
+            setQuickBookProfileServiceLoading(false);
             var ms = document.getElementById('modalQuickBookService');
             if (ms) {
               ms.style.display = 'none';
@@ -4123,6 +4280,9 @@
         var fromHub = (p.get('from') || '') === 'hub';
         var hubGroupSlotRaw = p.get('hub_group_slot');
         var flowBook = (p.get('flow') || '') === 'book';
+        if (p.get('embed') === '1' && (flowBook || !!cidRaw)) {
+          state.scheduleEditorEmbed = true;
+        }
         var tabParam = (p.get('tab') || '').trim().toLowerCase();
         var openClientProblem = (p.get('open_client_problem') || '') === '1';
         var anchorDate = (p.get('anchor_date') || '').trim();

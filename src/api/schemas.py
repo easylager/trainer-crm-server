@@ -275,6 +275,18 @@ class TrainerProfilePatchBody(BaseModel):
         default=None,
         description="Шаг сетки расписания, если у основной арены нет пресета в arena_schedule_presets.",
     )
+    push_notification_start_hour: int | None = Field(
+        default=None,
+        ge=0,
+        le=23,
+        description="Час начала окна пушей тренеру (Europe/Minsk), включительно. null + null = стандарт сервиса.",
+    )
+    push_notification_end_hour: int | None = Field(
+        default=None,
+        ge=1,
+        le=24,
+        description="Час конца окна (не включая). 24 = до полуночи. null + null = стандарт сервиса.",
+    )
 
     @field_validator("schedule_grid_step_minutes")
     @classmethod

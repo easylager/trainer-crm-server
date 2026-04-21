@@ -2541,7 +2541,7 @@ async def reverse_booking_completion_for_problem_report(session: AsyncSession, b
 
 
 async def list_bookings_to_complete(session: AsyncSession, limit: int = 50) -> list[dict]:
-    """Bookings with status in ('pending', 'confirmed') and slot (date + end_time) already in the past."""
+    """Bookings with status in ('pending', 'confirmed') and slot end (Europe/Minsk wall time) already in the past."""
     r = await session.execute(
         text("""
             SELECT b.id, c.telegram_id, b.trainer_id,
@@ -2557,7 +2557,7 @@ async def list_bookings_to_complete(session: AsyncSession, limit: int = 50) -> l
             JOIN trainers t ON t.id = b.trainer_id
             LEFT JOIN trainer_profiles p ON p.trainer_id = b.trainer_id
             WHERE b.status IN ('pending', 'confirmed') AND s.status IN ('available', 'booked')
-              AND (s.slot_date + s.end_time) < CURRENT_TIMESTAMP
+              AND """ + _SQL_SLOT_END_TS + """ < CURRENT_TIMESTAMP
               AND NOT EXISTS (SELECT 1 FROM booking_problem_reports pr WHERE pr.booking_id = b.id)
             ORDER BY s.slot_date, s.end_time
             LIMIT :lim
@@ -2642,6 +2642,79 @@ async def mark_client_booking_completion_push_sent(
     await session.commit()
 
 
+async def list_bookings_for_trainer_session_wrapup(
+    session: AsyncSession,
+    *,
+    lead_seconds: int,
+    limit: int = 20,
+) -> list[dict]:
+    """
+    Confirmed/pending bookings whose slot end is in the future but within ``lead_seconds`` (Europe/Minsk).
+    Used to prompt the trainer to offer repeat booking before the session ends. One push per booking.
+    """
+    if lead_seconds <= 0:
+        return []
+    r = await session.execute(
+        text("""
+            SELECT b.id, b.id AS booking_id, b.trainer_id, c.telegram_id AS client_telegram_id,
+                   b.client_id,
+                   s.slot_date, s.start_time, s.end_time,
+                   TRIM(COALESCE(c.first_name, '') || ' ' || COALESCE(c.last_name, '')) AS client_name,
+                   COALESCE(srv.name, '—') AS service_name,
+                   b.price_tier_kind,
+                   """
+        + SQL_BOOKING_ARENA_DISPLAY
+        + """ AS arenas_str
+            FROM bookings b
+            JOIN clients c ON c.id = b.client_id
+            JOIN slots s ON s.id = b.slot_id
+            LEFT JOIN services srv ON srv.id = b.service_id
+            WHERE b.status IN ('pending', 'confirmed') AND s.status IN ('available', 'booked')
+              AND b.trainer_session_wrapup_sent_at IS NULL
+              AND c.telegram_id IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM booking_problem_reports pr WHERE pr.booking_id = b.id)
+              AND """ + _SQL_SLOT_END_TS + """ > CURRENT_TIMESTAMP
+              AND (""" + _SQL_SLOT_END_TS + """ - ((INTERVAL '1 second') * :lead_sec)) <= CURRENT_TIMESTAMP
+            ORDER BY s.slot_date, s.start_time
+            LIMIT :lim
+        """),
+        {"lim": limit, "lead_sec": lead_seconds},
+    )
+    rows = r.fetchall()
+    out: list[dict] = []
+    for row in rows:
+        ptk = normalize_price_tier_kind(row[10])
+        tier_label = price_tier_label_ru(ptk) if ptk else None
+        arena_raw = _normalize_trainer_arenas_display(row[11])
+        out.append(
+            {
+                "id": row[0],
+                "booking_id": row[1],
+                "trainer_id": row[2],
+                "client_telegram_id": row[3],
+                "client_id": row[4],
+                "slot_date": row[5],
+                "start_time": row[6],
+                "end_time": row[7],
+                "client_name": ((row[8] or "").strip() or "Клиент"),
+                "service_name": ((row[9] or "—").strip()),
+                "price_tier_label": tier_label,
+                "arenas_str": arena_raw,
+            }
+        )
+    return out
+
+
+async def mark_trainer_session_wrapup_sent(session: AsyncSession, booking_id: int) -> None:
+    await session.execute(
+        text(
+            "UPDATE bookings SET trainer_session_wrapup_sent_at = CURRENT_TIMESTAMP WHERE id = :bid"
+        ),
+        {"bid": booking_id},
+    )
+    await session.commit()
+
+
 async def mark_booking_completed_and_notify(
     session: AsyncSession,
     booking_id: int,
@@ -2659,59 +2732,35 @@ async def mark_booking_completed_and_notify(
     )
     # Rule 3.1: deduct one pass session when booking becomes completed (best-effort; no raise if no pass)
     pass_redeemed = await redeem_pass_session_for_booking(session, booking_id)
-    # If no pass was used, try to deduct from certificate monetary balance for this client+trainer
+    cert_redeemed = False
     if not pass_redeemed:
-        await redeem_certificate_balance_for_booking(session, booking_id)
+        cert_redeemed = await redeem_certificate_balance_for_booking(session, booking_id)
+    trainer_no_pass_footer = not pass_redeemed and not cert_redeemed
     await session.execute(
         text("""
-            INSERT INTO booking_completed_notifications (booking_id, client_telegram_id, trainer_id)
-            SELECT b.id, c.telegram_id, b.trainer_id FROM bookings b
-            JOIN clients c ON c.id = b.client_id AND c.telegram_id IS NOT NULL WHERE b.id = :bid
+            INSERT INTO booking_completed_notifications
+                (booking_id, client_telegram_id, trainer_id, trainer_no_pass_footer)
+            SELECT b.id, c.telegram_id, b.trainer_id, :footer
+            FROM bookings b
+            JOIN clients c ON c.id = b.client_id WHERE b.id = :bid
             ON CONFLICT (booking_id) DO NOTHING
+        """),
+        {"bid": booking_id, "footer": trainer_no_pass_footer},
+    )
+    # Trainer already received «wrap-up» push in the last minute — do not enqueue duplicate Telegram.
+    await session.execute(
+        text("""
+            UPDATE booking_completed_notifications n
+            SET trainer_sent_at = CURRENT_TIMESTAMP
+            FROM bookings b
+            WHERE n.booking_id = b.id AND b.id = :bid
+              AND b.trainer_session_wrapup_sent_at IS NOT NULL
+              AND n.trainer_sent_at IS NULL
         """),
         {"bid": booking_id},
     )
     await session.commit()
     return pass_redeemed
-
-
-async def get_booking_no_pass_notify_payload(
-    session: AsyncSession,
-    booking_id: int,
-) -> dict | None:
-    """Payload for trainer 'no pass for this service' notification: trainer_telegram_id, client_name, service_name, date, time. Booking must exist (typically just completed)."""
-    r = await session.execute(
-        text("""
-            SELECT t.telegram_id,
-                   TRIM(COALESCE(c.first_name, '') || ' ' || COALESCE(c.last_name, '')),
-                   COALESCE(srv.name, '—'),
-                   s.slot_date,
-                   s.start_time
-            FROM bookings b
-            JOIN trainers t ON t.id = b.trainer_id
-            JOIN clients c ON c.id = b.client_id
-            JOIN slots s ON s.id = b.slot_id
-            LEFT JOIN services srv ON srv.id = b.service_id
-            WHERE b.id = :bid
-        """),
-        {"bid": booking_id},
-    )
-    row = r.fetchone()
-    if not row or row[0] is None:
-        return None
-    slot_date, start_time = row[3], row[4]
-    date_str = slot_date.strftime("%d.%m") if hasattr(slot_date, "strftime") else str(slot_date)
-    _days = ("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс")
-    day_str = (_days[slot_date.weekday()] if hasattr(slot_date, "weekday") else "") if slot_date else ""
-    time_str = start_time.strftime("%H:%M") if start_time and hasattr(start_time, "strftime") else str(start_time or "")[:5]
-    return {
-        "trainer_telegram_id": row[0],
-        "client_name": (row[1] or "").strip() or "Клиент",
-        "service_name": (row[2] or "—").strip(),
-        "date": date_str,
-        "day": day_str,
-        "time": time_str,
-    }
 
 
 async def mark_booking_completed_by_trainer(
@@ -2745,14 +2794,29 @@ async def mark_booking_completed_by_trainer(
         {"bid": booking_id},
     )
     pass_redeemed = await redeem_pass_session_for_booking(session, booking_id)
+    cert_redeemed = False
     if not pass_redeemed:
-        await redeem_certificate_balance_for_booking(session, booking_id)
+        cert_redeemed = await redeem_certificate_balance_for_booking(session, booking_id)
+    trainer_no_pass_footer = not pass_redeemed and not cert_redeemed
     await session.execute(
         text("""
-            INSERT INTO booking_completed_notifications (booking_id, client_telegram_id, trainer_id)
-            SELECT b.id, c.telegram_id, b.trainer_id FROM bookings b
-            JOIN clients c ON c.id = b.client_id AND c.telegram_id IS NOT NULL WHERE b.id = :bid
+            INSERT INTO booking_completed_notifications
+                (booking_id, client_telegram_id, trainer_id, trainer_no_pass_footer)
+            SELECT b.id, c.telegram_id, b.trainer_id, :footer
+            FROM bookings b
+            JOIN clients c ON c.id = b.client_id WHERE b.id = :bid
             ON CONFLICT (booking_id) DO NOTHING
+        """),
+        {"bid": booking_id, "footer": trainer_no_pass_footer},
+    )
+    await session.execute(
+        text("""
+            UPDATE booking_completed_notifications n
+            SET trainer_sent_at = CURRENT_TIMESTAMP
+            FROM bookings b
+            WHERE n.booking_id = b.id AND b.id = :bid
+              AND b.trainer_session_wrapup_sent_at IS NOT NULL
+              AND n.trainer_sent_at IS NULL
         """),
         {"bid": booking_id},
     )
@@ -2765,6 +2829,7 @@ async def get_pending_completed_for_trainer(session: AsyncSession, limit: int = 
     r = await session.execute(
         text("""
             SELECT n.id, n.booking_id, n.trainer_id, n.client_telegram_id,
+                   n.trainer_no_pass_footer,
                    b.client_id,
                    s.slot_date, s.start_time, s.end_time,
                    TRIM(COALESCE(c.first_name, '') || ' ' || COALESCE(c.last_name, '')) AS client_name,
@@ -2787,21 +2852,22 @@ async def get_pending_completed_for_trainer(session: AsyncSession, limit: int = 
     rows = r.fetchall()
     out: list[dict] = []
     for row in rows:
-        ptk = normalize_price_tier_kind(row[10])
+        ptk = normalize_price_tier_kind(row[11])
         tier_label = price_tier_label_ru(ptk) if ptk else None
-        arena_raw = _normalize_trainer_arenas_display(row[11])
+        arena_raw = _normalize_trainer_arenas_display(row[12])
         out.append(
             {
                 "id": row[0],
                 "booking_id": row[1],
                 "trainer_id": row[2],
                 "client_telegram_id": row[3],
-                "client_id": row[4],
-                "slot_date": row[5],
-                "start_time": row[6],
-                "end_time": row[7],
-                "client_name": ((row[8] or "").strip() or "Клиент"),
-                "service_name": ((row[9] or "—").strip()),
+                "trainer_no_pass_footer": bool(row[4]),
+                "client_id": row[5],
+                "slot_date": row[6],
+                "start_time": row[7],
+                "end_time": row[8],
+                "client_name": ((row[9] or "").strip() or "Клиент"),
+                "service_name": ((row[10] or "—").strip()),
                 "price_tier_label": tier_label,
                 "arenas_str": arena_raw,
             }

@@ -12,7 +12,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 
 from src.application.booking_use_cases import (
-    get_booking_no_pass_notify_payload,
     get_bookings_pending_notification,
     get_clients_for_inactive_notification,
     get_pending_booking_cancel_notifications,
@@ -22,6 +21,7 @@ from src.application.booking_use_cases import (
     INACTIVE_KIND_10_DAYS,
     INACTIVE_KIND_30_DAYS,
     list_bookings_pending_client_completion_push,
+    list_bookings_for_trainer_session_wrapup,
     list_bookings_pending_confirm_reminder,
     list_bookings_to_complete,
     list_pending_reminders,
@@ -29,6 +29,7 @@ from src.application.booking_use_cases import (
     mark_booking_completed_and_notify,
     mark_booking_notified,
     mark_confirm_reminder_sent,
+    mark_trainer_session_wrapup_sent,
     mark_inactive_notification_sent,
     mark_reminder_failed,
     mark_reminder_sent,
@@ -71,13 +72,23 @@ from src.bot.trainer_cancel_client_notify import send_cancel_notification_payloa
 from src.infrastructure.db import async_session_factory
 from src.shared.config import Settings
 from src.shared.map_links import build_yandex_by_map_url
+from src.application.trainer_notification_prefs import is_trainer_push_allowed_now
 from src.shared.notification_hours import is_within_notification_hours
 
 logger = logging.getLogger(__name__)
 
+
+def _booking_complete_poll_interval_sec() -> int:
+    """Sleep between auto-complete scans; from Settings, clamped 15–600 s."""
+    try:
+        raw = int(Settings().booking_complete_poll_interval_sec)
+    except (TypeError, ValueError):
+        return 60
+    return max(15, min(600, raw))
+
+
 # Intervals (seconds)
 REMINDER_INTERVAL_SEC = 60
-BOOKING_COMPLETE_INTERVAL_SEC = 5 * 60
 CANCEL_NOTIFIER_INTERVAL_SEC = 15
 RESPONSE_NOTIFIER_INTERVAL_SEC = 20
 NO_RESPONSE_REMINDER_INTERVAL_SEC = 60 * 60
@@ -172,12 +183,14 @@ async def _send_client_booking_completed_push(
 async def process_booking_complete_round(client_bot: Bot, trainer_bot: Bot) -> None:
     """
     One pass: retry failed client completion pushes, then auto-complete past slots and notify.
+    Client completion Telegram uses global quiet hours; trainer no-pass uses per-trainer window.
     Exposed for integration tests (notification_service worker runs this in a loop).
     """
     async with async_session_factory() as session:
-        pending_retry = await list_bookings_pending_client_completion_push(session)
-        for b in pending_retry:
-            await _send_client_booking_completed_push(client_bot, session, b)
+        if is_within_notification_hours():
+            pending_retry = await list_bookings_pending_client_completion_push(session)
+            for b in pending_retry:
+                await _send_client_booking_completed_push(client_bot, session, b)
 
         to_complete = await list_bookings_to_complete(session)
         if to_complete:
@@ -186,32 +199,9 @@ async def process_booking_complete_round(client_bot: Bot, trainer_bot: Bot) -> N
                 len(to_complete),
             )
         for b in to_complete:
-            pass_redeemed = await mark_booking_completed_and_notify(session, b["id"])
-            if not pass_redeemed:
-                no_pass_payload = await get_booking_no_pass_notify_payload(session, b["id"])
-                if no_pass_payload and no_pass_payload.get("trainer_telegram_id"):
-                    try:
-                        text = msg.TRAINER_NO_PASS_FOR_SERVICE.format(
-                            client_name=html_lib.escape(
-                                (no_pass_payload.get("client_name") or "Клиент").strip() or "Клиент"
-                            ),
-                            date=html_lib.escape(str(no_pass_payload.get("date") or "")),
-                            time=html_lib.escape(str(no_pass_payload.get("time") or "")),
-                            service_name=html_lib.escape(
-                                str(no_pass_payload.get("service_name") or "—").strip()
-                            ),
-                        )
-                        await trainer_bot.send_message(
-                            chat_id=no_pass_payload["trainer_telegram_id"],
-                            text=text,
-                        )
-                    except Exception as e:
-                        logger.warning(
-                            "No-pass notify to trainer %s: %s",
-                            no_pass_payload.get("trainer_telegram_id"),
-                            e,
-                        )
-            await _send_client_booking_completed_push(client_bot, session, b)
+            await mark_booking_completed_and_notify(session, b["id"])
+            if is_within_notification_hours():
+                await _send_client_booking_completed_push(client_bot, session, b)
 
 
 async def process_cancel_notifications_batch(client_bot: Bot, session: AsyncSession) -> None:
@@ -276,6 +266,8 @@ async def process_request_notifications_batch(
 ) -> None:
     pending = await get_pending_request_notifications(session)
     for p in pending:
+        if not await is_trainer_push_allowed_now(session, int(p["trainer_id"])):
+            continue
         tid = p.get("trainer_telegram_id")
         if not tid:
             continue
@@ -314,6 +306,164 @@ async def process_request_notifications_batch(
             logger.warning("Request notifier send to %s: %s", tid, e)
 
 
+async def _build_trainer_post_session_keyboard(
+    session: AsyncSession,
+    p: dict,
+    *,
+    base: str,
+    webapp_https: bool,
+) -> InlineKeyboardMarkup:
+    """Inline keyboard for trainer «session end» flows: quick rebook, repeat week, feedback, write, client card."""
+    client_id = p.get("client_id")
+    slot_date = p.get("slot_date")
+    start_time = p.get("start_time")
+    can_quick_rebook = (
+        webapp_https
+        and client_id is not None
+        and await trainer_has_crm_access(session, p["trainer_id"])
+    )
+    rows: list[list[InlineKeyboardButton]] = []
+    if can_quick_rebook:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=msg.TRAINER_BUTTON_BOOK_AGAIN,
+                    web_app=WebAppInfo(
+                        url=f"{base}/webapp/schedule-editor?flow=book&client_id={int(client_id)}"
+                    ),
+                ),
+            ],
+        )
+    if slot_date and start_time:
+        sd = (
+            slot_date.date() if hasattr(slot_date, "date") else slot_date
+        )
+        target_d = sd + timedelta(days=7)
+        st_norm = (
+            start_time.replace(second=0, microsecond=0)
+            if hasattr(start_time, "replace")
+            else start_time
+        )
+        status_next, _ = await get_slot_status_on_date(
+            session, p["trainer_id"], target_d, st_norm
+        )
+        if status_next != "booked":
+            rows.append(
+                [
+                    InlineKeyboardButton(
+                        text=msg.TRAINER_BUTTON_BOOK_SAME_TIME_NEXT_WEEK,
+                        callback_data=f"trainer_repeat_week:{p['booking_id']}",
+                    ),
+                ],
+            )
+    rows.append(
+        [
+            InlineKeyboardButton(
+                text=msg.TRAINER_BUTTON_LEAVE_FEEDBACK,
+                callback_data=f"feedback_booking_trainer:{p['booking_id']}",
+            ),
+        ],
+    )
+    if p.get("client_telegram_id"):
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=msg.TRAINER_BOOKING_CONFIRMED_BTN_WRITE,
+                    url=f"tg://user?id={int(p['client_telegram_id'])}",
+                ),
+            ],
+        )
+    if can_quick_rebook:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=msg.TRAINER_BUTTON_CLIENT_CARD_WEBAPP,
+                    web_app=WebAppInfo(
+                        url=f"{base}/webapp/trainer-clients?client_id={int(client_id)}"
+                    ),
+                ),
+            ],
+        )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+async def process_trainer_session_wrapup_round(trainer_bot: Bot) -> None:
+    """
+    One pass: notify trainers in the last N seconds before slot end (Europe/Minsk) to offer repeat booking.
+    Respects each trainer's push window (and global bypass from NOTIFICATION_DISABLE_QUIET_HOURS).
+    """
+    settings = Settings()
+    lead_sec = int(settings.trainer_session_wrapup_lead_seconds or 0)
+    if lead_sec <= 0:
+        return
+    lead_sec = max(15, min(lead_sec, 600))
+    async with async_session_factory() as session:
+        pending = await list_bookings_for_trainer_session_wrapup(
+            session, lead_seconds=lead_sec, limit=25
+        )
+    base = (settings.webapp_base_url or "").rstrip("/")
+    webapp_https = base.startswith("https://")
+    for p in pending:
+        async with async_session_factory() as session:
+            trainer_tid = await get_trainer_telegram_id(session, p["trainer_id"])
+            if not trainer_tid:
+                await mark_trainer_session_wrapup_sent(session, p["booking_id"])
+                continue
+            if not await is_trainer_push_allowed_now(session, int(p["trainer_id"])):
+                continue
+            slot_date = p.get("slot_date")
+            start_time = p.get("start_time")
+            date_str = (
+                slot_date.strftime("%d.%m")
+                if slot_date and hasattr(slot_date, "strftime")
+                else "—"
+            )
+            day_str = (
+                msg.TRAINER_DAYS[slot_date.weekday()]
+                if slot_date and hasattr(slot_date, "weekday")
+                else ""
+            )
+            time_str = (
+                start_time.strftime("%H:%M")
+                if start_time and hasattr(start_time, "strftime")
+                else "—"
+            )
+            end_time = p.get("end_time")
+            duration_done = _reminder_duration_minutes(start_time, end_time)
+            client_id = p.get("client_id")
+            can_quick_rebook = (
+                webapp_https
+                and client_id is not None
+                and await trainer_has_crm_access(session, p["trainer_id"])
+            )
+            text = msg.format_trainer_booking_session_wrapup_html(
+                client_name=p.get("client_name") or "Клиент",
+                date=date_str,
+                day=day_str,
+                time=time_str,
+                duration_minutes=duration_done,
+                service_name=p.get("service_name"),
+                price_tier_label=p.get("price_tier_label"),
+                arena_display=p.get("arenas_str"),
+                include_quick_rebook_line=can_quick_rebook,
+            )
+            kb = await _build_trainer_post_session_keyboard(
+                session, p, base=base, webapp_https=webapp_https
+            )
+            try:
+                await trainer_bot.send_message(
+                    chat_id=trainer_tid, text=text, reply_markup=kb
+                )
+                await mark_trainer_session_wrapup_sent(session, p["booking_id"])
+            except Exception as e:
+                logger.warning(
+                    "Session wrap-up send to trainer %s (booking_id=%s): %s",
+                    trainer_tid,
+                    p.get("booking_id"),
+                    e,
+                )
+
+
 async def process_completed_feedback_batch(
     trainer_bot: Bot, session: AsyncSession
 ) -> None:
@@ -322,6 +472,8 @@ async def process_completed_feedback_batch(
     base = (settings.webapp_base_url or "").rstrip("/")
     webapp_https = base.startswith("https://")
     for p in pending:
+        if not await is_trainer_push_allowed_now(session, int(p["trainer_id"])):
+            continue
         trainer_tid = await get_trainer_telegram_id(session, p["trainer_id"])
         if not trainer_tid:
             await mark_trainer_completed_sent(session, p["id"])
@@ -345,6 +497,12 @@ async def process_completed_feedback_batch(
         )
         end_time = p.get("end_time")
         duration_done = _reminder_duration_minutes(start_time, end_time)
+        client_id = p.get("client_id")
+        can_quick_rebook = (
+            webapp_https
+            and client_id is not None
+            and await trainer_has_crm_access(session, p["trainer_id"])
+        )
         text = msg.format_trainer_booking_completed_html(
             client_name=p.get("client_name") or "Клиент",
             date=date_str,
@@ -354,64 +512,12 @@ async def process_completed_feedback_batch(
             service_name=p.get("service_name"),
             price_tier_label=p.get("price_tier_label"),
             arena_display=p.get("arenas_str"),
+            include_quick_rebook_line=can_quick_rebook,
+            append_no_pass_notice=bool(p.get("trainer_no_pass_footer")),
         )
-        rows: list[list[InlineKeyboardButton]] = [
-            [
-                InlineKeyboardButton(
-                    text=msg.TRAINER_BUTTON_LEAVE_FEEDBACK,
-                    callback_data=f"feedback_booking_trainer:{p['booking_id']}",
-                ),
-            ],
-        ]
-        if p.get("client_telegram_id"):
-            rows.append(
-                [
-                    InlineKeyboardButton(
-                        text=msg.TRAINER_BOOKING_CONFIRMED_BTN_WRITE,
-                        url=f"tg://user?id={int(p['client_telegram_id'])}",
-                    ),
-                ],
-            )
-        if slot_date and start_time:
-            sd = (
-                slot_date.date() if hasattr(slot_date, "date") else slot_date
-            )
-            target_d = sd + timedelta(days=7)
-            st_norm = (
-                start_time.replace(second=0, microsecond=0)
-                if hasattr(start_time, "replace")
-                else start_time
-            )
-            status_next, _ = await get_slot_status_on_date(
-                session, p["trainer_id"], target_d, st_norm
-            )
-            if status_next != "booked":
-                rows.append(
-                    [
-                        InlineKeyboardButton(
-                            text=msg.TRAINER_BUTTON_BOOK_SAME_TIME_NEXT_WEEK,
-                            callback_data=f"trainer_repeat_week:{p['booking_id']}",
-                        ),
-                    ],
-                )
-        client_id = p.get("client_id")
-        if (
-            webapp_https
-            and client_id is not None
-            and await trainer_has_crm_access(session, p["trainer_id"])
-        ):
-            # One button per row: full labels on narrow screens.
-            rows.append(
-                [
-                    InlineKeyboardButton(
-                        text=msg.TRAINER_BUTTON_CLIENT_CARD_WEBAPP,
-                        web_app=WebAppInfo(
-                            url=f"{base}/webapp/trainer-clients?client_id={int(client_id)}"
-                        ),
-                    ),
-                ],
-            )
-        kb = InlineKeyboardMarkup(inline_keyboard=rows)
+        kb = await _build_trainer_post_session_keyboard(
+            session, p, base=base, webapp_https=webapp_https
+        )
         try:
             await trainer_bot.send_message(
                 chat_id=trainer_tid, text=text, reply_markup=kb
@@ -569,9 +675,8 @@ async def run_booking_complete_loop(client_bot: Bot, trainer_bot: Bot) -> None:
     logger.info("[booking_complete_loop] started")
     while True:
         try:
-            await asyncio.sleep(BOOKING_COMPLETE_INTERVAL_SEC)
-            if not is_within_notification_hours():
-                continue
+            await asyncio.sleep(_booking_complete_poll_interval_sec())
+            await process_trainer_session_wrapup_round(trainer_bot)
             await process_booking_complete_round(client_bot, trainer_bot)
         except asyncio.CancelledError:
             logger.info("[booking_complete_loop] cancelled")
@@ -774,8 +879,6 @@ async def run_booking_notifier_loop(trainer_bot: Bot) -> None:
     while True:
         await asyncio.sleep(BOOKING_NOTIFIER_INTERVAL_SEC)
         try:
-            if not is_within_notification_hours():
-                continue
             async with async_session_factory() as session:
                 pending = await get_bookings_pending_notification(session)
                 if pending:
@@ -784,6 +887,8 @@ async def run_booking_notifier_loop(trainer_bot: Bot) -> None:
                         len(pending),
                     )
                 for b in pending:
+                    if not await is_trainer_push_allowed_now(session, int(b["trainer_id"])):
+                        continue
                     trainer_tid = await get_trainer_telegram_id(session, b["trainer_id"])
                     if not trainer_tid:
                         await mark_booking_notified(session, b["id"])
@@ -869,6 +974,8 @@ async def run_booking_notifier_loop(trainer_bot: Bot) -> None:
 
                 remind_candidates = await list_bookings_pending_confirm_reminder(session)
                 for r in remind_candidates:
+                    if not await is_trainer_push_allowed_now(session, int(r["trainer_id"])):
+                        continue
                     trainer_tid = await get_trainer_telegram_id(
                         session, r["trainer_id"]
                     )
@@ -942,8 +1049,6 @@ async def run_request_notifier_loop(trainer_bot: Bot) -> None:
     while True:
         await asyncio.sleep(REQUEST_NOTIFIER_INTERVAL_SEC)
         try:
-            if not is_within_notification_hours():
-                continue
             async with async_session_factory() as session:
                 await process_request_notifications_batch(trainer_bot, session)
         except asyncio.CancelledError:
@@ -956,8 +1061,6 @@ async def run_completed_feedback_loop(trainer_bot: Bot) -> None:
     while True:
         await asyncio.sleep(COMPLETED_FEEDBACK_INTERVAL_SEC)
         try:
-            if not is_within_notification_hours():
-                continue
             async with async_session_factory() as session:
                 await process_completed_feedback_batch(trainer_bot, session)
         except asyncio.CancelledError:
@@ -970,11 +1073,11 @@ async def run_daily_request_reminder_loop(trainer_bot: Bot) -> None:
     while True:
         await asyncio.sleep(DAILY_REQUEST_REMINDER_INTERVAL_SEC)
         try:
-            if not is_within_notification_hours():
-                continue
             async with async_session_factory() as session:
                 trainers = await get_trainers_for_daily_request_reminder(session)
                 for p in trainers:
+                    if not await is_trainer_push_allowed_now(session, int(p["trainer_id"])):
+                        continue
                     tid = p.get("trainer_telegram_id")
                     if not tid:
                         continue
@@ -1030,14 +1133,14 @@ async def run_subscription_expire_and_reminder_loop(trainer_bot: Bot) -> None:
                 if cert_n:
                     logger.info("Certificate expire: %d set to expired", cert_n)
                 # 2) Reminders for subscriptions expiring in the next 3 days
-                if not is_within_notification_hours():
-                    continue
                 days_ahead = max(1, Settings().subscription_reminder_days_ahead)
                 due = await get_subscriptions_reminder_due(session, days_ahead=days_ahead)
                 base = (Settings().webapp_base_url or "").rstrip("/")
                 pay_url = base + "/webapp/trainer-pay-subscription" if base else None
                 tariffs_url = base + "/webapp/trainer-subscription?v=20260450" if base else None
                 for sub in due:
+                    if not await is_trainer_push_allowed_now(session, int(sub["trainer_id"])):
+                        continue
                     tid = sub.get("trainer_telegram_id")
                     if not tid:
                         continue

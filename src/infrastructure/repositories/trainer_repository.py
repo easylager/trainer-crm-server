@@ -230,6 +230,24 @@ class TrainerRepository:
             {"tid": trainer_id, "step": step_minutes},
         )
 
+    async def set_push_notification_window(self, trainer_id: int, start_h: int, end_h: int) -> None:
+        await self._session.execute(
+            text(
+                "UPDATE trainers SET push_notification_start_hour = :s, push_notification_end_hour = :e "
+                "WHERE id = :tid"
+            ),
+            {"tid": trainer_id, "s": start_h, "e": end_h},
+        )
+
+    async def clear_push_notification_window(self, trainer_id: int) -> None:
+        await self._session.execute(
+            text(
+                "UPDATE trainers SET push_notification_start_hour = NULL, push_notification_end_hour = NULL "
+                "WHERE id = :tid"
+            ),
+            {"tid": trainer_id},
+        )
+
     async def reconcile_primary_arena(self, trainer_id: int) -> None:
         """If primary is missing or not in trainer_arenas, set to MIN(arena_id). Clears primary if no arenas."""
         r = await self._session.execute(
@@ -250,7 +268,9 @@ class TrainerRepository:
         """Load trainer with profile, photos, service_ids; None if not found."""
         r = await self._session.execute(
             text(
-                "SELECT id, telegram_id, status, created_at, moderation_feedback, moderation_submitted_at, profile_pending, photo_pending, primary_arena_id, schedule_grid_step_minutes, is_catalog_visible "
+                "SELECT id, telegram_id, status, created_at, moderation_feedback, moderation_submitted_at, "
+                "profile_pending, photo_pending, primary_arena_id, schedule_grid_step_minutes, is_catalog_visible, "
+                "push_notification_start_hour, push_notification_end_hour "
                 "FROM trainers WHERE id = :id"
             ),
             {"id": trainer_id},
@@ -282,6 +302,8 @@ class TrainerRepository:
             "primary_arena_id": row[8] if len(row) > 8 else None,
             "schedule_grid_step_minutes": int(row[9]) if len(row) > 9 and row[9] is not None else 15,
             "is_catalog_visible": bool(row[10]) if len(row) > 10 and row[10] is not None else True,
+            "push_notification_start_hour": int(row[11]) if len(row) > 11 and row[11] is not None else None,
+            "push_notification_end_hour": int(row[12]) if len(row) > 12 and row[12] is not None else None,
         }
         rp = await self._session.execute(
             text(

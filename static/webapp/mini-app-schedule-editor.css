@@ -720,6 +720,130 @@
       opacity: 0.72;
     }
 
+    /* Quick book datetime / service: shimmer overlay while GET /schedule or services load */
+    #modalQuickBookDatetime .quick-book-datetime-loading-wrap,
+    #modalQuickBookService .quick-book-service-loading-wrap {
+      position: relative;
+    }
+    #modalQuickBookDatetime .quick-book-datetime-skel {
+      display: none;
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 0;
+      z-index: 2;
+      pointer-events: none;
+      background: var(--tg-theme-bg-color);
+    }
+    #modalQuickBookService .quick-book-service-skel {
+      display: none;
+      position: absolute;
+      inset: 0;
+      z-index: 2;
+      pointer-events: none;
+      background: var(--tg-theme-bg-color);
+      flex-direction: column;
+      justify-content: flex-start;
+    }
+    #modalQuickBookDatetime .quick-book-datetime-loading-wrap--loading .quick-book-datetime-skel {
+      display: block;
+    }
+    #modalQuickBookService .quick-book-service-loading-wrap--loading .quick-book-service-skel {
+      display: flex;
+    }
+    #modalQuickBookDatetime .quick-book-datetime-loading-wrap--loading .quick-book-datetime-live,
+    #modalQuickBookService .quick-book-service-loading-wrap--loading .quick-book-service-live {
+      visibility: hidden;
+    }
+    #modalQuickBookDatetime .quick-book-datetime-skel-card,
+    #modalQuickBookService .quick-book-service-skel-card {
+      margin: 0 0 18px;
+    }
+    #modalQuickBookDatetime .quick-book-datetime-skel .quick-book-datetime-skel-stack,
+    #modalQuickBookService .quick-book-service-skel .quick-book-service-skel-stack {
+      margin: 0;
+      padding: 12px 14px;
+      border-bottom: 1px solid rgba(128, 128, 128, 0.08);
+    }
+    #modalQuickBookDatetime .quick-book-datetime-skel .quick-book-datetime-skel-stack:last-child,
+    #modalQuickBookService .quick-book-service-skel .quick-book-service-skel-stack:last-child {
+      border-bottom: none;
+    }
+    #modalQuickBookDatetime .qb-skel-label,
+    #modalQuickBookService .qb-skel-label {
+      width: 28%;
+      max-width: 100px;
+      height: 11px;
+      border-radius: 6px;
+      margin-bottom: 8px;
+    }
+    #modalQuickBookService .qb-skel-label--short {
+      width: 20%;
+    }
+    #modalQuickBookDatetime .qb-skel-input,
+    #modalQuickBookService .qb-skel-input {
+      width: 100%;
+      height: 48px;
+      border-radius: 14px;
+    }
+    #modalQuickBookDatetime .quick-book-datetime-skel-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    #modalQuickBookService .quick-book-service-skel-inner {
+      display: flex;
+      flex-direction: column;
+      flex: 1 1 auto;
+      min-height: 100%;
+      min-width: 0;
+    }
+    #modalQuickBookService .quick-book-service-skel .quick-book-actions.quick-book-service-skel-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      flex-shrink: 0;
+      width: 100%;
+      margin-top: 0;
+    }
+    #modalQuickBookDatetime .qb-skel-btn,
+    #modalQuickBookService .qb-skel-btn {
+      width: 100%;
+      height: 48px;
+      border-radius: 14px;
+    }
+    #modalQuickBookService .qb-skel-arena {
+      display: none;
+    }
+    #modalQuickBookService .quick-book-service-loading-wrap--show-arena-skel .qb-skel-arena {
+      display: flex;
+    }
+    #modalQuickBookService .qb-skel-tier-rows {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    #modalQuickBookService .qb-skel-tier {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    #modalQuickBookService .qb-skel-tier-radio {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    #modalQuickBookService .qb-skel-tier-line {
+      flex: 1;
+      height: 14px;
+      border-radius: 7px;
+      max-width: 220px;
+    }
+    #modalQuickBookDatetime .quick-book-datetime-loading-wrap:not(.quick-book-datetime-wrap--duration-custom) .qb-skel-duration {
+      display: none;
+    }
+
     /* Stack above datetime modal during handoff (same z-index would rely on DOM order). */
     #modalQuickBookService.modal-overlay.book-flow-overlay {
       z-index: 101;
@@ -821,6 +945,46 @@
     }
     #modalQuickBookService .quick-book-actions .btn-secondary:active {
       transform: scale(0.99);
+    }
+
+    /* «Услуга и тариф»: короткие экраны — прокрутка листа, меньше отступы */
+    #modalQuickBookService.modal-overlay.book-flow-overlay {
+      padding: max(6px, env(safe-area-inset-top)) 10px max(12px, env(safe-area-inset-bottom));
+      align-items: flex-start;
+      justify-content: center;
+    }
+    @media (min-height: 640px) {
+      #modalQuickBookService.modal-overlay.book-flow-overlay {
+        align-items: center;
+      }
+    }
+    #modalQuickBookService .modal.book-flow-modal {
+      max-height: min(88vh, calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 16px));
+      overflow-y: auto;
+      overflow-x: hidden;
+      -webkit-overflow-scrolling: touch;
+      padding: 16px 16px 14px;
+      box-sizing: border-box;
+    }
+    #modalQuickBookService .quick-book-kicker {
+      margin-bottom: 6px;
+    }
+    #modalQuickBookService .book-modal-title {
+      margin-bottom: 6px !important;
+    }
+    #modalQuickBookService .quick-book-lead {
+      margin-bottom: 12px;
+      font-size: 12.5px;
+      line-height: 1.4;
+    }
+    #modalQuickBookService .quick-book-fields {
+      margin-bottom: 14px;
+    }
+    #modalQuickBookService .quick-book-fields .book-field-stack {
+      padding: 10px 12px;
+    }
+    #modalQuickBookService .quick-book-actions {
+      gap: 8px;
     }
 
     .book-service-select {
@@ -1774,6 +1938,22 @@
       margin-top: 18px;
       margin-bottom: 6px;
     }
+    .bd-actions-extra {
+      display: flex;
+      flex-direction: column;
+      gap: var(--app-btn-stack-gap);
+    }
+    .bd-actions-separator {
+      height: 1px;
+      background: rgba(128, 128, 128, 0.22);
+      margin: 2px 0 2px;
+    }
+    .bd-btn--compact {
+      min-height: 44px;
+      font-size: 14px;
+      padding-top: 10px;
+      padding-bottom: 10px;
+    }
     .btn-row { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
     .btn-row button, .btn-row a.btn-tg {
       flex: 1;
@@ -2147,3 +2327,59 @@
       margin-bottom: 12px;
     }
     .modal-problem-skel-line:last-child { margin-bottom: 0; }
+
+    /* Quick-book inside trainer-clients iframe: never show schedule chrome (avoids flash before modals). */
+    html.se-client-embed #screenMain,
+    html.se-client-embed #screenBookingDetail,
+    html.se-client-embed #screenBookingDecline,
+    html.se-client-embed #screenEdit,
+    html.se-client-embed #screenDayPick {
+      display: none !important;
+    }
+
+    /* schedule-editor?flow=book: splash until first quick-book sheet (JS removes when modal opens) */
+    html.se-flow-book-boot {
+      overflow: hidden;
+    }
+    .se-flow-book-boot-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 90;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--tg-theme-bg-color);
+      padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    }
+    .se-flow-book-boot-overlay[hidden] {
+      display: none !important;
+    }
+    .se-flow-book-boot-overlay__card {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+      padding: 24px;
+      text-align: center;
+    }
+    .se-flow-book-boot-overlay__pulse {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      border: 3px solid color-mix(in srgb, var(--tg-theme-hint-color) 38%, transparent);
+      border-top-color: var(--app-cta-fill);
+      animation: se-flow-book-boot-spin 0.75s linear infinite;
+    }
+    @keyframes se-flow-book-boot-spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+    .se-flow-book-boot-overlay__text {
+      margin: 0;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--tg-theme-hint-color);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
