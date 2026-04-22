@@ -1859,6 +1859,11 @@
       transform: translateX(20px);
     }
 
+    /* Push window: same switch row, nested under icon+label block */
+    .settings-format-main .settings-group-toggle--push-window {
+      margin-top: 12px;
+    }
+
     /* Schedule grid step (settings tab) */
     .grid-step-chips {
       display: flex;
@@ -2238,38 +2243,61 @@
 
     .settings-push-default {
       display: flex;
-      align-items: center;
-      gap: 8px;
+      align-items: flex-start;
+      gap: 10px;
       margin: 10px 0 12px;
+      width: 100%;
+      max-width: 100%;
       font-size: 14px;
       color: var(--tg-theme-text-color);
       cursor: pointer;
       user-select: none;
+      box-sizing: border-box;
     }
     .settings-push-default__input {
       width: 18px;
       height: 18px;
       flex-shrink: 0;
+      margin-top: 2px;
     }
+    .settings-push-default > span {
+      flex: 1;
+      min-width: 0;
+      line-height: 1.4;
+    }
+    /* Row «с … — до …»: .field select { width:100% } ломал раскладку (два select на двух строках). */
     .settings-push-custom {
       display: flex;
-      flex-wrap: wrap;
+      flex-direction: row;
+      flex-wrap: nowrap;
       align-items: center;
-      gap: 8px;
+      gap: 6px 8px;
+      width: 100%;
+      max-width: 100%;
+      margin-top: 2px;
+      box-sizing: border-box;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: thin;
     }
     .settings-push-custom__lead {
       font-size: 13px;
       color: var(--tg-theme-hint-color);
+      flex-shrink: 0;
+      white-space: nowrap;
     }
     .settings-push-custom__sep {
       color: var(--tg-theme-hint-color);
-      margin: 0 2px;
+      flex-shrink: 0;
+      white-space: nowrap;
+      margin: 0;
     }
-    .settings-push-custom__select {
-      flex: 1;
-      min-width: 112px;
-      max-width: 160px;
-      padding: 10px 12px;
+    .field.settings-format-field .settings-push-custom__select {
+      width: auto;
+      flex: 1 1 0;
+      min-width: 72px;
+      max-width: none;
+      padding: 10px 36px 10px 12px;
       border-radius: 12px;
       border: 1px solid rgba(128, 128, 128, 0.28);
       background: var(--tg-theme-bg-color);
@@ -2277,6 +2305,25 @@
       font-size: 15px;
       -webkit-appearance: none;
       appearance: none;
+    }
+
+    /* Daily / weekly digest — toggles like «Группы в расписании», not raw checkboxes */
+    .settings-format-main > .settings-group-toggle--digest {
+      margin-top: 12px;
+    }
+    .settings-digest-options {
+      margin-top: 10px;
+    }
+
+    /* Daily / weekly digest (same row rules as push custom selects) */
+    .settings-digest-options__hint {
+      margin: 0 0 8px;
+    }
+    #digest_options_wrap[hidden] {
+      display: none !important;
+    }
+    .settings-digest-options .settings-digest-options__hint[hidden] {
+      display: none;
     }
 
     /* ============================================================

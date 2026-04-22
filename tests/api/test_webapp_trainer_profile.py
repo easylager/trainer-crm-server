@@ -68,6 +68,66 @@ async def test_webapp_trainer_profile_get_returns_trainer_and_readiness(
     assert data["moderation_readiness"].get("full_profile_criteria_total") == 12
     assert "education_entries" in data
     assert isinstance(data["education_entries"], list)
+    assert "digest_enabled" in data["trainer"]
+    assert "digest_send_time" in data["trainer"]
+
+
+@pytest.mark.asyncio
+async def test_webapp_trainer_profile_patch_digest_settings(
+    app_use_test_db,
+    db_session,
+) -> None:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        create_resp = await client.post(
+            "/api/trainers",
+            json={"profile": {"first_name": "Дайджест", "last_name": "Тест", "age": 30}},
+        )
+        trainer_id = create_resp.json()["id"]
+    tg = _fresh_trainer_telegram_id()
+    await db_session.execute(
+        text("UPDATE trainers SET telegram_id = :tg, digest_send_time = '09:15' WHERE id = :id"),
+        {"tg": tg, "id": trainer_id},
+    )
+    await db_session.commit()
+
+    with patch("src.api.routes.webapp_trainer_profile.require_telegram_user_id", return_value=tg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            patch_ok = await client.patch(
+                "/api/webapp/trainer/profile",
+                headers={"X-Telegram-Init-Data": "mock"},
+                json={"digest_enabled": True, "digest_send_time": "08:00"},
+            )
+    assert patch_ok.status_code == 200, patch_ok.text
+
+    with patch("src.api.routes.webapp_trainer_profile.require_telegram_user_id", return_value=tg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            get_r = await client.get(
+                "/api/webapp/trainer/profile",
+                headers={"X-Telegram-Init-Data": "mock"},
+            )
+    assert get_r.status_code == 200
+    ds = get_r.json()["trainer"].get("digest_send_time")
+    assert ds is not None
+    assert str(ds).replace(".", ":")[:5] in ("08:00", "8:00")  # time serialization may vary
+
+    with patch("src.api.routes.webapp_trainer_profile.require_telegram_user_id", return_value=tg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            patch_off = await client.patch(
+                "/api/webapp/trainer/profile",
+                headers={"X-Telegram-Init-Data": "mock"},
+                json={"digest_enabled": False, "digest_send_time": None},
+            )
+    assert patch_off.status_code == 200
+    with patch("src.api.routes.webapp_trainer_profile.require_telegram_user_id", return_value=tg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            get2 = await client.get(
+                "/api/webapp/trainer/profile",
+                headers={"X-Telegram-Init-Data": "mock"},
+            )
+    t2 = get2.json()["trainer"]
+    assert t2["digest_enabled"] is False
+    tstr = str(t2.get("digest_send_time") or "")
+    assert "08" in tstr, t2  # time preserved for re-enable
 
 
 @pytest.mark.asyncio

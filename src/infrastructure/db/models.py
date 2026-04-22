@@ -101,6 +101,10 @@ class Trainer(Base):
     # Europe/Minsk wall-clock hours for Telegram pushes from notification_service; NULL = platform default (8–22).
     push_notification_start_hour: Mapped[Optional[int]] = mapped_column(SmallInteger(), nullable=True)
     push_notification_end_hour: Mapped[Optional[int]] = mapped_column(SmallInteger(), nullable=True)
+    # Daily/weekly digest ritual (notification_loops → run_daily_morning_digest_loop, run_weekly_sunday_digest_loop).
+    digest_enabled: Mapped[bool] = mapped_column(nullable=False, default=True, server_default="true")
+    # Europe/Minsk local time for morning digest; NULL = auto "1 hour before first session today".
+    digest_send_time: Mapped[Optional[time]] = mapped_column(Time(), nullable=True)
 
     link_tokens: Mapped[list["TrainerLinkToken"]] = relationship(back_populates="trainer", lazy="raise")
     profile: Mapped[Optional["TrainerProfile"]] = relationship(back_populates="trainer", uselist=False, lazy="raise")

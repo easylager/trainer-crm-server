@@ -3,7 +3,7 @@ Infrastructure: trainer persistence. All SQL here; no business rules.
 """
 import json
 from typing import Any
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -248,6 +248,17 @@ class TrainerRepository:
             {"tid": trainer_id},
         )
 
+    async def set_digest_settings(
+        self, trainer_id: int, *, digest_enabled: bool, digest_send_time: time | None
+    ) -> None:
+        """Morning/weekly digest toggle + fixed Europe/Minsk send time; NULL time = auto (1h before first session)."""
+        await self._session.execute(
+            text(
+                "UPDATE trainers SET digest_enabled = :en, digest_send_time = :st WHERE id = :tid"
+            ),
+            {"tid": trainer_id, "en": digest_enabled, "st": digest_send_time},
+        )
+
     async def reconcile_primary_arena(self, trainer_id: int) -> None:
         """If primary is missing or not in trainer_arenas, set to MIN(arena_id). Clears primary if no arenas."""
         r = await self._session.execute(
@@ -270,7 +281,8 @@ class TrainerRepository:
             text(
                 "SELECT id, telegram_id, status, created_at, moderation_feedback, moderation_submitted_at, "
                 "profile_pending, photo_pending, primary_arena_id, schedule_grid_step_minutes, is_catalog_visible, "
-                "push_notification_start_hour, push_notification_end_hour "
+                "push_notification_start_hour, push_notification_end_hour, "
+                "digest_enabled, digest_send_time "
                 "FROM trainers WHERE id = :id"
             ),
             {"id": trainer_id},
@@ -290,6 +302,13 @@ class TrainerRepository:
                 raw_photo_pend = json.loads(raw_photo_pend) if isinstance(raw_photo_pend, str) else raw_photo_pend
             except (json.JSONDecodeError, TypeError):
                 raw_photo_pend = None
+        def _time_to_api_hhmm(t: object | None) -> str | None:
+            if t is None:
+                return None
+            if isinstance(t, time):
+                return t.strftime("%H:%M")
+            return None
+
         out: dict[str, Any] = {
             "id": row[0],
             "telegram_id": row[1],
@@ -304,6 +323,8 @@ class TrainerRepository:
             "is_catalog_visible": bool(row[10]) if len(row) > 10 and row[10] is not None else True,
             "push_notification_start_hour": int(row[11]) if len(row) > 11 and row[11] is not None else None,
             "push_notification_end_hour": int(row[12]) if len(row) > 12 and row[12] is not None else None,
+            "digest_enabled": bool(row[13]) if len(row) > 13 and row[13] is not None else True,
+            "digest_send_time": _time_to_api_hhmm(row[14]) if len(row) > 14 else None,
         }
         rp = await self._session.execute(
             text(

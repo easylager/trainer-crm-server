@@ -38,3 +38,13 @@ def test_profile_patch_age_integer() -> None:
 def test_trainer_profile_patch_body_nested_phone_error() -> None:
     with pytest.raises(ValidationError):
         TrainerProfilePatchBody.model_validate({"profile": {"phone": "12345"}})
+
+
+def test_trainer_profile_patch_digest_send_time_normalized() -> None:
+    b = TrainerProfilePatchBody.model_validate({"digest_send_time": "8:5"})
+    assert b.digest_send_time == "08:05"
+
+
+def test_trainer_profile_patch_digest_send_time_invalid() -> None:
+    with pytest.raises(ValidationError):
+        TrainerProfilePatchBody.model_validate({"digest_send_time": "25:00"})

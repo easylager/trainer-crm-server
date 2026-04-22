@@ -40,11 +40,9 @@ from src.application.client_request_use_cases import (
     get_pending_no_response_reminders,
     get_pending_request_notifications,
     get_pending_response_notifications,
-    get_trainers_for_daily_request_reminder,
     mark_no_response_reminder_sent,
     mark_request_trainer_notified,
     mark_response_notified,
-    mark_trainer_daily_request_reminder_sent,
 )
 from src.application.recurring_use_cases import get_slot_status_on_date
 from src.application.certificate_use_cases import (
@@ -97,9 +95,13 @@ INACTIVE_CLIENT_INTERVAL_SEC = 60 * 60 * 6
 BOOKING_NOTIFIER_INTERVAL_SEC = 15
 REQUEST_NOTIFIER_INTERVAL_SEC = 20
 COMPLETED_FEEDBACK_INTERVAL_SEC = 20
-DAILY_REQUEST_REMINDER_INTERVAL_SEC = 3 * 24 * 60 * 60
 SUBSCRIPTION_LOOP_INTERVAL_SEC = 24 * 60 * 60  # once per day: expire + reminder
 CERTIFICATE_OUTBOX_INTERVAL_SEC = 2 * 60  # every 2 min: retry failed certificate emails
+# Morning/weekly digest ritual: tick every minute so we hit per-trainer send_at with ≤60s jitter.
+DIGEST_LOOP_INTERVAL_SEC = 60
+# Grace window after a trainer's send_at during which we may still fire today's digest
+# (covers service restarts, short outages). After this we skip until tomorrow.
+DIGEST_SEND_GRACE_MIN = 120
 
 
 def _slot_display_strings(slot_date, start_time):
@@ -1069,55 +1071,6 @@ async def run_completed_feedback_loop(trainer_bot: Bot) -> None:
             logger.exception("Completed feedback loop: %s", e)
 
 
-async def run_daily_request_reminder_loop(trainer_bot: Bot) -> None:
-    while True:
-        await asyncio.sleep(DAILY_REQUEST_REMINDER_INTERVAL_SEC)
-        try:
-            async with async_session_factory() as session:
-                trainers = await get_trainers_for_daily_request_reminder(session)
-                for p in trainers:
-                    if not await is_trainer_push_allowed_now(session, int(p["trainer_id"])):
-                        continue
-                    tid = p.get("trainer_telegram_id")
-                    if not tid:
-                        continue
-                    count = p.get("request_count") or 0
-                    if count <= 0:
-                        continue
-                    text = msg.TRAINER_DAILY_REQUESTS_REMINDER.format(
-                        count=count,
-                        requests_word=_requests_word(count),
-                    )
-                    daily_kb = InlineKeyboardMarkup(
-                        inline_keyboard=[
-                            [
-                                InlineKeyboardButton(
-                                    text=msg.TRAINER_BUTTON_REQUESTS,
-                                    callback_data=REQUESTS_CALLBACK,
-                                ),
-                            ],
-                        ]
-                    )
-                    try:
-                        await trainer_bot.send_message(
-                            chat_id=tid, text=text, reply_markup=daily_kb
-                        )
-                        await mark_trainer_daily_request_reminder_sent(
-                            session, p["trainer_id"]
-                        )
-                    except Exception as e:
-                        logger.warning(
-                            "Daily request reminder to trainer %s (id=%s): %s",
-                            tid,
-                            p.get("trainer_id"),
-                            e,
-                        )
-        except asyncio.CancelledError:
-            break
-        except Exception as e:
-            logger.exception("Daily request reminder loop: %s", e)
-
-
 async def run_subscription_expire_and_reminder_loop(trainer_bot: Bot) -> None:
     """Once per day: set past_due for expired subscriptions; send reminder N days before expiry (config: subscription_reminder_days_ahead)."""
     while True:
@@ -1199,3 +1152,290 @@ async def run_certificate_email_outbox_loop() -> None:
             break
         except Exception as e:
             logger.exception("Certificate email outbox loop: %s", e)
+
+
+# =============================================================================
+# Morning + weekly digest ritual
+# =============================================================================
+
+_DIGEST_KIND_DAILY = "daily"
+_DIGEST_KIND_WEEKLY = "weekly"
+
+
+def _digest_overview_keyboard() -> "InlineKeyboardMarkup | None":
+    """CTA 'Обзор' opens trainer hub (rhythm hints live there). None if webapp not configured."""
+    base = (Settings().webapp_base_url or "").rstrip("/")
+    if not base.lower().startswith("https://"):
+        return None
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=msg.TRAINER_MENU_BUTTON_HUB,
+                    web_app=WebAppInfo(url=f"{base}/webapp/trainer-home"),
+                )
+            ]
+        ]
+    )
+
+
+async def _mark_digest_sent(
+    session: AsyncSession, trainer_id: int, sent_date: date, kind: str
+) -> None:
+    """Idempotent insert into trainer_digest_sent (once per trainer-date-kind)."""
+    from sqlalchemy import text as _text
+
+    await session.execute(
+        _text(
+            """
+            INSERT INTO trainer_digest_sent (trainer_id, sent_date, kind)
+            VALUES (:tid, :d, :k)
+            ON CONFLICT (trainer_id, sent_date, kind) DO NOTHING
+            """
+        ),
+        {"tid": trainer_id, "d": sent_date, "k": kind},
+    )
+    await session.commit()
+
+
+async def _list_digest_candidates_for_kind(
+    session: AsyncSession, today_minsk: date, kind: str
+) -> list[dict]:
+    """
+    Trainers eligible for today's digest (kind='daily' or 'weekly'):
+    digest_enabled + telegram set + active + haven't received this kind today yet.
+    Returns id, telegram_id, digest_send_time, push_notification_start_hour,
+    push_notification_end_hour; caller resolves send_at + decides firing.
+    """
+    from sqlalchemy import text as _text
+
+    r = await session.execute(
+        _text(
+            """
+            SELECT t.id,
+                   t.telegram_id,
+                   t.digest_send_time,
+                   t.push_notification_start_hour,
+                   t.push_notification_end_hour
+            FROM trainers t
+            LEFT JOIN trainer_digest_sent ds
+                ON ds.trainer_id = t.id
+               AND ds.sent_date = :d
+               AND ds.kind = :k
+            WHERE t.digest_enabled = true
+              AND t.telegram_id IS NOT NULL
+              AND t.status = 'active'
+              AND ds.id IS NULL
+            """
+        ),
+        {"d": today_minsk, "k": kind},
+    )
+    rows = r.fetchall()
+    return [
+        {
+            "trainer_id": int(row[0]),
+            "telegram_id": int(row[1]),
+            "digest_send_time": row[2],
+            "push_window_start_hour": row[3],
+            "push_window_end_hour": row[4],
+        }
+        for row in rows
+    ]
+
+
+def _time_diff_minutes(a: "time", b: "time") -> int:
+    """a - b in minutes (walltime, ignoring date). Negative when a precedes b."""
+    return (a.hour * 60 + a.minute) - (b.hour * 60 + b.minute)
+
+
+async def run_daily_morning_digest_loop(trainer_bot: Bot) -> None:
+    """
+    Ticks every DIGEST_LOOP_INTERVAL_SEC. For each enabled trainer whose resolved send_at
+    falls in ``[send_at, send_at + DIGEST_SEND_GRACE_MIN)`` Minsk-time window today AND who
+    hasn't yet received today's digest, compute the aggregator and fire a message with an
+    'Обзор' CTA to trainer-home.
+
+    Suppression rules:
+      - 0 sessions today AND 0 pending requests → stay silent.
+      - 0 sessions today AND ≥1 pending catalog request → send a lite digest (owed line only).
+      - ≥1 session today → send the full run-sheet.
+    """
+    from src.application.trainer_digest_use_cases import (
+        get_trainer_daily_digest,
+        now_minsk,
+        resolve_digest_send_time,
+    )
+    from src.application.trainer_notification_prefs import (
+        get_trainer_push_window_bounds,
+    )
+    from src.bot.trainer_digest_format import (
+        format_morning_digest,
+        format_morning_digest_lite_owed_only,
+    )
+
+    while True:
+        try:
+            now = now_minsk()
+            today = now.date()
+            now_t = now.time().replace(second=0, microsecond=0)
+
+            async with async_session_factory() as session:
+                candidates = await _list_digest_candidates_for_kind(
+                    session, today, _DIGEST_KIND_DAILY
+                )
+
+                for cand in candidates:
+                    tid = cand["trainer_id"]
+                    tg = cand["telegram_id"]
+                    try:
+                        if cand["push_window_start_hour"] is not None and cand["push_window_end_hour"] is not None:
+                            start_h = int(cand["push_window_start_hour"])
+                            end_h = int(cand["push_window_end_hour"])
+                        else:
+                            start_h, end_h = await get_trainer_push_window_bounds(session, tid)
+
+                        digest = await get_trainer_daily_digest(session, tid, today)
+
+                        has_sessions = digest["sessions_count"] > 0
+                        has_owed = digest["pending_requests_count"] > 0
+
+                        send_at = resolve_digest_send_time(
+                            digest_send_time=cand["digest_send_time"],
+                            first_session_start=digest["first_session_start"],
+                            push_window_start_hour=start_h,
+                            push_window_end_hour=end_h,
+                        )
+
+                        if send_at is None:
+                            continue
+
+                        if not has_sessions and not has_owed:
+                            continue
+
+                        delta = _time_diff_minutes(now_t, send_at)
+                        if delta < 0 or delta >= DIGEST_SEND_GRACE_MIN:
+                            continue
+
+                        if has_sessions:
+                            text_body = format_morning_digest(digest)
+                        else:
+                            lite = format_morning_digest_lite_owed_only(digest)
+                            if not lite:
+                                continue
+                            text_body = lite
+
+                        kb = _digest_overview_keyboard()
+                        try:
+                            await trainer_bot.send_message(
+                                chat_id=tg,
+                                text=text_body,
+                                parse_mode="HTML",
+                                reply_markup=kb,
+                                disable_web_page_preview=True,
+                            )
+                            await _mark_digest_sent(session, tid, today, _DIGEST_KIND_DAILY)
+                        except Exception as e:
+                            logger.warning(
+                                "Morning digest to trainer %s (id=%s): %s", tg, tid, e
+                            )
+                    except Exception as e:
+                        logger.exception(
+                            "Morning digest eval for trainer id=%s: %s", tid, e
+                        )
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.exception("Morning digest loop: %s", e)
+
+        try:
+            await asyncio.sleep(DIGEST_LOOP_INTERVAL_SEC)
+        except asyncio.CancelledError:
+            break
+
+
+async def run_weekly_sunday_digest_loop(trainer_bot: Bot) -> None:
+    """
+    Ticks every DIGEST_LOOP_INTERVAL_SEC, but only acts on Sundays. Sends the weekly digest
+    at the same resolved send_at as the daily one (shared send_time setting).
+    """
+    from src.application.trainer_digest_use_cases import (
+        get_trainer_daily_digest,
+        get_trainer_weekly_digest,
+        now_minsk,
+        resolve_digest_send_time,
+    )
+    from src.application.trainer_notification_prefs import (
+        get_trainer_push_window_bounds,
+    )
+    from src.bot.trainer_digest_format import format_weekly_digest
+
+    while True:
+        try:
+            now = now_minsk()
+            today = now.date()
+            now_t = now.time().replace(second=0, microsecond=0)
+
+            if today.weekday() != 6:  # 6 = Sunday
+                await asyncio.sleep(DIGEST_LOOP_INTERVAL_SEC)
+                continue
+
+            async with async_session_factory() as session:
+                candidates = await _list_digest_candidates_for_kind(
+                    session, today, _DIGEST_KIND_WEEKLY
+                )
+
+                for cand in candidates:
+                    tid = cand["trainer_id"]
+                    tg = cand["telegram_id"]
+                    try:
+                        if cand["push_window_start_hour"] is not None and cand["push_window_end_hour"] is not None:
+                            start_h = int(cand["push_window_start_hour"])
+                            end_h = int(cand["push_window_end_hour"])
+                        else:
+                            start_h, end_h = await get_trainer_push_window_bounds(session, tid)
+
+                        daily = await get_trainer_daily_digest(session, tid, today)
+                        send_at = resolve_digest_send_time(
+                            digest_send_time=cand["digest_send_time"],
+                            first_session_start=daily["first_session_start"],
+                            push_window_start_hour=start_h,
+                            push_window_end_hour=end_h,
+                        )
+                        if send_at is None:
+                            # No sessions today AND no explicit time — default Sunday send at push_window start.
+                            send_at = time(hour=start_h)
+
+                        delta = _time_diff_minutes(now_t, send_at)
+                        if delta < 0 or delta >= DIGEST_SEND_GRACE_MIN:
+                            continue
+
+                        weekly = await get_trainer_weekly_digest(session, tid, today)
+                        text_body = format_weekly_digest(weekly)
+
+                        kb = _digest_overview_keyboard()
+                        try:
+                            await trainer_bot.send_message(
+                                chat_id=tg,
+                                text=text_body,
+                                parse_mode="HTML",
+                                reply_markup=kb,
+                                disable_web_page_preview=True,
+                            )
+                            await _mark_digest_sent(session, tid, today, _DIGEST_KIND_WEEKLY)
+                        except Exception as e:
+                            logger.warning(
+                                "Weekly digest to trainer %s (id=%s): %s", tg, tid, e
+                            )
+                    except Exception as e:
+                        logger.exception(
+                            "Weekly digest eval for trainer id=%s: %s", tid, e
+                        )
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.exception("Weekly digest loop: %s", e)
+
+        try:
+            await asyncio.sleep(DIGEST_LOOP_INTERVAL_SEC)
+        except asyncio.CancelledError:
+            break

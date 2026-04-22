@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import time as dt_time
 
 from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Query, UploadFile
 from pydantic import BaseModel, Field
@@ -64,6 +65,17 @@ from src.shared.telegram_webapp import InitDataAuthError, require_telegram_user_
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _digest_api_str_to_time(s: str | None) -> dt_time | None:
+    if s is None or (isinstance(s, str) and not str(s).strip()):
+        return None
+    s = str(s).strip()
+    parts = s.split(":")
+    if len(parts) != 2:
+        return None
+    h, m = int(parts[0]), int(parts[1])
+    return dt_time(hour=h, minute=m)
 
 
 def _trainer_telegram_id_from_init(init_data: str) -> int:
@@ -274,6 +286,28 @@ async def patch_trainer_profile_for_webapp(
             except ValueError as exc:
                 raise HTTPException(status_code=422, detail=str(exc)) from exc
             await repo.set_push_notification_window(trainer_id, sh, eh)
+
+    digest_set = "digest_enabled" in body.model_fields_set or "digest_send_time" in body.model_fields_set
+    if digest_set:
+        repo = TrainerRepository(session)
+        cur = await get_trainer(session, trainer_id)
+        if not cur:
+            raise HTTPException(status_code=404, detail="Trainer not found")
+        en = bool(cur.get("digest_enabled", True))
+        st: dt_time | None = _digest_api_str_to_time(cur.get("digest_send_time"))  # type: ignore[arg-type]
+        if "digest_enabled" in body.model_fields_set:
+            if body.digest_enabled is None:
+                raise HTTPException(status_code=422, detail="digest_enabled: укажите true или false.")
+            en = bool(body.digest_enabled)
+        if "digest_send_time" in body.model_fields_set:
+            raw = body.digest_send_time
+            if raw is not None and str(raw).strip():
+                st = _digest_api_str_to_time(str(raw).strip())
+            elif en:
+                st = None
+            # If digest is off and client sends null time, keep previous ``st`` (from ``cur``).
+        await repo.set_digest_settings(trainer_id, digest_enabled=en, digest_send_time=st)
+
     try:
         ok = await update_trainer_profile(
             session,

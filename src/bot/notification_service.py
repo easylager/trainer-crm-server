@@ -19,7 +19,7 @@ from src.bot.notification_loops import (
     run_cancel_notifier_loop,
     run_certificate_email_outbox_loop,
     run_completed_feedback_loop,
-    run_daily_request_reminder_loop,
+    run_daily_morning_digest_loop,
     run_group_attendance_prompt_loop,
     run_inactive_client_loop,
     run_no_response_reminder_loop,
@@ -28,6 +28,7 @@ from src.bot.notification_loops import (
     run_response_notifier_loop,
     run_subscription_expire_and_reminder_loop,
     run_trainer_booked_notifier_loop,
+    run_weekly_sunday_digest_loop,
 )
 from src.shared.config import Settings
 from src.shared.notification_hours import set_notification_quiet_hours_bypass
@@ -74,7 +75,9 @@ async def main() -> None:
         asyncio.create_task(run_booking_notifier_loop(trainer_bot), name="booking_notifier"),
         asyncio.create_task(run_request_notifier_loop(trainer_bot), name="request_notifier"),
         asyncio.create_task(run_completed_feedback_loop(trainer_bot), name="completed_feedback"),
-        asyncio.create_task(run_daily_request_reminder_loop(trainer_bot), name="daily_request_reminder"),
+        # daily_request_reminder replaced by morning digest (lite when 0 sessions + open requests).
+        asyncio.create_task(run_daily_morning_digest_loop(trainer_bot), name="daily_morning_digest"),
+        asyncio.create_task(run_weekly_sunday_digest_loop(trainer_bot), name="weekly_sunday_digest"),
         asyncio.create_task(run_subscription_expire_and_reminder_loop(trainer_bot), name="subscription_expire_reminder"),
     ]
     # Background jobs (no bot)

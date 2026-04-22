@@ -287,6 +287,36 @@ class TrainerProfilePatchBody(BaseModel):
         le=24,
         description="Час конца окна (не включая). 24 = до полуночи. null + null = стандарт сервиса.",
     )
+    digest_enabled: bool | None = Field(
+        default=None,
+        description="Ежедневный (утро) и воскресный дайджест в Telegram. None = не менять в PATCH.",
+    )
+    digest_send_time: str | None = Field(
+        default=None,
+        max_length=5,
+        description="Фиксированное время дайджеста Europe/Minsk «HH:MM». null = за час до первой тренировки в этот день.",
+    )
+
+    @field_validator("digest_send_time", mode="before")
+    @classmethod
+    def _digest_hhmm(cls, v: object) -> str | None:
+        if v is None:
+            return None
+        if not isinstance(v, str):
+            raise ValueError("Время дайджеста — строка ЧЧ:ММ.")
+        s = v.strip()
+        if not s:
+            return None
+        parts = s.split(":")
+        if len(parts) != 2:
+            raise ValueError("Время дайджеста: формат ЧЧ:ММ (например 08:00).")
+        try:
+            h, m = int(parts[0]), int(parts[1])
+        except ValueError as exc:
+            raise ValueError("Время дайджеста: неверные числа.") from exc
+        if h < 0 or h > 23 or m < 0 or m > 59:
+            raise ValueError("Время дайджеста: часы 0–23, минуты 0–59.")
+        return f"{h:02d}:{m:02d}"
 
     @field_validator("schedule_grid_step_minutes")
     @classmethod

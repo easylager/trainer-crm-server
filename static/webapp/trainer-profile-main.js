@@ -392,7 +392,7 @@
         'experience_years', 'education', 'session_duration_minutes', 'min_hours_before_booking',
       ];
       /** Fields shown on «Настройки» tab — used to switch tab on validation errors. */
-      var SETTINGS_FORMAT_FIELD_IDS = ['session_duration_minutes', 'min_hours_before_booking', 'push_notification'];
+      var SETTINGS_FORMAT_FIELD_IDS = ['session_duration_minutes', 'min_hours_before_booking', 'push_notification', 'digest'];
       var PHONE_MAX_LEN = 32;
       /** Aligned with server: Belarus E.164 `+375` + 9 digits after country code. */
       var PHONE_BY_RE = /^\+375\d{9}$/;
@@ -522,6 +522,11 @@
           epush.textContent = '';
           epush.hidden = true;
         }
+        var edig = document.getElementById('err_digest');
+        if (edig) {
+          edig.textContent = '';
+          edig.hidden = true;
+        }
       }
 
       function showFieldError(fieldId, message) {
@@ -530,6 +535,14 @@
           if (epn) {
             epn.textContent = message || '';
             epn.hidden = !message;
+          }
+          return;
+        }
+        if (fieldId === 'digest') {
+          var edg = document.getElementById('err_digest');
+          if (edg) {
+            edg.textContent = message || '';
+            edg.hidden = !message;
           }
           return;
         }
@@ -548,6 +561,9 @@
           if (loc[si] === 'schedule_grid_step_minutes') return 'schedule_grid';
           if (loc[si] === 'push_notification_start_hour' || loc[si] === 'push_notification_end_hour') {
             return 'push_notification';
+          }
+          if (loc[si] === 'digest_send_time' || loc[si] === 'digest_enabled') {
+            return 'digest';
           }
         }
         var j = -1;
@@ -1028,6 +1044,82 @@
         if (s1 && !isNaN(eh)) s1.value = String(eh);
       }
 
+      function _digestNearestMinute(m) {
+        var allowed = [0, 15, 30, 45];
+        var best = 0;
+        var d = 999;
+        var i;
+        for (i = 0; i < allowed.length; i++) {
+          var ad = Math.abs(allowed[i] - m);
+          if (ad < d) {
+            d = ad;
+            best = allowed[i];
+          }
+        }
+        return best;
+      }
+
+      function populateDigestSelects() {
+        var hEl = document.getElementById('digest_send_hour');
+        var mEl = document.getElementById('digest_send_minute');
+        if (!hEl || !mEl || hEl.options.length) return;
+        var h;
+        for (h = 5; h <= 12; h++) {
+          var o = document.createElement('option');
+          o.value = String(h);
+          o.textContent = _pad2(h) + ':00';
+          hEl.appendChild(o);
+        }
+        [0, 15, 30, 45].forEach(function(mm) {
+          var o2 = document.createElement('option');
+          o2.value = String(mm);
+          o2.textContent = _pad2(mm);
+          mEl.appendChild(o2);
+        });
+      }
+
+      function syncDigestInnerFromState(enOverride) {
+        populateDigestSelects();
+        var t = state.trainer || {};
+        var en =
+          enOverride != null ? !!enOverride : t.digest_enabled !== false;
+        var useAuto = !t.digest_send_time;
+        var dauto = document.getElementById('digest_time_auto');
+        var cust = document.getElementById('digest_custom_time_wrap');
+        var hint = document.querySelector('.settings-digest-options__hint');
+        if (dauto) dauto.checked = useAuto;
+        if (cust) cust.style.display = en && !useAuto ? 'flex' : 'none';
+        if (hint) hint.hidden = !(en && useAuto);
+        var hEl = document.getElementById('digest_send_hour');
+        var mEl = document.getElementById('digest_send_minute');
+        if (t.digest_send_time && hEl && mEl) {
+          var parts = String(t.digest_send_time).split(':');
+          var hh = parseInt(parts[0], 10);
+          var mm = parseInt(parts[1] || '0', 10);
+          if (!isNaN(hh)) {
+            if (hh < 5) hh = 5;
+            if (hh > 12) hh = 12;
+            hEl.value = String(hh);
+          }
+          if (!isNaN(mm)) {
+            mEl.value = String(_digestNearestMinute(mm));
+          }
+        } else if (hEl && mEl) {
+          hEl.value = '8';
+          mEl.value = '0';
+        }
+      }
+
+      function syncDigestUiFromState() {
+        var t = state.trainer || {};
+        var en = t.digest_enabled !== false;
+        var de = document.getElementById('digest_enabled');
+        var wrap = document.getElementById('digest_options_wrap');
+        if (de) de.checked = en;
+        if (wrap) wrap.hidden = !en;
+        syncDigestInnerFromState();
+      }
+
       function normSnapshot() {
         var p = state.trainer && state.trainer.profile ? state.trainer.profile : {};
         var services = (state.trainer && state.trainer.services) ? state.trainer.services : [];
@@ -1061,6 +1153,11 @@
         var primary_arena_id = (state.trainer && state.trainer.primary_arena_id != null) ? Number(state.trainer.primary_arena_id) : null;
         var tSnap = state.trainer || {};
         var pushDef = tSnap.push_notification_start_hour == null && tSnap.push_notification_end_hour == null;
+        var digestEn = tSnap.digest_enabled !== false;
+        var digestTime =
+          tSnap.digest_send_time != null && String(tSnap.digest_send_time).trim()
+            ? String(tSnap.digest_send_time).trim()
+            : null;
         return JSON.stringify({
           profile: {
             first_name: p.first_name || '',
@@ -1086,6 +1183,8 @@
             tSnap.push_notification_start_hour != null ? Number(tSnap.push_notification_start_hour) : null,
           push_notification_end_hour:
             tSnap.push_notification_end_hour != null ? Number(tSnap.push_notification_end_hour) : null,
+          digest_enabled: digestEn,
+          digest_send_time: digestTime,
         });
       }
 
@@ -1169,6 +1268,20 @@
           pushSh = num('push_notification_start_hour', true);
           pushEh = num('push_notification_end_hour', true);
         }
+        var digestEnEl = document.getElementById('digest_enabled');
+        var digestEn = !digestEnEl || digestEnEl.checked;
+        var digestAutoEl = document.getElementById('digest_time_auto');
+        var digestAuto = digestEn && digestAutoEl && digestAutoEl.checked;
+        var digestTime = null;
+        if (!digestEn) {
+          if (state.trainer && state.trainer.digest_send_time) {
+            digestTime = String(state.trainer.digest_send_time).trim() || null;
+          }
+        } else if (digestEn && !digestAuto) {
+          var dh = num('digest_send_hour', true);
+          var dm = num('digest_send_minute', true);
+          if (dh != null && dm != null) digestTime = _pad2(dh) + ':' + _pad2(dm);
+        }
         return JSON.stringify({
           profile: {
             first_name: str('first_name'),
@@ -1195,6 +1308,8 @@
           push_notif_use_default: pushUseDef,
           push_notification_start_hour: pushSh,
           push_notification_end_hour: pushEh,
+          digest_enabled: digestEn,
+          digest_send_time: digestTime,
         });
       }
 
@@ -2216,6 +2331,7 @@
 
         renderServices();
         syncPushNotifUiFromState();
+        syncDigestUiFromState();
         var pcb = document.getElementById('push_notif_use_default');
         if (pcb && !pcb._pushBound) {
           pcb._pushBound = true;
@@ -2234,6 +2350,37 @@
         if (ps1 && !ps1._pushBound) {
           ps1._pushBound = true;
           ps1.addEventListener('change', setDirty);
+        }
+        var deEn = document.getElementById('digest_enabled');
+        if (deEn && !deEn._digestBound) {
+          deEn._digestBound = true;
+          deEn.addEventListener('change', function() {
+            var w = document.getElementById('digest_options_wrap');
+            if (w) w.hidden = !deEn.checked;
+            if (deEn.checked) syncDigestInnerFromState(true);
+            setDirty();
+          });
+        }
+        var dAuto = document.getElementById('digest_time_auto');
+        if (dAuto && !dAuto._digestBound) {
+          dAuto._digestBound = true;
+          dAuto.addEventListener('change', function() {
+            var cust = document.getElementById('digest_custom_time_wrap');
+            var hint = document.querySelector('.settings-digest-options__hint');
+            if (cust) cust.style.display = dAuto.checked ? 'none' : 'flex';
+            if (hint) hint.hidden = !dAuto.checked;
+            setDirty();
+          });
+        }
+        var dsh = document.getElementById('digest_send_hour');
+        var dsm = document.getElementById('digest_send_minute');
+        if (dsh && !dsh._digestBound) {
+          dsh._digestBound = true;
+          dsh.addEventListener('change', setDirty);
+        }
+        if (dsm && !dsm._digestBound) {
+          dsm._digestBound = true;
+          dsm.addEventListener('change', setDirty);
         }
         return loadArenasForCity(p.city_id).then(function() {
           renderArenas();
@@ -3936,6 +4083,9 @@
           body.push_notification_start_hour = parsed.push_notification_start_hour;
           body.push_notification_end_hour = parsed.push_notification_end_hour;
         }
+
+        body.digest_enabled = !!parsed.digest_enabled;
+        body.digest_send_time = parsed.digest_send_time != null ? parsed.digest_send_time : null;
 
         fetch(apiUrl('/trainer/profile'), {
           method: 'PATCH',

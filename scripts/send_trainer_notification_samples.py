@@ -189,24 +189,80 @@ async def main() -> None:
             ),
         )
 
-        await _section(bot, chat_id, "Ежедневное напоминание по заявкам")
-        daily_requests_kb = InlineKeyboardMarkup(
-            inline_keyboard=[
-                [
-                    InlineKeyboardButton(
-                        text=msg.TRAINER_BUTTON_REQUESTS,
-                        callback_data=REQUESTS_CALLBACK,
-                    ),
-                ],
-            ],
+        await _section(bot, chat_id, "Утренний ритуал — ежедневный обзор")
+        from datetime import date, time, timedelta
+        from src.bot.trainer_digest_format import (
+            format_morning_digest,
+            format_weekly_digest,
         )
+
+        morning_sample = {
+            "sessions": [
+                {
+                    "start_time": time(9, 0),
+                    "end_time": time(10, 0),
+                    "client_name": "Олег Петров",
+                    "arena_name": "Минск-Арена",
+                    "is_first_time": False,
+                    "status": "confirmed",
+                },
+                {
+                    "start_time": time(10, 30),
+                    "end_time": time(11, 30),
+                    "client_name": "Ирина Ковалёва",
+                    "arena_name": "Минск-Арена",
+                    "is_first_time": True,
+                    "status": "confirmed",
+                },
+                {
+                    "start_time": time(18, 0),
+                    "end_time": time(19, 0),
+                    "client_name": "Катя Смирнова",
+                    "arena_name": "FootballPark",
+                    "is_first_time": False,
+                    "status": "pending",
+                },
+            ],
+            "sessions_count": 3,
+            "gaps": [
+                {
+                    "from_time": time(11, 30),
+                    "to_time": time(18, 0),
+                    "duration_minutes": 390,
+                }
+            ],
+            "first_timers_count": 1,
+            "pending_confirmations_count": 1,
+            "pending_requests_count": 2,
+        }
         await bot.send_message(
             chat_id=chat_id,
-            text=msg.TRAINER_DAILY_REQUESTS_REMINDER.format(
-                count=3,
-                requests_word=_requests_word(3),
-            ),
-            reply_markup=daily_requests_kb,
+            text=format_morning_digest(morning_sample),
+        )
+
+        await _section(bot, chat_id, "Воскресный обзор недели")
+        today_preview = date.today()
+        weekly_sample = {
+            "past_week": {
+                "completed_count": 8,
+                "cash_cents": 24000,
+                "pass_sessions_count": 3,
+                "cert_cents": 5000,
+            },
+            "upcoming_week": {
+                "sessions_count": 6,
+                "empty_days": [today_preview + timedelta(days=4)],
+                "heaviest_day": {"date": today_preview + timedelta(days=2), "count": 3},
+                "new_clients": [
+                    {"client_name": "Павел Сидоров"},
+                    {"client_name": "Настя Иванова"},
+                ],
+            },
+            "drought": {"triggered": False},
+        }
+        await bot.send_message(
+            chat_id=chat_id,
+            text=format_weekly_digest(weekly_sample),
         )
 
         await _section(bot, chat_id, "Новая запись / напоминание подтвердить")

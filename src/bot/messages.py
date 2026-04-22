@@ -377,9 +377,118 @@ TRAINER_BUTTON_DECLINE = "❌ Отклонить"
 TRAINER_REQUEST_DECLINED = "Заявка отклонена. Её больше не видно в списке."
 
 # --- Notifications ---
-TRAINER_DAILY_REQUESTS_REMINDER = (
-    "⏰ <b>Напоминание:</b> у вас <b>{count}</b> открытых {requests_word}.\n\n"
-    "Клиенты ждут ответа — откройте список и свяжитесь с ними."
+
+# --- Morning + Sunday digest (src/application/trainer_digest_use_cases.py) ---
+# Design intent: a habit-forming ritual, not a billing dump. Structure per message:
+#   1) HERO (emoji + warm hook + the number that matters most)
+#   2) DETAIL (scannable rows; inline tags for risks/opportunities)
+#   3) ONE RECOMMENDATION (👉 — closes an open loop; always present)
+# Voice rule: .cursor/rules/Product-voice.mdc  •  Edit: reuse emoji vocabulary consistently
+# (☀️ morning · 🌙 weekly · ⏱ time · 📍 venue · 👋 first-timer · ⚠ risk · 💬 owed · 👉 do-this).
+
+# --- Morning digest — sent 1h before first session (or at trainer's digest_send_time).
+TRAINER_DIGEST_MORNING_GREETING = "☀️ Доброе утро!"
+TRAINER_DIGEST_SESSION_TAG_FIRST_TIMER = "👋 первая тренировка"
+TRAINER_DIGEST_SESSION_TAG_PENDING = "⚠ ждёт подтверждения"
+TRAINER_DIGEST_GAP_LINE = (
+    "⏱ Окно между <b>{from_time}</b> и <b>{to_time}</b> — <b>{duration}</b>."
+)
+TRAINER_DIGEST_OWED_LINE_REQUESTS_ONLY = (
+    "💬 Ждут ответа: <b>{count}</b> {word} в каталоге."
+)
+TRAINER_DIGEST_OWED_LINE_CONFIRMS_ONLY = (
+    "💬 Ждут твоего решения: <b>{count}</b> {word} на подтверждение."
+)
+TRAINER_DIGEST_OWED_LINE_BOTH = (
+    "💬 Ждут ответа: <b>{req_count}</b> {req_word} в каталоге "
+    "и <b>{conf_count}</b> {conf_word} на подтверждение."
+)
+
+# Morning recommendation — exactly one 👉 line, picked by priority ladder in
+# trainer_digest_format._pick_morning_recommendation. Goal: close the open loop.
+TRAINER_DIGEST_MORNING_REC_FIRST_TIMER = (
+    "👉 Начни день с {name} — у клиента это первое занятие. "
+    "Первые минуты знакомства часто решают, вернётся ли человек."
+)
+TRAINER_DIGEST_MORNING_REC_PENDING_CONFIRM = (
+    "👉 Бронь {name} в <b>{time}</b> ещё висит без подтверждения — одно нажатие закроет."
+)
+TRAINER_DIGEST_MORNING_REC_PENDING_REQUESTS = (
+    "👉 <b>{count}</b> {word} в каталоге ждут ответа. "
+    "В первый час отклик работает лучше всего."
+)
+TRAINER_DIGEST_MORNING_REC_BIG_GAP = (
+    "👉 Днём есть окно — хороший момент ответить на заявки или пройтись по профилю."
+)
+TRAINER_DIGEST_MORNING_REC_ALL_CLEAR = "👉 День собран. Хорошей работы."
+
+# Morning LITE — 0 sessions but ≥1 open request. No run-sheet, just a nudge + rec.
+TRAINER_DIGEST_MORNING_LITE_HEADER = (
+    "☀️ Доброе утро. Сегодня тренировок нет — но <b>{count}</b> {word} "
+    "в каталоге ждут ответа."
+)
+TRAINER_DIGEST_MORNING_LITE_REC = (
+    "👉 Ответ в первый час обычно решает, выберет клиент тебя или соседа."
+)
+
+# --- Sunday digest — perspective + ledger.
+TRAINER_DIGEST_WEEKLY_GREETING = "🌙 Воскресный обзор."
+TRAINER_DIGEST_WEEKLY_PAST_HEADER = "📊 <b>За прошедшую неделю</b>"
+TRAINER_DIGEST_WEEKLY_PAST_COMPLETED = "• Провёл <b>{count}</b> {word}"
+TRAINER_DIGEST_WEEKLY_PAST_CASH = "• <b>{cash}</b> наличными"
+TRAINER_DIGEST_WEEKLY_PAST_PASSES = "• <b>{count}</b> {word} по абонементам"
+TRAINER_DIGEST_WEEKLY_PAST_CERTS = "• <b>{cash}</b> по сертификатам"
+TRAINER_DIGEST_WEEKLY_PAST_EMPTY = "• Неделя была без тренировок — бывает."
+
+TRAINER_DIGEST_WEEKLY_UPCOMING_HEADER = "📅 <b>Впереди</b>"
+TRAINER_DIGEST_WEEKLY_UPCOMING_COUNT = "• <b>{count}</b> {word} запланировано"
+TRAINER_DIGEST_WEEKLY_UPCOMING_EMPTY = "• Неделя пока пустая."
+TRAINER_DIGEST_WEEKLY_NEW_CLIENTS = "• Новые лица: {names}"
+TRAINER_DIGEST_WEEKLY_EMPTY_DAYS = "• Полностью свободно: {days}"
+TRAINER_DIGEST_WEEKLY_HEAVIEST_DAY = "• Самый плотный — {label}, {count} {word}"
+
+# Weekly recommendation — closes the loop with one concrete move for the coming week.
+TRAINER_DIGEST_WEEKLY_REC_EMPTY_DAY = (
+    "👉 В {day} пусто — хороший момент написать давним клиентам или добавить слоты."
+)
+TRAINER_DIGEST_WEEKLY_REC_HEAVY_DAY = (
+    "👉 {day} плотно — проверь, что между тренировками есть время на переезд и еду."
+)
+TRAINER_DIGEST_WEEKLY_REC_NEW_CLIENTS = (
+    "👉 На неделе встретишь новых: {names}. "
+    "Короткое сообщение накануне обычно снижает no-show."
+)
+TRAINER_DIGEST_WEEKLY_REC_QUIET = (
+    "👉 На неделе тихо. Пара слов тем, кто давно не появлялся — "
+    "часто возвращает пару ритмов."
+)
+TRAINER_DIGEST_WEEKLY_REC_ALL_GOOD = (
+    "👉 Неделя собрана. Воскресенье — твоё."
+)
+
+# Drought ladder (src/application/trainer_digest_use_cases.py::_weekly_drought_block).
+# Appears before the weekly recommendation when triggered; case 7 = silence.
+TRAINER_DIGEST_DROUGHT_OPEN_REQUESTS = (
+    "💬 На неделе тихо — но тебя ждут <b>{count}</b> {word} в каталоге. "
+    "Ответ в первый час обычно решает."
+)
+TRAINER_DIGEST_DROUGHT_CATALOG_HIDDEN = (
+    "👁 На неделе пусто — и тебя сейчас не видно в каталоге. Включим обратно?"
+)
+TRAINER_DIGEST_DROUGHT_NO_SLOTS = (
+    "📭 Клиенту сейчас не из чего выбрать: свободных окон нет на ближайшие "
+    "<b>{horizon_days}</b> дней. Добавим несколько?"
+)
+TRAINER_DIGEST_DROUGHT_DORMANT = (
+    "💭 На неделе пусто. {names} давно не появлялись — может, написать им первым?"
+)
+TRAINER_DIGEST_DROUGHT_PROFILE_INCOMPLETE = (
+    "✏️ Сейчас затишье — хороший момент довести профиль. "
+    "Клиент в каталоге видит только то, что заполнено."
+)
+TRAINER_DIGEST_DROUGHT_NO_TEMPLATE = (
+    "🗓 Пусто. Недельный шаблон расписания пока не настроен — "
+    "с ним слоты появляются автоматически."
 )
 TRAINER_REQUEST_NOTIFICATION = (
     "📩 <b>Новая заявка</b>\n\n"

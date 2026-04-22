@@ -25,7 +25,7 @@
     />
   </noscript>
   <link rel="preload" href="trainer-profile-main.js?v=20260491" as="script" />
-  <link rel="stylesheet" href="mini-app-trainer-profile.css?v=20260492" />
+  <link rel="stylesheet" href="mini-app-trainer-profile.css?v=20260496" />
   <link rel="stylesheet" href="mini-app-trainer-nav.css?v=20260419" />
 </head>
 <body>
@@ -310,10 +310,16 @@
             <div class="settings-format-main">
               <span class="settings-format-label">Пуши от бота</span>
               <p class="settings-format-micro">Время по Минску: в каком интервале вам можно присылать уведомления о записях, заявках и подписке.</p>
-              <label class="settings-push-default">
-                <input type="checkbox" id="push_notif_use_default" class="settings-push-default__input" />
-                <span>Как у сервиса (8:00–22:00)</span>
-              </label>
+              <div class="settings-group-toggle settings-group-toggle--push-window">
+                <input type="checkbox" id="push_notif_use_default" class="settings-group-toggle__input" />
+                <label for="push_notif_use_default" class="settings-group-toggle__label">
+                  <span class="settings-group-toggle__copy">
+                    <span class="settings-group-toggle__title">Окно как у сервиса</span>
+                    <span class="settings-group-toggle__hint">8:00–22:00 по Минску. Выключите, чтобы задать свой интервал.</span>
+                  </span>
+                  <span class="settings-group-toggle__switch" aria-hidden="true"></span>
+                </label>
+              </div>
               <div id="push_notif_custom_wrap" class="settings-push-custom">
                 <span class="settings-push-custom__lead">с</span>
                 <select id="push_notification_start_hour" class="settings-push-custom__select" aria-label="Час начала"></select>
@@ -322,6 +328,50 @@
                 <select id="push_notification_end_hour" class="settings-push-custom__select" aria-label="Час окончания"></select>
               </div>
               <p id="err_push_notification" class="field-error" role="status" hidden></p>
+            </div>
+          </div>
+        </div>
+        <div class="settings-format-divider" role="presentation"></div>
+        <div class="field settings-format-field" id="digestSettingsField">
+          <div class="settings-format-row">
+            <div class="settings-format-icon" aria-hidden="true" title="Дайджест">
+              <svg class="settings-format-svg" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M4 4h16v2H4V4zm0 4h10v2H4V8zm0 4h10v2H4v-2zm0 4h7v2H4v-2zm8 2v-6h8l-4 3-4 3z" fill="currentColor"/>
+              </svg>
+            </div>
+            <div class="settings-format-main">
+              <span class="settings-format-label">Дайджест в Telegram</span>
+              <p class="settings-format-micro">Утром — план дня, риски и одно конкретное действие. По воскресеньям — коротко про неделю. Время — по Минску, в пределах окна пушей выше.</p>
+              <div class="settings-group-toggle settings-group-toggle--digest">
+                <input type="checkbox" id="digest_enabled" class="settings-group-toggle__input" />
+                <label for="digest_enabled" class="settings-group-toggle__label">
+                  <span class="settings-group-toggle__copy">
+                    <span class="settings-group-toggle__title">Присылать дайджест</span>
+                    <span class="settings-group-toggle__hint">Утро + воскресный обзор</span>
+                  </span>
+                  <span class="settings-group-toggle__switch" aria-hidden="true"></span>
+                </label>
+              </div>
+              <div id="digest_options_wrap" class="settings-digest-options">
+                <div class="settings-group-toggle settings-group-toggle--digest">
+                  <input type="checkbox" id="digest_time_auto" class="settings-group-toggle__input" />
+                  <label for="digest_time_auto" class="settings-group-toggle__label">
+                    <span class="settings-group-toggle__copy">
+                      <span class="settings-group-toggle__title">Время: автомат</span>
+                      <span class="settings-group-toggle__hint">За час до первой тренировки, если в этот день она есть. Выключите — задайте час сами.</span>
+                    </span>
+                    <span class="settings-group-toggle__switch" aria-hidden="true"></span>
+                  </label>
+                </div>
+                <p class="settings-format-micro settings-digest-options__hint">Снимите «автомат» выше, чтобы открылись часы (например, к выходу из дома).</p>
+                <div id="digest_custom_time_wrap" class="settings-push-custom">
+                  <span class="settings-push-custom__lead">В</span>
+                  <select id="digest_send_hour" class="settings-push-custom__select" aria-label="Час дайджеста"></select>
+                  <span class="settings-push-custom__sep">:</span>
+                  <select id="digest_send_minute" class="settings-push-custom__select" aria-label="Минуты"></select>
+                </div>
+              </div>
+              <p id="err_digest" class="field-error" role="status" hidden></p>
             </div>
           </div>
         </div>

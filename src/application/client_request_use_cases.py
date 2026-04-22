@@ -892,63 +892,6 @@ async def mark_request_trainer_notified(
     await session.commit()
 
 
-async def get_trainers_for_daily_request_reminder(session: AsyncSession) -> list[dict]:
-    """
-    Trainers who: (1) have at least one open request (city+service, not responded/declined),
-    (2) have not responded to any request in the last 2 days (we nudge inactive ones),
-    (3) have not received this reminder in the last 2 days.
-    Returns: trainer_id, trainer_telegram_id, request_count.
-    """
-    r = await session.execute(
-        text("""
-            SELECT t.id, t.telegram_id, COUNT(req.id) AS request_count
-            FROM trainers t
-            INNER JOIN trainer_profiles p ON p.trainer_id = t.id
-            INNER JOIN trainer_services ts ON ts.trainer_id = t.id
-            LEFT JOIN trainer_daily_request_reminder_sent rem
-                ON rem.trainer_id = t.id AND rem.sent_date >= CURRENT_DATE - 2
-            INNER JOIN client_requests req
-                ON req.city_id = p.city_id AND req.service_id = ts.service_id AND req.status = 'new'
-                AND NOT EXISTS (
-                    SELECT 1 FROM client_request_responses resp
-                    WHERE resp.client_request_id = req.id AND resp.trainer_id = t.id
-                )
-                AND NOT EXISTS (
-                    SELECT 1 FROM client_request_declines d
-                    WHERE d.client_request_id = req.id AND d.trainer_id = t.id
-                )
-            WHERE t.telegram_id IS NOT NULL
-              AND rem.id IS NULL
-              AND NOT EXISTS (
-                  SELECT 1 FROM client_request_responses any_resp
-                  WHERE any_resp.trainer_id = t.id
-                    AND any_resp.created_at >= NOW() - INTERVAL '2 days'
-              )
-            GROUP BY t.id, t.telegram_id
-            HAVING COUNT(req.id) > 0
-        """),
-    )
-    rows = r.fetchall()
-    return [
-        {"trainer_id": row[0], "trainer_telegram_id": row[1], "request_count": row[2]}
-        for row in rows
-    ]
-
-
-async def mark_trainer_daily_request_reminder_sent(
-    session: AsyncSession, trainer_id: int
-) -> None:
-    """Record that we sent today's request digest to this trainer."""
-    await session.execute(
-        text("""
-            INSERT INTO trainer_daily_request_reminder_sent (trainer_id, sent_date)
-            VALUES (:tid, CURRENT_DATE)
-        """),
-        {"tid": trainer_id},
-    )
-    await session.commit()
-
-
 async def get_pending_response_notifications(session: AsyncSession, limit: int = 50) -> list[dict]:
     """
     Responses where client_notified_at is null. Returns: response_id, request_id, client_telegram_id,
