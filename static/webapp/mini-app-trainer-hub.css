@@ -13,21 +13,16 @@
       overflow-x: hidden;
     }
     .hub-shell {
-      animation: hub-enter 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+      /* Opacity-only: translate/scale on the whole shell caused visible layout jump vs async content. */
+      animation: hub-enter 0.32s ease-out both;
       max-width: 540px;
       margin: 0 auto;
       position: relative;
     }
     
     @keyframes hub-enter {
-      from { 
-        opacity: 0; 
-        transform: translateY(20px) scale(0.98);
-      }
-      to { 
-        opacity: 1; 
-        transform: translateY(0) scale(1);
-      }
+      from { opacity: 0; }
+      to { opacity: 1; }
     }
     
     @keyframes float-gentle {
@@ -39,25 +34,6 @@
       0%, 100% { box-shadow: 0 0 20px rgba(247, 166, 0, 0.15); }
       50% { box-shadow: 0 0 30px rgba(247, 166, 0, 0.25); }
     }
-    
-    @keyframes stat-card-enter {
-      from { 
-        opacity: 0; 
-        transform: translateY(10px) scale(0.95);
-      }
-      to { 
-        opacity: 1; 
-        transform: translateY(0) scale(1);
-      }
-    }
-    
-    .hub-stat-card {
-      animation: stat-card-enter 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
-    }
-    
-    .hub-stat-card:nth-child(1) { animation-delay: 0.1s; }
-    .hub-stat-card:nth-child(2) { animation-delay: 0.2s; }
-    .hub-stat-card:nth-child(3) { animation-delay: 0.3s; }
     /* Elevated Header with Sophisticated Branding */
     .hub-header {
       display: flex;
@@ -100,6 +76,9 @@
       align-items: flex-start;
       justify-content: flex-end;
       flex-shrink: 0;
+      /* Reserve share button slot so title does not reflow when eligibility loads. */
+      min-width: 42px;
+      min-height: 42px;
     }
     .hub-link-share-btn {
       width: 42px;
@@ -290,6 +269,8 @@
       color: var(--tg-theme-text-color);
       line-height: 1.1;
       margin-bottom: 4px;
+      font-variant-numeric: tabular-nums;
+      min-height: 1.1em;
     }
     
     .hub-stat-label {
@@ -2218,11 +2199,6 @@
       .hub-stat-card {
         animation: none !important;
         transition: none;
-      }
-      .hub-stat-card:nth-child(1),
-      .hub-stat-card:nth-child(2),
-      .hub-stat-card:nth-child(3) {
-        animation-delay: 0s !important;
       }
       .hub-hero-main {
         animation: none;

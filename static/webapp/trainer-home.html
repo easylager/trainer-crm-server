@@ -51,9 +51,9 @@
     })();
   </script>
   <!-- Bump ?v= when mini-app-trainer-hub.css changes (immutable cache on /webapp/…). -->
-  <link rel="stylesheet" href="mini-app-trainer-hub.css?v=20260479" />
+  <link rel="stylesheet" href="mini-app-trainer-hub.css?v=20260480" />
   <!-- Early download of main hub script (defer runs at end of body); improves time-to-interactive vs. discover-at-bottom. -->
-  <link rel="preload" href="trainer-home-main.js?v=20260476" as="script" />
+  <link rel="preload" href="trainer-home-main.js?v=20260477" as="script" />
 
 </head>
 <body class="hub-body">
@@ -305,7 +305,17 @@
     <div class="hub-section-head">
       <div class="hub-section-title">Разделы</div>
     </div>
-    <div class="hub-grid" id="hubGrid"></div>
+    <!-- Initial skeleton matches renderTiles() markup until deferred JS runs (avoids empty «Разделы» → CLS). -->
+    <div class="hub-grid" id="hubGrid">
+      <div class="hub-tile hub-tile--skeleton" role="status" aria-busy="true" aria-label="Загрузка"><div class="hub-tile-inner"><div class="hub-tile-top"><div class="hub-skel-line hub-skel-line--icon hub-skel-shimmer" aria-hidden="true"></div></div><div class="hub-tile-content"><div class="hub-skel-line hub-skel-line--title hub-skel-shimmer" aria-hidden="true"></div><div class="hub-skel-line hub-skel-line--hint hub-skel-shimmer" aria-hidden="true"></div></div></div></div>
+      <div class="hub-tile hub-tile--skeleton" role="status" aria-busy="true" aria-label="Загрузка"><div class="hub-tile-inner"><div class="hub-tile-top"><div class="hub-skel-line hub-skel-line--icon hub-skel-shimmer" aria-hidden="true"></div></div><div class="hub-tile-content"><div class="hub-skel-line hub-skel-line--title hub-skel-shimmer" aria-hidden="true"></div><div class="hub-skel-line hub-skel-line--hint hub-skel-shimmer" aria-hidden="true"></div></div></div></div>
+      <div class="hub-tile hub-tile--skeleton" role="status" aria-busy="true" aria-label="Загрузка"><div class="hub-tile-inner"><div class="hub-tile-top"><div class="hub-skel-line hub-skel-line--icon hub-skel-shimmer" aria-hidden="true"></div></div><div class="hub-tile-content"><div class="hub-skel-line hub-skel-line--title hub-skel-shimmer" aria-hidden="true"></div><div class="hub-skel-line hub-skel-line--hint hub-skel-shimmer" aria-hidden="true"></div></div></div></div>
+      <div class="hub-tile hub-tile--skeleton" role="status" aria-busy="true" aria-label="Загрузка"><div class="hub-tile-inner"><div class="hub-tile-top"><div class="hub-skel-line hub-skel-line--icon hub-skel-shimmer" aria-hidden="true"></div></div><div class="hub-tile-content"><div class="hub-skel-line hub-skel-line--title hub-skel-shimmer" aria-hidden="true"></div><div class="hub-skel-line hub-skel-line--hint hub-skel-shimmer" aria-hidden="true"></div></div></div></div>
+      <div class="hub-tile hub-tile--skeleton" role="status" aria-busy="true" aria-label="Загрузка"><div class="hub-tile-inner"><div class="hub-tile-top"><div class="hub-skel-line hub-skel-line--icon hub-skel-shimmer" aria-hidden="true"></div></div><div class="hub-tile-content"><div class="hub-skel-line hub-skel-line--title hub-skel-shimmer" aria-hidden="true"></div><div class="hub-skel-line hub-skel-line--hint hub-skel-shimmer" aria-hidden="true"></div></div></div></div>
+      <div class="hub-tile hub-tile--skeleton" role="status" aria-busy="true" aria-label="Загрузка"><div class="hub-tile-inner"><div class="hub-tile-top"><div class="hub-skel-line hub-skel-line--icon hub-skel-shimmer" aria-hidden="true"></div></div><div class="hub-tile-content"><div class="hub-skel-line hub-skel-line--title hub-skel-shimmer" aria-hidden="true"></div><div class="hub-skel-line hub-skel-line--hint hub-skel-shimmer" aria-hidden="true"></div></div></div></div>
+      <div class="hub-tile hub-tile--skeleton" role="status" aria-busy="true" aria-label="Загрузка"><div class="hub-tile-inner"><div class="hub-tile-top"><div class="hub-skel-line hub-skel-line--icon hub-skel-shimmer" aria-hidden="true"></div></div><div class="hub-tile-content"><div class="hub-skel-line hub-skel-line--title hub-skel-shimmer" aria-hidden="true"></div><div class="hub-skel-line hub-skel-line--hint hub-skel-shimmer" aria-hidden="true"></div></div></div></div>
+      <div class="hub-tile hub-tile--skeleton" role="status" aria-busy="true" aria-label="Загрузка"><div class="hub-tile-inner"><div class="hub-tile-top"><div class="hub-skel-line hub-skel-line--icon hub-skel-shimmer" aria-hidden="true"></div></div><div class="hub-tile-content"><div class="hub-skel-line hub-skel-line--title hub-skel-shimmer" aria-hidden="true"></div><div class="hub-skel-line hub-skel-line--hint hub-skel-shimmer" aria-hidden="true"></div></div></div></div>
+    </div>
 
     <div class="hub-footnote" id="hubFootnote">
       <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
@@ -534,6 +544,6 @@
   <script src="mini-app-trainer-gate.js"></script>
   <script src="mini-app-trainer-celebration.js"></script>
   <!-- Bump ?v= when trainer-home-main.js changes (immutable cache on /webapp/…). -->
-  <script defer src="trainer-home-main.js?v=20260476"></script>
+  <script defer src="trainer-home-main.js?v=20260477"></script>
 </body>
 </html>

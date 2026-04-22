@@ -2142,15 +2142,6 @@ def format_trainer_first_booking_milestone_from_booking_row(info: dict) -> str:
     )
 
 
-# After first booking: trainer may still be pending activation — catalog listing requires active + visibility.
-TRAINER_SHARE_FIRST_BOOKING_CATALOG_PATH_HTML = (
-    "🎯 <b>Что дальше?</b>\n\n"
-    "С первой записью вы уже в деле — это хороший старт. В <b>общем каталоге</b> появляетесь после "
-    "активации профиля: у всех новых тренеров такой же понятный путь — так мы держим площадку "
-    "предсказуемой и для вас, и для клиентов.\n\n"
-    "Когда будет удобно, дополните профиль по кнопке ниже. После проверки вас смогут находить в каталоге. "
-    "Если что-то неясно — <code>/guide</code>: ответим в этом чате и поможем разобраться."
-)
 TRAINER_SHARE_FIRST_BOOKING_ACTIVE_HIDDEN_FROM_CATALOG_HTML = (
     "👁 <b>Профиль активен, но вы скрыты из каталога</b>\n\n"
     "В приложении в профиле включите <b>«Показать в каталоге»</b> — иначе клиенты не увидят вас в общем списке.\n\n"

@@ -20,6 +20,14 @@
   --tg-theme-button-text-color: #1a1a1a;
   --tg-theme-secondary-bg-color: #fff5e1;
 
+  /*
+   * Фон и поверхности Trainer CRM (крем / тёплый графит).
+   * Не задавайте эти переменные из themeParams — Telegram часто подсовывает холодный «сине-серый»
+   * в --tg-theme-bg-color; для оболочек модалок/визарда и полей используйте именно --app-brand-*.
+   */
+  --app-brand-root-bg: #fffbec;
+  --app-brand-surface: #fff5e1;
+
   /* Brand CTA (янтарь) — не подменяется themeParams Telegram; кнопки/ссылки/фокус в мини-приложении */
   --app-cta-fill: #f5a623;
   --app-cta-text: #1a1a1a;
@@ -61,6 +69,9 @@
     --tg-theme-button-color: #f5a623;
     --tg-theme-button-text-color: #1a1a1a;
     --tg-theme-secondary-bg-color: #2c2c2e;
+
+    --app-brand-root-bg: #1c1c1c;
+    --app-brand-surface: #2c2c2e;
 
     --app-chip-bg: #3c3c3e;
     --app-chip-text: #f5f5f5;

@@ -170,7 +170,41 @@
     .card:focus-within {
       box-shadow: 0 2px 12px rgba(247, 166, 0, 0.12);
     }
-    .field { margin-bottom: 16px; position: relative; }
+    .field { margin-bottom: 16px; position: relative; scroll-margin-top: 140px; }
+    /*
+     * TTV onboarding: scrollIntoView учитывает scroll-padding у корня — нужно перекрыть липкий бар + шапку mini-app.
+     * 176px было мало: высота бара с кнопками и подсказкой на телефоне больше.
+     */
+    html.profile-block-tour--on {
+      scroll-padding-top: calc(env(safe-area-inset-top, 0px) + max(240px, 30vh));
+      scroll-padding-bottom: max(12px, env(safe-area-inset-bottom, 12px));
+    }
+    /*
+     * Телефон + тур (единый подход):
+     * — бар всегда один и тот же по вёрстке (не сжимаем при фокусе/клавиатуре — без «прыжка» UI);
+     * — подсказка скрыта, заголовок шага — одна строка с многоточием;
+     * — кнопки: сетка 2+1 (основная на всю ширину), как на всём диапазоне ≤560px;
+     * — позиция: fixed снизу; сдвиг по visualViewport (--profile-tour-vv-overlap) только поднимает бар над клавиатурой, без смены размеров.
+     */
+    @media (max-width: 560px) {
+      html.profile-block-tour--on {
+        scroll-padding-top: calc(env(safe-area-inset-top, 0px) + 8px);
+        /* vv-overlap — зона клавиатуры (visualViewport), задаётся в JS */
+        scroll-padding-bottom: calc(
+          16px + var(--profile-tour-vv-overlap, 0px) + var(--profile-tour-bar-height, 120px) +
+            env(safe-area-inset-bottom, 0px)
+        );
+      }
+      body.profile-block-tour--on #mainContent {
+        padding-bottom: calc(
+          8px + var(--profile-tour-vv-overlap, 0px) + var(--profile-tour-bar-height, 120px) +
+            env(safe-area-inset-bottom, 0px)
+        );
+      }
+    }
+    body.profile-block-tour--on .field {
+      scroll-margin-top: 0;
+    }
     .field:last-child { margin-bottom: 0; }
     .field.field-toggle .toggle-label {
       display: flex;
@@ -310,7 +344,7 @@
       padding: 12px;
       border-radius: 12px;
       background: var(--tg-theme-bg-color);
-      transition: background 0.2s;
+      transition: background 0.12s ease-out;
       min-width: 0;
     }
     .service-block { margin-bottom: 14px; }
@@ -418,11 +452,17 @@
       opacity: 0.45;
       pointer-events: none;
     }
+    /*
+     * Grid с 3 фиксированными колонками (checkbox / name / price) исключает перенос строки:
+     * лейбл тарифа и его инпут всегда на одном уровне даже на узких айфонах. Если имя длинное —
+     * переносится на 2 строки внутри своей колонки, ряд вырастает, но инпут остаётся на месте.
+     */
     .svc-tier-row {
-      display: flex;
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
       align-items: center;
-      gap: 10px;
-      flex-wrap: wrap;
+      column-gap: 10px;
+      row-gap: 4px;
       width: 100%;
       max-width: 100%;
       box-sizing: border-box;
@@ -432,23 +472,24 @@
       flex-shrink: 0;
     }
     .svc-tier-row .tier-name {
-      flex: 1 1 120px;
       min-width: 0;
       font-size: 14px;
       font-weight: 500;
       line-height: 1.3;
+      overflow-wrap: anywhere;
+      word-break: break-word;
     }
     .svc-tier-row .tier-price-wrap {
       display: flex;
       align-items: center;
       gap: 6px;
       flex-shrink: 0;
-      margin-left: auto;
-      padding-left: 8px;
+      margin-left: 0;
+      padding-left: 0;
     }
     .svc-tier-row input[type="number"] {
-      width: 88px;
-      min-width: 88px;
+      width: 76px;
+      min-width: 76px;
       padding: 8px 8px;
       border-radius: 10px;
       font-size: 15px;
@@ -1430,6 +1471,41 @@
       padding-bottom: calc(12px + env(safe-area-inset-bottom, 0));
       background: linear-gradient(to top, var(--tg-theme-bg-color) 85%, transparent);
       z-index: 10;
+      will-change: transform;
+      transition: transform 0.16s ease-out, opacity 0.14s ease-out;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .save-bar {
+        transition: none;
+      }
+    }
+    /*
+     * Пока фокус в поле ввода (или наведение на .field на десктопе) — убираем панель вниз,
+     * чтобы она не перекрывала поле и клавиатуру на телефоне.
+     * Если видна общая ошибка (#err_general) — панель оставляем (текст ошибки внутри неё).
+     */
+    @supports selector(:has(*)) {
+      body:has(#mainContent :is(input, textarea, select):focus):not(:has(#err_general:not([hidden]))) .save-bar {
+        transform: translateY(110%);
+        opacity: 0;
+        pointer-events: none;
+      }
+    }
+    @media (hover: hover) and (pointer: fine) {
+      @supports selector(:has(*)) {
+        body:has(#mainContent .field:hover):not(:has(#err_general:not([hidden]))) .save-bar {
+          transform: translateY(110%);
+          opacity: 0;
+          pointer-events: none;
+        }
+      }
+    }
+    @supports not selector(:has(*)) {
+      #mainContent:focus-within ~ .save-bar {
+        transform: translateY(110%);
+        opacity: 0;
+        pointer-events: none;
+      }
     }
     .btn-save {
       display: flex;
@@ -1506,6 +1582,7 @@
       .skeleton-line, .skeleton-hero { animation: none; opacity: 0.7; }
       .tab-pane { animation: none; }
       .save-toast { transition: opacity 0.2s; }
+      .save-bar { transition: none; }
     }
     input[type="file"] { font-size: 14px; max-width: 100%; }
     .phone-input-wrap {
@@ -2002,8 +2079,8 @@
       .quick-action-btn { background: #252525 !important; }
     }
 
-    /* TTV tour: in document flow, then sticks to viewport top while scrolling long анкета
-       (fixed bottom overlapped keyboard; plain static bar scrolled out of view). */
+    /* TTV tour: десктоп/планшет — в потоке и sticky сверху при длинной анкете.
+       Узкий экран: см. @media (max-width: 560px) — бар снизу, без перекрытия полей. */
     .profile-block-tour-bar {
       position: relative;
       z-index: 2;
@@ -2021,7 +2098,9 @@
       padding: 8px 12px 12px;
       background: var(--tg-theme-bg-color);
       box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
+      transition: opacity 0.2s ease;
     }
+    /* Не откреплять бар при фокусе: иначе он остаётся в начале DOM и пропадает при прокрутке к полям ниже (Контакты и т.д.). Sticky держит «Сохранить и дальше» у верхнего края экрана. */
     .profile-block-tour-bar__inner {
       max-width: 100%;
       margin: 0;
@@ -2057,6 +2136,8 @@
       font-size: 13px;
       font-weight: 600;
       cursor: pointer;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
     }
     .profile-block-tour-bar__btn--ghost {
       background: transparent;
@@ -2080,6 +2161,74 @@
       .profile-block-tour-bar__btn--primary {
         grid-column: 1 / -1;
         margin-left: 0;
+      }
+    }
+
+    @media (max-width: 560px) {
+      body.profile-block-tour--on .profile-block-tour-bar {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        top: auto;
+        z-index: 25;
+        margin: 0;
+        margin-left: 0;
+        margin-right: 0;
+        padding: 8px 12px calc(10px + env(safe-area-inset-bottom, 0));
+        background: var(--tg-theme-bg-color);
+        box-shadow: 0 -10px 28px rgba(0, 0, 0, 0.14);
+        border-top: 1px solid rgba(247, 166, 0, 0.22);
+      }
+      body.profile-block-tour--on .profile-block-tour-bar__hint {
+        display: none;
+      }
+      body.profile-block-tour--on .profile-block-tour-bar__inner {
+        contain: layout style;
+        padding: 10px 12px;
+      }
+      body.profile-block-tour--on .profile-block-tour-bar__title {
+        font-size: 13px;
+        font-weight: 600;
+        line-height: 1.3;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      /* Единая сетка на всех телефонах с туром (перекрывает общий max-width:420px для этого блока). */
+      body.profile-block-tour--on .profile-block-tour-bar__actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+        margin-top: 8px;
+        justify-content: stretch;
+      }
+      body.profile-block-tour--on .profile-block-tour-bar__btn--primary {
+        grid-column: 1 / -1;
+        margin-left: 0;
+      }
+      /*
+       * Дублирующая «Сохранить изменения» скрыта — CTA в баре тура.
+       * Панель над баром тура; vv-overlap — сдвиг вместе с клавиатурой (iOS).
+       */
+      body.profile-block-tour--on .save-bar {
+        bottom: calc(
+          var(--profile-tour-vv-overlap, 0px) + var(--profile-tour-bar-height, 120px) +
+            env(safe-area-inset-bottom, 0px)
+        );
+        padding-bottom: 8px;
+      }
+      body.profile-block-tour--on .save-bar .btn-save {
+        display: none;
+      }
+      /*
+       * Цены тарифов — не в .field; без отступа scrollIntoView / фокус клавиатуры залипает под нижним баром тура.
+       */
+      body.profile-block-tour--on #servicesWrap .svc-tier-row,
+      body.profile-block-tour--on #servicesWrap .svc-group-price-wrap {
+        scroll-margin-bottom: calc(
+          var(--profile-tour-bar-height, 120px) + var(--profile-tour-vv-overlap, 0px) + 16px
+        );
       }
     }
     /* During TTV tour, age is optional — hide required marker (server TTV gate also skips age). */
@@ -2128,4 +2277,285 @@
       font-size: 15px;
       -webkit-appearance: none;
       appearance: none;
+    }
+
+    /* ============================================================
+       Onboarding wizard (full-screen)
+       ---------------------------------------------------------------
+       Принципы:
+       1. height: 100dvh — контейнер сам сжимается под клавиатурой iOS,
+          поэтому футер с кнопкой всегда остаётся видимым, а активное поле
+          при фокусе скроллится в видимую часть body.
+       2. Никаких position: fixed для футера — используем CSS grid
+          «header / body(1fr) / footer», чтобы ничего не перекрывало поля.
+       3. Перенос DOM: реальные блоки анкеты временно перемещаются в
+          #obFlowSlot и возвращаются обратно при закрытии/смене шага,
+          чтобы сохранить существующие обработчики и валидацию.
+       ============================================================ */
+
+    /* Скрыть всю прежнюю «хромированную» обвязку страницы, пока открыт визард. */
+    body.ob-flow-open {
+      overflow: hidden;
+    }
+    body.ob-flow-open #mainContent,
+    body.ob-flow-open .save-bar,
+    body.ob-flow-open #saveToast {
+      visibility: hidden;
+    }
+    /* Старый sticky-бар больше не используется; прячем на всякий случай. */
+    #profileBlockTourBar {
+      display: none !important;
+    }
+
+    .ob-flow[hidden] {
+      display: none !important;
+    }
+    /* Фон визарда — брендовый (крем/графит), не «telegram-синий» из themeParams. */
+    .ob-flow {
+      position: fixed;
+      inset: 0;
+      z-index: 210;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      background: var(--app-brand-root-bg);
+      color: var(--tg-theme-text-color);
+      accent-color: var(--app-cta-fill, var(--tg-theme-button-color));
+      height: 100vh;
+      height: 100dvh;
+      max-height: 100dvh;
+      overscroll-behavior: contain;
+    }
+
+    .ob-flow__header {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      align-items: center;
+      gap: 12px;
+      padding: calc(env(safe-area-inset-top, 0px) + 10px) 16px 10px;
+      border-bottom: 1px solid rgba(128, 128, 128, 0.12);
+      background: var(--app-brand-root-bg);
+    }
+    .ob-flow__close {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      border: none;
+      background: var(--app-brand-surface);
+      color: var(--tg-theme-text-color);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .ob-flow__close:active { transform: scale(0.95); }
+    .ob-flow__progress {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      min-width: 0;
+    }
+    .ob-flow__dots {
+      display: flex;
+      gap: 6px;
+    }
+    .ob-flow__dot {
+      flex: 1 1 0;
+      min-width: 6px;
+      height: 6px;
+      border-radius: 3px;
+      background: rgba(128, 128, 128, 0.22);
+      transition: background 0.18s ease;
+    }
+    .ob-flow__dot--done {
+      background: color-mix(in srgb, #F7A600 55%, transparent);
+    }
+    .ob-flow__dot--current {
+      background: linear-gradient(135deg, #F7A600 0%, #e69500 100%);
+    }
+    .ob-flow__step-label {
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      color: var(--tg-theme-hint-color);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .ob-flow__body {
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      padding: 20px 16px 24px;
+      /* scroll-padding чтобы фокус input не прилипал к верху/низу под клавиатурой */
+      scroll-padding-top: 20px;
+      scroll-padding-bottom: 24px;
+    }
+    .ob-flow__card {
+      max-width: 520px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .ob-flow__title {
+      margin: 0;
+      font-size: 24px;
+      font-weight: 700;
+      line-height: 1.2;
+      letter-spacing: -0.01em;
+      color: var(--tg-theme-text-color);
+    }
+    .ob-flow__subtitle {
+      margin: 0 0 6px;
+      font-size: 14px;
+      line-height: 1.45;
+      color: var(--tg-theme-hint-color);
+    }
+    .ob-flow__slot {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    /* Пока блок в слоте — собственный заголовок/саммари не нужен, его заменяет ob-flow__title. */
+    .ob-flow__slot details.profile-collapse,
+    .ob-flow__slot details.profile-collapse[open] {
+      margin: 0;
+      padding: 0;
+      background: transparent;
+      box-shadow: none;
+      border: none;
+    }
+    .ob-flow__slot details.profile-collapse > summary {
+      display: none !important;
+    }
+    .ob-flow__slot .card {
+      margin-bottom: 0;
+      box-shadow: none;
+      background: var(--app-brand-surface);
+    }
+    /*
+     * Поля ввода внутри визарда: не брать «холодный» --tg-theme-bg-color из Telegram,
+     * а слой canvas (--app-brand-root-bg) поверх карточки surface — как в основной анкете.
+     */
+    .ob-flow .field input,
+    .ob-flow .field select,
+    .ob-flow .field textarea,
+    .ob-flow input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]),
+    .ob-flow select,
+    .ob-flow textarea {
+      background: var(--app-brand-root-bg);
+      color: var(--tg-theme-text-color);
+    }
+    .ob-flow .svc-tier-row input[type="number"],
+    .ob-flow .svc-group-price-wrap input[type="number"] {
+      background: var(--app-brand-root-bg);
+    }
+    /* В онбординге «Возраст» не требуется — показываем только имя, фамилию и город. */
+    .ob-flow__slot .field--age {
+      display: none !important;
+    }
+    /*
+     * Тарифы/групповая цена при фокусе сами скроллятся в центр #obFlowBody (см. JS).
+     * scroll-margin добавляет комфортный отступ — чтобы строка не прилипала к краю визарда.
+     */
+    .ob-flow__slot .svc-tier-row,
+    .ob-flow__slot .svc-group-price-wrap {
+      scroll-margin-top: 24px;
+      scroll-margin-bottom: 24px;
+    }
+    /* Обёртки шагов настроек: без встроенных отступов. */
+    .ob-flow__slot #obSessionDurationWrap,
+    .ob-flow__slot #obMinHoursWrap {
+      background: var(--app-brand-surface);
+      border-radius: 16px;
+      padding: 16px;
+      margin: 0;
+    }
+    .ob-flow__slot #obSessionDurationWrap .settings-format-row,
+    .ob-flow__slot #obMinHoursWrap .settings-format-row {
+      gap: 12px;
+    }
+    .ob-flow__slot .err-general {
+      font-size: 13px;
+      color: #d14343;
+    }
+    .ob-flow__error {
+      margin: 0;
+      font-size: 13px;
+      line-height: 1.4;
+      color: #d14343;
+    }
+
+    .ob-flow__footer {
+      display: flex;
+      gap: 10px;
+      padding: 10px 16px calc(env(safe-area-inset-bottom, 0px) + 14px);
+      background: var(--app-brand-root-bg);
+      border-top: 1px solid rgba(128, 128, 128, 0.12);
+    }
+    .ob-flow__btn--ghost { flex: 0 0 auto; }
+    .ob-flow__btn--primary { flex: 1 1 auto; }
+    .ob-flow__btn {
+      border: none;
+      border-radius: 14px;
+      padding: 15px 18px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
+      transition: transform 0.12s ease, box-shadow 0.2s ease, opacity 0.15s ease;
+    }
+    .ob-flow__btn:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+    .ob-flow__btn--ghost {
+      background: var(--app-brand-surface);
+      color: var(--tg-theme-text-color);
+    }
+    .ob-flow__btn--primary {
+      background: linear-gradient(135deg, #F7A600 0%, #e69500 100%);
+      color: #1a1a1a;
+      box-shadow: 0 4px 16px rgba(247, 166, 0, 0.32);
+    }
+    .ob-flow__btn--primary:not(:disabled):active {
+      transform: scale(0.98);
+      box-shadow: 0 2px 10px rgba(247, 166, 0, 0.35);
+    }
+    .ob-flow__btn--primary.is-saving {
+      pointer-events: none;
+      opacity: 0.85;
+    }
+
+    /* Desktop: центрируем карточку (но управление всё равно снизу для единообразия). */
+    @media (min-width: 561px) {
+      .ob-flow__body {
+        padding: 40px 24px 48px;
+      }
+      .ob-flow__title {
+        font-size: 28px;
+      }
+      .ob-flow__footer {
+        padding: 14px 24px calc(env(safe-area-inset-bottom, 0px) + 18px);
+      }
+      .ob-flow__footer-inner,
+      .ob-flow__header,
+      .ob-flow__body,
+      .ob-flow__footer {
+        max-width: none;
+      }
+    }
+
+    /* Плавный enter шага */
+    @media (prefers-reduced-motion: no-preference) {
+      .ob-flow__card.ob-flow__card--enter {
+        animation: obFlowEnter 0.22s ease both;
+      }
+      @keyframes obFlowEnter {
+        from { opacity: 0; transform: translateY(6px); }
+        to   { opacity: 1; transform: translateY(0); }
+      }
     }

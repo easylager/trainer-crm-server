@@ -6,7 +6,7 @@
   <title>Профиль тренера</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script src="mini-app-telegram-chrome.js"></script>
-  <link rel="stylesheet" href="theme.css?v=20260419" />
+  <link rel="stylesheet" href="theme.css?v=20260492" />
   <link rel="stylesheet" href="mini-app-components.css?v=20260419" />
   <script src="mini-app-confirm.js"></script>
   <link rel="dns-prefetch" href="https://cdn.jsdelivr.net" />
@@ -24,8 +24,8 @@
       href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=optional"
     />
   </noscript>
-  <link rel="preload" href="trainer-profile-main.js?v=20260470" as="script" />
-  <link rel="stylesheet" href="mini-app-trainer-profile.css?v=20260470" />
+  <link rel="preload" href="trainer-profile-main.js?v=20260491" as="script" />
+  <link rel="stylesheet" href="mini-app-trainer-profile.css?v=20260492" />
   <link rel="stylesheet" href="mini-app-trainer-nav.css?v=20260419" />
 </head>
 <body>
@@ -108,19 +108,6 @@
     </nav>
 
     <div id="tab-form" class="tab-pane active">
-      <div id="profileBlockTourBar" class="profile-block-tour-bar" hidden>
-        <div class="profile-block-tour-bar__inner">
-          <div class="profile-block-tour-bar__copy">
-            <div class="profile-block-tour-bar__title" id="profileBlockTourStepLabel"></div>
-            <p class="profile-block-tour-bar__hint" id="profileBlockTourHint"></p>
-          </div>
-          <div class="profile-block-tour-bar__actions">
-            <button type="button" class="profile-block-tour-bar__btn profile-block-tour-bar__btn--ghost" id="profileBlockTourExit">Закрыть</button>
-            <button type="button" class="profile-block-tour-bar__btn profile-block-tour-bar__btn--secondary" id="profileBlockTourFocus">К полю</button>
-            <button type="button" class="profile-block-tour-bar__btn profile-block-tour-bar__btn--primary" id="profileBlockTourNext">Дальше</button>
-          </div>
-        </div>
-      </div>
       <details class="profile-collapse" id="anketaStart" open>
         <summary class="profile-collapse__summary">
           <span class="profile-collapse__title">Основное</span>
@@ -250,7 +237,7 @@
     <div id="tab-settings" class="tab-pane">
       <div class="section-title">Формат занятий</div>
       <div class="card settings-format-card">
-        <div class="field settings-format-field">
+        <div class="field settings-format-field" id="obSessionDurationWrap">
           <div class="settings-format-row">
             <div class="settings-format-icon" aria-hidden="true" title="Длительность">
               <svg class="settings-format-svg" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -283,7 +270,7 @@
           </div>
         </div>
         <div class="settings-format-divider" role="presentation"></div>
-        <div class="field settings-format-field">
+        <div class="field settings-format-field" id="obMinHoursWrap">
           <div class="settings-format-row">
             <div class="settings-format-icon" aria-hidden="true" title="Окно записи">
               <svg class="settings-format-svg" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -395,6 +382,36 @@
       <span class="btn-save-saving">Сохраняем…</span>
     </button>
   </div>
+  <!--
+    Onboarding wizard (full-screen). Когда активен, переносим в #obFlowSlot реальные блоки из #mainContent,
+    чтобы не дублировать DOM и сохранить уже подключённые обработчики, валидацию и API.
+  -->
+  <div id="onboardingFlow" class="ob-flow" hidden aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="obFlowTitle">
+    <header class="ob-flow__header">
+      <button type="button" class="ob-flow__close" id="obFlowClose" aria-label="Отложить и вернуться к главной">
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+          <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+        </svg>
+      </button>
+      <div class="ob-flow__progress">
+        <div class="ob-flow__dots" id="obFlowDots" role="progressbar" aria-valuemin="1" aria-valuemax="1" aria-valuenow="1"></div>
+        <div class="ob-flow__step-label" id="obFlowStepLabel"></div>
+      </div>
+    </header>
+    <main class="ob-flow__body" id="obFlowBody">
+      <div class="ob-flow__card">
+        <h1 class="ob-flow__title" id="obFlowTitle"></h1>
+        <p class="ob-flow__subtitle" id="obFlowSubtitle"></p>
+        <div class="ob-flow__slot" id="obFlowSlot" aria-live="polite"></div>
+        <p class="ob-flow__error" id="obFlowError" role="alert" hidden></p>
+      </div>
+    </main>
+    <footer class="ob-flow__footer">
+      <button type="button" class="ob-flow__btn ob-flow__btn--ghost" id="obFlowBack" hidden>Назад</button>
+      <button type="button" class="ob-flow__btn ob-flow__btn--primary" id="obFlowNext">Далее</button>
+    </footer>
+  </div>
+
   <div id="saveToast" class="save-toast" role="status" aria-live="polite" aria-atomic="true" hidden>
     <div class="save-toast-inner">
       <span class="save-toast-mark" aria-hidden="true">✓</span>
@@ -420,7 +437,7 @@
     </div>
   </div>
 
-  <script defer src="trainer-profile-main.js?v=20260470"></script>
+  <script defer src="trainer-profile-main.js?v=20260491"></script>
   <script defer src="mini-app-trainer-home.js"></script>
 </body>
 </html>

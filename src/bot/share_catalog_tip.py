@@ -58,15 +58,7 @@ async def send_trainer_share_catalog_tip_to_chat(
 
     if not in_public_catalog:
         if st != TRAINER_STATUS_ACTIVE:
-            tip = msg.TRAINER_SHARE_FIRST_BOOKING_CATALOG_PATH_HTML
-            from src.bot.handlers.trainer_handlers import _trainer_profile_keyboard
-
-            await bot.send_message(
-                chat_id=chat_id,
-                text=tip,
-                parse_mode=ParseMode.HTML,
-                reply_markup=_trainer_profile_keyboard(),
-            )
+            # Не отправляем длинное «Что дальше?» про каталог и активацию — праздничная карточка первой записи уже ушла выше.
             return
         elif links.catalog_page_url:
             cat_esc = html.escape(links.catalog_page_url)

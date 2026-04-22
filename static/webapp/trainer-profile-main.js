@@ -110,16 +110,58 @@
       };
 
       var SCHEDULE_GRID_STEPS = [10, 15, 30, 60];
-      /** Same order as TTV minimal analysis on the server — stable step numbers in the coach UI. */
+      /**
+       * UX order for coach UI.
+       * Один шаг «Основное»: имя + фамилия + город (сервер шлёт full_name и/или city).
+       */
       var PROFILE_TT_BLOCK_ORDER = [
-        'full_name',
+        'anketa_main',
         'phone',
-        'city',
         'session_duration_minutes',
         'min_hours_before_booking',
         'services',
         'arenas',
       ];
+      /** Stable RU labels by tour step key (do not depend on server array ordering). */
+      var PROFILE_TT_BLOCK_LABELS_RU = {
+        anketa_main: 'Основное',
+        phone: 'контакты',
+        city: 'город',
+        session_duration_minutes: 'длительность занятия',
+        min_hours_before_booking: 'окно записи',
+        services: 'услуги',
+        arenas: 'арены',
+      };
+
+      /** Первое незаполненное поле в блоке «Основное» (имя → фамилия → город). */
+      function getAnketaMainFocusEl() {
+        var fn = document.getElementById('first_name');
+        var ln = document.getElementById('last_name');
+        var city = document.getElementById('city_id');
+        var fnv = fn ? String(fn.value || '').trim() : '';
+        var lnv = ln ? String(ln.value || '').trim() : '';
+        var cityVal = city ? String(city.value || '').trim() : '';
+        if (!fnv) return fn;
+        if (!lnv) return ln;
+        if (!cityVal) return city;
+        return fn || ln || city;
+      }
+
+      /** Server readiness keys -> UI coach steps (один шаг anketa_main вместо отдельных имя/фамилия/город). */
+      function profileBlockTourMissingStepKeys(serverMissingKeys) {
+        var inKeys = Array.isArray(serverMissingKeys) ? serverMissingKeys.slice() : [];
+        var out = [];
+        var has = function(k) { return inKeys.indexOf(k) >= 0; };
+        if (has('full_name') || has('city')) {
+          out.push('anketa_main');
+        }
+        if (has('phone')) out.push('phone');
+        if (has('session_duration_minutes')) out.push('session_duration_minutes');
+        if (has('min_hours_before_booking')) out.push('min_hours_before_booking');
+        if (has('services')) out.push('services');
+        if (has('arenas')) out.push('arenas');
+        return out;
+      }
 
       function buildScheduleGridPreviewInner(step) {
         var totalMin = 4 * 60;
@@ -1251,13 +1293,118 @@
         syncProfileFormNavVisibility(tab);
       }
 
-      function focusElForProfileField(el) {
+      /** Соответствует html.profile-block-tour--on { scroll-padding-top } — для решения «скроллить или нет». */
+      function getHtmlScrollPaddingTopPx() {
+        try {
+          var s = getComputedStyle(document.documentElement).scrollPaddingTop;
+          var m = /^([\d.]+)px\s*$/.exec(String(s || '').trim());
+          if (m) return parseFloat(m[1]);
+          var n = parseFloat(s);
+          if (!isNaN(n)) return n;
+        } catch (e) {}
+        return 260;
+      }
+
+      /** Высота нижнего бара тура на телефоне (CSS fixed bottom) — для visualViewport и отступа save-bar. */
+      function getProfileTourBottomInsetPx() {
+        try {
+          var v = getComputedStyle(document.documentElement)
+            .getPropertyValue('--profile-tour-bar-height')
+            .trim();
+          var m = /^([\d.]+)px\s*$/.exec(v);
+          if (m) return parseFloat(m[1]);
+        } catch (e2) {}
+        return 0;
+      }
+
+      /**
+       * iOS / Telegram WebView: 100dvh не сжимается под клавиатуру. Чтобы кнопка «Далее»
+       * не уходила под клаву, размер оболочки визарда берём из visualViewport.height
+       * (и смещаем top на visualViewport.offsetTop на случай, когда страница «проваливается»).
+       */
+      function syncProfileTourBarInset() {
+        var flow = document.getElementById('onboardingFlow');
+        if (!flow || flow.hidden) {
+          if (flow) {
+            try { flow.style.removeProperty('height'); } catch (eH1) {}
+            try { flow.style.removeProperty('top'); } catch (eT1) {}
+          }
+          return;
+        }
+        var vv = window.visualViewport;
+        if (!vv) return;
+        try {
+          flow.style.height = vv.height + 'px';
+        } catch (eH2) {}
+        try {
+          if (vv.offsetTop) flow.style.top = vv.offsetTop + 'px';
+          else flow.style.removeProperty('top');
+        } catch (eT2) {}
+      }
+
+      /**
+       * В туре не дёргаем scrollIntoView на каждый тап по соседнему полю — иначе рывок (как в нормальных мобильных формах).
+       * Скроллим только если блок реально уехал под липкий бар / клавиатуру.
+       */
+      function profileTourFieldIsComfortablyVisible(scrollTarget) {
+        if (!scrollTarget) return false;
+        var r = scrollTarget.getBoundingClientRect();
+        var vv = window.visualViewport;
+        var vh =
+          vv && typeof vv.height === 'number' && vv.height > 0
+            ? vv.height
+            : window.innerHeight || document.documentElement.clientHeight || 0;
+        if (vh < 1) return false;
+        var padTop = getHtmlScrollPaddingTopPx() + 6;
+        var padBottom = Math.max(20, (window.innerHeight || vh) - vh + 12);
+        var tour = state.profileBlockTourActive;
+        var extraBottom = 0;
+        if (
+          tour &&
+          window.matchMedia &&
+          window.matchMedia('(max-width: 560px)').matches
+        ) {
+          extraBottom = getProfileTourBottomInsetPx();
+          if (extraBottom < 1) extraBottom = 110;
+        }
+        if (r.top < padTop) return false;
+        if (r.bottom > vh - padBottom - extraBottom) return false;
+        return true;
+      }
+
+      /**
+       * @param {HTMLElement} el — фокус (input/checkbox/…).
+       * @param {HTMLElement} [scrollAnchor] — если задан, скроллим его (напр. details с заголовком секции), а не внутренний контрол.
+       */
+      function focusElForProfileField(el, scrollAnchor) {
         if (!el) return;
         openProfileCollapseContaining(el);
-        try {
-          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        } catch (e) {}
-        setTimeout(function() {
+        var tour = state.profileBlockTourActive;
+        /* scroll-margin на .field задаётся в CSS; scrollIntoView по input его не учитывает — скроллим .field */
+        var scrollTarget =
+          scrollAnchor ||
+          (el.closest && el.closest('.field') ? el.closest('.field') : el);
+        if (!scrollAnchor && el.closest && el.closest('#servicesWrap')) {
+          var svcRow = el.closest('.svc-tier-row') || el.closest('.svc-group-price-wrap');
+          if (svcRow) scrollTarget = svcRow;
+        }
+        var skipScroll = tour && profileTourFieldIsComfortablyVisible(scrollTarget);
+        var tourScrollBlock = 'start';
+        if (tour && scrollTarget && scrollTarget.closest && scrollTarget.closest('#servicesWrap')) {
+          /* nearest — минимальный сдвиг при смене тарифа; center давал рывок между соседними полями. */
+          tourScrollBlock = 'nearest';
+        }
+        if (!skipScroll) {
+          try {
+            /* Tour: instant scroll avoids fighting Telegram/WebView + second delayed focus; smooth elsewhere */
+            scrollTarget.scrollIntoView({
+              behavior: tour ? 'auto' : 'smooth',
+              block: tour ? tourScrollBlock : 'center',
+              inline: 'nearest',
+            });
+          } catch (e) {}
+        }
+        function doFocus() {
           try {
             if (el.focus) el.focus({ preventScroll: true });
           } catch (e2) {
@@ -1265,7 +1412,14 @@
               if (el.focus) el.focus();
             } catch (e3) {}
           }
-        }, 120);
+        }
+        if (tour) {
+          requestAnimationFrame(function() {
+            requestAnimationFrame(doFocus);
+          });
+        } else {
+          setTimeout(doFocus, 120);
+        }
       }
 
       /**
@@ -1276,8 +1430,14 @@
         if (!key) {
           setTab('form');
           setTimeout(function() {
-            var anchor = document.getElementById('anketaStart');
-            if (anchor) anchor.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            if (!state.profileBlockTourActive) {
+              var anchor = document.getElementById('anketaStart');
+              if (anchor) {
+                try {
+                  anchor.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                } catch (eA) {}
+              }
+            }
             focusElForProfileField(document.getElementById('first_name'));
           }, 80);
           return;
@@ -1312,6 +1472,29 @@
         setTimeout(function() {
           var el = null;
           switch (key) {
+            case 'anketa_main': {
+              var ank = document.getElementById('anketaStart');
+              var fn0 = document.getElementById('first_name');
+              if (ank) {
+                try {
+                  ank.open = true;
+                } catch (eOpen) {}
+              }
+              openProfileCollapseContaining(fn0 || ank);
+              function runAnketaFocus() {
+                var t = getAnketaMainFocusEl();
+                if (t) focusElForProfileField(t);
+              }
+              /* Один проход + повтор после отрисовки бара — без лишних scrollIntoView (они дают рывки между полями) */
+              runAnketaFocus();
+              requestAnimationFrame(function() {
+                requestAnimationFrame(function() {
+                  runAnketaFocus();
+                  setTimeout(runAnketaFocus, 360);
+                });
+              });
+              return;
+            }
             case 'full_name': {
               var fn = document.getElementById('first_name');
               var ln = document.getElementById('last_name');
@@ -1350,24 +1533,38 @@
               el = document.getElementById('min_hours_before_booking');
               break;
             case 'services': {
+              var svcDetails = document.getElementById('profileServicesCollapse');
+              if (svcDetails) {
+                try {
+                  svcDetails.open = true;
+                } catch (eSvc) {}
+              }
               var uc = document.querySelector('#servicesWrap input[type="checkbox"]:not(:checked)');
               el = uc || document.getElementById('servicesWrap');
-              break;
+              if (el) focusElForProfileField(el, svcDetails);
+              return;
             }
             case 'arenas': {
+              var arDetails = document.getElementById('profileNavArenas');
+              if (arDetails) {
+                try {
+                  arDetails.open = true;
+                } catch (eAr) {}
+              }
               var uca = document.querySelector('#arenasWrap input[type="checkbox"]:not(:checked)');
               if (uca) {
                 el = uca;
-                break;
-              }
-              var pwrap = document.getElementById('primaryArenaWrap');
-              if (pwrap && pwrap.style.display !== 'none') {
-                if (!document.querySelector('input[name="primary_arena"]:checked')) {
-                  el = document.querySelector('input[name="primary_arena"]');
+              } else {
+                var pwrap = document.getElementById('primaryArenaWrap');
+                if (pwrap && pwrap.style.display !== 'none') {
+                  if (!document.querySelector('input[name="primary_arena"]:checked')) {
+                    el = document.querySelector('input[name="primary_arena"]');
+                  }
                 }
+                if (!el) el = document.getElementById('arenasWrap') || document.getElementById('arenaHint');
               }
-              if (!el) el = document.getElementById('arenasWrap') || document.getElementById('arenaHint');
-              break;
+              if (el) focusElForProfileField(el, arDetails);
+              return;
             }
             default:
               el = document.getElementById('anketaStart');
@@ -1388,22 +1585,203 @@
         focusFormFieldForReadinessKey(missing.length ? missing[0] : null);
       }
 
+      /**
+       * Онбординг-визард: 1 шаг = 1 экран. Чтобы не дублировать DOM и сохранить всю существующую
+       * валидацию / автосохранение / каскад city→phone и т.п., реальные блоки анкеты временно
+       * переносятся в #obFlowSlot и возвращаются на место при закрытии или смене шага.
+       */
+      var OB_FLOW_STEP_DEFS = {
+        anketa_main: {
+          containerId: 'anketaStart',
+          tabId: 'form',
+          title: 'Познакомимся',
+          subtitle: 'Имя, фамилия и город — это то, что клиенты увидят в первую очередь.',
+        },
+        phone: {
+          containerId: 'profileNavContacts',
+          tabId: 'form',
+          title: 'Как с вами связаться',
+          subtitle: 'Телефон нужен для подтверждения записи. Остальные контакты — по желанию.',
+        },
+        session_duration_minutes: {
+          containerId: 'obSessionDurationWrap',
+          tabId: 'settings',
+          title: 'Длительность занятия',
+          subtitle: 'Сколько минут идёт обычная тренировка — станет значением по умолчанию для новых слотов.',
+        },
+        min_hours_before_booking: {
+          containerId: 'obMinHoursWrap',
+          tabId: 'settings',
+          title: 'Окно записи',
+          subtitle: 'За сколько часов до занятия вы готовы принять запись.',
+        },
+        services: {
+          containerId: 'profileServicesCollapse',
+          tabId: 'form',
+          title: 'Услуги и цены',
+          subtitle: 'Отметьте услуги, которые проводите, и укажите стоимость — так клиенты сразу видят ваш прайс.',
+        },
+        arenas: {
+          containerId: 'profileNavArenas',
+          tabId: 'form',
+          title: 'Где вы тренируете',
+          subtitle: 'Выберите арены и отметьте основную — она появится в карточке тренера.',
+        },
+      };
+
+      /** Последний смонтированный в слоте ключ шага — чтобы не перемонтировать одно и то же. */
+      var obFlowCurrentMountKey = null;
+
+      /** Запомнить исходное место блока в DOM — чтобы потом вернуть ровно туда же. */
+      function obFlowRecordHome(el) {
+        if (!el) return;
+        if (el.dataset.obHomeRecorded === '1') return;
+        el.dataset.obHomeRecorded = '1';
+        el._obHomeParent = el.parentNode;
+        el._obHomeNext = el.nextSibling;
+      }
+
+      function obFlowReturnHome(el) {
+        if (!el || el.dataset.obHomeRecorded !== '1') return;
+        var parent = el._obHomeParent;
+        if (!parent) return;
+        var next = el._obHomeNext && el._obHomeNext.parentNode === parent ? el._obHomeNext : null;
+        try {
+          parent.insertBefore(el, next);
+        } catch (eRet) {}
+      }
+
+      function obFlowUnmountCurrent() {
+        var key = obFlowCurrentMountKey;
+        obFlowCurrentMountKey = null;
+        if (!key) return;
+        var def = OB_FLOW_STEP_DEFS[key];
+        if (!def) return;
+        var el = document.getElementById(def.containerId);
+        obFlowReturnHome(el);
+      }
+
+      function obFlowMountStep(key) {
+        var def = OB_FLOW_STEP_DEFS[key];
+        if (!def) return;
+        if (obFlowCurrentMountKey === key) return;
+        /* Переключить вкладку, чтобы блок «жил» там, где к нему привязаны другие обработчики. */
+        if (def.tabId) {
+          try { setTab(def.tabId); } catch (eTab) {}
+        }
+        obFlowUnmountCurrent();
+        var slot = document.getElementById('obFlowSlot');
+        var el = document.getElementById(def.containerId);
+        if (!slot || !el) return;
+        obFlowRecordHome(el);
+        slot.innerHTML = '';
+        slot.appendChild(el);
+        if (el.tagName === 'DETAILS') {
+          try { el.open = true; } catch (eOpen) {}
+        }
+        obFlowCurrentMountKey = key;
+        /* Анимация входа. */
+        var card = document.querySelector('#onboardingFlow .ob-flow__card');
+        if (card) {
+          card.classList.remove('ob-flow__card--enter');
+          void card.offsetWidth;
+          card.classList.add('ob-flow__card--enter');
+        }
+        /* Сбрасываем скролл тела визарда к началу — чтобы заголовок шага был виден сразу. */
+        var body = document.getElementById('obFlowBody');
+        if (body) {
+          try { body.scrollTo({ top: 0, left: 0, behavior: 'auto' }); } catch (eSc) {
+            body.scrollTop = 0;
+          }
+        }
+        /*
+         * Ставим фокус на первом пустом контроле без scrollIntoView — заголовок карточки
+         * должен оставаться видимым. iOS сам откроет клавиатуру и подвинет поле только
+         * когда пользователь реально тапнет по инпуту.
+         */
+        setTimeout(function() {
+          try { obFlowFocusFirstEmpty(key); } catch (eFoc) {}
+        }, 80);
+      }
+
+      /**
+       * Находит первое пустое поле шага и ставит focus({preventScroll:true}).
+       * Не трогает scroll — позволяет iOS решать, когда реально нужно двигать поле.
+       */
+      function obFlowFocusFirstEmpty(key) {
+        var el = null;
+        switch (key) {
+          case 'anketa_main':
+            el = getAnketaMainFocusEl();
+            break;
+          case 'phone':
+            el = document.getElementById('phone');
+            break;
+          case 'session_duration_minutes':
+            el = document.getElementById('session_duration_minutes');
+            break;
+          case 'min_hours_before_booking':
+            el = document.getElementById('min_hours_before_booking');
+            break;
+          case 'services':
+          case 'arenas':
+            /* Сложные блоки со списками: авто-фокус не нужен — пользователь сам выбирает. */
+            return;
+          default:
+            return;
+        }
+        if (!el) return;
+        if (el.tagName === 'SELECT') {
+          /* На iOS авто-фокус select открывает picker — нежелательно до тапа. */
+          return;
+        }
+        try { el.focus({ preventScroll: true }); } catch (eF) {
+          try { el.focus(); } catch (eF2) {}
+        }
+      }
+
+      function obFlowOpen() {
+        var flow = document.getElementById('onboardingFlow');
+        if (!flow) return;
+        if (!flow.hidden) {
+          syncProfileTourBarInset();
+          return;
+        }
+        flow.hidden = false;
+        flow.setAttribute('aria-hidden', 'false');
+        document.body.classList.add('ob-flow-open');
+        syncProfileTourBarInset();
+      }
+
+      function obFlowClose() {
+        var flow = document.getElementById('onboardingFlow');
+        if (!flow) return;
+        obFlowUnmountCurrent();
+        flow.hidden = true;
+        flow.setAttribute('aria-hidden', 'true');
+        document.body.classList.remove('ob-flow-open');
+        try { flow.style.removeProperty('height'); } catch (eHc) {}
+        try { flow.style.removeProperty('top'); } catch (eTc) {}
+      }
+
+      /**
+       * Главная «синхронизация» визарда: вызывается из той же точки, где раньше был sticky-бар.
+       * Имя оставлено для обратной совместимости с существующими call-site'ами.
+       */
       function syncProfileBlockTourBar() {
-        var bar = document.getElementById('profileBlockTourBar');
-        if (!bar) return;
         if (!state.profileBlockTourActive) {
-          bar.hidden = true;
-          document.body.classList.remove('profile-block-tour--on');
+          obFlowClose();
           syncProfileBlockTourNextCta();
           return;
         }
         var d = state.moderation_readiness || {};
-        var keys = d.tt_minimal_missing_fields || [];
-        if (keys.length) state.profileBlockTourHubRedirectScheduled = false;
-        if (!keys.length) {
+        var rawKeys = d.tt_minimal_missing_fields || [];
+        var stepKeys = profileBlockTourMissingStepKeys(rawKeys);
+        if (stepKeys.length) state.profileBlockTourHubRedirectScheduled = false;
+        if (!stepKeys.length) {
+          /* Все шаги выполнены — закрываем визард и ведём на хаб. */
           state.profileBlockTourActive = false;
-          bar.hidden = true;
-          document.body.classList.remove('profile-block-tour--on');
+          obFlowClose();
           syncProfileBlockTourNextCta();
           showSaveToast(
             'Готово',
@@ -1418,29 +1796,42 @@
           }
           return;
         }
-        bar.hidden = false;
-        document.body.classList.add('profile-block-tour--on');
-        var labels = d.tt_minimal_missing_labels_ru || [];
-        var curKey = profileBlockTourCanonicalFirstMissing();
-        var labelIdx = curKey ? keys.indexOf(curKey) : -1;
-        var label0 =
-          labelIdx >= 0 && labels[labelIdx] ? labels[labelIdx] : curKey || keys[0] || '';
-        var ordKeys = profileBlockTourMissingInCanonicalOrder(keys);
-        var ord = curKey ? ordKeys.indexOf(curKey) : 0;
-        if (ord < 0) ord = 0;
-        var totalSteps = ordKeys.length || keys.length || PROFILE_TT_BLOCK_ORDER.length;
-        var stepEl = document.getElementById('profileBlockTourStepLabel');
-        var hintEl = document.getElementById('profileBlockTourHint');
+        obFlowOpen();
+        var currKey = profileBlockTourCanonicalFirstMissing() || stepKeys[0];
+        var ordered = profileBlockTourMissingInCanonicalOrder(stepKeys);
+        var idx = currKey ? ordered.indexOf(currKey) : 0;
+        if (idx < 0) idx = 0;
+        var total = ordered.length;
+        var def = OB_FLOW_STEP_DEFS[currKey] || {};
+        /* Заголовок шага. */
+        var titleEl = document.getElementById('obFlowTitle');
+        if (titleEl) titleEl.textContent = def.title || PROFILE_TT_BLOCK_LABELS_RU[currKey] || 'Заполните профиль';
+        var subEl = document.getElementById('obFlowSubtitle');
+        if (subEl) subEl.textContent = def.subtitle || '';
+        /* Прогресс: «Шаг X из N · Название». */
+        var stepEl = document.getElementById('obFlowStepLabel');
         if (stepEl) {
-          stepEl.textContent =
-            'Шаг ' + String(ord + 1) + ' из ' + String(totalSteps) + ': ' + label0;
+          var label = PROFILE_TT_BLOCK_LABELS_RU[currKey] || currKey || '';
+          stepEl.textContent = 'Шаг ' + (idx + 1) + ' из ' + total + ' · ' + label;
         }
-        if (hintEl) {
-          hintEl.textContent = profileBlockTourNeedsSave()
-            ? 'Нажмите «Сохранить и дальше» — после сохранения откроется следующий шаг.'
-            : 'Нажмите «Дальше», чтобы перейти к следующему шагу.';
+        var dots = document.getElementById('obFlowDots');
+        if (dots) {
+          dots.innerHTML = '';
+          for (var i = 0; i < total; i++) {
+            var dot = document.createElement('span');
+            var cls = 'ob-flow__dot';
+            if (i < idx) cls += ' ob-flow__dot--done';
+            else if (i === idx) cls += ' ob-flow__dot--current';
+            dot.className = cls;
+            dots.appendChild(dot);
+          }
+          dots.setAttribute('aria-valuemax', String(total));
+          dots.setAttribute('aria-valuenow', String(idx + 1));
         }
+        /* Смонтировать актуальный блок, если сменился шаг. */
+        obFlowMountStep(currKey);
         syncProfileBlockTourNextCta();
+        syncProfileTourBarInset();
       }
 
       function profileBlockTourMissingInCanonicalOrder(missingKeys) {
@@ -1465,13 +1856,13 @@
       }
 
       function syncProfileBlockTourNextCta() {
-        var nx = document.getElementById('profileBlockTourNext');
+        var nx = document.getElementById('obFlowNext');
         if (!nx) return;
         if (!state.profileBlockTourActive) {
-          nx.textContent = 'Дальше';
+          nx.textContent = 'Далее';
           return;
         }
-        nx.textContent = profileBlockTourNeedsSave() ? 'Сохранить и дальше' : 'Дальше';
+        nx.textContent = profileBlockTourNeedsSave() ? 'Сохранить и дальше' : 'Далее';
       }
 
       function profileBlockTourClearAdvanceStash() {
@@ -1480,7 +1871,8 @@
 
       /** First TTV gap in canonical wizard order (same as server append order, but robust if API changes). */
       function profileBlockTourCanonicalFirstMissing() {
-        var missing = (state.moderation_readiness && state.moderation_readiness.tt_minimal_missing_fields) || [];
+        var rawMissing = (state.moderation_readiness && state.moderation_readiness.tt_minimal_missing_fields) || [];
+        var missing = profileBlockTourMissingStepKeys(rawMissing);
         var j;
         for (j = 0; j < PROFILE_TT_BLOCK_ORDER.length; j++) {
           if (missing.indexOf(PROFILE_TT_BLOCK_ORDER[j]) >= 0) return PROFILE_TT_BLOCK_ORDER[j];
@@ -1576,7 +1968,8 @@
         profileBlockTourFetchBootstrapRefresh()
           .then(function() {
             if (!state.profileBlockTourActive) return;
-            var missing = (state.moderation_readiness && state.moderation_readiness.tt_minimal_missing_fields) || [];
+            var missingRaw = (state.moderation_readiness && state.moderation_readiness.tt_minimal_missing_fields) || [];
+            var missing = profileBlockTourMissingStepKeys(missingRaw);
             syncProfileBlockTourBar();
             if (!missing.length) return;
             if (prevKey && missing.indexOf(prevKey) >= 0) {
@@ -1602,7 +1995,8 @@
           profileBlockTourClearAdvanceStash();
           return;
         }
-        var missing = (state.moderation_readiness && state.moderation_readiness.tt_minimal_missing_fields) || [];
+        var missingRaw = (state.moderation_readiness && state.moderation_readiness.tt_minimal_missing_fields) || [];
+        var missing = profileBlockTourMissingStepKeys(missingRaw);
         var fromKey = state.profileBlockTourAdvanceFromKey;
         profileBlockTourClearAdvanceStash();
         if (!missing.length) return;
@@ -1626,7 +2020,7 @@
           history.replaceState(null, '', path);
         } catch (e) {}
         var rawKeys = (state.moderation_readiness && state.moderation_readiness.tt_minimal_missing_fields) || [];
-        var keys = Array.isArray(rawKeys) ? rawKeys : [];
+        var keys = profileBlockTourMissingStepKeys(Array.isArray(rawKeys) ? rawKeys : []);
         if (!keys.length) {
           /* TTV minimal already closed — blocks tour would hit «done» branch and bounce to hub (wrong for catalog tier). */
           state.profileBlockTourActive = false;
@@ -1643,33 +2037,97 @@
         state.profileBlockTourHubRedirectScheduled = false;
         syncProfileBlockTourBar();
         var k0 = profileBlockTourCanonicalFirstMissing();
-        if (k0) focusFormFieldForReadinessKey(k0);
+        if (k0) {
+          /* После показа липкого бара WebView иногда дорисовывает позже — повторяем наведение на шаг. */
+          requestAnimationFrame(function() {
+            requestAnimationFrame(function() {
+              if (!state.profileBlockTourActive) return;
+              focusFormFieldForReadinessKey(profileBlockTourCanonicalFirstMissing() || k0);
+            });
+          });
+          setTimeout(function() {
+            if (!state.profileBlockTourActive) return;
+            var k1 = profileBlockTourCanonicalFirstMissing();
+            if (k1) focusFormFieldForReadinessKey(k1);
+          }, 680);
+        }
+      }
+
+      /**
+       * Telegram / iOS WebView: первый тап по кнопке при фокусе в поле ввода часто уходит на blur
+       * и закрытие клавиатуры — синтетический click не приходит. pointerdown + preventDefault
+       * для touch/pen срабатывает сразу; debounce страхует от двойного вызова (touchend + click).
+       */
+      function bindProfileTourBarTap(el, handler) {
+        if (!el || el.dataset.tourTapBound) return;
+        el.dataset.tourTapBound = '1';
+        var last = 0;
+        function run() {
+          var t = Date.now();
+          if (t - last < 420) return;
+          last = t;
+          handler();
+        }
+        el.addEventListener('click', function() {
+          run();
+        });
+        el.addEventListener(
+          'pointerdown',
+          function(ev) {
+            if (!ev || ev.pointerType === 'mouse') return;
+            ev.preventDefault();
+            run();
+          },
+          { passive: false }
+        );
       }
 
       function wireProfileBlockTourBar() {
-        var ex = document.getElementById('profileBlockTourExit');
-        var nx = document.getElementById('profileBlockTourNext');
-        var fc = document.getElementById('profileBlockTourFocus');
-        if (ex && !ex.dataset.wired) {
-          ex.dataset.wired = '1';
-          ex.onclick = function() {
-            state.profileBlockTourActive = false;
-            syncProfileBlockTourBar();
-          };
-        }
-        if (nx && !nx.dataset.wired) {
-          nx.dataset.wired = '1';
-          nx.onclick = function() {
-            profileBlockTourOnNextClick();
-          };
-        }
-        if (fc && !fc.dataset.wired) {
-          fc.dataset.wired = '1';
-          fc.onclick = function() {
-            var kf = profileBlockTourCanonicalFirstMissing();
-            if (!kf) return;
-            focusFormFieldForReadinessKey(kf);
-          };
+        var closeBtn = document.getElementById('obFlowClose');
+        var nextBtn = document.getElementById('obFlowNext');
+        var backBtn = document.getElementById('obFlowBack');
+        var flow = document.getElementById('onboardingFlow');
+
+        bindProfileTourBarTap(closeBtn, function() {
+          if (!state.profileBlockTourActive) {
+            obFlowClose();
+            return;
+          }
+          /* Отложить онбординг: закрываем визард и уводим на хаб.
+             Хаб сам покажет «Продолжить», пока readiness не закрыта. */
+          state.profileBlockTourActive = false;
+          obFlowClose();
+          try { window.location.href = webappPageUrl('trainer-home'); } catch (eNav) {
+            window.location.href = webappPageUrl('trainer-home');
+          }
+        });
+
+        bindProfileTourBarTap(nextBtn, profileBlockTourOnNextClick);
+
+        /* «Назад» пока скрыт (визард линейный, идёт только вперёд по недостающим шагам).
+           Оставляю обработчик на будущее — пока no-op. */
+        if (backBtn) backBtn.hidden = true;
+
+        if (flow && !flow.dataset.obFlowInsetWired) {
+          flow.dataset.obFlowInsetWired = '1';
+          function onFlowResize() {
+            if (!flow.hidden) syncProfileTourBarInset();
+          }
+          window.addEventListener('resize', onFlowResize);
+          window.addEventListener('orientationchange', onFlowResize);
+          if (window.visualViewport) {
+            window.visualViewport.addEventListener('resize', onFlowResize);
+            window.visualViewport.addEventListener('scroll', onFlowResize);
+          }
+          /* При каждом focusin/focusout пересчитать высоту — iOS показывает клавиатуру не мгновенно. */
+          flow.addEventListener('focusin', function() {
+            requestAnimationFrame(syncProfileTourBarInset);
+            setTimeout(syncProfileTourBarInset, 250);
+          });
+          flow.addEventListener('focusout', function() {
+            requestAnimationFrame(syncProfileTourBarInset);
+            setTimeout(syncProfileTourBarInset, 250);
+          });
         }
       }
 
@@ -3959,5 +4417,51 @@
 
       wireSessionDurationQuickChips();
       wireProfileBlockTourBar();
+      /*
+       * Тарифы в визарде: при фокусе на цену тарифа строка должна остаться видимой
+       * во время анимации открытия iOS-клавиатуры. visualViewport resize приходит с задержкой,
+       * поэтому повторяем scrollIntoView несколько раз после первого focusin и при каждом
+       * изменении visualViewport, пока поле сфокусировано.
+       */
+      (function wireServicesTourPriceFocusScroll() {
+        var sw = document.getElementById('servicesWrap');
+        if (!sw || sw.dataset.tourPriceFocus) return;
+        sw.dataset.tourPriceFocus = '1';
+        var focusedRow = null;
+        function scrollFocusedRowIntoCenter() {
+          if (!focusedRow || !document.body.contains(focusedRow)) return;
+          try {
+            focusedRow.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'auto' });
+          } catch (e) {}
+        }
+        sw.addEventListener(
+          'focusin',
+          function(ev) {
+            if (!state.profileBlockTourActive) return;
+            var t = ev.target;
+            if (!t || typeof t.closest !== 'function') return;
+            if (!sw.contains(t)) return;
+            if (t.tagName !== 'INPUT' && t.tagName !== 'TEXTAREA') return;
+            var row = t.closest('.svc-tier-row') || t.closest('.svc-group-price-wrap');
+            if (!row) return;
+            focusedRow = row;
+            /* iOS поднимает клавиатуру ~300-600ms; повторяем скролл, чтобы строка гарантированно попала в центр. */
+            requestAnimationFrame(scrollFocusedRowIntoCenter);
+            setTimeout(scrollFocusedRowIntoCenter, 260);
+            setTimeout(scrollFocusedRowIntoCenter, 520);
+          },
+          true
+        );
+        sw.addEventListener(
+          'focusout',
+          function() {
+            focusedRow = null;
+          },
+          true
+        );
+        if (window.visualViewport) {
+          window.visualViewport.addEventListener('resize', scrollFocusedRowIntoCenter);
+        }
+      })();
       loadInitial();
     })();
