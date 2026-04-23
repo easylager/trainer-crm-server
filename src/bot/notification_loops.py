@@ -314,8 +314,9 @@ async def _build_trainer_post_session_keyboard(
     *,
     base: str,
     webapp_https: bool,
+    include_client_dm: bool = True,
 ) -> InlineKeyboardMarkup:
-    """Inline keyboard for trainer «session end» flows: quick rebook, repeat week, feedback, write, client card."""
+    """Inline keyboard for trainer «session end» flows: quick rebook, repeat week, feedback, optional DM, client card."""
     client_id = p.get("client_id")
     slot_date = p.get("slot_date")
     start_time = p.get("start_time")
@@ -366,7 +367,7 @@ async def _build_trainer_post_session_keyboard(
             ),
         ],
     )
-    if p.get("client_telegram_id"):
+    if include_client_dm and p.get("client_telegram_id"):
         rows.append(
             [
                 InlineKeyboardButton(
@@ -450,7 +451,11 @@ async def process_trainer_session_wrapup_round(trainer_bot: Bot) -> None:
                 include_quick_rebook_line=can_quick_rebook,
             )
             kb = await _build_trainer_post_session_keyboard(
-                session, p, base=base, webapp_https=webapp_https
+                session,
+                p,
+                base=base,
+                webapp_https=webapp_https,
+                include_client_dm=False,
             )
             try:
                 await trainer_bot.send_message(

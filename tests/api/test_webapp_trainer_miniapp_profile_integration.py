@@ -1291,3 +1291,116 @@ async def test_moderation_readiness_embedded_reflects_submit_state(
             )
     mr = after.json()["moderation_readiness"]
     assert mr["already_submitted_for_moderation"] is True
+
+
+@pytest.mark.asyncio
+async def test_onboarding_checklist_open_loop_aggregates(
+    app_use_test_db,
+    db_session,
+) -> None:
+    """Hub rhythm: open_loop_* counts for pending, no-upcoming, no-telegram (trainer_onboarding_checklist)."""
+    tg = _fresh_trainer_telegram_id()
+    r = await db_session.execute(text("INSERT INTO trainers (status) VALUES ('active') RETURNING id"))
+    tid = r.fetchone()[0]
+    await db_session.execute(
+        text("UPDATE trainers SET telegram_id = :tg WHERE id = :id"),
+        {"tg": tg, "id": tid},
+    )
+    await db_session.execute(
+        text(
+            "INSERT INTO trainer_profiles (trainer_id, first_name, last_name, age) "
+            "VALUES (:tid, 'Open', 'Loop', 30)"
+        ),
+        {"tid": tid},
+    )
+    svc_name = "Oloop svc " + uuid.uuid4().hex[:8]
+    r_service = await db_session.execute(
+        text("INSERT INTO services (name) VALUES (:name) RETURNING id"),
+        {"name": svc_name},
+    )
+    service_id = r_service.fetchone()[0]
+    await db_session.execute(
+        text(
+            "INSERT INTO trainer_services (trainer_id, service_id, price_cents) VALUES (:tid, :sid, 5000)"
+        ),
+        {"tid": tid, "sid": service_id},
+    )
+    p_a, pn_a = "+37544" + str(800_000 + (uuid.uuid4().int % 9_000)), "37544" + str(800_000 + (uuid.uuid4().int % 9_000))
+    p_b, pn_b = "+37544" + str(900_000 + (uuid.uuid4().int % 9_000)), "37544" + str(900_000 + (uuid.uuid4().int % 9_000))
+    r_a = await db_session.execute(
+        text(
+            """
+            INSERT INTO clients (telegram_id, first_name, phone, phone_normalized)
+            VALUES (NULL, 'NoTg', :phone, :pn)
+            RETURNING id
+            """
+        ),
+        {"phone": p_a, "pn": pn_a},
+    )
+    client_a = r_a.fetchone()[0]
+    r_b = await db_session.execute(
+        text(
+            """
+            INSERT INTO clients (telegram_id, first_name, phone, phone_normalized)
+            VALUES (:tg, 'Pending', :phone, :pn)
+            RETURNING id
+            """
+        ),
+        {"tg": _fresh_trainer_telegram_id(), "phone": p_b, "pn": pn_b},
+    )
+    client_b = r_b.fetchone()[0]
+    past = date.today() - timedelta(days=2)
+    future = date.today() + timedelta(days=3)
+    r_past = await db_session.execute(
+        text(
+            """
+            INSERT INTO slots (trainer_id, slot_date, start_time, end_time, status)
+            VALUES (:tid, :d, TIME '10:00', TIME '11:00', 'booked')
+            RETURNING id
+            """
+        ),
+        {"tid": tid, "d": past},
+    )
+    slot_past = r_past.fetchone()[0]
+    r_future = await db_session.execute(
+        text(
+            """
+            INSERT INTO slots (trainer_id, slot_date, start_time, end_time, status)
+            VALUES (:tid, :d, TIME '12:00', TIME '13:00', 'booked')
+            RETURNING id
+            """
+        ),
+        {"tid": tid, "d": future},
+    )
+    slot_future = r_future.fetchone()[0]
+    await db_session.execute(
+        text(
+            """
+            INSERT INTO bookings (slot_id, trainer_id, client_id, service_id, status)
+            VALUES (:sid, :tid, :cid, :svc, 'completed')
+            """
+        ),
+        {"sid": slot_past, "tid": tid, "cid": client_a, "svc": service_id},
+    )
+    await db_session.execute(
+        text(
+            """
+            INSERT INTO bookings (slot_id, trainer_id, client_id, service_id, status, notified_at)
+            VALUES (:sid, :tid, :cid, :svc, 'pending', NOW())
+            """
+        ),
+        {"sid": slot_future, "tid": tid, "cid": client_b, "svc": service_id},
+    )
+    await db_session.commit()
+
+    with patch_trainer_init_auth(tg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.get(
+                "/api/webapp/trainer/onboarding/checklist",
+                headers={"X-Telegram-Init-Data": "mock"},
+            )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data.get("open_loop_pending_bookings_count") == 1
+    assert data.get("open_loop_clients_no_upcoming_count") == 1
+    assert data.get("open_loop_clients_no_telegram_count") == 1

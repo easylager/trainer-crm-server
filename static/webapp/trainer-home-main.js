@@ -555,6 +555,77 @@
         var slotRhythmDeferredForTemplateOnboarding =
           wd === 0 && !isRhythmHintDismissed('template');
 
+        var openLoopPending = parseNonNegativeInt(d.open_loop_pending_bookings_count);
+        var openLoopNoUpcoming = parseNonNegativeInt(d.open_loop_clients_no_upcoming_count);
+        var openLoopNoTg = parseNonNegativeInt(d.open_loop_clients_no_telegram_count);
+
+        /* Open loops (Zeigarnik): unfinished business, not just “do X” maintenance — sorted by priority below. */
+        if (openLoopPending > 0 && !isRhythmHintDismissed('open_loop_pending')) {
+          out.push({
+            id: 'open_loop_pending',
+            priority: 103,
+            text:
+              'Осталось подтвердить ' +
+              openLoopPending +
+              ' ' +
+              pluralRu(openLoopPending, 'запись', 'записи', 'записей') +
+              ' — до подтверждения клиент не увидит занятие как согласованное.',
+            ctaLabel: 'К ближайшим',
+            action: 'hub_upcoming_bookings',
+          });
+        }
+        if (openLoopNoUpcoming > 0 && !isRhythmHintDismissed('open_loop_no_next')) {
+          out.push({
+            id: 'open_loop_no_next',
+            priority: 97,
+            text:
+              openLoopNoUpcoming +
+              ' ' +
+              pluralRu(openLoopNoUpcoming, 'ученик', 'ученика', 'учеников') +
+              ' пока без следующей записи — имеет смысл спланировать слот, чтобы не терять ритм.',
+            ctaLabel: 'Клиенты',
+            action: 'trainer_clients',
+          });
+        }
+        if (openLoopNoTg > 0 && !isRhythmHintDismissed('open_loop_no_telegram')) {
+          out.push({
+            id: 'open_loop_no_telegram',
+            priority: 88,
+            text:
+              openLoopNoTg +
+              ' ' +
+              pluralRu(openLoopNoTg, 'клиент', 'клиента', 'клиентов') +
+              ' ещё не в боте — подключение по персональной ссылке из карточки.',
+            ctaLabel: 'Клиенты',
+            action: 'trainer_clients',
+          });
+        }
+        if (
+          !slotRhythmDeferredForTemplateOnboarding &&
+          availNext > 0 &&
+          !isRhythmHintDismissed('open_loop_free_next')
+        ) {
+          out.push({
+            id: 'open_loop_free_next',
+            priority: 72,
+            text:
+              'На следующей неделе ' +
+              availNext +
+              ' ' +
+              pluralRu(
+                availNext,
+                'свободный слот',
+                'свободных слота',
+                'свободных слотов',
+              ) +
+              (hubOnlineBookingEnabled
+                ? ' в расписании. Кому из клиентов в первую очередь написать со ссылкой на запись?'
+                : ' в расписании. Кого из клиентов логичнее пригласить в эти окна?'),
+            ctaLabel: 'Расписание',
+            action: 'schedule',
+          });
+        }
+
         if (
           !slotRhythmDeferredForTemplateOnboarding &&
           availThis === 0 &&
@@ -665,6 +736,23 @@
             } else {
               navigateTo('trainer-clients');
             }
+          });
+          return;
+        }
+        if (cand.action === 'hub_upcoming_bookings') {
+          ensureTrainerSectionsAccess(function() {
+            var el = document.getElementById('bookingsBlock');
+            if (el) {
+              try {
+                el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              } catch (e) {}
+            }
+          });
+          return;
+        }
+        if (cand.action === 'trainer_clients') {
+          ensureTrainerSectionsAccess(function() {
+            navigateTo('trainer-clients');
           });
           return;
         }

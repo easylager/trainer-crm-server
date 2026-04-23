@@ -12,6 +12,10 @@ Trainer onboarding checklist: submission readiness, full-profile flag, future sl
 ``slots_next_week_count`` = available/booked slots for the next full week.
 ``available_slots_this_week_count`` / ``available_slots_next_week_count`` = free slots only (hub rhythm).
 ``bookings_this_week_count`` / ``bookings_next_week_count`` = non-cancelled bookings in that week window.
+``open_loop_pending_bookings_count`` = future sessions with status ``pending`` (trainer confirm).
+``open_loop_clients_no_upcoming_count`` = distinct clients (bookings or active/trial group) with no upcoming
+session (slot end in the future, ``pending``/``confirmed``).
+``open_loop_clients_no_telegram_count`` = those clients (same scope as CRM visibility) with ``telegram_id`` null.
 """
 from __future__ import annotations
 
@@ -29,6 +33,8 @@ from src.shared.trainer_status import normalize_trainer_status_value
 
 # How far ahead to look for slots (matches product: "reasonable horizon").
 _SLOT_HORIZON_DAYS = 56
+
+_SQL_SLOT_END_TS = f"((s.slot_date + s.end_time) AT TIME ZONE '{NOTIFICATION_TZ}')"
 
 # Inline: profile not ready for TTV path and no CRM trial yet.
 _SLOTS_BOOKINGS_LOCKED_RU = (
@@ -77,6 +83,9 @@ async def get_trainer_onboarding_checklist(session: AsyncSession, trainer_id: in
         "last_completed_booking_client_id": None,
         "slots_locked_reason": None,
         "bookings_locked_reason": None,
+        "open_loop_pending_bookings_count": 0,
+        "open_loop_clients_no_upcoming_count": 0,
+        "open_loop_clients_no_telegram_count": 0,
     }
 
     pending_ttv_unlock = (
@@ -91,6 +100,9 @@ async def get_trainer_onboarding_checklist(session: AsyncSession, trainer_id: in
         out["bookings_locked_reason"] = reason
         out["schedule_unlocked"] = False
         out["trainer_id"] = trainer_id
+        out["open_loop_pending_bookings_count"] = 0
+        out["open_loop_clients_no_upcoming_count"] = 0
+        out["open_loop_clients_no_telegram_count"] = 0
         return out
 
     r_tpl = await session.execute(
@@ -302,4 +314,83 @@ async def get_trainer_onboarding_checklist(session: AsyncSession, trainer_id: in
 
     out["schedule_unlocked"] = bool(is_active or pending_ttv_unlock)
     out["trainer_id"] = trainer_id
+
+    r_oloop = await session.execute(
+        text(
+            """
+            SELECT
+                (
+                    SELECT COUNT(*)::int
+                    FROM bookings b
+                    JOIN slots s ON s.id = b.slot_id
+                    WHERE b.trainer_id = :tid
+                      AND b.status = 'pending'
+                      AND s.status IN ('available', 'booked')
+                      AND """
+            + _SQL_SLOT_END_TS
+            + """
+                      > CURRENT_TIMESTAMP
+                ) AS pending_cnt,
+                (
+                    WITH rel AS (
+                        SELECT DISTINCT q.client_id
+                        FROM (
+                            SELECT b.client_id
+                            FROM bookings b
+                            WHERE b.trainer_id = :tid
+                              AND b.status NOT IN ('cancelled', 'declined')
+                            UNION
+                            SELECT m.client_id
+                            FROM training_group_members m
+                            INNER JOIN training_groups g ON g.id = m.training_group_id
+                            WHERE g.trainer_id = :tid
+                              AND m.status IN ('active', 'trial')
+                        ) q
+                    ),
+                    has_upcoming AS (
+                        SELECT DISTINCT b.client_id
+                        FROM bookings b
+                        JOIN slots s ON s.id = b.slot_id
+                        WHERE b.trainer_id = :tid
+                          AND b.status IN ('pending', 'confirmed')
+                          AND s.status IN ('available', 'booked')
+                          AND """
+            + _SQL_SLOT_END_TS
+            + """
+                          > CURRENT_TIMESTAMP
+                    )
+                    SELECT COUNT(*)::int
+                    FROM rel
+                    WHERE NOT EXISTS (SELECT 1 FROM has_upcoming h WHERE h.client_id = rel.client_id)
+                ) AS no_next_cnt,
+                (
+                    SELECT COUNT(DISTINCT c.id)::int
+                    FROM clients c
+                    WHERE c.telegram_id IS NULL
+                      AND (
+                          EXISTS (
+                              SELECT 1 FROM bookings b
+                              WHERE b.client_id = c.id
+                                AND b.trainer_id = :tid
+                                AND b.status NOT IN ('cancelled', 'declined')
+                          )
+                          OR EXISTS (
+                              SELECT 1 FROM training_group_members m
+                              INNER JOIN training_groups g ON g.id = m.training_group_id
+                              WHERE m.client_id = c.id
+                                AND g.trainer_id = :tid
+                                AND m.status IN ('active', 'trial')
+                          )
+                      )
+                ) AS no_tg_cnt
+            """
+        ),
+        {"tid": trainer_id},
+    )
+    row_ol = r_oloop.fetchone()
+    if row_ol:
+        out["open_loop_pending_bookings_count"] = int(row_ol[0] or 0)
+        out["open_loop_clients_no_upcoming_count"] = int(row_ol[1] or 0)
+        out["open_loop_clients_no_telegram_count"] = int(row_ol[2] or 0)
+
     return out
