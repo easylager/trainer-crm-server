@@ -379,6 +379,46 @@
       box-shadow: 0 4px 16px rgba(245, 166, 35, 0.4);
     }
     .tc-hero-text { flex: 1; min-width: 0; }
+    /* «Написать» в Telegram — тот же язык, что .hub-slot-msg на хабе */
+    .tc-hero-dm {
+      position: relative;
+      z-index: 2;
+      flex-shrink: 0;
+      touch-action: manipulation;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 40px;
+      height: 40px;
+      padding: 0;
+      margin: 0 0 0 4px;
+      border: 1px solid color-mix(in srgb, var(--tg-theme-button-color) 32%, transparent);
+      border-radius: 12px;
+      background: color-mix(in srgb, var(--tg-theme-button-color) 12%, transparent);
+      color: var(--tg-theme-text-color);
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    @media (hover: hover) {
+      .tc-hero-dm:hover {
+        background: color-mix(in srgb, var(--tg-theme-button-color) 22%, transparent);
+        border-color: color-mix(in srgb, var(--tg-theme-button-color) 48%, transparent);
+      }
+    }
+    .tc-hero-dm:active {
+      transform: scale(0.96);
+      opacity: 0.92;
+    }
+    .tc-hero-dm-icon {
+      width: 18px;
+      height: 18px;
+      flex-shrink: 0;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
     .tc-name {
       font-size: clamp(20px, 5vw, 24px);
       font-weight: 700;

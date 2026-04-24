@@ -698,17 +698,43 @@
           });
         }
         if (openLoopNoUpcoming > 0 && !isRhythmHintDismissed('open_loop_no_next')) {
-          out.push({
-            id: 'open_loop_no_next',
-            priority: 97,
-            text:
-              openLoopNoUpcoming +
-              ' ' +
-              pluralRu(openLoopNoUpcoming, 'ученик', 'ученика', 'учеников') +
-              ' пока без следующей записи — имеет смысл спланировать слот, чтобы не терять ритм.',
-            ctaLabel: 'Клиенты',
-            action: 'trainer_clients',
-          });
+          var hasFutureAvailSlots = !!d.has_future_available_slots;
+          var noNextBase =
+            openLoopNoUpcoming +
+            ' ' +
+            pluralRu(openLoopNoUpcoming, 'ученик', 'ученика', 'учеников') +
+            ' пока без следующей записи';
+          if (!hasFutureAvailSlots) {
+            out.push({
+              id: 'open_loop_no_next',
+              priority: 97,
+              text:
+                noNextBase +
+                '. В расписании сейчас нет свободных слотов — сначала добавьте окна, чтобы можно было пригласить на конкретное время.',
+              ctaLabel: 'Расписание',
+              action: 'schedule',
+            });
+          } else if (fillSlotsCandidates > 0) {
+            out.push({
+              id: 'open_loop_no_next',
+              priority: 97,
+              text:
+                noNextBase +
+                ' — напомните в клиентском боте тех, кто уже подключён: откроется список с кнопкой «Записаться».',
+              ctaLabel: 'Напомнить',
+              action: 'fill_slots_invites',
+            });
+          } else {
+            out.push({
+              id: 'open_loop_no_next',
+              priority: 97,
+              text:
+                noNextBase +
+                ' — в боте пока некому отправить такое напоминание: подключите клиентов по ссылке из карточки.',
+              ctaLabel: 'Кого пригласить',
+              action: 'trainer_clients_invite_bot',
+            });
+          }
         }
         if (openLoopNoTg > 0 && !isRhythmHintDismissed('open_loop_no_telegram')) {
           out.push({

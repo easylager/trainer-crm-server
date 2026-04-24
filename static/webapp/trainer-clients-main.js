@@ -1690,6 +1690,43 @@
         if (overlay) overlay.remove();
       }
 
+      /** @see mini-app-telegram-chrome.js openTelegramChatFromMiniApp (t.me vs tg://, platform=web). */
+      function trainerClientCanWriteTelegram(c) {
+        if (!c) return false;
+        var un = (c.telegram_username || '').replace(/^@/, '').trim();
+        var tid = c.telegram_id;
+        return !!un || (tid != null && tid !== '');
+      }
+
+      function openTrainerClientTelegramDm(c) {
+        if (!c) return;
+        var un = String(c.telegram_username || '').replace(/^@/, '').trim();
+        var tid = c.telegram_id;
+        if (typeof window.openTelegramChatFromMiniApp === 'function') {
+          window.openTelegramChatFromMiniApp({
+            username: un || undefined,
+            telegramId: tid != null && tid !== '' ? tid : undefined,
+          });
+          return;
+        }
+        if (un) {
+          var u2 = 'https://t.me/' + encodeURIComponent(un);
+          if (tg && typeof tg.openTelegramLink === 'function') {
+            try {
+              tg.openTelegramLink(u2);
+              return;
+            } catch (e) { /* continue */ }
+          }
+          if (tg && typeof tg.openLink === 'function') {
+            try {
+              tg.openLink(u2, { try_instant_view: false });
+              return;
+            } catch (e2) { /* continue */ }
+          }
+          window.location.href = u2;
+        }
+      }
+
       function openClientDetail(id) {
         var client = state.allClients.find(function(c) { return c.id === id; });
         if (!client) return;
@@ -1709,6 +1746,16 @@
         var ICO_TICKET = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/><path d="M13 5v2"/><path d="M13 11v2"/><path d="M13 17v2"/></svg>';
         var ICO_PHONE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>';
         var ICO_SEND = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>';
+        var ICO_MSG_BUBBLE =
+          '<svg class="tc-hero-dm-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></svg>';
+        var canDm = trainerClientCanWriteTelegram(client);
+        var heroDmBtn = '';
+        if (canDm) {
+          heroDmBtn =
+            '<button type=\"button\" class=\"tc-hero-dm\" id=\"tcClientHeroDm\" aria-label=\"Написать в Telegram\" title=\"Написать в Telegram\">' +
+            ICO_MSG_BUBBLE +
+            '</button>';
+        }
         var detail = '' +
           '<div class=\"tc-detail\">' +
           '<div class=\"tc-hero\">' +
@@ -1717,6 +1764,7 @@
               '<h1 class=\"tc-name\">' + escapeHtml(name) + '</h1>' +
               (firstDateLabel ? '<p class=\"tc-since\">' + escapeHtml(firstDateLabel) + '</p>' : '') +
             '</div>' +
+            heroDmBtn +
           '</div>' +
           '<div class=\"tc-stats\">' +
             '<span class=\"tc-stat\"><span class=\"tc-stat-label\">Последнее</span><strong id=\"clientLastLabel\">' + escapeHtml(lastLabel) + '</strong></span>' +
@@ -1740,7 +1788,9 @@
         if (phone && phone !== '—') {
           detail += '<button type=\"button\" class=\"bd-btn bd-btn--surface\" id=\"btnCopyPhone\">' + ICO_PHONE + ' Скопировать телефон</button>';
         }
-        detail += '<button type=\"button\" class=\"bd-btn bd-btn--surface\" id=\"btnWriteClient\">' + ICO_SEND + ' Написать в TG</button>';
+        if (canDm) {
+          detail += '<button type=\"button\" class=\"bd-btn bd-btn--surface\" id=\"btnWriteClient\">' + ICO_SEND + ' Написать в TG</button>';
+        }
         var showBindWelcome = client.telegram_id == null;
         if (showBindWelcome) {
           detail +=
@@ -1773,20 +1823,24 @@
             }
           };
         }
-        var writeBtn = document.getElementById('btnWriteClient');
-        var username = client && client.telegram_username;
-        if (writeBtn && username) {
-          writeBtn.onclick = function() {
-            var url = 'https://t.me/' + encodeURIComponent(username);
-            if (tg && tg.openLink) {
-              tg.openLink(url);
-            } else {
-              window.location.href = url;
-            }
-          };
-        } else if (writeBtn) {
-          writeBtn.style.display = 'none';
+        var heroDm = document.getElementById('tcClientHeroDm');
+        function wireTrainerClientTelegramDms() {
+          function go() {
+            openTrainerClientTelegramDm(client);
+          }
+          if (heroDm) {
+            heroDm.addEventListener('click', function(ev) {
+              ev.preventDefault();
+              ev.stopPropagation();
+              go();
+            }, true);
+          }
+          var writeBtn = document.getElementById('btnWriteClient');
+          if (writeBtn) {
+            writeBtn.onclick = go;
+          }
         }
+        wireTrainerClientTelegramDms();
         if (showBindWelcome) {
           var bindBtn = document.getElementById('btnClientBindWelcome');
           if (bindBtn) {

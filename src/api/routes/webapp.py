@@ -4427,6 +4427,26 @@ async def get_trainer_clients(
             or q_lower in (c.get("phone") or "").lower()
             or (digits and digits in phone_digits_only(c.get("phone")))
         ]
+    urows: list[dict[str, Any]] = []
+    owners: list[dict] = []
+    for c in clients:
+        if c.get("telegram_id") is None:
+            continue
+        if (c.get("telegram_username") or "").strip():
+            continue
+        urows.append(
+            {
+                "client_telegram_id": c.get("telegram_id"),
+                "client_telegram_username": None,
+            }
+        )
+        owners.append(c)
+    if urows:
+        await enrich_booking_dicts_with_client_telegram_usernames(session, urows)
+        for i, c_own in enumerate(owners):
+            u_val = urows[i].get("client_telegram_username")
+            if u_val:
+                c_own["telegram_username"] = u_val
     return {"clients": clients}
 
 
@@ -4448,6 +4468,14 @@ async def get_trainer_client_card(
     client = await get_trainer_client_for_card(session, trainer_id, client_id)
     if not client:
         raise HTTPException(status_code=404, detail="Клиент не найден или нет доступа")
+    u_row = {
+        "client_telegram_id": client.get("telegram_id"),
+        "client_telegram_username": (client.get("telegram_username") or "").strip() or None,
+    }
+    if u_row.get("client_telegram_id") is not None:
+        await enrich_booking_dicts_with_client_telegram_usernames(session, [u_row])
+        if u_row.get("client_telegram_username"):
+            client["telegram_username"] = u_row["client_telegram_username"]
     return {"client": client}
 
 
