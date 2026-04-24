@@ -1685,27 +1685,13 @@
       }
 
       function openTelegramDmMiniApp(username, telegramId) {
-        var un = String(username || '').replace(/^@/, '').trim();
-        var url;
-        if (un) url = 'https://t.me/' + encodeURIComponent(un);
-        else if (telegramId != null && telegramId !== '') url = 'tg://user?id=' + encodeURIComponent(String(telegramId));
-        else return;
-        var tg = window.Telegram && window.Telegram.WebApp;
-        if (tg) {
-          try {
-            if (typeof tg.openTelegramLink === 'function') {
-              tg.openTelegramLink(url);
-              return;
-            }
-          } catch (e) { /* noop */ }
-          try {
-            if (typeof tg.openLink === 'function') {
-              tg.openLink(url);
-              return;
-            }
-          } catch (e2) { /* noop */ }
+        if (window.openTelegramChatFromMiniApp) {
+          return window.openTelegramChatFromMiniApp({
+            username: username,
+            telegramId: telegramId,
+          });
         }
-        window.location.href = url;
+        return false;
       }
 
       function hubTrainerCanWriteClient(b) {
@@ -1798,7 +1784,7 @@
             '</button>';
         }
         return (
-          '<div class="slot-row slot-booked-click ' + rowMod + '" data-bid="' + String(b.id) + '" role="button" tabindex="0">' +
+          '<div class="slot-row slot-booked-click ' + rowMod + '" data-bid="' + String(b.id) + '">' +
             '<div class="slot-row-left">' +
               '<div class="hub-slot-time-row">' +
               '<span class="slot-time">' + escapeHtml(timeRange) + '</span>' +
@@ -3343,6 +3329,11 @@
         }
         block.innerHTML = parts.join('') + capHint;
         applyHubPendingBookingHighlight();
+        if (window.wireHubSlotMessageButtons) {
+          try {
+            window.wireHubSlotMessageButtons(block);
+          } catch (e) { /* noop */ }
+        }
         block.onclick = function(ev) {
           var msgBtn = ev.target && ev.target.closest && ev.target.closest('button.hub-slot-msg[data-hub-dm]');
           if (msgBtn) {

@@ -15,8 +15,10 @@
 })();
 
 /**
- * Open a private Telegram chat from Mini App. Plain <a href="tg://..."> often does nothing in WebView;
- * prefer https://t.me/username via openLink; fallback tg://user?id= via openTelegramLink/openLink.
+ * Open a private Telegram chat from Mini App.
+ * - Plain <a href="tg://..."> is unreliable in WebView; use WebApp APIs first.
+ * - `openLink` for tg:// may hand off to the system browser (broken) — avoid as primary for tg://.
+ * - On some iOS builds `openTelegramLink` is flaky; we add <a>.click() + location fallbacks.
  */
 window.openTelegramChatFromMiniApp = function (opts) {
   opts = opts || {};
@@ -30,24 +32,78 @@ window.openTelegramChatFromMiniApp = function (opts) {
   } else {
     return false;
   }
+
   var w = window.Telegram && window.Telegram.WebApp;
   if (w) {
-    // Prefer openTelegramLink for both https://t.me/... and tg:// (opens inside Telegram; closes Mini App).
-    try {
-      if (typeof w.openTelegramLink === 'function') {
+    if (typeof w.openTelegramLink === 'function') {
+      try {
         w.openTelegramLink(url);
         return true;
-      }
-    } catch (e) { /* older clients */ }
-    try {
-      if (typeof w.openLink === 'function') {
-        w.openLink(url);
+      } catch (e) { /* continue */ }
+    }
+    // https://t.me/... — extra path for mobile clients where openTelegramLink is a no-op
+    if (url.indexOf('https://t.me/') === 0 && typeof w.openLink === 'function') {
+      try {
+        w.openLink(url, { try_instant_view: false });
         return true;
+      } catch (e2) {
+        try {
+          w.openLink(url);
+          return true;
+        } catch (e3) { /* continue */ }
       }
-    } catch (e2) { /* proceed */ }
+    }
+    // tg:// — last resort inside WebApp: some Android builds route in-app via openLink
+    if (url.indexOf('tg://') === 0 && typeof w.openLink === 'function') {
+      try {
+        w.openLink(url, { try_instant_view: false });
+        return true;
+      } catch (e4) { /* continue */ }
+    }
   }
+
+  // Programmatic anchor (helps on some iOS WebViews)
+  try {
+    var a = document.createElement('a');
+    a.href = url;
+    a.rel = 'noopener noreferrer';
+    a.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0;pointer-events:auto;';
+    // tg:// must stay in the same webview context
+    a.target = url.indexOf('tg://') === 0 ? '_self' : '_blank';
+    (document.body || document.documentElement).appendChild(a);
+    a.click();
+    setTimeout(function () {
+      try {
+        if (a && a.parentNode) a.parentNode.removeChild(a);
+      } catch (x) { /* noop */ }
+    }, 0);
+  } catch (e5) { /* continue */ }
   try {
     window.location.href = url;
-  } catch (e3) { /* noop */ }
+  } catch (e6) { /* noop */ }
   return true;
+};
+
+/**
+ * Wire «написать» buttons in hub lists (Ближайшие записи). Delegation + bubble
+ * competes with parent row click on iOS; use capture on each button.
+ */
+window.wireHubSlotMessageButtons = function (root) {
+  if (!root || !root.querySelectorAll) return;
+  root.querySelectorAll('button.hub-slot-msg').forEach(function (btn) {
+    btn.addEventListener(
+      'click',
+      function (ev) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        if (typeof window.openTelegramChatFromMiniApp === 'function') {
+          window.openTelegramChatFromMiniApp({
+            username: btn.getAttribute('data-dm-un'),
+            telegramId: btn.getAttribute('data-dm-tid'),
+          });
+        }
+      },
+      true
+    );
+  });
 };

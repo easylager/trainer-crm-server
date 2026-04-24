@@ -754,6 +754,8 @@
     }
     /* Иконка «чат в Telegram» под бейджем — компактно, без текстовой ссылки */
     .hub-bookings-stack .hub-slot-msg {
+      position: relative;
+      z-index: 2;
       display: inline-flex;
       align-items: center;
       justify-content: center;

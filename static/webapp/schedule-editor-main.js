@@ -1334,25 +1334,10 @@
         if (!booking) return;
         var un = String(booking.client_telegram_username || '').replace(/^@/, '').trim();
         var tid = booking.client_telegram_id;
-        var url;
-        if (un) url = 'https://t.me/' + encodeURIComponent(un);
-        else if (tid != null && tid !== '') url = 'tg://user?id=' + encodeURIComponent(String(tid));
-        else return;
-        if (tg) {
-          try {
-            if (typeof tg.openTelegramLink === 'function') {
-              tg.openTelegramLink(url);
-              return;
-            }
-          } catch (e) { /* noop */ }
-          try {
-            if (typeof tg.openLink === 'function') {
-              tg.openLink(url);
-              return;
-            }
-          } catch (e2) { /* noop */ }
+        if (!un && (tid == null || tid === '')) return;
+        if (window.openTelegramChatFromMiniApp) {
+          window.openTelegramChatFromMiniApp({ username: un, telegramId: tid });
         }
-        window.location.href = url;
       });
 
       function syncBookArenaSelects() {

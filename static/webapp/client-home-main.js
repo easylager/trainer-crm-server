@@ -201,27 +201,13 @@
       }
 
       function openTelegramDmMiniApp(username, telegramId) {
-        var un = String(username || '').replace(/^@/, '').trim();
-        var url;
-        if (un) url = 'https://t.me/' + encodeURIComponent(un);
-        else if (telegramId != null && telegramId !== '') url = 'tg://user?id=' + encodeURIComponent(String(telegramId));
-        else return;
-        var tg = window.Telegram && window.Telegram.WebApp;
-        if (tg) {
-          try {
-            if (typeof tg.openTelegramLink === 'function') {
-              tg.openTelegramLink(url);
-              return;
-            }
-          } catch (e) { /* noop */ }
-          try {
-            if (typeof tg.openLink === 'function') {
-              tg.openLink(url);
-              return;
-            }
-          } catch (e2) { /* noop */ }
+        if (window.openTelegramChatFromMiniApp) {
+          return window.openTelegramChatFromMiniApp({
+            username: username,
+            telegramId: telegramId,
+          });
         }
-        window.location.href = url;
+        return false;
       }
 
       function hubClientCanWriteTrainer(b) {
@@ -263,7 +249,7 @@
                 '</button>';
             }
             parts.push(
-              '<div class="slot-row slot-booked-click ' + rowMod + '" data-bid="' + escapeHtml(String(b.id)) + '" role="button" tabindex="0">' +
+              '<div class="slot-row slot-booked-click ' + rowMod + '" data-bid="' + escapeHtml(String(b.id)) + '">' +
                 '<div class="slot-row-main">' +
                   '<div class="slot-time">' + escapeHtml((b.start_time || '') + ' · ' + (b.duration_minutes || 45) + ' мин') + '</div>' +
                   '<div class="slot-trainer">' + escapeHtml(b.trainer_name || 'Тренер') + '</div>' +
@@ -294,6 +280,12 @@
           cap = '<div class="hub-bookings-cap">Показаны ' + HUB_UPCOMING_MAX + ' из ' + total + ' записей</div>';
         }
         revealBookingsBlock(parts.join('') + cap);
+        var bblock = document.getElementById('bookingsBlock');
+        if (bblock && window.wireHubSlotMessageButtons) {
+          try {
+            window.wireHubSlotMessageButtons(bblock);
+          } catch (e) { /* noop */ }
+        }
         block.onclick = function(ev) {
           var msgBtn = ev.target && ev.target.closest && ev.target.closest('button.hub-slot-msg[data-hub-dm]');
           if (msgBtn) {
