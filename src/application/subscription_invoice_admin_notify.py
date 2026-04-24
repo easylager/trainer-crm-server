@@ -63,6 +63,7 @@ async def _load_invoice_notify_row(session: AsyncSession, invoice_id: int) -> di
         text("""
             SELECT ti.id, ti.trainer_id, ti.amount_cents, ti.period_start, ti.period_end, ti.status,
                    ti.checkout_bundle_tier, ti.checkout_billing_period_months, ti.checkout_modules,
+                   ti.amount_cents_before_referral, COALESCE(ti.referral_bonus_days_applied, 0),
                    t.telegram_id, t.telegram_username, tp.first_name, tp.last_name
             FROM trainer_invoices ti
             INNER JOIN trainers t ON t.id = ti.trainer_id
@@ -86,10 +87,12 @@ async def _load_invoice_notify_row(session: AsyncSession, invoice_id: int) -> di
         "checkout_bundle_tier": row[6],
         "checkout_billing_period_months": row[7],
         "checkout_modules": row[8],
-        "telegram_id": int(row[9]) if row[9] is not None else None,
-        "telegram_username": row[10],
-        "first_name": row[11],
-        "last_name": row[12],
+        "amount_cents_before_referral": row[9],
+        "referral_bonus_days_applied": int(row[10] or 0),
+        "telegram_id": int(row[11]) if row[11] is not None else None,
+        "telegram_username": row[12],
+        "first_name": row[13],
+        "last_name": row[14],
     }
 
 
@@ -125,6 +128,21 @@ async def notify_admins_new_catalog_subscription_invoice(invoice_id: int) -> Non
         if contact_url
         else "<i>Нет telegram_id / username — ищите по internal id.</i>"
     )
+    bonus_days = int(row.get("referral_bonus_days_applied") or 0)
+    list_cents = row.get("amount_cents_before_referral")
+    if bonus_days > 0 and list_cents is not None and int(list_cents) != int(row.get("amount_cents") or 0):
+        list_byn = int(list_cents) / 100
+        list_fmt = int(list_byn) if list_byn == int(list_byn) else round(list_byn, 2)
+        referral_discount_line = (
+            f"🔖 Реф.баланс: <b>−{bonus_days} дн.</b> к периоду "
+            f"(полная цена без бонусов: <b>{list_fmt} BYN</b>)\n"
+        )
+    elif bonus_days > 0 and int(row.get("amount_cents") or 0) == 0:
+        referral_discount_line = (
+            f"🔖 Период полностью покрыт реф.балансом: <b>{bonus_days} дн.</b> (к оплате 0 BYN)\n"
+        )
+    else:
+        referral_discount_line = ""
     body = msg.ADMIN_SUBSCRIPTION_INVOICE_NOTIFY.format(
         invoice_id=invoice_id,
         trainer_id=tid,
@@ -133,6 +151,7 @@ async def notify_admins_new_catalog_subscription_invoice(invoice_id: int) -> Non
         period_start=html.escape(ps_s),
         period_end=html.escape(pe_s),
         plan_line=plan_line,
+        referral_discount_line=referral_discount_line,
         trainer_contact_block=link_line,
     )
     keyboard = build_admin_subscription_invoice_keyboard(int(invoice_id))

@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.referral_subscription_discount import compute_referral_invoice_discount
 from src.application.platform_settings_use_cases import (
     WELCOME_TRIAL_PERIOD_DAYS_KEY,
     get_platform_int,
@@ -366,17 +367,28 @@ async def create_subscription_invoice(
     period_start = row2[0] if row2 and row2[0] and row2[0] > now else now
     period_end = period_start + timedelta(days=period_days)
     due_date = period_end
+    list_cents = int(amount_cents)
+    disc_cents, bonus_days, _ = await compute_referral_invoice_discount(
+        session,
+        trainer_id,
+        total_cents=list_cents,
+        period_days=int(period_days),
+    )
     r3 = await session.execute(
         text("""
             INSERT INTO trainer_invoices
-            (trainer_id, subscription_plan_id, amount_cents, period_start, period_end, due_date, status)
-            VALUES (:tid, :pid, :amount, :period_start, :period_end, :due_date, :status)
+            (trainer_id, subscription_plan_id, amount_cents, amount_cents_before_referral,
+             referral_bonus_days_applied, period_start, period_end, due_date, status)
+            VALUES (:tid, :pid, :amount, :list_cents, :bonus_days,
+                    :period_start, :period_end, :due_date, :status)
             RETURNING id, amount_cents, period_start, period_end
         """),
         {
             "tid": trainer_id,
             "pid": plan_id,
-            "amount": amount_cents,
+            "amount": disc_cents,
+            "list_cents": list_cents,
+            "bonus_days": bonus_days,
             "period_start": period_start,
             "period_end": period_end,
             "due_date": due_date,
@@ -391,6 +403,8 @@ async def create_subscription_invoice(
         "period_start": row3[2],
         "period_end": row3[3],
         "plan_name": plan_name,
+        "referral_bonus_days_applied": bonus_days,
+        "amount_cents_before_referral": list_cents,
     }
 
 
@@ -399,7 +413,9 @@ async def get_pending_subscription_invoice(session: AsyncSession, trainer_id: in
     r = await session.execute(
         text("""
             SELECT ti.id, ti.subscription_plan_id, ti.amount_cents, ti.period_start, ti.period_end, ti.status,
-                   sp.name AS plan_name
+                   sp.name AS plan_name,
+                   COALESCE(ti.referral_bonus_days_applied, 0),
+                   ti.amount_cents_before_referral
             FROM trainer_invoices ti
             JOIN subscription_plans sp ON sp.id = ti.subscription_plan_id
             WHERE ti.trainer_id = :tid AND ti.status IN ('sent', 'overdue')
@@ -411,6 +427,7 @@ async def get_pending_subscription_invoice(session: AsyncSession, trainer_id: in
     row = r.fetchone()
     if not row:
         return None
+    list_cents = row[8] if row[8] is not None else row[2]
     return {
         "invoice_id": row[0],
         "subscription_plan_id": row[1],
@@ -419,6 +436,8 @@ async def get_pending_subscription_invoice(session: AsyncSession, trainer_id: in
         "period_end": row[4],
         "status": row[5],
         "plan_name": row[6],
+        "referral_bonus_days_applied": int(row[7] or 0),
+        "amount_cents_before_referral": int(list_cents) if list_cents is not None else int(row[2]),
     }
 
 
@@ -524,19 +543,30 @@ async def create_catalog_subscription_invoice_for_trainer(
     mods_json = json.dumps(mods, ensure_ascii=False)
     await cancel_pending_catalog_subscription_invoices(session, trainer_id)
 
+    list_cents = int(total_cents)
+    disc_cents, bonus_days, _ = await compute_referral_invoice_discount(
+        session,
+        trainer_id,
+        total_cents=list_cents,
+        period_days=int(period_days),
+    )
     r3 = await session.execute(
         text("""
             INSERT INTO trainer_invoices
-            (trainer_id, subscription_plan_id, amount_cents, period_start, period_end, due_date, status,
+            (trainer_id, subscription_plan_id, amount_cents, amount_cents_before_referral,
+             referral_bonus_days_applied, period_start, period_end, due_date, status,
              checkout_modules, checkout_billing_period_months, checkout_bundle_tier)
-            VALUES (:tid, :pid, :amount, :period_start, :period_end, :due_date, :status,
+            VALUES (:tid, :pid, :amount, :list_cents, :bonus_days,
+                    :period_start, :period_end, :due_date, :status,
                     CAST(:mods AS jsonb), :bpm, :bundle)
             RETURNING id, amount_cents, period_start, period_end
         """),
         {
             "tid": trainer_id,
             "pid": plan_id,
-            "amount": total_cents,
+            "amount": disc_cents,
+            "list_cents": list_cents,
+            "bonus_days": bonus_days,
             "period_start": period_start,
             "period_end": period_end,
             "due_date": due_date,
@@ -557,6 +587,8 @@ async def create_catalog_subscription_invoice_for_trainer(
         "checkout_modules": mods,
         "checkout_billing_period_months": period_months,
         "checkout_bundle_tier": bundle_tier,
+        "referral_bonus_days_applied": bonus_days,
+        "amount_cents_before_referral": list_cents,
     }
 
 
@@ -623,12 +655,15 @@ async def confirm_subscription_invoice_after_payment(
     Catalog invoices (checkout_modules set): insert row with tier=crm + modules JSON + billing period.
     Legacy invoices: same entitlement shape (CRM base + default modules).
 
+    Redeems referral bonus days recorded on the invoice (prorated discount) in the same transaction.
+
     Also triggers referral credit grant if this is the trainer's first paid subscription.
     """
     r = await session.execute(
         text("""
             SELECT trainer_id, subscription_plan_id, amount_cents, period_start, period_end, status,
-                   checkout_modules, checkout_billing_period_months, checkout_bundle_tier
+                   checkout_modules, checkout_billing_period_months, checkout_bundle_tier,
+                   COALESCE(referral_bonus_days_applied, 0)
             FROM trainer_invoices WHERE id = :iid
         """),
         {"iid": invoice_id},
@@ -646,6 +681,7 @@ async def confirm_subscription_invoice_after_payment(
         checkout_modules,
         checkout_billing_period_months,
         _checkout_bundle_tier,
+        referral_bonus_days_applied,
     ) = row
     if status == INVOICE_STATUS_PAID:
         return True
@@ -677,14 +713,16 @@ async def confirm_subscription_invoice_after_payment(
         """),
         {"paid": INVOICE_STATUS_PAID, "now": now, "ext_id": payment_external_id[:256], "iid": invoice_id},
     )
+    new_sub_id: int
     if catalog_checkout and mods_for_insert is not None and bpm is not None:
         mods_json = json.dumps(mods_for_insert, ensure_ascii=False)
-        await session.execute(
+        r_ins = await session.execute(
             text("""
                 INSERT INTO trainer_subscriptions
                     (trainer_id, plan_id, tier, modules, billing_period_months, started_at, expires_at, status)
                 VALUES
                     (:tid, :pid, :tier, CAST(:mods AS jsonb), :bpm, :started_at, :expires_at, :status)
+                RETURNING id
             """),
             {
                 "tid": tid,
@@ -697,13 +735,15 @@ async def confirm_subscription_invoice_after_payment(
                 "status": SUBSCRIPTION_STATUS_ACTIVE,
             },
         )
+        new_sub_id = int(r_ins.scalar_one())
     else:
-        await session.execute(
+        r_ins = await session.execute(
             text("""
                 INSERT INTO trainer_subscriptions
                     (trainer_id, plan_id, tier, modules, billing_period_months, started_at, expires_at, status)
                 VALUES
                     (:tid, :pid, :tier, CAST(:mods AS jsonb), NULL, :started_at, :expires_at, :status)
+                RETURNING id
             """),
             {
                 "tid": tid,
@@ -715,6 +755,21 @@ async def confirm_subscription_invoice_after_payment(
                 "status": SUBSCRIPTION_STATUS_ACTIVE,
             },
         )
+        new_sub_id = int(r_ins.scalar_one())
+    bonus_days = int(referral_bonus_days_applied or 0)
+    if bonus_days > 0:
+        from src.application.referral_use_cases import get_referral_credit_balance, redeem_referral_credit
+
+        bal = await get_referral_credit_balance(session, int(tid))
+        if bal < bonus_days:
+            await session.rollback()
+            return False
+        redeemed = await redeem_referral_credit(
+            session, int(tid), bonus_days, new_sub_id, do_commit=False
+        )
+        if redeemed < bonus_days:
+            await session.rollback()
+            return False
     await session.commit()
     # Referral credit: grant to referrer if this is first paid subscription
     if is_first_paid:
@@ -788,12 +843,20 @@ async def admin_grant_subscription_for_invoice(
                 return None
             new_total += int(mp["price_cents"])
         new_period_end = period_start + timedelta(days=new_period_days)
+        disc_amt, bonus_d, list_price = await compute_referral_invoice_discount(
+            session,
+            int(tid),
+            total_cents=int(new_total),
+            period_days=int(new_period_days),
+        )
         await session.execute(
             text("""
                 UPDATE trainer_invoices
                 SET checkout_modules = CAST(:mods AS jsonb),
                     checkout_billing_period_months = :pm,
                     amount_cents = :amt,
+                    amount_cents_before_referral = :listp,
+                    referral_bonus_days_applied = :bd,
                     period_end = :pe,
                     due_date = :pe
                 WHERE id = :iid
@@ -801,13 +864,15 @@ async def admin_grant_subscription_for_invoice(
             {
                 "mods": json.dumps(final_modules, ensure_ascii=False),
                 "pm": int(final_pm),
-                "amt": int(new_total),
+                "amt": int(disc_amt),
+                "listp": int(list_price),
+                "bd": int(bonus_d),
                 "pe": new_period_end,
                 "iid": invoice_id,
             },
         )
         await session.commit()
-        amount_cents = new_total
+        amount_cents = disc_amt
         period_end = new_period_end
 
     if status != INVOICE_STATUS_PAID:

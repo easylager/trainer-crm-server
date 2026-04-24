@@ -123,6 +123,37 @@
       </ol>
     </div>
 
+    <!-- Reserve space for up to two rhythm hints while checklist/bootstrap hydrates (reduces CLS). -->
+    <div
+      id="hubRhythmHintsSkeleton"
+      class="hub-rhythm-hints-skeleton"
+      hidden
+      role="status"
+      aria-busy="true"
+      aria-label="Загрузка подсказок"
+    >
+      <div class="hub-rhythm-hints-skel-card" aria-hidden="true">
+        <div class="hub-rhythm-hints-skel-lines">
+          <div class="hub-rhythm-hints-skel-line hub-skel-shimmer"></div>
+          <div class="hub-rhythm-hints-skel-line hub-rhythm-hints-skel-line--short hub-skel-shimmer"></div>
+        </div>
+        <div class="hub-rhythm-hints-skel-actions">
+          <div class="hub-rhythm-hints-skel-btn hub-skel-shimmer"></div>
+          <div class="hub-rhythm-hints-skel-dismiss hub-skel-shimmer"></div>
+        </div>
+      </div>
+      <div class="hub-rhythm-hints-skel-card" aria-hidden="true">
+        <div class="hub-rhythm-hints-skel-lines">
+          <div class="hub-rhythm-hints-skel-line hub-skel-shimmer"></div>
+          <div class="hub-rhythm-hints-skel-line hub-rhythm-hints-skel-line--short hub-skel-shimmer"></div>
+        </div>
+        <div class="hub-rhythm-hints-skel-actions">
+          <div class="hub-rhythm-hints-skel-btn hub-skel-shimmer"></div>
+          <div class="hub-rhythm-hints-skel-dismiss hub-skel-shimmer"></div>
+        </div>
+      </div>
+    </div>
+
     <!-- Legacy rhythm cards: populated only by JS fallback; primary UI uses hubRhythmSlot0/1. -->
     <div id="hubScheduleRhythmHint" class="hub-schedule-rhythm-hint" hidden aria-live="polite">
       <p class="hub-schedule-rhythm-hint__text">

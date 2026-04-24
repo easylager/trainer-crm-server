@@ -220,6 +220,28 @@
       var hubLastRhythmPicked = [null, null];
       /** «Мало записей» vs свободные слоты (aligned with product). */
       var HUB_RHYTHM_BOOKINGS_LOW_THRESHOLD = 6;
+      /**
+       * After onboarding checklist is applied (bootstrap or GET) or fetch failed — rhythm resolver may hide skeleton.
+       * Stays false until then so two placeholder cards reserve space and reduce CLS.
+       */
+      var hubRhythmHintsReady = false;
+
+      function showHubRhythmHintsSkeleton() {
+        if (!getInitData() || hubRhythmHintsReady) return;
+        var sk = document.getElementById('hubRhythmHintsSkeleton');
+        if (!sk) return;
+        sk.removeAttribute('hidden');
+        sk.style.display = 'flex';
+        sk.setAttribute('aria-busy', 'true');
+      }
+
+      function hideHubRhythmHintsSkeleton() {
+        var sk = document.getElementById('hubRhythmHintsSkeleton');
+        if (!sk) return;
+        sk.setAttribute('hidden', 'hidden');
+        sk.style.display = 'none';
+        sk.setAttribute('aria-busy', 'false');
+      }
 
       function syncHubHeroCompact() {
         var el = document.querySelector('.hub-hero');
@@ -1007,6 +1029,9 @@
           if (txt) txt.textContent = cand.text;
           if (cta) cta.textContent = cand.ctaLabel;
         }
+        if (hubRhythmHintsReady) {
+          hideHubRhythmHintsSkeleton();
+        }
       }
 
       function syncHubWeekRhythmPanel() {
@@ -1111,6 +1136,7 @@
 
       function applyOnboardingChecklist(data) {
         hubOnboardingData = data;
+        hubRhythmHintsReady = true;
         if (data && data.trainer_id != null && data.trainer_id !== '') {
           trainerAccessSnapshot = trainerAccessSnapshot || {};
           trainerAccessSnapshot.trainer_id = data.trainer_id;
@@ -1136,7 +1162,10 @@
           if (tsCh) trainerAccessSnapshot.trainer_status = tsCh;
         }
         var strip = document.getElementById('onboardingStrip');
-        if (!strip) return;
+        if (!strip) {
+          syncHubWeekRhythmPanel();
+          return;
+        }
         /* Both stages done: hide checklist */
         if (data && onboardingAllComplete(data)) {
           strip.setAttribute('hidden', 'hidden');
@@ -1295,6 +1324,8 @@
         if (!getInitData()) {
           strip.setAttribute('hidden', 'hidden');
           strip.style.display = 'none';
+          hubRhythmHintsReady = true;
+          hideHubRhythmHintsSkeleton();
           syncHubWeekRhythmPanel();
           return;
         }
@@ -1305,10 +1336,17 @@
             });
           })
           .then(function(o) {
-            if (!o.ok || !o.data) return;
+            if (!o.ok || !o.data) {
+              hubRhythmHintsReady = true;
+              syncHubWeekRhythmPanel();
+              return;
+            }
             applyOnboardingChecklist(o.data);
           })
-          .catch(function() {});
+          .catch(function() {
+            hubRhythmHintsReady = true;
+            syncHubWeekRhythmPanel();
+          });
       }
 
       function wireOnboardingHub() {
@@ -4788,6 +4826,7 @@
         if (!getInitData() || hubTrainerMainBootstrapDone) return;
         hubTrainerMainBootstrapDone = true;
         ensureHubBookingsPlaceholder();
+        showHubRhythmHintsSkeleton();
         fetch(
           apiUrlWithQuery(
             '/trainer/hub/bootstrap?bookings_limit=' + encodeURIComponent(String(HUB_BOOKINGS_FETCH_LIMIT))

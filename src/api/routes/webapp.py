@@ -2328,6 +2328,8 @@ async def get_trainer_subscription_payment_url(
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     plan_name: str | None = None
     period_start = period_end = None
+    referral_bonus_days_applied = 0
+    amount_cents_before_referral: int | None = None
     if plan_id is not None:
         inv = await create_subscription_invoice(session, trainer_id, plan_id)
         if not inv:
@@ -2337,6 +2339,8 @@ async def get_trainer_subscription_payment_url(
         period_start = inv["period_start"]
         period_end = inv["period_end"]
         plan_name = inv.get("plan_name")
+        referral_bonus_days_applied = int(inv.get("referral_bonus_days_applied") or 0)
+        amount_cents_before_referral = inv.get("amount_cents_before_referral")
     else:
         pending = await get_pending_subscription_invoice(session, trainer_id)
         if pending:
@@ -2345,6 +2349,8 @@ async def get_trainer_subscription_payment_url(
             period_start = pending["period_start"]
             period_end = pending["period_end"]
             plan_name = pending.get("plan_name")
+            referral_bonus_days_applied = int(pending.get("referral_bonus_days_applied") or 0)
+            amount_cents_before_referral = pending.get("amount_cents_before_referral")
         else:
             default_plan_id = await get_paid_plan_id(session)
             if not default_plan_id:
@@ -2357,12 +2363,34 @@ async def get_trainer_subscription_payment_url(
             period_start = inv["period_start"]
             period_end = inv["period_end"]
             plan_name = inv.get("plan_name")
+            referral_bonus_days_applied = int(inv.get("referral_bonus_days_applied") or 0)
+            amount_cents_before_referral = inv.get("amount_cents_before_referral")
     settings = Settings()
     webapp_base = (settings.webapp_base_url or "").rstrip("/")
     api_base = (settings.api_base_url or webapp_base).rstrip("/")
     return_url = f"{webapp_base}/webapp/trainer-pay-subscription?payment_success=1"
     notification_url = f"{api_base}/api/webhooks/bepaid"
     tracking_id = f"inv_{invoice_id}"
+
+    def _date_str(d):
+        if d is None:
+            return None
+        return d.isoformat()[:10] if hasattr(d, "isoformat") else str(d)[:10]
+
+    base_out: dict = {
+        "invoice_id": invoice_id,
+        "amount_cents": amount_cents,
+        "plan_name": plan_name or "Подписка",
+        "period_start": _date_str(period_start),
+        "period_end": _date_str(period_end),
+        "referral_bonus_days_applied": referral_bonus_days_applied,
+        "amount_cents_before_referral": amount_cents_before_referral,
+        "referral_fully_covered": bool(amount_cents <= 0 and referral_bonus_days_applied > 0),
+    }
+    if amount_cents <= 0:
+        base_out["payment_url"] = None
+        return base_out
+
     result = await create_checkout(
         amount_cents=amount_cents,
         currency="BYN",
@@ -2372,18 +2400,8 @@ async def get_trainer_subscription_payment_url(
         notification_url=notification_url,
         success_url=return_url,
     )
-    def _date_str(d):
-        if d is None:
-            return None
-        return d.isoformat()[:10] if hasattr(d, "isoformat") else str(d)[:10]
-    return {
-        "payment_url": result["payment_url"],
-        "invoice_id": invoice_id,
-        "amount_cents": amount_cents,
-        "plan_name": plan_name or "Подписка",
-        "period_start": _date_str(period_start),
-        "period_end": _date_str(period_end),
-    }
+    base_out["payment_url"] = result["payment_url"]
+    return base_out
 
 
 class SubscriptionStubConfirmBody(BaseModel):
@@ -2400,24 +2418,33 @@ async def post_trainer_subscription_stub_confirm(
     """
     In sandbox/stub mode: gateway returns to front with payment_stub=1&tracking_id=inv_XXX
     and does not send webhook. Front calls this to confirm the subscription invoice.
+
+    When not in sandbox: allows confirming invoices with amount_cents == 0 that are fully
+    covered by referral bonus days (no card payment).
     """
     raw = init_data or x_telegram_init_data
     if not raw:
         raise HTTPException(status_code=401, detail="Missing init data")
-    if not Settings().payment_sandbox:
-        raise HTTPException(status_code=404, detail="Not available when payment_sandbox is false")
+    settings = Settings()
     telegram_id = _trainer_telegram_id(raw)
     trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     from sqlalchemy import text
+
     r = await session.execute(
-        text("SELECT trainer_id FROM trainer_invoices WHERE id = :iid"),
+        text("""
+            SELECT trainer_id, amount_cents, COALESCE(referral_bonus_days_applied, 0)
+            FROM trainer_invoices WHERE id = :iid
+        """),
         {"iid": body.invoice_id},
     )
     row = r.fetchone()
     if not row or row[0] != trainer_id:
         raise HTTPException(status_code=403, detail="Invoice not found or not yours")
+    if not settings.payment_sandbox:
+        if int(row[1] or 0) != 0 or int(row[2] or 0) <= 0:
+            raise HTTPException(status_code=404, detail="Not available when payment_sandbox is false")
     payment_external_id = f"stub-inv-{body.invoice_id}-{uuid.uuid4().hex[:12]}"
     ok = await confirm_subscription_invoice_after_payment(
         session, body.invoice_id, payment_external_id
@@ -2548,12 +2575,34 @@ async def post_trainer_subscription_bepaid_checkout(
     period_start = inv["period_start"]
     period_end = inv["period_end"]
     plan_name = str(inv.get("plan_name") or "Подписка")
+    referral_bonus_days_applied = int(inv.get("referral_bonus_days_applied") or 0)
+    amount_cents_before_referral = inv.get("amount_cents_before_referral")
 
     webapp_base = (settings.webapp_base_url or "").rstrip("/")
     api_base = (settings.api_base_url or webapp_base).rstrip("/")
     return_url = f"{webapp_base}/webapp/trainer-pay-subscription?payment_success=1"
     notification_url = f"{api_base}/api/webhooks/bepaid"
     tracking_id = f"inv_{invoice_id}"
+
+    def _date_str(d):
+        if d is None:
+            return None
+        return d.isoformat()[:10] if hasattr(d, "isoformat") else str(d)[:10]
+
+    out: dict = {
+        "invoice_id": invoice_id,
+        "amount_cents": amount_cents,
+        "plan_name": plan_name,
+        "period_start": _date_str(period_start),
+        "period_end": _date_str(period_end),
+        "referral_bonus_days_applied": referral_bonus_days_applied,
+        "amount_cents_before_referral": amount_cents_before_referral,
+        "referral_fully_covered": bool(amount_cents <= 0 and referral_bonus_days_applied > 0),
+    }
+    if amount_cents <= 0:
+        out["payment_url"] = None
+        return out
+
     result = await create_checkout(
         amount_cents=amount_cents,
         currency="BYN",
@@ -2563,20 +2612,8 @@ async def post_trainer_subscription_bepaid_checkout(
         notification_url=notification_url,
         success_url=return_url,
     )
-
-    def _date_str(d):
-        if d is None:
-            return None
-        return d.isoformat()[:10] if hasattr(d, "isoformat") else str(d)[:10]
-
-    return {
-        "payment_url": result["payment_url"],
-        "invoice_id": invoice_id,
-        "amount_cents": amount_cents,
-        "plan_name": plan_name,
-        "period_start": _date_str(period_start),
-        "period_end": _date_str(period_end),
-    }
+    out["payment_url"] = result["payment_url"]
+    return out
 
 
 @router.post("/trainer/subscription/invoice-request")
@@ -2630,6 +2667,9 @@ async def post_trainer_subscription_invoice_request(
         "invoice_id": invoice_id,
         "amount_cents": int(inv["amount_cents"]),
         "plan_name": str(inv.get("plan_name") or "Подписка"),
+        "referral_bonus_days_applied": int(inv.get("referral_bonus_days_applied") or 0),
+        "amount_cents_before_referral": inv.get("amount_cents_before_referral"),
+        "referral_fully_covered": bool(int(inv["amount_cents"]) <= 0 and int(inv.get("referral_bonus_days_applied") or 0) > 0),
     }
 
 

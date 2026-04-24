@@ -2081,6 +2081,63 @@
       opacity: 0.7;
     }
 
+    /* Rhythm hints: skeleton for up to two cards (matches hub-schedule-rhythm-hint spacing). */
+    .hub-rhythm-hints-skeleton {
+      display: none;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 12px;
+      margin: 0 0 20px;
+    }
+    .hub-rhythm-hints-skeleton:not([hidden]) {
+      display: flex;
+    }
+    .hub-rhythm-hints-skel-card {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: 1px solid rgba(128, 128, 128, 0.1);
+      background: color-mix(in srgb, var(--tg-theme-secondary-bg-color) 55%, transparent);
+      pointer-events: none;
+      box-sizing: border-box;
+    }
+    .hub-rhythm-hints-skel-lines {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      width: 100%;
+    }
+    .hub-rhythm-hints-skel-line {
+      height: 13px;
+      border-radius: 7px;
+      width: 94%;
+      max-width: 100%;
+    }
+    .hub-rhythm-hints-skel-line--short {
+      width: 62%;
+    }
+    .hub-rhythm-hints-skel-actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+    }
+    .hub-rhythm-hints-skel-btn {
+      width: 132px;
+      height: 32px;
+      border-radius: 10px;
+      flex-shrink: 0;
+    }
+    .hub-rhythm-hints-skel-dismiss {
+      width: 32px;
+      height: 32px;
+      border-radius: 10px;
+      flex-shrink: 0;
+    }
+
     /* Post-purchase celebration — constitution gradients + --app-success accent */
     .hub-sub-celebration {
       margin: 0 0 22px;

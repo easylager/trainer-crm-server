@@ -567,9 +567,19 @@ async def get_admin_growth_stats(session: AsyncSession) -> dict:
                     (SELECT COUNT(*) FROM trainer_referrals)::int                                            AS invites,
                     (SELECT COUNT(*) FROM trainer_referrals WHERE credit_granted_at IS NOT NULL)::int        AS credited,
                     (SELECT COALESCE(SUM(amount_days), 0) FROM trainer_referral_credits
-                       WHERE reason = 'referral_accrual')::int                                                AS days_total,
+                       WHERE reason IN (
+                         'referral_accrual',
+                         'referral_accrual_onboarding',
+                         'referral_accrual_first_booking',
+                         'referral_accrual_payment'
+                       ))::int                                                                                AS days_total,
                     (SELECT COALESCE(SUM(amount_days), 0) FROM trainer_referral_credits
-                       WHERE reason = 'referral_accrual'
+                       WHERE reason IN (
+                         'referral_accrual',
+                         'referral_accrual_onboarding',
+                         'referral_accrual_first_booking',
+                         'referral_accrual_payment'
+                       )
                          AND created_at >= CURRENT_TIMESTAMP - INTERVAL '30 days')::int                       AS days_30d
                 """
             )

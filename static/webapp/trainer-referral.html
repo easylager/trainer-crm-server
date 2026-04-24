@@ -279,7 +279,7 @@
         </svg>
       </div>
       <h1 class="ref-hero-title">Пригласи коллегу</h1>
-      <p class="ref-hero-subtitle">Получи бонусные дни подписки за каждого тренера, который оплатит подписку по твоей ссылке</p>
+      <p class="ref-hero-subtitle">Бонусные дни за прогресс коллеги: базовый профиль, первая запись и первая оплата</p>
     </section>
 
     <div id="refLoading" class="ref-loading">Загрузка…</div>
@@ -320,9 +320,11 @@
         <div class="ref-card-title">Как это работает</div>
         <div class="ref-rules">
           <ul>
-            <li><strong id="refCreditDays">14</strong> дней подписки за каждого коллегу, который оплатит подписку</li>
-            <li>Коллега должен оплатить в течение <strong id="refWindowDays">60</strong> дней после перехода по ссылке</li>
-            <li>Бонусные дни автоматически добавляются к твоей подписке при продлении</li>
+            <li><strong id="refBonusOnb">2</strong> дня — коллега заполнил базовый профиль</li>
+            <li><strong id="refBonusBook">3</strong> дня — первая подтверждённая или проведённая запись</li>
+            <li><strong id="refBonusPay">14</strong> дней — первая оплата подписки в течение <strong id="refWindowDays">60</strong> дней после ссылки</li>
+            <li>Не больше <strong id="refCap">60</strong> бонусных дней с рефералок на одного тренера за всё время</li>
+            <li>При оплате подписки бонусы <strong>уменьшают сумму счёта</strong> (пропорционально дням периода)</li>
           </ul>
         </div>
       </div>
@@ -384,7 +386,10 @@
       var earnedEl = document.getElementById('refEarned');
       var referredEl = document.getElementById('refReferred');
       var creditedEl = document.getElementById('refCredited');
-      var creditDaysEl = document.getElementById('refCreditDays');
+      var bonusOnbEl = document.getElementById('refBonusOnb');
+      var bonusBookEl = document.getElementById('refBonusBook');
+      var bonusPayEl = document.getElementById('refBonusPay');
+      var capEl = document.getElementById('refCap');
       var windowDaysEl = document.getElementById('refWindowDays');
       var invitedCardEl = document.getElementById('refInvitedCard');
       var invitedListEl = document.getElementById('refInvitedList');
@@ -421,7 +426,10 @@
             earnedEl.textContent = data.total_earned_days || 0;
             referredEl.textContent = data.total_referred || 0;
             creditedEl.textContent = data.credited_count || 0;
-            creditDaysEl.textContent = data.credit_per_referral_days || 14;
+            if (bonusOnbEl) bonusOnbEl.textContent = data.bonus_onboarding_days != null ? data.bonus_onboarding_days : 2;
+            if (bonusBookEl) bonusBookEl.textContent = data.bonus_first_booking_days != null ? data.bonus_first_booking_days : 3;
+            if (bonusPayEl) bonusPayEl.textContent = data.bonus_payment_days != null ? data.bonus_payment_days : (data.credit_per_referral_days || 14);
+            if (capEl) capEl.textContent = data.referral_accrual_cap_days != null ? data.referral_accrual_cap_days : 60;
             windowDaysEl.textContent = data.attribution_window_days || 60;
             showContent();
             loadInvitedList();
@@ -446,7 +454,11 @@
               var dateStr = formatDate(item.created_at);
               var isCredited = !!item.credit_granted_at;
               var statusClass = isCredited ? 'credited' : 'pending';
-              var statusText = isCredited ? 'Оплатил' : 'Ожидание';
+              var statusText = isCredited
+                ? 'Оплатил'
+                : (item.first_booking_bonus_granted_at
+                    ? 'Ждём оплату'
+                    : (item.onboarding_bonus_granted_at ? 'Ждём запись' : 'Новый'));
               return (
                 '<div class="ref-invited-item">' +
                   '<div class="ref-invited-avatar">' + escapeHtml(initial) + '</div>' +

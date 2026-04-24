@@ -861,6 +861,9 @@ class TrainerInvoice(Base):
     checkout_modules: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     checkout_billing_period_months: Mapped[Optional[int]] = mapped_column(Integer(), nullable=True)
     checkout_bundle_tier: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    # Referral "wallet": list price before proration; bonus days applied at payment confirm (redeemed from balance).
+    referral_bonus_days_applied: Mapped[int] = mapped_column(Integer(), nullable=False, server_default="0")
+    amount_cents_before_referral: Mapped[Optional[int]] = mapped_column(Integer(), nullable=True)
 
 
 class SubscriptionTierPricing(Base):
@@ -971,15 +974,29 @@ class TrainerAgreement(Base):
 # --- Referral program (B2B: trainer invites trainer) ---
 
 REFERRAL_CREDIT_REASON_ACCRUAL = "referral_accrual"
+REFERRAL_CREDIT_REASON_ACCRUAL_ONBOARDING = "referral_accrual_onboarding"
+REFERRAL_CREDIT_REASON_ACCRUAL_FIRST_BOOKING = "referral_accrual_first_booking"
+REFERRAL_CREDIT_REASON_ACCRUAL_PAYMENT = "referral_accrual_payment"
 REFERRAL_CREDIT_REASON_REDEMPTION = "subscription_redemption"
 REFERRAL_CREDIT_REASON_ADMIN = "admin_adjustment"
 REFERRAL_CREDIT_REASON_EXPIRY = "expiry"
 
 REFERRAL_CREDIT_REASONS = (
     REFERRAL_CREDIT_REASON_ACCRUAL,
+    REFERRAL_CREDIT_REASON_ACCRUAL_ONBOARDING,
+    REFERRAL_CREDIT_REASON_ACCRUAL_FIRST_BOOKING,
+    REFERRAL_CREDIT_REASON_ACCRUAL_PAYMENT,
     REFERRAL_CREDIT_REASON_REDEMPTION,
     REFERRAL_CREDIT_REASON_ADMIN,
     REFERRAL_CREDIT_REASON_EXPIRY,
+)
+
+# Positive referral-program accruals (excludes admin/redemption/expiry) — for caps and stats.
+REFERRAL_PROGRAM_ACCRUAL_REASONS = (
+    REFERRAL_CREDIT_REASON_ACCRUAL,
+    REFERRAL_CREDIT_REASON_ACCRUAL_ONBOARDING,
+    REFERRAL_CREDIT_REASON_ACCRUAL_FIRST_BOOKING,
+    REFERRAL_CREDIT_REASON_ACCRUAL_PAYMENT,
 )
 
 
@@ -997,6 +1014,12 @@ class TrainerReferral(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     attribution_expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     credit_granted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    onboarding_bonus_granted_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    first_booking_bonus_granted_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
 
 class TrainerReferralCredit(Base):

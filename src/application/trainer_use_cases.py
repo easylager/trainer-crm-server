@@ -485,6 +485,9 @@ async def update_trainer_profile(
                 logger.exception("notify admins after active profile pending failed trainer_id=%s", trainer_id)
         await _demote_status_if_profile_incomplete(session, trainer_id)
         await reconcile_trainer_moderation_queue_if_incomplete(session, trainer_id)
+        from src.application.referral_use_cases import maybe_grant_referral_onboarding_bonus
+
+        await maybe_grant_referral_onboarding_bonus(trainer_id)
         return True
 
     if updates:
@@ -521,6 +524,9 @@ async def update_trainer_profile(
     await session.commit()
     await _demote_status_if_profile_incomplete(session, trainer_id)
     await reconcile_trainer_moderation_queue_if_incomplete(session, trainer_id)
+    from src.application.referral_use_cases import maybe_grant_referral_onboarding_bonus
+
+    await maybe_grant_referral_onboarding_bonus(trainer_id)
     return True
 
 

@@ -51,6 +51,10 @@ async def try_claim_first_booking_milestones(session: AsyncSession, trainer_id: 
             {"tid": trainer_id},
         )
         claimed_tip = r2.fetchone() is not None
+    if claimed_congrats:
+        from src.application.referral_use_cases import maybe_grant_referral_first_booking_bonus
+
+        await maybe_grant_referral_first_booking_bonus(session, trainer_id)
     return claimed_congrats, claimed_tip
 
 

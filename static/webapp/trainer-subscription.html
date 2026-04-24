@@ -2226,14 +2226,53 @@
           })
             .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
             .then(function(res) {
+              function bpReset() {
+                btn.disabled = false;
+                relabelPayButtonAfterError();
+              }
+              if (res.ok && res.data.referral_fully_covered && res.data.invoice_id) {
+                var urlCf = '/api/webapp/trainer/subscription-stub-confirm' + (initData() ? '?init_data=' + encodeURIComponent(initData()) : '');
+                fetch(urlCf, {
+                  method: 'POST',
+                  headers: Object.assign(headers(), { 'Content-Type': 'application/json' }),
+                  body: JSON.stringify({ invoice_id: res.data.invoice_id }),
+                })
+                  .then(function(r2) { return r2.json().then(function(d2) { return { ok: r2.ok, data: d2 }; }).catch(function() { return { ok: false, data: {} }; }); })
+                  .then(function(r2) {
+                    if (!r2.ok) {
+                      haptic('error');
+                      alert((r2.data && r2.data.detail) || 'Не удалось активировать подписку');
+                      bpReset();
+                      return;
+                    }
+                    var stUrl = '/api/webapp/trainer/subscription/status' + (initData() ? '?init_data=' + encodeURIComponent(initData()) : '');
+                    fetch(stUrl, { headers: headers() })
+                      .then(function(rs) { return rs.json(); })
+                      .then(function(st) {
+                        haptic('success');
+                        showSuccess({ tier: st.tier, modules: st.modules, expires_at: st.expires_at });
+                        bpReset();
+                      })
+                      .catch(function() {
+                        haptic('success');
+                        showSuccess({ tier: 'crm', modules: { online: false, analytics: false, groups: false }, expires_at: '' });
+                        bpReset();
+                      });
+                  })
+                  .catch(function() {
+                    haptic('error');
+                    alert('Ошибка сети');
+                    bpReset();
+                  });
+                return;
+              }
               if (res.ok && res.data.payment_url) {
                 window.location.href = res.data.payment_url;
                 return;
               }
               haptic('error');
               alert((res.data && res.data.detail) || 'Не удалось открыть оплату');
-              btn.disabled = false;
-              relabelPayButtonAfterError();
+              bpReset();
             })
             .catch(function() {
               haptic('error');

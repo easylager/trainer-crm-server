@@ -2580,6 +2580,7 @@ ADMIN_SUBSCRIPTION_INVOICE_NOTIFY = (
     "Счёт № <code>{invoice_id}</code>\n"
     "Тренер: <b>{trainer_name}</b> (internal <code>{trainer_id}</code>)\n"
     "{plan_line}\n"
+    "{referral_discount_line}"
     "Сумма: <b>{amount_byn} BYN</b>\n"
     "Период: {period_start} — {period_end}\n\n"
     "{trainer_contact_block}\n\n"

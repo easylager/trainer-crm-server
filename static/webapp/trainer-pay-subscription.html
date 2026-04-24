@@ -401,6 +401,17 @@
             document.getElementById('btnRetry').onclick = function() { loadPlans(); };
           });
       }
+      function confirmReferralCoveredInvoice(invoiceId, onOk, onErr) {
+        var url = '/api/webapp/trainer/subscription-stub-confirm' + (initData() ? '?init_data=' + encodeURIComponent(initData()) : '');
+        fetch(url, { method: 'POST', headers: Object.assign(headers(), {'Content-Type': 'application/json'}), body: JSON.stringify({ invoice_id: invoiceId }) })
+          .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }).catch(function() { return { ok: false, data: {} }; }); })
+          .then(function(o) {
+            if (o.ok) onOk();
+            else onErr((o.data && o.data.detail) || 'Не удалось активировать подписку.');
+          })
+          .catch(function() { onErr('Ошибка сети.'); });
+      }
+
       function goToPayment(planId) {
         showScreen('screenPay');
         document.getElementById('paySummary').innerHTML = '<p class="message">Подготовка счёта…</p>';
@@ -409,16 +420,38 @@
         fetch(url, { headers: headers() })
           .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }).catch(function() { return { ok: false, data: {} }; }); })
           .then(function(o) {
-            if (o.ok && o.data.payment_url) {
-              var d = o.data;
-              var summary = 'Оплата подписки <b>«' + (d.plan_name || 'Подписка') + '»</b><br>';
-              if (d.period_start && d.period_end) summary += '<span class="period">Период: с ' + d.period_start + ' по ' + d.period_end + '</span><br>';
-              summary += '<strong>' + formatPrice(d.amount_cents) + '</strong>';
-              document.getElementById('paySummary').innerHTML = summary;
+            if (!o.ok) {
+              document.getElementById('errorText').textContent = (o.data && o.data.detail) || 'Не удалось получить ссылку на оплату.';
+              showScreen('screenError');
+              document.getElementById('btnRetry').onclick = function() { showScreen('screenChoose'); loadPlans(); };
+              return;
+            }
+            var d = o.data;
+            var summary = 'Оплата подписки <b>«' + (d.plan_name || 'Подписка') + '»</b><br>';
+            if (d.period_start && d.period_end) summary += '<span class="period">Период: с ' + d.period_start + ' по ' + d.period_end + '</span><br>';
+            if (d.referral_bonus_days_applied > 0 && d.amount_cents_before_referral != null && d.amount_cents_before_referral !== d.amount_cents) {
+              summary += '<span class="period">Реф.баланс: <b>−' + d.referral_bonus_days_applied + '</b> дн. к периоду</span><br>';
+              summary += '<span class="period">Без скидки было бы: ' + formatPrice(d.amount_cents_before_referral) + '</span><br>';
+            }
+            summary += '<strong>' + formatPrice(d.amount_cents) + '</strong>';
+            document.getElementById('paySummary').innerHTML = summary;
+            if (d.referral_fully_covered && d.invoice_id) {
+              document.getElementById('payLoading').textContent = 'Период покрыт бонусными днями, активируем…';
+              confirmReferralCoveredInvoice(d.invoice_id, function() {
+                showScreen('screenSuccess');
+                document.getElementById('btnPaySuccessDone').onclick = fetchStatusAndNavigateToHub;
+              }, function(err) {
+                document.getElementById('errorText').textContent = err;
+                showScreen('screenError');
+                document.getElementById('btnRetry').style.display = 'none';
+              });
+              return;
+            }
+            if (d.payment_url) {
               document.getElementById('payLoading').textContent = 'Открываю страницу оплаты…';
               window.location.href = d.payment_url;
             } else {
-              document.getElementById('errorText').textContent = (o.data && o.data.detail) || 'Не удалось получить ссылку на оплату.';
+              document.getElementById('errorText').textContent = 'Не удалось получить ссылку на оплату.';
               showScreen('screenError');
               document.getElementById('btnRetry').onclick = function() { showScreen('screenChoose'); loadPlans(); };
             }
