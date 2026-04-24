@@ -16,6 +16,8 @@ Trainer onboarding checklist: submission readiness, full-profile flag, future sl
 ``open_loop_clients_no_upcoming_count`` = distinct clients (bookings or active/trial group) with no upcoming
 session (slot end in the future, ``pending``/``confirmed``).
 ``open_loop_clients_no_telegram_count`` = those clients (same scope as CRM visibility) with ``telegram_id`` null.
+``fill_slots_invite_candidates_count`` = clients eligible for hub «напомнить о слотах»: CRM scope, Telegram linked,
+no upcoming pending/confirmed session (same filter as ``list_trainer_fill_slots_invite_candidates``).
 """
 from __future__ import annotations
 
@@ -25,6 +27,7 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.booking_use_cases import count_trainer_fill_slots_invite_candidates
 from src.application.subscription_tier_use_cases import trainer_has_crm_access
 from src.application.trainer_use_cases import get_trainer, get_trainer_moderation_readiness
 from src.infrastructure.db.models import TRAINER_STATUS_ACTIVE, TRAINER_STATUS_PENDING_PROFILE
@@ -86,6 +89,7 @@ async def get_trainer_onboarding_checklist(session: AsyncSession, trainer_id: in
         "open_loop_pending_bookings_count": 0,
         "open_loop_clients_no_upcoming_count": 0,
         "open_loop_clients_no_telegram_count": 0,
+        "fill_slots_invite_candidates_count": 0,
     }
 
     pending_ttv_unlock = (
@@ -103,6 +107,7 @@ async def get_trainer_onboarding_checklist(session: AsyncSession, trainer_id: in
         out["open_loop_pending_bookings_count"] = 0
         out["open_loop_clients_no_upcoming_count"] = 0
         out["open_loop_clients_no_telegram_count"] = 0
+        out["fill_slots_invite_candidates_count"] = 0
         return out
 
     r_tpl = await session.execute(
@@ -392,5 +397,9 @@ async def get_trainer_onboarding_checklist(session: AsyncSession, trainer_id: in
         out["open_loop_pending_bookings_count"] = int(row_ol[0] or 0)
         out["open_loop_clients_no_upcoming_count"] = int(row_ol[1] or 0)
         out["open_loop_clients_no_telegram_count"] = int(row_ol[2] or 0)
+
+    out["fill_slots_invite_candidates_count"] = await count_trainer_fill_slots_invite_candidates(
+        session, trainer_id
+    )
 
     return out

@@ -28,14 +28,32 @@
             else if (tid != null && tid !== '') url = 'tg://user?id=' + encodeURIComponent(String(tid));
             else return false;
             var w = window.Telegram && window.Telegram.WebApp;
-            if (w) {
+            var isTgUser = url.indexOf('tg://') === 0;
+            var isTme = url.indexOf('https://t.me/') === 0;
+            if (isTgUser) {
+              if (w && w.platform === 'web') {
+                if (typeof w.showAlert === 'function') {
+                  try {
+                    w.showAlert(
+                      'В браузерной версии Telegram нельзя открыть чат только по внутреннему ID. Обновите «Ближайшие записи» — подтянется @username, или откройте тот же мини-апп в приложении Telegram на телефоне.'
+                    );
+                  } catch (e0) { /* noop */ }
+                }
+                return false;
+              }
+              try {
+                window.location.assign(url);
+              } catch (e1) { /* noop */ }
+              return true;
+            }
+            if (isTme && w) {
               if (typeof w.openTelegramLink === 'function') {
                 try {
                   w.openTelegramLink(url);
                   return true;
-                } catch (e1) { /* continue */ }
+                } catch (e) { /* continue */ }
               }
-              if (url.indexOf('https://t.me/') === 0 && typeof w.openLink === 'function') {
+              if (typeof w.openLink === 'function') {
                 try {
                   w.openLink(url, { try_instant_view: false });
                   return true;
@@ -46,19 +64,13 @@
                   } catch (e3) { /* continue */ }
                 }
               }
-              if (url.indexOf('tg://') === 0 && typeof w.openLink === 'function') {
-                try {
-                  w.openLink(url, { try_instant_view: false });
-                  return true;
-                } catch (e4) { /* continue */ }
-              }
             }
             try {
               var a = document.createElement('a');
               a.href = url;
               a.rel = 'noopener noreferrer';
               a.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0;pointer-events:auto;';
-              a.target = url.indexOf('tg://') === 0 ? '_self' : '_blank';
+              a.target = '_blank';
               (document.body || document.documentElement).appendChild(a);
               a.click();
               setTimeout(function () {
@@ -66,10 +78,10 @@
                   if (a && a.parentNode) a.parentNode.removeChild(a);
                 } catch (x) { /* noop */ }
               }, 0);
-            } catch (e5) { /* noop */ }
+            } catch (e4) { /* noop */ }
             try {
               window.location.href = url;
-            } catch (e6) { /* noop */ }
+            } catch (e5) { /* noop */ }
             return true;
           };
         }
@@ -668,6 +680,7 @@
         var openLoopPending = parseNonNegativeInt(d.open_loop_pending_bookings_count);
         var openLoopNoUpcoming = parseNonNegativeInt(d.open_loop_clients_no_upcoming_count);
         var openLoopNoTg = parseNonNegativeInt(d.open_loop_clients_no_telegram_count);
+        var fillSlotsCandidates = parseNonNegativeInt(d.fill_slots_invite_candidates_count);
 
         /* Open loops (Zeigarnik): unfinished business, not just “do X” maintenance — sorted by priority below. */
         if (openLoopPending > 0 && !isRhythmHintDismissed('open_loop_pending')) {
@@ -713,6 +726,7 @@
         if (
           !slotRhythmDeferredForTemplateOnboarding &&
           availNext > 0 &&
+          fillSlotsCandidates > 0 &&
           !isRhythmHintDismissed('open_loop_free_next')
         ) {
           out.push({
@@ -728,11 +742,35 @@
                 'свободных слота',
                 'свободных слотов',
               ) +
+              ' — кого из клиентов в боте напомнить о записи? Мы отобрали тех, у кого ещё нет будущей тренировки.',
+            ctaLabel: 'Напомнить',
+            action: 'fill_slots_invites',
+          });
+        }
+        if (
+          !slotRhythmDeferredForTemplateOnboarding &&
+          availNext > 0 &&
+          fillSlotsCandidates === 0 &&
+          !isRhythmHintDismissed('open_loop_free_next_growth')
+        ) {
+          out.push({
+            id: 'open_loop_free_next_growth',
+            priority: 71,
+            text:
+              'На следующей неделе ' +
+              availNext +
+              ' ' +
+              pluralRu(
+                availNext,
+                'свободный слот',
+                'свободных слота',
+                'свободных слотов',
+              ) +
               (hubOnlineBookingEnabled
-                ? ' в расписании. Кому из клиентов в первую очередь написать со ссылкой на запись?'
-                : ' в расписании. Кого из клиентов логичнее пригласить в эти окна?'),
-            ctaLabel: 'Расписание',
-            action: 'schedule',
+                ? ' — хороший повод привлечь новых клиентов. Поделитесь ссылкой на запись.'
+                : ' — хороший повод привлечь новых клиентов.'),
+            ctaLabel: hubOnlineBookingEnabled ? 'Ссылка на запись' : 'Пригласить в бот',
+            action: hubOnlineBookingEnabled ? 'share_link' : 'trainer_clients_invite_bot',
           });
         }
 
@@ -870,6 +908,10 @@
           ensureTrainerSectionsAccess(function() {
             navigateTo('trainer-clients?focus=invite_bot');
           });
+          return;
+        }
+        if (cand.action === 'fill_slots_invites') {
+          openHubFillSlotsInvitesFlow();
           return;
         }
         if (cand.action === 'profile_catalog') {
@@ -3754,6 +3796,214 @@
         });
       }
 
+      function closeHubFillSlotsInvitesModal() {
+        var overlay = document.getElementById('hubModalFillSlotsInvites');
+        if (!overlay) return;
+        overlay.style.display = 'none';
+        overlay.setAttribute('aria-hidden', 'true');
+      }
+
+      function hubFillSlotsSelectedCount(host) {
+        if (!host) return 0;
+        return host.querySelectorAll('input.hub-fill-slots-pick:checked').length;
+      }
+
+      function hubFillSlotsUpdateSendButtonLabel() {
+        var host = document.getElementById('hubFillSlotsInvitesHost');
+        var btn = document.getElementById('hubFillSlotsInvitesSend');
+        if (!btn || !host) return;
+        var n = hubFillSlotsSelectedCount(host);
+        btn.textContent = n > 0 ? 'Отправить (' + n + ')' : 'Отправить';
+        btn.disabled = n === 0 || btn.dataset.sending === '1';
+      }
+
+      function renderHubFillSlotsInvitesModalBody(clients) {
+        var host = document.getElementById('hubFillSlotsInvitesHost');
+        if (!host) return;
+        host.innerHTML = '';
+        if (!clients.length) {
+          var p = document.createElement('p');
+          p.className = 'hub-fill-slots-empty';
+          p.textContent =
+            'Нет клиентов с привязанным Telegram — напоминание через бот недоступно. Подключите клиентов в разделе «Клиенты» или добавьте новых.';
+          host.appendChild(p);
+          var actions = document.createElement('div');
+          actions.className = 'modal-actions';
+          var b1 = document.createElement('button');
+          b1.type = 'button';
+          b1.className = 'btn-block btn-primary';
+          b1.textContent = 'Клиенты';
+          b1.onclick = function() {
+            closeHubFillSlotsInvitesModal();
+            navigateTo('trainer-clients');
+          };
+          var b2 = document.createElement('button');
+          b2.type = 'button';
+          b2.className = 'btn-block btn-secondary';
+          b2.textContent = 'Расписание';
+          b2.onclick = function() {
+            closeHubFillSlotsInvitesModal();
+            navigateTo('schedule-editor');
+          };
+          actions.appendChild(b1);
+          actions.appendChild(b2);
+          host.appendChild(actions);
+          return;
+        }
+        for (var idx = 0; idx < clients.length; idx++) {
+          var c = clients[idx];
+          var card = document.createElement('div');
+          card.className = 'hub-fill-slots-card';
+          var pickRow = document.createElement('label');
+          pickRow.className = 'hub-fill-slots-pick-row';
+          var cb = document.createElement('input');
+          cb.type = 'checkbox';
+          cb.className = 'hub-fill-slots-pick';
+          cb.value = c && c.id != null ? String(c.id) : '';
+          cb.checked = true;
+          cb.addEventListener('change', hubFillSlotsUpdateSendButtonLabel);
+          pickRow.appendChild(cb);
+          var nameWrap = document.createElement('span');
+          nameWrap.className = 'hub-fill-slots-pick-label';
+          nameWrap.textContent = c && c.display_name ? String(c.display_name) : 'Клиент';
+          pickRow.appendChild(nameWrap);
+          card.appendChild(pickRow);
+          if (c && c.reason_line) {
+            var reasonEl = document.createElement('div');
+            reasonEl.className = 'hub-fill-slots-card-reason';
+            reasonEl.textContent = String(c.reason_line);
+            card.appendChild(reasonEl);
+          }
+          host.appendChild(card);
+        }
+        var sendWrap = document.createElement('div');
+        sendWrap.className = 'hub-fill-slots-send-wrap';
+        var sendBtn = document.createElement('button');
+        sendBtn.type = 'button';
+        sendBtn.id = 'hubFillSlotsInvitesSend';
+        sendBtn.className = 'btn-block btn-primary';
+        sendBtn.textContent = 'Отправить';
+        sendBtn.onclick = function() {
+          var ids = [];
+          host.querySelectorAll('input.hub-fill-slots-pick:checked').forEach(function(el) {
+            var id = parseInt(String(el.value || ''), 10);
+            if (!isNaN(id) && id > 0) ids.push(id);
+          });
+          if (!ids.length) {
+            hubToast('Выберите хотя бы одного клиента с подключённым Telegram.');
+            return;
+          }
+          sendBtn.dataset.sending = '1';
+          sendBtn.disabled = true;
+          sendBtn.textContent = 'Отправляем…';
+          fetch(apiUrlWithQuery('/trainer/hub/fill-slots-invites/send'), {
+            method: 'POST',
+            headers: headersJson(),
+            body: JSON.stringify({ client_ids: ids }),
+          })
+            .then(function(r) {
+              return r.json().then(function(data) {
+                return { ok: r.ok, data: data, status: r.status };
+              });
+            })
+            .then(function(o) {
+              if (!o.ok) {
+                var det = o.data && o.data.detail;
+                var msgErr =
+                  typeof det === 'string'
+                    ? det
+                    : Array.isArray(det) && det[0] && det[0].msg
+                      ? det[0].msg
+                      : 'Не удалось отправить (' + o.status + ').';
+                throw new Error(msgErr);
+              }
+              var sent = (o.data && o.data.sent) || [];
+              var failed = (o.data && o.data.failed) || [];
+              var skipped = (o.data && o.data.skipped_no_telegram) || [];
+              var parts = [];
+              if (sent.length) parts.push('Отправлено: ' + sent.length);
+              if (failed.length) parts.push('Ошибок: ' + failed.length);
+              if (skipped.length) parts.push('Без Telegram: ' + skipped.length);
+              hubToast(parts.length ? parts.join(' · ') : 'Готово.');
+              closeHubFillSlotsInvitesModal();
+            })
+            .catch(function(err) {
+              hubToast((err && err.message) || 'Ошибка отправки.');
+            })
+            .finally(function() {
+              delete sendBtn.dataset.sending;
+              sendBtn.disabled = false;
+              hubFillSlotsUpdateSendButtonLabel();
+            });
+        };
+        sendWrap.appendChild(sendBtn);
+        host.appendChild(sendWrap);
+        hubFillSlotsUpdateSendButtonLabel();
+      }
+
+      function openHubFillSlotsInvitesFlow() {
+        ensureTrainerSectionsAccess(function() {
+          var overlay = document.getElementById('hubModalFillSlotsInvites');
+          var host = document.getElementById('hubFillSlotsInvitesHost');
+          if (!overlay || !host) return;
+          host.innerHTML = '';
+          var loading = document.createElement('p');
+          loading.className = 'hub-fill-slots-loading';
+          loading.textContent = 'Подбираем клиентов…';
+          host.appendChild(loading);
+          overlay.style.display = 'flex';
+          overlay.setAttribute('aria-hidden', 'false');
+
+          fetch(apiUrlWithQuery('/trainer/hub/fill-slots-invites'), { headers: headersJson() })
+            .then(function(r) {
+              return r.json().then(function(data) {
+                return { ok: r.ok, data: data, status: r.status };
+              });
+            })
+            .then(function(o) {
+              if (!o.ok) {
+                var det = o.data && o.data.detail;
+                throw new Error(
+                  typeof det === 'string' ? det : 'Не удалось загрузить подсказки (' + o.status + ').'
+                );
+              }
+              return (o.data && o.data.clients) || [];
+            })
+            .then(function(clients) {
+              renderHubFillSlotsInvitesModalBody(clients);
+            })
+            .catch(function(err) {
+              hubToast((err && err.message) || 'Не удалось загрузить подсказки.');
+              closeHubFillSlotsInvitesModal();
+            });
+        });
+      }
+
+      function wireHubFillSlotsInvitesModal() {
+        var overlay = document.getElementById('hubModalFillSlotsInvites');
+        var closeBtn = document.getElementById('hubFillSlotsInvitesClose');
+        var schedBtn = document.getElementById('hubFillSlotsInvitesSchedule');
+        if (overlay && !overlay.dataset.fillSlotsWired) {
+          overlay.dataset.fillSlotsWired = '1';
+          overlay.onclick = function(ev) {
+            if (ev.target === overlay) closeHubFillSlotsInvitesModal();
+          };
+        }
+        if (closeBtn && !closeBtn.dataset.fillSlotsWired) {
+          closeBtn.dataset.fillSlotsWired = '1';
+          closeBtn.onclick = function() {
+            closeHubFillSlotsInvitesModal();
+          };
+        }
+        if (schedBtn && !schedBtn.dataset.fillSlotsWired) {
+          schedBtn.dataset.fillSlotsWired = '1';
+          schedBtn.onclick = function() {
+            closeHubFillSlotsInvitesModal();
+            navigateTo('schedule-editor');
+          };
+        }
+      }
+
       /** Server-side funnel: first time trainer copied a client-facing booking/invite link. */
       function postHubClientInviteLinkFirstCopyRecorded() {
         if (!getInitData()) return;
@@ -4092,6 +4342,7 @@
           };
         }
         wireHubShareBookingLinkModal();
+        wireHubFillSlotsInvitesModal();
         applyHubShareButtonVisibility();
         applyHubLockedState();
         renderHubSummaryHints();

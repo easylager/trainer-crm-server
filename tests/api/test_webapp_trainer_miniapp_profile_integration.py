@@ -15,7 +15,7 @@ from contextlib import contextmanager
 from datetime import date, timedelta, time
 from io import BytesIO
 from urllib.parse import quote
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -177,6 +177,7 @@ async def test_onboarding_checklist_inactive_trainer_slots_and_bookings_locked(
     assert data.get("slots_locked_reason")
     assert data.get("bookings_locked_reason")
     assert data.get("schedule_unlocked") is False
+    assert data.get("fill_slots_invite_candidates_count") == 0
 
 
 @pytest.mark.asyncio
@@ -1404,3 +1405,251 @@ async def test_onboarding_checklist_open_loop_aggregates(
     assert data.get("open_loop_pending_bookings_count") == 1
     assert data.get("open_loop_clients_no_upcoming_count") == 1
     assert data.get("open_loop_clients_no_telegram_count") == 1
+    assert data.get("fill_slots_invite_candidates_count") == 0
+
+
+@pytest.mark.asyncio
+async def test_trainer_hub_fill_slots_invites_prefers_clients_without_upcoming(
+    app_use_test_db,
+    db_session,
+) -> None:
+    """GET /trainer/hub/fill-slots-invites ranks clients without a future session first."""
+    tg = _fresh_trainer_telegram_id()
+    r = await db_session.execute(text("INSERT INTO trainers (status) VALUES ('active') RETURNING id"))
+    tid = r.fetchone()[0]
+    await db_session.execute(
+        text("UPDATE trainers SET telegram_id = :tg WHERE id = :id"),
+        {"tg": tg, "id": tid},
+    )
+    await db_session.execute(
+        text(
+            "INSERT INTO trainer_profiles (trainer_id, first_name, last_name, age) "
+            "VALUES (:tid, 'Fill', 'Slots', 30)"
+        ),
+        {"tid": tid},
+    )
+    svc_name = "FillSlots " + uuid.uuid4().hex[:8]
+    r_service = await db_session.execute(
+        text("INSERT INTO services (name) VALUES (:name) RETURNING id"),
+        {"name": svc_name},
+    )
+    service_id = r_service.fetchone()[0]
+    await db_session.execute(
+        text(
+            "INSERT INTO trainer_services (trainer_id, service_id, price_cents) VALUES (:tid, :sid, 5000)"
+        ),
+        {"tid": tid, "sid": service_id},
+    )
+    r_stale = await db_session.execute(
+        text(
+            """
+            INSERT INTO clients (telegram_id, telegram_username, first_name, phone, phone_normalized)
+            VALUES (:tg, 'stale_user', 'Stale', '+37500000001', '37500000001')
+            RETURNING id
+            """
+        ),
+        {"tg": _fresh_trainer_telegram_id()},
+    )
+    stale_id = r_stale.fetchone()[0]
+    r_hot = await db_session.execute(
+        text(
+            """
+            INSERT INTO clients (telegram_id, telegram_username, first_name, phone, phone_normalized)
+            VALUES (:tg, 'hot_user', 'Hot', '+37500000002', '37500000002')
+            RETURNING id
+            """
+        ),
+        {"tg": _fresh_trainer_telegram_id()},
+    )
+    hot_id = r_hot.fetchone()[0]
+    past = date.today() - timedelta(days=10)
+    future = date.today() + timedelta(days=5)
+    r_past = await db_session.execute(
+        text(
+            """
+            INSERT INTO slots (trainer_id, slot_date, start_time, end_time, status)
+            VALUES (:tid, :d, TIME '10:00', TIME '11:00', 'booked')
+            RETURNING id
+            """
+        ),
+        {"tid": tid, "d": past},
+    )
+    slot_past = r_past.fetchone()[0]
+    r_future = await db_session.execute(
+        text(
+            """
+            INSERT INTO slots (trainer_id, slot_date, start_time, end_time, status)
+            VALUES (:tid, :d, TIME '12:00', TIME '13:00', 'booked')
+            RETURNING id
+            """
+        ),
+        {"tid": tid, "d": future},
+    )
+    slot_future = r_future.fetchone()[0]
+    await db_session.execute(
+        text(
+            """
+            INSERT INTO bookings (slot_id, trainer_id, client_id, service_id, status)
+            VALUES (:sid, :tid, :cid, :svc, 'completed')
+            """
+        ),
+        {"sid": slot_past, "tid": tid, "cid": stale_id, "svc": service_id},
+    )
+    await db_session.execute(
+        text(
+            """
+            INSERT INTO bookings (slot_id, trainer_id, client_id, service_id, status, notified_at)
+            VALUES (:sid, :tid, :cid, :svc, 'pending', NOW())
+            """
+        ),
+        {"sid": slot_future, "tid": tid, "cid": hot_id, "svc": service_id},
+    )
+    r_skip = await db_session.execute(
+        text(
+            """
+            INSERT INTO clients (telegram_id, first_name, phone, phone_normalized)
+            VALUES (NULL, 'NoTgHub', '+37500000999', '37500000999')
+            RETURNING id
+            """
+        ),
+    )
+    skip_id = r_skip.fetchone()[0]
+    r_slot2 = await db_session.execute(
+        text(
+            """
+            INSERT INTO slots (trainer_id, slot_date, start_time, end_time, status)
+            VALUES (:tid, :d, TIME '14:00', TIME '15:00', 'booked')
+            RETURNING id
+            """
+        ),
+        {"tid": tid, "d": past},
+    )
+    slot_past2 = r_slot2.fetchone()[0]
+    await db_session.execute(
+        text(
+            """
+            INSERT INTO bookings (slot_id, trainer_id, client_id, service_id, status)
+            VALUES (:sid, :tid, :cid, :svc, 'completed')
+            """
+        ),
+        {"sid": slot_past2, "tid": tid, "cid": skip_id, "svc": service_id},
+    )
+    await db_session.commit()
+
+    with patch_trainer_init_auth(tg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.get(
+                "/api/webapp/trainer/hub/fill-slots-invites",
+                headers={"X-Telegram-Init-Data": "mock"},
+            )
+    assert resp.status_code == 200
+    payload = resp.json()
+    clients = payload.get("clients") or []
+    assert len(clients) == 1
+    assert skip_id not in {c["id"] for c in clients}
+    assert all(c.get("has_telegram") is True for c in clients)
+    assert clients[0]["id"] == stale_id
+    assert clients[0].get("has_upcoming_booking") is False
+    assert "reason_line" in clients[0]
+
+    with patch_trainer_init_auth(tg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            chk = await client.get(
+                "/api/webapp/trainer/onboarding/checklist",
+                headers={"X-Telegram-Init-Data": "mock"},
+            )
+    assert chk.status_code == 200
+    assert chk.json().get("fill_slots_invite_candidates_count") == 1
+
+
+@pytest.mark.asyncio
+async def test_trainer_hub_fill_slots_invites_send_posts_to_client_bot(
+    app_use_test_db,
+    db_session,
+) -> None:
+    """POST fill-slots-invites/send delivers client-bot messages (Bot API mocked)."""
+    tg = _fresh_trainer_telegram_id()
+    r = await db_session.execute(text("INSERT INTO trainers (status) VALUES ('active') RETURNING id"))
+    tid = r.fetchone()[0]
+    await db_session.execute(
+        text("UPDATE trainers SET telegram_id = :tg WHERE id = :id"),
+        {"tg": tg, "id": tid},
+    )
+    await db_session.execute(
+        text(
+            "INSERT INTO trainer_profiles (trainer_id, first_name, last_name, age) "
+            "VALUES (:tid, 'Send', 'Test', 30)"
+        ),
+        {"tid": tid},
+    )
+    svc_name = "SendInv " + uuid.uuid4().hex[:8]
+    r_service = await db_session.execute(
+        text("INSERT INTO services (name) VALUES (:name) RETURNING id"),
+        {"name": svc_name},
+    )
+    service_id = r_service.fetchone()[0]
+    await db_session.execute(
+        text(
+            "INSERT INTO trainer_services (trainer_id, service_id, price_cents) VALUES (:tid, :sid, 5000)"
+        ),
+        {"tid": tid, "sid": service_id},
+    )
+    client_tg = _fresh_trainer_telegram_id()
+    r_c = await db_session.execute(
+        text(
+            """
+            INSERT INTO clients (telegram_id, first_name, phone, phone_normalized)
+            VALUES (:tg, 'Notifier', '+37500000003', '37500000003')
+            RETURNING id
+            """
+        ),
+        {"tg": client_tg},
+    )
+    client_id = r_c.fetchone()[0]
+    past = date.today() - timedelta(days=3)
+    r_slot = await db_session.execute(
+        text(
+            """
+            INSERT INTO slots (trainer_id, slot_date, start_time, end_time, status)
+            VALUES (:tid, :d, TIME '10:00', TIME '11:00', 'booked')
+            RETURNING id
+            """
+        ),
+        {"tid": tid, "d": past},
+    )
+    slot_id = r_slot.fetchone()[0]
+    await db_session.execute(
+        text(
+            """
+            INSERT INTO bookings (slot_id, trainer_id, client_id, service_id, status)
+            VALUES (:sid, :tid, :cid, :svc, 'completed')
+            """
+        ),
+        {"sid": slot_id, "tid": tid, "cid": client_id, "svc": service_id},
+    )
+    await db_session.commit()
+
+    mock_send = AsyncMock()
+    with patch_trainer_init_auth(tg):
+        with patch("src.application.trainer_fill_slots_invite_send.Settings") as MS:
+            MS.return_value.webapp_base_url = "https://example.test"
+            MS.return_value.telegram_bot_token_client = "dummy"
+            with patch("src.application.trainer_fill_slots_invite_send.trainer_allows_online_booking", new=AsyncMock(return_value=True)):
+                with patch("src.application.trainer_fill_slots_invite_send.Bot") as MockBot:
+                    inst = MockBot.return_value
+                    inst.send_message = mock_send
+                    inst.session = AsyncMock()
+                    inst.session.close = AsyncMock()
+                    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                        resp = await client.post(
+                            "/api/webapp/trainer/hub/fill-slots-invites/send",
+                            headers={"X-Telegram-Init-Data": "mock"},
+                            json={"client_ids": [client_id]},
+                        )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert client_id in body.get("sent", [])
+    mock_send.assert_awaited_once()
+    call_kw = mock_send.await_args.kwargs
+    assert int(call_kw["chat_id"]) == int(client_tg)
+    assert "reply_markup" in call_kw

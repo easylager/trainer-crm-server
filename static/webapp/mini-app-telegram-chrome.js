@@ -16,9 +16,10 @@
 
 /**
  * Open a private Telegram chat from Mini App.
- * - Plain <a href="tg://..."> is unreliable in WebView; use WebApp APIs first.
- * - `openLink` for tg:// may hand off to the system browser (broken) — avoid as primary for tg://.
- * - On some iOS builds `openTelegramLink` is flaky; we add <a>.click() + location fallbacks.
+ * - https://t.me/… — WebApp.openTelegramLink / openLink (works in web + native).
+ * - tg://user?id=… — do NOT use WebApp APIs: they log "Url protocol is not supported" and burn the
+ *   user-gesture, so the browser then blocks the fallback. Use sync location.assign on native; on
+ *   platform=web, tg:// is unsupported — prefer t.me (API can fill username via getChat) or showAlert.
  */
 window.openTelegramChatFromMiniApp = function (opts) {
   opts = opts || {};
@@ -34,15 +35,34 @@ window.openTelegramChatFromMiniApp = function (opts) {
   }
 
   var w = window.Telegram && window.Telegram.WebApp;
-  if (w) {
+  var isTgUser = url.indexOf('tg://') === 0;
+  var isTme = url.indexOf('https://t.me/') === 0;
+
+  if (isTgUser) {
+    if (w && w.platform === 'web') {
+      if (typeof w.showAlert === 'function') {
+        try {
+          w.showAlert(
+            'В браузерной версии Telegram нельзя открыть чат только по внутреннему ID. Обновите «Ближайшие записи» — подтянется @username, или откройте тот же мини-апп в приложении Telegram на телефоне.'
+          );
+        } catch (e0) { /* noop */ }
+      }
+      return false;
+    }
+    try {
+      window.location.assign(url);
+    } catch (e1) { /* noop */ }
+    return true;
+  }
+
+  if (isTme && w) {
     if (typeof w.openTelegramLink === 'function') {
       try {
         w.openTelegramLink(url);
         return true;
       } catch (e) { /* continue */ }
     }
-    // https://t.me/... — extra path for mobile clients where openTelegramLink is a no-op
-    if (url.indexOf('https://t.me/') === 0 && typeof w.openLink === 'function') {
+    if (typeof w.openLink === 'function') {
       try {
         w.openLink(url, { try_instant_view: false });
         return true;
@@ -53,23 +73,14 @@ window.openTelegramChatFromMiniApp = function (opts) {
         } catch (e3) { /* continue */ }
       }
     }
-    // tg:// — last resort inside WebApp: some Android builds route in-app via openLink
-    if (url.indexOf('tg://') === 0 && typeof w.openLink === 'function') {
-      try {
-        w.openLink(url, { try_instant_view: false });
-        return true;
-      } catch (e4) { /* continue */ }
-    }
   }
 
-  // Programmatic anchor (helps on some iOS WebViews)
   try {
     var a = document.createElement('a');
     a.href = url;
     a.rel = 'noopener noreferrer';
     a.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0;pointer-events:auto;';
-    // tg:// must stay in the same webview context
-    a.target = url.indexOf('tg://') === 0 ? '_self' : '_blank';
+    a.target = '_blank';
     (document.body || document.documentElement).appendChild(a);
     a.click();
     setTimeout(function () {
@@ -77,10 +88,10 @@ window.openTelegramChatFromMiniApp = function (opts) {
         if (a && a.parentNode) a.parentNode.removeChild(a);
       } catch (x) { /* noop */ }
     }, 0);
-  } catch (e5) { /* continue */ }
+  } catch (e4) { /* continue */ }
   try {
     window.location.href = url;
-  } catch (e6) { /* noop */ }
+  } catch (e5) { /* noop */ }
   return true;
 };
 

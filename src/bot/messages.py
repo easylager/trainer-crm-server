@@ -529,6 +529,8 @@ CLIENT_BOOKING_CANCELLED_BY_SELF = (
     "Ниже можно сразу выбрать новое время в каталоге."
 )
 CLIENT_BUTTON_BOOK_AGAIN = "📅 Записаться снова"
+# Hub rhythm: trainer picks clients → push from client bot with WebApp booking entry
+CLIENT_FILL_SLOTS_INVITE_BTN_BOOK = "Записаться"
 CLIENT_BUTTON_SHOW_ON_MAP = "Показать на карте"
 CLIENT_BOOKING_CONFIRMED_BTN_MAP = "🗺 На карте"
 CLIENT_REMINDER_BTN_SHOW_ON_MAP = "🗺 На карте"
@@ -638,6 +640,56 @@ def build_client_no_response_catalog_keyboard(*, webapp_base_url: str | None):
                     web_app=WebAppInfo(url=f"{base}/webapp/catalog"),
                 ),
             ],
+        ]
+    )
+
+
+def format_client_fill_slots_invite_from_trainer_html(
+    *,
+    client_first_name: str | None,
+    trainer_display_name: str,
+    variant_index: int,
+) -> str:
+    """Client-bot HTML push: trainer asked to notify about free slots next week (Zeigarnik hub)."""
+    cn = (client_first_name or "").strip()
+    tn = html.escape((trainer_display_name or "").strip() or "Тренер")
+    greet = f"👋 {html.escape(cn)}, привет!\n\n" if cn else ""
+    foot = (
+        "\n\nНажмите <b>Записаться</b> ниже — откроется запись к этому тренеру."
+    )
+    bodies = [
+        f"{greet}<b>{tn}</b> напоминает: на следующей неделе есть свободные окна — можно выбрать время.{foot}",
+        f"{greet}<b>{tn}</b> освобождает слоты на следующей неделе. Если планируете занятие — забронируйте время.{foot}",
+        f"{greet}Добрый день! <b>{tn}</b> приглашает записаться на следующую неделю — в расписании появились свободные окна.{foot}",
+    ]
+    return bodies[int(variant_index) % len(bodies)]
+
+
+def build_client_fill_slots_invite_keyboard(
+    *,
+    webapp_base_url: str | None,
+    trainer_id: int,
+    online_booking: bool,
+):
+    """WebApp entry: direct book flow when online tier; otherwise catalog pinned to trainer."""
+    from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
+
+    base = (webapp_base_url or "").rstrip("/")
+    if not base.lower().startswith("https://"):
+        return None
+    tid = int(trainer_id)
+    if online_booking:
+        url = f"{base}/webapp/book?trainer_id={tid}"
+    else:
+        url = f"{base}/webapp/catalog?trainer_id={tid}"
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=CLIENT_FILL_SLOTS_INVITE_BTN_BOOK,
+                    web_app=WebAppInfo(url=url),
+                )
+            ]
         ]
     )
 

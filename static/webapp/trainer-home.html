@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Тренерский кабинет</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="mini-app-telegram-chrome.js?v=20260484"></script>
+  <script src="mini-app-telegram-chrome.js?v=20260501"></script>
   <!-- Bump ?v= when theme.css / mini-app-components.css change (immutable cache on /webapp/…). -->
   <link rel="stylesheet" href="theme.css?v=20260425" />
   <link rel="stylesheet" href="mini-app-components.css?v=20260425" />
@@ -51,9 +51,9 @@
     })();
   </script>
   <!-- Bump ?v= when mini-app-trainer-hub.css changes (immutable cache on /webapp/…). -->
-  <link rel="stylesheet" href="mini-app-trainer-hub.css?v=20260484" />
+  <link rel="stylesheet" href="mini-app-trainer-hub.css?v=20260488" />
   <!-- Early download of main hub script (defer runs at end of body); improves time-to-interactive vs. discover-at-bottom. -->
-  <link rel="preload" href="trainer-home-main.js?v=20260485" as="script" />
+  <link rel="preload" href="trainer-home-main.js?v=20260501" as="script" />
 
 </head>
 <body class="hub-body">
@@ -404,6 +404,20 @@
     </div>
   </div>
 
+  <div id="hubModalFillSlotsInvites" class="modal-overlay hub-book-flow-overlay hub-fill-slots-invites-overlay" style="display:none;" aria-hidden="true">
+    <div class="modal hub-fill-slots-invites-modal" role="dialog" aria-labelledby="hubFillSlotsInvitesTitle">
+      <h3 id="hubFillSlotsInvitesTitle" class="book-modal-title">Напоминание о записи</h3>
+      <p class="book-choice-lead hub-fill-slots-invites-lead">
+        Отметьте клиентов — им придёт сообщение в <b>клиентском боте</b> от вашего имени с кнопкой «Записаться».
+      </p>
+      <div id="hubFillSlotsInvitesHost" class="hub-fill-slots-invites-host"></div>
+      <div class="modal-actions hub-fill-slots-invites-footer-actions">
+        <button type="button" class="btn-block btn-secondary" id="hubFillSlotsInvitesSchedule">Расписание</button>
+        <button type="button" class="btn-block btn-secondary" id="hubFillSlotsInvitesClose">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
   <div id="hubModalShareBookingLink" class="modal-overlay hub-book-flow-overlay hub-share-link-overlay" style="display:none;" aria-hidden="true">
     <div class="modal hub-share-link-modal" role="dialog" aria-labelledby="hubShareLinkTitle">
       <h3 id="hubShareLinkTitle" class="book-modal-title">Ссылка на запись</h3>
@@ -544,6 +558,6 @@
   <script src="mini-app-trainer-gate.js"></script>
   <script src="mini-app-trainer-celebration.js"></script>
   <!-- Bump ?v= when trainer-home-main.js changes (immutable cache on /webapp/…). -->
-  <script defer src="trainer-home-main.js?v=20260485"></script>
+  <script defer src="trainer-home-main.js?v=20260501"></script>
 </body>
 </html>

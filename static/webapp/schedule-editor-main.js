@@ -22,14 +22,32 @@
           else if (tid != null && tid !== '') url = 'tg://user?id=' + encodeURIComponent(String(tid));
           else return false;
           var w = window.Telegram && window.Telegram.WebApp;
-          if (w) {
+          var isTgUser = url.indexOf('tg://') === 0;
+          var isTme = url.indexOf('https://t.me/') === 0;
+          if (isTgUser) {
+            if (w && w.platform === 'web') {
+              if (typeof w.showAlert === 'function') {
+                try {
+                  w.showAlert(
+                    'В браузерной версии Telegram нельзя открыть чат только по внутреннему ID. Обновите данные — подтянется @username, или откройте мини-апп в приложении Telegram на телефоне.'
+                  );
+                } catch (e0) { /* noop */ }
+              }
+              return false;
+            }
+            try {
+              window.location.assign(url);
+            } catch (e1) { /* noop */ }
+            return true;
+          }
+          if (isTme && w) {
             if (typeof w.openTelegramLink === 'function') {
               try {
                 w.openTelegramLink(url);
                 return true;
-              } catch (e1) { /* continue */ }
+              } catch (e) { /* continue */ }
             }
-            if (url.indexOf('https://t.me/') === 0 && typeof w.openLink === 'function') {
+            if (typeof w.openLink === 'function') {
               try {
                 w.openLink(url, { try_instant_view: false });
                 return true;
@@ -40,19 +58,13 @@
                 } catch (e3) { /* continue */ }
               }
             }
-            if (url.indexOf('tg://') === 0 && typeof w.openLink === 'function') {
-              try {
-                w.openLink(url, { try_instant_view: false });
-                return true;
-              } catch (e4) { /* continue */ }
-            }
           }
           try {
             var a = document.createElement('a');
             a.href = url;
             a.rel = 'noopener noreferrer';
             a.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0;pointer-events:auto;';
-            a.target = url.indexOf('tg://') === 0 ? '_self' : '_blank';
+            a.target = '_blank';
             (document.body || document.documentElement).appendChild(a);
             a.click();
             setTimeout(function () {
@@ -60,10 +72,10 @@
                 if (a && a.parentNode) a.parentNode.removeChild(a);
               } catch (x) { /* noop */ }
             }, 0);
-          } catch (e5) { /* noop */ }
+          } catch (e4) { /* noop */ }
           try {
             window.location.href = url;
-          } catch (e6) { /* noop */ }
+          } catch (e5) { /* noop */ }
           return true;
         };
       })();
@@ -1053,6 +1065,7 @@
           var bookingEnded = isSlotEndedInPast(b);
           var canCancelBooking = stRaw === 'confirmed' && !bookingEnded;
           var tid = b.client_telegram_id;
+          var canDmUsername = !!(b.client_telegram_username || '').replace(/^@/, '').trim();
 
           var primaryActions = [];
           var extraActions = [];
@@ -1063,7 +1076,7 @@
             primaryActions.push({ cls: 'bd-btn--secondary', action: 'reschedule', icon: BD_ICONS.session, label: 'Перенести запись' });
             primaryActions.push({ cls: 'bd-btn--outline-danger', action: 'cancel', icon: BD_ICONS.cancelOutline, label: 'Отменить запись' });
           }
-          if (tid && b.client_has_telegram !== false) {
+          if (canDmUsername || (tid != null && tid !== '')) {
             extraActions.push({ cls: 'bd-btn--surface', action: 'write_client', icon: BD_ICONS.send, label: 'Написать клиенту' });
           }
           var canReportProblem = stRaw !== 'cancelled' && stRaw !== 'declined';

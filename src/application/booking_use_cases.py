@@ -1551,6 +1551,225 @@ async def list_trainer_clients(
     ]
 
 
+def _last_meeting_phrase_ru(*, today: date, last_session_date: date) -> str:
+    """Short phrase for «how long since last session» (avoid «0 дн. назад»)."""
+    days = (today - last_session_date).days
+    if days <= 0:
+        return "сегодня"
+    if days == 1:
+        return "вчера"
+    return f"{days} дн. назад"
+
+
+def _reason_line_for_fill_slots_invite(
+    *,
+    today: date,
+    has_upcoming_booking: bool,
+    last_session_date: date | None,
+) -> str:
+    if not has_upcoming_booking:
+        if last_session_date is not None:
+            ago = _last_meeting_phrase_ru(today=today, last_session_date=last_session_date)
+            return f"Без следующей записи · последняя встреча {ago}"
+        return "Без следующей записи · в истории ещё не было занятий"
+    if last_session_date is not None:
+        ago = _last_meeting_phrase_ru(today=today, last_session_date=last_session_date)
+        return f"Уже есть будущая запись · можно напомнить про окна · последний раз {ago}"
+    return "Уже есть будущая запись · мягкое напоминание про свободные слоты"
+
+
+async def list_trainer_fill_slots_invite_candidates(
+    session: AsyncSession,
+    trainer_id: int,
+    limit: int = 3,
+) -> list[dict]:
+    """
+    Clients to nudge when the hub shows free slots next week: same CRM scope as open-loop hints
+    (any non-cancelled booking or active/trial group), **only with Telegram linked** (client bot).
+    **Excludes anyone with a future pending/confirmed session** — напоминание про слоты им не логично.
+    Among the rest, ranks by stale last contact (oldest first).
+    """
+    lim = max(1, min(int(limit), 10))
+    r = await session.execute(
+        text(
+            """
+            WITH rel AS (
+                SELECT DISTINCT q.client_id
+                FROM (
+                    SELECT b.client_id
+                    FROM bookings b
+                    WHERE b.trainer_id = :tid
+                      AND b.status NOT IN ('cancelled', 'declined')
+                    UNION
+                    SELECT m.client_id
+                    FROM training_group_members m
+                    INNER JOIN training_groups g ON g.id = m.training_group_id
+                    WHERE g.trainer_id = :tid
+                      AND m.status IN ('active', 'trial')
+                ) q
+            ),
+            has_upcoming AS (
+                SELECT DISTINCT b.client_id
+                FROM bookings b
+                JOIN slots s ON s.id = b.slot_id
+                WHERE b.trainer_id = :tid
+                  AND b.status IN ('pending', 'confirmed')
+                  AND s.status IN ('available', 'booked')
+                  AND """
+            + _SQL_SLOT_END_TS
+            + """
+                  > CURRENT_TIMESTAMP
+            ),
+            last_sess AS (
+                SELECT
+                    b.client_id,
+                    MAX("""
+            + _SQL_SLOT_START_TS
+            + """) AS last_ts,
+                    MAX(s.slot_date) AS last_date
+                FROM bookings b
+                JOIN slots s ON s.id = b.slot_id
+                WHERE b.trainer_id = :tid
+                  AND b.status NOT IN ('cancelled', 'declined')
+                GROUP BY b.client_id
+            ),
+            scored AS (
+                SELECT
+                    c.id AS client_id,
+                    COALESCE(NULLIF(TRIM(c.first_name), ''), '') AS first_name,
+                    COALESCE(NULLIF(TRIM(c.last_name), ''), '') AS last_name,
+                    c.telegram_id,
+                    COALESCE(NULLIF(TRIM(c.telegram_username), ''), '') AS telegram_username,
+                    CASE WHEN hu.client_id IS NULL THEN 0 ELSE 1 END AS has_upcoming_flag,
+                    ls.last_date,
+                    ls.last_ts
+                FROM rel r
+                INNER JOIN clients c ON c.id = r.client_id AND c.telegram_id IS NOT NULL
+                LEFT JOIN has_upcoming hu ON hu.client_id = c.id
+                LEFT JOIN last_sess ls ON ls.client_id = c.id
+            )
+            SELECT
+                client_id,
+                first_name,
+                last_name,
+                telegram_id,
+                telegram_username,
+                has_upcoming_flag,
+                last_date
+            FROM scored
+            WHERE has_upcoming_flag = 0
+            ORDER BY last_ts ASC NULLS LAST,
+                     client_id ASC
+            LIMIT :lim
+            """
+        ),
+        {"tid": trainer_id, "lim": lim},
+    )
+    rows = r.fetchall()
+    today = date.today()
+    out: list[dict] = []
+    for row in rows:
+        cid = int(row[0])
+        fn = (row[1] or "").strip()
+        ln = (row[2] or "").strip()
+        tid_raw = row[3]
+        uname = (row[4] or "").strip()
+        has_up = int(row[5] or 0) == 1
+        last_d = row[6]
+        last_date: date | None
+        if last_d is None:
+            last_date = None
+        elif hasattr(last_d, "isoformat"):
+            last_date = last_d  # type: ignore[assignment]
+        else:
+            last_date = date.fromisoformat(str(last_d))
+        display = (fn + " " + ln).strip() or "Клиент"
+        out.append(
+            {
+                "id": cid,
+                "first_name": fn,
+                "last_name": ln,
+                "display_name": display,
+                "telegram_username": uname or None,
+                "has_telegram": tid_raw is not None,
+                "has_upcoming_booking": has_up,
+                "last_session_date": last_date.isoformat() if last_date else None,
+                "reason_line": _reason_line_for_fill_slots_invite(
+                    today=today,
+                    has_upcoming_booking=has_up,
+                    last_session_date=last_date,
+                ),
+            }
+        )
+    return out
+
+
+async def count_trainer_fill_slots_invite_candidates(session: AsyncSession, trainer_id: int) -> int:
+    """Count clients matching ``list_trainer_fill_slots_invite_candidates`` (telegram + no upcoming)."""
+    r = await session.execute(
+        text(
+            """
+            WITH rel AS (
+                SELECT DISTINCT q.client_id
+                FROM (
+                    SELECT b.client_id
+                    FROM bookings b
+                    WHERE b.trainer_id = :tid
+                      AND b.status NOT IN ('cancelled', 'declined')
+                    UNION
+                    SELECT m.client_id
+                    FROM training_group_members m
+                    INNER JOIN training_groups g ON g.id = m.training_group_id
+                    WHERE g.trainer_id = :tid
+                      AND m.status IN ('active', 'trial')
+                ) q
+            ),
+            has_upcoming AS (
+                SELECT DISTINCT b.client_id
+                FROM bookings b
+                JOIN slots s ON s.id = b.slot_id
+                WHERE b.trainer_id = :tid
+                  AND b.status IN ('pending', 'confirmed')
+                  AND s.status IN ('available', 'booked')
+                  AND """
+            + _SQL_SLOT_END_TS
+            + """
+                  > CURRENT_TIMESTAMP
+            ),
+            last_sess AS (
+                SELECT
+                    b.client_id,
+                    MAX("""
+            + _SQL_SLOT_START_TS
+            + """) AS last_ts,
+                    MAX(s.slot_date) AS last_date
+                FROM bookings b
+                JOIN slots s ON s.id = b.slot_id
+                WHERE b.trainer_id = :tid
+                  AND b.status NOT IN ('cancelled', 'declined')
+                GROUP BY b.client_id
+            ),
+            scored AS (
+                SELECT
+                    c.id AS client_id,
+                    CASE WHEN hu.client_id IS NULL THEN 0 ELSE 1 END AS has_upcoming_flag,
+                    ls.last_ts
+                FROM rel r
+                INNER JOIN clients c ON c.id = r.client_id AND c.telegram_id IS NOT NULL
+                LEFT JOIN has_upcoming hu ON hu.client_id = c.id
+                LEFT JOIN last_sess ls ON ls.client_id = c.id
+            )
+            SELECT COUNT(*)::int
+            FROM scored
+            WHERE has_upcoming_flag = 0
+            """
+        ),
+        {"tid": trainer_id},
+    )
+    row = r.fetchone()
+    return int(row[0] or 0) if row else 0
+
+
 async def trainer_has_access_to_client(
     session: AsyncSession,
     trainer_id: int,

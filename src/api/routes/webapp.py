@@ -69,10 +69,12 @@ from src.application.booking_use_cases import (
     list_bookings_for_client,
     list_bookings_for_trainer,
     list_trainer_clients,
+    list_trainer_fill_slots_invite_candidates,
     list_trainer_client_history,
     resolve_arena_for_client_self_booking,
     get_trainer_primary_arena_resolved,
 )
+from src.application.client_username_enrich import enrich_booking_dicts_with_client_telegram_usernames
 from src.application.client_use_cases import (
     get_client_id_by_telegram_id,
     get_client_phone_for_webapp,
@@ -211,6 +213,7 @@ from src.application.trainer_schedule_use_cases import (
 from src.application.recurring_use_cases import apply_recurring_bookings_for_week
 from src.application.welcome_link_use_cases import WELCOME_TOKEN_TYPE_CLIENT_BIND, create_welcome_link_token
 from src.application.trainer_invite_links import build_trainer_invite_links
+from src.application.trainer_fill_slots_invite_send import send_trainer_fill_slots_invites
 from src.application.client_notes_use_cases import (
     get_trainer_client_note,
     upsert_trainer_client_note,
@@ -1745,6 +1748,7 @@ async def _trainer_bookings_grouped_days_payload(
     bookings = await list_bookings_for_trainer(session, trainer_id, limit=lim)
     if not bookings:
         return {"days": []}
+    await enrich_booking_dicts_with_client_telegram_usernames(session, bookings)
     days_list: list[dict[str, Any]] = []
     for slot_date, group in groupby(bookings, key=lambda b: b["slot_date"]):
         day_bookings = list(group)
@@ -1988,6 +1992,57 @@ async def get_trainer_hub_bootstrap(
         "subscription_status": subscription_status,
         "partial_errors": partial_errors or None,
     }
+
+
+@router.get("/trainer/hub/fill-slots-invites")
+async def get_trainer_hub_fill_slots_invites(
+    init_data: str | None = Query(None),
+    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    session: AsyncSession = Depends(get_session),
+    limit: int = Query(3, ge=1, le=10),
+):
+    """
+    Ranked clients for «free slots next week» rhythm hint: pre-invite workflow in the hub.
+    Auth: trainer initData (same as /trainer/clients).
+    """
+    raw = init_data or x_telegram_init_data
+    if not raw:
+        raise HTTPException(status_code=401, detail="Missing init data")
+    telegram_id = _trainer_telegram_id(raw)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+    clients = await list_trainer_fill_slots_invite_candidates(session, trainer_id, limit=limit)
+    return {"clients": clients}
+
+
+class TrainerFillSlotsInviteSendBody(BaseModel):
+    client_ids: list[int] = Field(
+        ...,
+        min_length=1,
+        max_length=10,
+        description="Clients to notify via client bot (must be in trainer CRM and linked to Telegram).",
+    )
+
+
+@router.post("/trainer/hub/fill-slots-invites/send")
+async def post_trainer_hub_fill_slots_invites_send(
+    body: TrainerFillSlotsInviteSendBody,
+    init_data: str | None = Query(None),
+    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    session: AsyncSession = Depends(get_session),
+):
+    """
+    Trainer hub: send ranked-slot-invite pushes from the **client** bot with a «Записаться» WebApp button.
+    """
+    raw = init_data or x_telegram_init_data
+    if not raw:
+        raise HTTPException(status_code=401, detail="Missing init data")
+    telegram_id = _trainer_telegram_id(raw)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+    return await send_trainer_fill_slots_invites(session, trainer_id, body.client_ids)
 
 
 # --- Support: client/trainer send message; admin list and reply ---
@@ -3870,6 +3925,7 @@ async def get_trainer_booking_detail(
     b = await get_trainer_booking_detail_payload(session, booking_id, trainer_id)
     if not b:
         raise HTTPException(status_code=404, detail="Booking not found")
+    await enrich_booking_dicts_with_client_telegram_usernames(session, [b])
     flow_ok = booking_problem_api_allowed_for_trainer(trainer_id)
     detail = _serialize_booking(b, problem_flow_enabled=flow_ok)
     slot_date = b.get("slot_date")
