@@ -10,6 +10,64 @@
         try { tg.onEvent('themeChanged', window.__applyScheduleEditorTheme); } catch (e) { /* older clients */ }
       }
 
+      /** See trainer-home-main.js — same production cache issue; self-contained polyfill. */
+      (function ensureScheduleTelegramDmPolyfill() {
+        if (typeof window.openTelegramChatFromMiniApp === 'function') return;
+        window.openTelegramChatFromMiniApp = function (opts) {
+          opts = opts || {};
+          var un = String(opts.username || '').replace(/^@/, '').trim();
+          var tid = opts.telegramId;
+          var url;
+          if (un) url = 'https://t.me/' + encodeURIComponent(un);
+          else if (tid != null && tid !== '') url = 'tg://user?id=' + encodeURIComponent(String(tid));
+          else return false;
+          var w = window.Telegram && window.Telegram.WebApp;
+          if (w) {
+            if (typeof w.openTelegramLink === 'function') {
+              try {
+                w.openTelegramLink(url);
+                return true;
+              } catch (e1) { /* continue */ }
+            }
+            if (url.indexOf('https://t.me/') === 0 && typeof w.openLink === 'function') {
+              try {
+                w.openLink(url, { try_instant_view: false });
+                return true;
+              } catch (e2) {
+                try {
+                  w.openLink(url);
+                  return true;
+                } catch (e3) { /* continue */ }
+              }
+            }
+            if (url.indexOf('tg://') === 0 && typeof w.openLink === 'function') {
+              try {
+                w.openLink(url, { try_instant_view: false });
+                return true;
+              } catch (e4) { /* continue */ }
+            }
+          }
+          try {
+            var a = document.createElement('a');
+            a.href = url;
+            a.rel = 'noopener noreferrer';
+            a.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0;pointer-events:auto;';
+            a.target = url.indexOf('tg://') === 0 ? '_self' : '_blank';
+            (document.body || document.documentElement).appendChild(a);
+            a.click();
+            setTimeout(function () {
+              try {
+                if (a && a.parentNode) a.parentNode.removeChild(a);
+              } catch (x) { /* noop */ }
+            }, 0);
+          } catch (e5) { /* noop */ }
+          try {
+            window.location.href = url;
+          } catch (e6) { /* noop */ }
+          return true;
+        };
+      })();
+
       const DAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 
       const BD_ICONS = {
@@ -1335,7 +1393,7 @@
         var un = String(booking.client_telegram_username || '').replace(/^@/, '').trim();
         var tid = booking.client_telegram_id;
         if (!un && (tid == null || tid === '')) return;
-        if (window.openTelegramChatFromMiniApp) {
+        if (typeof window.openTelegramChatFromMiniApp === 'function') {
           window.openTelegramChatFromMiniApp({ username: un, telegramId: tid });
         }
       });

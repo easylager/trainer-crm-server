@@ -37,8 +37,8 @@
       window.__applyTrainerClientsTheme = applyTrainerClientsTheme;
     })();
   </script>
-  <link rel="preload" href="trainer-clients-main.js?v=20260434" as="script" />
-  <link rel="stylesheet" href="mini-app-trainer-clients.css?v=20260434" />
+  <link rel="preload" href="trainer-clients-main.js?v=20260435" as="script" />
+  <link rel="stylesheet" href="mini-app-trainer-clients.css?v=20260435" />
   <link rel="stylesheet" href="mini-app-trainer-nav.css?v=20260422" />
 </head>
 <body>
@@ -49,6 +49,13 @@
         <button type="button" class="btn-app-home" id="btnHome">Главная</button>
         <button type="button" class="btn-app-back" id="btnBack" data-skip-history-back="true" hidden>Назад</button>
       </div>
+    </div>
+  </div>
+  <div id="tcListFocusBanner" class="tc-list-focus-banner" hidden>
+    <div class="tc-list-focus-banner__title">Нужна привязка к боту</div>
+    <p class="tc-list-focus-banner__text"></p>
+    <div class="tc-list-focus-banner__actions">
+      <button type="button" class="btn btn-secondary" id="tcListFocusShowAll">Все клиенты</button>
     </div>
   </div>
   <div class="search-box">
@@ -163,7 +170,7 @@
   </div>
 
   <script src="mini-app-trainer-gate.js"></script>
-  <script defer src="trainer-clients-main.js?v=20260434"></script>
+  <script defer src="trainer-clients-main.js?v=20260435"></script>
   <script defer src="mini-app-trainer-home.js"></script>
 </body>
 </html>

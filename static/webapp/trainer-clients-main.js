@@ -60,6 +60,8 @@
         clientsListLoading: false,
         /** Cached GET /trainer/welcome-link/eligibility for invite link flow. */
         inviteWelcomeMeta: null,
+        /** Deep link ?focus=invite_bot — list only clients without telegram_id + banner (from hub rhythm hint). */
+        focusInviteBot: false,
       };
 
       function initReturnContextFromQuery() {
@@ -998,12 +1000,18 @@
 
       function applyFilter() {
         var q = (document.getElementById('searchInput').value || '').trim();
+        var pool = state.allClients;
+        if (state.focusInviteBot) {
+          pool = state.allClients.filter(function(c) {
+            return c.telegram_id == null || c.telegram_id === '';
+          });
+        }
         if (!q) {
-          state.filteredClients = state.allClients.slice();
+          state.filteredClients = pool.slice();
         } else {
           var qLower = q.toLowerCase();
           var digits = q.replace(/\\D/g, '');
-          state.filteredClients = state.allClients.filter(function(c) {
+          state.filteredClients = pool.filter(function(c) {
             var name = ((c.first_name || '') + ' ' + (c.last_name || '')).trim().toLowerCase();
             var phone = (c.phone || '').toLowerCase();
             var phoneDigits = (c.phone || '').replace(/\\D/g, '');
@@ -1013,6 +1021,94 @@
           });
         }
         renderList();
+      }
+
+      function hideInviteBotBanner() {
+        var b = document.getElementById('tcListFocusBanner');
+        if (b) b.hidden = true;
+      }
+
+      function pluralRuClients(n) {
+        var n10 = n % 10;
+        var n100 = n % 100;
+        if (n10 === 1 && n100 !== 11) return 'клиент';
+        if (n10 >= 2 && n10 <= 4 && (n100 < 10 || n100 >= 20)) return 'клиента';
+        return 'клиентов';
+      }
+
+      function showInviteBotBannerUi(count) {
+        var b = document.getElementById('tcListFocusBanner');
+        if (!b) return;
+        b.hidden = false;
+        var text = b.querySelector('.tc-list-focus-banner__text');
+        if (text) {
+          text.textContent =
+            'Показаны ' +
+            count +
+            ' ' +
+            pluralRuClients(count) +
+            ' без Telegram в боте. Откройте карточку и отправьте персональную ссылку — кнопка «Ссылка в клиентский бот (привязка профиля)».';
+        }
+      }
+
+      function wireInviteBotBannerActions() {
+        var btnAll = document.getElementById('tcListFocusShowAll');
+        if (btnAll && !btnAll.dataset.wiredInviteFocus) {
+          btnAll.dataset.wiredInviteFocus = '1';
+          btnAll.onclick = function() {
+            state.focusInviteBot = false;
+            hideInviteBotBanner();
+            var si = document.getElementById('searchInput');
+            if (si) si.value = '';
+            applyFilter();
+          };
+        }
+      }
+
+      function applyInviteBotFocusAfterLoad() {
+        var noTg = state.allClients.filter(function(c) {
+          return c.telegram_id == null || c.telegram_id === '';
+        });
+        if (!noTg.length) {
+          state.focusInviteBot = false;
+          hideInviteBotBanner();
+          state.filteredClients = state.allClients.slice();
+          renderList();
+          showTcToast('Все клиенты уже в боте.');
+          return;
+        }
+        showInviteBotBannerUi(noTg.length);
+        wireInviteBotBannerActions();
+        applyFilter();
+      }
+
+      function afterClientsLoaded() {
+        if (state.focusInviteBot) {
+          applyInviteBotFocusAfterLoad();
+        } else {
+          hideInviteBotBanner();
+          state.filteredClients = state.allClients.slice();
+          renderList();
+        }
+      }
+
+      function initListFocusFromQuery() {
+        try {
+          var p = new URLSearchParams(window.location.search || '');
+          if (p.get('client_id')) {
+            state.focusInviteBot = false;
+            return;
+          }
+          var f = (p.get('focus') || '').trim().toLowerCase();
+          state.focusInviteBot = f === 'invite_bot';
+          if (state.focusInviteBot) {
+            p.delete('focus');
+            var qs = p.toString();
+            history.replaceState({}, '', window.location.pathname + (qs ? '?' + qs : ''));
+          }
+        } catch (e) {
+          state.focusInviteBot = false;
+        }
       }
 
       function clientInitials(displayName) {
@@ -1102,7 +1198,20 @@
         }
         listEl.innerHTML = '';
         if (!state.filteredClients.length) {
-          listEl.innerHTML = '<div class=\"empty\"><div class=\"empty-inner\"><div class=\"empty-title\">Пока пусто</div>Пока нет клиентов с записями. Как только клиенты начнут записываться, они появятся здесь.</div></div>';
+          var qEmp = (document.getElementById('searchInput').value || '').trim();
+          if (qEmp && state.allClients.length > 0) {
+            var sub =
+              state.focusInviteBot
+                ? 'По запросу никого не нашли среди клиентов без привязки к боту. Измените поиск или нажмите «Все клиенты».'
+                : 'По запросу никого не нашли. Измените поиск или очистите поле.';
+            listEl.innerHTML =
+              '<div class="empty"><div class="empty-inner"><div class="empty-title">Никого не нашли</div>' +
+              sub +
+              '</div></div>';
+            return;
+          }
+          listEl.innerHTML =
+            '<div class="empty"><div class="empty-inner"><div class="empty-title">Пока пусто</div>Пока нет клиентов с записями. Как только клиенты начнут записываться, они появятся здесь.</div></div>';
           return;
         }
         var html = state.filteredClients.map(function(c) {
@@ -1112,11 +1221,19 @@
           var lastLabel = c.last_date
             ? ('Последнее занятие: ' + formatDate(c.last_date) + (c.last_start ? ' ' + formatTime(c.last_start) : ''))
             : 'Был(а) на занятии ранее';
+          var needsInvite = c.telegram_id == null || c.telegram_id === '';
+          var badge =
+            needsInvite
+              ? '<span class="client-badge client-badge--no-tg">Нет в боте</span>'
+              : '';
           return (
             '<button type=\"button\" class=\"client-card\" data-id=\"' + c.id + '\">' +
               '<div class=\"client-avatar\" aria-hidden=\"true\">' + escapeHtml(initials) + '</div>' +
               '<div class=\"client-main\">' +
-                '<div class=\"client-name\">' + escapeHtml(name) + '</div>' +
+                '<div class=\"client-name-row\">' +
+                  '<span class=\"client-name\">' + escapeHtml(name) + '</span>' +
+                  badge +
+                '</div>' +
                 '<div class=\"client-meta\">' + escapeHtml(phone) + '</div>' +
                 '<div class=\"client-meta\">' + escapeHtml(lastLabel) + '</div>' +
               '</div>' +
@@ -1837,7 +1954,11 @@
             if (!c || c.id == null) throw new Error('Нет данных клиента');
             state.allClients = state.allClients.filter(function(x) { return x.id !== c.id; });
             state.allClients.unshift(c);
-            state.filteredClients = state.allClients.slice();
+            if (state.focusInviteBot) {
+              applyFilter();
+            } else {
+              state.filteredClients = state.allClients.slice();
+            }
             renderList();
             openClientDetail(id);
           })
@@ -1848,8 +1969,12 @@
 
       function mergeFullClientList(data) {
         state.allClients = data.clients || [];
-        state.filteredClients = state.allClients.slice();
-        renderList();
+        if (state.focusInviteBot) {
+          applyInviteBotFocusAfterLoad();
+        } else {
+          state.filteredClients = state.allClients.slice();
+          renderList();
+        }
       }
 
       function loadClientsInternal() {
@@ -1868,10 +1993,9 @@
           })
           .then(function(data) {
             state.allClients = data.clients || [];
-            state.filteredClients = state.allClients.slice();
             state.clientsListLoading = false;
             setStateMessage('');
-            renderList();
+            afterClientsLoaded();
             tryOpenClientFromQuery();
           })
           .catch(function(err) {
@@ -1915,8 +2039,12 @@
                 } catch (e) {}
                 state.allClients = state.allClients.filter(function(x) { return x.id !== c.id; });
                 state.allClients.unshift(c);
-                state.filteredClients = state.allClients.slice();
                 state.clientsListLoading = false;
+                if (state.focusInviteBot) {
+                  applyFilter();
+                } else {
+                  state.filteredClients = state.allClients.slice();
+                }
                 renderList();
                 openClientDetail(idFromUrl);
                 setStateMessage('');
@@ -2127,6 +2255,7 @@
       }
 
       initReturnContextFromQuery();
+      initListFocusFromQuery();
       syncTrainerClientsHeaderBack();
       if (initData && window.TrainerMiniAppGate) {
         window.TrainerMiniAppGate.fetchAccess(initData)

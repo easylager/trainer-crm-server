@@ -11,6 +11,91 @@
           if (typeof tg.setBackgroundColor === 'function') tg.setBackgroundColor(bgHex);
         } catch (e) {}
       }
+
+      /**
+       * Production often caches an old mini-app-telegram-chrome.js without openTelegramChatFromMiniApp /
+       * wireHubSlotMessageButtons — «Написать» would do nothing (no server logs). Polyfill from the
+       * main bundle so new ?v= on trainer-home-main.js alone fixes the hub.
+       */
+      (function ensureTrainerTelegramDmHelpers() {
+        if (typeof window.openTelegramChatFromMiniApp !== 'function') {
+          window.openTelegramChatFromMiniApp = function (opts) {
+            opts = opts || {};
+            var un = String(opts.username || '').replace(/^@/, '').trim();
+            var tid = opts.telegramId;
+            var url;
+            if (un) url = 'https://t.me/' + encodeURIComponent(un);
+            else if (tid != null && tid !== '') url = 'tg://user?id=' + encodeURIComponent(String(tid));
+            else return false;
+            var w = window.Telegram && window.Telegram.WebApp;
+            if (w) {
+              if (typeof w.openTelegramLink === 'function') {
+                try {
+                  w.openTelegramLink(url);
+                  return true;
+                } catch (e1) { /* continue */ }
+              }
+              if (url.indexOf('https://t.me/') === 0 && typeof w.openLink === 'function') {
+                try {
+                  w.openLink(url, { try_instant_view: false });
+                  return true;
+                } catch (e2) {
+                  try {
+                    w.openLink(url);
+                    return true;
+                  } catch (e3) { /* continue */ }
+                }
+              }
+              if (url.indexOf('tg://') === 0 && typeof w.openLink === 'function') {
+                try {
+                  w.openLink(url, { try_instant_view: false });
+                  return true;
+                } catch (e4) { /* continue */ }
+              }
+            }
+            try {
+              var a = document.createElement('a');
+              a.href = url;
+              a.rel = 'noopener noreferrer';
+              a.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0;pointer-events:auto;';
+              a.target = url.indexOf('tg://') === 0 ? '_self' : '_blank';
+              (document.body || document.documentElement).appendChild(a);
+              a.click();
+              setTimeout(function () {
+                try {
+                  if (a && a.parentNode) a.parentNode.removeChild(a);
+                } catch (x) { /* noop */ }
+              }, 0);
+            } catch (e5) { /* noop */ }
+            try {
+              window.location.href = url;
+            } catch (e6) { /* noop */ }
+            return true;
+          };
+        }
+        if (typeof window.wireHubSlotMessageButtons !== 'function') {
+          window.wireHubSlotMessageButtons = function (root) {
+            if (!root || !root.querySelectorAll) return;
+            root.querySelectorAll('button.hub-slot-msg').forEach(function (btn) {
+              btn.addEventListener(
+                'click',
+                function (ev) {
+                  ev.preventDefault();
+                  ev.stopPropagation();
+                  if (typeof window.openTelegramChatFromMiniApp === 'function') {
+                    window.openTelegramChatFromMiniApp({
+                      username: btn.getAttribute('data-dm-un'),
+                      telegramId: btn.getAttribute('data-dm-tid'),
+                    });
+                  }
+                },
+                true
+              );
+            });
+          };
+        }
+      })();
+
       /**
        * Never cache initData at parse time — some Telegram WebViews fill it after the first tick.
        * Fall back to URL (in-app navigation may preserve init_data as query).
@@ -27,6 +112,31 @@
         var t = window.Telegram && window.Telegram.WebApp;
         var raw = (t && t.initData) || initDataFromUrl();
         return raw ? String(raw) : '';
+      }
+      /**
+       * Reply keyboard / some WebViews fill initData a tick after the first script run. Without this,
+       * the first quick-book API calls go unauthenticated and fail — user sees «Не удалось подготовить
+       * форму…», the second try works. Mirrors waitForInitThen in trainer-groups-main.js.
+       */
+      function waitForTrainerInitDataThen(callback) {
+        if (getInitData()) {
+          callback();
+          return;
+        }
+        var n = 0;
+        var maxTicks = 100;
+        var iv = setInterval(function() {
+          n++;
+          if (getInitData()) {
+            clearInterval(iv);
+            callback();
+            return;
+          }
+          if (n >= maxTicks) {
+            clearInterval(iv);
+            callback();
+          }
+        }, 50);
       }
       /** Set after GET /trainer/access when initData present (onboarding vs active). */
       var trainerAccessSnapshot = null;
@@ -596,8 +706,8 @@
               ' ' +
               pluralRu(openLoopNoTg, 'клиент', 'клиента', 'клиентов') +
               ' ещё не в боте — подключение по персональной ссылке из карточки.',
-            ctaLabel: 'Клиенты',
-            action: 'trainer_clients',
+            ctaLabel: 'Кого пригласить',
+            action: 'trainer_clients_invite_bot',
           });
         }
         if (
@@ -753,6 +863,12 @@
         if (cand.action === 'trainer_clients') {
           ensureTrainerSectionsAccess(function() {
             navigateTo('trainer-clients');
+          });
+          return;
+        }
+        if (cand.action === 'trainer_clients_invite_bot') {
+          ensureTrainerSectionsAccess(function() {
+            navigateTo('trainer-clients?focus=invite_bot');
           });
           return;
         }
@@ -1685,7 +1801,7 @@
       }
 
       function openTelegramDmMiniApp(username, telegramId) {
-        if (window.openTelegramChatFromMiniApp) {
+        if (typeof window.openTelegramChatFromMiniApp === 'function') {
           return window.openTelegramChatFromMiniApp({
             username: username,
             telegramId: telegramId,
@@ -2694,42 +2810,75 @@
           duration_minutes: durationMinutes,
         };
         hubBookSlotWhenLabel = slotDate + ' ' + startTime;
-        Promise.all([
-          fetch(apiUrlWithQuery('/trainer/my-services'), { headers: headersJson() }).then(function(r) {
-            return r.ok ? r.json() : Promise.reject(new Error('services'));
-          }),
-          fetch(apiUrlWithQuery('/trainer/clients'), { headers: headersJson() }).then(function(r) {
-            return r.json();
-          }),
-        ])
-          .then(function(results) {
-            setHubBookChoiceQuickLoading(false);
-            var servicePayload = results[0] || {};
-            var clientsPayload = results[1] || {};
-            hubBookQuickServices = servicePayload.services || [];
-            if (!hubBookQuickServices.length) {
-              hubApplyTrainerHasClientsFromPayload(clientsPayload);
-              setHubBookOptExistingVisible(false);
-              closeHubBookGroupModals();
-              resetHubBookSlotState();
-              hubToast('Добавьте услугу в профиле, чтобы записывать клиентов.');
-              return;
-            }
-            hubBookServiceId = hubBookQuickServices[0].id;
-            fillHubBookServiceSelect(hubBookQuickServices);
-            setHubBookServiceVisibility(true);
-            syncHubBookPriceTierRadios();
-            var hasClients = hubApplyTrainerHasClientsFromPayload(clientsPayload);
-            setHubBookOptExistingVisible(hasClients);
-          })
-          .catch(function() {
+
+        function failHubQuickBookPrepare() {
+          setHubBookChoiceQuickLoading(false);
+          hubTrainerHasClientsCache = null;
+          setHubBookOptExistingVisible(false);
+          closeHubBookGroupModals();
+          resetHubBookSlotState();
+          hubToast('Не удалось подготовить форму записи. Повторите попытку.');
+        }
+
+        function runHubQuickBookPrepare(isFirstAttempt) {
+          Promise.all([
+            fetch(apiUrlWithQuery('/trainer/my-services'), { headers: headersJson(), cache: 'no-store' }).then(
+              function(r) {
+                return r.ok ? r.json() : Promise.reject(new Error('services'));
+              }
+            ),
+            fetch(apiUrlWithQuery('/trainer/clients'), { headers: headersJson(), cache: 'no-store' }).then(
+              function(r) {
+                return r.json().then(function(j) {
+                  if (!r.ok) return Promise.reject(new Error('clients'));
+                  return j;
+                });
+              }
+            ),
+          ])
+            .then(function(results) {
+              setHubBookChoiceQuickLoading(false);
+              var servicePayload = results[0] || {};
+              var clientsPayload = results[1] || {};
+              hubBookQuickServices = servicePayload.services || [];
+              if (!hubBookQuickServices.length) {
+                hubApplyTrainerHasClientsFromPayload(clientsPayload);
+                setHubBookOptExistingVisible(false);
+                closeHubBookGroupModals();
+                resetHubBookSlotState();
+                hubToast('Добавьте услугу в профиле, чтобы записывать клиентов.');
+                return;
+              }
+              hubBookServiceId = hubBookQuickServices[0].id;
+              fillHubBookServiceSelect(hubBookQuickServices);
+              setHubBookServiceVisibility(true);
+              syncHubBookPriceTierRadios();
+              var hasClients = hubApplyTrainerHasClientsFromPayload(clientsPayload);
+              setHubBookOptExistingVisible(hasClients);
+            })
+            .catch(function() {
+              if (isFirstAttempt && getInitData()) {
+                setTimeout(function() {
+                  runHubQuickBookPrepare(false);
+                }, 450);
+                return;
+              }
+              failHubQuickBookPrepare();
+            });
+        }
+
+        waitForTrainerInitDataThen(function() {
+          if (!getInitData()) {
             setHubBookChoiceQuickLoading(false);
             hubTrainerHasClientsCache = null;
             setHubBookOptExistingVisible(false);
             closeHubBookGroupModals();
             resetHubBookSlotState();
-            hubToast('Не удалось подготовить форму записи. Повторите попытку.');
-          });
+            hubToast('Сессия ещё подключается. Подождите секунду и откройте запись снова.');
+            return;
+          }
+          runHubQuickBookPrepare(true);
+        });
       }
 
       function loadHubBookClients(q) {

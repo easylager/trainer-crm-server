@@ -63,6 +63,54 @@
       border-color: rgba(245, 166, 35, 0.45);
       box-shadow: 0 0 0 3px rgba(245, 166, 35, 0.18);
     }
+    /* Hub rhythm deep link: ?focus=invite_bot — who still needs Telegram bind */
+    .tc-list-focus-banner {
+      margin: 0 0 12px;
+      padding: 12px 14px;
+      border-radius: 14px;
+      border: 1px solid rgba(245, 166, 35, 0.22);
+      background: color-mix(in srgb, var(--tg-theme-secondary-bg-color) 88%, transparent);
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
+    }
+    .tc-list-focus-banner__title {
+      font-size: 15px;
+      font-weight: 700;
+      margin: 0 0 8px;
+      color: var(--tg-theme-text-color);
+      font-family: var(--app-font-sans);
+      letter-spacing: -0.02em;
+    }
+    .tc-list-focus-banner__text {
+      font-size: 13px;
+      line-height: 1.45;
+      margin: 0 0 10px;
+      color: var(--tg-theme-hint-color);
+    }
+    .tc-list-focus-banner__actions .btn {
+      font-size: 13px;
+      padding: 10px 14px;
+    }
+    .client-name-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+    .client-name-row .client-name {
+      flex: 1;
+      min-width: 0;
+    }
+    .client-badge--no-tg {
+      flex-shrink: 0;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 999px;
+      font-family: var(--app-font-sans);
+      letter-spacing: 0.01em;
+      background: rgba(245, 166, 35, 0.22);
+      color: var(--tg-theme-text-color);
+    }
     .section-title {
       font-size: 13px;
       font-weight: 600;
