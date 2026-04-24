@@ -226,7 +226,7 @@ async def test_request_batch_marks_sent_only_after_telegram_ok(db_session) -> No
 
 
 @pytest.mark.asyncio
-async def test_completed_feedback_marks_sent_only_after_telegram_ok(db_session) -> None:
+async def test_completed_feedback_marks_sent_only_after_telegram_ok(db_session, monkeypatch) -> None:
     yesterday = date.today() - timedelta(days=1)
     trainer_id, slot_id, service_id = await _create_trainer_and_slot(
         db_session, yesterday, time(10, 0), time(11, 0), status="available"
@@ -256,6 +256,12 @@ async def test_completed_feedback_marks_sent_only_after_telegram_ok(db_session) 
         {"tid": tr_telegram, "id": trainer_id},
     )
     await db_session.commit()
+
+    # Time-independent test: completed-feedback loop also checks trainer push window.
+    monkeypatch.setattr(
+        "src.bot.notification_loops.is_trainer_push_allowed_now",
+        AsyncMock(return_value=True),
+    )
 
     bot = MagicMock()
     bot.send_message = AsyncMock(side_effect=RuntimeError("fail"))
@@ -320,7 +326,7 @@ async def test_completed_feedback_row_when_client_has_no_telegram(db_session) ->
 
 
 @pytest.mark.asyncio
-async def test_booking_complete_round_sets_client_push_timestamp_after_send(db_session) -> None:
+async def test_booking_complete_round_sets_client_push_timestamp_after_send(db_session, monkeypatch) -> None:
     yesterday = date.today() - timedelta(days=1)
     trainer_id, slot_id, service_id = await _create_trainer_and_slot(
         db_session, yesterday, time(10, 0), time(11, 0), status="available"
@@ -344,6 +350,13 @@ async def test_booking_complete_round_sets_client_push_timestamp_after_send(db_s
         {"id": booking_id},
     )
     await db_session.commit()
+
+    # Time-independent test: completion loop is gated by global quiet hours.
+    monkeypatch.setattr("src.bot.notification_loops.is_within_notification_hours", lambda: True)
+    monkeypatch.setattr(
+        "src.bot.notification_loops.is_trainer_push_allowed_now",
+        AsyncMock(return_value=True),
+    )
 
     client_bot = MagicMock()
     client_bot.send_message = AsyncMock(return_value=None)
