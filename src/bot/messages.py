@@ -550,29 +550,30 @@ def build_client_booking_confirmed_inline_keyboard(
     booking_id: int | None = None,
     webapp_base_url: str | None = None,
 ):
-    """Details (Mini App) + write trainer; second row: map when URL known."""
+    """Details (Mini App) and write trainer each on their own row (avoids Telegram truncating side-by-side labels); then map when URL known."""
     from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 
     base = (webapp_base_url or "").rstrip("/")
     web_ok = base.lower().startswith("https://")
     rows: list[list[InlineKeyboardButton]] = []
-    primary: list[InlineKeyboardButton] = []
     if web_ok and booking_id is not None:
-        primary.append(
-            InlineKeyboardButton(
-                text=CLIENT_BOOKING_CONFIRMED_BTN_DETAILS,
-                web_app=WebAppInfo(url=f"{base}/webapp/client-bookings?open_booking={int(booking_id)}"),
-            )
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=CLIENT_BOOKING_CONFIRMED_BTN_DETAILS,
+                    web_app=WebAppInfo(url=f"{base}/webapp/client-bookings?open_booking={int(booking_id)}"),
+                )
+            ]
         )
     if trainer_telegram_id:
-        primary.append(
-            InlineKeyboardButton(
-                text=CLIENT_BOOKING_CONFIRMED_BTN_WRITE_TRAINER,
-                url=f"tg://user?id={trainer_telegram_id}",
-            )
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=CLIENT_BOOKING_CONFIRMED_BTN_WRITE_TRAINER,
+                    url=f"tg://user?id={trainer_telegram_id}",
+                )
+            ]
         )
-    if primary:
-        rows.append(primary)
     if map_url:
         rows.append(
             [InlineKeyboardButton(text=CLIENT_BOOKING_CONFIRMED_BTN_MAP, url=map_url)]
@@ -670,8 +671,9 @@ def build_client_fill_slots_invite_keyboard(
     webapp_base_url: str | None,
     trainer_id: int,
     online_booking: bool,
+    slot_id: int | None = None,
 ):
-    """WebApp entry: direct book flow when online tier; otherwise catalog pinned to trainer."""
+    """WebApp entry: direct book flow when online tier; otherwise catalog pinned to trainer. Optional slot_id opens book on that window."""
     from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 
     base = (webapp_base_url or "").rstrip("/")
@@ -680,6 +682,8 @@ def build_client_fill_slots_invite_keyboard(
     tid = int(trainer_id)
     if online_booking:
         url = f"{base}/webapp/book?trainer_id={tid}"
+        if slot_id is not None:
+            url += f"&slot_id={int(slot_id)}"
     else:
         url = f"{base}/webapp/catalog?trainer_id={tid}"
     return InlineKeyboardMarkup(
@@ -692,6 +696,110 @@ def build_client_fill_slots_invite_keyboard(
             ]
         ]
     )
+
+
+def format_client_fill_slots_invite_freed_slot_html(
+    *,
+    client_first_name: str | None,
+    trainer_display_name: str,
+    variant_index: int,
+    date_ddmm: str,
+    weekday_short: str,
+    time_range: str,
+    service_name: str | None = None,
+    arena_name: str | None = None,
+) -> str:
+    """Client push when trainer nudges about one concrete freed slot (hub or cancel follow-up)."""
+    cn = (client_first_name or "").strip()
+    tn = html.escape((trainer_display_name or "").strip() or "Тренер")
+    greet = f"👋 {html.escape(cn)}, привет!\n\n" if cn else ""
+    ds = html.escape(date_ddmm)
+    dw = html.escape(weekday_short)
+    tr = html.escape(time_range)
+    when = f"{ds} ({dw}) · {tr}"
+    sn = (service_name or "").strip()
+    an = (arena_name or "").strip()
+    lines_scope: list[str] = []
+    if sn and an:
+        lines_scope.append(
+            f"🎯 <b>{html.escape(sn)}</b> · 📍 <b>{html.escape(an)}</b>"
+        )
+    elif sn:
+        lines_scope.append(f"🎯 <b>{html.escape(sn)}</b>")
+    elif an:
+        lines_scope.append(f"📍 <b>{html.escape(an)}</b>")
+    scope_block = ("\n" + "\n".join(lines_scope)) if lines_scope else ""
+    if sn and an:
+        fit_line = (
+            "Если вам удобно прийти <b>в это время</b> на эту <b>услугу</b> и <b>площадку</b> — нажмите "
+            "<b>Записаться</b> ниже. Форма откроется сразу на это окно (пока оно свободно)."
+        )
+    elif sn:
+        fit_line = (
+            "Если вам подходят <b>время</b> и <b>услуга</b> — нажмите <b>Записаться</b> ниже. "
+            "Площадка будет указана в форме записи."
+        )
+    elif an:
+        fit_line = (
+            "Если вам подходят <b>время</b> и <b>площадка</b> — нажмите <b>Записаться</b> ниже. "
+            "Услуга будет указана в форме записи."
+        )
+    else:
+        fit_line = (
+            "Если вам удобно прийти в это время — нажмите <b>Записаться</b> ниже. "
+            "В форме будет услуга и площадка, как у тренера в расписании."
+        )
+    foot = f"\n\n{fit_line}"
+    bodies = [
+        (
+            f"{greet}<b>{tn}</b> сообщает: освободилось окно <b>{when}</b>.{scope_block}{foot}"
+        ),
+        (
+            f"{greet}Свободно окно <b>{when}</b> у <b>{tn}</b>.{scope_block}{foot}"
+        ),
+    ]
+    return bodies[int(variant_index) % len(bodies)]
+
+
+def build_trainer_client_cancel_notification_keyboard(
+    *,
+    webapp_base_url: str | None,
+    slot_id: int,
+    exclude_client_id: int,
+    client_telegram_id: int | None,
+):
+    """
+    After client self-cancel: offer mass invite (Mini App) + direct DM to the client.
+    """
+    from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
+
+    base = (webapp_base_url or "").rstrip("/")
+    rows: list = []
+    if base.lower().startswith("https://"):
+        q = (
+            f"open_fill_slots=1&fill_slot_id={int(slot_id)}"
+            f"&fill_exclude_client_id={int(exclude_client_id)}"
+        )
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=TRAINER_BUTTON_OFFER_FREED_SLOT_TO_CLIENTS,
+                    web_app=WebAppInfo(url=f"{base}/webapp/trainer-home?{q}"),
+                )
+            ]
+        )
+    if client_telegram_id:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=TRAINER_BUTTON_CANCEL_CLIENT_WRITE,
+                    url=f"tg://user?id={int(client_telegram_id)}",
+                )
+            ]
+        )
+    if not rows:
+        return None
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 CLIENT_BOOKING_CONFIRMED_FIRST_FOR_TRAINER_BLOCK = (
@@ -1920,21 +2028,28 @@ TRAINER_BOOKINGS_BUTTON_WRITE_SLOT = "✉️ Написать клиенту —
 TRAINER_BOOKINGS_BUTTON_CANCEL = "❌ Отменить запись"
 TRAINER_BOOKINGS_BUTTON_CONFIRM = "✅ Подтвердить"
 # Client cancelled their booking (sent to trainer immediately)
+TRAINER_BOOKING_CANCELLED_CATALOG_LINE = (
+    "🌐 <b>Онлайн-запись:</b> это окно снова в каталоге — его могут взять другие клиенты. "
+    "Чтобы пригласить своих, нажмите кнопку ниже."
+)
 TRAINER_BOOKING_CANCELLED_BY_CLIENT = (
     "🗑️ <b>Запись отменена клиентом</b>\n\n"
     "👤 <b>Клиент:</b> {client_name}\n"
     "📅 <b>Было:</b> {date} ({day}) · {time}\n"
     "💬 <b>Причина:</b> {reason}\n\n"
-    "Предложите другое время или свяжитесь с клиентом — кнопки ниже."
+    f"{TRAINER_BOOKING_CANCELLED_CATALOG_LINE}\n\n"
+    "Связаться с клиентом или открыть рассылку — кнопки ниже."
 )
 TRAINER_BOOKING_CANCELLED_BY_CLIENT_NO_REASON = (
     "🗑️ <b>Запись отменена клиентом</b>\n\n"
     "👤 <b>Клиент:</b> {client_name}\n"
     "📅 <b>Было:</b> {date} ({day}) · {time}\n\n"
-    "Предложите альтернативу или напишите клиенту — кнопки ниже."
+    f"{TRAINER_BOOKING_CANCELLED_CATALOG_LINE}\n\n"
+    "Связаться с клиентом или открыть рассылку — кнопки ниже."
 )
 TRAINER_BUTTON_CANCEL_CLIENT_WRITE = "💬 Написать клиенту"
 TRAINER_BUTTON_CANCEL_CLIENT_SCHEDULE = "📅 Расписание и слоты"
+TRAINER_BUTTON_OFFER_FREED_SLOT_TO_CLIENTS = "📣 Предложить это окно своим"
 TRAINER_BUTTON_SUPPORT_GO_SUBSCRIPTION = "Перейти в «Подписку»"
 TRAINER_BOOKINGS_BUTTON_DECLINE = "❌ Отклонить"
 TRAINER_BOOKINGS_BUTTON_MAKE_REGULAR = "📅 Сделать постоянным клиентом"

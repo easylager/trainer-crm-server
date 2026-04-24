@@ -180,6 +180,8 @@
       /** Last JSON from GET /trainer/subscription/status — used if sessionStorage was cleared (Telegram WebView) but URL has hub_celebrate=1. */
       var hubLastSubscriptionStatus = null;
 
+      /** When opening fill-slots from client-cancel deep link: target slot + exclude former booker. */
+      var hubFillSlotsInviteContext = { slotId: null, excludeClientId: null };
       /** Last GET /trainer/onboarding/checklist payload — drives hero + empty list copy (avoid slots CTA before profile/active). */
       var hubOnboardingData = null;
       /** Last bookings payload from /trainer/bookings — used to refresh empty-state HTML after onboarding loads. */
@@ -715,12 +717,28 @@
               action: 'schedule',
             });
           } else if (fillSlotsCandidates > 0) {
+            /* noNextBase used «все без записи»; список «Напомнить» = только с telegram_id (fill_slots). */
+            var remindN = fillSlotsCandidates;
+            var extraNoTg = Math.max(0, openLoopNoUpcoming - remindN);
+            var noNextRemind =
+              remindN +
+              ' ' +
+              pluralRu(remindN, 'ученик', 'ученика', 'учеников') +
+              ' пока без следующей записи' +
+              (extraNoTg > 0
+                ? ' · ещё ' +
+                  extraNoTg +
+                  ' ' +
+                  pluralRu(extraNoTg, 'клиент', 'клиента', 'клиентов') +
+                  ' в базе ' +
+                  pluralRu(extraNoTg, 'не подключён', 'не подключены', 'не подключены') +
+                  ' к боту — в списке «Напомнить» только подключённые'
+                : '') +
+              '.';
             out.push({
               id: 'open_loop_no_next',
               priority: 97,
-              text:
-                noNextBase +
-                ' — напомните в клиентском боте тех, кто уже подключён: откроется список с кнопкой «Записаться».',
+              text: noNextRemind,
               ctaLabel: 'Напомнить',
               action: 'fill_slots_invites',
             });
@@ -937,7 +955,7 @@
           return;
         }
         if (cand.action === 'fill_slots_invites') {
-          openHubFillSlotsInvitesFlow();
+          openHubFillSlotsInvitesFlow(null, null);
           return;
         }
         if (cand.action === 'profile_catalog') {
@@ -3825,6 +3843,13 @@
       function closeHubFillSlotsInvitesModal() {
         var overlay = document.getElementById('hubModalFillSlotsInvites');
         if (!overlay) return;
+        hubFillSlotsInviteContext.slotId = null;
+        hubFillSlotsInviteContext.excludeClientId = null;
+        var lead = document.querySelector('.hub-fill-slots-invites-lead');
+        if (lead) {
+          lead.innerHTML =
+            'Отметьте клиентов — им придёт сообщение в <b>клиентском боте</b> от вашего имени с кнопкой «Записаться».';
+        }
         overlay.style.display = 'none';
         overlay.setAttribute('aria-hidden', 'true');
       }
@@ -3843,37 +3868,37 @@
         btn.disabled = n === 0 || btn.dataset.sending === '1';
       }
 
-      function renderHubFillSlotsInvitesModalBody(clients) {
+      function renderHubFillSlotsInvitesModalBody(clients, slotInfo) {
         var host = document.getElementById('hubFillSlotsInvitesHost');
         if (!host) return;
         host.innerHTML = '';
+        if (slotInfo && slotInfo.label) {
+          var slotNote = document.createElement('p');
+          slotNote.className = 'hub-fill-slots-slot-note';
+          slotNote.style.marginBottom = '12px';
+          slotNote.style.fontSize = '14px';
+          slotNote.style.color = 'var(--tg-theme-hint-color, #666)';
+          slotNote.textContent = 'Сообщение будет про освободившееся окно: ' + String(slotInfo.label);
+          host.appendChild(slotNote);
+        }
         if (!clients.length) {
+          var emptyWrap = document.createElement('div');
+          emptyWrap.className = 'hub-fill-slots-empty-state';
           var p = document.createElement('p');
           p.className = 'hub-fill-slots-empty';
           p.textContent =
             'Нет клиентов с привязанным Telegram — напоминание через бот недоступно. Подключите клиентов в разделе «Клиенты» или добавьте новых.';
-          host.appendChild(p);
-          var actions = document.createElement('div');
-          actions.className = 'modal-actions';
-          var b1 = document.createElement('button');
-          b1.type = 'button';
-          b1.className = 'btn-block btn-primary';
-          b1.textContent = 'Клиенты';
-          b1.onclick = function() {
+          emptyWrap.appendChild(p);
+          var cta = document.createElement('button');
+          cta.type = 'button';
+          cta.className = 'btn-block btn-primary hub-fill-slots-empty-cta';
+          cta.textContent = 'Открыть раздел «Клиенты»';
+          cta.onclick = function() {
             closeHubFillSlotsInvitesModal();
             navigateTo('trainer-clients');
           };
-          var b2 = document.createElement('button');
-          b2.type = 'button';
-          b2.className = 'btn-block btn-secondary';
-          b2.textContent = 'Расписание';
-          b2.onclick = function() {
-            closeHubFillSlotsInvitesModal();
-            navigateTo('schedule-editor');
-          };
-          actions.appendChild(b1);
-          actions.appendChild(b2);
-          host.appendChild(actions);
+          emptyWrap.appendChild(cta);
+          host.appendChild(emptyWrap);
           return;
         }
         for (var idx = 0; idx < clients.length; idx++) {
@@ -3909,7 +3934,7 @@
         sendBtn.id = 'hubFillSlotsInvitesSend';
         sendBtn.className = 'btn-block btn-primary';
         sendBtn.textContent = 'Отправить';
-        sendBtn.onclick = function() {
+          sendBtn.onclick = function() {
           var ids = [];
           host.querySelectorAll('input.hub-fill-slots-pick:checked').forEach(function(el) {
             var id = parseInt(String(el.value || ''), 10);
@@ -3922,10 +3947,17 @@
           sendBtn.dataset.sending = '1';
           sendBtn.disabled = true;
           sendBtn.textContent = 'Отправляем…';
+          var payload = { client_ids: ids };
+          if (hubFillSlotsInviteContext.slotId) {
+            payload.slot_id = hubFillSlotsInviteContext.slotId;
+          }
+          if (hubFillSlotsInviteContext.excludeClientId) {
+            payload.exclude_client_id = hubFillSlotsInviteContext.excludeClientId;
+          }
           fetch(apiUrlWithQuery('/trainer/hub/fill-slots-invites/send'), {
             method: 'POST',
             headers: headersJson(),
-            body: JSON.stringify({ client_ids: ids }),
+            body: JSON.stringify(payload),
           })
             .then(function(r) {
               return r.json().then(function(data) {
@@ -3967,7 +3999,27 @@
         hubFillSlotsUpdateSendButtonLabel();
       }
 
-      function openHubFillSlotsInvitesFlow() {
+      function openHubFillSlotsInvitesFlow(slotIdOpt, excludeClientIdOpt) {
+        hubFillSlotsInviteContext.slotId =
+          slotIdOpt != null && !isNaN(parseInt(String(slotIdOpt), 10)) && parseInt(String(slotIdOpt), 10) > 0
+            ? parseInt(String(slotIdOpt), 10)
+            : null;
+        hubFillSlotsInviteContext.excludeClientId =
+          excludeClientIdOpt != null &&
+          !isNaN(parseInt(String(excludeClientIdOpt), 10)) &&
+          parseInt(String(excludeClientIdOpt), 10) > 0
+            ? parseInt(String(excludeClientIdOpt), 10)
+            : null;
+        var lead = document.querySelector('.hub-fill-slots-invites-lead');
+        if (lead) {
+          if (hubFillSlotsInviteContext.slotId) {
+            lead.innerHTML =
+              'Отметьте клиентов — им придёт предложение в <b>клиентском боте</b> про <b>конкретное окно</b> (дата и время) с кнопкой «Записаться» на него.';
+          } else {
+            lead.innerHTML =
+              'Отметьте клиентов — им придёт сообщение в <b>клиентском боте</b> от вашего имени с кнопкой «Записаться».';
+          }
+        }
         ensureTrainerSectionsAccess(function() {
           var overlay = document.getElementById('hubModalFillSlotsInvites');
           var host = document.getElementById('hubFillSlotsInvitesHost');
@@ -3980,7 +4032,17 @@
           overlay.style.display = 'flex';
           overlay.setAttribute('aria-hidden', 'false');
 
-          fetch(apiUrlWithQuery('/trainer/hub/fill-slots-invites'), { headers: headersJson() })
+          var path = '/trainer/hub/fill-slots-invites';
+          var q = [];
+          if (hubFillSlotsInviteContext.slotId) {
+            q.push('slot_id=' + encodeURIComponent(String(hubFillSlotsInviteContext.slotId)));
+          }
+          if (hubFillSlotsInviteContext.excludeClientId) {
+            q.push('exclude_client_id=' + encodeURIComponent(String(hubFillSlotsInviteContext.excludeClientId)));
+          }
+          if (q.length) path += '?' + q.join('&');
+
+          fetch(apiUrlWithQuery(path), { headers: headersJson() })
             .then(function(r) {
               return r.json().then(function(data) {
                 return { ok: r.ok, data: data, status: r.status };
@@ -3993,16 +4055,55 @@
                   typeof det === 'string' ? det : 'Не удалось загрузить подсказки (' + o.status + ').'
                 );
               }
-              return (o.data && o.data.clients) || [];
+              return o.data || {};
             })
-            .then(function(clients) {
-              renderHubFillSlotsInvitesModalBody(clients);
+            .then(function(data) {
+              var clients = (data && data.clients) || [];
+              var slot = data && data.slot ? data.slot : null;
+              renderHubFillSlotsInvitesModalBody(clients, slot);
             })
             .catch(function(err) {
               hubToast((err && err.message) || 'Не удалось загрузить подсказки.');
               closeHubFillSlotsInvitesModal();
             });
         });
+      }
+
+      function stripHubFillSlotsQueryFromUrl() {
+        try {
+          var params = new URLSearchParams(window.location.search || '');
+          if (params.get('open_fill_slots') !== '1') return;
+          params.delete('open_fill_slots');
+          params.delete('fill_slot_id');
+          params.delete('fill_exclude_client_id');
+          var ns = params.toString();
+          var clean = window.location.pathname + (ns ? '?' + ns : '') + (window.location.hash || '');
+          window.history.replaceState({}, '', clean);
+        } catch (e) {
+          /* */
+        }
+      }
+
+      function tryOpenHubFillSlotsFromUrl() {
+        try {
+          var params = new URLSearchParams(window.location.search || '');
+          if (params.get('open_fill_slots') !== '1') return;
+          var sid = params.get('fill_slot_id');
+          var ex = params.get('fill_exclude_client_id');
+          var slotId = sid ? parseInt(sid, 10) : NaN;
+          var exId = ex ? parseInt(ex, 10) : NaN;
+          stripHubFillSlotsQueryFromUrl();
+          if (!isNaN(slotId) && slotId > 0) {
+            openHubFillSlotsInvitesFlow(
+              slotId,
+              !isNaN(exId) && exId > 0 ? exId : null
+            );
+          } else {
+            openHubFillSlotsInvitesFlow(null, null);
+          }
+        } catch (e) {
+          /* */
+        }
       }
 
       function wireHubFillSlotsInvitesModal() {
@@ -4677,6 +4778,9 @@
         if (!bs || !bs.onboarding_checklist) {
           loadOnboardingChecklist();
         }
+        setTimeout(function() {
+          tryOpenHubFillSlotsFromUrl();
+        }, 400);
       }
 
       var hubTrainerMainBootstrapDone = false;

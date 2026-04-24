@@ -1704,6 +1704,64 @@ async def list_trainer_fill_slots_invite_candidates(
     return out
 
 
+async def get_trainer_slot_for_mass_client_invite(
+    session: AsyncSession, trainer_id: int, slot_id: int
+) -> dict | None:
+    """
+    Slot must belong to trainer, not cancelled, end in the future, and have at least one free seat
+    (for mass «запишитесь на это окно» client pushes).
+    """
+    tid = int(trainer_id)
+    sid = int(slot_id)
+    r = await session.execute(
+        text(
+            """
+            SELECT s.id, s.slot_date, s.start_time, s.end_time, s.capacity, s.status,
+                   NULLIF(TRIM(sv.name), '') AS service_name,
+                   NULLIF(TRIM(ar.name), '') AS arena_name,
+                   (
+                       SELECT COUNT(*)::int FROM bookings b
+                       WHERE b.slot_id = s.id AND b.status IN ('pending', 'confirmed')
+                   ) AS occ
+            FROM slots s
+            LEFT JOIN services sv ON sv.id = s.service_id
+            LEFT JOIN arenas ar ON ar.id = s.arena_id
+            WHERE s.id = :sid AND s.trainer_id = :tid
+            """
+        ),
+        {"sid": sid, "tid": tid},
+    )
+    row = r.fetchone()
+    if not row:
+        return None
+    status = (row[5] or "").strip().lower()
+    if status == "cancelled":
+        return None
+    cap = max(1, int(row[4] or 1))
+    occ = int(row[8] or 0)
+    if occ >= cap:
+        return None
+    slot_date = row[1]
+    end_t = row[3]
+    if slot_date is None or end_t is None:
+        return None
+    if is_slot_end_in_past_local(slot_date, end_t):
+        return None
+    svc = row[6]
+    arn = row[7]
+    return {
+        "id": sid,
+        "trainer_id": tid,
+        "slot_date": slot_date,
+        "start_time": row[2],
+        "end_time": end_t,
+        "capacity": cap,
+        "occupancy": occ,
+        "service_name": (str(svc).strip() if svc is not None else None) or None,
+        "arena_name": (str(arn).strip() if arn is not None else None) or None,
+    }
+
+
 async def count_trainer_fill_slots_invite_candidates(session: AsyncSession, trainer_id: int) -> int:
     """Count clients matching ``list_trainer_fill_slots_invite_candidates`` (telegram + no upcoming)."""
     r = await session.execute(
@@ -2311,6 +2369,8 @@ async def cancel_booking_by_client(
     invalidate_slots_for_trainer(trainer_id_cache)
     return {
         "trainer_telegram_id": trainer_telegram_id,
+        "trainer_id": int(trainer_id_cache),
+        "slot_id": int(slot_id_cancel),
         "slot_date": slot_date,
         "start_time": start_time,
         "client_name": client_name,

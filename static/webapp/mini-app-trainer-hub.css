@@ -1054,6 +1054,27 @@
       line-height: 1.45;
       color: var(--tg-theme-hint-color);
     }
+    /* Пустой список: одна CTA, без дублирования «Расписание» (оно в футере модалки). */
+    .hub-fill-slots-empty-state {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      padding: 16px 14px 14px;
+      border-radius: 16px;
+      background: var(--tg-theme-secondary-bg-color);
+      box-shadow: inset 0 0 0 1px rgba(247, 166, 0, 0.1);
+    }
+    .hub-fill-slots-empty-state .hub-fill-slots-empty {
+      margin: 0;
+    }
+    .hub-fill-slots-empty-cta {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 12px 16px;
+      font-size: 15px;
+      font-weight: 600;
+      border-radius: 14px;
+    }
     .hub-fill-slots-card {
       padding: 14px 14px 12px;
       border-radius: 16px;

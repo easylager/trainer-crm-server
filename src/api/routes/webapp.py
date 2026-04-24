@@ -73,6 +73,7 @@ from src.application.booking_use_cases import (
     list_trainer_client_history,
     resolve_arena_for_client_self_booking,
     get_trainer_primary_arena_resolved,
+    get_trainer_slot_for_mass_client_invite,
 )
 from src.application.client_username_enrich import enrich_booking_dicts_with_client_telegram_usernames
 from src.application.client_use_cases import (
@@ -1505,8 +1506,15 @@ async def get_client_hub_bootstrap(
         async with async_session_factory() as s:
             return await _client_requests_list_payload(s, telegram_id)
 
-    bookings, requests = await asyncio.gather(_bookings(), _requests())
-    return {"bookings": bookings, "requests": requests}
+    async def _hub_session() -> dict[str, Any]:
+        """Catalog/bot: selected_trainer_id drives client-home empty-state CTA («Мой тренер» vs «Найти тренера»)."""
+        async with async_session_factory() as s:
+            row = await read_client_bot_session(telegram_id, s)
+            tid = (row or {}).get("selected_trainer_id")
+            return {"selected_trainer_id": int(tid) if tid is not None else None}
+
+    bookings, requests, client_session = await asyncio.gather(_bookings(), _requests(), _hub_session())
+    return {"bookings": bookings, "requests": requests, "client_session": client_session}
 
 
 @router.get("/client/passes")
@@ -1633,7 +1641,23 @@ async def post_client_booking_cancel(
             default=DefaultBotProperties(parse_mode=ParseMode.HTML),
         )
         try:
-            await trainer_bot.send_message(chat_id=trainer_tid, text=text)
+            reply_markup = None
+            ex_cid = payload.get("client_id")
+            slot_id_raw = payload.get("slot_id")
+            c_tid = payload.get("client_telegram_id")
+            if (
+                slot_id_raw is not None
+                and ex_cid is not None
+            ):
+                reply_markup = msg.build_trainer_client_cancel_notification_keyboard(
+                    webapp_base_url=Settings().webapp_base_url,
+                    slot_id=int(slot_id_raw),
+                    exclude_client_id=int(ex_cid),
+                    client_telegram_id=int(c_tid) if c_tid is not None else None,
+                )
+            await trainer_bot.send_message(
+                chat_id=trainer_tid, text=text, reply_markup=reply_markup
+            )
         finally:
             await trainer_bot.session.close()
     text_client = msg.CLIENT_BOOKING_CANCELLED_BY_SELF.format(
@@ -2000,6 +2024,10 @@ async def get_trainer_hub_fill_slots_invites(
     x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
     session: AsyncSession = Depends(get_session),
     limit: int = Query(3, ge=1, le=10),
+    slot_id: int | None = Query(None, description="When set, validate freed slot for «offer this window» copy."),
+    exclude_client_id: int | None = Query(
+        None, description="Omit this CRM client from the list (e.g. who just cancelled)."
+    ),
 ):
     """
     Ranked clients for «free slots next week» rhythm hint: pre-invite workflow in the hub.
@@ -2013,7 +2041,38 @@ async def get_trainer_hub_fill_slots_invites(
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     clients = await list_trainer_fill_slots_invite_candidates(session, trainer_id, limit=limit)
-    return {"clients": clients}
+    if exclude_client_id is not None:
+        ex = int(exclude_client_id)
+        clients = [c for c in clients if int(c.get("id") or 0) != ex]
+    slot_payload: dict | None = None
+    if slot_id is not None:
+        slot = await get_trainer_slot_for_mass_client_invite(session, trainer_id, int(slot_id))
+        if not slot:
+            raise HTTPException(
+                status_code=404,
+                detail="Слот не найден, уже занят или прошёл.",
+            )
+        sd = slot["slot_date"]
+        st = slot["start_time"]
+        en = slot["end_time"]
+        date_str = sd.strftime("%d.%m") if hasattr(sd, "strftime") else str(sd)[:10]
+        dow_i = int(sd.weekday()) if hasattr(sd, "weekday") else 0
+        dlabel = (
+            CLIENT_DAYS[dow_i] if 0 <= dow_i < len(CLIENT_DAYS) else ""
+        )
+        t1 = st.strftime("%H:%M") if hasattr(st, "strftime") else str(st)[:5]
+        t2 = en.strftime("%H:%M") if hasattr(en, "strftime") else str(en)[:5]
+        label = f"{date_str} ({dlabel}) · {t1}–{t2}"
+        sn = (slot.get("service_name") or "").strip()
+        an = (slot.get("arena_name") or "").strip()
+        if sn and an:
+            label += f" · {sn} · {an}"
+        elif sn:
+            label += f" · {sn}"
+        elif an:
+            label += f" · {an}"
+        slot_payload = {"id": int(slot["id"]), "label": label}
+    return {"clients": clients, "slot": slot_payload}
 
 
 class TrainerFillSlotsInviteSendBody(BaseModel):
@@ -2022,6 +2081,12 @@ class TrainerFillSlotsInviteSendBody(BaseModel):
         min_length=1,
         max_length=10,
         description="Clients to notify via client bot (must be in trainer CRM and linked to Telegram).",
+    )
+    slot_id: int | None = Field(
+        None, description="When set, message and book button target this concrete slot."
+    )
+    exclude_client_id: int | None = Field(
+        None, description="Optional: never message this client (e.g. who freed the slot)."
     )
 
 
@@ -2042,7 +2107,19 @@ async def post_trainer_hub_fill_slots_invites_send(
     trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
-    return await send_trainer_fill_slots_invites(session, trainer_id, body.client_ids)
+    out = await send_trainer_fill_slots_invites(
+        session,
+        trainer_id,
+        body.client_ids,
+        slot_id=body.slot_id,
+        exclude_client_id=body.exclude_client_id,
+    )
+    err = out.get("error")
+    if err == "slot_unavailable":
+        raise HTTPException(status_code=400, detail=out.get("detail") or "Slot unavailable")
+    if err == "no_recipients":
+        raise HTTPException(status_code=400, detail=out.get("detail") or "No recipients")
+    return out
 
 
 # --- Support: client/trainer send message; admin list and reply ---

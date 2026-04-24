@@ -13,6 +13,9 @@
       }
       var initData = tg && tg.initData ? tg.initData : '';
 
+      /** From GET /client/hub/bootstrap `client_session` — выбранный в каталоге/боте тренер. */
+      var clientHubSession = { selected_trainer_id: null };
+
       var HUB_UPCOMING_MAX = 6;
 
       /* Same icon set / sizing as trainer-home hub tiles */
@@ -266,8 +269,12 @@
           parts.push('</div>');
         });
         if (!count) {
+          var hasSelTrainer = clientHubSession.selected_trainer_id != null && clientHubSession.selected_trainer_id !== '';
+          var ctaFindTrainer = hasSelTrainer ? 'Мой тренер' : 'Найти тренера';
           revealBookingsBlock(
-            '<div class="hub-empty">Нет предстоящих записей.<br><button type="button" class="bd-btn bd-btn--primary" id="btnHubToCatalog" style="margin-top:14px">Найти тренера</button></div>'
+            '<div class="hub-empty">Нет предстоящих записей.<br><button type="button" class="bd-btn bd-btn--primary" id="btnHubToCatalog" style="margin-top:14px">' +
+              escapeHtml(ctaFindTrainer) +
+              '</button></div>'
           );
           block.onclick = null;
           var bc = document.getElementById('btnHubToCatalog');
@@ -386,7 +393,10 @@
           });
         }
 
-        function applyHubPayload(bookingsData, reqData) {
+        function applyHubPayload(bookingsData, reqData, hubMeta) {
+          var cs = (hubMeta && hubMeta.client_session) || {};
+          clientHubSession.selected_trainer_id =
+            cs.selected_trainer_id != null && cs.selected_trainer_id !== '' ? cs.selected_trainer_id : null;
           var days = bookingsData.days || [];
           var requestItems = reqData.items || [];
           setStateMessage('', '');
@@ -400,14 +410,22 @@
         fetch(apiUrl('/client/hub/bootstrap'), { headers: headersJson() })
           .then(jsonOrThrow)
           .then(function(hub) {
-            applyHubPayload(hub.bookings || {}, hub.requests || {});
+            applyHubPayload(hub.bookings || {}, hub.requests || {}, hub);
           })
           .catch(function() {
             return Promise.all([
               fetch(apiUrl('/client/bookings'), { headers: headersJson() }).then(jsonOrThrow),
               fetch(apiUrl('/client/requests'), { headers: headersJson() }).then(jsonOrThrow),
+              fetch(apiUrl('/client/session'), { headers: headersJson() })
+                .then(jsonOrThrow)
+                .catch(function() {
+                  return {};
+                }),
             ]).then(function(results) {
-              applyHubPayload(results[0], results[1]);
+              var sess = results[2] || {};
+              applyHubPayload(results[0], results[1], {
+                client_session: { selected_trainer_id: sess.trainer_id != null ? sess.trainer_id : null },
+              });
             });
           })
           .catch(function() {

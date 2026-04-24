@@ -1544,6 +1544,7 @@ async def test_trainer_hub_fill_slots_invites_prefers_clients_without_upcoming(
             )
     assert resp.status_code == 200
     payload = resp.json()
+    assert payload.get("slot") is None
     clients = payload.get("clients") or []
     assert len(clients) == 1
     assert skip_id not in {c["id"] for c in clients}

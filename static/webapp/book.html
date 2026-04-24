@@ -523,6 +523,8 @@
       const parsedUrlServiceId = serviceIdParam ? parseInt(serviceIdParam, 10) : NaN;
       const serviceIdFromUrl = Number.isFinite(parsedUrlServiceId) ? parsedUrlServiceId : null;
       const forceServiceChoice = params.get('force_service_choice') === '1';
+      const slotIdFromUrlParam = params.get('slot_id');
+      const slotIdFromUrl = slotIdFromUrlParam ? parseInt(slotIdFromUrlParam, 10) : NaN;
       if (!trainerId) {
         document.getElementById('content').innerHTML = '<div class="error">Не указан тренер. Откройте запись из бота.</div>';
         document.getElementById('prevWeek').style.display = 'none';
@@ -1129,8 +1131,34 @@
           }
           allSlots = data.slots || [];
           currentWeekStart = new Date(thisMonday.getTime());
+          if (Number.isFinite(slotIdFromUrl) && slotIdFromUrl > 0) {
+            var targetSlot = (allSlots || []).find(function(s) {
+              return Number(s.id) === slotIdFromUrl;
+            });
+            if (targetSlot && targetSlot.slot_date) {
+              var p = String(targetSlot.slot_date).split('-');
+              if (p.length === 3) {
+                var y = parseInt(p[0], 10);
+                var m = parseInt(p[1], 10) - 1;
+                var d = parseInt(p[2], 10);
+                if (!isNaN(y) && !isNaN(m) && !isNaN(d)) {
+                  var ad = new Date(y, m, d);
+                  currentWeekStart = getMonday(ad);
+                }
+              }
+            }
+          }
           document.getElementById('weekLabel').textContent = formatWeekLabel(currentWeekStart);
           render(slotsInWeek(allSlots, currentWeekStart));
+          if (Number.isFinite(slotIdFromUrl) && slotIdFromUrl > 0) {
+            var t2 = (allSlots || []).find(function(s) {
+              return Number(s.id) === slotIdFromUrl;
+            });
+            if (t2) {
+              var tr = (t2.start_time || '') + '–' + (t2.end_time || '');
+              showForm(slotIdFromUrl, t2.slot_date, tr);
+            }
+          }
         } catch (e) {
           document.getElementById('content').innerHTML = '<div class="error">' + (e.message || 'Ошибка загрузки') + '</div>';
         }
