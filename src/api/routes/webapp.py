@@ -129,6 +129,13 @@ from src.application.stats_use_cases import (
     get_trainer_revenue_breakdown_for_range,
     get_trainer_stats_dashboard,
 )
+from src.application.admin_analytics_use_cases import (
+    get_admin_clients_stats,
+    get_admin_engagement_stats,
+    get_admin_growth_stats,
+    get_admin_money_stats,
+    get_admin_retention_stats,
+)
 from src.application.support_use_cases import (
     create_support_message,
     list_support_messages,
@@ -2044,6 +2051,76 @@ async def get_admin_stats(
         if hasattr(data["prev_week_end"], "isoformat")
         else str(data["prev_week_end"]),
     }
+
+
+@router.get("/admin/stats/money")
+async def get_admin_stats_money(
+    init_data: str | None = Query(None),
+    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    session: AsyncSession = Depends(get_session),
+):
+    """Money tab: MRR/ARR, GMV trend, revenue, top paying trainers, pending invoices, subscription mix."""
+    raw = init_data or x_telegram_init_data
+    if not raw:
+        raise HTTPException(status_code=401, detail="Missing init data")
+    _admin_telegram_id(raw)
+    return await get_admin_money_stats(session)
+
+
+@router.get("/admin/stats/growth")
+async def get_admin_stats_growth(
+    init_data: str | None = Query(None),
+    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    session: AsyncSession = Depends(get_session),
+):
+    """Growth tab: new trainer cohorts, trial→paid conversion, time-to-first-paid, referral program."""
+    raw = init_data or x_telegram_init_data
+    if not raw:
+        raise HTTPException(status_code=401, detail="Missing init data")
+    _admin_telegram_id(raw)
+    return await get_admin_growth_stats(session)
+
+
+@router.get("/admin/stats/retention")
+async def get_admin_stats_retention(
+    init_data: str | None = Query(None),
+    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    session: AsyncSession = Depends(get_session),
+):
+    """Retention tab: churn rate, expiring subs, sleeping trainers, revival, retention curve by cohort."""
+    raw = init_data or x_telegram_init_data
+    if not raw:
+        raise HTTPException(status_code=401, detail="Missing init data")
+    _admin_telegram_id(raw)
+    return await get_admin_retention_stats(session)
+
+
+@router.get("/admin/stats/engagement")
+async def get_admin_stats_engagement(
+    init_data: str | None = Query(None),
+    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    session: AsyncSession = Depends(get_session),
+):
+    """Engagement tab: DAU/WAU/MAU, feature adoption, top active trainers, day-of-week heat."""
+    raw = init_data or x_telegram_init_data
+    if not raw:
+        raise HTTPException(status_code=401, detail="Missing init data")
+    _admin_telegram_id(raw)
+    return await get_admin_engagement_stats(session)
+
+
+@router.get("/admin/stats/clients")
+async def get_admin_stats_clients(
+    init_data: str | None = Query(None),
+    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    session: AsyncSession = Depends(get_session),
+):
+    """Clients tab: funnel, repeat rate, top cities/trainers, recent client requests."""
+    raw = init_data or x_telegram_init_data
+    if not raw:
+        raise HTTPException(status_code=401, detail="Missing init data")
+    _admin_telegram_id(raw)
+    return await get_admin_clients_stats(session)
 
 
 @router.get("/admin/support")

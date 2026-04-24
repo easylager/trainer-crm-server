@@ -31,10 +31,31 @@ from src.application.platform_settings_use_cases import (
     set_platform_int,
 )
 from src.application.subscription_invoice_admin_notify import (
+    build_admin_subscription_invoice_keyboard,
     format_catalog_modules_short,
+    load_subscription_invoice_admin_view,
     trainer_contact_link_html,
+    trainer_contact_url,
+)
+from src.application.subscription_tier_use_cases import (
+    SUBSCRIPTION_BILLING_PERIOD_MONTHS,
+    SUBSCRIPTION_MODULE_ANALYTICS,
+    SUBSCRIPTION_MODULE_GROUPS,
+    SUBSCRIPTION_MODULE_ONLINE,
+    SUBSCRIPTION_MODULES,
+    SUBSCRIPTION_TIER_CRM,
+    default_modules_dict,
+    format_subscription_label,
+    get_module_period_pricing,
+    get_tier_period_pricing,
 )
 from src.application.subscription_use_cases import (
+    admin_cancel_pending_subscription_invoice,
+    admin_grant_subscription_for_invoice,
+    admin_merge_modules_into_current_subscription,
+    compute_prorated_module_addon_cost_cents,
+    create_catalog_subscription_invoice_for_trainer,
+    get_active_paid_subscription_for_merge,
     get_resolved_welcome_trial_days_for_display,
     list_pending_catalog_subscription_invoices,
 )
@@ -278,7 +299,7 @@ async def cmd_start(message: Message) -> None:
     # No keyboard: all actions via menu commands (/pending, /stats, /support, /dicts)
     await message.answer(
         msg.ADMIN_START
-        + "\n\nИспользуйте команды из меню (слева от поля ввода):\n/pending — модерация\n/stats — статистика\n/support — поддержка\n/dicts — города и арены\n/subscription_invoices — счета по подписке (ERIP)\n/problem_reports — аудит отчётов о проблемах"
+        + "\n\nИспользуйте команды из меню (слева от поля ввода):\n/pending — модерация\n/stats — статистика\n/support — поддержка\n/dicts — города и арены\n/subscription_invoices — заявки на подписку (активировать/отклонить)\n/grant_subscription — выдать подписку конкретному тренеру\n/problem_reports — аудит отчётов о проблемах"
     )
 
 
@@ -585,24 +606,35 @@ async def cmd_problem_reports(message: Message) -> None:
 
 @router.message(Command("stats"))
 async def cmd_stats(message: Message) -> None:
-    """Open platform stats Mini App."""
+    """Open platform analytics — menu of Mini Apps (overview + five dashboards).
+
+    Each button opens a focused dashboard. Drilldown happens inside each app
+    (tap a card to expand details about a specific trainer/invoice/request).
+    """
     if not _is_admin(message.from_user.id if message.from_user else 0):
         await message.answer(msg.ADMIN_NO_ACCESS)
         return
-    base = Settings().webapp_base_url or ""
-    url = f"{base.rstrip('/')}/webapp/admin-stats" if base else ""
-    tiers_url = f"{base.rstrip('/')}/webapp/admin-subscription-tiers" if base else ""
-    if not url:
+    base = (Settings().webapp_base_url or "").rstrip("/")
+    if not base:
         async with async_session_factory() as session:
             s = await get_platform_stats(session)
         await message.answer(_admin_stats_message(s), parse_mode=ParseMode.HTML)
         return
-    stats_kb = [[InlineKeyboardButton(text="Открыть дашборд", web_app=WebAppInfo(url=url))]]
-    if tiers_url:
-        stats_kb.append([InlineKeyboardButton(text="Тарифы подписки", web_app=WebAppInfo(url=tiers_url))])
+
+    def _wa(label: str, slug: str) -> InlineKeyboardButton:
+        return InlineKeyboardButton(text=label, web_app=WebAppInfo(url=f"{base}/webapp/{slug}"))
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [_wa("📊 Обзор", "admin-stats"),       _wa("💰 Деньги", "admin-money")],
+        [_wa("📈 Рост", "admin-growth"),       _wa("🔁 Удержание", "admin-retention")],
+        [_wa("🎯 Активность", "admin-engagement"), _wa("👥 Клиенты", "admin-clients")],
+    ])
     await message.answer(
-        "📊 Статистика платформы",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=stats_kb),
+        "📊 <b>Аналитика платформы</b>\n\n"
+        "Выберите раздел — каждый открывается отдельным мини-приложением.\n"
+        "Внутри карточки можно тапнуть, чтобы развернуть детали по конкретному тренеру/счёту.",
+        parse_mode=ParseMode.HTML,
+        reply_markup=keyboard,
     )
 
 
@@ -646,7 +678,7 @@ async def cmd_subscription_tiers(message: Message) -> None:
 
 @router.message(Command("subscription_invoices"))
 async def cmd_subscription_invoices(message: Message) -> None:
-    """List unpaid catalog subscription invoices (ERIP / manual checkout)."""
+    """List unpaid catalog subscription invoices (ERIP / manual checkout). One actionable card per item."""
     user_id = message.from_user.id if message.from_user else 0
     if not _is_admin(user_id):
         await message.answer(msg.ADMIN_NO_ACCESS)
@@ -665,7 +697,7 @@ async def cmd_subscription_invoices(message: Message) -> None:
             parse_mode=ParseMode.HTML,
         )
         return
-    lines: list[str] = [msg.ADMIN_SUBSCRIPTION_INVOICES_TITLE]
+    await message.answer(msg.ADMIN_SUBSCRIPTION_INVOICES_TITLE, parse_mode=ParseMode.HTML)
     for i, it in enumerate(items, start=1):
         tid = int(it["trainer_id"])
         fn = (it.get("first_name") or "").strip()
@@ -686,25 +718,671 @@ async def cmd_subscription_invoices(message: Message) -> None:
         ps_s = ps.strftime("%d.%m.%y") if hasattr(ps, "strftime") else str(ps)[:10]
         pe_s = pe.strftime("%d.%m.%y") if hasattr(pe, "strftime") else str(pe)[:10]
         link = trainer_contact_link_html(it.get("telegram_id"), it.get("telegram_username"))
-        lines.append(
-            msg.ADMIN_SUBSCRIPTION_INVOICES_LINE.format(
-                n=i,
-                iid=it["invoice_id"],
-                tid=tid,
-                name=html.escape(name_plain),
-                plan_short=plan_short,
-                amt=amt_s,
-                ps=html.escape(ps_s),
-                pe=html.escape(pe_s),
-                st=html.escape(str(it.get("status") or "")),
-                link=link,
-            )
+        card = msg.ADMIN_SUBSCRIPTION_INVOICES_LINE.format(
+            n=i,
+            iid=it["invoice_id"],
+            tid=tid,
+            name=html.escape(name_plain),
+            plan_short=plan_short,
+            amt=amt_s,
+            ps=html.escape(ps_s),
+            pe=html.escape(pe_s),
+            st=html.escape(str(it.get("status") or "")),
+            link=link,
         )
-    lines.append(msg.ADMIN_SUBSCRIPTION_INVOICES_FOOTER)
-    out = "".join(lines)
-    if len(out) > 4090:
-        out = out[:4070] + "\n\n<i>…обрезано (лимит Telegram)</i>"
-    await message.answer(out, parse_mode=ParseMode.HTML)
+        kb = build_admin_subscription_invoice_keyboard(int(it["invoice_id"]))
+        await message.answer(card, parse_mode=ParseMode.HTML, reply_markup=kb)
+
+
+# ---------------------------------------------------------------------------
+# Admin: grant / edit / cancel subscription invoices via inline buttons.
+#
+# Callback grammar (kept under Telegram's 64-byte limit). `mode` in {s, m}:
+#   s = stack    — new subscription period (extends after current, or starts now)
+#   m = merge    — add modules to the trainer's current paid subscription in place,
+#                  pro-rated to the remaining days (no period extension)
+#
+#   as:act:{iid}                                        one-tap activate as requested
+#   as:cancel:{iid}                                     decline the request
+#   as:edit:{iid}                                       open editor seeded from invoice
+#   as:mode:{iid}:{flags}:{months}:{mode}               switch editor mode
+#   as:tog:{iid}:{flags}:{months}:{mode}:{module}       toggle a module bit
+#   as:setper:{iid}:{flags}:{months}:{mode}             apply chosen period (stack only)
+#   as:apply:{iid}:{flags}:{months}:{mode}              commit edits and activate
+#
+# `flags` packs the three module bits: 1=online, 2=analytics, 4=groups.
+# ---------------------------------------------------------------------------
+
+ADMIN_SUBSCRIPTION_GRANT_PREFIX = "as:"
+
+_MODULE_BITS = {
+    SUBSCRIPTION_MODULE_ONLINE: 1,
+    SUBSCRIPTION_MODULE_ANALYTICS: 2,
+    SUBSCRIPTION_MODULE_GROUPS: 4,
+}
+_MODULE_LABELS = {
+    SUBSCRIPTION_MODULE_ONLINE: "Онлайн-запись",
+    SUBSCRIPTION_MODULE_ANALYTICS: "Аналитика",
+    SUBSCRIPTION_MODULE_GROUPS: "Группы",
+}
+
+
+def _flags_to_modules(flags: int) -> dict[str, bool]:
+    return {k: bool(int(flags) & bit) for k, bit in _MODULE_BITS.items()}
+
+
+def _modules_to_flags(modules: dict | None) -> int:
+    f = 0
+    if not isinstance(modules, dict):
+        return f
+    for k, bit in _MODULE_BITS.items():
+        if modules.get(k):
+            f |= bit
+    return f
+
+
+async def _calc_total_byn(session, flags: int, months: int) -> tuple[int | None, int | None]:
+    """Return (total_cents, period_days) for current editor state, or (None, None) if pricing missing."""
+    base = await get_tier_period_pricing(session, SUBSCRIPTION_TIER_CRM, months)
+    if not base:
+        return None, None
+    total = int(base["price_cents"])
+    period_days = int(base["period_days"])
+    mods = _flags_to_modules(flags)
+    for key in SUBSCRIPTION_MODULES:
+        if not mods.get(key):
+            continue
+        mp = await get_module_period_pricing(session, key, months)
+        if not mp:
+            return None, None
+        total += int(mp["price_cents"])
+    return total, period_days
+
+
+_MODE_STACK = "s"
+_MODE_MERGE = "m"
+
+
+def _fmt_amount_byn(cents: int | None) -> str:
+    if cents is None:
+        return "—"
+    v = int(cents) / 100
+    return str(int(v)) if v == int(v) else f"{v:.2f}"
+
+
+def _fmt_date_ru(d) -> str:
+    return d.strftime("%d.%m.%Y") if d and hasattr(d, "strftime") else "—"
+
+
+async def _build_editor_keyboard(
+    session,
+    invoice_id: int,
+    trainer_id: int,
+    flags: int,
+    months: int,
+    mode: str,
+) -> InlineKeyboardMarkup:
+    """
+    Editor keyboard. In merge mode the period row is replaced by a lock, module toggles
+    for modules ALREADY active on the current sub are marked (cannot remove them), and
+    the activate button reflects pro-rated add-on pricing.
+    """
+    current = await get_active_paid_subscription_for_merge(session, trainer_id)
+    can_merge = current is not None
+    effective_mode = mode if (mode == _MODE_STACK or (mode == _MODE_MERGE and can_merge)) else _MODE_STACK
+
+    rows: list[list[InlineKeyboardButton]] = []
+
+    # Row 1: mode toggle (only shown if trainer has an active paid subscription).
+    if can_merge:
+        expires_str = _fmt_date_ru(current["expires_at"])
+        stack_marker = "✅ " if effective_mode == _MODE_STACK else ""
+        merge_marker = "✅ " if effective_mode == _MODE_MERGE else ""
+        rows.append([
+            InlineKeyboardButton(
+                text=f"{stack_marker}🔄 Продлить",
+                callback_data=f"as:mode:{invoice_id}:{int(flags)}:{int(months)}:{_MODE_STACK}",
+            ),
+            InlineKeyboardButton(
+                text=f"{merge_marker}➕ Добавить (до {expires_str})",
+                callback_data=f"as:mode:{invoice_id}:{int(flags)}:{int(months)}:{_MODE_MERGE}",
+            ),
+        ])
+
+    # CRM base indicator. In merge mode it stays on (can't remove), in stack mode also on.
+    rows.append([InlineKeyboardButton(text="✅ CRM (база — всегда включена)", callback_data="as:noop")])
+
+    for code in SUBSCRIPTION_MODULES:
+        bit = _MODULE_BITS[code]
+        is_on_in_editor = bool(int(flags) & bit)
+        already_active = bool(effective_mode == _MODE_MERGE and current and current["modules"].get(code))
+        if already_active:
+            # In merge mode we don't allow removing modules the trainer already paid for.
+            rows.append([
+                InlineKeyboardButton(
+                    text=f"✅ {_MODULE_LABELS[code]} (уже активен)",
+                    callback_data="as:noop",
+                )
+            ])
+        else:
+            prefix = "✅" if is_on_in_editor else "➕"
+            rows.append([
+                InlineKeyboardButton(
+                    text=f"{prefix} {_MODULE_LABELS[code]}",
+                    callback_data=f"as:tog:{invoice_id}:{int(flags)}:{int(months)}:{effective_mode}:{code}",
+                )
+            ])
+
+    if effective_mode == _MODE_STACK:
+        period_row: list[InlineKeyboardButton] = []
+        for m in SUBSCRIPTION_BILLING_PERIOD_MONTHS:
+            marker = "✅ " if int(months) == m else ""
+            period_row.append(
+                InlineKeyboardButton(
+                    text=f"{marker}{m} мес.",
+                    callback_data=f"as:setper:{invoice_id}:{int(flags)}:{m}:{_MODE_STACK}",
+                )
+            )
+        rows.append(period_row)
+        rows.append([
+            InlineKeyboardButton(
+                text=f"✅ Активировать на {int(months)} мес.",
+                callback_data=f"as:apply:{invoice_id}:{int(flags)}:{int(months)}:{_MODE_STACK}",
+            )
+        ])
+    else:
+        # Merge mode: period is dictated by remaining days of current sub, not editable.
+        expires_str = _fmt_date_ru(current["expires_at"]) if current else "—"
+        rows.append([
+            InlineKeyboardButton(
+                text=f"✅ Добавить к текущей (до {expires_str})",
+                callback_data=f"as:apply:{invoice_id}:{int(flags)}:{int(months)}:{_MODE_MERGE}",
+            )
+        ])
+
+    rows.append([
+        InlineKeyboardButton(
+            text="❌ Отклонить заявку",
+            callback_data=f"as:cancel:{invoice_id}",
+        )
+    ])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+async def _format_editor_body(
+    session,
+    invoice_view: dict,
+    flags: int,
+    months: int,
+    mode: str = _MODE_STACK,
+) -> str:
+    tid = int(invoice_view["trainer_id"])
+    fn = (invoice_view.get("first_name") or "").strip()
+    ln = (invoice_view.get("last_name") or "").strip()
+    name_plain = " ".join([fn, ln]).strip() or f"id{tid}"
+    contact_url = trainer_contact_url(invoice_view.get("telegram_id"), invoice_view.get("telegram_username"))
+    contact_block = (
+        f'<a href="{html.escape(contact_url)}">Открыть контакт тренера в Telegram</a>'
+        if contact_url
+        else "<i>Нет @username / id — ищите по internal id.</i>"
+    )
+
+    editor_flags_modules = _flags_to_modules(flags)
+
+    if mode == _MODE_MERGE:
+        current = await get_active_paid_subscription_for_merge(session, tid)
+        if current:
+            added_codes = [k for k in SUBSCRIPTION_MODULES if editor_flags_modules.get(k) and not current["modules"].get(k)]
+            total_modules = dict(current["modules"])
+            for k in added_codes:
+                total_modules[k] = True
+            final_label = format_subscription_label(total_modules)
+            cost_cents = await compute_prorated_module_addon_cost_cents(session, added_codes, current["remaining_days"])
+            amount_str = _fmt_amount_byn(cost_cents)
+            added_label = ", ".join(_MODULE_LABELS[c] for c in added_codes) or "—"
+            plan_line = (
+                f"Режим: <b>Добавить модули к текущей</b>\n"
+                f"До: <b>{_fmt_date_ru(current['expires_at'])}</b> "
+                f"(осталось {current['remaining_days']} дн.)\n"
+                f"Добавляем: <b>{html.escape(added_label)}</b>\n"
+                f"После активации: <b>{html.escape(final_label)}</b>"
+            )
+            return msg.ADMIN_SUBSCRIPTION_GRANT_EDIT_TITLE.format(
+                invoice_id=int(invoice_view["invoice_id"]),
+                trainer_name=html.escape(name_plain),
+                trainer_id=tid,
+                plan_line=plan_line,
+                amount_byn=amount_str,
+                months=f"пропорц. {current['remaining_days']} дн.",
+                trainer_contact_block=contact_block,
+            )
+        # Fall through to stack rendering if no current paid sub (shouldn't happen, but safe).
+
+    total_cents, _ = await _calc_total_byn(session, flags, months)
+    plan_label = format_subscription_label(editor_flags_modules)
+    amount_str = _fmt_amount_byn(total_cents)
+    plan_line = f"Режим: <b>Новый период</b>\nСостав: <b>{html.escape(plan_label)}</b>"
+    return msg.ADMIN_SUBSCRIPTION_GRANT_EDIT_TITLE.format(
+        invoice_id=int(invoice_view["invoice_id"]),
+        trainer_name=html.escape(name_plain),
+        trainer_id=tid,
+        plan_line=plan_line,
+        amount_byn=amount_str,
+        months=f"{int(months)} мес.",
+        trainer_contact_block=contact_block,
+    )
+
+
+async def _notify_trainer_subscription_granted(
+    trainer_id: int,
+    label: str,
+    expires_iso: str | None,
+) -> None:
+    """Push to trainer bot when admin activates their subscription."""
+    settings = Settings()
+    if not settings.telegram_bot_token_trainer:
+        return
+    async with async_session_factory() as session:
+        r = await session.execute(
+            text("SELECT telegram_id FROM trainers WHERE id = :id"),
+            {"id": int(trainer_id)},
+        )
+        row = r.fetchone()
+    if not row or not row[0]:
+        return
+    expires_date = "—"
+    if expires_iso:
+        s = str(expires_iso)[:10]
+        try:
+            y, m, d = s.split("-")
+            expires_date = f"{d}.{m}.{y}"
+        except ValueError:
+            expires_date = s
+    body = msg.TRAINER_SUBSCRIPTION_GRANTED_BY_ADMIN.format(
+        label=html.escape(label),
+        expires_date=html.escape(expires_date),
+    )
+    bot = Bot(
+        token=settings.telegram_bot_token_trainer,
+        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+    )
+    try:
+        try:
+            await bot.send_message(chat_id=int(row[0]), text=body)
+        except Exception:
+            logger.exception(
+                "trainer subscription grant notification failed trainer_id=%s",
+                trainer_id,
+            )
+    finally:
+        await bot.session.close()
+
+
+async def _notify_trainer_subscription_invoice_declined(trainer_id: int) -> None:
+    settings = Settings()
+    if not settings.telegram_bot_token_trainer:
+        return
+    async with async_session_factory() as session:
+        r = await session.execute(
+            text("SELECT telegram_id FROM trainers WHERE id = :id"),
+            {"id": int(trainer_id)},
+        )
+        row = r.fetchone()
+    if not row or not row[0]:
+        return
+    bot = Bot(
+        token=settings.telegram_bot_token_trainer,
+        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+    )
+    try:
+        try:
+            await bot.send_message(
+                chat_id=int(row[0]),
+                text=msg.TRAINER_SUBSCRIPTION_INVOICE_DECLINED,
+            )
+        except Exception:
+            logger.exception(
+                "trainer subscription decline notification failed trainer_id=%s",
+                trainer_id,
+            )
+    finally:
+        await bot.session.close()
+
+
+@router.callback_query(lambda c: c.data == "as:noop")
+async def on_admin_sub_invoice_noop(callback: CallbackQuery) -> None:
+    await callback.answer()
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("as:act:"))
+async def on_admin_sub_invoice_activate(callback: CallbackQuery) -> None:
+    """One-tap: activate the trainer's invoice exactly as they requested."""
+    user_id = callback.from_user.id if callback.from_user else 0
+    if not _is_admin(user_id):
+        await callback.answer("Нет доступа", show_alert=True)
+        return
+    iid = safe_parse_id(callback.data[len("as:act:"):])
+    if iid is None:
+        await callback.answer()
+        return
+    async with async_session_factory() as session:
+        view = await load_subscription_invoice_admin_view(session, iid)
+        if not view:
+            await callback.answer(msg.ADMIN_SUBSCRIPTION_GRANT_NOT_FOUND, show_alert=True)
+            return
+        result = await admin_grant_subscription_for_invoice(
+            session, iid, modules=None, period_months=None, admin_id=user_id
+        )
+    if not result:
+        await callback.answer(msg.ADMIN_SUBSCRIPTION_GRANT_FAILED, show_alert=True)
+        return
+    await _send_grant_success(callback, view, result)
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("as:cancel:"))
+async def on_admin_sub_invoice_cancel(callback: CallbackQuery) -> None:
+    user_id = callback.from_user.id if callback.from_user else 0
+    if not _is_admin(user_id):
+        await callback.answer("Нет доступа", show_alert=True)
+        return
+    iid = safe_parse_id(callback.data[len("as:cancel:"):])
+    if iid is None:
+        await callback.answer()
+        return
+    async with async_session_factory() as session:
+        result = await admin_cancel_pending_subscription_invoice(session, iid)
+    if not result:
+        await callback.answer(msg.ADMIN_SUBSCRIPTION_GRANT_NOT_FOUND, show_alert=True)
+        return
+    audit_log(
+        "admin_subscription_invoice_cancelled",
+        ACTOR_ADMIN_BOT,
+        user_id,
+        payload={"invoice_id": int(iid), "trainer_id": int(result["trainer_id"])},
+    )
+    try:
+        await callback.message.edit_reply_markup(reply_markup=None)
+    except Exception:
+        pass
+    await callback.message.answer(
+        msg.ADMIN_SUBSCRIPTION_GRANT_CANCELLED.format(invoice_id=int(iid)),
+        parse_mode=ParseMode.HTML,
+    )
+    await _notify_trainer_subscription_invoice_declined(int(result["trainer_id"]))
+    await callback.answer()
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("as:edit:"))
+async def on_admin_sub_invoice_edit(callback: CallbackQuery) -> None:
+    """Open the module/period editor seeded from the invoice's current state."""
+    user_id = callback.from_user.id if callback.from_user else 0
+    if not _is_admin(user_id):
+        await callback.answer("Нет доступа", show_alert=True)
+        return
+    iid = safe_parse_id(callback.data[len("as:edit:"):])
+    if iid is None:
+        await callback.answer()
+        return
+    async with async_session_factory() as session:
+        view = await load_subscription_invoice_admin_view(session, iid)
+        if not view:
+            await callback.answer(msg.ADMIN_SUBSCRIPTION_GRANT_NOT_FOUND, show_alert=True)
+            return
+        flags = _modules_to_flags(view.get("checkout_modules"))
+        months = int(view.get("checkout_billing_period_months") or 1)
+        if months not in SUBSCRIPTION_BILLING_PERIOD_MONTHS:
+            months = SUBSCRIPTION_BILLING_PERIOD_MONTHS[0]
+        # Default mode: stack. Admin can flip to merge via the mode button if applicable.
+        mode = _MODE_STACK
+        body = await _format_editor_body(session, view, flags, months, mode)
+        kb = await _build_editor_keyboard(session, int(iid), int(view["trainer_id"]), flags, months, mode)
+    await callback.message.answer(body, reply_markup=kb, parse_mode=ParseMode.HTML)
+    await callback.answer()
+
+
+async def _re_render_editor(callback: CallbackQuery, iid: int, flags: int, months: int, mode: str) -> None:
+    async with async_session_factory() as session:
+        view = await load_subscription_invoice_admin_view(session, iid)
+        if not view:
+            await callback.answer(msg.ADMIN_SUBSCRIPTION_GRANT_NOT_FOUND, show_alert=True)
+            return
+        body = await _format_editor_body(session, view, flags, months, mode)
+        kb = await _build_editor_keyboard(session, int(iid), int(view["trainer_id"]), flags, months, mode)
+    try:
+        await callback.message.edit_text(body, reply_markup=kb, parse_mode=ParseMode.HTML)
+    except Exception:
+        await callback.message.answer(body, reply_markup=kb, parse_mode=ParseMode.HTML)
+
+
+def _parse_mode(part: str) -> str:
+    return _MODE_MERGE if part == _MODE_MERGE else _MODE_STACK
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("as:mode:"))
+async def on_admin_sub_invoice_mode(callback: CallbackQuery) -> None:
+    """Flip editor between stack (new period) and merge (add modules to current)."""
+    user_id = callback.from_user.id if callback.from_user else 0
+    if not _is_admin(user_id):
+        await callback.answer("Нет доступа", show_alert=True)
+        return
+    parts = (callback.data or "").split(":")
+    if len(parts) != 6:
+        await callback.answer()
+        return
+    try:
+        iid = int(parts[2]); flags = int(parts[3]); months = int(parts[4])
+    except ValueError:
+        await callback.answer()
+        return
+    mode = _parse_mode(parts[5])
+    # When switching TO merge: pre-fill editor flags from current sub's modules + requested delta,
+    # so all existing modules show as selected (admin can only add, not remove in merge mode).
+    if mode == _MODE_MERGE:
+        async with async_session_factory() as session:
+            view = await load_subscription_invoice_admin_view(session, iid)
+            if view:
+                current = await get_active_paid_subscription_for_merge(session, int(view["trainer_id"]))
+                if current:
+                    current_flags = _modules_to_flags(current["modules"])
+                    flags = int(flags) | current_flags
+    await _re_render_editor(callback, iid, flags, months, mode)
+    await callback.answer()
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("as:tog:"))
+async def on_admin_sub_invoice_toggle(callback: CallbackQuery) -> None:
+    user_id = callback.from_user.id if callback.from_user else 0
+    if not _is_admin(user_id):
+        await callback.answer("Нет доступа", show_alert=True)
+        return
+    parts = (callback.data or "").split(":")
+    if len(parts) != 7:
+        await callback.answer()
+        return
+    try:
+        iid = int(parts[2]); flags = int(parts[3]); months = int(parts[4])
+    except ValueError:
+        await callback.answer()
+        return
+    mode = _parse_mode(parts[5])
+    code = parts[6]
+    bit = _MODULE_BITS.get(code)
+    if bit is None:
+        await callback.answer()
+        return
+    flags ^= bit
+    await _re_render_editor(callback, iid, flags, months, mode)
+    await callback.answer()
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("as:setper:"))
+async def on_admin_sub_invoice_setper(callback: CallbackQuery) -> None:
+    user_id = callback.from_user.id if callback.from_user else 0
+    if not _is_admin(user_id):
+        await callback.answer("Нет доступа", show_alert=True)
+        return
+    parts = (callback.data or "").split(":")
+    if len(parts) != 6:
+        await callback.answer()
+        return
+    try:
+        iid = int(parts[2]); flags = int(parts[3]); months = int(parts[4])
+    except ValueError:
+        await callback.answer()
+        return
+    mode = _parse_mode(parts[5])
+    if months not in SUBSCRIPTION_BILLING_PERIOD_MONTHS:
+        await callback.answer()
+        return
+    await _re_render_editor(callback, iid, flags, months, mode)
+    await callback.answer()
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("as:apply:"))
+async def on_admin_sub_invoice_apply(callback: CallbackQuery) -> None:
+    user_id = callback.from_user.id if callback.from_user else 0
+    if not _is_admin(user_id):
+        await callback.answer("Нет доступа", show_alert=True)
+        return
+    parts = (callback.data or "").split(":")
+    if len(parts) != 6:
+        await callback.answer()
+        return
+    try:
+        iid = int(parts[2]); flags = int(parts[3]); months = int(parts[4])
+    except ValueError:
+        await callback.answer()
+        return
+    mode = _parse_mode(parts[5])
+    if mode == _MODE_STACK and months not in SUBSCRIPTION_BILLING_PERIOD_MONTHS:
+        await callback.answer(msg.ADMIN_SUBSCRIPTION_GRANT_FAILED, show_alert=True)
+        return
+    new_modules = _flags_to_modules(flags)
+    async with async_session_factory() as session:
+        view = await load_subscription_invoice_admin_view(session, iid)
+        if not view:
+            await callback.answer(msg.ADMIN_SUBSCRIPTION_GRANT_NOT_FOUND, show_alert=True)
+            return
+        if mode == _MODE_MERGE:
+            result = await admin_merge_modules_into_current_subscription(
+                session, iid, add_modules=new_modules, admin_id=user_id
+            )
+        else:
+            result = await admin_grant_subscription_for_invoice(
+                session, iid, modules=new_modules, period_months=int(months), admin_id=user_id
+            )
+    if not result:
+        await callback.answer(msg.ADMIN_SUBSCRIPTION_GRANT_FAILED, show_alert=True)
+        return
+    await _send_grant_success(callback, view, result)
+
+
+async def _send_grant_success(callback: CallbackQuery, view: dict, result: dict) -> None:
+    user_id = callback.from_user.id if callback.from_user else 0
+    iid = int(result["invoice_id"])
+    tid = int(result["trainer_id"])
+    label = format_subscription_label(result.get("modules") or default_modules_dict())
+    months = int(result.get("period_months") or 0)
+    is_merge = bool(result.get("merged"))
+    amount_cents = result.get("amount_cents") or 0
+    amt = amount_cents / 100
+    amount_byn = str(int(amt)) if amt == int(amt) else f"{amt:.2f}"
+    period_end = result.get("period_end")
+    if hasattr(period_end, "strftime"):
+        expires_date = period_end.strftime("%d.%m.%Y")
+        expires_iso = period_end.isoformat()
+    else:
+        expires_date = str(period_end)[:10] if period_end else "—"
+        expires_iso = str(period_end) if period_end else None
+    fn = (view.get("first_name") or "").strip()
+    ln = (view.get("last_name") or "").strip()
+    name_plain = " ".join([fn, ln]).strip() or f"id{tid}"
+    audit_log(
+        "admin_subscription_invoice_granted" if not is_merge else "admin_subscription_modules_merged",
+        ACTOR_ADMIN_BOT,
+        user_id,
+        payload={
+            "invoice_id": iid,
+            "trainer_id": tid,
+            "modules": result.get("modules"),
+            "added_modules": result.get("added_modules"),
+            "period_months": months,
+            "amount_cents": int(amount_cents),
+            "merged": is_merge,
+        },
+    )
+    try:
+        await callback.message.edit_reply_markup(reply_markup=None)
+    except Exception:
+        pass
+    # In merge mode we spell out that we extended the existing subscription, not started a new one.
+    period_str = f"{months} мес." if not is_merge else f"пропорц. {int(result.get('remaining_days') or 0)} дн."
+    await callback.message.answer(
+        msg.ADMIN_SUBSCRIPTION_GRANT_ACTIVATED.format(
+            invoice_id=iid,
+            trainer_name=html.escape(name_plain),
+            label=html.escape(label),
+            months=period_str,
+            amount_byn=amount_byn,
+            expires_date=html.escape(expires_date),
+        ),
+        parse_mode=ParseMode.HTML,
+    )
+    await _notify_trainer_subscription_granted(tid, label, expires_iso)
+    await callback.answer("Активировано")
+
+
+@router.message(Command("grant_subscription"))
+async def cmd_grant_subscription(message: Message) -> None:
+    """Ad-hoc grant: open the editor for any trainer (creates a draft CRM invoice first)."""
+    user_id = message.from_user.id if message.from_user else 0
+    if not _is_admin(user_id):
+        await message.answer(msg.ADMIN_NO_ACCESS)
+        return
+    parts = (message.text or "").split()
+    if len(parts) < 2:
+        await message.answer(msg.ADMIN_SUBSCRIPTION_GRANT_HELP, parse_mode=ParseMode.HTML)
+        return
+    tid = safe_parse_id(parts[1])
+    if tid is None:
+        await message.answer(msg.ADMIN_SUBSCRIPTION_GRANT_HELP, parse_mode=ParseMode.HTML)
+        return
+    async with async_session_factory() as session:
+        trainer = await get_trainer(session, int(tid))
+        if not trainer:
+            await message.answer(
+                msg.ADMIN_SUBSCRIPTION_GRANT_NO_TRAINER.format(tid=int(tid)),
+                parse_mode=ParseMode.HTML,
+            )
+            return
+        draft = await create_catalog_subscription_invoice_for_trainer(
+            session,
+            int(tid),
+            tier=None,
+            modules=default_modules_dict(),
+            period_months=1,
+        )
+        if not draft:
+            await message.answer(msg.ADMIN_SUBSCRIPTION_GRANT_DRAFT_FAILED, parse_mode=ParseMode.HTML)
+            return
+        view = await load_subscription_invoice_admin_view(session, int(draft["invoice_id"]))
+        if not view:
+            await message.answer(msg.ADMIN_SUBSCRIPTION_GRANT_NOT_FOUND, parse_mode=ParseMode.HTML)
+            return
+        flags = _modules_to_flags(view.get("checkout_modules"))
+        months = int(view.get("checkout_billing_period_months") or 1)
+        mode = _MODE_STACK
+        body = await _format_editor_body(session, view, flags, months, mode)
+        kb = await _build_editor_keyboard(
+            session, int(draft["invoice_id"]), int(tid), flags, months, mode
+        )
+    audit_log(
+        "admin_subscription_grant_started",
+        ACTOR_ADMIN_BOT,
+        user_id,
+        payload={"trainer_id": int(tid), "invoice_id": int(draft["invoice_id"])},
+    )
+    await message.answer(body, reply_markup=kb, parse_mode=ParseMode.HTML)
 
 
 @router.message(Command("welcome_trial_days"))

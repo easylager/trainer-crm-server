@@ -451,7 +451,7 @@ async def cmd_start(message: Message) -> None:
                         and (sub_st.get("effective_tier") or "none") != "none"
                     ):
                         tier_label = html.escape(
-                            (sub_st.get("tier_name_ru") or "Аналитика").strip() or "Аналитика"
+                            (sub_st.get("tier_name_ru") or "Полный доступ").strip() or "Полный доступ"
                         )
                         exp_fmt = _format_expires_ru_from_iso(sub_st.get("expires_at"))
                         await message.answer(
@@ -1207,8 +1207,14 @@ async def cmd_passes(message: Message) -> None:
     await message.answer(msg.TRAINER_PASSES_HTTPS_REQUIRED)
 
 
-def _subscription_tier_name_ru(tier: str) -> str:
-    return {"crm": "CRM", "online": "Онлайн-запись", "analytics": "Аналитика"}.get(tier, tier)
+def _subscription_label_from_status(status: dict) -> str:
+    """Use the API-provided composite label; fall back to a reasonable default."""
+    name = (status.get("tier_name_ru") or "").strip()
+    if name:
+        return name
+    if status.get("is_trial"):
+        return "Полный доступ"
+    return "Подписка"
 
 
 def _format_iso_date_ru(iso: str | None) -> str:
@@ -1236,9 +1242,19 @@ async def cmd_subscription(message: Message) -> None:
         if eff != "none" and tier_status.get("is_active") and tier_status.get("expires_at"):
             expires_date = _format_iso_date_ru(tier_status.get("expires_at"))
             text = msg.TRAINER_SUBSCRIPTION_WITH_TIER.format(
-                tier_name=_subscription_tier_name_ru(eff),
+                tier_name=_subscription_label_from_status(tier_status),
                 expires_date=expires_date,
             )
+            # Queued paid plan will kick in after current window — surface it so trainer
+            # knows days/modules aren't lost when trial and paid overlap.
+            nxt = tier_status.get("next_plan")
+            if nxt and nxt.get("expires_at"):
+                nxt_label = (nxt.get("tier_name_ru") or "Подписка").strip()
+                nxt_expires = _format_iso_date_ru(nxt.get("expires_at"))
+                text += (
+                    "\n\nПосле окончания текущего периода автоматически начнётся "
+                    f"<b>{nxt_label}</b> до <b>{nxt_expires}</b>. Дни не сгорят."
+                )
         else:
             text = msg.TRAINER_SUBSCRIPTION_WITHOUT_TIER
         rows: list[list[InlineKeyboardButton]] = []

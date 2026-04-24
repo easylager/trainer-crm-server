@@ -84,15 +84,34 @@ class TestTierIncludes:
 # --- Async DB tests (with mocked session) ---
 
 
+def _ent_rows(rows: list[tuple] | None) -> MagicMock:
+    """Mock fetchall result for get_trainer_entitlements (returns rows of (tier, modules))."""
+    m = MagicMock()
+    m.fetchall.return_value = rows or []
+    return m
+
+
+def _current_rows(rows: list[tuple] | None) -> MagicMock:
+    """Mock fetchall for the 'currently-active rows' query in get_trainer_subscription_status."""
+    m = MagicMock()
+    m.fetchall.return_value = rows or []
+    return m
+
+
+def _next_row(row: tuple | None) -> MagicMock:
+    """Mock fetchone for the 'queued next plan' query."""
+    m = MagicMock()
+    m.fetchone.return_value = row
+    return m
+
+
 class TestGetEffectiveSubscriptionTier:
-    """get_effective_subscription_tier: synthetic tier from CRM row + modules."""
+    """get_effective_subscription_tier: synthetic tier from CRM row + modules (union across overlapping rows)."""
 
     @pytest.mark.asyncio
     async def test_no_subscription_returns_none(self) -> None:
         mock_session = AsyncMock()
-        mock_result = MagicMock()
-        mock_result.fetchone.return_value = None
-        mock_session.execute.return_value = mock_result
+        mock_session.execute.return_value = _ent_rows([])
 
         tier = await get_effective_subscription_tier(mock_session, trainer_id=1)
         assert tier == SUBSCRIPTION_TIER_NONE
@@ -100,9 +119,7 @@ class TestGetEffectiveSubscriptionTier:
     @pytest.mark.asyncio
     async def test_online_module_returns_online_effective(self) -> None:
         mock_session = AsyncMock()
-        mock_result = MagicMock()
-        mock_result.fetchone.return_value = (SUBSCRIPTION_TIER_CRM, _mods(online=True))
-        mock_session.execute.return_value = mock_result
+        mock_session.execute.return_value = _ent_rows([(SUBSCRIPTION_TIER_CRM, _mods(online=True))])
 
         tier = await get_effective_subscription_tier(mock_session, trainer_id=1)
         assert tier == SUBSCRIPTION_TIER_ONLINE
@@ -111,27 +128,39 @@ class TestGetEffectiveSubscriptionTier:
     async def test_legacy_online_tier_row_infer_modules(self) -> None:
         """Old tier column without JSON modules still maps to online."""
         mock_session = AsyncMock()
-        mock_result = MagicMock()
-        mock_result.fetchone.return_value = (SUBSCRIPTION_TIER_ONLINE, _mods())
-        mock_session.execute.return_value = mock_result
+        mock_session.execute.return_value = _ent_rows([(SUBSCRIPTION_TIER_ONLINE, _mods())])
 
         tier = await get_effective_subscription_tier(mock_session, trainer_id=1)
         assert tier == SUBSCRIPTION_TIER_ONLINE
 
+    @pytest.mark.asyncio
+    async def test_overlapping_trial_and_paid_unions_modules(self) -> None:
+        """
+        Regression: when a trial row (full modules) overlaps with a queued but started
+        paid row (CRM only), entitlements must reflect the union — never downgrade.
+        """
+        mock_session = AsyncMock()
+        mock_session.execute.return_value = _ent_rows([
+            (SUBSCRIPTION_TIER_CRM, _mods(online=True, analytics=True, groups=True)),
+            (SUBSCRIPTION_TIER_CRM, _mods()),
+        ])
+
+        tier = await get_effective_subscription_tier(mock_session, trainer_id=1)
+        assert tier == SUBSCRIPTION_TIER_ANALYTICS
+
 
 class TestGetTrainerSubscriptionStatus:
-    """get_trainer_subscription_status: two entitlement reads + subscription row + CRM name."""
+    """get_trainer_subscription_status: 2 entitlement reads + current rows + next row."""
 
     @pytest.mark.asyncio
     async def test_inactive_subscription_status(self) -> None:
         mock_session = AsyncMock()
-
-        mock_result_ent = MagicMock()
-        mock_result_ent.fetchone.return_value = None
-        mock_result_sub = MagicMock()
-        mock_result_sub.fetchone.return_value = None
-
-        mock_session.execute.side_effect = [mock_result_ent, mock_result_ent, mock_result_sub]
+        mock_session.execute.side_effect = [
+            _ent_rows([]),             # get_effective_subscription_tier → entitlements
+            _ent_rows([]),             # entitlements (union) inside status
+            _current_rows([]),         # rows covering now
+            _next_row(None),           # queued next plan
+        ]
 
         status = await get_trainer_subscription_status(mock_session, trainer_id=1)
 
@@ -139,6 +168,7 @@ class TestGetTrainerSubscriptionStatus:
         assert status["tier"] == SUBSCRIPTION_TIER_NONE
         assert status["effective_tier"] == SUBSCRIPTION_TIER_NONE
         assert status["unlocked_features"] == []
+        assert status["next_plan"] is None
 
     @pytest.mark.asyncio
     async def test_active_subscription_status(self) -> None:
@@ -148,41 +178,74 @@ class TestGetTrainerSubscriptionStatus:
         expires_at = now + timedelta(days=30)
         started_at = now - timedelta(days=5)
         mods = _mods(online=True)
-
-        mock_result_ent = MagicMock()
-        mock_result_ent.fetchone.return_value = (SUBSCRIPTION_TIER_CRM, mods)
-
-        mock_result_sub = MagicMock()
-        mock_result_sub.fetchone.return_value = (
-            123,
-            SUBSCRIPTION_TIER_CRM,
-            mods,
-            expires_at,
-            "active",
-            started_at,
-            1,
-        )
-
-        mock_result_name = MagicMock()
-        mock_result_name.fetchone.return_value = ("CRM + онлайн-запись",)
-
+        ent_rows_data = [(SUBSCRIPTION_TIER_CRM, mods)]
+        current_rows_data = [(
+            123, SUBSCRIPTION_TIER_CRM, mods, expires_at, "active", started_at, 1,
+        )]
         mock_session.execute.side_effect = [
-            mock_result_ent,
-            mock_result_ent,
-            mock_result_sub,
-            mock_result_name,
+            _ent_rows(ent_rows_data),     # effective tier
+            _ent_rows(ent_rows_data),     # entitlements (union)
+            _current_rows(current_rows_data),
+            _next_row(None),
         ]
 
         status = await get_trainer_subscription_status(mock_session, trainer_id=1)
 
         assert status["is_active"] is True
         assert status["is_trial"] is False
-        assert status["tier_name_ru"] == "CRM + онлайн-запись"
+        # Label comes from the composed helper, not a DB lookup.
+        assert status["tier_name_ru"] == "CRM + Онлайн-запись"
         assert status["tier"] == SUBSCRIPTION_TIER_CRM
         assert status["effective_tier"] == SUBSCRIPTION_TIER_ONLINE
         assert status["billing_period_months"] == 1
         assert status["unlocked_features"] == ["crm", "online"]
         assert status["modules"]["online"] is True
+        assert status["next_plan"] is None
+
+    @pytest.mark.asyncio
+    async def test_trial_overlap_no_downgrade_and_reports_next_plan(self) -> None:
+        """
+        Key regression: admin activated a CRM-only paid plan 1 day before trial ends.
+        Until trial expires the trainer must keep full access AND see the queued plan.
+        """
+        mock_session = AsyncMock()
+        now = datetime.now(timezone.utc)
+        trial_started = now - timedelta(days=20)
+        trial_expires = now + timedelta(days=1)
+        paid_started = trial_expires
+        paid_expires = trial_expires + timedelta(days=365)
+        full_mods = _mods(online=True, analytics=True, groups=True)
+        crm_only = _mods()
+
+        ent_rows_data = [
+            (SUBSCRIPTION_TIER_CRM, full_mods),  # trial row covers now
+        ]
+        current_rows_data = [
+            (111, SUBSCRIPTION_TIER_CRM, full_mods, trial_expires, "trial", trial_started, None),
+        ]
+        next_row_data = (
+            222, SUBSCRIPTION_TIER_CRM, crm_only, paid_expires, "active", paid_started, 12,
+        )
+        infer_result = MagicMock()
+        infer_result.fetchone.return_value = None  # trial length doesn't match any billing period
+        mock_session.execute.side_effect = [
+            _ent_rows(ent_rows_data),
+            _ent_rows(ent_rows_data),
+            _current_rows(current_rows_data),
+            _next_row(next_row_data),
+            infer_result,  # _infer_billing_period_months for the trial row
+        ]
+
+        status = await get_trainer_subscription_status(mock_session, trainer_id=1)
+
+        # Currently active window = trial with full access.
+        assert status["is_trial"] is True
+        assert status["tier_name_ru"] == "Полный доступ"
+        assert status["unlocked_features"] == ["crm", "online", "analytics", "groups"]
+        # Next plan surfaced for UI so trainer/admin see what kicks in after trial.
+        assert status["next_plan"] is not None
+        assert status["next_plan"]["tier_name_ru"] == "CRM"
+        assert status["next_plan"]["billing_period_months"] == 12
 
 
 class TestExpiredSubscription:
@@ -191,9 +254,7 @@ class TestExpiredSubscription:
     @pytest.mark.asyncio
     async def test_expired_subscription_returns_none_tier(self) -> None:
         mock_session = AsyncMock()
-        mock_result = MagicMock()
-        mock_result.fetchone.return_value = None
-        mock_session.execute.return_value = mock_result
+        mock_session.execute.return_value = _ent_rows([])
 
         tier = await get_effective_subscription_tier(mock_session, trainer_id=1)
         assert tier == SUBSCRIPTION_TIER_NONE

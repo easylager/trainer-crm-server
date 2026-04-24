@@ -38,9 +38,53 @@ SUBSCRIPTION_MODULES: tuple[str, ...] = (
     SUBSCRIPTION_MODULE_GROUPS,
 )
 
+# Human-readable Russian names for the CRM base + modules.
+# Single source of truth — used by API status, bot messages, admin views.
+SUBSCRIPTION_BASE_NAME_RU = "CRM"
+SUBSCRIPTION_MODULE_NAMES_RU: dict[str, str] = {
+    SUBSCRIPTION_MODULE_ONLINE: "Онлайн-запись",
+    SUBSCRIPTION_MODULE_ANALYTICS: "Аналитика",
+    SUBSCRIPTION_MODULE_GROUPS: "Группы",
+}
+SUBSCRIPTION_FULL_ACCESS_NAME_RU = "Полный доступ"
+
 
 def default_modules_dict() -> dict[str, bool]:
     return {k: False for k in SUBSCRIPTION_MODULES}
+
+
+def format_subscription_label(
+    modules: Any,
+    *,
+    has_base_crm: bool = True,
+    is_trial: bool = False,
+) -> str:
+    """
+    Return one human-readable Russian name for any subscription state.
+
+    Rules:
+        - Trial → "Полный доступ" (trial always grants every module).
+        - All three modules on → "Полный доступ".
+        - No base / no access → "Без подписки".
+        - CRM only (no modules on) → "CRM".
+        - Otherwise → "CRM + …" composed from module display names.
+
+    Used everywhere we show a tier label so trainers always see what they actually have.
+    """
+    if is_trial:
+        return SUBSCRIPTION_FULL_ACCESS_NAME_RU
+    if not has_base_crm:
+        return "Без подписки"
+    mods = normalize_modules_dict(modules) if modules is not None else default_modules_dict()
+    on_modules = [k for k in SUBSCRIPTION_MODULES if mods.get(k)]
+    if len(on_modules) == len(SUBSCRIPTION_MODULES):
+        return SUBSCRIPTION_FULL_ACCESS_NAME_RU
+    if not on_modules:
+        return SUBSCRIPTION_BASE_NAME_RU
+    parts = [SUBSCRIPTION_BASE_NAME_RU]
+    for k in on_modules:
+        parts.append(SUBSCRIPTION_MODULE_NAMES_RU.get(k, k))
+    return " + ".join(parts)
 
 
 def normalize_modules_dict(raw: Any) -> dict[str, bool]:
@@ -108,18 +152,27 @@ def tier_includes(tier: SubscriptionTier) -> list[str]:
 
 
 async def get_trainer_entitlements(session: AsyncSession, trainer_id: int) -> TrainerEntitlements:
-    """Active subscription row → CRM base + module flags."""
+    """
+    Resolve what the trainer has access to RIGHT NOW.
+
+    Correctness rules (protect customer value):
+        1. A row only grants access while started_at <= now < expires_at — future-dated paid
+           rows queued after a trial must NOT activate early, and they must NOT mask trial
+           entitlements.
+        2. If multiple rows cover now (overlap), union their modules. We never downgrade
+           access when a paid plan with fewer modules overlaps with a more generous one
+           (e.g. trial with full access stacked with queued CRM-only paid plan).
+    """
     now = datetime.now(timezone.utc)
     result = await session.execute(
         text("""
             SELECT tier, modules
             FROM trainer_subscriptions
             WHERE trainer_id = :tid
+              AND started_at <= :now
               AND expires_at > :now
               AND status IN (:s1, :s2)
               AND tier IS NOT NULL
-            ORDER BY expires_at DESC
-            LIMIT 1
         """),
         {
             "tid": trainer_id,
@@ -128,14 +181,21 @@ async def get_trainer_entitlements(session: AsyncSession, trainer_id: int) -> Tr
             "s2": SUBSCRIPTION_STATUS_ACTIVE,
         },
     )
-    row = result.fetchone()
-    if not row:
+    rows = result.fetchall()
+    if not rows:
         return TrainerEntitlements(has_base_crm=False, modules=default_modules_dict(), raw_tier=None)
-    raw_tier = row[0]
-    mods = normalize_modules_dict(row[1])
-    if raw_tier in (SUBSCRIPTION_TIER_ONLINE, SUBSCRIPTION_TIER_ANALYTICS) and not any(mods.values()):
-        mods = infer_modules_from_legacy_tier(raw_tier)
-    return TrainerEntitlements(has_base_crm=True, modules=mods, raw_tier=raw_tier)
+    union = default_modules_dict()
+    any_raw_tier: str | None = None
+    for row in rows:
+        raw_tier = row[0]
+        mods = normalize_modules_dict(row[1])
+        if raw_tier in (SUBSCRIPTION_TIER_ONLINE, SUBSCRIPTION_TIER_ANALYTICS) and not any(mods.values()):
+            mods = infer_modules_from_legacy_tier(raw_tier)
+        for k in SUBSCRIPTION_MODULES:
+            if mods.get(k):
+                union[k] = True
+        any_raw_tier = any_raw_tier or raw_tier
+    return TrainerEntitlements(has_base_crm=True, modules=union, raw_tier=any_raw_tier)
 
 
 async def get_effective_subscription_tier(session: AsyncSession, trainer_id: int) -> SubscriptionTier:
@@ -320,22 +380,55 @@ async def _infer_billing_period_months(
 
 async def get_trainer_subscription_status(session: AsyncSession, trainer_id: int) -> dict:
     """
-    Get trainer's current subscription status for UI.
+    Trainer's current subscription status for UI.
 
-    Includes effective tier, modules, expiration, and unlocked capability codes.
+    Contract — protects customer value by reporting:
+        - The row that actually covers NOW (trial preferred if multiple rows overlap).
+        - `modules` / `unlocked_features` as the UNION across all rows covering NOW
+          (so a remaining trial day always shows full access even when a queued
+          CRM-only paid plan is already persisted).
+        - `next_plan` describing the queued paid subscription that will kick in after
+          the current window, so the UI can tell the trainer "trial until X, then
+          your CRM plan until Y" in one glance.
     """
     tier = await get_effective_subscription_tier(session, trainer_id)
     ent = await get_trainer_entitlements(session, trainer_id)
     now = datetime.now(timezone.utc)
 
-    result = await session.execute(
+    # All currently-active rows (row covers now: started_at <= now < expires_at).
+    current_rows_result = await session.execute(
         text("""
-            SELECT ts.id, ts.tier, ts.modules, ts.expires_at, ts.status, ts.started_at, ts.billing_period_months
+            SELECT ts.id, ts.tier, ts.modules, ts.expires_at, ts.status, ts.started_at,
+                   ts.billing_period_months
             FROM trainer_subscriptions ts
             WHERE ts.trainer_id = :tid
+              AND ts.started_at <= :now
               AND ts.expires_at > :now
               AND ts.status IN (:s1, :s2)
-            ORDER BY ts.expires_at DESC
+            ORDER BY
+                CASE WHEN ts.status = :s1 THEN 0 ELSE 1 END,  -- trial first (most generous)
+                ts.expires_at DESC
+        """),
+        {
+            "tid": trainer_id,
+            "now": now,
+            "s1": SUBSCRIPTION_STATUS_TRIAL,
+            "s2": SUBSCRIPTION_STATUS_ACTIVE,
+        },
+    )
+    current_rows = current_rows_result.fetchall()
+
+    # Queued rows: already persisted but start in the future (e.g. paid plan that kicks
+    # in after the current trial ends). Used for UI hints, not for entitlements.
+    next_row_result = await session.execute(
+        text("""
+            SELECT ts.id, ts.tier, ts.modules, ts.expires_at, ts.status, ts.started_at,
+                   ts.billing_period_months
+            FROM trainer_subscriptions ts
+            WHERE ts.trainer_id = :tid
+              AND ts.started_at > :now
+              AND ts.status IN (:s1, :s2)
+            ORDER BY ts.started_at ASC
             LIMIT 1
         """),
         {
@@ -345,41 +438,59 @@ async def get_trainer_subscription_status(session: AsyncSession, trainer_id: int
             "s2": SUBSCRIPTION_STATUS_ACTIVE,
         },
     )
-    row = result.fetchone()
+    next_row = next_row_result.fetchone()
 
-    if row:
-        row_tier = row[1] or tier
-        mods = normalize_modules_dict(row[2])
-        if row_tier in (SUBSCRIPTION_TIER_ONLINE, SUBSCRIPTION_TIER_ANALYTICS) and not any(mods.values()):
-            mods = infer_modules_from_legacy_tier(row_tier)
-        expires_at = row[3]
-        sub_status = row[4]
-        started_at = row[5]
-        stored_pm = row[6]
+    next_plan: dict | None = None
+    if next_row:
+        nx_tier = next_row[1] or SUBSCRIPTION_TIER_CRM
+        nx_mods = normalize_modules_dict(next_row[2])
+        if nx_tier in (SUBSCRIPTION_TIER_ONLINE, SUBSCRIPTION_TIER_ANALYTICS) and not any(nx_mods.values()):
+            nx_mods = infer_modules_from_legacy_tier(nx_tier)
+        next_plan = {
+            "subscription_id": next_row[0],
+            "tier": nx_tier,
+            "modules": nx_mods,
+            "started_at": next_row[5].isoformat() if next_row[5] else None,
+            "expires_at": next_row[3].isoformat() if next_row[3] else None,
+            "status": next_row[4],
+            "is_trial": next_row[4] == SUBSCRIPTION_STATUS_TRIAL,
+            "tier_name_ru": format_subscription_label(
+                nx_mods,
+                has_base_crm=True,
+                is_trial=next_row[4] == SUBSCRIPTION_STATUS_TRIAL,
+            ),
+            "billing_period_months": int(next_row[6]) if next_row[6] is not None else None,
+        }
+
+    if current_rows:
+        # Primary row for display (trial preferred, then latest expiry).
+        primary = current_rows[0]
+        row_tier = primary[1] or tier
+        primary_mods = normalize_modules_dict(primary[2])
+        if row_tier in (SUBSCRIPTION_TIER_ONLINE, SUBSCRIPTION_TIER_ANALYTICS) and not any(primary_mods.values()):
+            primary_mods = infer_modules_from_legacy_tier(row_tier)
+        expires_at = primary[3]
+        sub_status = primary[4]
+        started_at = primary[5]
+        stored_pm = primary[6]
         billing_pm: int | None = int(stored_pm) if stored_pm is not None else None
         if billing_pm is None and row_tier and expires_at and started_at:
             billing_pm = await _infer_billing_period_months(session, row_tier, started_at, expires_at)
-        # Human label: use synthetic effective tier (trial with full modules → analytics name, not bare CRM).
-        tier_name_ru: str | None = None
-        if row_tier:
-            lookup_tier = tier if tier != SUBSCRIPTION_TIER_NONE else row_tier
-            if lookup_tier not in SUBSCRIPTION_TIERS:
-                lookup_tier = row_tier
-            nr = await session.execute(
-                text("SELECT name_ru FROM subscription_tier_pricing WHERE tier = :t LIMIT 1"),
-                {"t": lookup_tier},
-            )
-            nrow = nr.fetchone()
-            tier_name_ru = nrow[0] if nrow else None
         is_trial = sub_status == SUBSCRIPTION_STATUS_TRIAL
-        caps = unlocked_capability_codes(
-            TrainerEntitlements(has_base_crm=ent.has_base_crm, modules=mods, raw_tier=row_tier)
+        # Unified entitlements across ALL rows covering now — the trainer's effective access.
+        # Label is composed from this union so we never downgrade during an overlap.
+        tier_name_ru: str = format_subscription_label(
+            ent.modules,
+            has_base_crm=ent.has_base_crm,
+            is_trial=is_trial,
         )
+        caps = unlocked_capability_codes(ent)
         return {
-            "subscription_id": row[0],
+            "subscription_id": primary[0],
             "tier": row_tier,
             "effective_tier": tier,
-            "modules": mods,
+            # Modules reported to clients are the UNION — the trainer's real access today.
+            "modules": ent.modules,
             "expires_at": expires_at.isoformat() if expires_at else None,
             "status": sub_status,
             "is_trial": is_trial,
@@ -388,6 +499,7 @@ async def get_trainer_subscription_status(session: AsyncSession, trainer_id: int
             "billing_period_months": billing_pm,
             "is_active": True,
             "unlocked_features": caps,
+            "next_plan": next_plan,
         }
 
     return {
@@ -403,6 +515,7 @@ async def get_trainer_subscription_status(session: AsyncSession, trainer_id: int
         "billing_period_months": None,
         "is_active": False,
         "unlocked_features": [],
+        "next_plan": next_plan,
     }
 
 

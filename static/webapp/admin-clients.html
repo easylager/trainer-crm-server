@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Клиенты · Аналитика</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="mini-app-telegram-chrome.js"></script>
+  <link rel="stylesheet" href="theme.css" />
+  <link rel="stylesheet" href="admin-analytics-shared.css" />
+</head>
+<body>
+  <div class="adm-header">
+    <h1>👥 Клиенты</h1>
+    <div class="adm-sub">воронка · повторные · топ-города · топ-тренеры · заявки</div>
+  </div>
+  <div id="content">
+    <div class="adm-loading">Загрузка…</div>
+  </div>
+  <script src="admin-analytics-shared.js"></script>
+  <script>
+    (function () {
+      var A = window.AdmAnalytics;
+
+      function pct(p) { return p != null ? p + '%' : '—'; }
+
+      function statusPill(status) {
+        if (status === 'new')       return '<span class="adm-pill warn">новая</span>';
+        if (status === 'contacted') return '<span class="adm-pill info">контакт</span>';
+        if (status === 'archived')  return '<span class="adm-pill">архив</span>';
+        return '<span class="adm-pill">' + A.escapeHtml(status || '—') + '</span>';
+      }
+
+      function deltaBadge(p) {
+        if (p == null || isNaN(p)) return '<span class="adm-delta flat">— к прошлому периоду</span>';
+        var cls = A.deltaClass(p);
+        var arrow = cls === 'up' ? '▲' : cls === 'down' ? '▼' : '•';
+        return '<span class="adm-delta ' + cls + '">' + arrow + ' ' + A.formatPct(p) + ' MoM</span>';
+      }
+
+      function render(d) {
+        var html = '';
+
+        html += '<div class="adm-banner">';
+        html +=   '<div class="adm-banner-title">Возвратность клиентов (90 дн)</div>';
+        html +=   '<div class="adm-banner-value">' + pct(d.repeat_rate_pct) + '</div>';
+        html +=   '<div class="adm-banner-sub">';
+        html +=     A.formatNum(d.clients_repeat_90d) + ' клиентов записались ≥2 раза. ';
+        html +=     'В среднем ' + d.avg_bookings_per_client_90d + ' записи на клиента за 90 дн.';
+        html +=   '</div>';
+        html += '</div>';
+
+        // Totals
+        html += '<div class="adm-section"><div class="adm-section-title">База клиентов</div>';
+        html +=   '<div class="adm-kpi-grid">';
+        html +=     '<div class="adm-kpi"><div class="adm-kpi-label">Всего</div>' +
+                    '<div class="adm-kpi-value">' + A.formatNum(d.clients_total) + '</div>' +
+                    '<div class="adm-kpi-sub">' + A.formatNum(d.clients_with_telegram) + ' с Telegram</div></div>';
+        html +=     '<div class="adm-kpi"><div class="adm-kpi-label">Активны (30 дн)</div>' +
+                    '<div class="adm-kpi-value">' + A.formatNum(d.clients_active_30d) + '</div>' +
+                    '<div class="adm-kpi-sub">' + A.formatNum(d.clients_active_90d) + ' за 90 дн</div></div>';
+        html +=     '<div class="adm-kpi"><div class="adm-kpi-label">Новых (30 дн)</div>' +
+                    '<div class="adm-kpi-value">' + A.formatNum(d.new_clients_30d) + '</div>' +
+                    '<div class="adm-kpi-sub">' + deltaBadge(d.new_clients_mom_pct) + '</div></div>';
+        html +=     '<div class="adm-kpi"><div class="adm-kpi-label">Заявок (30 дн)</div>' +
+                    '<div class="adm-kpi-value">' + A.formatNum(d.requests_30d) + '</div>' +
+                    '<div class="adm-kpi-sub">через бота клиента</div></div>';
+        html +=   '</div>';
+        html += '</div>';
+
+        // Request funnel
+        html += '<div class="adm-section"><div class="adm-section-title">📞 Воронка заявок (30 дн)</div>';
+        html +=   '<div class="adm-card tight"><div class="adm-row-list">' +
+                    '<div><span>1. Заявок создано:</span><span>' + A.formatNum(d.requests_30d) + '</span></div>' +
+                    '<div><span>2. Тренер откликнулся:</span><span>' + A.formatNum(d.requests_with_response_30d) + ' (' + pct(d.request_response_pct) + ')</span></div>' +
+                    '<div><span>3. Закончилось записью:</span><span>' + A.formatNum(d.requests_with_booking_30d) + ' (' + pct(d.request_booking_pct) + ')</span></div>' +
+                  '</div></div>';
+        html +=   '<div class="adm-hint">Если шаг 1→2 проседает — мало тренеров видят заявки. Если 2→3 — отклики не доходят до брони (UX/коммуникация).</div>';
+        html += '</div>';
+
+        // Top cities
+        html += '<div class="adm-section"><div class="adm-section-title">🏙 Топ-городов (90 дн)</div>';
+        var cities = d.top_cities || [];
+        if (!cities.length) {
+          html += '<div class="adm-card"><div class="adm-empty">Нет данных</div></div>';
+        } else {
+          html += '<div class="adm-card" style="padding:0;">';
+          html +=   '<div class="adm-scroll"><table class="adm-table"><thead><tr>' +
+                      '<th>Город</th>' +
+                      '<th class="num">Активных клиентов</th>' +
+                      '<th class="num">Записей</th>' +
+                    '</tr></thead><tbody>';
+          cities.forEach(function (c) {
+            html += '<tr><td>' + A.escapeHtml(c.name) + '</td>' +
+                    '<td class="num">' + A.formatNum(c.active_clients) + '</td>' +
+                    '<td class="num">' + A.formatNum(c.bookings_90d) + '</td></tr>';
+          });
+          html +=   '</tbody></table></div>';
+          html += '</div>';
+        }
+        html += '</div>';
+
+        // Top trainers by clients
+        html += '<div class="adm-section"><div class="adm-section-title">🏆 Топ-20 тренеров по числу клиентов (90 дн)</div>';
+        var top = d.top_trainers_by_clients || [];
+        if (!top.length) {
+          html += '<div class="adm-card"><div class="adm-empty">Нет данных</div></div>';
+        } else {
+          html += A.drilldown(top.map(function (t, i) {
+            var extra = '<div class="adm-row-list">' +
+              '<div><span>ID:</span><span>#' + t.trainer_id + '</span></div>' +
+              '<div><span>Уникальных клиентов:</span><span>' + A.formatNum(t.clients) + '</span></div>' +
+              '<div><span>Завершено занятий:</span><span>' + A.formatNum(t.completed_90d) + '</span></div>' +
+            '</div>';
+            return {
+              title: (i + 1) + '. ' + A.escapeHtml(t.display_name),
+              meta: A.formatNum(t.clients) + ' клиентов · ' + A.formatNum(t.completed_90d) + ' занятий',
+              value: A.formatNum(t.clients),
+              extra: extra,
+            };
+          }));
+        }
+        html += '</div>';
+
+        // Recent requests
+        html += '<div class="adm-section"><div class="adm-section-title">📥 Последние заявки клиентов</div>';
+        var reqs = d.recent_requests || [];
+        if (!reqs.length) {
+          html += '<div class="adm-card"><div class="adm-empty">Заявок пока нет</div></div>';
+        } else {
+          html += A.drilldown(reqs.map(function (r) {
+            var extra = '<div class="adm-row-list">' +
+              '<div><span>ID:</span><span>#' + r.request_id + '</span></div>' +
+              '<div><span>Создана:</span><span>' + A.formatDate(r.created_at) + '</span></div>' +
+              '<div><span>Откликов:</span><span>' + A.formatNum(r.responses) + '</span></div>' +
+              '<div><span>ID клиента:</span><span>#' + r.client_id + '</span></div>' +
+            '</div>';
+            var meta = A.escapeHtml(r.city) + ' · ' + A.escapeHtml(r.service);
+            return {
+              title: '#' + r.request_id + ' ' + statusPill(r.status),
+              meta: meta + ' · ' + A.formatDate(r.created_at),
+              value: A.formatNum(r.responses) + ' откл.',
+              extra: extra,
+            };
+          }));
+        }
+        html += '</div>';
+
+        return html;
+      }
+
+      A.mount({ endpoint: '/admin/stats/clients', render: render });
+    })();
+  </script>
+</body>
+</html>

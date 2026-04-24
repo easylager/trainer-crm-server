@@ -217,6 +217,51 @@ def webapp_admin_dicts_page():
     return _webapp_file_response(path)
 
 
+@app.get("/webapp/admin-money")
+def webapp_admin_money_page():
+    """Serve the admin Money tab Mini App (MRR/ARR, GMV, top payers, pending invoices, subscription mix)."""
+    path = _WEBAPP_DIR / "admin-money.html"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Web App not found")
+    return _webapp_file_response(path)
+
+
+@app.get("/webapp/admin-growth")
+def webapp_admin_growth_page():
+    """Serve the admin Growth tab Mini App (new trainer cohorts, trial→paid, referral program)."""
+    path = _WEBAPP_DIR / "admin-growth.html"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Web App not found")
+    return _webapp_file_response(path)
+
+
+@app.get("/webapp/admin-retention")
+def webapp_admin_retention_page():
+    """Serve the admin Retention tab Mini App (churn, expiring subs, sleeping trainers, revival)."""
+    path = _WEBAPP_DIR / "admin-retention.html"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Web App not found")
+    return _webapp_file_response(path)
+
+
+@app.get("/webapp/admin-engagement")
+def webapp_admin_engagement_page():
+    """Serve the admin Engagement tab Mini App (DAU/WAU/MAU, feature usage, top active trainers, DoW heat)."""
+    path = _WEBAPP_DIR / "admin-engagement.html"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Web App not found")
+    return _webapp_file_response(path)
+
+
+@app.get("/webapp/admin-clients")
+def webapp_admin_clients_page():
+    """Serve the admin Clients tab Mini App (clients funnel, repeat rate, top cities/trainers, recent requests)."""
+    path = _WEBAPP_DIR / "admin-clients.html"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Web App not found")
+    return _webapp_file_response(path)
+
+
 @app.get("/webapp/admin-subscription-tiers")
 def webapp_admin_subscription_tiers_page():
     """Serve the admin subscription tiers Mini App (pricing for CRM/Online/Analytics)."""
@@ -384,6 +429,32 @@ def webapp_theme_css(request: Request):
         path,
         media_type="text/css",
         headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/admin-analytics-shared.css")
+def webapp_admin_analytics_shared_css(request: Request):
+    """Admin analytics tab Mini Apps (Money, Growth, Retention, …). Use ``?v=…`` for cache after deploy."""
+    path = _WEBAPP_DIR / "admin-analytics-shared.css"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="CSS file not found")
+    return FileResponse(
+        path,
+        media_type="text/css",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/admin-analytics-shared.js")
+def webapp_admin_analytics_shared_js():
+    """Shared fetch, formatters, drilldown for /webapp/admin-* analytics pages."""
+    path = _WEBAPP_DIR / "admin-analytics-shared.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_WEBAPP_NO_CACHE_HEADERS,
     )
 
 

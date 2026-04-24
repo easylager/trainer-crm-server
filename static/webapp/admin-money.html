@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Деньги · Аналитика</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="mini-app-telegram-chrome.js"></script>
+  <link rel="stylesheet" href="theme.css" />
+  <link rel="stylesheet" href="admin-analytics-shared.css" />
+</head>
+<body>
+  <div class="adm-header">
+    <h1>💰 Деньги</h1>
+    <div class="adm-sub">MRR · GMV · выручка · подписки · долги</div>
+  </div>
+  <div id="content">
+    <div class="adm-loading">Загрузка…</div>
+  </div>
+  <script src="admin-analytics-shared.js"></script>
+  <script>
+    (function () {
+      var A = window.AdmAnalytics;
+
+      function deltaBadge(pct) {
+        if (pct == null || isNaN(pct)) {
+          return '<span class="adm-delta flat">— к прошлому периоду</span>';
+        }
+        var cls = A.deltaClass(pct);
+        var arrow = cls === 'up' ? '▲' : cls === 'down' ? '▼' : '•';
+        return '<span class="adm-delta ' + cls + '">' + arrow + ' ' + A.formatPct(pct) + ' MoM</span>';
+      }
+
+      function moduleHint(modules) {
+        if (!modules) return '';
+        var bits = [];
+        if (modules.online)    bits.push('онлайн');
+        if (modules.groups)    bits.push('группы');
+        if (modules.analytics) bits.push('аналитика');
+        return bits.length ? bits.join(', ') : 'только база';
+      }
+
+      function render(d) {
+        var html = '';
+
+        // North-star: MRR + ARR
+        html += '<div class="adm-banner">';
+        html +=   '<div class="adm-banner-title">North-star · MRR (повторяющийся доход)</div>';
+        html +=   '<div class="adm-banner-value">' + A.formatBYN(d.mrr_cents, { compact: true }) + ' / мес</div>';
+        html +=   '<div class="adm-banner-sub">';
+        html +=     'Годовой темп <b>' + A.formatBYN(d.arr_cents, { compact: true }) + '</b> · ';
+        html +=     'активных платных подписок: <b>' + A.formatNum(d.active_paid_subscriptions) + '</b>';
+        html +=   '</div>';
+        html += '</div>';
+
+        // Revenue & GMV KPIs
+        html += '<div class="adm-section"><div class="adm-section-title">Выручка и оборот</div>';
+        html +=   '<div class="adm-kpi-grid">';
+        html +=     '<div class="adm-kpi"><div class="adm-kpi-label">Подписки за 30 дн</div>' +
+                   '<div class="adm-kpi-value">' + A.formatBYN(d.revenue_paid_30d_cents, { compact: true }) + '</div>' +
+                   '<div class="adm-kpi-sub">' + A.formatNum(d.paid_invoices_30d_count) + ' оплат · ' + deltaBadge(d.revenue_paid_mom_pct) + '</div></div>';
+        html +=     '<div class="adm-kpi"><div class="adm-kpi-label">GMV за 30 дн</div>' +
+                   '<div class="adm-kpi-value">' + A.formatBYN(d.gmv_30d_cents, { compact: true }) + '</div>' +
+                   '<div class="adm-kpi-sub">занятия + абонементы + сертификаты · ' + deltaBadge(d.gmv_mom_pct) + '</div></div>';
+        html +=     '<div class="adm-kpi"><div class="adm-kpi-label">Платящих тренеров</div>' +
+                   '<div class="adm-kpi-value">' + A.formatNum(d.paying_trainers_total) + '</div>' +
+                   '<div class="adm-kpi-sub">всего за всё время</div></div>';
+        html +=     '<div class="adm-kpi"><div class="adm-kpi-label">Средний чек</div>' +
+                   '<div class="adm-kpi-value">' + A.formatBYN(d.avg_paid_invoice_cents) + '</div>' +
+                   '<div class="adm-kpi-sub">по всем оплаченным счетам</div></div>';
+        html +=   '</div>';
+        html += '</div>';
+
+        // GMV by month sparkline
+        html += '<div class="adm-section"><div class="adm-section-title">GMV по месяцам</div>';
+        html +=   '<div class="adm-card">';
+        var vals = (d.gmv_by_month || []).map(function (x) { return Math.round((x.gmv_cents || 0) / 100); });
+        var labs = (d.gmv_by_month || []).map(function (x) { return (x.month || '').slice(5); });
+        html +=     A.sparkline(vals, labs);
+        var lastMonth = (d.gmv_by_month || []).slice(-1)[0];
+        html +=     '<div class="adm-hint">Последний месяц: <b>' + (lastMonth ? A.formatBYN((lastMonth.gmv_cents||0), {compact:true}) : '—') + '</b>. Сравнивайте тренд, не отдельные точки.</div>';
+        html +=   '</div>';
+        html += '</div>';
+
+        // Subscription mix
+        html += '<div class="adm-section"><div class="adm-section-title">Что покупают (активные подписки)</div>';
+        var mix = d.subscription_mix || [];
+        if (mix.length === 0) {
+          html += '<div class="adm-card"><div class="adm-empty">Нет активных подписок</div></div>';
+        } else {
+          html += mix.map(function (m) {
+            return '<div class="adm-list-item">' +
+              '<div class="adm-list-head">' +
+                '<div>' +
+                  '<div class="adm-list-title">' + A.escapeHtml(m.label) + '</div>' +
+                  '<div class="adm-list-meta">модули: ' + A.escapeHtml(moduleHint(m.modules)) + '</div>' +
+                '</div>' +
+                '<div class="adm-list-value">' + A.formatNum(m.count) + ' тр.</div>' +
+              '</div>' +
+            '</div>';
+          }).join('');
+        }
+        html += '</div>';
+
+        // Top paying trainers (drilldown)
+        html += '<div class="adm-section"><div class="adm-section-title">Топ-10 платящих тренеров</div>';
+        var top = d.top_paying_trainers || [];
+        if (top.length === 0) {
+          html += '<div class="adm-card"><div class="adm-empty">Пока никто не платил</div></div>';
+        } else {
+          html += A.drilldown(top.map(function (t, i) {
+            var extra =
+              '<div class="adm-row-list">' +
+                '<div><span>ID тренера:</span><span>#' + t.trainer_id + '</span></div>' +
+                '<div><span>Оплачено счетов:</span><span>' + A.formatNum(t.paid_invoices) + '</span></div>' +
+                '<div><span>Последняя оплата:</span><span>' + A.formatDate(t.last_paid_at) + '</span></div>' +
+              '</div>';
+            return {
+              title: (i + 1) + '. ' + A.escapeHtml(t.display_name),
+              meta: t.paid_invoices + ' оплат · последняя ' + A.formatDate(t.last_paid_at),
+              value: A.formatBYN(t.lifetime_cents, { compact: true }),
+              extra: extra,
+            };
+          }));
+        }
+        html += '</div>';
+
+        // Pending invoices (cash sitting in funnel)
+        html += '<div class="adm-section"><div class="adm-section-title">Висят без оплаты</div>';
+        var pend = d.pending_invoices || [];
+        if (pend.length === 0) {
+          html += '<div class="adm-card"><div class="adm-empty">Нет неоплаченных счетов 🎉</div></div>';
+        } else {
+          html += '<div class="adm-card tight"><div class="adm-row-list">' +
+            '<div><span>Счетов в работе:</span><span>' + A.formatNum(d.pending_invoices_count) + '</span></div>' +
+            '<div><span>Сумма ожидания:</span><span>' + A.formatBYN(d.pending_invoices_total_cents, { compact: true }) + '</span></div>' +
+          '</div></div>';
+          html += A.drilldown(pend.map(function (inv) {
+            var statusPill = inv.status === 'overdue'
+              ? '<span class="adm-pill danger">просрочен</span>'
+              : inv.status === 'sent'
+                ? '<span class="adm-pill warn">ждёт оплаты</span>'
+                : '<span class="adm-pill info">' + A.escapeHtml(inv.status || '—') + '</span>';
+            var extra =
+              '<div class="adm-row-list">' +
+                '<div><span>Счёт #:</span><span>' + inv.invoice_id + '</span></div>' +
+                '<div><span>Тренер #:</span><span>' + inv.trainer_id + '</span></div>' +
+                '<div><span>Выставлен:</span><span>' + A.formatDate(inv.issued_at) + '</span></div>' +
+                '<div><span>Срок:</span><span>' + A.formatDate(inv.due_date) + '</span></div>' +
+              '</div>' +
+              '<div class="adm-hint">Активировать в /subscription_invoices или /grant_subscription</div>';
+            return {
+              title: A.escapeHtml(inv.display_name) + ' ' + statusPill,
+              meta: 'ждёт ' + inv.waiting_days + ' дн.',
+              value: A.formatBYN(inv.amount_cents),
+              extra: extra,
+            };
+          }));
+        }
+        html += '</div>';
+
+        return html;
+      }
+
+      A.mount({ endpoint: '/admin/stats/money', render: render });
+    })();
+  </script>
+</body>
+</html>

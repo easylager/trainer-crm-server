@@ -11,9 +11,11 @@ from typing import Any
 from aiogram import Bot
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.subscription_tier_use_cases import format_subscription_label
 from src.bot import messages as msg
 from src.infrastructure.db import async_session_factory
 from src.shared.config import Settings
@@ -45,16 +47,15 @@ def trainer_contact_link_html(telegram_id: int | None, telegram_username: str | 
 
 
 def format_catalog_modules_short(mods: dict[str, Any] | None) -> str:
+    """Single-line label for an invoice's module set; matches the unified plan-naming rules."""
     if not isinstance(mods, dict):
         return "—"
-    parts = ["CRM"]
-    if mods.get("online"):
-        parts.append("онлайн")
-    if mods.get("analytics"):
-        parts.append("аналитика")
-    if mods.get("groups"):
-        parts.append("группы")
-    return " + ".join(parts)
+    return format_subscription_label(mods, has_base_crm=True, is_trial=False)
+
+
+async def load_subscription_invoice_admin_view(session: AsyncSession, invoice_id: int) -> dict[str, Any] | None:
+    """Public alias used by admin handlers; same row shape as the notification loader."""
+    return await _load_invoice_notify_row(session, invoice_id)
 
 
 async def _load_invoice_notify_row(session: AsyncSession, invoice_id: int) -> dict[str, Any] | None:
@@ -134,11 +135,12 @@ async def notify_admins_new_catalog_subscription_invoice(invoice_id: int) -> Non
         plan_line=plan_line,
         trainer_contact_block=link_line,
     )
+    keyboard = build_admin_subscription_invoice_keyboard(int(invoice_id))
     bot = Bot(token=token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     try:
         for chat_id in admin_ids:
             try:
-                await bot.send_message(chat_id=chat_id, text=body)
+                await bot.send_message(chat_id=chat_id, text=body, reply_markup=keyboard)
             except Exception:
                 logger.exception(
                     "subscription invoice notify failed chat_id=%s invoice_id=%s",
@@ -147,3 +149,27 @@ async def notify_admins_new_catalog_subscription_invoice(invoice_id: int) -> Non
                 )
     finally:
         await bot.session.close()
+
+
+def build_admin_subscription_invoice_keyboard(invoice_id: int) -> InlineKeyboardMarkup:
+    """Three-button action keyboard attached to every admin invoice card."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="✅ Активировать как заказано",
+                    callback_data=f"as:act:{invoice_id}",
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    text="⚙️ Изменить состав",
+                    callback_data=f"as:edit:{invoice_id}",
+                ),
+                InlineKeyboardButton(
+                    text="❌ Отклонить",
+                    callback_data=f"as:cancel:{invoice_id}",
+                ),
+            ],
+        ]
+    )

@@ -722,3 +722,321 @@ async def confirm_subscription_invoice_after_payment(
 
         await grant_referral_credit_if_eligible(session, tid)
     return True
+
+
+async def admin_grant_subscription_for_invoice(
+    session: AsyncSession,
+    invoice_id: int,
+    *,
+    modules: dict[str, bool] | None = None,
+    period_months: int | None = None,
+    admin_id: int,
+) -> dict | None:
+    """
+    Admin path: confirm a pending invoice as paid (no money transfer required).
+
+    If modules and/or period_months are provided, the invoice is rewritten in place first
+    (modules JSON, billing period, recomputed amount, recomputed period_end). Then we go
+    through the normal confirm_subscription_invoice_after_payment flow so trainer
+    entitlements / referral credits / status all update via the same code path as ERIP.
+
+    Returns a dict describing the activated subscription (trainer_id, modules, period_end,
+    period_months, amount_cents, label) or None on failure.
+    """
+    r = await session.execute(
+        text("""
+            SELECT trainer_id, status, period_start, period_end, amount_cents,
+                   checkout_modules, checkout_billing_period_months
+            FROM trainer_invoices WHERE id = :iid
+        """),
+        {"iid": invoice_id},
+    )
+    row = r.fetchone()
+    if not row:
+        return None
+    (
+        tid,
+        status,
+        period_start,
+        period_end,
+        amount_cents,
+        existing_modules,
+        existing_pm,
+    ) = row
+    if status not in (INVOICE_STATUS_SENT, INVOICE_STATUS_OVERDUE, INVOICE_STATUS_PAID):
+        return None
+
+    final_modules = (
+        normalize_modules_dict(modules) if modules is not None else normalize_modules_dict(existing_modules)
+    )
+    final_pm = int(period_months) if period_months is not None else (int(existing_pm) if existing_pm else None)
+
+    # Rewrite invoice if anything changed (and it's still unpaid) so the audit trail matches reality.
+    if status in (INVOICE_STATUS_SENT, INVOICE_STATUS_OVERDUE) and final_pm is not None:
+        if final_pm not in SUBSCRIPTION_BILLING_PERIOD_MONTHS:
+            return None
+        base = await get_tier_period_pricing(session, SUBSCRIPTION_TIER_CRM, final_pm)
+        if not base:
+            return None
+        new_total = int(base["price_cents"])
+        new_period_days = int(base["period_days"])
+        for key in SUBSCRIPTION_MODULES:
+            if not final_modules.get(key):
+                continue
+            mp = await get_module_period_pricing(session, key, final_pm)
+            if not mp:
+                return None
+            new_total += int(mp["price_cents"])
+        new_period_end = period_start + timedelta(days=new_period_days)
+        await session.execute(
+            text("""
+                UPDATE trainer_invoices
+                SET checkout_modules = CAST(:mods AS jsonb),
+                    checkout_billing_period_months = :pm,
+                    amount_cents = :amt,
+                    period_end = :pe,
+                    due_date = :pe
+                WHERE id = :iid
+            """),
+            {
+                "mods": json.dumps(final_modules, ensure_ascii=False),
+                "pm": int(final_pm),
+                "amt": int(new_total),
+                "pe": new_period_end,
+                "iid": invoice_id,
+            },
+        )
+        await session.commit()
+        amount_cents = new_total
+        period_end = new_period_end
+
+    if status != INVOICE_STATUS_PAID:
+        ext_id = f"admin_grant:{int(admin_id)}"
+        ok = await confirm_subscription_invoice_after_payment(session, invoice_id, ext_id)
+        if not ok:
+            return None
+
+    return {
+        "invoice_id": int(invoice_id),
+        "trainer_id": int(tid),
+        "modules": final_modules,
+        "period_months": final_pm,
+        "amount_cents": int(amount_cents) if amount_cents is not None else None,
+        "period_end": period_end,
+    }
+
+
+async def get_active_paid_subscription_for_merge(
+    session: AsyncSession,
+    trainer_id: int,
+) -> dict | None:
+    """
+    Return trainer's current paid (non-trial) subscription that covers NOW, for admin
+    merge flow. Used to offer "add modules to existing plan" instead of stacking a new one.
+
+    Returns None if trainer has no active paid plan (only trial, or nothing at all) —
+    in that case admin should use the regular stack flow.
+    """
+    now = datetime.now(timezone.utc)
+    r = await session.execute(
+        text("""
+            SELECT id, tier, modules, started_at, expires_at, billing_period_months
+            FROM trainer_subscriptions
+            WHERE trainer_id = :tid
+              AND started_at <= :now
+              AND expires_at > :now
+              AND status = :active
+              AND tier IS NOT NULL
+            ORDER BY expires_at DESC
+            LIMIT 1
+        """),
+        {"tid": int(trainer_id), "now": now, "active": SUBSCRIPTION_STATUS_ACTIVE},
+    )
+    row = r.fetchone()
+    if not row:
+        return None
+    sub_id, tier, mods, started_at, expires_at, pm = row
+    remaining_seconds = max(0.0, (expires_at - now).total_seconds())
+    remaining_days = int(remaining_seconds // 86400)
+    return {
+        "subscription_id": int(sub_id),
+        "tier": tier,
+        "modules": normalize_modules_dict(mods),
+        "started_at": started_at,
+        "expires_at": expires_at,
+        "billing_period_months": int(pm) if pm is not None else None,
+        "remaining_days": remaining_days,
+    }
+
+
+async def compute_prorated_module_addon_cost_cents(
+    session: AsyncSession,
+    modules_to_add: list[str],
+    remaining_days: int,
+) -> int | None:
+    """
+    Cost of adding `modules_to_add` to an already-paid subscription for `remaining_days` only.
+
+    Pro-rated against the 1-month catalog price: we divide monthly price by 30 and charge
+    the remaining days. Returns cents. Returns None if a module has no catalog pricing.
+    """
+    if remaining_days <= 0 or not modules_to_add:
+        return 0
+    total = 0
+    for code in modules_to_add:
+        mp = await get_module_period_pricing(session, code, 1)
+        if not mp:
+            return None
+        monthly_cents = int(mp["price_cents"])
+        prorated = int(round(monthly_cents * (remaining_days / 30.0)))
+        total += prorated
+    return total
+
+
+async def admin_merge_modules_into_current_subscription(
+    session: AsyncSession,
+    invoice_id: int,
+    *,
+    add_modules: dict[str, bool],
+    admin_id: int,
+) -> dict | None:
+    """
+    Admin path: extend the trainer's CURRENT active paid subscription with extra modules,
+    without creating a new subscription row.
+
+    Use case: trainer paid for CRM/year, later asks for 'add groups'. Instead of stacking
+    a new row after the year, we OR the new module flags into the current row and charge
+    a pro-rated delta for the remaining days. Invoice is rewritten to describe the delta
+    (modules = what we added, amount = pro-rated price, period_end = current sub's
+    expires_at) and then marked paid.
+
+    Returns activation summary (trainer_id, modules = final UNION, period_end, amount_cents,
+    period_months = 0 sentinel "add-on", invoice_id) or None on failure.
+    """
+    now = datetime.now(timezone.utc)
+    r = await session.execute(
+        text("""
+            SELECT trainer_id, status FROM trainer_invoices WHERE id = :iid
+        """),
+        {"iid": int(invoice_id)},
+    )
+    inv_row = r.fetchone()
+    if not inv_row:
+        return None
+    tid, inv_status = int(inv_row[0]), inv_row[1]
+    if inv_status not in (INVOICE_STATUS_SENT, INVOICE_STATUS_OVERDUE):
+        return None
+
+    current = await get_active_paid_subscription_for_merge(session, tid)
+    if not current:
+        # No active paid subscription to merge into.
+        return None
+
+    add = normalize_modules_dict(add_modules)
+    new_modules_to_add = [k for k in SUBSCRIPTION_MODULES if add.get(k) and not current["modules"].get(k)]
+    if not new_modules_to_add:
+        # Nothing to add — every requested module is already active. Treat as a no-op success.
+        return {
+            "invoice_id": int(invoice_id),
+            "trainer_id": tid,
+            "modules": current["modules"],
+            "period_end": current["expires_at"],
+            "amount_cents": 0,
+            "period_months": 0,
+            "merged": True,
+            "remaining_days": current["remaining_days"],
+        }
+
+    cost_cents = await compute_prorated_module_addon_cost_cents(
+        session, new_modules_to_add, current["remaining_days"]
+    )
+    if cost_cents is None:
+        return None
+
+    union_modules = dict(current["modules"])
+    for k in new_modules_to_add:
+        union_modules[k] = True
+
+    # 1. Extend the existing subscription row's modules (no expires_at change).
+    await session.execute(
+        text("""
+            UPDATE trainer_subscriptions
+            SET modules = CAST(:mods AS jsonb)
+            WHERE id = :sid
+        """),
+        {
+            "mods": json.dumps(union_modules, ensure_ascii=False),
+            "sid": int(current["subscription_id"]),
+        },
+    )
+
+    # 2. Rewrite the invoice to describe the add-on: modules = delta, period_end = sub's
+    #    end, amount = pro-rated cents, period_months = 0 sentinel (not a full cycle).
+    delta_mods_dict = {k: (k in new_modules_to_add) for k in SUBSCRIPTION_MODULES}
+    await session.execute(
+        text("""
+            UPDATE trainer_invoices
+            SET checkout_modules = CAST(:mods AS jsonb),
+                checkout_billing_period_months = 0,
+                amount_cents = :amt,
+                period_start = :ps,
+                period_end = :pe,
+                due_date = :pe,
+                status = :paid,
+                paid_at = :now,
+                external_payment_id = :ext
+            WHERE id = :iid
+        """),
+        {
+            "mods": json.dumps(delta_mods_dict, ensure_ascii=False),
+            "amt": int(cost_cents),
+            "ps": now,
+            "pe": current["expires_at"],
+            "paid": INVOICE_STATUS_PAID,
+            "now": now,
+            "ext": f"admin_merge:{int(admin_id)}",
+            "iid": int(invoice_id),
+        },
+    )
+    await session.commit()
+
+    return {
+        "invoice_id": int(invoice_id),
+        "trainer_id": tid,
+        # Final state: union of what the trainer has after the merge.
+        "modules": union_modules,
+        # Which modules were actually added in this call — handy for trainer-facing message.
+        "added_modules": new_modules_to_add,
+        "period_end": current["expires_at"],
+        "amount_cents": int(cost_cents),
+        # 0 signals "add-on, not a period renewal" to callers.
+        "period_months": 0,
+        "merged": True,
+        "remaining_days": current["remaining_days"],
+    }
+
+
+async def admin_cancel_pending_subscription_invoice(
+    session: AsyncSession,
+    invoice_id: int,
+) -> dict | None:
+    """Admin declines a trainer's invoice request. Marks invoice cancelled. Idempotent for already-cancelled."""
+    r = await session.execute(
+        text("""
+            SELECT trainer_id, status FROM trainer_invoices WHERE id = :iid
+        """),
+        {"iid": invoice_id},
+    )
+    row = r.fetchone()
+    if not row:
+        return None
+    tid, status = int(row[0]), row[1]
+    if status not in (INVOICE_STATUS_SENT, INVOICE_STATUS_OVERDUE, INVOICE_STATUS_CANCELLED):
+        return None
+    if status != INVOICE_STATUS_CANCELLED:
+        await session.execute(
+            text("UPDATE trainer_invoices SET status = :c WHERE id = :iid"),
+            {"c": INVOICE_STATUS_CANCELLED, "iid": invoice_id},
+        )
+        await session.commit()
+    return {"invoice_id": int(invoice_id), "trainer_id": tid, "status": INVOICE_STATUS_CANCELLED}

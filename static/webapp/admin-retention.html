@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Удержание · Аналитика</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="mini-app-telegram-chrome.js"></script>
+  <link rel="stylesheet" href="theme.css" />
+  <link rel="stylesheet" href="admin-analytics-shared.css" />
+</head>
+<body>
+  <div class="adm-header">
+    <h1>🔁 Удержание</h1>
+    <div class="adm-sub">churn · истекают · спящие · возвращения · когорты</div>
+  </div>
+  <div id="content">
+    <div class="adm-loading">Загрузка…</div>
+  </div>
+  <script src="admin-analytics-shared.js"></script>
+  <script>
+    (function () {
+      var A = window.AdmAnalytics;
+
+      function urgencyPill(daysLeft) {
+        if (daysLeft <= 1) return '<span class="adm-pill danger">' + daysLeft + ' дн.</span>';
+        if (daysLeft <= 7) return '<span class="adm-pill warn">' + daysLeft + ' дн.</span>';
+        return '<span class="adm-pill info">' + daysLeft + ' дн.</span>';
+      }
+
+      function render(d) {
+        var html = '';
+
+        var churnLabel = d.churn_rate_30d_pct != null ? d.churn_rate_30d_pct + '%' : '—';
+        var churnCls = d.churn_rate_30d_pct == null ? 'flat'
+                       : d.churn_rate_30d_pct >= 10 ? 'down'
+                       : d.churn_rate_30d_pct >= 5  ? 'flat'
+                                                    : 'up';
+        html += '<div class="adm-banner">';
+        html +=   '<div class="adm-banner-title">Churn rate (30 дней)</div>';
+        html +=   '<div class="adm-banner-value">' + churnLabel + '</div>';
+        html +=   '<div class="adm-banner-sub">' +
+                    A.formatNum(d.churn_count_30d) + ' тренеров отвалилось из ' + A.formatNum(d.base_active_30d_ago) + ' активных 30 дн. назад. ' +
+                    '<span class="adm-delta ' + churnCls + '">' + (churnCls === 'up' ? 'низкий churn — хорошо' : churnCls === 'down' ? 'высокий churn — внимание' : 'в норме') + '</span>' +
+                  '</div>';
+        html += '</div>';
+
+        // Expiring soon
+        html += '<div class="adm-section"><div class="adm-section-title">⏰ Истекают подписки</div>';
+        html +=   '<div class="adm-kpi-grid cols-3">' +
+                    '<div class="adm-kpi"><div class="adm-kpi-label">≤ 7 дней</div>' +
+                      '<div class="adm-kpi-value">' + A.formatNum(d.expiring_7d_count) + '</div>' +
+                      '<div class="adm-kpi-sub">срочно напомнить</div></div>' +
+                    '<div class="adm-kpi"><div class="adm-kpi-label">≤ 14 дней</div>' +
+                      '<div class="adm-kpi-value">' + A.formatNum(d.expiring_14d_count) + '</div>' +
+                      '<div class="adm-kpi-sub">подготовить продление</div></div>' +
+                    '<div class="adm-kpi"><div class="adm-kpi-label">≤ 30 дней</div>' +
+                      '<div class="adm-kpi-value">' + A.formatNum(d.expiring_30d_count) + '</div>' +
+                      '<div class="adm-kpi-sub">в обработку</div></div>' +
+                  '</div>';
+        var expSoon = d.expiring_soon || [];
+        if (expSoon.length) {
+          html += '<div class="adm-section-title" style="margin-top:14px">Кому позвонить (первые 30)</div>';
+          html += A.drilldown(expSoon.map(function (t) {
+            var statusPill = t.status === 'trial'
+              ? '<span class="adm-pill warn">триал</span>'
+              : '<span class="adm-pill success">платный</span>';
+            var extra = '<div class="adm-row-list">' +
+              '<div><span>ID:</span><span>#' + t.trainer_id + '</span></div>' +
+              '<div><span>Текущий план:</span><span>' + A.escapeHtml(t.label) + '</span></div>' +
+              '<div><span>Истекает:</span><span>' + A.formatDate(t.expires_at) + '</span></div>' +
+              '<div><span>Совет:</span><span>напомнить лично или /grant_subscription</span></div>' +
+            '</div>';
+            return {
+              title: A.escapeHtml(t.display_name) + ' ' + statusPill,
+              meta: A.escapeHtml(t.label),
+              value: urgencyPill(t.days_left),
+              extra: extra,
+            };
+          }));
+        }
+        html += '</div>';
+
+        // Sleeping trainers
+        html += '<div class="adm-section"><div class="adm-section-title">😴 Спящие тренеры (без записей)</div>';
+        html +=   '<div class="adm-kpi-grid cols-3">' +
+                    '<div class="adm-kpi"><div class="adm-kpi-label">30+ дней</div><div class="adm-kpi-value">' + A.formatNum(d.sleeping_30_count) + '</div><div class="adm-kpi-sub">внимание</div></div>' +
+                    '<div class="adm-kpi"><div class="adm-kpi-label">60+ дней</div><div class="adm-kpi-value">' + A.formatNum(d.sleeping_60_count) + '</div><div class="adm-kpi-sub">риск</div></div>' +
+                    '<div class="adm-kpi"><div class="adm-kpi-label">90+ дней</div><div class="adm-kpi-value">' + A.formatNum(d.sleeping_90_count) + '</div><div class="adm-kpi-sub">почти потеряны</div></div>' +
+                  '</div>';
+        var sleepers = d.sleeping_trainers || [];
+        if (sleepers.length) {
+          html += '<div class="adm-section-title" style="margin-top:14px">Кого реактивировать</div>';
+          html += A.drilldown(sleepers.map(function (t) {
+            var extra = '<div class="adm-row-list">' +
+              '<div><span>ID:</span><span>#' + t.trainer_id + '</span></div>' +
+              '<div><span>Зарегистрирован:</span><span>' + A.formatDate(t.created_at) + '</span></div>' +
+              '<div><span>Последняя запись:</span><span>' + (t.last_booking_at ? A.formatDate(t.last_booking_at) : 'не было ни разу') + '</span></div>' +
+              '<div><span>Совет:</span><span>написать в личку или дать промо-период</span></div>' +
+            '</div>';
+            return {
+              title: A.escapeHtml(t.display_name),
+              meta: t.last_booking_at ? 'последняя запись ' + A.formatDate(t.last_booking_at) : 'ни одной записи',
+              value: t.last_booking_at ? '' : '<span class="adm-pill danger">никогда</span>',
+              extra: extra,
+            };
+          }));
+        }
+        html += '</div>';
+
+        // Revival
+        html += '<div class="adm-section"><div class="adm-section-title">🌅 Возвращения (revival)</div>';
+        html +=   '<div class="adm-card tight"><div class="adm-row-list">' +
+                    '<div><span>Вернулись за 30 дн:</span><span>' + A.formatNum(d.revival_count_30d) + '</span></div>' +
+                  '</div></div>';
+        var revs = d.revived_trainers || [];
+        if (revs.length) {
+          html += A.drilldown(revs.map(function (t) {
+            var extra = '<div class="adm-row-list">' +
+              '<div><span>ID:</span><span>#' + t.trainer_id + '</span></div>' +
+              '<div><span>Тишина была до:</span><span>' + A.formatDate(t.last_booking_before_revival) + '</span></div>' +
+              '<div><span>Совет:</span><span>проверить, не было ли проблем — точка роста</span></div>' +
+            '</div>';
+            return {
+              title: A.escapeHtml(t.display_name),
+              meta: 'тишина до ' + A.formatDate(t.last_booking_before_revival),
+              value: '<span class="adm-pill success">вернулся</span>',
+              extra: extra,
+            };
+          }));
+        }
+        html += '</div>';
+
+        // Cohort retention
+        html += '<div class="adm-section"><div class="adm-section-title">📅 Когортная retention (по месяцу регистрации)</div>';
+        var coh = d.cohort_retention || [];
+        if (!coh.length) {
+          html += '<div class="adm-card"><div class="adm-empty">Нет данных</div></div>';
+        } else {
+          html += '<div class="adm-card" style="padding:0;">';
+          html +=   '<div class="adm-scroll"><table class="adm-table"><thead><tr>' +
+                      '<th>Месяц</th>' +
+                      '<th class="num">Зашло</th>' +
+                      '<th class="num">Активны</th>' +
+                      '<th class="num">Retention</th>' +
+                    '</tr></thead><tbody>';
+          coh.forEach(function (c) {
+            html += '<tr><td>' + A.escapeHtml(c.cohort_month) + '</td>' +
+                    '<td class="num">' + A.formatNum(c.cohort_size) + '</td>' +
+                    '<td class="num">' + A.formatNum(c.still_active) + '</td>' +
+                    '<td class="num">' + (c.retention_pct != null ? c.retention_pct + '%' : '—') + '</td></tr>';
+          });
+          html +=   '</tbody></table></div>';
+          html += '</div>';
+        }
+        html += '</div>';
+
+        // Churned trainers (the bad news, last)
+        html += '<div class="adm-section"><div class="adm-section-title">💔 Отвалились за 30 дней</div>';
+        var ch = d.churned_trainers || [];
+        if (!ch.length) {
+          html += '<div class="adm-card"><div class="adm-empty">Никто не отвалился 🎉</div></div>';
+        } else {
+          html += A.drilldown(ch.map(function (t) {
+            var extra = '<div class="adm-row-list">' +
+              '<div><span>ID:</span><span>#' + t.trainer_id + '</span></div>' +
+              '<div><span>Подписка истекла:</span><span>' + A.formatDate(t.expired_at) + '</span></div>' +
+              '<div><span>Совет:</span><span>написать «что не так?» — это самые ценные интервью</span></div>' +
+            '</div>';
+            return {
+              title: A.escapeHtml(t.display_name),
+              meta: 'истекла ' + A.formatDate(t.expired_at),
+              value: '<span class="adm-pill danger">churn</span>',
+              extra: extra,
+            };
+          }));
+        }
+        html += '</div>';
+
+        return html;
+      }
+
+      A.mount({ endpoint: '/admin/stats/retention', render: render });
+    })();
+  </script>
+</body>
+</html>

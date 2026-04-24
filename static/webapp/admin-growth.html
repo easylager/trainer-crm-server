@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Рост · Аналитика</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="mini-app-telegram-chrome.js"></script>
+  <link rel="stylesheet" href="theme.css" />
+  <link rel="stylesheet" href="admin-analytics-shared.css" />
+</head>
+<body>
+  <div class="adm-header">
+    <h1>📈 Рост</h1>
+    <div class="adm-sub">новые тренеры · trial→paid · time-to-paid · рефералка</div>
+  </div>
+  <div id="content">
+    <div class="adm-loading">Загрузка…</div>
+  </div>
+  <script src="admin-analytics-shared.js"></script>
+  <script>
+    (function () {
+      var A = window.AdmAnalytics;
+
+      function deltaBadge(pct) {
+        if (pct == null || isNaN(pct)) return '<span class="adm-delta flat">— к прошлому периоду</span>';
+        var cls = A.deltaClass(pct);
+        var arrow = cls === 'up' ? '▲' : cls === 'down' ? '▼' : '•';
+        return '<span class="adm-delta ' + cls + '">' + arrow + ' ' + A.formatPct(pct) + ' MoM</span>';
+      }
+
+      function statusPill(status) {
+        if (status === 'active')          return '<span class="adm-pill success">активен</span>';
+        if (status === 'pending_profile') return '<span class="adm-pill warn">профиль</span>';
+        if (status === 'pending_payment') return '<span class="adm-pill warn">оплата</span>';
+        if (status === 'deactivated')     return '<span class="adm-pill danger">отключён</span>';
+        return '<span class="adm-pill">' + A.escapeHtml(status || '—') + '</span>';
+      }
+
+      function render(d) {
+        var html = '';
+
+        html += '<div class="adm-banner">';
+        html +=   '<div class="adm-banner-title">Конверсия trial → paid (90 дней)</div>';
+        html +=   '<div class="adm-banner-value">' + (d.trial_to_paid_pct != null ? d.trial_to_paid_pct + '%' : '—') + '</div>';
+        html +=   '<div class="adm-banner-sub">';
+        html +=     A.formatNum(d.trial_paid_90d) + ' оплатили из ' + A.formatNum(d.trial_starts_90d) + ' стартовавших триалов';
+        if (d.trial_to_paid_pct_prev != null) {
+          html += ' · предыдущие 90 дн.: ' + d.trial_to_paid_pct_prev + '%';
+        }
+        html +=   '</div>';
+        html += '</div>';
+
+        // KPIs
+        html += '<div class="adm-section"><div class="adm-section-title">Привлечение</div>';
+        html +=   '<div class="adm-kpi-grid">';
+        html +=     '<div class="adm-kpi"><div class="adm-kpi-label">Новых тренеров (7 дн)</div>' +
+                    '<div class="adm-kpi-value">' + A.formatNum(d.new_trainers_7d) + '</div>' +
+                    '<div class="adm-kpi-sub">за неделю</div></div>';
+        html +=     '<div class="adm-kpi"><div class="adm-kpi-label">Новых тренеров (30 дн)</div>' +
+                    '<div class="adm-kpi-value">' + A.formatNum(d.new_trainers_30d) + '</div>' +
+                    '<div class="adm-kpi-sub">' + deltaBadge(d.new_trainers_mom_pct) + '</div></div>';
+        html +=     '<div class="adm-kpi"><div class="adm-kpi-label">Медиана до 1-й оплаты</div>' +
+                    '<div class="adm-kpi-value">' + (d.median_days_to_first_paid != null ? d.median_days_to_first_paid + ' дн' : '—') + '</div>' +
+                    '<div class="adm-kpi-sub">p90: ' + (d.p90_days_to_first_paid != null ? d.p90_days_to_first_paid + ' дн' : '—') + '</div></div>';
+        html +=     '<div class="adm-kpi"><div class="adm-kpi-label">До 1-й записи</div>' +
+                    '<div class="adm-kpi-value">' + (d.median_days_to_first_booking != null ? d.median_days_to_first_booking + ' дн' : '—') + '</div>' +
+                    '<div class="adm-kpi-sub">медиана за 180 дн</div></div>';
+        html +=   '</div>';
+        html += '</div>';
+
+        // Spark
+        html += '<div class="adm-section"><div class="adm-section-title">Новые тренеры по месяцам</div>';
+        html +=   '<div class="adm-card">';
+        var vals = (d.new_trainers_by_month || []).map(function (x) { return x.count || 0; });
+        var labs = (d.new_trainers_by_month || []).map(function (x) { return (x.month || '').slice(5); });
+        html +=     A.sparkline(vals, labs);
+        html +=     '<div class="adm-hint">Сравнивайте тренд, а не отдельные пики — органика часто скачет.</div>';
+        html +=   '</div>';
+        html += '</div>';
+
+        // Referral program
+        html += '<div class="adm-section"><div class="adm-section-title">🎁 Реферальная программа</div>';
+        html +=   '<div class="adm-card tight"><div class="adm-row-list">' +
+                    '<div><span>Всего приглашений:</span><span>' + A.formatNum(d.referral_invites_total) + '</span></div>' +
+                    '<div><span>Засчитано (купили):</span><span>' + A.formatNum(d.referral_credited_total) + '</span></div>' +
+                    '<div><span>Конверсия:</span><span>' + (d.referral_invites_total ? Math.round(100 * d.referral_credited_total / d.referral_invites_total) + '%' : '—') + '</span></div>' +
+                    '<div><span>Дней начислено всего:</span><span>' + A.formatNum(d.referral_credit_days_total) + '</span></div>' +
+                    '<div><span>Дней начислено за 30 дн:</span><span>' + A.formatNum(d.referral_credit_days_30d) + '</span></div>' +
+                  '</div></div>';
+        if ((d.top_referrers || []).length) {
+          html += '<div class="adm-section-title" style="margin-top:14px">Топ-10 рефереров</div>';
+          html += A.drilldown(d.top_referrers.map(function (r, i) {
+            var extra = '<div class="adm-row-list">' +
+              '<div><span>ID тренера:</span><span>#' + r.trainer_id + '</span></div>' +
+              '<div><span>Пригласил всего:</span><span>' + A.formatNum(r.invited) + '</span></div>' +
+              '<div><span>Из них оплатили:</span><span>' + A.formatNum(r.credited) + '</span></div>' +
+              '<div><span>Конверсия:</span><span>' + (r.invited ? Math.round(100*r.credited/r.invited) + '%' : '—') + '</span></div>' +
+            '</div>';
+            return {
+              title: (i + 1) + '. ' + A.escapeHtml(r.display_name),
+              meta: r.invited + ' приглашений',
+              value: A.formatNum(r.credited) + ' / ' + A.formatNum(r.invited),
+              extra: extra,
+            };
+          }));
+        }
+        html += '</div>';
+
+        // Recent signups
+        html += '<div class="adm-section"><div class="adm-section-title">🆕 Последние регистрации</div>';
+        var signups = d.recent_signups || [];
+        if (!signups.length) {
+          html += '<div class="adm-card"><div class="adm-empty">Нет данных</div></div>';
+        } else {
+          html += A.drilldown(signups.map(function (s) {
+            var channel = s.channel === 'referral'
+              ? '<span class="adm-pill info">по реферальной</span>'
+              : '<span class="adm-pill">органика</span>';
+            var milestones = [];
+            if (s.has_booking) milestones.push('<span class="adm-pill success">была запись</span>');
+            if (s.has_paid)    milestones.push('<span class="adm-pill success">платил</span>');
+            if (!milestones.length) milestones.push('<span class="adm-pill warn">тихо</span>');
+            var extra = '<div class="adm-row-list">' +
+              '<div><span>ID:</span><span>#' + s.trainer_id + '</span></div>' +
+              '<div><span>Зарегистрирован:</span><span>' + A.formatDate(s.created_at) + '</span></div>' +
+              '<div><span>Канал:</span><span>' + (s.channel === 'referral' ? 'реферальная' : 'органика') + '</span></div>' +
+              '<div><span>Статус:</span><span>' + A.escapeHtml(s.status) + '</span></div>' +
+            '</div>';
+            return {
+              title: A.escapeHtml(s.display_name) + ' ' + statusPill(s.status),
+              meta: A.formatDate(s.created_at) + ' · ' + channel + ' · ' + milestones.join(' '),
+              value: '#' + s.trainer_id,
+              extra: extra,
+            };
+          }));
+        }
+        html += '</div>';
+
+        return html;
+      }
+
+      A.mount({ endpoint: '/admin/stats/growth', render: render });
+    })();
+  </script>
+</body>
+</html>

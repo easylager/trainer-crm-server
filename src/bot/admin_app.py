@@ -32,6 +32,7 @@ async def setup_menu_and_commands(bot: Bot) -> None:
             BotCommand(command="dicts", description="Города и арены"),
             BotCommand(command="subscription_tiers", description="Тарифы подписки тренеров"),
             BotCommand(command="subscription_invoices", description="Счета по подписке (ERIP)"),
+            BotCommand(command="grant_subscription", description="Выдать подписку тренеру"),
             BotCommand(command="version", description="Версия деплоя и health API"),
             BotCommand(command="problem_reports", description="Аудит отчётов о проблемах (E6)"),
         ]

@@ -17,6 +17,23 @@ from src.infrastructure.db.models import (
 )
 
 
+class _DualResultMock:
+    """
+    Session.execute().fetchone() / fetchall() helper: both return consistent data so
+    existing tests (written against fetchone) keep passing alongside get_trainer_entitlements,
+    which now uses fetchall to union modules across overlapping rows.
+    """
+
+    def __init__(self, row: tuple | None) -> None:
+        self._row = row
+
+    def fetchone(self) -> tuple | None:
+        return self._row
+
+    def fetchall(self) -> list:
+        return [self._row] if self._row is not None else []
+
+
 def _mods(online: bool = False, analytics: bool = False, groups: bool = False) -> dict:
     return {"online": online, "analytics": analytics, "groups": groups}
 
@@ -25,6 +42,19 @@ def _ent_row(tier: str | None, modules: dict | None) -> tuple | None:
     if tier is None:
         return None
     return (tier, modules)
+
+
+def _result_mock(row: tuple | None) -> MagicMock:
+    """
+    Build a result mock that answers both fetchone() and fetchall() consistently.
+
+    get_trainer_entitlements switched to fetchall (module union across overlapping
+    rows); older tests rely on fetchone semantics. This keeps both shapes working.
+    """
+    m = MagicMock()
+    m.fetchone.return_value = row
+    m.fetchall.return_value = [row] if row is not None else []
+    return m
 
 
 class TestTrainerAllowsOnlineBooking:
@@ -53,9 +83,9 @@ class TestTrainerAllowsOnlineBooking:
     @pytest.mark.asyncio
     async def test_online_module_allows_booking(self) -> None:
         mock_session = AsyncMock()
-        mock_result = MagicMock()
-        mock_result.fetchone.return_value = _ent_row(SUBSCRIPTION_TIER_CRM, _mods(online=True))
-        mock_session.execute.return_value = mock_result
+        mock_session.execute.return_value = _DualResultMock(
+            _ent_row(SUBSCRIPTION_TIER_CRM, _mods(online=True))
+        )
 
         result = await trainer_allows_online_booking(mock_session, trainer_id=1)
         assert result is True
@@ -80,9 +110,7 @@ class TestTrainerHasCrmAccess:
     @pytest.mark.asyncio
     async def test_no_subscription_denies_crm(self) -> None:
         mock_session = AsyncMock()
-        mock_result = MagicMock()
-        mock_result.fetchone.return_value = None
-        mock_session.execute.return_value = mock_result
+        mock_session.execute.return_value = _DualResultMock(None)
 
         result = await trainer_has_crm_access(mock_session, trainer_id=1)
         assert result is False
@@ -124,11 +152,9 @@ class TestTrainerHasAnalyticsAccess:
     @pytest.mark.asyncio
     async def test_analytics_module_allows_analytics(self) -> None:
         mock_session = AsyncMock()
-        mock_result = MagicMock()
-        mock_result.fetchone.return_value = _ent_row(
-            SUBSCRIPTION_TIER_CRM, _mods(analytics=True)
+        mock_session.execute.return_value = _DualResultMock(
+            _ent_row(SUBSCRIPTION_TIER_CRM, _mods(analytics=True))
         )
-        mock_session.execute.return_value = mock_result
 
         result = await trainer_has_analytics_access(mock_session, trainer_id=1)
         assert result is True
@@ -138,11 +164,9 @@ class TestTrainerHasGroupsAccess:
     @pytest.mark.asyncio
     async def test_groups_module(self) -> None:
         mock_session = AsyncMock()
-        mock_result = MagicMock()
-        mock_result.fetchone.return_value = _ent_row(
-            SUBSCRIPTION_TIER_CRM, _mods(groups=True)
+        mock_session.execute.return_value = _DualResultMock(
+            _ent_row(SUBSCRIPTION_TIER_CRM, _mods(groups=True))
         )
-        mock_session.execute.return_value = mock_result
         assert await trainer_has_groups_access(mock_session, 1) is True
 
 
@@ -152,9 +176,7 @@ class TestGetTrainerBookingAvailability:
     @pytest.mark.asyncio
     async def test_no_subscription_returns_cannot_book(self) -> None:
         mock_session = AsyncMock()
-        mock_result = MagicMock()
-        mock_result.fetchone.return_value = None
-        mock_session.execute.return_value = mock_result
+        mock_session.execute.return_value = _DualResultMock(None)
 
         result = await get_trainer_booking_availability(mock_session, trainer_id=1)
 
@@ -181,9 +203,7 @@ class TestGetTrainerBookingAvailability:
     async def test_online_module_returns_can_book(self) -> None:
         mock_session = AsyncMock()
         row = _ent_row(SUBSCRIPTION_TIER_CRM, _mods(online=True))
-        mock_result = MagicMock()
-        mock_result.fetchone.return_value = row
-        mock_session.execute.return_value = mock_result
+        mock_session.execute.return_value = _DualResultMock(row)
 
         result = await get_trainer_booking_availability(mock_session, trainer_id=1)
 
@@ -214,14 +234,11 @@ class TestTierAccessMatrix:
         analytics_access: bool,
     ) -> None:
         mock_session = AsyncMock()
-        mock_result = MagicMock()
-        mock_result.fetchone.return_value = (
-            None if modules is None else _ent_row(SUBSCRIPTION_TIER_CRM, modules)
-        )
-        mock_session.execute.return_value = mock_result
+        row = None if modules is None else _ent_row(SUBSCRIPTION_TIER_CRM, modules)
+        mock_session.execute.return_value = _DualResultMock(row)
 
         assert await trainer_has_crm_access(mock_session, 1) == crm_access
-        mock_session.execute.return_value = mock_result
+        mock_session.execute.return_value = _DualResultMock(row)
         assert await trainer_allows_online_booking(mock_session, 1) == online_access
-        mock_session.execute.return_value = mock_result
+        mock_session.execute.return_value = _DualResultMock(row)
         assert await trainer_has_analytics_access(mock_session, 1) == analytics_access

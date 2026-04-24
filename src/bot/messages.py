@@ -1432,15 +1432,13 @@ TRAINER_LINK_TELEGRAM_CONFLICT = (
     "Если ты уже работаешь в боте — просто открой чат и пользуйся меню (команда /start без ссылки). "
     "Если это ошибка — напиши в поддержку: /guide"
 )
-# После первой привязки по ссылке (active + пробный тариф «Аналитика»)
+# После первой привязки по ссылке: активируется полный доступ на пробный период.
 TRAINER_WELCOME_TRIAL_ACTIVATED = (
-    "🎁 <b>Пробный период на максимальном тарифе</b>\n\n"
-    "Для тебя активирован тариф <b>«{tier_name}»</b> в пробном режиме "
-    "до <b>{expires_date}</b>.\n\n"
-    "Сейчас доступны <b>все инструменты</b> платформы: расписание, CRM, онлайн-запись, "
-    "абонементы, сертификаты и аналитика.\n\n"
-    "Когда пробный период закончится, выбери платный тариф в разделе "
-    "<b>«Подписка»</b> в меню бота — мы напомним заранее."
+    "🎁 <b>Пробный период — {tier_name}</b>\n\n"
+    "До <b>{expires_date}</b> у тебя открыт полный доступ ко всем модулям платформы: "
+    "CRM, онлайн-запись, абонементы, сертификаты, аналитика и группы.\n\n"
+    "Когда пробный период закончится, собери свой план в разделе "
+    "<b>«Подписка»</b> в меню бота — оставь только то, что реально используешь."
 )
 TRAINER_FALLBACK = "Используй меню слева от поля ввода — там все разделы. Помощь: /guide"
 
@@ -1616,7 +1614,8 @@ ADMIN_START = (
     "Привет! Это админ-бот для модерации тренеров.\n\n"
     "Команды:\n"
     "/pending — показать тренеров на модерацию.\n"
-    "/subscription_invoices — заявки на счёт по подписке (ERIP / ручное подтверждение).\n"
+    "/subscription_invoices — заявки на подписку (активировать / отклонить кнопками).\n"
+    "/grant_subscription &lt;trainer_id&gt; — выдать подписку конкретному тренеру.\n"
     "/problem_reports — аудит отчётов «проблема с клиентом» (E6)."
 )
 ADMIN_NO_ACCESS = "У вас нет доступа к этому боту."
@@ -2417,8 +2416,7 @@ ADMIN_SUBSCRIPTION_INVOICE_NOTIFY = (
     "Сумма: <b>{amount_byn} BYN</b>\n"
     "Период: {period_start} — {period_end}\n\n"
     "{trainer_contact_block}\n\n"
-    "<i>После оплаты подтвердите через API: </i><code>POST …/admin/trainer-invoices/{invoice_id}/confirm-paid</code>"
-    "<i> (admin initData).</i>"
+    "<i>Подтвердите оплату или измените состав кнопками ниже.</i>"
 )
 ADMIN_SUBSCRIPTION_INVOICES_TITLE = "💳 <b>Ожидающие счета по подписке</b> (каталог, ERIP)\n\n"
 ADMIN_SUBSCRIPTION_INVOICES_EMPTY = "Нет неоплаченных заявок."
@@ -2428,9 +2426,54 @@ ADMIN_SUBSCRIPTION_INVOICES_LINE = (
     "   {link}\n"
 )
 ADMIN_SUBSCRIPTION_INVOICES_FOOTER = "\n<i>Команда: /subscription_invoices</i>"
+
+# Admin: subscription grant flow (per-invoice activate / edit / cancel)
+ADMIN_SUBSCRIPTION_GRANT_EDIT_TITLE = (
+    "⚙️ <b>Состав подписки № <code>{invoice_id}</code></b>\n"
+    "Тренер: <b>{trainer_name}</b> (internal <code>{trainer_id}</code>)\n\n"
+    "{plan_line}\n"
+    "Сумма: <b>{amount_byn} BYN</b> · период <b>{months}</b>\n\n"
+    "«Продлить» = новый период. «Добавить» = модули в текущую подписку, цена пропорциональна остатку.\n"
+    "{trainer_contact_block}"
+)
+ADMIN_SUBSCRIPTION_GRANT_NOT_FOUND = "Счёт не найден или уже неактивен."
+ADMIN_SUBSCRIPTION_GRANT_ALREADY_PAID = "Счёт уже подтверждён."
+ADMIN_SUBSCRIPTION_GRANT_ACTIVATED = (
+    "✅ <b>Подписка активирована</b>\n\n"
+    "Счёт № <code>{invoice_id}</code> · тренер <b>{trainer_name}</b>\n"
+    "Тариф: <b>{label}</b> · период <b>{months}</b>\n"
+    "Сумма: <b>{amount_byn} BYN</b>\n"
+    "Действует до <b>{expires_date}</b>.\n\n"
+    "Тренеру отправлено уведомление."
+)
+ADMIN_SUBSCRIPTION_GRANT_FAILED = "Не удалось активировать счёт. Проверьте логи."
+ADMIN_SUBSCRIPTION_GRANT_CANCELLED = (
+    "❌ Заявка № <code>{invoice_id}</code> отклонена. Тренеру отправлено уведомление."
+)
+ADMIN_SUBSCRIPTION_GRANT_HELP = (
+    "<b>/grant_subscription</b> — выдать подписку конкретному тренеру.\n\n"
+    "Использование:\n"
+    "<code>/grant_subscription &lt;trainer_id&gt;</code>\n\n"
+    "Бот создаст черновик счёта (CRM, 1 мес.) и откроет конструктор — там можно "
+    "переключить модули и срок, затем нажать «Активировать»."
+)
+ADMIN_SUBSCRIPTION_GRANT_NO_TRAINER = "Тренер с id <code>{tid}</code> не найден."
+ADMIN_SUBSCRIPTION_GRANT_DRAFT_FAILED = "Не удалось создать черновик счёта. Проверьте, что тариф CRM сконфигурирован."
+
+# Trainer-side notifications when admin acts on a subscription invoice
+TRAINER_SUBSCRIPTION_GRANTED_BY_ADMIN = (
+    "✅ <b>Подписка активирована</b>\n\n"
+    "Тариф: <b>«{label}»</b>\n"
+    "Действует до <b>{expires_date}</b>.\n\n"
+    "Все включённые модули уже доступны в меню."
+)
+TRAINER_SUBSCRIPTION_INVOICE_DECLINED = (
+    "ℹ️ <b>Заявка на подписку отклонена</b>\n\n"
+    "Если это ошибка — напишите в поддержку или оставьте новую заявку в разделе «Подписка»."
+)
 ADMIN_WELCOME_TRIAL_DAYS_CURRENT = (
     "🧪 <b>Пробный период при первой привязке Telegram</b>\n\n"
-    "Сейчас в базе: <b>{days}</b> дн. (макс. тариф «Аналитика»).\n"
+    "Сейчас в базе: <b>{days}</b> дн. (полный доступ ко всем модулям: CRM, онлайн-запись, аналитика, группы).\n"
     "Переопределение через <code>TRIAL_PERIOD_DAYS</code> в окружении имеет приоритет."
 )
 ADMIN_WELCOME_TRIAL_DAYS_SET = "Сохранено: пробный период <b>{days}</b> дн. для новых подписок."

@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Активность · Аналитика</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="mini-app-telegram-chrome.js"></script>
+  <link rel="stylesheet" href="theme.css" />
+  <link rel="stylesheet" href="admin-analytics-shared.css" />
+  <style>
+    .heat-row { display: flex; gap: 4px; align-items: flex-end; height: 80px; margin-top: 6px; }
+    .heat-cell {
+      flex: 1; min-width: 22px;
+      background: rgba(245, 166, 35, 0.65);
+      border-radius: 4px 4px 0 0;
+      position: relative;
+      min-height: 6px;
+    }
+    .heat-cell.muted { background: rgba(255,255,255,0.18); }
+    .heat-labels { display: flex; gap: 4px; margin-top: 6px; }
+    .heat-label { flex: 1; text-align: center; font-size: 11px; color: var(--tg-theme-hint-color); }
+  </style>
+</head>
+<body>
+  <div class="adm-header">
+    <h1>🎯 Активность</h1>
+    <div class="adm-sub">DAU/WAU/MAU · фичи · топ активных · по дням недели</div>
+  </div>
+  <div id="content">
+    <div class="adm-loading">Загрузка…</div>
+  </div>
+  <script src="admin-analytics-shared.js"></script>
+  <script>
+    (function () {
+      var A = window.AdmAnalytics;
+
+      function pct(p) { return p != null ? p + '%' : '—'; }
+
+      function render(d) {
+        var html = '';
+
+        html += '<div class="adm-banner">';
+        html +=   '<div class="adm-banner-title">Активные тренеры (по записям клиентов)</div>';
+        html +=   '<div class="adm-banner-value">DAU ' + A.formatNum(d.dau) + ' · WAU ' + A.formatNum(d.wau) + ' · MAU ' + A.formatNum(d.mau) + '</div>';
+        html +=   '<div class="adm-banner-sub">';
+        html +=     'Из ' + A.formatNum(d.trainers_active) + ' активных аккаунтов: за неделю ' + pct(d.wau_share_pct) + ', за месяц ' + pct(d.mau_share_pct);
+        html +=   '</div>';
+        html += '</div>';
+
+        // Bookings per active trainer
+        html += '<div class="adm-section"><div class="adm-section-title">Записи на активного тренера (30 дн)</div>';
+        html +=   '<div class="adm-kpi-grid">';
+        html +=     '<div class="adm-kpi"><div class="adm-kpi-label">Среднее</div>' +
+                    '<div class="adm-kpi-value">' + d.avg_bookings_per_active_30d + '</div>' +
+                    '<div class="adm-kpi-sub">записей / месяц / тренер</div></div>';
+        html +=     '<div class="adm-kpi"><div class="adm-kpi-label">Медиана</div>' +
+                    '<div class="adm-kpi-value">' + d.median_bookings_per_active_30d + '</div>' +
+                    '<div class="adm-kpi-sub">типичный тренер</div></div>';
+        html +=   '</div>';
+        html += '</div>';
+
+        // Feature usage
+        html += '<div class="adm-section"><div class="adm-section-title">Фичи: кто чем пользуется</div>';
+        var feats = d.feature_usage || [];
+        if (!feats.length) {
+          html += '<div class="adm-card"><div class="adm-empty">Нет данных</div></div>';
+        } else {
+          html += feats.map(function (f) {
+            var widthPct = Math.min(100, Math.max(2, +f.share_pct || 0));
+            return '<div class="adm-card tight">' +
+              '<div class="adm-list-head">' +
+                '<div><div class="adm-list-title">' + A.escapeHtml(f.label) + '</div>' +
+                '<div class="adm-list-meta">' + A.formatNum(f.users) + ' тренеров · ' + pct(f.share_pct) + ' от активных</div></div>' +
+                '<div class="adm-list-value">' + pct(f.share_pct) + '</div>' +
+              '</div>' +
+              '<div style="margin-top:8px;height:6px;background:rgba(255,255,255,0.07);border-radius:4px;overflow:hidden;">' +
+                '<div style="width:' + widthPct + '%;height:100%;background:rgba(245, 166, 35, 0.7);"></div>' +
+              '</div>' +
+            '</div>';
+          }).join('');
+        }
+        html += '</div>';
+
+        // Day-of-week heat
+        html += '<div class="adm-section"><div class="adm-section-title">Активность по дням недели (30 дн)</div>';
+        html +=   '<div class="adm-card">';
+        var counts = d.dow_counts || [0,0,0,0,0,0,0];
+        var labels = d.dow_labels || ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
+        var max = Math.max.apply(null, counts);
+        if (max <= 0) max = 1;
+        var bars = counts.map(function (c) {
+          var h = Math.round(Math.max(6, c * 100 / max));
+          var muted = c === 0 ? ' muted' : '';
+          return '<div class="heat-cell' + muted + '" style="height:' + h + '%" title="' + c + ' завершённых занятий"></div>';
+        }).join('');
+        var ll = labels.map(function (l, i) {
+          return '<div class="heat-label">' + A.escapeHtml(l) + '<br/><span style="opacity:.7">' + A.formatNum(counts[i]) + '</span></div>';
+        }).join('');
+        html +=     '<div class="heat-row">' + bars + '</div>';
+        html +=     '<div class="heat-labels">' + ll + '</div>';
+        html +=     '<div class="adm-hint">Завершённые занятия по дате слота. Используйте, чтобы планировать кампании на «тихие» дни.</div>';
+        html +=   '</div>';
+        html += '</div>';
+
+        // Top active
+        html += '<div class="adm-section"><div class="adm-section-title">🏆 Топ-20 активных (30 дн)</div>';
+        var top = d.top_active_trainers || [];
+        if (!top.length) {
+          html += '<div class="adm-card"><div class="adm-empty">Нет активности</div></div>';
+        } else {
+          html += A.drilldown(top.map(function (t, i) {
+            var compRate = t.total ? Math.round(100 * t.completed / t.total) : 0;
+            var extra = '<div class="adm-row-list">' +
+              '<div><span>ID:</span><span>#' + t.trainer_id + '</span></div>' +
+              '<div><span>Завершено:</span><span>' + A.formatNum(t.completed) + ' из ' + A.formatNum(t.total) + ' (' + compRate + '%)</span></div>' +
+              '<div><span>Совет:</span><span>взять интервью — узнать, что работает</span></div>' +
+            '</div>';
+            return {
+              title: (i + 1) + '. ' + A.escapeHtml(t.display_name),
+              meta: A.formatNum(t.total) + ' записей · ' + A.formatNum(t.completed) + ' завершено',
+              value: A.formatNum(t.total),
+              extra: extra,
+            };
+          }));
+        }
+        html += '</div>';
+
+        return html;
+      }
+
+      A.mount({ endpoint: '/admin/stats/engagement', render: render });
+    })();
+  </script>
+</body>
+</html>
