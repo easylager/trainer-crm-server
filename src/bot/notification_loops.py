@@ -1094,8 +1094,9 @@ async def run_subscription_expire_and_reminder_loop(trainer_bot: Bot) -> None:
                 days_ahead = max(1, Settings().subscription_reminder_days_ahead)
                 due = await get_subscriptions_reminder_due(session, days_ahead=days_ahead)
                 base = (Settings().webapp_base_url or "").rstrip("/")
-                pay_url = base + "/webapp/trainer-pay-subscription" if base else None
-                tariffs_url = base + "/webapp/trainer-subscription?v=20260450" if base else None
+                subscription_webapp_url = (
+                    base + "/webapp/trainer-subscription?v=20260450" if base else None
+                )
                 for sub in due:
                     if not await is_trainer_push_allowed_now(session, int(sub["trainer_id"])):
                         continue
@@ -1109,17 +1110,13 @@ async def run_subscription_expire_and_reminder_loop(trainer_bot: Bot) -> None:
                     else:
                         text = msg.TRAINER_SUBSCRIPTION_REMINDER.format(expires_date=expires_date)
                     kb = None
-                    if pay_url and tariffs_url and base.lower().startswith("https://"):
+                    if subscription_webapp_url and base.lower().startswith("https://"):
                         kb = InlineKeyboardMarkup(
                             inline_keyboard=[
                                 [
                                     InlineKeyboardButton(
-                                        text=msg.TRAINER_SUBSCRIPTION_PUSH_BTN_PAY_NOW,
-                                        url=pay_url,
-                                    ),
-                                    InlineKeyboardButton(
-                                        text=msg.TRAINER_SUBSCRIPTION_PUSH_BTN_TARIFFS,
-                                        url=tariffs_url,
+                                        text=msg.TRAINER_SUBSCRIPTION_PUSH_BTN_WEBAPP,
+                                        web_app=WebAppInfo(url=subscription_webapp_url),
                                     ),
                                 ],
                             ]

@@ -2496,8 +2496,8 @@ TRAINER_SUBSCRIPTION_REMINDER_TRIAL = (
     "⏳ <b>Пробный период заканчивается {expires_date}</b>\n\n"
     "После этого — доступ к премиум-функциям по выбранному тарифу."
 )
-TRAINER_SUBSCRIPTION_PUSH_BTN_PAY_NOW = "💳 Оплатить сейчас"
-TRAINER_SUBSCRIPTION_PUSH_BTN_TARIFFS = "📄 Тарифы"
+# Напоминание об окончании подписки / триала: одна кнопка → мини-приложение trainer-subscription (тарифы и оплата).
+TRAINER_SUBSCRIPTION_PUSH_BTN_WEBAPP = "💳 Тарифы и оплата"
 TRAINER_BUTTON_PAY_SUBSCRIPTION = "Продлить подписку"
 TRAINER_BUTTON_CHOOSE_TARIFF = "Выбрать тариф"
 # /subscription — мини-апп trainer-subscription

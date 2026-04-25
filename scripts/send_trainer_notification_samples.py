@@ -102,8 +102,7 @@ async def main() -> None:
 
     base = (settings.webapp_base_url or "").rstrip("/")
     webapp_https = base.lower().startswith("https://")
-    pay_url = base + "/webapp/trainer-pay-subscription" if base else None
-    tariffs_url = base + "/webapp/trainer-subscription?v=20260448" if base else None
+    subscription_webapp_url = base + "/webapp/trainer-subscription?v=20260450" if base else None
 
     planned = [
         "Секции-заголовки в чате",
@@ -114,7 +113,7 @@ async def main() -> None:
         "Занятие завершено (HTML) + отзыв / повтор / карточка клиента",
         "Закрыто без списания абонемента",
         "Появились слоты → заявки ждут записи",
-        "Подписка / триал + опционально ссылка на оплату",
+        "Подписка / триал + кнопка WebApp «Тарифы и оплата»",
         "Клиент отменил запись (с причиной / без)",
         "Отчёт о проблеме (PASS / CERT / NONE) + опционально WebApp",
         "«Клиент не пришёл» — 4 исхода + опционально WebApp",
@@ -447,17 +446,13 @@ async def main() -> None:
 
         await _section(bot, chat_id, "Подписка / пробный период")
         sub_kb = None
-        if pay_url and tariffs_url:
+        if webapp_https and subscription_webapp_url:
             sub_kb = InlineKeyboardMarkup(
                 inline_keyboard=[
                     [
                         InlineKeyboardButton(
-                            text=msg.TRAINER_SUBSCRIPTION_PUSH_BTN_PAY_NOW,
-                            url=pay_url,
-                        ),
-                        InlineKeyboardButton(
-                            text=msg.TRAINER_SUBSCRIPTION_PUSH_BTN_TARIFFS,
-                            url=tariffs_url,
+                            text=msg.TRAINER_SUBSCRIPTION_PUSH_BTN_WEBAPP,
+                            web_app=WebAppInfo(url=subscription_webapp_url),
                         ),
                     ],
                 ]
@@ -468,17 +463,13 @@ async def main() -> None:
             reply_markup=sub_kb,
         )
         sub_kb_trial = None
-        if pay_url and tariffs_url:
+        if webapp_https and subscription_webapp_url:
             sub_kb_trial = InlineKeyboardMarkup(
                 inline_keyboard=[
                     [
                         InlineKeyboardButton(
-                            text=msg.TRAINER_SUBSCRIPTION_PUSH_BTN_PAY_NOW,
-                            url=pay_url,
-                        ),
-                        InlineKeyboardButton(
-                            text=msg.TRAINER_SUBSCRIPTION_PUSH_BTN_TARIFFS,
-                            url=tariffs_url,
+                            text=msg.TRAINER_SUBSCRIPTION_PUSH_BTN_WEBAPP,
+                            web_app=WebAppInfo(url=subscription_webapp_url),
                         ),
                     ],
                 ]
