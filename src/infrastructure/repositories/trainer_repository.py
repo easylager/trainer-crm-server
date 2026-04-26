@@ -251,7 +251,7 @@ class TrainerRepository:
     async def set_digest_settings(
         self, trainer_id: int, *, digest_enabled: bool, digest_send_time: time | None
     ) -> None:
-        """Morning/weekly digest toggle + fixed Europe/Minsk send time; NULL time = auto (1h before first session)."""
+        """Morning/weekly digest toggle + fixed Europe/Minsk send time; NULL = auto morning slot (~8:00), not tied to evening sessions."""
         await self._session.execute(
             text(
                 "UPDATE trainers SET digest_enabled = :en, digest_send_time = :st WHERE id = :tid"

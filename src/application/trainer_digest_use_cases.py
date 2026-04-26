@@ -11,9 +11,10 @@ Two aggregators and one scheduler helper:
   finished (factual money from pass_redemptions / certificate_booking_credits), upcoming = next
   Mon..Sun. Drought ladder triggers after 3+ consecutive zero-booking days.
 
-- ``resolve_digest_send_time(trainer_row, first_session_start)`` → Europe/Minsk wall-clock time
-  when today's morning digest should fire. Priority: ``trainers.digest_send_time`` →
-  ``first_session_start - 1h``. Clamped to ``push_notification_start_hour``.
+- ``resolve_digest_send_time(...)`` → Europe/Minsk wall-clock time for the **daily** digest.
+  Priority: explicit ``trainers.digest_send_time`` → иначе утренний слот по умолчанию (08:00) или
+  раньше, если первая тренировка требует (``min(08:00, first_session - lead)``), без отправки
+  днём «как за час до вечерней тренировки». Clamped to push window.
 
 Drought ladder order (first match wins; case 7 = silence):
   1. Open catalog requests > 0
@@ -54,6 +55,9 @@ DORMANT_CLIENT_SAMPLE_LIMIT = 3
 
 # Horizon for "no available slots" check in drought ladder case 3.
 DROUGHT_SLOT_HORIZON_DAYS = 14
+
+# Авто-режим (digest_send_time IS NULL): слот утром, не «за час» до вечерней тренировки.
+MORNING_DIGEST_AUTO_DEFAULT_T = time(8, 0)
 
 
 # =============================================================================
@@ -621,28 +625,34 @@ def resolve_digest_send_time(
     lead_minutes: int = 60,
 ) -> Optional[time]:
     """
-    Europe/Minsk wall-clock time when today's morning digest should fire.
+    Europe/Minsk wall-clock time when today's **daily** digest should fire.
 
     Priority:
-      1. Explicit ``digest_send_time`` from trainer settings.
-      2. ``first_session_start - lead_minutes`` (default 60 min before first session).
-      3. None — trainer has 0 sessions today and no explicit time → loop suppresses the push.
+      1. Explicit ``digest_send_time`` from trainer settings (always honored).
+      2. Auto: ``min(MORNING_DIGEST_AUTO_DEFAULT_T, first_session_start - lead_minutes)``
+         when there is a session today; otherwise default morning time only.
+         So a single evening workout no longer moves the digest to late afternoon.
 
-    Clamped to ``[push_window_start_hour, push_window_end_hour)`` so we never break quiet hours.
-    Exception: if the trainer explicitly set ``digest_send_time`` inside their own quiet hours,
-    we honor it (opt-in ritual beats default window).
+    Clamped to ``[push_window_start_hour, push_window_end_hour)``.
+    If the clamped time falls on or after the window end, returns None.
     """
     if digest_send_time is not None:
         return digest_send_time
 
+    default_morning = MORNING_DIGEST_AUTO_DEFAULT_T
+
     if first_session_start is None:
-        return None
-
-    total = first_session_start.hour * 60 + first_session_start.minute - lead_minutes
-    if total < 0:
-        total = 0
-
-    candidate = time(hour=total // 60, minute=total % 60)
+        candidate = default_morning
+    else:
+        total = (
+            first_session_start.hour * 60
+            + first_session_start.minute
+            - lead_minutes
+        )
+        if total < 0:
+            total = 0
+        pre_session = time(hour=total // 60, minute=total % 60)
+        candidate = pre_session if pre_session < default_morning else default_morning
 
     lower = time(hour=push_window_start_hour)
     upper = time(hour=push_window_end_hour) if push_window_end_hour < 24 else None

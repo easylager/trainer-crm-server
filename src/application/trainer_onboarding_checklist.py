@@ -3,6 +3,8 @@ Trainer onboarding checklist: submission readiness, full-profile flag, future sl
 ``profile_complete`` = moderation submission tier (8 criteria); ``full_profile_complete`` = dossier (12).
 ``tt_minimal_complete`` = 7-field TTV gate (schedule/bookings in Mini App before activation).
 ``has_upcoming_booking`` mirrors hub upcoming list logic (pending/confirmed on future-ended slots).
+``has_any_booking`` = ever created a booking row for this trainer (includes ``cancelled`` / ``declined``)
+so onboarding «первая запись» does not regress after cancel.
 ``has_completed_booking`` = at least one booking with status ``completed`` (hub nudge: client notes).
 ``last_completed_booking_client_id`` = ``client_id`` of the latest completed row by ``bookings.id`` (deep link).
 ``schedule_unlocked`` mirrors Mini App access (active or pending TTV + CRM trial).
@@ -246,7 +248,6 @@ async def get_trainer_onboarding_checklist(session: AsyncSession, trainer_id: in
             SELECT EXISTS(
                 SELECT 1 FROM bookings
                 WHERE trainer_id = :tid
-                  AND status NOT IN ('cancelled', 'declined')
             )
             """
         ),

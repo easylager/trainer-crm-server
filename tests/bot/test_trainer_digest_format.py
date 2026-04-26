@@ -165,6 +165,13 @@ def test_morning_digest_has_hero_emoji_and_count() -> None:
     assert "Минск-Арена" in out
 
 
+def test_morning_digest_greeting_follows_wall_time_for_manual_send_hour() -> None:
+    d = _morning_digest_fixture([_session(hh=9)])
+    assert "Доброе утро" in format_morning_digest(d, wall_time=time(8, 0))
+    assert "Добрый день" in format_morning_digest(d, wall_time=time(15, 59))
+    assert "Добрый вечер" in format_morning_digest(d, wall_time=time(18, 0))
+
+
 def test_morning_digest_multiple_sessions_header_and_run_sheet() -> None:
     d = _morning_digest_fixture(
         [

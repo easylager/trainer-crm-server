@@ -498,6 +498,89 @@ async def test_onboarding_checklist_has_upcoming_booking_uses_hub_upcoming_filte
 
 
 @pytest.mark.asyncio
+async def test_onboarding_checklist_has_any_booking_true_after_cancel(
+    app_use_test_db,
+    db_session,
+) -> None:
+    """Отменённая бронь не откатывает шаг «первая запись» в онбординге (has_any_booking)."""
+    tg = _fresh_trainer_telegram_id()
+    r = await db_session.execute(text("INSERT INTO trainers (status) VALUES ('active') RETURNING id"))
+    tid = r.fetchone()[0]
+    await db_session.execute(
+        text("UPDATE trainers SET telegram_id = :tg WHERE id = :id"),
+        {"tg": tg, "id": tid},
+    )
+    await db_session.execute(
+        text(
+            "INSERT INTO trainer_profiles (trainer_id, first_name, last_name, age) "
+            "VALUES (:tid, 'Отмена', 'Чеклист', 31)"
+        ),
+        {"tid": tid},
+    )
+    svc_name = "Test service " + uuid.uuid4().hex[:8]
+    r_service = await db_session.execute(
+        text("INSERT INTO services (name) VALUES (:name) RETURNING id"),
+        {"name": svc_name},
+    )
+    service_id = r_service.fetchone()[0]
+    r_client = await db_session.execute(
+        text(
+            "INSERT INTO clients (telegram_id, first_name) VALUES (:tg, 'Клиент') RETURNING id"
+        ),
+        {"tg": _fresh_trainer_telegram_id()},
+    )
+    client_id = r_client.fetchone()[0]
+    slot_day = date.today() + timedelta(days=2)
+    r_slot = await db_session.execute(
+        text(
+            """
+            INSERT INTO slots (trainer_id, slot_date, start_time, end_time, status)
+            VALUES (:tid, :d, :st, :en, 'available')
+            RETURNING id
+            """
+        ),
+        {"tid": tid, "d": slot_day, "st": time(10, 0), "en": time(11, 0)},
+    )
+    slot_id = r_slot.fetchone()[0]
+    await db_session.execute(
+        text(
+            """
+            INSERT INTO bookings (slot_id, trainer_id, client_id, service_id, status)
+            VALUES (:sid, :tid, :cid, :svc, 'confirmed')
+            """
+        ),
+        {"sid": slot_id, "tid": tid, "cid": client_id, "svc": service_id},
+    )
+    await db_session.commit()
+
+    with patch_trainer_init_auth(tg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.get(
+                "/api/webapp/trainer/onboarding/checklist",
+                headers={"X-Telegram-Init-Data": "mock"},
+            )
+    assert resp.status_code == 200
+    assert resp.json().get("has_any_booking") is True
+
+    await db_session.execute(
+        text("UPDATE bookings SET status = 'cancelled' WHERE slot_id = :sid"),
+        {"sid": slot_id},
+    )
+    await db_session.commit()
+
+    with patch_trainer_init_auth(tg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp2 = await client.get(
+                "/api/webapp/trainer/onboarding/checklist",
+                headers={"X-Telegram-Init-Data": "mock"},
+            )
+    assert resp2.status_code == 200
+    data2 = resp2.json()
+    assert data2.get("has_any_booking") is True
+    assert data2.get("has_upcoming_booking") is False
+
+
+@pytest.mark.asyncio
 async def test_onboarding_checklist_completed_booking_and_last_client_id(
     app_use_test_db,
     db_session,

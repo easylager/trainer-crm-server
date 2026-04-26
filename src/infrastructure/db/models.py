@@ -103,7 +103,7 @@ class Trainer(Base):
     push_notification_end_hour: Mapped[Optional[int]] = mapped_column(SmallInteger(), nullable=True)
     # Daily/weekly digest ritual (notification_loops → run_daily_morning_digest_loop, run_weekly_sunday_digest_loop).
     digest_enabled: Mapped[bool] = mapped_column(nullable=False, default=True, server_default="true")
-    # Europe/Minsk local time for morning digest; NULL = auto "1 hour before first session today".
+    # Europe/Minsk local time for morning digest; NULL = auto morning slot (~8:00), not tied to evening session time.
     digest_send_time: Mapped[Optional[time]] = mapped_column(Time(), nullable=True)
 
     link_tokens: Mapped[list["TrainerLinkToken"]] = relationship(back_populates="trainer", lazy="raise")

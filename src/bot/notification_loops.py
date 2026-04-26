@@ -1324,9 +1324,11 @@ async def run_daily_morning_digest_loop(trainer_bot: Bot) -> None:
                             continue
 
                         if has_sessions:
-                            text_body = format_morning_digest(digest)
+                            text_body = format_morning_digest(digest, wall_time=now_t)
                         else:
-                            lite = format_morning_digest_lite_owed_only(digest)
+                            lite = format_morning_digest_lite_owed_only(
+                                digest, wall_time=now_t
+                            )
                             if not lite:
                                 continue
                             text_body = lite

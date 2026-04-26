@@ -110,7 +110,27 @@ def _h(text: str) -> str:
 # =============================================================================
 
 
-def format_morning_digest(digest: dict[str, Any]) -> str:
+def _digest_morning_hero_greeting(wall_time: time | None) -> str:
+    """Приветствие по фактическому времени отправки (если тренер задал час вручную)."""
+    if wall_time is None or wall_time.hour < 12:
+        return msg.TRAINER_DIGEST_MORNING_GREETING
+    if wall_time.hour < 17:
+        return msg.TRAINER_DIGEST_MORNING_GREETING_DAY
+    return msg.TRAINER_DIGEST_MORNING_GREETING_EVENING
+
+
+def _digest_morning_lite_greet_phrase(wall_time: time | None) -> str:
+    """Короткая вставка в lite-заголовок (с точкой перед «Сегодня»)."""
+    if wall_time is None or wall_time.hour < 12:
+        return "Доброе утро."
+    if wall_time.hour < 17:
+        return "Добрый день."
+    return "Добрый вечер."
+
+
+def format_morning_digest(
+    digest: dict[str, Any], *, wall_time: time | None = None
+) -> str:
     """
     Produces HTML-parsed Telegram text for today's run-sheet. ``digest`` must have at least
     one session (caller — the loop — is responsible for suppressing the push on empty days).
@@ -123,7 +143,7 @@ def format_morning_digest(digest: dict[str, Any]) -> str:
             "loop should suppress the push instead."
         )
 
-    lines: list[str] = [_format_morning_header(sessions), ""]
+    lines: list[str] = [_format_morning_header(sessions, wall_time), ""]
     for s in sessions:
         lines.append(_format_session_row(s))
 
@@ -145,16 +165,19 @@ def format_morning_digest(digest: dict[str, Any]) -> str:
     return "\n".join(lines).rstrip()
 
 
-def _format_morning_header(sessions: list[dict[str, Any]]) -> str:
+def _format_morning_header(
+    sessions: list[dict[str, Any]], wall_time: time | None = None
+) -> str:
     n = len(sessions)
     first_hhmm = _format_hhmm(sessions[0]["start_time"])
+    greet = _digest_morning_hero_greeting(wall_time)
     if n == 1:
         return (
-            f"{msg.TRAINER_DIGEST_MORNING_GREETING} "
+            f"{greet} "
             f"Сегодня одна {_sessions_word(1)} — в <b>{first_hhmm}</b>."
         )
     return (
-        f"{msg.TRAINER_DIGEST_MORNING_GREETING} "
+        f"{greet} "
         f"Сегодня <b>{n}</b> {_sessions_word(n)}, первая в <b>{first_hhmm}</b>."
     )
 
@@ -241,7 +264,9 @@ def _pick_morning_recommendation(digest: dict[str, Any]) -> str:
     return msg.TRAINER_DIGEST_MORNING_REC_ALL_CLEAR
 
 
-def format_morning_digest_lite_owed_only(digest: dict[str, Any]) -> str | None:
+def format_morning_digest_lite_owed_only(
+    digest: dict[str, Any], *, wall_time: time | None = None
+) -> str | None:
     """
     Lite morning text used when trainer has 0 sessions today but ≥1 open catalog request.
     Replaces the old ``run_daily_request_reminder_loop``: surfaces pending work without
@@ -252,7 +277,9 @@ def format_morning_digest_lite_owed_only(digest: dict[str, Any]) -> str | None:
     if count <= 0:
         return None
     header = msg.TRAINER_DIGEST_MORNING_LITE_HEADER.format(
-        count=count, word=_requests_word(count)
+        greet=_digest_morning_lite_greet_phrase(wall_time),
+        count=count,
+        word=_requests_word(count),
     )
     return f"{header}\n\n{msg.TRAINER_DIGEST_MORNING_LITE_REC}"
 

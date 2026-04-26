@@ -77,11 +77,25 @@ def test_resolve_explicit_setting_honored_even_inside_quiet_hours() -> None:
     )
 
 
-def test_resolve_auto_one_hour_before_first_session() -> None:
+def test_resolve_auto_morning_default_before_typical_first_session() -> None:
+    """Раньше было «за час до»; теперь авто — утренний слот 8:00, если тренировка не раньше."""
     assert (
         resolve_digest_send_time(
             digest_send_time=None,
             first_session_start=time(9, 0),
+            push_window_start_hour=8,
+            push_window_end_hour=22,
+        )
+        == time(8, 0)
+    )
+
+
+def test_resolve_auto_evening_session_stays_morning_not_one_hour_before() -> None:
+    """Запись на вечер не переносит дайджест на «за час до» (избегаем «Доброе утро» в 16:00)."""
+    assert (
+        resolve_digest_send_time(
+            digest_send_time=None,
+            first_session_start=time(17, 0),
             push_window_start_hour=8,
             push_window_end_hour=22,
         )
@@ -102,7 +116,8 @@ def test_resolve_clamps_to_push_window_start() -> None:
     )
 
 
-def test_resolve_returns_none_when_no_sessions_and_no_explicit_time() -> None:
+def test_resolve_auto_no_session_uses_default_morning() -> None:
+    """Без тренировок — всё равно утренний слот (для lite-дайджеста с заявками)."""
     assert (
         resolve_digest_send_time(
             digest_send_time=None,
@@ -110,12 +125,12 @@ def test_resolve_returns_none_when_no_sessions_and_no_explicit_time() -> None:
             push_window_start_hour=8,
             push_window_end_hour=22,
         )
-        is None
+        == time(8, 0)
     )
 
 
-def test_resolve_returns_none_when_auto_falls_after_window_end() -> None:
-    """Late first session with narrow push window → skip digest (don't fire in evening)."""
+def test_resolve_late_first_session_still_morning_in_window() -> None:
+    """Поздняя первая тренировка не тянет авто-время к вечеру — остаётся утро."""
     assert (
         resolve_digest_send_time(
             digest_send_time=None,
@@ -123,7 +138,7 @@ def test_resolve_returns_none_when_auto_falls_after_window_end() -> None:
             push_window_start_hour=8,
             push_window_end_hour=22,
         )
-        is None
+        == time(8, 0)
     )
 
 
@@ -140,7 +155,8 @@ def test_resolve_respects_trainer_widened_window() -> None:
     )
 
 
-def test_resolve_custom_lead_minutes() -> None:
+def test_resolve_custom_lead_only_pulls_earlier_than_default_morning() -> None:
+    """lead_minutes влияет только если первая тренировка раньше 08:00 по расчёту."""
     assert (
         resolve_digest_send_time(
             digest_send_time=None,
@@ -149,5 +165,15 @@ def test_resolve_custom_lead_minutes() -> None:
             push_window_end_hour=22,
             lead_minutes=30,
         )
-        == time(9, 30)
+        == time(8, 0)
+    )
+    assert (
+        resolve_digest_send_time(
+            digest_send_time=None,
+            first_session_start=time(7, 0),
+            push_window_start_hour=6,
+            push_window_end_hour=22,
+            lead_minutes=60,
+        )
+        == time(6, 0)
     )

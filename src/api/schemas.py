@@ -294,7 +294,10 @@ class TrainerProfilePatchBody(BaseModel):
     digest_send_time: str | None = Field(
         default=None,
         max_length=5,
-        description="Фиксированное время дайджеста Europe/Minsk «HH:MM». null = за час до первой тренировки в этот день.",
+        description=(
+            "Фиксированное время дайджеста Europe/Minsk «HH:MM». "
+            "null = утренний автомат (~8:00 в окне пушей, без сдвига к вечерней тренировке)."
+        ),
     )
 
     @field_validator("digest_send_time", mode="before")

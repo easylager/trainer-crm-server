@@ -508,8 +508,7 @@
 
       function onboardingBookingStepDone(data) {
         if (!data) return false;
-        // API always sends has_upcoming_booking; it becomes false after the slot ends. Treat any
-        // non-cancelled booking (or confirmed/completed) as «первая запись» done — no regression.
+        // has_any_booking = any bookings row ever (incl. cancelled). Upcoming/confirmed cover active case.
         return !!(
           data.has_any_booking ||
           data.has_confirmed_booking ||
@@ -1248,7 +1247,10 @@
                   'Сначала завершите шаг 1, затем откроется запись клиентов.'
                 : 'Сначала закройте шаг 1.';
           } else if (bookDone) {
-            hintB.textContent = 'Запись создана — проверьте её в блоке «Ближайшие записи».';
+            hintB.textContent =
+              data.has_upcoming_booking || data.has_confirmed_booking
+                ? 'Запись создана — проверьте её в блоке «Ближайшие записи».'
+                : 'Бронь уже оформляли — шаг закрыт. Новую запись можно добавить кнопкой «Записать клиента».';
           } else if (!data.has_future_slots && !data.has_future_available_slots && !data.has_any_booking) {
             hintB.textContent =
               'Нажмите «Записать клиента» — слот создастся автоматически при необходимости.';

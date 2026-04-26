@@ -386,8 +386,10 @@ TRAINER_REQUEST_DECLINED = "Заявка отклонена. Её больше �
 # Voice rule: .cursor/rules/Product-voice.mdc  •  Edit: reuse emoji vocabulary consistently
 # (☀️ morning · 🌙 weekly · ⏱ time · 📍 venue · 👋 first-timer · ⚠ risk · 💬 owed · 👉 do-this).
 
-# --- Morning digest — sent 1h before first session (or at trainer's digest_send_time).
+# --- Morning digest — auto: утренний слот (~8:00), не «за час» до вечерней тренировки; иначе digest_send_time.
 TRAINER_DIGEST_MORNING_GREETING = "☀️ Доброе утро!"
+TRAINER_DIGEST_MORNING_GREETING_DAY = "☀️ Добрый день!"
+TRAINER_DIGEST_MORNING_GREETING_EVENING = "🌤 Добрый вечер!"
 TRAINER_DIGEST_SESSION_TAG_FIRST_TIMER = "👋 первая тренировка"
 TRAINER_DIGEST_SESSION_TAG_PENDING = "⚠ ждёт подтверждения"
 TRAINER_DIGEST_GAP_LINE = (
@@ -424,7 +426,7 @@ TRAINER_DIGEST_MORNING_REC_ALL_CLEAR = "👉 День собран. Хороше
 
 # Morning LITE — 0 sessions but ≥1 open request. No run-sheet, just a nudge + rec.
 TRAINER_DIGEST_MORNING_LITE_HEADER = (
-    "☀️ Доброе утро. Сегодня тренировок нет — но <b>{count}</b> {word} "
+    "☀️ {greet} Сегодня тренировок нет — но <b>{count}</b> {word} "
     "в каталоге ждут ответа."
 )
 TRAINER_DIGEST_MORNING_LITE_REC = (
@@ -459,8 +461,8 @@ TRAINER_DIGEST_WEEKLY_REC_NEW_CLIENTS = (
     "Короткое сообщение накануне обычно снижает no-show."
 )
 TRAINER_DIGEST_WEEKLY_REC_QUIET = (
-    "👉 На неделе тихо. Пара слов тем, кто давно не появлялся — "
-    "часто возвращает пару ритмов."
+    "👉 На неделе тихо. Напишите тем, кто давно не занимался — "
+    "так чаще возвращаются к регулярным тренировкам."
 )
 TRAINER_DIGEST_WEEKLY_REC_ALL_GOOD = (
     "👉 Неделя собрана. Воскресенье — твоё."
