@@ -236,8 +236,9 @@ async def _insert_invoice(
             INSERT INTO trainer_invoices
                 (trainer_id, subscription_plan_id, amount_cents,
                  period_start, period_end, due_date, status, paid_at,
-                 checkout_billing_period_months)
-            VALUES (:t, :p, :a, :ps, :pe, :dd, :s, :pa, :bm)
+                 checkout_billing_period_months,
+                 referral_bonus_days_applied, amount_cents_before_referral)
+            VALUES (:t, :p, :a, :ps, :pe, :dd, :s, :pa, :bm, 0, :a)
             RETURNING id
             """
         ),

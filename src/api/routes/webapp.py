@@ -2427,7 +2427,9 @@ async def post_trainer_subscription_stub_confirm(
         raise HTTPException(status_code=401, detail="Missing init data")
     settings = Settings()
     telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    # Linked Telegram enough: API-created trainers stay pending_profile until moderation;
+    # zero-amount referral invoices must still be confirmable in production.
+    trainer_id = await get_trainer_id_linked_any_status(session, telegram_id)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     from sqlalchemy import text
