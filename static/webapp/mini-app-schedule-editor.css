@@ -97,6 +97,32 @@
       line-height: 1.45;
       color: var(--tg-theme-hint-color);
     }
+    .calendar-empty-state {
+      text-align: center;
+      padding: 28px 20px 32px;
+      max-width: 340px;
+      margin: 0 auto;
+    }
+    .calendar-empty-state__title {
+      margin: 0 0 10px;
+      font-size: 16px;
+      font-weight: 600;
+      line-height: 1.35;
+      color: var(--tg-theme-text-color);
+    }
+    .calendar-empty-state__hint {
+      margin: 0;
+      font-size: 14px;
+      line-height: 1.45;
+      color: var(--tg-theme-hint-color);
+    }
+    .calendar-empty-state__past {
+      margin: 14px 0 0;
+      font-size: 13px;
+      line-height: 1.4;
+      color: var(--tg-theme-hint-color);
+      opacity: 0.92;
+    }
     @supports not (color: color-mix(in srgb, red, blue)) {
       .calendar-past-reveal {
         border-color: rgba(102, 102, 102, 0.35);
@@ -459,6 +485,13 @@
       opacity: 0.45;
       line-height: 1;
     }
+    /* Пока грузятся услуги и список клиентов — обе кнопки скрыты, но в потоке (нет «сначала только новый» на iOS). */
+    #modalBookClient .book-choice-actions--pending .btn-book-option {
+      visibility: hidden;
+    }
+    #modalBookClient .book-choice-actions--pending .btn-book-option:disabled {
+      pointer-events: none;
+    }
     .btn-book-cancel {
       position: relative;
       z-index: 1;
@@ -660,7 +693,9 @@
       font-size: 15px;
       font-variant-numeric: tabular-nums;
       box-sizing: border-box;
-      display: block;
+      display: flex;
+      align-items: center;
+      line-height: 1.2;
       font-family: inherit;
       color-scheme: light dark;
     }
@@ -669,10 +704,16 @@
       width: 100%;
       max-width: 100%;
       min-width: 0;
+      flex: 1;
+      display: flex;
+      align-items: center;
     }
     #modalQuickBookDatetime .quick-book-date-input::-webkit-datetime-edit {
+      flex: 1;
       width: 100%;
       padding: 0;
+      display: flex;
+      align-items: center;
     }
     #modalQuickBookDatetime .quick-book-date-input:focus-visible,
     #modalQuickBookDatetime .quick-book-fields .book-service-select:focus-visible {

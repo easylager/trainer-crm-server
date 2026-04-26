@@ -24,8 +24,8 @@
       href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=optional"
     />
   </noscript>
-  <link rel="preload" href="schedule-editor-main.js?v=20260501" as="script" />
-  <link rel="stylesheet" href="mini-app-schedule-editor.css?v=20260445" />
+  <link rel="preload" href="schedule-editor-main.js?v=20260502" as="script" />
+  <link rel="stylesheet" href="mini-app-schedule-editor.css?v=20260503" />
   <link rel="stylesheet" href="mini-app-trainer-nav.css?v=20260429" />
 </head>
 <body>
@@ -436,26 +436,28 @@
       <h3 id="modalBookTitle" class="book-modal-title">Записать клиента</h3>
       <div id="bookStepChoice" class="book-step" data-step="choice">
         <p class="book-choice-lead">Кого записать на занятие?</p>
-        <button type="button" class="btn-book-option" id="bookOptExisting">
-          <span class="btn-book-option-media" aria-hidden="true">
-            <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.5"/><path d="M5 20v-1a5 5 0 0 1 5-5h4a5 5 0 0 1 5 5v1"/></svg>
-          </span>
-          <span class="btn-book-option-body">
-            <span class="btn-book-option-text">Выбрать из списка</span>
-            <span class="btn-book-option-hint">Существующий клиент</span>
-          </span>
-          <span class="btn-book-option-arrow" aria-hidden="true">›</span>
-        </button>
-        <button type="button" class="btn-book-option" id="bookOptNew">
-          <span class="btn-book-option-media" aria-hidden="true">
-            <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
-          </span>
-          <span class="btn-book-option-body">
-            <span class="btn-book-option-text">Добавить нового</span>
-            <span class="btn-book-option-hint">Телефон, имя — и записать</span>
-          </span>
-          <span class="btn-book-option-arrow" aria-hidden="true">›</span>
-        </button>
+        <div id="bookChoiceActions" class="book-choice-actions">
+          <button type="button" class="btn-book-option" id="bookOptExisting">
+            <span class="btn-book-option-media" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.5"/><path d="M5 20v-1a5 5 0 0 1 5-5h4a5 5 0 0 1 5 5v1"/></svg>
+            </span>
+            <span class="btn-book-option-body">
+              <span class="btn-book-option-text">Выбрать из списка</span>
+              <span class="btn-book-option-hint">Существующий клиент</span>
+            </span>
+            <span class="btn-book-option-arrow" aria-hidden="true">›</span>
+          </button>
+          <button type="button" class="btn-book-option" id="bookOptNew">
+            <span class="btn-book-option-media" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+            </span>
+            <span class="btn-book-option-body">
+              <span class="btn-book-option-text">Добавить нового</span>
+              <span class="btn-book-option-hint">Телефон, имя — и записать</span>
+            </span>
+            <span class="btn-book-option-arrow" aria-hidden="true">›</span>
+          </button>
+        </div>
         <button type="button" class="btn-block btn-book-cancel" id="modalBookCancel">Отмена</button>
       </div>
       <div id="bookStepExisting" class="book-step" data-step="existing" style="display:none;">
@@ -529,6 +531,6 @@
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
   <script src="mini-app-trainer-home.js"></script>
-  <script defer src="schedule-editor-main.js?v=20260501"></script>
+  <script defer src="schedule-editor-main.js?v=20260502"></script>
 </body>
 </html>

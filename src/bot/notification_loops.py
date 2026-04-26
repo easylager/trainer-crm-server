@@ -5,7 +5,7 @@ Used by notification_service (standalone process). Client/trainer apps no longer
 import asyncio
 import html as html_lib
 import logging
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 
 from aiogram import Bot
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -575,22 +575,27 @@ async def run_reminder_loop(client_bot: Bot) -> None:
                         "address": p.get("arena_address"),
                     }
                     map_url = build_yandex_by_map_url(arena_payload)
-                    row: list[InlineKeyboardButton] = []
+                    # One button per row: side-by-side labels truncate on narrow phones.
+                    kb_rows: list[list[InlineKeyboardButton]] = []
                     if p.get("trainer_telegram_id"):
-                        row.append(
-                            InlineKeyboardButton(
-                                text=msg.CLIENT_REMINDER_BTN_WRITE_TRAINER,
-                                url=f"tg://user?id={int(p['trainer_telegram_id'])}",
-                            )
+                        kb_rows.append(
+                            [
+                                InlineKeyboardButton(
+                                    text=msg.CLIENT_REMINDER_BTN_WRITE_TRAINER,
+                                    url=f"tg://user?id={int(p['trainer_telegram_id'])}",
+                                )
+                            ]
                         )
                     if map_url:
-                        row.append(
-                            InlineKeyboardButton(
-                                text=msg.CLIENT_REMINDER_BTN_SHOW_ON_MAP,
-                                url=map_url,
-                            )
+                        kb_rows.append(
+                            [
+                                InlineKeyboardButton(
+                                    text=msg.CLIENT_REMINDER_BTN_SHOW_ON_MAP,
+                                    url=map_url,
+                                )
+                            ]
                         )
-                    kb = InlineKeyboardMarkup(inline_keyboard=[row]) if row else None
+                    kb = InlineKeyboardMarkup(inline_keyboard=kb_rows) if kb_rows else None
                     try:
                         await client_bot.send_message(
                             chat_id=chat_id,

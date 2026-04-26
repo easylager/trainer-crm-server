@@ -711,7 +711,9 @@
       width: 100%;
       max-width: 100%;
       min-width: 0;
-      display: block;
+      display: flex;
+      align-items: center;
+      line-height: 1.2;
       font-family: inherit;
       font-variant-numeric: tabular-nums;
       color: var(--tg-theme-text-color);
@@ -721,14 +723,20 @@
       color: var(--tg-theme-text-color);
     }
     #tcModalQuickBookDatetime input#tcQuickBookDate.tc-qb-input[type='date']::-webkit-datetime-edit {
+      flex: 1;
       width: 100%;
       min-width: 0;
       padding: 0;
+      display: flex;
+      align-items: center;
     }
     #tcModalQuickBookDatetime input#tcQuickBookDate.tc-qb-input[type='date']::-webkit-datetime-edit-fields-wrapper {
       width: 100%;
       max-width: 100%;
       min-width: 0;
+      flex: 1;
+      display: flex;
+      align-items: center;
     }
     #tcModalQuickBookDatetime input#tcQuickBookDate.tc-qb-input[type='date']::-webkit-datetime-edit-month-field,
     #tcModalQuickBookDatetime input#tcQuickBookDate.tc-qb-input[type='date']::-webkit-datetime-edit-day-field,

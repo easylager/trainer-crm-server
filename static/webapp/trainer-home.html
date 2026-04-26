@@ -51,7 +51,7 @@
     })();
   </script>
   <!-- Bump ?v= when mini-app-trainer-hub.css changes (immutable cache on /webapp/…). -->
-  <link rel="stylesheet" href="mini-app-trainer-hub.css?v=20260488" />
+  <link rel="stylesheet" href="mini-app-trainer-hub.css?v=20260503" />
   <!-- Early download of main hub script (defer runs at end of body); improves time-to-interactive vs. discover-at-bottom. -->
   <link rel="preload" href="trainer-home-main.js?v=20260503" as="script" />
 
@@ -509,26 +509,28 @@
           <label class="book-field-label">Тариф</label>
           <div id="hubBookPriceTierRadios" class="book-price-tier-radios"></div>
         </div>
-        <button type="button" class="btn-book-option" id="hubBookOptExisting" style="display: none;" aria-hidden="true">
-          <span class="btn-book-option-media" aria-hidden="true">
-            <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.5"/><path d="M5 20v-1a5 5 0 0 1 5-5h4a5 5 0 0 1 5 5v1"/></svg>
-          </span>
-          <span class="btn-book-option-body">
-            <span class="btn-book-option-text">Выбрать из списка</span>
-            <span class="btn-book-option-hint">Существующий клиент</span>
-          </span>
-          <span class="btn-book-option-arrow" aria-hidden="true">›</span>
-        </button>
-        <button type="button" class="btn-book-option" id="hubBookOptNew">
-          <span class="btn-book-option-media" aria-hidden="true">
-            <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
-          </span>
-          <span class="btn-book-option-body">
-            <span class="btn-book-option-text">Добавить нового</span>
-            <span class="btn-book-option-hint">Телефон, имя — и записать</span>
-          </span>
-          <span class="btn-book-option-arrow" aria-hidden="true">›</span>
-        </button>
+        <div id="hubBookChoiceActions" class="hub-book-choice-actions">
+          <button type="button" class="btn-book-option" id="hubBookOptExisting" style="display: none;" aria-hidden="true">
+            <span class="btn-book-option-media" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.5"/><path d="M5 20v-1a5 5 0 0 1 5-5h4a5 5 0 0 1 5 5v1"/></svg>
+            </span>
+            <span class="btn-book-option-body">
+              <span class="btn-book-option-text">Выбрать из списка</span>
+              <span class="btn-book-option-hint">Существующий клиент</span>
+            </span>
+            <span class="btn-book-option-arrow" aria-hidden="true">›</span>
+          </button>
+          <button type="button" class="btn-book-option" id="hubBookOptNew">
+            <span class="btn-book-option-media" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+            </span>
+            <span class="btn-book-option-body">
+              <span class="btn-book-option-text">Добавить нового</span>
+              <span class="btn-book-option-hint">Телефон, имя — и записать</span>
+            </span>
+            <span class="btn-book-option-arrow" aria-hidden="true">›</span>
+          </button>
+        </div>
         <button type="button" class="btn-block btn-book-cancel" id="hubBookCancel">Отмена</button>
       </div>
       <div id="hubBookStepExisting" style="display: none;">

@@ -1467,6 +1467,34 @@
         btn.tabIndex = show ? 0 : -1;
       }
 
+      /** Две кнопки выбора клиента: общая высота до ответа API, затем одновременное появление. */
+      function primeBookChoicePairLayout() {
+        var exBtn = document.getElementById('bookOptExisting');
+        var newBtn = document.getElementById('bookOptNew');
+        if (exBtn) {
+          exBtn.style.display = '';
+          exBtn.setAttribute('aria-hidden', 'false');
+        }
+        if (newBtn) {
+          newBtn.style.display = '';
+          newBtn.setAttribute('aria-hidden', 'false');
+        }
+      }
+
+      function setBookChoicePairPending(on) {
+        var w = document.getElementById('bookChoiceActions');
+        if (!w) return;
+        w.classList.toggle('book-choice-actions--pending', !!on);
+      }
+
+      function scheduleRevealBookChoicePairIfNeeded() {
+        var ch = document.getElementById('bookStepChoice');
+        if (!ch || ch.style.display === 'none') return;
+        requestAnimationFrame(function() {
+          setBookChoicePairPending(false);
+        });
+      }
+
       function trainerBookingPayload(clientId, serviceId) {
         var o = { slot_id: state.bookSlotId, client_id: clientId, service_id: serviceId };
         if (!state.bookSlotIsGroup && state.trainerArenas && state.trainerArenas.length > 1 && state.bookArenaId != null) {
@@ -1529,6 +1557,7 @@
         state.quickBookProfileAwaitingConfirm = false;
         state.quickBookProfileClientName = null;
         state.quickBookLockedClientId = null;
+        setBookChoicePairPending(false);
       }
 
       function setBookClientSearchSectionVisible(visible) {
@@ -2299,6 +2328,41 @@
         return 'Показать прошлые · ' + n + ' ' + word;
       }
 
+      /**
+       * Empty calendar: lead with what to do next; past slots = one short line (toggle is above).
+       */
+      function buildCalendarEmptyStateHtml(hiddenPastN, slotFilter, showPastThisWeek) {
+        var onlyPastHidden = slotFilter === 'all' && hiddenPastN > 0 && !showPastThisWeek;
+        var title = 'Запланируйте окна на эту неделю';
+        var hint =
+          'Добавьте слоты кнопкой выше или задайте повтор во вкладке «Шаблон недели» — так неделя заполняется быстрее.';
+        if (slotFilter === 'available') {
+          title = 'Нет свободных слотов';
+          hint = 'Попробуйте фильтр «Все» или добавьте новые окна на день.';
+        } else if (slotFilter === 'booked') {
+          title = 'Нет занятых слотов';
+          hint = 'Попробуйте фильтр «Все» или перелистайте неделю стрелками.';
+        }
+        var html =
+          '<div class="calendar-empty-state">' +
+          '<p class="calendar-empty-state__title">' +
+          escapeHtml(title) +
+          '</p>' +
+          '<p class="calendar-empty-state__hint">' +
+          escapeHtml(hint) +
+          '</p>';
+        if (onlyPastHidden) {
+          html +=
+            '<p class="calendar-empty-state__past">' +
+            escapeHtml(
+              'Прошлые слоты этой недели скрыты — при необходимости разверните список кнопкой выше.'
+            ) +
+            '</p>';
+        }
+        html += '</div>';
+        return html;
+      }
+
       function updatePastRevealChrome() {
         var wrap = document.getElementById('calendarPastRevealWrap');
         var btn = document.getElementById('btnTogglePastThisWeek');
@@ -2868,10 +2932,15 @@
           document.getElementById('bookStepExisting').style.display = 'none';
           document.getElementById('bookStepNew').style.display = 'none';
         }
+        if (prefilledClient) {
+          setBookChoicePairPending(false);
+        } else {
+          setBookChoicePairPending(true);
+          primeBookChoicePairLayout();
+        }
         document.getElementById('modalBookClient').style.display = 'flex';
         applyBookModalGroupUi();
         updateTelegramBack();
-        setBookOptExistingVisible(false);
         Promise.all([
           fetch(apiUrlWithQuery('/trainer/my-services'), { headers: headers() }).then(function(r) {
             return r.ok ? r.json() : Promise.reject(new Error('Ошибка'));
@@ -2942,6 +3011,7 @@
               state.bookModalStep = 'choice';
               setBookClientSearchSectionVisible(true);
             }
+            scheduleRevealBookChoicePairIfNeeded();
           })
           .catch(function() {
             state.trainerHasBookClients = false;
@@ -2963,6 +3033,7 @@
               state.bookModalStep = 'choice';
             }
             setBookClientSearchSectionVisible(true);
+            scheduleRevealBookChoicePairIfNeeded();
           });
       }
 
@@ -3072,11 +3143,11 @@
         const content = document.getElementById('calendarContent');
         var hiddenPastN = (!entirePast && !state.showPastThisWeek) ? countPastHiddenSlots(state.slots) : 0;
         if (days.length === 0) {
-          if (state.slotFilter === 'all' && hiddenPastN > 0 && !state.showPastThisWeek) {
-            content.innerHTML = '<div class="empty calendar-past-nudge">Слоты прошедших дней на этой неделе скрыты. Откройте список кнопкой выше — можно записать клиента задним числом или поправить слоты.</div>';
-          } else {
-            content.innerHTML = '<div class="empty">На эту неделю слотов нет. Добавьте слоты или примените шаблон.</div>';
-          }
+          content.innerHTML = buildCalendarEmptyStateHtml(
+            hiddenPastN,
+            state.slotFilter,
+            state.showPastThisWeek
+          );
           updatePastRevealChrome();
           return;
         }
@@ -3185,11 +3256,11 @@
           html += '</div>';
         });
         if (!html) {
-          if (state.slotFilter === 'all' && hiddenPastN > 0 && !state.showPastThisWeek) {
-            content.innerHTML = '<div class="empty calendar-past-nudge">Слоты прошедших дней на этой неделе скрыты. Откройте список кнопкой выше — можно записать клиента задним числом или поправить слоты.</div>';
-          } else {
-            content.innerHTML = '<div class="empty">На эту неделю слотов нет. Добавьте слоты или примените шаблон.</div>';
-          }
+          content.innerHTML = buildCalendarEmptyStateHtml(
+            hiddenPastN,
+            state.slotFilter,
+            state.showPastThisWeek
+          );
           updatePastRevealChrome();
           return;
         }

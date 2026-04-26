@@ -126,18 +126,20 @@ async def main() -> None:
             arena_address=MOCK_ADDRESS,
         )
         row_rem = [
-            InlineKeyboardButton(
-                text=msg.CLIENT_REMINDER_BTN_WRITE_TRAINER,
-                url=f"tg://user?id={MOCK_TRAINER_TG}",
-            ),
-            InlineKeyboardButton(text=msg.CLIENT_REMINDER_BTN_SHOW_ON_MAP, url=MOCK_MAP_URL),
+            [
+                InlineKeyboardButton(
+                    text=msg.CLIENT_REMINDER_BTN_WRITE_TRAINER,
+                    url=f"tg://user?id={MOCK_TRAINER_TG}",
+                ),
+            ],
+            [InlineKeyboardButton(text=msg.CLIENT_REMINDER_BTN_SHOW_ON_MAP, url=MOCK_MAP_URL)],
         ]
         await _send(
             bot,
             chat_id,
             "Напоминание (~за сутки / не «скоро»)",
             rem24,
-            InlineKeyboardMarkup(inline_keyboard=[row_rem]),
+            InlineKeyboardMarkup(inline_keyboard=row_rem),
         )
 
         rem2h = msg.format_client_booking_reminder_text(

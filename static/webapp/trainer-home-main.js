@@ -808,7 +808,7 @@
                 'свободных слота',
                 'свободных слотов',
               ) +
-              ' — кого из клиентов в боте напомнить о записи? Мы отобрали тех, у кого ещё нет будущей тренировки.',
+              ' — кому из клиентов в боте напомнить о записи? Мы отобрали тех, у кого ещё нет будущей тренировки.',
             ctaLabel: 'Напомнить',
             action: 'fill_slots_invites',
           });
@@ -2310,25 +2310,27 @@
         btn.setAttribute('aria-hidden', show ? 'false' : 'true');
       }
 
-      /** Same layout slot as the final button — no vertical reflow while clients list is loading. */
-      function setHubBookOptExistingProbing() {
-        var btn = document.getElementById('hubBookOptExisting');
-        if (!btn) return;
-        btn.style.display = '';
-        btn.setAttribute('aria-hidden', 'false');
-        btn.classList.add('hub-book-opt-existing--probing');
-        btn.disabled = true;
-        btn.setAttribute('aria-busy', 'true');
-        var hint = btn.querySelector('.btn-book-option-hint');
-        if (hint) hint.textContent = 'Загрузка…';
+      /**
+       * Reserve layout for both choice rows while hidden (visibility) so WebKit/iOS does not paint
+       * «Добавить нового» before «Выбрать из списка».
+       */
+      function primeHubBookChoicePairLayout() {
+        var exBtn = document.getElementById('hubBookOptExisting');
+        var newBtn = document.getElementById('hubBookOptNew');
+        if (exBtn) {
+          exBtn.style.display = '';
+          exBtn.setAttribute('aria-hidden', 'false');
+        }
+        if (newBtn) {
+          newBtn.style.display = '';
+          newBtn.setAttribute('aria-hidden', 'false');
+        }
       }
 
-      function syncHubBookOptExistingOnModalOpen() {
-        if (hubTrainerHasClientsCache === true) {
-          setHubBookOptExistingVisible(true);
-        } else {
-          setHubBookOptExistingProbing();
-        }
+      function setHubBookChoicePairPending(on) {
+        var w = document.getElementById('hubBookChoiceActions');
+        if (!w) return;
+        w.classList.toggle('hub-book-choice-actions--pending', !!on);
       }
 
       function clearHubBookChoiceQuickUi() {
@@ -2348,6 +2350,7 @@
           exBtn.disabled = false;
           exBtn.classList.remove('hub-book-opt--awaiting-data');
         }
+        setHubBookChoicePairPending(false);
       }
 
       function setHubBookChoiceQuickLoading(on) {
@@ -2561,7 +2564,8 @@
       function openHubBookModalShell() {
         resetHubBookFormFields();
         resetHubBookSteps();
-        syncHubBookOptExistingOnModalOpen();
+        setHubBookChoicePairPending(true);
+        primeHubBookChoicePairLayout();
         var cfm = document.getElementById('hubModalBookGroupConfirm');
         if (cfm) {
           cfm.style.display = 'none';
@@ -2979,6 +2983,9 @@
               syncHubBookPriceTierRadios();
               var hasClients = hubApplyTrainerHasClientsFromPayload(clientsPayload);
               setHubBookOptExistingVisible(hasClients);
+              requestAnimationFrame(function() {
+                setHubBookChoicePairPending(false);
+              });
             })
             .catch(function() {
               if (isFirstAttempt && getInitData()) {
@@ -3087,10 +3094,16 @@
           .then(function(data) {
             var has = hubApplyTrainerHasClientsFromPayload(data);
             setHubBookOptExistingVisible(has);
+            requestAnimationFrame(function() {
+              setHubBookChoicePairPending(false);
+            });
           })
           .catch(function() {
             hubTrainerHasClientsCache = null;
             setHubBookOptExistingVisible(false);
+            requestAnimationFrame(function() {
+              setHubBookChoicePairPending(false);
+            });
           });
       }
 
