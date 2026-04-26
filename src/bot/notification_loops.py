@@ -1365,6 +1365,8 @@ async def run_weekly_sunday_digest_loop(trainer_bot: Bot) -> None:
     Ticks every DIGEST_LOOP_INTERVAL_SEC, but only acts on Sundays. Sends the weekly digest
     at the same resolved send_at as the daily one (shared send_time setting).
     """
+    from datetime import time as time_of_day
+
     from src.application.trainer_digest_use_cases import (
         get_trainer_daily_digest,
         get_trainer_weekly_digest,
@@ -1410,7 +1412,7 @@ async def run_weekly_sunday_digest_loop(trainer_bot: Bot) -> None:
                         )
                         if send_at is None:
                             # No sessions today AND no explicit time — default Sunday send at push_window start.
-                            send_at = time(hour=start_h)
+                            send_at = time_of_day(hour=start_h)
 
                         delta = _time_diff_minutes(now_t, send_at)
                         if delta < 0 or delta >= DIGEST_SEND_GRACE_MIN:

@@ -1324,8 +1324,8 @@
         if (!getInitData()) {
           strip.setAttribute('hidden', 'hidden');
           strip.style.display = 'none';
-          hubRhythmHintsReady = true;
-          hideHubRhythmHintsSkeleton();
+          /* Do not set hubRhythmHintsReady or hide rhythm skeleton: on iOS initData often arrives
+           * late; marking ready here blocks showHubRhythmHintsSkeleton() when bootstrap runs. */
           syncHubWeekRhythmPanel();
           return;
         }
@@ -4050,6 +4050,54 @@
         hubFillSlotsUpdateSendButtonLabel();
       }
 
+      function renderHubFillSlotsInvitesSkeleton(withSlotNote) {
+        var host = document.getElementById('hubFillSlotsInvitesHost');
+        if (!host) return;
+        host.innerHTML = '';
+        var root = document.createElement('div');
+        root.className = 'hub-fill-slots-skel';
+        root.setAttribute('aria-busy', 'true');
+        root.setAttribute('aria-label', 'Загрузка списка клиентов');
+        if (withSlotNote) {
+          var note = document.createElement('div');
+          note.className = 'hub-fill-slots-skel-slot-note hub-skel-shimmer';
+          note.setAttribute('aria-hidden', 'true');
+          root.appendChild(note);
+        }
+        function skelCard() {
+          var card = document.createElement('div');
+          card.className = 'hub-fill-slots-skel-card';
+          var row = document.createElement('div');
+          row.className = 'hub-fill-slots-skel-pick';
+          var cb = document.createElement('div');
+          cb.className = 'hub-fill-slots-skel-cb hub-skel-shimmer';
+          cb.setAttribute('aria-hidden', 'true');
+          var col = document.createElement('div');
+          col.className = 'hub-fill-slots-skel-textcol';
+          var l1 = document.createElement('div');
+          l1.className =
+            'hub-fill-slots-skel-line hub-fill-slots-skel-line--name hub-skel-shimmer';
+          l1.setAttribute('aria-hidden', 'true');
+          var l2 = document.createElement('div');
+          l2.className =
+            'hub-fill-slots-skel-line hub-fill-slots-skel-line--reason hub-skel-shimmer';
+          l2.setAttribute('aria-hidden', 'true');
+          col.appendChild(l1);
+          col.appendChild(l2);
+          row.appendChild(cb);
+          row.appendChild(col);
+          card.appendChild(row);
+          return card;
+        }
+        root.appendChild(skelCard());
+        root.appendChild(skelCard());
+        var send = document.createElement('div');
+        send.className = 'hub-fill-slots-skel-send hub-skel-shimmer';
+        send.setAttribute('aria-hidden', 'true');
+        root.appendChild(send);
+        host.appendChild(root);
+      }
+
       function openHubFillSlotsInvitesFlow(slotIdOpt, excludeClientIdOpt) {
         hubFillSlotsInviteContext.slotId =
           slotIdOpt != null && !isNaN(parseInt(String(slotIdOpt), 10)) && parseInt(String(slotIdOpt), 10) > 0
@@ -4075,11 +4123,7 @@
           var overlay = document.getElementById('hubModalFillSlotsInvites');
           var host = document.getElementById('hubFillSlotsInvitesHost');
           if (!overlay || !host) return;
-          host.innerHTML = '';
-          var loading = document.createElement('p');
-          loading.className = 'hub-fill-slots-loading';
-          loading.textContent = 'Подбираем клиентов…';
-          host.appendChild(loading);
+          renderHubFillSlotsInvitesSkeleton(!!hubFillSlotsInviteContext.slotId);
           overlay.style.display = 'flex';
           overlay.setAttribute('aria-hidden', 'false');
 
