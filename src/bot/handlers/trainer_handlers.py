@@ -586,7 +586,7 @@ async def _send_first_booking_milestone_followups(
             card_html = msg.format_trainer_first_booking_milestone_from_booking_row(info_for_card)
         else:
             card_html = (
-                "🎉 <b>Старт засчитан: это ваша первая запись в Trainer CRM!</b>\n\n"
+                "🎉 <b>Старт засчитан: это ваша первая запись в Ice Pro!</b>\n\n"
                 + msg.TRAINER_FIRST_BOOKING_MILESTONE_FOOTER_HTML
             )
         await chat_message.answer(card_html, parse_mode=ParseMode.HTML)
@@ -1530,7 +1530,7 @@ async def _complete_schedule_create_booking(
             card_html = msg.format_trainer_first_booking_milestone_from_booking_row(info_for_card)
         else:
             card_html = (
-                "🎉 <b>Старт засчитан: это ваша первая запись в Trainer CRM!</b>\n\n"
+                "🎉 <b>Старт засчитан: это ваша первая запись в Ice Pro!</b>\n\n"
                 + msg.TRAINER_FIRST_BOOKING_MILESTONE_FOOTER_HTML
             )
         milestone_kb = msg.build_trainer_first_booking_milestone_reply_markup(

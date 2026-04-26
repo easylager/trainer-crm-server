@@ -2306,7 +2306,7 @@ def format_trainer_first_booking_milestone_rich_html(
         tg_line = TRAINER_FIRST_BOOKING_NO_TG_NUDGE_HTML
 
     blocks: list[str] = [
-        "🎉 <b>Старт засчитан: это ваша первая запись в Trainer CRM!</b>\n\n"
+        "🎉 <b>Старт засчитан: это ваша первая запись в Ice Pro!</b>\n\n"
         "Вы только что перевели занятие в понятный план — с датой, местом и контекстом.",
         "👤 <b>Клиент</b>\n" f"ФИО: <b>{cn}</b>\n" + phone_line.rstrip("\n"),
         venue_block,

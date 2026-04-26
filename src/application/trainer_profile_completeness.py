@@ -47,7 +47,7 @@ MISSING_FIELD_LABELS_RU: dict[str, str] = {
     "age": "возраст",
     "phone": "телефон",
     "description": f"краткое описание (не менее {MIN_DESCRIPTION_CHARS} символов)",
-    "photo": "фотография профиля (минимум одна)",
+    "photo": "фотография профиля",
     "city": "город",
     "education": "образование (кратко в анкете или запись об образовании)",
     "experience_years": "опыт (лет)",

@@ -2436,12 +2436,39 @@
         var hint = document.getElementById('modHint');
         var missTitle = document.getElementById('modMissingTitle');
 
+        function appendGapListItems(labels) {
+          (labels || []).forEach(function(label) {
+            var li = document.createElement('li');
+            li.textContent = label;
+            missList.appendChild(li);
+          });
+        }
+
         if (st === 'active') {
-          missTitle.style.display = 'none';
           var vis = state.trainer && state.trainer.is_catalog_visible !== false;
-          hint.textContent = vis
-            ? 'Вы в каталоге — клиенты могут вас найти и записаться.'
-            : 'Профиль скрыт из публичного каталога. Запись по прямой ссылке и для текущих клиентов сохраняется — включите показ в разделе «Настройки», если нужен поиск в каталоге.';
+          var baseHint = vis
+            ? 'Профиль одобрен. Вы в каталоге — клиенты могут вас найти и записаться.'
+            : 'Профиль одобрен, но скрыт из публичного каталога. Запись по прямой ссылке и для текущих клиентов сохраняется — включите показ в разделе «Настройки», если нужен поиск в каталоге.';
+          var activeGapLabels = [];
+          if (d.full_profile_complete === false) {
+            var flA = d.full_profile_missing_labels_ru;
+            if (Array.isArray(flA) && flA.length) activeGapLabels = flA.slice();
+          }
+          if (activeGapLabels.length) {
+            missTitle.style.display = 'block';
+            missTitle.textContent = 'Можно усилить карточку в каталоге:';
+            hint.textContent =
+              baseHint +
+              ' Ниже — конкретные поля; правки во вкладке «Анкета». Это необязательно для работы.';
+            appendGapListItems(activeGapLabels);
+          } else {
+            missTitle.style.display = 'none';
+            hint.textContent =
+              d.full_profile_complete === false
+                ? baseHint +
+                  ' Для полноты карточки в каталоге остались поля — откройте вкладку «Анкета».'
+                : baseHint;
+          }
         } else if (st === 'deactivated') {
           missTitle.style.display = 'none';
           hint.textContent = 'Каталог недоступен. Восстановление — через поддержку.';
@@ -2458,13 +2485,6 @@
           if (d.full_profile_complete === false) {
             var fl = d.full_profile_missing_labels_ru;
             if (Array.isArray(fl) && fl.length) fullGapLabels = fl.slice();
-          }
-          function appendGapListItems(labels) {
-            (labels || []).forEach(function(label) {
-              var li = document.createElement('li');
-              li.textContent = label;
-              missList.appendChild(li);
-            });
           }
           if (fbTrim) {
             missTitle.style.display = 'none';
@@ -2655,6 +2675,12 @@
         var fullMissing = d.full_profile_missing_fields || [];
         var fullMissingLabels = d.full_profile_missing_labels_ru || [];
         var hasFullProfileLabelList = Array.isArray(fullMissingLabels) && fullMissingLabels.length > 0;
+        var fullFilled = Math.max(0, fullTotal - fullMissing.length);
+        /** Для одобренного тренера кольцо — по полной карточке каталога (12 пунктов), не по готовности к модерации. */
+        var displayPercent =
+          stTr === 'active'
+            ? Math.round((fullFilled / fullTotal) * 100)
+            : percent;
 
         var percentEl = document.getElementById('progressPercent');
         var titleEl = document.getElementById('progressTitle');
@@ -2662,20 +2688,35 @@
         var ringFill = document.querySelector('.progress-ring-fill');
         var ringCircle = document.querySelector('.progress-ring-fill circle');
         
-        if (percentEl) percentEl.textContent = percent + '%';
+        if (percentEl) percentEl.textContent = displayPercent + '%';
         
         if (ringCircle) {
           var circumference = 2 * Math.PI * 18;
-          var offset = circumference - (percent / 100) * circumference;
+          var offset = circumference - (displayPercent / 100) * circumference;
           ringCircle.style.strokeDashoffset = offset;
         }
         
         if (ringFill) {
-          ringFill.classList.toggle('complete', percent === 100);
+          ringFill.classList.toggle('complete', displayPercent === 100);
         }
         
         if (titleEl && subtitleEl) {
-          if (stTr === 'pending_profile' && d.tt_minimal_complete && !d.complete) {
+          if (stTr === 'active') {
+            if (d.full_profile_complete === true) {
+              titleEl.textContent = 'Анкета готова!';
+              subtitleEl.textContent = 'Все ' + fullTotal + ' пунктов полного профиля выполнены';
+            } else {
+              titleEl.textContent = 'Полнота карточки в каталоге';
+              subtitleEl.textContent =
+                'Заполнено ' +
+                fullFilled +
+                ' из ' +
+                fullTotal +
+                ' пунктов. Недостаёт ещё ' +
+                fullMissing.length +
+                ' — список на вкладке «Статус» (и во вкладке «Анкета»).';
+            }
+          } else if (stTr === 'pending_profile' && d.tt_minimal_complete && !d.complete) {
             titleEl.textContent = 'Можно открыть расписание';
             subtitleEl.textContent =
               'Чтобы отправить анкету на проверку администратором, закройте ещё ' +
@@ -2691,7 +2732,7 @@
                     fullMissing.length +
                     ' из ' +
                     fullTotal +
-                    ' — список на вкладке «Статус», под строкой о проверке.'
+                    ' — список во вкладке «Статус».'
                 : 'Для полноты карточки в каталоге можно дополнить ещё ' +
                     fullMissing.length +
                     ' из ' +
