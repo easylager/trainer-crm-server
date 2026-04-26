@@ -820,7 +820,7 @@
         ) {
           out.push({
             id: 'open_loop_free_next_growth',
-            priority: 71,
+            priority: 58,
             text:
               'На следующей неделе ' +
               availNext +
@@ -878,7 +878,7 @@
           if (eligibleForShare && hasSomethingToShare) {
             out.push({
               id: 'share_link',
-              priority: 60,
+              priority: 72,
               text:
                 'Поделитесь ссылкой, чтобы клиенты записывались сами: кнопка с цепочкой справа вверху или «Получить ссылку» ниже в этом блоке.',
               ctaLabel: 'Получить ссылку',
