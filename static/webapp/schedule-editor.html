@@ -25,7 +25,7 @@
     />
   </noscript>
   <link rel="preload" href="schedule-editor-main.js?v=20260512" as="script" />
-  <link rel="stylesheet" href="mini-app-schedule-editor.css?v=20260512" />
+  <link rel="stylesheet" href="mini-app-schedule-editor.css?v=20260529" />
   <link rel="stylesheet" href="mini-app-trainer-nav.css?v=20260429" />
 </head>
 <body>
@@ -510,8 +510,10 @@
           <div class="label">Новый клиент</div>
           <div class="book-new-client">
             <label class="book-field-label" for="bookNewPhone">Телефон <span class="book-req" aria-hidden="true">*</span></label>
-            <input type="tel" id="bookNewPhone" class="input" placeholder="+375 29 123 45 67" autocomplete="tel" inputmode="tel" maxlength="32" aria-required="true">
-            <p class="book-phone-hint">Номер в формате +375 XX XXX XX XX</p>
+            <div class="hub-phone-input-wrap">
+              <span class="hub-phone-prefix" aria-hidden="true">+375</span>
+              <input type="tel" id="bookNewPhone" class="input hub-phone-input" placeholder="29 123-45-67" autocomplete="tel" inputmode="numeric" maxlength="14" aria-required="true">
+            </div>
             <label class="book-field-label" for="bookNewFirstName">Имя <span class="book-req" aria-hidden="true">*</span></label>
             <input type="text" id="bookNewFirstName" class="input" placeholder="Иван" autocomplete="given-name" maxlength="120" aria-required="true">
             <label class="book-field-label" for="bookNewLastName">Фамилия</label>
@@ -537,6 +539,6 @@
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
   <script src="mini-app-trainer-home.js"></script>
-  <script defer src="schedule-editor-main.js?v=20260512"></script>
+  <script defer src="schedule-editor-main.js?v=20260527"></script>
 </body>
 </html>

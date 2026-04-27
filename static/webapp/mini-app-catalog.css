@@ -1662,6 +1662,32 @@
       background: var(--tg-theme-secondary-bg-color); color: var(--tg-theme-text-color); font-size: 16px;
     }
     .form-block textarea { min-height: 60px; resize: vertical; }
+    /* Client booking: +375 prefix + national XX XXX-XX-XX (matches trainer hub new-client flow). */
+    #screenBookingForm .catalog-phone-input-wrap {
+      position: relative;
+    }
+    #screenBookingForm .catalog-phone-prefix {
+      position: absolute;
+      left: 14px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--tg-theme-text-color);
+      opacity: 0.85;
+      pointer-events: none;
+      letter-spacing: 0.02em;
+    }
+    #screenBookingForm .catalog-phone-input {
+      padding-left: 56px;
+      font-variant-numeric: tabular-nums;
+    }
+    #screenBookingForm .catalog-book-phone-hint {
+      font-size: 12px;
+      color: var(--tg-theme-hint-color);
+      margin: -4px 0 0;
+      line-height: 1.35;
+    }
     .booking-slot-label { font-size: 15px; margin-bottom: 12px; color: var(--tg-theme-hint-color); }
     .booking-service-line {
       font-size: 15px;

@@ -1109,6 +1109,58 @@
       color: var(--tg-theme-hint-color);
       margin: 0 0 14px;
     }
+    /* Composite field: one visual box; focus ring only on inner input in WebKit → strip it, align copy metrics. */
+    .book-new-client .hub-phone-input-wrap {
+      display: flex;
+      flex-direction: row;
+      align-items: baseline;
+      width: 100%;
+      margin-bottom: 10px;
+      padding: 11px 0 12px;
+      border-radius: 14px;
+      background: var(--tg-theme-bg-color);
+      color: var(--tg-theme-text-color);
+      box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.06);
+      box-sizing: border-box;
+    }
+    .book-new-client .hub-phone-input-wrap .hub-phone-prefix {
+      flex-shrink: 0;
+      padding: 0 0 0 14px;
+      font-size: 15px;
+      font-weight: 600;
+      line-height: 1.3;
+      color: var(--tg-theme-text-color);
+      opacity: 0.85;
+      pointer-events: none;
+      letter-spacing: 0.02em;
+    }
+    .book-new-client .hub-phone-input-wrap .hub-phone-input {
+      flex: 1;
+      min-width: 0;
+      width: auto;
+      margin: 0;
+      padding: 0 14px 0 8px;
+      border-radius: 0;
+      border: none;
+      background: transparent;
+      box-shadow: none;
+      font-size: 15px;
+      font-weight: 600;
+      line-height: 1.3;
+      font-variant-numeric: tabular-nums;
+      -webkit-appearance: none;
+      appearance: none;
+      outline: none;
+    }
+    .book-new-client .hub-phone-input-wrap .hub-phone-input:focus,
+    .book-new-client .hub-phone-input-wrap .hub-phone-input:focus-visible {
+      outline: none;
+      box-shadow: none;
+    }
+    .book-new-client .hub-phone-input-wrap .hub-phone-input::placeholder {
+      font-weight: 600;
+      opacity: 0.55;
+    }
     .book-new-client .input {
       width: 100%;
       padding: 13px 14px;

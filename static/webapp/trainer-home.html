@@ -51,9 +51,9 @@
     })();
   </script>
   <!-- Bump ?v= when mini-app-trainer-hub.css changes (immutable cache on /webapp/…). -->
-  <link rel="stylesheet" href="mini-app-trainer-hub.css?v=20260517" />
+  <link rel="stylesheet" href="mini-app-trainer-hub.css?v=20260530" />
   <!-- Early download of main hub script (defer runs at end of body); improves time-to-interactive vs. discover-at-bottom. -->
-  <link rel="preload" href="trainer-home-main.js?v=20260515" as="script" />
+  <link rel="preload" href="trainer-home-main.js?v=20260530" as="script" />
 
 </head>
 <body class="hub-body">
@@ -139,9 +139,6 @@
         <div class="hub-lead-banner__head">
           <span class="hub-lead-banner__chip" aria-hidden="true">Подписка на паузе</span>
           <h2 class="hub-lead-banner__title">Вас всё ещё ищут — карточка осталась в каталоге</h2>
-          <p class="hub-lead-banner__sub" id="hubLeadBannerSub">
-            Расписание, онлайн-запись и CRM остановлены, но клиенты продолжают находить ваш профиль.
-          </p>
         </div>
         <ul class="hub-lead-banner__signals" id="hubLeadBannerSignals" hidden>
           <li class="hub-lead-banner__signal-item">
@@ -596,8 +593,10 @@
           <div class="label">Новый клиент</div>
           <div class="book-new-client">
             <label class="book-field-label" for="hubBookNewPhone">Телефон <span class="book-req" aria-hidden="true">*</span></label>
-            <input type="tel" id="hubBookNewPhone" class="input" placeholder="+375 29 123 45 67" autocomplete="tel" inputmode="tel" maxlength="32" aria-required="true">
-            <p class="book-phone-hint">Номер в формате +375 XX XXX XX XX</p>
+            <div class="hub-phone-input-wrap">
+              <span class="hub-phone-prefix" aria-hidden="true">+375</span>
+              <input type="tel" id="hubBookNewPhone" class="input hub-phone-input" placeholder="29 123-45-67" autocomplete="tel" inputmode="numeric" maxlength="14" aria-required="true">
+            </div>
             <label class="book-field-label" for="hubBookNewFirstName">Имя <span class="book-req" aria-hidden="true">*</span></label>
             <input type="text" id="hubBookNewFirstName" class="input" placeholder="Иван" autocomplete="given-name" maxlength="120" aria-required="true">
             <label class="book-field-label" for="hubBookNewLastName">Фамилия</label>
@@ -634,6 +633,6 @@
   <script src="mini-app-trainer-gate.js"></script>
   <script src="mini-app-trainer-celebration.js"></script>
   <!-- Bump ?v= when trainer-home-main.js changes (immutable cache on /webapp/…). -->
-  <script defer src="trainer-home-main.js?v=20260515"></script>
+  <script defer src="trainer-home-main.js?v=20260530"></script>
 </body>
 </html>

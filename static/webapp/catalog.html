@@ -23,8 +23,8 @@
     />
   </noscript>
   <script src="client-mini-app-theme.js"></script>
-  <link rel="preload" href="catalog-main.js?v=20260520" as="script" />
-  <link rel="stylesheet" href="mini-app-catalog.css?v=20260518" />
+  <link rel="preload" href="catalog-main.js?v=20260522" as="script" />
+  <link rel="stylesheet" href="mini-app-catalog.css?v=20260522" />
   <link rel="stylesheet" href="mini-app-client-nav.css?v=20260426" />
   <!-- Leaflet (mini-map for arena multi-select). Loaded on every page so back/forward keeps tiles cached;
        library is ~40KB gz, used only when #screenArena renders. OSM tiles require attribution by license. -->
@@ -187,7 +187,11 @@
     </div>
     <div class="form-block">
       <label for="bookingPhone">Телефон *</label>
-      <input type="tel" id="bookingPhone" placeholder="+375291234567" inputmode="tel" />
+      <div class="catalog-phone-input-wrap">
+        <span class="catalog-phone-prefix" aria-hidden="true">+375</span>
+        <input type="tel" id="bookingPhone" class="catalog-phone-input" placeholder="29 123-45-67" autocomplete="tel" inputmode="numeric" maxlength="14" aria-describedby="bookingPhoneHint" />
+      </div>
+      <p class="catalog-book-phone-hint" id="bookingPhoneHint">Код страны уже указан — введите 9 цифр: XX XXX-XX-XX</p>
     </div>
     <div class="form-block">
       <label for="bookingComment">Комментарий (необязательно)</label>
@@ -228,7 +232,7 @@
     </div>
   </div>
 
-  <script defer src="catalog-main.js?v=20260520"></script>
+  <script defer src="catalog-main.js?v=20260522"></script>
   <script defer src="mini-app-client-home.js"></script>
 </body>
 </html>

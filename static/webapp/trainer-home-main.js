@@ -1696,30 +1696,6 @@
         var views = Number(recap.profile_views || 0) | 0;
         var clicks = Number(recap.contact_clicks || 0) | 0;
         var blocked = Number(recap.booking_attempts_blocked || 0) | 0;
-        var hasAnyDemand = views > 0 || clicks > 0 || blocked > 0;
-
-        var subEl = document.getElementById('hubLeadBannerSub');
-        if (subEl) {
-          var days = Number(lc.days_in_lead_mode || 0) | 0;
-          var baseLine;
-          if (hasAnyDemand) {
-            baseLine =
-              'Запись на паузе, но вас всё ещё находят в каталоге' +
-              (days > 0
-                ? ' — уже ' + days + ' ' + pluralRu(days, 'день', 'дня', 'дней') + ' с паузы'
-                : '') +
-              '.';
-          } else {
-            baseLine = 'Подписка на паузе — в каталоге вас видно, без онлайн-записи и CRM.';
-          }
-          var periodRu =
-            recap.window === 'since_lead_mode'
-              ? ' Ниже — с начала паузы: просмотры профиля и переходы в Telegram.'
-              : ' Ниже — за ' +
-                String(recap.window_days != null ? recap.window_days : 14) +
-                ' дн.: просмотры и переходы в Telegram.';
-          subEl.textContent = baseLine + periodRu;
-        }
 
         var signalsEl = document.getElementById('hubLeadBannerSignals');
         if (signalsEl) {
@@ -2353,6 +2329,25 @@
         if (t.length > HUB_PHONE_MAX) return 'Телефон: не длиннее 32 символов.';
         if (!PHONE_BY_RE_HUB.test(t)) return 'Укажите корректный номер телефона.';
         return null;
+      }
+
+      /**
+       * Hub «новый клиент»: поле без +375 (префикс в UI). Маска XX XXX-XX-XX по мере ввода.
+       * Вставка +37529… или 8029… нормализуется к 9 национальным цифрам.
+       */
+      function formatHubBookNewPhoneInput(ev) {
+        var el = ev && ev.target ? ev.target : ev;
+        if (!el) return;
+        var d = String(el.value || '').replace(/\D/g, '');
+        if (d.indexOf('375') === 0) d = d.slice(3);
+        if (d.indexOf('80') === 0) d = d.slice(2);
+        if (d.length > 9) d = d.slice(0, 9);
+        var f = '';
+        if (d.length > 0) f = d.slice(0, 2);
+        if (d.length > 2) f += ' ' + d.slice(2, 5);
+        if (d.length > 5) f += '-' + d.slice(5, 7);
+        if (d.length > 7) f += '-' + d.slice(7, 9);
+        el.value = f;
       }
 
       function hubToast(msg) {
@@ -3383,6 +3378,11 @@
           bwn.onclick = function() {
             resetHubBookSteps();
           };
+        }
+        var hubPhoneInp = document.getElementById('hubBookNewPhone');
+        if (hubPhoneInp && hubPhoneInp.dataset.byMask !== '1') {
+          hubPhoneInp.dataset.byMask = '1';
+          hubPhoneInp.addEventListener('input', formatHubBookNewPhoneInput);
         }
         var bsearch = document.getElementById('hubBookClientSearch');
         var tmr = null;

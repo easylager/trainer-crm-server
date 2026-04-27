@@ -1104,10 +1104,51 @@
         });
       }
 
+      /**
+       * Client booking form: national part only in #bookingPhone (+375 shown as prefix in HTML).
+       * Mask XX XXX-XX-XX; POST body uses E.164 +375 + 9 digits.
+       */
+      function formatCatalogBookingPhoneInput(ev) {
+        var el = ev && ev.target ? ev.target : ev;
+        if (!el) return;
+        var d = String(el.value || '').replace(/\D/g, '');
+        if (d.indexOf('375') === 0) d = d.slice(3);
+        if (d.indexOf('80') === 0) d = d.slice(2);
+        if (d.length > 9) d = d.slice(0, 9);
+        var f = '';
+        if (d.length > 0) f = d.slice(0, 2);
+        if (d.length > 2) f += ' ' + d.slice(2, 5);
+        if (d.length > 5) f += '-' + d.slice(5, 7);
+        if (d.length > 7) f += '-' + d.slice(7, 9);
+        el.value = f;
+      }
+
+      function normalizeCatalogBookingPhoneFromField(raw) {
+        var d = String(raw || '').replace(/\D/g, '');
+        if (d.indexOf('375') === 0) d = d.slice(3);
+        if (d.indexOf('80') === 0) d = d.slice(2);
+        if (d.length > 9) d = d.slice(0, 9);
+        if (d.length !== 9) return '';
+        return '+375' + d;
+      }
+
       function prefillBookingPhoneField() {
         var el = document.getElementById('bookingPhone');
         if (!el) return;
-        el.value = (state.clientPhone || '').trim();
+        var raw = (state.clientPhone || '').trim();
+        if (!raw) {
+          el.value = '';
+          return;
+        }
+        var d = raw.replace(/\D/g, '');
+        if (d.indexOf('375') === 0) d = d.slice(3);
+        if (d.indexOf('80') === 0) d = d.slice(2);
+        if (d.length < 9) {
+          el.value = '';
+          return;
+        }
+        el.value = d.slice(0, 9);
+        formatCatalogBookingPhoneInput({ target: el });
       }
 
       function persistTrainerSelection(trainerId) {
@@ -2563,12 +2604,20 @@
         });
       }
 
+      (function wireCatalogBookingPhoneMask() {
+        var el = document.getElementById('bookingPhone');
+        if (!el || el.dataset.byMask === '1') return;
+        el.dataset.byMask = '1';
+        el.addEventListener('input', formatCatalogBookingPhoneInput);
+      })();
+
       document.getElementById('btnSubmitBooking').onclick = function() {
         var slot = state.selectedSlot;
         if (!slot || !state.selectedTrainer) return;
-        var phone = (document.getElementById('bookingPhone').value || '').trim();
-        if (!phone || (phone.replace(/\D/g, '').length < 10)) {
-          alert('Введите корректный телефон');
+        var phoneRaw = (document.getElementById('bookingPhone').value || '').trim();
+        var phone = normalizeCatalogBookingPhoneFromField(phoneRaw);
+        if (!phone) {
+          alert('Введите 9 цифр номера после +375 (например 29 123-45-67).');
           return;
         }
         if (state.needsProfileName) {

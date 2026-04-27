@@ -228,6 +228,31 @@
       min-height: 100px;
       resize: vertical;
     }
+    .book-phone-input-wrap {
+      position: relative;
+    }
+    .book-phone-input-wrap .book-phone-prefix {
+      position: absolute;
+      left: 16px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--tg-theme-text-color);
+      opacity: 0.85;
+      pointer-events: none;
+      letter-spacing: 0.02em;
+    }
+    .book-phone-input-wrap .book-phone-input {
+      padding-left: 58px;
+      font-variant-numeric: tabular-nums;
+    }
+    .book-phone-field-hint {
+      font-size: 12px;
+      color: var(--tg-theme-hint-color);
+      margin: -12px 0 16px;
+      line-height: 1.35;
+    }
     .price-tier-radios label {
       display: flex;
       align-items: center;
@@ -459,7 +484,11 @@
     </div>
     <div class="form-block">
       <label for="phone">Телефон *</label>
-      <input type="tel" id="phone" placeholder="+375291234567" inputmode="tel" />
+      <div class="book-phone-input-wrap">
+        <span class="book-phone-prefix" aria-hidden="true">+375</span>
+        <input type="tel" id="phone" class="book-phone-input" placeholder="29 123-45-67" autocomplete="tel" inputmode="numeric" maxlength="14" aria-describedby="bookPhoneHint" />
+      </div>
+      <p class="book-phone-field-hint" id="bookPhoneHint">Код страны уже указан — введите 9 цифр: XX XXX-XX-XX</p>
     </div>
     <div class="form-block">
       <label for="comment">Комментарий (необязательно)</label>
@@ -653,6 +682,48 @@
         }
         el.innerHTML = parts.join('');
         el.style.display = 'block';
+      }
+
+      function formatBookPhoneInput(ev) {
+        var el = ev && ev.target ? ev.target : ev;
+        if (!el) return;
+        var d = String(el.value || '').replace(/\D/g, '');
+        if (d.indexOf('375') === 0) d = d.slice(3);
+        if (d.indexOf('80') === 0) d = d.slice(2);
+        if (d.length > 9) d = d.slice(0, 9);
+        var f = '';
+        if (d.length > 0) f = d.slice(0, 2);
+        if (d.length > 2) f += ' ' + d.slice(2, 5);
+        if (d.length > 5) f += '-' + d.slice(5, 7);
+        if (d.length > 7) f += '-' + d.slice(7, 9);
+        el.value = f;
+      }
+
+      function normalizeBookPhoneForApi(raw) {
+        var d = String(raw || '').replace(/\D/g, '');
+        if (d.indexOf('375') === 0) d = d.slice(3);
+        if (d.indexOf('80') === 0) d = d.slice(2);
+        if (d.length > 9) d = d.slice(0, 9);
+        if (d.length !== 9) return '';
+        return '+375' + d;
+      }
+
+      function prefillBookPhoneField() {
+        var el = document.getElementById('phone');
+        if (!el) return;
+        if (!clientPhone) {
+          el.value = '';
+          return;
+        }
+        var d = String(clientPhone).replace(/\D/g, '');
+        if (d.indexOf('375') === 0) d = d.slice(3);
+        if (d.indexOf('80') === 0) d = d.slice(2);
+        if (d.length < 9) {
+          el.value = '';
+          return;
+        }
+        el.value = d.slice(0, 9);
+        formatBookPhoneInput({ target: el });
       }
 
       function renderPriceTierUi(effServiceId) {
@@ -925,7 +996,7 @@
         document.getElementById('comment').value = '';
         await fetchClientSession();
         updateBookNameFields();
-        document.getElementById('phone').value = clientPhone || '';
+        prefillBookPhoneField();
         await loadTrainerDetailForBook();
         let effSid = effectiveServiceId();
         if (requestId != null && effSid == null) {
@@ -1039,6 +1110,13 @@
         headerBack.onclick = goToTrainerCatalogCard;
       })();
 
+      (function wireBookPhoneMask() {
+        var el = document.getElementById('phone');
+        if (!el || el.dataset.byMask === '1') return;
+        el.dataset.byMask = '1';
+        el.addEventListener('input', formatBookPhoneInput);
+      })();
+
       document.getElementById('prevWeek').onclick = function() {
         if (currentWeekStart.getTime() <= thisMonday.getTime()) return;
         currentWeekStart.setDate(currentWeekStart.getDate() - 7);
@@ -1054,10 +1132,9 @@
       };
 
       document.getElementById('btnSubmit').onclick = function() {
-        const phone = (document.getElementById('phone').value || '').trim();
-        const digits = phone.replace(/\D/g, '');
-        if (digits.length < 10) {
-          alert('Введите корректный номер телефона (например +375291234567)');
+        const phone = normalizeBookPhoneForApi((document.getElementById('phone').value || '').trim());
+        if (!phone) {
+          alert('Введите 9 цифр номера после +375 (например 29 123-45-67).');
           return;
         }
         if (needsProfileName) {

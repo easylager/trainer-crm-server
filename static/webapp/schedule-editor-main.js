@@ -128,6 +128,30 @@
         return null;
       }
 
+      /** National digits only (9) from masked «новый клиент» field; paste +375… / 80… supported. */
+      function nationalDigitsFromBookNewPhoneField(raw) {
+        var d = String(raw || '').replace(/\D/g, '');
+        if (d.indexOf('375') === 0) d = d.slice(3);
+        if (d.indexOf('80') === 0) d = d.slice(2);
+        return d.length > 9 ? d.slice(0, 9) : d;
+      }
+
+      /** Mask XX XXX-XX-XX while typing (prefix +375 is outside the input). */
+      function formatBookNewPhoneInput(ev) {
+        var el = ev && ev.target ? ev.target : ev;
+        if (!el) return;
+        var d = String(el.value || '').replace(/\D/g, '');
+        if (d.indexOf('375') === 0) d = d.slice(3);
+        if (d.indexOf('80') === 0) d = d.slice(2);
+        if (d.length > 9) d = d.slice(0, 9);
+        var f = '';
+        if (d.length > 0) f = d.slice(0, 2);
+        if (d.length > 2) f += ' ' + d.slice(2, 5);
+        if (d.length > 5) f += '-' + d.slice(5, 7);
+        if (d.length > 7) f += '-' + d.slice(7, 9);
+        el.value = f;
+      }
+
       function apiUrl(path) { return '/api/webapp' + path; }
       function headers() {
         const h = { 'Content-Type': 'application/json' };
@@ -3783,6 +3807,13 @@
         if (e.key === 'Enter') { e.preventDefault(); loadBookClients(bookSearchEl.value.trim()); }
       };
 
+      (function wireBookNewPhoneMask() {
+        var el = document.getElementById('bookNewPhone');
+        if (!el || el.dataset.byMask === '1') return;
+        el.dataset.byMask = '1';
+        el.addEventListener('input', formatBookNewPhoneInput);
+      })();
+
       document.getElementById('bookNewSubmit').onclick = function() {
         var phoneEl = document.getElementById('bookNewPhone');
         var firstEl = document.getElementById('bookNewFirstName');
@@ -3795,22 +3826,28 @@
           phoneEl.focus();
           return;
         }
-        var phone = phoneRaw;
-        if (phone.indexOf(' ') >= 0 && !first && !last) {
-          var parts = phone.split(/\s+/);
-          var digitParts = [];
-          var nameParts = [];
-          parts.forEach(function(p) {
-            if (/^[\d+\-()]+$/.test(p)) digitParts.push(p);
-            else nameParts.push(p);
-          });
-          if (nameParts.length) {
-            first = nameParts[0] || null;
-            last = nameParts.slice(1).join(' ') || null;
+        var nd = nationalDigitsFromBookNewPhoneField(phoneRaw);
+        var phone;
+        if (nd.length === 9) {
+          phone = '+375' + nd;
+        } else {
+          phone = phoneRaw;
+          if (phone.indexOf(' ') >= 0 && !first && !last) {
+            var parts = phone.split(/\s+/);
+            var digitParts = [];
+            var nameParts = [];
+            parts.forEach(function(p) {
+              if (/^[\d+\-()]+$/.test(p)) digitParts.push(p);
+              else nameParts.push(p);
+            });
+            if (nameParts.length) {
+              first = nameParts[0] || null;
+              last = nameParts.slice(1).join(' ') || null;
+            }
+            if (digitParts.length) phone = digitParts.join('').replace(/\D/g, function(c) { return c === '+' ? '+' : ''; });
           }
-          if (digitParts.length) phone = digitParts.join('').replace(/\D/g, function(c) { return c === '+' ? '+' : ''; });
+          phone = normalizePhoneClient((phone || '').trim());
         }
-        phone = normalizePhoneClient((phone || '').trim());
         var phoneErr = validatePhoneMessage(phone);
         if (phoneErr) {
           showToast(phoneErr);
