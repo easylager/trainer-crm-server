@@ -10,6 +10,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.demand_signals_use_cases import get_signals_lifetime_totals
 from src.application.trainer_schedule_use_cases import this_week_monday
 from src.infrastructure.db.models import SUBSCRIPTION_STATUS_ACTIVE, SUBSCRIPTION_STATUS_TRIAL
 
@@ -846,6 +847,8 @@ async def get_trainer_stats_dashboard(session: AsyncSession, trainer_id: int) ->
         for row in r.fetchall()
     ]
 
+    catalog_signals_all_time = await get_signals_lifetime_totals(session, trainer_id=trainer_id)
+
     return {
         **base,
         "last_week_total": last_week_total,
@@ -892,6 +895,7 @@ async def get_trainer_stats_dashboard(session: AsyncSession, trainer_id: int) ->
         "revenue_prev_calendar_month_cents": revenue_prev_calendar_month_cents,
         "revenue_month_change_pct": revenue_month_change_pct,
         "revenue_month_run_rate_cents": revenue_month_run_rate_cents,
+        "catalog_signals_all_time": catalog_signals_all_time,
     }
 
 

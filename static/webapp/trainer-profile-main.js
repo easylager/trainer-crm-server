@@ -4491,13 +4491,59 @@
           if (fw) fw.classList.remove('field-focused');
         });
       });
-      (function() {
-        var gce = document.getElementById('group_classes_enabled');
-        if (gce) {
-          gce.addEventListener('change', function() {
-            setDirty();
-          });
-        }
+      /** Same pattern as «Показывать в каталоге» — do not require full-form validity for one toggle. */
+      (function wireGroupClassesToggle() {
+        var cb = document.getElementById('group_classes_enabled');
+        if (!cb) return;
+        var busy = false;
+        cb.addEventListener('change', function() {
+          if (busy) return;
+          var want = !!cb.checked;
+          busy = true;
+          cb.disabled = true;
+          fetch(apiUrl('/trainer/profile'), {
+            method: 'PATCH',
+            headers: headersJson(),
+            body: JSON.stringify({ profile: { group_classes_enabled: want } }),
+          })
+            .then(parseJsonResponse)
+            .then(function(o) {
+              busy = false;
+              cb.disabled = false;
+              if (!o.ok) {
+                cb.checked = !want;
+                haptic('error');
+                var msg =
+                  o.data && o.data.detail
+                    ? String(o.data.detail)
+                    : 'Не удалось сохранить настройку «группы в расписании».';
+                if (typeof msg === 'object') msg = JSON.stringify(msg);
+                alert(msg);
+                return;
+              }
+              if (state.trainer) {
+                state.trainer.profile = state.trainer.profile || {};
+                state.trainer.profile.group_classes_enabled = want;
+              }
+              state.snapshot = normSnapshot();
+              setDirty();
+              haptic('success');
+              showSaveToast(
+                'Группы в расписании',
+                want
+                  ? 'Настройка включена: можно слоты с несколькими местами'
+                  : 'Слоты с несколькими местами в новых правилах отключены',
+                'success'
+              );
+            })
+            .catch(function() {
+              busy = false;
+              cb.disabled = false;
+              cb.checked = !want;
+              haptic('error');
+              alert('Ошибка сети. Попробуйте снова.');
+            });
+        });
       })();
       (function wireCatalogVisibilityToggle() {
         var cb = document.getElementById('is_catalog_visible');

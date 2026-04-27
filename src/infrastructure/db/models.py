@@ -188,8 +188,8 @@ class TrainerProfile(Base):
         Integer(), nullable=False, server_default="3"
     )  # Only slots at least this many *working* hours (08:00–22:00 Minsk) from now are bookable by clients
     group_classes_enabled: Mapped[bool] = mapped_column(
-        nullable=False, server_default="false"
-    )  # When false, schedule UI/API disallow capacity > 1 (opt-in for group slots)
+        nullable=False, server_default="true"
+    )  # When false, schedule UI/API disallow capacity > 1; default on for new trainers
     # One-time onboarding funnel: first confirmed/completed booking + share-link tip (never repeat after cancel).
     first_booking_milestone_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True

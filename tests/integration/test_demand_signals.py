@@ -14,6 +14,7 @@ from src.application.demand_signals_use_cases import (
     RECAP_WINDOW_7D,
     RECAP_WINDOW_14D,
     SignalsRecap,
+    get_signals_lifetime_totals,
     get_signals_recap,
     get_signals_since,
     record_booking_attempt_blocked,
@@ -304,3 +305,21 @@ async def test_recap_isolated_per_trainer(db_session: AsyncSession) -> None:
     assert recap_a.contact_clicks == 0
     assert recap_b.profile_views == 0
     assert recap_b.contact_clicks == 1
+
+
+@pytest.mark.asyncio
+async def test_lifetime_totals_sum_all_rows(db_session: AsyncSession) -> None:
+    """Aggregate since epoch = all events for trainer (used by stats «каталог» block)."""
+    tid = await _create_trainer(db_session)
+    await record_profile_view(
+        db_session, trainer_id=tid, source=DEMAND_SOURCE_CATALOG, client_ip="9.9.1.1", user_agent="A"
+    )
+    await record_profile_view(
+        db_session, trainer_id=tid, source=DEMAND_SOURCE_CATALOG, client_ip="9.9.1.2", user_agent="B"
+    )
+    await record_contact_click(
+        db_session, trainer_id=tid, source=DEMAND_SOURCE_CATALOG, client_ip="1.1.1.1", user_agent="C"
+    )
+    tot = await get_signals_lifetime_totals(db_session, trainer_id=tid)
+    assert tot["profile_views"] == 2
+    assert tot["contact_clicks"] == 1

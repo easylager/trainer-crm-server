@@ -270,6 +270,31 @@ async def get_signals_recap(
     )
 
 
+# Earliest possible lower bound: append-only log has no "before" events.
+_EPOCH_UTC = datetime(1970, 1, 1, tzinfo=timezone.utc)
+
+
+async def get_signals_lifetime_totals(
+    session: AsyncSession, *, trainer_id: int, now: datetime | None = None
+) -> dict[str, int]:
+    """
+    All-time counts of catalog profile views and Telegram contact clicks.
+    """
+    # Note: COUNT over demand log — analytics dashboard only, not per hub request.
+    until = now or datetime.now(timezone.utc)
+    repo = DemandSignalsRepository(session)
+    counts = await repo.aggregate_window(
+        trainer_id=trainer_id,
+        kinds=(DEMAND_EVENT_PROFILE_VIEW, DEMAND_EVENT_CONTACT_CLICK),
+        since=_EPOCH_UTC,
+        until=until,
+    )
+    return {
+        "profile_views": int(counts.get(DEMAND_EVENT_PROFILE_VIEW, 0)),
+        "contact_clicks": int(counts.get(DEMAND_EVENT_CONTACT_CLICK, 0)),
+    }
+
+
 async def get_signals_since(
     session: AsyncSession,
     *,
@@ -312,6 +337,7 @@ __all__ = [
     "record_contact_click",
     "record_contact_click_commit",
     "record_booking_attempt_blocked",
+    "get_signals_lifetime_totals",
     "get_signals_recap",
     "get_signals_since",
     "RECAP_WINDOW_7D",
