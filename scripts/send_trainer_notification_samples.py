@@ -43,6 +43,7 @@ from src.bot.handlers.trainer_handlers import (
     REQUEST_DECLINE_PREFIX,
     REQUEST_RESPOND_PREFIX,
     TRAINER_REPEAT_WEEK_PREFIX,
+    _trainer_moderation_profile_approved_reply_markup,
     _trainer_profile_footer_hint,
     _trainer_profile_keyboard,
 )
@@ -266,6 +267,14 @@ async def _send_profile_moderation_html(
     await bot.send_message(chat_id=chat_id, text=html_body, reply_markup=kb)
 
 
+async def _send_moderation_profile_approved_html(bot: Bot, chat_id: int, html_body: str) -> None:
+    """Catalog approval: «Профиль» + «Статистика» (same as admin_handlers._trainer_bot_send_moderation_profile_approved)."""
+    kb = _trainer_moderation_profile_approved_reply_markup()
+    if kb is None:
+        html_body = html_body + _trainer_profile_footer_hint()
+    await bot.send_message(chat_id=chat_id, text=html_body, reply_markup=kb)
+
+
 async def main() -> None:
     parser = argparse.ArgumentParser(
         description="Send sample trainer-bot notifications (mock data) for copy QA"
@@ -320,7 +329,7 @@ async def main() -> None:
         "Отчёт о проблеме (PASS / CERT / NONE) + опционально WebApp",
         "«Клиент не пришёл» — 4 исхода + опционально WebApp",
         "Модерация образования (без ParseMode, как в админке)",
-        "Модерация профиля (HTML + кнопка профиля)",
+        "Модерация профиля (HTML + кнопки Профиль и Статистика)",
         "Запись подтверждена (эхо после confirm)",
         "Первая запись — rich card",
         "Подсказки «поделиться каталогом» (все варианты HTML)",
@@ -807,7 +816,7 @@ async def main() -> None:
         )
         fb += msg.TRAINER_PROFILE_MODERATION_FEEDBACK_PUSH_FOOTER
         await _send_profile_moderation_html(bot, chat_id, fb)
-        await _send_profile_moderation_html(bot, chat_id, msg.TRAINER_MODERATION_PROFILE_APPROVED)
+        await _send_moderation_profile_approved_html(bot, chat_id, msg.TRAINER_MODERATION_PROFILE_APPROVED)
         await _send_profile_moderation_html(bot, chat_id, msg.TRAINER_MODERATION_PROFILE_REJECTED)
 
         await _section(bot, chat_id, "Подтверждение записи (ответ в чат после confirm)")

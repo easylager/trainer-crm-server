@@ -1090,6 +1090,7 @@
         document.getElementById('detailBookingContent').innerHTML = buildBookingDetailSkeletonHtml();
         document.getElementById('detailBookingActions').innerHTML = '';
         showBookingStack('detail');
+        hideFlowBookBootOverlay();
         getJsonTrainer('/trainer/bookings/' + bookingId).then(function(b) {
           state.selectedBooking = b;
           var client = [b.client_first_name, b.client_last_name].filter(Boolean).join(' ') || b.client_phone || 'Клиент';
@@ -1248,6 +1249,7 @@
             }, 0);
           }
         }).catch(function() {
+          hideFlowBookBootOverlay();
           alert('Ошибка загрузки');
           showBookingStack('main');
           loadSlots();
@@ -2632,7 +2634,7 @@
 
       function hideFlowBookBootOverlay() {
         try {
-          document.documentElement.classList.remove('se-flow-book-boot');
+          document.documentElement.classList.remove('se-flow-book-boot', 'se-open-booking-boot');
           var el = document.getElementById('seFlowBookBootOverlay');
           if (el) {
             el.hidden = true;

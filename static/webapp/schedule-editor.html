@@ -24,12 +24,12 @@
       href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=optional"
     />
   </noscript>
-  <link rel="preload" href="schedule-editor-main.js?v=20260512" as="script" />
-  <link rel="stylesheet" href="mini-app-schedule-editor.css?v=20260529" />
+  <link rel="preload" href="schedule-editor-main.js?v=20260536" as="script" />
+  <link rel="stylesheet" href="mini-app-schedule-editor.css?v=20260536" />
   <link rel="stylesheet" href="mini-app-trainer-nav.css?v=20260429" />
 </head>
 <body>
-  <!-- Covers main UI until quick-book modal opens (schedule-editor?flow=book) — avoids calendar flash -->
+  <!-- Covers main UI until quick-book modal opens (flow=book) or booking detail loads (open_booking=) — avoids calendar flash -->
   <div id="seFlowBookBootOverlay" class="se-flow-book-boot-overlay" hidden aria-hidden="true">
     <div class="se-flow-book-boot-overlay__card" aria-busy="true">
       <span class="se-flow-book-boot-overlay__pulse" aria-hidden="true"></span>
@@ -63,19 +63,32 @@
   })();
   </script>
   <script>
-  /* Before first paint: quick-book opened inside trainer-clients iframe must not flash the calendar. */
+  /* Before first paint: quick-book or deep link to booking detail must not flash the calendar. */
   (function () {
     try {
       var p = new URLSearchParams(window.location.search || '');
       if (p.get('embed') === '1' && ((p.get('flow') || '') === 'book' || p.get('client_id'))) {
         document.documentElement.classList.add('se-client-embed');
       }
+      var boot = document.getElementById('seFlowBookBootOverlay');
+      var bootTxt = boot && boot.querySelector('.se-flow-book-boot-overlay__text');
       if ((p.get('flow') || '') === 'book' && !p.get('open_booking')) {
         document.documentElement.classList.add('se-flow-book-boot');
-        var boot = document.getElementById('seFlowBookBootOverlay');
         if (boot) {
           boot.hidden = false;
           boot.setAttribute('aria-hidden', 'false');
+          if (bootTxt) bootTxt.textContent = 'Быстрая запись';
+        }
+      } else {
+        var obRaw = (p.get('open_booking') || '').trim();
+        var obId = obRaw ? parseInt(obRaw, 10) : 0;
+        if (obId > 0) {
+          document.documentElement.classList.add('se-open-booking-boot');
+          if (boot) {
+            boot.hidden = false;
+            boot.setAttribute('aria-hidden', 'false');
+            if (bootTxt) bootTxt.textContent = 'Запись';
+          }
         }
       }
     } catch (e) { /* ignore */ }
@@ -539,6 +552,6 @@
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
   <script src="mini-app-trainer-home.js"></script>
-  <script defer src="schedule-editor-main.js?v=20260527"></script>
+  <script defer src="schedule-editor-main.js?v=20260536"></script>
 </body>
 </html>

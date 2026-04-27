@@ -51,9 +51,9 @@
     })();
   </script>
   <!-- Bump ?v= when mini-app-trainer-hub.css changes (immutable cache on /webapp/…). -->
-  <link rel="stylesheet" href="mini-app-trainer-hub.css?v=20260530" />
+  <link rel="stylesheet" href="mini-app-trainer-hub.css?v=20260535" />
   <!-- Early download of main hub script (defer runs at end of body); improves time-to-interactive vs. discover-at-bottom. -->
-  <link rel="preload" href="trainer-home-main.js?v=20260530" as="script" />
+  <link rel="preload" href="trainer-home-main.js?v=20260534" as="script" />
 
 </head>
 <body class="hub-body">
@@ -100,15 +100,15 @@
     <!-- Onboarding first: visible without scrolling (TTV); same id for trainer-home-main.js -->
     <div id="onboardingStrip" class="onboarding-strip onboarding-strip--hub-top" style="display:none;" hidden>
       <div class="onboarding-strip-head">
-        <h2 class="onboarding-strip-title">Первые шаги</h2>
-        <p class="onboarding-strip-lead">2 шага до первой ценности: минимальный профиль → первая запись.</p>
+        <h2 class="onboarding-strip-title">Быстрый старт</h2>
+        <p class="onboarding-strip-lead">2 шага — и первый клиент уже в системе.</p>
       </div>
       <ol class="onboarding-steps">
         <li class="onboarding-step" id="onboardingStepProfile">
           <span class="onboarding-step-icon" id="onboardingIconProfile">1</span>
           <div class="onboarding-step-body">
-            <div class="onboarding-step-name">Профиль по блокам</div>
-            <p class="onboarding-step-hint" id="onboardingHintProfile">Мастер в профиле проведёт по обязательным полям.</p>
+            <div class="onboarding-step-name">Заполни анкету</div>
+            <p class="onboarding-step-hint" id="onboardingHintProfile">Откроет расписание и записи.</p>
           </div>
           <button type="button" class="onboarding-step-cta" id="onboardingCtaProfile">Продолжить</button>
         </li>
@@ -116,7 +116,7 @@
           <span class="onboarding-step-icon" id="onboardingIconBooking">2</span>
           <div class="onboarding-step-body">
             <div class="onboarding-step-name">Тестовая запись</div>
-            <p class="onboarding-step-hint" id="onboardingHintBooking">Нажмите «Записать клиента» — слот создастся автоматически, если его нет.</p>
+            <p class="onboarding-step-hint" id="onboardingHintBooking">Посмотри, как работает система.</p>
           </div>
           <button type="button" class="onboarding-step-cta" id="onboardingCtaBooking">Записать клиента</button>
         </li>
@@ -389,18 +389,19 @@
     </div>
 
     <div class="hub-footnote" id="hubFootnote">
-      <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--app-cta-fill); opacity: 0.8;">
-          <circle cx="12" cy="12" r="10"/>
-          <path d="M12 16v-4"/>
-          <path d="M12 8h.01"/>
+      <div class="hub-footnote__head">
+        <svg class="hub-footnote__icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
         </svg>
-        <strong style="color: var(--tg-theme-text-color);">Быстрый доступ</strong>
+        <strong class="hub-footnote__title">Мы на связи</strong>
       </div>
-      <div style="font-size: 11px; line-height: 1.6;">
-        Команды в чате бота: <strong>/guide</strong> — помощь, <strong>/home</strong> — эта страница.
-        Все разделы синхронизированы в реальном времени.
-      </div>
+      <p class="hub-footnote__lead">
+        Что-то сломалось или непонятно — <strong>напишите</strong>: разберём и постараемся закрыть вопрос <strong>как можно быстрее</strong>.
+        Есть идея, как улучшить платформу, — <strong>тоже пришлите</strong>: нам важен ваш опыт.
+      </p>
+      <p class="hub-footnote__cta">
+        Напишите в <strong>чате с ботом</strong> команду <strong>/guide</strong> — там помощь и связь с командой.
+      </p>
     </div>
   </div>
 
@@ -633,6 +634,6 @@
   <script src="mini-app-trainer-gate.js"></script>
   <script src="mini-app-trainer-celebration.js"></script>
   <!-- Bump ?v= when trainer-home-main.js changes (immutable cache on /webapp/…). -->
-  <script defer src="trainer-home-main.js?v=20260530"></script>
+  <script defer src="trainer-home-main.js?v=20260534"></script>
 </body>
 </html>

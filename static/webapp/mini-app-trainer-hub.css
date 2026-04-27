@@ -2027,6 +2027,35 @@
       color: var(--tg-theme-text-color); 
       font-weight: 600; 
     }
+    .hub-footnote__head {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    .hub-footnote__icon {
+      flex-shrink: 0;
+      color: var(--app-cta-fill);
+      opacity: 0.9;
+    }
+    .hub-footnote__title {
+      color: var(--tg-theme-text-color);
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+    .hub-footnote__lead,
+    .hub-footnote__cta {
+      margin: 0;
+      font-size: 12px;
+      line-height: 1.55;
+      color: var(--tg-theme-hint-color);
+    }
+    .hub-footnote__cta {
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid rgba(128, 128, 128, 0.12);
+    }
 
     /* Onboarding checklist (same tokens as trainer-profile; constitution surfaces) */
     /* Hub: strip sits under header — avoid double gap with .hub-header margin-bottom */
@@ -2122,8 +2151,12 @@
       color: var(--tg-theme-text-color);
     }
     .onboarding-step-cta:disabled {
-      opacity: 0.45;
+      opacity: 0.5;
       cursor: default;
+      pointer-events: none;
+      border-style: dashed;
+      background: color-mix(in srgb, var(--tg-theme-secondary-bg-color) 92%, transparent);
+      color: color-mix(in srgb, var(--tg-theme-text-color) 55%, var(--tg-theme-hint-color));
     }
     .onboarding-faq-row {
       margin-top: 12px;

@@ -20,15 +20,18 @@ def trainer_first_link_onboarding_html(state: TrainerAccessState, trainer: dict[
     if state == TrainerAccessState.DEACTIVATED:
         return msg.TRAINER_AFTER_LINK_STEP_DEACTIVATED
     hero = msg.TRAINER_AFTER_LINK_HERO
-    step = _after_link_step_html(state, trainer)
-    return f"{hero}\n\n{step}"
+    step = _after_link_step_html(state, trainer).strip()
+    if step:
+        return f"{hero}\n\n{step}"
+    return hero
 
 
 def _after_link_step_html(state: TrainerAccessState, trainer: dict[str, Any] | None) -> str:
     if state == TrainerAccessState.NOT_LINKED:
         return msg.TRAINER_ONLY_VIA_SITE
     if state == TrainerAccessState.BLOCKED_PROFILE:
-        return msg.TRAINER_AFTER_LINK_STEP_BLOCKED
+        # Hero already points to «Обзор» / быстрый старт — без повторного «сначала анкета».
+        return ""
     if state == TrainerAccessState.BOOKING_READY:
         return msg.TRAINER_AFTER_LINK_STEP_BOOKING_READY
     if state == TrainerAccessState.PENDING_MODERATION:

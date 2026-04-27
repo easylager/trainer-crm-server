@@ -88,7 +88,11 @@ from src.bot.admin_moderation_card import (
 )
 from src.bot.admin_health import fetch_api_health, format_admin_version_message
 from src.bot.client_api import resolve_trainer_photo_bytes
-from src.bot.handlers.trainer_handlers import _trainer_profile_footer_hint, _trainer_profile_keyboard
+from src.bot.handlers.trainer_handlers import (
+    _trainer_moderation_profile_approved_reply_markup,
+    _trainer_profile_footer_hint,
+    _trainer_profile_keyboard,
+)
 from sqlalchemy import text
 
 from src.infrastructure.db import async_session_factory
@@ -197,6 +201,24 @@ async def _notify_trainer_profile_moderation_feedback(trainer: dict | None, feed
     await _trainer_bot_send_html_with_profile_button(int(telegram_id), body)
 
 
+async def _trainer_bot_send_moderation_profile_approved(telegram_id: int) -> None:
+    """HTML push: celebratory catalog approval + WebApp row «Профиль» + «Статистика»."""
+    settings = Settings()
+    if not settings.telegram_bot_token_trainer:
+        return
+    html_body = msg.TRAINER_MODERATION_PROFILE_APPROVED
+    kb = _trainer_moderation_profile_approved_reply_markup()
+    if kb is None:
+        html_body = html_body + _trainer_profile_footer_hint()
+    bot = Bot(token=settings.telegram_bot_token_trainer, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+    try:
+        await bot.send_message(chat_id=telegram_id, text=html_body, reply_markup=kb)
+    except Exception:
+        pass
+    finally:
+        await bot.session.close()
+
+
 async def _notify_trainer_moderation_approved(trainer: dict | None) -> None:
     """Notify trainer that the profile passed moderation (catalog visible)."""
     if not trainer:
@@ -204,7 +226,7 @@ async def _notify_trainer_moderation_approved(trainer: dict | None) -> None:
     telegram_id = trainer.get("telegram_id")
     if not telegram_id:
         return
-    await _trainer_bot_send_html_with_profile_button(int(telegram_id), msg.TRAINER_MODERATION_PROFILE_APPROVED)
+    await _trainer_bot_send_moderation_profile_approved(int(telegram_id))
 
 
 async def _notify_trainer_moderation_rejected(trainer: dict | None) -> None:

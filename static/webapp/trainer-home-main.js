@@ -1215,10 +1215,7 @@
 
         var leadEl = document.querySelector('.onboarding-strip-lead');
         if (leadEl && data) {
-          leadEl.textContent =
-            schedUnlocked && !activeFromChecklist && ttOk
-              ? '2 шага до первой записи: закройте базовый профиль и нажмите «Записать клиента».'
-              : '2 шага: минимальный профиль → первая запись.';
+          leadEl.textContent = '2 шага — и первый клиент уже в системе.';
         }
 
         var stepP = document.getElementById('onboardingStepProfile');
@@ -1237,27 +1234,27 @@
         if (iconP) iconP.textContent = stage1Done ? '✓' : '1';
         if (hintP) {
           if (!stage1Done && !active) {
-            hintP.textContent =
-              'Откройте мастер и заполните только обязательные поля.';
+            hintP.textContent = 'Откроет расписание и записи.';
           } else if (!stage1Done && active) {
-            hintP.textContent =
-              'Откройте профиль и закройте критерии для каталога.';
+            hintP.textContent = 'Осталось закрыть пару пунктов — и вы в каталоге.';
           } else if (active && !fpc) {
-            hintP.textContent =
-              'Аккаунт активен — дополните возраст, описание, образование и опыт.';
+            hintP.textContent = 'Добавьте детали — клиенты видят полный профиль.';
           } else if (schedUnlocked && ttOk && !pc) {
-            hintP.textContent =
-              'База готова — вкладка «Статус» подскажет, что добавить для каталога.';
+            hintP.textContent = 'База готова — можно отправить на проверку.';
           } else {
-            hintP.textContent =
-              'Этап закрыт. Можно отправлять на модерацию и ждать проверку.';
+            hintP.textContent = 'Готово — анкета ушла на проверку.';
           }
         }
         if (ctaP) {
-          ctaP.disabled = false;
-          if (pc) ctaP.textContent = 'Статус';
-          else if (!active && !ttOk) ctaP.textContent = 'Продолжить';
-          else ctaP.textContent = 'Открыть';
+          if (stage1Done) {
+            ctaP.disabled = true;
+            ctaP.textContent = 'Готово';
+          } else {
+            ctaP.disabled = false;
+            if (pc) ctaP.textContent = 'Статус';
+            else if (!active && !ttOk) ctaP.textContent = 'Продолжить';
+            else ctaP.textContent = 'Открыть';
+          }
         }
 
         var bookingStepDone = onboardingBookingStepDone(data);
@@ -1274,23 +1271,16 @@
         if (iconB) iconB.textContent = bookDone ? '✓' : '2';
         if (hintB) {
           if (bookLocked) {
-            hintB.textContent =
-              !schedUnlocked
-                ? (data && data.bookings_locked_reason) ||
-                  (data && data.slots_locked_reason) ||
-                  'Сначала завершите шаг 1, затем откроется запись клиентов.'
-                : 'Сначала закройте шаг 1.';
+            hintB.textContent = 'Откроется после шага 1.';
           } else if (bookDone) {
             hintB.textContent =
               data.has_upcoming_booking || data.has_confirmed_booking
-                ? 'Запись создана — проверьте её в блоке «Ближайшие записи».'
-                : 'Бронь уже оформляли — шаг закрыт. Новую запись можно добавить кнопкой «Записать клиента».';
+                ? 'Готово — запись в «Ближайших записях».'
+                : 'Уже делали — шаг закрыт.';
           } else if (!data.has_future_slots && !data.has_future_available_slots && !data.has_any_booking) {
-            hintB.textContent =
-              'Нажмите «Записать клиента» — слот создастся автоматически при необходимости.';
+            hintB.textContent = 'Слот создастся сам — просто нажмите кнопку.';
           } else {
-            hintB.textContent =
-              'Нажмите «Записать клиента», выберите время и оформите запись.';
+            hintB.textContent = 'Посмотрите, как работает система.';
           }
         }
         if (ctaB) {
@@ -1389,6 +1379,7 @@
         var ctaP = document.getElementById('onboardingCtaProfile');
         if (ctaP) {
           ctaP.onclick = function() {
+            if (ctaP.disabled) return;
             if (ctaP.textContent === 'Статус') {
               navigateToWithHash('trainer-profile', 'moderation');
               return;

@@ -196,6 +196,29 @@ def _trainer_profile_webapp_url() -> str | None:
     return None
 
 
+def _trainer_stats_webapp_url() -> str | None:
+    base = (Settings().webapp_base_url or "").rstrip("/")
+    if base.lower().startswith("https://"):
+        return f"{base}/webapp/trainer-stats"
+    return None
+
+
+def _trainer_moderation_profile_approved_reply_markup() -> InlineKeyboardMarkup | None:
+    """After catalog moderation: open profile or stats mini apps (same row)."""
+    profile = _trainer_profile_webapp_url()
+    stats = _trainer_stats_webapp_url()
+    if not profile or not stats:
+        return None
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text=msg.TRAINER_PROFILE_BTN_MINI_APP, web_app=WebAppInfo(url=profile)),
+                InlineKeyboardButton(text=msg.TRAINER_STATS_BTN_MINI_APP, web_app=WebAppInfo(url=stats)),
+            ],
+        ]
+    )
+
+
 def _trainer_faq_webapp_url() -> str | None:
     base = (Settings().webapp_base_url or "").rstrip("/")
     if base.lower().startswith("https://"):

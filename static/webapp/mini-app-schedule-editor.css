@@ -2430,8 +2430,9 @@
       display: none !important;
     }
 
-    /* schedule-editor?flow=book: splash until first quick-book sheet (JS removes when modal opens) */
-    html.se-flow-book-boot {
+    /* schedule-editor?flow=book | ?open_booking=: splash until modal / detail (JS removes overlay) */
+    html.se-flow-book-boot,
+    html.se-open-booking-boot {
       overflow: hidden;
     }
     .se-flow-book-boot-overlay {

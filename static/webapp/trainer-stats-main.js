@@ -54,6 +54,48 @@
         return months[mi] + ' ' + p[0];
       }
 
+      /**
+       * Human label for demand-signals window (GET /trainer/lifecycle → signals_recap).
+       * Mirrors hub Lead Mode / 14d framing so copy stays consistent.
+       */
+      function formatCatalogTrafficPeriod(recap) {
+        if (!recap || typeof recap !== 'object') return '';
+        if (String(recap.window) === 'since_lead_mode' && recap.since) {
+          var s = String(recap.since).slice(0, 10);
+          return 'С ' + formatDateShort(s) + ' — сейчас (как в обзоре после окончания подписки)';
+        }
+        var wd = recap.window_days != null ? parseInt(String(recap.window_days), 10) : 14;
+        if (isNaN(wd) || wd < 1) wd = 14;
+        return 'Последние ' + wd + ' дней — тот же период, что в обзоре на главной';
+      }
+
+      function renderCatalogTrafficBlock(recap) {
+        if (!recap || typeof recap !== 'object') return '';
+        var views = Number(recap.profile_views);
+        if (isNaN(views)) views = 0;
+        var clicks = Number(recap.contact_clicks);
+        if (isNaN(clicks)) clicks = 0;
+        var period = formatCatalogTrafficPeriod(recap);
+        var html = '';
+        html += '<div class="section stats-catalog-traffic">';
+        html += '<div class="section-title">Каталог</div>';
+        html +=
+          '<div class="card stats-catalog-traffic-card" role="region" aria-label="Показатели из каталога">';
+        html += '<p class="stats-catalog-traffic-kicker">Как вас ищут</p>';
+        html += '<h3 class="stats-catalog-traffic-title">Профиль в каталоге</h3>';
+        if (period) html += '<p class="stats-catalog-traffic-period">' + period + '</p>';
+        html += '<div class="stats-catalog-traffic-grid">';
+        html += '<div><div class="stats-catalog-traffic-metric-val">' + views + '</div>';
+        html += '<div class="stats-catalog-traffic-metric-lbl">Просмотры профиля</div></div>';
+        html += '<div><div class="stats-catalog-traffic-metric-val">' + clicks + '</div>';
+        html += '<div class="stats-catalog-traffic-metric-lbl">Переходы в Telegram</div></div>';
+        html += '</div>';
+        html +=
+          '<p class="stats-catalog-traffic-hint">Это те же цифры, что и на главной: открытия карточки и клик по ссылке в Telegram.</p>';
+        html += '</div></div>';
+        return html;
+      }
+
       function renderTrend(pct) {
         if (pct == null || pct === 0) return '';
         var cls = pct > 0 ? 'up' : 'down';
@@ -133,8 +175,9 @@
       }
 
       /** Single scroll: overview + former «Динамика», deduplicated (no redundant month/week insights). */
-      function renderDashboard(d, weekLabel) {
+      function renderDashboard(d, weekLabel, catalogRecap) {
         var html = '';
+        html += renderCatalogTrafficBlock(catalogRecap);
         html += '<div class="stat-chips">';
         html += '<div class="stat-chip"><div class="stat-chip-value">' + (d.bookings_today != null ? d.bookings_today : 0) + '</div><div class="stat-chip-label">Сегодня</div></div>';
         html += '<div class="stat-chip"><div class="stat-chip-value">' + (d.avg_check_cents_30d != null ? formatMoney(d.avg_check_cents_30d) : '—') + '</div><div class="stat-chip-label">Средний чек · 30 дн.</div></div>';
@@ -481,7 +524,7 @@
         return html;
       }
 
-      function renderShell(d) {
+      function renderShell(d, catalogRecap) {
         var weekLabel = formatWeekRange(d.week_start_iso || d.week_start, d.week_end_iso || d.week_end);
         var monthTitle = formatMonthTitle(d.month_start);
         var periodLine = 'Неделя <strong>' + weekLabel + '</strong> · отчётный месяц: <strong>' + monthTitle + '</strong>';
@@ -491,7 +534,7 @@
           +   '<button type="button" class="stats-tab-btn" role="tab" id="tab-overview" aria-selected="true" aria-controls="panel-overview" data-tab="overview">Сводка</button>'
           +   '<button type="button" class="stats-tab-btn" role="tab" id="tab-money" aria-selected="false" aria-controls="panel-money" data-tab="money">Бухгалтерия</button>'
           + '</nav>'
-          + '<div class="stats-tab-panel is-active" role="tabpanel" id="panel-overview" aria-labelledby="tab-overview">' + renderDashboard(d, weekLabel) + '</div>'
+          + '<div class="stats-tab-panel is-active" role="tabpanel" id="panel-overview" aria-labelledby="tab-overview">' + renderDashboard(d, weekLabel, catalogRecap) + '</div>'
           + '<div class="stats-tab-panel" role="tabpanel" id="panel-money" aria-labelledby="tab-money" hidden>' + renderMoney(d) + '</div>';
       }
 
@@ -759,14 +802,23 @@
 
       function loadStatsDashboard() {
         if (window.TrainerMiniAppGate && window.TrainerMiniAppGate.shouldBlockFeatureFetch()) return;
-        getJson('/api/webapp/trainer/stats').then(function(data) {
-          contentEl.innerHTML = renderShell(data);
-          wireTabs(contentEl);
-          wireMoneyPeriod(contentEl, data);
-        }).catch(function(e) {
-          var msg = (e && e.message) ? e.message : 'Ошибка сети или таймаут. Проверьте tunnel и откройте из бота снова.';
-          contentEl.innerHTML = '<div class="error">' + msg + '</div>';
+        var statsP = getJson('/api/webapp/trainer/stats');
+        var lifeP = getJson('/api/webapp/trainer/lifecycle').catch(function() {
+          return null;
         });
+        Promise.all([statsP, lifeP])
+          .then(function(pair) {
+            var data = pair[0];
+            var life = pair[1];
+            var catalogRecap = life && life.signals_recap ? life.signals_recap : null;
+            contentEl.innerHTML = renderShell(data, catalogRecap);
+            wireTabs(contentEl);
+            wireMoneyPeriod(contentEl, data);
+          })
+          .catch(function(e) {
+            var msg = (e && e.message) ? e.message : 'Ошибка сети или таймаут. Проверьте tunnel и откройте из бота снова.';
+            contentEl.innerHTML = '<div class="error">' + msg + '</div>';
+          });
       }
 
       if (initData && window.TrainerMiniAppGate) {

@@ -248,6 +248,78 @@
       margin-bottom: 10px;
     }
 
+    /* Catalog demand signals (same source as trainer-home) — lead block on «Сводка» */
+    .stats-catalog-traffic {
+      margin-bottom: 22px;
+    }
+    .stats-catalog-traffic-card {
+      margin-bottom: 0;
+      background: linear-gradient(
+        145deg,
+        color-mix(in srgb, var(--tg-theme-button-color) 14%, var(--tg-theme-secondary-bg-color)) 0%,
+        var(--tg-theme-secondary-bg-color) 55%,
+        color-mix(in srgb, var(--tg-theme-button-color) 6%, var(--tg-theme-secondary-bg-color)) 100%
+      );
+      border: 1px solid color-mix(in srgb, var(--tg-theme-button-color) 26%, transparent);
+      box-shadow:
+        0 4px 22px color-mix(in srgb, var(--tg-theme-button-color) 14%, transparent),
+        inset 0 1px 0 color-mix(in srgb, #fff 6%, transparent);
+    }
+    @media (prefers-color-scheme: dark) {
+      .stats-catalog-traffic-card {
+        box-shadow:
+          0 8px 28px rgba(0, 0, 0, 0.45),
+          inset 0 1px 0 rgba(255, 255, 255, 0.04);
+      }
+    }
+    .stats-catalog-traffic-kicker {
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--tg-theme-hint-color);
+      margin: 0 0 6px;
+    }
+    .stats-catalog-traffic-title {
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1.15;
+      margin: 0 0 8px;
+      color: var(--tg-theme-text-color);
+    }
+    .stats-catalog-traffic-period {
+      font-size: 12px;
+      line-height: 1.4;
+      color: var(--tg-theme-hint-color);
+      margin: 0 0 16px;
+    }
+    .stats-catalog-traffic-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px 12px;
+    }
+    .stats-catalog-traffic-metric-val {
+      font-size: 28px;
+      font-weight: 800;
+      letter-spacing: -0.04em;
+      line-height: 1.05;
+      color: var(--tg-theme-text-color);
+    }
+    .stats-catalog-traffic-metric-lbl {
+      font-size: 12px;
+      line-height: 1.3;
+      color: var(--tg-theme-hint-color);
+      margin-top: 5px;
+    }
+    .stats-catalog-traffic-hint {
+      font-size: 11px;
+      line-height: 1.45;
+      color: var(--tg-theme-hint-color);
+      margin: 14px 0 0;
+      opacity: 0.95;
+    }
+
     .chart-bars {
       display: flex;
       align-items: flex-end;

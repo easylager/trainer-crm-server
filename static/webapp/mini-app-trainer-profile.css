@@ -1254,13 +1254,6 @@
     .hero-photo-status.hero-photo-status--error {
       color: #dc2626;
     }
-    .hero-photo-hint {
-      margin: 0;
-      font-size: 11px;
-      color: var(--tg-theme-hint-color);
-      opacity: 0.9;
-      text-align: center;
-    }
     .hero-photo-frame.hero-photo-frame--empty .hero-photo-gradient,
     .hero-photo-frame.hero-photo-frame--empty .hero-photo-caption {
       display: none;
