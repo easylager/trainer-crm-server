@@ -617,6 +617,10 @@ async def test_put_templates_day_400_group_when_profile_disabled(
         ),
         {"tid": trainer_id, "sid": svc_id},
     )
+    await db_session.execute(
+        text("UPDATE trainer_profiles SET group_classes_enabled = false WHERE trainer_id = :tid"),
+        {"tid": trainer_id},
+    )
     await db_session.commit()
 
     with patch_trainer_webapp_init(tg):
@@ -881,6 +885,13 @@ async def test_post_schedule_slots_400_group_when_profile_disabled_leaves_db_unc
     d = date.today() + timedelta(days=11)
     await _insert_slot(db_session, trainer_id, d, 10, 11, "available", capacity=1)
     await _insert_slot(db_session, trainer_id, d, 11, 12, "available", capacity=1)
+
+    # Precondition: groups off in profile (DB default is now true — must be explicit in test).
+    await db_session.execute(
+        text("UPDATE trainer_profiles SET group_classes_enabled = false WHERE trainer_id = :tid"),
+        {"tid": trainer_id},
+    )
+    await db_session.commit()
 
     with patch_trainer_webapp_init(tg):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
