@@ -658,18 +658,20 @@ async def list_active_trainers_for_client(
     city_id: int | None = None,
     service_id: int | None = None,
     arena_id: int | None = None,
+    arena_ids: list[int] | None = None,
     order_by: str = "rating",
     # Time-based filters
     filter_days: list[int] | None = None,  # [1,2,3] for Mon,Tue,Wed (0=Sunday)
     filter_time_slots: list[str] | None = None,  # ["09:00-12:00", "18:00-21:00"]
 ) -> tuple[list[dict[str, Any]], int]:
-    """Active trainers; optional arena filter (trainers with slot in that arena). Returns (items, total)."""
+    """Active trainers; optional arena filter (logical OR over arena_ids). Returns (items, total)."""
     return await TrainerRepository(session).list_active_with_details(
         limit=limit,
         offset=offset,
         city_id=city_id,
         service_id=service_id,
         arena_id=arena_id,
+        arena_ids=arena_ids,
         order_by=order_by,
         filter_days=filter_days,
         filter_time_slots=filter_time_slots,

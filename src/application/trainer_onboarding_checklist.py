@@ -20,6 +20,8 @@ session (slot end in the future, ``pending``/``confirmed``).
 ``open_loop_clients_no_telegram_count`` = those clients (same scope as CRM visibility) with ``telegram_id`` null.
 ``fill_slots_invite_candidates_count`` = clients eligible for hub «напомнить о слотах»: CRM scope, Telegram linked,
 no upcoming pending/confirmed session (same filter as ``list_trainer_fill_slots_invite_candidates``).
+``has_crm_subscription_access`` = active trial/paid row with CRM base (``get_trainer_entitlements``); when false after
+expiry, hub may show a soft tariff hint while the public catalog card can remain visible.
 """
 from __future__ import annotations
 
@@ -92,12 +94,14 @@ async def get_trainer_onboarding_checklist(session: AsyncSession, trainer_id: in
         "open_loop_clients_no_upcoming_count": 0,
         "open_loop_clients_no_telegram_count": 0,
         "fill_slots_invite_candidates_count": 0,
+        "has_crm_subscription_access": False,
     }
 
+    has_crm = await trainer_has_crm_access(session, trainer_id)
+    out["has_crm_subscription_access"] = has_crm
+
     pending_ttv_unlock = (
-        st == TRAINER_STATUS_PENDING_PROFILE
-        and tt_minimal_complete
-        and await trainer_has_crm_access(session, trainer_id)
+        st == TRAINER_STATUS_PENDING_PROFILE and tt_minimal_complete and has_crm
     )
 
     if not is_active and not pending_ttv_unlock:

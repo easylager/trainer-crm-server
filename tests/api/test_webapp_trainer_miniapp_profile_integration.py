@@ -178,6 +178,7 @@ async def test_onboarding_checklist_inactive_trainer_slots_and_bookings_locked(
     assert data.get("bookings_locked_reason")
     assert data.get("schedule_unlocked") is False
     assert data.get("fill_slots_invite_candidates_count") == 0
+    assert data.get("has_crm_subscription_access") is False
 
 
 @pytest.mark.asyncio
@@ -223,6 +224,7 @@ async def test_onboarding_checklist_active_future_available_slot(
     assert ej.get("has_future_available_slots") is False
     assert ej.get("has_future_slots") is False
     assert ej.get("has_upcoming_booking") is False
+    assert ej.get("has_crm_subscription_access") is False
 
     slot_day = date.today() + timedelta(days=14)
     await db_session.execute(

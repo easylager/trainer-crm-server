@@ -7,11 +7,12 @@ Usage:
   python -m scripts.send_trainer_notification_samples
   python -m scripts.send_trainer_notification_samples --chat-id 123456789
   python -m scripts.send_trainer_notification_samples --dry-run
+  python -m scripts.send_trainer_notification_samples --lead-mode-recovery-only --chat-id 123456789
 
 Env (.env):
   TELEGRAM_BOT_TOKEN_TRAINER
   NOTIFY_TELEGRAM_ID  (если не передан --chat-id)
-  WEBAPP_BASE_URL     (для кнопок WebApp и ссылки «Оплатить подписку»)
+  WEBAPP_BASE_URL     (для кнопок WebApp и ссылки «Оплатить подписку»; для WebApp-кнопки нужен https)
 """
 from __future__ import annotations
 
@@ -19,6 +20,7 @@ import argparse
 import asyncio
 import html
 import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -44,12 +46,199 @@ from src.bot.handlers.trainer_handlers import (
     _trainer_profile_footer_hint,
     _trainer_profile_keyboard,
 )
+from src.bot.notification_loops import _render_recovery_text
 from src.bot.schedule_notifications import REQUESTS_CALLBACK
+from src.application.demand_signals_use_cases import SignalsRecap
+from src.application.lead_mode_recovery_use_cases import DueRecoveryNudge
+from src.infrastructure.db.models import (
+    RECOVERY_STEP_D0,
+    RECOVERY_STEP_D3,
+    RECOVERY_STEP_D14,
+    RECOVERY_STEP_D30,
+)
 from src.shared.config import Settings
 
 MOCK_BOOKING_ID = 900001
 MOCK_REQUEST_ID = 800001
 MOCK_CLIENT_TELEGRAM_ID = 123456789
+
+
+def _sample_signals(
+    profile_views: int, contact_clicks: int, booking_attempts_blocked: int = 0
+) -> SignalsRecap:
+    now = datetime.now(timezone.utc)
+    since = now - timedelta(days=14)
+    return SignalsRecap(
+        trainer_id=1,
+        window_days=14,
+        since=since,
+        until=now,
+        profile_views=profile_views,
+        contact_clicks=contact_clicks,
+        booking_attempts_blocked=booking_attempts_blocked,
+    )
+
+
+def _sample_recovery_nudge(
+    *,
+    step: str,
+    days_in_lead_mode: int,
+    signals: SignalsRecap,
+) -> DueRecoveryNudge:
+    now = datetime.now(timezone.utc)
+    last_exp = now - timedelta(days=days_in_lead_mode)
+    offset = {RECOVERY_STEP_D0: 0, RECOVERY_STEP_D3: 3, RECOVERY_STEP_D14: 14, RECOVERY_STEP_D30: 30}[
+        step
+    ]
+    return DueRecoveryNudge(
+        trainer_id=1,
+        trainer_telegram_id=0,
+        step=step,
+        days_offset=offset,
+        days_in_lead_mode=days_in_lead_mode,
+        last_expires_at=last_exp,
+        signals=signals,
+    )
+
+
+async def _send_lead_mode_recovery_samples(
+    bot: Bot,
+    chat_id: int,
+    *,
+    base: str,
+    webapp_https: bool,
+) -> None:
+    """Same rendering as run_lead_mode_recovery_loop (HTML + optional subscription WebApp button)."""
+    subscription_webapp_url = (
+        base + "/webapp/trainer-subscription?v=20260509" if base else None
+    )
+    sub_kb: InlineKeyboardMarkup | None = None
+    if webapp_https and subscription_webapp_url:
+        sub_kb = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text=msg.TRAINER_SUBSCRIPTION_PUSH_BTN_WEBAPP,
+                        web_app=WebAppInfo(url=subscription_webapp_url),
+                    ),
+                ],
+            ],
+        )
+
+    await bot.send_message(
+        chat_id=chat_id,
+        text=(
+            "<b>Превью: Lead Mode recovery</b> (серия D+0 / D+3 / D+14 / D+30, как в "
+            "<code>run_lead_mode_recovery_loop</code>)."
+        ),
+    )
+    await _section(bot, chat_id, "Recovery D+0 — после trial")
+    await bot.send_message(
+        chat_id=chat_id,
+        text=_render_recovery_text(
+            _sample_recovery_nudge(
+                step=RECOVERY_STEP_D0,
+                days_in_lead_mode=0,
+                signals=_sample_signals(0, 0),
+            ),
+            was_trial=True,
+        ),
+        reply_markup=sub_kb,
+    )
+    await _section(bot, chat_id, "Recovery D+0 — после оплаченного периода")
+    await bot.send_message(
+        chat_id=chat_id,
+        text=_render_recovery_text(
+            _sample_recovery_nudge(
+                step=RECOVERY_STEP_D0,
+                days_in_lead_mode=0,
+                signals=_sample_signals(0, 0),
+            ),
+            was_trial=False,
+        ),
+        reply_markup=sub_kb,
+    )
+
+    await _section(bot, chat_id, "Recovery D+3 — есть просмотры и клики в Telegram")
+    await bot.send_message(
+        chat_id=chat_id,
+        text=_render_recovery_text(
+            _sample_recovery_nudge(
+                step=RECOVERY_STEP_D3,
+                days_in_lead_mode=5,
+                signals=_sample_signals(23, 6),
+            ),
+            was_trial=False,
+        ),
+        reply_markup=sub_kb,
+    )
+    await _section(bot, chat_id, "Recovery D+3 — только просмотры (без кликов)")
+    await bot.send_message(
+        chat_id=chat_id,
+        text=_render_recovery_text(
+            _sample_recovery_nudge(
+                step=RECOVERY_STEP_D3,
+                days_in_lead_mode=4,
+                signals=_sample_signals(12, 0),
+            ),
+            was_trial=False,
+        ),
+        reply_markup=sub_kb,
+    )
+    await _section(bot, chat_id, "Recovery D+3 — без сигналов (честно, без фейковых нулей)")
+    await bot.send_message(
+        chat_id=chat_id,
+        text=_render_recovery_text(
+            _sample_recovery_nudge(
+                step=RECOVERY_STEP_D3,
+                days_in_lead_mode=3,
+                signals=_sample_signals(0, 0),
+            ),
+            was_trial=False,
+        ),
+        reply_markup=sub_kb,
+    )
+
+    await _section(bot, chat_id, "Recovery D+14 — усиленный loss framing")
+    await bot.send_message(
+        chat_id=chat_id,
+        text=_render_recovery_text(
+            _sample_recovery_nudge(
+                step=RECOVERY_STEP_D14,
+                days_in_lead_mode=15,
+                signals=_sample_signals(41, 9, booking_attempts_blocked=2),
+            ),
+            was_trial=False,
+        ),
+        reply_markup=sub_kb,
+    )
+
+    await _section(bot, chat_id, "Recovery D+30 — последнее напоминание + сигналы")
+    await bot.send_message(
+        chat_id=chat_id,
+        text=_render_recovery_text(
+            _sample_recovery_nudge(
+                step=RECOVERY_STEP_D30,
+                days_in_lead_mode=31,
+                signals=_sample_signals(88, 19),
+            ),
+            was_trial=False,
+        ),
+        reply_markup=sub_kb,
+    )
+    await _section(bot, chat_id, "Recovery D+30 — без сигналов")
+    await bot.send_message(
+        chat_id=chat_id,
+        text=_render_recovery_text(
+            _sample_recovery_nudge(
+                step=RECOVERY_STEP_D30,
+                days_in_lead_mode=30,
+                signals=_sample_signals(0, 0),
+            ),
+            was_trial=False,
+        ),
+        reply_markup=sub_kb,
+    )
 
 
 def _requests_word(n: int) -> str:
@@ -92,6 +281,11 @@ async def main() -> None:
         action="store_true",
         help="Print planned samples only, do not call Telegram",
     )
+    parser.add_argument(
+        "--lead-mode-recovery-only",
+        action="store_true",
+        help="Send only Lead Mode recovery nudges (D+0/D+3/D+14/D+30), not the full sample pack",
+    )
     args = parser.parse_args()
 
     settings = Settings()
@@ -104,7 +298,15 @@ async def main() -> None:
     webapp_https = base.lower().startswith("https://")
     subscription_webapp_url = base + "/webapp/trainer-subscription?v=20260450" if base else None
 
-    planned = [
+    if args.lead_mode_recovery_only:
+        planned = [
+            "Lead Mode recovery: D+0 trial / D+0 paid",
+            "D+3: views+clicks / views only / no signals",
+            "D+14: strong loss framing",
+            "D+30: last call with / without signals",
+        ]
+    else:
+        planned = [
         "Секции-заголовки в чате",
         "Новая заявка (с комментарием / без) + клавиатура отклика",
         "Ежедневное напоминание по заявкам",
@@ -133,6 +335,17 @@ async def main() -> None:
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
     )
     try:
+        if args.lead_mode_recovery_only:
+            await _send_lead_mode_recovery_samples(
+                bot, chat_id, base=base, webapp_https=webapp_https
+            )
+            await bot.send_message(
+                chat_id=chat_id,
+                text="<b>Готово.</b> Это все варианты серии Lead Mode recovery.",
+            )
+            print(f"Sent Lead Mode recovery previews to chat_id={chat_id}")
+            return
+
         await bot.send_message(
             chat_id=chat_id,
             text=(

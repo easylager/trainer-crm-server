@@ -5,6 +5,7 @@ import asyncio
 import html
 import logging
 import random
+import re
 import string
 import uuid
 from collections import defaultdict
@@ -82,6 +83,7 @@ from src.application.trainer_schedule_use_cases import (
     next_week_monday,
     this_week_monday,
 )
+from src.application.demand_signals_use_cases import record_profile_view_commit
 from src.application.trainer_use_cases import add_trainer_rating, get_trainer
 from src.application.support_use_cases import create_support_message
 from src.application.group_attendance_use_cases import (
@@ -96,7 +98,7 @@ from src.application.welcome_link_use_cases import (
     WELCOME_TOKEN_TYPE_PASS,
     consume_welcome_link_token,
 )
-from src.infrastructure.db.models import SUPPORT_FROM_CLIENT
+from src.infrastructure.db.models import DEMAND_SOURCE_CLIENT_APP, SUPPORT_FROM_CLIENT
 from src.bot import messages as msg
 from src.shared.config import Settings
 from src.shared.mini_app_https import mini_app_https_base
@@ -254,6 +256,29 @@ def _trainer_book_markup(
             [InlineKeyboardButton(text=msg.CLIENT_BUTTON_ANOTHER_TRAINER, callback_data=CATALOG_CALLBACK)],
         ]
     return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+# Mirrors redirect username rules so /r/tg/{id} does not 404 when the user taps «Написать».
+_CLIENT_TG_USERNAME_RE = re.compile(r"^[A-Za-z0-9_]{5,64}$")
+
+
+def _client_trainer_write_url(*, base: str, trainer: dict) -> str | None:
+    """
+    Prefer HTTPS /r/tg/{id} (records contact_click) when public base and @username exist;
+    otherwise fall back to tg://user (no server-side click signal).
+    """
+    b = (base or "").rstrip("/")
+    trainer_id = trainer.get("id")
+    telegram_id = trainer.get("telegram_id")
+    if trainer_id is None:
+        return None
+    if b.startswith("https://"):
+        raw_u = (trainer.get("telegram_username") or "").strip().lstrip("@")
+        if raw_u and _CLIENT_TG_USERNAME_RE.fullmatch(raw_u):
+            return f"{b}/r/tg/{int(trainer_id)}?src={DEMAND_SOURCE_CLIENT_APP}"
+    if telegram_id:
+        return f"tg://user?id={int(telegram_id)}"
+    return None
 
 
 def _invite_welcome_text(trainer: dict | None, base: str) -> str:
@@ -515,6 +540,11 @@ async def cmd_start(message: Message) -> None:
             if service_id is not None:
                 await set_service(telegram_id, service_id, db_session)
             await set_selected_trainer(telegram_id, trainer_id, db_session)
+            await record_profile_view_commit(
+                db_session,
+                trainer_id=int(trainer_id),
+                source=DEMAND_SOURCE_CLIENT_APP,
+            )
         if token_type == WELCOME_TOKEN_TYPE_CLIENT_BIND:
             async with async_session_factory() as db_session:
                 trainer = await get_trainer(db_session, int(trainer_id))
@@ -650,6 +680,11 @@ async def cmd_start(message: Message) -> None:
                 if service_id is not None:
                     await set_service(telegram_id, service_id, db_session)
                 await set_selected_trainer(telegram_id, trainer_id, db_session)
+                await record_profile_view_commit(
+                    db_session,
+                    trainer_id=int(trainer_id),
+                    source=DEMAND_SOURCE_CLIENT_APP,
+                )
             base = (Settings().webapp_base_url or "").rstrip("/")
             async with async_session_factory() as db_session:
                 trainer = await get_trainer(db_session, int(trainer_id))
@@ -699,6 +734,11 @@ async def cmd_start(message: Message) -> None:
             if ref_trainer_id:
                 async with async_session_factory() as db_session:
                     await set_selected_trainer(telegram_id, ref_trainer_id, db_session)
+                    await record_profile_view_commit(
+                        db_session,
+                        trainer_id=int(ref_trainer_id),
+                        source=DEMAND_SOURCE_CLIENT_APP,
+                    )
             await message.answer(msg.CLIENT_CERT_CODE_INVALID)
         return
 
@@ -716,6 +756,11 @@ async def cmd_start(message: Message) -> None:
                 await set_service(telegram_id, service_id, db_session)
             await set_selected_trainer(telegram_id, trainer_id_ref, db_session)
             trainer = await get_trainer(db_session, trainer_id_ref)
+            await record_profile_view_commit(
+                db_session,
+                trainer_id=int(trainer_id_ref),
+                source=DEMAND_SOURCE_CLIENT_APP,
+            )
         base = (Settings().webapp_base_url or "").rstrip("/")
         welcome_body = _invite_welcome_text(trainer, base)
         await message.answer(
@@ -740,6 +785,11 @@ async def cmd_start(message: Message) -> None:
                 await set_service(telegram_id, service_id, db_session)
             await set_selected_trainer(telegram_id, pass_trainer_id, db_session)
             trainer = await get_trainer(db_session, pass_trainer_id)
+            await record_profile_view_commit(
+                db_session,
+                trainer_id=int(pass_trainer_id),
+                source=DEMAND_SOURCE_CLIENT_APP,
+            )
         name = html.escape(_trainer_name(trainer) if trainer else "Тренер")
         base = (Settings().webapp_base_url or "").rstrip("/")
         keyboard = InlineKeyboardMarkup(
@@ -768,6 +818,11 @@ async def cmd_start(message: Message) -> None:
                 await clear_selected_service(telegram_id, db_session)
             await set_selected_trainer(telegram_id, trainer_id, db_session)
             trainer = await get_trainer(db_session, trainer_id)
+            await record_profile_view_commit(
+                db_session,
+                trainer_id=int(trainer_id),
+                source=DEMAND_SOURCE_CLIENT_APP,
+            )
             service_label = None
             if service_id is not None:
                 rsvc = await db_session.execute(
@@ -869,13 +924,26 @@ async def cmd_my_requests(message: Message) -> None:
     await message.answer(text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
 
 
-def _trainer_display_for_booking(b: dict, client_telegram_id: int) -> str:
-    """HTML fragment: trainer name as tg:// link if telegram_id present and not self; else plain name + hint."""
+def _trainer_display_for_booking(b: dict, client_telegram_id: int, *, base: str = "") -> str:
+    """HTML fragment: trainer name as trackable or tg:// link if telegram_id present and not self."""
     name = (b.get("trainer_name") or "Тренер").strip() or "Тренер"
     safe_name = html.escape(name)
     tid = b.get("trainer_telegram_id")
-    # Don't link when trainer is the same user (opens Saved Messages / "Избранное")
+    if tid and int(tid) == int(client_telegram_id):
+        # Same Telegram account as client — avoid tg:// deep link to self.
+        return safe_name
     if tid:
+        trainer_id = b.get("trainer_id")
+        uname = (b.get("trainer_telegram_username") or "").strip().lstrip("@")
+        mini = (base or "").rstrip("/")
+        if (
+            mini.startswith("https://")
+            and trainer_id is not None
+            and uname
+            and _CLIENT_TG_USERNAME_RE.fullmatch(uname)
+        ):
+            href = f"{mini}/r/tg/{int(trainer_id)}?src={DEMAND_SOURCE_CLIENT_APP}"
+            return f'<a href="{html.escape(href, quote=True)}">{safe_name}</a>'
         return f'<a href="tg://user?id={int(tid)}">{safe_name}</a>'
     # Trainer not linked to bot yet — show hint so user knows why there's no link
     return f"{safe_name} (написать в TG можно после подключения тренера к боту)"
@@ -883,6 +951,7 @@ def _trainer_display_for_booking(b: dict, client_telegram_id: int) -> str:
 
 async def _my_bookings_content(telegram_id: int) -> tuple[str, InlineKeyboardMarkup]:
     """Build client's bookings list text. No back button — user navigates via menu."""
+    base = (Settings().webapp_base_url or "").rstrip("/")
     async with async_session_factory() as db_session:
         bookings = await list_bookings_for_client(db_session, telegram_id)
     back_kb = InlineKeyboardMarkup(inline_keyboard=[])
@@ -915,7 +984,7 @@ async def _my_bookings_content(telegram_id: int) -> tuple[str, InlineKeyboardMar
                 day=day_str,
                 time=time_str,
                 duration=duration,
-                trainer_display=_trainer_display_for_booking(b, telegram_id),
+                trainer_display=_trainer_display_for_booking(b, telegram_id, base=base),
                 place=b.get("place_display") or "Уточните у тренера",
                 status=status_label,
             )
@@ -1114,6 +1183,11 @@ async def on_select_trainer(callback: CallbackQuery, bot: Bot) -> None:
         await set_selected_trainer(telegram_id, trainer_id, db_session)
         trainer = await get_trainer(db_session, trainer_id)
         allows_online = await trainer_allows_online_booking(db_session, trainer_id)
+        await record_profile_view_commit(
+            db_session,
+            trainer_id=trainer_id,
+            source=DEMAND_SOURCE_CLIENT_APP,
+        )
     name = html.escape(_trainer_name(trainer) if trainer else "Тренер")
     base = (Settings().webapp_base_url or "").rstrip("/")
     if not allows_online:
@@ -2475,6 +2549,12 @@ async def show_responder_profile(callback: CallbackQuery, bot: Bot) -> None:
     if not trainer:
         await callback.message.answer(msg.CLIENT_ERROR_TRAINER_NOT_FOUND)
         return
+    async with async_session_factory() as db_session:
+        await record_profile_view_commit(
+            db_session,
+            trainer_id=trainer_id,
+            source=DEMAND_SOURCE_CLIENT_APP,
+        )
     client_telegram_id = callback.from_user.id if callback.from_user else 0
     trainer_comment = None
     async with async_session_factory() as db_session:
@@ -2486,12 +2566,13 @@ async def show_responder_profile(callback: CallbackQuery, bot: Bot) -> None:
             trainer_comment = (resp.get("trainer_comment") or "").strip() or None
     if trainer_comment:
         await callback.message.answer(msg.CLIENT_TRAINER_COMMENT_LABEL.format(comment=trainer_comment))
-    telegram_id = trainer.get("telegram_id")
     buttons = []
-    if telegram_id:
+    base = (Settings().webapp_base_url or "").rstrip("/")
+    write_url = _client_trainer_write_url(base=base, trainer=trainer)
+    if write_url:
         buttons.append([InlineKeyboardButton(
             text=msg.CLIENT_BUTTON_RESPONDER_WRITE,
-            url=f"tg://user?id={telegram_id}",
+            url=write_url,
         )])
     buttons.append([InlineKeyboardButton(
         text=msg.CLIENT_BUTTON_RESPONDER_BOOK,
@@ -2525,6 +2606,11 @@ async def book_from_request(callback: CallbackQuery) -> None:
     async with async_session_factory() as db_session:
         await set_selected_trainer(telegram_id, trainer_id, db_session)
         await set_pending_request_id(telegram_id, request_id, db_session)
+        await record_profile_view_commit(
+            db_session,
+            trainer_id=trainer_id,
+            source=DEMAND_SOURCE_CLIENT_APP,
+        )
     text, keyboard = await _client_slots_content(trainer_id)
     await callback.message.answer(msg.CLIENT_PICK_TRAINER_DONE)
     if keyboard is None:
@@ -2548,6 +2634,11 @@ async def pick_responder(callback: CallbackQuery) -> None:
         return
     async with async_session_factory() as db_session:
         await set_selected_trainer(telegram_id, trainer_id, db_session)
+        await record_profile_view_commit(
+            db_session,
+            trainer_id=trainer_id,
+            source=DEMAND_SOURCE_CLIENT_APP,
+        )
     text, keyboard = await _client_slots_content(trainer_id)
     await callback.message.answer(msg.CLIENT_PICK_TRAINER_DONE)
     if keyboard is None:
@@ -2742,6 +2833,11 @@ async def on_catalog_web_app_data(message: Message) -> None:
         return
     async with async_session_factory() as db_session:
         trainer = await get_trainer(db_session, int(trainer_id))
+        await record_profile_view_commit(
+            db_session,
+            trainer_id=int(trainer_id),
+            source=DEMAND_SOURCE_CLIENT_APP,
+        )
     name = html.escape(_trainer_name(trainer) if trainer else "Тренер")
     base = (Settings().webapp_base_url or "").rstrip("/")
     await message.answer(

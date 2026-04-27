@@ -1,13 +1,21 @@
 """Public API (no auth): catalog (cities, services, trainers) and photo serving for client/bot."""
+import logging
+import re
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.deps import get_session
+from src.api.middleware.http_limits import client_ip_from_request
 from src.application.catalog_use_cases import list_arenas, list_cities, list_services
+from src.application.demand_signals_use_cases import record_profile_view_commit
+from src.application.lifecycle_use_cases import (
+    LifecycleStage,
+    resolve_lifecycle_snapshot,
+)
 from src.application.subscription_tier_use_cases import get_trainer_booking_availability
 from src.application.training_group_use_cases import (
     batch_open_groups_count_for_trainers,
@@ -21,8 +29,35 @@ from src.application.trainer_use_cases import (
     list_trainer_education,
 )
 from src.infrastructure import s3
+from src.infrastructure.db.models import DEMAND_SOURCE_CATALOG, DEMAND_SOURCE_DIRECT_LINK
 from src.shared.config import Settings
 from src.shared.public_trainer_payload import sanitize_trainer_for_public_catalog
+
+
+logger = logging.getLogger(__name__)
+
+# Telegram username rule mirrored from redirects.py (see comment there).
+_TELEGRAM_USERNAME_RE = re.compile(r"^[A-Za-z0-9_]{5,64}$")
+# Cap to avoid log/hash blowups from rogue clients.
+_UA_MAX_LEN = 512
+
+
+def _build_contact_telegram_url(trainer_id: int, telegram_username: str | None) -> str | None:
+    """Return the trackable redirect URL only when the trainer has a valid Telegram handle."""
+    if not telegram_username:
+        return None
+    candidate = telegram_username.strip().lstrip("@")
+    if not _TELEGRAM_USERNAME_RE.fullmatch(candidate):
+        return None
+    return f"/r/tg/{trainer_id}"
+
+
+def _resolve_source_from_referer(request: Request) -> str:
+    """Pick demand source from Referer; defaults to direct_link."""
+    referer = (request.headers.get("referer") or "").lower()
+    if "/webapp/catalog" in referer:
+        return DEMAND_SOURCE_CATALOG
+    return DEMAND_SOURCE_DIRECT_LINK
 
 router = APIRouter(prefix="/api/public", tags=["public"])
 
@@ -34,6 +69,34 @@ def _trainer_public_catalog_exposed(trainer: dict | None) -> bool:
     if (trainer.get("status") or "").strip().lower() != "active":
         return False
     return bool(trainer.get("is_catalog_visible", True))
+
+
+# Hard cap on catalog multi-arena filter — defends DB from oversized IN-lists from rogue clients
+# without affecting realistic catalog UX (cities have well under 32 arenas).
+_ARENA_IDS_FILTER_LIMIT = 32
+
+
+def _parse_arena_ids_csv(raw: str | None) -> list[int] | None:
+    """Parse `arena_ids=1,2,3` query into deduped list[int]; None when empty/invalid/missing."""
+    if not raw:
+        return None
+    parsed: list[int] = []
+    seen: set[int] = set()
+    for chunk in raw.split(","):
+        s = chunk.strip()
+        if not s:
+            continue
+        try:
+            n = int(s)
+        except ValueError:
+            continue
+        if n in seen:
+            continue
+        seen.add(n)
+        parsed.append(n)
+        if len(parsed) >= _ARENA_IDS_FILTER_LIMIT:
+            break
+    return parsed or None
 
 
 def _photo_url_from_cdn(file_key: str) -> str | None:
@@ -145,6 +208,7 @@ async def list_active_trainers(
     city_id: int | None = None,
     service_id: int | None = None,
     arena_id: int | None = None,
+    arena_ids: str | None = None,  # comma-separated; logical OR over selected arenas
     order_by: str = "rating",
     # Time-based filters
     filter_days: str | None = None,  # comma-separated: "1,2,3" for Mon,Tue,Wed
@@ -153,7 +217,10 @@ async def list_active_trainers(
 ) -> dict:
     """
     Active trainers; optional city, service, arena. order_by: rating (Bayesian) or id.
-    
+
+    arena_ids — multi-select arena filter (CSV of ids), logical OR. arena_id is the legacy
+    single-id alias and is honored when arena_ids is empty.
+
     Each trainer includes `can_book` flag: True if clients can self-book (tier >= online).
     Trainers appear when status=active, is_catalog_visible=true, and subscription rules apply.
     """
@@ -173,6 +240,8 @@ async def list_active_trainers(
     if time_slots_filter is not None and len(time_slots_filter) == 0:
         time_slots_filter = None
 
+    arena_ids_filter = _parse_arena_ids_csv(arena_ids)
+
     # Trainer names/photos change after moderation — must not be served from browser HTTP cache.
     response.headers["Cache-Control"] = "no-store"
 
@@ -183,6 +252,7 @@ async def list_active_trainers(
         city_id=city_id,
         service_id=service_id,
         arena_id=arena_id,
+        arena_ids=arena_ids_filter,
         order_by=order_by,
         filter_days=days_filter,
         filter_time_slots=time_slots_filter,
@@ -216,6 +286,7 @@ async def list_catalog_training_groups(
     city_id: int | None = None,
     service_id: int | None = None,
     arena_id: int | None = None,
+    arena_ids: str | None = None,  # comma-separated; logical OR over selected arenas
     filter_days: str | None = Query(
         None,
         description="Comma-separated weekday 0=Mon..6=Sun (matches training_group_schedule_rules)",
@@ -233,11 +304,14 @@ async def list_catalog_training_groups(
     if days_filter is not None and len(days_filter) == 0:
         days_filter = None
 
+    arena_ids_filter = _parse_arena_ids_csv(arena_ids)
+
     items, total = await list_open_training_groups_catalog(
         session,
         city_id=city_id,
         service_id=service_id,
         arena_id=arena_id,
+        arena_ids=arena_ids_filter,
         filter_days=days_filter,
         limit=limit,
         offset=offset,
@@ -272,31 +346,75 @@ async def list_catalog_training_groups(
 @router.get("/trainers/{trainer_id:int}")
 async def get_one_active_trainer(
     trainer_id: int,
+    request: Request,
     response: Response,
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     """
     Single trainer for catalog: status=active and is_catalog_visible=true (subscription still applies to list).
-    
+
     Returns `can_book` flag: True if clients can self-book (tier >= online).
     Without online tier, trainer is visible but clients must contact directly.
+
+    Also returns lifecycle context for Lead Mode UX (see lead-mode-revenue-retention.md):
+        - `lifecycle_stage`: "active" | "lead_mode" | "onboarding" | "churned"
+        - `is_lead_mode`: bool — convenience flag for the catalog frontend
+        - `contact_telegram_url`: trackable redirect "/r/tg/{id}" (only when in Lead Mode and a
+          valid telegram_username is on file). Frontend uses this for the
+          "Написать в Telegram" CTA in place of "Записаться".
     """
     response.headers["Cache-Control"] = "no-store"
     trainer = await get_trainer(session, trainer_id)
     if not trainer or not _trainer_public_catalog_exposed(trainer):
         raise HTTPException(status_code=404, detail="Trainer not found")
 
+    # Side-channel SELECT for telegram_username — it is intentionally excluded from get_by_id's
+    # public payload (we never echo the raw handle to clients), but we still need it to decide
+    # whether a Lead Mode CTA can be offered at all.
+    r = await session.execute(
+        text("SELECT telegram_username FROM trainers WHERE id = :tid"),
+        {"tid": trainer_id},
+    )
+    tg_row = r.fetchone()
+    telegram_username = tg_row[0] if tg_row else None
+
     trainer = sanitize_trainer_for_public_catalog(trainer)
     _enrich_trainer_photo_urls(trainer)
     trainer["_photo_source"] = (trainer.get("photos") or [{}])[0].get("_source", "proxy") if trainer.get("photos") else "proxy"
-    
-    # Add booking availability info
+
     availability = await get_trainer_booking_availability(session, trainer_id)
     trainer["can_book"] = availability["can_book"]
     trainer["booking_reason"] = availability["reason"]  # null if can_book, else 'crm_only'/'no_subscription'
 
+    # Lifecycle: derive Lead Mode badge + Telegram CTA. Only Lead Mode trainers get the redirect
+    # URL — ACTIVE trainers without `online` module keep the existing "leave a request" flow.
+    snap = await resolve_lifecycle_snapshot(session, trainer_id)
+    trainer["lifecycle_stage"] = snap.stage.value
+    trainer["is_lead_mode"] = snap.is_lead_mode
+    trainer["contact_telegram_url"] = (
+        _build_contact_telegram_url(trainer_id, telegram_username)
+        if snap.stage == LifecycleStage.LEAD_MODE
+        else None
+    )
+
     edu = await list_trainer_education(session, trainer_id, public_only=True)
     trainer["education_entries"] = edu if edu is not None else []
+
+    # Anonymous demand signal: best-effort. Must commit — get_session closes without auto-commit.
+    try:
+        await record_profile_view_commit(
+            session,
+            trainer_id=trainer_id,
+            source=_resolve_source_from_referer(request),
+            client_ip=client_ip_from_request(request),
+            user_agent=(request.headers.get("user-agent") or "")[:_UA_MAX_LEN],
+        )
+    except Exception as exc:  # pragma: no cover — defensive
+        logger.warning(
+            "demand_signals.record_profile_view_commit failed for trainer_id=%s: %s",
+            trainer_id,
+            exc,
+        )
 
     return trainer
 

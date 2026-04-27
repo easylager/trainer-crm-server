@@ -16,6 +16,7 @@ from sqlalchemy import text
 
 from src.api.routes import (
     public_router,
+    redirects_router,
     trainers_router,
     upload_router,
     webapp_router,
@@ -881,6 +882,7 @@ async def health() -> dict[str, str]:
 
 
 app.include_router(public_router)
+app.include_router(redirects_router)
 app.include_router(trainers_router)
 app.include_router(upload_router)
 webapp_router.include_router(webapp_trainer_profile_router)

@@ -51,9 +51,9 @@
     })();
   </script>
   <!-- Bump ?v= when mini-app-trainer-hub.css changes (immutable cache on /webapp/…). -->
-  <link rel="stylesheet" href="mini-app-trainer-hub.css?v=20260504" />
+  <link rel="stylesheet" href="mini-app-trainer-hub.css?v=20260517" />
   <!-- Early download of main hub script (defer runs at end of body); improves time-to-interactive vs. discover-at-bottom. -->
-  <link rel="preload" href="trainer-home-main.js?v=20260507" as="script" />
+  <link rel="preload" href="trainer-home-main.js?v=20260515" as="script" />
 
 </head>
 <body class="hub-body">
@@ -122,6 +122,49 @@
         </li>
       </ol>
     </div>
+
+    <!--
+      Lead Mode banner: visible only when lifecycle.is_lead_mode === true.
+      Loss framing on real numbers (signals_recap), recovery CTA opens trainer-subscription.
+      Hidden by default to avoid CLS while bootstrap hydrates.
+    -->
+    <section
+      id="hubLeadModeBanner"
+      class="hub-lead-banner"
+      hidden
+      aria-live="polite"
+      aria-label="Подписка на паузе — карточка остаётся в каталоге"
+    >
+      <div class="hub-lead-banner__inner">
+        <div class="hub-lead-banner__head">
+          <span class="hub-lead-banner__chip" aria-hidden="true">Подписка на паузе</span>
+          <h2 class="hub-lead-banner__title">Вас всё ещё ищут — карточка осталась в каталоге</h2>
+          <p class="hub-lead-banner__sub" id="hubLeadBannerSub">
+            Расписание, онлайн-запись и CRM остановлены, но клиенты продолжают находить ваш профиль.
+          </p>
+        </div>
+        <ul class="hub-lead-banner__signals" id="hubLeadBannerSignals" hidden>
+          <li class="hub-lead-banner__signal-item">
+            <span class="hub-lead-banner__signal-value" id="hubLeadSignalViews">0</span>
+            <span class="hub-lead-banner__signal-label" id="hubLeadSignalViewsLabel">просмотров профиля</span>
+          </li>
+          <li class="hub-lead-banner__signal-item">
+            <span class="hub-lead-banner__signal-value" id="hubLeadSignalClicks">0</span>
+            <span class="hub-lead-banner__signal-label" id="hubLeadSignalClicksLabel">переходов в Telegram</span>
+          </li>
+          <li class="hub-lead-banner__signal-item" id="hubLeadSignalBlockedItem" hidden>
+            <span class="hub-lead-banner__signal-value" id="hubLeadSignalBlocked">0</span>
+            <span class="hub-lead-banner__signal-label" id="hubLeadSignalBlockedLabel">не смогли записаться</span>
+          </li>
+        </ul>
+        <p class="hub-lead-banner__loss" id="hubLeadBannerLoss" hidden></p>
+        <div class="hub-lead-banner__actions">
+          <button type="button" class="btn-block btn-primary hub-lead-banner__cta" id="hubLeadBannerCta">
+            Вернуть онлайн-запись
+          </button>
+        </div>
+      </div>
+    </section>
 
     <!-- Reserve space for up to two rhythm hints while checklist/bootstrap hydrates (reduces CLS). -->
     <div
@@ -591,6 +634,6 @@
   <script src="mini-app-trainer-gate.js"></script>
   <script src="mini-app-trainer-celebration.js"></script>
   <!-- Bump ?v= when trainer-home-main.js changes (immutable cache on /webapp/…). -->
-  <script defer src="trainer-home-main.js?v=20260507"></script>
+  <script defer src="trainer-home-main.js?v=20260515"></script>
 </body>
 </html>

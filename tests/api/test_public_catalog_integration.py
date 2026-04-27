@@ -371,12 +371,87 @@ async def test_public_time_filters_require_matching_slot(
 
 
 @pytest.mark.asyncio
-async def test_public_list_requires_active_subscription_detail_is_active_only(
+async def test_public_arena_ids_filter_returns_union_and_is_compatible_with_arena_id(
     app_use_test_db, db_session
 ) -> None:
     """
-    Список каталога требует неистёкшую подписку; карточка по id остаётся доступной при status=active
-    даже без подписки (но скрывается при is_catalog_visible=false — см. отдельный тест).
+    Multi-arena filter (`arena_ids=A,B`) returns trainers attached to **any** of the listed arenas
+    (logical OR), and the legacy single-id `arena_id=A` filter still narrows to a single venue.
+    Guarantees:
+      - trainer attached only to arena A is in arena_ids=A,B and arena_id=A but not arena_id=B,
+      - trainer attached only to arena B is in arena_ids=A,B and arena_id=B but not arena_id=A,
+      - trainer with no listed arenas is excluded by both filters.
+    """
+    sid, cid, aid = await _require_seed_ids(db_session)
+    if aid is None:
+        pytest.skip("seed must contain at least one arena")
+
+    # Provision a second arena in the same city — needed to exercise the IN-list path.
+    second = await db_session.execute(
+        text(
+            """
+            INSERT INTO arenas (city_id, name, sort_order, address, is_active)
+            VALUES (:cid, 'Test Arena Two', 999, 'Test Address 2', TRUE)
+            RETURNING id
+            """
+        ),
+        {"cid": cid},
+    )
+    aid2 = int(second.scalar())
+    await db_session.commit()
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            t_a_only = await _create_active_trainer_via_api(
+                client, city_id=cid, service_ids=[sid], arena_ids=[aid],
+                first_name="Arena", last_name="One",
+            )
+            t_b_only = await _create_active_trainer_via_api(
+                client, city_id=cid, service_ids=[sid], arena_ids=[aid2],
+                first_name="Arena", last_name="Two",
+            )
+            t_none = await _create_active_trainer_via_api(
+                client, city_id=cid, service_ids=[sid],
+                first_name="Arena", last_name="None",
+            )
+            for tid in (t_a_only, t_b_only, t_none):
+                await _ensure_trainer_subscription_tier(db_session, tid, SUBSCRIPTION_TIER_ONLINE)
+
+            multi = await client.get(
+                "/api/public/trainers",
+                params={"city_id": cid, "arena_ids": f"{aid},{aid2}", "limit": 200},
+            )
+            only_a = await client.get(
+                "/api/public/trainers",
+                params={"city_id": cid, "arena_id": aid, "limit": 200},
+            )
+            only_b = await client.get(
+                "/api/public/trainers",
+                params={"city_id": cid, "arena_id": aid2, "limit": 200},
+            )
+
+        assert multi.status_code == only_a.status_code == only_b.status_code == 200
+        multi_ids = {it["id"] for it in multi.json()["items"]}
+        a_ids = {it["id"] for it in only_a.json()["items"]}
+        b_ids = {it["id"] for it in only_b.json()["items"]}
+
+        assert {t_a_only, t_b_only}.issubset(multi_ids)
+        assert t_none not in multi_ids
+
+        assert t_a_only in a_ids and t_b_only not in a_ids
+        assert t_b_only in b_ids and t_a_only not in b_ids
+    finally:
+        # Restore arena set so other tests on shared DB aren't affected.
+        await db_session.execute(text("DELETE FROM arenas WHERE id = :aid"), {"aid": aid2})
+        await db_session.commit()
+
+
+@pytest.mark.asyncio
+async def test_public_list_keeps_expired_subscription_trainer_visible_detail_can_book_false(
+    app_use_test_db, db_session
+) -> None:
+    """
+    Список каталога показывает активного тренера с видимой карточкой даже без действующей подписки
+    (самозапись на карточке при этом off — см. can_book / reason).
     """
     sid, cid, _ = await _require_seed_ids(db_session)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
@@ -393,9 +468,11 @@ async def test_public_list_requires_active_subscription_detail_is_active_only(
         lst = await client.get("/api/public/trainers", params={"limit": 200})
         one = await client.get(f"/api/public/trainers/{tid}")
     assert lst.status_code == 200
-    assert tid not in {it["id"] for it in lst.json()["items"]}
+    assert tid in {it["id"] for it in lst.json()["items"]}
     assert one.status_code == 200
-    assert one.json()["id"] == tid
+    body = one.json()
+    assert body["id"] == tid
+    assert body.get("can_book") is False
 
 
 @pytest.mark.asyncio

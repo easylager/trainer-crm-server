@@ -24,8 +24,8 @@
       href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=optional"
     />
   </noscript>
-  <link rel="preload" href="schedule-editor-main.js?v=20260502" as="script" />
-  <link rel="stylesheet" href="mini-app-schedule-editor.css?v=20260503" />
+  <link rel="preload" href="schedule-editor-main.js?v=20260512" as="script" />
+  <link rel="stylesheet" href="mini-app-schedule-editor.css?v=20260512" />
   <link rel="stylesheet" href="mini-app-trainer-nav.css?v=20260429" />
 </head>
 <body>
@@ -88,6 +88,12 @@
       <button type="button" class="btn-app-home" id="btnHome">Главная</button>
       <button type="button" class="btn-app-back" id="btnBack" data-skip-history-back="true" hidden>Назад</button>
     </div>
+  </div>
+  <div id="seCrmLockBanner" class="se-crm-lock-banner" hidden aria-hidden="true">
+    <p class="se-crm-lock-banner__text">
+      Режим витрины без CRM: календарь для просмотра. Чтобы добавлять слоты, шаблон и записи — оформите подписку.
+    </p>
+    <button type="button" class="btn-block btn-primary se-crm-lock-banner__cta" id="seCrmLockBannerCta">Тарифы и оплата</button>
   </div>
   <div class="tabs">
     <button type="button" class="tab active" data-tab="calendar">Расписание</button>
@@ -531,6 +537,6 @@
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
   <script src="mini-app-trainer-home.js"></script>
-  <script defer src="schedule-editor-main.js?v=20260502"></script>
+  <script defer src="schedule-editor-main.js?v=20260512"></script>
 </body>
 </html>

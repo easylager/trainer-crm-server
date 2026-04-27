@@ -1464,6 +1464,7 @@ async def list_open_training_groups_catalog(
     city_id: int | None = None,
     service_id: int | None = None,
     arena_id: int | None = None,
+    arena_ids: list[int] | None = None,
     filter_days: list[int] | None = None,
     limit: int = 10,
     offset: int = 0,
@@ -1471,11 +1472,24 @@ async def list_open_training_groups_catalog(
     """
     Cross-trainer catalog: open recruiting groups with free roster seats.
     Same business rules as list_open_training_groups_public per group, plus city/service/arena filters.
+
+    arena_ids semantics — show a group if its venue (or, when group has no venue, the trainer)
+    matches **any** of the selected arenas. arena_id is a legacy alias and is promoted to
+    arena_ids=[arena_id] when arena_ids is empty.
     """
     lim = max(1, min(int(limit), 100))
     off = max(0, int(offset))
     days = [int(d) for d in (filter_days or []) if 0 <= int(d) <= 6]
     has_day_filter = bool(days)
+
+    # Normalize legacy single-id alias.
+    effective_arena_ids: list[int] | None = None
+    if arena_ids:
+        effective_arena_ids = list({int(a) for a in arena_ids if a is not None})
+    elif arena_id is not None:
+        effective_arena_ids = [int(arena_id)]
+    if effective_arena_ids is not None and not effective_arena_ids:
+        effective_arena_ids = None
 
     params: dict = {
         "st": TG_RECRUITING,
@@ -1505,20 +1519,22 @@ async def list_open_training_groups_catalog(
     if service_id is not None:
         filter_parts.append("tg.service_id = :service_id")
         params["service_id"] = int(service_id)
-    if arena_id is not None:
+    if effective_arena_ids is not None:
+        arena_phs = ", ".join(f":arena_id_{i}" for i in range(len(effective_arena_ids)))
+        for i, a in enumerate(effective_arena_ids):
+            params[f"arena_id_{i}"] = a
         filter_parts.append(
-            """(
-          tg.arena_id = :arena_id
+            f"""(
+          tg.arena_id IN ({arena_phs})
           OR (
             tg.arena_id IS NULL
             AND EXISTS (
               SELECT 1 FROM trainer_arenas ta
-              WHERE ta.trainer_id = tg.trainer_id AND ta.arena_id = :arena_id
+              WHERE ta.trainer_id = tg.trainer_id AND ta.arena_id IN ({arena_phs})
             )
           )
         )"""
         )
-        params["arena_id"] = int(arena_id)
     filter_sql = ""
     if filter_parts:
         filter_sql = " AND " + " AND ".join(filter_parts)

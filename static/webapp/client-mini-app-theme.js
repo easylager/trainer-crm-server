@@ -12,6 +12,8 @@
   function applyClientMiniAppTheme() {
     var d = document.documentElement;
     var dark = isAppDark();
+    // Generic dark-mode signal for any consumer (e.g. Leaflet map tile invert filter).
+    d.classList.toggle('client-mini-dark', dark);
     if (d.hasAttribute('data-client-hub')) {
       /* Client hub: тот же янтарный CRM-акцент, что и в catalog/book + trainer-home */
       d.classList.toggle('hub-is-dark', dark);

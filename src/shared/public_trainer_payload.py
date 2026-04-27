@@ -9,6 +9,7 @@ from __future__ import annotations
 PUBLIC_CATALOG_TRAINER_DROP_KEYS = frozenset(
     {
         "telegram_id",
+        "telegram_username",
         "moderation_feedback",
         "moderation_submitted_at",
         "created_at",

@@ -836,6 +836,9 @@ class TrainerSubscription(Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False)  # trial, active, past_due, cancelled
     payment_external_id: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    trial_roi_recap_sent_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     reminder_sent_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
@@ -1042,3 +1045,87 @@ class TrainerReferralCredit(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     created_by_admin_id: Mapped[Optional[int]] = mapped_column(BigInteger(), nullable=True)
 
+
+# --- Lead Mode: anonymous demand signals (proof of demand for post-trial trainers) ---
+# Append-only event log. dedup_hash collapses refresh storms inside 24h windows.
+# No user identifiers stored — only hash(ip||ua||trainer_id||day) which is irreversible.
+
+DEMAND_EVENT_PROFILE_VIEW = "profile_view"
+DEMAND_EVENT_CONTACT_CLICK = "contact_click"
+DEMAND_EVENT_BOOKING_ATTEMPT_BLOCKED = "booking_attempt_blocked"
+
+DEMAND_EVENT_KINDS = (
+    DEMAND_EVENT_PROFILE_VIEW,
+    DEMAND_EVENT_CONTACT_CLICK,
+    DEMAND_EVENT_BOOKING_ATTEMPT_BLOCKED,
+)
+
+DEMAND_SOURCE_CATALOG = "catalog"
+DEMAND_SOURCE_DIRECT_LINK = "direct_link"
+DEMAND_SOURCE_SEARCH = "search"
+DEMAND_SOURCE_BOT = "bot"
+DEMAND_SOURCE_CLIENT_APP = "client_app"
+
+DEMAND_SOURCES = (
+    DEMAND_SOURCE_CATALOG,
+    DEMAND_SOURCE_DIRECT_LINK,
+    DEMAND_SOURCE_SEARCH,
+    DEMAND_SOURCE_BOT,
+    DEMAND_SOURCE_CLIENT_APP,
+)
+
+
+class TrainerDemandEvent(Base):
+    """Anonymous proof-of-demand event for a trainer's public presence (Lead Mode)."""
+    __tablename__ = "trainer_demand_events"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    trainer_id: Mapped[int] = mapped_column(
+        ForeignKey("trainers.id", ondelete="CASCADE"), nullable=False
+    )
+    kind: Mapped[str] = mapped_column(String(40), nullable=False)
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    source: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
+    # sha256(ip || ua || trainer_id || day) — irreversible, narrow window. Never store IP/UA in cleartext.
+    dedup_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    payload: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default="{}")
+
+
+# ---------------------------------------------------------------------------
+# Lead Mode recovery nudges (D+0..D+30 reactivation series — idempotency log).
+# ---------------------------------------------------------------------------
+
+RECOVERY_STEP_D0 = "d0"
+RECOVERY_STEP_D3 = "d3"
+RECOVERY_STEP_D14 = "d14"
+RECOVERY_STEP_D30 = "d30"
+
+# Order matters: the loop fires the highest-eligible step at each tick, so steps with smaller
+# offsets must come first. Days are anchored to last_subscription_expires_at.
+RECOVERY_STEPS_ORDERED: tuple[tuple[str, int], ...] = (
+    (RECOVERY_STEP_D0, 0),
+    (RECOVERY_STEP_D3, 3),
+    (RECOVERY_STEP_D14, 14),
+    (RECOVERY_STEP_D30, 30),
+)
+
+RECOVERY_STEP_KEYS = tuple(s for s, _ in RECOVERY_STEPS_ORDERED)
+
+
+class TrainerRecoveryNudge(Base):
+    """Idempotency log for Lead Mode recovery series. One row per (trainer_id, step) — append-only."""
+    __tablename__ = "trainer_recovery_nudges"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    trainer_id: Mapped[int] = mapped_column(
+        ForeignKey("trainers.id", ondelete="CASCADE"), nullable=False
+    )
+    step: Mapped[str] = mapped_column(String(8), nullable=False)
+    sent_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    expires_at_anchor: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )

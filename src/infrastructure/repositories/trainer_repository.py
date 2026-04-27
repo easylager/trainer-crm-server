@@ -282,7 +282,7 @@ class TrainerRepository:
                 "SELECT id, telegram_id, status, created_at, moderation_feedback, moderation_submitted_at, "
                 "profile_pending, photo_pending, primary_arena_id, schedule_grid_step_minutes, is_catalog_visible, "
                 "push_notification_start_hour, push_notification_end_hour, "
-                "digest_enabled, digest_send_time "
+                "digest_enabled, digest_send_time, telegram_username "
                 "FROM trainers WHERE id = :id"
             ),
             {"id": trainer_id},
@@ -325,6 +325,11 @@ class TrainerRepository:
             "push_notification_end_hour": int(row[12]) if len(row) > 12 and row[12] is not None else None,
             "digest_enabled": bool(row[13]) if len(row) > 13 and row[13] is not None else True,
             "digest_send_time": _time_to_api_hhmm(row[14]) if len(row) > 14 else None,
+            "telegram_username": (
+                str(row[15]).strip()
+                if len(row) > 15 and row[15] is not None and str(row[15]).strip()
+                else None
+            ),
         }
         rp = await self._session.execute(
             text(
@@ -1092,6 +1097,7 @@ class TrainerRepository:
         city_id: int | None = None,
         service_id: int | None = None,
         arena_id: int | None = None,
+        arena_ids: list[int] | None = None,
         order_by: str = "rating",
         # Time-based filters
         filter_days: list[int] | None = None,  # [1,2,3] for Mon,Tue,Wed (0=Sunday)
@@ -1099,23 +1105,29 @@ class TrainerRepository:
     ) -> tuple[list[dict[str, Any]], int]:
         """
         Active trainers with profile, photos, service_ids; paginated.
-        arena_id: only trainers that have at least one slot in this arena.
+        arena_ids: trainers that have at least one of the listed arenas (logical OR, "any of").
+        arena_id: legacy single-id alias; promoted to arena_ids=[arena_id] when arena_ids is empty.
         Returns (items, total_count).
 
         Each trainer dict also contains:
         - free_slots_14d: count of available slots in the next 14 days (inclusive of today).
         """
+        # Normalize legacy single-id into the canonical list form. Dedupe to avoid useless params.
+        effective_arena_ids: list[int] | None = None
+        if arena_ids:
+            effective_arena_ids = list({int(a) for a in arena_ids if a is not None})
+        elif arena_id is not None:
+            effective_arena_ids = [int(arena_id)]
+        if effective_arena_ids is not None and not effective_arena_ids:
+            effective_arena_ids = None
+
         base = """
             FROM trainers t
             LEFT JOIN trainer_profiles p ON p.trainer_id = t.id
         """
+        # Активные тренеры с видимой карточкой — в списке каталога даже без текущей подписки
+        # (самозапись и слоты по-прежнему зависят от тарифа в карточке / API).
         where = " WHERE t.status = 'active' AND t.is_catalog_visible = true"
-        where += """ AND EXISTS (
-            SELECT 1 FROM trainer_subscriptions ts
-            WHERE ts.trainer_id = t.id
-              AND ts.expires_at > NOW()
-              AND ts.status IN ('trial', 'active')
-        )"""
         params: dict[str, Any] = {"lim": limit, "off": offset}
         if service_id is not None:
             base += " INNER JOIN trainer_services ts ON ts.trainer_id = t.id AND ts.service_id = :service_id"
@@ -1123,9 +1135,15 @@ class TrainerRepository:
         if city_id is not None:
             where += " AND p.city_id = :city_id"
             params["city_id"] = city_id
-        if arena_id is not None:
-            base += " INNER JOIN trainer_arenas ta ON ta.trainer_id = t.id AND ta.arena_id = :arena_id"
-            params["arena_id"] = arena_id
+        if effective_arena_ids is not None:
+            # IN-list with explicit named placeholders (asyncpg-friendly; mirrors filter_days style).
+            arena_phs = ", ".join(f":arena_id_{i}" for i in range(len(effective_arena_ids)))
+            base += (
+                " INNER JOIN trainer_arenas ta ON ta.trainer_id = t.id"
+                f" AND ta.arena_id IN ({arena_phs})"
+            )
+            for i, a in enumerate(effective_arena_ids):
+                params[f"arena_id_{i}"] = a
 
         # Time filters: match real `slots` rows (available, next 14 days).
         # Day chips: 0=Sun .. 6=Sat (same as PostgreSQL EXTRACT(DOW FROM date)).

@@ -32,6 +32,11 @@
         cityName: '',
         serviceId: null,
         serviceName: '',
+        // Canonical multi-arena filter. arenaId/arenaName below are *derived* single-context
+        // (set only when exactly one arena is picked) to keep legacy code paths working
+        // (slot-list filter, "non-primary arena" alert, /client/booking body).
+        arenaIds: [],
+        arenaNames: [],
         arenaId: null,
         arenaName: 'Любая',
         trainerId: null,
@@ -65,6 +70,42 @@
         }
       };
 
+      /**
+       * Single source of truth for arena selection. Pass arrays of equal length;
+       * mirrors single-context fields when exactly one arena is selected so that
+       * "non-primary arena" alert and slot-list (which take a single arena_id) keep working.
+       */
+      function setArenaSelection(ids, names) {
+        var safeIds = Array.isArray(ids) ? ids.filter(function(v) { return v != null; }).map(function(v) { return parseInt(v, 10); }).filter(function(v) { return !isNaN(v); }) : [];
+        var safeNames = Array.isArray(names) ? names.slice(0, safeIds.length) : [];
+        while (safeNames.length < safeIds.length) safeNames.push('Арена');
+        state.arenaIds = safeIds;
+        state.arenaNames = safeNames;
+        if (safeIds.length === 1) {
+          state.arenaId = safeIds[0];
+          state.arenaName = safeNames[0] || 'Арена';
+        } else {
+          state.arenaId = null;
+          state.arenaName = safeIds.length === 0 ? 'Любая' : (safeIds.length + ' арены');
+        }
+      }
+      function clearArenaSelection() {
+        setArenaSelection([], []);
+      }
+      /** Display label for the summary row: handles 0 / 1 / 2 / 3+ cases gracefully. */
+      function arenaSummaryLabel() {
+        var n = state.arenaIds.length;
+        if (n === 0) return 'Любая';
+        if (n === 1) return state.arenaNames[0] || 'Арена';
+        if (n === 2) return state.arenaNames.join(' · ');
+        return state.arenaNames.slice(0, 2).join(' · ') + ' и ещё ' + (n - 2);
+      }
+      /** Stable cache fragment for arena selection (sorted to ignore selection order). */
+      function arenaIdsCacheKey() {
+        if (!state.arenaIds.length) return '0';
+        return state.arenaIds.slice().sort(function(a, b) { return a - b; }).join('-');
+      }
+
       function primaryVenueLabel(t) {
         if (!t) return '';
         if (t.primary_arena_name && String(t.primary_arena_name).trim()) return String(t.primary_arena_name).trim();
@@ -84,9 +125,8 @@
       /** Switch catalog filter to trainer's primary arena (online booking). */
       function applyTrainerPrimaryArenaToCatalogFilter(t) {
         if (!t || t.primary_arena_id == null) return false;
-        state.arenaId = t.primary_arena_id;
-        var label = primaryVenueLabel(t);
-        state.arenaName = label || 'Основная площадка';
+        var label = primaryVenueLabel(t) || 'Основная площадка';
+        setArenaSelection([t.primary_arena_id], [label]);
         return true;
       }
       /** Slot row from /client/slots: arena + address + map (server builds map_link). */
@@ -365,6 +405,19 @@
           };
           return;
         }
+        // City / service / arena: header «Назад» = «К выбору» when editing from summary (returnToSummary).
+        if (sid === 'screenCity' || sid === 'screenService' || sid === 'screenArena') {
+          var showPickerBack = state.returnToSummary || canBrowserGoBack();
+          btn.hidden = !showPickerBack;
+          btn.onclick = function() {
+            if (state.returnToSummary) {
+              goBackToSummary();
+            } else {
+              window.history.back();
+            }
+          };
+          return;
+        }
         btn.hidden = !canBrowserGoBack();
         btn.onclick = function() { window.history.back(); };
       }
@@ -479,7 +532,9 @@
       }
       function makeTrainerListParams(offset) {
         var params = { limit: state.limit, offset: offset, city_id: state.cityId, service_id: state.serviceId, order_by: 'rating' };
-        if (state.arenaId) params.arena_id = state.arenaId;
+        // Single arena → legacy arena_id (kept for proxy/CDN cache compat); multi → arena_ids CSV.
+        if (state.arenaIds.length === 1) params.arena_id = state.arenaIds[0];
+        else if (state.arenaIds.length > 1) params.arena_ids = state.arenaIds.join(',');
         var f = state.filters;
         if (f.days.length > 0) {
           params.filter_days = f.days.join(',');
@@ -499,7 +554,8 @@
       }
       function makeGroupListParams(offset) {
         var params = { limit: state.limit, offset: offset, city_id: state.cityId, service_id: state.serviceId };
-        if (state.arenaId) params.arena_id = state.arenaId;
+        if (state.arenaIds.length === 1) params.arena_id = state.arenaIds[0];
+        else if (state.arenaIds.length > 1) params.arena_ids = state.arenaIds.join(',');
         var f = state.filters;
         if (f.days.length > 0) {
           params.filter_days = mapCatalogChipDaysToGroupRuleDays(f.days).join(',');
@@ -511,7 +567,7 @@
         var dayPart = f.days.length ? f.days.slice().sort(function(a, b) { return a - b; }).join('-') : '';
         var timePart = f.timeSlots.length ? f.timeSlots.slice().sort().join('|') : '';
         var mode = state.catalogMode || 'trainers';
-        return [mode, state.cityId || 0, state.serviceId || 0, state.arenaId || 0, state.limit || 10, dayPart, timePart].join(':');
+        return [mode, state.cityId || 0, state.serviceId || 0, arenaIdsCacheKey(), state.limit || 10, dayPart, timePart].join(':');
       }
 
       function toggleFilterPanel() {
@@ -988,8 +1044,12 @@
       function applySessionToState(session) {
         if (session.city_id) { state.cityId = session.city_id; state.cityName = session.city_name || ''; }
         if (session.service_id) { state.serviceId = session.service_id; state.serviceName = session.service_name || ''; }
-        if (session.arena_id != null) { state.arenaId = session.arena_id; state.arenaName = session.arena_name || 'Любая'; }
-        else { state.arenaId = null; state.arenaName = 'Любая'; }
+        if (session.arena_id != null) {
+          // Persisted single-arena session (server only stores one) is restored as a 1-element selection.
+          setArenaSelection([session.arena_id], [session.arena_name || 'Арена']);
+        } else {
+          clearArenaSelection();
+        }
         if (session.trainer_id) { state.trainerId = session.trainer_id; state.trainerName = session.trainer_name || ''; }
         else { state.trainerId = null; state.trainerName = ''; }
         state.clientPhone =
@@ -1180,7 +1240,7 @@
         var rows = [
           { key: 'city', label: 'Город', value: state.cityName || '—', cls: '' },
           { key: 'service', label: 'Услуга', value: state.serviceName || '—', cls: '' },
-          { key: 'arena', label: 'Арена', value: state.arenaName || '—', cls: '' },
+          { key: 'arena', label: 'Арена', value: arenaSummaryLabel(), cls: '' },
           { key: 'trainer', label: 'Тренер', value: state.trainerName || 'Не выбран', cls: state.trainerName ? '' : 'muted' }
         ];
         document.getElementById('summaryRows').innerHTML = rows.map(function(r) {
@@ -1193,30 +1253,25 @@
             var action = btn.dataset.action;
             if (action === 'city') {
               state.returnToSummary = true;
-              document.getElementById('backFromCityToSummary').style.display = 'block';
               loadCities();
               showScreen('screenCity');
             } else if (action === 'service') {
               if (!state.cityId) {
                 state.returnToSummary = true;
-                document.getElementById('backFromCityToSummary').style.display = 'block';
                 loadCities();
                 showScreen('screenCity');
               } else {
                 state.returnToSummary = true;
-                document.getElementById('backFromServiceToSummary').style.display = 'block';
                 loadServices();
                 showScreen('screenService');
               }
             } else if (action === 'arena') {
               if (!state.cityId) {
                 state.returnToSummary = true;
-                document.getElementById('backFromCityToSummary').style.display = 'block';
                 loadCities();
                 showScreen('screenCity');
               } else {
                 state.returnToSummary = true;
-                document.getElementById('backFromArenaToSummary').style.display = 'block';
                 loadArenas();
                 showScreen('screenArena');
               }
@@ -1237,13 +1292,13 @@
           var items = data.items || [];
           if (!items.length) {
             document.getElementById('cityList').innerHTML = '<div class="empty">Нет городов</div>';
+            syncCatalogHeaderBack();
             return;
           }
           var html = items.map(function(c) {
             return '<button type="button" class="choice-card" data-id="' + c.id + '" data-name="' + (c.name || '').replace(/"/g, '&quot;') + '"><div class="main"><div class="label">Город</div><div class="value">' + (c.name || '') + '</div></div><span class="arrow">→</span></button>';
           }).join('');
           document.getElementById('cityList').innerHTML = html;
-          document.getElementById('backFromCityToSummary').style.display = state.returnToSummary ? 'block' : 'none';
           document.querySelectorAll('#cityList .choice-card').forEach(function(btn) {
             btn.onclick = function() {
               state.cityId = parseInt(btn.dataset.id, 10);
@@ -1252,9 +1307,8 @@
               if (state.returnToSummary) {
                 state.returnToSummary = false;
                 state.serviceId = null; state.serviceName = '';
-                state.arenaId = null; state.arenaName = 'Любая';
+                clearArenaSelection();
                 state.trainerId = null; state.trainerName = '';
-                document.getElementById('backFromCityToSummary').style.display = 'none';
                 renderSummary();
                 showScreen('screenSummary');
               } else {
@@ -1264,8 +1318,10 @@
               prefetchFirstPageIfNeeded();
             };
           });
+          syncCatalogHeaderBack();
         }).catch(function() {
           document.getElementById('cityList').innerHTML = '<div class="error">Ошибка загрузки</div>';
+          syncCatalogHeaderBack();
         });
       }
 
@@ -1277,13 +1333,13 @@
             document.getElementById('serviceList').innerHTML = '<div class="empty">Нет услуг</div>';
             var backCityEmpty = document.getElementById('backToCity');
             if (backCityEmpty) backCityEmpty.style.display = state.returnToSummary ? 'none' : 'block';
+            syncCatalogHeaderBack();
             return;
           }
           var html = items.map(function(s) {
             return '<button type="button" class="choice-card" data-id="' + s.id + '" data-name="' + (s.name || '').replace(/"/g, '&quot;') + '"><div class="main"><div class="label">Услуга</div><div class="value">' + (s.name || '') + '</div></div><span class="arrow">→</span></button>';
           }).join('');
           document.getElementById('serviceList').innerHTML = html;
-          document.getElementById('backFromServiceToSummary').style.display = state.returnToSummary ? 'block' : 'none';
           var backCity = document.getElementById('backToCity');
           if (backCity) backCity.style.display = state.returnToSummary ? 'none' : 'block';
           document.querySelectorAll('#serviceList .choice-card').forEach(function(btn) {
@@ -1293,9 +1349,8 @@
               clearCatalogSessionStorageCache();
               if (state.returnToSummary) {
                 state.returnToSummary = false;
-                state.arenaId = null; state.arenaName = 'Любая';
+                clearArenaSelection();
                 state.trainerId = null; state.trainerName = '';
-                document.getElementById('backFromServiceToSummary').style.display = 'none';
                 renderSummary();
                 showScreen('screenSummary');
               } else {
@@ -1305,50 +1360,252 @@
               prefetchFirstPageIfNeeded();
             };
           });
+          syncCatalogHeaderBack();
         }).catch(function() {
           document.getElementById('serviceList').innerHTML = '<div class="error">Ошибка загрузки</div>';
           var backCityErr = document.getElementById('backToCity');
           if (backCityErr) backCityErr.style.display = state.returnToSummary ? 'none' : 'block';
+          syncCatalogHeaderBack();
+        });
+      }
+
+      // Pending arena selection on the screen — committed via "Готово". Allows the user to
+      // toggle freely without firing list reloads on every checkbox tap.
+      var arenaScreenDraft = { ids: [], names: [], items: [] };
+
+      // Leaflet map for the arena selection screen. Lazily initialised — created on first
+      // mount, then re-bound each time loadArenas() runs. Hidden when no arenas have coords.
+      var arenaMapInstance = null;
+      var arenaMapMarkers = {}; // id -> L.marker
+
+      function ensureArenaMapMounted() {
+        var wrap = document.getElementById('arenaMapWrap');
+        var node = document.getElementById('arenaMap');
+        if (!wrap || !node) return;
+        var items = (arenaScreenDraft.items || []).filter(function(a) { return a.latitude != null && a.longitude != null; });
+        if (!items.length) {
+          wrap.setAttribute('hidden', '');
+          return;
+        }
+        // Leaflet loads with `defer` — on slow networks may not yet be parsed when arenas come back.
+        // Retry once the script signals readiness (or quietly stay list-only after the timeout).
+        if (typeof window.L === 'undefined') {
+          wrap.setAttribute('hidden', '');
+          var waited = 0;
+          var poll = setInterval(function() {
+            waited += 200;
+            if (typeof window.L !== 'undefined') {
+              clearInterval(poll);
+              ensureArenaMapMounted();
+            } else if (waited >= 4000) {
+              clearInterval(poll);
+            }
+          }, 200);
+          return;
+        }
+        wrap.removeAttribute('hidden');
+
+        // Destroy old map on each (re)mount to reset markers cleanly.
+        if (arenaMapInstance) {
+          try { arenaMapInstance.remove(); } catch (e) { /* ignore — node will be re-used */ }
+          arenaMapInstance = null;
+          arenaMapMarkers = {};
+        }
+        // Lock map height in CSS; tap handlers don't need keyboard.
+        var L = window.L;
+        var map = L.map(node, {
+          zoomControl: false,
+          attributionControl: true,
+          // Lower default sensitivity helps inside a Telegram WebView where vertical scroll wins.
+          tap: true,
+        });
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          maxZoom: 18,
+          // OSM ToS requires visible attribution. Keep it short.
+          attribution: '&copy; OpenStreetMap',
+        }).addTo(map);
+        // Leaflet 1.9+ default prefix includes a flag in the attribution bar; we only need OSM credit.
+        if (map.attributionControl && typeof map.attributionControl.setPrefix === 'function') {
+          map.attributionControl.setPrefix(false);
+        }
+
+        items.forEach(function(a) {
+          var lat = parseFloat(a.latitude);
+          var lng = parseFloat(a.longitude);
+          if (isNaN(lat) || isNaN(lng)) return;
+          var marker = L.marker([lat, lng], {
+            icon: makeArenaPinIcon(arenaScreenDraft.ids.indexOf(a.id) >= 0),
+            title: a.name || 'Арена',
+            keyboard: false,
+            riseOnHover: true,
+          });
+          marker.on('click', function() {
+            toggleArenaInDraft(a.id, a.name || 'Арена');
+          });
+          marker.addTo(map);
+          arenaMapMarkers[a.id] = marker;
+        });
+
+        var bounds = L.latLngBounds(items.map(function(a) { return [parseFloat(a.latitude), parseFloat(a.longitude)]; }));
+        // Padding leaves room for the legend + makes single-pin cities not zoom in too far.
+        if (items.length === 1) {
+          map.setView(bounds.getCenter(), 14);
+        } else {
+          map.fitBounds(bounds, { padding: [28, 28], maxZoom: 15 });
+        }
+        arenaMapInstance = map;
+
+        // Tile layout often misjudges the container height on first render inside a hidden screen.
+        // requestAnimationFrame triggers a one-shot invalidateSize after the screen is visible.
+        requestAnimationFrame(function() {
+          if (arenaMapInstance) arenaMapInstance.invalidateSize();
+        });
+
+        // Public API for renderArenaListCheckboxes ↔ marker sync (no global reach into Leaflet).
+        window.__arenaMapSyncSelection = function(ids) {
+          var idset = {};
+          (ids || []).forEach(function(id) { idset[id] = true; });
+          Object.keys(arenaMapMarkers).forEach(function(key) {
+            var marker = arenaMapMarkers[key];
+            marker.setIcon(makeArenaPinIcon(!!idset[key]));
+          });
+        };
+      }
+
+      function makeArenaPinIcon(isSelected) {
+        var L = window.L;
+        return L.divIcon({
+          className: 'arena-pin-icon',
+          html: '<div class="arena-pin' + (isSelected ? ' arena-pin--selected' : '') + '"></div>',
+          iconSize: [28, 28],
+          iconAnchor: [14, 14],
         });
       }
 
       function loadArenas() {
-        document.getElementById('arenaList').innerHTML = '<div class="loading">Загрузка...</div>';
+        var listEl = document.getElementById('arenaList');
+        listEl.innerHTML = '<div class="loading">Загрузка...</div>';
+        var mapWrap = document.getElementById('arenaMapWrap');
+        if (mapWrap) mapWrap.setAttribute('hidden', '');
+        var actions = document.getElementById('arenaListActions');
+        if (actions) actions.setAttribute('hidden', '');
+        var applyBar = document.getElementById('arenaApplyBar');
+        if (applyBar) applyBar.setAttribute('hidden', '');
         getJson('/arenas', { city_id: state.cityId }).then(function(data) {
           var items = data.items || [];
-          var html = '<button type="button" class="choice-card" data-id="" data-name="Любая"><div class="main"><div class="label">Арена</div><div class="value">Любая</div></div><span class="arrow">→</span></button>';
-          html += items.map(function(a) {
-            return '<button type="button" class="choice-card" data-id="' + a.id + '" data-name="' + (a.name || '').replace(/"/g, '&quot;') + '"><div class="main"><div class="label">Арена</div><div class="value">' + (a.name || '') + '</div></div><span class="arrow">→</span></button>';
-          }).join('');
-          document.getElementById('arenaList').innerHTML = html;
-          document.getElementById('backFromArenaToSummary').style.display = state.returnToSummary ? 'block' : 'none';
-          // From summary: only "К выбору" — "Другая услуга" duplicates back affordance and skips loadServices (broken screen).
+          arenaScreenDraft.items = items;
+          arenaScreenDraft.ids = state.arenaIds.slice();
+          arenaScreenDraft.names = state.arenaNames.slice();
+
+          renderArenaListCheckboxes();
+          updateArenaScreenChrome();
+          ensureArenaMapMounted();
+
+          // From summary: hide «Другая услуга» — header «Назад» returns to summary; backToService would skip loadServices.
           var backSvc = document.getElementById('backToService');
           if (backSvc) backSvc.style.display = state.returnToSummary ? 'none' : 'block';
-          document.querySelectorAll('#arenaList .choice-card').forEach(function(btn) {
-            btn.onclick = function() {
-              state.arenaId = btn.dataset.id ? parseInt(btn.dataset.id, 10) : null;
-              state.arenaName = btn.dataset.name || 'Любая';
-              state.offset = 0;
-              clearCatalogSessionStorageCache();
-              if (state.returnToSummary) {
-                state.returnToSummary = false;
-                state.trainerId = null; state.trainerName = '';
-                document.getElementById('backFromArenaToSummary').style.display = 'none';
-                renderSummary();
-                showScreen('screenSummary');
-              } else {
-                loadCatalogList();
-                showScreen('screenTrainers');
-              }
-              prefetchFirstPageIfNeeded();
-            };
-          });
+          syncCatalogHeaderBack();
         }).catch(function() {
-          document.getElementById('arenaList').innerHTML = '<div class="error">Ошибка загрузки</div>';
+          listEl.innerHTML = '<div class="error">Ошибка загрузки</div>';
           var backSvc = document.getElementById('backToService');
           if (backSvc) backSvc.style.display = state.returnToSummary ? 'none' : 'block';
+          syncCatalogHeaderBack();
         });
+      }
+
+      function renderArenaListCheckboxes() {
+        var listEl = document.getElementById('arenaList');
+        var items = arenaScreenDraft.items || [];
+        if (!items.length) {
+          listEl.innerHTML = '<div class="empty">В этом городе арены пока не добавлены</div>';
+          return;
+        }
+        var selectedSet = {};
+        arenaScreenDraft.ids.forEach(function(id) { selectedSet[id] = true; });
+        var html = items.map(function(a) {
+          var isSel = !!selectedSet[a.id];
+          var name = (a.name || '').replace(/"/g, '&quot;');
+          var addr = a.address ? ('<div class="arena-card__addr">' + escapeHtml(a.address) + '</div>') : '';
+          return (
+            '<label class="arena-card' + (isSel ? ' selected' : '') + '" data-id="' + a.id + '" data-name="' + name + '">' +
+              '<span class="arena-card__check" aria-hidden="true">' +
+                (isSel
+                  ? '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="3.5 8.5 6.8 11.8 12.5 5.2"/></svg>'
+                  : '') +
+              '</span>' +
+              '<span class="arena-card__main">' +
+                '<span class="arena-card__name">' + (a.name || '') + '</span>' +
+                addr +
+              '</span>' +
+            '</label>'
+          );
+        }).join('');
+        listEl.innerHTML = '<div class="arena-card-list">' + html + '</div>';
+        listEl.querySelectorAll('.arena-card').forEach(function(card) {
+          card.addEventListener('click', function(ev) {
+            ev.preventDefault();
+            var id = parseInt(card.dataset.id, 10);
+            if (!id) return;
+            var name = card.dataset.name || 'Арена';
+            toggleArenaInDraft(id, name);
+          });
+        });
+      }
+
+      function toggleArenaInDraft(id, name) {
+        var idx = arenaScreenDraft.ids.indexOf(id);
+        if (idx >= 0) {
+          arenaScreenDraft.ids.splice(idx, 1);
+          arenaScreenDraft.names.splice(idx, 1);
+        } else {
+          arenaScreenDraft.ids.push(id);
+          arenaScreenDraft.names.push(name);
+        }
+        renderArenaListCheckboxes();
+        updateArenaScreenChrome();
+        if (typeof window.__arenaMapSyncSelection === 'function') {
+          window.__arenaMapSyncSelection(arenaScreenDraft.ids);
+        }
+      }
+
+      function updateArenaScreenChrome() {
+        var counter = document.getElementById('arenaListCounter');
+        var anyBtn = document.getElementById('arenaAnyBtn');
+        var actions = document.getElementById('arenaListActions');
+        var applyBar = document.getElementById('arenaApplyBar');
+        var applyBtn = document.getElementById('arenaApplyBtn');
+        var n = arenaScreenDraft.ids.length;
+        if (counter) counter.textContent = n === 0 ? 'Любая арена' : ('Выбрано: ' + n);
+        if (anyBtn) anyBtn.classList.toggle('selected', n === 0);
+        if (actions) actions.removeAttribute('hidden');
+        if (applyBar) applyBar.removeAttribute('hidden');
+        if (applyBtn) applyBtn.textContent = n === 0 ? 'Готово · любая арена' : ('Готово · ' + n);
+      }
+
+      function commitArenaScreenSelection() {
+        setArenaSelection(arenaScreenDraft.ids.slice(), arenaScreenDraft.names.slice());
+        state.offset = 0;
+        clearCatalogSessionStorageCache();
+        if (state.returnToSummary) {
+          state.returnToSummary = false;
+          state.trainerId = null; state.trainerName = '';
+          renderSummary();
+          showScreen('screenSummary');
+        } else {
+          loadCatalogList();
+          showScreen('screenTrainers');
+        }
+        prefetchFirstPageIfNeeded();
+      }
+
+      function clearArenaScreenSelection() {
+        arenaScreenDraft.ids = [];
+        arenaScreenDraft.names = [];
+        renderArenaListCheckboxes();
+        updateArenaScreenChrome();
+        if (typeof window.__arenaMapSyncSelection === 'function') {
+          window.__arenaMapSyncSelection([]);
+        }
       }
 
       function formatCatalogServicePrice(s) {
@@ -2117,6 +2374,37 @@
           var ct = (p.contacts || '').trim();
           if (ph) phoneLine += '<div class="slots-empty slots-contact"><strong>Телефон:</strong> <a href="tel:' + ph.replace(/[^\d+]/g, '') + '">' + escapeHtml(ph) + '</a></div>';
           if (ct) phoneLine += '<div class="slots-empty slots-contact"><strong>Контакты:</strong> ' + escapeHtml(ct) + '</div>';
+          // Lead Mode: trainer kept in catalog after subscription expiry. Promote a strong
+          // "Write in Telegram" CTA over the generic "leave request" path so we capture the
+          // contact_click signal and route the visitor straight to the trainer's DM.
+          var isLeadMode = t.is_lead_mode === true;
+          var tgUrl = (typeof t.contact_telegram_url === 'string' && t.contact_telegram_url) ? t.contact_telegram_url : '';
+          if (isLeadMode && tgUrl) {
+            document.getElementById('trainerDetailSlots').innerHTML =
+              '<div class="slots-title">Онлайн-запись</div>' +
+              '<div class="slots-empty">Онлайн-запись временно недоступна. Напишите тренеру в Telegram — ответит лично.</div>' +
+              phoneLine;
+            state.slotsForTrainer = [];
+            var actionsLeadEl = document.getElementById('trainerDetailActions');
+            actionsLeadEl.innerHTML = '';
+            actionsLeadEl.innerHTML += '<button type="button" class="btn-primary btn-block" id="btnContactTelegram">Написать в Telegram</button>';
+            actionsLeadEl.innerHTML += '<button type="button" class="btn-secondary btn-block" data-action="leave-request">Оставить заявку</button>';
+            var btnTg = document.getElementById('btnContactTelegram');
+            if (btnTg) {
+              btnTg.onclick = function() {
+                // Use Telegram's openLink when available — keeps the redirect inside the WebView
+                // and lets t.me launch the native Telegram client.
+                if (tg && typeof tg.openLink === 'function') {
+                  tg.openLink(tgUrl);
+                } else {
+                  window.open(tgUrl, '_blank');
+                }
+              };
+            }
+            document.getElementById('trainerDetailSecondary').innerHTML = '';
+            return;
+          }
+          // ACTIVE trainer without `online` module — keep existing "contact directly" copy.
           document.getElementById('trainerDetailSlots').innerHTML =
             '<div class="slots-title">Онлайн-запись</div>' +
             '<div class="slots-empty">У этого тренера нет самозаписи через каталог. Свяжитесь напрямую — тренер в каталоге, как и раньше.</div>' +
@@ -2462,14 +2750,12 @@
       document.getElementById('btnPickTrainer').onclick = function() {
         if (!state.cityId) {
           state.returnToSummary = true;
-          document.getElementById('backFromCityToSummary').style.display = 'block';
           loadCities();
           showScreen('screenCity');
           return;
         }
         if (!state.serviceId) {
           state.returnToSummary = true;
-          document.getElementById('backFromServiceToSummary').style.display = 'block';
           loadServices();
           showScreen('screenService');
           return;
@@ -2501,9 +2787,6 @@
 
       function goBackToSummary() {
         state.returnToSummary = false;
-        document.getElementById('backFromCityToSummary').style.display = 'none';
-        document.getElementById('backFromServiceToSummary').style.display = 'none';
-        document.getElementById('backFromArenaToSummary').style.display = 'none';
         var backSvc = document.getElementById('backToService');
         if (backSvc) backSvc.style.display = 'block';
         var backCity = document.getElementById('backToCity');
@@ -2513,9 +2796,12 @@
         renderSummary();
         showScreen('screenSummary');
       }
-      document.getElementById('backFromCityToSummary').onclick = goBackToSummary;
-      document.getElementById('backFromServiceToSummary').onclick = goBackToSummary;
-      document.getElementById('backFromArenaToSummary').onclick = goBackToSummary;
+      (function bindArenaScreenControls() {
+        var anyBtn = document.getElementById('arenaAnyBtn');
+        if (anyBtn) anyBtn.onclick = clearArenaScreenSelection;
+        var applyBtn = document.getElementById('arenaApplyBtn');
+        if (applyBtn) applyBtn.onclick = commitArenaScreenSelection;
+      })();
 
       getClientSession()
         .then(function(session) {
@@ -2528,12 +2814,21 @@
             if (!tid) return null;
             var id = parseInt(tid, 10);
             if (!id) return null;
-            return { trainer_id: id, city_id: p.get('city_id'), service_id: p.get('service_id'), arena_id: p.get('arena_id'), offset: p.get('offset') };
+            return { trainer_id: id, city_id: p.get('city_id'), service_id: p.get('service_id'), arena_id: p.get('arena_id'), arena_ids: p.get('arena_ids'), offset: p.get('offset') };
           })();
           if (returnCtx) {
             if (returnCtx.city_id != null) state.cityId = parseInt(returnCtx.city_id, 10) || null;
             if (returnCtx.service_id != null) state.serviceId = parseInt(returnCtx.service_id, 10) || null;
-            if (returnCtx.arena_id != null) state.arenaId = returnCtx.arena_id === '' ? null : (parseInt(returnCtx.arena_id, 10) || null);
+            // Deep-link supports both `arena_ids=1,2,3` (multi) and legacy `arena_id=1` (single).
+            if (returnCtx.arena_ids != null && returnCtx.arena_ids !== '') {
+              var deepIds = returnCtx.arena_ids.split(',').map(function(s) { return parseInt(s, 10); }).filter(function(n) { return !isNaN(n); });
+              if (deepIds.length) setArenaSelection(deepIds, deepIds.map(function() { return 'Арена'; }));
+              else clearArenaSelection();
+            } else if (returnCtx.arena_id != null) {
+              var deepOne = returnCtx.arena_id === '' ? null : (parseInt(returnCtx.arena_id, 10) || null);
+              if (deepOne) setArenaSelection([deepOne], ['Арена']);
+              else clearArenaSelection();
+            }
             if (returnCtx.offset != null) state.offset = Math.max(0, parseInt(returnCtx.offset, 10) || 0);
           }
           function showInitialScreen() {

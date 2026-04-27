@@ -2424,3 +2424,21 @@
       letter-spacing: 0.04em;
       text-transform: uppercase;
     }
+
+    /* Lead Mode / no CRM: explain paywall before trainer hits API errors */
+    .se-crm-lock-banner {
+      margin: 0 0 14px;
+      padding: 12px 14px;
+      border-radius: 12px;
+      background: color-mix(in srgb, var(--app-cta-fill) 14%, var(--tg-theme-secondary-bg-color));
+      border: 1px solid color-mix(in srgb, var(--app-cta-fill) 35%, transparent);
+    }
+    .se-crm-lock-banner__text {
+      margin: 0 0 10px;
+      font-size: 14px;
+      line-height: 1.45;
+      color: var(--tg-theme-text-color);
+    }
+    .se-crm-lock-banner__cta {
+      margin: 0;
+    }

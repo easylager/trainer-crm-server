@@ -142,6 +142,69 @@
         return url;
       }
 
+      var _seCrmBannerCtaWired = false;
+
+      function applyScheduleCrmLockUI() {
+        var allowed = !!state.scheduleCrmWriteAllowed;
+        var ban = document.getElementById('seCrmLockBanner');
+        if (ban) {
+          ban.hidden = allowed;
+          ban.setAttribute('aria-hidden', allowed ? 'true' : 'false');
+        }
+        ['btnAddSlots', 'btnApplyThis', 'btnApplyNext'].forEach(function(id) {
+          var el = document.getElementById(id);
+          if (el) el.disabled = !allowed;
+        });
+        if (!_seCrmBannerCtaWired) {
+          _seCrmBannerCtaWired = true;
+          var cta = document.getElementById('seCrmLockBannerCta');
+          if (cta) {
+            cta.onclick = function() {
+              try {
+                window.location.assign('/webapp/trainer-subscription?v=20260450');
+              } catch (e) { /* noop */ }
+            };
+          }
+        }
+      }
+
+      function runAfterScheduleCrmGate(done) {
+        if (!tg || !tg.initData) {
+          state.scheduleCrmWriteAllowed = true;
+          applyScheduleCrmLockUI();
+          done();
+          return;
+        }
+        getJsonTrainer('/trainer/subscription/status')
+          .then(function(st) {
+            var caps = st && st.unlocked_features;
+            state.scheduleCrmWriteAllowed = Array.isArray(caps) && caps.indexOf('crm') !== -1;
+            applyScheduleCrmLockUI();
+            done();
+          })
+          .catch(function() {
+            state.scheduleCrmWriteAllowed = true;
+            applyScheduleCrmLockUI();
+            done();
+          });
+      }
+
+      function assertScheduleCrmWriteAllowed() {
+        if (state.scheduleCrmWriteAllowed) return true;
+        var msg =
+          'Нужна активная подписка с CRM, чтобы создавать слоты и записи. Откройте «Тарифы и оплата».';
+        if (tg && typeof tg.showAlert === 'function') {
+          try {
+            tg.showAlert(msg);
+          } catch (e) {
+            alert(msg);
+          }
+        } else {
+          alert(msg);
+        }
+        return false;
+      }
+
       /** Some clients (reply keyboard → Web App) fill initData late; notify Telegram again when it appears. */
       var _readyAfterInitDone = false;
       function callReadyWhenInitDataReady() {
@@ -1368,6 +1431,8 @@
         rescheduleSourceBookingId: null,
         /** schedule-editor?embed=1 — loaded inside trainer-clients iframe; parent handles success / dismiss. */
         scheduleEditorEmbed: false,
+        /** False after /trainer/subscription/status when `crm` not in unlocked_features (Lead Mode / no sub). */
+        scheduleCrmWriteAllowed: true,
         /** Slots for selected quick-book day (from GET /schedule); used to mark busy hours. */
         quickBookSlotsForDay: null,
         quickBookSlotDate: null,
@@ -2075,6 +2140,7 @@
 
       // English note: one modal entry point keeps the flow explicit before trainer picks a day/hours.
       function openSlotIntentModal(flow, templateDay, suggestedIntent) {
+        if (!assertScheduleCrmWriteAllowed()) return;
         var modal = document.getElementById('modalSlotIntent');
         if (!modal) return;
         state.pendingIntentFlow = flow || null;
@@ -2199,6 +2265,7 @@
       }
 
       function showDayPickScreen() {
+        if (!assertScheduleCrmWriteAllowed()) return;
         if (!state.weekStart) return;
         var dayPickTitle = document.getElementById('dayPickTitle');
         if (dayPickTitle) {
@@ -2675,6 +2742,7 @@
       }
 
       function openQuickBookModalFromHub(prefill) {
+        if (!assertScheduleCrmWriteAllowed()) return;
         var mq = document.getElementById('modalQuickBookDatetime');
         if (!mq) return;
         prefill = prefill || {};
@@ -3039,6 +3107,7 @@
 
       /** Quick book from hub: date/time chosen — no slot row in state yet. */
       function openBookModalForQuickFlow() {
+        if (!assertScheduleCrmWriteAllowed()) return;
         state.bookSlotId = null;
         state.bookFlowQuick = true;
         state.bookPriceVariantId = null;
@@ -3049,6 +3118,7 @@
 
       /** Opens the book-client flow for a slot id (used by calendar row and group hub). */
       function openBookModalForSlot(slotId) {
+        if (!assertScheduleCrmWriteAllowed()) return;
         state.bookFlowQuick = false;
         state.bookSlotId = slotId;
         state.bookPriceVariantId = null;
@@ -3271,6 +3341,7 @@
             const id = parseInt(btn.dataset.slotId, 10);
             showAppConfirm('Удалить этот слот?', { okText: 'Удалить', cancelText: 'Отмена' }).then(function (ok) {
               if (!ok) return;
+              if (!assertScheduleCrmWriteAllowed()) return;
               fetch(apiUrlWithQuery('/schedule/slots/' + id), { method: 'DELETE', headers: headers() })
                 .then(function(r) {
                   if (r.ok) {
@@ -3830,6 +3901,7 @@
       }
 
       function openEditTemplateDay(day) {
+        if (!assertScheduleCrmWriteAllowed()) return;
         state.editMode = 'template';
         state.editDay = day;
         state.editDate = null;
@@ -3927,6 +3999,7 @@
       }
 
       function openEditCalendarDay(slotDate) {
+        if (!assertScheduleCrmWriteAllowed()) return;
         state.editMode = 'calendar';
         state.editDay = null;
         state.editDate = slotDate;
@@ -4134,6 +4207,7 @@
       })();
 
       document.getElementById('editDone').onclick = function() {
+        if (!assertScheduleCrmWriteAllowed()) return;
         if (state.editMode === 'calendar' && state.calendarBaselineStarts && !hasCalendarNewSlotSelection()) {
           return;
         }
@@ -4286,6 +4360,7 @@
       };
 
       document.getElementById('btnApplyThis').onclick = function() {
+        if (!assertScheduleCrmWriteAllowed()) return;
         if (!state.weekStart) return;
         state.applyWeekStart = dateToStr(state.weekStart);
         document.getElementById('modalConfirmTitle').textContent = 'Применить шаблон на эту неделю?';
@@ -4295,6 +4370,7 @@
       };
 
       document.getElementById('btnApplyNext').onclick = function() {
+        if (!assertScheduleCrmWriteAllowed()) return;
         if (!state.weekStart) return;
         const next = new Date(state.weekStart);
         next.setDate(next.getDate() + 7);
@@ -4321,6 +4397,7 @@
 
       document.getElementById('modalConfirmYes').onclick = function() {
         if (!state.applyWeekStart) return;
+        if (!assertScheduleCrmWriteAllowed()) return;
         document.getElementById('modalConfirm').style.display = 'none';
         updateTelegramBack();
         fetch(apiUrlWithQuery('/schedule/apply-week'), {
@@ -4346,6 +4423,7 @@
       };
 
       document.getElementById('btnAddSlots').onclick = function() {
+        if (!assertScheduleCrmWriteAllowed()) return;
         if (!state.weekStart) return;
         if (isGroupClassesFeatureEnabled()) {
           openSlotIntentModal('calendar', null, 'individual');
@@ -4459,18 +4537,22 @@
               state.bookingDetailReturn = fromHub ? 'hub' : 'schedule';
               state.hubGroupSlotReturnId = null;
             }
-            openBookingDetail(bid);
-            prefetchSlotsInBackground();
+            runAfterScheduleCrmGate(function() {
+              openBookingDetail(bid);
+              prefetchSlotsInBackground();
+            });
             return;
           }
         }
         function startScheduleLoads() {
-          if (state.pendingOpenTemplateTab) {
-            state.pendingOpenTemplateTab = false;
-            setActiveTab('template');
-            return;
-          }
-          loadSlots();
+          runAfterScheduleCrmGate(function() {
+            if (state.pendingOpenTemplateTab) {
+              state.pendingOpenTemplateTab = false;
+              setActiveTab('template');
+              return;
+            }
+            loadSlots();
+          });
         }
         if (tg && tg.initData && window.TrainerMiniAppGate) {
           window.TrainerMiniAppGate.fetchAccess(tg.initData)

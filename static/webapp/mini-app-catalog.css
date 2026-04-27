@@ -1754,3 +1754,179 @@
       text-align: center;
     }
     .empty-state-request .empty-state-text { font-size: 15px; color: var(--tg-theme-hint-color); margin-bottom: 14px; }
+
+    /* ======================================================================
+     * Arena multi-select screen — map + checkbox cards + sticky "Готово".
+     * Visual contract: brand amber for selected, neutral for idle; map only
+     * shows arenas that have lat/lng (gracefully hides on cities without coords).
+     * ====================================================================== */
+    .arena-help {
+      margin: 0 0 12px 4px;
+      font-size: 13px;
+      line-height: 1.45;
+      color: var(--tg-theme-hint-color);
+    }
+    .arena-map-wrap {
+      position: relative;
+      margin: 4px 0 14px;
+      border-radius: 18px;
+      overflow: hidden;
+      border: 1px solid rgba(247, 166, 0, 0.22);
+      box-shadow: 0 4px 18px rgba(0, 0, 0, 0.08);
+      background: var(--tg-theme-secondary-bg-color);
+    }
+    .arena-map-wrap[hidden] { display: none !important; }
+    .arena-map {
+      width: 100%;
+      height: 220px;
+      background: var(--tg-theme-secondary-bg-color);
+    }
+    /* Dark theme: invert OSM tiles so the light raster doesn't flashbang the user.
+     * Leaflet controls/markers stay above the tile pane and aren't inverted. */
+    html.client-mini-dark .arena-map .leaflet-tile-pane {
+      filter: invert(0.92) hue-rotate(180deg) brightness(0.95) contrast(0.92) saturate(0.85);
+    }
+    .arena-map__legend {
+      position: absolute;
+      left: 10px;
+      bottom: 10px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-size: 11px;
+      line-height: 1;
+      color: var(--tg-theme-text-color);
+      background: color-mix(in srgb, var(--tg-theme-bg-color) 85%, transparent);
+      backdrop-filter: blur(6px);
+      border: 1px solid color-mix(in srgb, var(--tg-theme-hint-color) 16%, transparent);
+      pointer-events: none;
+    }
+    .arena-map__legend-text { font-weight: 500; }
+    .arena-map__legend-text + .arena-map__legend-dot { margin-left: 6px; }
+    .arena-map__legend-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      border: 1.5px solid #fff;
+      box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.18);
+    }
+    .arena-map__legend-dot--selected { background: var(--tg-theme-button-color, #f5a623); }
+    .arena-map__legend-dot--idle { background: var(--tg-theme-hint-color); opacity: 0.85; }
+
+    /* Custom Leaflet pin via divIcon — sized to match brand and visible on busy map. */
+    .arena-pin {
+      width: 28px;
+      height: 28px;
+      border-radius: 999px;
+      border: 2px solid #fff;
+      background: var(--tg-theme-hint-color);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+      display: grid;
+      place-items: center;
+      color: #fff;
+      font-size: 13px;
+      font-weight: 700;
+      transition: transform 0.12s ease, background 0.12s ease;
+    }
+    .arena-pin--selected {
+      background: var(--tg-theme-button-color, #f5a623);
+      transform: scale(1.08);
+      box-shadow: 0 4px 14px rgba(247, 166, 0, 0.45);
+    }
+    .arena-pin:hover { transform: scale(1.05); }
+    .leaflet-marker-icon.arena-pin-icon { background: transparent; border: none; }
+
+    .arena-list-actions {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin: 4px 4px 10px;
+    }
+    .arena-list-actions[hidden] { display: none !important; }
+    .arena-any-btn {
+      appearance: none;
+      border: 1px solid color-mix(in srgb, var(--tg-theme-hint-color) 24%, transparent);
+      background: var(--tg-theme-secondary-bg-color);
+      color: var(--tg-theme-text-color);
+      padding: 8px 14px;
+      border-radius: 999px;
+      font: inherit;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.12s ease, border-color 0.12s ease;
+    }
+    .arena-any-btn.selected {
+      background: color-mix(in srgb, var(--tg-theme-button-color) 18%, var(--tg-theme-secondary-bg-color));
+      border-color: rgba(247, 166, 0, 0.5);
+      color: var(--tg-theme-text-color);
+    }
+    .arena-list-counter {
+      font-size: 12px;
+      color: var(--tg-theme-hint-color);
+      font-weight: 500;
+      letter-spacing: 0.02em;
+    }
+
+    .arena-card-list { display: flex; flex-direction: column; gap: 8px; }
+    .arena-card {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 16px;
+      border-radius: 16px;
+      background: var(--tg-theme-secondary-bg-color);
+      border: 1px solid color-mix(in srgb, var(--tg-theme-hint-color) 14%, transparent);
+      cursor: pointer;
+      transition: border-color 0.12s ease, background 0.12s ease, transform 0.12s ease;
+      position: relative;
+      overflow: hidden;
+    }
+    .arena-card:active { transform: scale(0.99); }
+    .arena-card.selected {
+      border-color: rgba(247, 166, 0, 0.55);
+      background: color-mix(in srgb, var(--tg-theme-button-color) 8%, var(--tg-theme-secondary-bg-color));
+    }
+    .arena-card__check {
+      flex: 0 0 auto;
+      width: 22px;
+      height: 22px;
+      border-radius: 7px;
+      border: 1.5px solid color-mix(in srgb, var(--tg-theme-hint-color) 40%, transparent);
+      display: grid;
+      place-items: center;
+      color: #fff;
+      background: transparent;
+      transition: background 0.12s ease, border-color 0.12s ease;
+    }
+    .arena-card.selected .arena-card__check {
+      background: var(--tg-theme-button-color, #f5a623);
+      border-color: var(--tg-theme-button-color, #f5a623);
+    }
+    .arena-card__main { flex: 1; min-width: 0; }
+    .arena-card__name {
+      display: block;
+      font-size: 15px;
+      font-weight: 600;
+      line-height: 1.25;
+      letter-spacing: -0.01em;
+      color: var(--tg-theme-text-color);
+    }
+    .arena-card__addr {
+      margin-top: 2px;
+      font-size: 12px;
+      color: var(--tg-theme-hint-color);
+      line-height: 1.35;
+    }
+
+    .arena-apply-bar {
+      position: sticky;
+      bottom: 0;
+      margin: 14px -12px 0;
+      padding: 12px 12px calc(12px + env(safe-area-inset-bottom, 0px));
+      background: linear-gradient(180deg, color-mix(in srgb, var(--tg-theme-bg-color) 0%, transparent), var(--tg-theme-bg-color) 30%);
+    }
+    .arena-apply-bar[hidden] { display: none !important; }

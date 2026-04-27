@@ -2492,12 +2492,122 @@ TRAINER_STATS_OPEN_APP = "📊 Открой статистику в прилож
 TRAINER_BUTTON_STATS_APP = "📊 Открыть статистику"
 TRAINER_SUBSCRIPTION_REMINDER = (
     "💳 <b>Подписка заканчивается {expires_date}</b>\n\n"
-    "Продлите, чтобы не потерять доступ к каталогу и записям клиентов."
+    "Продлите тариф — снова откроются расписание, база клиентов и онлайн-запись. "
+    "<b>Карточка в каталоге остаётся</b>: вас по-прежнему видно в списке."
 )
 TRAINER_SUBSCRIPTION_REMINDER_TRIAL = (
-    "⏳ <b>Пробный период заканчивается {expires_date}</b>\n\n"
-    "После этого — доступ к премиум-функциям по выбранному тарифу."
+    "⏳ <b>Завтра пробный период закончится</b> ({expires_date})\n\n"
+    "Профиль остаётся в каталоге — клиенты по-прежнему вас находят 🧭\n\n"
+    "Но завтра <b>встанет на паузу</b>:\n"
+    "• онлайн-запись через каталог\n"
+    "• CRM перейдёт в режим только для чтения\n"
+    "• новые клиенты не смогут записаться автоматически\n\n"
+    "Продлить и сохранить контроль 👇"
 )
+
+
+def _money_byn(cents: int | None) -> str:
+    byn = (int(cents or 0)) / 100.0
+    return f"{int(byn)} BYN" if byn == int(byn) else f"{byn:.2f} BYN"
+
+
+def _ru_word(n: int, one: str, few: str, many: str) -> str:
+    n = abs(int(n))
+    if 11 <= (n % 100) <= 14:
+        return many
+    m = n % 10
+    if m == 1:
+        return one
+    if m in (2, 3, 4):
+        return few
+    return many
+
+
+def format_trainer_trial_roi_recap_html(
+    *,
+    recap,
+    expires_date: str,
+    days_until_expiry: int = 2,
+) -> str:
+    """
+    D-2 message: pure mental anchoring — facts about real value already received, no CTA.
+    Tone: «ты уже получил пользу», not «купи». Decision is asked on D-1, not here.
+    ``recap`` is TrialRoiRecap-like; kept duck-typed to avoid importing app-layer objects here.
+    """
+    fact_lines: list[str] = []
+    if recap.completed_sessions_count > 0:
+        fact_lines.append(
+            f"• провести <b>{recap.completed_sessions_count}</b> "
+            f"{_ru_word(recap.completed_sessions_count, 'тренировку', 'тренировки', 'тренировок')} без хаоса в расписании"
+        )
+    if recap.self_bookings_count > 0:
+        fact_lines.append(
+            f"• заранее подтвердить <b>{recap.self_bookings_count}</b> "
+            f"{_ru_word(recap.self_bookings_count, 'запись', 'записи', 'записей')} без переписки «когда удобно?»"
+        )
+    if recap.repeat_bookings_count > 0:
+        fact_lines.append(
+            f"• не потерять <b>{recap.repeat_bookings_count}</b> "
+            f"{_ru_word(recap.repeat_bookings_count, 'повторную запись', 'повторные записи', 'повторных записей')}"
+        )
+    if recap.future_available_slots_count > 0:
+        fact_lines.append(
+            f"• заранее видеть в календаре <b>{recap.future_available_slots_count}</b> "
+            f"{_ru_word(recap.future_available_slots_count, 'свободное окно', 'свободных окна', 'свободных окон')}"
+        )
+    if recap.auto_reminders_sent_count > 0:
+        fact_lines.append(
+            f"• отправить <b>{recap.auto_reminders_sent_count}</b> "
+            f"{_ru_word(recap.auto_reminders_sent_count, 'напоминание', 'напоминания', 'напоминаний')} клиентам — автоматически"
+        )
+    accounting_count = int(recap.pass_redemptions_count or 0) + int(recap.certificate_credits_count or 0)
+    if accounting_count > 0:
+        fact_lines.append(
+            f"• учесть <b>{accounting_count}</b> "
+            f"{_ru_word(accounting_count, 'списание', 'списания', 'списаний')} по абонементам/сертификатам без ручных заметок"
+        )
+    if not fact_lines:
+        fact_lines.append("• держать расписание, клиентов и оплату в одном месте — без отдельной таблицы и переписок по кускам")
+
+    saved_line = ""
+    if recap.saved_minutes_display > 0:
+        saved_line = (
+            f"\n\n⏱ ≈ <b>{recap.saved_minutes_display} "
+            f"{_ru_word(recap.saved_minutes_display, 'минута', 'минуты', 'минут')} рутины снято</b> "
+            "за счёт записей, напоминаний, подтверждений и учёта."
+        )
+
+    has_revenue = recap.revenue_total_cents > 0
+    revenue_block = ""
+    if has_revenue:
+        revenue_block = (
+            "\n\n💼 <b>Деньги, которые уже прошли через систему:</b>\n"
+            f"• Разовые занятия: <b>{_money_byn(recap.revenue_sessions_cents)}</b>\n"
+            f"• Абонементы: <b>{_money_byn(recap.revenue_pass_sales_cents)}</b>\n"
+            f"• Сертификаты: <b>{_money_byn(recap.revenue_certificate_sales_cents)}</b>\n"
+            f"Итого в учёте: <b>{_money_byn(recap.revenue_total_cents)}</b>"
+        )
+
+    days_n = max(1, int(days_until_expiry))
+    days_phrase = (
+        f"<b>{days_n} {_ru_word(days_n, 'день', 'дня', 'дней')}</b>"
+    )
+
+    # Mental anchoring close: state the fact about expiry, but reassure that the catalog presence stays.
+    # We deliberately do NOT add "продлить →"-style CTA here; D-1 message owns the decision ask.
+    return (
+        "📊 <b>Короткая сводка по пробному периоду</b>\n\n"
+        "За это время платформа уже помогла:\n"
+        + "\n".join(fact_lines)
+        + saved_line
+        + revenue_block
+        + "\n\n"
+        f"Через {days_phrase} trial закончится — но <b>профиль останется в каталоге</b>, "
+        "клиенты по-прежнему смогут вас находить 🧭\n\n"
+        f"<i>Trial действует до {html.escape(expires_date)}.</i>"
+    )
+
+
 # Напоминание об окончании подписки / триала: одна кнопка → мини-приложение trainer-subscription (тарифы и оплата).
 TRAINER_SUBSCRIPTION_PUSH_BTN_WEBAPP = "💳 Тарифы и оплата"
 TRAINER_BUTTON_PAY_SUBSCRIPTION = "Продлить подписку"
@@ -2508,20 +2618,100 @@ TRAINER_SUBSCRIPTION_WITH_TIER = (
     "📋 Тариф: <b>{tier_name}</b>\n"
     "До <b>{expires_date}</b>"
 )
-TRAINER_SUBSCRIPTION_WITHOUT_TIER = "📋 Подписка не активна."
+TRAINER_SUBSCRIPTION_WITHOUT_TIER = (
+    "📋 <b>Сейчас без активного тарифа</b>\n\n"
+    "Расписание и клиентская база на паузе. <b>Карточка в общем каталоге остаётся</b> — вас можно найти в списке. "
+    "Чтобы вернуть ведение записей и онлайн-запись, выберите тариф ниже — в своём темпе."
+)
 TRAINER_SUBSCRIPTION_ACTIVE = (
     "Подписка на платформу активна до <b>{expires_date}</b>. Ты в каталоге.\n\n"
     "Кнопка ниже — оплата за <b>следующий период</b> (после этой даты). Можно выбрать срок: месяц, 3 мес, год или 1,5 года."
 )
 TRAINER_SUBSCRIPTION_EXPIRED = (
-    "Подписка истекла. Оплати новый период (месяц / 3 мес / год / 1,5 года), чтобы снова быть в каталоге."
+    "Срок подписки прошёл. Оформите новый период — вернутся расписание, база и онлайн-запись. "
+    "<b>В каталоге карточка остаётся видимой.</b>"
 )
+
+# Одноразовое уведомление в боте сразу после перевода подписки в past_due (см. notification_loops).
+TRAINER_SUBSCRIPTION_JUST_EXPIRED_TRIAL = (
+    "Пробный период завершился — спасибо, что попробовали сервис.\n\n"
+    "Платные функции сейчас на паузе, но <b>карточка в каталоге остаётся</b>: вас можно найти в списке. "
+    "Когда будете готовы, откройте тарифы — расписание и клиенты снова под рукой, без спешки."
+)
+TRAINER_SUBSCRIPTION_JUST_EXPIRED_PAID = (
+    "Оплаченный период закончился.\n\n"
+    "<b>Карточка в каталоге остаётся на виду</b>. Расписание, база и онлайн-запись снова заработают после продления — "
+    "ниже кнопка «Тарифы и оплата»."
+)
+
+# ---------------------------------------------------------------------------
+# Lead Mode recovery series (D+0 / D+3 / D+14 / D+30) — see lead_mode_recovery_use_cases.
+# Tone: "ты остался в системе как supply, без paid-control" — never "тебя отключили".
+# All messages may inject a loss-framing line using real demand numbers (see _format_signals_line).
+# ---------------------------------------------------------------------------
+
+# D+0: graceful downgrade, not punishment. State plainly what stays and what is paused —
+# trainer should read this as «я перешёл в более лёгкий режим», not «меня отключили».
+TRAINER_LEAD_MODE_RECOVERY_D0_TRIAL = (
+    "🎯 <b>Пробный период закончился</b>\n\n"
+    "Ваш профиль <b>всё ещё активен в каталоге</b> — клиенты могут вас находить и писать в Telegram 🧭\n\n"
+    "Сейчас <b>на паузе</b>:\n"
+    "• онлайн-запись через каталог\n"
+    "• CRM и автоматизация\n"
+    "• новые записи через систему\n\n"
+    "Вернуть рабочий режим — кнопка ниже 👇"
+)
+TRAINER_LEAD_MODE_RECOVERY_D0_PAID = (
+    "💼 Оплаченный период закончился — <b>спасибо, что были с нами</b>.\n\n"
+    "<b>Что остаётся без доплаты:</b>\n"
+    "• 🧭 Профиль в каталоге — вас по-прежнему находят\n"
+    "• 📊 Короткая сводка интереса к карточке в мини-приложении\n\n"
+    "📌 <b>На паузе</b> — онлайн-запись, календарь и CRM. "
+    "Текущие записи и абонементы <b>не ломаем</b> — всё доживает как обычно.\n\n"
+    "Продлить и вернуть привычный ритм — кнопка ниже 👇"
+)
+
+# D+3: gentle reminder. Soft loss framing — "пока спрос идёт, но без CRM это просто просмотры".
+TRAINER_LEAD_MODE_RECOVERY_D3 = (
+    "Прошло несколько дней без подписки.\n\n"
+    "{signals_line}"
+    "Эти люди уже видят вашу карточку, но <b>записаться онлайн</b> не могут — пока подписка не активна. "
+    "Вернуть приём заявок в один клик 👇"
+)
+
+# D+14: stronger loss framing. Now we have two weeks of real demand to point at.
+TRAINER_LEAD_MODE_RECOVERY_D14 = (
+    "Две недели без активной подписки.\n\n"
+    "{signals_line}"
+    "Каждый из этих просмотров — потенциальная запись, которая <b>не дошла до календаря</b>. "
+    "С активной подпиской клиенты записываются сами, а вы видите их в один экран.\n\n"
+    "Самое время вернуть онлайн-запись 👇"
+)
+
+# D+30: last call. Honest framing — мы не давим, просто говорим как есть.
+TRAINER_LEAD_MODE_RECOVERY_D30 = (
+    "Месяц без подписки. Карточка по-прежнему в каталоге — мы вас не убираем.\n\n"
+    "{signals_line}"
+    "Если решите вернуться — расписание, база клиентов и онлайн-запись восстановятся в полном объёме сразу. "
+    "Ничего не потеряется.\n\n"
+    "Если пока не до этого — карточка остаётся, ничего делать не нужно."
+)
+
+# Loss-framing line builder. Used by notification_loops to inject real numbers into D+3/D+14/D+30.
+# Three variants by signal density — keeps the message honest (no "23 просмотра" if it's actually 0).
+TRAINER_LEAD_MODE_SIGNALS_BOTH = (
+    "За это время <b>{views} просмотров карточки</b> и <b>{clicks} переходов в Telegram</b>. "
+)
+TRAINER_LEAD_MODE_SIGNALS_VIEWS_ONLY = (
+    "За это время вашу карточку посмотрели <b>{views} раз</b>. "
+)
+TRAINER_LEAD_MODE_SIGNALS_NONE = ""  # Empty — message reads naturally without the signals sentence.
 
 # Subscription tier access messages
 TRAINER_TIER_REQUIRED_CRM = (
-    "⚠️ Для этой функции нужна подписка уровня <b>CRM</b> или выше.\n\n"
-    "Оформи подписку, чтобы использовать расписание, клиентскую базу, абонементы, сертификаты "
-    "и профиль в каталоге."
+    "⚠️ Для этой функции нужен активный тариф <b>CRM</b> или выше.\n\n"
+    "Оформите подписку — откроются расписание, клиентская база, абонементы и сертификаты. "
+    "<b>Карточка в общем каталоге при этом остаётся</b>, чтобы клиенты вас находили."
 )
 TRAINER_TIER_REQUIRED_ONLINE = (
     "⚠️ Для онлайн-записи клиентов нужна подписка уровня <b>Онлайн-запись</b> или выше.\n\n"

@@ -179,6 +179,8 @@
       var hasAnalyticsAccess = false;
       /** Last JSON from GET /trainer/subscription/status — used if sessionStorage was cleared (Telegram WebView) but URL has hub_celebrate=1. */
       var hubLastSubscriptionStatus = null;
+      /** Last lifecycle payload (stage + signals_recap) from bootstrap or GET /trainer/lifecycle. */
+      var hubLastLifecycle = null;
 
       /** When opening fill-slots from client-cancel deep link: target slot + exclude former booker. */
       var hubFillSlotsInviteContext = { slotId: null, excludeClientId: null };
@@ -651,6 +653,9 @@
         var d = hubOnboardingData;
         if (!d || !getInitData()) return out;
 
+        var active = !!d.is_active;
+        var complete = onboardingAllComplete(d);
+
         /* After first booking: nudge catalog path (profile / moderation / visibility) — runs even before full hub unlock. */
         if (onboardingBookingStepDone(d) && !isRhythmHintDismissed('catalog_publication')) {
           var catVis = d.is_catalog_visible !== false && d.is_catalog_visible !== 0;
@@ -683,9 +688,24 @@
           }
         }
 
-        var active = !!d.is_active;
-        var complete = onboardingAllComplete(d);
         if (!active || !complete) return out;
+
+        /* Growth loop: referral accrual (cap shown on referral page) — show even in Lead Mode. */
+        if (!isRhythmHintDismissed('referral_growth')) {
+          out.push({
+            id: 'referral_growth',
+            priority: 66,
+            textHtml:
+              '<strong>До 60 бесплатных дней</strong> полного доступа — приглашайте коллег по реферальной программе. Подробности в разделе «Рефералы».',
+            ctaLabel: 'Рефералы',
+            action: 'trainer_referral',
+          });
+        }
+
+        /* Lead Mode: CRM off — hide operational rhythm (slots, open loops, template). Not subscription_lapsed: Lead banner covers that. */
+        if (d.has_crm_subscription_access === false) {
+          return out;
+        }
 
         var availThis = parseNonNegativeInt(d.available_slots_this_week_count);
         var availNext = parseNonNegativeInt(d.available_slots_next_week_count);
@@ -919,6 +939,10 @@
 
       function runRhythmCandidateAction(cand) {
         if (!cand || !cand.action) return;
+        if (cand.action === 'subscription') {
+          navigateTo('trainer-subscription?v=20260450');
+          return;
+        }
         if (cand.action === 'schedule') {
           ensureTrainerSectionsAccess(function() {
             navigateTo('schedule-editor');
@@ -991,6 +1015,11 @@
             return;
           }
           navigateTo('trainer-profile');
+          return;
+        }
+        if (cand.action === 'trainer_referral') {
+          navigateTo('trainer-referral');
+          return;
         }
       }
 
@@ -1025,7 +1054,10 @@
           container.style.display = 'flex';
           var txt = document.getElementById('hubRhythmSlot' + s + 'Text');
           var cta = document.getElementById('hubRhythmSlot' + s + 'Cta');
-          if (txt) txt.textContent = cand.text;
+          if (txt) {
+            if (cand.textHtml) txt.innerHTML = cand.textHtml;
+            else txt.textContent = cand.text;
+          }
           if (cta) cta.textContent = cand.ctaLabel;
         }
         if (hubRhythmHintsReady) {
@@ -1052,7 +1084,9 @@
                   hid === 'share_link' ||
                   hid === 'template' ||
                   hid === 'client_notes' ||
-                  hid === 'catalog_publication'
+                  hid === 'catalog_publication' ||
+                  hid === 'subscription_lapsed' ||
+                  hid === 'referral_growth'
                     ? 14
                     : 7;
                 setRhythmDismissUntilMs(hid, Date.now() + days * 24 * 60 * 60 * 1000);
@@ -1644,6 +1678,143 @@
       }
 
       /** Renders one next-best-action hint (plus urgent operational states). */
+      /**
+       * Lead Mode banner: shown when lifecycle.is_lead_mode === true.
+       * Contract: presence stays, control is paywalled. Banner reframes silence as "still being found"
+       * using real demand numbers (signals_recap), not a generic "subscription expired" alarm.
+       */
+      function renderHubLeadModeBanner() {
+        var el = document.getElementById('hubLeadModeBanner');
+        if (!el) return;
+        var lc = hubLastLifecycle;
+        if (!lc || !lc.is_lead_mode) {
+          el.setAttribute('hidden', '');
+          el.setAttribute('aria-hidden', 'true');
+          return;
+        }
+        var recap = lc.signals_recap || {};
+        var views = Number(recap.profile_views || 0) | 0;
+        var clicks = Number(recap.contact_clicks || 0) | 0;
+        var blocked = Number(recap.booking_attempts_blocked || 0) | 0;
+        var hasAnyDemand = views > 0 || clicks > 0 || blocked > 0;
+
+        var subEl = document.getElementById('hubLeadBannerSub');
+        if (subEl) {
+          var days = Number(lc.days_in_lead_mode || 0) | 0;
+          var baseLine;
+          if (hasAnyDemand) {
+            baseLine =
+              'Запись на паузе, но вас всё ещё находят в каталоге' +
+              (days > 0
+                ? ' — уже ' + days + ' ' + pluralRu(days, 'день', 'дня', 'дней') + ' с паузы'
+                : '') +
+              '.';
+          } else {
+            baseLine = 'Подписка на паузе — в каталоге вас видно, без онлайн-записи и CRM.';
+          }
+          var periodRu =
+            recap.window === 'since_lead_mode'
+              ? ' Ниже — с начала паузы: просмотры профиля и переходы в Telegram.'
+              : ' Ниже — за ' +
+                String(recap.window_days != null ? recap.window_days : 14) +
+                ' дн.: просмотры и переходы в Telegram.';
+          subEl.textContent = baseLine + periodRu;
+        }
+
+        var signalsEl = document.getElementById('hubLeadBannerSignals');
+        if (signalsEl) {
+          signalsEl.removeAttribute('hidden');
+          var viewsValueEl = document.getElementById('hubLeadSignalViews');
+          var viewsLabelEl = document.getElementById('hubLeadSignalViewsLabel');
+          if (viewsValueEl) viewsValueEl.textContent = String(views);
+          if (viewsLabelEl) {
+            viewsLabelEl.textContent = pluralRu(views, 'просмотр профиля', 'просмотра профиля', 'просмотров профиля');
+          }
+          var clicksValueEl = document.getElementById('hubLeadSignalClicks');
+          var clicksLabelEl = document.getElementById('hubLeadSignalClicksLabel');
+          if (clicksValueEl) clicksValueEl.textContent = String(clicks);
+          if (clicksLabelEl) {
+            clicksLabelEl.textContent = pluralRu(clicks, 'переход в Telegram', 'перехода в Telegram', 'переходов в Telegram');
+          }
+          var blockedItem = document.getElementById('hubLeadSignalBlockedItem');
+          var blockedValueEl = document.getElementById('hubLeadSignalBlocked');
+          var blockedLabelEl = document.getElementById('hubLeadSignalBlockedLabel');
+          if (blocked > 0) {
+            if (blockedItem) blockedItem.removeAttribute('hidden');
+            if (blockedValueEl) blockedValueEl.textContent = String(blocked);
+            if (blockedLabelEl) {
+              blockedLabelEl.textContent = pluralRu(
+                blocked,
+                'не смог записаться',
+                'не смогли записаться',
+                'не смогли записаться'
+              );
+            }
+          } else if (blockedItem) {
+            blockedItem.setAttribute('hidden', '');
+          }
+        }
+
+        var lossEl = document.getElementById('hubLeadBannerLoss');
+        if (lossEl) {
+          if (clicks > 0 || blocked > 0) {
+            // Real loss numbers: prefer the strongest signal (blocked >= click >= view).
+            var lossPrefix;
+            if (blocked > 0) {
+              lossPrefix = ruLeadLossBlockedPhrase(blocked);
+            } else {
+              lossPrefix = ruLeadLossTelegramPhrase(clicks);
+            }
+            lossEl.textContent =
+              lossPrefix +
+              ' — с онлайн-записью такие обращения попадают в календарь, а не остаются только в чате.';
+            lossEl.removeAttribute('hidden');
+          } else {
+            lossEl.setAttribute('hidden', '');
+          }
+        }
+
+        var ctaEl = document.getElementById('hubLeadBannerCta');
+        if (ctaEl && !ctaEl.__leadCtaWired) {
+          ctaEl.__leadCtaWired = true;
+          ctaEl.addEventListener('click', function() {
+            try {
+              window.location.assign('/webapp/trainer-subscription?from=lead_mode');
+            } catch (e) {
+              window.location.href = '/webapp/trainer-subscription';
+            }
+          });
+        }
+
+        el.removeAttribute('hidden');
+        el.removeAttribute('aria-hidden');
+      }
+
+      function applyHubLifecycle(payload) {
+        if (!payload || typeof payload !== 'object') {
+          return;
+        }
+        hubLastLifecycle = payload;
+        renderHubLeadModeBanner();
+      }
+
+      /** Fallback path: bootstrap didn't include lifecycle (legacy, partial error) — fetch standalone. */
+      function loadTrainerLifecycle() {
+        if (!getInitData()) return Promise.resolve(null);
+        return fetch(apiUrlWithQuery('/trainer/lifecycle'), { headers: headersJson() })
+          .then(function(r) {
+            if (!r.ok) return null;
+            return r.json();
+          })
+          .then(function(data) {
+            if (data) applyHubLifecycle(data);
+            return data;
+          })
+          .catch(function() {
+            return null;
+          });
+      }
+
       function renderHubSummaryHints() {
         applyHubRhythmResolver();
         var el = document.getElementById('hubSummaryHints');
@@ -1924,6 +2095,26 @@
         if (m === 1) return one;
         if (m >= 2 && m <= 4) return few;
         return many;
+      }
+
+      /** Past-tense phrase for lead-mode loss line (Russian number + noun + verb agreement). */
+      function ruLeadLossTelegramPhrase(clicks) {
+        var n = Number(clicks) | 0;
+        var noun = pluralRu(n, 'клиент', 'клиента', 'клиентов');
+        var mm = n % 100;
+        var m = n % 10;
+        // contact_clicks = CTA /r/tg redirect — opens Telegram, not proof a message was sent.
+        var verb = m === 1 && mm !== 11 ? 'перешёл' : 'перешли';
+        return n + ' ' + noun + ' ' + verb + ' в Telegram';
+      }
+
+      function ruLeadLossBlockedPhrase(blocked) {
+        var n = Number(blocked) | 0;
+        var noun = pluralRu(n, 'клиент', 'клиента', 'клиентов');
+        var mm = n % 100;
+        var m = n % 10;
+        var verb = m === 1 && mm !== 11 ? 'пытался записаться' : 'пытались записаться';
+        return n + ' ' + noun + ' ' + verb;
       }
 
       function openTelegramDmMiniApp(username, telegramId) {
@@ -4801,6 +4992,9 @@
           }
           hubSubscriptionStatusReady = true;
         }
+        if (payload.lifecycle) {
+          applyHubLifecycle(payload.lifecycle);
+        }
         if (payload.requests_summary && typeof payload.requests_summary.unanswered_count === 'number') {
           hubRequestsStatReady = true;
           hubLastNewRequestsCount = payload.requests_summary.unanswered_count;
@@ -4843,6 +5037,9 @@
           loadSubscriptionStatus().then(function() {
             showHubSubscriptionCelebrationIfPending();
           });
+        }
+        if (!bs || !bs.lifecycle) {
+          loadTrainerLifecycle();
         }
         if (!getInitData()) {
           loadBookings();

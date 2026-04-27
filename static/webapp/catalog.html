@@ -23,9 +23,13 @@
     />
   </noscript>
   <script src="client-mini-app-theme.js"></script>
-  <link rel="preload" href="catalog-main.js?v=20260447" as="script" />
-  <link rel="stylesheet" href="mini-app-catalog.css?v=20260448" />
+  <link rel="preload" href="catalog-main.js?v=20260520" as="script" />
+  <link rel="stylesheet" href="mini-app-catalog.css?v=20260518" />
   <link rel="stylesheet" href="mini-app-client-nav.css?v=20260426" />
+  <!-- Leaflet (mini-map for arena multi-select). Loaded on every page so back/forward keeps tiles cached;
+       library is ~40KB gz, used only when #screenArena renders. OSM tiles require attribution by license. -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  <script defer src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 </head>
 <body>
   <div class="header">
@@ -66,21 +70,35 @@
   </div>
 
   <div id="screenCity" data-screen>
-    <div class="back-link" id="backFromCityToSummary" style="display:none; margin-bottom:8px;"><svg class="back-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>К выбору</div>
     <div class="step-title">Выбери город</div>
     <div id="cityList"></div>
   </div>
   <div id="screenService" data-screen>
-    <div class="back-link" id="backFromServiceToSummary" style="display:none; margin-bottom:8px;"><svg class="back-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>К выбору</div>
     <button type="button" class="back-link" id="backToCity" style="margin-bottom:8px;"><svg class="back-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>Другой город</button>
     <div class="step-title">Выбери услугу</div>
     <div id="serviceList"></div>
   </div>
   <div id="screenArena" data-screen>
-    <div class="back-link" id="backFromArenaToSummary" style="display:none; margin-bottom:8px;"><svg class="back-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>К выбору</div>
     <button type="button" class="back-link" id="backToService" style="margin-bottom:8px;"><svg class="back-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>Другая услуга</button>
-    <div class="step-title">Арена (необязательно)</div>
+    <div class="step-title">Где удобно заниматься?</div>
+    <p class="arena-help">Можно выбрать сразу несколько арен — покажем тренеров, у которых занятия проходят на любой из них.</p>
+    <div class="arena-map-wrap" id="arenaMapWrap" hidden>
+      <div class="arena-map" id="arenaMap" role="img" aria-label="Карта арен в выбранном городе"></div>
+      <div class="arena-map__legend" id="arenaMapLegend">
+        <span class="arena-map__legend-dot arena-map__legend-dot--selected" aria-hidden="true"></span>
+        <span class="arena-map__legend-text">Выбранные</span>
+        <span class="arena-map__legend-dot arena-map__legend-dot--idle" aria-hidden="true"></span>
+        <span class="arena-map__legend-text">Доступные</span>
+      </div>
+    </div>
+    <div class="arena-list-actions" id="arenaListActions" hidden>
+      <button type="button" class="arena-any-btn" id="arenaAnyBtn">Любая арена</button>
+      <span class="arena-list-counter" id="arenaListCounter">Любая арена</span>
+    </div>
     <div id="arenaList"></div>
+    <div class="arena-apply-bar" id="arenaApplyBar" hidden>
+      <button type="button" class="btn-block btn-primary" id="arenaApplyBtn">Готово</button>
+    </div>
   </div>
   <div id="screenTrainers" data-screen>
     <div class="step-title" id="screenTrainersTitle">Тренеры</div>
@@ -210,7 +228,7 @@
     </div>
   </div>
 
-  <script defer src="catalog-main.js?v=20260456"></script>
+  <script defer src="catalog-main.js?v=20260520"></script>
   <script defer src="mini-app-client-home.js"></script>
 </body>
 </html>

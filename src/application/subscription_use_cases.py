@@ -1,6 +1,7 @@
 """
 Trainer platform subscription: trial, paid plans, active check.
-Single source for trainer_has_active_subscription used by catalog and payment flows.
+Single source for trainer_has_active_subscription used in payment flows and entitlements.
+Public catalog list visibility does not require an active row (see TrainerRepository.list_active_with_details).
 """
 import json
 from datetime import datetime, timedelta, timezone
@@ -223,16 +224,32 @@ async def ensure_trainer_welcome_trial(session: AsyncSession, trainer_id: int) -
     await session.commit()
 
 
-async def expire_subscriptions_to_past_due(session: AsyncSession) -> int:
-    """Set status to past_due for subscriptions with expires_at < now() and status in (trial, active). Returns count updated."""
+async def expire_subscriptions_to_past_due(session: AsyncSession) -> list[dict]:
+    """
+    Set status to past_due for subscriptions with expires_at < now() and status in (trial, active).
+
+    Returns rows just transitioned (for one-time trainer notifications): subscription_id, trainer_id,
+    prior_status ('trial' | 'active'), trainer_telegram_id (may be None).
+    """
     now = datetime.now(timezone.utc)
     r = await session.execute(
         text("""
-            UPDATE trainer_subscriptions
-            SET status = :past_due
-            WHERE expires_at < :now
-              AND status IN (:s1, :s2)
-            RETURNING id
+            WITH to_expire AS (
+                SELECT id, trainer_id, status
+                FROM trainer_subscriptions
+                WHERE expires_at < :now
+                  AND status IN (:s1, :s2)
+            ),
+            upd AS (
+                UPDATE trainer_subscriptions u
+                SET status = :past_due
+                FROM to_expire te
+                WHERE u.id = te.id
+                RETURNING u.id AS subscription_id, u.trainer_id, te.status AS prior_status
+            )
+            SELECT upd.subscription_id, upd.trainer_id, upd.prior_status, t.telegram_id
+            FROM upd
+            JOIN trainers t ON t.id = upd.trainer_id
         """),
         {
             "past_due": SUBSCRIPTION_STATUS_PAST_DUE,
@@ -241,32 +258,58 @@ async def expire_subscriptions_to_past_due(session: AsyncSession) -> int:
             "s2": SUBSCRIPTION_STATUS_ACTIVE,
         },
     )
-    ids = r.fetchall()
-    if ids:
+    rows = r.fetchall()
+    if rows:
         await session.commit()
-    return len(ids)
+    return [
+        {
+            "subscription_id": int(row[0]),
+            "trainer_id": int(row[1]),
+            "prior_status": (row[2] or "").strip(),
+            "trainer_telegram_id": int(row[3]) if row[3] is not None else None,
+        }
+        for row in rows
+    ]
 
 
-async def get_subscriptions_reminder_due(session: AsyncSession, days_ahead: int = 3) -> list[dict]:
-    """Subscriptions expiring in the next days_ahead days, status in (trial, active), reminder_sent_at is null. Returns list with id, trainer_id, expires_at, trainer_telegram_id."""
+async def get_subscriptions_reminder_due(
+    session: AsyncSession,
+    days_ahead: int = 3,
+    *,
+    statuses: tuple[str, ...] | None = None,
+) -> list[dict]:
+    """Subscriptions expiring inside the next ``days_ahead`` days with ``reminder_sent_at IS NULL``.
+
+    ``statuses`` lets the caller restrict the lookup window to trial-only or paid-only candidates;
+    by default both ``trial`` and ``active`` are returned (legacy behaviour). Trial cadence and paid
+    cadence run on different ``days_ahead`` (see ``subscription_reminder_trial_days_ahead`` /
+    ``subscription_reminder_days_ahead``), so two filtered calls keep them from poaching each other.
+    """
     now = datetime.now(timezone.utc)
     end = now + timedelta(days=days_ahead)
+    effective_statuses = tuple(statuses) if statuses else (
+        SUBSCRIPTION_STATUS_TRIAL,
+        SUBSCRIPTION_STATUS_ACTIVE,
+    )
+    if not effective_statuses:
+        return []
     r = await session.execute(
-        text("""
+        text(
+            """
             SELECT ts.id, ts.trainer_id, ts.expires_at, t.telegram_id, ts.status
             FROM trainer_subscriptions ts
             JOIN trainers t ON t.id = ts.trainer_id
             WHERE ts.expires_at > :now
               AND ts.expires_at <= :end
-              AND ts.status IN (:s1, :s2)
+              AND ts.status = ANY(:statuses)
               AND ts.reminder_sent_at IS NULL
             ORDER BY ts.expires_at
-        """),
+            """
+        ),
         {
             "now": now,
             "end": end,
-            "s1": SUBSCRIPTION_STATUS_TRIAL,
-            "s2": SUBSCRIPTION_STATUS_ACTIVE,
+            "statuses": list(effective_statuses),
         },
     )
     rows = r.fetchall()

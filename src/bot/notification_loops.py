@@ -5,7 +5,8 @@ Used by notification_service (standalone process). Client/trainer apps no longer
 import asyncio
 import html as html_lib
 import logging
-from datetime import date, datetime, time, timedelta
+import math
+from datetime import date, datetime, time, timedelta, timezone
 
 from aiogram import Bot
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -63,6 +64,24 @@ from src.application.subscription_use_cases import (
     get_subscriptions_reminder_due,
     mark_subscription_reminder_sent,
 )
+from src.application.lead_mode_recovery_use_cases import (
+    DueRecoveryNudge,
+    compute_due_nudges,
+    mark_nudge_sent,
+)
+from src.application.trial_roi_recap_use_cases import (
+    get_trial_roi_recap,
+    list_trial_roi_recap_due,
+    mark_trial_roi_recap_sent,
+)
+from src.infrastructure.db.models import (
+    RECOVERY_STEP_D0,
+    RECOVERY_STEP_D3,
+    RECOVERY_STEP_D14,
+    RECOVERY_STEP_D30,
+    SUBSCRIPTION_STATUS_ACTIVE,
+    SUBSCRIPTION_STATUS_TRIAL,
+)
 from src.bot import messages as msg
 from src.bot.handlers.trainer_handlers import REQUEST_DECLINE_PREFIX, REQUEST_RESPOND_PREFIX
 from src.bot.schedule_notifications import REQUESTS_CALLBACK
@@ -95,8 +114,25 @@ INACTIVE_CLIENT_INTERVAL_SEC = 60 * 60 * 6
 BOOKING_NOTIFIER_INTERVAL_SEC = 15
 REQUEST_NOTIFIER_INTERVAL_SEC = 20
 COMPLETED_FEEDBACK_INTERVAL_SEC = 20
-SUBSCRIPTION_LOOP_INTERVAL_SEC = 24 * 60 * 60  # once per day: expire + reminder
 CERTIFICATE_OUTBOX_INTERVAL_SEC = 2 * 60  # every 2 min: retry failed certificate emails
+
+
+def _subscription_loop_interval_sec() -> int:
+    """Sleep between subscription expire/reminder ticks; clamped for safe local debugging."""
+    try:
+        v = int(Settings().notification_subscription_loop_interval_sec)
+    except (TypeError, ValueError):
+        v = 86400
+    return max(5, min(v, 86400))
+
+
+def _lead_mode_recovery_loop_interval_sec() -> int:
+    """Sleep between Lead Mode recovery series ticks; clamped for safe local debugging."""
+    try:
+        v = int(Settings().notification_lead_mode_recovery_interval_sec)
+    except (TypeError, ValueError):
+        v = 86400
+    return max(5, min(v, 86400))
 # Morning/weekly digest ritual: tick every minute so we hit per-trainer send_at with ≤60s jitter.
 DIGEST_LOOP_INTERVAL_SEC = 60
 # Grace window after a trainer's send_at during which we may still fire today's digest
@@ -1082,60 +1118,180 @@ async def run_completed_feedback_loop(trainer_bot: Bot) -> None:
 
 
 async def run_subscription_expire_and_reminder_loop(trainer_bot: Bot) -> None:
-    """Once per day: set past_due for expired subscriptions; send reminder N days before expiry (config: subscription_reminder_days_ahead)."""
+    """Once per day: expire past subscriptions, then run the trial conversion cadence + paid billing reminder.
+
+    Trial conversion cadence (per trainer, in chronological order):
+      • D-2 — ROI recap (mental anchoring of value already received, no CTA)
+      • D-1 — loss reminder (decision ask + what stops tomorrow, CTA enabled)
+      • D+0 — graceful downgrade is owned by the Lead Mode recovery series, see
+        ``run_lead_mode_recovery_loop`` (also handles D+3 / D+14 / D+30 with demand-numbers
+        loss framing).
+
+    Paid plans keep a separate billing reminder (default D-3) using ``subscription_reminder_days_ahead``.
+    Trial cadence offsets are configured via ``trial_roi_recap_days_ahead`` and
+    ``subscription_reminder_trial_days_ahead`` so cadences cannot poach each other.
+
+    Work runs first on startup, then after each ``notification_subscription_loop_interval_sec`` sleep
+    (default 24h; lower locally via Settings / env for debugging).
+    """
     while True:
-        await asyncio.sleep(SUBSCRIPTION_LOOP_INTERVAL_SEC)
         try:
             async with async_session_factory() as session:
-                # 1) Expire subscriptions that passed expires_at
-                n = await expire_subscriptions_to_past_due(session)
-                if n:
-                    logger.info("Subscription expire: %d set to past_due", n)
+                # 1) Expire subscriptions that passed expires_at — pure state transition;
+                #    the recovery loop will pick them up as Lead Mode candidates and send D+0.
+                expired_rows = await expire_subscriptions_to_past_due(session)
+                if expired_rows:
+                    logger.info(
+                        "Subscription expire: %d set to past_due (recovery series will pick up D+0)",
+                        len(expired_rows),
+                    )
                 # 1b) Expire certificates past expires_at (issued/activated -> expired)
                 cert_n = await expire_certificates_past_expiry(session)
                 if cert_n:
                     logger.info("Certificate expire: %d set to expired", cert_n)
-                # 2) Reminders for subscriptions expiring in the next 3 days
-                days_ahead = max(1, Settings().subscription_reminder_days_ahead)
-                due = await get_subscriptions_reminder_due(session, days_ahead=days_ahead)
-                base = (Settings().webapp_base_url or "").rstrip("/")
+                # Trial conversion cadence: D-2 ROI anchor → D-1 loss reminder → D+0 graceful downgrade
+                # (handled by the Lead Mode recovery loop, not here).
+                settings = Settings()
+                paid_days_ahead = max(1, settings.subscription_reminder_days_ahead)
+                trial_days_ahead = max(1, settings.subscription_reminder_trial_days_ahead)
+                # ROI window must end strictly after the trial loss-reminder window so D-2 fires before D-1.
+                roi_days_ahead = max(trial_days_ahead + 1, settings.trial_roi_recap_days_ahead)
+                base = (settings.webapp_base_url or "").rstrip("/")
                 subscription_webapp_url = (
                     base + "/webapp/trainer-subscription?v=20260450" if base else None
                 )
-                for sub in due:
+                webapp_kb_available = bool(
+                    subscription_webapp_url and base.lower().startswith("https://")
+                )
+
+                def _build_subscription_kb() -> InlineKeyboardMarkup | None:
+                    if not webapp_kb_available:
+                        return None
+                    return InlineKeyboardMarkup(
+                        inline_keyboard=[
+                            [
+                                InlineKeyboardButton(
+                                    text=msg.TRAINER_SUBSCRIPTION_PUSH_BTN_WEBAPP,
+                                    web_app=WebAppInfo(url=subscription_webapp_url),
+                                ),
+                            ],
+                        ]
+                    )
+
+                # 2) D-2: Trial ROI recap — facts about value already received. NO CTA: pure mental anchoring.
+                trial_roi_due = await list_trial_roi_recap_due(
+                    session,
+                    roi_days_ahead=roi_days_ahead,
+                    final_reminder_days_ahead=trial_days_ahead,
+                )
+                for sub in trial_roi_due:
                     if not await is_trainer_push_allowed_now(session, int(sub["trainer_id"])):
                         continue
                     tid = sub.get("trainer_telegram_id")
                     if not tid:
                         continue
                     expires_at = sub.get("expires_at")
-                    expires_date = expires_at.strftime("%d.%m.%Y") if hasattr(expires_at, "strftime") else str(expires_at)[:10]
-                    if sub.get("status") == "trial":
-                        text = msg.TRAINER_SUBSCRIPTION_REMINDER_TRIAL.format(expires_date=expires_date)
+                    expires_date = (
+                        expires_at.strftime("%d.%m.%Y")
+                        if hasattr(expires_at, "strftime")
+                        else str(expires_at)[:10]
+                    )
+                    now_utc = datetime.now(timezone.utc)
+                    if hasattr(expires_at, "tzinfo"):
+                        delta_seconds = (expires_at - now_utc).total_seconds()
+                        # Round up so the trainer never reads "1 день" while still inside D-2 window.
+                        days_until_expiry = max(1, math.ceil(delta_seconds / 86400.0))
                     else:
-                        text = msg.TRAINER_SUBSCRIPTION_REMINDER.format(expires_date=expires_date)
-                    kb = None
-                    if subscription_webapp_url and base.lower().startswith("https://"):
-                        kb = InlineKeyboardMarkup(
-                            inline_keyboard=[
-                                [
-                                    InlineKeyboardButton(
-                                        text=msg.TRAINER_SUBSCRIPTION_PUSH_BTN_WEBAPP,
-                                        web_app=WebAppInfo(url=subscription_webapp_url),
-                                    ),
-                                ],
-                            ]
+                        days_until_expiry = roi_days_ahead
+                    period_end = now_utc
+                    period_start = sub.get("started_at") or (period_end - timedelta(days=14))
+                    recap = await get_trial_roi_recap(
+                        session,
+                        trainer_id=int(sub["trainer_id"]),
+                        period_start=period_start,
+                        period_end=period_end,
+                    )
+                    text = msg.format_trainer_trial_roi_recap_html(
+                        recap=recap,
+                        expires_date=expires_date,
+                        days_until_expiry=days_until_expiry,
+                    )
+                    try:
+                        # No reply_markup on D-2 by design: the goal is anchoring, not the click.
+                        # The decision ask comes on D-1 below.
+                        await trainer_bot.send_message(chat_id=tid, text=text)
+                        await mark_trial_roi_recap_sent(session, sub["id"])
+                    except Exception as e:
+                        logger.warning(
+                            "Trial ROI recap to trainer %s (sub id=%s): %s",
+                            tid,
+                            sub.get("id"),
+                            e,
                         )
+
+                # 3) D-1: trial loss reminder — decision ask, what stops tomorrow. With CTA.
+                trial_due = await get_subscriptions_reminder_due(
+                    session,
+                    days_ahead=trial_days_ahead,
+                    statuses=(SUBSCRIPTION_STATUS_TRIAL,),
+                )
+                for sub in trial_due:
+                    if not await is_trainer_push_allowed_now(session, int(sub["trainer_id"])):
+                        continue
+                    tid = sub.get("trainer_telegram_id")
+                    if not tid:
+                        continue
+                    expires_at = sub.get("expires_at")
+                    expires_date = (
+                        expires_at.strftime("%d.%m.%Y")
+                        if hasattr(expires_at, "strftime")
+                        else str(expires_at)[:10]
+                    )
+                    text = msg.TRAINER_SUBSCRIPTION_REMINDER_TRIAL.format(expires_date=expires_date)
                     try:
                         await trainer_bot.send_message(
                             chat_id=tid,
                             text=text,
-                            reply_markup=kb,
+                            reply_markup=_build_subscription_kb(),
                         )
                         await mark_subscription_reminder_sent(session, sub["id"])
                     except Exception as e:
                         logger.warning(
-                            "Subscription reminder to trainer %s (sub id=%s): %s",
+                            "Trial loss reminder to trainer %s (sub id=%s): %s",
+                            tid,
+                            sub.get("id"),
+                            e,
+                        )
+
+                # 4) Paid billing reminder — kept on its own cadence (default D-3) and own status filter.
+                paid_due = await get_subscriptions_reminder_due(
+                    session,
+                    days_ahead=paid_days_ahead,
+                    statuses=(SUBSCRIPTION_STATUS_ACTIVE,),
+                )
+                for sub in paid_due:
+                    if not await is_trainer_push_allowed_now(session, int(sub["trainer_id"])):
+                        continue
+                    tid = sub.get("trainer_telegram_id")
+                    if not tid:
+                        continue
+                    expires_at = sub.get("expires_at")
+                    expires_date = (
+                        expires_at.strftime("%d.%m.%Y")
+                        if hasattr(expires_at, "strftime")
+                        else str(expires_at)[:10]
+                    )
+                    text = msg.TRAINER_SUBSCRIPTION_REMINDER.format(expires_date=expires_date)
+                    try:
+                        await trainer_bot.send_message(
+                            chat_id=tid,
+                            text=text,
+                            reply_markup=_build_subscription_kb(),
+                        )
+                        await mark_subscription_reminder_sent(session, sub["id"])
+                    except Exception as e:
+                        logger.warning(
+                            "Paid subscription reminder to trainer %s (sub id=%s): %s",
                             tid,
                             sub.get("id"),
                             e,
@@ -1144,6 +1300,140 @@ async def run_subscription_expire_and_reminder_loop(trainer_bot: Bot) -> None:
             break
         except Exception as e:
             logger.exception("Subscription expire/reminder loop: %s", e)
+        await asyncio.sleep(_subscription_loop_interval_sec())
+
+
+def _render_recovery_signals_line(*, views: int, clicks: int) -> str:
+    """Pure: build the loss-framing sentence from real demand counts. Empty string if no demand."""
+    if views > 0 and clicks > 0:
+        return msg.TRAINER_LEAD_MODE_SIGNALS_BOTH.format(views=views, clicks=clicks)
+    if views > 0:
+        return msg.TRAINER_LEAD_MODE_SIGNALS_VIEWS_ONLY.format(views=views)
+    return msg.TRAINER_LEAD_MODE_SIGNALS_NONE
+
+
+def _render_recovery_text(nudge: DueRecoveryNudge, *, was_trial: bool) -> str:
+    """Pure: pick the right template for this step + inject demand numbers (loss framing)."""
+    signals_line = _render_recovery_signals_line(
+        views=nudge.signals.profile_views,
+        clicks=nudge.signals.contact_clicks,
+    )
+    if nudge.step == RECOVERY_STEP_D0:
+        # D+0 has no loss framing yet — nothing has accumulated in lead mode.
+        return (
+            msg.TRAINER_LEAD_MODE_RECOVERY_D0_TRIAL
+            if was_trial
+            else msg.TRAINER_LEAD_MODE_RECOVERY_D0_PAID
+        )
+    if nudge.step == RECOVERY_STEP_D3:
+        return msg.TRAINER_LEAD_MODE_RECOVERY_D3.format(signals_line=signals_line)
+    if nudge.step == RECOVERY_STEP_D14:
+        return msg.TRAINER_LEAD_MODE_RECOVERY_D14.format(signals_line=signals_line)
+    if nudge.step == RECOVERY_STEP_D30:
+        return msg.TRAINER_LEAD_MODE_RECOVERY_D30.format(signals_line=signals_line)
+    raise ValueError(f"Unknown recovery step: {nudge.step!r}")
+
+
+async def _was_last_subscription_a_trial(
+    session: AsyncSession, trainer_id: int
+) -> bool:
+    """D+0 copy: use plan.is_trial so rows already moved to past_due still get trial wording."""
+    from sqlalchemy import text as _t
+
+    r = await session.execute(
+        _t(
+            """
+            SELECT COALESCE(sp.is_trial, false)
+            FROM trainer_subscriptions ts
+            JOIN subscription_plans sp ON sp.id = ts.plan_id
+            WHERE ts.trainer_id = :tid
+            ORDER BY ts.expires_at DESC
+            LIMIT 1
+            """
+        ),
+        {"tid": trainer_id},
+    )
+    row = r.fetchone()
+    return bool(row and row[0])
+
+
+async def run_lead_mode_recovery_loop(trainer_bot: Bot) -> None:
+    """
+    Once per day: send the next due Lead Mode recovery nudge (D+0/D+3/D+14/D+30) to each
+    trainer currently in LEAD_MODE that hasn't received it yet.
+
+    Idempotency boundary: trainer_recovery_nudges (UNIQUE on trainer_id+step). Cancel-on-payment is
+    implicit — trainers who reactivate disappear from `compute_due_nudges` candidate list.
+
+    Work runs first on startup, then after each ``notification_lead_mode_recovery_interval_sec`` sleep.
+    """
+    while True:
+        try:
+            async with async_session_factory() as session:
+                due_list = await compute_due_nudges(session)
+                if due_list:
+                    logger.info("Lead Mode recovery: %d due nudges", len(due_list))
+
+                    base = (Settings().webapp_base_url or "").rstrip("/")
+                    webapp_url = (
+                        base + "/webapp/trainer-subscription?v=20260509"
+                        if base and base.lower().startswith("https://")
+                        else None
+                    )
+                    kb: InlineKeyboardMarkup | None = None
+                    if webapp_url:
+                        kb = InlineKeyboardMarkup(
+                            inline_keyboard=[
+                                [
+                                    InlineKeyboardButton(
+                                        text=msg.TRAINER_SUBSCRIPTION_PUSH_BTN_WEBAPP,
+                                        web_app=WebAppInfo(url=webapp_url),
+                                    )
+                                ]
+                            ]
+                        )
+
+                    for nudge in due_list:
+                        try:
+                            if not await is_trainer_push_allowed_now(
+                                session, nudge.trainer_id
+                            ):
+                                # Quiet hours / opt-out — skip this tick; the step stays "due" and will
+                                # fire next day. After 30 days we cap at D+30 forever (idempotent).
+                                continue
+                            was_trial = (
+                                await _was_last_subscription_a_trial(
+                                    session, nudge.trainer_id
+                                )
+                                if nudge.step == RECOVERY_STEP_D0
+                                else False
+                            )
+                            text_msg = _render_recovery_text(nudge, was_trial=was_trial)
+                            await trainer_bot.send_message(
+                                chat_id=nudge.trainer_telegram_id,
+                                text=text_msg,
+                                reply_markup=kb,
+                                parse_mode="HTML",
+                            )
+                            # Persist after successful send so a Telegram error retries the step tomorrow.
+                            await mark_nudge_sent(
+                                session,
+                                trainer_id=nudge.trainer_id,
+                                step=nudge.step,
+                                expires_at_anchor=nudge.last_expires_at,
+                            )
+                        except Exception as e:
+                            logger.warning(
+                                "Lead Mode recovery nudge failed (trainer=%s, step=%s): %s",
+                                nudge.trainer_id,
+                                nudge.step,
+                                e,
+                            )
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.exception("Lead Mode recovery loop: %s", e)
+        await asyncio.sleep(_lead_mode_recovery_loop_interval_sec())
 
 
 async def run_certificate_email_outbox_loop() -> None:

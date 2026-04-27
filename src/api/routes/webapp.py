@@ -5,7 +5,7 @@ import asyncio
 import html
 import logging
 import uuid
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from itertools import groupby
 from typing import Any, Literal
 
@@ -194,8 +194,23 @@ from src.application.subscription_tier_use_cases import (
     trainer_has_crm_access,
     update_subscription_tier_pricing,
 )
+from src.application.lifecycle_use_cases import (
+    LifecycleSnapshot,
+    LifecycleStage,
+    resolve_lifecycle_snapshot,
+)
+from src.application.demand_signals_use_cases import (
+    RECAP_WINDOW_14D,
+    SignalsRecap,
+    get_signals_recap,
+    get_signals_since,
+)
 from src.infrastructure.db import async_session_factory
 from src.infrastructure.db.models import SUBSCRIPTION_TIERS, TRAINER_STATUS_ACTIVE
+from src.shared.webapp_http_messages import (
+    WEBAPP_DETAIL_SUBSCRIPTION_ANALYTICS_REQUIRED,
+    WEBAPP_DETAIL_SUBSCRIPTION_CRM_REQUIRED,
+)
 from src.billing.payment_gateway import create_checkout
 from src.application.arena_schedule_preset import (
     get_schedule_grid_preset_for_trainer,
@@ -671,7 +686,7 @@ async def put_schedule_templates_day(
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     # Require CRM tier to edit templates
     if not await trainer_has_crm_access(session, trainer_id):
-        raise HTTPException(status_code=403, detail="Subscription tier required: CRM")
+        raise HTTPException(status_code=403, detail=WEBAPP_DETAIL_SUBSCRIPTION_CRM_REQUIRED)
     if body.day_of_week < 0 or body.day_of_week > 6:
         raise HTTPException(status_code=400, detail="day_of_week must be 0-6")
     slots = body.slots or []
@@ -787,7 +802,7 @@ async def post_schedule_slots(
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     # Require CRM tier to create/update slots
     if not await trainer_has_crm_access(session, trainer_id):
-        raise HTTPException(status_code=403, detail="Subscription tier required: CRM")
+        raise HTTPException(status_code=403, detail=WEBAPP_DETAIL_SUBSCRIPTION_CRM_REQUIRED)
     if body.capacity > 1:
         trainer_row = await get_trainer(session, trainer_id) or {}
         if not bool((trainer_row.get("profile") or {}).get("group_classes_enabled")):
@@ -859,7 +874,7 @@ async def post_schedule_apply_week(
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     # Require CRM tier to apply template and recurring bookings
     if not await trainer_has_crm_access(session, trainer_id):
-        raise HTTPException(status_code=403, detail="Subscription tier required: CRM")
+        raise HTTPException(status_code=403, detail=WEBAPP_DETAIL_SUBSCRIPTION_CRM_REQUIRED)
     try:
         week_start = date.fromisoformat(body.week_start)
     except ValueError:
@@ -889,6 +904,8 @@ async def delete_schedule_slot(
     trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+    if not await trainer_has_crm_access(session, trainer_id):
+        raise HTTPException(status_code=403, detail=WEBAPP_DETAIL_SUBSCRIPTION_CRM_REQUIRED)
     deleted = await schedule_delete_slot(session, trainer_id, slot_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Slot not found or booked")
@@ -1813,7 +1830,7 @@ async def get_trainer_stats_api(
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     if not await trainer_has_analytics_access(session, trainer_id):
-        raise HTTPException(status_code=403, detail="Analytics module required for statistics")
+        raise HTTPException(status_code=403, detail=WEBAPP_DETAIL_SUBSCRIPTION_ANALYTICS_REQUIRED)
     data = await get_trainer_stats_dashboard(session, trainer_id)
     return _serialize_trainer_dashboard(data)
 
@@ -1835,11 +1852,76 @@ async def get_trainer_revenue_range_api(
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     if not await trainer_has_analytics_access(session, trainer_id):
-        raise HTTPException(status_code=403, detail="Analytics module required for statistics")
+        raise HTTPException(status_code=403, detail=WEBAPP_DETAIL_SUBSCRIPTION_ANALYTICS_REQUIRED)
     try:
         return await get_trainer_revenue_breakdown_for_range(session, trainer_id, period_from, period_to)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+async def build_trainer_lifecycle_payload(
+    session: AsyncSession,
+    trainer_id: int,
+) -> dict[str, Any]:
+    """Lifecycle snapshot + demand recap for trainer-home Lead Mode banner / recap card.
+
+    For Lead Mode trainers the recap window starts at last_subscription_expires_at so the loss
+    framing ("23 views since trial ended") is grounded in real numbers. For other stages the
+    recap falls back to the standard 14-day window — still useful as a presence proof for ACTIVE
+    trainers without exposing Lead Mode mechanics.
+    """
+    snap: LifecycleSnapshot = await resolve_lifecycle_snapshot(session, trainer_id)
+    now = datetime.now(timezone.utc)
+
+    if snap.is_lead_mode and snap.last_subscription_expires_at is not None:
+        # Anchor the recap to the exact moment Lead Mode started so loss framing matches reality.
+        anchored_since = max(snap.last_subscription_expires_at, now - timedelta(days=90))
+        recap: SignalsRecap = await get_signals_since(
+            session, trainer_id=trainer_id, since=anchored_since, now=now
+        )
+        recap_dict = recap.as_dict()
+        recap_dict["window"] = "since_lead_mode"
+    else:
+        recap = await get_signals_recap(
+            session, trainer_id=trainer_id, window_days=RECAP_WINDOW_14D, now=now
+        )
+        recap_dict = recap.as_dict()
+        recap_dict["window"] = f"{RECAP_WINDOW_14D}d"
+
+    days_in_lead_mode: int | None = None
+    if snap.is_lead_mode and snap.last_subscription_expires_at is not None:
+        delta = now - snap.last_subscription_expires_at
+        days_in_lead_mode = max(0, int(delta.total_seconds() // 86400))
+
+    payload: dict[str, Any] = snap.as_dict()
+    payload["lead_mode_since"] = (
+        snap.last_subscription_expires_at.isoformat()
+        if snap.is_lead_mode and snap.last_subscription_expires_at is not None
+        else None
+    )
+    payload["days_in_lead_mode"] = days_in_lead_mode
+    payload["signals_recap"] = recap_dict
+    return payload
+
+
+@router.get("/trainer/lifecycle")
+async def get_trainer_lifecycle(
+    init_data: str | None = Query(None),
+    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    """
+    Trainer lifecycle snapshot + demand signals recap. Drives Lead Mode banner / recap card on
+    trainer-home. Safe to poll: read-only, no side effects beyond the demand signal recap query.
+    """
+    raw = init_data or x_telegram_init_data
+    if not raw:
+        raise HTTPException(status_code=401, detail="Missing init data")
+    telegram_id = _trainer_telegram_id(raw)
+    trainer_id = await get_trainer_id_linked_any_status(session, telegram_id)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail="Trainer not linked")
+    return await build_trainer_lifecycle_payload(session, trainer_id)
 
 
 @router.get("/trainer/hub/revenue-mtd")
@@ -1906,6 +1988,7 @@ async def get_trainer_hub_bootstrap(
     revenue_mtd: dict[str, Any] | None = None
     bookings: dict[str, Any] | None = None
     subscription_status: dict[str, Any] | None = None
+    lifecycle: dict[str, Any] | None = None
 
     if trainer_id_linked:
         tid_l = trainer_id_linked
@@ -1939,13 +2022,18 @@ async def get_trainer_hub_bootstrap(
                 async with async_session_factory() as s:
                     return await get_trainer_subscription_status(s, tid_act)
 
-            p_res, o_res, r_req, r_rev, r_book, r_sub = await asyncio.gather(
+            async def _hub_lifecycle() -> dict[str, Any]:
+                async with async_session_factory() as s:
+                    return await build_trainer_lifecycle_payload(s, tid_l)
+
+            p_res, o_res, r_req, r_rev, r_book, r_sub, r_life = await asyncio.gather(
                 _hub_profile(),
                 _hub_onboarding(),
                 _hub_req_count(),
                 _hub_revenue(),
                 _hub_bookings(),
                 _hub_subscription(),
+                _hub_lifecycle(),
                 return_exceptions=True,
             )
             if isinstance(p_res, BaseException):
@@ -1976,10 +2064,15 @@ async def get_trainer_hub_bootstrap(
                 partial_errors["subscription_status"] = str(r_sub)
             else:
                 subscription_status = r_sub
+            if isinstance(r_life, BaseException):
+                partial_errors["lifecycle"] = str(r_life)
+            else:
+                lifecycle = r_life
         else:
-            p_res, o_res = await asyncio.gather(
+            p_res, o_res, r_life = await asyncio.gather(
                 _hub_profile(),
                 _hub_onboarding(),
+                _hub_lifecycle(),
                 return_exceptions=True,
             )
             if isinstance(p_res, BaseException):
@@ -1994,6 +2087,10 @@ async def get_trainer_hub_bootstrap(
                 partial_errors["onboarding_checklist"] = str(o_res)
             else:
                 onboarding_checklist = o_res
+            if isinstance(r_life, BaseException):
+                partial_errors["lifecycle"] = str(r_life)
+            else:
+                lifecycle = r_life
             if state == TrainerAccessState.BOOKING_READY and trainer_id_linked:
 
                 async def _hub_sub_ttv() -> dict[str, Any]:
@@ -2014,6 +2111,7 @@ async def get_trainer_hub_bootstrap(
         "revenue_mtd": revenue_mtd,
         "bookings": bookings,
         "subscription_status": subscription_status,
+        "lifecycle": lifecycle,
         "partial_errors": partial_errors or None,
     }
 
@@ -2756,7 +2854,7 @@ async def get_trainer_pass_products(
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     if not await trainer_has_crm_access(session, trainer_id):
-        raise HTTPException(status_code=403, detail="Subscription tier required: CRM")
+        raise HTTPException(status_code=403, detail=WEBAPP_DETAIL_SUBSCRIPTION_CRM_REQUIRED)
     items = await list_pass_products(session, trainer_id, active_only=active_only)
     return {"items": items}
 
@@ -2785,7 +2883,7 @@ async def post_trainer_pass_product(
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     if not await trainer_has_crm_access(session, trainer_id):
-        raise HTTPException(status_code=403, detail="Subscription tier required: CRM")
+        raise HTTPException(status_code=403, detail=WEBAPP_DETAIL_SUBSCRIPTION_CRM_REQUIRED)
     product_id = await create_pass_product(
         session,
         trainer_id,
@@ -2824,7 +2922,7 @@ async def patch_trainer_pass_product(
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     if not await trainer_has_crm_access(session, trainer_id):
-        raise HTTPException(status_code=403, detail="Subscription tier required: CRM")
+        raise HTTPException(status_code=403, detail=WEBAPP_DETAIL_SUBSCRIPTION_CRM_REQUIRED)
     patch = body.model_dump(exclude_unset=True)
     ok = await update_pass_product(
         session,
@@ -2853,7 +2951,7 @@ async def delete_trainer_pass_product(
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     if not await trainer_has_crm_access(session, trainer_id):
-        raise HTTPException(status_code=403, detail="Subscription tier required: CRM")
+        raise HTTPException(status_code=403, detail=WEBAPP_DETAIL_SUBSCRIPTION_CRM_REQUIRED)
     try:
         ok = await delete_pass_product(session, product_id, trainer_id)
     except IntegrityError:
@@ -5069,6 +5167,8 @@ async def post_trainer_booking(
     trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+    if not await trainer_has_crm_access(session, trainer_id):
+        raise HTTPException(status_code=403, detail=WEBAPP_DETAIL_SUBSCRIPTION_CRM_REQUIRED)
     slot = await get_slot(session, body.slot_id)
     if not slot or slot.get("trainer_id") != trainer_id:
         raise HTTPException(status_code=400, detail="Slot not found or not available")
@@ -5146,7 +5246,7 @@ async def post_trainer_booking_quick(
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     if not await trainer_has_crm_access(session, trainer_id):
-        raise HTTPException(status_code=403, detail="Subscription tier required: CRM")
+        raise HTTPException(status_code=403, detail=WEBAPP_DETAIL_SUBSCRIPTION_CRM_REQUIRED)
     try:
         slot_date = date.fromisoformat(body.slot_date)
     except ValueError:

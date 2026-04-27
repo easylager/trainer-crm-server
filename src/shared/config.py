@@ -119,6 +119,10 @@ class Settings(BaseSettings):
 
     # notification_service only: if True, send user-facing Telegram pushes 24/7 (default window is 08:00–22:00 Europe/Minsk).
     notification_disable_quiet_hours: NotificationQuietHoursBypassFlag = False
+    # notification_service: interval between subscription expire + pre-expiry reminder ticks (seconds). Default 86400 (1d). Set e.g. 10 locally to debug trial expiry / past_due; production should keep default.
+    notification_subscription_loop_interval_sec: int = 86400
+    # notification_service: interval between Lead Mode recovery (D+0..D+30) ticks. Default 86400. Set e.g. 10 locally; production should keep default.
+    notification_lead_mode_recovery_interval_sec: int = 86400
     # notification_service: poll for slot end → auto-complete booking → «Записать снова» trainer push. Clamped to 15–600 s in worker.
     booking_complete_poll_interval_sec: int = 60
     # Last N seconds before slot end (Europe/Minsk): send trainer one «предложите повтор» push with WebApp buttons. 0 = disabled.
@@ -127,8 +131,15 @@ class Settings(BaseSettings):
     # Trainer subscription: trial and reminders
     # Trial: if set, overrides DB platform_settings.welcome_trial_period_days and subscription_plans.period_days
     trial_period_days: int | None = None
-    # Reminder: send "subscription ending soon" this many days before expires_at (default 3)
+    # Paid subscriptions: classic billing reminder N days before expires_at (default 3).
     subscription_reminder_days_ahead: int = 3
+    # Trial loss reminder (D-1): single push the day before trial expiry, framed as what stops tomorrow.
+    # Lives in its own setting so trial cadence (D-2 ROI → D-1 loss → D+0 downgrade) stays independent
+    # of paid billing cadence.
+    subscription_reminder_trial_days_ahead: int = 1
+    # Trial ROI recap (D-2 by default): send BEFORE the trial loss reminder so the trainer
+    # first anchors value, then on D-1 receives a decision-focused loss-framing nudge.
+    trial_roi_recap_days_ahead: int = 2
 
     # Client bot: username for deep links (e.g. t.me/<username>?start=cert_XXX). Required for certificate email links.
     client_bot_username: str | None = None

@@ -41,6 +41,7 @@ from src.application.subscription_tier_use_cases import trainer_has_groups_acces
 from src.application.client_use_cases import get_client_id_by_telegram_id, get_or_create_client_by_phone
 from src.shared.config import Settings
 from src.shared.telegram_webapp import InitDataAuthError, require_telegram_user_id
+from src.shared.webapp_http_messages import WEBAPP_DETAIL_SUBSCRIPTION_GROUPS_REQUIRED
 
 router = APIRouter(tags=["webapp-training-groups"])
 
@@ -124,7 +125,7 @@ async def get_trainer_training_groups(
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     if not await trainer_has_groups_access(session, trainer_id):
-        raise HTTPException(status_code=403, detail="Subscription module required: groups")
+        raise HTTPException(status_code=403, detail=WEBAPP_DETAIL_SUBSCRIPTION_GROUPS_REQUIRED)
     items = await list_training_groups(session, trainer_id)
     return {"groups": items}
 
@@ -144,7 +145,7 @@ async def post_trainer_training_groups(
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     if not await trainer_has_groups_access(session, trainer_id):
-        raise HTTPException(status_code=403, detail="Subscription module required: groups")
+        raise HTTPException(status_code=403, detail=WEBAPP_DETAIL_SUBSCRIPTION_GROUPS_REQUIRED)
     if body.status not in (TG_DRAFT, TG_RECRUITING, TG_ACTIVE):
         raise HTTPException(status_code=400, detail="Invalid status")
     if not await trainer_offers_service(session, trainer_id, body.service_id):
@@ -197,7 +198,7 @@ async def get_trainer_training_group_detail(
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     if not await trainer_has_groups_access(session, trainer_id):
-        raise HTTPException(status_code=403, detail="Subscription module required: groups")
+        raise HTTPException(status_code=403, detail=WEBAPP_DETAIL_SUBSCRIPTION_GROUPS_REQUIRED)
     d = await get_training_group_detail(session, trainer_id, group_id)
     if not d:
         raise HTTPException(status_code=404, detail="Not found")
@@ -222,7 +223,7 @@ async def get_trainer_training_group_upcoming_slots(
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     if not await trainer_has_groups_access(session, trainer_id):
-        raise HTTPException(status_code=403, detail="Subscription module required: groups")
+        raise HTTPException(status_code=403, detail=WEBAPP_DETAIL_SUBSCRIPTION_GROUPS_REQUIRED)
     rows = await list_upcoming_group_slots(session, trainer_id, group_id, limit=limit)
     return {"slots": rows}
 
@@ -243,7 +244,7 @@ async def put_trainer_training_group_schedule_rules(
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     if not await trainer_has_groups_access(session, trainer_id):
-        raise HTTPException(status_code=403, detail="Subscription module required: groups")
+        raise HTTPException(status_code=403, detail=WEBAPP_DETAIL_SUBSCRIPTION_GROUPS_REQUIRED)
     rules = [r.model_dump() for r in body.schedule_rules]
     kwargs: dict = {"schedule_rules": rules}
     fs = body.model_fields_set
@@ -305,7 +306,7 @@ async def post_cancel_training_group_slot(
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     if not await trainer_has_groups_access(session, trainer_id):
-        raise HTTPException(status_code=403, detail="Subscription module required: groups")
+        raise HTTPException(status_code=403, detail=WEBAPP_DETAIL_SUBSCRIPTION_GROUPS_REQUIRED)
     ok = await cancel_group_slot(session, trainer_id, group_id, slot_id)
     if not ok:
         raise HTTPException(status_code=400, detail="Не удалось отменить (нет слота или есть записи)")
@@ -328,7 +329,7 @@ async def post_cancel_training_group_slots_in_range(
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     if not await trainer_has_groups_access(session, trainer_id):
-        raise HTTPException(status_code=403, detail="Subscription module required: groups")
+        raise HTTPException(status_code=403, detail=WEBAPP_DETAIL_SUBSCRIPTION_GROUPS_REQUIRED)
     try:
         df = date.fromisoformat(body.date_from)
         dt = date.fromisoformat(body.date_to)
@@ -354,7 +355,7 @@ async def patch_trainer_training_group(
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     if not await trainer_has_groups_access(session, trainer_id):
-        raise HTTPException(status_code=403, detail="Subscription module required: groups")
+        raise HTTPException(status_code=403, detail=WEBAPP_DETAIL_SUBSCRIPTION_GROUPS_REQUIRED)
     if body.status is not None and body.status not in (
         TG_DRAFT,
         TG_RECRUITING,
@@ -404,7 +405,7 @@ async def post_trainer_training_group_member(
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     if not await trainer_has_groups_access(session, trainer_id):
-        raise HTTPException(status_code=403, detail="Subscription module required: groups")
+        raise HTTPException(status_code=403, detail=WEBAPP_DETAIL_SUBSCRIPTION_GROUPS_REQUIRED)
     client_id: int
     if body.client_id is not None:
         client_id = int(body.client_id)
@@ -450,7 +451,7 @@ async def delete_trainer_training_group_member(
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     if not await trainer_has_groups_access(session, trainer_id):
-        raise HTTPException(status_code=403, detail="Subscription module required: groups")
+        raise HTTPException(status_code=403, detail=WEBAPP_DETAIL_SUBSCRIPTION_GROUPS_REQUIRED)
     ok = await remove_group_member(session, trainer_id, group_id, client_id)
     if not ok:
         raise HTTPException(status_code=404, detail="Not found")
@@ -473,7 +474,7 @@ async def post_approve_join_request(
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     if not await trainer_has_groups_access(session, trainer_id):
-        raise HTTPException(status_code=403, detail="Subscription module required: groups")
+        raise HTTPException(status_code=403, detail=WEBAPP_DETAIL_SUBSCRIPTION_GROUPS_REQUIRED)
     ok = await approve_join_request(session, trainer_id, group_id, request_id)
     if not ok:
         raise HTTPException(status_code=400, detail="Не удалось подтвердить")
@@ -496,7 +497,7 @@ async def post_reject_join_request(
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     if not await trainer_has_groups_access(session, trainer_id):
-        raise HTTPException(status_code=403, detail="Subscription module required: groups")
+        raise HTTPException(status_code=403, detail=WEBAPP_DETAIL_SUBSCRIPTION_GROUPS_REQUIRED)
     ok = await reject_join_request(session, trainer_id, group_id, request_id)
     if not ok:
         raise HTTPException(status_code=400, detail="Не удалось отклонить")
