@@ -363,6 +363,7 @@ async def create_booking(
     strict_service_price_variant: bool = False,
     *,
     allow_overbook: bool = False,
+    is_sandbox: bool = False,
 ) -> tuple[int | None, tuple[bool, bool]]:
     """
     Create booking: insert row; slot becomes 'booked' only when pending+confirmed count reaches capacity.
@@ -370,6 +371,7 @@ async def create_booking(
     Status semantics:
     - Client-initiated bookings start as 'pending' (trainer should confirm/decline).
     - Trainer-initiated bookings (created_by_trainer=True) start as 'confirmed'.
+    is_sandbox=True: onboarding demo booking — excluded from stats, revenue, and first-booking milestones.
 
     If client_request_id is set, link booking to that request and archive the request.
     When created_by_trainer=True and client_request_id is set, leave client_notified_trainer_booked_at
@@ -486,10 +488,12 @@ async def create_booking(
             text("""
                 INSERT INTO bookings (
                     slot_id, trainer_id, client_id, service_id, client_comment, client_request_id,
-                    status, arena_id, service_price_variant_id, booking_price_cents, price_tier_kind
+                    status, arena_id, service_price_variant_id, booking_price_cents, price_tier_kind,
+                    is_sandbox
                 )
                 VALUES (
-                    :sid, :tid, :cid, :svc_id, :comment, :req_id, :status, :arena_id, :vvid, :bpc, :ptk
+                    :sid, :tid, :cid, :svc_id, :comment, :req_id, :status, :arena_id, :vvid, :bpc, :ptk,
+                    :is_sandbox
                 )
                 RETURNING id
             """),
@@ -505,6 +509,7 @@ async def create_booking(
                 "vvid": variant_id_resolved,
                 "bpc": booking_price_cents,
                 "ptk": price_tier_kind,
+                "is_sandbox": is_sandbox,
             },
         )
         (booking_id,) = r.fetchone()
@@ -541,7 +546,7 @@ async def create_booking(
     await session.commit()
     # Client catalog caches GET /client/slots; pending bookings still use status=booked on slot.
     mile_flags: tuple[bool, bool] = (False, False)
-    if created_by_trainer:
+    if created_by_trainer and not is_sandbox:
         ms, tip = await try_claim_first_booking_milestones(session, trainer_id)
         if ms or tip:
             await session.commit()
@@ -561,6 +566,7 @@ async def create_trainer_quick_booking(
     *,
     arena_id: int | None = None,
     service_price_variant_id: int | None = None,
+    is_sandbox: bool = False,
 ) -> tuple[int, int, bool, bool] | None:
     """
     Create an individual slot at date/start_minutes (15 min grid) if needed, then a trainer-initiated booking.
@@ -587,6 +593,7 @@ async def create_trainer_quick_booking(
             service_price_variant_id=service_price_variant_id,
             strict_service_price_variant=False,
             allow_overbook=False,
+            is_sandbox=is_sandbox,
         )
     except ServicePriceVariantRequired:
         await session.rollback()

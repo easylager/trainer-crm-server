@@ -1682,12 +1682,6 @@
       padding-left: 56px;
       font-variant-numeric: tabular-nums;
     }
-    #screenBookingForm .catalog-book-phone-hint {
-      font-size: 12px;
-      color: var(--tg-theme-hint-color);
-      margin: -4px 0 0;
-      line-height: 1.35;
-    }
     .booking-slot-label { font-size: 15px; margin-bottom: 12px; color: var(--tg-theme-hint-color); }
     .booking-service-line {
       font-size: 15px;

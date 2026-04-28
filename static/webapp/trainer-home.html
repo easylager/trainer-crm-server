@@ -51,9 +51,9 @@
     })();
   </script>
   <!-- Bump ?v= when mini-app-trainer-hub.css changes (immutable cache on /webapp/…). -->
-  <link rel="stylesheet" href="mini-app-trainer-hub.css?v=20260535" />
+  <link rel="stylesheet" href="mini-app-trainer-hub.css?v=20260540" />
   <!-- Early download of main hub script (defer runs at end of body); improves time-to-interactive vs. discover-at-bottom. -->
-  <link rel="preload" href="trainer-home-main.js?v=20260534" as="script" />
+  <link rel="preload" href="trainer-home-main.js?v=20260540" as="script" />
 
 </head>
 <body class="hub-body">
@@ -115,12 +115,34 @@
         <li class="onboarding-step" id="onboardingStepBooking">
           <span class="onboarding-step-icon" id="onboardingIconBooking">2</span>
           <div class="onboarding-step-body">
-            <div class="onboarding-step-name">Тестовая запись</div>
-            <p class="onboarding-step-hint" id="onboardingHintBooking">Посмотри, как работает система.</p>
+            <div class="onboarding-step-name">Первая запись</div>
+            <p class="onboarding-step-hint" id="onboardingHintBooking">Посмотрите, как работает расписание, клиент и напоминания.</p>
+            <!-- Two-path CTAs: shown only while step is pending; replaced by disabled «Готово» when done -->
+            <div class="onboarding-step-ctas" id="onboardingBookingCtas">
+              <button type="button" class="onboarding-step-cta onboarding-step-cta--primary" id="onboardingCtaBookingReal">Записать реального клиента</button>
+              <button type="button" class="onboarding-step-cta onboarding-step-cta--sandbox" id="onboardingCtaBookingSandbox">Попробовать на примере</button>
+            </div>
+            <!-- Replaces the above when step is done (JS toggles visibility) -->
+            <button type="button" class="onboarding-step-cta" id="onboardingCtaBookingDone" style="display:none;" disabled>Готово</button>
           </div>
-          <button type="button" class="onboarding-step-cta" id="onboardingCtaBooking">Записать клиента</button>
         </li>
       </ol>
+    </div>
+
+    <!-- Sandbox success panel: shown after «Попробовать на примере» creates a demo booking -->
+    <div id="hubSandboxSuccess" class="hub-sandbox-success" hidden>
+      <div class="hub-sandbox-success__head">
+        <span class="hub-sandbox-success__icon" aria-hidden="true">✓</span>
+        <span class="hub-sandbox-success__title">Пробная запись создана</span>
+      </div>
+      <p class="hub-sandbox-success__hint">
+        Посмотрите, как выглядит занятие в расписании. Данные не влияют на статистику.<br>
+        Попробуйте также <strong>раздел «Расписание»</strong> — там вы увидите эту запись.
+      </p>
+      <div class="hub-sandbox-success__actions">
+        <button type="button" class="hub-sandbox-success__btn-delete" id="hubSandboxDeleteBtn">Удалить эту запись</button>
+        <button type="button" class="hub-sandbox-success__btn-keep" id="hubSandboxKeepBtn">Оставить как пример</button>
+      </div>
     </div>
 
     <!--
@@ -634,6 +656,6 @@
   <script src="mini-app-trainer-gate.js"></script>
   <script src="mini-app-trainer-celebration.js"></script>
   <!-- Bump ?v= when trainer-home-main.js changes (immutable cache on /webapp/…). -->
-  <script defer src="trainer-home-main.js?v=20260534"></script>
+  <script defer src="trainer-home-main.js?v=20260540"></script>
 </body>
 </html>

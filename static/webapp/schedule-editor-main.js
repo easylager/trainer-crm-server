@@ -82,6 +82,12 @@
 
       const DAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 
+      /**
+       * Booking detail from a multi-client group slot (`state.bookingDetailReturn` is `group` or `hub_group`):
+       * omit reschedule, cancel, and regular-client actions. Set to false to show them again.
+       */
+      const SCHEDULE_EDITOR_HIDE_GROUP_CONTEXT_BOOKING_ACTIONS = true;
+
       const BD_ICONS = {
         service: '<svg class="bd-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><path d="M3.27 6.96L12 12.01l8.73-5.05"/></svg>',
         session: '<svg class="bd-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/></svg>',
@@ -1154,13 +1160,17 @@
           var canCancelBooking = stRaw === 'confirmed' && !bookingEnded;
           var tid = b.client_telegram_id;
           var canDmUsername = !!(b.client_telegram_username || '').replace(/^@/, '').trim();
+          var bookingDetailFromGroupSlot =
+            state.bookingDetailReturn === 'group' || state.bookingDetailReturn === 'hub_group';
+          var suppressGroupSlotBookingActions =
+            SCHEDULE_EDITOR_HIDE_GROUP_CONTEXT_BOOKING_ACTIONS && bookingDetailFromGroupSlot;
 
           var primaryActions = [];
           var extraActions = [];
           if (pending) {
             primaryActions.push({ cls: 'bd-btn--confirm', action: 'confirm', icon: BD_ICONS.check, label: 'Подтвердить' });
             primaryActions.push({ cls: 'bd-btn--decline', action: 'decline', icon: BD_ICONS.xCircle, label: 'Отклонить' });
-          } else if (canCancelBooking) {
+          } else if (canCancelBooking && !suppressGroupSlotBookingActions) {
             primaryActions.push({ cls: 'bd-btn--secondary', action: 'reschedule', icon: BD_ICONS.session, label: 'Перенести запись' });
             primaryActions.push({ cls: 'bd-btn--outline-danger', action: 'cancel', icon: BD_ICONS.cancelOutline, label: 'Отменить запись' });
           }
@@ -1182,7 +1192,7 @@
               extraActions.push({ cls: 'bd-btn--surface', action: 'client_problem', icon: BD_ICONS.alert, label: probBtnLabel });
             }
           }
-          if (!completed) {
+          if (!completed && !suppressGroupSlotBookingActions) {
             if (b.recurring_id) {
               extraActions.push({
                 cls: 'bd-btn--soft',
@@ -2422,10 +2432,9 @@
       }
 
       /**
-       * Empty calendar: lead with what to do next; past slots = one short line (toggle is above).
+       * Empty calendar: lead with what to do next (past-week toggle stays in toolbar above).
        */
-      function buildCalendarEmptyStateHtml(hiddenPastN, slotFilter, showPastThisWeek) {
-        var onlyPastHidden = slotFilter === 'all' && hiddenPastN > 0 && !showPastThisWeek;
+      function buildCalendarEmptyStateHtml(slotFilter) {
         var title = 'Запланируйте окна на эту неделю';
         var hint =
           'Добавьте слоты кнопкой выше или задайте повтор во вкладке «Шаблон недели» — так неделя заполняется быстрее.';
@@ -2444,14 +2453,6 @@
           '<p class="calendar-empty-state__hint">' +
           escapeHtml(hint) +
           '</p>';
-        if (onlyPastHidden) {
-          html +=
-            '<p class="calendar-empty-state__past">' +
-            escapeHtml(
-              'Прошлые слоты этой недели скрыты — при необходимости разверните список кнопкой выше.'
-            ) +
-            '</p>';
-        }
         html += '</div>';
         return html;
       }
@@ -3237,13 +3238,8 @@
         });
         const days = Object.keys(byDay).sort();
         const content = document.getElementById('calendarContent');
-        var hiddenPastN = (!entirePast && !state.showPastThisWeek) ? countPastHiddenSlots(state.slots) : 0;
         if (days.length === 0) {
-          content.innerHTML = buildCalendarEmptyStateHtml(
-            hiddenPastN,
-            state.slotFilter,
-            state.showPastThisWeek
-          );
+          content.innerHTML = buildCalendarEmptyStateHtml(state.slotFilter);
           updatePastRevealChrome();
           return;
         }
@@ -3352,11 +3348,7 @@
           html += '</div>';
         });
         if (!html) {
-          content.innerHTML = buildCalendarEmptyStateHtml(
-            hiddenPastN,
-            state.slotFilter,
-            state.showPastThisWeek
-          );
+          content.innerHTML = buildCalendarEmptyStateHtml(state.slotFilter);
           updatePastRevealChrome();
           return;
         }

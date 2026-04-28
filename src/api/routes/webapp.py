@@ -5306,6 +5306,94 @@ async def post_trainer_booking_quick(
     }
 
 
+class TrainerSandboxBookingBody(BaseModel):
+    """Onboarding sandbox: one-field body for demo quick-booking (no client selection needed)."""
+    slot_date: str
+    start_time: str
+    duration_minutes: int = 45
+
+
+@router.post("/trainer/onboarding/sandbox-booking")
+async def post_trainer_onboarding_sandbox_booking(
+    body: TrainerSandboxBookingBody,
+    init_data: str | None = Query(None),
+    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    session: AsyncSession = Depends(get_session),
+):
+    """
+    Create a sandbox (demo) booking for onboarding TTV step 2.
+    Auto-creates or reuses a phantom client per trainer — never triggers milestone or stats.
+    The trainer can delete the booking afterward via the normal cancel endpoint.
+    """
+    raw = init_data or x_telegram_init_data
+    if not raw:
+        raise HTTPException(status_code=401, detail="Missing init data")
+    telegram_id = _trainer_telegram_id(raw)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+    if not await trainer_has_crm_access(session, trainer_id):
+        raise HTTPException(status_code=403, detail=WEBAPP_DETAIL_SUBSCRIPTION_CRM_REQUIRED)
+    try:
+        slot_date = date.fromisoformat(body.slot_date)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid slot_date") from None
+    try:
+        start_minutes = next(iter(_hhmm_strings_to_minutes([body.start_time.strip()])))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    # Idempotent sandbox client: one per trainer, identified by a deterministic phantom phone.
+    sandbox_phone = f"+37500{trainer_id:07d}"
+    r_c = await session.execute(
+        text("SELECT id FROM clients WHERE phone_normalized = :p"),
+        {"p": sandbox_phone},
+    )
+    row_c = r_c.fetchone()
+    if row_c:
+        client_id = row_c[0]
+    else:
+        r_new = await session.execute(
+            text(
+                "INSERT INTO clients (phone, phone_normalized, first_name, last_name)"
+                " VALUES (:p, :p, :fn, :ln) RETURNING id"
+            ),
+            {"p": sandbox_phone, "fn": "Пример", "ln": "К."},
+        )
+        client_id = r_new.fetchone()[0]
+    await session.commit()
+
+    r_svc = await session.execute(
+        text("SELECT service_id FROM trainer_services WHERE trainer_id = :tid LIMIT 1"),
+        {"tid": trainer_id},
+    )
+    row_svc = r_svc.fetchone()
+    if not row_svc:
+        raise HTTPException(
+            status_code=400,
+            detail="Добавьте хотя бы одну услугу в профиле, чтобы сделать пробную запись.",
+        )
+    service_id = row_svc[0]
+
+    try:
+        result = await create_trainer_quick_booking(
+            session,
+            trainer_id=trainer_id,
+            slot_date=slot_date,
+            start_minutes=start_minutes,
+            duration_minutes=body.duration_minutes,
+            client_id=client_id,
+            service_id=service_id,
+            is_sandbox=True,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    if result is None:
+        raise HTTPException(status_code=400, detail="Не удалось создать пробную запись")
+    booking_id, slot_id, _, _ = result
+    return {"success": True, "booking_id": booking_id, "slot_id": slot_id}
+
+
 @router.post("/trainer/bookings/{booking_id:int}/make_regular")
 async def post_trainer_booking_make_regular(
     booking_id: int,

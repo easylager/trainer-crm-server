@@ -247,12 +247,6 @@
       padding-left: 58px;
       font-variant-numeric: tabular-nums;
     }
-    .book-phone-field-hint {
-      font-size: 12px;
-      color: var(--tg-theme-hint-color);
-      margin: -12px 0 16px;
-      line-height: 1.35;
-    }
     .price-tier-radios label {
       display: flex;
       align-items: center;
@@ -486,9 +480,8 @@
       <label for="phone">Телефон *</label>
       <div class="book-phone-input-wrap">
         <span class="book-phone-prefix" aria-hidden="true">+375</span>
-        <input type="tel" id="phone" class="book-phone-input" placeholder="29 123-45-67" autocomplete="tel" inputmode="numeric" maxlength="14" aria-describedby="bookPhoneHint" />
+        <input type="tel" id="phone" class="book-phone-input" placeholder="29 123-45-67" autocomplete="tel" inputmode="numeric" maxlength="14" />
       </div>
-      <p class="book-phone-field-hint" id="bookPhoneHint">Код страны уже указан — введите 9 цифр: XX XXX-XX-XX</p>
     </div>
     <div class="form-block">
       <label for="comment">Комментарий (необязательно)</label>

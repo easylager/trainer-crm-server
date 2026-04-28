@@ -2158,6 +2158,91 @@
       background: color-mix(in srgb, var(--tg-theme-secondary-bg-color) 92%, transparent);
       color: color-mix(in srgb, var(--tg-theme-text-color) 55%, var(--tg-theme-hint-color));
     }
+    /* Two-CTA layout for step 2 (real + sandbox paths) */
+    .onboarding-step-ctas {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      margin-top: 8px;
+    }
+    .onboarding-step-ctas .onboarding-step-cta {
+      flex-shrink: unset;
+      align-self: stretch;
+      text-align: center;
+    }
+    .onboarding-step-cta--sandbox {
+      border-color: rgba(128, 128, 128, 0.25) !important;
+      background: color-mix(in srgb, var(--tg-theme-secondary-bg-color) 94%, transparent) !important;
+      color: var(--tg-theme-hint-color) !important;
+      font-weight: 500 !important;
+    }
+    /* Sandbox success panel — persistent inline card below onboarding strip */
+    .hub-sandbox-success {
+      background: color-mix(in srgb, var(--app-success) 10%, var(--tg-theme-bg-color));
+      border: 1px solid color-mix(in srgb, var(--app-success) 30%, transparent);
+      border-radius: 14px;
+      padding: 12px 14px 14px;
+      margin-bottom: 12px;
+    }
+    .hub-sandbox-success__head {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      margin-bottom: 5px;
+    }
+    .hub-sandbox-success__icon {
+      font-size: 18px;
+      line-height: 1;
+    }
+    .hub-sandbox-success__title {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--tg-theme-text-color);
+    }
+    .hub-sandbox-success__hint {
+      font-size: 12px;
+      color: var(--tg-theme-hint-color);
+      margin: 0 0 12px;
+      line-height: 1.45;
+    }
+    .hub-sandbox-success__actions {
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+    }
+    .hub-sandbox-success__btn-delete {
+      display: block;
+      width: 100%;
+      padding: 9px 14px;
+      border-radius: 11px;
+      border: 1.5px solid color-mix(in srgb, var(--app-danger, #e03c3c) 55%, transparent);
+      background: color-mix(in srgb, var(--app-danger, #e03c3c) 8%, var(--tg-theme-bg-color));
+      font-size: 13px;
+      font-weight: 600;
+      font-family: inherit;
+      color: var(--app-danger, #e03c3c);
+      cursor: pointer;
+      text-align: center;
+    }
+    .hub-sandbox-success__btn-keep {
+      display: block;
+      width: 100%;
+      padding: 7px 14px;
+      border: none;
+      background: none;
+      font-size: 12px;
+      font-weight: 500;
+      font-family: inherit;
+      color: var(--tg-theme-hint-color);
+      cursor: pointer;
+      text-align: center;
+    }
+    .hub-sandbox-success__btn-delete:disabled,
+    .hub-sandbox-success__btn-keep:disabled {
+      opacity: 0.5;
+      cursor: default;
+      pointer-events: none;
+    }
     .onboarding-faq-row {
       margin-top: 12px;
       padding-top: 10px;

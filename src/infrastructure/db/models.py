@@ -554,6 +554,8 @@ class Booking(Base):
     status: Mapped[str] = mapped_column(
         String(32), nullable=False, server_default="pending"
     )  # pending|confirmed|completed|cancelled|declined|no_show|payment_dispute
+    # Onboarding demo booking: excluded from stats, revenue, and first-booking milestones.
+    is_sandbox: Mapped[bool] = mapped_column(nullable=False, server_default="false")
 
     client: Mapped["Client"] = relationship(back_populates="bookings", lazy="raise")
 

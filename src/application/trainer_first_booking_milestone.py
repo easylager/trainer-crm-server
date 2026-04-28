@@ -29,6 +29,7 @@ async def try_claim_first_booking_milestones(session: AsyncSession, trainer_id: 
                 SELECT COUNT(*)::int FROM bookings b
                 WHERE b.trainer_id = :tid
                   AND b.status IN ('confirmed', 'completed')
+                  AND NOT b.is_sandbox
               ) = 1
             RETURNING tp.trainer_id
             """

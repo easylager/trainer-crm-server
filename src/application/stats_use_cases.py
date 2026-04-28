@@ -97,6 +97,7 @@ async def _trainer_calendar_revenue_total(
             LEFT JOIN pass_redemptions pr ON pr.booking_id = b.id
             LEFT JOIN certificate_booking_credits cbc ON cbc.booking_id = b.id
             WHERE b.trainer_id = :tid AND b.status = 'completed'
+              AND NOT b.is_sandbox
               AND s.status IN ('available', 'booked')
               AND s.slot_date >= :ds AND s.slot_date <= :de
             """
@@ -173,6 +174,7 @@ async def get_trainer_revenue_breakdown_for_range(
                 LEFT JOIN pass_redemptions pr ON pr.booking_id = b.id
                 LEFT JOIN certificate_booking_credits cbc ON cbc.booking_id = b.id
                 WHERE b.trainer_id = :tid AND b.status = 'completed'
+                  AND NOT b.is_sandbox
                   AND s.status IN ('available', 'booked')
                   AND s.slot_date >= :ds AND s.slot_date <= :de
             ) sub
@@ -265,6 +267,7 @@ async def get_trainer_stats(session: AsyncSession, trainer_id: int) -> dict:
             FROM bookings b
             JOIN slots s ON s.id = b.slot_id
             WHERE b.trainer_id = :tid AND b.status != 'cancelled'
+              AND NOT b.is_sandbox
               AND s.slot_date >= :ws AND s.slot_date <= :we
         """),
         {"tid": trainer_id, "ws": week_start, "we": week_end},
@@ -281,6 +284,7 @@ async def get_trainer_stats(session: AsyncSession, trainer_id: int) -> dict:
             FROM bookings b
             JOIN slots s ON s.id = b.slot_id
             WHERE b.trainer_id = :tid AND b.status != 'cancelled'
+              AND NOT b.is_sandbox
               AND s.slot_date >= :ms AND s.slot_date <= :me
         """),
         {"tid": trainer_id, "ms": month_start, "me": month_end},
@@ -310,10 +314,12 @@ async def get_trainer_stats(session: AsyncSession, trainer_id: int) -> dict:
             SELECT COUNT(DISTINCT b.client_id)
             FROM bookings b
             WHERE b.trainer_id = :tid
+              AND NOT b.is_sandbox
               AND b.created_at >= CURRENT_TIMESTAMP - INTERVAL '30 days'
               AND NOT EXISTS (
                   SELECT 1 FROM bookings b2
                   WHERE b2.trainer_id = b.trainer_id AND b2.client_id = b.client_id
+                    AND NOT b2.is_sandbox
                     AND b2.created_at < CURRENT_TIMESTAMP - INTERVAL '30 days'
               )
         """),
@@ -415,6 +421,7 @@ async def get_trainer_stats_dashboard(session: AsyncSession, trainer_id: int) ->
             FROM bookings b
             JOIN slots s ON s.id = b.slot_id
             WHERE b.trainer_id = :tid AND b.status != 'cancelled'
+              AND NOT b.is_sandbox
               AND s.slot_date >= :ws AND s.slot_date <= :we
         """),
         {"tid": trainer_id, "ws": last_week_start, "we": last_week_end},
@@ -428,6 +435,7 @@ async def get_trainer_stats_dashboard(session: AsyncSession, trainer_id: int) ->
             FROM bookings b
             JOIN slots s ON s.id = b.slot_id
             WHERE b.trainer_id = :tid AND b.status != 'cancelled'
+              AND NOT b.is_sandbox
               AND s.slot_date >= :ms AND s.slot_date <= :me
         """),
         {"tid": trainer_id, "ms": last_month_start, "me": last_month_end},
@@ -441,6 +449,7 @@ async def get_trainer_stats_dashboard(session: AsyncSession, trainer_id: int) ->
             FROM bookings b
             JOIN slots s ON s.id = b.slot_id
             WHERE b.trainer_id = :tid AND b.status != 'cancelled'
+              AND NOT b.is_sandbox
               AND s.slot_date >= :ws AND s.slot_date <= :we
             GROUP BY s.slot_date
             ORDER BY s.slot_date
@@ -471,6 +480,7 @@ async def get_trainer_stats_dashboard(session: AsyncSession, trainer_id: int) ->
                 FROM bookings b
                 JOIN slots s ON s.id = b.slot_id
                 WHERE b.trainer_id = :tid AND b.status != 'cancelled'
+                  AND NOT b.is_sandbox
                   AND s.slot_date >= :ws AND s.slot_date <= :we
             """),
             {"tid": trainer_id, "ws": ws, "we": we},
@@ -490,6 +500,7 @@ async def get_trainer_stats_dashboard(session: AsyncSession, trainer_id: int) ->
             FROM bookings b
             JOIN slots s ON s.id = b.slot_id
             WHERE b.trainer_id = :tid AND b.status != 'cancelled'
+              AND NOT b.is_sandbox
               AND s.slot_date >= :since
             GROUP BY EXTRACT(DOW FROM s.slot_date)
             ORDER BY COUNT(*) DESC
@@ -514,6 +525,7 @@ async def get_trainer_stats_dashboard(session: AsyncSession, trainer_id: int) ->
             FROM bookings b
             JOIN slots s ON s.id = b.slot_id
             WHERE b.trainer_id = :tid AND b.status != 'cancelled'
+              AND NOT b.is_sandbox
               AND s.slot_date >= :ms AND s.slot_date <= :me
         """),
         {"tid": trainer_id, "ms": month_start, "me": month_end},
@@ -543,6 +555,7 @@ async def get_trainer_stats_dashboard(session: AsyncSession, trainer_id: int) ->
                 LEFT JOIN pass_redemptions pr ON pr.booking_id = b.id
                 LEFT JOIN certificate_booking_credits cbc ON cbc.booking_id = b.id
                 WHERE b.trainer_id = :tid AND b.status = 'completed'
+                  AND NOT b.is_sandbox
                   AND s.status IN ('available', 'booked')
                   AND s.slot_date >= CURRENT_DATE - INTERVAL '30 days'
             )
@@ -648,6 +661,7 @@ async def get_trainer_stats_dashboard(session: AsyncSession, trainer_id: int) ->
             FROM bookings b
             JOIN slots s ON s.id = b.slot_id
             WHERE b.trainer_id = :tid AND b.status != 'cancelled'
+              AND NOT b.is_sandbox
               AND s.slot_date = CURRENT_DATE
             """
         ),
@@ -664,6 +678,7 @@ async def get_trainer_stats_dashboard(session: AsyncSession, trainer_id: int) ->
                 FROM bookings b
                 JOIN slots s ON s.id = b.slot_id
                 WHERE b.trainer_id = :tid AND b.status != 'cancelled'
+                  AND NOT b.is_sandbox
                   AND s.slot_date >= CURRENT_DATE - INTERVAL '30 days'
                 GROUP BY b.client_id
                 HAVING COUNT(*) >= 2
@@ -682,6 +697,7 @@ async def get_trainer_stats_dashboard(session: AsyncSession, trainer_id: int) ->
             FROM bookings b
             JOIN slots s ON s.id = b.slot_id
             WHERE b.trainer_id = :tid AND b.status != 'cancelled'
+              AND NOT b.is_sandbox
               AND s.slot_date >= CURRENT_DATE - INTERVAL '30 days'
             """
         ),
@@ -700,7 +716,7 @@ async def get_trainer_stats_dashboard(session: AsyncSession, trainer_id: int) ->
             FROM pass_redemptions pr
             JOIN bookings b ON b.id = pr.booking_id
             JOIN slots s ON s.id = b.slot_id
-            WHERE b.trainer_id = :tid
+            WHERE b.trainer_id = :tid AND NOT b.is_sandbox
               AND s.slot_date >= CURRENT_DATE - INTERVAL '30 days'
             """
         ),
@@ -717,7 +733,7 @@ async def get_trainer_stats_dashboard(session: AsyncSession, trainer_id: int) ->
                 COUNT(*) FILTER (WHERE b.status = 'cancelled') AS cx_cnt
             FROM bookings b
             JOIN slots s ON s.id = b.slot_id
-            WHERE b.trainer_id = :tid
+            WHERE b.trainer_id = :tid AND NOT b.is_sandbox
               AND s.slot_date >= CURRENT_DATE - INTERVAL '30 days'
             """
         ),
@@ -772,6 +788,7 @@ async def get_trainer_stats_dashboard(session: AsyncSession, trainer_id: int) ->
             FROM bookings b
             JOIN slots s ON s.id = b.slot_id
             WHERE b.trainer_id = :tid AND b.status = 'cancelled'
+              AND NOT b.is_sandbox
               AND s.slot_date >= CURRENT_DATE - INTERVAL '30 days'
             """
         ),
@@ -827,6 +844,7 @@ async def get_trainer_stats_dashboard(session: AsyncSession, trainer_id: int) ->
             LEFT JOIN certificate_booking_credits cbc ON cbc.booking_id = b.id
             WHERE b.trainer_id = :tid
               AND b.status = 'completed'
+              AND NOT b.is_sandbox
               AND s.status IN ('available', 'booked')
               AND s.slot_date >= CURRENT_DATE - INTERVAL '30 days'
             GROUP BY c.id, name, phone
@@ -930,7 +948,7 @@ async def get_platform_stats(session: AsyncSession) -> dict:
         text("""
             SELECT COUNT(*) FROM bookings b
             JOIN slots s ON s.id = b.slot_id
-            WHERE b.status != 'cancelled' AND s.slot_date = :d
+            WHERE b.status != 'cancelled' AND NOT b.is_sandbox AND s.slot_date = :d
         """),
         {"d": today},
     )
@@ -940,7 +958,7 @@ async def get_platform_stats(session: AsyncSession) -> dict:
         text("""
             SELECT COUNT(*) FROM bookings b
             JOIN slots s ON s.id = b.slot_id
-            WHERE b.status != 'cancelled'
+            WHERE b.status != 'cancelled' AND NOT b.is_sandbox
               AND s.slot_date >= :ws AND s.slot_date <= :we
               AND (s.slot_date + s.end_time) >= CURRENT_TIMESTAMP
         """),
@@ -960,7 +978,7 @@ async def get_platform_stats(session: AsyncSession) -> dict:
                 COUNT(*) FILTER (WHERE status != 'cancelled') AS non_cancelled,
                 COUNT(*) FILTER (WHERE status = 'cancelled') AS cancelled
             FROM bookings
-            WHERE created_at >= CURRENT_TIMESTAMP - INTERVAL '7 days'
+            WHERE NOT is_sandbox AND created_at >= CURRENT_TIMESTAMP - INTERVAL '7 days'
         """),
     )
     row = r.fetchone() or (0, 0)
@@ -1191,6 +1209,7 @@ async def get_platform_stats(session: AsyncSession) -> dict:
             SELECT COUNT(*) FROM bookings b
             JOIN slots s ON s.id = b.slot_id
             WHERE b.status IN ('confirmed', 'completed')
+              AND NOT b.is_sandbox
               AND s.slot_date >= :ws AND s.slot_date <= :we
             """
         ),
@@ -1204,6 +1223,7 @@ async def get_platform_stats(session: AsyncSession) -> dict:
             SELECT COUNT(*) FROM bookings b
             JOIN slots s ON s.id = b.slot_id
             WHERE b.status IN ('confirmed', 'completed')
+              AND NOT b.is_sandbox
               AND s.slot_date >= :ws AND s.slot_date <= :we
             """
         ),
@@ -1241,6 +1261,7 @@ async def get_platform_stats(session: AsyncSession) -> dict:
                 EXISTS(
                     SELECT 1 FROM bookings b
                     WHERE b.trainer_id = t.id AND b.status NOT IN ('cancelled', 'declined')
+                      AND NOT b.is_sandbox
                 ) AS has_booking,
                 t.client_invite_link_first_copied_at AS invite_copied_at,
                 ({_TRAINER_ACTIVATION_STAGE_CASE.strip()}) AS stage_key

@@ -116,13 +116,6 @@
       line-height: 1.45;
       color: var(--tg-theme-hint-color);
     }
-    .calendar-empty-state__past {
-      margin: 14px 0 0;
-      font-size: 13px;
-      line-height: 1.4;
-      color: var(--tg-theme-hint-color);
-      opacity: 0.92;
-    }
     @supports not (color: color-mix(in srgb, red, blue)) {
       .calendar-past-reveal {
         border-color: rgba(102, 102, 102, 0.35);
