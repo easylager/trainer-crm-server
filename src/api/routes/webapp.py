@@ -51,8 +51,10 @@ from src.application.booking_use_cases import (
     count_trainer_client_upcoming,
     create_booking,
     create_trainer_quick_booking,
+    compute_booking_reminder_schedule,
     explain_trainer_booking_failure,
     decline_booking,
+    format_reminder_plan_ru,
     generate_reminders_for_booking,
     get_booking_milestone_display_for_trainer,
     get_trainer_default_city_and_service,
@@ -370,23 +372,14 @@ def _build_client_reminder_plan_text_for_trainer(
     if slot_dt_local <= now_local:
         return "не ставим: слот уже начался или в прошлом"
 
-    def _is_quiet_hours(dt: datetime) -> bool:
-        return 0 <= dt.hour < 8
-
-    candidates: list[tuple[str, datetime]] = []
-    t24 = slot_dt_local - timedelta(hours=24)
-    t2 = slot_dt_local - timedelta(hours=2)
-    if now_local.date() < slot_date:
-        if t24 > now_local and t24 < slot_dt_local and not _is_quiet_hours(t24):
-            candidates.append(("за 24 ч", t24))
-        if t2 > now_local and t2 < slot_dt_local and not _is_quiet_hours(t2):
-            candidates.append(("за 2 ч", t2))
-    else:
-        if now_local < t2 and t2 < slot_dt_local and not _is_quiet_hours(t2):
-            candidates.append(("за 2 ч", t2))
-    if not candidates:
-        return "не планируются: поздняя запись или время попало в тихие часы"
-    return ", ".join(f"{dt.strftime('%d.%m %H:%M')} ({label})" for label, dt in candidates)
+    plan = compute_booking_reminder_schedule(
+        anchor_local=now_local,
+        slot_date=slot_date,
+        start_time=start_time,
+    )
+    if not plan:
+        return "не планируются: поздняя запись или нет окна до начала слота"
+    return format_reminder_plan_ru(plan)
 
 
 async def _send_trainer_post_booking_feedback(
@@ -400,6 +393,7 @@ async def _send_trainer_post_booking_feedback(
     start_time,
     first_booking_milestone: bool = False,
     share_catalog_tip: bool = False,
+    is_sandbox: bool = False,
 ) -> None:
     """Best-effort trainer post-action push after trainer-created booking from Mini App."""
     client_card = await get_trainer_client_for_card(session, trainer_id, client_id)
@@ -447,30 +441,37 @@ async def _send_trainer_post_booking_feedback(
             client_confirmation = "не применимо: у клиента не привязан Telegram"
             if client_tg_id:
                 client_confirmation = msg.TRAINER_CREATE_BOOKING_CLIENT_CONFIRMATION_QUEUED
-            buttons_row: list[InlineKeyboardButton] = [
-                InlineKeyboardButton(
-                    text=msg.TRAINER_BUTTON_ADD_BOOKING_NOTE,
-                    callback_data=f"{BOOKING_ADD_NOTE_PREFIX}{booking_id}",
-                )
+            keyboard_rows: list[list[InlineKeyboardButton]] = [
+                [
+                    InlineKeyboardButton(
+                        text=msg.TRAINER_BUTTON_ADD_BOOKING_NOTE,
+                        callback_data=f"{BOOKING_ADD_NOTE_PREFIX}{booking_id}",
+                    )
+                ]
             ]
             if not client_tg_id:
-                buttons_row.append(
-                    InlineKeyboardButton(
-                        text=msg.TRAINER_BUTTON_INVITE_CLIENT_TO_BOT,
-                        callback_data=f"{BOOKING_INVITE_CLIENT_PREFIX}{booking_id}",
-                    )
+                keyboard_rows.append(
+                    [
+                        InlineKeyboardButton(
+                            text=msg.TRAINER_BUTTON_INVITE_CLIENT_TO_BOT,
+                            callback_data=f"{BOOKING_INVITE_CLIENT_PREFIX}{booking_id}",
+                        )
+                    ]
                 )
+            done_text = msg.TRAINER_CREATE_BOOKING_DONE.format(
+                client_name=html.escape(client_name),
+                date=date_str,
+                day=day_str,
+                time=time_str,
+                reminder_plan=html.escape(reminder_plan),
+                client_confirmation=html.escape(client_confirmation),
+            )
+            if is_sandbox:
+                done_text += msg.TRAINER_CREATE_BOOKING_SANDBOX_CANCEL_HINT
             await trainer_bot.send_message(
                 chat_id=trainer_telegram_id,
-                text=msg.TRAINER_CREATE_BOOKING_DONE.format(
-                    client_name=html.escape(client_name),
-                    date=date_str,
-                    day=day_str,
-                    time=time_str,
-                    reminder_plan=html.escape(reminder_plan),
-                    client_confirmation=html.escape(client_confirmation),
-                ),
-                reply_markup=InlineKeyboardMarkup(inline_keyboard=[buttons_row]),
+                text=done_text,
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard_rows),
             )
         if share_catalog_tip:
             await send_trainer_share_catalog_tip_to_chat(
@@ -1463,6 +1464,7 @@ def _serialize_client_booking(b: dict) -> dict:
     end_time = b.get("end_time")
     ptk = normalize_price_tier_kind(b.get("price_tier_kind"))
     svc_name = (b.get("service_name") or "").strip()
+    pc = b.get("price_cents")
     return {
         "id": b["id"],
         "slot_id": b.get("slot_id"),
@@ -1484,6 +1486,7 @@ def _serialize_client_booking(b: dict) -> dict:
         "arena_name": b.get("arena_name"),
         "arena_address": b.get("arena_address"),
         "map_link": b.get("map_link"),
+        "price_cents": int(pc) if pc is not None else None,
     }
 
 
@@ -4497,6 +4500,8 @@ class TrainerQuickBookingBody(BaseModel):
     service_id: int
     arena_id: int | None = None
     service_price_variant_id: int | None = None
+    #: Onboarding «пример»: excluded from stats/milestones; no reminders / post-booking bot nudge.
+    is_sandbox: bool = False
 
 
 class TrainerCreateClientBody(BaseModel):
@@ -5271,6 +5276,7 @@ async def post_trainer_booking_quick(
             service_id=body.service_id,
             arena_id=body.arena_id,
             service_price_variant_id=body.service_price_variant_id,
+            is_sandbox=bool(body.is_sandbox),
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
@@ -5284,8 +5290,10 @@ async def post_trainer_booking_quick(
         raise HTTPException(status_code=400, detail="Не удалось создать запись")
     booking_id, slot_id, first_booking_milestone, share_catalog_tip = result
     slot = await get_slot(session, slot_id)
-    if slot and not is_slot_end_in_past_local(slot.get("slot_date"), slot.get("end_time")):
-        await generate_reminders_for_booking(session, booking_id)
+    if not body.is_sandbox:
+        if slot and not is_slot_end_in_past_local(slot.get("slot_date"), slot.get("end_time")):
+            await generate_reminders_for_booking(session, booking_id)
+    # Sandbox: no client reminders; trainer still gets the same first-booking celebration when applicable.
     await _send_trainer_post_booking_feedback(
         session=session,
         trainer_id=trainer_id,
@@ -5296,6 +5304,7 @@ async def post_trainer_booking_quick(
         start_time=(slot or {}).get("start_time"),
         first_booking_milestone=first_booking_milestone,
         share_catalog_tip=share_catalog_tip,
+        is_sandbox=bool(body.is_sandbox),
     )
     return {
         "success": True,
@@ -5322,7 +5331,9 @@ async def post_trainer_onboarding_sandbox_booking(
 ):
     """
     Create a sandbox (demo) booking for onboarding TTV step 2.
-    Auto-creates or reuses a phantom client per trainer — never triggers milestone or stats.
+    Auto-creates or reuses a phantom client per trainer. Excluded from stats/revenue like other
+    sandbox rows, but the trainer still receives the same first-booking Telegram celebration when
+    this is their first confirmed slot (onboarding aha moment).
     The trainer can delete the booking afterward via the normal cancel endpoint.
     """
     raw = init_data or x_telegram_init_data
@@ -5390,8 +5401,27 @@ async def post_trainer_onboarding_sandbox_booking(
         raise HTTPException(status_code=400, detail=str(e)) from e
     if result is None:
         raise HTTPException(status_code=400, detail="Не удалось создать пробную запись")
-    booking_id, slot_id, _, _ = result
-    return {"success": True, "booking_id": booking_id, "slot_id": slot_id}
+    booking_id, slot_id, first_booking_milestone, share_catalog_tip = result
+    slot = await get_slot(session, slot_id)
+    await _send_trainer_post_booking_feedback(
+        session=session,
+        trainer_id=trainer_id,
+        trainer_telegram_id=telegram_id,
+        booking_id=int(booking_id),
+        client_id=int(client_id),
+        slot_date=(slot or {}).get("slot_date"),
+        start_time=(slot or {}).get("start_time"),
+        first_booking_milestone=first_booking_milestone,
+        share_catalog_tip=share_catalog_tip,
+        is_sandbox=True,
+    )
+    return {
+        "success": True,
+        "booking_id": booking_id,
+        "slot_id": slot_id,
+        "first_booking_milestone": first_booking_milestone,
+        "share_catalog_tip": share_catalog_tip,
+    }
 
 
 @router.post("/trainer/bookings/{booking_id:int}/make_regular")

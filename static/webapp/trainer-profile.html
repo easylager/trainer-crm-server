@@ -24,8 +24,8 @@
       href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=optional"
     />
   </noscript>
-  <link rel="preload" href="trainer-profile-main.js?v=20260494" as="script" />
-  <link rel="stylesheet" href="mini-app-trainer-profile.css?v=20260537" />
+  <link rel="preload" href="trainer-profile-main.js?v=20260547" as="script" />
+  <link rel="stylesheet" href="mini-app-trainer-profile.css?v=20260547" />
   <link rel="stylesheet" href="mini-app-trainer-nav.css?v=20260419" />
 </head>
 <body>
@@ -202,7 +202,7 @@
           <span class="profile-collapse__title">Услуги и цены</span>
         </summary>
         <div class="card">
-          <p class="hint" style="margin: 0 0 14px;">Услуги и цены в BYN. «Важно для клиента» — по желанию: кнопки-пресеты собирают строку «В стоимость не входит: …» для каталога; можно дописать вручную.</p>
+          <p class="hint" style="margin: 0 0 14px;">Не переживайте, если что-то захотите уточнить позже — всегда можно дозаполнить или изменить в разделе «Профиль». 😊</p>
           <div id="servicesWrap"></div>
           <p class="field-error" id="err_services" role="status" hidden style="margin:14px 0 0;"></p>
         </div>
@@ -425,6 +425,7 @@
 
   <div class="save-bar">
     <p class="field-error save-bar-error" id="err_general" role="status" hidden></p>
+    <p class="hint save-bar-hint" id="saveBarHint" hidden></p>
     <button type="button" class="btn-save" id="btnSave" disabled>
       <span class="spinner"></span>
       <span class="btn-save-text">Сохранить изменения</span>
@@ -457,7 +458,10 @@
     </main>
     <footer class="ob-flow__footer">
       <button type="button" class="ob-flow__btn ob-flow__btn--ghost" id="obFlowBack" hidden>Назад</button>
-      <button type="button" class="ob-flow__btn ob-flow__btn--primary" id="obFlowNext">Далее</button>
+      <button type="button" class="ob-flow__btn ob-flow__btn--primary" id="obFlowNext">
+        <span class="ob-flow__btn-spinner" aria-hidden="true"></span>
+        <span class="ob-flow__btn-text" id="obFlowNextText">Далее</span>
+      </button>
     </footer>
   </div>
 
@@ -486,7 +490,7 @@
     </div>
   </div>
 
-  <script defer src="trainer-profile-main.js?v=20260494"></script>
+  <script defer src="trainer-profile-main.js?v=20260547"></script>
   <script defer src="mini-app-trainer-home.js"></script>
 </body>
 </html>

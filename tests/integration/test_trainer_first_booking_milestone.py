@@ -64,6 +64,36 @@ async def test_first_trainer_booking_claims_milestone_once(db_session: AsyncSess
 
 
 @pytest.mark.asyncio
+async def test_sandbox_first_trainer_booking_claims_milestone_once(db_session: AsyncSession) -> None:
+    """Onboarding demo booking should still unlock the one-time celebration flags."""
+    tomorrow = date.today() + timedelta(days=1)
+    trainer_id, slot_id, service_id = await _create_trainer_and_slot(
+        db_session, tomorrow, time(10, 0), time(11, 0)
+    )
+    client_id = await _create_client(db_session, unique_test_telegram_id())
+    bid, flags = await create_booking(
+        db_session,
+        slot_id=slot_id,
+        trainer_id=trainer_id,
+        client_id=client_id,
+        service_id=service_id,
+        created_by_trainer=True,
+        is_sandbox=True,
+    )
+    assert bid is not None
+    assert flags[0] is True and flags[1] is True
+
+    r = await db_session.execute(
+        text(
+            "SELECT first_booking_milestone_at, share_catalog_tip_sent_at FROM trainer_profiles WHERE trainer_id = :tid"
+        ),
+        {"tid": trainer_id},
+    )
+    row = r.fetchone()
+    assert row and row[0] is not None and row[1] is not None
+
+
+@pytest.mark.asyncio
 async def test_milestone_not_reclaimed_after_cancel_first_booking(db_session: AsyncSession) -> None:
     tomorrow = date.today() + timedelta(days=1)
     trainer_id, slot_id, service_id = await _create_trainer_and_slot(

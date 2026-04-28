@@ -51,12 +51,231 @@
     })();
   </script>
   <!-- Bump ?v= when mini-app-trainer-hub.css changes (immutable cache on /webapp/…). -->
-  <link rel="stylesheet" href="mini-app-trainer-hub.css?v=20260540" />
+  <link rel="stylesheet" href="mini-app-trainer-hub.css?v=20260545" />
   <!-- Early download of main hub script (defer runs at end of body); improves time-to-interactive vs. discover-at-bottom. -->
-  <link rel="preload" href="trainer-home-main.js?v=20260540" as="script" />
+  <link rel="preload" href="trainer-home-main.js?v=20260552" as="script" />
+
+  <!-- ─── Splash loader (inline to guarantee render before external CSS) ─── -->
+  <style>
+    #hubSplash {
+      position: fixed; inset: 0; z-index: 9999;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      background:
+        radial-gradient(ellipse 130% 80% at 50% 38%, rgba(247,166,0,.22) 0%, rgba(247,166,0,.08) 45%, transparent 68%),
+        var(--tg-theme-bg-color, #fffbec);
+      will-change: opacity, transform;
+    }
+    #hubSplash.hub-splash--out {
+      opacity: 0; transform: scale(1.05);
+      transition: opacity .38s ease-out, transform .42s ease-out;
+      pointer-events: none;
+    }
+    .hub-splash-ring-wrap {
+      position: relative; width: 128px; height: 128px;
+      display: flex; align-items: center; justify-content: center;
+      margin-bottom: 28px;
+    }
+    /* Three concentric rings — staggered breathe */
+    .hub-splash-ring {
+      position: absolute; border-radius: 50%;
+      will-change: transform, opacity;
+      animation: hub-splash-breathe 2.6s ease-in-out infinite;
+    }
+    .hub-splash-ring-1 {
+      inset: 0;
+      border: 1.5px solid rgba(247,166,0,.55);
+    }
+    .hub-splash-ring-2 {
+      inset: 13px;
+      border: 1.5px solid rgba(247,166,0,.35);
+      animation-delay: -.87s;
+    }
+    .hub-splash-ring-3 {
+      inset: 26px;
+      border: 1px solid rgba(247,166,0,.2);
+      animation-delay: -1.73s;
+    }
+    /* Amber glow in the center */
+    .hub-splash-ring-glow {
+      position: absolute; inset: 32px; border-radius: 50%;
+      background: radial-gradient(ellipse, rgba(247,166,0,.18) 0%, transparent 70%);
+      animation: hub-splash-breathe 2.6s ease-in-out infinite;
+      animation-delay: -1.3s;
+      will-change: opacity;
+    }
+    @keyframes hub-splash-breathe {
+      0%, 100% { transform: scale(1);    opacity: .65; }
+      50%       { transform: scale(1.09); opacity: 1;   }
+    }
+    /* Dumbbell icon — subtle float */
+    .hub-splash-icon-wrap {
+      position: relative; z-index: 1;
+      animation: hub-splash-float 3.2s ease-in-out infinite;
+      will-change: transform;
+    }
+    @keyframes hub-splash-float {
+      0%, 100% { transform: translateY(0);   }
+      50%       { transform: translateY(-5px); }
+    }
+    .hub-splash-icon {
+      display: block;
+      color: #f5a623;
+      /* amber glow shadow */
+      filter: drop-shadow(0 0 10px rgba(247,166,0,.45)) drop-shadow(0 2px 4px rgba(0,0,0,.12));
+    }
+    /* Text block fades up after 180ms */
+    .hub-splash-text {
+      text-align: center;
+      animation: hub-splash-text-in .52s cubic-bezier(.22,1,.36,1) .18s both;
+      will-change: opacity, transform;
+    }
+    .hub-splash-title {
+      font-family: var(--app-font-sans, 'DM Sans', system-ui, sans-serif);
+      font-size: 12px; font-weight: 700;
+      letter-spacing: .16em; text-transform: uppercase;
+      color: var(--tg-theme-text-color, #1a1a1a);
+      line-height: 1;
+    }
+    .hub-splash-sub {
+      font-family: var(--app-font-sans, 'DM Sans', system-ui, sans-serif);
+      font-size: 12px; font-weight: 400;
+      color: var(--tg-theme-hint-color, #666);
+      margin-top: 7px;
+      display: flex; align-items: center; justify-content: center; gap: 5px;
+      animation: hub-splash-text-in .52s cubic-bezier(.22,1,.36,1) .34s both;
+      will-change: opacity, transform;
+    }
+    /* Three loading dots */
+    .hub-splash-dot {
+      width: 4px; height: 4px; border-radius: 50%;
+      background: var(--tg-theme-hint-color, #999);
+      animation: hub-splash-dot-blink 1.2s ease-in-out infinite;
+      will-change: opacity;
+    }
+    .hub-splash-dot:nth-child(2) { animation-delay: .2s; }
+    .hub-splash-dot:nth-child(3) { animation-delay: .4s; }
+    @keyframes hub-splash-dot-blink {
+      0%, 100% { opacity: .25; } 50% { opacity: 1; }
+    }
+    @keyframes hub-splash-text-in {
+      from { opacity: 0; transform: translateY(8px); }
+      to   { opacity: 1; transform: translateY(0);   }
+    }
+    /* Progress bar at bottom */
+    .hub-splash-bar-wrap {
+      position: absolute; bottom: 0; left: 0; right: 0;
+      height: 3px;
+      background: rgba(128,128,128,.08);
+      overflow: hidden;
+    }
+    .hub-splash-bar {
+      height: 100%; transform-origin: left;
+      background: linear-gradient(90deg, rgba(247,166,0,.4) 0%, #f5a623 100%);
+      animation: hub-splash-bar-fill .72s cubic-bezier(.22,1,.36,1) both;
+      will-change: transform;
+    }
+    @keyframes hub-splash-bar-fill {
+      from { transform: scaleX(0); }
+      to   { transform: scaleX(1); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .hub-splash-ring, .hub-splash-ring-glow, .hub-splash-icon-wrap { animation: none !important; }
+      .hub-splash-dot { animation: none !important; opacity: .5; }
+      .hub-splash-bar { animation-duration: .01s !important; }
+    }
+  </style>
+
+  <!-- Splash timer: min display 680ms + data-ready gate, 4s safety timeout -->
+  <script>
+    (function() {
+      var _minDone = false, _dataReady = false;
+      function tryDismiss() {
+        if (!_minDone || !_dataReady) return;
+        var el = document.getElementById('hubSplash');
+        if (!el || el._dismissed) return;
+        el._dismissed = true;
+        el.classList.add('hub-splash--out');
+        setTimeout(function() { try { el.parentNode && el.parentNode.removeChild(el); } catch(e) {} }, 450);
+      }
+      window.__hubSplash = {
+        markMinDone:   function() { _minDone   = true; tryDismiss(); },
+        markDataReady: function() { _dataReady = true; tryDismiss(); },
+      };
+      setTimeout(function() { window.__hubSplash.markMinDone(); }, 680);
+      /* Safety net: force-close after 4s even if data fetch never resolves */
+      setTimeout(function() { _minDone = true; _dataReady = true; tryDismiss(); }, 4000);
+    })();
+  </script>
 
 </head>
 <body class="hub-body">
+
+  <!-- ─── Premium splash loader ─────────────────────────────────────────── -->
+  <!-- Renders immediately on parse; dismissed by __hubSplash.markDataReady() -->
+  <div id="hubSplash" aria-hidden="true" aria-label="Загрузка тренерского кабинета">
+    <!-- Three breathing rings -->
+    <div class="hub-splash-ring-wrap">
+      <div class="hub-splash-ring hub-splash-ring-1"></div>
+      <div class="hub-splash-ring hub-splash-ring-2"></div>
+      <div class="hub-splash-ring hub-splash-ring-3"></div>
+      <div class="hub-splash-ring-glow"></div>
+      <!-- Dumbbell icon — fitness-specific, floats -->
+      <div class="hub-splash-icon-wrap">
+        <svg class="hub-splash-icon" width="74" height="30" viewBox="0 0 74 30"
+             fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"
+             aria-hidden="true">
+          <!-- bar -->
+          <line x1="22" y1="15" x2="52" y2="15" stroke-width="3.5"/>
+          <!-- left collar -->
+          <rect x="19" y="10.5" width="3" height="9" rx="1" stroke-width="2"/>
+          <!-- right collar -->
+          <rect x="52" y="10.5" width="3" height="9" rx="1" stroke-width="2"/>
+          <!-- left weight plate -->
+          <rect x="5" y="6" width="14" height="18" rx="3.5" stroke-width="2"/>
+          <!-- right weight plate -->
+          <rect x="55" y="6" width="14" height="18" rx="3.5" stroke-width="2"/>
+        </svg>
+      </div>
+    </div>
+    <!-- Brand text -->
+    <div class="hub-splash-text">
+      <div class="hub-splash-title">Тренерский кабинет</div>
+      <div class="hub-splash-sub">
+        <span class="hub-splash-dot"></span>
+        <span class="hub-splash-dot"></span>
+        <span class="hub-splash-dot"></span>
+      </div>
+    </div>
+    <!-- Bottom progress bar -->
+    <div class="hub-splash-bar-wrap">
+      <div class="hub-splash-bar"></div>
+    </div>
+  </div>
+
+  <!--
+    Call tg.ready() here — splash HTML is already in DOM at this point.
+    Telegram hides its own loading indicator and reveals the WebApp,
+    which shows our custom splash immediately (no robot flicker).
+    tg.expand() also runs here so the app opens full-height right away.
+  -->
+  <script>
+    (function() {
+      try {
+        var tg = window.Telegram && window.Telegram.WebApp;
+        if (!tg) return;
+        if (typeof tg.ready   === 'function') tg.ready();
+        if (typeof tg.expand  === 'function') tg.expand();
+        /* Sync header/bg color with our splash bg — prevents color flash on app open */
+        var isDark = document.documentElement.classList.contains('hub-is-dark');
+        var bgHex  = isDark ? '#1c1c1c' : '#fffbec';
+        try { if (typeof tg.setHeaderColor    === 'function') tg.setHeaderColor(bgHex);    } catch(e) {}
+        try { if (typeof tg.setBackgroundColor === 'function') tg.setBackgroundColor(bgHex); } catch(e) {}
+        window.__tgReadyCalled = true;
+      } catch(e) {}
+    })();
+  </script>
+
   <script>
     /* Avoid one frame of hub content before group modal loads (return from schedule-editor). */
     (function () {
@@ -129,22 +348,6 @@
       </ol>
     </div>
 
-    <!-- Sandbox success panel: shown after «Попробовать на примере» creates a demo booking -->
-    <div id="hubSandboxSuccess" class="hub-sandbox-success" hidden>
-      <div class="hub-sandbox-success__head">
-        <span class="hub-sandbox-success__icon" aria-hidden="true">✓</span>
-        <span class="hub-sandbox-success__title">Пробная запись создана</span>
-      </div>
-      <p class="hub-sandbox-success__hint">
-        Посмотрите, как выглядит занятие в расписании. Данные не влияют на статистику.<br>
-        Попробуйте также <strong>раздел «Расписание»</strong> — там вы увидите эту запись.
-      </p>
-      <div class="hub-sandbox-success__actions">
-        <button type="button" class="hub-sandbox-success__btn-delete" id="hubSandboxDeleteBtn">Удалить эту запись</button>
-        <button type="button" class="hub-sandbox-success__btn-keep" id="hubSandboxKeepBtn">Оставить как пример</button>
-      </div>
-    </div>
-
     <!--
       Lead Mode banner: visible only when lifecycle.is_lead_mode === true.
       Loss framing on real numbers (signals_recap), recovery CTA opens trainer-subscription.
@@ -195,9 +398,10 @@
       aria-label="Загрузка подсказок"
     >
       <div class="hub-rhythm-hints-skel-card" aria-hidden="true">
-        <div class="hub-rhythm-hints-skel-lines">
+        <div class="hub-rhythm-hints-skel-lines hub-rhythm-hints-skel-lines--para">
           <div class="hub-rhythm-hints-skel-line hub-skel-shimmer"></div>
-          <div class="hub-rhythm-hints-skel-line hub-rhythm-hints-skel-line--short hub-skel-shimmer"></div>
+          <div class="hub-rhythm-hints-skel-line hub-rhythm-hints-skel-line--wrap2 hub-skel-shimmer"></div>
+          <div class="hub-rhythm-hints-skel-line hub-rhythm-hints-skel-line--wrap3 hub-skel-shimmer"></div>
         </div>
         <div class="hub-rhythm-hints-skel-actions">
           <div class="hub-rhythm-hints-skel-btn hub-skel-shimmer"></div>
@@ -205,9 +409,10 @@
         </div>
       </div>
       <div class="hub-rhythm-hints-skel-card" aria-hidden="true">
-        <div class="hub-rhythm-hints-skel-lines">
+        <div class="hub-rhythm-hints-skel-lines hub-rhythm-hints-skel-lines--para">
           <div class="hub-rhythm-hints-skel-line hub-skel-shimmer"></div>
-          <div class="hub-rhythm-hints-skel-line hub-rhythm-hints-skel-line--short hub-skel-shimmer"></div>
+          <div class="hub-rhythm-hints-skel-line hub-rhythm-hints-skel-line--wrap2 hub-skel-shimmer"></div>
+          <div class="hub-rhythm-hints-skel-line hub-rhythm-hints-skel-line--wrap3 hub-skel-shimmer"></div>
         </div>
         <div class="hub-rhythm-hints-skel-actions">
           <div class="hub-rhythm-hints-skel-btn hub-skel-shimmer"></div>
@@ -315,25 +520,37 @@
     <!-- Placeholder until deferred JS + bootstrap (same markup as buildHubBookingsSkeletonHtml). -->
     <div id="bookingsBlock">
       <div class="hub-bookings-skel" role="status" aria-busy="true" aria-label="Загрузка записей">
-        <div class="hub-skel-row">
-          <div class="hub-skel-line hub-skel-line--time hub-skel-shimmer" aria-hidden="true"></div>
-          <div style="flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center;">
-            <div class="hub-skel-line hub-skel-line--primary hub-skel-shimmer" aria-hidden="true"></div>
-            <div class="hub-skel-line hub-skel-line--secondary hub-skel-shimmer" aria-hidden="true"></div>
+        <div class="hub-skel-booking-row" aria-hidden="true">
+          <div class="hub-skel-booking-left">
+            <div class="hub-skel-booking-time hub-skel-shimmer"></div>
+            <div class="hub-skel-booking-venue hub-skel-shimmer"></div>
+            <div class="hub-skel-booking-client hub-skel-shimmer"></div>
+          </div>
+          <div class="hub-skel-booking-meta">
+            <div class="hub-skel-booking-badge hub-skel-shimmer"></div>
+            <div class="hub-skel-booking-msg hub-skel-shimmer"></div>
           </div>
         </div>
-        <div class="hub-skel-row">
-          <div class="hub-skel-line hub-skel-line--time hub-skel-shimmer" aria-hidden="true"></div>
-          <div style="flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center;">
-            <div class="hub-skel-line hub-skel-line--primary hub-skel-shimmer" aria-hidden="true"></div>
-            <div class="hub-skel-line hub-skel-line--secondary hub-skel-shimmer" aria-hidden="true"></div>
+        <div class="hub-skel-booking-row" aria-hidden="true">
+          <div class="hub-skel-booking-left">
+            <div class="hub-skel-booking-time hub-skel-shimmer"></div>
+            <div class="hub-skel-booking-venue hub-skel-shimmer"></div>
+            <div class="hub-skel-booking-client hub-skel-shimmer"></div>
+          </div>
+          <div class="hub-skel-booking-meta">
+            <div class="hub-skel-booking-badge hub-skel-shimmer"></div>
+            <div class="hub-skel-booking-msg hub-skel-shimmer"></div>
           </div>
         </div>
-        <div class="hub-skel-row">
-          <div class="hub-skel-line hub-skel-line--time hub-skel-shimmer" aria-hidden="true"></div>
-          <div style="flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center;">
-            <div class="hub-skel-line hub-skel-line--primary hub-skel-shimmer" aria-hidden="true"></div>
-            <div class="hub-skel-line hub-skel-line--secondary hub-skel-shimmer" aria-hidden="true"></div>
+        <div class="hub-skel-booking-row" aria-hidden="true">
+          <div class="hub-skel-booking-left">
+            <div class="hub-skel-booking-time hub-skel-shimmer"></div>
+            <div class="hub-skel-booking-venue hub-skel-shimmer"></div>
+            <div class="hub-skel-booking-client hub-skel-shimmer"></div>
+          </div>
+          <div class="hub-skel-booking-meta">
+            <div class="hub-skel-booking-badge hub-skel-shimmer"></div>
+            <div class="hub-skel-booking-msg hub-skel-shimmer"></div>
           </div>
         </div>
       </div>
@@ -540,9 +757,12 @@
       <div id="hubBookStepChoice" class="book-step">
         <p class="book-choice-lead">Кого записать на занятие?</p>
         <div id="hubBookChoiceSkel" class="hub-book-choice-skel" hidden aria-hidden="true">
+          <div class="hub-book-choice-skel-lead" aria-hidden="true">
+            <div class="hub-skel-line hub-book-choice-skel-lead-line hub-skel-shimmer"></div>
+            <div class="hub-skel-line hub-book-choice-skel-lead-line hub-book-choice-skel-lead-line--short hub-skel-shimmer"></div>
+          </div>
           <div class="hub-skel-line hub-book-choice-skel-eyebrow hub-skel-shimmer" aria-hidden="true"></div>
           <div class="hub-book-choice-skel-picks">
-            <div class="hub-skel-line hub-book-choice-skel-pill hub-skel-shimmer" aria-hidden="true"></div>
             <div class="hub-skel-line hub-book-choice-skel-pill hub-skel-shimmer" aria-hidden="true"></div>
           </div>
           <div class="hub-skel-line hub-book-choice-skel-eyebrow hub-book-choice-skel-eyebrow--narrow hub-skel-shimmer" aria-hidden="true"></div>
@@ -555,6 +775,20 @@
               <span class="hub-book-choice-skel-radio hub-skel-shimmer"></span>
               <span class="hub-skel-line hub-book-choice-skel-tier-line hub-skel-shimmer"></span>
             </div>
+          </div>
+          <!-- Sandbox: matches .book-modal-divider + .book-new-client (услуга и тариф уже выше). -->
+          <div class="hub-book-choice-skel-newcard" hidden aria-hidden="true">
+            <div class="hub-book-choice-skel-nc-label hub-skel-shimmer"></div>
+            <div class="hub-skel-line hub-book-choice-skel-field-eyebrow hub-skel-shimmer"></div>
+            <div class="hub-book-choice-skel-phone-row">
+              <span class="hub-book-choice-skel-phone-prefix hub-skel-shimmer"></span>
+              <span class="hub-book-choice-skel-phone-input hub-skel-shimmer"></span>
+            </div>
+            <div class="hub-skel-line hub-book-choice-skel-field-eyebrow hub-skel-shimmer"></div>
+            <div class="hub-skel-line hub-book-choice-skel-input hub-skel-shimmer"></div>
+            <div class="hub-skel-line hub-book-choice-skel-field-eyebrow hub-book-choice-skel-field-eyebrow--short hub-skel-shimmer"></div>
+            <div class="hub-skel-line hub-book-choice-skel-input hub-book-choice-skel-input--short hub-skel-shimmer"></div>
+            <div class="hub-book-choice-skel-submit hub-skel-shimmer"></div>
           </div>
         </div>
         <div id="hubBookServiceWrap" class="book-field-stack" style="display: none;">
@@ -594,7 +828,6 @@
             <span class="btn-book-option-arrow" aria-hidden="true">›</span>
           </button>
         </div>
-        <button type="button" class="btn-block btn-book-cancel" id="hubBookCancel">Отмена</button>
       </div>
       <div id="hubBookStepExisting" style="display: none;">
         <button type="button" class="book-modal-back" id="hubBookBackFromExisting">
@@ -628,6 +861,7 @@
           </div>
         </div>
       </div>
+      <button type="button" class="btn-block btn-book-cancel hub-book-slot-cancel-footer" id="hubBookCancel">Отмена</button>
     </div>
   </div>
 
@@ -653,9 +887,9 @@
     </div>
   </div>
 
-  <script src="mini-app-trainer-gate.js"></script>
+  <script src="mini-app-trainer-gate.js?v=20260548"></script>
   <script src="mini-app-trainer-celebration.js"></script>
   <!-- Bump ?v= when trainer-home-main.js changes (immutable cache on /webapp/…). -->
-  <script defer src="trainer-home-main.js?v=20260540"></script>
+  <script defer src="trainer-home-main.js?v=20260552"></script>
 </body>
 </html>

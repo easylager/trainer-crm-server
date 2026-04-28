@@ -1106,7 +1106,8 @@
     .book-new-client .hub-phone-input-wrap {
       display: flex;
       flex-direction: row;
-      align-items: baseline;
+      align-items: center;
+      gap: 4px;
       width: 100%;
       margin-bottom: 10px;
       padding: 11px 0 12px;
@@ -1128,8 +1129,9 @@
       letter-spacing: 0.02em;
     }
     .book-new-client .hub-phone-input-wrap .hub-phone-input {
-      flex: 1;
+      flex: 1 1 0;
       min-width: 0;
+      max-width: 100%;
       width: auto;
       margin: 0;
       padding: 0 14px 0 8px;
@@ -1154,7 +1156,8 @@
       font-weight: 600;
       opacity: 0.55;
     }
-    .book-new-client .input {
+    /* Do not apply full-width .input chrome to composite phone row — width:100% overlays +375 prefix in WebKit. */
+    .book-new-client .input:not(.hub-phone-input) {
       width: 100%;
       padding: 13px 14px;
       border-radius: 14px;
@@ -1166,7 +1169,7 @@
       box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.06);
     }
     .book-new-client .input:last-of-type { margin-bottom: 14px; }
-    .book-new-client .input::placeholder { color: var(--tg-theme-hint-color); opacity: 0.9; }
+    .book-new-client .input:not(.hub-phone-input)::placeholder { color: var(--tg-theme-hint-color); opacity: 0.9; }
     .book-phone-hint {
       font-size: 12px;
       line-height: 1.35;

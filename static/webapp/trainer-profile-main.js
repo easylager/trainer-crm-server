@@ -29,7 +29,30 @@
         return url;
       }
       function navigateToTrainerHubAfterMinimalTour() {
-        window.location.href = webappPageUrl('trainer-home?from=minimal_profile_done');
+        window.location.href = webappPageUrl('trainer-home');
+      }
+      /** Covers full profile UI while we close the block tour — avoids a flash of the «normal» profile before navigation. */
+      function showProfileToHubTransitionOverlay() {
+        var id = 'profileToHubTransitionOverlay';
+        var el = document.getElementById(id);
+        if (!el) {
+          el = document.createElement('div');
+          el.id = id;
+          el.className = 'profile-to-hub-transition';
+          el.setAttribute('role', 'status');
+          el.setAttribute('aria-live', 'polite');
+          el.innerHTML =
+            '<div class="profile-to-hub-transition__inner">' +
+            '<div class="profile-to-hub-transition__icon" aria-hidden="true">✓</div>' +
+            '<div class="profile-to-hub-transition__title">Базовый профиль готов</div>' +
+            '<p class="profile-to-hub-transition__hint">Сейчас откроется главная</p>' +
+            '</div>';
+          document.body.appendChild(el);
+        }
+        el.hidden = false;
+        requestAnimationFrame(function() {
+          el.classList.add('profile-to-hub-transition--visible');
+        });
       }
       /** Ensures fields inside <details.profile-collapse> are visible (focus / validation). */
       function openProfileCollapseContaining(el) {
@@ -785,7 +808,107 @@
         return true;
       }
 
+      /**
+       * Checked service: must have ≥1 tier checked, and every checked tier must have a valid BYN price.
+       * (Selecting two tariffs but filling only one must not pass.)
+       */
+      function domServicesPricesCoherent() {
+        var coherent = true;
+        state.servicesCatalog.forEach(function(s) {
+          var cb = document.getElementById('svc_' + s.id);
+          if (!cb || !cb.checked) return;
+          var anyTierChecked = false;
+          var everyCheckedHasValidPrice = true;
+          SERVICE_TIER_ORDER.forEach(function(code) {
+            var tcb = document.getElementById('svc_tier_' + s.id + '_' + code);
+            var pel = document.getElementById('price_tier_' + s.id + '_' + code);
+            if (tcb && tcb.checked) {
+              anyTierChecked = true;
+              if (!pel || pel.value.trim() === '') {
+                everyCheckedHasValidPrice = false;
+              } else {
+                var tn = Number(pel.value);
+                if (isNaN(tn) || tn < 0) everyCheckedHasValidPrice = false;
+              }
+            }
+          });
+          if (!anyTierChecked || !everyCheckedHasValidPrice) coherent = false;
+        });
+        return coherent;
+      }
+
+      var SERVICES_PRICE_HINT_RU =
+        'У каждого отмеченного тарифа должна быть цена в BYN. Лишний тариф снимите галочкой.';
+
+      /** Expand tiers and focus first missing price (or tariff) for onboarding clarity. */
+      function focusFirstMissingServicePrice() {
+        var found = false;
+        state.servicesCatalog.forEach(function(s) {
+          if (found) return;
+          var cb = document.getElementById('svc_' + s.id);
+          if (!cb || !cb.checked) return;
+          var tbody = document.getElementById('svc_tier_body_' + s.id);
+          var tbtn = document.getElementById('svc_tier_toggle_' + s.id);
+          if (tbody) {
+            tbody.hidden = false;
+            if (tbtn) {
+              tbtn.textContent = 'Свернуть ▴';
+              tbtn.setAttribute('aria-expanded', 'true');
+            }
+          }
+          var anyTier = false;
+          SERVICE_TIER_ORDER.forEach(function(code) {
+            var tcb = document.getElementById('svc_tier_' + s.id + '_' + code);
+            var pel = document.getElementById('price_tier_' + s.id + '_' + code);
+            if (tcb && tcb.checked && pel) {
+              var v = pel.value.trim();
+              var n = Number(v);
+              if (v !== '' && !isNaN(n) && n >= 0) anyTier = true;
+            }
+          });
+          var focusPel = null;
+          SERVICE_TIER_ORDER.forEach(function(code) {
+            if (focusPel) return;
+            var tcb = document.getElementById('svc_tier_' + s.id + '_' + code);
+            var pel = document.getElementById('price_tier_' + s.id + '_' + code);
+            if (tcb && tcb.checked && pel) {
+              var v2 = pel.value.trim();
+              var n2 = Number(v2);
+              if (v2 === '' || isNaN(n2) || n2 < 0) focusPel = pel;
+            }
+          });
+          if (focusPel) {
+            try {
+              focusPel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            } catch (eSc) {}
+            try {
+              focusPel.focus();
+            } catch (eF) {}
+            found = true;
+            return;
+          }
+          if (!anyTier) {
+            var tcbFocus = null;
+            SERVICE_TIER_ORDER.forEach(function(code) {
+              if (tcbFocus) return;
+              var tcb = document.getElementById('svc_tier_' + s.id + '_' + code);
+              if (tcb) tcbFocus = tcb;
+            });
+            if (tcbFocus) {
+              try {
+                tcbFocus.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              } catch (eSc2) {}
+              try {
+                tcbFocus.focus();
+              } catch (eF2) {}
+              found = true;
+            }
+          }
+        });
+      }
+
       function servicesPricesValid(parsed) {
+        if (!domServicesPricesCoherent()) return false;
         var services = parsed.services || [];
         var i;
         for (i = 0; i < services.length; i++) {
@@ -822,16 +945,22 @@
           if (!cb) return;
           var invalid = false;
           if (cb.checked) {
-            var anyTier = false;
+            var anyTierChecked = false;
+            var everyCheckedHasValidPrice = true;
             SERVICE_TIER_ORDER.forEach(function(code) {
               var tcb = document.getElementById('svc_tier_' + s.id + '_' + code);
               var pel = document.getElementById('price_tier_' + s.id + '_' + code);
-              if (tcb && tcb.checked && pel && pel.value.trim() !== '') {
-                var tn = Number(pel.value);
-                if (!isNaN(tn) && tn >= 0) anyTier = true;
+              if (tcb && tcb.checked) {
+                anyTierChecked = true;
+                if (!pel || pel.value.trim() === '') {
+                  everyCheckedHasValidPrice = false;
+                } else {
+                  var tn = Number(pel.value);
+                  if (isNaN(tn) || tn < 0) everyCheckedHasValidPrice = false;
+                }
               }
             });
-            if (!anyTier) invalid = true;
+            if (!anyTierChecked || !everyCheckedHasValidPrice) invalid = true;
           }
           if (grid) grid.classList.toggle('svc-tier-grid--error', invalid);
           if (tbody) {
@@ -857,8 +986,8 @@
               '.';
             errEl.hidden = false;
             openProfileCollapseContaining(errEl);
-          } else if (!svcOk && (parsed.services || []).length > 0) {
-            errEl.textContent = 'Для каждой выбранной услуги отметьте хотя бы один тариф и укажите цену.';
+          } else if (!svcOk) {
+            errEl.textContent = SERVICES_PRICE_HINT_RU;
             errEl.hidden = false;
             openProfileCollapseContaining(errEl);
           } else {
@@ -883,7 +1012,56 @@
         return true;
       }
 
-      /** Plain-language reason Save is disabled (tour «Дальше» when form invalid). */
+      /** Why Save is disabled: profile/tour copy + sticky bar after onboarding. */
+      function trainerProfileSaveBlockedExplanation() {
+        try {
+          var parsed = JSON.parse(readFormSnapshot());
+        } catch (e) {
+          return 'Проверьте форму.';
+        }
+        var pe = collectProfileFieldErrors(parsed);
+        if (pe.length) return pe[0][1];
+        if (!servicesPricesValid(parsed)) return SERVICES_PRICE_HINT_RU;
+        if (!serviceDescriptionsLengthOk(parsed)) {
+          return 'Сократите описание услуги или текст в блоке «Важно для клиента».';
+        }
+        if (parsed.arena_ids && parsed.arena_ids.length >= 2) {
+          if (!parsed.primary_arena_id || parsed.arena_ids.indexOf(parsed.primary_arena_id) < 0) {
+            return 'Несколько площадок — отметьте основную для онлайн-записи.';
+          }
+        }
+        return '';
+      }
+
+      /** When Save is inactive — explains «no changes», «tiers/prices», or first validation mismatch. */
+      function syncSaveBarHint() {
+        var hint = document.getElementById('saveBarHint');
+        var btn = document.getElementById('btnSave');
+        if (!hint || !btn) return;
+        if (!btn.disabled) {
+          hint.textContent = '';
+          hint.hidden = true;
+          return;
+        }
+        var dirty = false;
+        try {
+          dirty = state.snapshot !== null && readFormSnapshot() !== state.snapshot;
+        } catch (eD) {}
+        hint.hidden = false;
+        if (!dirty) {
+          if (!domServicesPricesCoherent()) {
+            hint.textContent =
+              'Откройте «Тарифы» у отмеченных услуг: нужен хотя бы один тариф с ценой в BYN (или снимите лишнюю услугу).';
+          } else {
+            hint.textContent = '';
+            hint.hidden = true;
+          }
+          return;
+        }
+        var sub = trainerProfileSaveBlockedExplanation();
+        hint.textContent = sub || 'Проверьте обязательные поля и вкладку «Настройки».';
+      }
+
       function profileBlockTourExplainSaveBlocked() {
         var fallback =
           'Заполните обязательные поля — затем нажмите «Сохранить и дальше».';
@@ -893,7 +1071,7 @@
           var pe = collectProfileFieldErrors(parsed);
           if (pe.length) return pe[0][1];
           if (!servicesPricesValid(parsed)) {
-            return 'Для отмеченных услуг выберите тариф и цену — без этого сохранить нельзя.';
+            return SERVICES_PRICE_HINT_RU;
           }
           if (!serviceDescriptionsLengthOk(parsed)) {
             return 'Сократите описание услуги или текст в блоке «Важно для клиента».';
@@ -927,7 +1105,7 @@
       function clientValidateProfile(parsed) {
         var errs = collectProfileFieldErrors(parsed);
         if (!servicesPricesValid(parsed)) {
-          errs.push(['services', 'Для каждой выбранной услуги отметьте хотя бы один тариф и укажите цену.']);
+          errs.push(['services', SERVICES_PRICE_HINT_RU]);
         }
         if (!serviceDescriptionsLengthOk(parsed)) {
           errs.push([
@@ -1320,6 +1498,7 @@
         syncServicesValidationUi();
         btn.disabled = !dirty || !isFormValidForSave();
         syncProfileBlockTourNextCta();
+        syncSaveBarHint();
       }
 
       function showMain() {
@@ -1455,6 +1634,16 @@
           if (vv.offsetTop) flow.style.top = vv.offsetTop + 'px';
           else flow.style.removeProperty('top');
         } catch (eT2) {}
+      }
+
+      var obFlowInsetDebounceT = null;
+      /** Coalesce keyboard/focus reflows — double rAF+timeout was shifting the footer mid-gesture (two taps). */
+      function scheduleProfileTourBarInsetSync() {
+        if (obFlowInsetDebounceT) clearTimeout(obFlowInsetDebounceT);
+        obFlowInsetDebounceT = setTimeout(function() {
+          obFlowInsetDebounceT = null;
+          syncProfileTourBarInset();
+        }, 100);
       }
 
       /**
@@ -1894,21 +2083,28 @@
         var stepKeys = profileBlockTourMissingStepKeys(rawKeys);
         if (stepKeys.length) state.profileBlockTourHubRedirectScheduled = false;
         if (!stepKeys.length) {
-          /* Все шаги выполнены — закрываем визард и ведём на хаб. */
+          /* Все шаги TTV закрыты — не показываем полный профиль: оверлей + popup, затем хаб. */
+          if (state.profileBlockTourHubRedirectScheduled) {
+            return;
+          }
+          state.profileBlockTourHubRedirectScheduled = true;
           state.profileBlockTourActive = false;
+          showProfileToHubTransitionOverlay();
           obFlowClose();
           syncProfileBlockTourNextCta();
-          showSaveToast(
-            'Готово',
-            'Минимальный профиль закрыт. Открываем главную, чтобы сделать первую запись.',
-            'success'
-          );
-          if (!state.profileBlockTourHubRedirectScheduled) {
-            state.profileBlockTourHubRedirectScheduled = true;
-            setTimeout(function() {
+          haptic('success');
+          /* Overlay already confirms success — no Telegram popup / hub toast duplicate. */
+          var hubNavCommitted = false;
+          function goHubOnce() {
+            if (hubNavCommitted) return;
+            hubNavCommitted = true;
+            try {
               navigateToTrainerHubAfterMinimalTour();
-            }, 900);
+            } catch (eNav) {
+              window.location.href = webappPageUrl('trainer-home');
+            }
           }
+          setTimeout(goHubOnce, 1050);
           return;
         }
         obFlowOpen();
@@ -1973,11 +2169,34 @@
       function syncProfileBlockTourNextCta() {
         var nx = document.getElementById('obFlowNext');
         if (!nx) return;
-        if (!state.profileBlockTourActive) {
-          nx.textContent = 'Далее';
+        if (nx.classList.contains('is-saving')) return;
+        var textEl = document.getElementById('obFlowNextText');
+        var label = 'Далее';
+        if (state.profileBlockTourActive) {
+          label = profileBlockTourNeedsSave() ? 'Сохранить и дальше' : 'Далее';
+        }
+        if (textEl) textEl.textContent = label;
+        else nx.textContent = label;
+      }
+
+      /** Tour footer CTA: spinner + «Сохраняем…» / «Загружаем…» while PATCH or bootstrap await. */
+      function setObFlowNextBusy(busy, mode) {
+        var nx = document.getElementById('obFlowNext');
+        if (!nx) return;
+        var textEl = document.getElementById('obFlowNextText');
+        if (!busy) {
+          nx.classList.remove('is-saving');
+          nx.removeAttribute('aria-busy');
+          nx.disabled = false;
+          syncProfileBlockTourNextCta();
           return;
         }
-        nx.textContent = profileBlockTourNeedsSave() ? 'Сохранить и дальше' : 'Далее';
+        nx.classList.add('is-saving');
+        nx.setAttribute('aria-busy', 'true');
+        nx.disabled = true;
+        if (textEl) {
+          textEl.textContent = mode === 'save' ? 'Сохраняем…' : 'Загружаем…';
+        }
       }
 
       function profileBlockTourClearAdvanceStash() {
@@ -2057,10 +2276,56 @@
       /**
        * «Дальше»: сохранить при наличии черновика, затем перейти к следующему блоку по порядку TTV;
        * если форма уже сохранена — только обновить с сервера и перейти, если текущий шаг закрыт.
+       *
+       * Шаг «Услуги и цены»: одно «Далее» после ввода в поле часто срабатывало как «со второго раза» —
+       * снимок формы и domServicesPricesCoherent отставали от UI до blur или до следующего тика. Blur + setTimeout(0).
        */
       function profileBlockTourOnNextClick() {
         if (!state.profileBlockTourActive) return;
+        var nxGate = document.getElementById('obFlowNext');
+        if (nxGate && nxGate.classList.contains('is-saving')) return;
+        var flow = document.getElementById('onboardingFlow');
+        var prevHead = profileBlockTourCanonicalFirstMissing();
+        /* Всегда откладываем на macrotask: цены/описание могут догружаться в снимок после blur или ввода. */
+        if (prevHead === 'services' && flow && !flow.hidden) {
+          var ae0 = document.activeElement;
+          if (ae0 && ae0.closest && ae0.closest('#onboardingFlow')) {
+            var tg0 = ae0.tagName;
+            if (tg0 === 'INPUT' || tg0 === 'TEXTAREA' || tg0 === 'SELECT') {
+              try {
+                ae0.blur();
+              } catch (eBl) {}
+            }
+          }
+          setTimeout(profileBlockTourOnNextClickBody, 0);
+          return;
+        }
+        profileBlockTourOnNextClickBody();
+      }
+
+      function profileBlockTourOnNextClickBody() {
+        if (!state.profileBlockTourActive) return;
+        var nxGate = document.getElementById('obFlowNext');
+        if (nxGate && nxGate.classList.contains('is-saving')) return;
         var prevKey = profileBlockTourCanonicalFirstMissing();
+        if (prevKey === 'services' && !domServicesPricesCoherent()) {
+          haptic('warning');
+          showSaveToast('Укажите цену', SERVICES_PRICE_HINT_RU, 'warning');
+          try {
+            syncServicesValidationUi();
+          } catch (eSync) {}
+          var esBlock = document.getElementById('err_services');
+          if (esBlock) {
+            esBlock.textContent = SERVICES_PRICE_HINT_RU;
+            esBlock.hidden = false;
+            openProfileCollapseContaining(esBlock);
+            try {
+              esBlock.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            } catch (eScr) {}
+          }
+          focusFirstMissingServicePrice();
+          return;
+        }
 
         var dirty = false;
         try {
@@ -2080,6 +2345,7 @@
           return;
         }
 
+        setObFlowNextBusy(true, 'fetch');
         profileBlockTourFetchBootstrapRefresh()
           .then(function() {
             if (!state.profileBlockTourActive) return;
@@ -2099,7 +2365,10 @@
             }
             profileBlockTourFocusAfterStep(prevKey, missing);
           })
-          .catch(function() {});
+          .catch(function() {})
+          .finally(function() {
+            setObFlowNextBusy(false);
+          });
       }
 
       /** After PATCH profile: advance tour focus (next block after stashed step, or first missing). */
@@ -2169,31 +2438,28 @@
       }
 
       /**
-       * Telegram / iOS WebView: первый тап по кнопке при фокусе в поле ввода часто уходит на blur
-       * и закрытие клавиатуры — синтетический click не приходит. pointerdown + preventDefault
-       * для touch/pen срабатывает сразу; debounce страхует от двойного вызова (touchend + click).
+       * Footer CTA in block tour: rely on a single trusted `click` + short debounce.
+       * Previous pointerdown + swallowNextClick could drop the next mouse click if a synthetic click
+       * never arrived after touch (hybrid devices, Telegram desktop) — felt like «кнопка со второго раза».
        */
       function bindProfileTourBarTap(el, handler) {
         if (!el || el.dataset.tourTapBound) return;
         el.dataset.tourTapBound = '1';
         var last = 0;
-        function run() {
-          var t = Date.now();
-          if (t - last < 420) return;
-          last = t;
-          handler();
-        }
-        el.addEventListener('click', function() {
-          run();
-        });
+        var debounceMs = 120;
         el.addEventListener(
-          'pointerdown',
+          'click',
           function(ev) {
-            if (!ev || ev.pointerType === 'mouse') return;
-            ev.preventDefault();
-            run();
+            var t = Date.now();
+            if (t - last < debounceMs) {
+              ev.preventDefault();
+              ev.stopPropagation();
+              return;
+            }
+            last = t;
+            handler();
           },
-          { passive: false }
+          false
         );
       }
 
@@ -2235,14 +2501,8 @@
             window.visualViewport.addEventListener('scroll', onFlowResize);
           }
           /* При каждом focusin/focusout пересчитать высоту — iOS показывает клавиатуру не мгновенно. */
-          flow.addEventListener('focusin', function() {
-            requestAnimationFrame(syncProfileTourBarInset);
-            setTimeout(syncProfileTourBarInset, 250);
-          });
-          flow.addEventListener('focusout', function() {
-            requestAnimationFrame(syncProfileTourBarInset);
-            setTimeout(syncProfileTourBarInset, 250);
-          });
+          flow.addEventListener('focusin', scheduleProfileTourBarInsetSync);
+          flow.addEventListener('focusout', scheduleProfileTourBarInsetSync);
         }
       }
 
@@ -3426,6 +3686,52 @@
         return null;
       }
 
+      /**
+       * New catalog service checked: copy tier toggles + BYN prices from another selected service
+       * so the row is not «empty» (Save stayed inactive: no diff in snapshot + incoherent tiers).
+       */
+      function primeNewServiceTiersFromPeers(serviceId) {
+        var anyTier = false;
+        SERVICE_TIER_ORDER.forEach(function(code) {
+          var tcb = document.getElementById('svc_tier_' + serviceId + '_' + code);
+          if (tcb && tcb.checked) anyTier = true;
+        });
+        if (anyTier) return;
+        var peerId = null;
+        state.servicesCatalog.forEach(function(s) {
+          if (peerId != null) return;
+          if (s.id === serviceId) return;
+          var scb = document.getElementById('svc_' + s.id);
+          if (!scb || !scb.checked) return;
+          var hasTier = false;
+          SERVICE_TIER_ORDER.forEach(function(code) {
+            var tc = document.getElementById('svc_tier_' + s.id + '_' + code);
+            var pl = document.getElementById('price_tier_' + s.id + '_' + code);
+            if (tc && tc.checked && pl && String(pl.value).trim() !== '') hasTier = true;
+          });
+          if (hasTier) peerId = s.id;
+        });
+        if (peerId == null) return;
+        SERVICE_TIER_ORDER.forEach(function(code) {
+          var ptcb = document.getElementById('svc_tier_' + peerId + '_' + code);
+          var ppel = document.getElementById('price_tier_' + peerId + '_' + code);
+          if (!ptcb || !ptcb.checked || !ppel || String(ppel.value).trim() === '') return;
+          var tcb = document.getElementById('svc_tier_' + serviceId + '_' + code);
+          var pel = document.getElementById('price_tier_' + serviceId + '_' + code);
+          if (!tcb || !pel) return;
+          tcb.checked = true;
+          pel.disabled = false;
+          pel.value = String(ppel.value).trim();
+        });
+        var tbody = document.getElementById('svc_tier_body_' + serviceId);
+        var tbtn = document.getElementById('svc_tier_toggle_' + serviceId);
+        if (tbody && tbtn) {
+          tbody.hidden = false;
+          tbtn.setAttribute('aria-expanded', 'true');
+          tbtn.textContent = 'Свернуть ▴';
+        }
+      }
+
       function renderServices() {
         var wrap = document.getElementById('servicesWrap');
         wrap.innerHTML = '';
@@ -3649,7 +3955,14 @@
           groupHint.textContent =
             'Если пусто — на группу действует та же цена, что в тарифах выше. Заполните, если за человека на групповом занятии нужна другая сумма.';
           var gRow = document.createElement('div');
-          gRow.className = 'svc-tier-row';
+          gRow.className = 'svc-tier-row svc-group-price-row';
+          /* Same 3-col grid as tariff rows — else the lone .tier-price-wrap sits in col1 and the block «прыгает». */
+          var gSpacer = document.createElement('span');
+          gSpacer.className = 'svc-tier-check-spacer';
+          gSpacer.setAttribute('aria-hidden', 'true');
+          var gMid = document.createElement('span');
+          gMid.className = 'tier-name svc-group-price-row__mid';
+          gMid.setAttribute('aria-hidden', 'true');
           var gpw = document.createElement('div');
           gpw.className = 'tier-price-wrap';
           var gInp = document.createElement('input');
@@ -3666,6 +3979,8 @@
           gsuf.textContent = 'BYN';
           gpw.appendChild(gInp);
           gpw.appendChild(gsuf);
+          gRow.appendChild(gSpacer);
+          gRow.appendChild(gMid);
           gRow.appendChild(gpw);
           groupWrap.appendChild(groupLab);
           groupWrap.appendChild(groupHint);
@@ -3746,6 +4061,7 @@
               });
               var pgeOn = document.getElementById('price_group_' + id);
               if (pgeOn) pgeOn.disabled = false;
+              primeNewServiceTiersFromPeers(id);
             }
             setDirty();
           });
@@ -4081,6 +4397,9 @@
         }
         btn.disabled = true;
         btn.classList.add('saving');
+        if (state.profileBlockTourActive) {
+          setObFlowNextBusy(true, 'save');
+        }
         var pr = parsed.profile;
         var body = {
           profile: {
@@ -4202,6 +4521,7 @@
           })
           .finally(function() {
             btn.classList.remove('saving');
+            setObFlowNextBusy(false);
             setDirty();
           });
       }

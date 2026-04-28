@@ -23,9 +23,17 @@ class CatalogRepository:
     async def list_services(self) -> list[dict[str, Any]]:
         """All services ordered by sort_order, then id."""
         r = await self._session.execute(
-            text("SELECT id, name, sort_order FROM services ORDER BY sort_order, id")
+            text("SELECT id, name, sort_order, client_summary FROM services ORDER BY sort_order, id")
         )
-        return [{"id": row[0], "name": row[1], "sort_order": row[2]} for row in r.fetchall()]
+        return [
+            {
+                "id": row[0],
+                "name": row[1],
+                "sort_order": row[2],
+                "client_summary": row[3],
+            }
+            for row in r.fetchall()
+        ]
 
     async def list_arenas(self, city_id: int) -> list[dict[str, Any]]:
         """Active arenas in a city with address and coords for map link; ordered by sort_order, id."""

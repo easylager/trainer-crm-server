@@ -245,6 +245,17 @@
       border-radius: 12px;
       background: var(--tg-theme-secondary-bg-color);
     }
+    /* Inline map link in booking detail rows */
+    a.bd-map-link {
+      display: inline-block;
+      color: var(--tg-theme-button-color);
+      font-weight: 600;
+      font-size: 15px;
+      line-height: 1.45;
+      text-decoration: none;
+      border-bottom: 1px solid color-mix(in srgb, var(--tg-theme-button-color) 40%, transparent);
+    }
+    a.bd-map-link:active { opacity: 0.82; }
   </style>
   <link rel="stylesheet" href="mini-app-client-nav.css" />
 </head>
@@ -294,6 +305,18 @@
             <div class="bd-row-value" id="detailVenue">—</div>
           </div>
         </div>
+        <div class="bd-row" id="detailMapRow" style="display: none;">
+          <svg class="bd-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+            <circle cx="12" cy="10" r="3"/>
+          </svg>
+          <div class="bd-row-text">
+            <div class="bd-row-label">Маршрут</div>
+            <div class="bd-row-value">
+              <a href="#" class="bd-map-link" id="detailMapLink">Показать на карте</a>
+            </div>
+          </div>
+        </div>
         <div class="bd-row">
           <svg class="bd-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="12" cy="12" r="10"/>
@@ -322,6 +345,17 @@
             <div class="bd-row-value" id="detailTierLabel">—</div>
           </div>
         </div>
+        <div class="bd-row" id="detailPriceRow" style="display: none;">
+          <svg class="bd-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="2" y="6" width="20" height="12" rx="2"/>
+            <circle cx="12" cy="12" r="2"/>
+            <path d="M6 12h.01M18 12h.01"/>
+          </svg>
+          <div class="bd-row-text">
+            <div class="bd-row-label">Стоимость</div>
+            <div class="bd-row-value" id="detailPrice">—</div>
+          </div>
+        </div>
         <div class="bd-row" id="detailStatusRow">
           <svg class="bd-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M9 12l2 2 4-4"/>
@@ -344,7 +378,7 @@
             <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
             <circle cx="12" cy="10" r="3"/>
           </svg>
-          Открыть на карте
+          Показать на карте
         </button>
         <button type="button" class="btn-secondary btn-block" id="detailCopyPhoneBtn" style="display:none;">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -388,6 +422,19 @@
       if (tg) { tg.ready(); tg.expand(); }
 
       function initData() { return (tg && tg.initData) ? tg.initData : ''; }
+
+      function openExternalMapUrl(url) {
+        if (!url) return;
+        if (tg && typeof tg.openLink === 'function') {
+          try {
+            tg.openLink(url, { try_instant_view: false });
+            return;
+          } catch (e) { /* fall through */ }
+        }
+        try {
+          window.open(url, '_blank');
+        } catch (e2) { /* */ }
+      }
       function apiUrl(path) {
         var base = '/api/webapp';
         var id = initData();
@@ -510,6 +557,14 @@
         return null;
       }
 
+      function formatBynFromCents(cents) {
+        if (cents == null || cents === '') return '';
+        var n = parseInt(cents, 10);
+        if (isNaN(n)) return '';
+        var v = n / 100;
+        return v.toFixed(v % 1 === 0 ? 0 : 2).replace('.', ',') + ' BYN';
+      }
+
       window.openBookingDetail = function(bookingId) {
         var result = findBookingById(bookingId);
         if (!result) return;
@@ -544,20 +599,40 @@
         } else {
           tierRow.style.display = 'none';
         }
+
+        var priceRow = document.getElementById('detailPriceRow');
+        var pc = booking.price_cents;
+        if (pc != null && pc !== '' && !isNaN(parseInt(pc, 10))) {
+          priceRow.style.display = '';
+          document.getElementById('detailPrice').textContent = formatBynFromCents(pc);
+        } else {
+          priceRow.style.display = 'none';
+        }
         
         var statusText = (booking.status === 'confirmed') ? 'Подтверждено' : 'Ожидает подтверждения';
         document.getElementById('detailStatus').textContent = statusText;
         
         // Кнопки действий
         var mapBtn = document.getElementById('detailMapBtn');
+        var mapRow = document.getElementById('detailMapRow');
+        var mapLinkEl = document.getElementById('detailMapLink');
         var copyPhoneBtn = document.getElementById('detailCopyPhoneBtn');
         var contactBtn = document.getElementById('detailContactBtn');
-        
-        if (booking.map_link) {
+        var mapUrl = booking.map_link || '';
+
+        if (mapUrl) {
           mapBtn.style.display = 'flex';
-          mapBtn.onclick = function() { window.open(booking.map_link, '_blank'); };
+          mapBtn.onclick = function() { openExternalMapUrl(mapUrl); };
+          mapRow.style.display = '';
+          mapLinkEl.onclick = function(ev) {
+            ev.preventDefault();
+            openExternalMapUrl(mapUrl);
+          };
         } else {
           mapBtn.style.display = 'none';
+          mapBtn.onclick = null;
+          mapRow.style.display = 'none';
+          mapLinkEl.onclick = null;
         }
 
         if (booking.trainer_phone) {

@@ -1,5 +1,5 @@
 """
-One-time funnel after the trainer's first confirmed/completed booking.
+One-time funnel after the trainer's first confirmed/completed booking (including sandbox/demo).
 
 Uses atomic UPDATEs so concurrent first bookings only claim once; flags persist if the
 booking is later cancelled (no repeat celebration).
@@ -12,8 +12,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 async def try_claim_first_booking_milestones(session: AsyncSession, trainer_id: int) -> tuple[bool, bool]:
     """
-    If this trainer now has exactly one confirmed/completed booking and profile flags
-    are still unset, set first_booking_milestone_at; then set share_catalog_tip_sent_at.
+    If this trainer now has exactly one confirmed/completed booking (including onboarding
+    sandbox/demo) and profile flags are still unset, set first_booking_milestone_at;
+    then set share_catalog_tip_sent_at.
 
     Returns (claimed_congrats, claimed_tip) for the current transaction only.
     Caller must commit when either is True.
@@ -29,7 +30,6 @@ async def try_claim_first_booking_milestones(session: AsyncSession, trainer_id: 
                 SELECT COUNT(*)::int FROM bookings b
                 WHERE b.trainer_id = :tid
                   AND b.status IN ('confirmed', 'completed')
-                  AND NOT b.is_sandbox
               ) = 1
             RETURNING tp.trainer_id
             """

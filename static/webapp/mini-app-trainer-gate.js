@@ -53,7 +53,7 @@
         icon: '📋',
         title: 'Сначала анкета',
         hint:
-          'Заполните профиль в разделе «Профиль» и отправьте анкету на проверку. После активации откроются расписание, заявки и остальные разделы — это не ошибка сети.',
+          'Заполните профиль в разделе «Первые шаги» и отправьте анкету на проверку. После активации откроются расписание, заявки и остальные разделы — это не ошибка сети.',
       };
     }
     if (st === 'booking_ready') {
@@ -88,7 +88,23 @@
 
   function gateCardHtml(access, compact) {
     var c = gateCopy(access);
+    var st = (access && access.access_state) || '';
     var compactClass = compact ? ' bd-trainer-gate__card--compact' : '';
+    var actionsHtml = '';
+    if (st !== 'blocked_profile') {
+      if (st === 'pending_moderation') {
+        actionsHtml =
+          '<div class="bd-trainer-gate__actions">' +
+          '<button type="button" class="bd-btn bd-btn--primary" data-trainer-gate="profile">Профиль</button>' +
+          '</div>';
+      } else {
+        actionsHtml =
+          '<div class="bd-trainer-gate__actions">' +
+          '<button type="button" class="bd-btn bd-btn--primary" data-trainer-gate="profile">Профиль</button>' +
+          '<button type="button" class="bd-btn bd-btn--secondary" data-trainer-gate="hub">Обзор</button>' +
+          '</div>';
+      }
+    }
     return (
       '<div class="bd-trainer-gate__card' +
       compactClass +
@@ -102,10 +118,8 @@
       '<p class="bd-trainer-gate__hint">' +
       c.hint +
       '</p>' +
-      '<div class="bd-trainer-gate__actions">' +
-      '<button type="button" class="bd-btn bd-btn--primary" data-trainer-gate="profile">Профиль</button>' +
-      '<button type="button" class="bd-btn bd-btn--secondary" data-trainer-gate="hub">Обзор</button>' +
-      '</div></div>'
+      actionsHtml +
+      '</div>'
     );
   }
 

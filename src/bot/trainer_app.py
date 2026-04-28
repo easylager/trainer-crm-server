@@ -92,9 +92,11 @@ async def main() -> None:
     )
     dp.update.outer_middleware(RateLimitMiddleware(limiter, bot))
     dp.update.outer_middleware(TrainerBenchmarkMiddleware())
-    trainer_router.message.middleware(TrainerGateMiddleware())
+    # Gate on Dispatcher outer_middleware — wraps entire router tree so allowlist runs before handlers.
+    trainer_gate = TrainerGateMiddleware()
+    dp.message.outer_middleware(trainer_gate)
+    dp.callback_query.outer_middleware(trainer_gate)
     trainer_router.message.middleware(TrainerMenuSyncMiddleware())
-    trainer_router.callback_query.middleware(TrainerGateMiddleware())
     trainer_router.callback_query.middleware(TrainerMenuSyncMiddleware())
     dp.include_router(trainer_router)
     logger.info("Trainer bot polling started (notifications run in notification_service)")

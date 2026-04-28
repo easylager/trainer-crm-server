@@ -595,7 +595,7 @@ async def run_reminder_loop(client_bot: Bot) -> None:
                     duration = _reminder_duration_minutes(p.get("start_time"), p.get("end_time"))
                     kind = p.get("kind") or ""
                     text = msg.format_client_booking_reminder_text(
-                        is_soon=(kind != "before_24h"),
+                        is_soon=(kind not in ("before_24h", "before_evening_prior")),
                         date=date_str,
                         day=day_str,
                         time=time_str,

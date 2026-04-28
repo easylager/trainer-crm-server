@@ -1,7 +1,10 @@
 """
-Blocks trainer bot work features until profile is complete and trainer is active (moderation approved).
-Allows: /start, /guide, /profile, /myprofile, /cancel, support flow, guide/support/faq callbacks, profwiz:* (legacy inline buttons → Mini App stub).
-Other callbacks (e.g. trainer:invite) require ACTIVE — same as non-allowlisted commands.
+Blocks trainer bot work only for states that cannot use CRM yet (e.g. incomplete profile, deactivated).
+
+Allows full bot workflows when linked trainer is ACTIVE, BOOKING_READY (TTV minimal), or
+PENDING_MODERATION (full anketa submitted — catalog still outside chat). Same allowlist as before
+for early onboarding: /start, /guide, /profile, /myprofile, /cancel, support, profwiz:*,
+booking_add_note:* / booking_invite_client:* (handlers enforce booking ownership).
 """
 import logging
 import time
@@ -12,10 +15,10 @@ from aiogram import BaseMiddleware
 from aiogram.enums import ChatAction
 from aiogram.types import CallbackQuery, Message, TelegramObject
 
-from src.application.trainer_access_state import TrainerAccessState, get_trainer_access_state
+from src.application.trainer_access_state import get_trainer_access_state, trainer_may_use_bot_workflows
 from src.bot import messages as msg
 from src.bot import trainer_benchmark_config as bench_cfg
-from src.bot.trainer_bot_state import trainer_support_awaiting
+from src.bot.trainer_bot_state import trainer_booking_note_awaiting, trainer_support_awaiting
 from src.bot.trainer_gate_text import trainer_gate_message
 from src.infrastructure.db import async_session_factory
 
@@ -36,26 +39,44 @@ def _is_allowed_command(text: str | None) -> bool:
     return root in ("/start", "/guide", "/profile", "/myprofile", "/cancel")
 
 
-# Keep in sync with trainer_handlers callback_data values.
-_ALLOWED_CALLBACK_PREFIXES: tuple[str, ...] = (
+# Keep in sync with trainer_handlers callback_data values (exact match or prefix).
+_ALLOWED_CALLBACK_EXACT: tuple[str, ...] = (
     "guide",
     "trainer:support",
     "trainer:faq",
+    "trainer:invite",
+)
+# Booking-scoped CRM (notes, invite link) must work in pending_profile before full anketa / catalog — handlers verify ownership.
+_BOOKING_CRM_CALLBACK_PREFIXES: tuple[str, ...] = (
+    "booking_add_note:",
+    "booking_invite_client:",
 )
 
 
+def _normalized_callback_data(data: str | None) -> str:
+    """Telegram usually sends clean ASCII; strip defensively for inline keyboards from API."""
+    if data is None:
+        return ""
+    return str(data).strip()
+
+
 def _callback_allowed(data: str | None) -> bool:
+    data = _normalized_callback_data(data)
     if not data:
         return False
-    if data in _ALLOWED_CALLBACK_PREFIXES:
+    if data in _ALLOWED_CALLBACK_EXACT:
         return True
-    if data.startswith("profwiz:"):
+    low = data.lower()
+    # Case-insensitive: inline data is always lowercase from our builders, belts-and-suspenders for API/proxy quirks.
+    if low.startswith("profwiz:"):
+        return True
+    if any(low.startswith(p) for p in _BOOKING_CRM_CALLBACK_PREFIXES):
         return True
     return False
 
 
 class TrainerGateMiddleware(BaseMiddleware):
-    """Pass through only ACTIVE trainers (or allowlisted onboarding/help commands)."""
+    """Pass through trainers who may use CRM bot flows, or allowlisted onboarding/help commands."""
 
     async def __call__(
         self,
@@ -78,6 +99,8 @@ class TrainerGateMiddleware(BaseMiddleware):
         uid = event.from_user.id if event.from_user else 0
         if uid and uid in trainer_support_awaiting:
             return await handler(event, data)
+        if uid and uid in trainer_booking_note_awaiting:
+            return await handler(event, data)
         if _is_allowed_command(event.text):
             return await handler(event, data)
 
@@ -90,7 +113,7 @@ class TrainerGateMiddleware(BaseMiddleware):
                 uid,
                 (time.perf_counter() - t0) * 1000,
             )
-        if state == TrainerAccessState.ACTIVE:
+        if trainer_may_use_bot_workflows(state):
             return await handler(event, data)
         await event.answer(trainer_gate_message(state, trainer))
         return None
@@ -102,7 +125,7 @@ class TrainerGateMiddleware(BaseMiddleware):
         data: dict[str, Any],
     ) -> Any:
         uid = event.from_user.id if event.from_user else 0
-        if _callback_allowed(event.data):
+        if _callback_allowed(getattr(event, "data", None)):
             return await handler(event, data)
 
         t0 = time.perf_counter()
@@ -114,7 +137,7 @@ class TrainerGateMiddleware(BaseMiddleware):
                 uid,
                 (time.perf_counter() - t0) * 1000,
             )
-        if state == TrainerAccessState.ACTIVE:
+        if trainer_may_use_bot_workflows(state):
             return await handler(event, data)
         await event.answer(msg.TRAINER_GATE_CALLBACK_BLOCKED, show_alert=True)
         if event.message:

@@ -30,6 +30,10 @@ except ImportError:
 BOOKING_STATUSES_OCCUPYING_SEAT = ("pending", "confirmed")
 
 # Hub / reminders: slot_date + start_time|end_time are Europe/Minsk wall clock (not DB session TZ).
+# Client push times: never 00:00–07:59; early-morning targets snap to 08:00 same local day if still before the slot.
+_REMINDER_NIGHT_END_HOUR = 8
+_REMINDER_EVENING_PRIOR_HOUR = 20
+_REMINDER_MIN_GAP_SEC = 120
 _SQL_SLOT_START_TS = f"((s.slot_date + s.start_time) AT TIME ZONE '{NOTIFICATION_TZ}')"
 _SQL_SLOT_END_TS = f"((s.slot_date + s.end_time) AT TIME ZONE '{NOTIFICATION_TZ}')"
 # Booking rows for this trainer already delivered via trainer_bot pending-booking notifier (notified_at set).
@@ -371,7 +375,8 @@ async def create_booking(
     Status semantics:
     - Client-initiated bookings start as 'pending' (trainer should confirm/decline).
     - Trainer-initiated bookings (created_by_trainer=True) start as 'confirmed'.
-    is_sandbox=True: onboarding demo booking — excluded from stats, revenue, and first-booking milestones.
+    is_sandbox=True: onboarding demo booking — excluded from stats/revenue, but still counts for the
+    one-time first-booking celebration (Telegram) so TTV step 2 matches a real booking UX.
 
     If client_request_id is set, link booking to that request and archive the request.
     When created_by_trainer=True and client_request_id is set, leave client_notified_trainer_booked_at
@@ -546,7 +551,7 @@ async def create_booking(
     await session.commit()
     # Client catalog caches GET /client/slots; pending bookings still use status=booked on slot.
     mile_flags: tuple[bool, bool] = (False, False)
-    if created_by_trainer and not is_sandbox:
+    if created_by_trainer:
         ms, tip = await try_claim_first_booking_milestones(session, trainer_id)
         if ms or tip:
             await session.commit()
@@ -810,12 +815,89 @@ async def resolve_arena_for_client_self_booking(
     return primary, None, False
 
 
+def compute_booking_reminder_schedule(
+    *,
+    anchor_local: datetime,
+    slot_date: date,
+    start_time: time,
+) -> list[tuple[str, datetime]]:
+    """
+    Planned client reminder send times (local wall clock), shared by persistence and trainer-facing copy.
+
+    anchor_local: booking creation instant in DB, or "now" for a live preview right after booking.
+    """
+    local_tz = ZoneInfo(NOTIFICATION_TZ)
+    if anchor_local.tzinfo is None:
+        anchor = anchor_local.replace(tzinfo=timezone.utc).astimezone(local_tz)
+    else:
+        anchor = anchor_local.astimezone(local_tz)
+
+    slot_dt_local = datetime.combine(slot_date, start_time).replace(tzinfo=local_tz)
+    if slot_dt_local <= anchor:
+        return []
+
+    def effective_send_time(raw: datetime) -> datetime | None:
+        """Drop night 00:00–07:59 by moving to same day _REMINDER_NIGHT_END_HOUR if still inside (anchor, slot)."""
+        if raw <= anchor or raw >= slot_dt_local:
+            return None
+        if 0 <= raw.hour < _REMINDER_NIGHT_END_HOUR:
+            snapped = datetime.combine(
+                raw.date(),
+                time(_REMINDER_NIGHT_END_HOUR, 0),
+                tzinfo=local_tz,
+            )
+            if snapped <= anchor or snapped >= slot_dt_local:
+                return None
+            return snapped
+        return raw
+
+    planned: list[tuple[str, datetime]] = []
+
+    def append_kind(kind: str, raw_candidate: datetime) -> None:
+        send_at = effective_send_time(raw_candidate)
+        if send_at is None:
+            return
+        for _, existing in planned:
+            if abs((send_at - existing).total_seconds()) < _REMINDER_MIN_GAP_SEC:
+                return
+        planned.append((kind, send_at))
+
+    t24 = slot_dt_local - timedelta(hours=24)
+    t2 = slot_dt_local - timedelta(hours=2)
+
+    if anchor.date() < slot_date:
+        append_kind("before_24h", t24)
+        append_kind("before_2h", t2)
+        if not planned:
+            eve = datetime.combine(
+                slot_date - timedelta(days=1),
+                time(_REMINDER_EVENING_PRIOR_HOUR, 0),
+                tzinfo=local_tz,
+            )
+            append_kind("before_evening_prior", eve)
+    else:
+        if anchor < t2:
+            append_kind("before_2h", t2)
+
+    return planned
+
+
+def format_reminder_plan_ru(plan: list[tuple[str, datetime]]) -> str:
+    """Trainer-visible summary; must match compute_booking_reminder_schedule."""
+    labels = {
+        "before_24h": "за 24 ч",
+        "before_2h": "за 2 ч",
+        "before_evening_prior": "накануне вечером",
+    }
+    return ", ".join(f"{dt.strftime('%d.%m %H:%M')} ({labels.get(k, k)})" for k, dt in plan)
+
+
 async def generate_reminders_for_booking(session: AsyncSession, booking_id: int) -> None:
     """
     Create reminder rows for a booking according to strategy:
-    - If booking created earlier than slot_date: try 24h and 2h reminders.
-    - If booking created in the same day as slot: only 2h reminder, и только если осталось >2 часов.
-    - Никогда не создаём напоминания в ночные часы (0–7); такие кандидаты просто пропускаем.
+    - If booking created earlier than slot_date: try 24h and 2h reminders (night windows snap to 08:00 same day).
+    - If both fail (e.g. early slot next day booked late afternoon): one reminder the previous evening at 20:00 local.
+    - If booking created on slot_date: only 2h-style path (with the same snap rule).
     """
     r = await session.execute(
         text(
@@ -842,40 +924,17 @@ async def generate_reminders_for_booking(session: AsyncSession, booking_id: int)
     slot_date = row[3]
     start_time = row[4]
 
-    # Treat slot_date/start_time as local (Europe/Minsk) time, and compare in that timezone.
     local_tz = ZoneInfo(NOTIFICATION_TZ)
-    # created_at comes from DB as UTC (timestamptz) – normalize and convert to local tz.
     if created_at.tzinfo is None:
         created_local = created_at.replace(tzinfo=timezone.utc).astimezone(local_tz)
     else:
         created_local = created_at.astimezone(local_tz)
-    slot_dt_local = datetime.combine(slot_date, start_time).replace(tzinfo=local_tz)
 
-    # If slot already started or in the past relative to creation – no reminders.
-    if slot_dt_local <= created_local:
-        return
-
-    def is_quiet_hours(dt: datetime) -> bool:
-        # Simple rule: 0:00–7:59 считаем ночными, туда ничего не шлём.
-        return 0 <= dt.hour < 8
-
-    reminders: list[tuple[str, datetime]] = []
-
-    t24 = slot_dt_local - timedelta(hours=24)
-    t2 = slot_dt_local - timedelta(hours=2)
-
-    # Booking created before slot calendar day → потенциально 24h + 2h.
-    if created_local.date() < slot_date:
-        if t24 > created_local and t24 < slot_dt_local and not is_quiet_hours(t24):
-            reminders.append(("before_24h", t24))
-        if t2 > created_local and t2 < slot_dt_local and not is_quiet_hours(t2):
-            reminders.append(("before_2h", t2))
-    else:
-        # Booking created in the same calendar day as slot.
-        # Если до слота осталось больше 2 часов, создаём только 2h-напоминание.
-        if created_local < t2 and t2 < slot_dt_local and not is_quiet_hours(t2):
-            reminders.append(("before_2h", t2))
-        # Если клиент записался позже, чем за 2 часа до начала, дополнительных напоминаний не создаём.
+    reminders = compute_booking_reminder_schedule(
+        anchor_local=created_local,
+        slot_date=slot_date,
+        start_time=start_time,
+    )
 
     for kind, send_at in reminders:
         # Store send_at in UTC so comparison with NOW() in DB is correct.
@@ -1997,13 +2056,16 @@ async def list_bookings_for_client(
                    a.name AS arena_name,
                    a.address AS arena_address,
                    a.latitude AS arena_lat,
-                   a.longitude AS arena_lon
+                   a.longitude AS arena_lon,
+                   COALESCE(b.booking_price_cents, spv.price_cents, ts.price_cents) AS price_cents
             FROM bookings b
             JOIN clients c ON c.id = b.client_id
             JOIN slots s ON s.id = b.slot_id
             JOIN trainers t ON t.id = b.trainer_id
             JOIN services srv ON srv.id = b.service_id
             LEFT JOIN trainer_profiles p ON p.trainer_id = b.trainer_id
+            LEFT JOIN trainer_service_price_variants spv ON spv.id = b.service_price_variant_id
+            LEFT JOIN trainer_services ts ON ts.trainer_id = b.trainer_id AND ts.service_id = b.service_id
             LEFT JOIN LATERAL (
                 SELECT a2.name, a2.address, a2.latitude, a2.longitude
                 FROM arenas a2
@@ -2056,6 +2118,7 @@ async def list_bookings_for_client(
             "arena_name": arena_name or None,
             "arena_address": arena_address or None,
             "map_link": map_link,
+            "price_cents": int(row[20]) if row[20] is not None else None,
         })
     return out
 

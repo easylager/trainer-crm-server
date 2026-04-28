@@ -29,84 +29,83 @@
       window.__applyClientHubTheme = applyClientHubTheme;
     })();
   </script>
-  <link rel="preload" href="client-home-main.js?v=20260504" as="script" />
-  <link rel="stylesheet" href="mini-app-client-home.css?v=20260424" />
+  <link rel="preload" href="client-home-main.js?v=20260505" as="script" />
+  <link rel="stylesheet" href="mini-app-client-home.css?v=20260506" />
 </head>
 <body class="hub-body">
   <div class="hub-shell" id="hubShell">
-    <header class="hub-header">
-      <div>
-        <h1 class="hub-header-title" id="hubPageTitle">Главная</h1>
-      </div>
-    </header>
 
-    <div class="hub-quick-grid hub-quick-grid--start" id="hubQuickGrid">
-      <button type="button" class="hub-quick-action" data-action="catalog">
-        <svg class="hub-quick-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-        <div><div class="hub-quick-label">Записаться к тренеру</div><div class="hub-quick-hint">Каталог, фильтры и слоты</div></div>
-      </button>
-      <button type="button" class="hub-quick-action" data-action="bookings">
-        <svg class="hub-quick-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
-        <div><div class="hub-quick-label">Мои записи</div><div class="hub-quick-hint">Что уже запланировано</div></div>
-      </button>
+    <!-- Hero heading — greeting + context label, updated by JS -->
+    <div class="hub-hero" id="hubHero">
+      <div class="hub-hero-greeting" id="hubGreeting">Привет 👋</div>
+      <h1 class="hub-hero-title" id="hubHeroTitle">Ваш следующий шаг</h1>
+      <p class="hub-hero-sub" id="hubHeroSub" style="display:none;"></p>
     </div>
 
-    <div class="hub-stats" id="hubStats" style="display:none;" aria-hidden="true">
-      <div class="hub-stat-card" id="statToday">
-        <div class="hub-stat-value" id="statTodayValue">—</div>
-        <div class="hub-stat-label">Сегодня</div>
-      </div>
-      <div class="hub-stat-card">
-        <div class="hub-stat-value" id="statWeekValue">—</div>
-        <div class="hub-stat-label">На неделе</div>
-      </div>
-      <div class="hub-stat-card">
-        <div class="hub-stat-value" id="statRequestsValue">—</div>
-        <div class="hub-stat-label">Заявки</div>
-      </div>
-    </div>
-
+    <!-- Error / loading panel -->
     <div id="stateMessage" class="state-panel loading" style="display:none;" role="status"></div>
 
-    <div class="hub-section-head">
-      <div class="hub-section-title">Ближайшие записи</div>
+    <!-- ── SCENARIO 3: NEXT BOOKING HERO CARD ──────────────────────────── -->
+    <!-- Skeleton visible until JS loads; replaced with real data or hidden. -->
+    <div id="nextBookingBlock">
+      <div class="hub-skel-card hub-skel-shimmer" id="nextBookingSkel" role="status" aria-busy="true" aria-label="Загрузка ближайшей записи"></div>
     </div>
-    <!-- Skeleton before deferred client-home-main.js runs (avoids empty block + layout jump). Mirrors buildClientHubBookingsSkeletonHtml(). -->
-    <div id="bookingsBlock">
-      <div class="hub-bookings-skel" role="status" aria-busy="true" aria-label="Загрузка записей">
-        <div class="hub-skel-row">
-          <div class="hub-skel-line hub-skel-line--time hub-skel-shimmer" aria-hidden="true"></div>
-          <div style="flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center;">
-            <div class="hub-skel-line hub-skel-line--primary hub-skel-shimmer" aria-hidden="true"></div>
-            <div class="hub-skel-line hub-skel-line--secondary hub-skel-shimmer" aria-hidden="true"></div>
-          </div>
+
+    <!-- ── SCENARIO 1: MY TRAINER CARD ────────────────────────────────── -->
+    <div id="myTrainerBlock" style="display:none;"></div>
+
+    <!-- ── QUICK ACTION PILLS ─────────────────────────────────────────── -->
+    <!-- Rendered by JS based on scenario; skeleton strip shown on load.  -->
+    <div class="hub-quick-strip" id="quickStrip">
+      <!-- JS will fill or replace; placeholder renders 3 skel pills -->
+      <div class="hub-quick-pill" style="opacity:0.35;pointer-events:none;min-width:100px;height:38px;border-radius:14px;background:var(--tg-theme-secondary-bg-color);"></div>
+      <div class="hub-quick-pill" style="opacity:0.25;pointer-events:none;min-width:80px;height:38px;border-radius:14px;background:var(--tg-theme-secondary-bg-color);"></div>
+      <div class="hub-quick-pill" style="opacity:0.18;pointer-events:none;min-width:90px;height:38px;border-radius:14px;background:var(--tg-theme-secondary-bg-color);"></div>
+    </div>
+
+    <!-- ── UPCOMING BOOKINGS LIST (secondary, below hero) ─────────────── -->
+    <div id="upcomingSection" style="display:none;">
+      <div class="hub-section-wrap">
+        <div class="hub-section-head">
+          <span class="hub-section-title">Все записи</span>
+          <button type="button" class="hub-section-link" id="btnAllBookings">Смотреть все</button>
         </div>
-        <div class="hub-skel-row">
-          <div class="hub-skel-line hub-skel-line--time hub-skel-shimmer" aria-hidden="true"></div>
-          <div style="flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center;">
-            <div class="hub-skel-line hub-skel-line--primary hub-skel-shimmer" aria-hidden="true"></div>
-            <div class="hub-skel-line hub-skel-line--secondary hub-skel-shimmer" aria-hidden="true"></div>
-          </div>
-        </div>
-        <div class="hub-skel-row">
-          <div class="hub-skel-line hub-skel-line--time hub-skel-shimmer" aria-hidden="true"></div>
-          <div style="flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center;">
-            <div class="hub-skel-line hub-skel-line--primary hub-skel-shimmer" aria-hidden="true"></div>
-            <div class="hub-skel-line hub-skel-line--secondary hub-skel-shimmer" aria-hidden="true"></div>
+        <div id="bookingsBlock">
+          <div class="hub-bookings-skel" role="status" aria-busy="true" aria-label="Загрузка записей">
+            <div class="hub-skel-row">
+              <div class="hub-skel-line hub-skel-line--time hub-skel-shimmer" aria-hidden="true"></div>
+              <div style="flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center;">
+                <div class="hub-skel-line hub-skel-line--primary hub-skel-shimmer" aria-hidden="true"></div>
+                <div class="hub-skel-line hub-skel-line--secondary hub-skel-shimmer" aria-hidden="true"></div>
+              </div>
+            </div>
+            <div class="hub-skel-row">
+              <div class="hub-skel-line hub-skel-line--time hub-skel-shimmer" aria-hidden="true"></div>
+              <div style="flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center;">
+                <div class="hub-skel-line hub-skel-line--primary hub-skel-shimmer" aria-hidden="true"></div>
+                <div class="hub-skel-line hub-skel-line--secondary hub-skel-shimmer" aria-hidden="true"></div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
     </div>
 
-    <div class="hub-section-head">
-      <div class="hub-section-title">Все разделы</div>
+    <!-- ── EXPLORE / SECTIONS GRID ────────────────────────────────────── -->
+    <div id="exploreSection">
+      <div style="padding:0 18px;margin-bottom:12px;">
+        <div class="hub-section-head">
+          <span class="hub-section-title" id="exploreSectionTitle">Разделы</span>
+        </div>
+      </div>
+      <div class="hub-explore-grid" id="hubGrid"></div>
     </div>
-    <div class="hub-grid" id="hubGrid"></div>
 
     <div class="hub-footnote" id="hubFootnote">
-      <strong>Подсказка:</strong> команды в чате — <strong>/guide</strong> (помощь), <strong>/home</strong> (эта страница). Меню слева от поля ввода тоже ведёт сюда, если у бота включена веб-кнопка.
+      <strong>Подсказка:</strong> команды в чате — <strong>/guide</strong> (помощь), <strong>/home</strong> (эта страница).
     </div>
+
   </div>
-  <script defer src="client-home-main.js?v=20260504"></script>
+  <script defer src="client-home-main.js?v=20260505"></script>
 </body>
 </html>

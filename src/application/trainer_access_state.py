@@ -29,10 +29,24 @@ class TrainerAccessState(str, Enum):
     NOT_LINKED = "not_linked"
     ACTIVE = "active"
     BLOCKED_PROFILE = "blocked_profile"
-    # pending_profile + TTV minimal: Mini App schedule/bookings; bot stays gated until active.
+    # pending_profile + TTV minimal: Mini App schedule/bookings; bot CRM flows match app (catalog still moderated).
     BOOKING_READY = "booking_ready"
     PENDING_MODERATION = "pending_moderation"
     DEACTIVATED = "deactivated"
+
+
+def trainer_may_use_bot_workflows(state: TrainerAccessState) -> bool:
+    """
+    Trainer-bot handlers (callbacks, CRM messages) run for these states.
+
+    Catalog / public card is gated in Mini App + moderation; onboarding trainers still need
+    notes, invites, and schedule-related flows in chat before status becomes active.
+    """
+    return state in (
+        TrainerAccessState.ACTIVE,
+        TrainerAccessState.BOOKING_READY,
+        TrainerAccessState.PENDING_MODERATION,
+    )
 
 
 def resolve_trainer_access_state(*, status: str, trainer: dict[str, Any] | None) -> TrainerAccessState:

@@ -1366,6 +1366,24 @@
         });
       }
 
+      function openServiceSummaryModal(title, bodyText) {
+        var modal = document.getElementById('serviceSummaryModal');
+        var modalTitle = document.getElementById('serviceSummaryModalTitle');
+        var modalBody = document.getElementById('serviceSummaryModalBody');
+        if (!modal || !modalTitle || !modalBody) return;
+        modalTitle.textContent = title || 'Услуга';
+        modalBody.textContent = bodyText != null && bodyText !== '' ? String(bodyText) : '';
+        modal.classList.add('show');
+      }
+
+      function closeServiceSummaryModal() {
+        var modal = document.getElementById('serviceSummaryModal');
+        if (modal) modal.classList.remove('show');
+      }
+
+      var SERVICE_INFO_SVG =
+        '<svg class="service-info-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>';
+
       function loadServices() {
         document.getElementById('serviceList').innerHTML = '<div class="loading">Загрузка...</div>';
         getJson('/services').then(function(data) {
@@ -1377,8 +1395,37 @@
             syncCatalogHeaderBack();
             return;
           }
+          var summaryById = {};
+          items.forEach(function(s) {
+            if (s.client_summary != null && String(s.client_summary).trim() !== '') {
+              summaryById[s.id] = String(s.client_summary);
+            }
+          });
           var html = items.map(function(s) {
-            return '<button type="button" class="choice-card" data-id="' + s.id + '" data-name="' + (s.name || '').replace(/"/g, '&quot;') + '"><div class="main"><div class="label">Услуга</div><div class="value">' + (s.name || '') + '</div></div><span class="arrow">→</span></button>';
+            var hasSummary = summaryById[s.id] != null;
+            var nameAttr = (s.name || '').replace(/"/g, '&quot;');
+            var escName = escapeHtml(s.name || '');
+            var btnInner = '<div class="main"><div class="label">Услуга</div><div class="value">' + escName + '</div></div><span class="arrow">→</span>';
+            var mainBtn =
+              '<button type="button" class="choice-card' +
+              (hasSummary ? ' service-choice-main' : '') +
+              '" data-id="' +
+              s.id +
+              '" data-name="' +
+              nameAttr +
+              '">' +
+              btnInner +
+              '</button>';
+            if (!hasSummary) return mainBtn;
+            return (
+              '<div class="service-choice-row">' +
+              mainBtn +
+              '<button type="button" class="service-info-btn" data-id="' +
+              s.id +
+              '" aria-label="Подробнее об услуге">' +
+              SERVICE_INFO_SVG +
+              '</button></div>'
+            );
           }).join('');
           document.getElementById('serviceList').innerHTML = html;
           var backCity = document.getElementById('backToCity');
@@ -1400,6 +1447,21 @@
               }
               prefetchFirstPageIfNeeded();
             };
+          });
+          document.querySelectorAll('#serviceList .service-info-btn').forEach(function(btn) {
+            btn.addEventListener('click', function(ev) {
+              ev.preventDefault();
+              ev.stopPropagation();
+              var sid = parseInt(btn.getAttribute('data-id'), 10);
+              var title = '';
+              for (var i = 0; i < items.length; i++) {
+                if (items[i].id === sid) {
+                  title = items[i].name || '';
+                  break;
+                }
+              }
+              openServiceSummaryModal(title, summaryById[sid] || '');
+            });
           });
           syncCatalogHeaderBack();
         }).catch(function() {
@@ -3051,4 +3113,19 @@
       window.closeReviewsModal = function() {
         document.getElementById('reviewsModal').classList.remove('show');
       };
+
+      (function setupServiceSummaryModal() {
+        var modal = document.getElementById('serviceSummaryModal');
+        var closeBtn = document.getElementById('serviceSummaryModalClose');
+        if (modal) {
+          modal.addEventListener('click', function(e) {
+            if (e.target === modal) closeServiceSummaryModal();
+          });
+        }
+        if (closeBtn) closeBtn.addEventListener('click', closeServiceSummaryModal);
+        document.addEventListener('keydown', function(e) {
+          if (e.key !== 'Escape') return;
+          if (modal && modal.classList.contains('show')) closeServiceSummaryModal();
+        });
+      })();
     })();

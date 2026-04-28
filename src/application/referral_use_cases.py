@@ -252,6 +252,7 @@ async def maybe_grant_referral_first_booking_bonus(trainer_id: int) -> None:
             text("""
                 SELECT COUNT(*)::int FROM bookings
                 WHERE trainer_id = :tid AND status IN ('confirmed', 'completed')
+                  AND NOT is_sandbox
             """),
             {"tid": trainer_id},
         )

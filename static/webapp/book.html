@@ -243,7 +243,8 @@
       pointer-events: none;
       letter-spacing: 0.02em;
     }
-    .book-phone-input-wrap .book-phone-input {
+    /* Must beat `.form-block input` (0,3,1) so padding-left isn’t reset by shorthand — same idea as #screenBookingForm .catalog-phone-input in catalog. */
+    #screenForm .book-phone-input-wrap .book-phone-input {
       padding-left: 58px;
       font-variant-numeric: tabular-nums;
     }

@@ -1,495 +1,1012 @@
-    body.hub-body {
-      margin: 0;
-      min-height: 100vh;
-      font-family: var(--app-font-sans);
-      color: var(--tg-theme-text-color);
-      padding: 16px calc(16px + env(safe-area-inset-right)) calc(28px + env(safe-area-inset-bottom)) calc(16px + env(safe-area-inset-left));
-      overflow-x: hidden;
-      background:
-        radial-gradient(ellipse 140% 100% at 50% -30%, rgba(247, 166, 0, 0.18) 0%, rgba(247, 166, 0, 0.08) 40%, transparent 70%),
-        radial-gradient(ellipse 80% 60% at 80% 100%, rgba(247, 166, 0, 0.06) 0%, transparent 50%),
-        var(--tg-theme-bg-color) !important;
-    }
-    .hub-shell { max-width: 540px; margin: 0 auto; position: relative; }
-    .hub-header {
-      display: flex;
-      align-items: flex-start;
-      justify-content: space-between;
-      gap: 12px;
-      margin-bottom: 20px;
-    }
-    .hub-header-title {
-      margin: 0;
-      font-size: clamp(22px, 6vw, 28px);
-      font-weight: 700;
-      letter-spacing: -0.03em;
-      line-height: 1.12;
-      background: linear-gradient(135deg, var(--tg-theme-text-color) 0%, var(--app-cta-fill) 100%);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-    }
-    .hub-quick-grid--start {
-      margin-bottom: 20px;
-    }
-    .hub-stats {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 10px;
-      margin-bottom: 22px;
-    }
-    /* After skeleton: short stagger so numbers feel settled, not “snapped in”. */
-    @keyframes hub-client-stat-in {
-      from {
-        opacity: 0.45;
-        transform: translateY(5px);
-      }
-      to {
-        opacity: 1;
-        transform: translateY(0);
-      }
-    }
-    .hub-stats--reveal .hub-stat-card {
-      animation: hub-client-stat-in 0.42s cubic-bezier(0.22, 1, 0.36, 1) backwards;
-    }
-    .hub-stats--reveal .hub-stat-card:nth-child(1) { animation-delay: 0.04s; }
-    .hub-stats--reveal .hub-stat-card:nth-child(2) { animation-delay: 0.1s; }
-    .hub-stats--reveal .hub-stat-card:nth-child(3) { animation-delay: 0.16s; }
-    .hub-stat-card {
-      border-radius: 16px;
-      padding: 14px 12px;
-      text-align: center;
-      background: var(--tg-theme-secondary-bg-color);
-      border: 1px solid rgba(128, 128, 128, 0.12);
-      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
-    }
-    .hub-is-dark .hub-stat-card { box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25); }
-    .hub-stat-value { font-size: 20px; font-weight: 700; color: var(--tg-theme-text-color); }
-    .hub-stat-label { font-size: 11px; font-weight: 600; color: var(--tg-theme-hint-color); margin-top: 4px; text-transform: uppercase; letter-spacing: 0.06em; }
-    .hub-section-head {
-      margin: 32px 0 16px;
-      position: relative;
-    }
-    .hub-section-head:first-of-type { margin-top: 8px; }
-    .hub-section-title {
-      font-size: 14px;
-      font-weight: 700;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      color: var(--tg-theme-hint-color);
-      position: relative;
-      padding-left: 20px;
-    }
-    .hub-section-title::before {
-      content: '';
-      position: absolute;
-      left: 0;
-      top: 50%;
-      transform: translateY(-50%);
-      width: 12px;
-      height: 2px;
-      background: var(--app-cta-fill);
-      border-radius: 1px;
-    }
-    .hub-quick-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 10px;
-    }
-    /* Две стартовые кнопки в один ряд — не копируют четырёхплиточную карту ниже */
-    .hub-quick-grid--start .hub-quick-action {
-      min-height: 76px;
-      align-items: flex-start;
-    }
-    .hub-quick-action {
-      position: relative;
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      padding: 14px 14px;
-      border-radius: 16px;
-      background: var(--tg-theme-secondary-bg-color);
-      border: 1px solid rgba(128, 128, 128, 0.1);
-      font: inherit;
-      text-align: left;
-      cursor: pointer;
-      color: inherit;
-      overflow: hidden;
-      transition: all 0.25s cubic-bezier(0.22, 1, 0.36, 1);
-    }
-    .hub-quick-action::before {
-      content: '';
-      position: absolute;
-      inset: 0;
-      background: linear-gradient(135deg, rgba(247, 166, 0, 0.08) 0%, transparent 100%);
-      opacity: 0;
-      transition: opacity 0.25s ease;
-    }
-    .hub-quick-action:hover {
-      transform: translateY(-1px);
-      border-color: rgba(247, 166, 0, 0.3);
-      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
-    }
-    .hub-quick-action:hover::before { opacity: 1; }
-    .hub-quick-action:active { transform: scale(0.98); }
-    .hub-quick-icon {
-      width: 28px;
-      height: 28px;
-      flex-shrink: 0;
-      color: var(--app-cta-fill);
-      position: relative;
-      z-index: 1;
-    }
-    .hub-quick-label { font-size: 14px; font-weight: 700; position: relative; z-index: 1; }
-    .hub-quick-hint { font-size: 11px; color: var(--tg-theme-hint-color); margin-top: 2px; position: relative; z-index: 1; }
-    .hub-day-label {
-      font-size: 13px;
-      font-weight: 600;
-      color: var(--tg-theme-hint-color);
-      margin: 12px 0 8px;
-    }
-    .hub-day-label:first-child { margin-top: 0; }
-    .hub-bookings-stack { display: flex; flex-direction: column; gap: 0; }
-    .hub-bookings-stack .slot-row .slot-row-main { flex: 1; min-width: 0; }
-    /* Same slot row model as trainer-home / schedule-editor — cream chip + green/amber border */
-    .hub-bookings-stack .slot-row {
-      display: flex;
-      align-items: flex-start;
-      justify-content: space-between;
-      gap: 10px;
-      width: 100%;
-      box-sizing: border-box;
-      margin: 0 0 6px;
-      padding: 12px 14px;
-      border-radius: 12px;
-      border: 2px solid transparent;
-      background: #fff3cc !important;
-      color: #1a1a1a !important;
-      text-align: left;
-      font: inherit;
-      cursor: pointer;
-      -webkit-appearance: none;
-      appearance: none;
-    }
-    .hub-is-dark .hub-bookings-stack .slot-row {
-      background: #2a2a2a !important;
-      color: #f5f5f5 !important;
-    }
-    .hub-bookings-stack .slot-row:last-child { margin-bottom: 0; }
-    .hub-bookings-stack .slot-row.slot-booked-click {
-      border-color: rgba(247, 166, 0, 0.45);
-    }
-    .hub-bookings-stack .slot-row.slot-booked-click.slot-booking-pending {
-      border-color: rgba(255, 159, 10, 0.55);
-    }
-    .hub-bookings-stack .slot-row.slot-booked-click.slot-booking-confirmed {
-      border-color: rgba(52, 199, 89, 0.45);
-    }
-    .hub-bookings-stack .slot-row:active { opacity: 0.92; }
-    .hub-bookings-stack .slot-time { font-weight: 600; font-size: 15px; }
-    .hub-bookings-stack .slot-trainer { font-size: 13px; color: var(--tg-theme-hint-color); margin-top: 4px; }
-    .hub-bookings-stack .slot-place { font-size: 12px; color: var(--tg-theme-hint-color); margin-top: 2px; }
-    .hub-bookings-stack .slot-status {
-      font-size: 12px;
-      padding: 4px 10px;
-      border-radius: 8px;
-      flex-shrink: 0;
-      align-self: flex-start;
-    }
-    .hub-bookings-stack .slot-status.booked-confirmed {
-      background: rgba(52, 199, 89, 0.2);
-      color: #34c759;
-    }
-    .hub-bookings-stack .slot-status.booked-pending {
-      background: rgba(255, 159, 10, 0.22);
-      color: #ff9500;
-    }
-    .hub-bookings-stack .slot-row .slot-meta-col {
-      display: inline-flex;
-      flex-direction: column;
-      align-items: flex-end;
-      justify-content: flex-start;
-      gap: 6px;
-      flex-shrink: 0;
-      max-width: 46%;
-      min-width: 0;
-    }
-    /* Иконка чата — как в trainer-home */
-    .hub-bookings-stack .hub-slot-msg {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      width: 32px;
-      height: 32px;
-      padding: 0;
-      margin: 0;
-      border: 1px solid color-mix(in srgb, var(--tg-theme-button-color) 32%, transparent);
-      border-radius: 10px;
-      background: color-mix(in srgb, var(--tg-theme-button-color) 12%, transparent);
-      color: var(--tg-theme-button-color);
-      cursor: pointer;
-      font-family: inherit;
-      line-height: 0;
-      -webkit-appearance: none;
-      appearance: none;
-      flex-shrink: 0;
-      transition: background 0.2s ease, border-color 0.2s ease, transform 0.12s ease;
-    }
-    .hub-bookings-stack .hub-slot-msg:hover {
-      background: color-mix(in srgb, var(--tg-theme-button-color) 22%, transparent);
-      border-color: color-mix(in srgb, var(--tg-theme-button-color) 48%, transparent);
-    }
-    .hub-bookings-stack .hub-slot-msg:active {
-      transform: scale(0.96);
-      opacity: 0.92;
-    }
-    .hub-bookings-stack .hub-slot-msg:focus-visible {
-      outline: 2px solid color-mix(in srgb, var(--tg-theme-button-color) 55%, transparent);
-      outline-offset: 2px;
-    }
-    .hub-bookings-stack .hub-slot-msg-icon {
-      width: 16px;
-      height: 16px;
-      flex-shrink: 0;
-      stroke: currentColor;
-      fill: none;
-      stroke-width: 2;
-      stroke-linecap: round;
-      stroke-linejoin: round;
-    }
-    .hub-bookings-cap {
-      margin-top: 10px;
-      font-size: 12px;
-      color: var(--tg-theme-hint-color);
-      text-align: center;
-    }
-    .hub-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-      gap: 14px;
-    }
-    .hub-tile {
-      position: relative;
-      display: flex;
-      flex-direction: column;
-      align-items: flex-start;
-      justify-content: space-between;
-      min-height: 120px;
-      padding: 20px 18px 18px;
-      border-radius: 20px;
-      overflow: hidden;
-      border: 1px solid rgba(245, 166, 35, 0.2);
-      font: inherit;
-      cursor: pointer;
-      text-align: left;
-      transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-      background: var(--tg-theme-secondary-bg-color);
-    }
-    .hub-is-dark .hub-tile {
-      background:
-        linear-gradient(165deg, rgba(255, 251, 235, 0.96) 0%, rgba(255, 243, 214, 0.92) 100%);
-      color: #1a1a1a;
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-      border-color: rgba(245, 166, 35, 0.4);
-    }
-    html:not(.hub-is-dark) .hub-tile {
-      background:
-        linear-gradient(165deg, rgba(255, 243, 204, 0.6) 0%, var(--tg-theme-secondary-bg-color) 100%);
-      color: var(--tg-theme-text-color);
-    }
-    .hub-tile::before {
-      content: '';
-      position: absolute;
-      top: -20%;
-      right: -20%;
-      width: 60%;
-      height: 80%;
-      background: radial-gradient(ellipse, rgba(247, 166, 0, 0.18) 0%, rgba(247, 166, 0, 0.08) 50%, transparent 80%);
-      pointer-events: none;
-      transition: all 0.4s ease;
-    }
-    .hub-tile:hover {
-      transform: translateY(-4px) scale(1.02);
-      border-color: rgba(247, 166, 0, 0.5);
-      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
-    }
-    .hub-is-dark .hub-tile:hover { box-shadow: 0 16px 50px rgba(0, 0, 0, 0.4); }
-    .hub-tile:hover::before {
-      background: radial-gradient(ellipse, rgba(247, 166, 0, 0.25) 0%, rgba(247, 166, 0, 0.12) 50%, transparent 80%);
-    }
-    .hub-tile:active { transform: translateY(-2px) scale(0.98); }
-    .hub-tile-inner {
-      position: relative;
-      z-index: 1;
-      width: 100%;
-      height: 100%;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-    }
-    .hub-tile-top {
-      display: flex;
-      align-items: flex-start;
-      justify-content: space-between;
-      width: 100%;
-      margin-bottom: 12px;
-    }
-    .hub-tile-icon { width: 32px; height: 32px; flex-shrink: 0; }
-    .hub-is-dark .hub-tile-icon { color: #c27800; }
-    html:not(.hub-is-dark) .hub-tile-icon { color: var(--app-cta-fill); }
-    .hub-tile-badge {
-      font-size: 10px;
-      font-weight: 700;
-      padding: 4px 8px;
-      border-radius: 8px;
-      background: rgba(247, 166, 0, 0.2);
-      color: var(--app-cta-fill);
-      line-height: 1;
-    }
-    .hub-tile-content { flex: 1; }
-    .hub-tile-label {
-      font-weight: 700;
-      font-size: 15px;
-      line-height: 1.2;
-      letter-spacing: -0.02em;
-      margin-bottom: 6px;
-    }
-    .hub-tile-hint {
-      font-size: 12px;
-      line-height: 1.4;
-      opacity: 0.8;
-    }
-    .hub-is-dark .hub-tile-hint { color: #4a4a4a; }
-    html:not(.hub-is-dark) .hub-tile-hint { color: var(--tg-theme-hint-color); }
-    .state-panel {
-      padding: 14px 16px;
-      border-radius: 14px;
-      background: var(--tg-theme-secondary-bg-color);
-      border: 1px solid rgba(128, 128, 128, 0.12);
-      font-size: 14px;
-      margin-bottom: 12px;
-    }
-    .state-panel.error { border-color: rgba(255, 59, 48, 0.35); }
-    .state-panel.loading { color: var(--tg-theme-hint-color); }
-    .hub-empty {
-      text-align: center;
-      padding: 20px 12px;
-      color: var(--tg-theme-hint-color);
-      font-size: 14px;
-      line-height: 1.5;
-    }
-    .hub-footnote {
-      margin-top: 28px;
-      padding: 16px 18px;
-      border-radius: 16px;
-      font-size: 12px;
-      line-height: 1.5;
-      color: var(--tg-theme-hint-color);
-      background:
-        linear-gradient(135deg, rgba(247, 166, 0, 0.04) 0%, var(--tg-theme-secondary-bg-color) 100%);
-      border: 1px solid rgba(245, 166, 35, 0.2);
-      box-shadow: 0 3px 16px rgba(0, 0, 0, 0.06);
-    }
-    .hub-is-dark .hub-footnote {
-      box-shadow: 0 6px 24px rgba(0, 0, 0, 0.2);
-      background:
-        linear-gradient(135deg, rgba(247, 166, 0, 0.06) 0%, var(--tg-theme-secondary-bg-color) 100%);
-    }
-    .hub-footnote strong { color: var(--tg-theme-text-color); }
-    .hub-body .bd-btn--secondary {
-      border-color: rgba(245, 166, 35, 0.4);
-      color: var(--app-cta-fill);
-    }
-    html:not(.hub-is-dark) .hub-body .bd-btn--secondary {
-      border-color: rgba(245, 166, 35, 0.45);
-      color: #c27800;
-    }
-    /* Smooth swap skeleton → list / empty (defer script paints mount at opacity 0, then fades in). */
-    #bookingsBlock {
-      contain: layout;
-    }
-    .hub-bookings-mount {
-      opacity: 0;
-      transform: translateY(10px);
-      transition:
-        opacity 0.34s ease,
-        transform 0.42s cubic-bezier(0.22, 1, 0.36, 1);
-      will-change: opacity, transform;
-    }
-    .hub-bookings-mount.hub-bookings-mount--visible {
-      opacity: 1;
-      transform: translateY(0);
-    }
-    /* Premium loading: token-based shimmer (aligned with trainer-home hub); no arbitrary page bg hex */
-    .hub-bookings-skel {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-    .hub-skel-row {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      padding: 12px 14px;
-      border-radius: 12px;
-      border: 1px solid rgba(128, 128, 128, 0.12);
-      background: var(--tg-theme-secondary-bg-color);
-      min-height: 56px;
-      box-sizing: border-box;
-    }
-    .hub-skel-row .hub-skel-line--time {
-      width: 48px;
-      height: 18px;
-      border-radius: 8px;
-      flex-shrink: 0;
-    }
-    .hub-skel-row .hub-skel-line--primary {
-      width: 70%;
-      height: 14px;
-      border-radius: 7px;
-    }
-    .hub-skel-row .hub-skel-line--secondary {
-      width: 44%;
-      height: 11px;
-      border-radius: 6px;
-      margin-top: 8px;
-    }
-    .hub-skel-shimmer {
-      background: linear-gradient(
-        110deg,
-        var(--tg-theme-secondary-bg-color) 0%,
-        color-mix(in srgb, var(--tg-theme-button-color) 14%, var(--tg-theme-secondary-bg-color)) 46%,
-        var(--tg-theme-secondary-bg-color) 100%
-      );
-      background-size: 200% 100%;
-      animation: client-hub-skel-shimmer 1.2s ease-in-out infinite;
-    }
-    @keyframes client-hub-skel-shimmer {
-      0% { background-position: 100% 0; }
-      100% { background-position: -100% 0; }
-    }
-    .hub-stats--loading .hub-stat-label {
-      opacity: 0.45;
-    }
-    .hub-stat-value.hub-stat-skel {
-      min-height: 22px;
-      border-radius: 8px;
-      line-height: 22px;
-    }
-    @media (prefers-reduced-motion: reduce) {
-      .hub-skel-shimmer {
-        animation: none !important;
-        background: var(--tg-theme-secondary-bg-color) !important;
-        opacity: 0.88;
-      }
-      .hub-bookings-mount {
-        opacity: 1 !important;
-        transform: none !important;
-        transition: none !important;
-        will-change: auto;
-      }
-      .hub-stats--reveal .hub-stat-card {
-        animation: none !important;
-      }
-    }
+/* ─── Client Action Hub ───────────────────────────────────────────────────── */
+/* Philosophy: "what does the client need right now?" — not a dashboard,      */
+/* but a state-driven action hub with a single hero and 2–3 CTAs.             */
+
+body.hub-body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: var(--app-font-sans);
+  color: var(--tg-theme-text-color);
+  padding: 0 0 calc(36px + env(safe-area-inset-bottom)) 0;
+  overflow-x: hidden;
+  background:
+    radial-gradient(ellipse 160% 90% at 50% -10%, rgba(247, 166, 0, 0.15) 0%, rgba(247, 166, 0, 0.06) 45%, transparent 68%),
+    var(--tg-theme-bg-color) !important;
+}
+
+.hub-shell {
+  max-width: 540px;
+  margin: 0 auto;
+  position: relative;
+}
+
+/* ─── Hero zone ──────────────────────────────────────────────────────────── */
+
+.hub-hero {
+  padding: 24px 18px 20px;
+  position: relative;
+}
+
+.hub-hero-greeting {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--tg-theme-hint-color);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+
+.hub-hero-title {
+  font-size: clamp(24px, 6.5vw, 30px);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+  margin: 0 0 4px;
+  /* amber gradient text — same technique as trainer hub */
+  background: linear-gradient(135deg, var(--tg-theme-text-color) 0%, var(--app-cta-fill) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.hub-hero-sub {
+  font-size: 14px;
+  color: var(--tg-theme-hint-color);
+  line-height: 1.4;
+  margin-top: 4px;
+}
+
+/* ─── Next booking hero card (Scenario 3) ──────────────────────────────── */
+
+.hub-next-card {
+  margin: 0 16px 20px;
+  border-radius: 24px;
+  overflow: hidden;
+  position: relative;
+  /* Deeper caramel — less «neon yellow» so white type doesn’t wash out */
+  background: linear-gradient(152deg, #d9890c 0%, #b86e08 48%, #8f5206 100%);
+  box-shadow: 0 12px 40px rgba(247, 166, 0, 0.28), 0 4px 12px rgba(0, 0, 0, 0.14);
+  color: #fffef9;
+  cursor: pointer;
+  transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.25s ease;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+
+/* Soft highlight only — the old 0.2 white blob blew out mid-tones vs white text */
+.hub-next-card::before {
+  content: '';
+  position: absolute;
+  top: -28%;
+  right: -12%;
+  width: 72%;
+  height: 128%;
+  background: radial-gradient(ellipse, rgba(255, 255, 255, 0.07) 0%, transparent 68%);
+  pointer-events: none;
+}
+
+/* Bottom vignette: stabilises contrast for meta row + CTAs */
+.hub-next-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, transparent 0%, transparent 42%, rgba(0, 0, 0, 0.12) 88%, rgba(0, 0, 0, 0.2) 100%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.hub-next-card:active {
+  transform: scale(0.985);
+  box-shadow: 0 6px 24px rgba(247, 166, 0, 0.3), 0 2px 6px rgba(0, 0, 0, 0.1);
+}
+
+.hub-next-card-inner {
+  padding: 20px 20px 18px;
+  position: relative;
+  z-index: 1;
+  /* Keeps headline readable on any band of the gradient */
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.22), 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+
+.hub-next-card-eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  opacity: 0.92;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.hub-next-card-eyebrow-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.8);
+  animation: hub-pulse 2s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+@keyframes hub-pulse {
+  0%, 100% { opacity: 0.8; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.3); }
+}
+
+.hub-next-card-time {
+  font-size: clamp(26px, 7vw, 32px);
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  margin-bottom: 6px;
+}
+
+.hub-next-card-date {
+  font-size: 14px;
+  font-weight: 600;
+  opacity: 0.96;
+  margin-bottom: 12px;
+}
+
+.hub-next-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.hub-next-card-trainer {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 600;
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 20px;
+  padding: 4px 12px 4px 6px;
+}
+
+.hub-next-card-trainer-avatar {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.28);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.hub-next-card-place {
+  font-size: 12px;
+  font-weight: 500;
+  opacity: 0.95;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.hub-next-card-place svg {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+}
+
+.hub-next-card-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.hub-next-card-btn {
+  flex: 1;
+  padding: 9px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: rgba(255, 253, 248, 0.94);
+  color: #1a1408;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease, transform 0.15s ease, box-shadow 0.2s ease;
+  -webkit-tap-highlight-color: transparent;
+  text-align: center;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  text-shadow: none;
+}
+
+.hub-next-card-btn:hover {
+  background: #fff;
+  border-color: rgba(255, 255, 255, 0.55);
+}
+
+.hub-next-card-btn:active {
+  transform: scale(0.95);
+  background: #f5f0e6;
+}
+
+/* Status badge on card */
+.hub-next-card-status {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 10px;
+  z-index: 2;
+}
+
+.hub-next-card-status--confirmed {
+  background: rgba(0, 0, 0, 0.28);
+  color: #fffef9;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.hub-next-card-status--pending {
+  background: rgba(0, 0, 0, 0.35);
+  color: #fffef9;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+/* ─── My Trainer card (Scenario 1) ─────────────────────────────────────── */
+
+.hub-trainer-card {
+  margin: 0 16px 20px;
+  border-radius: 20px;
+  background: var(--tg-theme-secondary-bg-color);
+  border: 1.5px solid rgba(247, 166, 0, 0.25);
+  padding: 16px 18px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  cursor: pointer;
+  transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.22s ease, border-color 0.22s ease;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.hub-is-dark .hub-trainer-card {
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.2);
+  border-color: rgba(247, 166, 0, 0.3);
+}
+
+.hub-trainer-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(247, 166, 0, 0.5);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.1);
+}
+
+.hub-trainer-card:active {
+  transform: scale(0.985);
+}
+
+.hub-trainer-avatar {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, rgba(247, 166, 0, 0.25) 0%, rgba(247, 166, 0, 0.1) 100%);
+  border: 2px solid rgba(247, 166, 0, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--app-cta-fill);
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.hub-trainer-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+}
+
+.hub-trainer-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.hub-trainer-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--tg-theme-hint-color);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin-bottom: 3px;
+}
+
+.hub-trainer-name {
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hub-trainer-sub {
+  font-size: 12px;
+  color: var(--tg-theme-hint-color);
+  margin-top: 2px;
+}
+
+.hub-trainer-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.hub-trainer-msg-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  border: 1.5px solid rgba(247, 166, 0, 0.35);
+  background: rgba(247, 166, 0, 0.1);
+  color: var(--app-cta-fill);
+  cursor: pointer;
+  font-family: inherit;
+  -webkit-appearance: none;
+  appearance: none;
+  transition: background 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.hub-trainer-msg-btn:hover {
+  background: rgba(247, 166, 0, 0.2);
+  border-color: rgba(247, 166, 0, 0.6);
+}
+
+.hub-trainer-msg-btn:active {
+  transform: scale(0.92);
+}
+
+.hub-trainer-msg-btn svg {
+  width: 17px;
+  height: 17px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* ─── Section headings ───────────────────────────────────────────────────── */
+
+.hub-section-pad {
+  padding: 0 18px;
+}
+
+.hub-section-head {
+  margin: 0 0 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.hub-section-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--tg-theme-hint-color);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.hub-section-title::before {
+  content: '';
+  width: 12px;
+  height: 2px;
+  background: var(--app-cta-fill);
+  border-radius: 1px;
+  flex-shrink: 0;
+}
+
+.hub-section-link {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--app-cta-fill);
+  cursor: pointer;
+  text-decoration: none;
+  border: none;
+  background: none;
+  font-family: inherit;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.hub-section-link:active { opacity: 0.7; }
+
+/* ─── Upcoming booking list (compact, below hero) ─────────────────────── */
+
+.hub-section-wrap {
+  padding: 0 16px;
+  margin-bottom: 24px;
+}
+
+.hub-bookings-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.hub-booking-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 15px;
+  border-radius: 16px;
+  background: var(--tg-theme-secondary-bg-color);
+  border: 1.5px solid transparent;
+  cursor: pointer;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+  position: relative;
+  overflow: hidden;
+}
+
+.hub-booking-row::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  border-radius: 2px 0 0 2px;
+}
+
+.hub-booking-row--confirmed::before { background: #34c759; }
+.hub-booking-row--pending::before { background: #ff9500; }
+
+.hub-booking-row--confirmed {
+  border-color: rgba(52, 199, 89, 0.2);
+}
+
+.hub-booking-row--pending {
+  border-color: rgba(255, 149, 0, 0.2);
+}
+
+.hub-booking-row:hover {
+  transform: translateX(2px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+}
+
+.hub-booking-row:active {
+  transform: scale(0.985);
+  opacity: 0.9;
+}
+
+.hub-booking-time-col {
+  flex-shrink: 0;
+  text-align: center;
+  min-width: 44px;
+}
+
+.hub-booking-time {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--tg-theme-text-color);
+}
+
+.hub-booking-dur {
+  font-size: 10px;
+  color: var(--tg-theme-hint-color);
+  margin-top: 2px;
+}
+
+.hub-booking-divider {
+  width: 1px;
+  height: 32px;
+  background: rgba(128, 128, 128, 0.15);
+  flex-shrink: 0;
+}
+
+.hub-booking-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.hub-booking-trainer {
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hub-booking-place {
+  font-size: 12px;
+  color: var(--tg-theme-hint-color);
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hub-booking-row-end {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 5px;
+}
+
+.hub-booking-status {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 8px;
+}
+
+.hub-booking-status--confirmed {
+  background: rgba(52, 199, 89, 0.15);
+  color: #34c759;
+}
+
+.hub-booking-status--pending {
+  background: rgba(255, 149, 0, 0.15);
+  color: #ff9500;
+}
+
+.hub-booking-msg-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid rgba(247, 166, 0, 0.3);
+  background: rgba(247, 166, 0, 0.08);
+  color: var(--app-cta-fill);
+  cursor: pointer;
+  font-family: inherit;
+  -webkit-appearance: none;
+  appearance: none;
+  transition: background 0.15s ease, transform 0.12s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.hub-booking-msg-btn:hover { background: rgba(247, 166, 0, 0.18); }
+.hub-booking-msg-btn:active { transform: scale(0.88); }
+
+.hub-booking-msg-btn svg {
+  width: 13px;
+  height: 13px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.hub-day-chip {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--tg-theme-hint-color);
+  text-transform: uppercase;
+  margin-bottom: 8px;
+  margin-top: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.hub-day-chip:first-child { margin-top: 0; }
+
+.hub-day-chip::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: rgba(128, 128, 128, 0.12);
+}
+
+.hub-bookings-cap {
+  text-align: center;
+  font-size: 12px;
+  color: var(--tg-theme-hint-color);
+  margin-top: 10px;
+}
+
+/* ─── Quick action strip (3 pill buttons) ─────────────────────────────── */
+
+.hub-quick-strip {
+  display: flex;
+  gap: 8px;
+  padding: 0 16px;
+  margin-bottom: 24px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.hub-quick-strip::-webkit-scrollbar { display: none; }
+
+.hub-quick-pill {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 10px 16px;
+  border-radius: 14px;
+  background: var(--tg-theme-secondary-bg-color);
+  border: 1.5px solid rgba(128, 128, 128, 0.12);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--tg-theme-text-color);
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease, transform 0.15s ease;
+  white-space: nowrap;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.hub-quick-pill svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  color: var(--app-cta-fill);
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.hub-quick-pill:hover {
+  border-color: rgba(247, 166, 0, 0.4);
+  background: rgba(247, 166, 0, 0.06);
+}
+
+.hub-quick-pill:active {
+  transform: scale(0.94);
+  background: rgba(247, 166, 0, 0.1);
+}
+
+.hub-quick-pill--primary {
+  background: var(--app-cta-fill);
+  color: var(--app-cta-text, #fff);
+  border-color: transparent;
+  box-shadow: 0 4px 16px rgba(247, 166, 0, 0.35);
+}
+
+.hub-quick-pill--primary svg { color: var(--app-cta-text, #fff); }
+
+.hub-quick-pill--primary:hover {
+  background: color-mix(in srgb, var(--app-cta-fill) 90%, #000);
+  border-color: transparent;
+}
+
+/* ─── Explore grid (2-col cards) ─────────────────────────────────────── */
+
+.hub-explore-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  padding: 0 16px;
+  margin-bottom: 24px;
+}
+
+.hub-explore-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-height: 110px;
+  padding: 18px 16px 16px;
+  border-radius: 20px;
+  overflow: hidden;
+  border: 1.5px solid rgba(245, 166, 35, 0.18);
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+  box-shadow: 0 3px 14px rgba(0, 0, 0, 0.07);
+  background: var(--tg-theme-secondary-bg-color);
+  color: var(--tg-theme-text-color);
+  -webkit-tap-highlight-color: transparent;
+}
+
+html:not(.hub-is-dark) .hub-explore-tile {
+  background: linear-gradient(165deg, rgba(255, 243, 204, 0.55) 0%, var(--tg-theme-secondary-bg-color) 100%);
+}
+
+.hub-is-dark .hub-explore-tile {
+  background: linear-gradient(165deg, rgba(255, 251, 235, 0.93) 0%, rgba(255, 243, 214, 0.88) 100%);
+  color: #1a1a1a;
+  border-color: rgba(245, 166, 35, 0.35);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25);
+}
+
+.hub-explore-tile::after {
+  content: '';
+  position: absolute;
+  top: -25%;
+  right: -15%;
+  width: 55%;
+  height: 85%;
+  background: radial-gradient(ellipse, rgba(247, 166, 0, 0.14) 0%, transparent 75%);
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+
+.hub-explore-tile:hover {
+  transform: translateY(-3px) scale(1.015);
+  border-color: rgba(247, 166, 0, 0.45);
+  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.12);
+}
+
+.hub-is-dark .hub-explore-tile:hover { box-shadow: 0 14px 44px rgba(0, 0, 0, 0.38); }
+
+.hub-explore-tile:active { transform: translateY(-1px) scale(0.97); }
+
+.hub-explore-icon {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  margin-bottom: 10px;
+  color: var(--app-cta-fill);
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  position: relative;
+  z-index: 1;
+}
+
+.hub-is-dark .hub-explore-icon { color: #c27800; }
+
+.hub-explore-badge {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 3px 7px;
+  border-radius: 7px;
+  background: rgba(247, 166, 0, 0.2);
+  color: var(--app-cta-fill);
+  line-height: 1;
+  z-index: 2;
+}
+
+.hub-is-dark .hub-explore-badge { color: #c27800; }
+
+.hub-explore-label {
+  font-weight: 700;
+  font-size: 14px;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  margin-bottom: 4px;
+  position: relative;
+  z-index: 1;
+}
+
+.hub-explore-hint {
+  font-size: 11px;
+  line-height: 1.4;
+  opacity: 0.72;
+  position: relative;
+  z-index: 1;
+}
+
+.hub-is-dark .hub-explore-hint { color: #4a4a4a; opacity: 1; }
+html:not(.hub-is-dark) .hub-explore-hint { color: var(--tg-theme-hint-color); opacity: 1; }
+
+/* ─── Acquisition hero (Scenario 2 — no trainer yet) ────────────────── */
+
+.hub-acq-hero {
+  margin: 0 16px 20px;
+  border-radius: 24px;
+  background: var(--tg-theme-secondary-bg-color);
+  border: 1.5px solid rgba(247, 166, 0, 0.2);
+  padding: 22px 20px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.07);
+  position: relative;
+  overflow: hidden;
+}
+
+.hub-is-dark .hub-acq-hero {
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  border-color: rgba(247, 166, 0, 0.3);
+}
+
+.hub-acq-hero::before {
+  content: '';
+  position: absolute;
+  bottom: -20%;
+  right: -10%;
+  width: 50%;
+  height: 80%;
+  background: radial-gradient(ellipse, rgba(247, 166, 0, 0.12) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.hub-acq-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 16px 0 0;
+}
+
+.hub-acq-step {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+  color: var(--tg-theme-hint-color);
+}
+
+.hub-acq-step-num {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: rgba(247, 166, 0, 0.15);
+  color: var(--app-cta-fill);
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+/* ─── Empty / no bookings state ────────────────────────────────────────── */
+
+.hub-empty-state {
+  text-align: center;
+  padding: 22px 16px;
+  color: var(--tg-theme-hint-color);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.hub-empty-icon {
+  font-size: 32px;
+  margin-bottom: 8px;
+  opacity: 0.55;
+}
+
+/* ─── State / error panel ─────────────────────────────────────────────── */
+
+.state-panel {
+  margin: 0 16px 16px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: var(--tg-theme-secondary-bg-color);
+  border: 1px solid rgba(128, 128, 128, 0.12);
+  font-size: 14px;
+}
+
+.state-panel.error { border-color: rgba(255, 59, 48, 0.35); color: #ff3b30; }
+.state-panel.loading { color: var(--tg-theme-hint-color); }
+
+/* ─── Footnote ────────────────────────────────────────────────────────── */
+
+.hub-footnote {
+  margin: 4px 16px 0;
+  padding: 14px 16px;
+  border-radius: 16px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--tg-theme-hint-color);
+  background: linear-gradient(135deg, rgba(247, 166, 0, 0.04) 0%, var(--tg-theme-secondary-bg-color) 100%);
+  border: 1px solid rgba(245, 166, 35, 0.15);
+}
+
+.hub-is-dark .hub-footnote {
+  background: linear-gradient(135deg, rgba(247, 166, 0, 0.06) 0%, var(--tg-theme-secondary-bg-color) 100%);
+}
+
+.hub-footnote strong { color: var(--tg-theme-text-color); }
+
+/* ─── Skeleton loading ───────────────────────────────────────────────── */
+
+.hub-skel-shimmer {
+  background: linear-gradient(
+    110deg,
+    var(--tg-theme-secondary-bg-color) 0%,
+    color-mix(in srgb, var(--tg-theme-button-color) 14%, var(--tg-theme-secondary-bg-color)) 46%,
+    var(--tg-theme-secondary-bg-color) 100%
+  );
+  background-size: 200% 100%;
+  animation: client-hub-skel-shimmer 1.2s ease-in-out infinite;
+  border-radius: 8px;
+}
+
+@keyframes client-hub-skel-shimmer {
+  0% { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}
+
+/* Card-shaped skeleton for next-booking hero */
+.hub-skel-card {
+  margin: 0 16px 20px;
+  border-radius: 24px;
+  height: 160px;
+  opacity: 0.6;
+}
+
+.hub-skel-trainer-card {
+  margin: 0 16px 20px;
+  border-radius: 20px;
+  height: 72px;
+  opacity: 0.5;
+}
+
+/* Row-shaped skeleton for bookings list */
+.hub-bookings-skel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.hub-skel-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(128, 128, 128, 0.1);
+  background: var(--tg-theme-secondary-bg-color);
+  min-height: 56px;
+  box-sizing: border-box;
+}
+
+.hub-skel-line {
+  flex-shrink: 0;
+  border-radius: 6px;
+}
+
+.hub-skel-line--time { width: 44px; height: 16px; }
+.hub-skel-line--primary { width: 65%; height: 13px; }
+.hub-skel-line--secondary { width: 40%; height: 10px; margin-top: 7px; }
+
+/* Smooth reveal: JS sets --visible class after paint */
+.hub-bookings-mount {
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 0.3s ease, transform 0.38s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: opacity, transform;
+}
+
+.hub-bookings-mount.hub-bookings-mount--visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hub-skel-shimmer {
+    animation: none !important;
+    background: var(--tg-theme-secondary-bg-color) !important;
+    opacity: 0.88;
+  }
+  .hub-bookings-mount {
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
+    will-change: auto;
+  }
+  .hub-next-card-eyebrow-dot { animation: none !important; }
+}

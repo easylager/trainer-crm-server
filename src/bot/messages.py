@@ -1724,8 +1724,9 @@ TRAINER_GATE_BLOCKED_PROFILE = (
     "Открой профиль в мини-приложении (кнопка «Профиль» в меню) — там видно, что добить."
 )
 TRAINER_GATE_BOOKING_READY = (
-    "В <b>мини-приложении</b> уже можно открыть расписание и сделать первые записи. "
-    "Команды меню бота до активации профиля пока недоступны — это нормально.\n\n"
+    "В <b>мини-приложении</b> уже можно открыть расписание и сделать первые записи — то же доступно и "
+    "в этом чате (заметки, приглашения клиентов и разделы меню).\n\n"
+    "Чтобы тебя увидели в <b>общем каталоге</b>, заполни анкету и дождись одобрения — статус в «Профиле» в приложении.\n\n"
     "Открой <b>«Обзор»</b> или <b>«Профиль»</b> в меню слева."
 )
 # Полная анкета, но заявка на модерацию ещё не ушла (moderation_submitted_at пустой): в Mini App отправка после «Сохранить».
@@ -1982,6 +1983,10 @@ TRAINER_CREATE_BOOKING_DONE = (
     "⏰ <b>Напоминания клиенту:</b> {reminder_plan}\n"
     "📩 <b>Подтверждение клиенту:</b> {client_confirmation}\n"
     "📝 <b>Заметка:</b> можно добавить сразу кнопкой ниже."
+)
+# Appended to TRAINER_CREATE_BOOKING_DONE for onboarding demo (is_sandbox) bookings — same push as real flow.
+TRAINER_CREATE_BOOKING_SANDBOX_CANCEL_HINT = (
+    "\n\n💡 <i>Чтобы отменить эту запись, откройте «Детали записи» в приложении.</i>"
 )
 # Rich push is sent by notification_service (trainer_booked loop), not inline from API/bot handlers.
 TRAINER_CREATE_BOOKING_CLIENT_CONFIRMATION_QUEUED = (

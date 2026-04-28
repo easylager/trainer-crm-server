@@ -290,6 +290,8 @@ class Service(Base):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(128), nullable=False)
     sort_order: Mapped[int] = mapped_column(Integer(), server_default="0", nullable=False)
+    #: Plain text for client catalog «Подробнее» modal (what it is, for whom). Editable in DB / admin.
+    client_summary: Mapped[Optional[str]] = mapped_column(Text(), nullable=True)
 
     trainers: Mapped[list["Trainer"]] = relationship(
         "Trainer", secondary="trainer_services", back_populates="services", lazy="raise"

@@ -1,8 +1,8 @@
 """
 Keep Telegram menu in sync with trainer status and subscription tier.
 
-- Active trainers get full menu based on subscription tier (CRM features, stats).
-- Non-active trainers (pending_profile, deactivated, etc.) get minimal menu (guide, profile, subscription).
+- Trainers who may use CRM bot workflows (active, booking_ready, pending_moderation) get full tier menu.
+- Others (incomplete profile, deactivated, etc.) get minimal menu (guide, profile, subscription).
 
 Throttles repeated set_my_commands when nothing changed; always syncs when signature changes
 (e.g. subscription removed in admin, or status demoted) so the 60s throttle does not block urgent updates.
@@ -15,7 +15,7 @@ from typing import Any
 from aiogram import BaseMiddleware
 from aiogram.types import CallbackQuery, Message, TelegramObject
 
-from src.application.trainer_access_state import TrainerAccessState, get_trainer_access_state
+from src.application.trainer_access_state import get_trainer_access_state, trainer_may_use_bot_workflows
 from src.application.trainer_link import get_trainer_id_by_telegram_id
 from src.bot import trainer_benchmark_config as bench_cfg
 from src.bot.trainer_menu_commands import (
@@ -77,7 +77,7 @@ class TrainerMenuSyncMiddleware(BaseMiddleware):
                     )
                 return await handler(event, data)
             # Signature includes state so menu resets when trainer loses active status
-            if state == TrainerAccessState.ACTIVE:
+            if trainer_may_use_bot_workflows(state):
                 tier_sig = await trainer_menu_signature(session, tid)
                 sig = f"active|{tier_sig}"
             else:
@@ -98,7 +98,7 @@ class TrainerMenuSyncMiddleware(BaseMiddleware):
 
         t_sync = time.perf_counter()
         async with async_session_factory() as session:
-            if state == TrainerAccessState.ACTIVE:
+            if trainer_may_use_bot_workflows(state):
                 await sync_trainer_menu_commands(bot, chat_id, tid, session)
             else:
                 await reset_trainer_menu_to_minimal(bot, chat_id)

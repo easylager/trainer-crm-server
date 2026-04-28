@@ -24,7 +24,9 @@ from src.application.booking_use_cases import (
     cancel_booking,
     confirm_booking,
     create_booking,
+    compute_booking_reminder_schedule,
     decline_booking,
+    format_reminder_plan_ru,
     generate_reminders_for_booking,
     get_booking_for_trainer_feedback,
     get_booking_milestone_display_for_trainer,
@@ -64,7 +66,11 @@ from src.application.subscription_tier_use_cases import (
     trainer_has_analytics_access,
     trainer_has_crm_access,
 )
-from src.application.trainer_access_state import TrainerAccessState, get_trainer_access_state
+from src.application.trainer_access_state import (
+    TrainerAccessState,
+    get_trainer_access_state,
+    trainer_may_use_bot_workflows,
+)
 from src.application.trainer_link import consume_link_token, get_trainer_id_by_telegram_id
 from src.application.referral_use_cases import (
     get_trainer_id_by_referral_code,
@@ -90,7 +96,7 @@ from src.application.trainer_schedule_use_cases import (
 )
 from src.bot import messages as msg
 from src.bot.trainer_cancel_client_notify import send_trainer_cancel_notification_for_booking_now
-from src.bot.trainer_bot_state import trainer_support_awaiting
+from src.bot.trainer_bot_state import trainer_booking_note_awaiting, trainer_support_awaiting
 from src.bot.trainer_gate_text import trainer_first_link_onboarding_html, trainer_gate_message
 from src.bot.trainer_menu_commands import sync_trainer_menu_commands
 from src.bot.share_catalog_tip import send_trainer_share_catalog_tip_to_chat
@@ -340,23 +346,14 @@ def _build_client_reminder_plan_text(
     if slot_dt_local <= now_local:
         return "не ставим: слот уже начался или в прошлом"
 
-    def _is_quiet_hours(dt: datetime) -> bool:
-        return 0 <= dt.hour < 8
-
-    candidates: list[tuple[str, datetime]] = []
-    t24 = slot_dt_local - timedelta(hours=24)
-    t2 = slot_dt_local - timedelta(hours=2)
-    if now_local.date() < slot_date:
-        if t24 > now_local and t24 < slot_dt_local and not _is_quiet_hours(t24):
-            candidates.append(("за 24 ч", t24))
-        if t2 > now_local and t2 < slot_dt_local and not _is_quiet_hours(t2):
-            candidates.append(("за 2 ч", t2))
-    else:
-        if now_local < t2 and t2 < slot_dt_local and not _is_quiet_hours(t2):
-            candidates.append(("за 2 ч", t2))
-    if not candidates:
-        return "не планируются: поздняя запись или время попало в тихие часы"
-    return ", ".join(f"{dt.strftime('%d.%m %H:%M')} ({label})" for label, dt in candidates)
+    plan = compute_booking_reminder_schedule(
+        anchor_local=now_local,
+        slot_date=slot_date,
+        start_time=start_time,
+    )
+    if not plan:
+        return "не планируются: поздняя запись или нет окна до начала слота"
+    return format_reminder_plan_ru(plan)
 
 
 def _week_range(week_start: date | str) -> tuple[str, str]:
@@ -1563,18 +1560,22 @@ async def _complete_schedule_create_booking(
         )
         await callback.message.answer(card_html, parse_mode=ParseMode.HTML, reply_markup=milestone_kb)
     else:
-        buttons_row: list[InlineKeyboardButton] = [
-            InlineKeyboardButton(
-                text=msg.TRAINER_BUTTON_ADD_BOOKING_NOTE,
-                callback_data=f"{BOOKING_ADD_NOTE_PREFIX}{booking_id}",
-            )
+        keyboard_rows: list[list[InlineKeyboardButton]] = [
+            [
+                InlineKeyboardButton(
+                    text=msg.TRAINER_BUTTON_ADD_BOOKING_NOTE,
+                    callback_data=f"{BOOKING_ADD_NOTE_PREFIX}{booking_id}",
+                )
+            ]
         ]
         if not client_tg_id:
-            buttons_row.append(
-                InlineKeyboardButton(
-                    text=msg.TRAINER_BUTTON_INVITE_CLIENT_TO_BOT,
-                    callback_data=f"{BOOKING_INVITE_CLIENT_PREFIX}{booking_id}",
-                )
+            keyboard_rows.append(
+                [
+                    InlineKeyboardButton(
+                        text=msg.TRAINER_BUTTON_INVITE_CLIENT_TO_BOT,
+                        callback_data=f"{BOOKING_INVITE_CLIENT_PREFIX}{booking_id}",
+                    )
+                ]
             )
         reminder_plan = _build_client_reminder_plan_text(
             slot_date,
@@ -1594,7 +1595,7 @@ async def _complete_schedule_create_booking(
                 reminder_plan=html.escape(reminder_plan),
                 client_confirmation=html.escape(client_confirmation),
             ),
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[buttons_row]),
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard_rows),
         )
     await _send_first_booking_milestone_followups(
         callback.message,
@@ -2256,6 +2257,7 @@ async def on_booking_add_note_start(callback: CallbackQuery) -> None:
         "slot_date": slot_date,
         "start_time": start_time,
     }
+    trainer_booking_note_awaiting.add(telegram_id)
     await callback.message.answer(
         msg.TRAINER_ADD_BOOKING_NOTE_PROMPT.format(
             client_name=html.escape(client_name),
@@ -2314,6 +2316,7 @@ async def on_booking_note_message(message: Message) -> None:
             entry_date=entry_dt,
         )
     _trainer_booking_note_state.pop(telegram_id, None)
+    trainer_booking_note_awaiting.discard(telegram_id)
     await message.answer(msg.TRAINER_ADD_BOOKING_NOTE_SAVED)
 
 
@@ -3138,6 +3141,7 @@ async def on_trainer_faq_callback(callback: CallbackQuery) -> None:
 async def cmd_cancel_idle(message: Message) -> None:
     telegram_id = message.from_user.id if message.from_user else 0
     _trainer_booking_note_state.pop(telegram_id, None)
+    trainer_booking_note_awaiting.discard(telegram_id)
     await message.answer(msg.TRAINER_CANCEL_IDLE)
 
 
@@ -3160,7 +3164,7 @@ async def fallback(message: Message) -> None:
     if state == TrainerAccessState.NOT_LINKED:
         await message.answer(msg.TRAINER_ONLY_VIA_SITE)
         return
-    if state != TrainerAccessState.ACTIVE:
+    if not trainer_may_use_bot_workflows(state):
         await message.answer(trainer_gate_message(state, trainer))
         return
     await message.answer(msg.TRAINER_FALLBACK)
