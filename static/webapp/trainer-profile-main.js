@@ -156,6 +156,11 @@
         'services',
         'arenas',
       ];
+      /**
+       * TTV block-tour only: «Назад» и канон без шагов из «Настройки» (длительность / окно записи).
+       * Серверные tt_minimal_missing_fields больше не содержат эти поля — порядок должен совпадать с продуктом.
+       */
+      var PROFILE_TT_MINIMAL_WIZARD_ORDER = ['anketa_main', 'phone', 'services', 'arenas'];
       /** Stable RU labels by tour step key (do not depend on server array ordering). */
       var PROFILE_TT_BLOCK_LABELS_RU = {
         anketa_main: 'Основное',
@@ -166,6 +171,55 @@
         services: 'услуги',
         arenas: 'арены',
       };
+
+      /** Previous step in TTV wizard (mandatory profile blocks only — not settings). */
+      function profileBlockTourCanonicalPrevStepKey(stepKey) {
+        if (!stepKey) return null;
+        var ix = PROFILE_TT_MINIMAL_WIZARD_ORDER.indexOf(stepKey);
+        if (ix <= 0) return null;
+        return PROFILE_TT_MINIMAL_WIZARD_ORDER[ix - 1];
+      }
+
+      /**
+       * Contiguous segment of PROFILE_TT_MINIMAL_WIZARD_ORDER covering all current TTV UI gaps
+       * (so «Назад/Далее» never skip phone between анкетой and услугами).
+       * `missingUiOrdered` = profileBlockTourMissingInCanonicalOrder(profileBlockTourMissingStepKeys(...)).
+       */
+      function profileBlockTourBuildMinimalContiguousRail(missingUiOrdered) {
+        var order = PROFILE_TT_MINIMAL_WIZARD_ORDER;
+        var ixes = [];
+        var i;
+        for (i = 0; i < missingUiOrdered.length; i++) {
+          var ix = order.indexOf(missingUiOrdered[i]);
+          if (ix >= 0) ixes.push(ix);
+        }
+        if (!ixes.length) return [];
+        ixes.sort(function(a, b) {
+          return a - b;
+        });
+        return order.slice(ixes[0], ixes[ixes.length - 1] + 1);
+      }
+
+      /** Grow session rail so it includes `stepKey` (user rewound / forward within minimal order). */
+      function profileBlockTourExpandMinimalRailToInclude(stepKey) {
+        var order = PROFILE_TT_MINIMAL_WIZARD_ORDER;
+        var ik = order.indexOf(stepKey);
+        if (ik < 0) return;
+        var rail = state.profileBlockTourSessionSealOrder;
+        if (!rail || !rail.length) {
+          state.profileBlockTourSessionSealOrder = order.slice(ik, ik + 1);
+          return;
+        }
+        var i0 = order.indexOf(rail[0]);
+        var i1 = order.indexOf(rail[rail.length - 1]);
+        if (i0 < 0 || i1 < 0) {
+          state.profileBlockTourSessionSealOrder = order.slice(ik, ik + 1);
+          return;
+        }
+        var lo = Math.min(i0, i1, ik);
+        var hi = Math.max(i0, i1, ik);
+        state.profileBlockTourSessionSealOrder = order.slice(lo, hi + 1);
+      }
 
       /** Первое незаполненное поле в блоке «Основное» (имя → фамилия → город). */
       function getAnketaMainFocusEl() {
@@ -216,17 +270,6 @@
       function profileBlockTourUiStepStillMissing(uiKey, missingUiKeysArray) {
         if (!uiKey || !missingUiKeysArray || !missingUiKeysArray.length) return false;
         return missingUiKeysArray.indexOf(uiKey) >= 0;
-      }
-
-      /**
-       * When moving forward successfully off `leftStepKey`, remember it so the user can return.
-       */
-      function profileBlockTourPushBackwardStack(leftStepKey) {
-        if (!leftStepKey) return;
-        if (!state.profileBlockTourBackwardStack) state.profileBlockTourBackwardStack = [];
-        var st = state.profileBlockTourBackwardStack;
-        if (st[st.length - 1] === leftStepKey) return;
-        st.push(leftStepKey);
       }
 
       function profileBlockTourResetWizardStacks() {
@@ -308,13 +351,20 @@
 
       function profileBlockTourOnBackClick() {
         if (!state.profileBlockTourActive) return;
-        if (!state.profileBlockTourBackwardStack || !state.profileBlockTourBackwardStack.length) return;
-        var prevKey = state.profileBlockTourBackwardStack.pop();
-        if (!prevKey) return;
         try {
           var ae = document.activeElement;
           if (ae && ae.blur) ae.blur();
         } catch (eBk) {}
+        var currKey = profileBlockTourEffectiveStepKey();
+        if (!currKey) return;
+        profileBlockTourExpandMinimalRailToInclude(currKey);
+        var rail = state.profileBlockTourSessionSealOrder || [];
+        var ix = rail.indexOf(currKey);
+        var prevKey = null;
+        if (ix > 0) prevKey = rail[ix - 1];
+        if (!prevKey) prevKey = profileBlockTourCanonicalPrevStepKey(currKey);
+        if (!prevKey) return;
+        profileBlockTourExpandMinimalRailToInclude(prevKey);
         state.profileBlockTourDisplayedStepOverride = prevKey;
         syncProfileBlockTourBar();
       }
@@ -2327,8 +2377,9 @@
           !state.profileBlockTourSessionSealOrder &&
           stepKeys.length
         ) {
-          state.profileBlockTourSessionSealOrder =
-            profileBlockTourMissingInCanonicalOrder(stepKeys.slice());
+          state.profileBlockTourSessionSealOrder = profileBlockTourBuildMinimalContiguousRail(
+            profileBlockTourMissingInCanonicalOrder(stepKeys.slice())
+          );
         }
         if (stepKeys.length) state.profileBlockTourHubRedirectScheduled = false;
         var syntheticTailStep = false;
@@ -2396,10 +2447,29 @@
         }
         var prog = syntheticTailStep
           ? profileBlockTourSealProgress(finalSealK)
-          : profileBlockTourProgressContext(state.profileBlockTourDisplayedStepOverride);
-        var orderedForDots = prog.keys;
-        var idx = prog.idx;
-        var totalDots = orderedForDots.length;
+          : null;
+        var orderedForDots;
+        var idx;
+        var totalDots;
+        if (syntheticTailStep) {
+          orderedForDots = prog.keys;
+          idx = prog.idx;
+          totalDots = orderedForDots.length;
+        } else {
+          profileBlockTourExpandMinimalRailToInclude(currKey);
+          var rail = state.profileBlockTourSessionSealOrder || [];
+          if (rail.length) {
+            orderedForDots = rail;
+            idx = rail.indexOf(currKey);
+            if (idx < 0) idx = 0;
+            totalDots = rail.length;
+          } else {
+            var progFb = profileBlockTourProgressContext(state.profileBlockTourDisplayedStepOverride);
+            orderedForDots = progFb.keys;
+            idx = progFb.idx;
+            totalDots = orderedForDots.length;
+          }
+        }
         var def = OB_FLOW_STEP_DEFS[currKey] || {};
         /* Заголовок шага. */
         var titleEl = document.getElementById('obFlowTitle');
@@ -2430,7 +2500,10 @@
         }
         var backBtnEl = document.getElementById('obFlowBack');
         if (backBtnEl) {
-          var canBack = !!(state.profileBlockTourBackwardStack && state.profileBlockTourBackwardStack.length);
+          profileBlockTourExpandMinimalRailToInclude(currKey);
+          var railBack = state.profileBlockTourSessionSealOrder || [];
+          var ixBack = railBack.indexOf(currKey);
+          var canBack = ixBack > 0 || (ixBack === 0 && !!profileBlockTourCanonicalPrevStepKey(currKey));
           backBtnEl.hidden = !canBack;
           backBtnEl.setAttribute('aria-hidden', canBack ? 'false' : 'true');
         }
@@ -2507,32 +2580,6 @@
           if (missing.indexOf(PROFILE_TT_BLOCK_ORDER[j]) >= 0) return PROFILE_TT_BLOCK_ORDER[j];
         }
         return missing[0] || null;
-      }
-
-      /** Next TTV criterion in PROFILE_TT_BLOCK_ORDER that is still in missingKeys (after prevKey). */
-      function profileBlockTourFirstMissingAfter(prevKey, missingKeys) {
-        if (!missingKeys || !missingKeys.length) return null;
-        var start = prevKey ? PROFILE_TT_BLOCK_ORDER.indexOf(prevKey) : -1;
-        if (start < 0) start = -1;
-        var i;
-        for (i = start + 1; i < PROFILE_TT_BLOCK_ORDER.length; i++) {
-          if (missingKeys.indexOf(PROFILE_TT_BLOCK_ORDER[i]) >= 0) return PROFILE_TT_BLOCK_ORDER[i];
-        }
-        return null;
-      }
-
-      /**
-       * After advancing: if prev step still missing — stay; else focus next in canonical order or first gap.
-       */
-      function profileBlockTourFocusAfterStep(prevKey, missingKeys) {
-        if (!missingKeys || !missingKeys.length) return;
-        if (prevKey && missingKeys.indexOf(prevKey) >= 0) {
-          focusFormFieldForReadinessKey(prevKey);
-          return;
-        }
-        var nextK = prevKey ? profileBlockTourFirstMissingAfter(prevKey, missingKeys) : null;
-        if (!nextK) nextK = missingKeys[0];
-        focusFormFieldForReadinessKey(nextK);
       }
 
       /** GET bootstrap + fill form; no focus (caller picks next step). Returns Promise. */
@@ -2654,8 +2701,14 @@
               state.profileBlockTourSessionVisitedLastForward = true;
             }
             if (!profileBlockTourUiStepStillMissing(stepAtClick, missing)) {
-              profileBlockTourPushBackwardStack(stepAtClick);
-              state.profileBlockTourDisplayedStepOverride = null;
+              profileBlockTourExpandMinimalRailToInclude(stepAtClick);
+              var railN = state.profileBlockTourSessionSealOrder || [];
+              var ixN = railN.indexOf(stepAtClick);
+              if (ixN >= 0 && ixN + 1 < railN.length) {
+                state.profileBlockTourDisplayedStepOverride = railN[ixN + 1];
+              } else {
+                state.profileBlockTourDisplayedStepOverride = null;
+              }
             }
             syncProfileBlockTourBar();
             if (!missing.length) return;
@@ -2669,7 +2722,6 @@
               focusFormFieldForReadinessKey(stepAtClick);
               return;
             }
-            profileBlockTourFocusAfterStep(stepAtClick, missing);
           })
           .catch(function() {})
           .finally(function() {
@@ -2693,11 +2745,15 @@
 
         var stillMissingAdv =
           advanceKey != null && profileBlockTourUiStepStillMissing(advanceKey, missing);
-        if (!stillMissingAdv) {
-          state.profileBlockTourDisplayedStepOverride = null;
-        }
-        if (advanceKey != null && !stillMissingAdv) {
-          profileBlockTourPushBackwardStack(advanceKey);
+        if (!stillMissingAdv && advanceKey != null) {
+          profileBlockTourExpandMinimalRailToInclude(advanceKey);
+          var railA = state.profileBlockTourSessionSealOrder || [];
+          var ixA = railA.indexOf(advanceKey);
+          if (ixA >= 0 && ixA + 1 < railA.length) {
+            state.profileBlockTourDisplayedStepOverride = railA[ixA + 1];
+          } else {
+            state.profileBlockTourDisplayedStepOverride = null;
+          }
         }
 
         syncProfileBlockTourBar();
@@ -2705,11 +2761,9 @@
         if (!missing.length) return;
         /* Defer past layout / nested loadProfile from maybeAutoSubmitForModeration. */
         setTimeout(function() {
-          if (advanceKey == null) {
-            focusFormFieldForReadinessKey(profileBlockTourCanonicalFirstMissing() || missing[0]);
-            return;
+          if (advanceKey != null && profileBlockTourUiStepStillMissing(advanceKey, missing)) {
+            focusFormFieldForReadinessKey(advanceKey);
           }
-          profileBlockTourFocusAfterStep(advanceKey, missing);
         }, 400);
       }
 
@@ -2739,7 +2793,9 @@
         state.profileBlockTourActive = true;
         state.profileBlockTourHubRedirectScheduled = false;
         profileBlockTourResetWizardStacks();
-        state.profileBlockTourSessionSealOrder = profileBlockTourMissingInCanonicalOrder(keys.slice());
+        state.profileBlockTourSessionSealOrder = profileBlockTourBuildMinimalContiguousRail(
+          profileBlockTourMissingInCanonicalOrder(keys.slice())
+        );
         state.profileBlockTourSessionVisitedLastForward = false;
         syncProfileBlockTourBar();
         var k0 = profileBlockTourCanonicalFirstMissing();

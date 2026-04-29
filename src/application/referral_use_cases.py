@@ -181,7 +181,7 @@ async def get_referral_attribution(session: AsyncSession, referred_id: int) -> d
 
 
 async def maybe_grant_referral_onboarding_bonus(trainer_id: int) -> None:
-    """Referrer +2d when referred trainer completes TTV minimal profile (7-field gate)."""
+    """Referrer +2d when referred trainer completes TTV minimal profile (5-field gate)."""
     from src.application.trainer_use_cases import get_trainer_moderation_readiness
     from src.infrastructure.db import async_session_factory
 

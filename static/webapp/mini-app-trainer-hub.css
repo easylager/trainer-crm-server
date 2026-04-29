@@ -976,7 +976,8 @@
     #hubModalBookGroupSlot.hub-book-flow-overlay,
     #hubModalBookGroupConfirm.hub-book-flow-overlay,
     #hubModalFillSlotsInvites.hub-book-flow-overlay,
-    #hubModalShareBookingLink.hub-book-flow-overlay {
+    #hubModalShareBookingLink.hub-book-flow-overlay,
+    #hubFirstBookingSoftGate.hub-book-flow-overlay {
       position: fixed;
       left: 0;
       right: 0;
@@ -1000,7 +1001,8 @@
     #hubModalBookGroupSlot .hub-book-modal.modal.book-flow-modal,
     #hubModalBookGroupConfirm .hub-book-modal.modal.book-flow-modal,
     #hubModalShareBookingLink .hub-share-link-modal.modal,
-    #hubModalFillSlotsInvites .hub-fill-slots-invites-modal.modal {
+    #hubModalFillSlotsInvites .hub-fill-slots-invites-modal.modal,
+    #hubFirstBookingSoftGate .hub-book-modal.modal.book-flow-modal {
       position: relative;
       max-width: 360px;
       width: 100%;
@@ -1026,6 +1028,16 @@
       letter-spacing: -0.02em;
       color: var(--tg-theme-text-color);
     }
+    /* Reserve space for absolute close control — long titles must not run under the ×. */
+    #hubFirstBookingSoftGate .book-modal-title {
+      margin: 0 0 12px;
+      padding-right: 52px;
+      font-size: 1.125rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: var(--tg-theme-text-color);
+      box-sizing: border-box;
+    }
     #hubModalBookGroupConfirm .book-confirm-text {
       margin: 0 0 20px;
       font-size: 14px;
@@ -1035,11 +1047,80 @@
     #hubModalQuickBookDatetime .book-choice-lead,
     #hubModalBookGroupSlot .book-choice-lead,
     #hubModalShareBookingLink .book-choice-lead,
-    #hubModalFillSlotsInvites .book-choice-lead {
+    #hubModalFillSlotsInvites .book-choice-lead,
+    #hubFirstBookingSoftGate .book-choice-lead {
       margin: 0 0 18px;
       font-size: 14px;
       line-height: 1.45;
       color: var(--tg-theme-hint-color);
+    }
+
+    #hubFirstBookingSoftGate .hub-soft-gate-modal {
+      position: relative;
+      padding-top: 28px;
+    }
+    #hubFirstBookingSoftGate .hub-soft-gate-close {
+      position: absolute;
+      top: 4px;
+      right: 4px;
+      width: 44px;
+      height: 44px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0;
+      padding: 0;
+      border: none;
+      border-radius: 12px;
+      background: transparent;
+      color: var(--tg-theme-hint-color);
+      font-size: 1.35rem;
+      line-height: 1;
+      cursor: pointer;
+    }
+    #hubFirstBookingSoftGate .hub-soft-gate-close:active {
+      opacity: 0.75;
+    }
+    #hubFirstBookingSoftGate .hub-soft-gate-list {
+      margin: 0 0 14px;
+      padding: 0 0 0 1.15em;
+      font-size: 14px;
+      line-height: 1.45;
+      color: var(--tg-theme-text-color);
+    }
+    #hubFirstBookingSoftGate .hub-soft-gate-list li {
+      margin: 6px 0;
+    }
+    #hubFirstBookingSoftGate .hub-soft-gate-footer {
+      margin: 0 0 18px;
+      font-size: 14px;
+      line-height: 1.45;
+      color: var(--tg-theme-hint-color);
+    }
+    #hubFirstBookingSoftGate .hub-soft-gate-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    #hubFirstBookingSoftGate .hub-soft-gate-actions .btn-block {
+      margin: 0;
+    }
+    #hubFirstBookingSoftGate .hub-soft-gate-skip {
+      display: block;
+      width: 100%;
+      margin-top: 12px;
+      padding: 8px 0 0;
+      text-align: center;
+      font-size: 14px;
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      color: var(--tg-theme-hint-color);
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+    #hubFirstBookingSoftGate .hub-soft-gate-skip[hidden] {
+      display: none !important;
     }
 
     .hub-fill-slots-invites-host {
@@ -1744,17 +1825,22 @@
     #hubModalBookGroupSlot .hub-phone-input-wrap .hub-phone-prefix {
       position: absolute;
       left: 14px;
-      top: 50%;
-      transform: translateY(-50%);
+      /* WebKit vertically centers tel text in the inner box; top:50% on the prefix drifts vs digits. */
+      top: 13px;
+      transform: none;
       z-index: 1;
       font-size: 15px;
       font-weight: 600;
-      line-height: 1;
+      line-height: 22px;
+      height: 22px;
+      display: flex;
+      align-items: center;
       color: var(--tg-theme-text-color);
       opacity: 1;
       pointer-events: none;
       letter-spacing: 0.02em;
       font-variant-numeric: tabular-nums;
+      font-family: inherit;
     }
     /* WebKit/iOS: tel input often ignores inherited color — digits render black while prefix uses theme; force theme foreground on both. */
     #hubModalBookGroupSlot .hub-phone-input-wrap .hub-phone-input {
@@ -1762,7 +1848,8 @@
       width: 100%;
       min-width: 0;
       margin: 0;
-      padding: 14px 14px 14px 58px;
+      padding: 13px 14px 13px 58px;
+      height: 48px;
       min-height: 48px;
       box-sizing: border-box;
       border-radius: 14px;
@@ -1771,7 +1858,8 @@
       box-shadow: none;
       font-size: 15px;
       font-weight: 600;
-      line-height: 1.25;
+      line-height: 22px;
+      font-family: inherit;
       font-variant-numeric: tabular-nums;
       -webkit-appearance: none;
       appearance: none;

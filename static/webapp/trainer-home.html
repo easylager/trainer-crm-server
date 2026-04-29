@@ -51,9 +51,9 @@
     })();
   </script>
   <!-- Bump ?v= when mini-app-trainer-hub.css changes (immutable cache on /webapp/…). -->
-  <link rel="stylesheet" href="mini-app-trainer-hub.css?v=20260559" />
+  <link rel="stylesheet" href="mini-app-trainer-hub.css?v=20260563" />
   <!-- Early download of main hub script (defer runs at end of body); improves time-to-interactive vs. discover-at-bottom. -->
-  <link rel="preload" href="trainer-home-main.js?v=20260552" as="script" />
+  <link rel="preload" href="trainer-home-main.js?v=20260562" as="script" />
 
   <!-- ─── Splash loader (inline to guarantee render before external CSS) ─── -->
   <style>
@@ -657,6 +657,21 @@
     </div>
   </div>
 
+  <div id="hubFirstBookingSoftGate" class="modal-overlay hub-book-flow-overlay hub-soft-gate-overlay" style="display: none;" aria-hidden="true">
+    <div class="modal book-flow-modal hub-book-modal hub-soft-gate-modal" role="dialog" aria-labelledby="hubSoftGateTitle" aria-modal="true">
+      <button type="button" class="hub-soft-gate-close" id="hubSoftGateClose" aria-label="Закрыть">×</button>
+      <h3 id="hubSoftGateTitle" class="book-modal-title hub-soft-gate-title"></h3>
+      <p id="hubSoftGateIntro" class="book-choice-lead hub-soft-gate-intro"></p>
+      <ul id="hubSoftGateList" class="hub-soft-gate-list"></ul>
+      <p id="hubSoftGateFooter" class="hub-soft-gate-footer"></p>
+      <div class="modal-actions hub-soft-gate-actions">
+        <button type="button" class="btn-block btn-primary" id="hubSoftGateCtaPrimary">Создать первую запись</button>
+        <button type="button" class="btn-block btn-secondary" id="hubSoftGateCtaSandbox">Попробовать на примере</button>
+      </div>
+      <button type="button" class="btn-link hub-soft-gate-skip" id="hubSoftGateSkip" hidden></button>
+    </div>
+  </div>
+
   <div id="hubModalQuickBookDatetime" class="modal-overlay hub-book-flow-overlay" style="display: none;" aria-hidden="true">
     <div class="modal book-flow-modal hub-book-modal" role="dialog" aria-labelledby="hubQuickBookTitle">
       <h3 id="hubQuickBookTitle" class="book-modal-title">Записать клиента</h3>
@@ -890,6 +905,6 @@
   <script src="mini-app-trainer-gate.js?v=20260548"></script>
   <script src="mini-app-trainer-celebration.js"></script>
   <!-- Bump ?v= when trainer-home-main.js changes (immutable cache on /webapp/…). -->
-  <script defer src="trainer-home-main.js?v=20260552"></script>
+  <script defer src="trainer-home-main.js?v=20260562"></script>
 </body>
 </html>

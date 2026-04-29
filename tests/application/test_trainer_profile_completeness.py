@@ -169,6 +169,27 @@ def test_moderation_readiness_submit_complete_full_incomplete() -> None:
     assert "description" in (d.get("full_profile_missing_fields") or [])
 
 
+def test_tt_minimal_ignores_session_duration_and_booking_window() -> None:
+    """Defaults / settings handle these; full tier still requires valid ranges."""
+    t = {
+        "profile": {
+            "first_name": "Ann",
+            "last_name": "Xu",
+            "phone": "+375291112233",
+            "city_id": 1,
+            "session_duration_minutes": None,
+            "min_hours_before_booking": None,
+        },
+        "photos": [],
+        "service_ids": [1],
+        "arena_ids": [2],
+        "education_entries_count": 0,
+    }
+    ok, miss = analyze_tt_minimal_profile_readiness(t)
+    assert ok is True
+    assert miss == []
+
+
 def test_tt_minimal_complete_without_photo_or_long_bio() -> None:
     t = {
         "profile": {
@@ -176,8 +197,6 @@ def test_tt_minimal_complete_without_photo_or_long_bio() -> None:
             "last_name": "Xu",
             "phone": "+375291112233",
             "city_id": 1,
-            "session_duration_minutes": 60,
-            "min_hours_before_booking": 3,
         },
         "photos": [],
         "service_ids": [1],
@@ -196,8 +215,6 @@ def test_moderation_readiness_includes_tt_minimal_keys() -> None:
             "last_name": "Xu",
             "phone": "+375291112233",
             "city_id": 1,
-            "session_duration_minutes": 60,
-            "min_hours_before_booking": 3,
         },
         "photos": [],
         "service_ids": [1],

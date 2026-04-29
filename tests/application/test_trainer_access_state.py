@@ -48,7 +48,7 @@ def test_blocked_profile_when_pending_and_incomplete_trainer() -> None:
 
 
 def _trainer_tt_minimal_only() -> dict:
-    """7-field TTV gate: no photo/description/education required."""
+    """5-field TTV gate: no photo/description/education or session/booking settings required."""
     return {
         "id": 2,
         "status": TRAINER_STATUS_PENDING_PROFILE,
@@ -57,8 +57,6 @@ def _trainer_tt_minimal_only() -> dict:
             "last_name": "Lee",
             "phone": "+375291112233",
             "city_id": 1,
-            "session_duration_minutes": 60,
-            "min_hours_before_booking": 3,
         },
         "photos": [],
         "service_ids": [1],

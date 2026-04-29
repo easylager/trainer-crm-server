@@ -11,8 +11,10 @@ full name, age > 0, phone, bio length >= MIN_DESCRIPTION_CHARS, photo, city, edu
 (text or structured entries), experience_years >= 0, session length [15,240],
 booking window [0,168], at least one service and one arena.
 
-**C — TTV minimal (time-to-value):** 7 checks — enough to open schedule + trial booking in Mini App
-while status is still pending_profile (no photo/bio/education/age/experience required).
+**C — TTV minimal (time-to-value):** 5 checks — identity + contacts + city + services + arenas;
+enough to open schedule + trial booking in Mini App while status is still pending_profile
+(no photo/bio/education/age/experience required). Session length and booking window stay in
+«Настройки» with product defaults in API until the trainer adjusts them (full tier still validates).
 Progressive profiling fills the rest toward tier A/B later.
 
 Partial PATCH is allowed; submit stays blocked until tier A is satisfied.
@@ -39,7 +41,7 @@ SUBMIT_OPTIONAL_PROFILE_FIELD_KEYS: frozenset[str] = frozenset(
 MODERATION_SUBMISSION_CRITERIA_TOTAL = MODERATION_CRITERIA_TOTAL - len(SUBMIT_OPTIONAL_PROFILE_FIELD_KEYS)
 
 # TTV gate: schedule + first booking before moderation (pending_profile only on access layer).
-TT_MINIMAL_CRITERIA_TOTAL = 7
+TT_MINIMAL_CRITERIA_TOTAL = 5
 
 # Stable keys for API, tests, and i18n.
 MISSING_FIELD_LABELS_RU: dict[str, str] = {
@@ -149,7 +151,8 @@ def analyze_tt_minimal_profile_readiness(trainer: dict[str, Any]) -> tuple[bool,
     """
     Minimal profile to unlock trainer Mini App schedule + bookings while pending_profile.
 
-    Intentionally excludes: photo, long description, education text/entries, age, experience_years.
+    Intentionally excludes: photo, long description, education text/entries, age, experience_years,
+    session_duration_minutes, min_hours_before_booking (use defaults / settings; full tier still checks).
     """
     missing: list[str] = []
     profile = trainer.get("profile")
@@ -167,22 +170,6 @@ def analyze_tt_minimal_profile_readiness(trainer: dict[str, Any]) -> tuple[bool,
 
     if profile.get("city_id") is None:
         missing.append("city")
-
-    sd = profile.get("session_duration_minutes")
-    try:
-        sd_ok = sd is not None and 15 <= int(sd) <= 240
-    except (TypeError, ValueError):
-        sd_ok = False
-    if not sd_ok:
-        missing.append("session_duration_minutes")
-
-    mh = profile.get("min_hours_before_booking")
-    try:
-        mh_ok = mh is not None and 0 <= int(mh) <= 168
-    except (TypeError, ValueError):
-        mh_ok = False
-    if not mh_ok:
-        missing.append("min_hours_before_booking")
 
     sids = trainer.get("service_ids")
     if not sids:

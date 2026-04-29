@@ -438,8 +438,15 @@
         var stage1Done = active ? !!(d && d.profile_complete) : ttOk;
         var schedUnlocked = !!(d && (d.schedule_unlocked || d.is_active));
         var bookLocked = !schedUnlocked || (!active && !ttOk);
+        var hubSoftGateFirstBookingPhase = !!(
+          stripOn &&
+          d &&
+          stage1Done &&
+          !bookLocked &&
+          !onboardingBookingStepDone(d)
+        );
 
-        var gridLockedAll = stripOn;
+        var gridLockedAll = stripOn && !hubSoftGateFirstBookingPhase;
         var gridLockedPartial = !sectionsOpen && !stripOn;
 
         var grid = document.getElementById('hubGrid');
@@ -544,7 +551,11 @@
         var raw = String(pathWithQuery || '');
         if (isProfilePath(raw)) {
           if (hubOnboardingStripVisible() && !hubTrainerProfileNavAllowedDuringOnboarding(raw)) {
-            alertHubProfileUseFirstSteps();
+            if (hubTrainerAwaitingFirstBooking()) {
+              openHubFirstBookingSoftGate('profile');
+            } else {
+              alertHubProfileUseFirstSteps();
+            }
             return;
           }
           navigateToImpl(raw);
@@ -555,7 +566,7 @@
           return;
         }
         if (canOpenTrainerSectionsSync()) {
-          navigateToImpl(pathWithQuery);
+          completeHubSectionNavigation(pathWithQuery);
           return;
         }
         /* After moderation, is_active flips on the server while WebView keeps stale JS state — always refetch before blocking. */
@@ -576,7 +587,7 @@
             mergeHubAccessFromProfilePayload(prof);
             applyHubLockedState();
             if (trainerAccessSnapshot && window.TrainerMiniAppGate.isActive(trainerAccessSnapshot)) {
-              navigateToImpl(pathWithQuery);
+              completeHubSectionNavigation(pathWithQuery);
             } else {
               showTrainerOnboardingNavAlert();
             }
@@ -595,7 +606,11 @@
               (d.is_active && !d.profile_complete) ||
               (!d.is_active && !d.profile_complete && d.tt_minimal_complete));
           if (!allowMod) {
-            alertHubProfileUseFirstSteps();
+            if (hubTrainerAwaitingFirstBooking()) {
+              openHubFirstBookingSoftGate('profile');
+            } else {
+              alertHubProfileUseFirstSteps();
+            }
             return;
           }
         }
@@ -646,6 +661,242 @@
         if (data.is_active && data.profile_complete) return true;
         if (!data.is_active && data.schedule_unlocked && data.tt_minimal_complete) return true;
         return false;
+      }
+
+      /**
+       * «Быстрый старт» виден, шаг 1 и расписание пройдены, но ещё нет первой записи —
+       * сетку не блокируем; при переходе показываем soft gate вместо жёсткого lock.
+       */
+      function hubTrainerAwaitingFirstBooking() {
+        if (!hubOnboardingStripVisible()) return false;
+        if (hubOnboardingNavBlocksGeneralNavigation()) return false;
+        return !onboardingBookingStepDone(hubOnboardingData);
+      }
+
+      function hubPathToFirstBookingSoftGateId(pathWithQuery) {
+        var base = String(pathWithQuery || '')
+          .split('?')[0]
+          .split('#')[0]
+          .replace(/^\//, '')
+          .toLowerCase();
+        if (base === 'trainer-clients') return 'clients';
+        if (base === 'trainer-groups') return 'groups';
+        if (base === 'trainer-requests') return 'requests';
+        if (base === 'schedule-editor') return 'schedule';
+        if (base === 'trainer-profile') return 'profile';
+        if (base === 'trainer-pass-products') return 'passes';
+        if (base === 'trainer-subscription') return 'subscription';
+        if (base === 'trainer-stats') return 'stats';
+        if (base === 'trainer-referral') return 'referral';
+        return null;
+      }
+
+      var HUB_SOFT_GATE_FIRST_BOOKING_INTRO = 'После первой записи здесь будет:';
+      var HUB_SOFT_GATE_FIRST_BOOKING_FOOTER =
+        'Создайте первую запись (можно тестовую), чтобы посмотреть как это работает.';
+
+      var HUB_FIRST_BOOKING_SOFT_GATE = {
+        _default: {
+          title: 'Раздел после первой записи',
+          intro: HUB_SOFT_GATE_FIRST_BOOKING_INTRO,
+          bullets: [
+            'связка записи с клиентом и расписанием',
+            'напоминания и статусы',
+            'история и быстрые действия',
+          ],
+          footer: HUB_SOFT_GATE_FIRST_BOOKING_FOOTER,
+        },
+        clients: {
+          title: '👥 Клиенты',
+          intro: HUB_SOFT_GATE_FIRST_BOOKING_INTRO,
+          bullets: [
+            'список клиентов',
+            'заметки по каждому',
+            'история занятий',
+            'быстрый контакт',
+          ],
+          footer: HUB_SOFT_GATE_FIRST_BOOKING_FOOTER,
+        },
+        groups: {
+          title: '👥 Группы',
+          intro: HUB_SOFT_GATE_FIRST_BOOKING_INTRO,
+          bullets: [
+            'набор и состав участников',
+            'расписание групповых слотов',
+            'заполненность и статусы',
+            'продукты и оплата',
+          ],
+          footer: HUB_SOFT_GATE_FIRST_BOOKING_FOOTER,
+        },
+        requests: {
+          title: '📥 Заявки клиентов',
+          intro: HUB_SOFT_GATE_FIRST_BOOKING_INTRO,
+          bullets: [
+            'новые отклики и вопросы',
+            'быстрый ответ и переход к записи',
+            'меньше ручного поиска в чатах',
+          ],
+          footer: HUB_SOFT_GATE_FIRST_BOOKING_FOOTER,
+        },
+        schedule: {
+          title: '📅 Расписание, шаблоны, история записей',
+          intro: HUB_SOFT_GATE_FIRST_BOOKING_INTRO,
+          bullets: [
+            'слоты и недельный шаблон',
+            'история записей и занятых окон',
+            'напоминания и статусы в одном месте',
+          ],
+          footer: HUB_SOFT_GATE_FIRST_BOOKING_FOOTER,
+        },
+        profile: {
+          title: '👤 Профиль и настройки',
+          intro: HUB_SOFT_GATE_FIRST_BOOKING_INTRO,
+          bullets: [
+            'услуги, цены и площадки',
+            'видимость в каталоге',
+            'модерация и актуальные данные',
+          ],
+          footer: HUB_SOFT_GATE_FIRST_BOOKING_FOOTER,
+        },
+        passes: {
+          title: '🎫 Абонементы и сертификаты',
+          intro: HUB_SOFT_GATE_FIRST_BOOKING_INTRO,
+          bullets: [
+            'продукты: абонементы и подарочные сертификаты',
+            'выдача, списание и остатки по клиентам',
+            'связь с расписанием',
+          ],
+          footer: HUB_SOFT_GATE_FIRST_BOOKING_FOOTER,
+        },
+        subscription: {
+          title: '💳 Тариф и оплата',
+          intro: HUB_SOFT_GATE_FIRST_BOOKING_INTRO,
+          bullets: [
+            'текущий план и продление',
+            'доступные модули (группы, аналитика)',
+            'апгрейд, когда вырастет поток',
+          ],
+          footer: HUB_SOFT_GATE_FIRST_BOOKING_FOOTER,
+        },
+        stats: {
+          title: '📈 Показатели и динамика',
+          intro: HUB_SOFT_GATE_FIRST_BOOKING_INTRO,
+          bullets: [
+            'загрузка и динамика записей',
+            'метрики по вашему тарифу',
+            'цифры на реальных данных, не «пустые» графики',
+          ],
+          footer: HUB_SOFT_GATE_FIRST_BOOKING_FOOTER,
+        },
+        referral: {
+          title: '🎁 Рефералы',
+          intro: HUB_SOFT_GATE_FIRST_BOOKING_INTRO,
+          bullets: [
+            'ваша персональная ссылка или код',
+            'бонусы за активных приглашённых',
+            'итоги в одном разделе',
+          ],
+          footer: HUB_SOFT_GATE_FIRST_BOOKING_FOOTER,
+        },
+      };
+
+      function closeHubFirstBookingSoftGate() {
+        var m = document.getElementById('hubFirstBookingSoftGate');
+        if (!m) return;
+        m.style.display = 'none';
+        m.setAttribute('aria-hidden', 'true');
+      }
+
+      function openHubFirstBookingSoftGate(gateId) {
+        var key = HUB_FIRST_BOOKING_SOFT_GATE[gateId] ? gateId : '_default';
+        var def = HUB_FIRST_BOOKING_SOFT_GATE[key];
+        var m = document.getElementById('hubFirstBookingSoftGate');
+        var tEl = document.getElementById('hubSoftGateTitle');
+        var introEl = document.getElementById('hubSoftGateIntro');
+        var listEl = document.getElementById('hubSoftGateList');
+        var footEl = document.getElementById('hubSoftGateFooter');
+        var skipEl = document.getElementById('hubSoftGateSkip');
+        if (!m || !tEl || !introEl || !listEl || !footEl) return;
+        tEl.textContent = def.title;
+        introEl.textContent = def.intro;
+        listEl.innerHTML = (def.bullets || []).map(function(b) {
+          return '<li>' + escapeHtml(b) + '</li>';
+        }).join('');
+        footEl.textContent = def.footer;
+        if (skipEl) {
+          skipEl.hidden = true;
+          skipEl.onclick = null;
+          skipEl.textContent = '';
+          if (key === 'profile') {
+            skipEl.hidden = false;
+            skipEl.textContent = 'Открыть анкету';
+            skipEl.onclick = function() {
+              closeHubFirstBookingSoftGate();
+              navigateToImpl('trainer-profile?onboarding=blocks');
+            };
+          } else if (key === 'schedule') {
+            skipEl.hidden = false;
+            skipEl.textContent = 'Только открыть расписание';
+            skipEl.onclick = function() {
+              closeHubFirstBookingSoftGate();
+              navigateToImpl('schedule-editor');
+            };
+          } else if (key === 'subscription') {
+            skipEl.hidden = false;
+            skipEl.textContent = 'Перейти к тарифу и оплате';
+            skipEl.onclick = function() {
+              closeHubFirstBookingSoftGate();
+              navigateToImpl('trainer-subscription?v=20260450');
+            };
+          }
+        }
+        m.style.display = 'flex';
+        m.setAttribute('aria-hidden', 'false');
+      }
+
+      function wireHubFirstBookingSoftGate() {
+        var m = document.getElementById('hubFirstBookingSoftGate');
+        if (!m || m.dataset.wiredHubFirstBookingSoftGate === '1') return;
+        m.dataset.wiredHubFirstBookingSoftGate = '1';
+        var primary = document.getElementById('hubSoftGateCtaPrimary');
+        var sandbox = document.getElementById('hubSoftGateCtaSandbox');
+        var closeBtn = document.getElementById('hubSoftGateClose');
+        if (closeBtn) {
+          closeBtn.onclick = function() {
+            closeHubFirstBookingSoftGate();
+          };
+        }
+        m.onclick = function(ev) {
+          if (ev.target === m) closeHubFirstBookingSoftGate();
+        };
+        if (primary) {
+          primary.onclick = function() {
+            closeHubFirstBookingSoftGate();
+            hubQuickBookIsSandbox = false;
+            ensureTrainerSectionsAccess(function() {
+              openHubQuickBookDatetimeModal();
+            });
+          };
+        }
+        if (sandbox) {
+          sandbox.onclick = function() {
+            closeHubFirstBookingSoftGate();
+            hubQuickBookIsSandbox = true;
+            ensureTrainerSectionsAccess(function() {
+              openHubQuickBookDatetimeModal();
+            });
+          };
+        }
+      }
+
+      function completeHubSectionNavigation(pathWithQuery) {
+        var raw = String(pathWithQuery || '');
+        var gid = hubPathToFirstBookingSoftGateId(raw);
+        if (hubTrainerAwaitingFirstBooking() && gid) {
+          openHubFirstBookingSoftGate(gid);
+          return;
+        }
+        navigateToImpl(raw);
       }
 
       function parseNonNegativeInt(v) {
@@ -5209,6 +5460,7 @@
       wireHubSubscriptionCelebrationClose();
 
       wireOnboardingHub();
+      wireHubFirstBookingSoftGate();
       wireHubRhythmSlots();
       wireHubScheduleRhythmHint();
       wireHubShareLinkGrowthHint();
