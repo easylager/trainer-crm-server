@@ -295,21 +295,18 @@ def _invite_welcome_text(trainer: dict | None, base: str) -> str:
 
 
 def _bind_first_impression_markup(base: str) -> InlineKeyboardMarkup:
-    """Primary onboarding actions after client-bind link: home first, then bookings."""
+    """После invite/bind одна кнопка — каталог (тренер + запись); без «Главная» и «Мои записи»."""
     b = (base or "").rstrip("/")
+    label = msg.CLIENT_BUTTON_TRAINER_AND_BOOKING
     if b.startswith("https://"):
         return InlineKeyboardMarkup(
             inline_keyboard=[
-                [InlineKeyboardButton(text=msg.CLIENT_MENU_BUTTON_HUB, web_app=WebAppInfo(url=f"{b}/webapp/client-home"))],
-                [InlineKeyboardButton(text=msg.CLIENT_BUTTON_MY_BOOKINGS, web_app=WebAppInfo(url=f"{b}/webapp/client-bookings"))],
-                [InlineKeyboardButton(text="Тренеры и запись", web_app=WebAppInfo(url=f"{b}/webapp/catalog"))],
+                [InlineKeyboardButton(text=label, web_app=WebAppInfo(url=f"{b}/webapp/catalog"))],
             ]
         )
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text=msg.CLIENT_MENU_BUTTON_HUB, callback_data=HOME_CALLBACK)],
-            [InlineKeyboardButton(text=msg.CLIENT_BUTTON_MY_BOOKINGS, callback_data=MY_BOOKINGS_CALLBACK)],
-            [InlineKeyboardButton(text="Тренеры и запись", callback_data=CATALOG_CALLBACK)],
+            [InlineKeyboardButton(text=label, callback_data=CATALOG_CALLBACK)],
         ]
     )
 

@@ -130,6 +130,17 @@
         profileBlockTourAdvanceFromKey: null,
         /** One-shot guard: avoid duplicate redirects when final minimal step closes. */
         profileBlockTourHubRedirectScheduled: false,
+        /** Wizard shows this step instead of-canonical first gap (rewind via «Назад»). */
+        profileBlockTourDisplayedStepOverride: null,
+        /** Completed steps rewound with FIFO pop inside the block tour («Назад»). */
+        profileBlockTourBackwardStack: [],
+        /**
+         * Canonical order of TTV steps for this tour session (fixed at entry).
+         * Last key = must be left via explicit «Далее» before hub / moderation auto-submit.
+         */
+        profileBlockTourSessionSealOrder: null,
+        /** User completed the last seal step forward with gaps cleared (allows hub + moderation). */
+        profileBlockTourSessionVisitedLastForward: false,
       };
 
       var SCHEDULE_GRID_STEPS = [10, 15, 30, 60];
@@ -184,6 +195,128 @@
         if (has('services')) out.push('services');
         if (has('arenas')) out.push('arenas');
         return out;
+      }
+
+      /** Visible tour step — override rewinds to an already-complete block («Назад»). */
+      function profileBlockTourEffectiveStepKey() {
+        if (state.profileBlockTourDisplayedStepOverride != null) {
+          return state.profileBlockTourDisplayedStepOverride;
+        }
+        var canon = profileBlockTourCanonicalFirstMissing();
+        if (canon != null) return canon;
+        /* Сервер уже не шлёт зазоры, но финальный seal-шаг ещё нужно явно покинуть «Далее». */
+        if (state.profileBlockTourActive && !state.profileBlockTourSessionVisitedLastForward) {
+          var fs = profileBlockTourFinalSealStepKey();
+          if (fs) return fs;
+        }
+        return null;
+      }
+
+      /** Whether this UI wizard key is still listed as missing server-side gaps. */
+      function profileBlockTourUiStepStillMissing(uiKey, missingUiKeysArray) {
+        if (!uiKey || !missingUiKeysArray || !missingUiKeysArray.length) return false;
+        return missingUiKeysArray.indexOf(uiKey) >= 0;
+      }
+
+      /**
+       * When moving forward successfully off `leftStepKey`, remember it so the user can return.
+       */
+      function profileBlockTourPushBackwardStack(leftStepKey) {
+        if (!leftStepKey) return;
+        if (!state.profileBlockTourBackwardStack) state.profileBlockTourBackwardStack = [];
+        var st = state.profileBlockTourBackwardStack;
+        if (st[st.length - 1] === leftStepKey) return;
+        st.push(leftStepKey);
+      }
+
+      function profileBlockTourResetWizardStacks() {
+        state.profileBlockTourDisplayedStepOverride = null;
+        state.profileBlockTourBackwardStack = [];
+        state.profileBlockTourSessionSealOrder = null;
+        state.profileBlockTourSessionVisitedLastForward = false;
+      }
+
+      /** Dots и «Шаг X из Y» когда показываем completed шаг после «Назад». */
+      function profileBlockTourProgressContext(displayOverrideKey) {
+        var rawMissing =
+          (state.moderation_readiness && state.moderation_readiness.tt_minimal_missing_fields) || [];
+        var stepKeysUi = profileBlockTourMissingStepKeys(rawMissing);
+        var orderedMiss = profileBlockTourMissingInCanonicalOrder(stepKeysUi);
+        var canon =
+          displayOverrideKey != null ? displayOverrideKey : profileBlockTourCanonicalFirstMissing();
+
+        if (!orderedMiss.length) {
+          var t = canon ? 1 : 0;
+          return { keys: canon ? [canon] : [], currKey: canon, idx: 0, total: t };
+        }
+
+        if (!displayOverrideKey || orderedMiss.indexOf(displayOverrideKey) >= 0) {
+          var ck = canon || orderedMiss[0];
+          var ix = ck ? orderedMiss.indexOf(ck) : 0;
+          if (ix < 0) ix = 0;
+          return { keys: orderedMiss, currKey: ck, idx: ix, total: orderedMiss.length };
+        }
+
+        var merged = [];
+        PROFILE_TT_BLOCK_ORDER.forEach(function(k) {
+          if (k === displayOverrideKey) merged.push(k);
+          else if (orderedMiss.indexOf(k) >= 0) merged.push(k);
+        });
+        var ix2 = displayOverrideKey ? merged.indexOf(displayOverrideKey) : 0;
+        if (ix2 < 0) ix2 = 0;
+        return { keys: merged, currKey: displayOverrideKey, idx: ix2, total: merged.length };
+      }
+
+      /** Last key of the fixed session seal list (explicit «Далее» required before hub / moderation path). */
+      function profileBlockTourFinalSealStepKey() {
+        var seal = state.profileBlockTourSessionSealOrder;
+        if (!seal || !seal.length) return null;
+        return seal[seal.length - 1];
+      }
+
+      /** Dots / «Шаг X из Y» using fixed seal order (when server gaps are empty but tour not finished). */
+      function profileBlockTourSealProgress(activeKey) {
+        var seal = state.profileBlockTourSessionSealOrder || [];
+        var fk =
+          activeKey != null ? activeKey : profileBlockTourFinalSealStepKey();
+        if (!seal.length) {
+          return fk
+            ? { keys: [fk], currKey: fk, idx: 0, total: 1 }
+            : { keys: [], currKey: null, idx: 0, total: 0 };
+        }
+        var ix = fk ? seal.indexOf(fk) : seal.length - 1;
+        if (ix < 0) ix = seal.length - 1;
+        return {
+          keys: seal.slice(),
+          currKey: fk || seal[ix],
+          idx: ix < 0 ? 0 : ix,
+          total: seal.length,
+        };
+      }
+
+      /** After PATCH + loadProfile: mark tour complete only if this save closed gaps leaving the seal's last UI step. */
+      function profileBlockTourMarkVisitedSealIfEligible() {
+        var advanceKey = state.profileBlockTourAdvanceFromKey;
+        if (!state.profileBlockTourActive || advanceKey == null) return;
+        var mr = state.moderation_readiness && state.moderation_readiness.tt_minimal_missing_fields;
+        var raw = Array.isArray(mr) ? mr : [];
+        var missing = profileBlockTourMissingStepKeys(raw);
+        if (missing.length) return;
+        var fs = profileBlockTourFinalSealStepKey();
+        if (fs && advanceKey === fs) state.profileBlockTourSessionVisitedLastForward = true;
+      }
+
+      function profileBlockTourOnBackClick() {
+        if (!state.profileBlockTourActive) return;
+        if (!state.profileBlockTourBackwardStack || !state.profileBlockTourBackwardStack.length) return;
+        var prevKey = state.profileBlockTourBackwardStack.pop();
+        if (!prevKey) return;
+        try {
+          var ae = document.activeElement;
+          if (ae && ae.blur) ae.blur();
+        } catch (eBk) {}
+        state.profileBlockTourDisplayedStepOverride = prevKey;
+        syncProfileBlockTourBar();
       }
 
       function buildScheduleGridPreviewInner(step) {
@@ -425,14 +558,43 @@
       /** Per-service blurb in «Услуги и цены»; aligned with LEN_TRAINER_SERVICE_DESCRIPTION on the server. */
       var MAX_SERVICE_DESCRIPTION_CHARS = 800;
       var MAX_SERVICE_CLIENT_NOTICE_CHARS = 400;
-      /** Saved text shown in the catalog must start with this line (trainers may append after presets). */
-      var SERVICE_NOTICE_PREFIX = 'В стоимость не входит:';
-      /** Quick-add chips in profile → compose `SERVICE_NOTICE_PREFIX` + comma-separated fragments + '.'. */
+      /** Stored/sent text; plural «не входят» matches client-facing wording. Legacy «не входит» still parses in catalog/profile. */
+      var SERVICE_NOTICE_PREFIX = 'В стоимость не входят:';
+      var SERVICE_NOTICE_PREFIX_LEGACY = 'В стоимость не входит:';
+      /** Quick-add chips → compose `SERVICE_NOTICE_PREFIX` + comma-separated fragments + '.' */
       var SERVICE_NOTICE_PRESETS = [
-        { id: 'skates', label: 'Коньки', fragment: 'аренда коньков' },
-        { id: 'ticket', label: 'Билет / вход', fragment: 'билет на лёд или вход на арену' },
-        { id: 'rollers', label: 'Ролики', fragment: 'аренда роликов' },
+        {
+          id: 'skates',
+          label: 'Коньки',
+          fragment: 'прокат коньков (при необходимости)',
+          legacyFragments: ['аренда коньков'],
+        },
+        {
+          id: 'rollers',
+          label: 'Ролики и защита',
+          fragment: 'прокат роликов и защиты (при необходимости)',
+          legacyFragments: ['аренда роликов'],
+        },
+        {
+          id: 'ticket_student',
+          label: 'Билет для ученика',
+          fragment: 'билет на лёд для ученика',
+          legacyFragments: ['билет на лёд или вход на арену'],
+        },
+        {
+          id: 'tickets_both',
+          label: 'Билеты для ученика и тренера',
+          fragment: 'билеты на лёд для ученика и тренера',
+          legacyFragments: [],
+        },
       ];
+
+      function _serviceNoticeEscapedPrefix(prefix) {
+        return new RegExp('^' + String(prefix || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*', 'i');
+      }
+
+      var RE_SERVICE_NOTICE_PREFIX = _serviceNoticeEscapedPrefix(SERVICE_NOTICE_PREFIX);
+      var RE_SERVICE_NOTICE_PREFIX_LEGACY = _serviceNoticeEscapedPrefix(SERVICE_NOTICE_PREFIX_LEGACY);
 
       function buildTrainerServiceNoticeFromPresetIds(ids) {
         if (!ids || !ids.length) return '';
@@ -444,16 +606,32 @@
         return SERVICE_NOTICE_PREFIX + ' ' + parts.join(', ') + '.';
       }
 
-      /** Infer which preset chips match the current notice text (substring match after optional prefix). */
+      /**
+       * Which chips match edited text — strip old/new prefixes, then longest fragments first so
+       * «билеты…» is not swallowed by substring «билет…».
+       */
       function inferTrainerNoticePresetIds(text) {
         var t = (text || '').trim();
         if (!t) return [];
-        var re = new RegExp('^' + SERVICE_NOTICE_PREFIX.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*', 'i');
-        var probe = re.test(t) ? t.replace(re, '').replace(/\.\s*$/, '').trim() : t;
+        var probe = t;
+        if (RE_SERVICE_NOTICE_PREFIX.test(probe)) {
+          probe = probe.replace(RE_SERVICE_NOTICE_PREFIX, '').replace(/\.\s*$/, '').trim();
+        } else if (RE_SERVICE_NOTICE_PREFIX_LEGACY.test(probe)) {
+          probe = probe.replace(RE_SERVICE_NOTICE_PREFIX_LEGACY, '').replace(/\.\s*$/, '').trim();
+        } else {
+          probe = probe.replace(/\.\s*$/, '').trim();
+        }
         var low = probe.toLowerCase();
         var out = [];
-        SERVICE_NOTICE_PRESETS.forEach(function(pr) {
-          if (low.indexOf(pr.fragment.toLowerCase()) >= 0) out.push(pr.id);
+        var sorted = SERVICE_NOTICE_PRESETS.slice().sort(function(a, b) {
+          return (b.fragment || '').length - (a.fragment || '').length;
+        });
+        sorted.forEach(function(pr) {
+          var needles = [pr.fragment].concat(pr.legacyFragments || []);
+          var matched = needles.some(function(needle) {
+            return needle && low.indexOf(String(needle).toLowerCase()) >= 0;
+          });
+          if (matched) out.push(pr.id);
         });
         return out;
       }
@@ -716,8 +894,7 @@
           if (!(el.value || '').trim()) msg = 'Укажите фамилию.';
         } else if (fieldId === 'age') {
           var av = el.value;
-          if (av === '' || av === null) msg = 'Укажите возраст.';
-          else {
+          if (av !== '' && av != null) {
             var an = Number(av);
             if (isNaN(an) || !Number.isInteger(an)) msg = 'Укажите целое число.';
           }
@@ -761,14 +938,8 @@
         var errs = [];
         if (!pr.first_name || !String(pr.first_name).trim()) errs.push(['first_name', 'Укажите имя.']);
         if (!pr.last_name || !String(pr.last_name).trim()) errs.push(['last_name', 'Укажите фамилию.']);
-        /* TTV block tour: age not required for «Дальше» / save (aligned with server tt_minimal). */
-        if (state.profileBlockTourActive) {
-          if (pr.age != null && pr.age !== '') {
-            var ageTour = Number(pr.age);
-            if (isNaN(ageTour) || !Number.isInteger(ageTour)) errs.push(['age', 'Укажите целое число.']);
-          }
-        } else if (pr.age == null || pr.age === '') errs.push(['age', 'Укажите возраст.']);
-        else {
+        /* Age optional on save: same as submission tier / server ProfilePatch — do not block edits while on moderation. */
+        if (pr.age != null && pr.age !== '') {
           var ageN = Number(pr.age);
           if (isNaN(ageN) || !Number.isInteger(ageN)) errs.push(['age', 'Укажите целое число.']);
         }
@@ -1623,27 +1794,80 @@
             try { flow.style.removeProperty('height'); } catch (eH1) {}
             try { flow.style.removeProperty('top'); } catch (eT1) {}
           }
+          resetObFlowInsetCache();
           return;
         }
         var vv = window.visualViewport;
         if (!vv) return;
+        var nh = vv.height;
+        var nt = vv.offsetTop || 0;
+        if (Math.abs(nh - obFlowLastInsetH) < 0.75 && Math.abs(nt - obFlowLastInsetTop) < 0.75) {
+          return;
+        }
+        obFlowLastInsetH = nh;
+        obFlowLastInsetTop = nt;
         try {
-          flow.style.height = vv.height + 'px';
+          flow.style.height = nh + 'px';
         } catch (eH2) {}
         try {
-          if (vv.offsetTop) flow.style.top = vv.offsetTop + 'px';
+          if (nt) flow.style.top = nt + 'px';
           else flow.style.removeProperty('top');
         } catch (eT2) {}
+        // After layout settles, nudge the focused text field — never for <select> (iOS wheel + scroll = freezes).
+        var ae = document.activeElement;
+        var aTag = ae && ae.tagName;
+        if (aTag === 'INPUT' || aTag === 'TEXTAREA') {
+          if (ae && flow.contains(ae)) scheduleObFlowFocusedScroll(250);
+        }
       }
 
       var obFlowInsetDebounceT = null;
+      /** Last applied inset to avoid duplicate reflows when vv fires resize+scroll in bursts. */
+      var obFlowLastInsetH = NaN;
+      var obFlowLastInsetTop = NaN;
+      var obFlowFocusScrollT = null;
+
+      /**
+       * After keyboard opens and flow height shrinks, scroll the active input back into
+       * the visible portion of #obFlowBody. Browser native scroll-into-view only fires at
+       * focus time — not when layout changes post-focus. Called after height transition settles.
+       */
+      function obFlowScrollFocusedIntoView() {
+        var flow = document.getElementById('onboardingFlow');
+        if (!flow || flow.hidden) return;
+        var ae = document.activeElement;
+        if (!ae || !flow.contains(ae)) return;
+        var tg = ae.tagName;
+        /* Native <select> on iOS: scrollIntoView fights the wheel picker — skip entirely. */
+        if (tg === 'SELECT') return;
+        if (tg !== 'INPUT' && tg !== 'TEXTAREA') return;
+        // .field has scroll-margin-top/bottom set in CSS; prefer scrolling the field wrapper
+        var target = (ae.closest && ae.closest('.field')) || ae;
+        try {
+          target.scrollIntoView({ block: 'nearest', behavior: 'auto', inline: 'nearest' });
+        } catch (e) {}
+      }
+
+      /** Schedule a single deferred scroll of the focused input (cancels any pending attempt). */
+      function scheduleObFlowFocusedScroll(delay) {
+        if (obFlowFocusScrollT) clearTimeout(obFlowFocusScrollT);
+        obFlowFocusScrollT = setTimeout(function() {
+          obFlowFocusScrollT = null;
+          obFlowScrollFocusedIntoView();
+        }, delay || 250);
+      }
       /** Coalesce keyboard/focus reflows — double rAF+timeout was shifting the footer mid-gesture (two taps). */
       function scheduleProfileTourBarInsetSync() {
         if (obFlowInsetDebounceT) clearTimeout(obFlowInsetDebounceT);
         obFlowInsetDebounceT = setTimeout(function() {
           obFlowInsetDebounceT = null;
           syncProfileTourBarInset();
-        }, 100);
+        }, 72);
+      }
+
+      function resetObFlowInsetCache() {
+        obFlowLastInsetH = NaN;
+        obFlowLastInsetTop = NaN;
       }
 
       /**
@@ -1653,6 +1877,20 @@
       function profileTourFieldIsComfortablyVisible(scrollTarget) {
         if (!scrollTarget) return false;
         var r = scrollTarget.getBoundingClientRect();
+        /*
+         * Fullscreen ob-flow: scroll container is #obFlowBody — comparing against window + stale
+         * html scroll-padding (tour class no longer applied) forced scrollIntoView on every tap.
+         */
+        if (document.body.classList.contains('ob-flow-open')) {
+          var obBody = document.getElementById('obFlowBody');
+          if (obBody && typeof obBody.getBoundingClientRect === 'function') {
+            var br = obBody.getBoundingClientRect();
+            var margin = 10;
+            if (r.top < br.top + margin) return false;
+            if (r.bottom > br.bottom - margin) return false;
+            return true;
+          }
+        }
         var vv = window.visualViewport;
         var vh =
           vv && typeof vv.height === 'number' && vv.height > 0
@@ -2066,6 +2304,7 @@
         document.body.classList.remove('ob-flow-open');
         try { flow.style.removeProperty('height'); } catch (eHc) {}
         try { flow.style.removeProperty('top'); } catch (eTc) {}
+        resetObFlowInsetCache();
       }
 
       /**
@@ -2074,6 +2313,7 @@
        */
       function syncProfileBlockTourBar() {
         if (!state.profileBlockTourActive) {
+          profileBlockTourResetWizardStacks();
           obFlowClose();
           syncProfileBlockTourNextCta();
           return;
@@ -2081,14 +2321,39 @@
         var d = state.moderation_readiness || {};
         var rawKeys = d.tt_minimal_missing_fields || [];
         var stepKeys = profileBlockTourMissingStepKeys(rawKeys);
+        /* Reload mid-session: infer seal once from current gaps so «force last step» UX can work. */
+        if (
+          state.profileBlockTourActive &&
+          !state.profileBlockTourSessionSealOrder &&
+          stepKeys.length
+        ) {
+          state.profileBlockTourSessionSealOrder =
+            profileBlockTourMissingInCanonicalOrder(stepKeys.slice());
+        }
         if (stepKeys.length) state.profileBlockTourHubRedirectScheduled = false;
+        var syntheticTailStep = false;
+        var finalSealK = null;
         if (!stepKeys.length) {
+          finalSealK = profileBlockTourFinalSealStepKey();
+          syntheticTailStep = !!(
+            finalSealK &&
+            !state.profileBlockTourSessionVisitedLastForward &&
+            state.profileBlockTourActive
+          );
+        }
+
+        if (!stepKeys.length && !syntheticTailStep) {
           /* Все шаги TTV закрыты — не показываем полный профиль: оверлей + popup, затем хаб. */
           if (state.profileBlockTourHubRedirectScheduled) {
             return;
           }
           state.profileBlockTourHubRedirectScheduled = true;
           state.profileBlockTourActive = false;
+          profileBlockTourResetWizardStacks();
+          /* Hub completion path: модерация та же что после сохранённого финального шага. */
+          try {
+            maybeAutoSubmitForModeration();
+          } catch (eMod) {}
           showProfileToHubTransitionOverlay();
           obFlowClose();
           syncProfileBlockTourNextCta();
@@ -2105,14 +2370,36 @@
             }
           }
           setTimeout(goHubOnce, 1050);
+          /* If navigation never happens (e.g. WebView blocked), remove veil so «Главная» and the rest stay usable. */
+          setTimeout(function () {
+            try {
+              var path = String(window.location.pathname || '') + String(window.location.hash || '');
+              if (!/trainer-profile/i.test(path)) return;
+              var ov = document.getElementById('profileToHubTransitionOverlay');
+              if (ov) ov.remove();
+            } catch (eRem) {}
+          }, 3500);
           return;
         }
         obFlowOpen();
-        var currKey = profileBlockTourCanonicalFirstMissing() || stepKeys[0];
-        var ordered = profileBlockTourMissingInCanonicalOrder(stepKeys);
-        var idx = currKey ? ordered.indexOf(currKey) : 0;
-        if (idx < 0) idx = 0;
-        var total = ordered.length;
+        var canonKey = syntheticTailStep
+          ? finalSealK
+          : profileBlockTourCanonicalFirstMissing() || stepKeys[0];
+        var rawOv = state.profileBlockTourDisplayedStepOverride;
+        var currKey = canonKey;
+        if (syntheticTailStep) {
+          state.profileBlockTourDisplayedStepOverride = null;
+        } else if (rawOv != null && OB_FLOW_STEP_DEFS[rawOv]) {
+          currKey = rawOv;
+        } else if (rawOv != null) {
+          state.profileBlockTourDisplayedStepOverride = null;
+        }
+        var prog = syntheticTailStep
+          ? profileBlockTourSealProgress(finalSealK)
+          : profileBlockTourProgressContext(state.profileBlockTourDisplayedStepOverride);
+        var orderedForDots = prog.keys;
+        var idx = prog.idx;
+        var totalDots = orderedForDots.length;
         var def = OB_FLOW_STEP_DEFS[currKey] || {};
         /* Заголовок шага. */
         var titleEl = document.getElementById('obFlowTitle');
@@ -2123,21 +2410,29 @@
         var stepEl = document.getElementById('obFlowStepLabel');
         if (stepEl) {
           var label = PROFILE_TT_BLOCK_LABELS_RU[currKey] || currKey || '';
-          stepEl.textContent = 'Шаг ' + (idx + 1) + ' из ' + total + ' · ' + label;
+          stepEl.textContent =
+            totalDots > 0 ? 'Шаг ' + (idx + 1) + ' из ' + totalDots + ' · ' + label : '· ' + label;
         }
         var dots = document.getElementById('obFlowDots');
         if (dots) {
           dots.innerHTML = '';
-          for (var i = 0; i < total; i++) {
+          var di;
+          for (di = 0; di < totalDots; di++) {
             var dot = document.createElement('span');
             var cls = 'ob-flow__dot';
-            if (i < idx) cls += ' ob-flow__dot--done';
-            else if (i === idx) cls += ' ob-flow__dot--current';
+            if (di < idx) cls += ' ob-flow__dot--done';
+            else if (di === idx) cls += ' ob-flow__dot--current';
             dot.className = cls;
             dots.appendChild(dot);
           }
-          dots.setAttribute('aria-valuemax', String(total));
+          dots.setAttribute('aria-valuemax', String(Math.max(totalDots, 1)));
           dots.setAttribute('aria-valuenow', String(idx + 1));
+        }
+        var backBtnEl = document.getElementById('obFlowBack');
+        if (backBtnEl) {
+          var canBack = !!(state.profileBlockTourBackwardStack && state.profileBlockTourBackwardStack.length);
+          backBtnEl.hidden = !canBack;
+          backBtnEl.setAttribute('aria-hidden', canBack ? 'false' : 'true');
         }
         /* Смонтировать актуальный блок, если сменился шаг. */
         obFlowMountStep(currKey);
@@ -2285,9 +2580,9 @@
         var nxGate = document.getElementById('obFlowNext');
         if (nxGate && nxGate.classList.contains('is-saving')) return;
         var flow = document.getElementById('onboardingFlow');
-        var prevHead = profileBlockTourCanonicalFirstMissing();
+        var curHead = profileBlockTourEffectiveStepKey();
         /* Всегда откладываем на macrotask: цены/описание могут догружаться в снимок после blur или ввода. */
-        if (prevHead === 'services' && flow && !flow.hidden) {
+        if (curHead === 'services' && flow && !flow.hidden) {
           var ae0 = document.activeElement;
           if (ae0 && ae0.closest && ae0.closest('#onboardingFlow')) {
             var tg0 = ae0.tagName;
@@ -2307,8 +2602,8 @@
         if (!state.profileBlockTourActive) return;
         var nxGate = document.getElementById('obFlowNext');
         if (nxGate && nxGate.classList.contains('is-saving')) return;
-        var prevKey = profileBlockTourCanonicalFirstMissing();
-        if (prevKey === 'services' && !domServicesPricesCoherent()) {
+        var stepAtClick = profileBlockTourEffectiveStepKey();
+        if (stepAtClick === 'services' && !domServicesPricesCoherent()) {
           haptic('warning');
           showSaveToast('Укажите цену', SERVICES_PRICE_HINT_RU, 'warning');
           try {
@@ -2339,7 +2634,7 @@
             showSaveToast('Сначала дополните шаг', profileBlockTourExplainSaveBlocked(), 'warning');
             return;
           }
-          state.profileBlockTourAdvanceFromKey = prevKey;
+          state.profileBlockTourAdvanceFromKey = stepAtClick;
           /* Synthetic click is unreliable in some WebViews; call save() directly. */
           save();
           return;
@@ -2351,19 +2646,30 @@
             if (!state.profileBlockTourActive) return;
             var missingRaw = (state.moderation_readiness && state.moderation_readiness.tt_minimal_missing_fields) || [];
             var missing = profileBlockTourMissingStepKeys(missingRaw);
+            if (
+              !missing.length &&
+              stepAtClick &&
+              profileBlockTourFinalSealStepKey() === stepAtClick
+            ) {
+              state.profileBlockTourSessionVisitedLastForward = true;
+            }
+            if (!profileBlockTourUiStepStillMissing(stepAtClick, missing)) {
+              profileBlockTourPushBackwardStack(stepAtClick);
+              state.profileBlockTourDisplayedStepOverride = null;
+            }
             syncProfileBlockTourBar();
             if (!missing.length) return;
-            if (prevKey && missing.indexOf(prevKey) >= 0) {
+            if (missing.indexOf(stepAtClick) >= 0) {
               haptic('warning');
               showSaveToast(
                 'Сначала закончите этот шаг',
                 'Заполните поля шага и нажмите «Сохранить и дальше».',
                 'warning'
               );
-              focusFormFieldForReadinessKey(prevKey);
+              focusFormFieldForReadinessKey(stepAtClick);
               return;
             }
-            profileBlockTourFocusAfterStep(prevKey, missing);
+            profileBlockTourFocusAfterStep(stepAtClick, missing);
           })
           .catch(function() {})
           .finally(function() {
@@ -2374,23 +2680,36 @@
       /** After PATCH profile: advance tour focus (next block after stashed step, or first missing). */
       function profileBlockTourAfterSave() {
         if (!state.profileBlockTourActive) return;
-        syncProfileBlockTourBar();
-        if (window.location.hash === '#moderation' || window.location.hash === '#settings') {
-          profileBlockTourClearAdvanceStash();
-          return;
-        }
         var missingRaw = (state.moderation_readiness && state.moderation_readiness.tt_minimal_missing_fields) || [];
         var missing = profileBlockTourMissingStepKeys(missingRaw);
-        var fromKey = state.profileBlockTourAdvanceFromKey;
+        var advanceKey = state.profileBlockTourAdvanceFromKey;
         profileBlockTourClearAdvanceStash();
+
+        if (window.location.hash === '#moderation' || window.location.hash === '#settings') {
+          state.profileBlockTourDisplayedStepOverride = null;
+          syncProfileBlockTourBar();
+          return;
+        }
+
+        var stillMissingAdv =
+          advanceKey != null && profileBlockTourUiStepStillMissing(advanceKey, missing);
+        if (!stillMissingAdv) {
+          state.profileBlockTourDisplayedStepOverride = null;
+        }
+        if (advanceKey != null && !stillMissingAdv) {
+          profileBlockTourPushBackwardStack(advanceKey);
+        }
+
+        syncProfileBlockTourBar();
+
         if (!missing.length) return;
         /* Defer past layout / nested loadProfile from maybeAutoSubmitForModeration. */
         setTimeout(function() {
-          if (fromKey == null) {
+          if (advanceKey == null) {
             focusFormFieldForReadinessKey(profileBlockTourCanonicalFirstMissing() || missing[0]);
             return;
           }
-          profileBlockTourFocusAfterStep(fromKey, missing);
+          profileBlockTourFocusAfterStep(advanceKey, missing);
         }, 400);
       }
 
@@ -2419,6 +2738,9 @@
         }
         state.profileBlockTourActive = true;
         state.profileBlockTourHubRedirectScheduled = false;
+        profileBlockTourResetWizardStacks();
+        state.profileBlockTourSessionSealOrder = profileBlockTourMissingInCanonicalOrder(keys.slice());
+        state.profileBlockTourSessionVisitedLastForward = false;
         syncProfileBlockTourBar();
         var k0 = profileBlockTourCanonicalFirstMissing();
         if (k0) {
@@ -2477,6 +2799,7 @@
           /* Отложить онбординг: закрываем визард и уводим на хаб.
              Хаб сам покажет «Продолжить», пока readiness не закрыта. */
           state.profileBlockTourActive = false;
+          profileBlockTourResetWizardStacks();
           obFlowClose();
           try { window.location.href = webappPageUrl('trainer-home'); } catch (eNav) {
             window.location.href = webappPageUrl('trainer-home');
@@ -2484,15 +2807,12 @@
         });
 
         bindProfileTourBarTap(nextBtn, profileBlockTourOnNextClick);
-
-        /* «Назад» пока скрыт (визард линейный, идёт только вперёд по недостающим шагам).
-           Оставляю обработчик на будущее — пока no-op. */
-        if (backBtn) backBtn.hidden = true;
+        bindProfileTourBarTap(backBtn, profileBlockTourOnBackClick);
 
         if (flow && !flow.dataset.obFlowInsetWired) {
           flow.dataset.obFlowInsetWired = '1';
           function onFlowResize() {
-            if (!flow.hidden) syncProfileTourBarInset();
+            if (!flow.hidden) scheduleProfileTourBarInsetSync();
           }
           window.addEventListener('resize', onFlowResize);
           window.addEventListener('orientationchange', onFlowResize);
@@ -2503,6 +2823,49 @@
           /* При каждом focusin/focusout пересчитать высоту — iOS показывает клавиатуру не мгновенно. */
           flow.addEventListener('focusin', scheduleProfileTourBarInsetSync);
           flow.addEventListener('focusout', scheduleProfileTourBarInsetSync);
+          /*
+           * Two-pass focused-field scroll: first pass (80ms) handles fields already near the
+           * bottom before keyboard opens; second pass (420ms) fires after iOS keyboard finishes
+           * its opening animation (~300ms). Services prices are handled by a dedicated listener.
+           */
+          flow.addEventListener('focusin', function(ev) {
+            var t = ev.target;
+            if (!t || !t.tagName) return;
+            var tg = t.tagName;
+            if (tg !== 'INPUT' && tg !== 'TEXTAREA') return;
+            if (t.closest && t.closest('#servicesWrap')) return;
+            setTimeout(function() { obFlowScrollFocusedIntoView(); }, 80);
+            setTimeout(function() { obFlowScrollFocusedIntoView(); }, 420);
+          });
+        }
+
+        /** Mobile WebView: tap on non-control areas should dismiss the keyboard (blur focused field). */
+        if (flow && !flow.dataset.obKbDismissBound) {
+          flow.dataset.obKbDismissBound = '1';
+          flow.addEventListener(
+            'pointerdown',
+            function(ev) {
+              if (!state.profileBlockTourActive || flow.hidden) return;
+              if (ev.pointerType === 'mouse' && ev.button !== 0) return;
+              var t = ev.target;
+              if (!t || !t.closest) return;
+              if (
+                t.closest(
+                  'input, textarea, select, button, label, summary, a[href], [contenteditable="true"]'
+                )
+              ) {
+                return;
+              }
+              var ae = document.activeElement;
+              if (!ae || !ae.closest || !flow.contains(ae)) return;
+              var tg = ae.tagName;
+              if (tg !== 'INPUT' && tg !== 'TEXTAREA' && tg !== 'SELECT') return;
+              try {
+                ae.blur();
+              } catch (eBlur) {}
+            },
+            true
+          );
         }
       }
 
@@ -3810,12 +4173,13 @@
           noticeKicker.textContent = 'Важно для клиента';
           var noticeHint = document.createElement('p');
           noticeHint.className = 'hint svc-client-notice-hint';
-          noticeHint.textContent = 'Что не входит в стоимость?';
+          noticeHint.textContent = 'Что не входит в стоимость? (необязательно)';
+
           var presetBar = document.createElement('div');
           presetBar.className = 'svc-client-notice-presets';
           presetBar.id = 'svc_notice_presets_' + id;
           presetBar.setAttribute('role', 'group');
-          presetBar.setAttribute('aria-label', 'Что не входит в стоимость');
+          presetBar.setAttribute('aria-label', 'Что не входит в стоимость, необязательно');
           var initialNotice = getServiceClientNotice(id);
           var selectedPresetIds = inferTrainerNoticePresetIds(initialNotice);
 
@@ -3824,9 +4188,12 @@
           noticeTa.id = 'svc_client_notice_' + id;
           noticeTa.rows = 3;
           noticeTa.maxLength = MAX_SERVICE_CLIENT_NOTICE_CHARS;
-          noticeTa.setAttribute('aria-label', 'В стоимость не входит');
+          noticeTa.setAttribute(
+            'aria-label',
+            'Что не входит в стоимость занятия (необязательно)'
+          );
           noticeTa.placeholder =
-            SERVICE_NOTICE_PREFIX + ' аренда коньков, билет на лёд или вход на арену. (или соберите кнопками выше)';
+            'Например: В стоимость не входят билеты на лёд (для ученика и тренера) и прокат коньков (при необходимости). Или соберите текст кнопками выше.';
           noticeTa.value = initialNotice;
           noticeTa.disabled = !isSelected;
           var noticeCount = document.createElement('div');
@@ -4466,7 +4833,11 @@
                     showSaveToast('Сохранено', 'Переходим к следующему шагу.', 'success');
                   }
                   /* Run tour focus after moderation auto-submit (may call loadProfile again). */
-                  return maybeAutoSubmitForModeration().finally(function() {
+                  profileBlockTourMarkVisitedSealIfEligible();
+                  var skipMod =
+                    state.profileBlockTourActive && !state.profileBlockTourSessionVisitedLastForward;
+                  var modP = skipMod ? Promise.resolve() : maybeAutoSubmitForModeration();
+                  return modP.finally(function() {
                     profileBlockTourAfterSave();
                   });
                 });
@@ -5002,10 +5373,9 @@
             var row = t.closest('.svc-tier-row') || t.closest('.svc-group-price-wrap');
             if (!row) return;
             focusedRow = row;
-            /* iOS поднимает клавиатуру ~300-600ms; повторяем скролл, чтобы строка гарантированно попала в центр. */
+            /* One immediate + один отложенный после анимации клавиатуры — меньше дёрганий, чем серия таймеров. */
             requestAnimationFrame(scrollFocusedRowIntoCenter);
-            setTimeout(scrollFocusedRowIntoCenter, 260);
-            setTimeout(scrollFocusedRowIntoCenter, 520);
+            setTimeout(scrollFocusedRowIntoCenter, 360);
           },
           true
         );
@@ -5016,9 +5386,88 @@
           },
           true
         );
+        var vvTourScrollDeb = null;
+        function scheduleScrollRowOnViewportChange() {
+          if (vvTourScrollDeb) clearTimeout(vvTourScrollDeb);
+          vvTourScrollDeb = setTimeout(function() {
+            vvTourScrollDeb = null;
+            scrollFocusedRowIntoCenter();
+          }, 96);
+        }
         if (window.visualViewport) {
-          window.visualViewport.addEventListener('resize', scrollFocusedRowIntoCenter);
+          window.visualViewport.addEventListener('resize', scheduleScrollRowOnViewportChange);
         }
       })();
+
+      /**
+       * Основная страница профиля (не в fullscreen-онбординге): фиксированный .save-bar и
+       * клавиатура режут высоту визуального порта — поле может оказаться под кнопкой.
+       * Повторяем паттерн визарда: отложенный scrollIntoView + при resize/visualViewport.
+       */
+      (function wireProfileMainFormKeyboardAvoidance() {
+        var root = document.getElementById('mainContent');
+        if (!root || root.dataset.profileKbAvoid === '1') return;
+        root.dataset.profileKbAvoid = '1';
+
+        function activeInProfileForm() {
+          var ae = document.activeElement;
+          if (!ae || !root.contains(ae)) return null;
+          var tg = ae.tagName;
+          if (tg !== 'INPUT' && tg !== 'TEXTAREA' && tg !== 'SELECT') return null;
+          return ae;
+        }
+
+        function scrollProfileMainFocusedFieldIntoView() {
+          if (document.body.classList.contains('ob-flow-open')) return;
+          var ae = activeInProfileForm();
+          if (!ae) return;
+          var target =
+            (ae.closest && ae.closest('.field')) ||
+            (ae.closest && ae.closest('.svc-tier-row')) ||
+            (ae.closest && ae.closest('.svc-group-price-wrap')) ||
+            (ae.closest && ae.closest('.svc-desc-wrap')) ||
+            (ae.closest && ae.closest('.svc-client-notice-wrap')) ||
+            (ae.closest && ae.closest('.edu-card')) ||
+            ae;
+          try {
+            target.scrollIntoView({
+              block: 'nearest',
+              behavior: 'smooth',
+              inline: 'nearest',
+            });
+          } catch (e) {}
+        }
+
+        var vpDeb = null;
+        function onViewportOrResize() {
+          if (document.body.classList.contains('ob-flow-open')) return;
+          if (vpDeb) clearTimeout(vpDeb);
+          vpDeb = setTimeout(function() {
+            vpDeb = null;
+            scrollProfileMainFocusedFieldIntoView();
+          }, 220);
+        }
+
+        root.addEventListener(
+          'focusin',
+          function(ev) {
+            if (document.body.classList.contains('ob-flow-open')) return;
+            var t = ev.target;
+            if (!t || !t.tagName) return;
+            var tg = t.tagName;
+            if (tg !== 'INPUT' && tg !== 'TEXTAREA' && tg !== 'SELECT') return;
+            setTimeout(scrollProfileMainFocusedFieldIntoView, 80);
+            setTimeout(scrollProfileMainFocusedFieldIntoView, 420);
+          },
+          true
+        );
+
+        window.addEventListener('resize', onViewportOrResize);
+        if (window.visualViewport) {
+          window.visualViewport.addEventListener('resize', onViewportOrResize);
+          window.visualViewport.addEventListener('scroll', onViewportOrResize);
+        }
+      })();
+
       loadInitial();
     })();

@@ -223,7 +223,7 @@ async def test_schedule_get_schedule_grid_zamok_hourly_when_primary(
     app_use_test_db,
     db_session,
 ) -> None:
-    """Primary arena ТЦ Замок → GET /schedule exposes hourly :10 grid from arena_schedule_presets (from 10:10)."""
+    """Primary arena ТЦ Замок → GET /schedule exposes hourly :15 preset (первое начало 10:15, последнее — 22:15)."""
     r = await db_session.execute(text("SELECT id FROM arenas WHERE name = 'ТЦ Замок' LIMIT 1"))
     row = r.fetchone()
     if row is None:
@@ -253,9 +253,9 @@ async def test_schedule_get_schedule_grid_zamok_hourly_when_primary(
         text(
             """
             UPDATE arena_schedule_presets
-            SET minute_offset = 10,
+            SET minute_offset = 15,
                 hour_start = 10,
-                hour_end = 21,
+                hour_end = 22,
                 slot_duration_minutes = COALESCE(slot_duration_minutes, 45)
             WHERE arena_id = :aid
             """
@@ -284,8 +284,9 @@ async def test_schedule_get_schedule_grid_zamok_hourly_when_primary(
     assert resp.status_code == 200
     sg = resp.json().get("schedule_grid") or {}
     assert sg.get("kind") == "hourly_minute"
-    assert int(sg.get("minute_offset", -1)) == 10
+    assert int(sg.get("minute_offset", -1)) == 15
     assert int(sg.get("hour_start", -1)) == 10
+    assert int(sg.get("hour_end", -1)) == 22
     assert sg.get("slot_duration_minutes") == 45
 
 

@@ -955,9 +955,13 @@
       sSel.innerHTML = services.map(function (s) {
         return '<option value="' + s.id + '">' + esc(s.name || ('Услуга ' + s.id)) + '</option>';
       }).join('');
-      aSel.innerHTML = arenas.map(function (a) {
-        return '<option value="' + a.id + '">' + esc(a.name || ('Площадка ' + a.id)) + '</option>';
-      }).join('');
+      aSel.innerHTML = arenas.length
+        ? arenas
+            .map(function (a) {
+              return '<option value="' + a.id + '">' + esc(a.name || ('Площадка ' + a.id)) + '</option>';
+            })
+            .join('')
+        : '<option value="">' + esc('Добавьте площадку в профиле тренера') + '</option>';
     });
   }
 

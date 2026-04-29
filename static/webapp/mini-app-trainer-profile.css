@@ -1492,6 +1492,23 @@
     html {
       scroll-padding-bottom: calc(100px + env(safe-area-inset-bottom, 0px));
     }
+    @media (max-width: 560px) {
+      html {
+        scroll-padding-bottom: calc(160px + env(safe-area-inset-bottom, 0px));
+      }
+      #mainContent {
+        padding-bottom: calc(120px + env(safe-area-inset-bottom, 0px));
+      }
+      .field,
+      #tab-form .svc-desc-wrap,
+      #tab-form .svc-client-notice-wrap {
+        scroll-margin-bottom: 100px;
+      }
+      #servicesWrap .svc-tier-row,
+      #servicesWrap .svc-group-price-wrap {
+        scroll-margin-bottom: 100px;
+      }
+    }
     .btn-save {
       display: flex;
       align-items: center;
@@ -2373,6 +2390,24 @@
       overscroll-behavior: contain;
     }
 
+    /*
+     * JS ставит inline height/top от visualViewport (клавиатура). На телефоне отключаем transition —
+     * иначе частые vv-события + анимация высоты дают рывки и иногда «залипание» WebView.
+     * Десктоп: короткий transition смягчает ресайн окна.
+     */
+    @media (max-width: 560px) {
+      #onboardingFlow:not([hidden]).ob-flow {
+        transition: none;
+      }
+    }
+    @media (min-width: 561px) and (prefers-reduced-motion: no-preference) {
+      #onboardingFlow:not([hidden]).ob-flow {
+        transition-property: height, top;
+        transition-duration: 0.2s;
+        transition-timing-function: cubic-bezier(0.33, 0.92, 0.25, 1);
+      }
+    }
+
     .ob-flow__header {
       display: grid;
       grid-template-columns: auto 1fr;
@@ -2437,7 +2472,7 @@
       padding: 20px 16px 24px;
       /* scroll-padding чтобы фокус input не прилипал к верху/низу под клавиатурой */
       scroll-padding-top: 20px;
-      scroll-padding-bottom: 24px;
+      scroll-padding-bottom: 80px;
     }
     .ob-flow__card {
       max-width: 520px;
@@ -2507,10 +2542,15 @@
      * Тарифы/групповая цена при фокусе сами скроллятся в центр #obFlowBody (см. JS).
      * scroll-margin добавляет комфортный отступ — чтобы строка не прилипала к краю визарда.
      */
+    .ob-flow__slot .field,
+    .ob-flow__slot .svc-desc-wrap,
+    .ob-flow__slot .svc-client-notice-wrap {
+      scroll-margin-bottom: 80px;
+    }
     .ob-flow__slot .svc-tier-row,
     .ob-flow__slot .svc-group-price-wrap {
       scroll-margin-top: 24px;
-      scroll-margin-bottom: 24px;
+      scroll-margin-bottom: 80px;
     }
     /* Обёртки шагов настроек: без встроенных отступов. */
     .ob-flow__slot #obSessionDurationWrap,
@@ -2651,10 +2691,12 @@
       background: var(--tg-theme-bg-color, #fff);
       opacity: 0;
       transition: opacity 0.28s ease;
-      pointer-events: auto;
+      /* Let clicks through until the veil is actually shown — avoids blocking header (#btnHome) while opacity is 0. */
+      pointer-events: none;
     }
     .profile-to-hub-transition--visible {
       opacity: 1;
+      pointer-events: auto;
     }
     .profile-to-hub-transition__inner {
       text-align: center;

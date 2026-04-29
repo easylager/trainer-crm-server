@@ -1794,3 +1794,80 @@
           0 16px 40px rgba(0, 0, 0, 0.45);
       }
     }
+
+    /*
+     * Create group / edit schedule: WebKit date input has intrinsic width > viewport — clips past card edge.
+     * Composite flex layout + datetime-edit min-width fixes overlap that made arena/select feel broken on iPhone.
+     */
+    #screenCreate {
+      overflow-x: clip;
+      max-width: 100%;
+      box-sizing: border-box;
+    }
+    #screenCreate .tg-create-form.tg-form-card {
+      overflow-x: clip;
+      max-width: 100%;
+      box-sizing: border-box;
+    }
+    #modalEditSchedule .tg-modal-edit-schedule__form.tg-form-card {
+      overflow-x: clip;
+      max-width: 100%;
+      box-sizing: border-box;
+    }
+    #screenCreate .tg-form-card .form-block,
+    #modalEditSchedule .tg-modal-edit-schedule__form .form-block {
+      min-width: 0;
+    }
+    #screenCreate .tg-form-card .form-block input[type='date'],
+    #modalEditSchedule .tg-form-card .form-block input[type='date'] {
+      display: flex;
+      align-items: center;
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      box-sizing: border-box;
+      font-family: inherit;
+      font-variant-numeric: tabular-nums;
+      color-scheme: light dark;
+    }
+    #screenCreate .tg-form-card .form-block input[type='date']::-webkit-date-and-time-value,
+    #modalEditSchedule .tg-form-card .form-block input[type='date']::-webkit-date-and-time-value {
+      color: var(--tg-theme-text-color);
+    }
+    #screenCreate .tg-form-card .form-block input[type='date']::-webkit-datetime-edit,
+    #modalEditSchedule .tg-form-card .form-block input[type='date']::-webkit-datetime-edit {
+      flex: 1;
+      min-width: 0;
+      padding: 0;
+      display: flex;
+      align-items: center;
+    }
+    #screenCreate .tg-form-card .form-block input[type='date']::-webkit-datetime-edit-fields-wrapper,
+    #modalEditSchedule .tg-form-card .form-block input[type='date']::-webkit-datetime-edit-fields-wrapper {
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      flex: 1;
+      display: flex;
+      align-items: center;
+    }
+    #screenCreate .tg-form-card .form-block input[type='date']::-webkit-datetime-edit-month-field,
+    #screenCreate .tg-form-card .form-block input[type='date']::-webkit-datetime-edit-day-field,
+    #screenCreate .tg-form-card .form-block input[type='date']::-webkit-datetime-edit-year-field,
+    #screenCreate .tg-form-card .form-block input[type='date']::-webkit-datetime-edit-text,
+    #modalEditSchedule .tg-form-card .form-block input[type='date']::-webkit-datetime-edit-month-field,
+    #modalEditSchedule .tg-form-card .form-block input[type='date']::-webkit-datetime-edit-day-field,
+    #modalEditSchedule .tg-form-card .form-block input[type='date']::-webkit-datetime-edit-year-field,
+    #modalEditSchedule .tg-form-card .form-block input[type='date']::-webkit-datetime-edit-text {
+      color: var(--tg-theme-text-color);
+    }
+    #screenCreate .tg-form-card .form-block input[type='date']::-webkit-calendar-picker-indicator,
+    #modalEditSchedule .tg-form-card .form-block input[type='date']::-webkit-calendar-picker-indicator {
+      flex-shrink: 0;
+      opacity: 0.8;
+      margin-inline-start: 4px;
+    }
+    #screenCreate .tg-form-card .form-block select.tg-select,
+    #modalEditSchedule .tg-form-card .form-block select.tg-select {
+      max-width: 100%;
+    }

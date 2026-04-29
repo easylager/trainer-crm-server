@@ -710,6 +710,10 @@
           return;
         }
         if (document.getElementById('screenEdit').style.display === 'block') {
+          if (state.editMode === 'calendar') {
+            returnToCalendarDayPickFromEdit({ reloadSlots: false });
+            return;
+          }
           showMain();
         }
       }
@@ -2311,11 +2315,22 @@
         }
         const list = document.getElementById('dayPickList');
         let html = '';
+        const todayStr = dateToStr(new Date());
         for (let i = 0; i < 7; i++) {
           const d = new Date(state.weekStart);
           d.setDate(d.getDate() + i);
           const dateStr = dateToStr(d);
-          html += '<button type="button" class="template-day-card" data-date="' + escapeHtml(dateStr) + '">';
+          const isPastDay = dateStr < todayStr;
+          const pastCls = isPastDay ? ' template-day-card--past' : '';
+          const pastTitle = isPastDay ? ' title="' + escapeHtml('День уже прошёл') + '"' : '';
+          html +=
+            '<button type="button" class="template-day-card' +
+            pastCls +
+            '" data-date="' +
+            escapeHtml(dateStr) +
+            '"' +
+            pastTitle +
+            '>';
           html += '<span class="day-name">' + DAYS[i] + '</span>';
           html += '<span class="day-slots">' + formatDateKey(dateStr) + '</span>';
           html += '<span class="arrow">→</span></button>';
@@ -2335,6 +2350,31 @@
               openEditCalendarDay(btn.dataset.date);
             };
           });
+        }
+      }
+
+      /**
+       * Leave calendar time-grid editor without closing the multi-day "add slots" flow:
+       * back to weekday list (same intent individual/group preserved).
+       */
+      function returnToCalendarDayPickFromEdit(opts) {
+        opts = opts || {};
+        var se = document.getElementById('screenEdit');
+        if (se) se.style.display = 'none';
+        state.editMode = null;
+        state.editDate = null;
+        state.editDay = null;
+        state.calendarBaselineStarts = null;
+        state.selectedStarts = new Set();
+        state.lockedStarts = new Set();
+        if (opts.reloadSlots) {
+          loadSlots({
+            onComplete: function() {
+              showDayPickScreen();
+            },
+          });
+        } else {
+          showDayPickScreen();
         }
       }
 
@@ -2479,7 +2519,11 @@
         }
       }
 
-      function loadSlots() {
+      /**
+       * opts.onComplete — fired after successful fetch + render (e.g. return to day-pick only when slots are fresh).
+       */
+      function loadSlots(opts) {
+        opts = opts || {};
         if (window.TrainerMiniAppGate && window.TrainerMiniAppGate.shouldBlockFeatureFetch()) return;
         if (tg && !tg.initData) {
           loadSlots._waitInit = (loadSlots._waitInit || 0) + 1;
@@ -2487,7 +2531,7 @@
             document.getElementById('calendarContent').innerHTML = buildCalendarSkeletonHtml();
             setTimeout(function() {
               callReadyWhenInitDataReady();
-              loadSlots();
+              loadSlots(opts);
             }, 50);
             return;
           }
@@ -2554,10 +2598,17 @@
                 showToast('Слот на другой неделе — перелистните календарь или откройте запись из расписания.');
               }
             }
+            if (typeof opts.onComplete === 'function') {
+              try {
+                opts.onComplete();
+              } catch (eCb) { /* ignore */ }
+            }
           })
           .catch(function(err) {
             if (err === 'retry-init') {
-              setTimeout(loadSlots, 100);
+              setTimeout(function() {
+                loadSlots(opts);
+              }, 100);
               return;
             }
             hideFlowBookBootOverlay();
@@ -4374,7 +4425,15 @@
                   state.showPastThisWeek = true;
                 }
                 showToast(msg);
-                showMain();
+                document.getElementById('screenEdit').style.display = 'none';
+                state.editMode = null;
+                state.editDate = null;
+                state.editDay = null;
+                state.calendarBaselineStarts = null;
+                state.selectedStarts = new Set();
+                state.lockedStarts = new Set();
+                showDayPickScreen();
+                loadSlots();
               } else {
                 r.json().then(function(o) {
                   var d = o.detail || 'Ошибка';
@@ -4387,6 +4446,10 @@
       };
 
       document.getElementById('editCancel').onclick = function() {
+        if (state.editMode === 'calendar') {
+          returnToCalendarDayPickFromEdit({ reloadSlots: false });
+          return;
+        }
         showMain();
       };
 

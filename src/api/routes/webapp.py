@@ -2092,6 +2092,10 @@ async def get_trainer_hub_bootstrap(
                 od = await get_trainer_onboarding_checklist(s, tid_l)
                 return od if od else None
 
+        async def _hub_lifecycle() -> dict[str, Any]:
+            async with async_session_factory() as s:
+                return await build_trainer_lifecycle_payload(s, tid_l)
+
         if trainer_id_active:
             tid_act = trainer_id_active
 
@@ -2110,10 +2114,6 @@ async def get_trainer_hub_bootstrap(
             async def _hub_subscription() -> dict[str, Any]:
                 async with async_session_factory() as s:
                     return await get_trainer_subscription_status(s, tid_act)
-
-            async def _hub_lifecycle() -> dict[str, Any]:
-                async with async_session_factory() as s:
-                    return await build_trainer_lifecycle_payload(s, tid_l)
 
             p_res, o_res, r_req, r_rev, r_book, r_sub, r_life = await asyncio.gather(
                 _hub_profile(),

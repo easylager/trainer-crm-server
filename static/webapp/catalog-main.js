@@ -1697,14 +1697,16 @@
         return String(s).replace(/"/g, '&quot;');
       }
 
-      var CATALOG_NOTICE_PREFIX = 'В стоимость не входит:';
+      var CATALOG_NOTICE_PREFIX = 'В стоимость не входят:';
 
       /** Text after the fixed prefix for display (or full text if prefix missing — still shown under the same lead). */
       function parseCatalogClientNoticeItems(raw) {
         var s = (raw || '').trim();
         if (!s) return '';
-        var re = /^В стоимость не входит:\s*/i;
-        if (re.test(s)) return s.replace(re, '').replace(/\.\s*$/, '').trim();
+        var rePlural = /^В стоимость не входят:\s*/i;
+        if (rePlural.test(s)) return s.replace(rePlural, '').replace(/\.\s*$/, '').trim();
+        var reSingular = /^В стоимость не входит:\s*/i;
+        if (reSingular.test(s)) return s.replace(reSingular, '').replace(/\.\s*$/, '').trim();
         return s;
       }
 
