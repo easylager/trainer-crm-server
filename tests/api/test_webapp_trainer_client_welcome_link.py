@@ -12,6 +12,7 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 
 from src.api.app import app
+from src.api.miniapp_auth.types import MiniAppPlatform, MiniAppPrincipal
 from src.application.booking_use_cases import trainer_has_access_to_client
 from src.application.client_use_cases import (
     attach_telegram_id_to_client,
@@ -35,7 +36,8 @@ def _fresh_trainer_telegram_id() -> int:
 
 @contextmanager
 def patch_trainer_webapp_init(telegram_id: int) -> Iterator[None]:
-    with patch("src.api.routes.webapp.require_telegram_user_id", return_value=telegram_id):
+    fake = MiniAppPrincipal(platform=MiniAppPlatform.TELEGRAM, user_id=telegram_id)
+    with patch("src.api.miniapp_auth.deps.verify_telegram_init_data_principal", return_value=fake):
         yield
 
 

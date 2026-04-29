@@ -8,6 +8,7 @@ import uuid
 from datetime import date, datetime, timedelta, timezone
 from itertools import groupby
 from typing import Any, Literal
+from urllib.parse import parse_qsl
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +48,7 @@ from src.application.booking_use_cases import (
     cancel_booking,
     cancel_booking_by_client,
     confirm_booking,
+    coerce_service_id_and_name_for_trainer_catalog,
     count_trainer_client_sessions,
     count_trainer_client_upcoming,
     create_booking,
@@ -66,9 +68,10 @@ from src.application.booking_use_cases import (
     get_trainer_client_next_booking,
     get_trainer_client_for_card,
     get_trainer_client_last_completed_booking_service_defaults,
+    get_trainer_client_latest_booking_service_id,
     get_trainer_group_slot_hub,
+    resolve_client_catalog_service_for_trainer,
     is_slot_end_in_past_local,
-    list_bookings_for_client,
     list_bookings_for_trainer,
     list_trainer_clients,
     list_trainer_fill_slots_invite_candidates,
@@ -114,6 +117,7 @@ from src.application.client_trainer_edge_use_cases import (
     get_primary_edge as get_primary_trainer_edge,
     get_saved_edges as get_saved_trainer_edges,
     notify_slot_waitlist as uc_notify_slot_waitlist,
+    record_booking_edge,
     save_trainer as uc_save_trainer,
     set_primary_trainer as uc_set_primary_trainer,
     subscribe_notify_slots as uc_subscribe_notify_slots,
@@ -128,12 +132,15 @@ from src.application.recurring_use_cases import (
     create_recurring_client_slot,
     get_active_recurring_for_booking,
 )
-from src.application.trainer_access_state import TrainerAccessState, get_trainer_access_state
+from src.application.trainer_access_state import (
+    TrainerAccessState,
+    get_trainer_access_state_from_principal,
+)
 from src.shared.trainer_status import normalize_trainer_status_value
 from src.application.trainer_link import (
-    get_trainer_id_by_telegram_id,
-    get_trainer_id_for_webapp_trainer_operations,
-    get_trainer_id_linked_any_status,
+    get_trainer_id_by_telegram_id_from_principal,
+    get_trainer_id_for_webapp_trainer_operations_from_principal,
+    get_trainer_id_linked_any_status_from_principal,
 )
 from src.application.welcome_link_use_cases import (
     WELCOME_TOKEN_TYPE_CERT,
@@ -244,7 +251,11 @@ from src.application.trainer_schedule_use_cases import (
 )
 from src.application.recurring_use_cases import apply_recurring_bookings_for_week
 from src.application.welcome_link_use_cases import WELCOME_TOKEN_TYPE_CLIENT_BIND, create_welcome_link_token
-from src.application.trainer_invite_links import build_trainer_invite_links
+from src.application.trainer_invite_links import build_trainer_invite_links, build_trainer_share_link
+from src.application.client_share_message import (
+    compose_client_share_message,
+    share_body_for_native_share_dialog,
+)
 from src.application.trainer_fill_slots_invite_send import send_trainer_fill_slots_invites
 from src.application.client_notes_use_cases import (
     get_trainer_client_note,
@@ -264,7 +275,36 @@ from src.shared.ttl_cache import get_slots_cached, set_slots_cached
 from src.shared.config import Settings
 from src.shared.map_links import build_yandex_by_map_url
 from src.shared.notification_hours import NOTIFICATION_TZ, working_hours_between
-from src.shared.telegram_webapp import InitDataAuthError, parse_user_json_from_init_data, require_telegram_user_id
+from src.shared.telegram_webapp import InitDataAuthError, parse_user_json_from_init_data
+
+from src.api.miniapp_auth import (
+    MiniAppPlatform,
+    MiniAppPrincipal,
+    MiniappCredentialIn,
+    client_catalog_telegram_key,
+    get_admin_miniapp_principal,
+    get_client_miniapp_principal,
+    get_trainer_miniapp_principal,
+    reject_unsupported_miniapp_platform,
+    require_miniapp_credential_in,
+    trainer_legacy_telegram_id_for_storage,
+    verify_vk_miniapp_launch_principal,
+)
+from src.api.miniapp_auth.telegram import verify_telegram_init_data_principal
+from src.api.miniapp_auth.vk_launch_params import vk_launch_display_user_fields
+from src.api.routes.webapp_init_data import (
+    strip_client_name_field as _strip_client_name_field,
+)
+from src.api.routes.webapp_client_trainer_graph import (
+    compute_primary_edge_meta as _compute_primary_edge_meta,
+    resolve_primary_catalog_service_id as _resolve_primary_catalog_service_id,
+)
+from src.api.routes.webapp_client_payloads import (
+    CLIENT_DAYS,
+    client_bookings_days_payload as _client_bookings_days_payload,
+    client_requests_list_payload as _client_requests_list_payload,
+    serialize_client_request as _serialize_client_request,
+)
 
 try:
     from zoneinfo import ZoneInfo
@@ -274,32 +314,17 @@ except ImportError:
 router = APIRouter(prefix="/api/webapp", tags=["webapp"])
 
 
-def _get_telegram_id_from_init_data(init_data: str, *, bot_token: str) -> int:
-    try:
-        return require_telegram_user_id(init_data, bot_token)
-    except InitDataAuthError:
-        raise HTTPException(status_code=401, detail="Invalid or expired init data") from None
-
-
-def _trainer_telegram_id(init_data: str) -> int:
-    return _get_telegram_id_from_init_data(init_data, bot_token=Settings().telegram_bot_token_trainer)
-
-
-def _client_telegram_id(init_data: str) -> int:
-    return _get_telegram_id_from_init_data(init_data, bot_token=Settings().telegram_bot_token_client)
-
-
-def _strip_client_name_field(value: str | None) -> str | None:
-    if value is None:
-        return None
-    t = (value or "").strip()[:64]
-    return t or None
+def _trainer_bot_notify_telegram_id(principal: MiniAppPrincipal) -> int | None:
+    """Trainer-bot Telegram chat id; no push target when Mini App host is not Telegram."""
+    if principal.platform == MiniAppPlatform.TELEGRAM:
+        return int(principal.user_id)
+    return None
 
 
 async def _ensure_client_for_webapp_miniapp(
     session: AsyncSession,
-    telegram_id: int,
-    raw_init_data: str,
+    principal: MiniAppPrincipal,
+    raw_credential: str,
     *,
     phone: str | None = None,
     first_name: str | None = None,
@@ -308,10 +333,17 @@ async def _ensure_client_for_webapp_miniapp(
     """
     Mini App: client row must have first_name (last_name optional).
     If profile already has first_name, only phone is updated when provided.
-    Otherwise first_name is taken from body or Telegram user in initData.
+    Otherwise first_name is taken from body or host user payload (Telegram initData / VK launch).
     """
-    profile = await get_client_profile_basic(session, telegram_id)
-    tg_user = parse_user_json_from_init_data(raw_init_data) or {}
+    catalog_tid = client_catalog_telegram_key(principal)
+    vk_uid = int(principal.user_id) if principal.platform == MiniAppPlatform.MAX else None
+
+    profile = await get_client_profile_basic(session, catalog_tid)
+    if principal.platform == MiniAppPlatform.TELEGRAM:
+        tg_user = parse_user_json_from_init_data(raw_credential) or {}
+    else:
+        q = dict(parse_qsl(raw_credential.lstrip("?"), keep_blank_values=True))
+        tg_user = vk_launch_display_user_fields(q)
     body_f = _strip_client_name_field(first_name)
     body_l = _strip_client_name_field(last_name)
     _tgf = tg_user.get("first_name")
@@ -321,7 +353,7 @@ async def _ensure_client_for_webapp_miniapp(
     has_saved_name = bool(profile and (profile.get("first_name") or "").strip())
 
     if has_saved_name:
-        return await get_or_create_client(session, telegram_id, phone=phone)
+        return await get_or_create_client(session, catalog_tid, vk_user_id=vk_uid, phone=phone)
 
     resolved_first = body_f or tg_first
     resolved_last = body_l if body_l is not None else tg_last
@@ -333,23 +365,12 @@ async def _ensure_client_for_webapp_miniapp(
         )
     return await get_or_create_client(
         session,
-        telegram_id,
+        catalog_tid,
+        vk_user_id=vk_uid,
         phone=phone,
         first_name=resolved_first,
         last_name=resolved_last,
     )
-
-
-def _admin_telegram_id(init_data: str) -> int:
-    """Validate init_data with admin bot token; require telegram_id in admin_telegram_ids."""
-    token = Settings().telegram_bot_token_admin
-    if not token:
-        raise HTTPException(status_code=503, detail="Admin Web App not configured")
-    tid = _get_telegram_id_from_init_data(init_data, bot_token=token)
-    admin_ids = Settings().admin_telegram_ids or []
-    if tid not in admin_ids:
-        raise HTTPException(status_code=403, detail="Not an admin")
-    return tid
 
 
 # --- Trainer bookings Mini App (initData validated with trainer bot token) ---
@@ -400,7 +421,7 @@ async def _send_trainer_post_booking_feedback(
     *,
     session: AsyncSession,
     trainer_id: int,
-    trainer_telegram_id: int,
+    trainer_telegram_id: int | None,
     booking_id: int,
     client_id: int,
     slot_date,
@@ -410,6 +431,8 @@ async def _send_trainer_post_booking_feedback(
     is_sandbox: bool = False,
 ) -> None:
     """Best-effort trainer post-action push after trainer-created booking from Mini App."""
+    if trainer_telegram_id is None:
+        return
     client_card = await get_trainer_client_for_card(session, trainer_id, client_id)
     first_name = (client_card or {}).get("first_name") or ""
     last_name = (client_card or {}).get("last_name") or ""
@@ -506,19 +529,14 @@ async def _send_trainer_post_booking_feedback(
 
 @router.get("/trainer/access")
 async def get_trainer_access_for_webapp(
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """
     Single source of truth for Mini App onboarding: linked trainer may be non-active.
     Use this before feature APIs that require status=active (schedule, requests, CRM, etc.).
     """
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    state, trainer = await get_trainer_access_state(session, telegram_id)
+    state, trainer = await get_trainer_access_state_from_principal(session, principal)
     tid = int(trainer["id"]) if trainer and trainer.get("id") is not None else None
     if tid is not None:
         await ensure_trainer_welcome_trial(session, tid)
@@ -543,19 +561,14 @@ async def get_schedule(
         None,
         description="view=list: slots only (compact JSON for read-only schedule screen; omits schedule_grid).",
     ),
-    init_data: str | None = Query(None, description="Telegram Web App initData (if header stripped by proxy)"),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """
     Return trainer's slots for date range. Requires Telegram Web App initData
     in header X-Telegram-Init-Data or in query param init_data (proxy-safe).
     """
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data (header or init_data query)")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
 
@@ -628,16 +641,11 @@ async def get_schedule(
 
 @router.get("/schedule/templates")
 async def get_schedule_templates(
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """List weekly template entries (day_of_week, start_time, duration). Auth: trainer initData."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     templates = await list_templates(session, trainer_id)
@@ -687,16 +695,11 @@ class ScheduleTemplateDayBody(BaseModel):
 @router.put("/schedule/templates/day")
 async def put_schedule_templates_day(
     body: ScheduleTemplateDayBody,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """Set template for one week day: replace template rows for that weekday (per-hour capacity). Auth: trainer."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     # Require CRM tier to edit templates
@@ -804,16 +807,11 @@ class ScheduleSlotsDayBody(BaseModel):
 async def post_schedule_slots(
     body: ScheduleSlotsDayBody,
     background_tasks: BackgroundTasks,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """Set slots for one calendar day: replace available slots. Auth: trainer."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     # Require CRM tier to create/update slots
@@ -882,16 +880,11 @@ class ScheduleApplyWeekBody(BaseModel):
 async def post_schedule_apply_week(
     body: ScheduleApplyWeekBody,
     background_tasks: BackgroundTasks,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """Replace one week with template (free slots only); then apply recurring. Auth: trainer."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     # Require CRM tier to apply template and recurring bookings
@@ -916,16 +909,11 @@ async def post_schedule_apply_week(
 @router.delete("/schedule/slots/{slot_id:int}")
 async def delete_schedule_slot(
     slot_id: int,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """Delete one applied slot (available only). Auth: trainer."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     if not await trainer_has_crm_access(session, trainer_id):
@@ -964,9 +952,8 @@ async def get_client_slots(
         None,
         description="Catalog/service context: show individual slots + group slots for this service only",
     ),
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
     session: AsyncSession = Depends(get_session),
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
 ):
     """
     Available slots for a trainer (client view). Pass min_hours and trainer_name from
@@ -976,10 +963,7 @@ async def get_client_slots(
     client's bot session already pins the same trainer and a service (welcome link,
     book button without query param): then group slots for that service are included.
     """
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    client_telegram_id = _client_telegram_id(raw)
+    client_telegram_id = client_catalog_telegram_key(principal)
 
     if not await trainer_allows_online_booking(session, trainer_id):
         trainer_row = await get_trainer(session, trainer_id)
@@ -1095,23 +1079,62 @@ class ClientBookingBody(BaseModel):
     last_name: str | None = None
 
 
+async def _client_booking_post_create_effects(
+    booking_id: int,
+    telegram_id: int,
+    trainer_id: int,
+    service_id: int,
+) -> None:
+    """
+    Edge counters + reminder rows after the booking row is committed.
+    Runs in BackgroundTasks so the HTTP client gets JSON quickly (reduces false «network error» when
+    the connection drops after the DB work but before the response is fully delivered).
+    """
+    try:
+        from src.infrastructure.db.session import async_session_factory
+
+        async with async_session_factory() as s:
+            await record_booking_edge(
+                telegram_id,
+                trainer_id,
+                completed=False,
+                session=s,
+                booking_service_id=service_id,
+            )
+            await generate_reminders_for_booking(s, booking_id)
+    except Exception:
+        logger.exception(
+            "client booking post-create effects failed booking_id=%s trainer_id=%s",
+            booking_id,
+            trainer_id,
+        )
+
+
 @router.post("/client/booking")
 async def post_client_booking(
     body: ClientBookingBody,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    background_tasks: BackgroundTasks,
+    cred: MiniappCredentialIn = Depends(require_miniapp_credential_in),
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
     session: AsyncSession = Depends(get_session),
+    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
 ):
     """
     Create booking from client Mini App. Auth: client bot initData.
     
     Requires trainer to have tier >= 'online' for self-booking.
     Phone required. service_id required (or from request).
+    Optional ``Idempotency-Key``: repeat submits within 24h return the same JSON (slot already taken
+    is avoided when the first request succeeded but the client did not receive the body).
     """
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _client_telegram_id(raw)
+    telegram_id = client_catalog_telegram_key(principal)
+    raw = cred.raw
+    ik = (idempotency_key or "").strip()
+    idem_cache_key = (f"bkc{telegram_id}_{ik}"[:64]) if ik else ""
+    if idem_cache_key:
+        cached = await get_idempotency_response(session, idem_cache_key)
+        if isinstance(cached, dict) and cached.get("success") is True:
+            return cached
 
     phone = (body.phone or "").strip()
     if not phone or len("".join(c for c in phone if c.isdigit() or c == "+")) < 10:
@@ -1143,9 +1166,19 @@ async def post_client_booking(
             raise HTTPException(status_code=400, detail="service_id required when not booking from request")
         service_id = body.service_id
 
+    r_ts_offers = await session.execute(
+        text("SELECT 1 FROM trainer_services WHERE trainer_id = :tid AND service_id = :sid"),
+        {"tid": trainer_id, "sid": service_id},
+    )
+    if not r_ts_offers.fetchone():
+        raise HTTPException(
+            status_code=400,
+            detail="Эта услуга недоступна у выбранного тренера. Откройте карточку тренера и выберите услугу снова.",
+        )
+
     client_id = await _ensure_client_for_webapp_miniapp(
         session,
-        telegram_id,
+        principal,
         raw,
         phone=phone,
         first_name=body.first_name,
@@ -1196,24 +1229,29 @@ async def post_client_booking(
         ) from None
     if not booking_id:
         raise HTTPException(status_code=400, detail="Slot not available")
-    await generate_reminders_for_booking(session, booking_id)
     out: dict[str, object] = {"success": True, "booking_id": booking_id}
     if client_request_id is None and used_primary_despite_filter:
         out["used_primary_venue_for_online_booking"] = True
+    if idem_cache_key:
+        await set_idempotency_response(session, idem_cache_key, dict(out))
+    background_tasks.add_task(
+        _client_booking_post_create_effects,
+        int(booking_id),
+        int(telegram_id),
+        int(trainer_id),
+        int(service_id),
+    )
     return out
 
 
 @router.get("/client/session")
 async def get_client_session_state(
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    for_trainer_id: int | None = Query(None, description="When set, suggested_service_id_for_trainer uses this trainer."),
     session: AsyncSession = Depends(get_session),
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
 ):
     """Return client session with resolved names (city, service, arena, trainer) for catalog UI. Auth: client initData."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _client_telegram_id(raw)
+    telegram_id = client_catalog_telegram_key(principal)
     profile = await get_client_profile_basic(session, telegram_id)
     needs_profile_name = not bool(profile and (profile.get("first_name") or "").strip())
     row = await get_client_session(telegram_id, session)
@@ -1256,6 +1294,27 @@ async def get_client_session_state(
 
     cfn = (profile.get("first_name") or "").strip() if profile else ""
     cln = (profile.get("last_name") or "").strip() if profile else ""
+    suggested_sid: int | None = None
+    tid_for_suggest = for_trainer_id if for_trainer_id is not None else trainer_id
+    tid_for_suggest_int: int | None = int(tid_for_suggest) if tid_for_suggest else None
+    if tid_for_suggest_int is not None:
+        client_row_id = await get_client_id_by_telegram_id(session, telegram_id)
+        if client_row_id is not None:
+            suggested_sid = await get_trainer_client_latest_booking_service_id(
+                session, tid_for_suggest_int, client_row_id
+            )
+    book_ctx_sid: int | None = None
+    book_ctx_nm: str | None = None
+    if for_trainer_id is not None:
+        hint_ids: list[int | None] = []
+        edge = await get_trainer_edge(telegram_id, int(for_trainer_id), session)
+        if edge:
+            hint_ids.append(edge.get("saved_catalog_service_id"))
+            hint_ids.append(edge.get("last_booking_service_id"))
+        hint_ids.append(suggested_sid)
+        book_ctx_sid, book_ctx_nm = await resolve_client_catalog_service_for_trainer(
+            session, int(for_trainer_id), row, *hint_ids
+        )
     payload = {
         "city_id": city_id,
         "city_name": city_name,
@@ -1265,6 +1324,12 @@ async def get_client_session_state(
         "arena_name": arena_name or (None if arena_id is None else "—"),
         "trainer_id": trainer_id,
         "trainer_name": trainer_name,
+        # Client must only apply suggested_service_id when viewing this trainer (avoids primary-trainer hint on another card).
+        "suggested_service_for_trainer_id": tid_for_suggest_int,
+        "suggested_service_id_for_trainer": suggested_sid,
+        # Per-trainer booking/catalog choice when for_trainer_id was passed (see resolve_client_catalog_service_for_trainer).
+        "booking_context_service_id": book_ctx_sid,
+        "booking_context_service_name": book_ctx_nm,
         "client_phone": client_phone,
         "needs_profile_name": needs_profile_name,
         "client_first_name": cfn or None,
@@ -1287,15 +1352,11 @@ class ClientSessionBody(BaseModel):
 @router.post("/client/session")
 async def post_client_session(
     body: ClientSessionBody,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
     session: AsyncSession = Depends(get_session),
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
 ):
     """Save catalog choice (city, service, arena, trainer) so bot can show 'Выбран: X'. Auth: client initData."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _client_telegram_id(raw)
+    telegram_id = client_catalog_telegram_key(principal)
 
     await set_city(telegram_id, body.city_id, session)
     await set_service(telegram_id, body.service_id, session)
@@ -1304,7 +1365,7 @@ async def post_client_session(
     return {"success": True}
 
 
-# ── Client ↔ Trainer relationship edges ───────────────────────────────────────
+# ── Client ↔ trainer edges API: see webapp_client_trainer_edges.py (notify waitlist after slot create) ──
 
 async def _bg_notify_slot_waitlist(trainer_id: int) -> None:
     """
@@ -1349,287 +1410,6 @@ async def _bg_notify_slot_waitlist(trainer_id: int) -> None:
         pass
 
 
-class _TrainerEdgeSaveBody(BaseModel):
-    trainer_id: int
-
-
-class _TrainerEdgePrimaryBody(BaseModel):
-    trainer_id: int
-
-
-def _compute_primary_edge(
-    edges: list[dict],
-    session_trainer_id: int | None = None,
-) -> dict | None:
-    """
-    Derive the most intent-relevant trainer without any explicit flag.
-
-    Priority (descending):
-      1. Last booking     — strongest engagement (last_booking_at)
-      2. Last saved       — declared intent (is_saved + saved_at)
-      3. Catalog session  — passive navigation (selected_trainer_id from session)
-
-    Ties within a priority are broken by timestamp recency.
-    Pure function — no writes, always consistent with live data.
-    """
-    if not edges:
-        return None
-
-    # P1: trainer the client most recently booked
-    booked = [e for e in edges if e.get("last_booking_at")]
-    if booked:
-        return max(booked, key=lambda e: e["last_booking_at"])
-
-    # P2: trainer the client most recently saved
-    saved = [e for e in edges if e.get("is_saved")]
-    if saved:
-        with_ts = [e for e in saved if e.get("saved_at")]
-        if with_ts:
-            return max(with_ts, key=lambda e: e["saved_at"])
-        return saved[0]  # saved without timestamp — rare but safe
-
-    # P3: trainer last opened in the catalog (session navigation signal)
-    if session_trainer_id is not None:
-        for e in edges:
-            if int(e.get("trainer_id", 0)) == session_trainer_id:
-                return e
-
-    return None
-
-
-def _serialize_edge(edge: dict) -> dict:
-    """Convert edge row to JSON-safe dict; datetime → ISO string."""
-    out = dict(edge)
-    for key in (
-        "saved_at", "notify_when_slots_at",
-        "last_booking_at", "last_completed_at", "last_interaction_at", "created_at",
-    ):
-        v = out.get(key)
-        if hasattr(v, "isoformat"):
-            out[key] = v.isoformat()
-        elif v is not None:
-            out[key] = str(v)
-    return out
-
-
-def _edge_json_with_trainer_hints(
-    edge: dict,
-    hints: dict[int, dict[str, Any]],
-    next_bookings: dict[int, dict[str, Any]] | None = None,
-) -> dict[str, Any]:
-    """Edge + display hints (name, photo, services, arena, min price) + next upcoming booking when available."""
-    base = _serialize_edge(edge)
-    tid = int(edge["trainer_id"])
-    h = hints.get(tid) or {}
-    base["trainer_display_name"] = h.get("trainer_display_name", "Тренер")
-    base["trainer_list_photo_key"] = h.get("trainer_list_photo_key")
-    base["services"] = h.get("services", [])
-    base["primary_arena_name"] = h.get("primary_arena_name")
-    base["min_price_cents"] = h.get("min_price_cents")
-    if next_bookings is not None:
-        nb = next_bookings.get(tid)
-        base["next_booking"] = nb  # may be None
-    return base
-
-
-def _next_booking_per_trainer(days: list[dict]) -> dict[int, dict[str, Any]]:
-    """First upcoming non-cancelled booking per trainer; days list is ascending by date already."""
-    out: dict[int, dict[str, Any]] = {}
-    for d in days or []:
-        for b in d.get("bookings", []) or []:
-            tid = b.get("trainer_id")
-            if tid is None or tid in out:
-                continue
-            status = (b.get("status") or "").lower()
-            if status in ("cancelled", "declined", "no_show"):
-                continue
-            out[int(tid)] = {
-                "slot_date": b.get("slot_date"),
-                "start_time": b.get("start_time"),
-                "service_name": b.get("service_name"),
-                "arena_name": b.get("arena_name"),
-            }
-    return out
-
-
-@router.get("/client/trainer-edges")
-async def get_client_trainer_edges(
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
-    session: AsyncSession = Depends(get_session),
-):
-    """All client ↔ trainer edges + display hints + next upcoming booking per trainer."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _client_telegram_id(raw)
-    edges = await get_all_trainer_edges(telegram_id, session)
-    hints = await trainer_display_hints_by_ids(session, [int(e["trainer_id"]) for e in edges])
-    bookings_payload = await _client_bookings_days_payload(session, telegram_id)
-    next_per_trainer = _next_booking_per_trainer(bookings_payload.get("days") or [])
-
-    # P3 fallback: last trainer opened in the catalog (from client session)
-    sess_row = await read_client_bot_session(telegram_id, session)
-    session_trainer_id = int(sess_row["selected_trainer_id"]) if (sess_row or {}).get("selected_trainer_id") else None
-
-    primary = _compute_primary_edge(edges, session_trainer_id)
-    primary_tid = int(primary["trainer_id"]) if primary else None
-
-    saved = [e for e in edges if e.get("is_saved") and int(e["trainer_id"]) != primary_tid]
-    past = [
-        e for e in edges
-        if e.get("completed_count", 0) > 0
-        and not e.get("is_saved")
-        and int(e["trainer_id"]) != primary_tid
-    ]
-    return {
-        "primary": _edge_json_with_trainer_hints(primary, hints, next_per_trainer) if primary else None,
-        "saved": [_edge_json_with_trainer_hints(e, hints, next_per_trainer) for e in saved],
-        "past": [_edge_json_with_trainer_hints(e, hints, next_per_trainer) for e in past],
-        "all": [_edge_json_with_trainer_hints(e, hints, next_per_trainer) for e in edges],
-    }
-
-
-@router.post("/client/trainer-edges/save")
-async def post_client_save_trainer(
-    body: _TrainerEdgeSaveBody,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
-    session: AsyncSession = Depends(get_session),
-):
-    """Bookmark a trainer (is_saved = true). Idempotent. Auth: client initData."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _client_telegram_id(raw)
-    edge = await uc_save_trainer(telegram_id, body.trainer_id, session)
-    return {"edge": _serialize_edge(edge)}
-
-
-@router.delete("/client/trainer-edges/save/{trainer_id:int}")
-async def delete_client_save_trainer(
-    trainer_id: int,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
-    session: AsyncSession = Depends(get_session),
-):
-    """Remove bookmark (is_saved = false). Idempotent. Auth: client initData."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _client_telegram_id(raw)
-    edge = await uc_unsave_trainer(telegram_id, trainer_id, session)
-    return {"edge": _serialize_edge(edge)}
-
-
-@router.post("/client/trainer-edges/primary")
-async def post_client_set_primary_trainer(
-    body: _TrainerEdgePrimaryBody,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
-    session: AsyncSession = Depends(get_session),
-):
-    """Set primary trainer (is_primary = true). Demotes previous primary. Syncs legacy session field. Auth: client initData."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _client_telegram_id(raw)
-    edge = await uc_set_primary_trainer(telegram_id, body.trainer_id, session)
-    return {"edge": _serialize_edge(edge)}
-
-
-@router.delete("/client/trainer-edges/primary")
-async def delete_client_primary_trainer(
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
-    session: AsyncSession = Depends(get_session),
-):
-    """Clear primary designation (no trainer is 'main' now). Auth: client initData."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _client_telegram_id(raw)
-    await uc_unset_primary_trainer(telegram_id, session)
-    return {"success": True}
-
-
-class _TrainerEdgeNotifyBody(BaseModel):
-    trainer_id: int
-
-
-@router.post("/client/trainer-edges/notify-slots")
-async def post_client_notify_slots(
-    body: _TrainerEdgeNotifyBody,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
-    session: AsyncSession = Depends(get_session),
-):
-    """Subscribe to slot-availability notification for a trainer. Idempotent. Auth: client initData."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _client_telegram_id(raw)
-    edge = await uc_subscribe_notify_slots(telegram_id, body.trainer_id, session)
-    return {"edge": _serialize_edge(edge)}
-
-
-@router.delete("/client/trainer-edges/notify-slots/{trainer_id:int}")
-async def delete_client_notify_slots(
-    trainer_id: int,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
-    session: AsyncSession = Depends(get_session),
-):
-    """Cancel slot-availability subscription. Idempotent. Auth: client initData."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _client_telegram_id(raw)
-    edge = await uc_unsubscribe_notify_slots(telegram_id, trainer_id, session)
-    return {"edge": _serialize_edge(edge)}
-
-
-def _serialize_client_request(req: dict) -> dict:
-    """Request + responses to JSON-safe (created_at as string)."""
-    created_at = req.get("created_at")
-    if hasattr(created_at, "isoformat"):
-        created_at = created_at.isoformat()
-    elif created_at is not None:
-        created_at = str(created_at)
-    return {
-        "id": req["id"],
-        "city_id": req["city_id"],
-        "service_id": req["service_id"],
-        "comment": req.get("comment"),
-        "created_at": created_at,
-        "status": req.get("status"),
-        "city_name": req.get("city_name"),
-        "service_name": req.get("service_name"),
-        "responses": [
-            {
-                "trainer_id": r.get("trainer_id"),
-                "name": r.get("name"),
-                "telegram_id": r.get("telegram_id"),
-                "telegram_username": r.get("telegram_username"),
-                "trainer_comment": r.get("trainer_comment"),
-                "rating_avg": r.get("rating_avg"),
-                "rating_count": r.get("rating_count") or 0,
-                "experience_years": r.get("experience_years"),
-                "description": r.get("description"),
-                "education": r.get("education"),
-                "education_entries": r.get("education_entries") or [],
-                "session_duration_minutes": r.get("session_duration_minutes"),
-                "photo_key": r.get("photo_key"),
-                "services": r.get("services") or [],
-                "arena_names": r.get("arena_names") or [],
-                "arena_ids": r.get("arena_ids") or [],
-                "primary_arena_id": r.get("primary_arena_id"),
-            }
-            for r in (req.get("responses") or [])
-        ],
-    }
-
-
 class ClientRequestCreateBody(BaseModel):
     """Create request from catalog Mini App: city, service, optional comment and trainer_id."""
     city_id: int
@@ -1643,19 +1423,16 @@ class ClientRequestCreateBody(BaseModel):
 @router.post("/client/request")
 async def post_client_request(
     body: ClientRequestCreateBody,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    cred: MiniappCredentialIn = Depends(require_miniapp_credential_in),
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """Create a client request (from catalog Mini App). Auth: client initData. Returns request_id so UI can show success before closing."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _client_telegram_id(raw)
+    telegram_id = client_catalog_telegram_key(principal)
     client_id = await _ensure_client_for_webapp_miniapp(
         session,
-        telegram_id,
-        raw,
+        principal,
+        cred.raw,
         phone=None,
         first_name=body.first_name,
         last_name=body.last_name,
@@ -1669,15 +1446,11 @@ async def post_client_request(
 
 @router.get("/client/requests")
 async def get_client_requests(
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
     session: AsyncSession = Depends(get_session),
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
 ):
     """List my requests with responses. Auth: client bot initData."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _client_telegram_id(raw)
+    telegram_id = client_catalog_telegram_key(principal)
     return await _client_requests_list_payload(session, telegram_id)
 
 
@@ -1687,15 +1460,10 @@ async def get_client_requests(
 @router.get("/client/pass-products")
 async def get_client_pass_products(
     trainer_id: int = Query(..., description="Trainer whose products to list"),
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
     session: AsyncSession = Depends(get_session),
+    _principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
 ):
     """List active pass products for a trainer (for purchase). Enriched with price_per_session_cents and savings when product has service_id."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    _client_telegram_id(raw)
     # Only trainers with online tier expose pass products in catalog (clients can book)
     if not await trainer_allows_online_booking(session, trainer_id):
         raise HTTPException(status_code=404, detail="Trainer not found")
@@ -1735,96 +1503,25 @@ async def get_client_pass_products(
     return {"items": items}
 
 
-CLIENT_DAYS = ("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс")
-
-
-async def _client_bookings_days_payload(session: AsyncSession, telegram_id: int) -> dict:
-    """Shared JSON body for GET /client/bookings and client hub bootstrap."""
-    bookings = await list_bookings_for_client(session, telegram_id)
-    if not bookings:
-        return {"days": []}
-    from itertools import groupby
-
-    days_list = []
-    for slot_date, group in groupby(bookings, key=lambda b: b["slot_date"]):
-        day_bookings = list(group)
-        date_str = slot_date.isoformat() if hasattr(slot_date, "isoformat") else str(slot_date)
-        dow = slot_date.weekday() if hasattr(slot_date, "weekday") else 0
-        day_label = CLIENT_DAYS[dow] if dow < len(CLIENT_DAYS) else ""
-        days_list.append({
-            "date": date_str,
-            "day_label": day_label,
-            "bookings": [_serialize_client_booking(b) for b in day_bookings],
-        })
-    return {"days": days_list}
-
-
-async def _client_requests_list_payload(session: AsyncSession, telegram_id: int) -> dict:
-    """Shared JSON body for GET /client/requests and client hub bootstrap."""
-    items = await list_my_requests_with_responses(session, telegram_id)
-    return {"items": [_serialize_client_request(r) for r in items]}
-
-
-def _serialize_client_booking(b: dict) -> dict:
-    """Client booking to JSON: date/time strings, arena, service, optional tier snapshot."""
-    slot_date = b.get("slot_date")
-    start_time = b.get("start_time")
-    end_time = b.get("end_time")
-    ptk = normalize_price_tier_kind(b.get("price_tier_kind"))
-    svc_name = (b.get("service_name") or "").strip()
-    pc = b.get("price_cents")
-    return {
-        "id": b["id"],
-        "slot_id": b.get("slot_id"),
-        "trainer_id": b.get("trainer_id"),
-        "service_id": b.get("service_id"),
-        "service_name": svc_name or None,
-        "price_tier_kind": ptk,
-        "price_tier_label": price_tier_label_ru(ptk) if ptk else None,
-        "trainer_name": (b.get("trainer_name") or "Тренер").strip(),
-        "trainer_telegram_id": b.get("trainer_telegram_id"),
-        "trainer_telegram_username": (b.get("trainer_telegram_username") or "").strip() or None,
-        "trainer_phone": (b.get("trainer_phone") or "").strip() or None,
-        "slot_date": slot_date.isoformat() if hasattr(slot_date, "isoformat") else str(slot_date),
-        "start_time": start_time.strftime("%H:%M") if hasattr(start_time, "strftime") else str(start_time)[:5],
-        "end_time": end_time.strftime("%H:%M") if hasattr(end_time, "strftime") else str(end_time)[:5],
-        "duration_minutes": b.get("duration_minutes") or 45,
-        "status": (b.get("status") or "pending").strip(),
-        "place_display": b.get("place_display") or "Уточните у тренера",
-        "arena_name": b.get("arena_name"),
-        "arena_address": b.get("arena_address"),
-        "map_link": b.get("map_link"),
-        "price_cents": int(pc) if pc is not None else None,
-    }
-
-
 @router.get("/client/bookings")
 async def get_client_bookings(
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
     session: AsyncSession = Depends(get_session),
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
 ):
     """List client's upcoming bookings grouped by day. Arena + address + map_link. Auth: client initData."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _client_telegram_id(raw)
+    telegram_id = client_catalog_telegram_key(principal)
     return await _client_bookings_days_payload(session, telegram_id)
 
 
 @router.get("/client/hub/bootstrap")
 async def get_client_hub_bootstrap(
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
 ):
     """
     Single round-trip for client home: bookings by day + requests list (same shapes as
     ``GET /client/bookings`` and ``GET /client/requests``). Parallel DB reads on separate sessions.
     """
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _client_telegram_id(raw)
+    telegram_id = client_catalog_telegram_key(principal)
 
     async def _bookings() -> dict:
         async with async_session_factory() as s:
@@ -1843,10 +1540,18 @@ async def get_client_hub_bootstrap(
             hints = await trainer_display_hints_by_ids(s, [int(e["trainer_id"]) for e in edges])
             # Computed primary — no explicit flag, derived from engagement signals
             session_tid = int(tid) if tid is not None else None
-            primary_edge = _compute_primary_edge(edges, session_tid)
+            primary_edge, primary_src = _compute_primary_edge_meta(edges, session_tid)
             saved_edges = [e for e in edges if e.get("is_saved")]
             pid = int(primary_edge["trainer_id"]) if primary_edge else None
             p_hint = hints.get(pid) if pid else None
+            sess_svc = (row or {}).get("selected_service_id")
+            raw_primary_svc = _resolve_primary_catalog_service_id(primary_edge, primary_src, sess_svc)
+            primary_catalog_service_id: int | None = None
+            primary_catalog_service_name: str | None = None
+            if pid is not None:
+                primary_catalog_service_id, primary_catalog_service_name = (
+                    await coerce_service_id_and_name_for_trainer_catalog(s, pid, raw_primary_svc)
+                )
             saved_preview = [
                 {
                     "trainer_id": int(e["trainer_id"]),
@@ -1866,6 +1571,8 @@ async def get_client_hub_bootstrap(
                     (p_hint or {}).get("trainer_display_name") if pid else None
                 ),
                 "primary_trainer_list_photo_key": (p_hint or {}).get("trainer_list_photo_key") if pid else None,
+                "primary_catalog_service_id": primary_catalog_service_id,
+                "primary_catalog_service_name": primary_catalog_service_name,
                 "saved_trainer_ids": [e["trainer_id"] for e in saved_edges],
                 "saved_trainers": saved_preview,
                 "has_past_sessions": any(e.get("completed_count", 0) > 0 for e in edges),
@@ -1875,17 +1582,93 @@ async def get_client_hub_bootstrap(
     return {"bookings": bookings, "requests": requests, "client_session": client_session}
 
 
+@router.get("/client/share-trainer/{trainer_id}")
+async def get_client_share_trainer(
+    trainer_id: int,
+    share_context: str | None = Query(
+        None,
+        description=(
+            "Где нажали «Поделиться»: my_trainer (основной на главной), catalog (карточка в каталоге), "
+            "booking_success (после записи), next_booking (ближайшая тренировка на главной)."
+        ),
+    ),
+    session: AsyncSession = Depends(get_session),
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+) -> dict:
+    """
+    Готовое сообщение-рекомендация + deep link (в `share_text` ссылка первой строкой;
+    для нативного «Поделиться» отдельно отдаём `share_url` + `share_body` без дубля URL).
+
+    Текст шаринга одинаковый для любого share_context (хаб, каталог, после записи и т.д.).
+    Структура в share_text: deep link первой строкой; затем opener, имя, услуги, локация.
+    """
+    hints = await trainer_display_hints_by_ids(session, [trainer_id])
+    hint = hints.get(trainer_id)
+    if not hint:
+        raise HTTPException(status_code=404, detail="Trainer not found")
+
+    settings = Settings()
+    share_link, err = build_trainer_share_link(
+        webapp_base_url=settings.webapp_base_url,
+        client_bot_username=settings.client_bot_username,
+        trainer_id=trainer_id,
+    )
+    if err or share_link is None:
+        raise HTTPException(status_code=503, detail=f"Share link unavailable: {err}")
+
+    deep_link = share_link.bot_deep_link.strip()
+
+    city_row = await session.execute(
+        text(
+            """
+            SELECT c.name FROM trainer_profiles tp
+            LEFT JOIN cities c ON c.id = tp.city_id
+            WHERE tp.trainer_id = :tid
+            LIMIT 1
+            """
+        ),
+        {"tid": trainer_id},
+    )
+    crow = city_row.fetchone()
+    city_name = (str(crow[0]).strip() if crow and crow[0] is not None else "") or None
+
+    name = hint.get("trainer_display_name") or "Тренер"
+    services: list[str] = list(hint.get("services") or [])
+    venue: str | None = hint.get("primary_arena_name")
+
+    raw_ctx = (share_context or "").strip() if share_context else None
+    share_text = compose_client_share_message(
+        share_context=raw_ctx or "",
+        trainer_display_name=str(name),
+        service_names=services,
+        city_name=city_name,
+        primary_arena_name=venue,
+        deep_link=deep_link,
+    )
+
+    service_line = services[0] if services else None
+
+    share_body = share_body_for_native_share_dialog(share_text, deep_link)
+
+    return {
+        "share_url": deep_link,
+        "share_body": share_body,
+        "share_text": share_text,
+        "trainer_name": name,
+        "trainer_service": service_line,
+        "trainer_venue": venue,
+        "trainer_city": city_name,
+        "share_context": raw_ctx or "catalog",
+    }
+
+
 @router.get("/client/passes")
 async def get_client_passes(
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
     session: AsyncSession = Depends(get_session),
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
 ) -> dict:
     """List current client's pass instances (my passes). Auth: client initData. One query with JOINs."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _client_telegram_id(raw)
+    telegram_id = client_catalog_telegram_key(principal)
     client_id = await get_client_id_by_telegram_id(session, telegram_id)
     if not client_id:
         return {"items": []}
@@ -1895,15 +1678,11 @@ async def get_client_passes(
 
 @router.get("/client/certificates")
 async def get_client_certificates(
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
     session: AsyncSession = Depends(get_session),
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
 ) -> dict:
     """List current client's certificate instances (my certificates). Auth: client initData."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _client_telegram_id(raw)
+    telegram_id = client_catalog_telegram_key(principal)
     client_id = await get_client_id_by_telegram_id(session, telegram_id)
     if not client_id:
         return {"items": []}
@@ -1918,9 +1697,8 @@ class ClientCertificateActivateBody(BaseModel):
 @router.post("/client/certificates/activate")
 async def post_client_certificate_activate(
     body: ClientCertificateActivateBody,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
     session: AsyncSession = Depends(get_session),
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
 ):
     """
     Client activates a certificate by code.
@@ -1928,10 +1706,7 @@ async def post_client_certificate_activate(
     - Returns basic info (trainer_id, amount_cents, product_id, expires_at).
     Auth: client initData.
     """
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    client_tid = _client_telegram_id(raw)
+    client_tid = client_catalog_telegram_key(principal)
     client_id = await get_client_id_by_telegram_id(session, client_tid)
     if not client_id:
         raise HTTPException(status_code=403, detail="Client not found")
@@ -1960,15 +1735,11 @@ class ClientCancelBookingBody(BaseModel):
 async def post_client_booking_cancel(
     booking_id: int,
     body: ClientCancelBookingBody,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
     session: AsyncSession = Depends(get_session),
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
 ):
     """Cancel own booking with optional reason. Auth: client initData. Notifies trainer immediately."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _client_telegram_id(raw)
+    telegram_id = client_catalog_telegram_key(principal)
     payload = await cancel_booking_by_client(
         session, booking_id, telegram_id, reason=body.reason
     )
@@ -2033,9 +1804,10 @@ async def post_client_booking_cancel(
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
     )
     try:
-        await client_bot.send_message(
-            chat_id=telegram_id, text=text_client, reply_markup=reply_markup_client
-        )
+        if principal.platform == MiniAppPlatform.TELEGRAM:
+            await client_bot.send_message(
+                chat_id=int(principal.user_id), text=text_client, reply_markup=reply_markup_client
+            )
     finally:
         await client_bot.session.close()
     return {"success": True}
@@ -2049,15 +1821,11 @@ class ClientRequestPatchBody(BaseModel):
 async def patch_client_request(
     request_id: int,
     body: ClientRequestPatchBody,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
     session: AsyncSession = Depends(get_session),
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
 ):
     """Replace request with new comment (re-create so trainers get new notification). Auth: client initData."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _client_telegram_id(raw)
+    telegram_id = client_catalog_telegram_key(principal)
     new_id = await replace_client_request_with_new(
         session, request_id, telegram_id, body.comment
     )
@@ -2073,15 +1841,11 @@ async def patch_client_request(
 @router.delete("/client/requests/{request_id}")
 async def delete_client_request_route(
     request_id: int,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
     session: AsyncSession = Depends(get_session),
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
 ):
     """Delete my request. Auth: client initData."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _client_telegram_id(raw)
+    telegram_id = client_catalog_telegram_key(principal)
     ok = await delete_client_request(session, request_id, telegram_id)
     if not ok:
         raise HTTPException(status_code=404, detail="Request not found")
@@ -2167,16 +1931,11 @@ def _serialize_trainer_dashboard(data: dict) -> dict:
 
 @router.get("/trainer/stats")
 async def get_trainer_stats_api(
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """Full stats dashboard for trainer Mini App: KPIs, trends, by-day, insights. Auth: trainer initData."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     if not await trainer_has_analytics_access(session, trainer_id):
@@ -2189,16 +1948,11 @@ async def get_trainer_stats_api(
 async def get_trainer_revenue_range_api(
     period_from: date = Query(..., alias="from"),
     period_to: date = Query(..., alias="to"),
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """Accrual revenue breakdown for an arbitrary inclusive date range (Mini App «Бухгалтерия»)."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     if not await trainer_has_analytics_access(session, trainer_id):
@@ -2256,19 +2010,14 @@ async def build_trainer_lifecycle_payload(
 
 @router.get("/trainer/lifecycle")
 async def get_trainer_lifecycle(
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
     """
     Trainer lifecycle snapshot + demand signals recap. Drives Lead Mode banner / recap card on
     trainer-home. Safe to poll: read-only, no side effects beyond the demand signal recap query.
     """
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_linked_any_status(session, telegram_id)
+    trainer_id = await get_trainer_id_linked_any_status_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked")
     return await build_trainer_lifecycle_payload(session, trainer_id)
@@ -2276,16 +2025,11 @@ async def get_trainer_lifecycle(
 
 @router.get("/trainer/hub/revenue-mtd")
 async def get_trainer_hub_revenue_mtd(
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """Hub KPI: accrual revenue from the 1st of the current month through today (Europe/Minsk). No analytics module gate."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     return await get_trainer_hub_revenue_month_to_date(session, trainer_id)
@@ -2293,8 +2037,7 @@ async def get_trainer_hub_revenue_mtd(
 
 @router.get("/trainer/hub/bootstrap")
 async def get_trainer_hub_bootstrap(
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     bookings_limit: int = Query(32, ge=1, le=100),
     session: AsyncSession = Depends(get_session),
 ):
@@ -2306,13 +2049,9 @@ async def get_trainer_hub_bootstrap(
     """
     from src.api.routes.webapp_trainer_profile import build_trainer_hub_profile_bootstrap_payload
 
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
     partial_errors: dict[str, str] = {}
 
-    state, trainer_row = await get_trainer_access_state(session, telegram_id)
+    state, trainer_row = await get_trainer_access_state_from_principal(session, principal)
     if trainer_row and trainer_row.get("id") is not None:
         await ensure_trainer_welcome_trial(session, int(trainer_row["id"]))
     tid = int(trainer_row["id"]) if trainer_row and trainer_row.get("id") is not None else None
@@ -2468,8 +2207,7 @@ async def get_trainer_hub_bootstrap(
 
 @router.get("/trainer/hub/fill-slots-invites")
 async def get_trainer_hub_fill_slots_invites(
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
     limit: int = Query(3, ge=1, le=10),
     slot_id: int | None = Query(None, description="When set, validate freed slot for «offer this window» copy."),
@@ -2481,11 +2219,7 @@ async def get_trainer_hub_fill_slots_invites(
     Ranked clients for «free slots next week» rhythm hint: pre-invite workflow in the hub.
     Auth: trainer initData (same as /trainer/clients).
     """
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     clients = await list_trainer_fill_slots_invite_candidates(session, trainer_id, limit=limit)
@@ -2541,18 +2275,13 @@ class TrainerFillSlotsInviteSendBody(BaseModel):
 @router.post("/trainer/hub/fill-slots-invites/send")
 async def post_trainer_hub_fill_slots_invites_send(
     body: TrainerFillSlotsInviteSendBody,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """
     Trainer hub: send ranked-slot-invite pushes from the **client** bot with a «Записаться» WebApp button.
     """
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     out = await send_trainer_fill_slots_invites(
@@ -2584,20 +2313,39 @@ class SupportReplyBody(BaseModel):
 @router.post("/support")
 async def post_support(
     body: SupportCreateBody,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    cred: MiniappCredentialIn = Depends(require_miniapp_credential_in),
     session: AsyncSession = Depends(get_session),
 ):
     """Create support ticket from client or trainer Mini App. Auth: client or trainer initData; role in body."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
+    reject_unsupported_miniapp_platform(cred.platform)
     role = (body.role or "client").strip().lower()
-    if role == "trainer":
-        telegram_id = _trainer_telegram_id(raw)
+    if cred.platform == MiniAppPlatform.MAX.value:
+        secret = (Settings().vk_mini_app_protected_key or "").strip()
+        if not secret:
+            raise HTTPException(status_code=503, detail="VK Mini App not configured")
+        try:
+            principal = verify_vk_miniapp_launch_principal(cred.raw, secret)
+        except InitDataAuthError:
+            raise HTTPException(status_code=401, detail="Invalid or expired launch params") from None
+        if role == "trainer":
+            telegram_id = trainer_legacy_telegram_id_for_storage(principal)
+        else:
+            role = "client"
+            telegram_id = client_catalog_telegram_key(principal)
     else:
-        telegram_id = _client_telegram_id(raw)
-        role = "client"
+        if role == "trainer":
+            token = Settings().telegram_bot_token_trainer
+            if not token:
+                raise HTTPException(status_code=503, detail="Trainer Mini App not configured")
+        else:
+            token = Settings().telegram_bot_token_client
+            if not token:
+                raise HTTPException(status_code=503, detail="Client Mini App not configured")
+            role = "client"
+        try:
+            telegram_id = verify_telegram_init_data_principal(cred.raw, token).user_id
+        except InitDataAuthError:
+            raise HTTPException(status_code=401, detail="Invalid or expired init data") from None
     from src.infrastructure.db.models import SUPPORT_FROM_CLIENT, SUPPORT_FROM_TRAINER
     from_role = SUPPORT_FROM_TRAINER if role == "trainer" else SUPPORT_FROM_CLIENT
     result = await create_support_message(session, telegram_id, from_role, body.message or "")
@@ -2608,15 +2356,10 @@ async def post_support(
 
 @router.get("/admin/stats")
 async def get_admin_stats(
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_admin_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """Platform stats + alerts for admin Mini App. Auth: admin bot initData."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    _admin_telegram_id(raw)
     data = await get_platform_stats(session)
     # Serialize dates for JSON
     return {
@@ -2635,86 +2378,56 @@ async def get_admin_stats(
 
 @router.get("/admin/stats/money")
 async def get_admin_stats_money(
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_admin_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """Money tab: MRR/ARR, GMV trend, revenue, top paying trainers, pending invoices, subscription mix."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    _admin_telegram_id(raw)
     return await get_admin_money_stats(session)
 
 
 @router.get("/admin/stats/growth")
 async def get_admin_stats_growth(
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_admin_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """Growth tab: new trainer cohorts, trial→paid conversion, time-to-first-paid, referral program."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    _admin_telegram_id(raw)
     return await get_admin_growth_stats(session)
 
 
 @router.get("/admin/stats/retention")
 async def get_admin_stats_retention(
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_admin_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """Retention tab: churn rate, expiring subs, sleeping trainers, revival, retention curve by cohort."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    _admin_telegram_id(raw)
     return await get_admin_retention_stats(session)
 
 
 @router.get("/admin/stats/engagement")
 async def get_admin_stats_engagement(
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_admin_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """Engagement tab: DAU/WAU/MAU, feature adoption, top active trainers, day-of-week heat."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    _admin_telegram_id(raw)
     return await get_admin_engagement_stats(session)
 
 
 @router.get("/admin/stats/clients")
 async def get_admin_stats_clients(
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_admin_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """Clients tab: funnel, repeat rate, top cities/trainers, recent client requests."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    _admin_telegram_id(raw)
     return await get_admin_clients_stats(session)
 
 
 @router.get("/admin/support")
 async def get_admin_support(
     status: str | None = Query(None, description="Filter: new, replied, closed"),
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_admin_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """List support tickets for admin. Auth: admin initData."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    _admin_telegram_id(raw)
     items = await list_support_messages(session, limit=50, status=status)
     return {"items": items}
 
@@ -2723,15 +2436,11 @@ async def get_admin_support(
 async def post_admin_support_reply(
     support_id: int,
     body: SupportReplyBody,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_admin_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """Admin replies to support ticket. Auth: admin initData."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    admin_tid = _admin_telegram_id(raw)
+    admin_tid = principal.user_id
     ok = await reply_support_message(session, support_id, admin_tid, body.reply_text or "")
     if not ok:
         raise HTTPException(status_code=404, detail="Ticket not found or already replied")
@@ -2740,16 +2449,11 @@ async def post_admin_support_reply(
 
 @router.get("/trainer/subscription-plans")
 async def get_trainer_subscription_plans(
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """List paid subscription plans for trainer to choose (Месяц, 3 месяца, Год, 1.5 года). Auth: trainer initData."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     plans = await list_paid_subscription_plans(session)
@@ -2759,19 +2463,14 @@ async def get_trainer_subscription_plans(
 @router.get("/trainer/subscription-payment-url")
 async def get_trainer_subscription_payment_url(
     plan_id: int | None = Query(None, description="Chosen plan id; if omitted, use pending invoice or default plan"),
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """
     Create (or reuse pending) invoice and return payment_url. When plan_id is set, create invoice for that plan
     (period: next after current subscription or from now). Response includes plan_name, period for clarity.
     """
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     plan_name: str | None = None
@@ -2859,8 +2558,7 @@ class SubscriptionStubConfirmBody(BaseModel):
 @router.post("/trainer/subscription-stub-confirm")
 async def post_trainer_subscription_stub_confirm(
     body: SubscriptionStubConfirmBody,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """
@@ -2870,14 +2568,10 @@ async def post_trainer_subscription_stub_confirm(
     When not in sandbox: allows confirming invoices with amount_cents == 0 that are fully
     covered by referral bonus days (no card payment).
     """
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
     settings = Settings()
-    telegram_id = _trainer_telegram_id(raw)
     # Linked Telegram enough: API-created trainers stay pending_profile until moderation;
     # zero-amount referral invoices must still be confirmable in production.
-    trainer_id = await get_trainer_id_linked_any_status(session, telegram_id)
+    trainer_id = await get_trainer_id_linked_any_status_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     from sqlalchemy import text
@@ -2909,8 +2603,7 @@ async def post_trainer_subscription_stub_confirm(
 
 @router.get("/trainer/subscription/catalog")
 async def get_trainer_subscription_tier_catalog(
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """
@@ -2919,11 +2612,7 @@ async def get_trainer_subscription_tier_catalog(
     Returns CRM, Online, Analytics tiers with prices, periods, and descriptions.
     Auth: trainer initData.
     """
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_linked_any_status(session, telegram_id)
+    trainer_id = await get_trainer_id_linked_any_status_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     await ensure_trainer_welcome_trial(session, trainer_id)
@@ -2944,8 +2633,7 @@ async def get_trainer_subscription_tier_catalog(
 
 @router.get("/trainer/subscription/status")
 async def get_trainer_subscription_tier_status(
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """
@@ -2954,11 +2642,7 @@ async def get_trainer_subscription_tier_status(
     Returns effective tier, expiration date, and unlocked features.
     Auth: trainer initData.
     """
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_linked_any_status(session, telegram_id)
+    trainer_id = await get_trainer_id_linked_any_status_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     await ensure_trainer_welcome_trial(session, trainer_id)
@@ -2978,17 +2662,13 @@ class SubscriptionConstructorCheckoutBody(BaseModel):
 @router.post("/trainer/subscription/bepaid-checkout")
 async def post_trainer_subscription_bepaid_checkout(
     body: SubscriptionConstructorCheckoutBody,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """
     bePaid: create catalog invoice for tier bundle or CRM+modules constructor, return gateway checkout URL.
     Mini App uses this instead of trainer-pay-subscription (legacy plan_id list) when checkout_mode=bepaid.
     """
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
     settings = Settings()
     if settings.payment_sandbox:
         raise HTTPException(
@@ -3000,8 +2680,7 @@ async def post_trainer_subscription_bepaid_checkout(
             status_code=400,
             detail="Оплата картой (bePaid) сейчас недоступна — проверьте режим подписки в настройках.",
         )
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
 
@@ -3069,25 +2748,20 @@ async def post_trainer_subscription_bepaid_checkout(
 @router.post("/trainer/subscription/invoice-request")
 async def post_trainer_subscription_invoice_request(
     body: SubscriptionConstructorCheckoutBody,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """
     ERIP / manual: create unpaid catalog invoice (tier or constructor) and notify admins.
     Mini App calls this when checkout_mode=invoice (not bePaid, not sandbox demo).
     """
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
     settings = Settings()
     if settings.resolved_trainer_subscription_checkout_mode() != "invoice":
         raise HTTPException(
             status_code=400,
             detail="Запрос счёта доступен только в режиме «счёт / ЕРИП» (invoice).",
         )
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
 
@@ -3126,8 +2800,7 @@ async def post_trainer_subscription_invoice_request(
 @router.post("/trainer/subscription/mock-checkout")
 async def post_trainer_subscription_mock_checkout(
     body: SubscriptionConstructorCheckoutBody,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """
@@ -3136,16 +2809,12 @@ async def post_trainer_subscription_mock_checkout(
     Disabled when payment_sandbox is false (production real payments); use bePaid flow instead.
     Auth: trainer initData.
     """
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
     if not Settings().payment_sandbox:
         raise HTTPException(
             status_code=404,
             detail="Mock checkout is not available when payment_sandbox is disabled",
         )
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
 
@@ -3191,16 +2860,11 @@ async def post_trainer_subscription_mock_checkout(
 @router.get("/trainer/pass-products")
 async def get_trainer_pass_products(
     active_only: bool = Query(False, description="If true, return only is_active=true"),
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """List trainer's pass products. Auth: trainer initData."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     if not await trainer_has_crm_access(session, trainer_id):
@@ -3220,16 +2884,11 @@ class PassProductCreateBody(BaseModel):
 @router.post("/trainer/pass-products")
 async def post_trainer_pass_product(
     body: PassProductCreateBody,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """Create a pass product. Auth: trainer initData."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     if not await trainer_has_crm_access(session, trainer_id):
@@ -3259,16 +2918,11 @@ class PassProductPatchBody(BaseModel):
 async def patch_trainer_pass_product(
     product_id: int,
     body: PassProductPatchBody,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """Update pass product. Auth: trainer initData."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     if not await trainer_has_crm_access(session, trainer_id):
@@ -3288,16 +2942,11 @@ async def patch_trainer_pass_product(
 @router.delete("/trainer/pass-products/{product_id:int}")
 async def delete_trainer_pass_product(
     product_id: int,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """Delete pass product only if no purchases. Auth: trainer initData."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     if not await trainer_has_crm_access(session, trainer_id):
@@ -3333,15 +2982,10 @@ class AdminCityPatchBody(BaseModel):
 async def get_admin_cities(
     q: str | None = Query(None, description="Search by city name"),
     include_inactive: bool = Query(False, description="Include inactive cities"),
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_admin_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """List cities for admin: id, name, sort_order, arenas_count, is_active."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    _admin_telegram_id(raw)
     from sqlalchemy import text
 
     # Only q_like param (no :q) so asyncpg never gets NULL / ambiguous type.
@@ -3380,15 +3024,10 @@ async def get_admin_cities(
 @router.post("/admin/cities")
 async def post_admin_city(
     body: AdminCityCreateBody,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_admin_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """Create city (for catalog). Admin only."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    _admin_telegram_id(raw)
     from sqlalchemy import text
 
     name = (body.name or "").strip()
@@ -3414,15 +3053,10 @@ async def post_admin_city(
 async def patch_admin_city(
     city_id: int,
     body: AdminCityPatchBody,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_admin_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """Update city name/sort_order. Admin only."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    _admin_telegram_id(raw)
     from sqlalchemy import text
 
     updates = []
@@ -3473,15 +3107,10 @@ async def get_admin_arenas(
     city_id: int = Query(..., description="City id"),
     q: str | None = Query(None, description="Search by name or address"),
     include_inactive: bool = Query(False, description="Include inactive arenas"),
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_admin_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """List arenas for a city: id, name, address, lat/lon, sort_order, is_active."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    _admin_telegram_id(raw)
     from sqlalchemy import text
 
     q_like = f"%{(q or '').strip()}%" if (q or "").strip() else "%"
@@ -3520,15 +3149,10 @@ async def get_admin_arenas(
 @router.post("/admin/arenas")
 async def post_admin_arena(
     body: AdminArenaCreateBody,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_admin_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """Create arena in a city. Admin only."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    _admin_telegram_id(raw)
     from sqlalchemy import text
 
     name = (body.name or "").strip()
@@ -3573,15 +3197,10 @@ async def post_admin_arena(
 async def patch_admin_arena(
     arena_id: int,
     body: AdminArenaPatchBody,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_admin_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """Update arena fields. Admin only."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    _admin_telegram_id(raw)
     from sqlalchemy import text
 
     updates = []
@@ -3628,14 +3247,9 @@ async def patch_admin_arena(
 @router.get("/admin/geocode")
 async def get_admin_geocode(
     address: str = Query(..., min_length=3, description="Address or place name to geocode"),
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_admin_miniapp_principal),
 ):
     """Resolve address to coordinates (Nominatim/OSM). Admin only. For Belarus/global addresses."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    _admin_telegram_id(raw)
     import aiohttp
     addr = address.strip()
     url = "https://nominatim.openstreetmap.org/search"
@@ -3668,8 +3282,7 @@ async def get_admin_geocode(
 
 @router.get("/admin/subscription-tiers")
 async def get_admin_subscription_tiers(
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_admin_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """
@@ -3678,10 +3291,6 @@ async def get_admin_subscription_tiers(
     Returns CRM, Online, Analytics tiers with prices, descriptions, active status.
     Auth: admin initData.
     """
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    _admin_telegram_id(raw)
     
     tiers = await list_subscription_tier_pricing_for_admin(session)
     return {"tiers": tiers}
@@ -3702,8 +3311,7 @@ class SubscriptionTierPatchBody(BaseModel):
 async def patch_admin_subscription_tier(
     tier: str,
     body: SubscriptionTierPatchBody,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_admin_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """
@@ -3711,10 +3319,7 @@ async def patch_admin_subscription_tier(
     
     Auth: admin initData. Tier must be one of: crm, online, analytics.
     """
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    admin_tid = _admin_telegram_id(raw)
+    admin_tid = principal.user_id
     
     if tier not in SUBSCRIPTION_TIERS:
         raise HTTPException(
@@ -3757,16 +3362,11 @@ async def patch_admin_subscription_tier(
 @router.get("/trainer/certificate-products")
 async def get_trainer_certificate_products(
     active_only: bool = Query(False, description="If true, return only is_active=true"),
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """List trainer's certificate products. Auth: trainer initData."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     items = await list_certificate_products(session, trainer_id, active_only=active_only)
@@ -3783,16 +3383,11 @@ class CertificateProductCreateBody(BaseModel):
 @router.post("/trainer/certificate-products")
 async def post_trainer_certificate_product(
     body: CertificateProductCreateBody,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """Create certificate product. amount_cents=null means 'any amount'. Auth: trainer initData."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     product_id = await create_certificate_product(
@@ -3817,16 +3412,11 @@ class CertificateProductPatchBody(BaseModel):
 async def patch_trainer_certificate_product(
     product_id: int,
     body: CertificateProductPatchBody,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """Update certificate product. Auth: trainer initData. Use model_dump(exclude_unset=True) to only send changed fields."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     payload = body.model_dump(exclude_unset=True)
@@ -3853,16 +3443,11 @@ async def patch_trainer_certificate_product(
 @router.delete("/trainer/certificate-products/{product_id:int}")
 async def delete_trainer_certificate_product(
     product_id: int,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """Delete certificate product. Auth: trainer initData."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     ok = await delete_certificate_product(session, product_id, trainer_id)
@@ -3874,16 +3459,11 @@ async def delete_trainer_certificate_product(
 @router.get("/trainer/certificates")
 async def get_trainer_certificates(
     active_only: bool = Query(True, description="If true, return only active (for redeem list)"),
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """List certificate instances issued by this trainer. Auth: trainer initData."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     items = await list_trainer_certificate_instances(session, trainer_id, active_only=active_only)
@@ -3901,17 +3481,12 @@ class CertificateIssueBody(BaseModel):
 @router.post("/trainer/certificate-issue")
 async def post_trainer_certificate_issue(
     body: CertificateIssueBody,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
     session: AsyncSession = Depends(get_session),
 ):
     """Issue a certificate: create instance, generate PDF, save file_url; optionally send PDF to recipient_email. Idempotent by Idempotency-Key. Auth: trainer initData."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     if idempotency_key:
@@ -4014,16 +3589,11 @@ async def post_trainer_certificate_issue(
 @router.get("/trainer/certificates/{certificate_id:int}/file")
 async def get_trainer_certificate_file(
     certificate_id: int,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """Download certificate PDF. Auth: trainer initData; certificate must belong to trainer."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     file_key = await get_certificate_file_key(session, certificate_id, trainer_id)
@@ -4042,16 +3612,11 @@ async def get_trainer_certificate_file(
 
 @router.get("/trainer/welcome-link/eligibility")
 async def get_trainer_welcome_link_eligibility(
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """Services list and whether trainer must pick one for generic welcome link."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     services = await list_trainer_services_for_welcome_link(session, trainer_id)
@@ -4063,16 +3628,11 @@ async def get_trainer_welcome_link_eligibility(
 
 @router.get("/trainer/public-booking-link/eligibility")
 async def get_trainer_public_booking_link_eligibility(
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """Services list for reusable public booking link. Auth: trainer initData."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     if not await trainer_allows_online_booking(session, trainer_id):
@@ -4094,8 +3654,7 @@ async def get_trainer_public_booking_link(
     service_id: int | None = Query(
         None, description="Required when trainer has multiple services; pins booking to service"
     ),
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """
@@ -4103,11 +3662,7 @@ async def get_trainer_public_booking_link(
     Deep-link payload matches client bot /start client_{city}_{service_or_0}_{trainer}.
     When service_id is omitted, client first chooses service in the booking flow.
     """
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     if not await trainer_allows_online_booking(session, trainer_id):
@@ -4158,16 +3713,11 @@ async def get_trainer_welcome_link(
     service_id: int | None = Query(
         None, description="Required when trainer has multiple services; pins catalog prefill"
     ),
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """Generic one-time invite link. Auth: trainer initData."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     resolved_service_id, err = await resolve_service_id_for_generic_welcome_link(
@@ -4203,8 +3753,7 @@ async def get_trainer_welcome_link(
 
 @router.post("/trainer/welcome-link/first-copy")
 async def post_trainer_welcome_link_first_copy(
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """
@@ -4213,11 +3762,7 @@ async def post_trainer_welcome_link_first_copy(
     """
     from src.application.trainer_client_invite_tracking import record_trainer_client_invite_link_first_copy
 
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     ts = await record_trainer_client_invite_link_first_copy(session, trainer_id)
@@ -4230,19 +3775,14 @@ async def get_trainer_client_welcome_link(
     service_id: int | None = Query(
         None, description="Required when trainer has multiple services; pins catalog prefill"
     ),
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """
     One-time welcome link that binds the opening Telegram account to this existing client row
     (trainer-created client without telegram_id). Same service_id rules as generic welcome link.
     """
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     client = await get_trainer_client_for_card(session, trainer_id, client_id)
@@ -4288,16 +3828,11 @@ async def get_trainer_client_welcome_link(
 @router.get("/trainer/welcome-link/pass")
 async def get_trainer_welcome_link_pass(
     pass_product_id: int = Query(..., description="Pass product id (must belong to trainer)"),
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """One-time pass invite link. Auth: trainer initData."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     from src.application.pass_product_use_cases import get_pass_product
@@ -4323,16 +3858,11 @@ class WelcomeLinkCertBody(BaseModel):
 @router.post("/trainer/welcome-link/cert")
 async def post_trainer_welcome_link_cert(
     body: WelcomeLinkCertBody,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """One-time cert welcome link: issue cert (no recipient name/phone), create token, return link. Auth: trainer initData."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     try:
@@ -4369,16 +3899,11 @@ class CertificateRedeemByCodeBody(BaseModel):
 @router.post("/trainer/certificates/redeem")
 async def post_trainer_certificates_redeem_by_code(
     body: CertificateRedeemByCodeBody,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """Redeem certificate by code. Auth: trainer initData."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     try:
@@ -4393,16 +3918,11 @@ async def post_trainer_certificates_redeem_by_code(
 @router.post("/trainer/certificates/{certificate_id:int}/redeem")
 async def post_trainer_certificate_redeem_by_id(
     certificate_id: int,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """Redeem certificate by instance id. Auth: trainer initData."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     result = await redeem_certificate(session, trainer_id, certificate_instance_id=certificate_id)
@@ -4414,57 +3934,36 @@ async def post_trainer_certificate_redeem_by_id(
 @router.get("/client/certificate-products")
 async def get_client_certificate_products(
     trainer_id: int = Query(..., description="Trainer whose certificate products to list"),
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
     session: AsyncSession = Depends(get_session),
+    _principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
 ):
     """List active certificate products for a trainer (info only for client). Auth: client initData."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    _client_telegram_id(raw)
     items = await list_certificate_products(session, trainer_id, active_only=True)
     return {"items": items}
 
 
 @router.get("/trainer/bookings")
 async def get_trainer_bookings(
-    init_data: str | None = Query(None),
-    limit: int | None = Query(
-        None,
-        ge=1,
-        le=100,
-        description="Max booking rows (hub may pass a smaller value; default 100).",
-    ),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    limit: int = Query(100, ge=1, le=500),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """List trainer's upcoming bookings grouped by day. Auth: trainer initData."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
 
-    lim = 100 if limit is None else limit
-    return await _trainer_bookings_grouped_days_payload(session, trainer_id, limit=lim)
+    return await _trainer_bookings_grouped_days_payload(session, trainer_id, limit=limit)
 
 
 @router.get("/trainer/slots/{slot_id:int}/group-hub")
 async def get_trainer_group_slot_hub_api(
     slot_id: int,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """Group slot summary + booking rows (trainer hub modal). Auth: trainer initData."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     hub = await get_trainer_group_slot_hub(session, trainer_id, slot_id)
@@ -4476,16 +3975,11 @@ async def get_trainer_group_slot_hub_api(
 @router.get("/trainer/bookings/{booking_id:int}")
 async def get_trainer_booking_detail(
     booking_id: int,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """One booking detail with recurring info. Auth: trainer initData."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
 
@@ -4525,16 +4019,11 @@ async def get_trainer_booking_detail(
 @router.get("/trainer/bookings/{booking_id:int}/client-no-show-options")
 async def get_trainer_booking_client_no_show_options_route(
     booking_id: int,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """PASS/CERT: copy for «Клиент не пришёл» modal (no booking_problem_reports)."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     if not booking_problem_api_allowed_for_trainer(trainer_id):
@@ -4554,15 +4043,10 @@ class TrainerClientNoShowBody(BaseModel):
 async def post_trainer_booking_client_no_show_route(
     booking_id: int,
     body: TrainerClientNoShowBody,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     if not booking_problem_api_allowed_for_trainer(trainer_id):
@@ -4599,16 +4083,11 @@ class TrainerBookingProblemBody(BaseModel):
 @router.get("/trainer/bookings/{booking_id:int}/problem-options")
 async def get_trainer_booking_problem_options_route(
     booking_id: int,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """Presets + payment class + pass/cert no-show policy (PRD E3); copy for trainer consent (E2)."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     if not booking_problem_api_allowed_for_trainer(trainer_id):
@@ -4623,15 +4102,10 @@ async def get_trainer_booking_problem_options_route(
 async def post_trainer_booking_problem_route(
     booking_id: int,
     body: TrainerBookingProblemBody,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     if not booking_problem_api_allowed_for_trainer(trainer_id):
@@ -4667,15 +4141,10 @@ class DeclineBody(BaseModel):
 @router.post("/trainer/bookings/{booking_id:int}/confirm")
 async def post_trainer_booking_confirm(
     booking_id: int,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     info = await confirm_booking(session, booking_id, trainer_id)
@@ -4731,15 +4200,10 @@ async def post_trainer_booking_confirm(
 async def post_trainer_booking_decline(
     booking_id: int,
     body: DeclineBody,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     comment = (body.comment or "").strip()
@@ -4778,15 +4242,10 @@ async def post_trainer_booking_decline(
 @router.post("/trainer/bookings/{booking_id:int}/cancel")
 async def post_trainer_booking_cancel(
     booking_id: int,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     ok = await cancel_booking(session, booking_id, trainer_id)
@@ -4809,16 +4268,11 @@ async def post_trainer_booking_cancel(
 @router.post("/trainer/bookings/{booking_id:int}/complete")
 async def post_trainer_booking_complete(
     booking_id: int,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """Mark booking as conducted (completed). Redeems one pass session if client has a matching pass. Auth: trainer initData."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     result = await mark_booking_completed_by_trainer(session, booking_id, trainer_id)
@@ -4876,16 +4330,11 @@ class TrainerBookingInviteClientBody(BaseModel):
 
 @router.get("/trainer/my-services")
 async def get_trainer_my_services(
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """List services offered by this trainer (for booking: choose service). Auth: trainer initData."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     r = await session.execute(
@@ -4973,16 +4422,11 @@ async def get_trainer_my_services(
 @router.get("/trainer/clients")
 async def get_trainer_clients(
     q: str | None = Query(None, description="Search by name or phone (optional)"),
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """List clients that have at least one booking with this trainer. Optional search by name/phone. Auth: trainer initData."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     clients = await list_trainer_clients(session, trainer_id, limit=100)
@@ -5022,16 +4466,11 @@ async def get_trainer_clients(
 @router.get("/trainer/clients/{client_id:int}/card")
 async def get_trainer_client_card(
     client_id: int,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     """Single client summary for card UI (booking roster or active/trial training group member)."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     client = await get_trainer_client_for_card(session, trainer_id, client_id)
@@ -5051,16 +4490,11 @@ async def get_trainer_client_card(
 @router.get("/trainer/clients/{client_id:int}/booking-defaults")
 async def get_trainer_client_booking_defaults(
     client_id: int,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     """Defaults for quick book from client profile: last completed service/tier + client name."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     client = await get_trainer_client_for_card(session, trainer_id, client_id)
@@ -5079,16 +4513,11 @@ async def get_trainer_client_booking_defaults(
 async def get_trainer_client_history(
     client_id: int,
     limit: int = Query(20, ge=1, le=100),
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     """Last bookings for this client with this trainer. Auth: trainer initData."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     items = await list_trainer_client_history(session, trainer_id, client_id, limit=limit)
@@ -5099,16 +4528,11 @@ async def get_trainer_client_history(
 @router.get("/trainer/clients/{client_id:int}/next-booking")
 async def get_trainer_client_next_booking_route(
     client_id: int,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     """Next upcoming booking for this client with this trainer, or null. Auth: trainer initData."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     next_booking = await get_trainer_client_next_booking(session, trainer_id, client_id)
@@ -5119,16 +4543,11 @@ async def get_trainer_client_next_booking_route(
 @router.get("/trainer/clients/{client_id:int}/passes")
 async def get_trainer_client_passes(
     client_id: int,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     """List pass instances for this client (issued by this trainer). Auth: trainer initData."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     items = await list_pass_instances_for_trainer_client(session, trainer_id, client_id)
@@ -5138,16 +4557,11 @@ async def get_trainer_client_passes(
 @router.get("/trainer/clients/{client_id:int}/certificates")
 async def get_trainer_client_certificates(
     client_id: int,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     """List certificate instances for this client (issued by this trainer). Auth: trainer initData."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     items = await list_certificate_instances_for_trainer_client(session, trainer_id, client_id)
@@ -5162,16 +4576,11 @@ class TrainerPassIssueBody(BaseModel):
 async def post_trainer_client_pass_issue(
     client_id: int,
     body: TrainerPassIssueBody,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     """Issue a pass to this client (trainer recorded external payment). Auth: trainer initData."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     try:
@@ -5233,16 +4642,11 @@ class TrainerClientNoteBody(BaseModel):
 @router.get("/trainer/clients/{client_id:int}/note")
 async def get_trainer_client_note_route(
     client_id: int,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     """Get trainer's private note about this client. Auth: trainer initData."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     note = await get_trainer_client_note(session, trainer_id, client_id)
@@ -5253,16 +4657,11 @@ async def get_trainer_client_note_route(
 async def post_trainer_client_note_route(
     client_id: int,
     body: TrainerClientNoteBody,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     """Create or update trainer's private note about this client. Auth: trainer initData."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     result = await upsert_trainer_client_note(session, trainer_id, client_id, body.note)
@@ -5304,16 +4703,11 @@ class DossierTagBody(BaseModel):
 @router.get("/trainer/clients/{client_id:int}/dossier")
 async def get_client_dossier_route(
     client_id: int,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     """Get full client dossier: profile, tags, entries. Auth: trainer initData."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     return await get_full_client_dossier(session, trainer_id, client_id)
@@ -5323,16 +4717,11 @@ async def get_client_dossier_route(
 async def update_client_dossier_profile_route(
     client_id: int,
     body: DossierProfileBody,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     """Update client profile fields. Auth: trainer initData."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     return await upsert_client_dossier_profile(
@@ -5349,16 +4738,11 @@ async def update_client_dossier_profile_route(
 async def list_client_entries_route(
     client_id: int,
     limit: int = Query(50, ge=1, le=100),
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     """List timeline entries for a client. Auth: trainer initData."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     entries = await list_client_entries(session, trainer_id, client_id, limit=limit)
@@ -5369,16 +4753,11 @@ async def list_client_entries_route(
 async def add_client_entry_route(
     client_id: int,
     body: DossierEntryBody,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     """Add a timeline entry. Auth: trainer initData."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     try:
@@ -5392,16 +4771,11 @@ async def add_client_entry_route(
 async def delete_client_entry_route(
     client_id: int,
     entry_id: int,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     """Delete a timeline entry. Auth: trainer initData."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     deleted = await delete_client_entry(session, trainer_id, entry_id)
@@ -5413,16 +4787,11 @@ async def delete_client_entry_route(
 @router.get("/trainer/clients/{client_id:int}/dossier/tags")
 async def list_client_tags_route(
     client_id: int,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     """List tags for a client. Auth: trainer initData."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     tags = await list_client_tags(session, trainer_id, client_id)
@@ -5433,16 +4802,11 @@ async def list_client_tags_route(
 async def add_client_tag_route(
     client_id: int,
     body: DossierTagBody,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     """Add a tag to a client. Auth: trainer initData."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     try:
@@ -5458,16 +4822,11 @@ async def add_client_tag_route(
 async def remove_client_tag_route(
     client_id: int,
     tag_id: int,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     """Remove a tag from a client. Auth: trainer initData."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     deleted = await remove_client_tag(session, trainer_id, tag_id)
@@ -5479,16 +4838,11 @@ async def remove_client_tag_route(
 @router.post("/trainer/clients")
 async def post_trainer_clients(
     body: TrainerCreateClientBody,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """Create or get client by phone (no telegram_id). For recording from schedule. Auth: trainer initData."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     try:
@@ -5507,20 +4861,16 @@ async def post_trainer_clients(
 @router.post("/trainer/booking")
 async def post_trainer_booking(
     body: TrainerCreateBookingBody,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """Create booking: trainer assigns client to slot (from schedule). Auth: trainer initData."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     if not await trainer_has_crm_access(session, trainer_id):
         raise HTTPException(status_code=403, detail=WEBAPP_DETAIL_SUBSCRIPTION_CRM_REQUIRED)
+    notify_tid = _trainer_bot_notify_telegram_id(principal)
     slot = await get_slot(session, body.slot_id)
     if not slot or slot.get("trainer_id") != trainer_id:
         raise HTTPException(status_code=400, detail="Slot not found or not available")
@@ -5566,7 +4916,7 @@ async def post_trainer_booking(
     await _send_trainer_post_booking_feedback(
         session=session,
         trainer_id=trainer_id,
-        trainer_telegram_id=telegram_id,
+        trainer_telegram_id=notify_tid,
         booking_id=int(booking_id),
         client_id=int(body.client_id),
         slot_date=(slot or {}).get("slot_date"),
@@ -5585,20 +4935,16 @@ async def post_trainer_booking(
 @router.post("/trainer/booking/quick")
 async def post_trainer_booking_quick(
     body: TrainerQuickBookingBody,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """Create individual slot at date/hour if needed, then booking. Requires CRM (same as creating slots)."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     if not await trainer_has_crm_access(session, trainer_id):
         raise HTTPException(status_code=403, detail=WEBAPP_DETAIL_SUBSCRIPTION_CRM_REQUIRED)
+    notify_tid = _trainer_bot_notify_telegram_id(principal)
     try:
         slot_date = date.fromisoformat(body.slot_date)
     except ValueError:
@@ -5644,7 +4990,7 @@ async def post_trainer_booking_quick(
     await _send_trainer_post_booking_feedback(
         session=session,
         trainer_id=trainer_id,
-        trainer_telegram_id=telegram_id,
+        trainer_telegram_id=notify_tid,
         booking_id=int(booking_id),
         client_id=int(body.client_id),
         slot_date=(slot or {}).get("slot_date"),
@@ -5672,8 +5018,7 @@ class TrainerSandboxBookingBody(BaseModel):
 @router.post("/trainer/onboarding/sandbox-booking")
 async def post_trainer_onboarding_sandbox_booking(
     body: TrainerSandboxBookingBody,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """
@@ -5683,15 +5028,12 @@ async def post_trainer_onboarding_sandbox_booking(
     this is their first confirmed slot (onboarding aha moment).
     The trainer can delete the booking afterward via the normal cancel endpoint.
     """
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     if not await trainer_has_crm_access(session, trainer_id):
         raise HTTPException(status_code=403, detail=WEBAPP_DETAIL_SUBSCRIPTION_CRM_REQUIRED)
+    notify_tid = _trainer_bot_notify_telegram_id(principal)
     try:
         slot_date = date.fromisoformat(body.slot_date)
     except ValueError:
@@ -5753,7 +5095,7 @@ async def post_trainer_onboarding_sandbox_booking(
     await _send_trainer_post_booking_feedback(
         session=session,
         trainer_id=trainer_id,
-        trainer_telegram_id=telegram_id,
+        trainer_telegram_id=notify_tid,
         booking_id=int(booking_id),
         client_id=int(client_id),
         slot_date=(slot or {}).get("slot_date"),
@@ -5774,15 +5116,10 @@ async def post_trainer_onboarding_sandbox_booking(
 @router.post("/trainer/bookings/{booking_id:int}/make_regular")
 async def post_trainer_booking_make_regular(
     booking_id: int,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     booking = await get_booking_with_slot(session, booking_id, trainer_id)
@@ -5798,15 +5135,10 @@ async def post_trainer_booking_make_regular(
 @router.post("/trainer/recurring/{recurring_id:int}/remove")
 async def post_trainer_recurring_remove(
     recurring_id: int,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_for_webapp_trainer_operations(session, telegram_id)
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     ok = await cancel_recurring_client_slot(session, trainer_id, recurring_id)
@@ -5845,16 +5177,11 @@ def _serialize_trainer_request(req: dict) -> dict:
 
 @router.get("/trainer/onboarding/moderation-readiness")
 async def webapp_trainer_moderation_readiness(
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """Submission + full-profile completeness for Mini App (same dict as embedded profile moderation_readiness)."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_linked_any_status(session, telegram_id)
+    trainer_id = await get_trainer_id_linked_any_status_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Telegram not linked to a trainer")
     data = await get_trainer_moderation_readiness(session, trainer_id)
@@ -5865,16 +5192,11 @@ async def webapp_trainer_moderation_readiness(
 
 @router.get("/trainer/onboarding/checklist")
 async def webapp_trainer_onboarding_checklist(
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """Profile / slots / optional booking flag for the «Первые шаги» strip (trainer hub Mini App)."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_linked_any_status(session, telegram_id)
+    trainer_id = await get_trainer_id_linked_any_status_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Telegram not linked to a trainer")
     data = await get_trainer_onboarding_checklist(session, trainer_id)
@@ -5885,16 +5207,11 @@ async def webapp_trainer_onboarding_checklist(
 
 @router.post("/trainer/onboarding/submit-for-moderation")
 async def webapp_trainer_submit_for_moderation(
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """422 if submission tier (8 criteria) incomplete; otherwise same rules as REST submit-for-moderation."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_linked_any_status(session, telegram_id)
+    trainer_id = await get_trainer_id_linked_any_status_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Telegram not linked to a trainer")
     result = await try_submit_trainer_for_moderation_review(session, trainer_id)
@@ -5928,16 +5245,11 @@ async def trainer_requests_ping(step: str | None = Query(None)):
 
 @router.get("/trainer/requests/summary")
 async def get_trainer_requests_summary(
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """Lightweight hub: count of requests the trainer has not answered yet. Auth: trainer initData."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     n = await count_unanswered_requests_for_trainer(session, trainer_id)
@@ -5946,17 +5258,12 @@ async def get_trainer_requests_summary(
 
 @router.get("/trainer/requests")
 async def get_trainer_requests(
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """List client requests for this trainer (city+service match). New first, then in progress. Auth: trainer initData."""
-    raw = init_data or x_telegram_init_data
-    logger.info("GET /trainer/requests has_init_data=%s", bool(raw))
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    logger.info("GET /trainer/requests authenticated")
+    trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     items = await list_requests_for_trainer(session, trainer_id)
@@ -5976,16 +5283,11 @@ class TrainerRespondBody(BaseModel):
 async def post_trainer_request_respond(
     request_id: int,
     body: TrainerRespondBody,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """Respond to request (optional comment). Auth: trainer initData."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     comment = (body.trainer_comment or "").strip() or None
@@ -5998,16 +5300,11 @@ async def post_trainer_request_respond(
 @router.post("/trainer/requests/{request_id:int}/decline")
 async def post_trainer_request_decline(
     request_id: int,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """Decline request (hide from trainer list). Auth: trainer initData."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     ok = await create_request_decline(session, request_id, trainer_id)
@@ -6019,16 +5316,11 @@ async def post_trainer_request_decline(
 @router.post("/trainer/requests/{request_id:int}/remind-slots")
 async def post_trainer_request_remind_slots(
     request_id: int,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """Set 'remind me when I have slots' for this request. Auth: trainer initData."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     was_new = await add_trainer_pending_request_booking(session, trainer_id, request_id)
@@ -6038,16 +5330,11 @@ async def post_trainer_request_remind_slots(
 @router.get("/trainer/requests/{request_id:int}/slots")
 async def get_trainer_request_slots(
     request_id: int,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """Available slots for next 2 weeks (for booking client from request). Auth: trainer initData."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     client_info = await get_request_client_for_trainer_booking(session, request_id, trainer_id)
@@ -6088,16 +5375,11 @@ class TrainerBookRequestBody(BaseModel):
 async def post_trainer_request_book(
     request_id: int,
     body: TrainerBookRequestBody,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
     """Create booking for client from request (trainer books client). Auth: trainer initData."""
-    raw = init_data or x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     client_info = await get_request_client_for_trainer_booking(session, request_id, trainer_id)
@@ -6143,14 +5425,10 @@ from src.application.referral_use_cases import (
 @router.get("/trainer/referral")
 async def get_trainer_referral_info(
     session: AsyncSession = Depends(get_session),
-    x_telegram_init_data: str = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
 ) -> dict[str, Any]:
     """Get referral info for trainer: code, link, stats, balance."""
-    raw = x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked")
     code = await ensure_trainer_referral_code(session, trainer_id)
@@ -6171,20 +5449,18 @@ async def get_trainer_referral_info(
 @router.get("/trainer/referral/referred")
 async def get_trainer_referred_list(
     session: AsyncSession = Depends(get_session),
-    x_telegram_init_data: str = Header(None, alias="X-Telegram-Init-Data"),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     limit: int = Query(50, ge=1, le=100),
 ) -> list[dict[str, Any]]:
     """List trainers referred by this trainer."""
-    raw = x_telegram_init_data
-    if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id(raw)
-    trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+    trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked")
     return await list_referred_trainers(session, trainer_id, limit=limit)
 
 
+from src.api.routes.webapp_client_trainer_edges import router as _webapp_client_trainer_edges_router
 from src.api.routes.webapp_training_groups import router as _webapp_training_groups_router
 
+router.include_router(_webapp_client_trainer_edges_router)
 router.include_router(_webapp_training_groups_router)

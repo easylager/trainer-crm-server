@@ -13,12 +13,13 @@ import asyncio
 import logging
 from datetime import time as dt_time
 
-from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.deps import get_session
+from src.api.miniapp_auth import MiniAppPrincipal, get_trainer_miniapp_principal, get_trainer_miniapp_principal_multipart
 from src.api.schemas import (
     TRAINER_EDUCATION_OPTIONS,
     PhotoRegisterBody,
@@ -28,7 +29,7 @@ from src.api.schemas import (
     TrainerProfilePatchBody,
 )
 from src.api.routes.public import _enrich_trainer_photo_urls
-from src.application.trainer_link import get_trainer_id_linked_any_status
+from src.application.trainer_link import get_trainer_id_linked_any_status_from_principal
 from src.application.trainer_profile_pending import (
     merge_profile_pending_for_editor,
     trainer_has_pending_text_revision,
@@ -60,7 +61,6 @@ from src.infrastructure import s3
 from src.infrastructure.db.models import TRAINER_STATUS_ACTIVE
 from src.shared.audit import ACTOR_API, audit_log
 from src.shared.config import Settings
-from src.shared.telegram_webapp import InitDataAuthError, require_telegram_user_id
 
 logger = logging.getLogger(__name__)
 
@@ -78,18 +78,8 @@ def _digest_api_str_to_time(s: str | None) -> dt_time | None:
     return dt_time(hour=h, minute=m)
 
 
-def _trainer_telegram_id_from_init(init_data: str) -> int:
-    try:
-        return require_telegram_user_id(init_data, Settings().telegram_bot_token_trainer)
-    except InitDataAuthError:
-        raise HTTPException(status_code=401, detail="Invalid or expired init data") from None
-
-
-async def _require_linked_trainer_id(session: AsyncSession, init_raw: str | None) -> int:
-    if not init_raw or not init_raw.strip():
-        raise HTTPException(status_code=401, detail="Missing init data")
-    telegram_id = _trainer_telegram_id_from_init(init_raw.strip())
-    trainer_id = await get_trainer_id_linked_any_status(session, telegram_id)
+async def _linked_trainer_id(session: AsyncSession, principal: MiniAppPrincipal) -> int:
+    trainer_id = await get_trainer_id_linked_any_status_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Telegram not linked to a trainer")
     return trainer_id
@@ -201,9 +191,8 @@ class WebappTrainerPhotoPresignBody(BaseModel):
 
 @router.get("/trainer/profile")
 async def get_trainer_profile_for_webapp(
-    init_data: str | None = Query(None, description="Telegram initData if not sent as header"),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
     session: AsyncSession = Depends(get_session),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
 ):
     """
     Full trainer aggregate for the profile Mini App editor.
@@ -215,23 +204,20 @@ async def get_trainer_profile_for_webapp(
     **Who can call:** any trainer whose Telegram account is linked (``trainers.telegram_id``), including
     ``pending_profile`` and ``active`` — product rule: edit before moderation approval and after.
     """
-    raw = init_data or x_telegram_init_data
-    trainer_id = await _require_linked_trainer_id(session, raw)
+    trainer_id = await _linked_trainer_id(session, principal)
     return await build_trainer_profile_webapp_payload(session, trainer_id)
 
 
 @router.get("/trainer/profile/page-bootstrap")
 async def get_trainer_profile_page_bootstrap(
-    init_data: str | None = Query(None, description="Telegram initData if not sent as header"),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
     session: AsyncSession = Depends(get_session),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
 ):
     """
     Single response for the profile Mini App first paint: full ``GET /trainer/profile`` payload plus
     cities, services, and education select options (otherwise 4 parallel HTTP requests from the client).
     """
-    raw = init_data or x_telegram_init_data
-    trainer_id = await _require_linked_trainer_id(session, raw)
+    trainer_id = await _linked_trainer_id(session, principal)
     cities, services, profile_payload = await asyncio.gather(
         list_cities(session),
         list_services(session),
@@ -250,17 +236,15 @@ async def get_trainer_profile_page_bootstrap(
 @router.patch("/trainer/profile")
 async def patch_trainer_profile_for_webapp(
     body: TrainerProfilePatchBody,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
     session: AsyncSession = Depends(get_session),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
 ):
     """
     Partial profile update; semantics match ``PATCH /api/trainers/{trainer_id}/profile`` but ownership is
     implied by initData. Triggers ``clear_moderation_submitted_at`` when any tracked field changes
     (see ``update_trainer_profile``).
     """
-    raw = init_data or x_telegram_init_data
-    trainer_id = await _require_linked_trainer_id(session, raw)
+    trainer_id = await _linked_trainer_id(session, principal)
     profile = body.profile.model_dump(exclude_unset=True) if body.profile else {}
     services_payload = [s.model_dump() for s in body.services] if body.services is not None else None
     primary_set = "primary_arena_id" in body.model_fields_set
@@ -332,16 +316,14 @@ async def patch_trainer_profile_for_webapp(
 @router.patch("/trainer/catalog-visibility")
 async def patch_trainer_catalog_visibility_for_webapp(
     body: TrainerCatalogVisibilityPatchBody,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
     session: AsyncSession = Depends(get_session),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
 ) -> dict[str, bool]:
     """
     Show or hide the trainer in the public client catalog. Only ``status=active`` trainers may change
     this from the Mini App (onboarding accounts are not listed anyway).
     """
-    raw = init_data or x_telegram_init_data
-    trainer_id = await _require_linked_trainer_id(session, raw)
+    trainer_id = await _linked_trainer_id(session, principal)
     trainer = await get_trainer(session, trainer_id)
     if not trainer:
         raise HTTPException(status_code=404, detail="Trainer not found")
@@ -365,13 +347,11 @@ async def patch_trainer_catalog_visibility_for_webapp(
 @router.post("/trainer/education", status_code=201)
 async def webapp_create_trainer_education(
     body: TrainerEducationCreateBody,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
     session: AsyncSession = Depends(get_session),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
 ):
     """Create education row; trainer_id from initData only (same rules as REST POST /trainers/{id}/education)."""
-    raw = init_data or x_telegram_init_data
-    trainer_id = await _require_linked_trainer_id(session, raw)
+    trainer_id = await _linked_trainer_id(session, principal)
     try:
         created = await create_trainer_education(session, trainer_id, payload=body.model_dump())
     except ValueError as exc:
@@ -391,13 +371,11 @@ async def webapp_create_trainer_education(
 async def webapp_patch_trainer_education(
     education_id: int,
     body: TrainerEducationPatchBody,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
     session: AsyncSession = Depends(get_session),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
 ):
     """Patch one education entry; trainer_id from initData only."""
-    raw = init_data or x_telegram_init_data
-    trainer_id = await _require_linked_trainer_id(session, raw)
+    trainer_id = await _linked_trainer_id(session, principal)
     try:
         updated = await update_trainer_education(
             session,
@@ -425,13 +403,11 @@ async def webapp_patch_trainer_education(
 @router.delete("/trainer/education/{education_id}")
 async def webapp_delete_trainer_education(
     education_id: int,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
     session: AsyncSession = Depends(get_session),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
 ):
     """Delete one education entry; trainer_id from initData only."""
-    raw = init_data or x_telegram_init_data
-    trainer_id = await _require_linked_trainer_id(session, raw)
+    trainer_id = await _linked_trainer_id(session, principal)
     result = await delete_trainer_education(session, trainer_id, education_id)
     if result is None:
         raise HTTPException(status_code=404, detail="Trainer not found")
@@ -449,13 +425,11 @@ async def webapp_delete_trainer_education(
 @router.post("/trainer/education/documents")
 async def webapp_trainer_education_document_upload(
     file: UploadFile = File(...),
-    init_data: str | None = Form(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
     session: AsyncSession = Depends(get_session),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal_multipart),
 ):
     """Upload one diploma/certificate photo and return scoped storage keys for education entry payloads."""
-    raw = init_data or x_telegram_init_data
-    trainer_id = await _require_linked_trainer_id(session, raw)
+    trainer_id = await _linked_trainer_id(session, principal)
     content_type = file.content_type or "image/jpeg"
     body_bytes = await file.read()
     ok, err, file_key, file_key_list = await upload_trainer_education_document_photo_from_bytes(
@@ -478,13 +452,11 @@ async def webapp_trainer_education_document_upload(
 @router.post("/trainer/photos/presign")
 async def webapp_trainer_photo_presign(
     body: WebappTrainerPhotoPresignBody,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
     session: AsyncSession = Depends(get_session),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
 ):
     """Presigned PUT URL for direct S3 upload; trainer_id from initData only."""
-    raw = init_data or x_telegram_init_data
-    trainer_id = await _require_linked_trainer_id(session, raw)
+    trainer_id = await _linked_trainer_id(session, principal)
     try:
         url, file_key = s3.presign_upload_url(trainer_id, content_type=body.content_type)
     except RuntimeError as e:
@@ -495,13 +467,11 @@ async def webapp_trainer_photo_presign(
 @router.post("/trainer/photos/register")
 async def webapp_trainer_photo_register(
     body: PhotoRegisterBody,
-    init_data: str | None = Query(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
     session: AsyncSession = Depends(get_session),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
 ):
     """Register photo after presigned upload; trainer_id from initData only."""
-    raw = init_data or x_telegram_init_data
-    trainer_id = await _require_linked_trainer_id(session, raw)
+    trainer_id = await _linked_trainer_id(session, principal)
     try:
         ok = await register_photo(session, trainer_id, body.file_key)
     except TrainerPhotoFileKeyError as exc:
@@ -514,16 +484,14 @@ async def webapp_trainer_photo_register(
 @router.post("/trainer/photos")
 async def webapp_trainer_photo_upload(
     file: UploadFile = File(...),
-    init_data: str | None = Form(None),
-    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
     session: AsyncSession = Depends(get_session),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal_multipart),
 ):
     """
     Multipart upload (same behaviour as ``POST /api/upload/photo``) but ``trainer_id`` comes from initData
     only — never from form fields. Pass initData in ``X-Telegram-Init-Data`` or form field ``init_data``.
     """
-    raw = init_data or x_telegram_init_data
-    trainer_id = await _require_linked_trainer_id(session, raw)
+    trainer_id = await _linked_trainer_id(session, principal)
     content_type = file.content_type or "image/jpeg"
     body_bytes = await file.read()
     ok, err, file_key, file_key_list = await upload_trainer_photo_from_bytes(

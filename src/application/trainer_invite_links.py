@@ -1,7 +1,9 @@
 """
 Shareable links for trainers to onboard clients from DMs into the client bot + catalog.
 
-Deep link payload matches client_handlers: /start client_{city_id}_{service_id_or_0}_{trainer_id}.
+Deep link payload matches client_handlers:
+  /start client_{city_id}_{service_id_or_0}_{trainer_id}  — trainer onboarding
+  /start share_ref_{trainer_id}                            — client→friend recommendation share
 """
 from __future__ import annotations
 
@@ -16,8 +18,44 @@ class TrainerInviteLinks:
     catalog_page_url: str | None
 
 
+@dataclass(frozen=True)
+class TrainerShareLink:
+    """Deep link for client→friend trainer recommendation (trust-based share, not referral)."""
+
+    bot_deep_link: str
+
+
 def normalize_client_bot_username(username: str | None) -> str:
     return (username or "").strip().lstrip("@")
+
+
+# --- Share ref: client recommends a trainer to a friend ---
+
+SHARE_REF_PREFIX = "share_ref_"
+
+
+def build_share_ref_payload(trainer_id: int) -> str:
+    """Produces the /start payload for a shared trainer link: share_ref_{trainer_id}."""
+    return f"{SHARE_REF_PREFIX}{int(trainer_id)}"
+
+
+def build_trainer_share_link(
+    *,
+    webapp_base_url: str,
+    client_bot_username: str | None,
+    trainer_id: int,
+) -> tuple[TrainerShareLink | None, str | None]:
+    """
+    Build a deep link for sharing a trainer profile (client→friend recommendation).
+    Returns (link, error) where error is one of: missing_username, invalid_trainer_id.
+    """
+    u = normalize_client_bot_username(client_bot_username)
+    if not u:
+        return None, "missing_username"
+    if int(trainer_id) <= 0:
+        return None, "invalid_trainer_id"
+    payload = build_share_ref_payload(int(trainer_id))
+    return TrainerShareLink(bot_deep_link=f"https://t.me/{u}?start={payload}"), None
 
 
 def build_client_start_payload(

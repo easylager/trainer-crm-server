@@ -3,6 +3,7 @@ Booking use cases: create booking (slot + client_id, comment), list for trainer,
 """
 from collections import defaultdict
 from datetime import date, datetime, time, timedelta, timezone
+from typing import Any
 from urllib.parse import quote
 
 from sqlalchemy import text
@@ -227,6 +228,111 @@ async def get_first_service_id_for_trainer(session: AsyncSession, trainer_id: in
     )
     row = r.fetchone()
     return row[0] if row else None
+
+
+async def coerce_service_id_and_name_for_trainer_catalog(
+    session: AsyncSession,
+    trainer_id: int,
+    preferred_service_id: int | None,
+) -> tuple[int | None, str | None]:
+    """
+    If preferred_service_id is offered by trainer, return it and display name; else first offered service.
+    Keeps hub primary service aligned with trainer's catalog offers.
+    """
+    if preferred_service_id is not None:
+        r = await session.execute(
+            text(
+                """
+                SELECT s.id, s.name FROM services s
+                INNER JOIN trainer_services ts ON ts.service_id = s.id AND ts.trainer_id = :tid
+                WHERE s.id = :sid
+                LIMIT 1
+                """
+            ),
+            {"tid": trainer_id, "sid": preferred_service_id},
+        )
+        row = r.fetchone()
+        if row:
+            return int(row[0]), (row[1] or "").strip() or None
+    fid = await get_first_service_id_for_trainer(session, trainer_id)
+    if fid is None:
+        return None, None
+    r2 = await session.execute(
+        text("SELECT name FROM services WHERE id = :id"),
+        {"id": fid},
+    )
+    row2 = r2.fetchone()
+    return fid, ((row2[0] or "").strip() or None) if row2 else None
+
+
+async def _trainer_offers_service(
+    session: AsyncSession, trainer_id: int, service_id: int
+) -> bool:
+    r = await session.execute(
+        text(
+            """
+            SELECT 1 FROM trainer_services
+            WHERE trainer_id = :tid AND service_id = :sid
+            LIMIT 1
+            """
+        ),
+        {"tid": trainer_id, "sid": service_id},
+    )
+    return r.fetchone() is not None
+
+
+async def _service_display_name(session: AsyncSession, service_id: int) -> str | None:
+    r = await session.execute(
+        text("SELECT name FROM services WHERE id = :id"),
+        {"id": service_id},
+    )
+    row = r.fetchone()
+    return ((row[0] or "").strip() or None) if row else None
+
+
+async def resolve_client_catalog_service_for_trainer(
+    session: AsyncSession,
+    trainer_id: int,
+    session_row: dict[str, Any] | None,
+    *service_hint_ids: int | None,
+) -> tuple[int | None, str | None]:
+    """
+    Service offered by this trainer for catalog / self-booking on this trainer's card.
+    Uses client_sessions.selected_service_id only when selected_trainer_id matches
+    this trainer — otherwise global session service (e.g. primary trainer's ОФП) is ignored.
+    """
+    tid = int(trainer_id)
+    preferred: int | None = None
+    if session_row:
+        raw_tid = session_row.get("selected_trainer_id")
+        if raw_tid is not None:
+            try:
+                if int(raw_tid) == tid:
+                    raw_sid = session_row.get("selected_service_id")
+                    if raw_sid is not None:
+                        preferred = int(raw_sid)
+            except (TypeError, ValueError):
+                preferred = None
+    if preferred is not None and await _trainer_offers_service(session, tid, preferred):
+        return preferred, await _service_display_name(session, preferred)
+
+    seen: set[int] = set()
+    chain: list[int] = []
+    for raw in service_hint_ids:
+        if raw is None:
+            continue
+        try:
+            sid = int(raw)
+        except (TypeError, ValueError):
+            continue
+        if sid <= 0 or sid in seen:
+            continue
+        seen.add(sid)
+        chain.append(sid)
+    for sid in chain:
+        if await _trainer_offers_service(session, tid, sid):
+            return sid, await _service_display_name(session, sid)
+    return await coerce_service_id_and_name_for_trainer_catalog(session, tid, None)
 
 
 async def list_trainer_service_price_variants(
@@ -2030,6 +2136,30 @@ async def get_trainer_client_last_completed_booking_service_defaults(
     if not row:
         return None, None
     return row[0], row[1]
+
+
+async def get_trainer_client_latest_booking_service_id(
+    session: AsyncSession,
+    trainer_id: int,
+    client_id: int,
+) -> int | None:
+    """Latest meaningful booking's service for this trainer+client (excl. cancelled/declined — not a 'chosen' service)."""
+    r = await session.execute(
+        text(
+            """
+            SELECT b.service_id
+            FROM bookings b
+            JOIN slots s ON s.id = b.slot_id
+            WHERE b.trainer_id = :tid AND b.client_id = :cid
+              AND b.status NOT IN ('cancelled', 'declined')
+            ORDER BY s.slot_date DESC, s.start_time DESC NULLS LAST
+            LIMIT 1
+            """
+        ),
+        {"tid": trainer_id, "cid": client_id},
+    )
+    row = r.fetchone()
+    return int(row[0]) if row and row[0] is not None else None
 
 
 async def list_bookings_for_client(

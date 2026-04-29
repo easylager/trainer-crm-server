@@ -16,6 +16,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.app import app
+from src.api.miniapp_auth.types import MiniAppPlatform, MiniAppPrincipal
 from src.infrastructure.db.models import INVOICE_STATUS_SENT, REFERRAL_CREDIT_REASON_ADMIN
 from src.shared.config import Settings
 
@@ -146,7 +147,7 @@ async def test_subscription_stub_confirm_zero_amount_referral_production_ok(
     mock_settings_inst.telegram_bot_token_trainer = real_settings.telegram_bot_token_trainer
 
     with (
-        patch("src.api.routes.webapp.require_telegram_user_id", return_value=tg),
+        patch("src.api.miniapp_auth.deps.verify_telegram_init_data_principal", return_value=MiniAppPrincipal(platform=MiniAppPlatform.TELEGRAM, user_id=tg)),
         patch("src.api.routes.webapp.Settings", return_value=mock_settings_inst),
     ):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
@@ -244,7 +245,7 @@ async def test_subscription_stub_confirm_production_rejects_nonzero_amount(
     mock_settings_inst.telegram_bot_token_trainer = real_settings.telegram_bot_token_trainer
 
     with (
-        patch("src.api.routes.webapp.require_telegram_user_id", return_value=tg),
+        patch("src.api.miniapp_auth.deps.verify_telegram_init_data_principal", return_value=MiniAppPrincipal(platform=MiniAppPlatform.TELEGRAM, user_id=tg)),
         patch("src.api.routes.webapp.Settings", return_value=mock_settings_inst),
     ):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
@@ -316,7 +317,7 @@ async def test_subscription_stub_confirm_production_rejects_zero_without_bonus(
     mock_settings_inst.telegram_bot_token_trainer = real_settings.telegram_bot_token_trainer
 
     with (
-        patch("src.api.routes.webapp.require_telegram_user_id", return_value=tg),
+        patch("src.api.miniapp_auth.deps.verify_telegram_init_data_principal", return_value=MiniAppPrincipal(platform=MiniAppPlatform.TELEGRAM, user_id=tg)),
         patch("src.api.routes.webapp.Settings", return_value=mock_settings_inst),
     ):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:

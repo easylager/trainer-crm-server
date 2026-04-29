@@ -10,6 +10,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.api.miniapp_auth.types import MiniAppPlatform, MiniAppPrincipal
 from src.shared.trainer_status import normalize_trainer_status_value
 
 
@@ -111,6 +112,41 @@ async def get_trainer_row_by_telegram_id(session: AsyncSession, telegram_id: int
     }
 
 
+async def get_trainer_row_by_vk_user_id(session: AsyncSession, vk_user_id: int) -> dict | None:
+    """Linked trainer row by VK id (any status)."""
+    r = await session.execute(
+        text(
+            """
+            SELECT id, status, moderation_feedback
+            FROM trainers
+            WHERE vk_user_id = :vk
+            LIMIT 1
+            """
+        ),
+        {"vk": vk_user_id},
+    )
+    row = r.fetchone()
+    if not row:
+        return None
+    return {
+        "id": row[0],
+        "status": normalize_trainer_status_value(row[1]),
+        "moderation_feedback": row[2],
+    }
+
+
+async def get_trainer_row_for_miniapp_principal(
+    session: AsyncSession,
+    principal: MiniAppPrincipal,
+) -> dict | None:
+    """Resolve lightweight trainer row from Telegram or MAX Mini App principal."""
+    if principal.platform == MiniAppPlatform.TELEGRAM:
+        return await get_trainer_row_by_telegram_id(session, principal.user_id)
+    if principal.platform == MiniAppPlatform.MAX:
+        return await get_trainer_row_by_vk_user_id(session, principal.user_id)
+    return None
+
+
 async def get_trainer_by_telegram_id(session: AsyncSession, telegram_id: int) -> bool:
     """True if this telegram_id is linked to an active trainer (bot access allowed)."""
     r = await session.execute(
@@ -151,6 +187,50 @@ async def get_trainer_id_for_webapp_trainer_operations(session: AsyncSession, te
     from src.infrastructure.db.models import TRAINER_STATUS_ACTIVE, TRAINER_STATUS_PENDING_PROFILE
 
     row = await get_trainer_row_by_telegram_id(session, telegram_id)
+    if not row:
+        return None
+    tid = int(row["id"])
+    st = (row.get("status") or "").strip().lower()
+    if st == TRAINER_STATUS_ACTIVE:
+        return tid
+    if st == TRAINER_STATUS_PENDING_PROFILE:
+        trainer = await get_trainer(session, tid)
+        if trainer and is_tt_minimal_profile_complete(trainer):
+            return tid
+    return None
+
+
+async def get_trainer_id_by_telegram_id_from_principal(
+    session: AsyncSession,
+    principal: MiniAppPrincipal,
+) -> int | None:
+    """Active trainer id for Mini App principal (Telegram or MAX)."""
+    row = await get_trainer_row_for_miniapp_principal(session, principal)
+    if not row:
+        return None
+    st = (row.get("status") or "").strip().lower()
+    if st != "active":
+        return None
+    return int(row["id"])
+
+
+async def get_trainer_id_linked_any_status_from_principal(
+    session: AsyncSession,
+    principal: MiniAppPrincipal,
+) -> int | None:
+    row = await get_trainer_row_for_miniapp_principal(session, principal)
+    return int(row["id"]) if row else None
+
+
+async def get_trainer_id_for_webapp_trainer_operations_from_principal(
+    session: AsyncSession,
+    principal: MiniAppPrincipal,
+) -> int | None:
+    from src.application.trainer_profile_completeness import is_tt_minimal_profile_complete
+    from src.application.trainer_use_cases import get_trainer
+    from src.infrastructure.db.models import TRAINER_STATUS_ACTIVE, TRAINER_STATUS_PENDING_PROFILE
+
+    row = await get_trainer_row_for_miniapp_principal(session, principal)
     if not row:
         return None
     tid = int(row["id"])

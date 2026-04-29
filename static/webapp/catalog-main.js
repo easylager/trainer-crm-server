@@ -48,6 +48,8 @@
         selectedTrainer: null,
         /** When trainer has multiple price tiers for filtered service — required by POST /client/booking */
         catalogBookingPriceVariantId: null,
+        /** Per slot selection — POST /client/booking Idempotency-Key (retry after dropped response). */
+        catalogBookingIdempotencyKey: null,
         slotsForTrainer: [],
         selectedSlot: null,
         returnToSummary: false,
@@ -69,7 +71,12 @@
           timeSlots: [] // ['06:00-09:00', '09:00-12:00', etc.]
         },
         /** Edge state map: trainerIdStr → {is_saved, is_primary, completed_count} */
-        trainerEdges: {}
+        trainerEdges: {},
+        /** From GET /client/trainer-edges ``primary`` — same priority as client hub (not legacy session row). */
+        hubPrimaryTrainerIdFromEdges: null,
+        /** From GET /client/session — last booking service hint for suggested_service_for_trainer_id only. */
+        suggestedServiceForTrainer: null,
+        suggestedServiceForTrainerId: null
       };
 
       /**
@@ -207,10 +214,66 @@
         return CATALOG_PRICE_TIER_LABELS[k] || tier.label || 'Тариф';
       }
 
+      function newCatalogBookingIdempotencyKey() {
+        if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+          return crypto.randomUUID();
+        }
+        return 'bk-' + Date.now() + '-' + Math.random().toString(36).slice(2, 11);
+      }
+
+      function assignCatalogBookingIdempotencyKeyForSlot() {
+        state.catalogBookingIdempotencyKey = newCatalogBookingIdempotencyKey();
+      }
+
+      /** Avoid false «network error» when res.ok but body is not JSON or parse fails. */
+      function catalogParseBookingJsonResponse(text) {
+        try {
+          return JSON.parse(text || 'null');
+        } catch (e) {
+          return null;
+        }
+      }
+
+      /** Slot-bound service_id wins over catalog state (same idea as book.html). */
+      function catalogEffectiveServiceIdForBooking() {
+        var slot = state.selectedSlot;
+        var t = state.selectedTrainer;
+        var services = (t && t.services) ? t.services : [];
+        var allowed = {};
+        var i;
+        for (i = 0; i < services.length; i++) {
+          var id = Number(services[i].service_id);
+          if (!isNaN(id) && id > 0) allowed[id] = true;
+        }
+        if (slot && slot.service_id != null) {
+          var ps = Number(slot.service_id);
+          if (!isNaN(ps) && ps > 0 && allowed[ps]) return ps;
+        }
+        if (state.serviceId != null) {
+          var cur = Number(state.serviceId);
+          if (!isNaN(cur) && cur > 0 && allowed[cur]) return cur;
+        }
+        return null;
+      }
+
+      function catalogServiceDisplayNameForId(serviceId) {
+        var t = state.selectedTrainer;
+        var services = (t && t.services) ? t.services : [];
+        var sidNum = Number(serviceId);
+        var i;
+        for (i = 0; i < services.length; i++) {
+          if (Number(services[i].service_id) === sidNum) {
+            return String(services[i].service_name || '').trim();
+          }
+        }
+        return (state.serviceName || '').trim();
+      }
+
       function getTiersForCatalogBooking() {
         var t = state.selectedTrainer;
-        if (!t || !t.services || state.serviceId == null) return [];
-        var sid = Number(state.serviceId);
+        if (!t || !t.services) return [];
+        var sid = catalogEffectiveServiceIdForBooking();
+        if (sid == null) return [];
         var svc = null;
         var i;
         for (i = 0; i < t.services.length; i++) {
@@ -229,8 +292,9 @@
         var block = document.getElementById('bookingPriceTierBlockCatalog');
         var host = document.getElementById('bookingPriceTierRadiosCatalog');
         state.catalogBookingPriceVariantId = null;
+        var effSid = catalogEffectiveServiceIdForBooking();
+        var nm = effSid != null ? catalogServiceDisplayNameForId(effSid) : (state.serviceName || '').trim();
         if (svcEl) {
-          var nm = (state.serviceName || '').trim();
           if (nm) {
             svcEl.style.display = 'block';
             svcEl.textContent = 'Услуга: ' + nm;
@@ -951,7 +1015,6 @@
         if (!t || !t.id) return;
         state.trainerId = t.id;
         state.trainerName = trainerName(t);
-        persistTrainerSelection(t.id);
         if (prefetchPhotos) {
           var detailPhoto = t.photos && t.photos[0];
           var pl = photoSrcList(detailPhoto);
@@ -962,12 +1025,16 @@
         loadTrainerById(t.id).then(function(full) {
           state.selectedTrainer = full || t;
           state.trainerName = trainerName(state.selectedTrainer);
-          renderTrainerDetail();
-          showScreen('screenTrainerDetail');
+          reconcileCatalogServiceWithTrainerAsync(state.selectedTrainer).then(function() {
+            renderTrainerDetail();
+            showScreen('screenTrainerDetail');
+          });
         }).catch(function() {
           state.selectedTrainer = t;
-          renderTrainerDetail();
-          showScreen('screenTrainerDetail');
+          reconcileCatalogServiceWithTrainerAsync(t).then(function() {
+            renderTrainerDetail();
+            showScreen('screenTrainerDetail');
+          });
         });
       }
 
@@ -999,18 +1066,30 @@
         });
         document.getElementById('catalogTabPanel').classList.toggle('active', tab === 'catalog');
         document.getElementById('myTrainerTabPanel').classList.toggle('active', tab === 'my_trainer');
-        document.getElementById('myTrainerLoading').style.display = 'none';
+        if (tab === 'catalog') {
+          document.getElementById('myTrainerLoading').style.display = 'none';
+        }
         if (tab === 'my_trainer') {
-          if (state.trainerId && state.trainerName) {
+          /* trainerId may be set from hub primary edges without trainerName — still open card (avoid empty flash). */
+          var eff = state.trainerId;
+          if (eff == null || eff === '' || !(Number(eff) > 0)) {
+            eff = resolveCatalogAutoTrainerIdFromEdges();
+          }
+          var tidNum = eff != null ? Number(eff) : NaN;
+          if (!isNaN(tidNum) && tidNum > 0) {
+            state.trainerId = tidNum;
+            document.getElementById('myTrainerEmpty').style.display = 'none';
             openMyTrainerCard();
             return;
           }
+          document.getElementById('myTrainerLoading').style.display = 'none';
           document.getElementById('myTrainerEmpty').style.display = 'block';
           document.getElementById('myTrainerCardShort').style.display = 'none';
         }
       }
       function openMyTrainerCard() {
         if (!state.trainerId) return;
+        document.getElementById('myTrainerEmpty').style.display = 'none';
         document.getElementById('myTrainerLoading').style.display = 'block';
         document.getElementById('myTrainerCardShort').style.display = 'none';
         state.openedFromMyTrainerTab = true;
@@ -1025,21 +1104,121 @@
           }
           state.selectedTrainer = t;
           state.trainerName = trainerName(t);
-          renderTrainerDetail();
-          showScreen('screenTrainerDetail');
+          reconcileCatalogServiceWithTrainerAsync(t).then(function() {
+            renderTrainerDetail();
+            showScreen('screenTrainerDetail');
+          });
         }).catch(function() {
           document.getElementById('myTrainerLoading').style.display = 'none';
           document.getElementById('myTrainerCardShort').style.display = 'block';
         });
       }
 
-      function getClientSession() {
+      /**
+       * @param {{ forTrainerId?: number }} [opts] Pass forTrainerId to align suggested_service_* with that card.
+       */
+      function getClientSession(opts) {
+        var q = '';
+        if (opts && opts.forTrainerId != null && opts.forTrainerId !== '') {
+          q = '?for_trainer_id=' + encodeURIComponent(opts.forTrainerId);
+        }
         var initData = tg && tg.initData ? tg.initData : '';
         var headers = { 'Content-Type': 'application/json' };
         if (initData) headers['X-Telegram-Init-Data'] = initData;
-        return fetch('/api/webapp/client/session', { headers: headers }).then(function(r) {
+        return fetch('/api/webapp/client/session' + q, { headers: headers, cache: 'no-store' }).then(function(r) {
           if (!r.ok) throw new Error(r.statusText);
           return r.json();
+        });
+      }
+
+      /**
+       * If catalog session service is not in this trainer's offers, replace it using server hint or first offer;
+       * persists client session so book.html and slots see a consistent service_id.
+       */
+      function reconcileCatalogServiceWithTrainerAsync(trainer) {
+        return new Promise(function(resolve) {
+          if (!trainer || trainer.id == null) {
+            resolve();
+            return;
+          }
+          var services = trainer.services || [];
+          if (!services.length) {
+            resolve();
+            return;
+          }
+          function buildAllowed() {
+            var m = {};
+            services.forEach(function(s) {
+              var id = s.service_id != null ? Number(s.service_id) : NaN;
+              if (!isNaN(id)) m[id] = s;
+            });
+            return m;
+          }
+          var allowed = buildAllowed();
+          function applyPick(sid, doPersist) {
+            var num = Number(sid);
+            if (isNaN(num) || !allowed[num]) return false;
+            state.serviceId = num;
+            state.serviceName = String(allowed[num].service_name || '').trim();
+            if (doPersist && state.cityId && state.serviceId) persistTrainerSelection(trainer.id);
+            return true;
+          }
+          var cur = state.serviceId != null ? Number(state.serviceId) : NaN;
+          if (!isNaN(cur) && allowed[cur]) {
+            state.serviceName = String(allowed[cur].service_name || state.serviceName || '').trim();
+            resolve();
+            return;
+          }
+          var locSugg = state.suggestedServiceForTrainer;
+          var locCtx = state.suggestedServiceForTrainerId;
+          if (
+            locSugg != null &&
+            !isNaN(Number(locSugg)) &&
+            locCtx != null &&
+            !isNaN(Number(locCtx)) &&
+            Number(locCtx) === Number(trainer.id) &&
+            applyPick(locSugg, true)
+          ) {
+            resolve();
+            return;
+          }
+          getClientSession({ forTrainerId: trainer.id })
+            .then(function(sess) {
+              if (sess) {
+                var st = sess.suggested_service_for_trainer_id;
+                var sidRaw = sess.suggested_service_id_for_trainer;
+                state.suggestedServiceForTrainerId =
+                  st != null && st !== '' && !isNaN(Number(st)) ? Number(st) : null;
+                state.suggestedServiceForTrainer =
+                  sidRaw != null && sidRaw !== '' && !isNaN(Number(sidRaw)) ? Number(sidRaw) : null;
+                if (
+                  state.suggestedServiceForTrainer != null &&
+                  state.suggestedServiceForTrainerId != null &&
+                  Number(state.suggestedServiceForTrainerId) === Number(trainer.id) &&
+                  applyPick(state.suggestedServiceForTrainer, true)
+                ) {
+                  resolve();
+                  return;
+                }
+              }
+              var pick0 = services[0];
+              var zid = pick0 && pick0.service_id != null ? Number(pick0.service_id) : NaN;
+              if (!isNaN(zid)) {
+                state.serviceId = zid;
+                state.serviceName = String(pick0.service_name || '').trim();
+                if (state.cityId && state.serviceId) persistTrainerSelection(trainer.id);
+              }
+              resolve();
+            })
+            .catch(function() {
+              var pick0 = services[0];
+              if (pick0 && pick0.service_id != null) {
+                state.serviceId = Number(pick0.service_id);
+                state.serviceName = String(pick0.service_name || '').trim();
+                if (state.cityId && state.serviceId) persistTrainerSelection(trainer.id);
+              }
+              resolve();
+            });
         });
       }
 
@@ -1056,8 +1235,44 @@
             data.all.forEach(function(e) {
               state.trainerEdges[String(e.trainer_id)] = e;
             });
+            state.hubPrimaryTrainerIdFromEdges = null;
+            if (data.primary && data.primary.trainer_id != null) {
+              var pt = Number(data.primary.trainer_id);
+              if (!isNaN(pt) && pt > 0) {
+                state.hubPrimaryTrainerIdFromEdges = pt;
+                var dn = data.primary.trainer_display_name;
+                if (dn != null && String(dn).trim()) state.trainerName = String(dn).trim();
+              }
+            }
           })
           .catch(function() { /* non-critical — save button falls back to unknown state */ });
+      }
+
+      /**
+       * Same notion of «primary» as client hub: GET /client/trainer-edges ``primary`` object
+       * (booking → saved → session), not only DB is_primary.
+       */
+      function resolveCatalogAutoTrainerIdFromEdges() {
+        if (state.hubPrimaryTrainerIdFromEdges != null) {
+          var h = Number(state.hubPrimaryTrainerIdFromEdges);
+          if (!isNaN(h) && h > 0) return h;
+        }
+        return primaryTrainerIdFromEdgesMap();
+      }
+
+      /** Explicit is_primary on an edge (when set via «сделать основным»). */
+      function primaryTrainerIdFromEdgesMap() {
+        var edges = state.trainerEdges || {};
+        var k;
+        for (k in edges) {
+          if (!Object.prototype.hasOwnProperty.call(edges, k)) continue;
+          var e = edges[k];
+          if (e && e.is_primary && e.trainer_id != null) {
+            var n = Number(e.trainer_id);
+            if (!isNaN(n) && n > 0) return n;
+          }
+        }
+        return null;
       }
 
       /**
@@ -1100,7 +1315,16 @@
         var url = nextSaved
           ? '/api/webapp/client/trainer-edges/save'
           : '/api/webapp/client/trainer-edges/save/' + trainerId;
-        var body = nextSaved ? JSON.stringify({ trainer_id: trainerId }) : undefined;
+        var body = nextSaved
+          ? JSON.stringify(function() {
+              var payload = { trainer_id: trainerId };
+              if (state.serviceId != null) {
+                var ns = Number(state.serviceId);
+                if (!isNaN(ns)) payload.catalog_service_id = ns;
+              }
+              return payload;
+            }())
+          : undefined;
         fetch(url, { method: method, headers: headers, body: body })
           .then(function(r) { return r.ok ? r.json() : Promise.reject(r.status); })
           .then(function(data) {
@@ -1185,6 +1409,51 @@
       }
 
       /**
+       * Client→friend trainer recommendation (same deep link as client-home «Поделиться»).
+       */
+      function openTrainerShareDialog(trainerId, shareContext) {
+        var initData = tg && tg.initData ? tg.initData : '';
+        if (!initData || trainerId == null) return;
+        var ctx = shareContext || 'catalog';
+        var url =
+          '/api/webapp/client/share-trainer/' +
+          encodeURIComponent(String(trainerId)) +
+          '?share_context=' +
+          encodeURIComponent(ctx) +
+          '&init_data=' +
+          encodeURIComponent(initData);
+        fetch(url, { headers: { 'X-Telegram-Init-Data': initData } })
+          .then(function(r) {
+            return r.ok ? r.json() : Promise.reject();
+          })
+          .then(function(data) {
+            var shareUrl = (data.share_url || '').trim();
+            var shareBody = (data.share_body || '').trim();
+            var shareText = (data.share_text || '').trim();
+            if (!shareUrl && !shareText) return;
+            if (typeof window.openTelegramShareUrlFromMiniApp === 'function') {
+              window.openTelegramShareUrlFromMiniApp({
+                shareUrl: shareUrl,
+                shareBody: shareBody,
+                fullMessage: shareText,
+              });
+              return;
+            }
+            var href;
+            if (shareUrl) {
+              href = 'https://t.me/share/url?url=' + encodeURIComponent(shareUrl);
+              if (shareBody) href += '&text=' + encodeURIComponent(shareBody);
+            } else {
+              href = 'https://t.me/share/url?text=' + encodeURIComponent(shareText);
+            }
+            if (tg && typeof tg.openTelegramLink === 'function') {
+              tg.openTelegramLink(href);
+            }
+          })
+          .catch(function() {});
+      }
+
+      /**
        * Dual-chip row: [🔔 Напомнить] [❤️ Сохранить].
        * Compact secondary actions — never obscure the primary CTA.
        * noSlots=true adds a subtle pulse to the notify chip to draw attention.
@@ -1230,6 +1499,20 @@
         row.appendChild(chipSave);
         container.appendChild(row);
 
+        var shareWide = document.createElement('button');
+        shareWide.type = 'button';
+        shareWide.className = 'trainer-share-wide-btn';
+        shareWide.setAttribute('aria-label', 'Поделиться тренером');
+        shareWide.innerHTML =
+          '<span class="trainer-share-wide-icon" aria-hidden="true">↗</span>' +
+          '<span>Поделиться тренером</span>';
+        shareWide.onclick = function(ev) {
+          ev.preventDefault();
+          ev.stopPropagation();
+          openTrainerShareDialog(tid, 'catalog');
+        };
+        container.appendChild(shareWide);
+
         // Context hint always under chips (was omitted when slots existed and user unsubscribed).
         var hint = document.createElement('p');
         hint.className = 'chips-hint';
@@ -1252,17 +1535,44 @@
         appendTrainerActionChips(container, trainer, false);
       }
 
-      function applySessionToState(session) {
-        if (session.city_id) { state.cityId = session.city_id; state.cityName = session.city_name || ''; }
-        if (session.service_id) { state.serviceId = session.service_id; state.serviceName = session.service_name || ''; }
-        if (session.arena_id != null) {
-          // Persisted single-arena session (server only stores one) is restored as a 1-element selection.
-          setArenaSelection([session.arena_id], [session.arena_name || 'Арена']);
+      /**
+       * @param {object} session — GET /client/session JSON
+       * @param {{ bookingFormRefresh?: boolean }} [opts] If true, only refresh phone/profile/suggested hints
+       *   and optionally align service with booking_context_* (for_trainer_id on the fetch). Does not overwrite
+       *   city/arena/catalog service from global session — avoids primary trainer's ОФП replacing the card filter.
+       */
+      function applySessionToState(session, opts) {
+        opts = opts || {};
+        var bookingOnly = !!opts.bookingFormRefresh;
+        if (!bookingOnly) {
+          if (session.city_id) { state.cityId = session.city_id; state.cityName = session.city_name || ''; }
+          if (session.service_id) { state.serviceId = session.service_id; state.serviceName = session.service_name || ''; }
+          if (session.arena_id != null) {
+            // Persisted single-arena session (server only stores one) is restored as a 1-element selection.
+            setArenaSelection([session.arena_id], [session.arena_name || 'Арена']);
+          } else {
+            clearArenaSelection();
+          }
+          if (session.trainer_id) { state.trainerId = session.trainer_id; state.trainerName = session.trainer_name || ''; }
+          else { state.trainerId = null; state.trainerName = ''; }
         } else {
-          clearArenaSelection();
+          var bc = session.booking_context_service_id;
+          if (bc != null && String(bc) !== '') {
+            var bn = Number(bc);
+            if (!isNaN(bn) && bn > 0) {
+              state.serviceId = bn;
+              var bcm = session.booking_context_service_name;
+              state.serviceName =
+                bcm != null && String(bcm).trim() !== '' ? String(bcm).trim() : (state.serviceName || '');
+            }
+          }
         }
-        if (session.trainer_id) { state.trainerId = session.trainer_id; state.trainerName = session.trainer_name || ''; }
-        else { state.trainerId = null; state.trainerName = ''; }
+        var stid = session.suggested_service_for_trainer_id;
+        state.suggestedServiceForTrainerId =
+          stid != null && stid !== '' && !isNaN(Number(stid)) ? Number(stid) : null;
+        var sidS = session.suggested_service_id_for_trainer;
+        state.suggestedServiceForTrainer =
+          sidS != null && sidS !== '' && !isNaN(Number(sidS)) ? Number(sidS) : null;
         state.clientPhone =
           session.client_phone != null && session.client_phone !== undefined
             ? String(session.client_phone).trim()
@@ -1305,8 +1615,10 @@
 
       /** Refresh client phone from API (e.g. before booking form) so DB updates are visible. */
       function refreshClientPhoneForBookingForm(cb) {
-        getClientSession().then(function(session) {
-          applySessionToState(session);
+        var tid = state.selectedTrainer && state.selectedTrainer.id != null ? state.selectedTrainer.id : null;
+        var req = tid != null ? getClientSession({ forTrainerId: tid }) : getClientSession();
+        req.then(function(session) {
+          applySessionToState(session, tid != null ? { bookingFormRefresh: true } : undefined);
           updateBookingNameFieldsVisibility();
           if (cb) cb();
         }).catch(function() {
@@ -2784,6 +3096,7 @@
             btn.onclick = function() {
               var i = parseInt(btn.dataset.slotIndex, 10);
               state.selectedSlot = state.slotsForTrainer[i];
+              assignCatalogBookingIdempotencyKeyForSlot();
               document.getElementById('bookingFormSlotLabel').textContent = 'Выбрано: ' + formatSlotSelectionSummary(state.selectedSlot);
               document.getElementById('bookingComment').value = '';
               refreshClientPhoneForBookingForm(function() {
@@ -2871,6 +3184,7 @@
           btn.onclick = function() {
             var i = parseInt(btn.dataset.slotIndex, 10);
             state.selectedSlot = state.slotsForTrainer[i];
+            assignCatalogBookingIdempotencyKeyForSlot();
             document.getElementById('bookingFormSlotLabel').textContent = 'Выбрано: ' + formatSlotSelectionSummary(state.selectedSlot);
             document.getElementById('bookingComment').value = '';
             refreshClientPhoneForBookingForm(function() {
@@ -2906,28 +3220,44 @@
             return;
           }
         }
+        var effBookingSid = catalogEffectiveServiceIdForBooking();
         var btn = document.getElementById('btnSubmitBooking');
         btn.disabled = true;
         var initData = tg ? tg.initData : '';
-        var headers = { 'Content-Type': 'application/json' };
-        if (initData) headers['X-Telegram-Init-Data'] = initData;
         var body = { slot_id: slot.id, phone: phone, comment: (document.getElementById('bookingComment').value || '').trim() || null };
         if (state.needsProfileName) {
           body.first_name = (document.getElementById('bookingFirstName').value || '').trim();
           var ln = (document.getElementById('bookingLastName').value || '').trim();
           if (ln) body.last_name = ln;
         }
-        if (state.serviceId != null) body.service_id = state.serviceId;
+        if (effBookingSid != null) body.service_id = effBookingSid;
         if (state.catalogBookingPriceVariantId != null) {
           body.service_price_variant_id = state.catalogBookingPriceVariantId;
         }
+        if (!state.catalogBookingIdempotencyKey) assignCatalogBookingIdempotencyKeyForSlot();
+        var headers = { 'Content-Type': 'application/json' };
+        if (initData) headers['X-Telegram-Init-Data'] = initData;
+        headers['Idempotency-Key'] = state.catalogBookingIdempotencyKey;
         fetch('/api/webapp/client/booking', {
           method: 'POST',
           headers: headers,
           body: JSON.stringify(body)
         }).then(function(r) {
-          return r.json().then(function(data) {
+          return r.text().then(function(text) {
+            var data = catalogParseBookingJsonResponse(text);
+            if (data == null) {
+              if (r.ok) {
+                alert(
+                  'Ответ сервера не распознан, но запись могла сохраниться. Откройте «Мои записи» в боте. ' +
+                    'Повторная кнопка с тем же временем подставит тот же запрос и обычно не дублирует бронь.'
+                );
+              } else {
+                alert('Ошибка сервера (' + r.status + '). Проверьте «Мои записи» в боте перед повтором.');
+              }
+              return;
+            }
             if (r.ok && data.success) {
+              state.catalogBookingIdempotencyKey = null;
               var okMsg = '✅ <b>Вы записаны</b>.<br><br>Ожидайте подтверждения от тренера в боте.';
               if (data.used_primary_venue_for_online_booking) {
                 okMsg += '<br><span style="color: var(--tg-theme-hint-color); font-size: 14px; display: inline-block; margin-top: 10px;">Запись создана на <strong>основную площадку</strong> тренера. Чтобы заниматься на площадке из вашего фильтра — оставьте заявку, тренер согласует место.</span>';
@@ -2941,13 +3271,16 @@
                 applySessionToState(session);
                 updateBookingNameFieldsVisibility();
               }).catch(function() {});
-            } else { alert(data.detail || 'Не удалось записаться'); }
-            btn.disabled = false;
+            } else {
+              alert((data && data.detail) || 'Не удалось записаться');
+            }
           });
         }).catch(function() {
-          alert('Ошибка сети');
-          btn.disabled = false;
-        });
+          alert(
+            'Сеть не ответила. Запись могла всё равно создаться — проверьте «Мои записи» в боте. ' +
+              'Повтор с тем же слотом использует тот же ключ запроса и возвращает успех, если бронь уже есть.'
+          );
+        }).finally(function() { btn.disabled = false; });
       };
 
 
@@ -3131,12 +3464,14 @@
         if (applyBtn) applyBtn.onclick = commitArenaScreenSelection;
       })();
 
-      // Load edges in parallel with session — non-blocking, best-effort
-      loadTrainerEdges();
-
-      getClientSession()
-        .then(function(session) {
+      Promise.all([loadTrainerEdges(), getClientSession()])
+        .then(function(results) {
+          var session = results[1];
           applySessionToState(session);
+          var primaryTid = resolveCatalogAutoTrainerIdFromEdges();
+          if (primaryTid != null) {
+            state.trainerId = primaryTid;
+          }
           updateBookingNameFieldsVisibility();
           updateRequestNameFieldsVisibility();
           var qp = new URLSearchParams(window.location.search || '');
@@ -3183,8 +3518,10 @@
               if (t) {
                 state.selectedTrainer = t;
                 state.trainerName = trainerName(t);
-                renderTrainerDetail();
-                showScreen('screenTrainerDetail');
+                reconcileCatalogServiceWithTrainerAsync(t).then(function() {
+                  renderTrainerDetail();
+                  showScreen('screenTrainerDetail');
+                });
                 return;
               }
               if (state.trainerId) {
@@ -3193,8 +3530,10 @@
                   if (t2) {
                     state.selectedTrainer = t2;
                     state.trainerName = trainerName(t2);
-                    renderTrainerDetail();
-                    showScreen('screenTrainerDetail');
+                    reconcileCatalogServiceWithTrainerAsync(t2).then(function() {
+                      renderTrainerDetail();
+                      showScreen('screenTrainerDetail');
+                    });
                   } else {
                     state.trainerId = null;
                     state.trainerName = '';
@@ -3215,8 +3554,10 @@
                   if (t2) {
                     state.selectedTrainer = t2;
                     state.trainerName = trainerName(t2);
-                    renderTrainerDetail();
-                    showScreen('screenTrainerDetail');
+                    reconcileCatalogServiceWithTrainerAsync(t2).then(function() {
+                      renderTrainerDetail();
+                      showScreen('screenTrainerDetail');
+                    });
                   } else {
                     state.trainerId = null;
                     state.trainerName = '';
@@ -3240,8 +3581,10 @@
               if (t) {
                 state.selectedTrainer = t;
                 state.trainerName = trainerName(t);
-                renderTrainerDetail();
-                showScreen('screenTrainerDetail');
+                reconcileCatalogServiceWithTrainerAsync(t).then(function() {
+                  renderTrainerDetail();
+                  showScreen('screenTrainerDetail');
+                });
               } else {
                 state.trainerId = null;
                 state.trainerName = '';

@@ -7,6 +7,7 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 
 from src.api.app import app
+from src.api.miniapp_auth.types import MiniAppPlatform, MiniAppPrincipal
 
 
 def _fresh_trainer_telegram_id() -> int:
@@ -24,7 +25,7 @@ async def test_webapp_trainer_profile_get_401_without_init_data(app_use_test_db)
 @pytest.mark.asyncio
 async def test_webapp_trainer_profile_get_403_when_telegram_not_linked(app_use_test_db) -> None:
     tg = 880_000_111
-    with patch("src.api.routes.webapp_trainer_profile.require_telegram_user_id", return_value=tg):
+    with patch("src.api.miniapp_auth.deps.verify_telegram_init_data_principal", return_value=MiniAppPrincipal(platform=MiniAppPlatform.TELEGRAM, user_id=tg)):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             resp = await client.get(
                 "/api/webapp/trainer/profile",
@@ -51,7 +52,7 @@ async def test_webapp_trainer_profile_get_returns_trainer_and_readiness(
     )
     await db_session.commit()
 
-    with patch("src.api.routes.webapp_trainer_profile.require_telegram_user_id", return_value=tg):
+    with patch("src.api.miniapp_auth.deps.verify_telegram_init_data_principal", return_value=MiniAppPrincipal(platform=MiniAppPlatform.TELEGRAM, user_id=tg)):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             resp = await client.get(
                 "/api/webapp/trainer/profile",
@@ -90,7 +91,7 @@ async def test_webapp_trainer_profile_patch_digest_settings(
     )
     await db_session.commit()
 
-    with patch("src.api.routes.webapp_trainer_profile.require_telegram_user_id", return_value=tg):
+    with patch("src.api.miniapp_auth.deps.verify_telegram_init_data_principal", return_value=MiniAppPrincipal(platform=MiniAppPlatform.TELEGRAM, user_id=tg)):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             patch_ok = await client.patch(
                 "/api/webapp/trainer/profile",
@@ -99,7 +100,7 @@ async def test_webapp_trainer_profile_patch_digest_settings(
             )
     assert patch_ok.status_code == 200, patch_ok.text
 
-    with patch("src.api.routes.webapp_trainer_profile.require_telegram_user_id", return_value=tg):
+    with patch("src.api.miniapp_auth.deps.verify_telegram_init_data_principal", return_value=MiniAppPrincipal(platform=MiniAppPlatform.TELEGRAM, user_id=tg)):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             get_r = await client.get(
                 "/api/webapp/trainer/profile",
@@ -110,7 +111,7 @@ async def test_webapp_trainer_profile_patch_digest_settings(
     assert ds is not None
     assert str(ds).replace(".", ":")[:5] in ("08:00", "8:00")  # time serialization may vary
 
-    with patch("src.api.routes.webapp_trainer_profile.require_telegram_user_id", return_value=tg):
+    with patch("src.api.miniapp_auth.deps.verify_telegram_init_data_principal", return_value=MiniAppPrincipal(platform=MiniAppPlatform.TELEGRAM, user_id=tg)):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             patch_off = await client.patch(
                 "/api/webapp/trainer/profile",
@@ -118,7 +119,7 @@ async def test_webapp_trainer_profile_patch_digest_settings(
                 json={"digest_enabled": False, "digest_send_time": None},
             )
     assert patch_off.status_code == 200
-    with patch("src.api.routes.webapp_trainer_profile.require_telegram_user_id", return_value=tg):
+    with patch("src.api.miniapp_auth.deps.verify_telegram_init_data_principal", return_value=MiniAppPrincipal(platform=MiniAppPlatform.TELEGRAM, user_id=tg)):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             get2 = await client.get(
                 "/api/webapp/trainer/profile",
@@ -148,7 +149,7 @@ async def test_webapp_trainer_profile_patch_updates_profile(
     )
     await db_session.commit()
 
-    with patch("src.api.routes.webapp_trainer_profile.require_telegram_user_id", return_value=tg):
+    with patch("src.api.miniapp_auth.deps.verify_telegram_init_data_principal", return_value=MiniAppPrincipal(platform=MiniAppPlatform.TELEGRAM, user_id=tg)):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             patch_resp = await client.patch(
                 "/api/webapp/trainer/profile",
@@ -180,7 +181,7 @@ async def test_webapp_trainer_profile_patch_422_invalid_phone(
     )
     await db_session.commit()
 
-    with patch("src.api.routes.webapp_trainer_profile.require_telegram_user_id", return_value=tg):
+    with patch("src.api.miniapp_auth.deps.verify_telegram_init_data_principal", return_value=MiniAppPrincipal(platform=MiniAppPlatform.TELEGRAM, user_id=tg)):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             patch_resp = await client.patch(
                 "/api/webapp/trainer/profile",
@@ -211,7 +212,7 @@ async def test_webapp_trainer_education_create_and_patch(
     )
     await db_session.commit()
 
-    with patch("src.api.routes.webapp_trainer_profile.require_telegram_user_id", return_value=tg):
+    with patch("src.api.miniapp_auth.deps.verify_telegram_init_data_principal", return_value=MiniAppPrincipal(platform=MiniAppPlatform.TELEGRAM, user_id=tg)):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             post_resp = await client.post(
                 "/api/webapp/trainer/education",
@@ -262,7 +263,7 @@ async def test_webapp_trainer_education_supports_uploaded_document_photos(
     fake_key = f"trainers/{trainer_id}/edu-proof.jpg"
     fake_key_list = f"trainers/{trainer_id}/edu-proof_list.jpg"
     with (
-        patch("src.api.routes.webapp_trainer_profile.require_telegram_user_id", return_value=tg),
+        patch("src.api.miniapp_auth.deps.verify_telegram_init_data_principal", return_value=MiniAppPrincipal(platform=MiniAppPlatform.TELEGRAM, user_id=tg)),
         patch("src.application.trainer_use_cases.trainer_photo_bytes_look_like_image", return_value=True),
         patch("src.application.trainer_use_cases.s3.upload_photo", return_value=(fake_key, fake_key_list)),
     ):
@@ -322,7 +323,7 @@ async def test_webapp_trainer_education_delete(
     )
     await db_session.commit()
 
-    with patch("src.api.routes.webapp_trainer_profile.require_telegram_user_id", return_value=tg):
+    with patch("src.api.miniapp_auth.deps.verify_telegram_init_data_principal", return_value=MiniAppPrincipal(platform=MiniAppPlatform.TELEGRAM, user_id=tg)):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             post_resp = await client.post(
                 "/api/webapp/trainer/education",
@@ -378,7 +379,7 @@ async def test_webapp_trainer_catalog_visibility_patch_403_when_not_active(
     )
     await db_session.commit()
 
-    with patch("src.api.routes.webapp_trainer_profile.require_telegram_user_id", return_value=tg):
+    with patch("src.api.miniapp_auth.deps.verify_telegram_init_data_principal", return_value=MiniAppPrincipal(platform=MiniAppPlatform.TELEGRAM, user_id=tg)):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             resp = await client.patch(
                 "/api/webapp/trainer/catalog-visibility",
@@ -408,7 +409,7 @@ async def test_webapp_trainer_catalog_visibility_patch_ok_for_active_trainer(
     )
     await db_session.commit()
 
-    with patch("src.api.routes.webapp_trainer_profile.require_telegram_user_id", return_value=tg):
+    with patch("src.api.miniapp_auth.deps.verify_telegram_init_data_principal", return_value=MiniAppPrincipal(platform=MiniAppPlatform.TELEGRAM, user_id=tg)):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             patch_resp = await client.patch(
                 "/api/webapp/trainer/catalog-visibility",

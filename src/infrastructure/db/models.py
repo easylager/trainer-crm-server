@@ -66,6 +66,7 @@ class Trainer(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     telegram_id: Mapped[Optional[int]] = mapped_column(BigInteger, unique=True, nullable=True, index=True)
+    vk_user_id: Mapped[Optional[int]] = mapped_column(BigInteger, unique=True, nullable=True, index=True)
     telegram_username: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
     status: Mapped[str] = mapped_column(
         Enum(*TRAINER_STATUSES, name="trainer_status_enum", create_constraint=True),
@@ -358,6 +359,14 @@ class ClientTrainerEdge(Base):
     last_interaction_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
+    # --- catalog context (align primary service with primary-trainer tier) ---
+    last_booking_service_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("services.id", ondelete="SET NULL"), nullable=True
+    )
+    saved_catalog_service_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("services.id", ondelete="SET NULL"), nullable=True
+    )
+
     # --- contextual primary scope (future-proof, unused in initial UI) ---
     context_type: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     context_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
@@ -390,13 +399,14 @@ class ClientSession(Base):
 
 class Client(Base):
     """
-    Client identity: by telegram_id (bot user) or by phone_normalized (trainer-added, no bot yet).
-    At least one of telegram_id or phone_normalized must be set.
+    Client identity: by telegram_id (bot user), vk_user_id (MAX/VK Mini App), or phone_normalized (trainer-added).
+    At least one of telegram_id, vk_user_id, or phone_normalized must be set for a valid row.
     """
     __tablename__ = "clients"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     telegram_id: Mapped[Optional[int]] = mapped_column(BigInteger, unique=True, nullable=True, index=True)
+    vk_user_id: Mapped[Optional[int]] = mapped_column(BigInteger, unique=True, nullable=True, index=True)
     telegram_username: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
     first_name: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     last_name: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
@@ -1134,6 +1144,8 @@ DEMAND_SOURCE_DIRECT_LINK = "direct_link"
 DEMAND_SOURCE_SEARCH = "search"
 DEMAND_SOURCE_BOT = "bot"
 DEMAND_SOURCE_CLIENT_APP = "client_app"
+# Opened via a shared trainer profile link (client→friend recommendation loop)
+DEMAND_SOURCE_CLIENT_SHARE = "client_share"
 
 DEMAND_SOURCES = (
     DEMAND_SOURCE_CATALOG,
@@ -1141,6 +1153,7 @@ DEMAND_SOURCES = (
     DEMAND_SOURCE_SEARCH,
     DEMAND_SOURCE_BOT,
     DEMAND_SOURCE_CLIENT_APP,
+    DEMAND_SOURCE_CLIENT_SHARE,
 )
 
 

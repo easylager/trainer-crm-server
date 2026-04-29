@@ -17,6 +17,7 @@ _SELECT_EDGE = """
         is_saved, is_primary, notify_when_slots, completed_count,
         saved_at, notify_when_slots_at,
         last_booking_at, last_completed_at, last_interaction_at,
+        last_booking_service_id, saved_catalog_service_id,
         context_type, context_id, created_at
     FROM client_trainer_edges
     WHERE telegram_id = :tid AND trainer_id = :trainer_id
@@ -29,6 +30,7 @@ _ROW_KEYS = (
     "is_saved", "is_primary", "notify_when_slots", "completed_count",
     "saved_at", "notify_when_slots_at",
     "last_booking_at", "last_completed_at", "last_interaction_at",
+    "last_booking_service_id", "saved_catalog_service_id",
     "context_type", "context_id", "created_at",
 )
 
@@ -102,6 +104,7 @@ class ClientTrainerEdgeRepository:
                     is_saved, is_primary, notify_when_slots, completed_count,
                     saved_at, notify_when_slots_at,
                     last_booking_at, last_completed_at, last_interaction_at,
+                    last_booking_service_id, saved_catalog_service_id,
                     context_type, context_id, created_at
                 FROM client_trainer_edges
                 WHERE telegram_id = :tid
@@ -126,6 +129,7 @@ class ClientTrainerEdgeRepository:
                     is_saved, is_primary, notify_when_slots, completed_count,
                     saved_at, notify_when_slots_at,
                     last_booking_at, last_completed_at, last_interaction_at,
+                    last_booking_service_id, saved_catalog_service_id,
                     context_type, context_id, created_at
                 FROM client_trainer_edges
                 WHERE telegram_id = :tid AND is_primary = true
@@ -147,6 +151,7 @@ class ClientTrainerEdgeRepository:
                     is_saved, is_primary, notify_when_slots, completed_count,
                     saved_at, notify_when_slots_at,
                     last_booking_at, last_completed_at, last_interaction_at,
+                    last_booking_service_id, saved_catalog_service_id,
                     context_type, context_id, created_at
                 FROM client_trainer_edges
                 WHERE telegram_id = :tid AND is_saved = true
@@ -187,6 +192,8 @@ class ClientTrainerEdgeRepository:
         saved: bool,
         context_type: str | None = None,
         context_id: int | None = None,
+        *,
+        catalog_service_id: int | None = None,
     ) -> dict[str, Any]:
         """Toggle is_saved flag; sets saved_at on save, clears on unsave."""
         await self.ensure_edge(telegram_id, trainer_id, context_type, context_id)
@@ -198,6 +205,9 @@ class ClientTrainerEdgeRepository:
                     saved_at  = CASE
                         WHEN :saved THEN CAST(:now AS TIMESTAMP WITH TIME ZONE)
                         ELSE NULL END,
+                    saved_catalog_service_id = CASE
+                        WHEN :saved THEN COALESCE(CAST(:svc_id AS INTEGER), saved_catalog_service_id)
+                        ELSE NULL END,
                     last_interaction_at = GREATEST(last_interaction_at,
                         CAST(:now_ts AS TIMESTAMP WITH TIME ZONE))
                 WHERE telegram_id = :tid AND trainer_id = :trainer_id
@@ -207,6 +217,7 @@ class ClientTrainerEdgeRepository:
             {
                 "tid": telegram_id, "trainer_id": trainer_id,
                 "saved": saved, "now": now, "now_ts": now,
+                "svc_id": catalog_service_id,
                 "ctx_type": context_type, "ctx_id": context_id,
             },
         )
@@ -274,6 +285,8 @@ class ClientTrainerEdgeRepository:
         booked_at: datetime | None = None,
         context_type: str | None = None,
         context_id: int | None = None,
+        *,
+        booking_service_id: int | None = None,
     ) -> None:
         """Update edge counters/timestamps when a booking is created or completed."""
         await self.ensure_edge(telegram_id, trainer_id, context_type, context_id)
@@ -291,6 +304,10 @@ class ClientTrainerEdgeRepository:
                         WHEN :completed THEN GREATEST(last_completed_at,
                             CAST(:ts AS TIMESTAMP WITH TIME ZONE))
                         ELSE last_completed_at
+                    END,
+                    last_booking_service_id = CASE
+                        WHEN :bsid IS NOT NULL THEN CAST(:bsid AS INTEGER)
+                        ELSE last_booking_service_id
                     END
                 WHERE telegram_id = :tid AND trainer_id = :trainer_id
                   AND context_type IS NOT DISTINCT FROM :ctx_type
@@ -299,6 +316,7 @@ class ClientTrainerEdgeRepository:
             {
                 "tid": telegram_id, "trainer_id": trainer_id,
                 "ts": ts, "completed": completed, "inc_completed": 1 if completed else 0,
+                "bsid": booking_service_id,
                 "ctx_type": context_type, "ctx_id": context_id,
             },
         )
@@ -339,6 +357,7 @@ class ClientTrainerEdgeRepository:
                     is_saved, is_primary, notify_when_slots, completed_count,
                     saved_at, notify_when_slots_at,
                     last_booking_at, last_completed_at, last_interaction_at,
+                    last_booking_service_id, saved_catalog_service_id,
                     context_type, context_id, created_at
                 FROM client_trainer_edges
                 WHERE trainer_id = :trainer_id AND notify_when_slots = true

@@ -23,6 +23,7 @@ from PIL import Image
 from sqlalchemy import text
 
 from src.api.app import app
+from src.api.miniapp_auth.types import MiniAppPlatform, MiniAppPrincipal
 from src.shared.telegram_webapp import InitDataAuthError
 
 
@@ -38,11 +39,9 @@ def _tiny_jpeg_bytes() -> bytes:
 
 @contextmanager
 def patch_trainer_init_auth(telegram_id: int) -> Iterator[None]:
-    """Both profile routes and webapp.onboarding use trainer-bot initData validation."""
-    with (
-        patch("src.api.routes.webapp_trainer_profile.require_telegram_user_id", return_value=telegram_id),
-        patch("src.api.routes.webapp.require_telegram_user_id", return_value=telegram_id),
-    ):
+    """Trainer Mini App routes validate via shared deps (trainer bot token)."""
+    fake = MiniAppPrincipal(platform=MiniAppPlatform.TELEGRAM, user_id=telegram_id)
+    with patch("src.api.miniapp_auth.deps.verify_telegram_init_data_principal", return_value=fake):
         yield
 
 
@@ -717,7 +716,7 @@ async def test_get_profile_401_when_init_data_invalid(
     def _raise_invalid(*_a, **_kw) -> int:
         raise InitDataAuthError("bad signature")
 
-    with patch("src.api.routes.webapp_trainer_profile.require_telegram_user_id", side_effect=_raise_invalid):
+    with patch("src.api.miniapp_auth.deps.verify_telegram_init_data_principal", side_effect=_raise_invalid):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             resp = await client.get(
                 "/api/webapp/trainer/profile",

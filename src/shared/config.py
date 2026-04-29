@@ -41,6 +41,8 @@ class Settings(BaseSettings):
     admin_telegram_ids: list[int] | None = None
     # Optional: one-time token for trainer link from site (dev stub; later from DB)
     trainer_link_token: str | None = None
+    # VK Mini Apps / MAX: "Защищённый ключ" for launch-params HMAC (omit until product enables MAX).
+    vk_mini_app_protected_key: str | None = None
 
     # Database
     database_url: str = "postgresql+asyncpg://trainer_crm:trainer_crm_dev@localhost:5432/trainer_crm"

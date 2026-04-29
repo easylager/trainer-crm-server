@@ -19,13 +19,14 @@ async def get_or_create_client(
     session: AsyncSession,
     telegram_id: int,
     *,
+    vk_user_id: int | None = None,
     phone: str | None = None,
     first_name: str | None = None,
     last_name: str | None = None,
     telegram_username: str | None = None,
 ) -> int:
     """
-    Resolve client by telegram_id (natural key). Create if missing; optionally update name/phone.
+    Resolve client by telegram_id (surrogate for MAX catalog) or vk_user_id. Create if missing; optionally update name/phone.
     If telegram row is missing but phone matches an offline row (telegram_id IS NULL), bind Telegram to it.
     Returns client_id. Caller must commit (we do not commit here to allow same transaction as booking/request).
     """
@@ -42,6 +43,12 @@ async def get_or_create_client(
         {"tid": telegram_id},
     )
     row = r.fetchone()
+    if not row and vk_user_id is not None:
+        r = await session.execute(
+            text("SELECT id, phone, first_name, last_name, telegram_username FROM clients WHERE vk_user_id = :vk"),
+            {"vk": vk_user_id},
+        )
+        row = r.fetchone()
     if row:
         client_id = row[0]
         # Optional update: fill or refresh name/phone when provided
@@ -62,6 +69,9 @@ async def get_or_create_client(
         if telegram_username is not None:
             updates.append("telegram_username = :telegram_username")
             params["telegram_username"] = telegram_username_val
+        if vk_user_id is not None:
+            updates.append("vk_user_id = COALESCE(vk_user_id, :vk)")
+            params["vk"] = vk_user_id
         if updates:
             await session.execute(
                 text("UPDATE clients SET updated_at = now(), " + ", ".join(updates) + " WHERE id = :cid"),
@@ -89,6 +99,9 @@ async def get_or_create_client(
             client_id = int(row_phone[0])
             updates = ["telegram_id = :tid"]
             params = {"cid": client_id, "tid": telegram_id}
+            if vk_user_id is not None:
+                updates.append("vk_user_id = :vk")
+                params["vk"] = vk_user_id
             if phone is not None and phone_val is not None:
                 updates.append("phone = :phone")
                 params["phone"] = phone_val
@@ -112,12 +125,13 @@ async def get_or_create_client(
     # Insert new client (with phone_normalized if phone provided)
     r = await session.execute(
         text("""
-            INSERT INTO clients (telegram_id, telegram_username, first_name, last_name, phone, phone_normalized)
-            VALUES (:tid, :tuname, :first_name, :last_name, :phone, :phone_normalized)
+            INSERT INTO clients (telegram_id, vk_user_id, telegram_username, first_name, last_name, phone, phone_normalized)
+            VALUES (:tid, :vk, :tuname, :first_name, :last_name, :phone, :phone_normalized)
             RETURNING id
         """),
         {
             "tid": telegram_id,
+            "vk": vk_user_id,
             "tuname": telegram_username_val,
             "first_name": first_name_val,
             "last_name": last_name_val,

@@ -24,6 +24,7 @@
         ticket: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/><path d="M13 5v2M13 11v2M13 17v2"/></svg>',
         user:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>',
         msg:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></svg>',
+        share:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>',
         pin:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>',
         bookmark: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m19 21-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/></svg>',
         repeat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>',
@@ -32,7 +33,8 @@
 
       /** Explore tiles shown at bottom — same in all scenarios. */
       var EXPLORE_TILES = [
-        { path: 'catalog',                   label: 'Тренеры и запись', hint: 'Каталог, фильтры, слоты',        icon: 'search', badge: null },
+        /* ?tab=catalog — list/browse; без этого каталог открывает карточку из сессии (часто устаревший тренер). */
+        { path: 'catalog?tab=catalog',       label: 'Тренеры и запись', hint: 'Каталог, фильтры, слоты',        icon: 'search', badge: null },
         { path: 'client-saved-trainers',     label: 'Сохранённые',        hint: 'Закладки из каталога',           icon: 'bookmark', badge: null },
         { path: 'client-bookings',           label: 'Мои записи',          hint: 'Все занятия',                    icon: 'cal',    badge: null },
         { path: 'client-requests',           label: 'Заявки',             hint: 'Подбор тренера',                 icon: 'inbox',  badge: 'NEW' },
@@ -42,6 +44,8 @@
       /* ── State ──────────────────────────────────────────────────────── */
       /** selected_trainer_id from catalog/bot session */
       var selectedTrainerId = null;
+      /** From hub bootstrap — service aligned with primary-trainer tier (booking / save / session). */
+      var primaryCatalogServiceId = null;
 
       /* ── Utils ─────────────────────────────────────────────────────── */
       function headersJson() {
@@ -207,6 +211,19 @@
             '</button>';
         }
 
+        var shareNextHtml = '';
+        if (b.trainer_id != null && String(b.trainer_id).trim() !== '') {
+          shareNextHtml =
+            '<div class="hub-next-card-share-row">' +
+              '<button type="button" class="hub-next-card-btn hub-next-card-btn--share"' +
+              ' data-hub-action="share-trainer"' +
+              ' data-share-tid="' + esc(String(b.trainer_id)) + '"' +
+              ' data-share-context="next_booking">' +
+              'Поделиться тренером' +
+              '</button>' +
+            '</div>';
+        }
+
         var html =
           '<div class="hub-next-card" id="nextCard" data-bid="' + esc(String(b.id)) + '">' +
             '<span class="hub-next-card-status ' + statusClass + '">' + statusLabel + '</span>' +
@@ -229,6 +246,7 @@
                 ' data-bid="' + esc(String(b.id)) + '">Открыть запись</button>' +
                 msgBtnHtml +
               '</div>' +
+              shareNextHtml +
             '</div>' +
           '</div>';
 
@@ -246,11 +264,51 @@
             openTelegramDm(dmBtn.getAttribute('data-dm-un'), dmBtn.getAttribute('data-dm-tid'));
             return;
           }
+          var shareNext = ev.target && ev.target.closest && ev.target.closest('[data-hub-action="share-trainer"]');
+          if (shareNext) {
+            ev.stopPropagation();
+            shareTrainer(
+              shareNext.getAttribute('data-share-tid'),
+              shareNext.getAttribute('data-share-context') || 'next_booking'
+            );
+            return;
+          }
           /* Open booking detail */
           var openBtn = ev.target && ev.target.closest && ev.target.closest('[data-hub-action="open-booking"]');
           var bid = (openBtn || card).getAttribute('data-bid');
           if (bid) navigateTo('client-bookings?open_booking=' + encodeURIComponent(bid));
         });
+      }
+
+      function catalogPrimaryServiceQuery() {
+        if (primaryCatalogServiceId == null || primaryCatalogServiceId === '') return '';
+        var n = Number(primaryCatalogServiceId);
+        if (!isFinite(n) || n <= 0) return '';
+        return '&service_id=' + encodeURIComponent(String(n));
+      }
+
+      /**
+       * «Записаться снова» — тренер и услуга с ближайшей записи (истина для клиента), иначе основной из хаба.
+       */
+      function navigateToCatalogBookAgain(nextBooking) {
+        var nb = nextBooking && nextBooking.b;
+        var tid = nb && nb.trainer_id != null ? Number(nb.trainer_id) : NaN;
+        if (!isNaN(tid) && tid > 0) {
+          var q = 'catalog?trainer_id=' + encodeURIComponent(String(tid));
+          var sid = nb.service_id != null ? Number(nb.service_id) : NaN;
+          if (!isNaN(sid) && sid > 0) {
+            q += '&service_id=' + encodeURIComponent(String(sid));
+          }
+          navigateTo(q);
+          return;
+        }
+        if (selectedTrainerId != null && String(selectedTrainerId).trim() !== '') {
+          navigateTo(
+            'catalog?trainer_id=' + encodeURIComponent(String(selectedTrainerId)) + catalogPrimaryServiceQuery()
+          );
+          return;
+        }
+        navigateTo('catalog?tab=catalog');
       }
 
       function hideNextBookingSkeleton() {
@@ -266,8 +324,48 @@
       /* ── My trainer card ─────────────────────────────────────────────── */
 
       /**
+       * Full recommendation text (opener → имя → услуги → город · арена → CTA → ссылка) — не голый URL.
+       */
+      function shareTrainer(trainerId, shareCtx) {
+        var ctx = shareCtx || 'catalog';
+        var path =
+          '/client/share-trainer/' +
+          encodeURIComponent(String(trainerId)) +
+          '?share_context=' +
+          encodeURIComponent(ctx);
+        fetch(apiUrl(path))
+          .then(function(r) { return r.ok ? r.json() : Promise.reject(r.status); })
+          .then(function(data) {
+            var shareUrl = (data.share_url || '').trim();
+            var shareBody = (data.share_body || '').trim();
+            var shareText = (data.share_text || '').trim();
+            if (!shareUrl && !shareText) return;
+            if (typeof window.openTelegramShareUrlFromMiniApp === 'function') {
+              window.openTelegramShareUrlFromMiniApp({
+                shareUrl: shareUrl,
+                shareBody: shareBody,
+                fullMessage: shareText,
+              });
+              return;
+            }
+            var href;
+            if (shareUrl) {
+              href = 'https://t.me/share/url?url=' + encodeURIComponent(shareUrl);
+              if (shareBody) href += '&text=' + encodeURIComponent(shareBody);
+            } else {
+              href = 'https://t.me/share/url?text=' + encodeURIComponent(shareText);
+            }
+            if (tg && typeof tg.openTelegramLink === 'function') {
+              tg.openTelegramLink(href);
+            }
+          })
+          .catch(function() {});
+      }
+
+      /**
        * Primary-relationship card: uppercase label «ОСНОВНОЙ», main line — trainer name from hub.
        * Opens catalog deep-linked to this trainer_id so we never reuse stale session.trainer_id from browsing.
+       * Share action added: 1-tap trainer recommendation via Telegram native share dialog.
        */
       function renderMyTrainerCard(trainerId, trainerName, trainerUsername, trainerTelegramId, listPhotoKey) {
         var block = document.getElementById('myTrainerBlock');
@@ -277,12 +375,23 @@
         var hasDm = un || tid;
         var displayName = ((trainerName || '').trim()) || 'Тренер';
 
-        var msgBtnHtml = hasDm
-          ? '<div class="hub-trainer-actions">' +
-              '<button type="button" class="hub-trainer-msg-btn" data-hub-dm="trainer"' +
-              ' data-dm-un="' + esc(un) + '" data-dm-tid="' + esc(tid) + '"' +
-              ' aria-label="Написать тренеру">' + ICONS.msg + '</button>' +
-            '</div>'
+        // Action buttons: [msg?] [share] — right-aligned cluster
+        var actionBtns = '';
+        if (hasDm) {
+          actionBtns +=
+            '<button type="button" class="hub-trainer-msg-btn" data-hub-dm="trainer"' +
+            ' data-dm-un="' + esc(un) + '" data-dm-tid="' + esc(tid) + '"' +
+            ' aria-label="Написать тренеру">' + ICONS.msg + '</button>';
+        }
+        if (trainerId != null) {
+          actionBtns +=
+            '<button type="button" class="hub-trainer-share-btn" data-hub-action="share-trainer"' +
+            ' data-share-tid="' + esc(String(trainerId)) + '"' +
+            ' data-share-context="my_trainer"' +
+            ' aria-label="Поделиться тренером">' + ICONS.share + '</button>';
+        }
+        var actionsHtml = actionBtns
+          ? '<div class="hub-trainer-actions">' + actionBtns + '</div>'
           : '';
 
         var src = trainerHubThumb(listPhotoKey || '');
@@ -298,7 +407,7 @@
               '<div class="hub-trainer-name">' + esc(displayName) + '</div>' +
               '<div class="hub-trainer-sub">Выбрать время в каталоге</div>' +
             '</div>' +
-            msgBtnHtml +
+            actionsHtml +
           '</div>';
         block.style.display = '';
 
@@ -311,9 +420,18 @@
             openTelegramDm(dmBtn.getAttribute('data-dm-un'), dmBtn.getAttribute('data-dm-tid'));
             return;
           }
+          var shareBtn = ev.target && ev.target.closest && ev.target.closest('[data-hub-action="share-trainer"]');
+          if (shareBtn) {
+            ev.stopPropagation();
+            shareTrainer(
+              shareBtn.getAttribute('data-share-tid'),
+              shareBtn.getAttribute('data-share-context') || 'my_trainer'
+            );
+            return;
+          }
           navigateTo(
             trainerId != null && String(trainerId).trim() !== ''
-              ? 'catalog?trainer_id=' + encodeURIComponent(String(trainerId))
+              ? 'catalog?trainer_id=' + encodeURIComponent(String(trainerId)) + catalogPrimaryServiceQuery()
               : 'catalog'
           );
         });
@@ -332,7 +450,11 @@
 
         if (scenario === 'has-booking') {
           pills = [
-            { label: 'Записаться снова', icon: 'repeat', action: function() { navigateTo('catalog'); } },
+            {
+              label: 'Записаться снова',
+              icon: 'repeat',
+              action: function() { navigateToCatalogBookAgain(nextBooking); },
+            },
             { label: 'Все записи',       icon: 'cal',    action: function() { navigateTo('client-bookings'); } },
             { label: 'Абонемент',        icon: 'ticket', action: function() { navigateTo('client-passes-certificates'); } },
           ];
@@ -344,9 +466,11 @@
               primary: true,
               action: function() {
                 if (selectedTrainerId != null && String(selectedTrainerId).trim() !== '') {
-                  navigateTo('catalog?trainer_id=' + encodeURIComponent(String(selectedTrainerId)));
+                  navigateTo(
+                    'catalog?trainer_id=' + encodeURIComponent(String(selectedTrainerId)) + catalogPrimaryServiceQuery()
+                  );
                 } else {
-                  navigateTo('catalog');
+                  navigateTo('catalog?tab=catalog');
                 }
               },
             },
@@ -355,20 +479,33 @@
           ];
         } else if (scenario === 'has-saved') {
           pills = [
-            { label: 'Записаться',    icon: 'plus',   primary: true, action: function() { navigateTo('catalog'); } },
-            { label: 'Тренеры',       icon: 'search',              action: function() { navigateTo('catalog'); } },
+            { label: 'Записаться',    icon: 'plus',   primary: true, action: function() { navigateTo('catalog?tab=catalog'); } },
+            { label: 'Тренеры',       icon: 'search',              action: function() { navigateTo('catalog?tab=catalog'); } },
             { label: 'Мои записи',    icon: 'cal',                 action: function() { navigateTo('client-bookings'); } },
           ];
         } else if (scenario === 'has-past') {
           pills = [
-            { label: 'Записаться снова', icon: 'repeat', primary: true, action: function() { navigateTo('catalog'); } },
-            { label: 'Тренеры',          icon: 'search',              action: function() { navigateTo('catalog'); } },
+            {
+              label: 'Записаться снова',
+              icon: 'repeat',
+              primary: true,
+              action: function() {
+                if (selectedTrainerId != null && String(selectedTrainerId).trim() !== '') {
+                  navigateTo(
+                    'catalog?trainer_id=' + encodeURIComponent(String(selectedTrainerId)) + catalogPrimaryServiceQuery()
+                  );
+                } else {
+                  navigateTo('catalog?tab=catalog');
+                }
+              },
+            },
+            { label: 'Тренеры',          icon: 'search',              action: function() { navigateTo('catalog?tab=catalog'); } },
             { label: 'Мои записи',       icon: 'cal',                 action: function() { navigateTo('client-bookings'); } },
           ];
         } else {
           /* acquisition state — clean */
           pills = [
-            { label: 'Найти тренера', icon: 'search', primary: true, action: function() { navigateTo('catalog'); } },
+            { label: 'Найти тренера', icon: 'search', primary: true, action: function() { navigateTo('catalog?tab=catalog'); } },
             { label: 'Заявка',        icon: 'inbox',               action: function() { navigateTo('client-requests'); } },
             { label: 'Мои записи',    icon: 'cal',                 action: function() { navigateTo('client-bookings'); } },
           ];
@@ -626,6 +763,13 @@
         var hasSavedBookmarks = savedTrainersRich.length > 0 || savedIds.length > 0;
         var hasPastSessions = !!cs.has_past_sessions;
         selectedTrainerId = primaryTrainerId;
+        var rawPcs = cs.primary_catalog_service_id;
+        if (rawPcs != null && rawPcs !== '') {
+          var ppn = Number(rawPcs);
+          primaryCatalogServiceId = !isNaN(ppn) && ppn > 0 ? ppn : null;
+        } else {
+          primaryCatalogServiceId = null;
+        }
 
         var nextItem = findNextBooking(bookingDays);
 

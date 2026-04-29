@@ -98,7 +98,8 @@ from src.application.welcome_link_use_cases import (
     WELCOME_TOKEN_TYPE_PASS,
     consume_welcome_link_token,
 )
-from src.infrastructure.db.models import DEMAND_SOURCE_CLIENT_APP, SUPPORT_FROM_CLIENT
+from src.infrastructure.db.models import DEMAND_SOURCE_CLIENT_APP, DEMAND_SOURCE_CLIENT_SHARE, SUPPORT_FROM_CLIENT
+from src.application.trainer_invite_links import SHARE_REF_PREFIX
 from src.bot import messages as msg
 from src.shared.config import Settings
 from src.shared.mini_app_https import mini_app_https_base
@@ -446,6 +447,17 @@ def _parse_welcome_ref(payload: str) -> int | None:
         return None
 
 
+def _parse_share_ref(payload: str) -> int | None:
+    """Parse share_ref_<trainer_id>. Returns trainer_id or None."""
+    if not payload or not payload.startswith(SHARE_REF_PREFIX):
+        return None
+    try:
+        tid = int(payload[len(SHARE_REF_PREFIX) :].strip())
+        return tid if tid > 0 else None
+    except ValueError:
+        return None
+
+
 def _parse_pass_start(payload: str) -> tuple[int | None, int | None]:
     """Parse pass_<product_id>_ref_<trainer_id>. Returns (pass_product_id, trainer_id) or (None, None)."""
     if not payload or not payload.startswith(PASS_START_PREFIX):
@@ -740,6 +752,36 @@ async def cmd_start(message: Message) -> None:
                         source=DEMAND_SOURCE_CLIENT_APP,
                     )
             await message.answer(msg.CLIENT_CERT_CODE_INVALID)
+        return
+
+    # Shared trainer profile: share_ref_<trainer_id> — friend recommendation deep link.
+    # Same session setup as welcome_ref but records DEMAND_SOURCE_CLIENT_SHARE for PLG analytics.
+    trainer_id_share = _parse_share_ref(payload)
+    if trainer_id_share is not None:
+        async with async_session_factory() as db_session:
+            await get_or_create_client(db_session, telegram_id)
+            await db_session.commit()
+        async with async_session_factory() as db_session:
+            city_id, service_id = await get_trainer_default_city_and_service(db_session, trainer_id_share)
+            if city_id is not None:
+                await set_city(telegram_id, city_id, db_session)
+            if service_id is not None:
+                await set_service(telegram_id, service_id, db_session)
+            await set_selected_trainer(telegram_id, trainer_id_share, db_session)
+            trainer = await get_trainer(db_session, trainer_id_share)
+            await record_profile_view_commit(
+                db_session,
+                trainer_id=int(trainer_id_share),
+                source=DEMAND_SOURCE_CLIENT_SHARE,
+            )
+        base = (Settings().webapp_base_url or "").rstrip("/")
+        welcome_body = _invite_welcome_text(trainer, base)
+        await message.answer(
+            welcome_body,
+            reply_markup=_trainer_book_markup(
+                base, trainer_id_share, include_catalog_alternative=False, service_id=service_id
+            ),
+        )
         return
 
     # Generic invite: welcome_ref_<trainer_id> — no cert/pass, just set trainer and city/service

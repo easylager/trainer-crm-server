@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Запись</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="mini-app-telegram-chrome.js"></script>
+  <script src="mini-app-telegram-chrome.js?v=20260556"></script>
   <link rel="stylesheet" href="theme.css" />
   <link rel="stylesheet" href="mini-app-components.css" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -313,6 +313,56 @@
       line-height: 1.45;
       color: var(--tg-theme-hint-color);
     }
+    /* Share trainer nudge — social moment after booking */
+    .success-share-nudge {
+      margin: 20px 0 0;
+      padding: 16px 18px;
+      border-radius: 14px;
+      background: var(--tg-theme-secondary-bg-color, rgba(247, 166, 0, 0.07));
+      border: 1px solid rgba(247, 166, 0, 0.18);
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    .success-share-nudge-text {
+      flex: 1;
+      font-size: 14px;
+      line-height: 1.4;
+      color: var(--tg-theme-text-color);
+    }
+    .success-share-nudge-text strong {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 2px;
+    }
+    .success-share-nudge-text span {
+      font-size: 12px;
+      color: var(--tg-theme-hint-color);
+    }
+    .success-share-btn {
+      flex-shrink: 0;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 9px 16px;
+      border-radius: 20px;
+      border: none;
+      background: var(--tg-theme-button-color, #f7a600);
+      color: var(--tg-theme-button-text-color, #fff);
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.12s ease, transform 0.1s ease;
+      white-space: nowrap;
+    }
+    .success-share-btn:active { opacity: 0.8; transform: scale(0.97); }
+    .success-share-btn svg {
+      width: 16px;
+      height: 16px;
+      stroke: currentColor;
+      fill: none;
+      flex-shrink: 0;
+    }
     
     /* Анимации появления */
     @keyframes card-enter {
@@ -494,6 +544,16 @@
     <div class="success-inner">
       <div class="success-msg" id="successMsgBody"></div>
       <p class="success-hint">Окно можно закрыть крестиком вверху Telegram.</p>
+      <div class="success-share-nudge" id="successShareNudge" style="display: none;">
+        <div class="success-share-nudge-text">
+          <strong id="successShareTitle">Позовите кого-нибудь</strong>
+          <span>Поделитесь тренером — 1 касание</span>
+        </div>
+        <button type="button" class="success-share-btn" id="btnShareTrainer" aria-label="Поделиться тренером">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+          Поделиться
+        </button>
+      </div>
     </div>
   </div>
   <div id="servicePickOverlay" class="service-pick-overlay" aria-hidden="true">
@@ -592,11 +652,18 @@
       let sessionArenaId = null;
       let sessionServiceId = null;
       let selectedServiceId = serviceIdFromUrl;
+      /** service_id passed to last GET /client/slots (for individual slots with null service_id). */
+      let lastSlotsQueryServiceId = null;
       let bookTrainerDetailCache = null;
       let selectedPriceVariantId = null;
+      /** POST /client/booking: safe retry if the response body was lost after commit. */
+      let bookSubmitIdempotencyKey = null;
+
+      function bookParseBookingJsonResponse(text) {
+        try { return JSON.parse(text || 'null'); } catch (e) { return null; }
+      }
 
       const PRICE_TIER_LABEL_RU = {
-        child: 'Детский',
         adult: 'Взрослый',
         two_children: '2 ребенка',
         two_adults: '2 взрослых',
@@ -773,7 +840,11 @@
         if (!initData) return;
         try {
           // Prefer header-only auth (same as catalog): long init_data in query can be truncated by proxies.
-          const res = await fetch('/api/webapp/client/session', {
+          let sessionUrl = '/api/webapp/client/session';
+          if (trainerId) {
+            sessionUrl += '?for_trainer_id=' + encodeURIComponent(trainerId);
+          }
+          const res = await fetch(sessionUrl, {
             headers: {
               Accept: 'application/json',
               'X-Telegram-Init-Data': initData,
@@ -786,7 +857,19 @@
             clientPhone = raw != null && String(raw).trim() !== '' ? String(raw).trim() : null;
             sessionCityId = data.city_id != null ? Number(data.city_id) : null;
             sessionArenaId = data.arena_id != null ? Number(data.arena_id) : null;
-            if (data.service_id != null) sessionServiceId = data.service_id;
+            // With for_trainer_id, server sends booking_context_* only — never reuse global session service_id
+            // (it may be another trainer's e.g. ОФП).
+            if (trainerId) {
+              const bc = data.booking_context_service_id;
+              if (bc != null && String(bc) !== '') {
+                const bn = Number(bc);
+                sessionServiceId = Number.isFinite(bn) && bn > 0 ? bn : null;
+              } else {
+                sessionServiceId = null;
+              }
+            } else if (data.service_id != null) {
+              sessionServiceId = data.service_id;
+            }
             needsProfileName = !!data.needs_profile_name;
             clientFirstName = data.client_first_name != null ? String(data.client_first_name).trim() : '';
             clientLastName = data.client_last_name != null ? String(data.client_last_name).trim() : '';
@@ -873,6 +956,13 @@
         });
       }
 
+      /** Group (and some) slots carry service_id — booking form must match the tapped slot, not stale session. */
+      function serviceIdFromSlotRow(slot) {
+        if (!slot || slot.service_id == null) return null;
+        const sid = Number(slot.service_id);
+        return Number.isFinite(sid) && sid > 0 ? sid : null;
+      }
+
       async function ensureServiceChoiceBeforeSlots() {
         const t = await loadTrainerDetailForBook();
         const servicesRaw = (t && t.services) ? t.services : [];
@@ -893,8 +983,11 @@
         }
         const current = effectiveServiceId();
         if (current != null) {
-          selectedServiceId = current;
-          return current;
+          const sidNum = Number(current);
+          if (map.has(sidNum)) {
+            selectedServiceId = sidNum;
+            return sidNum;
+          }
         }
         if (services.length === 1) {
           selectedServiceId = Number(services[0].service_id);
@@ -921,6 +1014,7 @@
         const initData = tg?.initData || '';
         let q = 'trainer_id=' + encodeURIComponent(trainerId);
         const sidForSlots = effectiveServiceId();
+        lastSlotsQueryServiceId = sidForSlots;
         if (sidForSlots != null) q += '&service_id=' + encodeURIComponent(sidForSlots);
         var hdr = { Accept: 'application/json' };
         if (initData) hdr['X-Telegram-Init-Data'] = initData;
@@ -985,6 +1079,10 @@
 
       async function showForm(slotId, dateStr, timeStr) {
         window._selectedSlotId = slotId;
+        bookSubmitIdempotencyKey =
+          (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
+            ? crypto.randomUUID()
+            : ('bk-' + Date.now() + '-' + Math.random().toString(36).slice(2, 10));
         document.getElementById('screenSlots').style.display = 'none';
         document.getElementById('screenForm').style.display = 'block';
         document.getElementById('comment').value = '';
@@ -992,26 +1090,58 @@
         updateBookNameFields();
         prefillBookPhoneField();
         await loadTrainerDetailForBook();
-        let effSid = effectiveServiceId();
-        if (requestId != null && effSid == null) {
-          const initData = tg?.initData || '';
-          const hdr = { Accept: 'application/json' };
-          if (initData) hdr['X-Telegram-Init-Data'] = initData;
-          try {
-            const res = await fetch(
-              '/api/webapp/client/requests' + (initData ? '?init_data=' + encodeURIComponent(initData) : ''),
-              { headers: hdr }
-            );
-            if (res.ok) {
-              const data = await res.json();
-              const items = data.items || [];
-              const found = items.find(function(x) { return Number(x.id) === requestId; });
-              if (found && found.service_id != null) effSid = found.service_id;
-            }
-          } catch (e) {}
-        }
+        var tDetailClamp = bookTrainerDetailCache;
+        var srvListClamp = (tDetailClamp && tDetailClamp.services) ? tDetailClamp.services : [];
+        var validSvcIds = new Map();
+        srvListClamp.forEach(function(s) {
+          var sidc = Number(s && s.service_id);
+          if (Number.isFinite(sidc) && sidc > 0) validSvcIds.set(sidc, s);
+        });
         var selSlot = (allSlots || []).find(function(s) { return Number(s.id) === Number(slotId); });
-        var capBook = selSlot && selSlot.capacity != null ? parseInt(selSlot.capacity, 10) : 1;
+        var slotPinnedSid = serviceIdFromSlotRow(selSlot);
+        if (slotPinnedSid == null && lastSlotsQueryServiceId != null) {
+          var lq = Number(lastSlotsQueryServiceId);
+          if (Number.isFinite(lq) && lq > 0 && validSvcIds.has(lq)) slotPinnedSid = lq;
+        }
+        if (slotPinnedSid != null && validSvcIds.has(slotPinnedSid)) {
+          selectedServiceId = slotPinnedSid;
+          sessionServiceId = slotPinnedSid;
+          persistServiceSelectionInSession(slotPinnedSid);
+        }
+        let effSid = slotPinnedSid != null && validSvcIds.has(slotPinnedSid)
+          ? slotPinnedSid
+          : effectiveServiceId();
+        if (slotPinnedSid == null || !validSvcIds.has(slotPinnedSid)) {
+          if (requestId != null && effSid == null) {
+            const initData = tg?.initData || '';
+            const hdr = { Accept: 'application/json' };
+            if (initData) hdr['X-Telegram-Init-Data'] = initData;
+            try {
+              const res = await fetch(
+                '/api/webapp/client/requests' + (initData ? '?init_data=' + encodeURIComponent(initData) : ''),
+                { headers: hdr }
+              );
+              if (res.ok) {
+                const data = await res.json();
+                const items = data.items || [];
+                const found = items.find(function(x) { return Number(x.id) === requestId; });
+                if (found && found.service_id != null) effSid = found.service_id;
+              }
+            } catch (e) {}
+          }
+          if (effSid != null && !validSvcIds.has(Number(effSid))) {
+            sessionServiceId = null;
+            effSid = null;
+          }
+          if (effSid == null && validSvcIds.size === 1) {
+            effSid = Array.from(validSvcIds.keys())[0];
+            selectedServiceId = effSid;
+            sessionServiceId = effSid;
+            persistServiceSelectionInSession(effSid);
+          }
+        }
+        var selSlotForCap = selSlot;
+        var capBook = selSlotForCap && selSlotForCap.capacity != null ? parseInt(selSlotForCap.capacity, 10) : 1;
         if (!isNaN(capBook) && capBook > 1) {
           var ptb = document.getElementById('priceTierBlock');
           if (ptb) ptb.style.display = 'none';
@@ -1155,13 +1285,36 @@
           if (sid != null) body.service_id = sid;
         }
         if (selectedPriceVariantId != null) body.service_price_variant_id = selectedPriceVariantId;
+        if (!bookSubmitIdempotencyKey) {
+          bookSubmitIdempotencyKey =
+            (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
+              ? crypto.randomUUID()
+              : ('bk-' + Date.now());
+        }
         fetch(url, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-Telegram-Init-Data': initData },
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Telegram-Init-Data': initData,
+            'Idempotency-Key': bookSubmitIdempotencyKey,
+          },
           body: JSON.stringify(body)
         }).then(function(res) {
-          return res.json().then(function(data) {
+          return res.text().then(function(text) {
+            var data = bookParseBookingJsonResponse(text);
+            if (data == null) {
+              if (res.ok) {
+                alert(
+                  'Ответ сервера не распознан, но запись могла сохраниться. Проверьте «Мои записи» в боте. ' +
+                    'Повтор «Записаться» с тем же слотом обычно не создаёт дубликат.'
+                );
+              } else {
+                alert('Ошибка сервера (' + res.status + '). Проверьте «Мои записи» в боте.');
+              }
+              return;
+            }
             if (res.ok && data.success) {
+              bookSubmitIdempotencyKey = null;
               var successMain = '✅ <b>Вы записаны</b>.<br><br>Ожидайте подтверждения от тренера в боте.';
               var successCtx = '';
               if (requestId) {
@@ -1174,12 +1327,80 @@
               document.getElementById('screenForm').style.display = 'none';
               document.getElementById('screenSuccess').style.display = 'flex';
               fetchClientSession().then(function() { updateBookNameFields(); }).catch(function() {});
+              // Social moment: show share nudge after booking so client can invite a friend.
+              if (trainerId) showSuccessShareNudge(trainerId);
             } else {
-              alert(data.detail || 'Ошибка. Попробуйте ещё раз.');
+              alert((data && data.detail) || 'Ошибка. Попробуйте ещё раз.');
             }
-          }).catch(function() { alert('Ошибка отправки'); });
-        }).catch(function() { alert('Ошибка сети'); }).finally(function() { btn.disabled = false; });
+          });
+        }).catch(function() {
+          alert(
+            'Сеть не ответила. Запись могла сохраниться — проверьте «Мои записи». Повтор с тем же слотом безопасен.'
+          );
+        }).finally(function() { btn.disabled = false; });
       };
+
+      var bookSharePayload = null;
+
+      function showSuccessShareNudge(tid) {
+        var nudge = document.getElementById('successShareNudge');
+        if (!nudge) return;
+        var initData = tg && tg.initData ? tg.initData : '';
+        var url =
+          '/api/webapp/client/share-trainer/' +
+          encodeURIComponent(String(tid)) +
+          '?share_context=' +
+          encodeURIComponent('booking_success') +
+          (initData ? '&init_data=' + encodeURIComponent(initData) : '');
+        fetch(url, {
+          headers: initData ? { 'X-Telegram-Init-Data': initData } : {},
+        })
+          .then(function(r) {
+            return r.ok ? r.json() : Promise.reject();
+          })
+          .then(function(data) {
+            if (!(data.share_text || '').trim() && !(data.share_url || '').trim()) return;
+            bookSharePayload = data;
+            var title = document.getElementById('successShareTitle');
+            if (title && data.trainer_name) {
+              var first = String(data.trainer_name).trim().split(/\s+/)[0];
+              title.textContent = 'Позовите тренироваться с ' + first;
+            }
+            nudge.style.display = 'flex';
+          })
+          .catch(function() {});
+      }
+
+      function doShareTrainerAfterBooking() {
+        if (!bookSharePayload) return;
+        var shareUrl = String(bookSharePayload.share_url || '').trim();
+        var shareBody = String(bookSharePayload.share_body || '').trim();
+        var shareText = String(bookSharePayload.share_text || '').trim();
+        if (!shareUrl && !shareText) return;
+        if (typeof window.openTelegramShareUrlFromMiniApp === 'function') {
+          window.openTelegramShareUrlFromMiniApp({
+            shareUrl: shareUrl,
+            shareBody: shareBody,
+            fullMessage: shareText,
+          });
+          return;
+        }
+        var href;
+        if (shareUrl) {
+          href = 'https://t.me/share/url?url=' + encodeURIComponent(shareUrl);
+          if (shareBody) href += '&text=' + encodeURIComponent(shareBody);
+        } else {
+          href = 'https://t.me/share/url?text=' + encodeURIComponent(shareText);
+        }
+        if (tg && typeof tg.openTelegramLink === 'function') {
+          tg.openTelegramLink(href);
+        }
+      }
+
+      var btnShareTrainerBook = document.getElementById('btnShareTrainer');
+      if (btnShareTrainerBook) {
+        btnShareTrainerBook.onclick = doShareTrainerAfterBooking;
+      }
 
       (async function init() {
         await fetchClientSession();

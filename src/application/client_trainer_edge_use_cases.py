@@ -25,10 +25,11 @@ async def save_trainer(
     telegram_id: int,
     trainer_id: int,
     session: AsyncSession,
+    catalog_service_id: int | None = None,
 ) -> dict[str, Any]:
     """Bookmark trainer. Idempotent — calling twice is safe."""
     repo = ClientTrainerEdgeRepository(session)
-    edge = await repo.set_saved(telegram_id, trainer_id, saved=True)
+    edge = await repo.set_saved(telegram_id, trainer_id, saved=True, catalog_service_id=catalog_service_id)
     await session.commit()
     return edge
 
@@ -156,6 +157,7 @@ async def record_booking_edge(
     completed: bool = False,
     booked_at: datetime | None = None,
     session: AsyncSession | None = None,
+    booking_service_id: int | None = None,
 ) -> None:
     """
     Update edge counters when booking is created (completed=False) or completed (completed=True).
@@ -165,7 +167,13 @@ async def record_booking_edge(
     if session is None:
         return
     repo = ClientTrainerEdgeRepository(session)
-    await repo.record_booking(telegram_id, trainer_id, completed=completed, booked_at=booked_at)
+    await repo.record_booking(
+        telegram_id,
+        trainer_id,
+        completed=completed,
+        booked_at=booked_at,
+        booking_service_id=booking_service_id,
+    )
 
 
 # ── read ───────────────────────────────────────────────────────────────────────

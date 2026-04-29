@@ -2,12 +2,15 @@
 Trainer bot access: map DB trainer.status + profile completeness to a small enum.
 Aligned with admin moderation (pending_profile queue → approve → active).
 """
+from __future__ import annotations
+
 from enum import Enum
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.application.trainer_link import get_trainer_row_by_telegram_id
+from src.api.miniapp_auth.types import MiniAppPrincipal
+from src.application.trainer_link import get_trainer_row_by_telegram_id, get_trainer_row_for_miniapp_principal
 from src.application.trainer_profile_completeness import (
     is_profile_complete_for_moderation,
     is_tt_minimal_profile_complete,
@@ -76,6 +79,25 @@ async def get_trainer_access_state(
     NOT_LINKED if telegram is not bound to a trainer row.
     """
     row = await get_trainer_row_by_telegram_id(session, telegram_id)
+    if not row:
+        return TrainerAccessState.NOT_LINKED, None
+    tid = row["id"]
+    trainer = await get_trainer(session, tid)
+    if not trainer:
+        return TrainerAccessState.NOT_LINKED, None
+    status = normalize_trainer_status_value(trainer.get("status"))
+    state = resolve_trainer_access_state(status=status, trainer=trainer)
+    if status == TRAINER_STATUS_ACTIVE:
+        return TrainerAccessState.ACTIVE, trainer
+    return state, trainer
+
+
+async def get_trainer_access_state_from_principal(
+    session: AsyncSession,
+    principal: MiniAppPrincipal,
+) -> tuple[TrainerAccessState, dict[str, Any] | None]:
+    """Same as :func:`get_trainer_access_state` but resolves link via Telegram or VK id from Mini App."""
+    row = await get_trainer_row_for_miniapp_principal(session, principal)
     if not row:
         return TrainerAccessState.NOT_LINKED, None
     tid = row["id"]

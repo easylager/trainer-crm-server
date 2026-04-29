@@ -28,6 +28,7 @@ from src.infrastructure.db.models import (
     SUBSCRIPTION_TIER_CRM,
     SUBSCRIPTION_TIER_ONLINE,
 )
+from src.api.miniapp_auth.types import MiniAppPlatform, MiniAppPrincipal
 from src.shared.telegram_webapp import InitDataAuthError
 from tests.conftest import belarus_test_phone
 
@@ -36,10 +37,14 @@ def _fresh_client_telegram_id() -> int:
     return 7_000_000_000 + (uuid.uuid4().int % 2_000_000_000)
 
 
+_CLIENT_MINIAPP_VERIFY_PATCH = "src.api.miniapp_auth.deps.verify_telegram_init_data_principal"
+
+
 @contextmanager
 def patch_client_init_auth(telegram_id: int) -> Iterator[None]:
     """Клиентский webapp валидирует initData токеном client-бота."""
-    with patch("src.api.routes.webapp.require_telegram_user_id", return_value=telegram_id):
+    fake = MiniAppPrincipal(platform=MiniAppPlatform.TELEGRAM, user_id=telegram_id)
+    with patch(_CLIENT_MINIAPP_VERIFY_PATCH, return_value=fake):
         yield
 
 
@@ -261,14 +266,14 @@ async def test_init_data_query_wins_over_header_when_both_present(app_use_test_d
     user_a = _fresh_client_telegram_id()
     user_b = _fresh_client_telegram_id()
 
-    def _side_effect(init_data: str, _token: object) -> int:
-        if "token_a" in init_data:
-            return user_a
-        if "token_b" in init_data:
-            return user_b
-        return user_a
+    def _side_effect(raw: str, _token: object) -> MiniAppPrincipal:
+        if "token_a" in raw:
+            return MiniAppPrincipal(platform=MiniAppPlatform.TELEGRAM, user_id=user_a)
+        if "token_b" in raw:
+            return MiniAppPrincipal(platform=MiniAppPlatform.TELEGRAM, user_id=user_b)
+        return MiniAppPrincipal(platform=MiniAppPlatform.TELEGRAM, user_id=user_a)
 
-    with patch("src.api.routes.webapp.require_telegram_user_id", side_effect=_side_effect):
+    with patch(_CLIENT_MINIAPP_VERIFY_PATCH, side_effect=_side_effect):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             q = quote("token_b", safe="")
             resp = await client.get(
@@ -297,7 +302,7 @@ async def test_client_routes_401_invalid_init_data(app_use_test_db) -> None:
     def _bad(*_a, **_kw) -> int:
         raise InitDataAuthError("bad")
 
-    with patch("src.api.routes.webapp.require_telegram_user_id", side_effect=_bad):
+    with patch(_CLIENT_MINIAPP_VERIFY_PATCH, side_effect=_bad):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             resp = await client.get("/api/webapp/client/session", headers={"X-Telegram-Init-Data": "x"})
     assert resp.status_code == 401
