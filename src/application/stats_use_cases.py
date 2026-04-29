@@ -866,6 +866,14 @@ async def get_trainer_stats_dashboard(session: AsyncSession, trainer_id: int) ->
     ]
 
     catalog_signals_all_time = await get_signals_lifetime_totals(session, trainer_id=trainer_id)
+    r_cf = await session.execute(
+        text(
+            "SELECT COUNT(*) FROM client_trainer_edges "
+            "WHERE trainer_id = :tid AND is_saved = true"
+        ),
+        {"tid": trainer_id},
+    )
+    catalog_signals_all_time["catalog_favorites_now"] = int((r_cf.fetchone() or (0,))[0])
 
     return {
         **base,

@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Аналитика платформы</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="mini-app-telegram-chrome.js"></script>
+  <link rel="stylesheet" href="theme.css" />
+  <link rel="stylesheet" href="admin-analytics-shared.css" />
+  <style>
+    .pa-hero {
+      border-radius: 16px;
+      padding: 18px 16px 14px;
+      background: linear-gradient(135deg,
+        rgba(88, 86, 214, 0.18) 0%,
+        rgba(56, 132, 255, 0.12) 60%,
+        rgba(88, 86, 214, 0.06) 100%);
+      border: 1px solid rgba(88, 86, 214, 0.3);
+      margin-bottom: 18px;
+    }
+    .pa-hero-chip {
+      font-size: 10px; font-weight: 800; letter-spacing: 0.1em;
+      text-transform: uppercase; color: #a78bfa; margin-bottom: 8px;
+    }
+    .pa-hero-title { font-size: 19px; font-weight: 700; line-height: 1.25; margin-bottom: 6px; }
+    .pa-hero-sub { font-size: 12px; color: var(--tg-theme-hint-color); line-height: 1.45; }
+
+    /* Funnel bar */
+    .pa-funnel { display: flex; flex-direction: column; gap: 6px; }
+    .pa-funnel-step {}
+    .pa-funnel-label {
+      display: flex; justify-content: space-between; align-items: baseline;
+      margin-bottom: 3px;
+    }
+    .pa-funnel-name { font-size: 12px; color: var(--tg-theme-hint-color); }
+    .pa-funnel-nums { font-size: 12px; font-weight: 600; white-space: nowrap; }
+    .pa-funnel-bar-track {
+      height: 8px; border-radius: 4px;
+      background: rgba(255,255,255,0.08);
+      overflow: hidden;
+    }
+    .pa-funnel-bar-fill {
+      height: 100%; border-radius: 4px;
+      background: linear-gradient(90deg, #5856d6 0%, #6ea8ff 100%);
+      transition: width 0.6s ease;
+    }
+    .pa-funnel-bar-fill.drop { background: linear-gradient(90deg, #ff6b60 0%, #ffb347 100%); }
+    .pa-funnel-drop {
+      font-size: 10px; color: #ff6b60; margin-top: 2px; text-align: right; font-weight: 600;
+    }
+
+    /* Proof of value grid */
+    .pa-pov-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .pa-pov-item {
+      background: var(--tg-theme-secondary-bg-color, #2a2a2a);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 12px; padding: 12px 14px;
+    }
+    .pa-pov-label { font-size: 11px; color: var(--tg-theme-hint-color); margin-bottom: 5px; line-height: 1.3; }
+    .pa-pov-value { font-size: 22px; font-weight: 700; line-height: 1; }
+    .pa-pov-pct { font-size: 11px; color: var(--tg-theme-hint-color); margin-top: 3px; }
+
+    /* Demand funnel */
+    .pa-demand-row {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+    }
+    .pa-demand-row:last-child { border-bottom: none; }
+    .pa-demand-icon { font-size: 18px; width: 28px; text-align: center; flex-shrink: 0; }
+    .pa-demand-body { flex: 1; min-width: 0; }
+    .pa-demand-name { font-size: 13px; font-weight: 600; }
+    .pa-demand-meta { font-size: 11px; color: var(--tg-theme-hint-color); margin-top: 2px; }
+    .pa-demand-num { font-size: 18px; font-weight: 700; white-space: nowrap; }
+    .pa-demand-conv {
+      display: inline-block; margin-top: 6px; margin-left: 28px;
+      font-size: 11px; color: var(--tg-theme-hint-color);
+    }
+    .pa-demand-conv span { color: #34c759; font-weight: 600; }
+
+    /* Monetization */
+    .pa-mono-funnel { display: flex; gap: 6px; align-items: stretch; margin-bottom: 14px; }
+    .pa-mono-step {
+      flex: 1;
+      background: var(--tg-theme-secondary-bg-color, #2a2a2a);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 12px; padding: 10px 8px; text-align: center;
+    }
+    .pa-mono-step-num { font-size: 20px; font-weight: 800; line-height: 1.1; }
+    .pa-mono-step-label { font-size: 10px; color: var(--tg-theme-hint-color); margin-top: 4px; line-height: 1.3; }
+    .pa-mono-arrow { display: flex; align-items: center; color: var(--tg-theme-hint-color); font-size: 14px; padding-top: 4px; }
+
+    /* Correlation table — the KEY section */
+    .pa-corr-title {
+      font-size: 11px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.06em; color: #a78bfa; margin-bottom: 10px;
+    }
+    .pa-corr-insight {
+      font-size: 13px; color: var(--tg-theme-hint-color);
+      background: rgba(88, 86, 214, 0.08);
+      border: 1px solid rgba(88, 86, 214, 0.2);
+      border-radius: 10px; padding: 10px 12px; margin-bottom: 14px; line-height: 1.45;
+    }
+    .pa-corr-insight strong { color: var(--tg-theme-text-color); }
+    .pa-corr-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .pa-corr-table th {
+      padding: 7px 10px; text-align: left;
+      background: rgba(0,0,0,0.14); font-size: 10px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.04em; color: var(--tg-theme-hint-color);
+    }
+    .pa-corr-table td {
+      padding: 9px 10px; border-top: 1px solid rgba(255,255,255,0.05);
+      vertical-align: middle;
+    }
+    .pa-corr-table td.paid-val { font-weight: 700; color: #34c759; }
+    .pa-corr-table td.unpaid-val { color: var(--tg-theme-text-color); }
+    .pa-corr-table td.delta-val { font-weight: 700; font-size: 11px; white-space: nowrap; }
+    .pa-corr-table td.delta-val.hi { color: #34c759; }
+    .pa-corr-table td.delta-val.lo { color: #ff6b60; }
+    .pa-corr-table td.delta-val.mid { color: #fde68a; }
+    .pa-corr-table tr.highlight-row { background: rgba(88, 86, 214, 0.06); }
+
+    .pa-corr-legend {
+      display: flex; gap: 14px; margin-top: 10px; flex-wrap: wrap;
+    }
+    .pa-corr-legend-item {
+      font-size: 11px; color: var(--tg-theme-hint-color);
+      display: flex; align-items: center; gap: 5px;
+    }
+    .pa-corr-legend-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+    }
+
+    /* Section nav pills */
+    .pa-nav {
+      display: flex; gap: 6px; margin-bottom: 20px;
+      overflow-x: auto; padding-bottom: 4px;
+      -webkit-overflow-scrolling: touch;
+    }
+    .pa-nav::-webkit-scrollbar { display: none; }
+    .pa-nav-pill {
+      flex-shrink: 0; padding: 5px 12px;
+      border-radius: 999px; font-size: 12px; font-weight: 600;
+      background: var(--tg-theme-secondary-bg-color, #2a2a2a);
+      border: 1px solid rgba(255,255,255,0.1);
+      cursor: pointer; color: var(--tg-theme-hint-color);
+      transition: all 0.15s;
+    }
+    .pa-nav-pill.active {
+      background: rgba(88, 86, 214, 0.25);
+      border-color: rgba(88, 86, 214, 0.5);
+      color: #a78bfa;
+    }
+
+    .pa-section { margin-bottom: 24px; scroll-margin-top: 8px; }
+
+    .adm-delta { font-size: 11px; font-weight: 600; }
+    .adm-delta.up   { color: #34c759; }
+    .adm-delta.down { color: #ff6b60; }
+    .adm-delta.flat { color: var(--tg-theme-hint-color); }
+  </style>
+</head>
+<body>
+  <div class="adm-header">
+    <h1>🔬 Аналитика платформы</h1>
+    <div class="adm-sub">активация · доказательство ценности · монетизация · корреляция</div>
+  </div>
+
+  <div id="content">
+    <div class="adm-loading">Загрузка данных…</div>
+  </div>
+
+  <script src="admin-analytics-shared.js"></script>
+  <script src="admin-product-analytics-main.js"></script>
+</body>
+</html>

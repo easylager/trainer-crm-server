@@ -285,18 +285,12 @@
       font-weight: 700;
       letter-spacing: -0.03em;
       line-height: 1.15;
-      margin: 0 0 8px;
-      color: var(--tg-theme-text-color);
-    }
-    .stats-catalog-traffic-period {
-      font-size: 12px;
-      line-height: 1.4;
-      color: var(--tg-theme-hint-color);
       margin: 0 0 16px;
+      color: var(--tg-theme-text-color);
     }
     .stats-catalog-traffic-grid {
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
       gap: 14px 12px;
     }
     .stats-catalog-traffic-metric-val {
@@ -311,13 +305,6 @@
       line-height: 1.3;
       color: var(--tg-theme-hint-color);
       margin-top: 5px;
-    }
-    .stats-catalog-traffic-hint {
-      font-size: 11px;
-      line-height: 1.45;
-      color: var(--tg-theme-hint-color);
-      margin: 14px 0 0;
-      opacity: 0.95;
     }
 
     .chart-bars {

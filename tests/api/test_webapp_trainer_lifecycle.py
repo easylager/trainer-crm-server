@@ -22,6 +22,7 @@ from sqlalchemy import text
 
 from src.api.app import app
 from src.infrastructure.db.models import (
+    DEMAND_EVENT_CATALOG_FAVORITE,
     DEMAND_EVENT_CONTACT_CLICK,
     DEMAND_EVENT_PROFILE_VIEW,
     SUBSCRIPTION_STATUS_ACTIVE,
@@ -155,6 +156,7 @@ async def test_lifecycle_active_trainer_uses_14d_window(app_use_test_db, db_sess
     assert recap["window_days"] == 14
     assert recap["profile_views"] == 0
     assert recap["contact_clicks"] == 0
+    assert recap["catalog_favorites"] == 0
 
 
 @pytest.mark.asyncio
@@ -177,6 +179,9 @@ async def test_lifecycle_lead_mode_anchored_to_last_expiry(
     await _insert_demand_event(db_session, trainer_id, DEMAND_EVENT_PROFILE_VIEW, occurred_at=after_2, dedup_hash="h2")
     await _insert_demand_event(db_session, trainer_id, DEMAND_EVENT_PROFILE_VIEW, occurred_at=before, dedup_hash="h3")
     await _insert_demand_event(db_session, trainer_id, DEMAND_EVENT_CONTACT_CLICK, occurred_at=after_1, dedup_hash="c1")
+    await _insert_demand_event(
+        db_session, trainer_id, DEMAND_EVENT_CATALOG_FAVORITE, occurred_at=after_2, dedup_hash=None
+    )
 
     with patch_trainer_webapp_init(tg):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
@@ -197,6 +202,7 @@ async def test_lifecycle_lead_mode_anchored_to_last_expiry(
     assert recap["profile_views"] == 2
     assert recap["contact_clicks"] == 1
     assert recap["booking_attempts_blocked"] == 0
+    assert recap["catalog_favorites"] == 1
     assert recap["has_any_demand"] is True
 
 
@@ -221,6 +227,7 @@ async def test_lifecycle_lead_mode_with_no_demand_returns_zero_recap(
     assert body["stage"] == "lead_mode"
     recap = body["signals_recap"]
     assert recap["profile_views"] == 0
+    assert recap["catalog_favorites"] == 0
     assert recap["has_any_demand"] is False
 
 

@@ -18,6 +18,7 @@ from src.application.demand_signals_use_cases import (
     get_signals_recap,
     get_signals_since,
     record_booking_attempt_blocked,
+    record_catalog_favorite,
     record_contact_click,
     record_profile_view,
 )
@@ -160,6 +161,7 @@ async def test_get_signals_recap_zero_filled_when_empty(db_session: AsyncSession
     assert recap.profile_views == 0
     assert recap.contact_clicks == 0
     assert recap.booking_attempts_blocked == 0
+    assert recap.catalog_favorites == 0
     assert recap.has_any_demand is False
     assert recap.window_days == RECAP_WINDOW_14D
 
@@ -198,6 +200,7 @@ async def test_get_signals_recap_aggregates_mixed_kinds(db_session: AsyncSession
     assert recap.profile_views == 2
     assert recap.contact_clicks == 1
     assert recap.booking_attempts_blocked == 3
+    assert recap.catalog_favorites == 0
     assert recap.has_any_demand is True
 
 
@@ -320,6 +323,9 @@ async def test_lifetime_totals_sum_all_rows(db_session: AsyncSession) -> None:
     await record_contact_click(
         db_session, trainer_id=tid, source=DEMAND_SOURCE_CATALOG, client_ip="1.1.1.1", user_agent="C"
     )
+    await record_catalog_favorite(db_session, trainer_id=tid, source=DEMAND_SOURCE_CATALOG)
+    await record_catalog_favorite(db_session, trainer_id=tid, source=DEMAND_SOURCE_CATALOG)
     tot = await get_signals_lifetime_totals(db_session, trainer_id=tid)
     assert tot["profile_views"] == 2
     assert tot["contact_clicks"] == 1
+    assert tot["catalog_favorites_events"] == 2

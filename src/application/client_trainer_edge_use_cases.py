@@ -18,6 +18,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.infrastructure.repositories.client_trainer_edge_repository import ClientTrainerEdgeRepository
 
+from src.application.demand_signals_use_cases import record_catalog_favorite
+
 
 # ── write ──────────────────────────────────────────────────────────────────────
 
@@ -26,12 +28,19 @@ async def save_trainer(
     trainer_id: int,
     session: AsyncSession,
     catalog_service_id: int | None = None,
-) -> dict[str, Any]:
-    """Bookmark trainer. Idempotent — calling twice is safe."""
+) -> tuple[dict[str, Any], bool]:
+    """Bookmark trainer. Idempotent — calling twice is safe.
+
+    Returns ``(edge, became_saved)``; ``became_saved`` is True only on the first transition to saved.
+    """
     repo = ClientTrainerEdgeRepository(session)
-    edge = await repo.set_saved(telegram_id, trainer_id, saved=True, catalog_service_id=catalog_service_id)
+    edge, became_saved = await repo.set_saved(
+        telegram_id, trainer_id, saved=True, catalog_service_id=catalog_service_id
+    )
+    if became_saved:
+        await record_catalog_favorite(session, trainer_id=trainer_id, source="catalog", payload=None)
     await session.commit()
-    return edge
+    return edge, became_saved
 
 
 async def unsave_trainer(
@@ -41,7 +50,7 @@ async def unsave_trainer(
 ) -> dict[str, Any]:
     """Remove bookmark. Idempotent."""
     repo = ClientTrainerEdgeRepository(session)
-    edge = await repo.set_saved(telegram_id, trainer_id, saved=False)
+    edge, _ = await repo.set_saved(telegram_id, trainer_id, saved=False)
     await session.commit()
     return edge
 

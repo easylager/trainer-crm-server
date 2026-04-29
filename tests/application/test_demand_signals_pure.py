@@ -83,6 +83,7 @@ class TestSignalsRecap:
         views: int = 0,
         clicks: int = 0,
         blocked: int = 0,
+        favorites: int = 0,
         window: int = RECAP_WINDOW_14D,
     ) -> SignalsRecap:
         return SignalsRecap(
@@ -93,23 +94,25 @@ class TestSignalsRecap:
             profile_views=views,
             contact_clicks=clicks,
             booking_attempts_blocked=blocked,
+            catalog_favorites=favorites,
         )
 
     def test_has_any_demand_false_on_empty(self) -> None:
         assert self._build().has_any_demand is False
 
-    @pytest.mark.parametrize("field", ["views", "clicks", "blocked"])
+    @pytest.mark.parametrize("field", ["views", "clicks", "blocked", "favorites"])
     def test_has_any_demand_true_when_any_signal_present(self, field: str) -> None:
         recap = self._build(**{field: 1})
         assert recap.has_any_demand is True
 
     def test_as_dict_contains_all_fields(self) -> None:
-        recap = self._build(views=5, clicks=2, blocked=1)
+        recap = self._build(views=5, clicks=2, blocked=1, favorites=3)
         d = recap.as_dict()
         assert d["trainer_id"] == 1
         assert d["profile_views"] == 5
         assert d["contact_clicks"] == 2
         assert d["booking_attempts_blocked"] == 1
+        assert d["catalog_favorites"] == 3
         assert d["has_any_demand"] is True
         assert d["window_days"] == RECAP_WINDOW_14D
         # ISO format for both window edges:

@@ -54,15 +54,15 @@
         return months[mi] + ' ' + p[0];
       }
 
-      /** From GET /trainer/stats — catalog_signals_all_time (all rows in demand log, not a 14d window). */
+      /** From GET /trainer/stats — catalog_signals_all_time (lifetime log + snapshot of saved edges). */
       function renderCatalogTrafficBlock(catalog) {
         if (catalog == null || typeof catalog !== 'object') return '';
         var views = Number(catalog.profile_views);
         if (isNaN(views)) views = 0;
         var clicks = Number(catalog.contact_clicks);
         if (isNaN(clicks)) clicks = 0;
-        var period =
-          'Всего — все накопленные просмотры и переходы, которые CRM уже записала (без среза по дням).';
+        var favNow = Number(catalog.catalog_favorites_now);
+        if (isNaN(favNow)) favNow = 0;
         var html = '';
         html += '<div class="section stats-catalog-traffic">';
         html += '<div class="section-title">Каталог</div>';
@@ -70,15 +70,14 @@
           '<div class="card stats-catalog-traffic-card" role="region" aria-label="Показатели из каталога">';
         html += '<p class="stats-catalog-traffic-kicker">Как вас ищут</p>';
         html += '<h3 class="stats-catalog-traffic-title">Профиль в каталоге</h3>';
-        html += '<p class="stats-catalog-traffic-period">' + period + '</p>';
         html += '<div class="stats-catalog-traffic-grid">';
         html += '<div><div class="stats-catalog-traffic-metric-val">' + views + '</div>';
         html += '<div class="stats-catalog-traffic-metric-lbl">Просмотры профиля</div></div>';
         html += '<div><div class="stats-catalog-traffic-metric-val">' + clicks + '</div>';
         html += '<div class="stats-catalog-traffic-metric-lbl">Переходы в Telegram</div></div>';
+        html += '<div><div class="stats-catalog-traffic-metric-val">' + favNow + '</div>';
+        html += '<div class="stats-catalog-traffic-metric-lbl">Сейчас в избранном</div></div>';
         html += '</div>';
-        html +=
-          '<p class="stats-catalog-traffic-hint">На главной в обзоре мы иногда показываем срез за короткое окно; здесь — полные счётчики по базе.</p>';
         html += '</div></div>';
         return html;
       }

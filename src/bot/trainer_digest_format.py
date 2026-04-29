@@ -105,6 +105,48 @@ def _h(text: str) -> str:
     return html_lib.escape(text or "", quote=False)
 
 
+def _format_catalog_pulse_line(pulse: dict[str, Any] | None, *, weekly: bool) -> str | None:
+    """
+    Optional positive catalog line for digests. Priority:
+    (1) non-zero window favorites and/or Telegram clicks — only mention non-zero parts;
+    (2) else lifetime profile views if > 0;
+    (3) else None (leave digest unchanged in that dimension).
+    """
+    if not pulse:
+        return None
+    fav = int(pulse.get("favorites") or 0)
+    clk = int(pulse.get("contact_clicks") or 0)
+    pv = int(pulse.get("profile_views_total") or 0)
+
+    head = "📈 "
+    if weekly:
+        intro = "<b>За прошлую неделю в каталоге</b> "
+    else:
+        intro = "<b>Вчера в каталоге</b> "
+
+    if fav > 0 or clk > 0:
+        chunks: list[str] = []
+        if fav > 0:
+            chunks.append(
+                f"<b>{fav}</b> "
+                f"{_plural_ru(fav, 'добавление в избранное', 'добавления в избранное', 'добавлений в избранное')}"
+            )
+        if clk > 0:
+            chunks.append(
+                f"<b>{clk}</b> "
+                f"{_plural_ru(clk, 'переход в Telegram', 'перехода в Telegram', 'переходов в Telegram')}"
+            )
+        return head + intro + "— " + " и ".join(chunks) + "."
+
+    if pv > 0:
+        # Lifetime metric — no «вчера/неделя» framing (would contradict «всего»).
+        return (
+            "📈 Вашу карточку в каталоге уже смотрели "
+            f"<b>{pv}</b> {_plural_ru(pv, 'раз', 'раза', 'раз')} всего."
+        )
+    return None
+
+
 # =============================================================================
 # Morning digest
 # =============================================================================
@@ -158,6 +200,11 @@ def format_morning_digest(
             lines.append(gap_line)
         if owed_line:
             lines.append(owed_line)
+
+    catalog_line = _format_catalog_pulse_line(digest.get("catalog_pulse"), weekly=False)
+    if catalog_line:
+        lines.append("")
+        lines.append(catalog_line)
 
     rec = _pick_morning_recommendation(digest)
     lines.extend(["", rec])
@@ -281,7 +328,12 @@ def format_morning_digest_lite_owed_only(
         count=count,
         word=_requests_word(count),
     )
-    return f"{header}\n\n{msg.TRAINER_DIGEST_MORNING_LITE_REC}"
+    catalog_line = _format_catalog_pulse_line(digest.get("catalog_pulse"), weekly=False)
+    parts = [header]
+    if catalog_line:
+        parts.extend(["", catalog_line])
+    parts.extend(["", msg.TRAINER_DIGEST_MORNING_LITE_REC])
+    return "\n".join(parts)
 
 
 # =============================================================================
@@ -295,6 +347,11 @@ def format_weekly_digest(digest: dict[str, Any]) -> str:
     Always ends with one recommendation so the message doesn't trail off flat.
     """
     lines: list[str] = [msg.TRAINER_DIGEST_WEEKLY_GREETING, ""]
+
+    catalog_line = _format_catalog_pulse_line(digest.get("catalog_pulse"), weekly=True)
+    if catalog_line:
+        lines.append(catalog_line)
+        lines.append("")
 
     lines.extend(_format_past_section(digest.get("past_week") or {}))
     lines.append("")

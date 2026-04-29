@@ -53,7 +53,7 @@
   <!-- Bump ?v= when mini-app-trainer-hub.css changes (immutable cache on /webapp/…). -->
   <link rel="stylesheet" href="mini-app-trainer-hub.css?v=20260563" />
   <!-- Early download of main hub script (defer runs at end of body); improves time-to-interactive vs. discover-at-bottom. -->
-  <link rel="preload" href="trainer-home-main.js?v=20260562" as="script" />
+  <link rel="preload" href="trainer-home-main.js?v=20260564" as="script" />
 
   <!-- ─── Splash loader (inline to guarantee render before external CSS) ─── -->
   <style>
@@ -373,6 +373,10 @@
           <li class="hub-lead-banner__signal-item">
             <span class="hub-lead-banner__signal-value" id="hubLeadSignalClicks">0</span>
             <span class="hub-lead-banner__signal-label" id="hubLeadSignalClicksLabel">переходов в Telegram</span>
+          </li>
+          <li class="hub-lead-banner__signal-item">
+            <span class="hub-lead-banner__signal-value" id="hubLeadSignalFavorites">0</span>
+            <span class="hub-lead-banner__signal-label" id="hubLeadSignalFavoritesLabel">добавлений в избранное</span>
           </li>
           <li class="hub-lead-banner__signal-item" id="hubLeadSignalBlockedItem" hidden>
             <span class="hub-lead-banner__signal-value" id="hubLeadSignalBlocked">0</span>
@@ -905,6 +909,6 @@
   <script src="mini-app-trainer-gate.js?v=20260548"></script>
   <script src="mini-app-trainer-celebration.js"></script>
   <!-- Bump ?v= when trainer-home-main.js changes (immutable cache on /webapp/…). -->
-  <script defer src="trainer-home-main.js?v=20260562"></script>
+  <script defer src="trainer-home-main.js?v=20260564"></script>
 </body>
 </html>

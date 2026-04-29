@@ -1303,13 +1303,16 @@ async def run_subscription_expire_and_reminder_loop(trainer_bot: Bot) -> None:
         await asyncio.sleep(_subscription_loop_interval_sec())
 
 
-def _render_recovery_signals_line(*, views: int, clicks: int) -> str:
+def _render_recovery_signals_line(*, views: int, clicks: int, favorites: int) -> str:
     """Pure: build the loss-framing sentence from real demand counts. Empty string if no demand."""
+    parts: list[str] = []
     if views > 0 and clicks > 0:
-        return msg.TRAINER_LEAD_MODE_SIGNALS_BOTH.format(views=views, clicks=clicks)
-    if views > 0:
-        return msg.TRAINER_LEAD_MODE_SIGNALS_VIEWS_ONLY.format(views=views)
-    return msg.TRAINER_LEAD_MODE_SIGNALS_NONE
+        parts.append(msg.TRAINER_LEAD_MODE_SIGNALS_BOTH.format(views=views, clicks=clicks))
+    elif views > 0:
+        parts.append(msg.TRAINER_LEAD_MODE_SIGNALS_VIEWS_ONLY.format(views=views))
+    if favorites > 0:
+        parts.append(msg.TRAINER_LEAD_MODE_SIGNALS_FAVORITES.format(favorites=favorites))
+    return "".join(parts) if parts else msg.TRAINER_LEAD_MODE_SIGNALS_NONE
 
 
 def _render_recovery_text(nudge: DueRecoveryNudge, *, was_trial: bool) -> str:
@@ -1317,6 +1320,7 @@ def _render_recovery_text(nudge: DueRecoveryNudge, *, was_trial: bool) -> str:
     signals_line = _render_recovery_signals_line(
         views=nudge.signals.profile_views,
         clicks=nudge.signals.contact_clicks,
+        favorites=nudge.signals.catalog_favorites,
     )
     if nudge.step == RECOVERY_STEP_D0:
         # D+0 has no loss framing yet — nothing has accumulated in lead mode.

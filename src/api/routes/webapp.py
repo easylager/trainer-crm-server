@@ -160,6 +160,7 @@ from src.application.admin_analytics_use_cases import (
     get_admin_engagement_stats,
     get_admin_growth_stats,
     get_admin_money_stats,
+    get_admin_product_analytics,
     get_admin_retention_stats,
 )
 from src.application.support_use_cases import (
@@ -2419,6 +2420,15 @@ async def get_admin_stats_clients(
 ):
     """Clients tab: funnel, repeat rate, top cities/trainers, recent client requests."""
     return await get_admin_clients_stats(session)
+
+
+@router.get("/admin/stats/product")
+async def get_admin_stats_product(
+    principal: MiniAppPrincipal = Depends(get_admin_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+):
+    """Product analytics: activation funnel, proof-of-value, marketplace, monetization, correlation."""
+    return await get_admin_product_analytics(session)
 
 
 @router.get("/admin/support")

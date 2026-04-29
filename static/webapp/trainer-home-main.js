@@ -1285,7 +1285,7 @@
           var tplText =
             thisWeekReady && nextWeekReady
               ? 'Добавьте часы в шаблон расписания — потом неделю можно накатить из шаблона за пару шагов.'
-              : 'Создайте шаблон недели с постоянными часами — так проще держать ритм и наполнять расписание после старта.';
+              : 'Создайте шаблон недели с постоянными часами — так проще держать ритм и наполнять расписание.';
           out.push({
             id: 'template',
             priority: 104,
@@ -2076,6 +2076,7 @@
         var recap = lc.signals_recap || {};
         var views = Number(recap.profile_views || 0) | 0;
         var clicks = Number(recap.contact_clicks || 0) | 0;
+        var favorites = Number(recap.catalog_favorites || 0) | 0;
         var blocked = Number(recap.booking_attempts_blocked || 0) | 0;
 
         var signalsEl = document.getElementById('hubLeadBannerSignals');
@@ -2092,6 +2093,17 @@
           if (clicksValueEl) clicksValueEl.textContent = String(clicks);
           if (clicksLabelEl) {
             clicksLabelEl.textContent = pluralRu(clicks, 'переход в Telegram', 'перехода в Telegram', 'переходов в Telegram');
+          }
+          var favValueEl = document.getElementById('hubLeadSignalFavorites');
+          var favLabelEl = document.getElementById('hubLeadSignalFavoritesLabel');
+          if (favValueEl) favValueEl.textContent = String(favorites);
+          if (favLabelEl) {
+            favLabelEl.textContent = pluralRu(
+              favorites,
+              'добавление в избранное',
+              'добавления в избранное',
+              'добавлений в избранное'
+            );
           }
           var blockedItem = document.getElementById('hubLeadSignalBlockedItem');
           var blockedValueEl = document.getElementById('hubLeadSignalBlocked');

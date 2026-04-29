@@ -5,11 +5,14 @@ Two aggregators and one scheduler helper:
 
 - ``get_trainer_daily_digest(session, trainer_id, today)`` → today's run-sheet (sessions, gaps ≥ 2h,
   first-timers, pending confirmations, open catalog requests). Excludes cancelled/declined/no_show.
-  Empty list = trainer has 0 sessions today → loop suppresses the push.
+  Empty list = trainer has 0 sessions today → loop suppresses the push. Includes ``catalog_pulse`` for
+  yesterday (Minsk): favorite saves + Telegram clicks in that calendar day, plus lifetime profile-view
+  count for digest copy when the window had no saves/clicks.
 
 - ``get_trainer_weekly_digest(session, trainer_id, today)`` → Sunday preview. Past = Mon..Sat just
   finished (factual money from pass_redemptions / certificate_booking_credits), upcoming = next
-  Mon..Sun. Drought ladder triggers after 3+ consecutive zero-booking days.
+  Mon..Sun. Drought ladder triggers after 3+ consecutive zero-booking days. ``catalog_pulse`` uses
+  the same Mon..Sat local window + lifetime profile views for fallback.
 
 - ``resolve_digest_send_time(...)`` → Europe/Minsk wall-clock time for the **daily** digest.
   Priority: explicit ``trainers.digest_send_time`` → иначе утренний слот по умолчанию (08:00) или
@@ -38,6 +41,12 @@ except ImportError:  # pragma: no cover - py<3.9 fallback
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.demand_signals_use_cases import get_signals_lifetime_totals
+from src.infrastructure.db.models import (
+    DEMAND_EVENT_CATALOG_FAVORITE,
+    DEMAND_EVENT_CONTACT_CLICK,
+)
+from src.infrastructure.repositories.demand_signals_repository import DemandSignalsRepository
 from src.shared.notification_hours import (
     NOTIFICATION_START_HOUR,
     NOTIFICATION_TZ,
@@ -58,6 +67,36 @@ DROUGHT_SLOT_HORIZON_DAYS = 14
 
 # Авто-режим (digest_send_time IS NULL): слот утром, не «за час» до вечерней тренировки.
 MORNING_DIGEST_AUTO_DEFAULT_T = time(8, 0)
+
+
+async def _digest_catalog_pulse_for_local_range(
+    session: AsyncSession,
+    trainer_id: int,
+    *,
+    range_start: date,
+    range_end: date,
+) -> dict[str, int]:
+    """
+    Catalog «pulse» for digest copy: favorite saves + Telegram contact clicks in
+    [range_start 00:00, range_end+1 00:00) Europe/Minsk, plus lifetime profile_view count
+    for positive fallback when the window had no saves/clicks.
+    """
+    tz = ZoneInfo(NOTIFICATION_TZ)
+    since = datetime.combine(range_start, time.min, tzinfo=tz)
+    until = datetime.combine(range_end + timedelta(days=1), time.min, tzinfo=tz)
+    repo = DemandSignalsRepository(session)
+    counts = await repo.aggregate_window(
+        trainer_id=trainer_id,
+        kinds=(DEMAND_EVENT_CATALOG_FAVORITE, DEMAND_EVENT_CONTACT_CLICK),
+        since=since,
+        until=until,
+    )
+    totals = await get_signals_lifetime_totals(session, trainer_id=trainer_id)
+    return {
+        "favorites": int(counts.get(DEMAND_EVENT_CATALOG_FAVORITE, 0)),
+        "contact_clicks": int(counts.get(DEMAND_EVENT_CONTACT_CLICK, 0)),
+        "profile_views_total": int(totals["profile_views"]),
+    }
 
 
 # =============================================================================
@@ -155,6 +194,11 @@ async def get_trainer_daily_digest(
     pending_confirmations_count = sum(1 for s in sessions if s["status"] == "pending")
     first_timers_count = sum(1 for s in sessions if s["is_first_time"])
 
+    yesterday = today - timedelta(days=1)
+    catalog_pulse = await _digest_catalog_pulse_for_local_range(
+        session, trainer_id, range_start=yesterday, range_end=yesterday
+    )
+
     return {
         "date": today,
         "trainer_id": trainer_id,
@@ -166,6 +210,7 @@ async def get_trainer_daily_digest(
         "first_timers_count": first_timers_count,
         "pending_confirmations_count": pending_confirmations_count,
         "pending_requests_count": pending_requests_count,
+        "catalog_pulse": catalog_pulse,
     }
 
 
@@ -251,6 +296,9 @@ async def get_trainer_weekly_digest(
     past = await _weekly_past_earnings(session, trainer_id, past_start, past_end)
     upcoming = await _weekly_upcoming_overview(session, trainer_id, up_start, up_end)
     drought = await _weekly_drought_block(session, trainer_id, today)
+    catalog_pulse = await _digest_catalog_pulse_for_local_range(
+        session, trainer_id, range_start=past_start, range_end=past_end
+    )
 
     return {
         "trainer_id": trainer_id,
@@ -259,6 +307,7 @@ async def get_trainer_weekly_digest(
         "past_week": past,
         "upcoming_week": upcoming,
         "drought": drought,
+        "catalog_pulse": catalog_pulse,
     }
 
 

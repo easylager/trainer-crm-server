@@ -65,7 +65,11 @@ MOCK_CLIENT_TELEGRAM_ID = 123456789
 
 
 def _sample_signals(
-    profile_views: int, contact_clicks: int, booking_attempts_blocked: int = 0
+    profile_views: int,
+    contact_clicks: int,
+    booking_attempts_blocked: int = 0,
+    *,
+    catalog_favorites: int = 0,
 ) -> SignalsRecap:
     now = datetime.now(timezone.utc)
     since = now - timedelta(days=14)
@@ -77,6 +81,7 @@ def _sample_signals(
         profile_views=profile_views,
         contact_clicks=contact_clicks,
         booking_attempts_blocked=booking_attempts_blocked,
+        catalog_favorites=catalog_favorites,
     )
 
 
@@ -455,6 +460,11 @@ async def main() -> None:
             "first_timers_count": 1,
             "pending_confirmations_count": 1,
             "pending_requests_count": 2,
+            "catalog_pulse": {
+                "favorites": 2,
+                "contact_clicks": 4,
+                "profile_views_total": 120,
+            },
         }
         await bot.send_message(
             chat_id=chat_id,
@@ -480,6 +490,11 @@ async def main() -> None:
                 ],
             },
             "drought": {"triggered": False},
+            "catalog_pulse": {
+                "favorites": 5,
+                "contact_clicks": 3,
+                "profile_views_total": 200,
+            },
         }
         await bot.send_message(
             chat_id=chat_id,

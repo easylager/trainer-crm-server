@@ -1,7 +1,9 @@
 """Client ↔ trainer edges: bookmarks, primary trainer, slot-wait subscriptions."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+import logging
+
+from fastapi import APIRouter, BackgroundTasks, Depends
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,8 +27,27 @@ from src.application.client_trainer_edge_use_cases import (
     unsave_trainer as uc_unsave_trainer,
     unsubscribe_notify_slots as uc_unsubscribe_notify_slots,
 )
+from src.application.trainer_client_favorite_notify import notify_trainer_new_catalog_favorite
+from src.infrastructure.db.session import async_session_factory
 
 router = APIRouter(tags=["webapp"])
+
+logger = logging.getLogger(__name__)
+
+
+async def _bg_notify_trainer_catalog_favorite(trainer_id: int, client_catalog_telegram_id: int) -> None:
+    try:
+        async with async_session_factory() as s:
+            await notify_trainer_new_catalog_favorite(
+                session=s,
+                trainer_id=trainer_id,
+                client_catalog_telegram_id=client_catalog_telegram_id,
+            )
+    except Exception:
+        logger.exception(
+            "background catalog-favorite notify failed trainer_id=%s",
+            trainer_id,
+        )
 
 
 class TrainerEdgeSaveBody(BaseModel):
@@ -78,6 +99,7 @@ async def get_client_trainer_edges(
 @router.post("/client/trainer-edges/save")
 async def post_client_save_trainer(
     body: TrainerEdgeSaveBody,
+    background_tasks: BackgroundTasks,
     session: AsyncSession = Depends(get_session),
     principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
 ):
@@ -94,9 +116,11 @@ async def post_client_save_trainer(
                     svc_id = int(raw)
                 except (TypeError, ValueError):
                     svc_id = None
-    edge = await uc_save_trainer(
+    edge, became_saved = await uc_save_trainer(
         catalog_tid, body.trainer_id, session, catalog_service_id=svc_id
     )
+    if became_saved:
+        background_tasks.add_task(_bg_notify_trainer_catalog_favorite, body.trainer_id, catalog_tid)
     return {"edge": serialize_trainer_edge_row(edge)}
 
 

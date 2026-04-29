@@ -1429,3 +1429,432 @@ async def get_admin_clients_stats(session: AsyncSession) -> dict:
         "top_trainers_by_clients": top_trainers_by_clients,
         "recent_requests": recent_requests,
     }
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 🔬 PRODUCT ANALYTICS — where activation breaks, what predicts payment
+# ──────────────────────────────────────────────────────────────────────────
+
+async def get_admin_product_analytics(session: AsyncSession) -> dict:
+    """
+    Founder-grade product analytics. Six focused sections:
+
+    activation_funnel  — step-by-step drop-off from trainer creation to first real booking.
+    proof_of_value     — % reaching each value milestone (2nd booking, catalog live, inbound, etc.).
+    marketplace        — catalog demand funnel: views → clicks → saves.
+    monetization       — trial → paid conversion ladder.
+    habit              — weekly active count, avg bookings per active trainer.
+    correlation        — THE KEY: paid vs never-paid behavior comparison after 14 days.
+                         Biggest delta = strongest monetization predictor.
+    """
+    today = date.today()
+
+    # ── 1. ACTIVATION FUNNEL ─────────────────────────────────────────────
+    activation: dict = {}
+    try:
+        r = await session.execute(
+            text(
+                """
+                SELECT
+                    COUNT(*)                                                    AS created,
+                    COUNT(*) FILTER (WHERE telegram_id IS NOT NULL)             AS linked_telegram,
+                    COUNT(*) FILTER (WHERE EXISTS (
+                        SELECT 1 FROM trainer_schedule_templates tpl
+                        WHERE tpl.trainer_id = t.id
+                    ))                                                          AS has_template,
+                    COUNT(*) FILTER (
+                        WHERE client_invite_link_first_copied_at IS NOT NULL
+                    )                                                           AS copied_invite,
+                    COUNT(*) FILTER (
+                        WHERE moderation_submitted_at IS NOT NULL
+                    )                                                           AS submitted_moderation,
+                    COUNT(*) FILTER (WHERE status = 'active')                   AS activated,
+                    COUNT(*) FILTER (
+                        WHERE status = 'active' AND EXISTS (
+                            SELECT 1 FROM bookings b
+                            WHERE b.trainer_id = t.id
+                              AND b.status NOT IN ('cancelled', 'declined')
+                              AND COALESCE(b.is_sandbox, false) = false
+                        )
+                    )                                                           AS has_first_booking
+                FROM trainers t
+                WHERE status != 'deactivated'
+                """
+            )
+        )
+        row = r.fetchone()
+        if row:
+            created, linked, has_tmpl, copied, submitted, activated, first_booking = row
+            activation = {
+                "created": int(created or 0),
+                "linked_telegram": int(linked or 0),
+                "has_template": int(has_tmpl or 0),
+                "copied_invite": int(copied or 0),
+                "submitted_moderation": int(submitted or 0),
+                "activated": int(activated or 0),
+                "has_first_booking": int(first_booking or 0),
+            }
+    except ProgrammingError:
+        pass
+
+    # ── 2. PROOF OF VALUE (all active trainers) ───────────────────────────
+    proof: dict = {}
+    try:
+        r = await session.execute(
+            text(
+                """
+                WITH real_bookings AS (
+                    SELECT b.trainer_id, COUNT(*) AS cnt
+                    FROM bookings b
+                    WHERE b.status NOT IN ('cancelled', 'declined')
+                      AND COALESCE(b.is_sandbox, false) = false
+                    GROUP BY b.trainer_id
+                )
+                SELECT
+                    COUNT(DISTINCT t.id)                                        AS active_total,
+                    COUNT(DISTINCT t.id) FILTER (WHERE rb.cnt >= 1)             AS first_booking,
+                    COUNT(DISTINCT t.id) FILTER (WHERE rb.cnt >= 2)             AS second_booking,
+                    COUNT(DISTINCT t.id) FILTER (WHERE rb.cnt >= 5)             AS five_bookings,
+                    COUNT(DISTINCT t.id) FILTER (
+                        WHERE t.client_invite_link_first_copied_at IS NOT NULL
+                    )                                                           AS invited_client,
+                    COUNT(DISTINCT t.id) FILTER (
+                        WHERE EXISTS (
+                            SELECT 1 FROM trainer_schedule_templates tst
+                            WHERE tst.trainer_id = t.id
+                        )
+                    )                                                           AS has_template,
+                    COUNT(DISTINCT t.id) FILTER (
+                        WHERE t.is_catalog_visible = true AND EXISTS (
+                            SELECT 1 FROM trainer_profiles tp
+                            WHERE tp.trainer_id = t.id
+                        )
+                    )                                                           AS catalog_live,
+                    COUNT(DISTINCT t.id) FILTER (
+                        WHERE EXISTS (
+                            SELECT 1 FROM trainer_demand_events tde
+                            WHERE tde.trainer_id = t.id AND tde.kind = 'profile_view'
+                        )
+                    )                                                           AS got_first_view,
+                    COUNT(DISTINCT t.id) FILTER (
+                        WHERE EXISTS (
+                            SELECT 1 FROM trainer_demand_events tde
+                            WHERE tde.trainer_id = t.id AND tde.kind = 'contact_click'
+                        )
+                    )                                                           AS got_first_click,
+                    COUNT(DISTINCT t.id) FILTER (
+                        WHERE EXISTS (
+                            SELECT 1 FROM trainer_demand_events tde
+                            WHERE tde.trainer_id = t.id AND tde.kind = 'catalog_favorite'
+                        )
+                    )                                                           AS got_first_save
+                FROM trainers t
+                LEFT JOIN real_bookings rb ON rb.trainer_id = t.id
+                WHERE t.status = 'active'
+                """
+            )
+        )
+        row = r.fetchone()
+        if row:
+            (
+                active_total, first_b, second_b, five_b, invited,
+                has_tmpl, catalog, got_view, got_click, got_save,
+            ) = row
+            n = int(active_total or 0) or None
+
+            def _p(x: object) -> float | None:
+                return _pct(x, n)
+
+            proof = {
+                "active_total": int(active_total or 0),
+                "first_booking": int(first_b or 0),
+                "first_booking_pct": _p(first_b),
+                "second_booking": int(second_b or 0),
+                "second_booking_pct": _p(second_b),
+                "five_bookings": int(five_b or 0),
+                "five_bookings_pct": _p(five_b),
+                "invited_client": int(invited or 0),
+                "invited_client_pct": _p(invited),
+                "has_template": int(has_tmpl or 0),
+                "has_template_pct": _p(has_tmpl),
+                "catalog_live": int(catalog or 0),
+                "catalog_live_pct": _p(catalog),
+                "got_first_view": int(got_view or 0),
+                "got_first_view_pct": _p(got_view),
+                "got_first_click": int(got_click or 0),
+                "got_first_click_pct": _p(got_click),
+                "got_first_save": int(got_save or 0),
+                "got_first_save_pct": _p(got_save),
+            }
+    except ProgrammingError:
+        pass
+
+    # ── 3. MARKETPLACE (catalog demand funnel) ────────────────────────────
+    marketplace: dict = {}
+    try:
+        r = await session.execute(
+            text(
+                """
+                SELECT
+                    COUNT(DISTINCT t.id)                            AS trainers_in_catalog,
+                    COALESCE(SUM(de.views), 0)::bigint              AS total_views,
+                    COALESCE(SUM(de.clicks), 0)::bigint             AS total_clicks,
+                    COALESCE(SUM(de.saves), 0)::bigint              AS total_saves,
+                    COUNT(DISTINCT de.tid_view)                     AS trainers_with_views,
+                    COUNT(DISTINCT de.tid_click)                    AS trainers_with_clicks,
+                    COUNT(DISTINCT de.tid_save)                     AS trainers_with_saves
+                FROM trainers t
+                JOIN trainer_profiles tp ON tp.trainer_id = t.id
+                LEFT JOIN LATERAL (
+                    SELECT
+                        SUM(CASE WHEN kind = 'profile_view'    THEN 1 ELSE 0 END) AS views,
+                        SUM(CASE WHEN kind = 'contact_click'   THEN 1 ELSE 0 END) AS clicks,
+                        SUM(CASE WHEN kind = 'catalog_favorite' THEN 1 ELSE 0 END) AS saves,
+                        MIN(CASE WHEN kind = 'profile_view'    THEN t.id END) AS tid_view,
+                        MIN(CASE WHEN kind = 'contact_click'   THEN t.id END) AS tid_click,
+                        MIN(CASE WHEN kind = 'catalog_favorite' THEN t.id END) AS tid_save
+                    FROM trainer_demand_events
+                    WHERE trainer_id = t.id
+                ) de ON true
+                WHERE t.is_catalog_visible = true AND t.status = 'active'
+                """
+            )
+        )
+        row = r.fetchone()
+        if row:
+            (in_cat, tot_v, tot_c, tot_s, tr_v, tr_c, tr_s) = row
+            marketplace = {
+                "trainers_in_catalog": int(in_cat or 0),
+                "total_views": int(tot_v or 0),
+                "total_clicks": int(tot_c or 0),
+                "total_saves": int(tot_s or 0),
+                "trainers_with_views": int(tr_v or 0),
+                "trainers_with_clicks": int(tr_c or 0),
+                "trainers_with_saves": int(tr_s or 0),
+                "view_to_click_pct": _pct(tot_c, tot_v),
+                "click_to_save_pct": _pct(tot_s, tot_c),
+            }
+    except ProgrammingError:
+        pass
+
+    # ── 4. MONETIZATION FUNNEL ────────────────────────────────────────────
+    monetization: dict = {}
+    try:
+        r = await session.execute(
+            text(
+                """
+                WITH first_sub AS (
+                    SELECT DISTINCT ON (trainer_id)
+                        trainer_id, status, expires_at, started_at
+                    FROM trainer_subscriptions
+                    ORDER BY trainer_id, started_at ASC
+                ),
+                paid_trainers AS (
+                    SELECT DISTINCT trainer_id
+                    FROM trainer_invoices
+                    WHERE status = 'paid'
+                )
+                SELECT
+                    COUNT(DISTINCT fs.trainer_id)                                        AS trial_started,
+                    COUNT(DISTINCT fs.trainer_id) FILTER (
+                        WHERE fs.status = :s_trial AND fs.expires_at > NOW()
+                    )                                                                    AS trial_active,
+                    COUNT(DISTINCT fs.trainer_id) FILTER (
+                        WHERE fs.expires_at <= NOW()
+                        AND NOT EXISTS (
+                            SELECT 1 FROM trainer_subscriptions ts2
+                            WHERE ts2.trainer_id = fs.trainer_id
+                              AND ts2.status = :s_active
+                        )
+                    )                                                                    AS trial_expired_no_paid,
+                    COUNT(DISTINCT pt.trainer_id)                                        AS paid_at_least_once,
+                    COUNT(DISTINCT fs.trainer_id) FILTER (
+                        WHERE fs.expires_at <= NOW() - INTERVAL '30 days'
+                          AND pt.trainer_id IS NULL
+                    )                                                                    AS trial_expired_30d_churned
+                FROM first_sub fs
+                LEFT JOIN paid_trainers pt ON pt.trainer_id = fs.trainer_id
+                """
+            ),
+            {"s_trial": SUBSCRIPTION_STATUS_TRIAL, "s_active": SUBSCRIPTION_STATUS_ACTIVE},
+        )
+        row = r.fetchone()
+        if row:
+            (t_start, t_active, t_expired_no_paid, paid, t_expired_30d_churned) = row
+            monetization = {
+                "trial_started": int(t_start or 0),
+                "trial_active": int(t_active or 0),
+                "trial_expired_no_paid": int(t_expired_no_paid or 0),
+                "trial_to_paid_pct": _pct(paid, t_start),
+                "paid_at_least_once": int(paid or 0),
+                "trial_expired_30d_churned": int(t_expired_30d_churned or 0),
+                "churn_30d_pct": _pct(t_expired_30d_churned, t_start),
+            }
+    except ProgrammingError:
+        pass
+
+    # ── 5. HABIT PROXY ────────────────────────────────────────────────────
+    habit: dict = {}
+    try:
+        r = await session.execute(
+            text(
+                """
+                WITH week_active AS (
+                    SELECT DISTINCT b.trainer_id
+                    FROM bookings b
+                    JOIN slots s ON s.id = b.slot_id
+                    WHERE b.status NOT IN ('cancelled', 'declined')
+                      AND COALESCE(b.is_sandbox, false) = false
+                      AND s.slot_date >= CURRENT_DATE - 7
+                ),
+                all_active AS (
+                    SELECT t.id AS trainer_id
+                    FROM trainers t
+                    WHERE t.status = 'active'
+                ),
+                booking_counts AS (
+                    SELECT b.trainer_id, COUNT(*) AS cnt
+                    FROM bookings b
+                    WHERE b.status NOT IN ('cancelled', 'declined')
+                      AND COALESCE(b.is_sandbox, false) = false
+                    GROUP BY b.trainer_id
+                ),
+                -- trainers who had first booking in past 30 days
+                recent_activated AS (
+                    SELECT b.trainer_id,
+                           MIN(s.slot_date) AS first_date
+                    FROM bookings b
+                    JOIN slots s ON s.id = b.slot_id
+                    WHERE b.status NOT IN ('cancelled', 'declined')
+                      AND COALESCE(b.is_sandbox, false) = false
+                    GROUP BY b.trainer_id
+                    HAVING MIN(s.slot_date) >= CURRENT_DATE - 30
+                )
+                SELECT
+                    COUNT(DISTINCT aa.trainer_id)   AS active_total,
+                    COUNT(DISTINCT wa.trainer_id)   AS weekly_active,
+                    ROUND(AVG(bc.cnt)::numeric, 1)  AS avg_bookings_per_trainer,
+                    COUNT(DISTINCT ra.trainer_id)   AS recently_activated_30d
+                FROM all_active aa
+                LEFT JOIN week_active wa ON wa.trainer_id = aa.trainer_id
+                LEFT JOIN booking_counts bc ON bc.trainer_id = aa.trainer_id
+                LEFT JOIN recent_activated ra ON ra.trainer_id = aa.trainer_id
+                """
+            )
+        )
+        row = r.fetchone()
+        if row:
+            (act_total, wkly, avg_b, rec_act) = row
+            habit = {
+                "active_total": int(act_total or 0),
+                "weekly_active": int(wkly or 0),
+                "weekly_active_pct": _pct(wkly, act_total),
+                "avg_bookings_per_trainer": float(avg_b or 0),
+                "recently_activated_30d": int(rec_act or 0),
+            }
+    except ProgrammingError:
+        pass
+
+    # ── 6. CORRELATION TABLE — paid vs not-paid (cohort: active ≥14 days) ─
+    # THE MOST IMPORTANT SECTION: what behaviors actually predict payment?
+    correlation: list[dict] = []
+    try:
+        r = await session.execute(
+            text(
+                """
+                WITH eligible AS (
+                    SELECT
+                        t.id,
+                        t.client_invite_link_first_copied_at IS NOT NULL           AS invited_client,
+                        t.is_catalog_visible AND EXISTS (
+                            SELECT 1 FROM trainer_profiles tp WHERE tp.trainer_id = t.id
+                        )                                                           AS catalog_live,
+                        EXISTS (
+                            SELECT 1 FROM trainer_invoices i
+                            WHERE i.trainer_id = t.id AND i.status = 'paid'
+                        )                                                           AS is_paid,
+                        EXISTS (
+                            SELECT 1 FROM trainer_schedule_templates tst
+                            WHERE tst.trainer_id = t.id
+                        )                                                           AS has_template,
+                        (
+                            SELECT COUNT(*)
+                            FROM bookings b
+                            WHERE b.trainer_id = t.id
+                              AND b.status NOT IN ('cancelled', 'declined')
+                              AND COALESCE(b.is_sandbox, false) = false
+                        )                                                           AS booking_count,
+                        EXISTS (
+                            SELECT 1 FROM trainer_demand_events tde
+                            WHERE tde.trainer_id = t.id AND tde.kind = 'profile_view'
+                        )                                                           AS got_view,
+                        EXISTS (
+                            SELECT 1 FROM trainer_demand_events tde
+                            WHERE tde.trainer_id = t.id AND tde.kind = 'contact_click'
+                        )                                                           AS got_inbound_click,
+                        EXISTS (
+                            SELECT 1 FROM trainer_demand_events tde
+                            WHERE tde.trainer_id = t.id AND tde.kind = 'catalog_favorite'
+                        )                                                           AS got_save
+                    FROM trainers t
+                    WHERE t.status = 'active'
+                      AND t.created_at < NOW() - INTERVAL '14 days'
+                )
+                SELECT
+                    is_paid,
+                    COUNT(*)                                                        AS cohort_size,
+                    ROUND(AVG(booking_count::numeric), 1)                          AS avg_bookings,
+                    COUNT(*) FILTER (WHERE booking_count >= 1)                     AS cnt_first_booking,
+                    COUNT(*) FILTER (WHERE booking_count >= 2)                     AS cnt_second_booking,
+                    COUNT(*) FILTER (WHERE booking_count >= 5)                     AS cnt_five_bookings,
+                    COUNT(*) FILTER (WHERE has_template)                           AS cnt_has_template,
+                    COUNT(*) FILTER (WHERE invited_client)                         AS cnt_invited_client,
+                    COUNT(*) FILTER (WHERE catalog_live)                           AS cnt_catalog_live,
+                    COUNT(*) FILTER (WHERE got_view)                               AS cnt_got_view,
+                    COUNT(*) FILTER (WHERE got_inbound_click)                      AS cnt_got_click,
+                    COUNT(*) FILTER (WHERE got_save)                               AS cnt_got_save
+                FROM eligible
+                GROUP BY is_paid
+                ORDER BY is_paid DESC
+                """
+            )
+        )
+        for row in r.fetchall():
+            (
+                is_paid, cohort_size, avg_b,
+                cnt_fb, cnt_sb, cnt_5b, cnt_tmpl, cnt_inv, cnt_cat,
+                cnt_view, cnt_click, cnt_save,
+            ) = row
+            n = int(cohort_size or 0) or None
+
+            def _pp(x: object) -> float | None:
+                return _pct(x, n)
+
+            correlation.append(
+                {
+                    "is_paid": bool(is_paid),
+                    "cohort_size": int(cohort_size or 0),
+                    "avg_bookings": float(avg_b or 0),
+                    "pct_first_booking": _pp(cnt_fb),
+                    "pct_second_booking": _pp(cnt_sb),
+                    "pct_five_bookings": _pp(cnt_5b),
+                    "pct_has_template": _pp(cnt_tmpl),
+                    "pct_invited_client": _pp(cnt_inv),
+                    "pct_catalog_live": _pp(cnt_cat),
+                    "pct_got_view": _pp(cnt_view),
+                    "pct_got_click": _pp(cnt_click),
+                    "pct_got_save": _pp(cnt_save),
+                }
+            )
+    except ProgrammingError:
+        pass
+
+    return {
+        "today": today.isoformat(),
+        "activation_funnel": activation,
+        "proof_of_value": proof,
+        "marketplace": marketplace,
+        "monetization": monetization,
+        "habit": habit,
+        "correlation": correlation,
+    }

@@ -309,6 +309,66 @@ def test_morning_lite_has_hero_and_closes_with_recommendation() -> None:
     assert "👉" in out
 
 
+def test_morning_digest_includes_catalog_pulse_favorites_and_clicks() -> None:
+    d = _morning_digest_fixture(
+        [_session(hh=9, name="A", arena=None)],
+        catalog_pulse={"favorites": 2, "contact_clicks": 1, "profile_views_total": 50},
+    )
+    out = format_morning_digest(d)
+    assert "📈" in out
+    assert "избранное" in out
+    assert "Telegram" in out
+
+
+def test_morning_digest_catalog_pulse_fallback_lifetime_views() -> None:
+    d = _morning_digest_fixture(
+        [_session(hh=9, name="A", arena=None)],
+        catalog_pulse={"favorites": 0, "contact_clicks": 0, "profile_views_total": 12},
+    )
+    out = format_morning_digest(d)
+    assert "📈" in out
+    assert "12" in out
+    assert "всего" in out
+    assert "добавлений в избранное" not in out
+
+
+def test_morning_digest_no_catalog_line_when_all_zero() -> None:
+    d = _morning_digest_fixture(
+        [_session(hh=9, name="A", arena=None)],
+        catalog_pulse={"favorites": 0, "contact_clicks": 0, "profile_views_total": 0},
+    )
+    out = format_morning_digest(d)
+    assert "📈" not in out
+
+
+def test_morning_digest_omits_pulse_without_catalog_key() -> None:
+    d = _morning_digest_fixture([_session(hh=9, name="A", arena=None)])
+    out = format_morning_digest(d)
+    assert "📈" not in out
+
+
+def test_morning_digest_catalog_favorites_only() -> None:
+    d = _morning_digest_fixture(
+        [_session(hh=9, name="A", arena=None)],
+        catalog_pulse={"favorites": 1, "contact_clicks": 0, "profile_views_total": 1},
+    )
+    out = format_morning_digest(d)
+    assert "добавление в избранное" in out
+    assert "Telegram" not in out
+
+
+def test_morning_lite_includes_catalog_pulse() -> None:
+    out = format_morning_digest_lite_owed_only(
+        {
+            "pending_requests_count": 2,
+            "catalog_pulse": {"favorites": 1, "contact_clicks": 0, "profile_views_total": 0},
+        }
+    )
+    assert out is not None
+    assert "📈" in out
+    assert "заявки" in out
+
+
 # =============================================================================
 # Weekly digest
 # =============================================================================
@@ -338,6 +398,27 @@ def _weekly_fixture(**overrides) -> dict:
 def test_weekly_has_sunday_hero_emoji() -> None:
     out = format_weekly_digest(_weekly_fixture())
     assert "🌙" in out
+
+
+def test_weekly_digest_catalog_pulse_uses_week_scope() -> None:
+    out = format_weekly_digest(
+        _weekly_fixture(
+            catalog_pulse={"favorites": 3, "contact_clicks": 2, "profile_views_total": 0},
+        )
+    )
+    assert "📈" in out
+    assert "прошлую неделю" in out.lower()
+
+
+def test_weekly_digest_catalog_fallback_views_no_week_phrase_in_fallback() -> None:
+    out = format_weekly_digest(
+        _weekly_fixture(
+            catalog_pulse={"favorites": 0, "contact_clicks": 0, "profile_views_total": 8},
+        )
+    )
+    assert "📈" in out
+    assert "8" in out
+    assert "всего" in out
 
 
 def test_weekly_has_both_section_headers() -> None:

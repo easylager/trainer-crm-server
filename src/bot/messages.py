@@ -2509,6 +2509,14 @@ TRAINER_STATS_CERTS = (
 )
 TRAINER_STATS_OPEN_APP = "📊 Открой статистику в приложении — графики, тренды и инсайты по работе."
 TRAINER_BUTTON_STATS_APP = "📊 Открыть статистику"
+TRAINER_CLIENT_FAVORITE_ADDED_HTML = (
+    "💛 <b>Приятный знак внимания</b>\n\n"
+    "<b>{client_label}</b> добавил(а) вас в <b>избранное</b> в каталоге — так отмечают профиль, "
+    "который не хочется терять из виду.\n\n"
+    "До первой записи дойдёт не каждый, а вы уже зацепили интерес — "
+    "маленькая победа, которую приятно заметить 🙌"
+)
+TRAINER_BUTTON_FAVORITE_STATS_WEBAPP = "Статистика"
 TRAINER_SUBSCRIPTION_REMINDER = (
     "💳 <b>Подписка заканчивается {expires_date}</b>\n\n"
     "Продлите тариф — снова откроются расписание, база клиентов и онлайн-запись. "
@@ -2723,6 +2731,9 @@ TRAINER_LEAD_MODE_SIGNALS_BOTH = (
 )
 TRAINER_LEAD_MODE_SIGNALS_VIEWS_ONLY = (
     "За это время вашу карточку посмотрели <b>{views} раз</b>. "
+)
+TRAINER_LEAD_MODE_SIGNALS_FAVORITES = (
+    "Вас <b>{favorites} раз</b> добавили в <b>избранное</b> в каталоге. "
 )
 TRAINER_LEAD_MODE_SIGNALS_NONE = ""  # Empty — message reads naturally without the signals sentence.
 

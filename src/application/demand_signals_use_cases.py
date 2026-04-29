@@ -23,6 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.infrastructure.db.models import (
     DEMAND_EVENT_BOOKING_ATTEMPT_BLOCKED,
+    DEMAND_EVENT_CATALOG_FAVORITE,
     DEMAND_EVENT_CONTACT_CLICK,
     DEMAND_EVENT_KINDS,
     DEMAND_EVENT_PROFILE_VIEW,
@@ -52,6 +53,7 @@ class SignalsRecap:
     profile_views: int
     contact_clicks: int
     booking_attempts_blocked: int
+    catalog_favorites: int
 
     @property
     def has_any_demand(self) -> bool:
@@ -59,6 +61,7 @@ class SignalsRecap:
             self.profile_views > 0
             or self.contact_clicks > 0
             or self.booking_attempts_blocked > 0
+            or self.catalog_favorites > 0
         )
 
     def as_dict(self) -> dict[str, Any]:
@@ -70,6 +73,7 @@ class SignalsRecap:
             "profile_views": self.profile_views,
             "contact_clicks": self.contact_clicks,
             "booking_attempts_blocked": self.booking_attempts_blocked,
+            "catalog_favorites": self.catalog_favorites,
             "has_any_demand": self.has_any_demand,
         }
 
@@ -100,6 +104,27 @@ def _validate_source(source: str | None) -> str | None:
     if source not in DEMAND_SOURCES:
         raise ValueError(f"Unknown demand source: {source!r}")
     return source
+
+
+async def record_catalog_favorite(
+    session: AsyncSession,
+    *,
+    trainer_id: int,
+    source: str | None = None,
+    payload: dict[str, Any] | None = None,
+) -> bool:
+    """
+    Record a catalog «heart» / bookmark save (client_trainer_edges.is_saved true transition).
+    No dedup — each deliberate save is a signal; unsave+save again counts again.
+    """
+    repo = DemandSignalsRepository(session)
+    return await repo.insert_event(
+        trainer_id=trainer_id,
+        kind=DEMAND_EVENT_CATALOG_FAVORITE,
+        source=_validate_source(source),
+        dedup_hash=None,
+        payload=payload,
+    )
 
 
 async def record_profile_view(
@@ -267,6 +292,7 @@ async def get_signals_recap(
         profile_views=counts.get(DEMAND_EVENT_PROFILE_VIEW, 0),
         contact_clicks=counts.get(DEMAND_EVENT_CONTACT_CLICK, 0),
         booking_attempts_blocked=counts.get(DEMAND_EVENT_BOOKING_ATTEMPT_BLOCKED, 0),
+        catalog_favorites=counts.get(DEMAND_EVENT_CATALOG_FAVORITE, 0),
     )
 
 
@@ -285,13 +311,14 @@ async def get_signals_lifetime_totals(
     repo = DemandSignalsRepository(session)
     counts = await repo.aggregate_window(
         trainer_id=trainer_id,
-        kinds=(DEMAND_EVENT_PROFILE_VIEW, DEMAND_EVENT_CONTACT_CLICK),
+        kinds=(DEMAND_EVENT_PROFILE_VIEW, DEMAND_EVENT_CONTACT_CLICK, DEMAND_EVENT_CATALOG_FAVORITE),
         since=_EPOCH_UTC,
         until=until,
     )
     return {
         "profile_views": int(counts.get(DEMAND_EVENT_PROFILE_VIEW, 0)),
         "contact_clicks": int(counts.get(DEMAND_EVENT_CONTACT_CLICK, 0)),
+        "catalog_favorites_events": int(counts.get(DEMAND_EVENT_CATALOG_FAVORITE, 0)),
     }
 
 
@@ -326,6 +353,7 @@ async def get_signals_since(
         profile_views=counts.get(DEMAND_EVENT_PROFILE_VIEW, 0),
         contact_clicks=counts.get(DEMAND_EVENT_CONTACT_CLICK, 0),
         booking_attempts_blocked=counts.get(DEMAND_EVENT_BOOKING_ATTEMPT_BLOCKED, 0),
+        catalog_favorites=counts.get(DEMAND_EVENT_CATALOG_FAVORITE, 0),
     )
 
 
@@ -340,6 +368,7 @@ __all__ = [
     "get_signals_lifetime_totals",
     "get_signals_recap",
     "get_signals_since",
+    "record_catalog_favorite",
     "RECAP_WINDOW_7D",
     "RECAP_WINDOW_14D",
     "RECAP_WINDOW_30D",

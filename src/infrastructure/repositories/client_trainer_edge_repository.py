@@ -194,9 +194,15 @@ class ClientTrainerEdgeRepository:
         context_id: int | None = None,
         *,
         catalog_service_id: int | None = None,
-    ) -> dict[str, Any]:
-        """Toggle is_saved flag; sets saved_at on save, clears on unsave."""
+    ) -> tuple[dict[str, Any], bool]:
+        """Toggle is_saved flag; sets saved_at on save, clears on unsave.
+
+        Returns ``(edge_row, became_saved)`` where ``became_saved`` is True only when the client
+        transitions to saved (was not saved before, now saved) — for one-shot trainer push.
+        """
         await self.ensure_edge(telegram_id, trainer_id, context_type, context_id)
+        prev = await self.get(telegram_id, trainer_id, context_type, context_id)
+        was_saved = bool(prev and prev.get("is_saved"))
         now = datetime.now(timezone.utc)
         await self._s.execute(
             text("""
@@ -221,7 +227,9 @@ class ClientTrainerEdgeRepository:
                 "ctx_type": context_type, "ctx_id": context_id,
             },
         )
-        return await self.get(telegram_id, trainer_id, context_type, context_id)  # type: ignore[return-value]
+        edge = await self.get(telegram_id, trainer_id, context_type, context_id)  # type: ignore[assignment]
+        became_saved = bool(saved and not was_saved)
+        return edge, became_saved
 
     async def set_primary(
         self,

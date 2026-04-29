@@ -275,7 +275,8 @@ async def test_signals_recap_anchored_to_last_expires_at(db_session: AsyncSessio
             VALUES
                 (:tid, 'profile_view', 'catalog', NOW() - INTERVAL '5 days'),
                 (:tid, 'profile_view', 'catalog', NOW() - INTERVAL '1 day'),
-                (:tid, 'contact_click', 'catalog', NOW() - INTERVAL '2 days')
+                (:tid, 'contact_click', 'catalog', NOW() - INTERVAL '2 days'),
+                (:tid, 'catalog_favorite', 'catalog', NOW() - INTERVAL '3 days')
             """
         ),
         {"tid": tid},
@@ -288,6 +289,7 @@ async def test_signals_recap_anchored_to_last_expires_at(db_session: AsyncSessio
     nudge = mine[0]
     assert nudge.signals.profile_views == 2
     assert nudge.signals.contact_clicks == 1
+    assert nudge.signals.catalog_favorites == 1
     assert nudge.signals.has_any_demand is True
 
 
