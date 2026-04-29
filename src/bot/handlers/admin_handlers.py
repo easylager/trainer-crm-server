@@ -220,7 +220,7 @@ async def _trainer_bot_send_moderation_profile_approved(telegram_id: int) -> Non
 
 
 async def _notify_trainer_moderation_approved(trainer: dict | None) -> None:
-    """Notify trainer that the profile passed moderation (catalog visible)."""
+    """Notify trainer of first-time catalog approval only (not silent re-approval of profile edits)."""
     if not trainer:
         return
     telegram_id = trainer.get("telegram_id")
@@ -1578,6 +1578,9 @@ async def on_approve(callback: CallbackQuery) -> None:
         return
     trainer: dict | None = None
     ok = False
+    # Only first-time catalog activation should get the celebratory push; re-approval of
+    # pending edits (trainer already ACTIVE) is intentionally silent unless admin flags issues.
+    notify_primary_catalog_approval = False
     async with async_session_factory() as session:
         t0 = await get_trainer(session, trainer_id)
         st = (t0.get("status") or "").strip() if t0 else ""
@@ -1600,6 +1603,7 @@ async def on_approve(callback: CallbackQuery) -> None:
             )
             trainer = await get_trainer(session, trainer_id)
         else:
+            notify_primary_catalog_approval = True
             await set_trainer_moderation_feedback(session, trainer_id, None)
             ok = await update_trainer_status(session, trainer_id, TRAINER_STATUS_ACTIVE)
             trainer = await get_trainer(session, trainer_id)
@@ -1613,7 +1617,8 @@ async def on_approve(callback: CallbackQuery) -> None:
         audit_log("trainer.approved", ACTOR_ADMIN_BOT, user_id, {"trainer_id": trainer_id})
         await callback.message.edit_reply_markup(reply_markup=None)
         await callback.message.answer(msg.ADMIN_APPROVED)
-        await _notify_trainer_moderation_approved(trainer)
+        if notify_primary_catalog_approval:
+            await _notify_trainer_moderation_approved(trainer)
     else:
         await callback.message.answer(f"Не удалось одобрить тренера #{trainer_id}.")
     await callback.answer()

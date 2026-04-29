@@ -530,6 +530,12 @@ CLIENT_BOOKING_CANCELLED_BY_SELF = (
     "📅 Было: <b>{date}</b> ({day}) · {time}\n\n"
     "Ниже можно сразу выбрать новое время в каталоге."
 )
+# Same booking details when WebApp URL is unavailable (no inline button promised).
+CLIENT_BOOKING_CANCELLED_BY_SELF_MENU = (
+    "🗑️ <b>Запись отменена</b>\n\n"
+    "📅 Было: <b>{date}</b> ({day}) · {time}\n\n"
+    "Чтобы записаться снова, откройте <b>«Тренеры и запись»</b> в меню бота."
+)
 CLIENT_BUTTON_BOOK_AGAIN = "📅 Записаться снова"
 # Hub rhythm: trainer picks clients → push from client bot with WebApp booking entry
 CLIENT_FILL_SLOTS_INVITE_BTN_BOOK = "Записаться"

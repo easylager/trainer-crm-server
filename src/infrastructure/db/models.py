@@ -298,6 +298,71 @@ class Service(Base):
     )
 
 
+# --- Client ↔ Trainer edge-state graph ---
+
+class ClientTrainerEdge(Base):
+    """
+    One row per (telegram_id, trainer_id) pair — the live state of a client-trainer relationship.
+
+    Design intent: edge-state, not a ledger of relation types.
+    Orthogonal flags:
+      is_saved    — client explicitly bookmarked this trainer (UX wishlist + intent signal)
+      is_primary  — client's "main" trainer for context_type/context_id (overlay, never replaces history)
+    Counters:
+      completed_count — completed bookings with this trainer (strength signal for ranking/home)
+    Timestamps:
+      saved_at            — when last saved (recency signal; None if never saved)
+      last_booking_at     — latest booking created (any status)
+      last_completed_at   — latest completed booking (strongest engagement signal)
+      last_interaction_at — latest of any meaningful interaction (union of above)
+      created_at          — edge first created
+
+    context_type / context_id: reserved for future scope; unused in APIs (always NULL until used).
+    Enforced uniquely on (telegram_id, trainer_id) — one logical relationship row per pair.
+    """
+    __tablename__ = "client_trainer_edges"
+    __table_args__ = (
+        UniqueConstraint(
+            "telegram_id", "trainer_id",
+            name="uq_client_trainer_pair",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    telegram_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("client_sessions.telegram_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    trainer_id: Mapped[int] = mapped_column(
+        ForeignKey("trainers.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    # --- flags (orthogonal) ---
+    is_saved: Mapped[bool] = mapped_column(nullable=False, server_default="false")
+    is_primary: Mapped[bool] = mapped_column(nullable=False, server_default="false")
+    # One-shot: cleared after notification is sent
+    notify_when_slots: Mapped[bool] = mapped_column(nullable=False, server_default="false")
+
+    # --- strength counters ---
+    completed_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+
+    # --- recency timestamps ---
+    saved_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    notify_when_slots_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_booking_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_interaction_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    # --- contextual primary scope (future-proof, unused in initial UI) ---
+    context_type: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    context_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+
+
 # --- Client bot session (one row per telegram_id); city_id for future cities table ---
 CLIENT_STATE_IDLE = "idle"
 CLIENT_STATE_TRAINER_SELECTED = "trainer_selected"

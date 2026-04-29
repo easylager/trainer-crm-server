@@ -2001,3 +2001,115 @@
       background: linear-gradient(180deg, color-mix(in srgb, var(--tg-theme-bg-color) 0%, transparent), var(--tg-theme-bg-color) 30%);
     }
     .arena-apply-bar[hidden] { display: none !important; }
+
+    /* ── Dual action chips: Save + Notify ─────────────────────────────────── */
+    /*
+     * Two compact chips sit side-by-side below the primary CTA.
+     * They intentionally feel "light" — secondary actions, not main.
+     */
+    .trainer-action-chips {
+      display: flex;
+      gap: 8px;
+      margin-top: 8px;
+    }
+    .trainer-action-chip {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      padding: 11px 10px;
+      border-radius: 14px;
+      border: 1.5px solid rgba(128, 128, 128, 0.18);
+      background: var(--tg-theme-secondary-bg-color);
+      font: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      color: var(--tg-theme-hint-color);
+      transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.1s ease;
+      -webkit-tap-highlight-color: transparent;
+      white-space: nowrap;
+    }
+    .trainer-action-chip:active { transform: scale(0.95); }
+
+    /* Save chip — rose/red accent */
+    .trainer-action-chip--save.is-active {
+      color: #e0245e;
+      border-color: color-mix(in srgb, #e0245e 35%, transparent);
+      background: color-mix(in srgb, #e0245e 10%, var(--tg-theme-secondary-bg-color));
+    }
+
+    /* Notify chip — sky blue accent */
+    .trainer-action-chip--notify.is-active {
+      color: #4f9cf9;
+      border-color: color-mix(in srgb, #4f9cf9 35%, transparent);
+      background: color-mix(in srgb, #4f9cf9 10%, var(--tg-theme-secondary-bg-color));
+    }
+
+    /* Pulse on the notify chip when trainer currently has no slots — subtle nudge */
+    @keyframes chip-pulse {
+      0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, #4f9cf9 0%, transparent); }
+      50%       { box-shadow: 0 0 0 4px color-mix(in srgb, #4f9cf9 20%, transparent); }
+    }
+    .trainer-action-chip--notify.wants-attention {
+      animation: chip-pulse 2.4s ease-in-out 0.6s 2;
+    }
+
+    /* ── Chips context hint ──────────────────────────────────────────────────── */
+    /* One muted line below the chips that explains the notify action. */
+    .chips-hint {
+      margin: 6px 2px 0;
+      font-size: 11px;
+      line-height: 1.4;
+      color: var(--tg-theme-hint-color);
+      opacity: 0.75;
+      text-align: center;
+    }
+
+    /* ── In-app toast ────────────────────────────────────────────────────────── */
+    /* Slides in from the bottom; auto-dismissed by JS. */
+    .app-toast {
+      position: fixed;
+      bottom: calc(env(safe-area-inset-bottom, 0px) + 20px);
+      left: 50%;
+      transform: translateX(-50%) translateY(8px);
+      background: var(--tg-theme-secondary-bg-color);
+      color: var(--tg-theme-text-color);
+      font-size: 13px;
+      font-weight: 500;
+      padding: 10px 18px;
+      border-radius: 20px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.22);
+      white-space: nowrap;
+      z-index: 9999;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.2s ease, transform 0.2s ease;
+    }
+    .app-toast.app-toast--visible {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    /* Legacy btn-save-trainer kept for backward compat with any cached HTML */
+    .btn-save-trainer {
+      width: 100%;
+      padding: 12px 16px;
+      border-radius: 16px;
+      border: 1.5px solid rgba(128, 128, 128, 0.22);
+      background: transparent;
+      color: var(--tg-theme-hint-color);
+      font-size: 15px;
+      font-weight: 500;
+      font-family: inherit;
+      cursor: pointer;
+      transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.1s ease;
+      text-align: center;
+    }
+    .btn-save-trainer:active { transform: scale(0.97); }
+    .btn-save-trainer--active {
+      background: color-mix(in srgb, #e0245e 10%, var(--tg-theme-secondary-bg-color));
+      border-color: color-mix(in srgb, #e0245e 35%, transparent);
+      color: #e0245e;
+    }

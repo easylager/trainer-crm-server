@@ -164,6 +164,15 @@ def webapp_client_bookings_page():
     return _webapp_file_response(path)
 
 
+@app.get("/webapp/client-saved-trainers")
+def webapp_client_saved_trainers_page():
+    """Client: bookmarked trainers (same API as catalog heart / save)."""
+    path = _WEBAPP_DIR / "client-saved-trainers.html"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Web App not found")
+    return _webapp_file_response(path)
+
+
 @app.get("/webapp/client-home")
 def webapp_client_home_page():
     """Client hub: contextual hero, upcoming bookings, links to catalog / bookings / requests / passes."""
@@ -832,6 +841,19 @@ def webapp_mini_app_client_nav_css(request: Request):
     return FileResponse(
         path,
         media_type="text/css",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/client-saved-trainers-main.js")
+def webapp_client_saved_trainers_main_js(request: Request):
+    """Client saved-trainers page logic (split from client-saved-trainers.html). Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "client-saved-trainers-main.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
         headers=_webapp_versioned_asset_cache_headers(request),
     )
 

@@ -67,7 +67,9 @@
         filters: {
           days: [], // [1,2,3,4,5,6,0] for Mon-Sun
           timeSlots: [] // ['06:00-09:00', '09:00-12:00', etc.]
-        }
+        },
+        /** Edge state map: trainerIdStr → {is_saved, is_primary, completed_count} */
+        trainerEdges: {}
       };
 
       /**
@@ -1039,6 +1041,215 @@
           if (!r.ok) throw new Error(r.statusText);
           return r.json();
         });
+      }
+
+      /** Load all client↔trainer edges once on init; stores into state.trainerEdges keyed by trainer_id. */
+      function loadTrainerEdges() {
+        var initData = tg && tg.initData ? tg.initData : '';
+        if (!initData) return Promise.resolve();
+        var headers = { 'X-Telegram-Init-Data': initData };
+        return fetch('/api/webapp/client/trainer-edges', { headers: headers })
+          .then(function(r) { return r.ok ? r.json() : null; })
+          .then(function(data) {
+            if (!data || !Array.isArray(data.all)) return;
+            state.trainerEdges = {};
+            data.all.forEach(function(e) {
+              state.trainerEdges[String(e.trainer_id)] = e;
+            });
+          })
+          .catch(function() { /* non-critical — save button falls back to unknown state */ });
+      }
+
+      /**
+       * Show a brief toast notification at the bottom of the screen.
+       * Auto-dismisses after `durationMs` (default 2400ms). Non-blocking.
+       */
+      var _toastTimer = null;
+      function showToast(message, durationMs) {
+        var dur = durationMs || 2400;
+        var el = document.getElementById('appToast');
+        if (!el) {
+          el = document.createElement('div');
+          el.id = 'appToast';
+          el.className = 'app-toast';
+          document.body.appendChild(el);
+        }
+        el.textContent = message;
+        el.classList.add('app-toast--visible');
+        if (_toastTimer) clearTimeout(_toastTimer);
+        _toastTimer = setTimeout(function() {
+          el.classList.remove('app-toast--visible');
+        }, dur);
+      }
+
+      /** Toggle save state for current trainer. Optimistic UI update then API call. */
+      function toggleSaveTrainer(trainerId) {
+        var initData = tg && tg.initData ? tg.initData : '';
+        if (!initData) return;
+        var key = String(trainerId);
+        var edge = state.trainerEdges[key] || {};
+        var nowSaved = !!edge.is_saved;
+        var nextSaved = !nowSaved;
+
+        // Optimistic update
+        state.trainerEdges[key] = Object.assign({}, edge, { is_saved: nextSaved });
+        _updateSaveButtonUI(trainerId, nextSaved);
+
+        var headers = { 'Content-Type': 'application/json', 'X-Telegram-Init-Data': initData };
+        var method = nextSaved ? 'POST' : 'DELETE';
+        var url = nextSaved
+          ? '/api/webapp/client/trainer-edges/save'
+          : '/api/webapp/client/trainer-edges/save/' + trainerId;
+        var body = nextSaved ? JSON.stringify({ trainer_id: trainerId }) : undefined;
+        fetch(url, { method: method, headers: headers, body: body })
+          .then(function(r) { return r.ok ? r.json() : Promise.reject(r.status); })
+          .then(function(data) {
+            if (data && data.edge) {
+              state.trainerEdges[key] = data.edge;
+              _updateSaveButtonUI(trainerId, !!data.edge.is_saved);
+            }
+          })
+          .catch(function() {
+            // Rollback optimistic on error
+            state.trainerEdges[key] = Object.assign({}, edge, { is_saved: nowSaved });
+            _updateSaveButtonUI(trainerId, nowSaved);
+          });
+      }
+
+      function _updateSaveButtonUI(trainerId, isSaved) {
+        var chip = document.getElementById('chipSaveTrainer');
+        if (!chip || parseInt(chip.dataset.trainerId, 10) !== trainerId) return;
+        chip.querySelector('span').textContent = isSaved ? 'Сохранено' : 'Сохранить';
+        chip.querySelector('.chip-icon').textContent = isSaved ? '❤️' : '🤍';
+        chip.classList.toggle('is-active', isSaved);
+      }
+
+      function _updateNotifyChipUI(trainerId, isNotify) {
+        var chip = document.getElementById('chipNotifySlots');
+        if (!chip || parseInt(chip.dataset.trainerId, 10) !== trainerId) return;
+        chip.querySelector('span').textContent = isNotify ? 'Подписан' : 'Напомнить';
+        chip.querySelector('.chip-icon').textContent = isNotify ? '🔔' : '🔕';
+        chip.classList.toggle('is-active', isNotify);
+        chip.classList.toggle('wants-attention', !isNotify);
+
+        var hint = document.getElementById('chipsContextHint');
+        if (hint) {
+          var noSlotsCtx = chip.dataset.noSlotsContext === '1';
+          if (isNotify) {
+            hint.textContent = '🔔 Уведомим, когда появятся свободные окна';
+          } else if (noSlotsCtx) {
+            hint.textContent = 'Нет слотов — нажмите 🔕, чтобы получить уведомление';
+          } else {
+            hint.textContent = 'Нажмите 🔕 — напомним о новых окнах в расписании';
+          }
+        }
+      }
+
+      /** Toggle slot-notification subscription. Optimistic UI + toast feedback. */
+      function toggleNotifySlots(trainerId) {
+        var initData = tg && tg.initData ? tg.initData : '';
+        if (!initData) return;
+        var key = String(trainerId);
+        var edge = state.trainerEdges[key] || {};
+        var nowNotify = !!edge.notify_when_slots;
+        var nextNotify = !nowNotify;
+
+        state.trainerEdges[key] = Object.assign({}, edge, { notify_when_slots: nextNotify });
+        _updateNotifyChipUI(trainerId, nextNotify);
+
+        // Immediate feedback — tells user exactly what will happen
+        if (nextNotify) {
+          showToast('🔔 Уведомим, когда тренер добавит свободные окна');
+        } else {
+          showToast('Подписка на уведомления отменена');
+        }
+
+        var headers = { 'Content-Type': 'application/json', 'X-Telegram-Init-Data': initData };
+        var method = nextNotify ? 'POST' : 'DELETE';
+        var url = nextNotify
+          ? '/api/webapp/client/trainer-edges/notify-slots'
+          : '/api/webapp/client/trainer-edges/notify-slots/' + trainerId;
+        var body = nextNotify ? JSON.stringify({ trainer_id: trainerId }) : undefined;
+        fetch(url, { method: method, headers: headers, body: body })
+          .then(function(r) { return r.ok ? r.json() : Promise.reject(r.status); })
+          .then(function(data) {
+            if (data && data.edge) {
+              state.trainerEdges[key] = data.edge;
+              _updateNotifyChipUI(trainerId, !!data.edge.notify_when_slots);
+            }
+          })
+          .catch(function() {
+            state.trainerEdges[key] = Object.assign({}, edge, { notify_when_slots: nowNotify });
+            _updateNotifyChipUI(trainerId, nowNotify);
+          });
+      }
+
+      /**
+       * Dual-chip row: [🔔 Напомнить] [❤️ Сохранить].
+       * Compact secondary actions — never obscure the primary CTA.
+       * noSlots=true adds a subtle pulse to the notify chip to draw attention.
+       */
+      function appendTrainerActionChips(container, trainer, noSlots) {
+        if (!container || !trainer || trainer.id == null) return;
+        if (!tg || !tg.initData) return;
+        var tid = trainer.id;
+        var edge = state.trainerEdges[String(tid)] || {};
+        var isSaved = !!edge.is_saved;
+        var isNotify = !!edge.notify_when_slots;
+
+        var row = document.createElement('div');
+        row.className = 'trainer-action-chips';
+
+        // ── Notify chip (left) ──
+        var chipNotify = document.createElement('button');
+        chipNotify.type = 'button';
+        chipNotify.id = 'chipNotifySlots';
+        chipNotify.setAttribute('data-trainer-id', String(tid));
+        chipNotify.className = 'trainer-action-chip trainer-action-chip--notify' +
+          (isNotify ? ' is-active' : '') +
+          (!isNotify && noSlots ? ' wants-attention' : '');
+        chipNotify.setAttribute('data-no-slots-context', noSlots ? '1' : '0');
+        chipNotify.innerHTML =
+          '<span class="chip-icon">' + (isNotify ? '🔔' : '🔕') + '</span>' +
+          '<span>' + (isNotify ? 'Подписан' : 'Напомнить') + '</span>';
+        chipNotify.onclick = function() { toggleNotifySlots(tid); };
+
+        // ── Save chip (right) ──
+        var chipSave = document.createElement('button');
+        chipSave.type = 'button';
+        chipSave.id = 'chipSaveTrainer';
+        chipSave.setAttribute('data-trainer-id', String(tid));
+        chipSave.className = 'trainer-action-chip trainer-action-chip--save' +
+          (isSaved ? ' is-active' : '');
+        chipSave.innerHTML =
+          '<span class="chip-icon">' + (isSaved ? '❤️' : '🤍') + '</span>' +
+          '<span>' + (isSaved ? 'Сохранено' : 'Сохранить') + '</span>';
+        chipSave.onclick = function() { toggleSaveTrainer(tid); };
+
+        row.appendChild(chipNotify);
+        row.appendChild(chipSave);
+        container.appendChild(row);
+
+        // Context hint always under chips (was omitted when slots existed and user unsubscribed).
+        var hint = document.createElement('p');
+        hint.className = 'chips-hint';
+        hint.id = 'chipsContextHint';
+        if (isNotify) {
+          hint.textContent = '🔔 Уведомим, когда появятся свободные окна';
+        } else if (noSlots) {
+          hint.textContent = 'Нет слотов — нажмите 🔕, чтобы получить уведомление';
+        } else {
+          hint.textContent = 'Нажмите 🔕 — напомним о новых окнах в расписании';
+        }
+        container.appendChild(hint);
+      }
+
+      /**
+       * @deprecated Use appendTrainerActionChips. Kept for safety in case any
+       * branch still calls it — silently delegates to the new implementation.
+       */
+      function appendSaveTrainerButton(container, trainer) {
+        appendTrainerActionChips(container, trainer, false);
       }
 
       function applySessionToState(session) {
@@ -2492,6 +2703,7 @@
             actionsLeadEl.innerHTML = '';
             actionsLeadEl.innerHTML += '<button type="button" class="btn-primary btn-block" id="btnContactTelegram">Написать в Telegram</button>';
             actionsLeadEl.innerHTML += '<button type="button" class="btn-secondary btn-block" data-action="leave-request">Оставить заявку</button>';
+            appendTrainerActionChips(actionsLeadEl, t, true);
             var btnTg = document.getElementById('btnContactTelegram');
             if (btnTg) {
               btnTg.onclick = function() {
@@ -2515,6 +2727,7 @@
           state.slotsForTrainer = [];
           var actionsEl = document.getElementById('trainerDetailActions');
           actionsEl.innerHTML = '<button type="button" class="btn-secondary btn-block" data-action="leave-request">Оставить заявку</button>';
+          appendTrainerActionChips(actionsEl, t, true);
           document.getElementById('trainerDetailSecondary').innerHTML = '';
           return;
         }
@@ -2537,6 +2750,7 @@
             if (t.has_pass_products || t.has_certificate_products) {
               actionsEl.innerHTML += '<button type="button" class="btn-secondary btn-block" data-action="buy-pass">Абонементы/Сертификаты</button>';
             }
+            appendTrainerActionChips(actionsEl, t, false);
             var btnPrim = document.getElementById('btnCatalogSlotsPrimaryArena');
             if (btnPrim) {
               btnPrim.onclick = function() {
@@ -2591,12 +2805,15 @@
           if (t.has_pass_products || t.has_certificate_products) {
             actionsEl.innerHTML += '<button type="button" class="btn-secondary btn-block" data-action="buy-pass">Абонементы/Сертификаты</button>';
           }
+          appendTrainerActionChips(actionsEl, t, slots.length === 0);
           var btnBook = document.getElementById('btnBookFromDetail');
           if (btnBook) btnBook.onclick = function() { renderSlotPickList(); showScreen('screenSlotPick'); };
           document.getElementById('trainerDetailSecondary').innerHTML = '';
         }).catch(function() {
           document.getElementById('trainerDetailSlots').innerHTML = '<div class="slots-title">Ближайшие слоты</div><div class="slots-empty">Не удалось загрузить слоты</div>';
-          document.getElementById('trainerDetailActions').innerHTML = '<button type="button" class="btn-secondary btn-block" data-action="leave-request">Оставить заявку</button>';
+          var errActions = document.getElementById('trainerDetailActions');
+          errActions.innerHTML = '<button type="button" class="btn-secondary btn-block" data-action="leave-request">Оставить заявку</button>';
+          appendTrainerActionChips(errActions, t, false);
           document.getElementById('trainerDetailSecondary').innerHTML = '';
         });
       }
@@ -2914,11 +3131,17 @@
         if (applyBtn) applyBtn.onclick = commitArenaScreenSelection;
       })();
 
+      // Load edges in parallel with session — non-blocking, best-effort
+      loadTrainerEdges();
+
       getClientSession()
         .then(function(session) {
           applySessionToState(session);
           updateBookingNameFieldsVisibility();
           updateRequestNameFieldsVisibility();
+          var qp = new URLSearchParams(window.location.search || '');
+          /* From "Мои тренеры" / saved hub: open catalog list, not auto-jump to session primary trainer card */
+          var forceCatalogBrowse = qp.get('tab') === 'catalog';
           var returnCtx = (function() {
             var p = new URLSearchParams(window.location.search || '');
             var tid = p.get('trainer_id');
@@ -3010,7 +3233,8 @@
             });
             return;
           }
-          if (state.trainerId) {
+          /* Session has selected primary trainer — normally open their card. ``?tab=catalog`` skips this (browse list). */
+          if (state.trainerId && !forceCatalogBrowse) {
             state.openedFromMyTrainerTab = true;
             loadTrainerById(state.trainerId).then(function(t) {
               if (t) {

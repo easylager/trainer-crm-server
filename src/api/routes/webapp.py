@@ -11,7 +11,7 @@ from typing import Any, Literal
 
 logger = logging.getLogger(__name__)
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -107,6 +107,20 @@ from src.application.client_session_use_cases import (
     set_city,
     set_selected_trainer,
     set_service,
+)
+from src.application.client_trainer_edge_use_cases import (
+    get_all_edges as get_all_trainer_edges,
+    get_edge as get_trainer_edge,
+    get_primary_edge as get_primary_trainer_edge,
+    get_saved_edges as get_saved_trainer_edges,
+    notify_slot_waitlist as uc_notify_slot_waitlist,
+    save_trainer as uc_save_trainer,
+    set_primary_trainer as uc_set_primary_trainer,
+    subscribe_notify_slots as uc_subscribe_notify_slots,
+    trainer_display_hints_by_ids,
+    unset_primary_trainer as uc_unset_primary_trainer,
+    unsave_trainer as uc_unsave_trainer,
+    unsubscribe_notify_slots as uc_unsubscribe_notify_slots,
 )
 from src.application.catalog_use_cases import list_arenas, list_cities, list_services
 from src.application.recurring_use_cases import (
@@ -789,6 +803,7 @@ class ScheduleSlotsDayBody(BaseModel):
 @router.post("/schedule/slots")
 async def post_schedule_slots(
     body: ScheduleSlotsDayBody,
+    background_tasks: BackgroundTasks,
     init_data: str | None = Query(None),
     x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
     session: AsyncSession = Depends(get_session),
@@ -851,6 +866,11 @@ async def post_schedule_slots(
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
+
+    # Notify waitlisted clients in background after slots are committed
+    if minutes_set:
+        background_tasks.add_task(_bg_notify_slot_waitlist, trainer_id)
+
     return {"ok": True}
 
 
@@ -861,6 +881,7 @@ class ScheduleApplyWeekBody(BaseModel):
 @router.post("/schedule/apply-week")
 async def post_schedule_apply_week(
     body: ScheduleApplyWeekBody,
+    background_tasks: BackgroundTasks,
     init_data: str | None = Query(None),
     x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
     session: AsyncSession = Depends(get_session),
@@ -887,6 +908,8 @@ async def post_schedule_apply_week(
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
     )
     asyncio.create_task(run_after_schedule_changed(trainer_id, trainer_bot))
+    if count:
+        background_tasks.add_task(_bg_notify_slot_waitlist, trainer_id)
     return {"ok": True, "slots_created": count, "trainer_id": trainer_id}
 
 
@@ -1281,6 +1304,291 @@ async def post_client_session(
     return {"success": True}
 
 
+# ── Client ↔ Trainer relationship edges ───────────────────────────────────────
+
+async def _bg_notify_slot_waitlist(trainer_id: int) -> None:
+    """
+    Background task: dispatch slot-availability notifications to subscribed clients.
+    Creates its own DB session so the slot-creation transaction is already committed.
+    """
+    from aiogram import Bot
+    from aiogram.client.default import DefaultBotProperties
+    from aiogram.enums import ParseMode
+
+    from src.infrastructure.db.session import async_session_factory
+
+    settings = Settings()
+    try:
+        async with async_session_factory() as session:
+            # Fetch trainer display name for the message
+            r = await session.execute(
+                text("""
+                    SELECT COALESCE(TRIM(tp.first_name || ' ' || tp.last_name), 'Тренер')
+                    FROM trainers t
+                    LEFT JOIN trainer_profiles tp ON tp.trainer_id = t.id
+                    WHERE t.id = :tid
+                """),
+                {"tid": trainer_id},
+            )
+            row = r.fetchone()
+            display_name = row[0].strip() if row else "Тренер"
+
+            client_bot = Bot(
+                token=settings.telegram_bot_token_client,
+                default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+            )
+            try:
+                async def _send(tg_id: int, txt: str) -> None:
+                    await client_bot.send_message(chat_id=tg_id, text=txt)
+
+                await uc_notify_slot_waitlist(trainer_id, display_name, session, _send)
+            finally:
+                await client_bot.session.close()
+    except Exception:
+        # Non-critical — slot creation already succeeded
+        pass
+
+
+class _TrainerEdgeSaveBody(BaseModel):
+    trainer_id: int
+
+
+class _TrainerEdgePrimaryBody(BaseModel):
+    trainer_id: int
+
+
+def _compute_primary_edge(
+    edges: list[dict],
+    session_trainer_id: int | None = None,
+) -> dict | None:
+    """
+    Derive the most intent-relevant trainer without any explicit flag.
+
+    Priority (descending):
+      1. Last booking     — strongest engagement (last_booking_at)
+      2. Last saved       — declared intent (is_saved + saved_at)
+      3. Catalog session  — passive navigation (selected_trainer_id from session)
+
+    Ties within a priority are broken by timestamp recency.
+    Pure function — no writes, always consistent with live data.
+    """
+    if not edges:
+        return None
+
+    # P1: trainer the client most recently booked
+    booked = [e for e in edges if e.get("last_booking_at")]
+    if booked:
+        return max(booked, key=lambda e: e["last_booking_at"])
+
+    # P2: trainer the client most recently saved
+    saved = [e for e in edges if e.get("is_saved")]
+    if saved:
+        with_ts = [e for e in saved if e.get("saved_at")]
+        if with_ts:
+            return max(with_ts, key=lambda e: e["saved_at"])
+        return saved[0]  # saved without timestamp — rare but safe
+
+    # P3: trainer last opened in the catalog (session navigation signal)
+    if session_trainer_id is not None:
+        for e in edges:
+            if int(e.get("trainer_id", 0)) == session_trainer_id:
+                return e
+
+    return None
+
+
+def _serialize_edge(edge: dict) -> dict:
+    """Convert edge row to JSON-safe dict; datetime → ISO string."""
+    out = dict(edge)
+    for key in (
+        "saved_at", "notify_when_slots_at",
+        "last_booking_at", "last_completed_at", "last_interaction_at", "created_at",
+    ):
+        v = out.get(key)
+        if hasattr(v, "isoformat"):
+            out[key] = v.isoformat()
+        elif v is not None:
+            out[key] = str(v)
+    return out
+
+
+def _edge_json_with_trainer_hints(
+    edge: dict,
+    hints: dict[int, dict[str, Any]],
+    next_bookings: dict[int, dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Edge + display hints (name, photo, services, arena, min price) + next upcoming booking when available."""
+    base = _serialize_edge(edge)
+    tid = int(edge["trainer_id"])
+    h = hints.get(tid) or {}
+    base["trainer_display_name"] = h.get("trainer_display_name", "Тренер")
+    base["trainer_list_photo_key"] = h.get("trainer_list_photo_key")
+    base["services"] = h.get("services", [])
+    base["primary_arena_name"] = h.get("primary_arena_name")
+    base["min_price_cents"] = h.get("min_price_cents")
+    if next_bookings is not None:
+        nb = next_bookings.get(tid)
+        base["next_booking"] = nb  # may be None
+    return base
+
+
+def _next_booking_per_trainer(days: list[dict]) -> dict[int, dict[str, Any]]:
+    """First upcoming non-cancelled booking per trainer; days list is ascending by date already."""
+    out: dict[int, dict[str, Any]] = {}
+    for d in days or []:
+        for b in d.get("bookings", []) or []:
+            tid = b.get("trainer_id")
+            if tid is None or tid in out:
+                continue
+            status = (b.get("status") or "").lower()
+            if status in ("cancelled", "declined", "no_show"):
+                continue
+            out[int(tid)] = {
+                "slot_date": b.get("slot_date"),
+                "start_time": b.get("start_time"),
+                "service_name": b.get("service_name"),
+                "arena_name": b.get("arena_name"),
+            }
+    return out
+
+
+@router.get("/client/trainer-edges")
+async def get_client_trainer_edges(
+    init_data: str | None = Query(None),
+    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    session: AsyncSession = Depends(get_session),
+):
+    """All client ↔ trainer edges + display hints + next upcoming booking per trainer."""
+    raw = init_data or x_telegram_init_data
+    if not raw:
+        raise HTTPException(status_code=401, detail="Missing init data")
+    telegram_id = _client_telegram_id(raw)
+    edges = await get_all_trainer_edges(telegram_id, session)
+    hints = await trainer_display_hints_by_ids(session, [int(e["trainer_id"]) for e in edges])
+    bookings_payload = await _client_bookings_days_payload(session, telegram_id)
+    next_per_trainer = _next_booking_per_trainer(bookings_payload.get("days") or [])
+
+    # P3 fallback: last trainer opened in the catalog (from client session)
+    sess_row = await read_client_bot_session(telegram_id, session)
+    session_trainer_id = int(sess_row["selected_trainer_id"]) if (sess_row or {}).get("selected_trainer_id") else None
+
+    primary = _compute_primary_edge(edges, session_trainer_id)
+    primary_tid = int(primary["trainer_id"]) if primary else None
+
+    saved = [e for e in edges if e.get("is_saved") and int(e["trainer_id"]) != primary_tid]
+    past = [
+        e for e in edges
+        if e.get("completed_count", 0) > 0
+        and not e.get("is_saved")
+        and int(e["trainer_id"]) != primary_tid
+    ]
+    return {
+        "primary": _edge_json_with_trainer_hints(primary, hints, next_per_trainer) if primary else None,
+        "saved": [_edge_json_with_trainer_hints(e, hints, next_per_trainer) for e in saved],
+        "past": [_edge_json_with_trainer_hints(e, hints, next_per_trainer) for e in past],
+        "all": [_edge_json_with_trainer_hints(e, hints, next_per_trainer) for e in edges],
+    }
+
+
+@router.post("/client/trainer-edges/save")
+async def post_client_save_trainer(
+    body: _TrainerEdgeSaveBody,
+    init_data: str | None = Query(None),
+    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    session: AsyncSession = Depends(get_session),
+):
+    """Bookmark a trainer (is_saved = true). Idempotent. Auth: client initData."""
+    raw = init_data or x_telegram_init_data
+    if not raw:
+        raise HTTPException(status_code=401, detail="Missing init data")
+    telegram_id = _client_telegram_id(raw)
+    edge = await uc_save_trainer(telegram_id, body.trainer_id, session)
+    return {"edge": _serialize_edge(edge)}
+
+
+@router.delete("/client/trainer-edges/save/{trainer_id:int}")
+async def delete_client_save_trainer(
+    trainer_id: int,
+    init_data: str | None = Query(None),
+    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    session: AsyncSession = Depends(get_session),
+):
+    """Remove bookmark (is_saved = false). Idempotent. Auth: client initData."""
+    raw = init_data or x_telegram_init_data
+    if not raw:
+        raise HTTPException(status_code=401, detail="Missing init data")
+    telegram_id = _client_telegram_id(raw)
+    edge = await uc_unsave_trainer(telegram_id, trainer_id, session)
+    return {"edge": _serialize_edge(edge)}
+
+
+@router.post("/client/trainer-edges/primary")
+async def post_client_set_primary_trainer(
+    body: _TrainerEdgePrimaryBody,
+    init_data: str | None = Query(None),
+    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    session: AsyncSession = Depends(get_session),
+):
+    """Set primary trainer (is_primary = true). Demotes previous primary. Syncs legacy session field. Auth: client initData."""
+    raw = init_data or x_telegram_init_data
+    if not raw:
+        raise HTTPException(status_code=401, detail="Missing init data")
+    telegram_id = _client_telegram_id(raw)
+    edge = await uc_set_primary_trainer(telegram_id, body.trainer_id, session)
+    return {"edge": _serialize_edge(edge)}
+
+
+@router.delete("/client/trainer-edges/primary")
+async def delete_client_primary_trainer(
+    init_data: str | None = Query(None),
+    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    session: AsyncSession = Depends(get_session),
+):
+    """Clear primary designation (no trainer is 'main' now). Auth: client initData."""
+    raw = init_data or x_telegram_init_data
+    if not raw:
+        raise HTTPException(status_code=401, detail="Missing init data")
+    telegram_id = _client_telegram_id(raw)
+    await uc_unset_primary_trainer(telegram_id, session)
+    return {"success": True}
+
+
+class _TrainerEdgeNotifyBody(BaseModel):
+    trainer_id: int
+
+
+@router.post("/client/trainer-edges/notify-slots")
+async def post_client_notify_slots(
+    body: _TrainerEdgeNotifyBody,
+    init_data: str | None = Query(None),
+    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    session: AsyncSession = Depends(get_session),
+):
+    """Subscribe to slot-availability notification for a trainer. Idempotent. Auth: client initData."""
+    raw = init_data or x_telegram_init_data
+    if not raw:
+        raise HTTPException(status_code=401, detail="Missing init data")
+    telegram_id = _client_telegram_id(raw)
+    edge = await uc_subscribe_notify_slots(telegram_id, body.trainer_id, session)
+    return {"edge": _serialize_edge(edge)}
+
+
+@router.delete("/client/trainer-edges/notify-slots/{trainer_id:int}")
+async def delete_client_notify_slots(
+    trainer_id: int,
+    init_data: str | None = Query(None),
+    x_telegram_init_data: str | None = Header(None, alias="X-Telegram-Init-Data"),
+    session: AsyncSession = Depends(get_session),
+):
+    """Cancel slot-availability subscription. Idempotent. Auth: client initData."""
+    raw = init_data or x_telegram_init_data
+    if not raw:
+        raise HTTPException(status_code=401, detail="Missing init data")
+    telegram_id = _client_telegram_id(raw)
+    edge = await uc_unsubscribe_notify_slots(telegram_id, trainer_id, session)
+    return {"edge": _serialize_edge(edge)}
+
+
 def _serialize_client_request(req: dict) -> dict:
     """Request + responses to JSON-safe (created_at as string)."""
     created_at = req.get("created_at")
@@ -1527,11 +1835,41 @@ async def get_client_hub_bootstrap(
             return await _client_requests_list_payload(s, telegram_id)
 
     async def _hub_session() -> dict[str, Any]:
-        """Catalog/bot: selected_trainer_id drives client-home empty-state CTA («Мой тренер» vs «Найти тренера»)."""
+        """Legacy: selected_trainer_id + edge graph fields + saved_trainers preview for home strip."""
         async with async_session_factory() as s:
             row = await read_client_bot_session(telegram_id, s)
             tid = (row or {}).get("selected_trainer_id")
-            return {"selected_trainer_id": int(tid) if tid is not None else None}
+            edges = await get_all_trainer_edges(telegram_id, s)
+            hints = await trainer_display_hints_by_ids(s, [int(e["trainer_id"]) for e in edges])
+            # Computed primary — no explicit flag, derived from engagement signals
+            session_tid = int(tid) if tid is not None else None
+            primary_edge = _compute_primary_edge(edges, session_tid)
+            saved_edges = [e for e in edges if e.get("is_saved")]
+            pid = int(primary_edge["trainer_id"]) if primary_edge else None
+            p_hint = hints.get(pid) if pid else None
+            saved_preview = [
+                {
+                    "trainer_id": int(e["trainer_id"]),
+                    "trainer_display_name": (hints.get(int(e["trainer_id"])) or {}).get(
+                        "trainer_display_name", "Тренер"
+                    ),
+                    "trainer_list_photo_key": (hints.get(int(e["trainer_id"])) or {}).get(
+                        "trainer_list_photo_key"
+                    ),
+                }
+                for e in saved_edges
+            ]
+            return {
+                "selected_trainer_id": int(tid) if tid is not None else None,
+                "primary_trainer_id": pid,
+                "primary_trainer_name": (
+                    (p_hint or {}).get("trainer_display_name") if pid else None
+                ),
+                "primary_trainer_list_photo_key": (p_hint or {}).get("trainer_list_photo_key") if pid else None,
+                "saved_trainer_ids": [e["trainer_id"] for e in saved_edges],
+                "saved_trainers": saved_preview,
+                "has_past_sessions": any(e.get("completed_count", 0) > 0 for e in edges),
+            }
 
     bookings, requests, client_session = await asyncio.gather(_bookings(), _requests(), _hub_session())
     return {"bookings": bookings, "requests": requests, "client_session": client_session}
@@ -1680,15 +2018,24 @@ async def post_client_booking_cancel(
             )
         finally:
             await trainer_bot.session.close()
-    text_client = msg.CLIENT_BOOKING_CANCELLED_BY_SELF.format(
-        date=date_str, day=day_label, time=time_str
+    settings_client = Settings()
+    reply_markup_client = msg.build_client_rebook_catalog_keyboard(
+        webapp_base_url=settings_client.webapp_base_url,
     )
+    cancel_tpl = (
+        msg.CLIENT_BOOKING_CANCELLED_BY_SELF
+        if reply_markup_client is not None
+        else msg.CLIENT_BOOKING_CANCELLED_BY_SELF_MENU
+    )
+    text_client = cancel_tpl.format(date=date_str, day=day_label, time=time_str)
     client_bot = Bot(
-        token=Settings().telegram_bot_token_client,
+        token=settings_client.telegram_bot_token_client,
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
     )
     try:
-        await client_bot.send_message(chat_id=telegram_id, text=text_client)
+        await client_bot.send_message(
+            chat_id=telegram_id, text=text_client, reply_markup=reply_markup_client
+        )
     finally:
         await client_bot.session.close()
     return {"success": True}

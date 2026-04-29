@@ -25,16 +25,18 @@
         user:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>',
         msg:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></svg>',
         pin:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>',
+        bookmark: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m19 21-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/></svg>',
         repeat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>',
         plus:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>',
       };
 
       /** Explore tiles shown at bottom — same in all scenarios. */
       var EXPLORE_TILES = [
-        { path: 'catalog',                label: 'Тренеры и запись',     hint: 'Каталог, фильтры, слоты', icon: 'search', badge: null },
-        { path: 'client-bookings',        label: 'Мои записи',           hint: 'Все занятия',             icon: 'cal',    badge: null },
-        { path: 'client-requests',        label: 'Заявки',               hint: 'Подбор тренера',          icon: 'inbox',  badge: 'NEW' },
-        { path: 'client-passes-certificates', label: 'Абонементы',       hint: 'Остаток, сроки, покупка', icon: 'ticket', badge: null },
+        { path: 'catalog',                   label: 'Тренеры и запись', hint: 'Каталог, фильтры, слоты',        icon: 'search', badge: null },
+        { path: 'client-saved-trainers',     label: 'Сохранённые',        hint: 'Закладки из каталога',           icon: 'bookmark', badge: null },
+        { path: 'client-bookings',           label: 'Мои записи',          hint: 'Все занятия',                    icon: 'cal',    badge: null },
+        { path: 'client-requests',           label: 'Заявки',             hint: 'Подбор тренера',                 icon: 'inbox',  badge: 'NEW' },
+        { path: 'client-passes-certificates',label: 'Абонементы',       hint: 'Остаток, сроки, покупка', icon: 'ticket', badge: null },
       ];
 
       /* ── State ──────────────────────────────────────────────────────── */
@@ -80,6 +82,11 @@
         var parts = String(name).trim().split(/\s+/);
         if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
         return parts[0].slice(0, 2).toUpperCase();
+      }
+
+      function trainerHubThumb(fileKey) {
+        if (!fileKey) return '';
+        return '/api/public/photos/' + encodeURIComponent(fileKey);
       }
 
       function parseDateTime(dateStr, timeStr) {
@@ -259,15 +266,16 @@
       /* ── My trainer card ─────────────────────────────────────────────── */
 
       /**
-       * Renders the "Мой тренер" card when client has a known trainer
-       * but no upcoming booking exists (or as secondary info in Scenario 1).
+       * Primary-relationship card: uppercase label «ОСНОВНОЙ», main line — trainer name from hub.
+       * Opens catalog deep-linked to this trainer_id so we never reuse stale session.trainer_id from browsing.
        */
-      function renderMyTrainerCard(trainerName, trainerUsername, trainerTelegramId) {
+      function renderMyTrainerCard(trainerId, trainerName, trainerUsername, trainerTelegramId, listPhotoKey) {
         var block = document.getElementById('myTrainerBlock');
         if (!block) return;
         var un = (trainerUsername || '').replace(/^@/, '').trim();
         var tid = trainerTelegramId != null ? String(trainerTelegramId) : '';
         var hasDm = un || tid;
+        var displayName = ((trainerName || '').trim()) || 'Тренер';
 
         var msgBtnHtml = hasDm
           ? '<div class="hub-trainer-actions">' +
@@ -277,13 +285,18 @@
             '</div>'
           : '';
 
+        var src = trainerHubThumb(listPhotoKey || '');
+        var avatarHtml = src
+          ? '<div class="hub-trainer-avatar hub-trainer-avatar--photo"><img src="' + esc(src) + '" alt="" loading="lazy"/></div>'
+          : '<div class="hub-trainer-avatar">' + esc(initials(displayName)) + '</div>';
+
         block.innerHTML =
           '<div class="hub-trainer-card" id="trainerCard">' +
-            '<div class="hub-trainer-avatar">' + esc(initials(trainerName)) + '</div>' +
+            avatarHtml +
             '<div class="hub-trainer-info">' +
-              '<div class="hub-trainer-label">Мой тренер</div>' +
-              '<div class="hub-trainer-name">' + esc(trainerName || 'Тренер') + '</div>' +
-              '<div class="hub-trainer-sub">Перейти в каталог → Записаться</div>' +
+              '<div class="hub-trainer-label">Основной</div>' +
+              '<div class="hub-trainer-name">' + esc(displayName) + '</div>' +
+              '<div class="hub-trainer-sub">Выбрать время в каталоге</div>' +
             '</div>' +
             msgBtnHtml +
           '</div>';
@@ -298,7 +311,11 @@
             openTelegramDm(dmBtn.getAttribute('data-dm-un'), dmBtn.getAttribute('data-dm-tid'));
             return;
           }
-          navigateTo('catalog');
+          navigateTo(
+            trainerId != null && String(trainerId).trim() !== ''
+              ? 'catalog?trainer_id=' + encodeURIComponent(String(trainerId))
+              : 'catalog'
+          );
         });
       }
 
@@ -321,12 +338,35 @@
           ];
         } else if (scenario === 'has-trainer') {
           pills = [
-            { label: 'Записаться',    icon: 'plus',   primary: true, action: function() { navigateTo('catalog'); } },
+            {
+              label: 'Записаться',
+              icon: 'plus',
+              primary: true,
+              action: function() {
+                if (selectedTrainerId != null && String(selectedTrainerId).trim() !== '') {
+                  navigateTo('catalog?trainer_id=' + encodeURIComponent(String(selectedTrainerId)));
+                } else {
+                  navigateTo('catalog');
+                }
+              },
+            },
             { label: 'Мои записи',    icon: 'cal',               action: function() { navigateTo('client-bookings'); } },
             { label: 'Абонемент',     icon: 'ticket',            action: function() { navigateTo('client-passes-certificates'); } },
           ];
+        } else if (scenario === 'has-saved') {
+          pills = [
+            { label: 'Записаться',    icon: 'plus',   primary: true, action: function() { navigateTo('catalog'); } },
+            { label: 'Тренеры',       icon: 'search',              action: function() { navigateTo('catalog'); } },
+            { label: 'Мои записи',    icon: 'cal',                 action: function() { navigateTo('client-bookings'); } },
+          ];
+        } else if (scenario === 'has-past') {
+          pills = [
+            { label: 'Записаться снова', icon: 'repeat', primary: true, action: function() { navigateTo('catalog'); } },
+            { label: 'Тренеры',          icon: 'search',              action: function() { navigateTo('catalog'); } },
+            { label: 'Мои записи',       icon: 'cal',                 action: function() { navigateTo('client-bookings'); } },
+          ];
         } else {
-          /* acquisition state */
+          /* acquisition state — clean */
           pills = [
             { label: 'Найти тренера', icon: 'search', primary: true, action: function() { navigateTo('catalog'); } },
             { label: 'Заявка',        icon: 'inbox',               action: function() { navigateTo('client-requests'); } },
@@ -506,50 +546,133 @@
           '</div>';
       }
 
-      /* ── Main state machine ─────────────────────────────────────────── */
+      /* ── Saved trainers strip ───────────────────────────────────────── */
+
+      function thumbForHubPhoto(key) {
+        if (!key) return '';
+        return '/api/public/photos/' + encodeURIComponent(key);
+      }
 
       /**
-       * Determines scenario and orchestrates all render functions.
-       *   Scenario 3: next booking exists → hero card + compact list + pills(has-booking)
-       *   Scenario 1: no booking but has trainer → trainer card + pills(has-trainer)
-       *   Scenario 2: no trainer, no booking → acquisition hero + pills(new-client)
+       * Renders a horizontal scroll strip of saved (bookmarked) trainers.
+       * Uses `client_session.saved_trainers` from hub bootstrap when present (names + photo keys).
+       */
+      function renderSavedTrainersStrip(cs) {
+        var block = document.getElementById('myTrainerBlock');
+        if (!block) return;
+        var list = [];
+        if (cs && Array.isArray(cs.saved_trainers) && cs.saved_trainers.length) {
+          list = cs.saved_trainers;
+        } else if (cs && Array.isArray(cs.saved_trainer_ids) && cs.saved_trainer_ids.length) {
+          cs.saved_trainer_ids.forEach(function (id) {
+            list.push({
+              trainer_id: id,
+              trainer_display_name: 'Тренер',
+              trainer_list_photo_key: null
+            });
+          });
+        }
+        if (!list.length) return;
+        var chips = list.map(function (row) {
+          var tid = row.trainer_id;
+          var label = (row.trainer_display_name || 'Тренер').trim() || 'Тренер';
+          var src = thumbForHubPhoto(row.trainer_list_photo_key || null);
+          var photoPart = src
+            ? '<span class="hub-saved-chip-avatar"><img src="' + esc(src) + '" alt=""/></span>'
+            : '<span class="hub-saved-chip-icon" aria-hidden="true">🤍</span>';
+          return '<button type="button" class="hub-saved-chip" data-tid="' + esc(String(tid)) + '">' +
+            photoPart +
+            '<span class="hub-saved-chip-label">' + esc(label) + '</span>' +
+            '</button>';
+        }).join('');
+        block.innerHTML =
+          '<div class="hub-saved-section">' +
+            '<div class="hub-saved-section-head">' +
+              '<span class="hub-saved-section-title">Сохранённые тренеры</span>' +
+              '<button type="button" class="hub-saved-section-link" id="btnViewSaved">Все</button>' +
+            '</div>' +
+            '<div class="hub-saved-strip">' + chips + '</div>' +
+          '</div>';
+        block.style.display = '';
+        var viewBtn = document.getElementById('btnViewSaved');
+        if (viewBtn) viewBtn.addEventListener('click', function() { navigateTo('client-saved-trainers'); });
+        block.querySelectorAll('.hub-saved-chip').forEach(function(btn) {
+          btn.addEventListener('click', function() {
+            navigateTo('catalog?trainer_id=' + encodeURIComponent(btn.getAttribute('data-tid')));
+          });
+        });
+      }
+
+      /* ── Main state machine — Intent Engine ─────────────────────────── */
+
+      /**
+       * Home intent priority (strict order — first matching level wins):
+       *   1. Upcoming booking  → booking hero card
+       *   2. Primary trainer   → "Мой тренер" card + book CTA
+       *   3. Saved trainers    → "Продолжить выбор" + saved strip
+       *   4. Has past sessions → "Записаться снова" acquisition
+       *   5. Clean state       → full acquisition onboarding hero
+       *
+       * This is a decision engine, not a dashboard.
+       * It answers: "what is the most important thing for the client right now?"
        */
       function applyHubState(bookingDays, requestItems, hubMeta) {
         var cs = (hubMeta && hubMeta.client_session) || {};
-        selectedTrainerId = cs.selected_trainer_id != null && cs.selected_trainer_id !== '' ? cs.selected_trainer_id : null;
+        // Support both legacy (selected_trainer_id) and new edge-based fields
+        var primaryTrainerId = cs.primary_trainer_id != null ? cs.primary_trainer_id
+          : (cs.selected_trainer_id != null && cs.selected_trainer_id !== '' ? cs.selected_trainer_id : null);
+        var savedTrainersRich = Array.isArray(cs.saved_trainers) ? cs.saved_trainers : [];
+        var savedIds = Array.isArray(cs.saved_trainer_ids) ? cs.saved_trainer_ids : [];
+        var hasSavedBookmarks = savedTrainersRich.length > 0 || savedIds.length > 0;
+        var hasPastSessions = !!cs.has_past_sessions;
+        selectedTrainerId = primaryTrainerId;
 
-        var flat = flattenBookings(bookingDays);
         var nextItem = findNextBooking(bookingDays);
-        var hasBookings = flat.length > 0;
 
-        /* --- Scenario 3: has upcoming booking --- */
+        /* ── Priority 1: Has upcoming booking ── */
         if (nextItem) {
           setHeroText('Ваша следующая тренировка', null);
           renderNextBookingCard(nextItem);
-          /* Show trainer card additionally if we know the trainer context */
           hideMyTrainerBlock();
           renderQuickStrip('has-booking', nextItem);
           renderUpcomingList(bookingDays, nextItem.b.id);
           return;
         }
 
-        /* --- Scenario 1: knows trainer, no upcoming booking --- */
-        if (selectedTrainerId != null) {
+        clearNextBookingBlock();
+        hideUpcomingSection();
+
+        /* ── Priority 2: Has primary trainer ── */
+        if (primaryTrainerId != null) {
           setHeroText('Готовы к следующей тренировке?', 'Запишитесь к своему тренеру');
-          clearNextBookingBlock();
-          /* We don't have trainer name in session — use generic card */
-          renderMyTrainerCard('Мой тренер', null, null);
+          var pname = (cs.primary_trainer_name || '').trim();
+          var pphoto = cs.primary_trainer_list_photo_key || null;
+          renderMyTrainerCard(primaryTrainerId, pname || null, null, null, pphoto);
           renderQuickStrip('has-trainer', null);
-          hideUpcomingSection();
           return;
         }
 
-        /* --- Scenario 2: acquisition state --- */
+        /* ── Priority 3: Has saved trainers (no primary yet) ── */
+        if (hasSavedBookmarks && primaryTrainerId == null) {
+          setHeroText('Продолжите выбор', 'Вы сохранили тренеров — выберите и запишитесь');
+          renderSavedTrainersStrip(cs);
+          renderQuickStrip('has-saved', null);
+          return;
+        }
+
+        /* ── Priority 4: Has past sessions (churned / dormant) ── */
+        if (hasPastSessions) {
+          setHeroText('Вернитесь к тренировкам', 'Вы уже занимались — запишитесь снова');
+          hideMyTrainerBlock();
+          renderQuickStrip('has-past', null);
+          return;
+        }
+
+        /* ── Priority 5: Clean state — full acquisition ── */
         setHeroText('Ваш следующий шаг', 'Выберите тренера и запишитесь на первую тренировку');
         renderAcquisitionHero();
         hideMyTrainerBlock();
         renderQuickStrip('new-client', null);
-        hideUpcomingSection();
       }
 
       function hideMyTrainerBlock() {

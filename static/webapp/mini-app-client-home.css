@@ -1010,3 +1010,90 @@ html:not(.hub-is-dark) .hub-explore-hint { color: var(--tg-theme-hint-color); op
   }
   .hub-next-card-eyebrow-dot { animation: none !important; }
 }
+
+/* ─── Saved trainers strip (Priority 3 on intent engine) ─────────────────── */
+
+.hub-saved-section {
+  margin: 0 18px 16px;
+}
+
+.hub-saved-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.hub-saved-section-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--tg-theme-text-color);
+}
+
+.hub-saved-section-link {
+  background: none;
+  border: none;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--tg-theme-button-color);
+  cursor: pointer;
+  padding: 0;
+  font-family: inherit;
+}
+
+.hub-saved-strip {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 2px;
+}
+.hub-saved-strip::-webkit-scrollbar { display: none; }
+
+.hub-saved-chip {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-width: 68px;
+  padding: 10px 12px;
+  background: var(--tg-theme-secondary-bg-color);
+  border: 1.5px solid color-mix(in srgb, #e0245e 25%, transparent);
+  border-radius: 14px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: transform 0.12s ease, background 0.12s ease;
+}
+.hub-saved-chip:active { transform: scale(0.95); }
+
+.hub-saved-chip-icon {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.hub-saved-chip-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: color-mix(in srgb, var(--tg-theme-hint-color) 12%, transparent);
+}
+.hub-saved-chip-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.hub-saved-chip-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--tg-theme-hint-color);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 64px;
+}
