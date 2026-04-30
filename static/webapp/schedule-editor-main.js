@@ -4337,28 +4337,18 @@
             const blockedByOverlap = intervalBlockKind != null;
             const labelFull = formatMinuteClock(m);
             const labelShort = ':' + String(m % 60).padStart(2, '0');
+            /** Short aria only (no hover titles): grid reads as «tap where allowed». */
             var ariaBits = [labelFull];
             if (blockedByOverlap) {
-              ariaBits.push(
-                intervalBlockKind === 'booking'
-                  ? 'внутри интервала занятого слота'
-                  : 'пересекается с другим началом при выбранной длительности'
-              );
+              ariaBits.push('занято, начало недоступно');
             } else if (locked) {
-              ariaBits.push('есть записи, слот занят — убрать нельзя');
+              ariaBits.push('нельзя убрать');
             } else if (pinned) {
-              ariaBits.push('окно уже в календаре без записей — снять нельзя');
+              ariaBits.push('открытый слот, не снимается');
             }
             var btnAttrs = ' aria-label="' + escapeHtml(ariaBits.join(' · ')) + '"';
-            if (blockedByOverlap) {
-              btnAttrs +=
-                intervalBlockKind === 'booking'
-                  ? ' disabled title="Это время внутри слота с записями — выбрать как начало нельзя"'
-                  : ' disabled title="Под другим началом при этой длительности — отметить нельзя"';
-            } else if (locked) {
-              btnAttrs += ' disabled title="Есть записи — убрать нельзя"';
-            } else if (pinned) {
-              btnAttrs += ' title="Окно в календаре без записей — убрать нельзя"';
+            if (blockedByOverlap || locked) {
+              btnAttrs += ' disabled';
             }
             html +=
               '<button type="button" class="hour-chip' +
@@ -4379,32 +4369,12 @@
         if (!html && calEditDate) {
           grid.innerHTML =
             '<div class="empty schedule-hour-grid-empty" role="status">Для добавления времени здесь уже нет ни одной ячейки&nbsp;— день мог уйти в прошлое по сетке площадки.</div>';
-          var legendEarly = document.getElementById('scheduleTimeGridLegend');
-          if (legendEarly && grid) {
-            legendEarly.hidden = true;
-            legendEarly.innerHTML = '';
-            grid.setAttribute('aria-describedby', 'scheduleTimeGridHint');
-          }
+          grid.setAttribute('aria-describedby', 'scheduleTimeGridHint');
           updateEditDoneButton();
           return;
         }
         grid.innerHTML = html;
-        var legendEl = document.getElementById('scheduleTimeGridLegend');
-        if (legendEl && grid) {
-          if (calEditDate) {
-            legendEl.hidden = false;
-            legendEl.innerHTML =
-              '<span class="schedule-time-grid-legend__items">' +
-              '<span class="schedule-time-grid-legend__it"><span class="schedule-leg schedule-leg--booked" aria-hidden="true"></span>Есть запись</span>' +
-              '<span class="schedule-time-grid-legend__it"><span class="schedule-leg schedule-leg--open" aria-hidden="true"></span>Есть свободный слот</span>' +
-              '</span>';
-            grid.setAttribute('aria-describedby', 'scheduleTimeGridHint scheduleTimeGridLegend');
-          } else {
-            legendEl.hidden = true;
-            legendEl.innerHTML = '';
-            grid.setAttribute('aria-describedby', 'scheduleTimeGridHint');
-          }
-        }
+        grid.setAttribute('aria-describedby', 'scheduleTimeGridHint');
         grid.querySelectorAll('.hour-chip:not(.locked):not(.pinned):not(.duration-blocked)').forEach(function(btn) {
           btn.onclick = function() {
             const m = parseInt(btn.dataset.minute, 10);
