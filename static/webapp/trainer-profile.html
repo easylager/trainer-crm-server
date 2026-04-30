@@ -24,7 +24,7 @@
       href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=optional"
     />
   </noscript>
-  <link rel="preload" href="trainer-profile-main.js?v=20260567" as="script" />
+  <link rel="preload" href="trainer-profile-main.js?v=20260569" as="script" />
   <link rel="stylesheet" href="mini-app-trainer-profile.css?v=20260556" />
   <link rel="stylesheet" href="mini-app-trainer-nav.css?v=20260419" />
 </head>
@@ -249,7 +249,7 @@
               </svg>
             </div>
             <div class="settings-format-main">
-              <label class="settings-format-label" for="session_duration_minutes"><span class="required-dot"></span>Длительность по умолчанию</label>
+              <label class="settings-format-label" for="session_duration_minutes"><span class="required-dot"></span>Длительность занятия по умолчанию</label>
               <div class="settings-format-inline">
                 <input
                   id="session_duration_minutes"
@@ -281,7 +281,7 @@
             <div class="settings-format-main">
               <label class="settings-format-label" for="min_hours_before_booking"><span class="required-dot"></span>Окно записи</label>
               <div class="settings-format-inline settings-format-inline--lead">
-                <span class="settings-format-lead">не позднее чем за</span>
+                <span class="settings-format-lead">Клиент может записаться не позднее чем за</span>
                 <input
                   id="min_hours_before_booking"
                   class="settings-format-num settings-format-num--narrow"
@@ -292,9 +292,9 @@
                   placeholder="3"
                   inputmode="numeric"
                 />
-                <span class="settings-format-unit">ч до старта</span>
+                <span class="settings-format-unit">часов до старта</span>
               </div>
-              <p class="settings-format-micro">0 — в день занятия (если слот свободен)</p>
+              <div class="settings-format-chips" id="minHoursBeforeQuickChips" aria-label="Частые значения"></div>
               <p id="err_min_hours_before_booking" class="field-error" role="status" hidden></p>
             </div>
           </div>
@@ -491,7 +491,7 @@
     </div>
   </div>
 
-  <script defer src="trainer-profile-main.js?v=20260567"></script>
+  <script defer src="trainer-profile-main.js?v=20260569"></script>
   <script defer src="mini-app-trainer-home.js?v=20260563"></script>
 </body>
 </html>

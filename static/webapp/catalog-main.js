@@ -234,7 +234,7 @@
         }
       }
 
-      /** Slot-bound service_id wins over catalog state (same idea as book.html). */
+      /** Card / catalog filter wins over slot.snapshot: API may tag slots with another service_id while times are shared. */
       function catalogEffectiveServiceIdForBooking() {
         var slot = state.selectedSlot;
         var t = state.selectedTrainer;
@@ -245,13 +245,13 @@
           var id = Number(services[i].service_id);
           if (!isNaN(id) && id > 0) allowed[id] = true;
         }
-        if (slot && slot.service_id != null) {
-          var ps = Number(slot.service_id);
-          if (!isNaN(ps) && ps > 0 && allowed[ps]) return ps;
-        }
         if (state.serviceId != null) {
           var cur = Number(state.serviceId);
           if (!isNaN(cur) && cur > 0 && allowed[cur]) return cur;
+        }
+        if (slot && slot.service_id != null) {
+          var ps = Number(slot.service_id);
+          if (!isNaN(ps) && ps > 0 && allowed[ps]) return ps;
         }
         return null;
       }
@@ -1537,9 +1537,9 @@
 
       /**
        * @param {object} session — GET /client/session JSON
-       * @param {{ bookingFormRefresh?: boolean }} [opts] If true, only refresh phone/profile/suggested hints
-       *   and optionally align service with booking_context_* (for_trainer_id on the fetch). Does not overwrite
-       *   city/arena/catalog service from global session — avoids primary trainer's ОФП replacing the card filter.
+       * @param {{ bookingFormRefresh?: boolean }} [opts] If true, only refresh phone/profile flags.
+       *   Does not touch city, arena, or service_id — those stay as on the trainer card so booking_context
+       *   from GET /client/session cannot revert a service the user just picked.
        */
       function applySessionToState(session, opts) {
         opts = opts || {};
@@ -1555,17 +1555,6 @@
           }
           if (session.trainer_id) { state.trainerId = session.trainer_id; state.trainerName = session.trainer_name || ''; }
           else { state.trainerId = null; state.trainerName = ''; }
-        } else {
-          var bc = session.booking_context_service_id;
-          if (bc != null && String(bc) !== '') {
-            var bn = Number(bc);
-            if (!isNaN(bn) && bn > 0) {
-              state.serviceId = bn;
-              var bcm = session.booking_context_service_name;
-              state.serviceName =
-                bcm != null && String(bcm).trim() !== '' ? String(bcm).trim() : (state.serviceName || '');
-            }
-          }
         }
         var stid = session.suggested_service_for_trainer_id;
         state.suggestedServiceForTrainerId =
@@ -2811,6 +2800,34 @@
         return html;
       }
 
+      window.selectTrainerService = function(serviceId) {
+        if (!state.selectedTrainer) return;
+        var sid = Number(serviceId);
+        if (isNaN(sid)) return;
+        if (state.serviceId === sid) return;
+        state.serviceId = sid;
+        
+        var services = state.selectedTrainer.services || [];
+        for (var i = 0; i < services.length; i++) {
+          if (Number(services[i].service_id) === sid) {
+            state.serviceName = String(services[i].service_name || '').trim();
+            break;
+          }
+        }
+        
+        // Update URL to reflect the new service ID so if they reload it stays
+        if (window.history && window.history.replaceState) {
+          var url = new URL(window.location.href);
+          url.searchParams.set('service_id', sid);
+          window.history.replaceState(null, '', url.toString());
+        }
+
+        var tid = state.selectedTrainer && state.selectedTrainer.id != null ? state.selectedTrainer.id : null;
+        if (tid != null && state.cityId && state.serviceId != null) persistTrainerSelection(tid);
+
+        renderTrainerDetail();
+      };
+
       function renderTrainerDetail() {
         var t = state.selectedTrainer;
         if (!t) return;
@@ -2916,12 +2933,21 @@
               state.serviceId != null &&
               !isNaN(sid) &&
               Number(state.serviceId) === sid;
-            html += '<div class="trainer-detail-service' + (matchCatalog ? ' trainer-detail-service--catalog-selected' : '') + '">';
+            var isClickable = !isNaN(sid) && !matchCatalog;
+            /* Native <button>: iOS/WebView reliably delivers taps as click; DIV+inline onclick often does not. */
+            if (isClickable) {
+              html += '<button type="button" class="trainer-detail-service trainer-detail-service--clickable" data-catalog-service-select="' + sid + '">';
+            } else {
+              html +=
+                '<div class="trainer-detail-service' +
+                (matchCatalog ? ' trainer-detail-service--catalog-selected' : '') +
+                '">';
+            }
             html += '<div class="trainer-detail-service-top">';
             html += '<span class="trainer-detail-service-name">' + escapeHtml(serviceName) + '</span>';
             html += '<span class="trainer-detail-service-price">' + escapeHtml(priceText) + '</span>';
             html += '</div>';
-            html += '</div>';
+            html += isClickable ? '</button>' : '</div>';
           });
           html += '</div>';
         }
@@ -3286,7 +3312,15 @@
       };
 
 
-      document.getElementById('btnCloseSuccess').onclick = closeApp;
+      function closeCatalogSuccessToHubOrApp() {
+        if (typeof window.navigateClientHome === 'function') {
+          window.navigateClientHome();
+          return;
+        }
+        closeApp();
+      }
+
+      document.getElementById('btnCloseSuccess').onclick = closeCatalogSuccessToHubOrApp;
 
       document.getElementById('backToCity').onclick = function() { showScreen('screenCity'); };
       document.getElementById('backToService').onclick = function() { showScreen('screenService'); };
@@ -3626,6 +3660,13 @@
 
       // Keep first-page prefetch hot while user is on summary and updates filters.
       document.addEventListener('click', function(e) {
+        var svcPick = e.target && e.target.closest && e.target.closest('#trainerDetailTop [data-catalog-service-select]');
+        if (svcPick) {
+          var raw = svcPick.getAttribute('data-catalog-service-select');
+          var sidNum = raw != null && raw !== '' ? parseInt(raw, 10) : NaN;
+          if (!isNaN(sidNum)) window.selectTrainerService(sidNum);
+          return;
+        }
         var actionBtn = e.target && e.target.closest && e.target.closest('#summaryRows .summary-row-clickable, #tabCatalog, #tabMyTrainer');
         if (actionBtn) {
           setTimeout(prefetchFirstPageIfNeeded, 0);

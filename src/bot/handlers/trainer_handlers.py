@@ -2202,7 +2202,7 @@ async def on_trainer_repeat_week(callback: CallbackQuery) -> None:
 
 @router.callback_query(lambda c: c.data and c.data.startswith(FEEDBACK_BOOKING_TRAINER_PREFIX))
 async def on_feedback_booking_trainer(callback: CallbackQuery) -> None:
-    """Trainer tapped 'Leave feedback' after completed booking: ask for optional review text."""
+    """Trainer tapped 'Leave feedback' after session (wrap-up or completed): ask for optional review text."""
     await callback.answer()
     raw = (callback.data or "").replace(FEEDBACK_BOOKING_TRAINER_PREFIX, "").strip()
     booking_id = safe_parse_id(raw)
@@ -2271,7 +2271,7 @@ async def on_booking_add_note_start(callback: CallbackQuery) -> None:
 
 @router.message(lambda m: m.from_user and m.from_user.id in _trainer_feedback_state)
 async def on_trainer_feedback_message(message: Message) -> None:
-    """Trainer sent review text for completed booking."""
+    """Trainer sent review text for a booking (any stage where feedback CTA is shown)."""
     telegram_id = message.from_user.id if message.from_user else 0
     state = _trainer_feedback_state.pop(telegram_id, None)
     if not state:

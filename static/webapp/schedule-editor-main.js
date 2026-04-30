@@ -181,10 +181,11 @@
           ban.hidden = allowed;
           ban.setAttribute('aria-hidden', allowed ? 'true' : 'false');
         }
-        ['btnAddSlots', 'btnApplyThis', 'btnApplyNext'].forEach(function(id) {
+        ['btnApplyThis', 'btnApplyNext'].forEach(function(id) {
           var el = document.getElementById(id);
           if (el) el.disabled = !allowed;
         });
+        syncAddSlotsButtonEligibility();
         if (!_seCrmBannerCtaWired) {
           _seCrmBannerCtaWired = true;
           var cta = document.getElementById('seCrmLockBannerCta');
@@ -1845,6 +1846,22 @@
         return d.getDate() + '.' + String(d.getMonth() + 1).padStart(2, '0') + ' (' + DAYS[wd === 0 ? 6 : wd - 1] + ')';
       }
 
+      /** Hide grid starts already before now — «Добавить слоты» is future-facing only (local clock). */
+      function isCalendarSlotStartInPast(slotDateStr, minuteOfDay) {
+        if (!slotDateStr) return false;
+        var parts = String(slotDateStr).slice(0, 10).split('-');
+        if (parts.length !== 3) return false;
+        var y = parseInt(parts[0], 10);
+        var mo = parseInt(parts[1], 10) - 1;
+        var d = parseInt(parts[2], 10);
+        if (isNaN(y) || isNaN(mo) || isNaN(d)) return false;
+        var mm = parseInt(minuteOfDay, 10);
+        if (isNaN(mm)) return false;
+        var hh = Math.floor(mm / 60);
+        var min = mm % 60;
+        return new Date(y, mo, d, hh, min, 0, 0).getTime() < Date.now();
+      }
+
       /** Minutes from midnight; API sends "HH:MM" for slot/template starts. */
       function parseStartToMinutes(startTime) {
         var s = (startTime == null ? '' : String(startTime)).trim();
@@ -1866,7 +1883,45 @@
 
       function slotDurationFromRow(row) {
         var d = row && row.duration_minutes != null ? parseInt(row.duration_minutes, 10) : NaN;
-        return !isNaN(d) ? d : 45;
+        if (!isNaN(d) && d >= 15) return d;
+        if (row && row.start_time != null && row.end_time != null) {
+          var sm = parseStartToMinutes(row.start_time);
+          var em = parseStartToMinutes(row.end_time);
+          if (!isNaN(sm) && !isNaN(em) && em > sm) return em - sm;
+        }
+        return 45;
+      }
+
+      /** Calendar slot row at this day's start minute (individual flow excludes group-generated rows). */
+      function calendarSlotRowByStartMinute(sm) {
+        if (state.editMode !== 'calendar' || !state.editDate) return null;
+        var rows = state.slots || [];
+        for (var i = 0; i < rows.length; i++) {
+          var s = rows[i];
+          if (s.slot_date !== state.editDate || s.training_group_id) continue;
+          if (parseStartToMinutes(s.start_time) === sm) return s;
+        }
+        return null;
+      }
+
+      function templateSlotRowByStartMinute(sm) {
+        if (state.editMode !== 'template' || state.editDay == null) return null;
+        var tpl = state.templates || [];
+        for (var j = 0; j < tpl.length; j++) {
+          var t = tpl[j];
+          if (t.day_of_week !== state.editDay) continue;
+          if (parseStartToMinutes(t.start_time) === sm) return t;
+        }
+        return null;
+      }
+
+      /** Wall duration for an anchor already on screen: prefer stored row, else current editor duration. */
+      function durationMinutesForSelectedStart(sm) {
+        var cal = calendarSlotRowByStartMinute(sm);
+        if (cal != null) return slotDurationFromRow(cal);
+        var te = templateSlotRowByStartMinute(sm);
+        if (te != null) return slotDurationFromRow(te);
+        return getEditDurationMinutes();
       }
 
       var SCHEDULE_DURATION_OPTIONS = [45, 50, 60, 70, 75, 90, 105, 120, 180];
@@ -2082,7 +2137,7 @@
        * Drop optional starts that overlap after duration change; keep locked + baseline-pinned.
        * English note: greedy by sorted time — first kept wins; later conflicts are removed.
        */
-      function pruneSelectedStartsForOverlap(durationMinutes) {
+      function pruneSelectedStartsForOverlap(_unusedEditorDurationHint) {
         var sorted = Array.from(state.selectedStarts).sort(function(a, b) {
           return a - b;
         });
@@ -2092,23 +2147,34 @@
             kept.add(m);
             return;
           }
+          var dNew = durationMinutesForSelectedStart(m);
           var conflict = false;
           kept.forEach(function(s) {
-            if (intervalsOverlapMin(s, durationMinutes, m, durationMinutes)) conflict = true;
+            var dKept = durationMinutesForSelectedStart(s);
+            if (intervalsOverlapMin(s, dKept, m, dNew)) conflict = true;
           });
           if (!conflict) kept.add(m);
         });
         state.selectedStarts = kept;
       }
 
-      /** True if choosing m as a start would overlap any already selected slot span. */
-      function isStartMinuteBlockedByOthers(m, durationMinutes, selectedStarts) {
-        if (selectedStarts.has(m)) return false;
-        var blocked = false;
-        selectedStarts.forEach(function(s) {
-          if (intervalsOverlapMin(s, durationMinutes, m, durationMinutes)) blocked = true;
+      /**
+       * Start minute overlaps another anchored slot's wall span — not usable as another start for candidateDur.
+       * Excludes overlapping the interval's anchor itself (that's the pillar chip).
+       */
+      function classifyIntervalConsumptionBlock(candidateSm, candidateDur) {
+        var hasBookingOverlap = false;
+        var hasSelectionOverlap = false;
+        state.selectedStarts.forEach(function(anchor) {
+          var anchorDur = durationMinutesForSelectedStart(anchor);
+          if (candidateSm === anchor) return;
+          if (!intervalsOverlapMin(anchor, anchorDur, candidateSm, candidateDur)) return;
+          if (state.lockedStarts.has(anchor)) hasBookingOverlap = true;
+          else hasSelectionOverlap = true;
         });
-        return blocked;
+        if (hasBookingOverlap) return 'booking';
+        if (hasSelectionOverlap) return 'selection';
+        return null;
       }
 
       function escapeHtml(s) {
@@ -2304,6 +2370,13 @@
           });
       }
 
+      /** Week range label above day list («Добавить слоты») — same copy as календарь. */
+      function syncDayPickWeekNav() {
+        var el = document.getElementById('dayPickWeekLabel');
+        if (!el || !state.weekStart) return;
+        el.textContent = formatWeekLabel(state.weekStart);
+      }
+
       function showDayPickScreen() {
         if (!assertScheduleCrmWriteAllowed()) return;
         if (!state.weekStart) return;
@@ -2313,6 +2386,7 @@
             ? 'Добавить групповые слоты на какой день?'
             : 'Добавить индивидуальные слоты на какой день?';
         }
+        syncDayPickWeekNav();
         const list = document.getElementById('dayPickList');
         let html = '';
         const todayStr = dateToStr(new Date());
@@ -2320,23 +2394,18 @@
           const d = new Date(state.weekStart);
           d.setDate(d.getDate() + i);
           const dateStr = dateToStr(d);
-          const isPastDay = dateStr < todayStr;
-          const pastCls = isPastDay ? ' template-day-card--past' : '';
-          const pastTitle = isPastDay ? ' title="' + escapeHtml('День уже прошёл') + '"' : '';
+          if (dateStr < todayStr) continue;
           html +=
-            '<button type="button" class="template-day-card' +
-            pastCls +
-            '" data-date="' +
+            '<button type="button" class="template-day-card" data-date="' +
             escapeHtml(dateStr) +
-            '"' +
-            pastTitle +
-            '>';
+            '">';
           html += '<span class="day-name">' + DAYS[i] + '</span>';
           html += '<span class="day-slots">' + formatDateKey(dateStr) + '</span>';
           html += '<span class="arrow">→</span></button>';
         }
         if (!html) {
-          list.innerHTML = '<div class="empty">Нет дней для выбора.</div>';
+          list.innerHTML =
+            '<div class="empty">В этой неделе нельзя добавить слоты — здесь только прошлые дни. Нажмите «›» (следующая неделя) выше.</div>';
         } else {
           list.innerHTML = html;
           document.querySelector('.tabs').style.display = 'none';
@@ -2459,6 +2528,21 @@
         return end < t;
       }
 
+      /** «Добавить слоты на день» — только когда неделя календаря не целиком в прошлом (и есть CRM). */
+      function syncAddSlotsButtonEligibility() {
+        var el = document.getElementById('btnAddSlots');
+        if (!el) return;
+        var crmOk = !!state.scheduleCrmWriteAllowed;
+        var pastWeek = !!(state.weekStart && isEntireWeekInPast(state.weekStart));
+        el.disabled = !crmOk || pastWeek;
+        el.classList.toggle('btn-add-slots--past-week', pastWeek && crmOk);
+        if (pastWeek && crmOk) {
+          el.setAttribute('title', 'На прошедшей неделе слоты не добавляем — перелистните календарь «›».');
+        } else {
+          el.removeAttribute('title');
+        }
+      }
+
       function countPastHiddenSlots(slots) {
         if (!slots || !slots.length) return 0;
         return slots.length - filterOutPastSlots(slots).length;
@@ -2474,11 +2558,14 @@
       /**
        * Empty calendar: lead with what to do next (past-week toggle stays in toolbar above).
        */
-      function buildCalendarEmptyStateHtml(slotFilter) {
+      function buildCalendarEmptyStateHtml(slotFilter, entirePast) {
         var title = 'Запланируйте окна на эту неделю';
         var hint =
           'Добавьте слоты кнопкой выше или задайте повтор во вкладке «Шаблон недели» — так неделя заполняется быстрее.';
-        if (slotFilter === 'available') {
+        if (entirePast) {
+          title = 'Эта неделя в прошлом';
+          hint = 'Выберите текущую или будущую неделю стрелками у дат выше — там можно добавить слоты.';
+        } else if (slotFilter === 'available') {
           title = 'Нет свободных слотов';
           hint = 'Попробуйте фильтр «Все» или добавьте новые окна на день.';
         } else if (slotFilter === 'booked') {
@@ -2550,6 +2637,7 @@
         const from = dateToStr(start);
         const to = dateToStr(end);
         document.getElementById('weekLabel').textContent = formatWeekLabel(start);
+        syncAddSlotsButtonEligibility();
         var pastWrap = document.getElementById('calendarPastRevealWrap');
         if (pastWrap) pastWrap.hidden = true;
         document.getElementById('calendarContent').innerHTML = buildCalendarSkeletonHtml();
@@ -3277,6 +3365,7 @@
       }
 
       function renderCalendar() {
+        syncAddSlotsButtonEligibility();
         const byDay = {};
         var entirePast = isEntireWeekInPast(state.weekStart);
         var baseSlots = entirePast || state.showPastThisWeek
@@ -3290,7 +3379,7 @@
         const days = Object.keys(byDay).sort();
         const content = document.getElementById('calendarContent');
         if (days.length === 0) {
-          content.innerHTML = buildCalendarEmptyStateHtml(state.slotFilter);
+          content.innerHTML = buildCalendarEmptyStateHtml(state.slotFilter, entirePast);
           updatePastRevealChrome();
           return;
         }
@@ -3399,7 +3488,7 @@
           html += '</div>';
         });
         if (!html) {
-          content.innerHTML = buildCalendarEmptyStateHtml(state.slotFilter);
+          content.innerHTML = buildCalendarEmptyStateHtml(state.slotFilter, entirePast);
           updatePastRevealChrome();
           return;
         }
@@ -4082,6 +4171,12 @@
 
       function openEditCalendarDay(slotDate) {
         if (!assertScheduleCrmWriteAllowed()) return;
+        var todayGate = dateToStr(new Date());
+        if (slotDate && String(slotDate).slice(0, 10) < todayGate) {
+          showToast('Слоты в прошлом не добавляем — только сегодня и будущие даты.');
+          showDayPickScreen();
+          return;
+        }
         state.editMode = 'calendar';
         state.editDay = null;
         state.editDate = slotDate;
@@ -4201,6 +4296,7 @@
         if (!grid) return;
         const durationMinutes = getEditDurationMinutes();
         const preset = state.scheduleGridPreset || defaultScheduleGridPreset();
+        const calEditDate = state.editMode === 'calendar' ? state.editDate : null;
         var h0 = Math.max(0, Math.min(23, parseInt(preset.hour_start, 10)));
         if (isNaN(h0)) h0 = 8;
         var h1 = Math.max(0, Math.min(23, parseInt(preset.hour_end, 10)));
@@ -4214,7 +4310,9 @@
         let html = '';
         for (let h = h0; h <= h1; h++) {
           const chips = list.filter(function(m) {
-            return Math.floor(m / 60) === h;
+            if (Math.floor(m / 60) !== h) return false;
+            if (calEditDate && isCalendarSlotStartInPast(calEditDate, m)) return false;
+            return true;
           });
           if (!chips.length) continue;
           html += '<div class="schedule-hour-row" role="row">';
@@ -4233,25 +4331,41 @@
               state.calendarBaselineStarts.has(m) &&
               selected &&
               !locked;
-            const blockedByOverlap =
-              !selected && isStartMinuteBlockedByOthers(m, durationMinutes, state.selectedStarts);
+            const candDur = durationMinutes;
+            var intervalBlockKind =
+              selected || locked || pinned ? null : classifyIntervalConsumptionBlock(m, candDur);
+            const blockedByOverlap = intervalBlockKind != null;
             const labelFull = formatMinuteClock(m);
             const labelShort = ':' + String(m % 60).padStart(2, '0');
-            var btnAttrs = ' aria-label="' + escapeHtml(labelFull) + '"';
+            var ariaBits = [labelFull];
+            if (blockedByOverlap) {
+              ariaBits.push(
+                intervalBlockKind === 'booking'
+                  ? 'внутри интервала занятого слота'
+                  : 'пересекается с другим началом при выбранной длительности'
+              );
+            } else if (locked) {
+              ariaBits.push('есть записи, слот занят — убрать нельзя');
+            } else if (pinned) {
+              ariaBits.push('окно уже в календаре без записей — снять нельзя');
+            }
+            var btnAttrs = ' aria-label="' + escapeHtml(ariaBits.join(' · ')) + '"';
             if (blockedByOverlap) {
               btnAttrs +=
-                ' disabled title="Пересекается с уже выбранным слотом при этой длительности"';
+                intervalBlockKind === 'booking'
+                  ? ' disabled title="Это время внутри слота с записями — выбрать как начало нельзя"'
+                  : ' disabled title="Под другим началом при этой длительности — отметить нельзя"';
             } else if (locked) {
               btnAttrs += ' disabled title="Есть записи — убрать нельзя"';
             } else if (pinned) {
-              btnAttrs += ' title="Уже в расписании — убрать нельзя"';
+              btnAttrs += ' title="Окно в календаре без записей — убрать нельзя"';
             }
             html +=
               '<button type="button" class="hour-chip' +
               (selected ? ' selected' : '') +
               (locked ? ' locked' : '') +
               (pinned ? ' pinned' : '') +
-              (blockedByOverlap ? ' duration-blocked' : '') +
+              (blockedByOverlap ? ' duration-blocked duration-blocked--' + intervalBlockKind : '') +
               '" data-minute="' +
               m +
               '"' +
@@ -4262,7 +4376,35 @@
           }
           html += '</div></div>';
         }
+        if (!html && calEditDate) {
+          grid.innerHTML =
+            '<div class="empty schedule-hour-grid-empty" role="status">Для добавления времени здесь уже нет ни одной ячейки&nbsp;— день мог уйти в прошлое по сетке площадки.</div>';
+          var legendEarly = document.getElementById('scheduleTimeGridLegend');
+          if (legendEarly && grid) {
+            legendEarly.hidden = true;
+            legendEarly.innerHTML = '';
+            grid.setAttribute('aria-describedby', 'scheduleTimeGridHint');
+          }
+          updateEditDoneButton();
+          return;
+        }
         grid.innerHTML = html;
+        var legendEl = document.getElementById('scheduleTimeGridLegend');
+        if (legendEl && grid) {
+          if (calEditDate) {
+            legendEl.hidden = false;
+            legendEl.innerHTML =
+              '<span class="schedule-time-grid-legend__items">' +
+              '<span class="schedule-time-grid-legend__it"><span class="schedule-leg schedule-leg--booked" aria-hidden="true"></span>Есть запись</span>' +
+              '<span class="schedule-time-grid-legend__it"><span class="schedule-leg schedule-leg--open" aria-hidden="true"></span>Есть свободный слот</span>' +
+              '</span>';
+            grid.setAttribute('aria-describedby', 'scheduleTimeGridHint scheduleTimeGridLegend');
+          } else {
+            legendEl.hidden = true;
+            legendEl.innerHTML = '';
+            grid.setAttribute('aria-describedby', 'scheduleTimeGridHint');
+          }
+        }
         grid.querySelectorAll('.hour-chip:not(.locked):not(.pinned):not(.duration-blocked)').forEach(function(btn) {
           btn.onclick = function() {
             const m = parseInt(btn.dataset.minute, 10);
@@ -4419,11 +4561,6 @@
                     : nNew === 1
                       ? 'Добавлен новый слот'
                       : 'Добавлено новых слотов: ' + nNew;
-                var todayStr = dateToStr(new Date());
-                if (state.editDate && state.editDate < todayStr) {
-                  // After saving on a past day, reveal past rows immediately so the new slot is visible.
-                  state.showPastThisWeek = true;
-                }
                 showToast(msg);
                 document.getElementById('screenEdit').style.display = 'none';
                 state.editMode = null;
@@ -4518,6 +4655,10 @@
 
       document.getElementById('btnAddSlots').onclick = function() {
         if (!assertScheduleCrmWriteAllowed()) return;
+        if (state.weekStart && isEntireWeekInPast(state.weekStart)) {
+          showToast('На прошедшей неделе слоты не добавляем — перелистните календарь.');
+          return;
+        }
         if (!state.weekStart) return;
         if (isGroupClassesFeatureEnabled()) {
           openSlotIntentModal('calendar', null, 'individual');
@@ -4540,12 +4681,34 @@
       document.getElementById('weekPrev').onclick = function() {
         state.showPastThisWeek = false;
         state.weekStart.setDate(state.weekStart.getDate() - 7);
+        syncAddSlotsButtonEligibility();
         loadSlots();
       };
       document.getElementById('weekNext').onclick = function() {
         state.showPastThisWeek = false;
         state.weekStart.setDate(state.weekStart.getDate() + 7);
+        syncAddSlotsButtonEligibility();
         loadSlots();
+      };
+
+      function rescheduleDayPickAfterWeekChangeIfVisible() {
+        var dp = document.getElementById('screenDayPick');
+        if (dp && dp.style.display === 'block') {
+          showDayPickScreen();
+        }
+      }
+
+      document.getElementById('dayPickWeekPrev').onclick = function() {
+        state.showPastThisWeek = false;
+        if (!state.weekStart) state.weekStart = getMonday(new Date());
+        state.weekStart.setDate(state.weekStart.getDate() - 7);
+        loadSlots({ onComplete: rescheduleDayPickAfterWeekChangeIfVisible });
+      };
+      document.getElementById('dayPickWeekNext').onclick = function() {
+        state.showPastThisWeek = false;
+        if (!state.weekStart) state.weekStart = getMonday(new Date());
+        state.weekStart.setDate(state.weekStart.getDate() + 7);
+        loadSlots({ onComplete: rescheduleDayPickAfterWeekChangeIfVisible });
       };
 
       document.getElementById('btnTogglePastThisWeek').onclick = function() {

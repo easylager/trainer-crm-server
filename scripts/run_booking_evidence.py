@@ -252,6 +252,8 @@ async def run_evidence(notify_chat_id: int | None) -> bool:
                 service_name="Услуга (тест)",
             )
             kb_client = msg.build_client_booking_completed_inline_keyboard(
+                webapp_base_url=(Settings().webapp_base_url or ""),
+                trainer_id=trainer_id,
                 booking_id=int(booking_id),
                 trainer_telegram_id=None,
                 show_repeat_row=False,

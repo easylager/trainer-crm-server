@@ -40,6 +40,7 @@ from src.application.client_use_cases import get_or_create_client
 from src.application.recurring_use_cases import get_slot_status_on_date
 from src.application.subscription_tier_use_cases import trainer_has_crm_access
 from src.bot import messages as msg
+from src.bot.handlers.trainer_handlers import BOOKING_ADD_NOTE_PREFIX
 from src.infrastructure.db import async_session_factory
 from src.shared.config import Settings
 
@@ -165,6 +166,8 @@ async def run_once() -> None:
                         check_session, b["trainer_id"], target_date, b["start_time"]
                     )
                 kb = msg.build_client_booking_completed_inline_keyboard(
+                    webapp_base_url=(settings.webapp_base_url or ""),
+                    trainer_id=b["trainer_id"],
                     booking_id=int(b["id"]),
                     trainer_telegram_id=b.get("trainer_telegram_id"),
                     show_repeat_row=(status_next != "booked"),
@@ -258,8 +261,8 @@ async def run_once() -> None:
             rows_tr.append(
                 [
                     InlineKeyboardButton(
-                        text=msg.TRAINER_BUTTON_LEAVE_FEEDBACK,
-                        callback_data=f"feedback_booking_trainer:{p['booking_id']}",
+                        text=msg.TRAINER_BUTTON_ADD_BOOKING_NOTE,
+                        callback_data=f"{BOOKING_ADD_NOTE_PREFIX}{p['booking_id']}",
                     ),
                 ],
             )

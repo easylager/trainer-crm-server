@@ -48,8 +48,8 @@
       window.__applyTrainerGroupsTheme = applyTrainerGroupsTheme;
     })();
   </script>
-  <link rel="preload" href="trainer-groups-main.js?v=20260558" as="script" />
-  <link rel="stylesheet" href="mini-app-trainer-groups.css?v=20260558" />
+  <link rel="preload" href="trainer-groups-main.js?v=20260562" as="script" />
+  <link rel="stylesheet" href="mini-app-trainer-groups.css?v=20260562" />
 </head>
 <body>
   <div id="screenList" data-screen class="active">
@@ -249,8 +249,10 @@
           <div class="label">Новый клиент</div>
           <div class="book-new-client">
             <label class="book-field-label" for="addMemberPhone">Телефон <span class="book-req" aria-hidden="true">*</span></label>
-            <input type="tel" id="addMemberPhone" class="input" placeholder="+375 29 123 45 67" autocomplete="tel" inputmode="tel" maxlength="32" aria-required="true" />
-            <p class="book-phone-hint">Номер в формате +375 XX XXX XX XX</p>
+            <div class="hub-phone-input-wrap">
+              <span class="hub-phone-prefix" aria-hidden="true">+375</span>
+              <input type="tel" id="addMemberPhone" class="input hub-phone-input" placeholder="29 123-45-67" autocomplete="tel" inputmode="numeric" maxlength="14" aria-required="true" />
+            </div>
             <label class="book-field-label" for="addMemberFn">Имя <span class="book-req" aria-hidden="true">*</span></label>
             <input type="text" id="addMemberFn" class="input" placeholder="Иван" autocomplete="given-name" maxlength="120" aria-required="true" />
             <label class="book-field-label" for="addMemberLn">Фамилия</label>
@@ -327,6 +329,6 @@
   <div id="tgAppToast" class="tg-app-toast" role="status" aria-live="polite"></div>
 
   <script defer src="mini-app-trainer-home.js"></script>
-  <script defer src="trainer-groups-main.js?v=20260558"></script>
+  <script defer src="trainer-groups-main.js?v=20260562"></script>
 </body>
 </html>

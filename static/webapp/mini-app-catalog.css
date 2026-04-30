@@ -539,6 +539,27 @@
       border: 2px solid transparent;
       box-sizing: border-box;
     }
+    /* Reset when row is a real button — reliable touch targets on mobile WebViews */
+    button.trainer-detail-service {
+      -webkit-appearance: none;
+      appearance: none;
+      display: block;
+      width: 100%;
+      margin-left: 0;
+      margin-right: 0;
+      font: inherit;
+      color: inherit;
+      text-align: left;
+      touch-action: manipulation;
+    }
+    .trainer-detail-service--clickable {
+      cursor: pointer;
+      transition: opacity 0.15s ease, transform 0.15s ease;
+    }
+    .trainer-detail-service--clickable:active {
+      opacity: 0.7;
+      transform: scale(0.98);
+    }
     .trainer-detail-service-top {
       display: flex;
       justify-content: space-between;
@@ -1510,13 +1531,15 @@
     }
     .trainer-detail-secondary .back-link { margin-top: 0; }
     .slot-pick-list .day-block { margin-bottom: 20px; }
+    /* Day headers — readable on phones (was 11px vs 16px slot time). */
     .slot-pick-list .day-title {
-      font-size: 11px;
-      font-weight: 600;
-      color: var(--tg-theme-hint-color);
-      margin: 4px 0 12px 4px;
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--tg-theme-text-color);
+      opacity: 0.82;
+      margin: 8px 0 12px 2px;
       text-transform: uppercase;
-      letter-spacing: 0.1em;
+      letter-spacing: 0.07em;
     }
     .slot-pick-list .slot-card-body {
       display: flex;

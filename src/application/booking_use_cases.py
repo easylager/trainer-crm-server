@@ -215,6 +215,39 @@ def is_slot_end_in_past_local(slot_date: date | None, end_time: time | None) -> 
     return end_local <= datetime.now(local_tz)
 
 
+def is_slot_start_in_past_local(slot_date: date | None, start_time: time | None) -> bool:
+    """
+    True when slot start (wall clock in NOTIFICATION_TZ) is strictly before "now".
+    Used so "new slot" pushes ignore retro openings that are not actionable as new availability.
+    """
+    if slot_date is None or start_time is None:
+        return False
+    st = start_time.replace(second=0, microsecond=0) if hasattr(start_time, "replace") else start_time
+    local_tz = ZoneInfo(NOTIFICATION_TZ)
+    start_local = datetime.combine(slot_date, st).replace(tzinfo=local_tz)
+    return start_local < datetime.now(local_tz)
+
+
+async def trainer_has_future_available_slot_wall_clock(
+    session: AsyncSession,
+    trainer_id: int,
+) -> bool:
+    """At least one available slot whose local start is still in the future (NOTIFICATION_TZ)."""
+    r = await session.execute(
+        text(
+            f"""
+            SELECT 1 FROM slots s
+            WHERE s.trainer_id = :tid AND s.status = 'available'
+              AND ((s.slot_date + s.start_time) AT TIME ZONE '{NOTIFICATION_TZ}')
+                  > (CURRENT_TIMESTAMP AT TIME ZONE '{NOTIFICATION_TZ}')
+            LIMIT 1
+            """
+        ),
+        {"tid": trainer_id},
+    )
+    return r.fetchone() is not None
+
+
 async def get_first_service_id_for_trainer(session: AsyncSession, trainer_id: int) -> int | None:
     """First service_id from trainer_services for this trainer (by service_id). Used when no explicit service (e.g. recurring)."""
     r = await session.execute(
@@ -777,8 +810,11 @@ async def trainer_repeat_booking_same_time_next_week(
     trainer_id: int,
 ) -> dict:
     """
-    Trainer taps «same time next week» after a completed session: book same client on slot_date+7
+    Trainer taps «same time next week» from wrap-up or after a session: book same client on slot_date+7
     at the same clock interval, creating an individual slot via create_trainer_quick_booking if needed.
+
+    Accepts active bookings (``confirmed`` / ``pending``) — same rows as ``list_bookings_for_trainer_session_wrapup`` —
+    plus ``completed`` so the action keeps working after the slot is closed.
 
     Returns:
         {"success": True, "new_booking_id": int, "slot_date": date, "start_time": time}
@@ -793,7 +829,8 @@ async def trainer_repeat_booking_same_time_next_week(
                    s.slot_date, s.start_time, s.end_time, s.arena_id AS slot_arena_id
             FROM bookings b
             JOIN slots s ON s.id = b.slot_id
-            WHERE b.id = :bid AND b.trainer_id = :tid AND b.status = 'completed'
+            WHERE b.id = :bid AND b.trainer_id = :tid
+              AND b.status IN ('completed', 'confirmed', 'pending')
         """),
         {"bid": booking_id, "tid": trainer_id},
     )
@@ -2187,7 +2224,8 @@ async def list_bookings_for_client(
                    a.address AS arena_address,
                    a.latitude AS arena_lat,
                    a.longitude AS arena_lon,
-                   COALESCE(b.booking_price_cents, spv.price_cents, ts.price_cents) AS price_cents
+                   COALESCE(b.booking_price_cents, spv.price_cents, ts.price_cents) AS price_cents,
+                   NULLIF(TRIM(COALESCE(ts.client_notice, '')), '') AS service_client_notice
             FROM bookings b
             JOIN clients c ON c.id = b.client_id
             JOIN slots s ON s.id = b.slot_id
@@ -2249,6 +2287,7 @@ async def list_bookings_for_client(
             "arena_address": arena_address or None,
             "map_link": map_link,
             "price_cents": int(row[20]) if row[20] is not None else None,
+            "service_client_notice": (row[21] or "").strip() or None,
         })
     return out
 
@@ -3140,6 +3179,7 @@ async def list_bookings_for_trainer_session_wrapup(
                    s.slot_date, s.start_time, s.end_time,
                    TRIM(COALESCE(c.first_name, '') || ' ' || COALESCE(c.last_name, '')) AS client_name,
                    COALESCE(srv.name, '—') AS service_name,
+                   b.booking_price_cents,
                    b.price_tier_kind,
                    """
         + SQL_BOOKING_ARENA_DISPLAY
@@ -3162,9 +3202,10 @@ async def list_bookings_for_trainer_session_wrapup(
     rows = r.fetchall()
     out: list[dict] = []
     for row in rows:
-        ptk = normalize_price_tier_kind(row[10])
+        ptk = normalize_price_tier_kind(row[11])
         tier_label = price_tier_label_ru(ptk) if ptk else None
-        arena_raw = _normalize_trainer_arenas_display(row[11])
+        arena_raw = _normalize_trainer_arenas_display(row[12])
+        cents = row[10]
         out.append(
             {
                 "id": row[0],
@@ -3177,6 +3218,7 @@ async def list_bookings_for_trainer_session_wrapup(
                 "end_time": row[7],
                 "client_name": ((row[8] or "").strip() or "Клиент"),
                 "service_name": ((row[9] or "—").strip()),
+                "booking_price_cents": int(cents) if cents is not None else None,
                 "price_tier_label": tier_label,
                 "arenas_str": arena_raw,
             }
@@ -3421,11 +3463,16 @@ async def get_booking_for_trainer_feedback(
     booking_id: int,
     trainer_id: int,
 ) -> dict | None:
-    """Completed booking by id and trainer; for trainer to leave review. None if not found or not completed."""
+    """Booking by id and trainer for optional trainer review text (wrap-up or completed push).
+
+    Allows pending/confirmed (session still active or just ended) and completed — same bookings that can
+    show the «Оставить отзыв» CTA. Cancelled/declined excluded.
+    """
     r = await session.execute(
         text("""
             SELECT b.id FROM bookings b
-            WHERE b.id = :bid AND b.trainer_id = :tid AND b.status = 'completed'
+            WHERE b.id = :bid AND b.trainer_id = :tid
+              AND b.status IN ('pending', 'confirmed', 'completed')
         """),
         {"bid": booking_id, "tid": trainer_id},
     )
@@ -3441,11 +3488,12 @@ async def set_booking_trainer_review(
     trainer_id: int,
     review_text: str,
 ) -> bool:
-    """Save trainer's optional review text for a completed booking. Returns True if updated."""
+    """Save trainer's optional review text. Allowed while booking is still active or completed (not cancelled)."""
     r = await session.execute(
         text("""
             UPDATE bookings SET trainer_review_text = :text
-            WHERE id = :bid AND trainer_id = :tid AND status = 'completed'
+            WHERE id = :bid AND trainer_id = :tid
+              AND status IN ('pending', 'confirmed', 'completed')
             RETURNING id
         """),
         {"bid": booking_id, "tid": trainer_id, "text": (review_text or "").strip()[:2000]},

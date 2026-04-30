@@ -11,6 +11,7 @@ from src.infrastructure.repositories.trainer_repository import (
     TRAINER_SERVICE_DEFAULT_TIER_LABEL,
     _sql_public_catalog_education_predicate,
 )
+from src.shared.notification_hours import NOTIFICATION_TZ
 from src.shared.price_tier_kind import normalize_price_tier_kind, price_tier_label_ru, sql_order_case_tier_kind
 
 
@@ -574,8 +575,10 @@ async def get_trainers_pending_request_with_slots(
     Returns: trainer_id, trainer_telegram_id, client_request_id.
     """
     # When cooldown_minutes=0, skip the "last reminder" filter so reminder is sent every time
+    # Only slots with start still in the future count as actionable availability (retro openings ignored).
     r = await session.execute(
-        text("""
+        text(
+            f"""
             SELECT DISTINCT p.trainer_id, t.telegram_id, p.client_request_id
             FROM trainer_pending_request_booking p
             INNER JOIN trainers t ON t.id = p.trainer_id AND t.telegram_id IS NOT NULL
@@ -584,13 +587,16 @@ async def get_trainers_pending_request_with_slots(
               AND s.slot_date >= CURRENT_DATE
               AND s.slot_date <= CURRENT_DATE + INTERVAL '14 days'
               AND s.status = 'available'
+              AND ((s.slot_date + s.start_time) AT TIME ZONE '{NOTIFICATION_TZ}')
+                  > (CURRENT_TIMESTAMP AT TIME ZONE '{NOTIFICATION_TZ}')
             WHERE (
                 :cooldown_minutes = 0
                 OR p.last_reminder_sent_at IS NULL
                 OR p.last_reminder_sent_at < NOW() - (INTERVAL '1 minute' * :cooldown_minutes)
             )
             LIMIT 50
-        """),
+            """
+        ),
         {"cooldown_minutes": cooldown_minutes},
     )
     rows = r.fetchall()

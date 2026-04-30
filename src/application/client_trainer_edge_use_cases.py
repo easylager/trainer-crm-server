@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.infrastructure.repositories.client_trainer_edge_repository import ClientTrainerEdgeRepository
 
+from src.application.booking_use_cases import trainer_has_future_available_slot_wall_clock
 from src.application.demand_signals_use_cases import record_catalog_favorite
 
 
@@ -133,10 +134,14 @@ async def notify_slot_waitlist(
     Fire-and-forget: send one Telegram message per subscriber, then bulk-clear subscriptions.
     send_fn(telegram_id, text) — async callable injected by the API layer (keeps infra out of here).
     Returns count of notified clients.
+
+    Retro slots (wall-clock start already in the past) do not count as «новые окна»: no send, subscriptions stay.
     """
     repo = ClientTrainerEdgeRepository(session)
     subscribers = await repo.list_slot_subscribers(trainer_id)
     if not subscribers:
+        return 0
+    if not await trainer_has_future_available_slot_wall_clock(session, trainer_id):
         return 0
 
     text_tpl = (

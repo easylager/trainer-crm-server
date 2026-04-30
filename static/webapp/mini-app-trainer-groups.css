@@ -948,6 +948,44 @@
       margin-top: 2px;
       flex-shrink: 0;
     }
+    .tg-catalog-pitch-label {
+      display: block;
+      margin: 10px 0 6px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--tg-theme-hint-color);
+    }
+    .tg-catalog-pitch-input {
+      width: 100%;
+      min-height: 96px;
+      padding: 12px 14px;
+      margin: 0 0 4px;
+      border: none;
+      border-radius: 14px;
+      font-size: 15px;
+      line-height: 1.45;
+      font-family: inherit;
+      resize: vertical;
+      background: var(--tg-theme-bg-color);
+      color: var(--tg-theme-text-color);
+      box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.06);
+      box-sizing: border-box;
+    }
+    .tg-catalog-pitch-input::placeholder {
+      color: var(--tg-theme-hint-color);
+      opacity: 0.85;
+    }
+    .tg-catalog-pitch-input:focus {
+      outline: none;
+      box-shadow:
+        inset 0 1px 3px rgba(0, 0, 0, 0.06),
+        0 0 0 2px rgba(245, 166, 35, 0.35);
+    }
+    .tg-catalog-pitch-save {
+      margin-top: 4px !important;
+    }
     .tg-upcoming-rows {
       margin-bottom: 8px;
     }
@@ -1720,7 +1758,79 @@
       color: var(--tg-theme-hint-color);
       margin: 0 0 14px;
     }
-    .book-new-client .input {
+    .book-new-client .hub-phone-input-wrap {
+      position: relative;
+      width: 100%;
+      margin-bottom: 10px;
+      border-radius: 14px;
+      background: var(--tg-theme-bg-color);
+      color: var(--tg-theme-text-color);
+      box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.06);
+      box-sizing: border-box;
+    }
+    .book-new-client .hub-phone-input-wrap .hub-phone-prefix {
+      position: absolute;
+      left: 14px;
+      top: 13px;
+      transform: none;
+      z-index: 1;
+      font-size: 15px;
+      font-weight: 600;
+      line-height: 22px;
+      height: 22px;
+      display: flex;
+      align-items: center;
+      color: var(--tg-theme-text-color);
+      opacity: 1;
+      pointer-events: none;
+      letter-spacing: 0.02em;
+      font-variant-numeric: tabular-nums;
+      font-family: inherit;
+    }
+    .book-new-client .hub-phone-input-wrap .hub-phone-input {
+      display: block;
+      width: 100%;
+      min-width: 0;
+      margin: 0;
+      padding: 13px 14px 13px 58px;
+      height: 48px;
+      min-height: 48px;
+      box-sizing: border-box;
+      border-radius: 14px;
+      border: none;
+      background: transparent;
+      box-shadow: none;
+      font-size: 15px;
+      font-weight: 600;
+      line-height: 22px;
+      font-family: inherit;
+      font-variant-numeric: tabular-nums;
+      -webkit-appearance: none;
+      appearance: none;
+      outline: none;
+      color: var(--tg-theme-text-color);
+      -webkit-text-fill-color: var(--tg-theme-text-color);
+      caret-color: var(--tg-theme-text-color);
+    }
+    .book-new-client .hub-phone-input-wrap .hub-phone-input:focus,
+    .book-new-client .hub-phone-input-wrap .hub-phone-input:focus-visible {
+      outline: none;
+      box-shadow: none;
+    }
+    .book-new-client .hub-phone-input-wrap .hub-phone-input::placeholder {
+      font-weight: 600;
+      opacity: 0.55;
+      color: var(--tg-theme-hint-color);
+      -webkit-text-fill-color: var(--tg-theme-hint-color);
+    }
+    .book-new-client .hub-phone-input-wrap .hub-phone-input:-webkit-autofill,
+    .book-new-client .hub-phone-input-wrap .hub-phone-input:-webkit-autofill:hover,
+    .book-new-client .hub-phone-input-wrap .hub-phone-input:-webkit-autofill:focus {
+      -webkit-text-fill-color: var(--tg-theme-text-color) !important;
+      caret-color: var(--tg-theme-text-color);
+      box-shadow: 0 0 0 1000px var(--tg-theme-bg-color) inset !important;
+    }
+    .book-new-client .input:not(.hub-phone-input) {
       width: 100%;
       padding: 13px 14px;
       border-radius: 14px;
@@ -1731,14 +1841,8 @@
       color: var(--tg-theme-text-color);
       box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.06);
     }
-    .book-new-client .input:last-of-type { margin-bottom: 14px; }
-    .book-new-client .input::placeholder { color: var(--tg-theme-hint-color); opacity: 0.9; }
-    .book-phone-hint {
-      font-size: 12px;
-      line-height: 1.35;
-      color: var(--tg-theme-hint-color);
-      margin: -2px 0 10px;
-    }
+    .book-new-client .input:not(.hub-phone-input):last-of-type { margin-bottom: 14px; }
+    .book-new-client .input:not(.hub-phone-input)::placeholder { color: var(--tg-theme-hint-color); opacity: 0.9; }
     .book-new-client .book-field-label {
       margin: 10px 0 8px;
     }

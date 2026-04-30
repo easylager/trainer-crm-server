@@ -841,7 +841,7 @@ def format_client_booking_confirmed_by_trainer_text(
     parts.append("✅ <b>Ваша запись подтверждена!</b>\n\n")
     cdn = (client_display_name or "").strip()
     if cdn:
-        parts.append(f"👤 <b>ФИ:</b> {html.escape(cdn)}\n")
+        parts.append(f"👤 <b>ФИО:</b> {html.escape(cdn)}\n")
     cp = (client_phone or "").strip()
     if cp:
         parts.append(f"📞 <b>Телефон:</b> {html.escape(cp)}\n")
@@ -1144,13 +1144,16 @@ def format_client_booking_completed_notice_html(
 
 def build_client_booking_completed_inline_keyboard(
     *,
+    webapp_base_url: str,
+    trainer_id: int,
     booking_id: int,
     trainer_telegram_id: int | None,
     show_repeat_row: bool,
 ):
-    """After session completed: feedback, optional DM trainer, optional repeat same slot next week."""
-    from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+    """After session completed: feedback, optional DM trainer, optional repeat same slot next week, and book again."""
+    from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 
+    base = (webapp_base_url or "").rstrip("/")
     rows: list[list[InlineKeyboardButton]] = [
         [
             InlineKeyboardButton(
@@ -1177,6 +1180,15 @@ def build_client_booking_completed_inline_keyboard(
                 ),
             ],
         )
+    if base.lower().startswith("https://"):
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=CLIENT_BUTTON_BOOK_AGAIN_COMPLETED,
+                    web_app=WebAppInfo(url=f"{base}/webapp/catalog?trainer_id={int(trainer_id)}"),
+                ),
+            ]
+        )
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -1195,6 +1207,7 @@ CLIENT_INACTIVE_BTN_BOOK_NOW = "📅 Записаться сейчас"
 CLIENT_BUTTON_LEAVE_FEEDBACK = "⭐ Оставить отзыв и оценку"
 CLIENT_BUTTON_REPEAT_SAME_TIME = "🔄 Повторить в это же время"
 CLIENT_BUTTON_BECOME_REGULAR = "📅 Стать постоянным клиентом"
+CLIENT_BUTTON_BOOK_AGAIN_COMPLETED = "📅 Записаться повторно"
 CLIENT_REPEAT_BOOKED = "✅ Записали вас на следующую неделю на <b>{date}</b> ({day}) {time}."
 CLIENT_REPEAT_SLOT_BOOKED = (
     "На это время на следующую неделю слот уже занят. "
@@ -1285,12 +1298,12 @@ def format_trainer_booking_completed_html(
     return (
         "🏁 <b>Занятие завершено</b>\n\n"
         f"📅 <b>{ds} ({dy}) {ts}</b>{dur_part}\n"
-        f"👤 {cn}\n"
+        f"👤 <b>ФИО:</b> {cn}\n"
         f"{service_line}"
         f"{arena_line}"
         f"{rebook}"
         "\n"
-        "Оставьте отзыв ⭐⭐⭐⭐⭐ — кнопка ниже. При необходимости напишите клиенту."
+        "Оставьте заметку в карточке клиента — кнопка ниже. При необходимости напишите клиенту."
         f"{no_pass_tail}"
     )
 
@@ -1304,6 +1317,7 @@ def format_trainer_booking_session_wrapup_html(
     duration_minutes: int | None,
     service_name: str | None,
     price_tier_label: str | None,
+    booking_price_cents: int | None = None,
     arena_display: str | None,
     include_quick_rebook_line: bool = False,
 ) -> str:
@@ -1328,6 +1342,11 @@ def format_trainer_booking_session_wrapup_html(
     ar = (arena_display or "").strip()
     if ar and ar != "—":
         arena_line = f"📍 {html.escape(ar)}\n"
+    payment_line = ""
+    if booking_price_cents is not None:
+        byn = booking_price_cents / 100.0
+        ps = f"{int(byn)} BYN" if byn == int(byn) else f"{byn:.2f} BYN"
+        payment_line = f"💳 <b>К оплате:</b> {html.escape(ps)}\n"
     rebook = ""
     if include_quick_rebook_line:
         rebook = (
@@ -1336,12 +1355,13 @@ def format_trainer_booking_session_wrapup_html(
     return (
         "⏱ <b>Занятие подходит к концу</b>\n\n"
         f"📅 <b>{ds} ({dy}) {ts}</b>{dur_part}\n"
-        f"👤 {cn}\n"
+        f"👤 <b>ФИО:</b> {cn}\n"
         f"{service_line}"
         f"{arena_line}"
+        f"{payment_line}"
         f"{rebook}"
         "\n"
-        "Кнопки ниже: быстрая запись и отзыв. Связаться с клиентом можно из карточки."
+        "Кнопки ниже: быстрая запись и заметка в карточку клиента. Связаться с клиентом можно из карточки."
     )
 
 
@@ -1375,7 +1395,7 @@ def format_trainer_booking_problem_ack_html(
         service_line = f"🎯 <b>Услуга:</b> {html.escape(svc)}\n"
     return (
         "⚠️ <b>Проблема зафиксирована</b>\n\n"
-        f"👤 <b>Клиент:</b> {cn}\n"
+        f"👤 <b>ФИО:</b> {cn}\n"
         f"📅 <b>Когда:</b> {ds} ({dy}) в {ts}\n"
         f"{service_line}"
         f"{pc_line}"
@@ -1436,7 +1456,7 @@ def format_trainer_client_no_show_ack_html(
         service_line = f"🎯 <b>Услуга:</b> {html.escape(svc)}\n"
     return (
         "✅ <b>Учёт «клиент не пришёл» сохранён</b>\n\n"
-        f"👤 <b>Клиент:</b> {cn}\n"
+        f"👤 <b>ФИО:</b> {cn}\n"
         f"📅 <b>Когда:</b> {ds} ({dy}) в {ts}\n"
         f"{service_line}"
         f"{pc_line}"
@@ -1516,13 +1536,13 @@ def format_client_booking_no_show_notice_html(
 TRAINER_BUTTON_OPEN_SCHEDULE_PROBLEM = "🔍 Посмотреть детали"
 TRAINER_NO_PASS_FOR_SERVICE = (
     "ℹ️ <b>Занятие закрыто без списания абонемента</b>\n\n"
-    "👤 <b>Клиент:</b> {client_name}\n"
+    "👤 <b>ФИО:</b> {client_name}\n"
     "📅 <b>Когда:</b> {date} · {time}\n"
     "🎯 <b>Услуга:</b> {service_name}\n\n"
     "⚠️ <b>Причина:</b> у клиента нет активного абонемента на эту услугу."
 )
 TRAINER_BUTTON_LEAVE_FEEDBACK = "🌟 Оставить отзыв"
-TRAINER_BUTTON_BOOK_SAME_TIME_NEXT_WEEK = "📅 Записать на то же время"
+TRAINER_BUTTON_BOOK_SAME_TIME_NEXT_WEEK = "🔄 Записать на то же время"
 TRAINER_BUTTON_BOOK_AGAIN = "📅 Записать снова"
 TRAINER_BUTTON_CLIENT_CARD_WEBAPP = "👤 Карточка"
 TRAINER_REPEAT_BOOKING_OK = (
@@ -1982,7 +2002,7 @@ TRAINER_CREATE_BOOKING_CHOOSE_CLIENT = (
 )
 TRAINER_CREATE_BOOKING_CHOOSE_TARIFF = (
     "Слот: <b>{date}</b> ({day}) {time}\n"
-    "Клиент: <b>{client_name}</b>\n\n"
+    "ФИО: <b>{client_name}</b>\n\n"
     "Выбери тариф для записи:"
 )
 TRAINER_CREATE_BOOKING_DONE = (
@@ -2003,7 +2023,7 @@ TRAINER_BUTTON_ADD_BOOKING_NOTE = "📝 Добавить заметку"
 TRAINER_BUTTON_INVITE_CLIENT_TO_BOT = "📣 Пригласить в бота"
 TRAINER_ADD_BOOKING_NOTE_PROMPT = (
     "📝 <b>Заметка по занятию</b>\n\n"
-    "Клиент: <b>{client_name}</b>\n"
+    "ФИО: <b>{client_name}</b>\n"
     "Дата занятия: <b>{date}</b> ({day}) {time}\n\n"
     "Пришлите текст заметки одним сообщением — сохраним в хронологии клиента."
 )
@@ -2055,7 +2075,7 @@ TRAINER_BOOKING_CANCELLED_CATALOG_LINE = (
 )
 TRAINER_BOOKING_CANCELLED_BY_CLIENT = (
     "🗑️ <b>Запись отменена клиентом</b>\n\n"
-    "👤 <b>Клиент:</b> {client_name}\n"
+    "👤 <b>ФИО:</b> {client_name}\n"
     "📅 <b>Было:</b> {date} ({day}) · {time}\n"
     "💬 <b>Причина:</b> {reason}\n\n"
     f"{TRAINER_BOOKING_CANCELLED_CATALOG_LINE}\n\n"
@@ -2063,7 +2083,7 @@ TRAINER_BOOKING_CANCELLED_BY_CLIENT = (
 )
 TRAINER_BOOKING_CANCELLED_BY_CLIENT_NO_REASON = (
     "🗑️ <b>Запись отменена клиентом</b>\n\n"
-    "👤 <b>Клиент:</b> {client_name}\n"
+    "👤 <b>ФИО:</b> {client_name}\n"
     "📅 <b>Было:</b> {date} ({day}) · {time}\n\n"
     f"{TRAINER_BOOKING_CANCELLED_CATALOG_LINE}\n\n"
     "Связаться с клиентом или открыть рассылку — кнопки ниже."
@@ -2095,7 +2115,7 @@ TRAINER_FIRST_ONLINE_BOOKING_NOTIFICATION_PREFIX = (
 )
 TRAINER_BOOKING_NOTIFICATION = (
     "🔔 <b>Новая запись</b> — нужно ваше решение\n\n"
-    "👤 <b>Клиент:</b> {client_name}\n"
+    "👤 <b>ФИО:</b> {client_name}\n"
     "📞 {phone}\n"
     "📅 <b>{date} ({day}) {time}</b> — {duration} мин.\n"
     "🎯 {service}\n"
@@ -2106,7 +2126,7 @@ TRAINER_BOOKING_NOTIFICATION = (
 )
 TRAINER_BOOKING_NOTIFICATION_NO_COMMENT = (
     "🔔 <b>Новая запись</b> — нужно ваше решение\n\n"
-    "👤 <b>Клиент:</b> {client_name}\n"
+    "👤 <b>ФИО:</b> {client_name}\n"
     "📞 {phone}\n"
     "📅 <b>{date} ({day}) {time}</b> — {duration} мин.\n"
     "🎯 {service}\n"
@@ -2136,9 +2156,9 @@ def format_trainer_booking_confirmed_echo_html(
     cn = html.escape((client_name or "").strip() or "Клиент")
     cp = (client_phone or "").strip()
     if cp:
-        client_line = f"👤 <b>Клиент:</b> {cn} (<b>{html.escape(cp)}</b>)\n"
+        client_line = f"👤 <b>ФИО:</b> {cn} (<b>{html.escape(cp)}</b>)\n"
     else:
-        client_line = f"👤 <b>Клиент:</b> {cn}\n"
+        client_line = f"👤 <b>ФИО:</b> {cn}\n"
     ds = html.escape(date)
     dy = html.escape(day)
     ts = html.escape(time)
@@ -2329,7 +2349,7 @@ def format_trainer_first_booking_milestone_rich_html(
     blocks: list[str] = [
         "🎉 <b>Старт засчитан: это ваша первая запись в Ice Pro!</b>\n\n"
         "Вы только что перевели занятие в понятный план — с датой, местом и контекстом.",
-        "👤 <b>Клиент</b>\n" f"ФИО: <b>{cn}</b>\n" + phone_line.rstrip("\n"),
+        f"👤 <b>ФИО:</b> {cn}\n" + phone_line.rstrip("\n"),
         venue_block,
         f"📅 <b>Время</b>\n{when_line}",
     ]
@@ -2482,7 +2502,7 @@ TRAINER_BOOKING_DECLINED_DONE = "Запись отклонена, клиенту
 TRAINER_BOOKING_CONFIRM_REMINDER = (
     "⏰ <b>Скоро: нужно решение по записи</b>\n\n"
     "Слот начинается менее чем через <b>2 часа</b>.\n"
-    "👤 <b>Клиент:</b> {client_display}\n"
+    "👤 <b>ФИО:</b> {client_display}\n"
     "📅 <b>{date} ({day}) {time}</b>\n\n"
     "Подтвердите или отклоните запись — чтобы клиент был в курсе."
 )

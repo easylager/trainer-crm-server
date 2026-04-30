@@ -25,6 +25,7 @@ from src.application.trainer_use_cases import get_trainer
 from src.bot import messages as msg
 from src.infrastructure.db import async_session_factory
 from src.shared.config import Settings
+from src.shared.notification_hours import NOTIFICATION_TZ
 
 logger = logging.getLogger(__name__)
 
@@ -123,11 +124,15 @@ async def run_after_schedule_changed(trainer_id: int, trainer_bot: Bot) -> None:
                 )
                 row1 = r1.fetchone()
                 r2 = await session.execute(
-                    sql_text("""
+                    sql_text(
+                        f"""
                         SELECT COUNT(*) FROM slots
                         WHERE trainer_id = :tid AND slot_date >= CURRENT_DATE
                           AND slot_date <= CURRENT_DATE + INTERVAL '14 days' AND status = 'available'
-                    """),
+                          AND ((slot_date + start_time) AT TIME ZONE '{NOTIFICATION_TZ}')
+                              > (CURRENT_TIMESTAMP AT TIME ZONE '{NOTIFICATION_TZ}')
+                        """
+                    ),
                     {"tid": trainer_id},
                 )
                 slots_count = (r2.fetchone() or (0,))[0]

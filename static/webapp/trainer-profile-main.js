@@ -519,6 +519,27 @@
         });
       }
 
+      function wireMinHoursBeforeQuickChips() {
+        var wrap = document.getElementById('minHoursBeforeQuickChips');
+        if (!wrap || wrap.dataset.wired === '1') return;
+        wrap.dataset.wired = '1';
+        [2, 3, 5, 10, 24].forEach(function(h) {
+          var b = document.createElement('button');
+          b.type = 'button';
+          b.className = 'settings-duration-chip';
+          b.textContent = h + ' ч';
+          b.addEventListener('click', function() {
+            var inp = document.getElementById('min_hours_before_booking');
+            if (!inp) return;
+            inp.value = String(h);
+            validateFieldRealtime('min_hours_before_booking');
+            setDirty();
+            markFieldValid('min_hours_before_booking');
+          });
+          wrap.appendChild(b);
+        });
+      }
+
       /** Fixed tariff codes (must match server price_tier_kind). */
       var SERVICE_TIER_ORDER = ['child', 'adult', 'two_children', 'two_adults', 'adult_and_child'];
       var SERVICE_TIER_DEFS = [
@@ -4026,46 +4047,6 @@
         return out;
       }
 
-      /** Same tier price is shared across selected services while editing (profile UX). */
-      var _tierPriceSyncing = false;
-
-      function propagateTierPriceAcrossServices(sourceServiceId, tierCode, value) {
-        if (_tierPriceSyncing) return;
-        _tierPriceSyncing = true;
-        try {
-          state.servicesCatalog.forEach(function(s) {
-            var sid = s.id;
-            if (sid === sourceServiceId) return;
-            var svcCb = document.getElementById('svc_' + sid);
-            if (!svcCb || !svcCb.checked) return;
-            var tcb = document.getElementById('svc_tier_' + sid + '_' + tierCode);
-            if (!tcb || !tcb.checked) return;
-            var pel = document.getElementById('price_tier_' + sid + '_' + tierCode);
-            if (pel) pel.value = value;
-          });
-        } finally {
-          _tierPriceSyncing = false;
-        }
-        setDirty();
-      }
-
-      /** First non-empty price among selected services for this tier (optionally skip one row). */
-      function getPeerTierPriceValue(tierCode, excludeServiceId) {
-        var i, s, sid, pel, tcb, svcCb;
-        for (i = 0; i < state.servicesCatalog.length; i++) {
-          s = state.servicesCatalog[i];
-          sid = s.id;
-          if (sid === excludeServiceId) continue;
-          svcCb = document.getElementById('svc_' + sid);
-          if (!svcCb || !svcCb.checked) continue;
-          tcb = document.getElementById('svc_tier_' + sid + '_' + tierCode);
-          if (!tcb || !tcb.checked) continue;
-          pel = document.getElementById('price_tier_' + sid + '_' + tierCode);
-          if (pel && pel.value.trim() !== '') return pel.value;
-        }
-        return null;
-      }
-
       /** Optional per-service description for clients (trainer_services.description). */
       function getServiceDescription(serviceId) {
         var list = state.trainer.services || [];
@@ -4106,8 +4087,8 @@
       }
 
       /**
-       * New catalog service checked: copy tier toggles + BYN prices from another selected service
-       * so the row is not «empty» (Save stayed inactive: no diff in snapshot + incoherent tiers).
+       * New catalog service checked: copy which tariffs are enabled from a peer (checkboxes only).
+       * Prices stay per-service — trainer enters BYN separately so two services can differ on the same tier.
        */
       function primeNewServiceTiersFromPeers(serviceId) {
         var anyTier = false;
@@ -4125,22 +4106,21 @@
           var hasTier = false;
           SERVICE_TIER_ORDER.forEach(function(code) {
             var tc = document.getElementById('svc_tier_' + s.id + '_' + code);
-            var pl = document.getElementById('price_tier_' + s.id + '_' + code);
-            if (tc && tc.checked && pl && String(pl.value).trim() !== '') hasTier = true;
+            if (tc && tc.checked) hasTier = true;
           });
           if (hasTier) peerId = s.id;
         });
         if (peerId == null) return;
         SERVICE_TIER_ORDER.forEach(function(code) {
           var ptcb = document.getElementById('svc_tier_' + peerId + '_' + code);
-          var ppel = document.getElementById('price_tier_' + peerId + '_' + code);
-          if (!ptcb || !ptcb.checked || !ppel || String(ppel.value).trim() === '') return;
           var tcb = document.getElementById('svc_tier_' + serviceId + '_' + code);
           var pel = document.getElementById('price_tier_' + serviceId + '_' + code);
           if (!tcb || !pel) return;
-          tcb.checked = true;
-          pel.disabled = false;
-          pel.value = String(ppel.value).trim();
+          if (ptcb && ptcb.checked) {
+            tcb.checked = true;
+            pel.disabled = false;
+            pel.value = '';
+          }
         });
         var tbody = document.getElementById('svc_tier_body_' + serviceId);
         var tbtn = document.getElementById('svc_tier_toggle_' + serviceId);
@@ -4347,20 +4327,11 @@
                 setDirty();
                 return;
               }
-              if (inp.value.trim() === '') {
-                var peer = getPeerTierPriceValue(code, id);
-                if (peer) inp.value = peer;
-              }
-              if (inp.value.trim() !== '') {
-                propagateTierPriceAcrossServices(id, code, inp.value);
-              } else {
-                setDirty();
-              }
+              setDirty();
             }
             tchk.addEventListener('change', syncTierInput);
             function onTierPriceInput() {
-              if (_tierPriceSyncing) return;
-              propagateTierPriceAcrossServices(id, code, inp.value);
+              setDirty();
             }
             inp.addEventListener('input', onTierPriceInput);
             inp.addEventListener('change', onTierPriceInput);
@@ -5400,6 +5371,7 @@
       }
 
       wireSessionDurationQuickChips();
+      wireMinHoursBeforeQuickChips();
       wireProfileBlockTourBar();
       /*
        * Тарифы в визарде: при фокусе на цену тарифа строка должна остаться видимой
@@ -5458,7 +5430,9 @@
       /**
        * Основная страница профиля (не в fullscreen-онбординге): фиксированный .save-bar и
        * клавиатура режут высоту визуального порта — поле может оказаться под кнопкой.
-       * Повторяем паттерн визарда: отложенный scrollIntoView + при resize/visualViewport.
+       * Отложенный scrollIntoView при фокусе + только visualViewport.resize (клавиатура).
+       * Не вешаем visualViewport.scroll: на телефоне он срабатывает при каждом пальцевом скролле
+       * и снова дёргает scrollIntoView — ощущение «пружины», нельзя пролистать форму.
        */
       (function wireProfileMainFormKeyboardAvoidance() {
         var root = document.getElementById('mainContent');
@@ -5488,7 +5462,7 @@
           try {
             target.scrollIntoView({
               block: 'nearest',
-              behavior: 'smooth',
+              behavior: 'auto',
               inline: 'nearest',
             });
           } catch (e) {}
@@ -5521,7 +5495,6 @@
         window.addEventListener('resize', onViewportOrResize);
         if (window.visualViewport) {
           window.visualViewport.addEventListener('resize', onViewportOrResize);
-          window.visualViewport.addEventListener('scroll', onViewportOrResize);
         }
       })();
 

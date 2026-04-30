@@ -622,12 +622,25 @@
     }
 
     .hub-day-label {
-      font-size: 13px;
-      font-weight: 600;
-      color: var(--tg-theme-hint-color);
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--tg-theme-text-color);
       margin: 14px 0 8px;
-      letter-spacing: 0.02em;
+      letter-spacing: 0.04em;
+      text-transform: none;
+      -webkit-font-smoothing: antialiased;
+      /* Separators («ЗАВТРА», «07.05 (чт)»): readable rail without washed-out gray. */
     }
+    html.hub-is-dark .hub-day-label {
+      color: #ffffff;
+      font-weight: 700;
+    }
+
+    /* Extra specificity — some hosts inject lower-specificity tg-theme resets. */
+    html.hub-is-dark #bookingsBlock .hub-day-label {
+      color: #ffffff !important;
+    }
+
     .hub-day-label:first-child { margin-top: 0; }
     /* Same slot row model as schedule-editor (calendar list) — cream/dark chip + green/amber border */
     .hub-bookings-stack {
@@ -1712,6 +1725,10 @@
     #hubModalQuickBookDatetime input#hubQuickBookDate.input[type='date']::-webkit-datetime-edit-year-field,
     #hubModalQuickBookDatetime input#hubQuickBookDate.input[type='date']::-webkit-datetime-edit-text {
       color: var(--tg-theme-text-color);
+    }
+    #hubModalQuickBookDatetime input#hubQuickBookDate.input[type='date']::-webkit-datetime-edit-year-field {
+      min-width: 4.25ch;
+      flex-shrink: 0;
     }
     #hubModalQuickBookDatetime input#hubQuickBookDate.input[type='date']::-webkit-calendar-picker-indicator {
       opacity: 0.72;

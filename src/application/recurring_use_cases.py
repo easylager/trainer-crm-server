@@ -7,7 +7,11 @@ from datetime import date, time, timedelta
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.application.booking_use_cases import create_booking, get_first_service_id_for_trainer
+from src.application.booking_use_cases import (
+    create_booking,
+    get_first_service_id_for_trainer,
+    is_slot_start_in_past_local,
+)
 from src.application.trainer_schedule_use_cases import next_week_monday
 
 RECURRING_STATUS_ACTIVE = "active"
@@ -318,6 +322,8 @@ async def list_wait_requests_with_available_slots(
         )
         slot_row = r2.fetchone()
         if not slot_row:
+            continue
+        if is_slot_start_in_past_local(slot_row[1], slot_row[2]):
             continue
         r3 = await session.execute(
             text("SELECT telegram_id FROM clients WHERE id = :id"),

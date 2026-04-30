@@ -80,6 +80,26 @@
     return h;
   }
 
+  /** Belarus new-client phone: national digits in field; +375 is fixed in UI (aligned with schedule-editor). */
+  function nationalDigitsFromGroupsNewPhone(raw) {
+    var d = String(raw || '').replace(/\D/g, '');
+    if (d.indexOf('375') === 0) d = d.slice(3);
+    if (d.indexOf('80') === 0) d = d.slice(2);
+    return d.length > 9 ? d.slice(0, 9) : d;
+  }
+
+  function formatGroupsAddMemberPhone(ev) {
+    var el = ev && ev.target ? ev.target : ev;
+    if (!el) return;
+    var d = nationalDigitsFromGroupsNewPhone(el.value);
+    var f = '';
+    if (d.length > 0) f = d.slice(0, 2);
+    if (d.length > 2) f += ' ' + d.slice(2, 5);
+    if (d.length > 5) f += '-' + d.slice(5, 7);
+    if (d.length > 7) f += '-' + d.slice(7, 9);
+    el.value = f;
+  }
+
   var DAYS = [
     { v: 1, l: 'Пн' }, { v: 2, l: 'Вт' }, { v: 3, l: 'Ср' }, { v: 4, l: 'Чт' },
     { v: 5, l: 'Пт' }, { v: 6, l: 'Сб' }, { v: 7, l: 'Вс' }
@@ -388,6 +408,13 @@
         alert('Укажите имя');
         return;
       }
+      var phEl = document.getElementById('addMemberPhone');
+      var nd = nationalDigitsFromGroupsNewPhone(phEl ? phEl.value : '');
+      if (nd.length !== 9) {
+        alert('Укажите корректный номер телефона (9 цифр после +375).');
+        return;
+      }
+      payload = Object.assign({}, payload, { phone: '+375' + nd });
     }
     var slotId = state.addMemberSlotId;
     var svcId = state.addMemberServiceId;
@@ -527,11 +554,16 @@
     if (btnNew) {
       btnNew.addEventListener('click', function () {
         postAddMember({
-          phone: document.getElementById('addMemberPhone') ? document.getElementById('addMemberPhone').value : '',
+          phone: '',
           first_name: document.getElementById('addMemberFn') ? document.getElementById('addMemberFn').value : '',
           last_name: document.getElementById('addMemberLn') ? document.getElementById('addMemberLn').value : ''
         });
       });
+    }
+    var addPh = document.getElementById('addMemberPhone');
+    if (addPh) {
+      addPh.addEventListener('input', formatGroupsAddMemberPhone);
+      addPh.addEventListener('blur', formatGroupsAddMemberPhone);
     }
   }
 
@@ -1428,7 +1460,12 @@
                   '<input type="checkbox" id="tgCatalogVisible" ' + (d.catalog_visible ? 'checked' : '') + ' /> ' +
                   'Показывать в общем каталоге (поиск по городу и услуге)' +
                 '</label>' +
-                '<p class="tg-detail-panel__hint">Статус «Набор» — только в вашем списке групп. Без этой галочки клиенты не увидят группу во вкладке «Группы» в каталоге.</p>' +
+                '<p class="tg-detail-panel__hint">Клиенты смогут сами находить вашу группу и записываться.</p>' +
+                '<label class="tg-catalog-pitch-label" for="tgCatalogPitch">Текст для каталога</label>' +
+                '<textarea id="tgCatalogPitch" class="tg-catalog-pitch-input" maxlength="2000" rows="4" placeholder="Кратко для клиентов — формат, уровень, что входит">' +
+                  esc(d.catalog_pitch || '') +
+                '</textarea>' +
+                '<button type="button" class="bd-btn bd-btn--secondary tg-catalog-pitch-save" id="btnSaveCatalogPitch">Сохранить описание</button>' +
               '</div>' +
             '</div>';
         }
@@ -1528,6 +1565,27 @@
               })
               .finally(function () {
                 catVis.disabled = false;
+              });
+          });
+        }
+        var btnSavePitch = document.getElementById('btnSaveCatalogPitch');
+        var taPitch = document.getElementById('tgCatalogPitch');
+        if (btnSavePitch && taPitch) {
+          btnSavePitch.addEventListener('click', function () {
+            var raw = taPitch.value.trim();
+            btnSavePitch.disabled = true;
+            fetchJson(apiUrlWithQuery('/trainer/training-groups/' + id), {
+              method: 'PATCH',
+              body: JSON.stringify({ catalog_pitch: raw ? raw : null })
+            })
+              .then(function () {
+                openDetail(id);
+              })
+              .catch(function (e) {
+                alert(e.message || String(e));
+              })
+              .finally(function () {
+                btnSavePitch.disabled = false;
               });
           });
         }

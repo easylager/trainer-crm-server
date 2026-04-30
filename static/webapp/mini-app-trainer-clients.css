@@ -744,6 +744,10 @@
     #tcModalQuickBookDatetime input#tcQuickBookDate.tc-qb-input[type='date']::-webkit-datetime-edit-text {
       color: var(--tg-theme-text-color);
     }
+    #tcModalQuickBookDatetime input#tcQuickBookDate.tc-qb-input[type='date']::-webkit-datetime-edit-year-field {
+      min-width: 4.25ch;
+      flex-shrink: 0;
+    }
     #tcModalQuickBookDatetime input#tcQuickBookDate.tc-qb-input[type='date']::-webkit-calendar-picker-indicator {
       opacity: 0.72;
     }

@@ -102,6 +102,47 @@ async def test_trainer_repeat_creates_booking_on_slot_date_plus_7(db_session) ->
 
 
 @pytest.mark.asyncio
+async def test_trainer_repeat_works_for_confirmed_wrapup_booking(db_session) -> None:
+    """Session wrap-up notifies while status is still confirmed — same-time-next-week must not return not_found."""
+    trainer_id, service_id, _arena_id = await _seed_trainer_with_arena(db_session)
+    tg = unique_test_telegram_id()
+    phone, phone_n = belarus_test_phone(tg)
+    r = await db_session.execute(
+        text(
+            """
+            INSERT INTO clients (telegram_id, first_name, last_name, phone, phone_normalized)
+            VALUES (:tg, 'C', 'L', :phone, :pn) RETURNING id
+            """
+        ),
+        {"tg": tg, "phone": phone, "pn": phone_n},
+    )
+    (client_id,) = r.fetchone()
+    past = date.today() - timedelta(days=2)
+    r = await db_session.execute(
+        text("""
+            INSERT INTO slots (trainer_id, slot_date, start_time, end_time, status, arena_id)
+            VALUES (:tid, :d, TIME '10:00', TIME '11:00', 'booked', :aid)
+            RETURNING id
+        """),
+        {"tid": trainer_id, "d": past, "aid": _arena_id},
+    )
+    (slot_id,) = r.fetchone()
+    r = await db_session.execute(
+        text("""
+            INSERT INTO bookings (slot_id, trainer_id, client_id, service_id, status)
+            VALUES (:sid, :tid, :cid, :svc, 'confirmed')
+            RETURNING id
+        """),
+        {"sid": slot_id, "tid": trainer_id, "cid": client_id, "svc": service_id},
+    )
+    (booking_id,) = r.fetchone()
+    await db_session.commit()
+
+    out = await trainer_repeat_booking_same_time_next_week(db_session, booking_id, trainer_id)
+    assert out.get("success") is True
+
+
+@pytest.mark.asyncio
 async def test_trainer_repeat_slot_booked_returns_error(db_session) -> None:
     trainer_id, service_id, arena_id = await _seed_trainer_with_arena(db_session)
     tg = unique_test_telegram_id()

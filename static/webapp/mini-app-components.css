@@ -256,12 +256,13 @@ body {
   margin-bottom: 20px;
 }
 .day-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--tg-theme-hint-color);
-  margin-bottom: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--tg-theme-text-color);
+  opacity: 0.82;
+  margin-bottom: 10px;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.07em;
 }
 .slot-card {
   display: flex;

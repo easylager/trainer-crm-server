@@ -202,6 +202,8 @@ async def main() -> None:
             service_name=MOCK_SERVICE,
         )
         kb_completed = msg.build_client_booking_completed_inline_keyboard(
+            webapp_base_url=(settings.webapp_base_url or ""),
+            trainer_id=1,
             booking_id=MOCK_BOOKING_ID,
             trainer_telegram_id=MOCK_TRAINER_TG,
             show_repeat_row=True,

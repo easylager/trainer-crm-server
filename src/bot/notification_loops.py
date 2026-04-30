@@ -83,7 +83,11 @@ from src.infrastructure.db.models import (
     SUBSCRIPTION_STATUS_TRIAL,
 )
 from src.bot import messages as msg
-from src.bot.handlers.trainer_handlers import REQUEST_DECLINE_PREFIX, REQUEST_RESPOND_PREFIX
+from src.bot.handlers.trainer_handlers import (
+    BOOKING_ADD_NOTE_PREFIX,
+    REQUEST_DECLINE_PREFIX,
+    REQUEST_RESPOND_PREFIX,
+)
 from src.bot.schedule_notifications import REQUESTS_CALLBACK
 from src.bot.trainer_cancel_client_notify import send_cancel_notification_payload
 from src.infrastructure.db import async_session_factory
@@ -200,6 +204,8 @@ async def _send_client_booking_completed_push(
             check_session, b["trainer_id"], target_date, b["start_time"]
         )
     kb = msg.build_client_booking_completed_inline_keyboard(
+        webapp_base_url=(Settings().webapp_base_url or ""),
+        trainer_id=b["trainer_id"],
         booking_id=booking_id,
         trainer_telegram_id=b.get("trainer_telegram_id"),
         show_repeat_row=(status_next != "booked"),
@@ -352,7 +358,7 @@ async def _build_trainer_post_session_keyboard(
     webapp_https: bool,
     include_client_dm: bool = True,
 ) -> InlineKeyboardMarkup:
-    """Inline keyboard for trainer «session end» flows: quick rebook, repeat week, feedback, optional DM, client card."""
+    """Inline keyboard for trainer «session end» flows: quick rebook, repeat week, note to client card, optional DM, client card."""
     client_id = p.get("client_id")
     slot_date = p.get("slot_date")
     start_time = p.get("start_time")
@@ -398,8 +404,8 @@ async def _build_trainer_post_session_keyboard(
     rows.append(
         [
             InlineKeyboardButton(
-                text=msg.TRAINER_BUTTON_LEAVE_FEEDBACK,
-                callback_data=f"feedback_booking_trainer:{p['booking_id']}",
+                text=msg.TRAINER_BUTTON_ADD_BOOKING_NOTE,
+                callback_data=f"{BOOKING_ADD_NOTE_PREFIX}{p['booking_id']}",
             ),
         ],
     )
@@ -483,6 +489,7 @@ async def process_trainer_session_wrapup_round(trainer_bot: Bot) -> None:
                 duration_minutes=duration_done,
                 service_name=p.get("service_name"),
                 price_tier_label=p.get("price_tier_label"),
+                booking_price_cents=p.get("booking_price_cents"),
                 arena_display=p.get("arenas_str"),
                 include_quick_rebook_line=can_quick_rebook,
             )

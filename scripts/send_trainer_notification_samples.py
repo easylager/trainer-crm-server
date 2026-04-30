@@ -37,9 +37,9 @@ from src.application.booking_client_no_show_notifications import _trainer_outcom
 from src.application.booking_no_show_use_cases import RESOLUTION_REDEEM, RESOLUTION_SKIP
 from src.bot import messages as msg
 from src.bot.handlers.trainer_handlers import (
+    BOOKING_ADD_NOTE_PREFIX,
     CONFIRM_BOOKING_PREFIX,
     DECLINE_BOOKING_PREFIX,
-    FEEDBACK_BOOKING_TRAINER_PREFIX,
     REQUEST_DECLINE_PREFIX,
     REQUEST_RESPOND_PREFIX,
     TRAINER_REPEAT_WEEK_PREFIX,
@@ -618,8 +618,8 @@ async def main() -> None:
             ],
             [
                 InlineKeyboardButton(
-                    text=msg.TRAINER_BUTTON_LEAVE_FEEDBACK,
-                    callback_data=f"{FEEDBACK_BOOKING_TRAINER_PREFIX}{MOCK_BOOKING_ID}",
+                    text=msg.TRAINER_BUTTON_ADD_BOOKING_NOTE,
+                    callback_data=f"{BOOKING_ADD_NOTE_PREFIX}{MOCK_BOOKING_ID}",
                 ),
             ],
             [
