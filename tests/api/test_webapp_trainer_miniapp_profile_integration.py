@@ -23,6 +23,7 @@ from PIL import Image
 from sqlalchemy import text
 
 from src.api.app import app
+from src.api.miniapp_auth.deps import MINIAPP_AUTH_ERROR_HEADER, MINIAPP_CREDENTIAL_USER_DETAIL_RU
 from src.api.miniapp_auth.types import MiniAppPlatform, MiniAppPrincipal
 from src.shared.telegram_webapp import InitDataAuthError
 
@@ -723,7 +724,8 @@ async def test_get_profile_401_when_init_data_invalid(
                 headers={"X-Telegram-Init-Data": "garbage"},
             )
     assert resp.status_code == 401
-    assert "init" in (resp.json().get("detail") or "").lower()
+    assert resp.json().get("detail") == MINIAPP_CREDENTIAL_USER_DETAIL_RU
+    assert resp.headers.get(MINIAPP_AUTH_ERROR_HEADER) == "1"
 
 
 @pytest.mark.asyncio

@@ -28,6 +28,7 @@ from src.infrastructure.db.models import (
     SUBSCRIPTION_TIER_CRM,
     SUBSCRIPTION_TIER_ONLINE,
 )
+from src.api.miniapp_auth.deps import MINIAPP_AUTH_ERROR_HEADER, MINIAPP_CREDENTIAL_USER_DETAIL_RU
 from src.api.miniapp_auth.types import MiniAppPlatform, MiniAppPrincipal
 from src.shared.telegram_webapp import InitDataAuthError
 from tests.conftest import belarus_test_phone
@@ -306,7 +307,8 @@ async def test_client_routes_401_invalid_init_data(app_use_test_db) -> None:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             resp = await client.get("/api/webapp/client/session", headers={"X-Telegram-Init-Data": "x"})
     assert resp.status_code == 401
-    assert "init" in (resp.json().get("detail") or "").lower()
+    assert resp.json().get("detail") == MINIAPP_CREDENTIAL_USER_DETAIL_RU
+    assert resp.headers.get(MINIAPP_AUTH_ERROR_HEADER) == "1"
 
 
 @pytest.mark.asyncio
