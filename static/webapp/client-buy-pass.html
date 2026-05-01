@@ -112,6 +112,20 @@
       border-color: rgba(247, 166, 0, 0.35);
       box-shadow: 0 6px 24px rgba(0, 0, 0, 0.08);
     }
+    .bp-pass-card--from-link {
+      border-color: rgba(247, 166, 0, 0.55);
+      box-shadow: 0 4px 20px rgba(247, 166, 0, 0.2);
+    }
+    .bp-pass-card--from-link::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: linear-gradient(90deg, #ffc23d, #f7a600);
+      pointer-events: none;
+    }
     .bp-pass-card--best::after {
       content: '';
       position: absolute;
@@ -279,12 +293,15 @@
         if (id) h['X-Telegram-Init-Data'] = id;
         return h;
       }
-      var state = { trainerId: null, trainerName: '', items: [], certItems: [], returnContext: {} };
+      var state = { trainerId: null, trainerName: '', items: [], certItems: [], returnContext: {}, highlightPassProductId: null };
       function getTrainerFromUrl() {
         var p = new URLSearchParams(window.location.search || '');
         var id = p.get('trainer_id');
         state.trainerName = p.get('trainer_name') || 'Тренер';
         state.trainerId = id ? parseInt(id, 10) : null;
+        var hpp = p.get('pass_product_id');
+        var hp = hpp ? parseInt(hpp, 10) : NaN;
+        state.highlightPassProductId = (Number.isFinite(hp) && hp > 0) ? hp : null;
         state.returnContext.trainer_id = state.trainerId;
         state.returnContext.city_id = p.get('city_id');
         state.returnContext.service_id = p.get('service_id');
@@ -366,6 +383,7 @@
           });
           if (hasPasses) {
             var html = '';
+            var hiPid = state.highlightPassProductId;
             state.items.forEach(function(p, idx) {
               var passPerSession = p.pass_price_per_session_cents != null ? (p.pass_price_per_session_cents / 100) : null;
               var meta = p.sessions_total + ' занятий · ' + formatPrice(p.price_cents);
@@ -383,11 +401,15 @@
                 savingsHtml += '</div>';
               }
               var extraClass = '';
-              if (bestIdx === idx && bestSav > 0) extraClass = ' bp-pass-card--best';
-              var bestTag = (bestIdx === idx && bestSav > 0)
-                ? '<span class="bp-pass-badge">Выгодно</span>'
-                : '';
-              html += '<article class="bp-pass-card' + extraClass + '" style="--bp-delay:' + (idx * 0.05) + 's">';
+              var fromLink = hiPid && Number(p.id) === Number(hiPid);
+              if (fromLink) extraClass = ' bp-pass-card--from-link';
+              else if (bestIdx === idx && bestSav > 0) extraClass = ' bp-pass-card--best';
+              var bestTag = fromLink
+                ? '<span class="bp-pass-badge">От тренера</span>'
+                : ((bestIdx === idx && bestSav > 0)
+                  ? '<span class="bp-pass-badge">Выгодно</span>'
+                  : '');
+              html += '<article class="bp-pass-card' + extraClass + '" data-pass-product-id="' + escapeHtml(String(p.id)) + '" style="--bp-delay:' + (idx * 0.05) + 's">';
               html += '<div class="bp-pass-inner">';
               html += '<div class="bp-pass-ico">' + ICON_PASS + '</div>';
               html += '<div class="bp-pass-body">';
@@ -399,6 +421,12 @@
               html += '</article>';
             });
             document.getElementById('listContent').innerHTML = html;
+            if (state.highlightPassProductId) {
+              requestAnimationFrame(function() {
+                var el = document.querySelector('[data-pass-product-id="' + state.highlightPassProductId + '"]');
+                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              });
+            }
           }
           if (hasCerts) {
             var certHtml = '';

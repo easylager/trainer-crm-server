@@ -5,6 +5,7 @@ import json
 from typing import Any
 
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.infrastructure.repositories.trainer_repository import (
@@ -692,13 +693,13 @@ async def archive_client_requests_fulfilled_by_bookings(
                     ON resp.client_request_id = r.id AND resp.trainer_id = b.trainer_id
                   WHERE b.client_id = r.client_id
                     AND b.service_id = r.service_id
-                    AND b.status NOT IN ('cancelled', 'declined')
+                    AND b.status NOT IN ('cancelled', 'declined', 'trainer_removed')
                 )
                 OR EXISTS (
                   SELECT 1 FROM bookings b
                   WHERE b.client_id = r.client_id
                     AND b.service_id = r.service_id
-                    AND b.status NOT IN ('cancelled', 'declined')
+                    AND b.status NOT IN ('cancelled', 'declined', 'trainer_removed')
                     AND r.trainer_id IS NOT NULL
                     AND b.trainer_id = r.trainer_id
                 )
@@ -845,8 +846,10 @@ async def get_pending_request_notifications(session: AsyncSession, limit: int = 
         text("""
             (
             SELECT r.id, t.id AS trainer_id, t.telegram_id,
-                   c.name AS city_name, s.name AS service_name, r.comment
+                   c.name AS city_name, s.name AS service_name, r.comment,
+                   r.client_id, cl.telegram_id AS client_telegram_id
             FROM client_requests r
+            INNER JOIN clients cl ON cl.id = r.client_id
             INNER JOIN cities c ON c.id = r.city_id
             INNER JOIN services s ON s.id = r.service_id
             INNER JOIN trainers t ON t.id = r.trainer_id AND t.telegram_id IS NOT NULL
@@ -856,8 +859,10 @@ async def get_pending_request_notifications(session: AsyncSession, limit: int = 
             UNION ALL
             (
             SELECT r.id, t.id AS trainer_id, t.telegram_id,
-                   c.name AS city_name, s.name AS service_name, r.comment
+                   c.name AS city_name, s.name AS service_name, r.comment,
+                   r.client_id, cl.telegram_id AS client_telegram_id
             FROM client_requests r
+            INNER JOIN clients cl ON cl.id = r.client_id
             INNER JOIN cities c ON c.id = r.city_id
             INNER JOIN services s ON s.id = r.service_id
             INNER JOIN trainer_profiles p ON p.city_id = r.city_id
@@ -879,6 +884,8 @@ async def get_pending_request_notifications(session: AsyncSession, limit: int = 
             "city_name": row[3],
             "service_name": row[4],
             "comment": row[5],
+            "client_id": row[6],
+            "client_telegram_id": row[7],
         }
         for row in rows
     ]
@@ -886,16 +893,21 @@ async def get_pending_request_notifications(session: AsyncSession, limit: int = 
 
 async def mark_request_trainer_notified(
     session: AsyncSession, request_id: int, trainer_id: int
-) -> None:
-    """Record that we sent this trainer a notification about this request."""
-    await session.execute(
-        text("""
-            INSERT INTO client_request_notifications (client_request_id, trainer_id)
-            VALUES (:rid, :tid)
-        """),
-        {"rid": request_id, "tid": trainer_id},
-    )
-    await session.commit()
+) -> bool:
+    """Record that we sent this trainer a notification about this request. False if another worker already inserted."""
+    try:
+        await session.execute(
+            text("""
+                INSERT INTO client_request_notifications (client_request_id, trainer_id)
+                VALUES (:rid, :tid)
+            """),
+            {"rid": request_id, "tid": trainer_id},
+        )
+        await session.commit()
+        return True
+    except IntegrityError:
+        await session.rollback()
+        return False
 
 
 async def get_pending_response_notifications(session: AsyncSession, limit: int = 50) -> list[dict]:

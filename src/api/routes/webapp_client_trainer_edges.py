@@ -16,6 +16,7 @@ from src.api.routes.webapp_client_trainer_graph import (
     next_booking_per_trainer,
     serialize_trainer_edge_row,
 )
+from src.application.booking_use_cases import client_latest_booking_primary_candidate
 from src.application.client_session_use_cases import get_session as read_client_bot_session
 from src.application.client_trainer_edge_use_cases import (
     get_all_edges as get_all_trainer_edges,
@@ -71,16 +72,23 @@ async def get_client_trainer_edges(
     """All client ↔ trainer edges + display hints + next upcoming booking per trainer."""
     catalog_tid = client_catalog_telegram_key(principal)
     edges = await get_all_trainer_edges(catalog_tid, session)
-    hints = await trainer_display_hints_by_ids(session, [int(e["trainer_id"]) for e in edges])
-    bookings_payload = await client_bookings_days_payload(session, catalog_tid)
-    next_per_trainer = next_booking_per_trainer(bookings_payload.get("days") or [])
+    booking_tid, booking_svc = await client_latest_booking_primary_candidate(session, catalog_tid)
 
     sess_row = await read_client_bot_session(catalog_tid, session)
     session_trainer_id = int(sess_row["selected_trainer_id"]) if (sess_row or {}).get("selected_trainer_id") else None
 
-    primary = compute_primary_edge(edges, session_trainer_id)
+    primary = compute_primary_edge(
+        edges,
+        session_trainer_id,
+        booking_primary_trainer_id=booking_tid,
+        booking_primary_service_id=booking_svc,
+    )
     primary_tid = int(primary["trainer_id"]) if primary else None
 
+    hint_ids = sorted({int(e["trainer_id"]) for e in edges} | ({primary_tid} if primary_tid else set()))
+    hints = await trainer_display_hints_by_ids(session, hint_ids)
+
+    bookings_payload = await client_bookings_days_payload(session, catalog_tid)
     saved = [e for e in edges if e.get("is_saved") and int(e["trainer_id"]) != primary_tid]
     past = [
         e for e in edges
@@ -88,6 +96,7 @@ async def get_client_trainer_edges(
         and not e.get("is_saved")
         and int(e["trainer_id"]) != primary_tid
     ]
+    next_per_trainer = next_booking_per_trainer(bookings_payload.get("days") or [])
     return {
         "primary": edge_json_with_trainer_hints(primary, hints, next_per_trainer) if primary else None,
         "saved": [edge_json_with_trainer_hints(e, hints, next_per_trainer) for e in saved],

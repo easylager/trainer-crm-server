@@ -17,6 +17,19 @@ from src.api.miniapp_auth.vk_launch_params import verify_vk_miniapp_launch_princ
 from src.shared.config import Settings
 from src.shared.telegram_webapp import InitDataAuthError
 
+# User-visible copy for Telegram/VK Mini Apps (never leak English auth diagnostics in JSON).
+MINIAPP_CREDENTIAL_USER_DETAIL_RU = "Что-то пошло не так"
+MINIAPP_AUTH_ERROR_HEADER = "X-Miniapp-Auth-Error"
+
+
+def miniapp_credential_http_exception() -> HTTPException:
+    """401 when initData / launch params are missing or fail verification."""
+    return HTTPException(
+        status_code=401,
+        detail=MINIAPP_CREDENTIAL_USER_DETAIL_RU,
+        headers={MINIAPP_AUTH_ERROR_HEADER: "1"},
+    )
+
 
 def _normalized_miniapp_platform(x_mini_app_platform: str | None) -> str:
     return (x_mini_app_platform or "").strip().lower() or MiniAppPlatform.TELEGRAM.value
@@ -58,7 +71,7 @@ def require_miniapp_credential_in(
     else:
         raw = (init_data or x_telegram_init_data or "").strip()
     if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
+        raise miniapp_credential_http_exception()
     return MiniappCredentialIn(raw=raw, platform=platform)
 
 
@@ -76,7 +89,7 @@ def require_miniapp_credential_in_multipart(
     else:
         raw = (init_data or x_telegram_init_data or "").strip()
     if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
+        raise miniapp_credential_http_exception()
     return MiniappCredentialIn(raw=raw, platform=platform)
 
 
@@ -88,14 +101,14 @@ def _principal_from_credential_trainer(cred: MiniappCredentialIn) -> MiniAppPrin
         try:
             return verify_vk_miniapp_launch_principal(cred.raw, secret)
         except InitDataAuthError:
-            raise HTTPException(status_code=401, detail="Invalid or expired launch params") from None
+            raise miniapp_credential_http_exception() from None
     token = Settings().telegram_bot_token_trainer
     if not token:
         raise HTTPException(status_code=503, detail="Trainer Mini App not configured")
     try:
         return verify_telegram_init_data_principal(cred.raw, token)
     except InitDataAuthError:
-        raise HTTPException(status_code=401, detail="Invalid or expired init data") from None
+        raise miniapp_credential_http_exception() from None
 
 
 def get_client_miniapp_principal(
@@ -109,14 +122,14 @@ def get_client_miniapp_principal(
         try:
             return verify_vk_miniapp_launch_principal(cred.raw, secret)
         except InitDataAuthError:
-            raise HTTPException(status_code=401, detail="Invalid or expired launch params") from None
+            raise miniapp_credential_http_exception() from None
     token = Settings().telegram_bot_token_client
     if not token:
         raise HTTPException(status_code=503, detail="Client Mini App not configured")
     try:
         return verify_telegram_init_data_principal(cred.raw, token)
     except InitDataAuthError:
-        raise HTTPException(status_code=401, detail="Invalid or expired init data") from None
+        raise miniapp_credential_http_exception() from None
 
 
 def get_trainer_miniapp_principal(
@@ -148,7 +161,7 @@ def get_admin_miniapp_principal(
     try:
         principal = verify_telegram_init_data_principal(cred.raw, token)
     except InitDataAuthError:
-        raise HTTPException(status_code=401, detail="Invalid or expired init data") from None
+        raise miniapp_credential_http_exception() from None
     allowed = Settings().admin_telegram_ids or []
     if principal.user_id not in allowed:
         raise HTTPException(status_code=403, detail="Not an admin")

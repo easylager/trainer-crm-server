@@ -9,6 +9,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.deps import get_session
+from src.api.miniapp_auth.deps import miniapp_credential_http_exception
 from src.application.trainer_link import get_trainer_id_by_telegram_id
 from src.application.training_group_series_notifications import notify_clients_group_series_schedule_updated
 from src.application.training_group_use_cases import (
@@ -50,14 +51,14 @@ def _trainer_tid(init_data: str) -> int:
     try:
         return require_telegram_user_id(init_data, Settings().telegram_bot_token_trainer)
     except InitDataAuthError:
-        raise HTTPException(status_code=401, detail="Invalid or expired init data") from None
+        raise miniapp_credential_http_exception() from None
 
 
 def _client_tid(init_data: str) -> int:
     try:
         return require_telegram_user_id(init_data, Settings().telegram_bot_token_client)
     except InitDataAuthError:
-        raise HTTPException(status_code=401, detail="Invalid or expired init data") from None
+        raise miniapp_credential_http_exception() from None
 
 
 class ScheduleRuleIn(BaseModel):
@@ -119,7 +120,7 @@ async def get_trainer_training_groups(
 ):
     raw = init_data or x_telegram_init_data
     if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
+        raise miniapp_credential_http_exception()
     tid = _trainer_tid(raw)
     trainer_id = await get_trainer_id_by_telegram_id(session, tid)
     if not trainer_id:
@@ -139,7 +140,7 @@ async def post_trainer_training_groups(
 ):
     raw = init_data or x_telegram_init_data
     if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
+        raise miniapp_credential_http_exception()
     tid = _trainer_tid(raw)
     trainer_id = await get_trainer_id_by_telegram_id(session, tid)
     if not trainer_id:
@@ -192,7 +193,7 @@ async def get_trainer_training_group_detail(
 ):
     raw = init_data or x_telegram_init_data
     if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
+        raise miniapp_credential_http_exception()
     tid = _trainer_tid(raw)
     trainer_id = await get_trainer_id_by_telegram_id(session, tid)
     if not trainer_id:
@@ -217,7 +218,7 @@ async def get_trainer_training_group_upcoming_slots(
 ):
     raw = init_data or x_telegram_init_data
     if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
+        raise miniapp_credential_http_exception()
     tid = _trainer_tid(raw)
     trainer_id = await get_trainer_id_by_telegram_id(session, tid)
     if not trainer_id:
@@ -238,7 +239,7 @@ async def put_trainer_training_group_schedule_rules(
 ):
     raw = init_data or x_telegram_init_data
     if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
+        raise miniapp_credential_http_exception()
     tid = _trainer_tid(raw)
     trainer_id = await get_trainer_id_by_telegram_id(session, tid)
     if not trainer_id:
@@ -300,7 +301,7 @@ async def post_cancel_training_group_slot(
 ):
     raw = init_data or x_telegram_init_data
     if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
+        raise miniapp_credential_http_exception()
     tid = _trainer_tid(raw)
     trainer_id = await get_trainer_id_by_telegram_id(session, tid)
     if not trainer_id:
@@ -323,7 +324,7 @@ async def post_cancel_training_group_slots_in_range(
 ):
     raw = init_data or x_telegram_init_data
     if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
+        raise miniapp_credential_http_exception()
     tid = _trainer_tid(raw)
     trainer_id = await get_trainer_id_by_telegram_id(session, tid)
     if not trainer_id:
@@ -349,7 +350,7 @@ async def patch_trainer_training_group(
 ):
     raw = init_data or x_telegram_init_data
     if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
+        raise miniapp_credential_http_exception()
     tid = _trainer_tid(raw)
     trainer_id = await get_trainer_id_by_telegram_id(session, tid)
     if not trainer_id:
@@ -399,7 +400,7 @@ async def post_trainer_training_group_member(
 ):
     raw = init_data or x_telegram_init_data
     if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
+        raise miniapp_credential_http_exception()
     tid = _trainer_tid(raw)
     trainer_id = await get_trainer_id_by_telegram_id(session, tid)
     if not trainer_id:
@@ -445,7 +446,7 @@ async def delete_trainer_training_group_member(
 ):
     raw = init_data or x_telegram_init_data
     if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
+        raise miniapp_credential_http_exception()
     tid = _trainer_tid(raw)
     trainer_id = await get_trainer_id_by_telegram_id(session, tid)
     if not trainer_id:
@@ -468,7 +469,7 @@ async def post_approve_join_request(
 ):
     raw = init_data or x_telegram_init_data
     if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
+        raise miniapp_credential_http_exception()
     tid = _trainer_tid(raw)
     trainer_id = await get_trainer_id_by_telegram_id(session, tid)
     if not trainer_id:
@@ -491,7 +492,7 @@ async def post_reject_join_request(
 ):
     raw = init_data or x_telegram_init_data
     if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
+        raise miniapp_credential_http_exception()
     tid = _trainer_tid(raw)
     trainer_id = await get_trainer_id_by_telegram_id(session, tid)
     if not trainer_id:
@@ -513,7 +514,7 @@ async def post_client_training_group_join_request(
 ):
     raw = init_data or x_telegram_init_data
     if not raw:
-        raise HTTPException(status_code=401, detail="Missing init data")
+        raise miniapp_credential_http_exception()
     ctid = _client_tid(raw)
     client_id = await get_client_id_by_telegram_id(session, ctid)
     if not client_id:

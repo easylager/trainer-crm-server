@@ -61,7 +61,7 @@
         });
       }
 
-      var state = { items: [], editingId: null, certItems: [], editingCertId: null, editingCert: null, activeTab: 'passes', clients: [], services: [], prefillClientIdForPassIssue: null, passIssueFilteredClients: [], passIssueSelectedClientId: null, passIssueSelectedClient: null, certIssueSubmitting: false, certIssueIdempotencyKey: null };
+      var state = { items: [], editingId: null, certItems: [], editingCertId: null, editingCert: null, activeTab: 'passes', clients: [], services: [], prefillClientIdForPassIssue: null, prefillPassProductIdForPassIssue: null, passIssueFilteredClients: [], passIssueSelectedClientId: null, passIssueSelectedClient: null, certIssueSubmitting: false, certIssueIdempotencyKey: null };
 
       function formatPrice(cents) {
         if (cents == null) return '—';
@@ -252,6 +252,14 @@
             document.getElementById('passIssueClientSearchGroup').style.display = 'none';
             document.getElementById('passIssueSelectedGroup').style.display = 'block';
           }
+        }
+        if (state.prefillPassProductIdForPassIssue) {
+          var wantPid = state.prefillPassProductIdForPassIssue;
+          state.prefillPassProductIdForPassIssue = null;
+          var optMatch = Array.from(productSelect.options).some(function(o) {
+            return parseInt(o.value, 10) === wantPid;
+          });
+          if (optMatch) productSelect.value = String(wantPid);
         }
         showScreen('screenPassIssue');
       }
@@ -806,10 +814,16 @@
       (function checkPassIssuePrefill() {
         var params = new URLSearchParams(window.location.search || '');
         var cid = params.get('client_id');
-        if (!cid) return;
-        var clientId = parseInt(cid, 10);
-        if (!clientId) return;
-        state.prefillClientIdForPassIssue = clientId;
+        if (cid) {
+          var clientId = parseInt(cid, 10);
+          if (clientId) state.prefillClientIdForPassIssue = clientId;
+        }
+        var ppidRaw = params.get('pass_product_id');
+        if (ppidRaw) {
+          var ppid = parseInt(ppidRaw, 10);
+          if (ppid) state.prefillPassProductIdForPassIssue = ppid;
+        }
+        if (!state.prefillClientIdForPassIssue && !state.prefillPassProductIdForPassIssue) return;
         setTab('passes');
         var itemsP = fetch(apiUrl('/trainer/pass-products') + initDataParam(), { headers: headers() }).then(function(r) { return r.json(); }).then(function(data) { state.items = data.items || []; });
         var clientsP = fetch(apiUrl('/trainer/clients') + initDataParam(), { headers: headers() }).then(function(r) { return r.json(); }).then(function(data) { state.clients = data.clients || []; }).catch(function() { state.clients = []; });

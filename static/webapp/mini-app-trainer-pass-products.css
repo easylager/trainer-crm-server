@@ -55,6 +55,74 @@
       color: var(--tg-theme-hint-color);
       font-weight: 500;
     }
+    /* Welcome-link screen: short lead + expandable details */
+    .pp-welcome-more {
+      margin: 14px 0 0;
+      border-radius: 14px;
+      border: 1px solid rgba(247, 166, 0, 0.22);
+      background: var(--tg-theme-secondary-bg-color);
+    }
+    .pp-welcome-more__summary {
+      list-style: none;
+      cursor: pointer;
+      padding: 12px 14px;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--tg-theme-button-color, #f5a623);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      font-family: var(--app-font-sans);
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .pp-welcome-more__summary::-webkit-details-marker {
+      display: none;
+    }
+    .pp-welcome-more__summary::after {
+      content: '';
+      width: 8px;
+      height: 8px;
+      border-right: 2px solid currentColor;
+      border-bottom: 2px solid currentColor;
+      transform: rotate(45deg);
+      flex-shrink: 0;
+      margin-top: -4px;
+      opacity: 0.85;
+    }
+    .pp-welcome-more[open] > .pp-welcome-more__summary::after {
+      transform: rotate(-135deg);
+      margin-top: 4px;
+    }
+    .pp-welcome-more__body {
+      padding: 0 14px 14px;
+      border-top: 1px solid rgba(128, 128, 128, 0.12);
+    }
+    .pp-welcome-more__p {
+      margin: 12px 0 0;
+      font-size: 14px;
+      line-height: 1.5;
+      color: var(--tg-theme-hint-color);
+      font-weight: 500;
+    }
+    .pp-welcome-more__body > .pp-welcome-more__p:first-child {
+      margin-top: 12px;
+    }
+    .pp-welcome-more__list {
+      margin: 8px 0 0;
+      padding: 0 0 0 1.15rem;
+      font-size: 14px;
+      line-height: 1.55;
+      color: var(--tg-theme-hint-color);
+      font-weight: 500;
+    }
+    .pp-welcome-more__list li {
+      margin: 6px 0 0;
+    }
+    .pp-welcome-more__list li:first-child {
+      margin-top: 0;
+    }
     .page-head { margin-bottom: 0; }
     .header h1 { margin: 0; }
     .pp-screen-title {

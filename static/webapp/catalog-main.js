@@ -1249,28 +1249,13 @@
       }
 
       /**
-       * Same notion of «primary» as client hub: GET /client/trainer-edges ``primary`` object
-       * (booking → saved → session), not only DB is_primary.
+       * Primary trainer id from GET /client/trainer-edges ``primary`` only (strict server tiers).
+       * No client-side fallback to legacy ``is_primary`` — avoids contradicting hub / «Мои тренеры».
        */
       function resolveCatalogAutoTrainerIdFromEdges() {
         if (state.hubPrimaryTrainerIdFromEdges != null) {
           var h = Number(state.hubPrimaryTrainerIdFromEdges);
           if (!isNaN(h) && h > 0) return h;
-        }
-        return primaryTrainerIdFromEdgesMap();
-      }
-
-      /** Explicit is_primary on an edge (when set via «сделать основным»). */
-      function primaryTrainerIdFromEdgesMap() {
-        var edges = state.trainerEdges || {};
-        var k;
-        for (k in edges) {
-          if (!Object.prototype.hasOwnProperty.call(edges, k)) continue;
-          var e = edges[k];
-          if (e && e.is_primary && e.trainer_id != null) {
-            var n = Number(e.trainer_id);
-            if (!isNaN(n) && n > 0) return n;
-          }
         }
         return null;
       }

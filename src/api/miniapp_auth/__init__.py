@@ -6,6 +6,7 @@ from src.api.miniapp_auth.deps import (
     get_client_miniapp_principal,
     get_trainer_miniapp_principal,
     get_trainer_miniapp_principal_multipart,
+    miniapp_credential_http_exception,
     reject_unsupported_miniapp_platform,
     require_miniapp_credential_in,
     require_miniapp_credential_in_multipart,
@@ -30,4 +31,5 @@ __all__ = [
     "get_trainer_miniapp_principal",
     "get_trainer_miniapp_principal_multipart",
     "get_admin_miniapp_principal",
+    "miniapp_credential_http_exception",
 ]

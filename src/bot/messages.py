@@ -505,6 +505,14 @@ TRAINER_REQUEST_NOTIFICATION_NO_COMMENT = (
     "<b>{city}</b> · {service}\n\n"
     "Дальше: меню → <b>«Заявки клиентов»</b> — отклик и действия под заявкой."
 )
+TRAINER_PASS_ORDER_NOTIFICATION = (
+    "📦 <b>Клиент хочет абонемент</b>\n\n"
+    "<b>{client_name}</b> — <b>{pass_name}</b>\n"
+    "{sessions} занятий · {service}\n\n"
+    "Напишите клиенту, обсудите оплату и выдайте абонемент."
+)
+TRAINER_PASS_ORDER_BTN_WRITE = "✍️ Написать клиенту"
+TRAINER_PASS_ORDER_BTN_ISSUE = "📦 Выдать абонемент"
 CLIENT_RESPONSE_NOTIFICATION = (
     "📩 <b>Отклик по вашей заявке</b>\n\n"
     "Тренер ответил — откройте список откликов кнопкой ниже: там можно написать или записаться."

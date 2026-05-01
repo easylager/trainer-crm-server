@@ -243,6 +243,17 @@ def _trainer_book_rows(
     return [[InlineKeyboardButton(text=msg.CLIENT_BUTTON_BOOK, callback_data="book")]]
 
 
+def _client_buy_pass_webapp_url(
+    base: str, trainer_id: int, pass_product_id: int | None = None
+) -> str:
+    """Client Mini App price list; optional pass_product_id highlights that product on open."""
+    b = (base or "").rstrip("/")
+    q = f"trainer_id={int(trainer_id)}"
+    if pass_product_id is not None:
+        q += f"&pass_product_id={int(pass_product_id)}"
+    return f"{b}/webapp/client-buy-pass?{q}"
+
+
 def _trainer_book_markup(
     base: str,
     trainer_id: int,
@@ -640,13 +651,19 @@ async def cmd_start(message: Message) -> None:
                 trainer = await get_trainer(db_session, trainer_id)
             name = html.escape(_trainer_name(trainer) if trainer else "Тренер")
             base = (Settings().webapp_base_url or "").rstrip("/")
+            pass_pid = payload_data.get("pass_product_id")
+            pass_pid_i = int(pass_pid) if pass_pid is not None else None
             keyboard = InlineKeyboardMarkup(
                 inline_keyboard=_trainer_book_rows(base, trainer_id, service_id=service_id)
                 + [
                     [
                         InlineKeyboardButton(
                             text=msg.CLIENT_BUTTON_BUY_PASS,
-                            web_app=WebAppInfo(url=f"{base}/webapp/client-buy-pass"),
+                            web_app=WebAppInfo(
+                                url=_client_buy_pass_webapp_url(
+                                    base, int(trainer_id), pass_pid_i
+                                )
+                            ),
                         )
                     ],
                 ]
@@ -837,7 +854,11 @@ async def cmd_start(message: Message) -> None:
                 [
                     InlineKeyboardButton(
                         text=msg.CLIENT_BUTTON_BUY_PASS,
-                        web_app=WebAppInfo(url=f"{base}/webapp/client-buy-pass"),
+                        web_app=WebAppInfo(
+                            url=_client_buy_pass_webapp_url(
+                                base, int(pass_trainer_id), int(pass_product_id)
+                            )
+                        ),
                     )
                 ],
             ]

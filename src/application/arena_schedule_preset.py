@@ -1,6 +1,6 @@
 """
 Schedule start-time grid presets per arena. Trainer UI uses primary arena's preset when set;
-otherwise trainer.schedule_grid_step_minutes (uniform_step).
+otherwise trainer.schedule_grid_step_minutes (uniform_step) with default window 06:00–23:00 for allowed starts.
 
 Extensible: add new grid_kind values + allowed_start_minutes() branch.
 """
@@ -18,6 +18,10 @@ GRID_UNIFORM_STEP = "uniform_step"
 
 _TRAINER_GRID_STEPS = frozenset({10, 15, 30, 60})
 
+# Inclusive hour bounds for first/last *start* on the grid when no arena row (or NULL cols). Keep in sync with webapp fallbacks.
+DEFAULT_SCHEDULE_HOUR_START = 6
+DEFAULT_SCHEDULE_HOUR_END = 23
+
 
 def normalize_trainer_schedule_grid_step(raw: object | None) -> int:
     """Valid trainer preference for slots when arena has no preset row; default 15."""
@@ -32,8 +36,8 @@ def default_quarter_preset() -> dict[str, Any]:
     return {
         "kind": GRID_QUARTER_15,
         "minute_offset": 0,
-        "hour_start": 8,
-        "hour_end": 21,
+        "hour_start": DEFAULT_SCHEDULE_HOUR_START,
+        "hour_end": DEFAULT_SCHEDULE_HOUR_END,
         "arena_id": None,
         "slot_duration_minutes": None,
         "step_minutes": 15,
@@ -49,8 +53,8 @@ def trainer_uniform_preset(step_minutes: int) -> dict[str, Any]:
     return {
         "kind": GRID_UNIFORM_STEP,
         "minute_offset": 0,
-        "hour_start": 8,
-        "hour_end": 21,
+        "hour_start": DEFAULT_SCHEDULE_HOUR_START,
+        "hour_end": DEFAULT_SCHEDULE_HOUR_END,
         "arena_id": None,
         "slot_duration_minutes": None,
         "step_minutes": step,
@@ -84,8 +88,8 @@ def validate_duration_for_preset(duration_minutes: int, preset: dict[str, Any]) 
 def allowed_start_minutes_from_preset(preset: dict[str, Any]) -> frozenset[int]:
     """All valid slot start minutes (from midnight) for this preset."""
     kind = (preset.get("kind") or GRID_QUARTER_15).strip()
-    h0 = max(0, min(23, int(preset.get("hour_start", 8))))
-    h1 = max(0, min(23, int(preset.get("hour_end", 21))))
+    h0 = max(0, min(23, int(preset.get("hour_start", DEFAULT_SCHEDULE_HOUR_START))))
+    h1 = max(0, min(23, int(preset.get("hour_end", DEFAULT_SCHEDULE_HOUR_END))))
     if h1 < h0:
         h0, h1 = h1, h0
     if kind == GRID_HOURLY_MINUTE:
@@ -138,8 +142,8 @@ async def get_schedule_grid_preset_for_trainer(
     return {
         "kind": (row2[0] or GRID_QUARTER_15).strip(),
         "minute_offset": int(row2[1] or 0),
-        "hour_start": int(row2[2] if row2[2] is not None else 8),
-        "hour_end": int(row2[3] if row2[3] is not None else 21),
+        "hour_start": int(row2[2] if row2[2] is not None else DEFAULT_SCHEDULE_HOUR_START),
+        "hour_end": int(row2[3] if row2[3] is not None else DEFAULT_SCHEDULE_HOUR_END),
         "slot_duration_minutes": int(row2[4]) if row2[4] is not None else None,
         "arena_id": primary,
         "step_minutes": 15 if (row2[0] or GRID_QUARTER_15).strip() == GRID_QUARTER_15 else None,
@@ -160,8 +164,8 @@ def schedule_grid_preset_to_api(preset: dict[str, Any]) -> dict[str, Any]:
     return {
         "kind": kind,
         "minute_offset": int(preset.get("minute_offset", 0)),
-        "hour_start": int(preset.get("hour_start", 8)),
-        "hour_end": int(preset.get("hour_end", 21)),
+        "hour_start": int(preset.get("hour_start", DEFAULT_SCHEDULE_HOUR_START)),
+        "hour_end": int(preset.get("hour_end", DEFAULT_SCHEDULE_HOUR_END)),
         "arena_id": preset.get("arena_id"),
         "slot_duration_minutes": int(raw_dur) if raw_dur is not None else None,
         "step_minutes": step_minutes,

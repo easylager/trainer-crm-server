@@ -45,6 +45,10 @@ from src.application.client_request_use_cases import (
     mark_request_trainer_notified,
     mark_response_notified,
 )
+from src.application.client_pass_order_use_cases import (
+    split_pass_order_comment,
+)
+from src.application.pass_product_use_cases import get_pass_product
 from src.application.recurring_use_cases import get_slot_status_on_date
 from src.application.certificate_use_cases import (
     expire_certificates_past_expiry,
@@ -305,22 +309,31 @@ async def process_response_notifications_batch(client_bot: Bot, session: AsyncSe
             )
 
 
-async def process_request_notifications_batch(
-    trainer_bot: Bot, session: AsyncSession
+async def _deliver_trainer_new_request_message(
+    trainer_bot: Bot,
+    session: AsyncSession,
+    p: dict,
 ) -> None:
-    pending = await get_pending_request_notifications(session)
-    for p in pending:
-        if not await is_trainer_push_allowed_now(session, int(p["trainer_id"])):
-            continue
-        tid = p.get("trainer_telegram_id")
-        if not tid:
-            continue
-        comment = (p.get("comment") or "").strip()
-        if comment:
+    """Send «new client request» DM to trainer; retry without keyboard if Telegram rejects inline markup."""
+    tid = p.get("trainer_telegram_id")
+    if not tid:
+        raise ValueError("trainer has no telegram id")
+
+    comment_raw = (p.get("comment") or "").strip()
+    pass_product_id, _body = split_pass_order_comment(comment_raw)
+
+    if pass_product_id is not None:
+        text, kb = await _build_pass_order_notification(
+            session,
+            p=p,
+            pass_product_id=pass_product_id,
+        )
+    else:
+        if comment_raw:
             text = msg.TRAINER_REQUEST_NOTIFICATION.format(
                 city=html_lib.escape(str(p.get("city_name") or "")),
                 service=html_lib.escape(str(p.get("service_name") or "")),
-                comment=html_lib.escape(comment),
+                comment=html_lib.escape(comment_raw),
             )
         else:
             text = msg.TRAINER_REQUEST_NOTIFICATION_NO_COMMENT.format(
@@ -341,13 +354,127 @@ async def process_request_notifications_batch(
                 ],
             ]
         )
+
+    try:
+        await trainer_bot.send_message(chat_id=tid, text=text, reply_markup=kb)
+    except Exception as e:
+        err_l = str(e).lower()
+        if kb and (
+            "button" in err_l
+            or "keyboard" in err_l
+            or "inline" in err_l
+            or "url" in err_l
+        ):
+            logger.warning(
+                "Request notifier: retry without keyboard (trainer_tid=%s): %s",
+                tid,
+                e,
+            )
+            await trainer_bot.send_message(chat_id=tid, text=text)
+            return
+        raise
+
+
+async def process_request_notifications_batch(
+    trainer_bot: Bot,
+    session: AsyncSession,
+    *,
+    only_request_id: int | None = None,
+    bypass_quiet_hours_for_that_request: bool = False,
+) -> None:
+    pending = await get_pending_request_notifications(session)
+    for p in pending:
+        if only_request_id is not None and int(p["request_id"]) != only_request_id:
+            continue
+
+        enforce_quiet_hours = True
+        if (
+            bypass_quiet_hours_for_that_request
+            and only_request_id is not None
+            and int(p["request_id"]) == only_request_id
+        ):
+            enforce_quiet_hours = False
+
+        if enforce_quiet_hours and not await is_trainer_push_allowed_now(session, int(p["trainer_id"])):
+            continue
+        tid = p.get("trainer_telegram_id")
+        if not tid:
+            continue
+
         try:
-            await trainer_bot.send_message(chat_id=tid, text=text, reply_markup=kb)
+            await _deliver_trainer_new_request_message(trainer_bot, session, p)
             await mark_request_trainer_notified(
                 session, p["request_id"], p["trainer_id"]
             )
         except Exception as e:
             logger.warning("Request notifier send to %s: %s", tid, e)
+
+
+async def _build_pass_order_notification(
+    session: AsyncSession,
+    *,
+    p: dict,
+    pass_product_id: int,
+) -> tuple[str, InlineKeyboardMarkup]:
+    """Text + keyboard for a pass-product order notification to the trainer."""
+    settings = Settings()
+    base = (settings.webapp_base_url or "").rstrip("/")
+    webapp_https = base.lower().startswith("https://")
+
+    product = await get_pass_product(session, pass_product_id, int(p["trainer_id"]))
+    client_name = " ".join(
+        filter(None, [p.get("client_first_name"), p.get("client_last_name")])
+    ).strip() or "Клиент"
+
+    if product:
+        pass_name = product.get("name") or "Абонемент"
+        sessions_total = product.get("sessions_total") or 0
+        service_name = product.get("service_name") or p.get("service_name") or "Услуга"
+    else:
+        pass_name = "Абонемент"
+        sessions_total = 0
+        service_name = p.get("service_name") or "Услуга"
+
+    text = msg.TRAINER_PASS_ORDER_NOTIFICATION.format(
+        client_name=html_lib.escape(client_name),
+        pass_name=html_lib.escape(pass_name),
+        sessions=sessions_total,
+        service=html_lib.escape(service_name),
+    )
+
+    rows: list[list[InlineKeyboardButton]] = []
+
+    # "Write to client" — direct Telegram DM
+    client_telegram_id = p.get("client_telegram_id")
+    if client_telegram_id:
+        rows.append([
+            InlineKeyboardButton(
+                text=msg.TRAINER_PASS_ORDER_BTN_WRITE,
+                url=f"tg://user?id={int(client_telegram_id)}",
+            )
+        ])
+
+    # "Issue pass" — open pass-products mini-app with client + product prefilled
+    client_id = p.get("client_id")
+    if webapp_https and client_id and pass_product_id:
+        issue_url = (
+            f"{base}/webapp/trainer-pass-products"
+            f"?client_id={int(client_id)}&pass_product_id={int(pass_product_id)}"
+        )
+        rows.append([
+            InlineKeyboardButton(
+                text=msg.TRAINER_PASS_ORDER_BTN_ISSUE,
+                web_app=WebAppInfo(url=issue_url),
+            )
+        ])
+
+    kb = InlineKeyboardMarkup(inline_keyboard=rows if rows else [[
+        InlineKeyboardButton(
+            text=msg.TRAINER_BUTTON_PASSES,
+            callback_data="passes",
+        )
+    ]])
+    return text, kb
 
 
 async def _build_trainer_post_session_keyboard(

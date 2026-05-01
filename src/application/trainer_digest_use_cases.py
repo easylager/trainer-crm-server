@@ -142,7 +142,7 @@ async def get_trainer_daily_digest(
                        WHERE b2.trainer_id = :tid
                          AND b2.client_id = c.id
                          AND b2.id <> b.id
-                         AND b2.status NOT IN ('cancelled', 'declined')
+                         AND b2.status NOT IN ('cancelled', 'declined', 'trainer_removed')
                          AND (s2.slot_date < :today
                               OR (s2.slot_date = :today AND s2.start_time < s.start_time))
                    )::int AS prior_sessions_count
@@ -383,7 +383,7 @@ async def _weekly_upcoming_overview(
             FROM bookings b
             JOIN slots s ON s.id = b.slot_id
             WHERE b.trainer_id = :tid
-              AND b.status NOT IN ('cancelled', 'declined')
+              AND b.status NOT IN ('cancelled', 'declined', 'trainer_removed')
               AND s.slot_date BETWEEN :d_from AND :d_to
             GROUP BY s.slot_date
             """
@@ -416,14 +416,14 @@ async def _weekly_upcoming_overview(
             JOIN slots s ON s.id = b.slot_id
             JOIN clients c ON c.id = b.client_id
             WHERE b.trainer_id = :tid
-              AND b.status NOT IN ('cancelled', 'declined')
+              AND b.status NOT IN ('cancelled', 'declined', 'trainer_removed')
               AND s.slot_date BETWEEN :d_from AND :d_to
               AND NOT EXISTS (
                   SELECT 1 FROM bookings b_prev
                   JOIN slots s_prev ON s_prev.id = b_prev.slot_id
                   WHERE b_prev.trainer_id = :tid
                     AND b_prev.client_id = c.id
-                    AND b_prev.status NOT IN ('cancelled', 'declined')
+                    AND b_prev.status NOT IN ('cancelled', 'declined', 'trainer_removed')
                     AND s_prev.slot_date < :d_from
               )
             GROUP BY c.id, client_name
@@ -587,7 +587,7 @@ async def _consecutive_skip_days_before(
             FROM bookings b
             JOIN slots s ON s.id = b.slot_id
             WHERE b.trainer_id = :tid
-              AND b.status NOT IN ('cancelled', 'declined')
+              AND b.status NOT IN ('cancelled', 'declined', 'trainer_removed')
               AND s.slot_date BETWEEN :d_from AND :d_to
             """
         ),
@@ -635,7 +635,7 @@ async def _dormant_clients_sample(
                   JOIN slots s_fut ON s_fut.id = b_fut.slot_id
                   WHERE b_fut.trainer_id = :tid
                     AND b_fut.client_id = c.id
-                    AND b_fut.status NOT IN ('cancelled', 'declined')
+                    AND b_fut.status NOT IN ('cancelled', 'declined', 'trainer_removed')
                     AND s_fut.slot_date >= :today
               )
             GROUP BY c.id, client_name

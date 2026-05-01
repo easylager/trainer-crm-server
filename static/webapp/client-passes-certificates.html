@@ -62,6 +62,140 @@
     .loading, .error { text-align: center; padding: 32px 16px; color: var(--tg-theme-hint-color); }
     .error { color: var(--app-danger); }
     .empty { text-align: center; padding: 32px 16px; color: var(--tg-theme-hint-color); font-size: 15px; }
+    /* Каталог абонементов основного тренера (заявка через «Мои заявки») */
+    .pass-shop-section {
+      margin-bottom: 20px;
+      padding: 18px 16px 20px;
+      border-radius: 20px;
+      background: linear-gradient(
+        160deg,
+        rgba(247, 166, 0, 0.14) 0%,
+        var(--tg-theme-secondary-bg-color) 38%
+      );
+      border: 1px solid rgba(247, 166, 0, 0.26);
+      box-shadow: 0 6px 24px rgba(0, 0, 0, 0.08);
+    }
+    .pass-shop-kicker {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--tg-theme-hint-color);
+      margin: 0 0 6px;
+    }
+    .pass-shop-headline {
+      margin: 0 0 6px;
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      line-height: 1.25;
+      color: var(--tg-theme-text-color);
+    }
+    .pass-shop-sub {
+      margin: 0 0 16px;
+      font-size: 14px;
+      line-height: 1.45;
+      color: var(--tg-theme-hint-color);
+    }
+    .pass-shop-list { display: flex; flex-direction: column; gap: 12px; }
+    .pass-offer-card {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      padding: 16px 16px 14px;
+      border-radius: 18px;
+      background: var(--tg-theme-bg-color);
+      border: 1px solid rgba(128, 128, 128, 0.14);
+      box-shadow: 0 2px 14px rgba(0, 0, 0, 0.06);
+    }
+    .pass-offer-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+    }
+    .pass-offer-name {
+      margin: 0;
+      font-size: 17px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      line-height: 1.25;
+      color: var(--tg-theme-text-color);
+    }
+    .pass-offer-scope {
+      margin: 6px 0 0;
+      font-size: 13px;
+      color: var(--tg-theme-hint-color);
+      line-height: 1.35;
+    }
+    .pass-offer-scope strong { color: var(--tg-theme-text-color); font-weight: 600; }
+    .pass-offer-price-pill {
+      flex-shrink: 0;
+      padding: 8px 12px;
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 700;
+      background: rgba(247, 166, 0, 0.22);
+      color: var(--tg-theme-text-color);
+      border: 1px solid rgba(245, 166, 35, 0.35);
+      white-space: nowrap;
+    }
+    .pass-offer-meta-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      font-size: 13px;
+      color: var(--tg-theme-hint-color);
+    }
+    .pass-offer-chip {
+      padding: 5px 11px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+      background: rgba(128, 128, 128, 0.12);
+      color: var(--tg-theme-text-color);
+    }
+    .pass-offer-actions .btn-order-pass {
+      width: 100%;
+      margin-top: 2px;
+      padding: 12px 16px;
+      border-radius: 14px;
+      border: none;
+      font: inherit;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      background: var(--tg-theme-button-color);
+      color: var(--tg-theme-button-text-color);
+      box-shadow: 0 4px 14px rgba(247, 166, 0, 0.28);
+    }
+    .pass-offer-actions .btn-order-pass:disabled {
+      opacity: 0.65;
+      cursor: default;
+    }
+    .pass-offer-actions .btn-order-pass:active:not(:disabled) {
+      transform: scale(0.992);
+      opacity: 0.94;
+    }
+    .pass-owned-divider {
+      margin: 0 0 12px;
+      padding-top: 0;
+      border-top: none;
+    }
+    .pass-shop-section.pass-shop-after-owned {
+      margin-top: 22px;
+      padding-top: 20px;
+      border-top: 1px solid rgba(128, 128, 128, 0.14);
+    }
+    .pass-owned-divider .pass-owned-divider-label {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--tg-theme-hint-color);
+      margin: 12px 0 4px;
+    }
     .pass-card {
       display: flex;
       align-items: stretch;
@@ -330,6 +464,86 @@
       font-size: 14px;
       font-weight: 600;
     }
+    /* Подтверждение заказа абонемента */
+    .pass-order-modal-root[hidden] {
+      display: none !important;
+    }
+    .pass-order-modal-root:not([hidden]) {
+      position: fixed;
+      inset: 0;
+      z-index: 10000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px 16px calc(24px + env(safe-area-inset-bottom, 0px));
+      box-sizing: border-box;
+    }
+    .pass-order-modal-backdrop {
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.52);
+      border: none;
+      padding: 0;
+      margin: 0;
+      cursor: pointer;
+    }
+    .pass-order-modal-sheet {
+      position: relative;
+      z-index: 1;
+      width: 100%;
+      max-width: 400px;
+      padding: 22px 20px 18px;
+      border-radius: 20px;
+      background: var(--tg-theme-bg-color);
+      border: 1px solid rgba(128, 128, 128, 0.18);
+      box-shadow: 0 16px 48px rgba(0, 0, 0, 0.35);
+    }
+    .pass-order-modal-sheet h3 {
+      margin: 0 0 10px;
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: var(--tg-theme-text-color);
+    }
+    .pass-order-modal-text {
+      margin: 0 0 20px;
+      font-size: 15px;
+      line-height: 1.45;
+      color: var(--tg-theme-hint-color);
+    }
+    .pass-order-modal-text strong {
+      color: var(--tg-theme-text-color);
+      font-weight: 600;
+    }
+    .pass-order-modal-actions {
+      display: flex;
+      gap: 10px;
+      justify-content: stretch;
+    }
+    .pass-order-modal-actions .pass-order-modal-btn {
+      flex: 1;
+      padding: 12px 14px;
+      border-radius: 14px;
+      font: inherit;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      border: none;
+      transition: opacity 0.15s ease, transform 0.12s ease;
+    }
+    .pass-order-modal-actions .pass-order-modal-btn:active {
+      transform: scale(0.988);
+      opacity: 0.92;
+    }
+    .pass-order-modal-btn.secondary {
+      background: rgba(128, 128, 128, 0.16);
+      color: var(--tg-theme-text-color);
+    }
+    .pass-order-modal-btn.primary {
+      background: var(--tg-theme-button-color);
+      color: var(--tg-theme-button-text-color);
+      box-shadow: 0 4px 14px rgba(247, 166, 0, 0.28);
+    }
   </style>
   <link rel="stylesheet" href="mini-app-client-nav.css" />
 </head>
@@ -348,7 +562,11 @@
 
   <div id="panelPasses" class="panel active" role="tabpanel">
     <div id="pass-screenList" data-pass-screen class="active">
+      <div id="pass-ownedDivider" class="pass-owned-divider" hidden>
+        <div class="pass-owned-divider-label">Ваши абонементы</div>
+      </div>
       <div id="pass-listContent"></div>
+      <div id="pass-shopSection" class="pass-shop-section" hidden></div>
     </div>
     <div id="pass-screenDetail" data-pass-screen>
       <div class="pass-detail-hero">
@@ -384,6 +602,18 @@
     <div id="cert-listContent"></div>
   </div>
 
+  <div id="pass-orderConfirmModal" class="pass-order-modal-root" hidden>
+    <button type="button" class="pass-order-modal-backdrop" id="pass-orderConfirmBackdrop" aria-label="Закрыть"></button>
+    <div class="pass-order-modal-sheet" role="dialog" aria-modal="true" aria-labelledby="pass-orderConfirmTitle">
+      <h3 id="pass-orderConfirmTitle">Отправить заявку?</h3>
+      <p class="pass-order-modal-text" id="pass-orderConfirmText"></p>
+      <div class="pass-order-modal-actions">
+        <button type="button" class="pass-order-modal-btn secondary" id="pass-orderConfirmCancel">Отмена</button>
+        <button type="button" class="pass-order-modal-btn primary" id="pass-orderConfirmSend">Отправить</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     (function() {
       var tg = window.Telegram && window.Telegram.WebApp;
@@ -401,10 +631,20 @@
         d.textContent = s;
         return d.innerHTML;
       }
+      function escapeAttr(s) {
+        return String(s == null ? '' : s)
+          .replace(/&/g, '&amp;')
+          .replace(/"/g, '&quot;')
+          .replace(/</g, '&lt;');
+      }
 
       function formatPassPrice(cents) {
         if (cents == null || cents === 0) return '';
         return (cents / 100).toFixed(2).replace(/\.?0+$/, '') + ' BYN за занятие';
+      }
+      function formatMoneyTotal(cents) {
+        if (cents == null || cents === 0) return '';
+        return (cents / 100).toFixed(2).replace(/\.?0+$/, '') + ' BYN';
       }
       function formatPassExpires(iso) {
         if (!iso) return '';
@@ -492,17 +732,160 @@
           navBack.hidden = id !== 'pass-screenDetail';
         }
       }
-      function loadPassesList() {
-        document.getElementById('pass-listContent').innerHTML = '<div class="loading">Загрузка…</div>';
-        var url = '/api/webapp/client/passes' + (initData() ? '?init_data=' + encodeURIComponent(initData()) : '');
-        fetch(url, { headers: headers() })
-          .then(function(r) { return r.json(); })
-          .then(function(data) {
-            passState.items = data.items || [];
-            if (passState.items.length === 0) {
-              document.getElementById('pass-listContent').innerHTML = '<div class="empty">Пока нет абонементов.</div>';
+      function renderPassShopFromCatalog(catalog) {
+        var sec = document.getElementById('pass-shopSection');
+        if (!catalog || !catalog.items || catalog.items.length === 0 || !catalog.trainer_id) {
+          sec.hidden = true;
+          sec.innerHTML = '';
+          return false;
+        }
+        var trainerName = catalog.trainer_display_name || 'Тренер';
+        var html = '';
+        html += '<p class="pass-shop-kicker">У вашего тренера</p>';
+        html += '<h2 class="pass-shop-headline">' + escapeHtml(trainerName) + '</h2>';
+        html += '<p class="pass-shop-sub">Выберите абонемент и отправьте заявку — тренер напишет вам для оплаты и сможет выдать абонемент.</p>';
+        html += '<div class="pass-shop-list">';
+        catalog.items.forEach(function(it) {
+          var scopeHtml = (it.service_name && String(it.service_name).trim())
+            ? '🎯 Услуга: <strong>' + escapeHtml(String(it.service_name).trim()) + '</strong>'
+            : '🎯 На <strong>все услуги</strong> этого тренера';
+          var chips = '<span class="pass-offer-chip">' + (it.sessions_total || 0) + ' занятий</span>';
+          var totalStr = formatMoneyTotal(it.price_cents);
+          if (totalStr) chips += '<span class="pass-offer-chip">' + escapeHtml(totalStr) + '</span>';
+          var pill = totalStr ? '<div class="pass-offer-price-pill">' + escapeHtml(totalStr) + '</div>' : '';
+          html += '<article class="pass-offer-card">';
+          html += '<div class="pass-offer-top"><div>';
+          html += '<h3 class="pass-offer-name">' + escapeHtml(it.name || 'Абонемент') + '</h3>';
+          html += '<p class="pass-offer-scope">' + scopeHtml + '</p></div>' + pill + '</div>';
+          html += '<div class="pass-offer-meta-row">' + chips + '</div>';
+          html += '<div class="pass-offer-actions"><button type="button" class="btn-order-pass" data-product-id="' + it.id + '" data-product-name="' + escapeAttr(it.name || 'Абонемент') + '">Заказать у тренера</button></div>';
+          html += '</article>';
+        });
+        html += '</div>';
+        sec.innerHTML = html;
+        sec.hidden = false;
+        sec.querySelectorAll('.btn-order-pass').forEach(function(btn) {
+          btn.onclick = function() {
+            var pid = parseInt(btn.getAttribute('data-product-id'), 10);
+            if (!pid) return;
+            var pname = btn.getAttribute('data-product-name') || 'Абонемент';
+            openPassOrderConfirmModal(pid, pname, btn);
+          };
+        });
+        return true;
+      }
+
+      var passOrderConfirmEl = document.getElementById('pass-orderConfirmModal');
+      var passOrderConfirmText = document.getElementById('pass-orderConfirmText');
+      var passOrderConfirmState = { productId: null, button: null };
+
+      function closePassOrderConfirmModal() {
+        if (passOrderConfirmEl) passOrderConfirmEl.hidden = true;
+        passOrderConfirmState.productId = null;
+        passOrderConfirmState.button = null;
+      }
+
+      function openPassOrderConfirmModal(passProductId, productName, sourceBtn) {
+        passOrderConfirmState.productId = passProductId;
+        passOrderConfirmState.button = sourceBtn;
+        if (passOrderConfirmText) {
+          passOrderConfirmText.innerHTML =
+            'Будет отправлена заявка вашему тренеру на абонемент <strong>' +
+            escapeHtml(productName) +
+            '</strong>. Тренер напишет вам для оплаты.';
+        }
+        if (passOrderConfirmEl) passOrderConfirmEl.hidden = false;
+      }
+
+      (function wirePassOrderConfirmModal() {
+        var cancel = document.getElementById('pass-orderConfirmCancel');
+        var send = document.getElementById('pass-orderConfirmSend');
+        var backdrop = document.getElementById('pass-orderConfirmBackdrop');
+        if (cancel) cancel.onclick = closePassOrderConfirmModal;
+        if (backdrop) backdrop.onclick = closePassOrderConfirmModal;
+        if (send) {
+          send.onclick = function() {
+            var pid = passOrderConfirmState.productId;
+            var btn = passOrderConfirmState.button;
+            closePassOrderConfirmModal();
+            if (!pid || !btn) return;
+            var ik =
+              typeof crypto !== 'undefined' && crypto.randomUUID
+                ? crypto.randomUUID()
+                : 'pop-' + String(pid) + '-' + Date.now() + '-' + Math.random().toString(16).slice(2);
+            submitPassProductOrder(pid, btn, ik);
+          };
+        }
+      })();
+
+      function submitPassProductOrder(passProductId, btn, idempotencyKey) {
+        if (!btn || btn.disabled) return;
+        var prev = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = 'Отправка…';
+        var url = '/api/webapp/client/pass-order/request' + (initData() ? '?init_data=' + encodeURIComponent(initData()) : '');
+        var reqHeaders = headers();
+        if (idempotencyKey) reqHeaders['Idempotency-Key'] = idempotencyKey;
+        fetch(url, {
+          method: 'POST',
+          headers: reqHeaders,
+          body: JSON.stringify({ pass_product_id: passProductId })
+        })
+          .then(function(r) {
+            return r.json().then(function(d) { return { ok: r.ok, data: d }; });
+          })
+          .then(function(o) {
+            btn.disabled = false;
+            btn.textContent = prev;
+            if (o.ok && o.data && o.data.success) {
+              var msg = 'Заявка отправлена тренеру. Он напишет вам для оплаты.';
+              if (tg && typeof tg.showPopup === 'function') {
+                tg.showPopup({ title: 'Готово', message: msg, buttons: [{ type: 'ok' }] });
+              } else {
+                alert(msg);
+              }
+              loadPassesPanel();
               return;
             }
+            var detail = o.data && (o.data.detail || o.data.message);
+            var errText = detail || 'Не удалось отправить заявку.';
+            if (tg && typeof tg.showPopup === 'function') {
+              tg.showPopup({ title: 'Не получилось', message: String(errText), buttons: [{ type: 'ok' }] });
+            } else {
+              alert(errText);
+            }
+          })
+          .catch(function() {
+            btn.disabled = false;
+            btn.textContent = prev;
+            alert('Ошибка сети. Попробуйте ещё раз.');
+          });
+      }
+
+      function loadPassesPanel() {
+        var listEl = document.getElementById('pass-listContent');
+        var shopEl = document.getElementById('pass-shopSection');
+        var divEl = document.getElementById('pass-ownedDivider');
+        shopEl.hidden = true;
+        shopEl.innerHTML = '';
+        shopEl.classList.remove('pass-shop-after-owned');
+        divEl.hidden = true;
+        listEl.innerHTML = '<div class="loading">Загрузка…</div>';
+
+        var q = initData() ? '?init_data=' + encodeURIComponent(initData()) : '';
+        var passesUrl = '/api/webapp/client/passes' + q;
+        var catalogUrl = '/api/webapp/client/pass-order/catalog' + q;
+
+        Promise.all([
+          fetch(passesUrl, { headers: headers() }).then(function(r) { return r.json(); }),
+          fetch(catalogUrl, { headers: headers() }).then(function(r) { return r.json(); }).catch(function() { return { items: [] }; })
+        ])
+          .then(function(pair) {
+            var data = pair[0];
+            var catalog = pair[1];
+            passState.items = (data && data.items) ? data.items : [];
+            var showShop = renderPassShopFromCatalog(catalog);
+
             function formatPriceChip(cents) {
               if (cents == null || cents === 0) return '';
               return (cents / 100).toFixed(2).replace(/\.?0+$/, '') + ' BYN';
@@ -568,31 +951,47 @@
                 '</div><span class="arrow" aria-hidden="true">→</span></button>'
               );
             }
-            var html = '';
-            passState.items.forEach(function(p) {
-              html += passListCardHtml(p);
-            });
-            document.getElementById('pass-listContent').innerHTML = html;
-            document.querySelectorAll('#panelPasses .pass-card').forEach(function(btn) {
-              btn.onclick = function() {
-                var id = parseInt(btn.dataset.id, 10);
-                var p = passState.items.find(function(x) { return x.id === id; });
-                if (p) {
-                  passState.current = p;
-                  renderPassDetailScreen(p);
-                  showPassScreen('pass-screenDetail');
-                }
-              };
-            });
+
+            if (passState.items.length === 0 && !showShop) {
+              listEl.innerHTML = '<div class="empty">Пока нет абонементов.</div>';
+              return;
+            }
+
+            divEl.hidden = passState.items.length === 0;
+
+            if (passState.items.length === 0) {
+              listEl.innerHTML = '';
+            } else {
+              var html = '';
+              passState.items.forEach(function(p) {
+                html += passListCardHtml(p);
+              });
+              listEl.innerHTML = html;
+              document.querySelectorAll('#panelPasses .pass-card').forEach(function(btn) {
+                btn.onclick = function() {
+                  var id = parseInt(btn.dataset.id, 10);
+                  var p = passState.items.find(function(x) { return x.id === id; });
+                  if (p) {
+                    passState.current = p;
+                    renderPassDetailScreen(p);
+                    showPassScreen('pass-screenDetail');
+                  }
+                };
+              });
+            }
+
+            if (showShop && passState.items.length > 0) {
+              shopEl.classList.add('pass-shop-after-owned');
+            }
           })
           .catch(function() {
-            document.getElementById('pass-listContent').innerHTML = '<div class="error">Не удалось загрузить. Откройте из бота.</div>';
+            listEl.innerHTML = '<div class="error">Не удалось загрузить. Откройте из бота.</div>';
           });
       }
       document.getElementById('btnBack').onclick = function() {
         showPassScreen('pass-screenList');
       };
-      loadPassesList();
+      loadPassesPanel();
 
       // --- Certificates (same logic as client-certificates.html) ---
       function formatAmount(cents) {

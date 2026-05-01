@@ -82,6 +82,14 @@
 
       const DAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 
+      /** Must match trainer-home-main.js HUB_FILL_SLOTS_RHYTHM_BOOST_KEY — приоритет хинта «Напомнить». */
+      const SCHEDULE_EDITOR_HUB_FILL_SLOTS_BOOST_KEY = 'trainer_hub_fill_slots_rhythm_boost_v1';
+      function markScheduleEditorHubFillSlotsRhythmBoost() {
+        try {
+          sessionStorage.setItem(SCHEDULE_EDITOR_HUB_FILL_SLOTS_BOOST_KEY, String(Date.now()));
+        } catch (e) {}
+      }
+
       /**
        * Booking detail from a multi-client group slot (`state.bookingDetailReturn` is `group` or `hub_group`):
        * omit reschedule, cancel, and regular-client actions. Set to false to show them again.
@@ -1477,7 +1485,7 @@
         /** Slots for selected quick-book day (from GET /schedule); used to mark busy hours. */
         quickBookSlotsForDay: null,
         quickBookSlotDate: null,
-        /** Minutes from midnight for quick book (15 min grid, 08:00–21:00). */
+        /** Minutes from midnight for quick book (15 min grid, 06:00–23:00 default window). */
         quickBookStartMinutes: null,
         quickBookDurationMinutes: 45,
         /** From GET /schedule + /schedule/templates: arena-based grid (kind, hour window, optional :MM offset). */
@@ -1975,8 +1983,8 @@
         return {
           kind: 'uniform_step',
           minute_offset: 0,
-          hour_start: 8,
-          hour_end: 21,
+          hour_start: 6,
+          hour_end: 23,
           arena_id: null,
           slot_duration_minutes: null,
           step_minutes: 15,
@@ -2063,9 +2071,9 @@
         preset = preset || defaultScheduleGridPreset();
         var kind = (preset.kind || 'uniform_step').toString().trim();
         var h0 = Math.max(0, Math.min(23, parseInt(preset.hour_start, 10)));
-        if (isNaN(h0)) h0 = 8;
+        if (isNaN(h0)) h0 = 6;
         var h1 = Math.max(0, Math.min(23, parseInt(preset.hour_end, 10)));
-        if (isNaN(h1)) h1 = 21;
+        if (isNaN(h1)) h1 = 23;
         if (h1 < h0) {
           var swap = h0;
           h0 = h1;
@@ -3482,6 +3490,8 @@
             }
             if (status === 'available' && occ === 0 && !cohortSlot) {
               html += '<button type="button" class="btn-slot-del" data-slot-id="' + s.id + '" aria-label="Удалить">×</button>';
+            } else if (bookedClick && slotPast && !groupHub && !cohortSlot) {
+              html += '<button type="button" class="btn-slot-del btn-booking-purge" data-booking-id="' + s.booking_id + '" aria-label="Убрать запись">×</button>';
             }
             html += '</div></div>';
           });
@@ -3493,7 +3503,7 @@
           return;
         }
         content.innerHTML = html;
-        content.querySelectorAll('.btn-slot-del').forEach(function(btn) {
+        content.querySelectorAll('.btn-slot-del:not(.btn-booking-purge)').forEach(function(btn) {
           btn.onclick = function(e) {
             e.stopPropagation();
             const id = parseInt(btn.dataset.slotId, 10);
@@ -3510,6 +3520,32 @@
                       var d = o.detail || 'Ошибка';
                       showToast(typeof d === 'string' ? d : 'Не удалось удалить');
                     });
+                  }
+                })
+                .catch(function() { showToast('Ошибка сети'); });
+            });
+          };
+        });
+        content.querySelectorAll('.btn-booking-purge').forEach(function(btn) {
+          btn.onclick = function(e) {
+            e.stopPropagation();
+            var bid = parseInt(btn.dataset.bookingId, 10);
+            if (!bid) return;
+            showAppConfirm(
+              'Убрать запись из расписания и статистики? Если занятие было по абонементу или сертификату, списание будет отменено.',
+              { okText: 'Убрать', cancelText: 'Отмена' }
+            ).then(function(ok) {
+              if (!ok) return;
+              if (!assertScheduleCrmWriteAllowed()) return;
+              fetch(apiUrlWithQuery('/trainer/bookings/' + bid + '/schedule-history'), { method: 'DELETE', headers: headers() })
+                .then(function(r) {
+                  if (r.ok) {
+                    showToast('Запись убрана');
+                    loadSlots();
+                  } else {
+                    r.json().then(function(o) {
+                      showToast(_detailMessageFromBody(o, 'Не удалось убрать запись'));
+                    }).catch(function() { showToast('Не удалось убрать запись'); });
                   }
                 })
                 .catch(function() { showToast('Ошибка сети'); });
@@ -3541,7 +3577,8 @@
           };
         });
         content.querySelectorAll('.slot-booked-click').forEach(function(row) {
-          row.onclick = function() {
+          row.onclick = function(e) {
+            if (e.target.closest('.btn-booking-purge')) return;
             var bid = row.getAttribute('data-booking-id');
             if (bid) openBookingDetail(parseInt(bid, 10));
           };
@@ -4298,9 +4335,9 @@
         const preset = state.scheduleGridPreset || defaultScheduleGridPreset();
         const calEditDate = state.editMode === 'calendar' ? state.editDate : null;
         var h0 = Math.max(0, Math.min(23, parseInt(preset.hour_start, 10)));
-        if (isNaN(h0)) h0 = 8;
+        if (isNaN(h0)) h0 = 6;
         var h1 = Math.max(0, Math.min(23, parseInt(preset.hour_end, 10)));
-        if (isNaN(h1)) h1 = 21;
+        if (isNaN(h1)) h1 = 23;
         if (h1 < h0) {
           var hx = h0;
           h0 = h1;
@@ -4525,6 +4562,7 @@
                 } else {
                   nNew = startsSorted.length;
                 }
+                if (nNew > 0) markScheduleEditorHubFillSlotsRhythmBoost();
                 var msg =
                   nNew === 0
                     ? 'Расписание на день обновлено'
@@ -4610,6 +4648,7 @@
           .then(function(data) {
             if (data.ok) {
               const n = data.slots_created != null ? data.slots_created : 0;
+              if (n > 0) markScheduleEditorHubFillSlotsRhythmBoost();
               showToast('Шаблон применён. Создано слотов: ' + n, 2800);
               setTimeout(function() {
                 showFirstApplyWeekShareToastIfNeeded(data.trainer_id);

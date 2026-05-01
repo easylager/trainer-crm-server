@@ -10,6 +10,8 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.infrastructure.repositories.client_trainer_edge_repository import ClientTrainerEdgeRepository
+
 from src.application.certificate_use_cases import redeem_certificate_for_booking, redeem_certificate_balance_for_booking
 from src.application.pass_product_use_cases import redeem_pass_session_for_booking
 from src.shared.notification_hours import NOTIFICATION_TZ
@@ -29,6 +31,9 @@ except ImportError:
 
 # Seats counted toward slot capacity (group lessons).
 BOOKING_STATUSES_OCCUPYING_SEAT = ("pending", "confirmed")
+
+# Trainer removed a past booking from schedule/reported stats (soft purge; ledger reversed when applicable).
+BOOKING_STATUS_TRAINER_REMOVED = "trainer_removed"
 
 # Hub / reminders: slot_date + start_time|end_time are Europe/Minsk wall clock (not DB session TZ).
 # Client push times: never 00:00–07:59; early-morning targets snap to 08:00 same local day if still before the slot.
@@ -1192,7 +1197,7 @@ async def list_pending_reminders(session: AsyncSession, limit: int = 100) -> lis
             LEFT JOIN arenas a ON a.id = COALESCE(b.arena_id, s.arena_id)
             WHERE r.status = 'pending'
               AND r.send_at <= now()
-              AND b.status NOT IN ('cancelled', 'declined')
+              AND b.status NOT IN ('cancelled', 'declined', 'trainer_removed')
             ORDER BY r.send_at
             LIMIT :lim
         """),
@@ -1255,8 +1260,9 @@ async def get_booking_with_slot(
             JOIN slots s ON s.id = b.slot_id
             JOIN services srv ON srv.id = b.service_id
             WHERE b.id = :id AND b.trainer_id = :tid
+              AND b.status <> :purged_status
         """),
-        {"id": booking_id, "tid": trainer_id},
+        {"id": booking_id, "tid": trainer_id, "purged_status": BOOKING_STATUS_TRAINER_REMOVED},
     )
     row = r.fetchone()
     if not row:
@@ -1318,9 +1324,10 @@ async def get_booking_milestone_display_for_trainer(
                 )
             ) ar ON true
             WHERE b.id = :bid AND b.trainer_id = :tid
+              AND b.status <> :purged_status
             """
         ),
-        {"bid": booking_id, "tid": trainer_id},
+        {"bid": booking_id, "tid": trainer_id, "purged_status": BOOKING_STATUS_TRAINER_REMOVED},
     )
     row2 = r2.fetchone()
     if not row2:
@@ -1381,7 +1388,7 @@ async def get_trainer_booking_detail_payload(
                     FROM bookings b2
                     JOIN slots s2 ON s2.id = b2.slot_id
                     WHERE b2.trainer_id = b.trainer_id AND b2.client_id = b.client_id
-                      AND b2.status NOT IN ('cancelled', 'declined')
+                      AND b2.status NOT IN ('cancelled', 'declined', 'trainer_removed')
                       AND (s2.slot_date < s.slot_date
                            OR (s2.slot_date = s.slot_date AND s2.start_time < s.start_time))
                    ) AS session_num,
@@ -1397,9 +1404,10 @@ async def get_trainer_booking_detail_payload(
             JOIN slots s ON s.id = b.slot_id
             JOIN services srv ON srv.id = b.service_id
             WHERE b.id = :bid AND b.trainer_id = :tid
+              AND b.status <> :purged_status
             """
         ),
-        {"bid": booking_id, "tid": trainer_id},
+        {"bid": booking_id, "tid": trainer_id, "purged_status": BOOKING_STATUS_TRAINER_REMOVED},
     )
     row = r.fetchone()
     if not row:
@@ -1451,7 +1459,7 @@ async def list_bookings_for_trainer(
                         FROM bookings b2
                         JOIN slots s2 ON s2.id = b2.slot_id
                         WHERE b2.trainer_id = b.trainer_id AND b2.client_id = b.client_id
-                          AND b2.status NOT IN ('cancelled', 'declined')
+                          AND b2.status NOT IN ('cancelled', 'declined', 'trainer_removed')
                           AND (s2.slot_date < s.slot_date OR (s2.slot_date = s.slot_date AND s2.start_time < s.start_time))
                        ) AS session_num,
                        COALESCE(b.status, 'confirmed') AS status,
@@ -1717,7 +1725,7 @@ async def list_trainer_clients(
                 FROM bookings b
                 JOIN slots s ON s.id = b.slot_id
                 WHERE b.trainer_id = :tid
-                  AND b.status NOT IN ('cancelled', 'declined')
+                  AND b.status NOT IN ('cancelled', 'declined', 'trainer_removed')
             )
             SELECT
                 c.id,
@@ -1733,7 +1741,7 @@ async def list_trainer_clients(
                  JOIN slots s2 ON s2.id = b2.slot_id
                  WHERE b2.client_id = c.id
                    AND b2.trainer_id = :tid
-                   AND b2.status NOT IN ('cancelled', 'declined')) AS first_date
+                   AND b2.status NOT IN ('cancelled', 'declined', 'trainer_removed')) AS first_date
             FROM last_per_client l
             JOIN clients c ON c.id = l.client_id
             WHERE l.rn = 1
@@ -1791,14 +1799,18 @@ async def list_trainer_fill_slots_invite_candidates(
     session: AsyncSession,
     trainer_id: int,
     limit: int = 3,
+    *,
+    include_with_upcoming: bool = False,
 ) -> list[dict]:
     """
-    Clients to nudge when the hub shows free slots next week: same CRM scope as open-loop hints
-    (any non-cancelled booking or active/trial group), **only with Telegram linked** (client bot).
-    **Excludes anyone with a future pending/confirmed session** — напоминание про слоты им не логично.
-    Among the rest, ranks by stale last contact (oldest first).
+    Clients for hub «напомнить про слоты»: CRM scope (booking or active/trial group), Telegram linked.
+
+    By default excludes clients who already have a future pending/confirmed session (focused nudge).
+    With ``include_with_upcoming=True``, returns everyone in scope (still sorted: без записи first).
     """
-    lim = max(1, min(int(limit), 10))
+    cap = 250 if include_with_upcoming else 10
+    lim = max(1, min(int(limit), cap))
+    upcoming_filter_sql = "" if include_with_upcoming else "WHERE has_upcoming_flag = 0"
     r = await session.execute(
         text(
             """
@@ -1808,7 +1820,7 @@ async def list_trainer_fill_slots_invite_candidates(
                     SELECT b.client_id
                     FROM bookings b
                     WHERE b.trainer_id = :tid
-                      AND b.status NOT IN ('cancelled', 'declined')
+                      AND b.status NOT IN ('cancelled', 'declined', 'trainer_removed')
                     UNION
                     SELECT m.client_id
                     FROM training_group_members m
@@ -1839,7 +1851,7 @@ async def list_trainer_fill_slots_invite_candidates(
                 FROM bookings b
                 JOIN slots s ON s.id = b.slot_id
                 WHERE b.trainer_id = :tid
-                  AND b.status NOT IN ('cancelled', 'declined')
+                  AND b.status NOT IN ('cancelled', 'declined', 'trainer_removed')
                 GROUP BY b.client_id
             ),
             scored AS (
@@ -1866,8 +1878,11 @@ async def list_trainer_fill_slots_invite_candidates(
                 has_upcoming_flag,
                 last_date
             FROM scored
-            WHERE has_upcoming_flag = 0
-            ORDER BY last_ts ASC NULLS LAST,
+            """
+            + upcoming_filter_sql
+            + """
+            ORDER BY has_upcoming_flag ASC,
+                     last_ts ASC NULLS LAST,
                      client_id ASC
             LIMIT :lim
             """
@@ -1982,7 +1997,7 @@ async def count_trainer_fill_slots_invite_candidates(session: AsyncSession, trai
                     SELECT b.client_id
                     FROM bookings b
                     WHERE b.trainer_id = :tid
-                      AND b.status NOT IN ('cancelled', 'declined')
+                      AND b.status NOT IN ('cancelled', 'declined', 'trainer_removed')
                     UNION
                     SELECT m.client_id
                     FROM training_group_members m
@@ -2013,7 +2028,7 @@ async def count_trainer_fill_slots_invite_candidates(session: AsyncSession, trai
                 FROM bookings b
                 JOIN slots s ON s.id = b.slot_id
                 WHERE b.trainer_id = :tid
-                  AND b.status NOT IN ('cancelled', 'declined')
+                  AND b.status NOT IN ('cancelled', 'declined', 'trainer_removed')
                 GROUP BY b.client_id
             ),
             scored AS (
@@ -2052,7 +2067,7 @@ async def trainer_has_access_to_client(
             SELECT EXISTS (
                 SELECT 1 FROM bookings b
                 WHERE b.trainer_id = :tid AND b.client_id = :cid
-                  AND b.status NOT IN ('cancelled', 'declined')
+                  AND b.status NOT IN ('cancelled', 'declined', 'trainer_removed')
             )
             OR EXISTS (
                 SELECT 1 FROM training_group_members m
@@ -2085,7 +2100,7 @@ async def get_trainer_client_for_card(
                 EXISTS (
                   SELECT 1 FROM bookings b
                   WHERE b.trainer_id = :tid AND b.client_id = :cid
-                    AND b.status NOT IN ('cancelled', 'declined')
+                    AND b.status NOT IN ('cancelled', 'declined', 'trainer_removed')
                 )
                 OR EXISTS (
                   SELECT 1 FROM training_group_members m
@@ -2117,21 +2132,21 @@ async def get_trainer_client_for_card(
                FROM bookings b
                JOIN slots s ON s.id = b.slot_id
                WHERE b.client_id = :cid AND b.trainer_id = :tid
-                 AND b.status NOT IN ('cancelled', 'declined')
+                 AND b.status NOT IN ('cancelled', 'declined', 'trainer_removed')
                ORDER BY s.slot_date DESC, s.start_time DESC NULLS LAST
                LIMIT 1) AS last_date,
               (SELECT s.start_time
                FROM bookings b
                JOIN slots s ON s.id = b.slot_id
                WHERE b.client_id = :cid AND b.trainer_id = :tid
-                 AND b.status NOT IN ('cancelled', 'declined')
+                 AND b.status NOT IN ('cancelled', 'declined', 'trainer_removed')
                ORDER BY s.slot_date DESC, s.start_time DESC NULLS LAST
                LIMIT 1) AS last_start,
               (SELECT MIN(s2.slot_date)
                FROM bookings b2
                JOIN slots s2 ON s2.id = b2.slot_id
                WHERE b2.client_id = :cid AND b2.trainer_id = :tid
-                 AND b2.status NOT IN ('cancelled', 'declined')) AS first_date
+                 AND b2.status NOT IN ('cancelled', 'declined', 'trainer_removed')) AS first_date
             """
         ),
         {"tid": trainer_id, "cid": client_id},
@@ -2188,7 +2203,7 @@ async def get_trainer_client_latest_booking_service_id(
             FROM bookings b
             JOIN slots s ON s.id = b.slot_id
             WHERE b.trainer_id = :tid AND b.client_id = :cid
-              AND b.status NOT IN ('cancelled', 'declined')
+              AND b.status NOT IN ('cancelled', 'declined', 'trainer_removed')
             ORDER BY s.slot_date DESC, s.start_time DESC NULLS LAST
             LIMIT 1
             """
@@ -2292,6 +2307,45 @@ async def list_bookings_for_client(
     return out
 
 
+async def client_latest_booking_primary_candidate(
+    session: AsyncSession,
+    client_telegram_id: int,
+) -> tuple[int | None, int | None]:
+    """
+    Trainer (and booking service_id hint) for the client's chronologically latest slot start —
+    past or upcoming. Authoritative «who is primary by bookings» for hub / catalog / bot parity.
+
+    Ignores cancelled-style bookings; slot row must exist and not be cancelled.
+    """
+    ctid = int(client_telegram_id)
+    r = await session.execute(
+        text(
+            """
+            SELECT b.trainer_id, b.service_id
+            FROM bookings b
+            INNER JOIN clients c ON c.id = b.client_id
+            INNER JOIN slots s ON s.id = b.slot_id
+            WHERE c.telegram_id = :ctid
+              AND b.status IN ('pending', 'confirmed', 'completed', 'no_show')
+              AND COALESCE(TRIM(LOWER(COALESCE(s.status, ''))), '') <> 'cancelled'
+            ORDER BY """
+            + _SQL_SLOT_START_TS
+            + """ DESC NULLS LAST,
+                     b.id DESC
+            LIMIT 1
+            """
+        ),
+        {"ctid": ctid},
+    )
+    row = r.fetchone()
+    if not row or row[0] is None:
+        return None, None
+    tid = int(row[0])
+    sid_raw = row[1]
+    sid = int(sid_raw) if sid_raw is not None else None
+    return tid, sid
+
+
 async def list_trainer_client_history(
     session: AsyncSession,
     trainer_id: int,
@@ -2326,7 +2380,7 @@ async def list_trainer_client_history(
             ) a2 ON true
             WHERE b.trainer_id = :tid
               AND b.client_id = :cid
-              AND b.status NOT IN ('cancelled', 'declined')
+              AND b.status NOT IN ('cancelled', 'declined', 'trainer_removed')
             ORDER BY s.slot_date DESC, s.start_time DESC
             LIMIT :lim
             """
@@ -2361,7 +2415,7 @@ async def count_trainer_client_sessions(
             SELECT COUNT(*) FROM bookings b
             WHERE b.trainer_id = :tid
               AND b.client_id = :cid
-              AND b.status NOT IN ('cancelled', 'declined')
+              AND b.status NOT IN ('cancelled', 'declined', 'trainer_removed')
             """
         ),
         {"tid": trainer_id, "cid": client_id},
@@ -2949,20 +3003,11 @@ async def mark_booking_cancel_notification_sent(session: AsyncSession, notificat
 # that set status to 'completed' must call redeem_pass_session_for_booking in the same transaction.
 
 
-async def undo_completed_booking_pass_cert_ledger(session: AsyncSession, booking_id: int) -> bool:
+async def restore_booking_financial_artifacts(session: AsyncSession, booking_id: int) -> None:
     """
-    When status is completed: remove pending completion notifications and restore pass/cert ledger rows.
-    Does not change booking status — caller sets terminal status (e.g. confirmed or no_show).
-    Returns True if the booking was completed; False if nothing to undo (wrong status).
+    Strip completion-side artifacts for a booking (notifications, pass redemption, cert credit rows).
+    Idempotent if rows are absent. Does not change booking status.
     """
-    r = await session.execute(
-        text("SELECT status FROM bookings WHERE id = :bid"),
-        {"bid": booking_id},
-    )
-    row = r.fetchone()
-    if not row or (row[0] or "").strip().lower() != "completed":
-        return False
-
     await session.execute(
         text("DELETE FROM booking_completed_notifications WHERE booking_id = :bid"),
         {"bid": booking_id},
@@ -3041,7 +3086,95 @@ async def undo_completed_booking_pass_cert_ledger(session: AsyncSession, booking
                 {"nb": new_bal, "st": new_st, "id": cert_id},
             )
 
+
+async def undo_completed_booking_pass_cert_ledger(session: AsyncSession, booking_id: int) -> bool:
+    """
+    When status is completed: remove pending completion notifications and restore pass/cert ledger rows.
+    Does not change booking status — caller sets terminal status (e.g. confirmed or no_show).
+    Returns True if the booking was completed; False if nothing to undo (wrong status).
+    """
+    r = await session.execute(
+        text("SELECT status FROM bookings WHERE id = :bid"),
+        {"bid": booking_id},
+    )
+    row = r.fetchone()
+    if not row or (row[0] or "").strip().lower() != "completed":
+        return False
+
+    await restore_booking_financial_artifacts(session, booking_id)
+
     return True
+
+
+async def purge_past_booking_from_schedule_history(
+    session: AsyncSession,
+    trainer_id: int,
+    booking_id: int,
+) -> tuple[bool, str | None]:
+    """
+    Soft-remove a past booking from schedule UI and trainer-facing aggregates (trainer_removed).
+    Reverses pass/cert ledger rows when present. Slot occupancy is resynced.
+    Returns (True, None) on success, or (False, machine-readable reason code).
+    """
+    r = await session.execute(
+        text(
+            """
+            SELECT b.status, b.slot_id, c.telegram_id
+            FROM bookings b
+            JOIN slots s ON s.id = b.slot_id
+            JOIN clients c ON c.id = b.client_id
+            WHERE b.id = :bid AND b.trainer_id = :tid
+              AND b.status NOT IN ('cancelled', 'declined', 'trainer_removed')
+              AND """
+            + _SQL_SLOT_END_TS
+            + """ < CURRENT_TIMESTAMP
+            """
+        ),
+        {"bid": booking_id, "tid": trainer_id},
+    )
+    row = r.fetchone()
+    if not row:
+        r2 = await session.execute(
+            text(
+                """
+                SELECT b.id
+                FROM bookings b
+                JOIN slots s ON s.id = b.slot_id
+                WHERE b.id = :bid AND b.trainer_id = :tid
+                """
+            ),
+            {"bid": booking_id, "tid": trainer_id},
+        )
+        if not r2.fetchone():
+            return False, "not_found"
+        return False, "slot_not_past_or_invalid_status"
+
+    slot_id, client_tg = int(row[1]), row[2]
+
+    await restore_booking_financial_artifacts(session, booking_id)
+    await session.execute(
+        text("UPDATE reminders SET status = 'cancelled' WHERE booking_id = :bid"),
+        {"bid": booking_id},
+    )
+    await session.execute(
+        text(
+            """
+            UPDATE bookings
+            SET status = :removed
+            WHERE id = :bid AND trainer_id = :tid
+            """
+        ),
+        {"removed": BOOKING_STATUS_TRAINER_REMOVED, "bid": booking_id, "tid": trainer_id},
+    )
+    await sync_slot_status_for_occupancy(session, slot_id)
+
+    if client_tg is not None:
+        repo = ClientTrainerEdgeRepository(session)
+        await repo.recompute_completed_booking_stats_for_global_edge(int(client_tg), trainer_id)
+
+    await session.commit()
+    invalidate_slots_for_trainer(trainer_id)
+    return True, None
 
 
 async def reverse_booking_completion_for_problem_report(session: AsyncSession, booking_id: int) -> None:
@@ -3528,7 +3661,7 @@ async def get_clients_for_inactive_notification(
                 SELECT b.client_id, MAX((s.slot_date + s.end_time)) AS last_session_end_at
                 FROM bookings b
                 JOIN slots s ON s.id = b.slot_id
-                WHERE b.status NOT IN ('cancelled', 'declined')
+                WHERE b.status NOT IN ('cancelled', 'declined', 'trainer_removed')
                 GROUP BY b.client_id
             ),
             candidates AS (

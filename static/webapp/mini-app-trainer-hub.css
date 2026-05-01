@@ -1202,6 +1202,73 @@
     .hub-fill-slots-send-wrap {
       margin-top: 4px;
     }
+    .hub-fill-slots-cap-note {
+      margin: 0 0 4px;
+      font-size: 12px;
+      line-height: 1.35;
+      color: var(--tg-theme-hint-color);
+    }
+    .hub-fill-slots-bulk-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+    .hub-fill-slots-bulk-btn {
+      flex: 1 1 auto;
+      min-width: 0;
+      padding: 8px 10px;
+      font-size: 12px;
+      font-weight: 600;
+      border-radius: 10px;
+      border: none;
+      cursor: pointer;
+      font-family: inherit;
+      background: color-mix(in srgb, var(--tg-theme-secondary-bg-color) 85%, var(--tg-theme-text-color));
+      color: var(--tg-theme-text-color);
+      box-sizing: border-box;
+    }
+    .hub-fill-slots-bulk-btn:active {
+      opacity: 0.85;
+    }
+    .hub-fill-slots-pick-meta {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .hub-fill-slots-name-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      line-height: 1.35;
+    }
+    .hub-fill-slots-pick-name {
+      font-weight: 600;
+      font-size: 15px;
+      color: var(--tg-theme-text-color);
+      letter-spacing: -0.01em;
+    }
+    .hub-fill-slots-status-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 8px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+      flex-shrink: 0;
+    }
+    .hub-fill-slots-status-badge--free {
+      background: color-mix(in srgb, var(--tg-theme-button-color, #f5a623) 22%, transparent);
+      color: color-mix(in srgb, var(--tg-theme-button-color, #c77800) 90%, var(--tg-theme-text-color));
+    }
+    .hub-fill-slots-status-badge--busy {
+      background: rgba(128, 128, 128, 0.14);
+      color: var(--tg-theme-hint-color);
+    }
     .hub-fill-slots-card-reason {
       margin-top: 4px;
       font-size: 12px;

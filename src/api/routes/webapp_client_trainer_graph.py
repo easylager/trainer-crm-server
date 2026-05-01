@@ -2,49 +2,165 @@
 Pure helpers for client ↔ trainer relationship graph (edges) and hub primary logic.
 
 No FastAPI imports — safe to use from multiple route modules without cycles.
+
+Primary trainer resolution (strict product contract):
+  1. Latest booking by slot start time (past or future), from DB bookings — not edge timestamps.
+  2. Else latest «saved» (catalog heart), by saved_at (fallback edge created_at).
+  3. Else client_sessions.selected_trainer_id (last catalog browse context).
+  4. Else no primary.
+
+Synthetic edge rows fill gaps when booking/session trainer_id has no client_trainer_edges row yet.
 """
 from __future__ import annotations
 
 from typing import Any
 
 
+def synthetic_client_trainer_edge_placeholder(
+    trainer_id: int,
+    *,
+    last_booking_service_id: int | None = None,
+    saved_catalog_service_id: int | None = None,
+) -> dict[str, Any]:
+    """Minimal edge-shaped dict for serialization when no CRM edge row exists."""
+    tid = int(trainer_id)
+    return {
+        "id": None,
+        "telegram_id": None,
+        "trainer_id": tid,
+        "is_saved": False,
+        "is_primary": False,
+        "notify_when_slots": False,
+        "completed_count": 0,
+        "saved_at": None,
+        "notify_when_slots_at": None,
+        "last_booking_at": None,
+        "last_completed_at": None,
+        "last_interaction_at": None,
+        "last_booking_service_id": last_booking_service_id,
+        "saved_catalog_service_id": saved_catalog_service_id,
+        "context_type": None,
+        "context_id": None,
+        "created_at": None,
+    }
+
+
+def edge_row_for_primary_trainer(
+    edges: list[dict],
+    trainer_id: int,
+    *,
+    last_booking_service_id: int | None = None,
+    saved_catalog_service_id: int | None = None,
+) -> dict[str, Any]:
+    """Prefer real CRM edge; otherwise synthetic placeholder carrying optional service hints."""
+    tid = int(trainer_id)
+    for e in edges:
+        if int(e.get("trainer_id", 0)) == tid:
+            return dict(e)
+    return synthetic_client_trainer_edge_placeholder(
+        tid,
+        last_booking_service_id=last_booking_service_id,
+        saved_catalog_service_id=saved_catalog_service_id,
+    )
+
+
+def _saved_recency_sort_key(edge: dict) -> tuple[float, float, int]:
+    """Higher tuple compares greater — newest bookmark wins."""
+
+    def ts(v: object) -> float:
+        if v is None:
+            return -1.0
+        if hasattr(v, "timestamp"):
+            try:
+                return float(v.timestamp())  # type: ignore[arg-type]
+            except Exception:
+                return -1.0
+        return -1.0
+
+    sa = edge.get("saved_at")
+    ca = edge.get("created_at")
+    tid = int(edge.get("trainer_id") or 0)
+    return (ts(sa), ts(ca), tid)
+
+
+def resolve_primary_trainer_strict(
+    edges: list[dict],
+    *,
+    booking_primary_trainer_id: int | None,
+    booking_primary_service_id: int | None,
+    session_trainer_id: int | None,
+) -> tuple[dict | None, str | None]:
+    """
+    Strict tier order for «основной тренер» across mini-app + dependent APIs.
+
+    booking_primary_* comes from SQL over bookings/slots (caller-supplied).
+    """
+    if booking_primary_trainer_id is not None:
+        tid = int(booking_primary_trainer_id)
+        sid = booking_primary_service_id
+        svc: int | None
+        try:
+            svc = int(sid) if sid is not None else None
+        except (TypeError, ValueError):
+            svc = None
+        row = edge_row_for_primary_trainer(
+            edges,
+            tid,
+            last_booking_service_id=svc,
+        )
+        if svc is not None:
+            row = dict(row)
+            row["last_booking_service_id"] = svc
+        return row, "booking"
+
+    saved_edges = [e for e in edges if e.get("is_saved")]
+    if saved_edges:
+        best = max(saved_edges, key=_saved_recency_sort_key)
+        tid = int(best["trainer_id"])
+        return edge_row_for_primary_trainer(edges, tid), "saved"
+
+    if session_trainer_id is not None:
+        tid = int(session_trainer_id)
+        return edge_row_for_primary_trainer(edges, tid), "session"
+
+    return None, None
+
+
 def compute_primary_edge_meta(
     edges: list[dict],
     session_trainer_id: int | None = None,
+    *,
+    booking_primary_trainer_id: int | None = None,
+    booking_primary_service_id: int | None = None,
 ) -> tuple[dict | None, str | None]:
     """
     Returns (edge, source) where source is ``booking`` | ``saved`` | ``session`` | None.
 
-    Priority matches ``compute_primary_edge`` (booking → saved → session row).
+    Booking tier uses authoritative rows from ``client_latest_booking_primary_candidate`` —
+    never ``last_booking_at`` on edges (avoids drift vs CRM bookings).
     """
-    if not edges:
-        return None, None
-
-    booked = [e for e in edges if e.get("last_booking_at")]
-    if booked:
-        return max(booked, key=lambda e: e["last_booking_at"]), "booking"
-
-    saved = [e for e in edges if e.get("is_saved")]
-    if saved:
-        with_ts = [e for e in saved if e.get("saved_at")]
-        if with_ts:
-            return max(with_ts, key=lambda e: e["saved_at"]), "saved"
-        return saved[0], "saved"
-
-    if session_trainer_id is not None:
-        for e in edges:
-            if int(e.get("trainer_id", 0)) == session_trainer_id:
-                return e, "session"
-
-    return None, None
+    return resolve_primary_trainer_strict(
+        edges,
+        booking_primary_trainer_id=booking_primary_trainer_id,
+        booking_primary_service_id=booking_primary_service_id,
+        session_trainer_id=session_trainer_id,
+    )
 
 
 def compute_primary_edge(
     edges: list[dict],
     session_trainer_id: int | None = None,
+    *,
+    booking_primary_trainer_id: int | None = None,
+    booking_primary_service_id: int | None = None,
 ) -> dict | None:
-    """Derive the most intent-relevant trainer without any explicit flag."""
-    edge, _ = compute_primary_edge_meta(edges, session_trainer_id)
+    """Derive primary trainer edge dict under strict tier rules."""
+    edge, _ = compute_primary_edge_meta(
+        edges,
+        session_trainer_id,
+        booking_primary_trainer_id=booking_primary_trainer_id,
+        booking_primary_service_id=booking_primary_service_id,
+    )
     return edge
 
 
@@ -56,8 +172,8 @@ def resolve_primary_catalog_service_id(
     """
     Pick catalog ``service_id`` using the same tier that selected ``primary_edge``.
 
-    - booking → service from last booking on that edge
-    - saved → service from catalog session at last save (like)
+    - booking → ``last_booking_service_id`` on edge (including synthetic booking-primary rows)
+    - saved → ``saved_catalog_service_id``
     - session → current ``client_sessions.selected_service_id`` while viewing that trainer
     """
     if not primary_edge or not primary_source:
@@ -86,8 +202,12 @@ def serialize_trainer_edge_row(edge: dict) -> dict:
     """Convert edge row to JSON-safe dict; datetime → ISO string."""
     out = dict(edge)
     for key in (
-        "saved_at", "notify_when_slots_at",
-        "last_booking_at", "last_completed_at", "last_interaction_at", "created_at",
+        "saved_at",
+        "notify_when_slots_at",
+        "last_booking_at",
+        "last_completed_at",
+        "last_interaction_at",
+        "created_at",
     ):
         v = out.get(key)
         if hasattr(v, "isoformat"):

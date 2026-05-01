@@ -53,7 +53,7 @@
   <!-- Bump ?v= when mini-app-trainer-hub.css changes (immutable cache on /webapp/…). -->
   <link rel="stylesheet" href="mini-app-trainer-hub.css?v=20260573" />
   <!-- Early download of main hub script (defer runs at end of body); improves time-to-interactive vs. discover-at-bottom. -->
-  <link rel="preload" href="trainer-home-main.js?v=20260564" as="script" />
+  <link rel="preload" href="trainer-home-main.js?v=202605022" as="script" />
 
   <!-- ─── Splash loader (inline to guarantee render before external CSS) ─── -->
   <style>
@@ -738,7 +738,7 @@
     <div class="modal hub-fill-slots-invites-modal" role="dialog" aria-labelledby="hubFillSlotsInvitesTitle">
       <h3 id="hubFillSlotsInvitesTitle" class="book-modal-title">Напоминание о записи</h3>
       <p class="book-choice-lead hub-fill-slots-invites-lead">
-        Отметьте клиентов — им придёт сообщение в <b>клиентском боте</b> от вашего имени с кнопкой «Записаться».
+        Выберите вручную или кнопками <b>Без записи</b> / <b>Все</b> под списком. У каждого видно статус следующей тренировки. Сообщение уходит в <b>клиентском боте</b> с кнопкой «Записаться».
       </p>
       <div id="hubFillSlotsInvitesHost" class="hub-fill-slots-invites-host"></div>
       <div class="modal-actions hub-fill-slots-invites-footer-actions">
@@ -909,6 +909,6 @@
   <script src="mini-app-trainer-gate.js?v=20260548"></script>
   <script src="mini-app-trainer-celebration.js"></script>
   <!-- Bump ?v= when trainer-home-main.js changes (immutable cache on /webapp/…). -->
-  <script defer src="trainer-home-main.js?v=20260564"></script>
+  <script defer src="trainer-home-main.js?v=202605022"></script>
 </body>
 </html>

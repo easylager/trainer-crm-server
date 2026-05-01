@@ -47,6 +47,7 @@ from src.application.booking_use_cases import (
     active_booking_summaries_by_slot_for_trainer_range,
     cancel_booking,
     cancel_booking_by_client,
+    client_latest_booking_primary_candidate,
     confirm_booking,
     coerce_service_id_and_name_for_trainer_catalog,
     count_trainer_client_sessions,
@@ -63,6 +64,7 @@ from src.application.booking_use_cases import (
     list_trainer_services_for_welcome_link,
     resolve_service_id_for_generic_welcome_link,
     mark_booking_completed_by_trainer,
+    purge_past_booking_from_schedule_history,
     get_booking_with_slot,
     get_trainer_booking_detail_payload,
     get_trainer_client_next_booking,
@@ -102,6 +104,11 @@ from src.application.client_request_use_cases import (
     count_unanswered_requests_for_trainer,
     list_requests_for_trainer,
     replace_client_request_with_new,
+)
+from src.application.client_pass_order_use_cases import (
+    get_primary_pass_order_catalog,
+    split_pass_order_comment,
+    submit_pass_product_order_request,
 )
 from src.application.client_session_use_cases import (
     get_or_create_session as get_client_session,
@@ -286,6 +293,7 @@ from src.api.miniapp_auth import (
     get_admin_miniapp_principal,
     get_client_miniapp_principal,
     get_trainer_miniapp_principal,
+    miniapp_credential_http_exception,
     reject_unsupported_miniapp_platform,
     require_miniapp_credential_in,
     trainer_legacy_telegram_id_for_storage,
@@ -1102,6 +1110,7 @@ async def _client_booking_post_create_effects(
                 session=s,
                 booking_service_id=service_id,
             )
+            await set_selected_trainer(telegram_id, trainer_id, s)
             await generate_reminders_for_booking(s, booking_id)
     except Exception:
         logger.exception(
@@ -1399,16 +1408,58 @@ async def _bg_notify_slot_waitlist(trainer_id: int) -> None:
                 token=settings.telegram_bot_token_client,
                 default=DefaultBotProperties(parse_mode=ParseMode.HTML),
             )
+            online = await trainer_allows_online_booking(session, trainer_id)
+            kb = msg.build_client_fill_slots_invite_keyboard(
+                webapp_base_url=settings.webapp_base_url,
+                trainer_id=trainer_id,
+                online_booking=online,
+                slot_id=None,
+            )
             try:
-                async def _send(tg_id: int, txt: str) -> None:
-                    await client_bot.send_message(chat_id=tg_id, text=txt)
+                async def _send(tg_id: int, txt: str, markup=None) -> None:
+                    await client_bot.send_message(chat_id=tg_id, text=txt, reply_markup=markup)
 
-                await uc_notify_slot_waitlist(trainer_id, display_name, session, _send)
+                await uc_notify_slot_waitlist(trainer_id, display_name, session, _send, kb)
             finally:
                 await client_bot.session.close()
     except Exception:
         # Non-critical — slot creation already succeeded
         pass
+
+
+async def _bg_notify_trainer_pass_order_request(request_id: int) -> None:
+    """
+    Immediate trainer DM for a pass-product request created via Mini App.
+    notification_service still polls for retries / other trainers; this avoids silent gaps when
+    that process is down or when quiet-hours batch skipped the row until later.
+    """
+    from aiogram import Bot
+    from aiogram.client.default import DefaultBotProperties
+    from aiogram.enums import ParseMode
+
+    from src.bot.notification_loops import process_request_notifications_batch
+    from src.infrastructure.db.session import async_session_factory
+
+    settings = Settings()
+    bot = Bot(
+        token=settings.telegram_bot_token_trainer,
+        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+    )
+    try:
+        async with async_session_factory() as session:
+            await process_request_notifications_batch(
+                bot,
+                session,
+                only_request_id=request_id,
+                bypass_quiet_hours_for_that_request=True,
+            )
+    except Exception:
+        logger.exception(
+            "Background pass-order trainer notify failed (request_id=%s)",
+            request_id,
+        )
+    finally:
+        await bot.session.close()
 
 
 class ClientRequestCreateBody(BaseModel):
@@ -1504,6 +1555,89 @@ async def get_client_pass_products(
     return {"items": items}
 
 
+class ClientPassOrderRequestBody(BaseModel):
+    pass_product_id: int = Field(..., ge=1)
+
+
+@router.get("/client/pass-order/catalog")
+async def get_client_pass_order_catalog_endpoint(
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+):
+    """Active pass products for the client's derived primary trainer (order-via-request UX)."""
+    telegram_id = client_catalog_telegram_key(principal)
+    return await get_primary_pass_order_catalog(session, telegram_id)
+
+
+@router.post("/client/pass-order/request")
+async def post_client_pass_order_request(
+    background_tasks: BackgroundTasks,
+    body: ClientPassOrderRequestBody,
+    cred: MiniappCredentialIn = Depends(require_miniapp_credential_in),
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
+):
+    """Create a personalized «purchase pass» client_request to the primary trainer."""
+    telegram_id = client_catalog_telegram_key(principal)
+    ik = (idempotency_key or "").strip()
+    idem_cache_key = (f"pop{telegram_id}_{ik}"[:64]) if ik else ""
+    if idem_cache_key:
+        cached = await get_idempotency_response(session, idem_cache_key)
+        if isinstance(cached, dict) and cached.get("success") is True:
+            return cached
+
+    client_id = await _ensure_client_for_webapp_miniapp(
+        session,
+        principal,
+        cred.raw,
+        phone=None,
+        first_name=None,
+        last_name=None,
+    )
+    result = await submit_pass_product_order_request(
+        session,
+        client_id=client_id,
+        telegram_id=telegram_id,
+        pass_product_id=body.pass_product_id,
+    )
+    if result.get("ok"):
+        out: dict[str, object] = {"success": True, "request_id": result["request_id"]}
+        if idem_cache_key:
+            await set_idempotency_response(session, idem_cache_key, dict(out))
+        background_tasks.add_task(
+            _bg_notify_trainer_pass_order_request, int(result["request_id"])
+        )
+        return out
+    err = str(result.get("error") or "unknown")
+    mapping: dict[str, tuple[int, str]] = {
+        "no_primary_trainer": (
+            400,
+            "Нет основного тренера — запишитесь к тренеру или добавьте его в избранное.",
+        ),
+        "product_not_found": (404, "Этот абонемент недоступен."),
+        "trainer_city_missing": (
+            422,
+            "У тренера не заполнен город в профиле. Напишите ему в Telegram.",
+        ),
+        "trainer_service_missing": (
+            422,
+            "У тренера не настроены услуги. Напишите ему напрямую.",
+        ),
+        "duplicate_pending": (
+            409,
+            "Заявка на этот абонемент уже отправлена. Дождитесь ответа тренера.",
+        ),
+        "daily_limit": (
+            429,
+            "Заявка уже отправлена ранее.",
+        ),
+        "client_mismatch": (403, "Не удалось подтвердить аккаунт."),
+    }
+    status_code, detail = mapping.get(err, (400, "Не удалось отправить заявку."))
+    raise HTTPException(status_code=status_code, detail=detail)
+
+
 @router.get("/client/bookings")
 async def get_client_bookings(
     session: AsyncSession = Depends(get_session),
@@ -1538,12 +1672,18 @@ async def get_client_hub_bootstrap(
             row = await read_client_bot_session(telegram_id, s)
             tid = (row or {}).get("selected_trainer_id")
             edges = await get_all_trainer_edges(telegram_id, s)
-            hints = await trainer_display_hints_by_ids(s, [int(e["trainer_id"]) for e in edges])
-            # Computed primary — no explicit flag, derived from engagement signals
             session_tid = int(tid) if tid is not None else None
-            primary_edge, primary_src = _compute_primary_edge_meta(edges, session_tid)
-            saved_edges = [e for e in edges if e.get("is_saved")]
+            book_tid, book_svc = await client_latest_booking_primary_candidate(s, telegram_id)
+            primary_edge, primary_src = _compute_primary_edge_meta(
+                edges,
+                session_tid,
+                booking_primary_trainer_id=book_tid,
+                booking_primary_service_id=book_svc,
+            )
             pid = int(primary_edge["trainer_id"]) if primary_edge else None
+            hint_ids = sorted({int(e["trainer_id"]) for e in edges} | ({pid} if pid else set()))
+            hints = await trainer_display_hints_by_ids(s, hint_ids)
+            saved_edges = [e for e in edges if e.get("is_saved")]
             p_hint = hints.get(pid) if pid else None
             sess_svc = (row or {}).get("selected_service_id")
             raw_primary_svc = _resolve_primary_catalog_service_id(primary_edge, primary_src, sess_svc)
@@ -2210,7 +2350,11 @@ async def get_trainer_hub_bootstrap(
 async def get_trainer_hub_fill_slots_invites(
     principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
-    limit: int = Query(3, ge=1, le=10),
+    limit: int = Query(3, ge=1, le=250),
+    include_with_upcoming: bool = Query(
+        False,
+        description="Include clients who already have a future session (hub modal full list).",
+    ),
     slot_id: int | None = Query(None, description="When set, validate freed slot for «offer this window» copy."),
     exclude_client_id: int | None = Query(
         None, description="Omit this CRM client from the list (e.g. who just cancelled)."
@@ -2223,7 +2367,12 @@ async def get_trainer_hub_fill_slots_invites(
     trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
-    clients = await list_trainer_fill_slots_invite_candidates(session, trainer_id, limit=limit)
+    clients = await list_trainer_fill_slots_invite_candidates(
+        session,
+        trainer_id,
+        limit=limit,
+        include_with_upcoming=include_with_upcoming,
+    )
     if exclude_client_id is not None:
         ex = int(exclude_client_id)
         clients = [c for c in clients if int(c.get("id") or 0) != ex]
@@ -2262,7 +2411,7 @@ class TrainerFillSlotsInviteSendBody(BaseModel):
     client_ids: list[int] = Field(
         ...,
         min_length=1,
-        max_length=10,
+        max_length=250,
         description="Clients to notify via client bot (must be in trainer CRM and linked to Telegram).",
     )
     slot_id: int | None = Field(
@@ -2327,7 +2476,7 @@ async def post_support(
         try:
             principal = verify_vk_miniapp_launch_principal(cred.raw, secret)
         except InitDataAuthError:
-            raise HTTPException(status_code=401, detail="Invalid or expired launch params") from None
+            raise miniapp_credential_http_exception() from None
         if role == "trainer":
             telegram_id = trainer_legacy_telegram_id_for_storage(principal)
         else:
@@ -2346,7 +2495,7 @@ async def post_support(
         try:
             telegram_id = verify_telegram_init_data_principal(cred.raw, token).user_id
         except InitDataAuthError:
-            raise HTTPException(status_code=401, detail="Invalid or expired init data") from None
+            raise miniapp_credential_http_exception() from None
     from src.infrastructure.db.models import SUPPORT_FROM_CLIENT, SUPPORT_FROM_TRAINER
     from_role = SUPPORT_FROM_TRAINER if role == "trainer" else SUPPORT_FROM_CLIENT
     result = await create_support_message(session, telegram_id, from_role, body.message or "")
@@ -4275,6 +4424,30 @@ async def post_trainer_booking_cancel(
     return {"success": True}
 
 
+@router.delete("/trainer/bookings/{booking_id:int}/schedule-history")
+async def delete_trainer_booking_schedule_history(
+    booking_id: int,
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+):
+    """
+    Remove a past booking from schedule and trainer-facing aggregates (soft status).
+    Only allowed after slot end (Europe/Minsk). Restores pass/cert ledger when applicable.
+    """
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+    ok, code = await purge_past_booking_from_schedule_history(session, trainer_id, booking_id)
+    if ok:
+        return {"success": True}
+    if code == "not_found":
+        raise HTTPException(status_code=404, detail="Запись не найдена")
+    raise HTTPException(
+        status_code=400,
+        detail="Можно убрать только прошедшие записи (время слота уже должно закончиться).",
+    )
+
+
 @router.post("/trainer/bookings/{booking_id:int}/complete")
 async def post_trainer_booking_complete(
     booking_id: int,
@@ -5167,11 +5340,14 @@ def _serialize_trainer_request(req: dict) -> dict:
         created_at = created_at.isoformat()
     elif created_at is not None:
         created_at = str(created_at)
+    _pid_marked, comment_body = split_pass_order_comment(req.get("comment"))
+    subtype = "pass_product_order" if _pid_marked is not None else None
     return {
         "id": req["id"],
         "city_id": req["city_id"],
         "service_id": req["service_id"],
         "comment": req.get("comment"),
+        "comment_body": comment_body if subtype else (req.get("comment") or None),
         "created_at": created_at,
         "city_name": req.get("city_name"),
         "service_name": req.get("service_name"),
@@ -5182,6 +5358,9 @@ def _serialize_trainer_request(req: dict) -> dict:
         "client_telegram_id": req.get("client_telegram_id"),
         "client_first_name": req.get("client_first_name"),
         "client_last_name": req.get("client_last_name"),
+        "request_subtype": subtype,
+        "pass_product_id": _pid_marked,
+        "client_telegram_id": req.get("client_telegram_id"),
     }
 
 

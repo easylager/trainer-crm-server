@@ -129,10 +129,11 @@ async def notify_slot_waitlist(
     trainer_display_name: str,
     session: AsyncSession,
     send_fn,
+    reply_markup=None,
 ) -> int:
     """
     Fire-and-forget: send one Telegram message per subscriber, then bulk-clear subscriptions.
-    send_fn(telegram_id, text) — async callable injected by the API layer (keeps infra out of here).
+    ``send_fn(telegram_id, text, reply_markup=None)`` — async callable injected by the API layer.
     Returns count of notified clients.
 
     Retro slots (wall-clock start already in the past) do not count as «новые окна»: no send, subscriptions stay.
@@ -154,7 +155,7 @@ async def notify_slot_waitlist(
     notified = 0
     for edge in subscribers:
         try:
-            await send_fn(int(edge["telegram_id"]), msg)
+            await send_fn(int(edge["telegram_id"]), msg, reply_markup)
             notified += 1
         except Exception:
             # Individual send failure must not abort the rest of the batch

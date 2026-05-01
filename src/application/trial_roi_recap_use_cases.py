@@ -156,7 +156,7 @@ async def get_trial_roi_recap(
             WHERE b.trainer_id = :tid
               AND b.created_at >= :start
               AND b.created_at <= :end
-              AND b.status NOT IN ('cancelled', 'declined', 'no_show', 'payment_dispute')
+              AND b.status NOT IN ('cancelled', 'declined', 'no_show', 'payment_dispute', 'trainer_removed')
             """
         ),
         params,

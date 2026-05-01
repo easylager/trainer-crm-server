@@ -15,6 +15,7 @@ from __future__ import annotations
 from fastapi import HTTPException
 
 from src.api.miniapp_auth import verify_telegram_init_data_principal
+from src.api.miniapp_auth.deps import miniapp_credential_http_exception
 from src.shared.config import Settings
 from src.shared.telegram_webapp import InitDataAuthError
 
@@ -28,7 +29,7 @@ def get_telegram_id_from_init_data(init_data: str, *, bot_token: str) -> int:
         principal = verify_telegram_init_data_principal(init_data, bot_token)
         return principal.user_id
     except InitDataAuthError:
-        raise HTTPException(status_code=401, detail="Invalid or expired init data") from None
+        raise miniapp_credential_http_exception() from None
 
 
 def trainer_telegram_id(init_data: str) -> int:

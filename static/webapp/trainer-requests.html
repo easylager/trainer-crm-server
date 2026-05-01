@@ -46,22 +46,19 @@
     body {
       margin: 0;
       font-family: var(--app-font-sans);
-      background: var(--tg-theme-bg-color);
-      color: var(--tg-theme-text-color);
+      background-color: var(--tg-theme-bg-color) !important;
+      background-image:
+        radial-gradient(ellipse 120% 80% at 50% -20%, rgba(247, 166, 0, 0.12), transparent 55%),
+        radial-gradient(ellipse 70% 50% at 100% 30%, rgba(247, 166, 0, 0.06), transparent 45%) !important;
+      background-attachment: fixed;
+      color: var(--tg-theme-text-color) !important;
       min-height: 100vh;
       padding: 12px;
       padding-bottom: max(12px, env(safe-area-inset-bottom));
       -webkit-font-smoothing: antialiased;
     }
-    /* schedule.html — Telegram themeParams must not tint the WebView body blue */
-    body {
-      background: var(--tg-theme-bg-color) !important;
-      color: var(--tg-theme-text-color) !important;
-    }
     .list-intro,
     .request-card,
-    .detail-hero-inner,
-    .detail-client-row,
     .card-wrap,
     .slot-card,
     .week-nav,
@@ -72,9 +69,32 @@
       background: var(--tg-theme-secondary-bg-color) !important;
       color: var(--tg-theme-text-color) !important;
     }
+    body > .page-header,
+    body > [data-screen] {
+      max-width: 560px;
+      margin-left: auto;
+      margin-right: auto;
+      width: 100%;
+      box-sizing: border-box;
+    }
     .page-header {
-      margin-bottom: 20px;
-      padding: 4px 0 2px;
+      margin-bottom: 22px;
+      padding: 8px 0 18px;
+      position: relative;
+    }
+    .page-header::after {
+      content: '';
+      display: block;
+      height: 1px;
+      margin-top: 16px;
+      background: linear-gradient(
+        90deg,
+        transparent,
+        rgba(247, 166, 0, 0.45) 25%,
+        rgba(247, 166, 0, 0.25) 75%,
+        transparent
+      );
+      border-radius: 1px;
     }
     .page-header-kicker {
       font-size: 11px;
@@ -104,6 +124,10 @@
       text-overflow: unset;
       white-space: normal;
       overflow-wrap: break-word;
+      text-shadow: 0 1px 0 rgba(0, 0, 0, 0.04);
+    }
+    html[data-app-theme="dark"] .header-title {
+      text-shadow: 0 1px 18px rgba(247, 166, 0, 0.08);
     }
     .header-deco {
       width: 48px;
@@ -128,14 +152,48 @@
     }
     .list-intro {
       font-size: 14px;
-      line-height: 1.5;
+      line-height: 1.55;
       color: var(--req-muted);
-      margin-bottom: 22px;
-      padding: 14px 16px;
-      border-radius: var(--req-radius-sm);
-      background: var(--req-surface);
-      border: 1px solid rgba(247, 166, 0, 0.18);
-      box-shadow: var(--req-shadow);
+      margin-bottom: 24px;
+      padding: 16px 18px 16px 52px;
+      border-radius: calc(var(--req-radius-sm) + 2px);
+      background: linear-gradient(
+        135deg,
+        color-mix(in srgb, var(--tg-theme-secondary-bg-color) 92%, rgba(247, 166, 0, 0.14)),
+        var(--tg-theme-secondary-bg-color)
+      );
+      border: 1px solid rgba(247, 166, 0, 0.22);
+      box-shadow:
+        0 4px 20px rgba(0, 0, 0, 0.06),
+        0 0 0 1px rgba(255, 255, 255, 0.04) inset;
+      position: relative;
+    }
+    html[data-app-theme="dark"] .list-intro {
+      box-shadow:
+        0 8px 32px rgba(0, 0, 0, 0.35),
+        0 0 0 1px rgba(255, 255, 255, 0.06) inset;
+      border-color: rgba(247, 166, 0, 0.28);
+    }
+    .list-intro::before {
+      content: '';
+      position: absolute;
+      left: 16px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 28px;
+      height: 28px;
+      border-radius: 10px;
+      background: linear-gradient(145deg, rgba(247, 166, 0, 0.35) 0%, rgba(247, 166, 0, 0.1) 100%);
+      border: 1px solid rgba(247, 166, 0, 0.35);
+      box-shadow: 0 4px 12px rgba(247, 166, 0, 0.2);
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23b45309' stroke-width='2'%3E%3Cpath d='M4 4h16c1 1 0 0 0 2v12l-8 4-8-4V6c0-1 1-2 2-2z'/%3E%3Cpath d='M8 10h8M8 14h5'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: center;
+      background-size: 16px 16px;
+    }
+    html[data-app-theme="dark"] .list-intro::before {
+      border-color: rgba(253, 230, 138, 0.35);
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fde68a' stroke-width='2'%3E%3Cpath d='M4 4h16c1 1 0 0 0 2v12l-8 4-8-4V6c0-1 1-2 2-2z'/%3E%3Cpath d='M8 10h8M8 14h5'/%3E%3C/svg%3E");
     }
     .section-title {
       display: flex;
@@ -163,30 +221,40 @@
       justify-content: space-between;
       gap: 10px;
       padding: 0;
-      margin-bottom: 12px;
-      border-radius: var(--req-radius);
+      margin-bottom: 14px;
+      border-radius: 20px;
       background: var(--req-surface);
       cursor: pointer;
-      border: 1px solid rgba(247, 166, 0, 0.1);
+      border: 1px solid rgba(247, 166, 0, 0.14);
       width: 100%;
       font: inherit;
       color: inherit;
       text-align: left;
-      box-shadow: var(--req-shadow);
+      box-shadow:
+        0 2px 8px rgba(0, 0, 0, 0.04),
+        0 12px 32px rgba(0, 0, 0, 0.06);
       overflow: hidden;
-      transition: transform 0.2s ease, box-shadow 0.2s ease;
+      transition: transform 0.18s ease, box-shadow 0.22s ease, border-color 0.2s ease;
+    }
+    html[data-app-theme="dark"] .request-card {
+      box-shadow:
+        0 4px 12px rgba(0, 0, 0, 0.35),
+        0 16px 40px rgba(0, 0, 0, 0.28);
+      border-color: rgba(247, 166, 0, 0.12);
     }
     .request-card:active {
-      transform: scale(0.985);
+      transform: scale(0.988);
       box-shadow: var(--req-shadow-hover);
     }
     .request-card__stripe {
-      width: 5px;
+      width: 6px;
       flex-shrink: 0;
-      background: linear-gradient(180deg, #22c55e 0%, #15803d 100%);
+      background: linear-gradient(180deg, #34d399 0%, #059669 55%, #047857 100%);
+      box-shadow: 2px 0 14px rgba(16, 185, 129, 0.35);
     }
     .request-card--progress .request-card__stripe {
-      background: linear-gradient(180deg, #d97706 0%, #92400e 100%);
+      background: linear-gradient(180deg, #fbbf24 0%, #d97706 55%, #b45309 100%);
+      box-shadow: 2px 0 14px rgba(245, 158, 11, 0.25);
     }
     .request-card__body {
       flex: 1;
@@ -202,8 +270,9 @@
       font-weight: 600;
       font-size: 16px;
       margin-bottom: 6px;
-      letter-spacing: -0.02em;
-      line-height: 1.3;
+      letter-spacing: -0.025em;
+      line-height: 1.35;
+      color: var(--req-text);
     }
     .request-card .meta {
       font-size: 13px;
@@ -256,6 +325,16 @@
       border-color: rgba(245, 166, 35, 0.48);
       background: rgba(245, 166, 35, 0.2);
     }
+    .request-card .badge.pass-order,
+    .badge.pass-order {
+      background: rgba(247, 166, 0, 0.14);
+      border: none;
+      color: var(--req-accent);
+      font-weight: 700;
+    }
+    html[data-app-theme="dark"] .badge.pass-order {
+      color: #fde68a;
+    }
     .request-card .arrow-wrap {
       display: flex;
       align-items: center;
@@ -269,17 +348,26 @@
       font-weight: 600;
     }
     .screen-title {
-      font-size: 22px;
+      font-size: 23px;
       font-weight: 700;
-      letter-spacing: -0.03em;
-      margin-bottom: 8px;
-      line-height: 1.25;
+      letter-spacing: -0.035em;
+      margin-bottom: 10px;
+      line-height: 1.28;
+      color: var(--req-text);
     }
     .screen-hint {
       font-size: 14px;
       color: var(--req-muted);
-      margin-bottom: 18px;
-      line-height: 1.5;
+      margin-bottom: 20px;
+      line-height: 1.55;
+      padding: 14px 16px;
+      border-radius: var(--req-radius-sm);
+      background: rgba(247, 166, 0, 0.06);
+      border: 1px solid rgba(247, 166, 0, 0.12);
+    }
+    html[data-app-theme="dark"] .screen-hint {
+      background: rgba(247, 166, 0, 0.1);
+      border-color: rgba(247, 166, 0, 0.16);
     }
     .respond-presets {
       margin-bottom: 14px;
@@ -322,16 +410,33 @@
       background: rgba(245, 166, 35, 0.12);
     }
     .detail-hero {
-      border-radius: var(--req-radius);
-      padding: 1px;
-      margin-bottom: 16px;
-      background: linear-gradient(135deg, rgba(247, 166, 0, 0.5) 0%, rgba(247, 166, 0, 0.1) 45%, var(--req-surface) 100%);
-      box-shadow: var(--req-shadow);
+      border-radius: calc(var(--req-radius) + 4px);
+      padding: 2px;
+      margin-bottom: 18px;
+      background: linear-gradient(
+        135deg,
+        rgba(247, 166, 0, 0.55) 0%,
+        rgba(247, 166, 0, 0.12) 42%,
+        rgba(247, 166, 0, 0.06) 70%,
+        var(--req-surface) 100%
+      );
+      box-shadow:
+        0 8px 32px rgba(0, 0, 0, 0.08),
+        0 0 0 1px rgba(247, 166, 0, 0.12);
+    }
+    html[data-app-theme="dark"] .detail-hero {
+      box-shadow:
+        0 12px 40px rgba(0, 0, 0, 0.45),
+        0 0 0 1px rgba(247, 166, 0, 0.15);
     }
     .detail-hero-inner {
-      border-radius: calc(var(--req-radius) - 1px);
+      border-radius: calc(var(--req-radius) + 2px);
       background: var(--req-surface);
-      padding: 18px 18px 16px;
+      padding: 22px 20px 18px;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+    }
+    html[data-app-theme="light"] .detail-hero-inner {
+      border-color: rgba(0, 0, 0, 0.04);
     }
     .detail-kicker {
       font-size: 11px;
@@ -341,24 +446,165 @@
       color: var(--req-accent);
       margin-bottom: 8px;
     }
-    .detail-title-line {
-      font-size: 19px;
-      font-weight: 700;
-      letter-spacing: -0.03em;
-      line-height: 1.35;
-      margin-bottom: 10px;
+    .detail-title-stack {
+      margin-bottom: 2px;
     }
-    .detail-title-badges { display: inline; }
-    .detail-badge-in-progress {
-      display: inline-block;
+    .detail-title-main {
+      margin: 0;
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: -0.035em;
+      line-height: 1.38;
+      color: var(--req-text);
+    }
+    .detail-badge-row {
+      display: none;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      margin-top: 12px;
+    }
+    .detail-badge-row .badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
       font-size: 11px;
-      padding: 4px 10px;
+      padding: 6px 12px;
       border-radius: 999px;
-      margin-left: 8px;
-      vertical-align: middle;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      white-space: nowrap;
+      box-sizing: border-box;
+    }
+    .detail-badge-row .badge.personalized {
+      background: rgba(245, 166, 35, 0.18);
+      border: 1px solid rgba(245, 166, 35, 0.42);
+      color: var(--req-accent);
+    }
+    html[data-app-theme="dark"] .detail-badge-row .badge.personalized {
+      color: #fde68a;
+      border-color: rgba(253, 230, 138, 0.38);
+      background: rgba(245, 166, 35, 0.14);
+    }
+    .detail-badge-row .badge.pass-order {
+      background: rgba(247, 166, 0, 0.1);
+      border: 1px solid rgba(247, 166, 0, 0.42);
+      color: var(--req-accent);
+      text-transform: uppercase;
+      font-size: 10px;
+      letter-spacing: 0.1em;
+    }
+    html[data-app-theme="dark"] .detail-badge-row .badge.pass-order {
+      color: #fde68a;
+      border-color: rgba(253, 230, 138, 0.45);
+      background: rgba(247, 166, 0, 0.08);
+    }
+    .detail-badge-row .detail-badge-in-progress {
+      display: inline-flex;
+      align-items: center;
+      margin-left: 0;
+      vertical-align: unset;
+      font-size: 11px;
+      padding: 6px 12px;
+      border-radius: 999px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
       background: var(--req-chip-warn-bg);
       color: var(--req-chip-warn-fg);
-      font-weight: 600;
+    }
+    /* Pass-order detail: stronger hero, clearer hierarchy */
+    #screenDetail.detail-screen--pass-order .detail-hero {
+      background: linear-gradient(
+        145deg,
+        rgba(247, 166, 0, 0.62) 0%,
+        rgba(247, 166, 0, 0.2) 36%,
+        rgba(247, 166, 0, 0.06) 68%,
+        var(--req-surface) 100%
+      );
+    }
+    #screenDetail.detail-screen--pass-order .detail-hero-inner {
+      position: relative;
+      overflow: hidden;
+    }
+    #screenDetail.detail-screen--pass-order .detail-hero-inner::before {
+      content: '';
+      position: absolute;
+      top: -35%;
+      right: -12%;
+      width: 160px;
+      height: 160px;
+      border-radius: 42px;
+      background: radial-gradient(circle, rgba(247, 166, 0, 0.22) 0%, transparent 68%);
+      pointer-events: none;
+    }
+    #screenDetail.detail-screen--pass-order .detail-kicker {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    #screenDetail.detail-screen--pass-order .detail-kicker::before {
+      content: '';
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--req-accent);
+      box-shadow: 0 0 14px rgba(247, 166, 0, 0.75);
+      flex-shrink: 0;
+    }
+    #screenDetail.detail-screen--pass-order .detail-title-main {
+      font-size: 22px;
+      letter-spacing: -0.04em;
+      line-height: 1.32;
+      position: relative;
+      z-index: 1;
+    }
+    #screenDetail.detail-screen--pass-order .detail-badge-row {
+      position: relative;
+      z-index: 1;
+    }
+    .detail-pass-flow-hint {
+      margin: 0 0 18px;
+      padding: 14px 17px;
+      border-radius: 16px;
+      font-size: 13px;
+      line-height: 1.52;
+      color: var(--req-muted);
+      background: rgba(247, 166, 0, 0.07);
+      border: 1px solid rgba(247, 166, 0, 0.18);
+    }
+    html[data-app-theme="dark"] .detail-pass-flow-hint {
+      background: rgba(247, 166, 0, 0.09);
+      border-color: rgba(247, 166, 0, 0.22);
+      color: #a8a8ae;
+    }
+    #detailActions.action-buttons--pass {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-top: 4px;
+    }
+    #detailActions.action-buttons--pass .bd-btn {
+      border-radius: 16px;
+      padding: 15px 18px;
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+    #detailActions.action-buttons--pass .bd-btn--primary {
+      box-shadow: 0 10px 28px rgba(247, 166, 0, 0.32);
+      border: none;
+    }
+    #detailActions.action-buttons--pass .bd-btn--secondary {
+      border-width: 2px;
+      border-color: rgba(247, 166, 0, 0.48);
+      background: rgba(247, 166, 0, 0.04);
+    }
+    html[data-app-theme="dark"] #detailActions.action-buttons--pass .bd-btn--secondary {
+      background: rgba(247, 166, 0, 0.08);
+    }
+    #screenDetail.detail-screen--pass-order .detail-client-row {
+      margin-bottom: 12px;
     }
     .detail-comment-wrap {
       display: none;
@@ -384,26 +630,44 @@
       display: flex;
       align-items: center;
       gap: 14px;
-      padding: 16px 18px;
-      border-radius: var(--req-radius-sm);
-      background: var(--req-surface);
-      border: 1px solid rgba(247, 166, 0, 0.1);
-      margin-bottom: 18px;
-      box-shadow: var(--req-shadow);
+      padding: 18px 20px;
+      border-radius: calc(var(--req-radius-sm) + 4px);
+      background: linear-gradient(
+        145deg,
+        color-mix(in srgb, var(--tg-theme-secondary-bg-color) 88%, rgba(247, 166, 0, 0.08)),
+        var(--tg-theme-secondary-bg-color)
+      );
+      border: 1px solid rgba(247, 166, 0, 0.2);
+      margin-bottom: 22px;
+      box-shadow:
+        0 6px 24px rgba(0, 0, 0, 0.06),
+        0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+    }
+    html[data-app-theme="dark"] .detail-client-row {
+      border-color: rgba(247, 166, 0, 0.22);
+      box-shadow:
+        0 8px 28px rgba(0, 0, 0, 0.4),
+        0 0 0 1px rgba(255, 255, 255, 0.05) inset;
     }
     .detail-client-avatar {
-      width: 52px;
-      height: 52px;
-      border-radius: 16px;
+      width: 56px;
+      height: 56px;
+      border-radius: 18px;
       background: linear-gradient(145deg, #ffc23d 0%, var(--req-accent) 50%, var(--req-accent-deep) 100%);
       color: #1a1a1a;
-      font-size: 18px;
+      font-size: 19px;
       font-weight: 700;
       display: flex;
       align-items: center;
       justify-content: center;
       flex-shrink: 0;
-      box-shadow: 0 4px 16px rgba(247, 166, 0, 0.4);
+      box-shadow:
+        0 6px 20px rgba(247, 166, 0, 0.45),
+        0 0 0 2px rgba(255, 255, 255, 0.15) inset;
+    }
+    .detail-client-meta {
+      flex: 1;
+      min-width: 0;
     }
     .detail-client-meta .detail-label {
       font-size: 11px;
@@ -414,6 +678,23 @@
       margin-bottom: 4px;
     }
     .detail-client-meta .detail-value { font-size: 17px; font-weight: 600; letter-spacing: -0.02em; }
+    .detail-client-row--clickable {
+      cursor: pointer;
+      transition: transform 0.12s ease, opacity 0.12s ease;
+    }
+    .detail-client-row--clickable:active {
+      transform: scale(0.992);
+      opacity: 0.94;
+    }
+    .detail-client-chevron {
+      margin-left: auto;
+      flex-shrink: 0;
+      align-self: center;
+      font-size: 20px;
+      font-weight: 600;
+      color: var(--req-muted);
+      opacity: 0.75;
+    }
     .detail-success-banner {
       padding: 12px 16px;
       margin-bottom: 14px;
@@ -424,6 +705,45 @@
       font-weight: 600;
       border: 1px solid rgba(34, 197, 94, 0.25);
       animation: bannerPop 0.45s ease;
+    }
+    .detail-pass-issue-cta {
+      display: none;
+      padding: 14px 16px;
+      margin: 0 0 16px;
+      border-radius: var(--req-radius-sm);
+      background: rgba(247, 166, 0, 0.12);
+      border: 1px solid rgba(247, 166, 0, 0.38);
+    }
+    .detail-pass-issue-cta .dpi-title {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--req-muted);
+      margin-bottom: 8px;
+    }
+    .detail-pass-issue-cta .dpi-text {
+      font-size: 14px;
+      line-height: 1.45;
+      color: var(--req-text);
+      margin-bottom: 12px;
+    }
+    .detail-pass-issue-cta .dpi-btn {
+      appearance: none;
+      border: none;
+      border-radius: 12px;
+      padding: 11px 16px;
+      font: inherit;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      background: var(--req-accent);
+      color: #1a1a1a;
+      width: 100%;
+    }
+    .detail-pass-issue-cta .dpi-btn:active {
+      opacity: 0.92;
+      transform: scale(0.992);
     }
     .detail-remind-status {
       display: none;
@@ -488,6 +808,13 @@
       margin-bottom: var(--app-btn-stack-gap, 10px);
     }
     .action-buttons .bd-btn:last-child { margin-bottom: 0; }
+    /* anchor styled as button — «Написать клиенту» for pass orders */
+    .action-buttons a.bd-btn {
+      display: block;
+      text-align: center;
+      text-decoration: none;
+      box-sizing: border-box;
+    }
     .btn-ghost {
       background: transparent;
       color: var(--req-muted);
@@ -654,7 +981,7 @@
       margin: 22px 0 8px;
     }
     .pagination button {
-      padding: 10px 18px;
+      padding: 11px 20px;
       border-radius: 999px;
       border: none;
       background: var(--req-surface);
@@ -663,10 +990,17 @@
       font-weight: 600;
       font-family: inherit;
       cursor: pointer;
-      box-shadow: var(--req-shadow);
-      border: 1px solid rgba(247, 166, 0, 0.18);
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+      border: 1px solid rgba(247, 166, 0, 0.22);
+      transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
     }
-    .pagination button:active { transform: scale(0.97); }
+    html[data-app-theme="dark"] .pagination button {
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+    }
+    .pagination button:active {
+      transform: scale(0.97);
+      border-color: rgba(247, 166, 0, 0.45);
+    }
     .pagination span { font-size: 13px; color: var(--req-muted); font-weight: 500; }
   </style>
   <script>
@@ -714,7 +1048,7 @@
   <!-- Diagnostic: triggers GET /api/webapp/trainer/requests/ping?step=img when page loads (no JS). -->
   <img src="/api/webapp/trainer/requests/ping?step=img" alt="" width="0" height="0" style="position:absolute;visibility:hidden" referrerpolicy="no-referrer">
   <div id="screenList" data-screen class="active">
-    <p class="list-intro" id="listHint">По вашему городу и услугам из профиля. Сначала новые заявки, затем в работе — по 10 на странице.</p>
+    <p class="list-intro" id="listHint">По вашему городу и услугам из профиля. Сначала новые заявки, затем в работе.</p>
     <div id="sectionNew" style="display: none;">
       <div class="section-title">Новые</div>
       <div id="requestListNew"></div>
@@ -737,22 +1071,28 @@
 
   <div id="screenDetail" data-screen>
     <div id="detailSuccessBanner" class="detail-success-banner" style="display: none;"></div>
+    <div id="detailPassIssueCta" class="detail-pass-issue-cta" style="display: none;" aria-live="polite"></div>
     <div class="detail-hero">
       <div class="detail-hero-inner">
-        <div class="detail-kicker">Заявка</div>
-        <div class="detail-title-line" id="detailTitle">—</div>
+        <div class="detail-kicker" id="detailKicker">Заявка</div>
+        <div class="detail-title-stack">
+          <h2 class="detail-title-main" id="detailTitleMain">—</h2>
+          <div class="detail-badge-row" id="detailTitleBadges" style="display: none;"></div>
+        </div>
         <div id="detailCommentWrap" class="detail-comment-wrap">
           <div class="detail-comment-label">Комментарий клиента</div>
           <p id="detailComment" class="detail-comment-text"></p>
         </div>
       </div>
     </div>
-    <div class="detail-client-row">
+    <p class="detail-pass-flow-hint" id="detailPassFlowHint" style="display: none;"></p>
+    <div class="detail-client-row" id="detailClientRow">
       <div class="detail-client-avatar" id="detailClientAvatar">—</div>
       <div class="detail-client-meta">
         <div class="detail-label">Клиент</div>
         <div class="detail-value" id="detailClient">—</div>
       </div>
+      <span class="detail-client-chevron" id="detailClientChevron" hidden aria-hidden="true">›</span>
     </div>
     <div id="detailActionsWrap">
       <div id="detailInfoRow" class="detail-actions-hint" style="display: none;">
@@ -761,7 +1101,7 @@
       </div>
       <div id="detailInfoPopover" class="detail-info-popover" style="display: none;"></div>
       <div id="detailRemindStatus" class="detail-remind-status" style="display: none;" role="status" aria-live="polite"></div>
-      <div class="action-buttons" id="detailActions"></div>
+      <div class="action-buttons" id="detailActions" data-variant="default"></div>
     </div>
   </div>
 
@@ -963,6 +1303,14 @@
         return first || 'Клиент';
       }
 
+      function requestCardMeta(r) {
+        var raw = (r.comment_body || '').trim();
+        if (!raw) raw = (r.comment || '').trim();
+        if (!raw) return clientPreview(r);
+        var line = raw.replace(/\n/g, ' ');
+        return line.slice(0, 50) + (line.length > 50 ? '…' : '');
+      }
+
       function renderList() {
         const items = state.items || [];
         const newList = items.filter(function(r) { return !r.has_responded; });
@@ -995,26 +1343,28 @@
         sectionNew.style.display = pageNew.length ? 'block' : 'none';
         document.getElementById('requestListNew').innerHTML = pageNew.map(function(r) {
           const title = (r.city_name || '—') + ' · ' + (r.service_name || '—');
-          const meta = (r.comment || '').trim() ? (r.comment.replace(/\n/g, ' ').slice(0, 50) + ((r.comment || '').length > 50 ? '…' : '')) : clientPreview(r);
+          const meta = requestCardMeta(r);
           const personalBadge = r.is_personalized ? '<span class="badge personalized">Для вас</span>' : '';
+          const passBadge = r.request_subtype === 'pass_product_order' ? '<span class="badge pass-order">Абонемент</span>' : '';
           return '<button type="button" class="request-card request-card--new" data-request-id="' + r.id + '">' +
             '<span class="request-card__stripe" aria-hidden="true"></span>' +
             '<div class="request-card__body">' +
             '<div class="main"><div class="title">' + escapeHtml(title) + '</div><div class="meta">' + escapeHtml(meta) + '</div></div>' +
-            '<div class="badges-row">' + personalBadge + '<span class="badge new">Новая</span></div>' +
+            '<div class="badges-row">' + personalBadge + passBadge + '<span class="badge new">Новая</span></div>' +
             '<span class="arrow-wrap" aria-hidden="true">→</span></div></button>';
         }).join('');
 
         sectionInProgress.style.display = pageInProgress.length ? 'block' : 'none';
         document.getElementById('requestListInProgress').innerHTML = pageInProgress.map(function(r) {
           const title = (r.city_name || '—') + ' · ' + (r.service_name || '—');
-          const meta = (r.comment || '').trim() ? (r.comment.replace(/\n/g, ' ').slice(0, 50) + ((r.comment || '').length > 50 ? '…' : '')) : clientPreview(r);
+          const meta = requestCardMeta(r);
           const personalBadge = r.is_personalized ? '<span class="badge personalized">Для вас</span>' : '';
+          const passBadge = r.request_subtype === 'pass_product_order' ? '<span class="badge pass-order">Абонемент</span>' : '';
           return '<button type="button" class="request-card request-card--progress" data-request-id="' + r.id + '">' +
             '<span class="request-card__stripe" aria-hidden="true"></span>' +
             '<div class="request-card__body">' +
             '<div class="main"><div class="title">' + escapeHtml(title) + '</div><div class="meta">' + escapeHtml(meta) + '</div></div>' +
-            '<div class="badges-row">' + personalBadge + '<span class="badge done">В работе</span></div>' +
+            '<div class="badges-row">' + personalBadge + passBadge + '<span class="badge done">В работе</span></div>' +
             '<span class="arrow-wrap" aria-hidden="true">→</span></div></button>';
         }).join('');
 
@@ -1045,12 +1395,37 @@
         const req = state.currentRequest;
         if (!req) return;
         req.remind_slots_pending = !!req.remind_slots_pending;
-        const titleBase = escapeHtml((req.city_name || '—') + '  ·  ' + (req.service_name || '—'));
-        const titleEl = document.getElementById('detailTitle');
+
+        var isPassOrder = req.request_subtype === 'pass_product_order';
+        var detailScreen = document.getElementById('screenDetail');
+        if (detailScreen) detailScreen.classList.toggle('detail-screen--pass-order', isPassOrder);
+
+        var detailKickerEl = document.getElementById('detailKicker');
+        if (detailKickerEl) detailKickerEl.textContent = isPassOrder ? 'Заявка на абонемент' : 'Заявка';
+
+        var passFlowHintEl = document.getElementById('detailPassFlowHint');
+        if (passFlowHintEl) {
+          if (isPassOrder) {
+            passFlowHintEl.style.display = 'block';
+            passFlowHintEl.textContent =
+              'Свяжитесь с клиентом в Telegram, примите оплату и выдайте абонемент в разделе «Абонементы».';
+          } else {
+            passFlowHintEl.style.display = 'none';
+            passFlowHintEl.textContent = '';
+          }
+        }
+
+        var titleMainEl = document.getElementById('detailTitleMain');
+        var badgesEl = document.getElementById('detailTitleBadges');
         var titleBadges = [];
         if (req.is_personalized) titleBadges.push('<span class="badge personalized">Заявка для вас</span>');
+        if (isPassOrder) titleBadges.push('<span class="badge pass-order">Абонемент</span>');
         if (req.has_responded) titleBadges.push('<span class="detail-badge-in-progress">В работе</span>');
-        titleEl.innerHTML = titleBase + (titleBadges.length ? '<span class="detail-title-badges"> ' + titleBadges.join(' ') + '</span>' : '');
+        if (titleMainEl) titleMainEl.textContent = (req.city_name || '—') + ' · ' + (req.service_name || '—');
+        if (badgesEl) {
+          badgesEl.innerHTML = titleBadges.join('');
+          badgesEl.style.display = titleBadges.length ? 'flex' : 'none';
+        }
 
         var bannerEl = document.getElementById('detailSuccessBanner');
         if (state.justResponded) {
@@ -1062,11 +1437,14 @@
           bannerEl.style.display = 'none';
         }
 
-        const comment = (req.comment || '').trim();
+        document.getElementById('detailPassIssueCta').style.display = 'none';
+        document.getElementById('detailPassIssueCta').innerHTML = '';
+
+        var commentBody = ((req.comment_body || req.comment) || '').trim();
         var commentWrap = document.getElementById('detailCommentWrap');
         var commentEl = document.getElementById('detailComment');
-        if (comment) {
-          commentEl.textContent = comment;
+        if (commentBody && !isPassOrder) {
+          commentEl.textContent = commentBody;
           commentWrap.style.display = 'block';
         } else {
           commentWrap.style.display = 'none';
@@ -1076,9 +1454,49 @@
         document.getElementById('detailClient').textContent = clientName;
         document.getElementById('detailClientAvatar').textContent = clientInitials(clientName);
 
+        var clientRow = document.getElementById('detailClientRow');
+        var clientChevron = document.getElementById('detailClientChevron');
+        function openClientProfileFromRequest() {
+          if (!req.client_id) return;
+          try {
+            sessionStorage.setItem(
+              'miniapp_return_trainer_requests_detail',
+              JSON.stringify({ request_id: req.id, client_id: req.client_id })
+            );
+          } catch (e) { /* private mode / quota */ }
+          var u = '/webapp/trainer-clients?client_id=' + encodeURIComponent(String(req.client_id));
+          var idt = initData();
+          if (idt) u += '&init_data=' + encodeURIComponent(idt);
+          window.location.href = u;
+        }
+        if (req.client_id) {
+          clientRow.classList.add('detail-client-row--clickable');
+          clientRow.setAttribute('role', 'button');
+          clientRow.setAttribute('tabindex', '0');
+          clientRow.setAttribute('aria-label', 'Открыть профиль клиента');
+          if (clientChevron) clientChevron.hidden = false;
+          clientRow.onclick = function () {
+            openClientProfileFromRequest();
+          };
+          clientRow.onkeydown = function (e) {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              openClientProfileFromRequest();
+            }
+          };
+        } else {
+          clientRow.classList.remove('detail-client-row--clickable');
+          clientRow.removeAttribute('role');
+          clientRow.removeAttribute('tabindex');
+          clientRow.removeAttribute('aria-label');
+          clientRow.onclick = null;
+          clientRow.onkeydown = null;
+          if (clientChevron) clientChevron.hidden = true;
+        }
+
         var infoRow = document.getElementById('detailInfoRow');
         var infoPopover = document.getElementById('detailInfoPopover');
-        if (req.has_responded) {
+        if (!isPassOrder && req.has_responded) {
           infoRow.style.display = 'flex';
           infoPopover.innerHTML = DETAIL_HINT_HTML;
           infoPopover.style.display = 'none';
@@ -1093,7 +1511,7 @@
 
         var remindStatusEl = document.getElementById('detailRemindStatus');
         if (remindStatusEl) {
-          if (req.has_responded && req.remind_slots_pending) {
+          if (!isPassOrder && req.has_responded && req.remind_slots_pending) {
             remindStatusEl.textContent = '✓ Напоминание включено: напишем в боте, когда в расписании появятся свободные окна.';
             remindStatusEl.style.display = 'block';
           } else {
@@ -1104,7 +1522,51 @@
 
         const actions = document.getElementById('detailActions');
         actions.innerHTML = '';
-        if (!req.has_responded) {
+        actions.className = 'action-buttons';
+        actions.removeAttribute('data-variant');
+
+        if (isPassOrder) {
+          actions.classList.add('action-buttons--pass');
+          actions.setAttribute('data-variant', 'pass');
+          // Pass-order: only two focused actions — no respond/decline workflow
+          var hasClientTg = !!(req.client_telegram_id);
+          if (hasClientTg) {
+            actions.innerHTML +=
+              '<button type="button" class="bd-btn bd-btn--primary" id="btnWriteClient">Написать клиенту</button>';
+          }
+          if (req.client_id && req.pass_product_id) {
+            actions.innerHTML += '<button type="button" class="bd-btn bd-btn--secondary" id="btnIssuePassFromRequest">Выдать абонемент</button>';
+          }
+          var writeClientBtn = document.getElementById('btnWriteClient');
+          if (writeClientBtn) {
+            writeClientBtn.onclick = function (ev) {
+              ev.preventDefault();
+              var tid = req.client_telegram_id;
+              if (tid == null || tid === '') return;
+              var opened = false;
+              if (typeof window.openTelegramChatFromMiniApp === 'function') {
+                opened = !!window.openTelegramChatFromMiniApp({ telegramId: tid });
+              }
+              if (!opened) {
+                try {
+                  window.location.assign('tg://user?id=' + encodeURIComponent(String(tid)));
+                } catch (e1) {
+                  /* noop */
+                }
+              }
+            };
+          }
+          var issueBtn = document.getElementById('btnIssuePassFromRequest');
+          if (issueBtn) {
+            issueBtn.onclick = function() {
+              var u = '/webapp/trainer-pass-products?client_id=' + encodeURIComponent(String(req.client_id)) +
+                '&pass_product_id=' + encodeURIComponent(String(req.pass_product_id));
+              var idt = initData();
+              if (idt) u += '&init_data=' + encodeURIComponent(idt);
+              window.location.href = u;
+            };
+          }
+        } else if (!req.has_responded) {
           actions.innerHTML += '<button type="button" class="bd-btn bd-btn--primary" id="btnRespond">Готов взять</button>';
           actions.innerHTML += '<button type="button" class="bd-btn bd-btn--outline-danger" id="btnDecline">Отклонить</button>';
         } else {
@@ -1365,6 +1827,25 @@
         document.getElementById('authErrorText').textContent = message || 'Не удалось загрузить заявки.';
       }
 
+      /** After full reload from trainer-clients (?request_id=) — reopen pass/detail screen. */
+      function tryOpenRequestDetailFromQuery() {
+        try {
+          var p = new URLSearchParams(window.location.search || '');
+          var ridRaw = p.get('request_id');
+          if (!ridRaw) return;
+          var rid = parseInt(ridRaw, 10);
+          if (!rid) return;
+          var req = state.items.find(function(r) { return r.id === rid; });
+          if (!req) return;
+          state.currentRequest = req;
+          renderDetail();
+          showScreen('screenDetail');
+          try {
+            history.replaceState({}, '', window.location.pathname || '/webapp/trainer-requests');
+          } catch (e) { /* ignore */ }
+        } catch (e2) { /* ignore */ }
+      }
+
       function loadList() {
         if (window.TrainerMiniAppGate && window.TrainerMiniAppGate.shouldBlockFeatureFetch()) return;
         fetch('/api/webapp/trainer/requests/ping?step=loadList').catch(function() {});
@@ -1390,6 +1871,7 @@
             state.items = Array.isArray(data.items) ? data.items : [];
             state.page = 0;
             renderList();
+            tryOpenRequestDetailFromQuery();
           })
           .catch(function(e) {
             if (e.message === 'SESSION') {

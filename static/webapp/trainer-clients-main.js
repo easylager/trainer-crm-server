@@ -137,6 +137,38 @@
           return;
         }
         if (detailVisible) {
+          var retReqId = null;
+          try {
+            var rawR = sessionStorage.getItem('miniapp_return_trainer_requests_detail');
+            if (rawR) {
+              var parsed = JSON.parse(rawR);
+              if (typeof parsed === 'number' && !isNaN(parsed) && parsed > 0) {
+                retReqId = parsed;
+              } else if (
+                parsed &&
+                typeof parsed.request_id === 'number' &&
+                parsed.request_id > 0 &&
+                typeof parsed.client_id === 'number' &&
+                parsed.client_id > 0 &&
+                state.selectedClientId === parsed.client_id
+              ) {
+                retReqId = parsed.request_id;
+              }
+            }
+          } catch (eR) { /* noop */ }
+          if (retReqId != null) {
+            btn.hidden = false;
+            btn.onclick = function() {
+              try {
+                sessionStorage.removeItem('miniapp_return_trainer_requests_detail');
+              } catch (eRm) { /* noop */ }
+              var pathR = (window.location.pathname || '').replace(/[^/]+$/, '') || '/webapp/';
+              var uR = pathR + 'trainer-requests?request_id=' + encodeURIComponent(String(retReqId));
+              if (initData) uR += (uR.indexOf('?') >= 0 ? '&' : '?') + 'init_data=' + encodeURIComponent(initData);
+              window.location.href = uR;
+            };
+            return;
+          }
           btn.hidden = false;
           btn.onclick = function() { backToListFromDetail(); };
           return;
@@ -294,8 +326,8 @@
           return {
             kind: 'uniform_step',
             minute_offset: 0,
-            hour_start: 8,
-            hour_end: 21,
+            hour_start: 6,
+            hour_end: 23,
             step_minutes: 15,
             slot_duration_minutes: null,
           };
@@ -356,9 +388,9 @@
           var preset = qb.scheduleGrid || defaultScheduleGrid();
           var kind = (preset.kind || 'uniform_step').toString().trim();
           var h0 = Math.max(0, Math.min(23, parseInt(preset.hour_start, 10)));
-          if (isNaN(h0)) h0 = 8;
+          if (isNaN(h0)) h0 = 6;
           var h1 = Math.max(0, Math.min(23, parseInt(preset.hour_end, 10)));
-          if (isNaN(h1)) h1 = 21;
+          if (isNaN(h1)) h1 = 23;
           if (h1 < h0) {
             var swap = h0;
             h0 = h1;

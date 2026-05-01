@@ -226,6 +226,15 @@
       var hubLastRhythmPicked = [null, null];
       /** «Мало записей» vs свободные слоты (aligned with product). */
       var HUB_RHYTHM_BOOKINGS_LOW_THRESHOLD = 6;
+      /** × dismiss: короткий / длинный mute для rhythm hints. */
+      var HUB_RHYTHM_DISMISS_DAYS_SHORT = 1;
+      var HUB_RHYTHM_DISMISS_DAYS_LONG = 2;
+      /** schedule-editor ставит метку после создания слотов — поднимаем приоритет хинта «Напомнить» (рассылка приглашений). */
+      var HUB_FILL_SLOTS_RHYTHM_BOOST_KEY = 'trainer_hub_fill_slots_rhythm_boost_v1';
+      var HUB_FILL_SLOTS_RHYTHM_BOOST_TTL_MS = 72 * 60 * 60 * 1000;
+      var HUB_RHYTHM_FILL_SLOTS_NOTIFY_PRIORITY_BOOST = 130;
+      /** Set at start of applyHubRhythmResolver — read by buildHubRhythmCandidates in same pass. */
+      var hubFillSlotsRhythmBoostActiveThisResolverPass = false;
       /**
        * After onboarding checklist is applied (bootstrap or GET) or fetch failed — rhythm resolver may hide skeleton.
        * Stays false until then so two placeholder cards reserve space and reduce CLS.
@@ -928,20 +937,8 @@
         return 'trainer_hub_rhythm_dismiss_v1_' + String(id) + '_' + String(hintId);
       }
 
-      function hubShareLinkGrowthHintStorageKey() {
-        var id = trainerAccessSnapshot && trainerAccessSnapshot.trainer_id;
-        if (id == null || id === '' || isNaN(Number(id))) return null;
-        return 'trainer_hub_dismiss_share_link_growth_v1_' + String(id);
-      }
-
-      function hubClientNotesRhythmHintStorageKey() {
-        var id = trainerAccessSnapshot && trainerAccessSnapshot.trainer_id;
-        if (id == null || id === '' || isNaN(Number(id))) return null;
-        return 'trainer_hub_dismiss_client_notes_rhythm_v1_' + String(id);
-      }
-
       /**
-       * Unified dismiss timestamp per hint id; merges legacy keys (template v2, share link, client notes).
+       * Unified dismiss timestamp per hint id; merges legacy template key (trainer_hub_schedule_rhythm_v2_*_dismiss_until).
        */
       function getRhythmDismissUntilMs(hintId) {
         var k = hubRhythmDismissKey(hintId);
@@ -963,18 +960,6 @@
             }
           } catch (e2) { /* */ }
         }
-        if (hintId === 'share_link') {
-          try {
-            var sk = hubShareLinkGrowthHintStorageKey();
-            if (sk && localStorage.getItem(sk) === '1') return 8e15;
-          } catch (e3) { /* */ }
-        }
-        if (hintId === 'client_notes') {
-          try {
-            var ck = hubClientNotesRhythmHintStorageKey();
-            if (ck && localStorage.getItem(ck) === '1') return 8e15;
-          } catch (e4) { /* */ }
-        }
         return 0;
       }
 
@@ -989,22 +974,30 @@
             if (dk) localStorage.setItem(dk, String(untilMs));
           } catch (e2) { /* */ }
         }
-        if (hintId === 'share_link') {
-          var sk = hubShareLinkGrowthHintStorageKey();
-          try {
-            if (sk) localStorage.setItem(sk, '1');
-          } catch (e3) { /* */ }
-        }
-        if (hintId === 'client_notes') {
-          var ck = hubClientNotesRhythmHintStorageKey();
-          try {
-            if (ck) localStorage.setItem(ck, '1');
-          } catch (e4) { /* */ }
-        }
       }
 
       function isRhythmHintDismissed(hintId) {
         return getRhythmDismissUntilMs(hintId) > Date.now();
+      }
+
+      /** True when schedule-editor создал слоты недавно — один проход резолвера читает флаг (TTL в sessionStorage). */
+      function readTrainerHubFillSlotsRhythmBoostPending() {
+        try {
+          var raw = sessionStorage.getItem(HUB_FILL_SLOTS_RHYTHM_BOOST_KEY);
+          if (!raw) return false;
+          var ts = parseInt(raw, 10);
+          if (isNaN(ts)) {
+            sessionStorage.removeItem(HUB_FILL_SLOTS_RHYTHM_BOOST_KEY);
+            return false;
+          }
+          if (Date.now() - ts > HUB_FILL_SLOTS_RHYTHM_BOOST_TTL_MS) {
+            sessionStorage.removeItem(HUB_FILL_SLOTS_RHYTHM_BOOST_KEY);
+            return false;
+          }
+          return true;
+        } catch (e) {
+          return false;
+        }
       }
 
       function hideLegacyRhythmHintCards() {
@@ -1180,21 +1173,30 @@
             action: 'trainer_clients_invite_bot',
           });
         }
+        var remindThisWeekBoost =
+          hubFillSlotsRhythmBoostActiveThisResolverPass &&
+          availThis > 0 &&
+          fillSlotsCandidates > 0 &&
+          availNext === 0;
         if (
           !slotRhythmDeferredForTemplateOnboarding &&
-          availNext > 0 &&
           fillSlotsCandidates > 0 &&
-          !isRhythmHintDismissed('open_loop_free_next')
+          !isRhythmHintDismissed('open_loop_free_next') &&
+          (availNext > 0 || remindThisWeekBoost)
         ) {
+          var availRemind = availNext > 0 ? availNext : availThis;
+          var remindPri = hubFillSlotsRhythmBoostActiveThisResolverPass
+            ? HUB_RHYTHM_FILL_SLOTS_NOTIFY_PRIORITY_BOOST
+            : 72;
           out.push({
             id: 'open_loop_free_next',
-            priority: 72,
+            priority: remindPri,
             text:
-              'На следующей неделе ' +
-              availNext +
+              (availNext > 0 ? 'На следующей неделе ' : 'На этой неделе ') +
+              availRemind +
               ' ' +
               pluralRu(
-                availNext,
+                availRemind,
                 'свободный слот',
                 'свободных слота',
                 'свободных слотов',
@@ -1210,9 +1212,12 @@
           fillSlotsCandidates === 0 &&
           !isRhythmHintDismissed('open_loop_free_next_growth')
         ) {
+          var growthPri = hubFillSlotsRhythmBoostActiveThisResolverPass
+            ? HUB_RHYTHM_FILL_SLOTS_NOTIFY_PRIORITY_BOOST
+            : 58;
           out.push({
             id: 'open_loop_free_next_growth',
-            priority: 58,
+            priority: growthPri,
             text:
               'На следующей неделе ' +
               availNext +
@@ -1397,6 +1402,7 @@
 
       /** Renders up to two priority rhythm hints; hides legacy fixed strips. */
       function applyHubRhythmResolver() {
+        hubFillSlotsRhythmBoostActiveThisResolverPass = readTrainerHubFillSlotsRhythmBoostPending();
         hideLegacyRhythmHintCards();
         var candidates = buildHubRhythmCandidates();
         candidates.sort(function(a, b) {
@@ -1459,8 +1465,8 @@
                   hid === 'catalog_publication' ||
                   hid === 'subscription_lapsed' ||
                   hid === 'referral_growth'
-                    ? 14
-                    : 7;
+                    ? HUB_RHYTHM_DISMISS_DAYS_LONG
+                    : HUB_RHYTHM_DISMISS_DAYS_SHORT;
                 setRhythmDismissUntilMs(hid, Date.now() + days * 24 * 60 * 60 * 1000);
               }
               applyHubRhythmResolver();
@@ -1483,7 +1489,7 @@
         if (dBtn && !dBtn.dataset.wiredRhythm) {
           dBtn.dataset.wiredRhythm = '1';
           dBtn.onclick = function() {
-            setRhythmDismissUntilMs('template', Date.now() + 14 * 24 * 60 * 60 * 1000);
+            setRhythmDismissUntilMs('template', Date.now() + HUB_RHYTHM_DISMISS_DAYS_LONG * 24 * 60 * 60 * 1000);
             syncHubWeekRhythmPanel();
             renderHubSummaryHints();
           };
@@ -1498,7 +1504,7 @@
 
       /** Same storage as «×» on growth strip — call after successful copy or dismiss. */
       function dismissHubShareLinkGrowthHintPersisted() {
-        setRhythmDismissUntilMs('share_link', Date.now() + 365 * 24 * 60 * 60 * 1000);
+        setRhythmDismissUntilMs('share_link', Date.now() + HUB_RHYTHM_DISMISS_DAYS_LONG * 24 * 60 * 60 * 1000);
         applyHubRhythmResolver();
         renderHubSummaryHints();
       }
@@ -1526,7 +1532,7 @@
         if (dBtn && !dBtn.dataset.wiredClientNotesRhythm) {
           dBtn.dataset.wiredClientNotesRhythm = '1';
           dBtn.onclick = function() {
-            setRhythmDismissUntilMs('client_notes', Date.now() + 365 * 24 * 60 * 60 * 1000);
+            setRhythmDismissUntilMs('client_notes', Date.now() + HUB_RHYTHM_DISMISS_DAYS_LONG * 24 * 60 * 60 * 1000);
             syncHubWeekRhythmPanel();
             renderHubSummaryHints();
           };
@@ -3239,8 +3245,8 @@
         return {
           kind: 'uniform_step',
           minute_offset: 0,
-          hour_start: 8,
-          hour_end: 21,
+          hour_start: 6,
+          hour_end: 23,
           step_minutes: 15,
           slot_duration_minutes: null,
         };
@@ -3311,9 +3317,9 @@
         var preset = hubQuickBookScheduleGrid || hubDefaultScheduleGrid();
         var kind = (preset.kind || 'uniform_step').toString().trim();
         var h0 = Math.max(0, Math.min(23, parseInt(preset.hour_start, 10)));
-        if (isNaN(h0)) h0 = 8;
+        if (isNaN(h0)) h0 = 6;
         var h1 = Math.max(0, Math.min(23, parseInt(preset.hour_end, 10)));
-        if (isNaN(h1)) h1 = 21;
+        if (isNaN(h1)) h1 = 23;
         if (h1 < h0) {
           var swap = h0;
           h0 = h1;
@@ -4571,10 +4577,24 @@
         var lead = document.querySelector('.hub-fill-slots-invites-lead');
         if (lead) {
           lead.innerHTML =
-            'Отметьте клиентов — им придёт сообщение в <b>клиентском боте</b> от вашего имени с кнопкой «Записаться».';
+            'Выберите вручную или кнопками <b>Без записи</b> / <b>Все</b> под списком. У каждого видно статус следующей тренировки. Сообщение уходит в <b>клиентском боте</b> с кнопкой «Записаться».';
         }
         overlay.style.display = 'none';
         overlay.setAttribute('aria-hidden', 'true');
+      }
+
+      /** Bulk checkbox presets for fill-slots modal (dataset data-has-upcoming on cards). */
+      function hubFillSlotsBulkSet(host, mode) {
+        if (!host) return;
+        host.querySelectorAll('.hub-fill-slots-card').forEach(function(card) {
+          var cb = card.querySelector('input.hub-fill-slots-pick');
+          if (!cb) return;
+          var hasUp = card.getAttribute('data-has-upcoming') === '1';
+          if (mode === 'none') cb.checked = false;
+          else if (mode === 'all') cb.checked = true;
+          else if (mode === 'no_upcoming') cb.checked = !hasUp;
+        });
+        hubFillSlotsUpdateSendButtonLabel();
       }
 
       function hubFillSlotsSelectedCount(host) {
@@ -4624,23 +4644,62 @@
           host.appendChild(emptyWrap);
           return;
         }
+        if (clients.length >= 250) {
+          var capNote = document.createElement('p');
+          capNote.className = 'hub-fill-slots-cap-note';
+          capNote.textContent =
+            'Показаны первые 250 клиентов с Telegram. Если база больше — отправьте этому списку, затем откройте окно снова.';
+          host.appendChild(capNote);
+        }
+        var toolbar = document.createElement('div');
+        toolbar.className = 'hub-fill-slots-bulk-toolbar';
+        toolbar.setAttribute('role', 'group');
+        toolbar.setAttribute('aria-label', 'Быстрый выбор получателей');
+        [['Без записи', 'no_upcoming'], ['Все', 'all'], ['Снять', 'none']].forEach(function(pair) {
+          var b = document.createElement('button');
+          b.type = 'button';
+          b.className = 'hub-fill-slots-bulk-btn';
+          b.textContent = pair[0];
+          (function(mode) {
+            b.onclick = function() {
+              hubFillSlotsBulkSet(host, mode);
+            };
+          })(pair[1]);
+          toolbar.appendChild(b);
+        });
+        host.appendChild(toolbar);
+
         for (var idx = 0; idx < clients.length; idx++) {
           var c = clients[idx];
+          var hasUpcoming = !!(c && c.has_upcoming_booking);
           var card = document.createElement('div');
           card.className = 'hub-fill-slots-card';
+          card.setAttribute('data-has-upcoming', hasUpcoming ? '1' : '0');
           var pickRow = document.createElement('label');
           pickRow.className = 'hub-fill-slots-pick-row';
           var cb = document.createElement('input');
           cb.type = 'checkbox';
           cb.className = 'hub-fill-slots-pick';
           cb.value = c && c.id != null ? String(c.id) : '';
-          cb.checked = true;
+          cb.checked = !hasUpcoming;
           cb.addEventListener('change', hubFillSlotsUpdateSendButtonLabel);
           pickRow.appendChild(cb);
-          var nameWrap = document.createElement('span');
-          nameWrap.className = 'hub-fill-slots-pick-label';
-          nameWrap.textContent = c && c.display_name ? String(c.display_name) : 'Клиент';
-          pickRow.appendChild(nameWrap);
+          var meta = document.createElement('span');
+          meta.className = 'hub-fill-slots-pick-meta';
+          var nameRow = document.createElement('span');
+          nameRow.className = 'hub-fill-slots-name-row';
+          var nameEl = document.createElement('span');
+          nameEl.className = 'hub-fill-slots-pick-name';
+          nameEl.textContent = c && c.display_name ? String(c.display_name) : 'Клиент';
+          nameRow.appendChild(nameEl);
+          var badge = document.createElement('span');
+          badge.className =
+            'hub-fill-slots-status-badge ' +
+            (hasUpcoming ? 'hub-fill-slots-status-badge--busy' : 'hub-fill-slots-status-badge--free');
+          badge.textContent = hasUpcoming ? 'Есть запись' : 'Без записи';
+          nameRow.appendChild(badge);
+          meta.appendChild(nameRow);
+          pickRow.appendChild(meta);
           card.appendChild(pickRow);
           if (c && c.reason_line) {
             var reasonEl = document.createElement('div');
@@ -4788,7 +4847,7 @@
               'Отметьте клиентов — им придёт предложение в <b>клиентском боте</b> про <b>конкретное окно</b> (дата и время) с кнопкой «Записаться» на него.';
           } else {
             lead.innerHTML =
-              'Отметьте клиентов — им придёт сообщение в <b>клиентском боте</b> от вашего имени с кнопкой «Записаться».';
+              'Выберите вручную или кнопками <b>Без записи</b> / <b>Все</b> под списком. У каждого видно статус следующей тренировки. Сообщение уходит в <b>клиентском боте</b> с кнопкой «Записаться».';
           }
         }
         ensureTrainerSectionsAccess(function() {
@@ -4800,14 +4859,17 @@
           overlay.setAttribute('aria-hidden', 'false');
 
           var path = '/trainer/hub/fill-slots-invites';
-          var q = [];
+          var q = [
+            'limit=' + encodeURIComponent('250'),
+            'include_with_upcoming=' + encodeURIComponent('true'),
+          ];
           if (hubFillSlotsInviteContext.slotId) {
             q.push('slot_id=' + encodeURIComponent(String(hubFillSlotsInviteContext.slotId)));
           }
           if (hubFillSlotsInviteContext.excludeClientId) {
             q.push('exclude_client_id=' + encodeURIComponent(String(hubFillSlotsInviteContext.excludeClientId)));
           }
-          if (q.length) path += '?' + q.join('&');
+          path += '?' + q.join('&');
 
           fetch(apiUrlWithQuery(path), { headers: headersJson() })
             .then(function(r) {

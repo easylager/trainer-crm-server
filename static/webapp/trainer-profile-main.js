@@ -4598,8 +4598,13 @@
           .then(parseJsonResponse)
           .then(function(o) {
             if (!o.ok) {
+              var rawDetail = o.data.detail != null ? o.data.detail : 'Ошибка загрузки профиля';
+              var detailShow =
+                window.MiniAppErrorUi && typeof MiniAppErrorUi.humanizeDetail === 'function'
+                  ? MiniAppErrorUi.humanizeDetail(rawDetail) || String(rawDetail)
+                  : String(rawDetail);
               document.getElementById('skeleton').innerHTML = '<p style="color:var(--app-danger); padding: 20px; text-align: center;">' +
-                (o.data.detail || 'Ошибка загрузки профиля') + '</p>';
+                detailShow + '</p>';
               return Promise.resolve();
             }
             var data = o.data;
@@ -4654,8 +4659,13 @@
           .then(parseJsonResponse)
           .then(function(o) {
             if (!o.ok) {
+              var rawDetail2 = o.data.detail != null ? o.data.detail : 'Ошибка загрузки профиля';
+              var detailShow2 =
+                window.MiniAppErrorUi && typeof MiniAppErrorUi.humanizeDetail === 'function'
+                  ? MiniAppErrorUi.humanizeDetail(rawDetail2) || String(rawDetail2)
+                  : String(rawDetail2);
               document.getElementById('skeleton').innerHTML = '<p style="color:var(--app-danger); padding: 20px; text-align: center;">' +
-                (o.data.detail || 'Ошибка загрузки профиля') + '</p>';
+                detailShow2 + '</p>';
               return Promise.resolve();
             }
             state.trainer = o.data.trainer;

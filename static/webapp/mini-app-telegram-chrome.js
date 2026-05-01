@@ -330,3 +330,131 @@ window.wireHubSlotMessageButtons = function (root) {
     );
   });
 };
+
+/**
+ * Mini App recoverable errors (missing/flaky initData, expired auth): Russian copy + reload.
+ * Backend sets X-Miniapp-Auth-Error on credential 401; fetch guard shows overlay globally.
+ */
+(function (global) {
+  'use strict';
+
+  var OVERLAY_ID = 'miniAppRecoverableErrorOverlay';
+  var HDR = 'X-Miniapp-Auth-Error';
+  var fetchGuardInstalled = false;
+  var overlayShown = false;
+
+  var LEGACY_AUTH_DETAIL_EN =
+    /missing\s+init\s+data|invalid\s+or\s+expired\s+init\s+data|invalid\s+or\s+expired\s+launch\s+params/i;
+
+  /**
+   * Turn known English API/auth snippets into neutral Russian for inline error slots.
+   */
+  function humanizeDetail(detail) {
+    if (detail == null || detail === '') return '';
+    if (typeof detail === 'object') return '';
+    var s = String(detail).trim();
+    if (!s) return '';
+    if (LEGACY_AUTH_DETAIL_EN.test(s)) return 'Что-то пошло не так';
+    if (
+      /\b(unauthorized|internal server error|bad gateway|gateway timeout|service unavailable|request timeout)\b/i.test(
+        s
+      )
+    ) {
+      return 'Что-то пошло не так';
+    }
+    return s;
+  }
+
+  function webappApiUrl(url) {
+    return String(url || '').indexOf('/api/webapp') >= 0;
+  }
+
+  function showRecoverableOverlay() {
+    if (overlayShown) return;
+    overlayShown = true;
+    var existing = document.getElementById(OVERLAY_ID);
+    var el = existing || document.createElement('div');
+    el.id = OVERLAY_ID;
+    el.className = 'bd-trainer-gate bd-trainer-gate--overlay mini-app-recoverable-err';
+    el.setAttribute('role', 'alertdialog');
+    el.setAttribute('aria-modal', 'true');
+    el.setAttribute('aria-live', 'assertive');
+    el.innerHTML =
+      '<div class="bd-trainer-gate__card">' +
+      '<div class="bd-trainer-gate__icon" aria-hidden="true">⚠️</div>' +
+      '<h2 class="bd-trainer-gate__title">Что-то пошло не так</h2>' +
+      '<p class="bd-trainer-gate__hint">Нажмите «Обновить» или закройте мини-приложение и откройте снова из бота.</p>' +
+      '<div class="bd-trainer-gate__actions">' +
+      '<button type="button" class="bd-btn bd-btn--primary" data-miniapp-recover="reload">Обновить</button>' +
+      '</div>' +
+      '</div>';
+    if (!existing && document.body) document.body.appendChild(el);
+    el.style.display = 'flex';
+    var btn = el.querySelector('[data-miniapp-recover="reload"]');
+    if (btn) {
+      btn.onclick = function () {
+        try {
+          global.location.reload();
+        } catch (e) {
+          global.location.href = global.location.href.split('#')[0];
+        }
+      };
+    }
+    try {
+      var sk = document.getElementById('skeleton');
+      if (sk) sk.style.display = 'none';
+    } catch (e2) {}
+  }
+
+  function inspectUnauthorized(url, res) {
+    if (!res || res.status !== 401 || !webappApiUrl(url)) return;
+    var h = '';
+    try {
+      h = res.headers.get(HDR) || '';
+    } catch (e) {
+      h = '';
+    }
+    if (h === '1') {
+      showRecoverableOverlay();
+      return;
+    }
+    var ct = (res.headers.get('content-type') || '').toLowerCase();
+    if (ct.indexOf('application/json') === -1) return;
+    res
+      .clone()
+      .json()
+      .then(function (body) {
+        var det = body && body.detail;
+        var ds = typeof det === 'string' ? det : '';
+        if (LEGACY_AUTH_DETAIL_EN.test(ds) || ds === 'Что-то пошло не так') showRecoverableOverlay();
+      })
+      .catch(function () {});
+  }
+
+  function installFetchGuard() {
+    if (fetchGuardInstalled) return;
+    fetchGuardInstalled = true;
+    var orig = global.fetch;
+    global.fetch = function (input, init) {
+      var url = '';
+      try {
+        if (typeof input === 'string') url = input;
+        else if (input && typeof input.url === 'string') url = input.url;
+      } catch (e) {
+        url = '';
+      }
+      return orig.apply(this, arguments).then(function (res) {
+        inspectUnauthorized(url, res);
+        return res;
+      });
+    };
+  }
+
+  global.MiniAppErrorUi = {
+    humanizeDetail: humanizeDetail,
+    showRecoverableOverlay: showRecoverableOverlay,
+    installFetchGuard: installFetchGuard,
+  };
+
+  installFetchGuard();
+})(window);

@@ -279,7 +279,7 @@ async def issue_pass_to_client(
         text("""
             SELECT 1 FROM bookings b
             WHERE b.trainer_id = :tid AND b.client_id = :cid
-              AND b.status NOT IN ('cancelled', 'declined')
+              AND b.status NOT IN ('cancelled', 'declined', 'trainer_removed')
             LIMIT 1
         """),
         {"tid": trainer_id, "cid": client_id},

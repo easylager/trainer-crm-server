@@ -374,6 +374,38 @@ class ClientTrainerEdgeRepository:
         )
         return [_row_to_dict(row) for row in r.fetchall()]
 
+    async def recompute_completed_booking_stats_for_global_edge(
+        self,
+        telegram_id: int,
+        trainer_id: int,
+    ) -> None:
+        """
+        Reset completed_count / last_completed_at from live bookings for the global edge row only.
+        Used after a trainer soft-removes a past booking so catalog signals stay consistent.
+        """
+        await self._s.execute(
+            text("""
+                UPDATE client_trainer_edges AS e SET
+                    completed_count = COALESCE(src.cnt, 0),
+                    last_completed_at = src.last_at
+                FROM (
+                    SELECT
+                        COUNT(*) FILTER (WHERE b.status = 'completed')::int AS cnt,
+                        MAX(b.created_at) FILTER (WHERE b.status = 'completed') AS last_at
+                    FROM bookings b
+                    INNER JOIN clients c ON c.id = b.client_id
+                    WHERE c.telegram_id = :tg
+                      AND b.trainer_id = :tid
+                      AND NOT b.is_sandbox
+                ) AS src
+                WHERE e.telegram_id = :tg
+                  AND e.trainer_id = :tid
+                  AND e.context_type IS NULL
+                  AND e.context_id IS NULL
+            """),
+            {"tg": telegram_id, "tid": trainer_id},
+        )
+
     async def clear_slot_subscriptions(self, trainer_id: int) -> int:
         """
         Bulk-clear notify_when_slots for all subscribers of a trainer after sending notifications.

@@ -1648,6 +1648,120 @@ async def test_trainer_hub_fill_slots_invites_prefers_clients_without_upcoming(
 
 
 @pytest.mark.asyncio
+async def test_trainer_hub_fill_slots_invites_include_with_upcoming_lists_all_with_telegram(
+    app_use_test_db,
+    db_session,
+) -> None:
+    """Full hub modal: include_with_upcoming returns clients with and without future sessions, ranked."""
+    tg = _fresh_trainer_telegram_id()
+    r = await db_session.execute(text("INSERT INTO trainers (status) VALUES ('active') RETURNING id"))
+    tid = r.fetchone()[0]
+    await db_session.execute(
+        text("UPDATE trainers SET telegram_id = :tg WHERE id = :id"),
+        {"tg": tg, "id": tid},
+    )
+    await db_session.execute(
+        text(
+            "INSERT INTO trainer_profiles (trainer_id, first_name, last_name, age) "
+            "VALUES (:tid, 'Inc', 'Up', 30)"
+        ),
+        {"tid": tid},
+    )
+    svc_name = "IncUp " + uuid.uuid4().hex[:8]
+    r_service = await db_session.execute(
+        text("INSERT INTO services (name) VALUES (:name) RETURNING id"),
+        {"name": svc_name},
+    )
+    service_id = r_service.fetchone()[0]
+    await db_session.execute(
+        text(
+            "INSERT INTO trainer_services (trainer_id, service_id, price_cents) VALUES (:tid, :sid, 5000)"
+        ),
+        {"tid": tid, "sid": service_id},
+    )
+    r_stale = await db_session.execute(
+        text(
+            """
+            INSERT INTO clients (telegram_id, telegram_username, first_name, phone, phone_normalized)
+            VALUES (:tg, 'stale2_user', 'Stale', '+37500000011', '37500000011')
+            RETURNING id
+            """
+        ),
+        {"tg": _fresh_trainer_telegram_id()},
+    )
+    stale_id = r_stale.fetchone()[0]
+    r_hot = await db_session.execute(
+        text(
+            """
+            INSERT INTO clients (telegram_id, telegram_username, first_name, phone, phone_normalized)
+            VALUES (:tg, 'hot2_user', 'Hot', '+37500000012', '37500000012')
+            RETURNING id
+            """
+        ),
+        {"tg": _fresh_trainer_telegram_id()},
+    )
+    hot_id = r_hot.fetchone()[0]
+    past = date.today() - timedelta(days=10)
+    future = date.today() + timedelta(days=5)
+    r_past = await db_session.execute(
+        text(
+            """
+            INSERT INTO slots (trainer_id, slot_date, start_time, end_time, status)
+            VALUES (:tid, :d, TIME '10:00', TIME '11:00', 'booked')
+            RETURNING id
+            """
+        ),
+        {"tid": tid, "d": past},
+    )
+    slot_past = r_past.fetchone()[0]
+    r_future = await db_session.execute(
+        text(
+            """
+            INSERT INTO slots (trainer_id, slot_date, start_time, end_time, status)
+            VALUES (:tid, :d, TIME '12:00', TIME '13:00', 'booked')
+            RETURNING id
+            """
+        ),
+        {"tid": tid, "d": future},
+    )
+    slot_future = r_future.fetchone()[0]
+    await db_session.execute(
+        text(
+            """
+            INSERT INTO bookings (slot_id, trainer_id, client_id, service_id, status)
+            VALUES (:sid, :tid, :cid, :svc, 'completed')
+            """
+        ),
+        {"sid": slot_past, "tid": tid, "cid": stale_id, "svc": service_id},
+    )
+    await db_session.execute(
+        text(
+            """
+            INSERT INTO bookings (slot_id, trainer_id, client_id, service_id, status, notified_at)
+            VALUES (:sid, :tid, :cid, :svc, 'pending', NOW())
+            """
+        ),
+        {"sid": slot_future, "tid": tid, "cid": hot_id, "svc": service_id},
+    )
+    await db_session.commit()
+
+    with patch_trainer_init_auth(tg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.get(
+                "/api/webapp/trainer/hub/fill-slots-invites?limit=10&include_with_upcoming=true",
+                headers={"X-Telegram-Init-Data": "mock"},
+            )
+    assert resp.status_code == 200
+    clients = (resp.json().get("clients") or [])
+    assert len(clients) == 2
+    ids_ordered = [c["id"] for c in clients]
+    assert stale_id in ids_ordered and hot_id in ids_ordered
+    assert ids_ordered.index(stale_id) < ids_ordered.index(hot_id)
+    assert clients[0].get("has_upcoming_booking") is False
+    assert clients[1].get("has_upcoming_booking") is True
+
+
+@pytest.mark.asyncio
 async def test_trainer_hub_fill_slots_invites_send_posts_to_client_bot(
     app_use_test_db,
     db_session,

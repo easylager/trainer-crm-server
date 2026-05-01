@@ -26,6 +26,7 @@ from src.api.routes.webapp_trainer_profile import router as webapp_trainer_profi
 from src.infrastructure.db import async_session_factory
 from src.api.middleware.http_limits import ApiRateLimitMiddleware, MaxBodySizeMiddleware
 from src.api.middleware.trainer_webapp_benchmark import TrainerWebappBenchmarkMiddleware
+from src.api.miniapp_auth.deps import MINIAPP_AUTH_ERROR_HEADER
 from src.shared.config import Settings
 from src.shared.logging_redact import sanitize_validation_errors_for_log
 from src.shared.sentry_init import init_sentry
@@ -56,6 +57,7 @@ app.add_middleware(
     allow_credentials=False,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
+    expose_headers=[MINIAPP_AUTH_ERROR_HEADER],
 )
 # Epic D: gzip JSON/HTML/CSS/JS when client sends Accept-Encoding: gzip (nginx can add brotli in front).
 # Last added = outermost on the stack — compresses the final response body.
