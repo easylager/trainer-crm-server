@@ -339,7 +339,7 @@
     .tc-hero {
       position: relative;
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       gap: 14px;
       padding: 20px 20px 22px;
       border-radius: 20px;
@@ -368,6 +368,7 @@
       height: 56px;
       border-radius: 50%;
       flex-shrink: 0;
+      margin-top: 3px;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -379,6 +380,16 @@
       box-shadow: 0 4px 16px rgba(245, 166, 35, 0.4);
     }
     .tc-hero-text { flex: 1; min-width: 0; }
+    /* Edit + DM share one column so icons stay on one baseline (not DM centered vs full text stack). */
+    .tc-hero-actions {
+      flex-shrink: 0;
+      display: inline-flex;
+      flex-direction: row;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 1px;
+    }
     /* «Написать» в Telegram — тот же язык, что .hub-slot-msg на хабе */
     .tc-hero-dm {
       position: relative;
@@ -391,7 +402,7 @@
       width: 40px;
       height: 40px;
       padding: 0;
-      margin: 0 0 0 4px;
+      margin: 0;
       border: 1px solid color-mix(in srgb, var(--tg-theme-button-color) 32%, transparent);
       border-radius: 12px;
       background: color-mix(in srgb, var(--tg-theme-button-color) 12%, transparent);
@@ -426,6 +437,90 @@
       letter-spacing: -0.035em;
       line-height: 1.15;
       word-break: break-word;
+    }
+    .tc-name-edit-btn {
+      flex-shrink: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 40px;
+      height: 40px;
+      padding: 0;
+      border-radius: 12px;
+      border: 1px solid color-mix(in srgb, var(--tg-theme-button-color) 32%, transparent);
+      background: color-mix(in srgb, var(--tg-theme-button-color) 12%, transparent);
+      color: var(--tg-theme-text-color);
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      transition: background 0.15s ease, border-color 0.15s ease, transform 0.12s ease;
+    }
+    @media (hover: hover) {
+      .tc-name-edit-btn:hover {
+        background: color-mix(in srgb, var(--tg-theme-button-color) 22%, transparent);
+        border-color: color-mix(in srgb, var(--tg-theme-button-color) 48%, transparent);
+      }
+    }
+    .tc-name-edit-btn:active {
+      transform: scale(0.96);
+    }
+    .tc-name-edit-icon {
+      width: 18px;
+      height: 18px;
+      stroke: currentColor;
+      flex-shrink: 0;
+    }
+    .tc-identity-panel {
+      margin-top: 14px;
+      padding-top: 14px;
+      border-top: 1px solid rgba(245, 166, 35, 0.22);
+    }
+    .tc-identity-fields {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .tc-identity-field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin: 0;
+    }
+    .tc-identity-label {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--tg-theme-hint-color);
+    }
+    .tc-identity-input {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 12px 14px;
+      border-radius: 12px;
+      border: 1px solid rgba(128, 128, 128, 0.18);
+      background: var(--tg-theme-bg-color);
+      color: var(--tg-theme-text-color);
+      font-size: 16px;
+      line-height: 1.35;
+      outline: none;
+    }
+    .tc-identity-input:focus {
+      border-color: color-mix(in srgb, var(--tg-theme-button-color) 55%, transparent);
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--tg-theme-button-color) 22%, transparent);
+    }
+    .tc-identity-input::placeholder {
+      color: var(--tg-theme-hint-color);
+      opacity: 0.85;
+    }
+    .tc-identity-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 16px;
+    }
+    .tc-identity-actions .bd-btn {
+      flex: 1;
+      min-width: 120px;
     }
     .tc-since {
       font-size: 14px;

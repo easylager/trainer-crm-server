@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.api.deps import get_session
 from src.api.miniapp_auth import MiniAppPrincipal, client_catalog_telegram_key, get_client_miniapp_principal
 from src.api.routes.webapp_client_payloads import client_bookings_days_payload
-from src.api.routes.webapp_client_trainer_graph import (
+from src.application.client_trainer_primary_graph import (
     compute_primary_edge,
     edge_json_with_trainer_hints,
     next_booking_per_trainer,

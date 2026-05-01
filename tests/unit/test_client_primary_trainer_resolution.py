@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from src.api.routes.webapp_client_trainer_graph import compute_primary_edge_meta
+from src.application.client_trainer_primary_graph import compute_primary_edge_meta
 
 
 def test_primary_booking_overrides_saved_and_session() -> None:

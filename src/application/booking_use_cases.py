@@ -1734,6 +1734,7 @@ async def list_trainer_clients(
                 c.phone,
                 c.first_name,
                 c.last_name,
+                c.middle_name,
                 l.last_date,
                 l.last_start,
                 (SELECT MIN(s2.slot_date)
@@ -1760,9 +1761,10 @@ async def list_trainer_clients(
             "phone": row[3] or "",
             "first_name": row[4] or "",
             "last_name": row[5] or "",
-            "last_date": row[6],
-            "last_start": row[7],
-            "first_date": row[8],
+            "middle_name": row[6] or "",
+            "last_date": row[7],
+            "last_start": row[8],
+            "first_date": row[9],
         }
         for row in rows
     ]
@@ -2114,7 +2116,8 @@ async def get_trainer_client_for_card(
               c.telegram_username,
               c.phone,
               c.first_name,
-              c.last_name
+              c.last_name,
+              c.middle_name
             FROM clients c
             WHERE c.id = :cid
             """
@@ -2159,10 +2162,52 @@ async def get_trainer_client_for_card(
         "phone": row[4] or "",
         "first_name": row[5] or "",
         "last_name": row[6] or "",
+        "middle_name": row[7] or "",
         "last_date": d[0] if d else None,
         "last_start": d[1] if d else None,
         "first_date": d[2] if d else None,
     }
+
+
+async def patch_trainer_client_identity_for_card(
+    session: AsyncSession,
+    trainer_id: int,
+    client_id: int,
+    *,
+    updates: dict[str, Any],
+) -> dict | None:
+    """
+    Update client first/middle/last name from trainer CRM card (subset of keys in updates).
+    Empty strings normalize to NULL; values are capped at 64 chars (DB column).
+    """
+    if not await trainer_has_access_to_client(session, trainer_id, client_id):
+        return None
+    norm: dict[str, str | None] = {}
+    for key in ("first_name", "last_name", "middle_name"):
+        if key not in updates:
+            continue
+        raw = updates[key]
+        if raw is None:
+            norm[key] = None
+        elif isinstance(raw, str):
+            s = raw.strip()
+            norm[key] = s[:64] if s else None
+        else:
+            raise ValueError(f"invalid_identity_field:{key}")
+    if not norm:
+        return await get_trainer_client_for_card(session, trainer_id, client_id)
+    assigns = []
+    bind: dict[str, Any] = {"cid": client_id}
+    for key, val in norm.items():
+        pname = "_" + key
+        assigns.append(f"{key} = :{pname}")
+        bind[pname] = val
+    await session.execute(
+        text(f"UPDATE clients SET {', '.join(assigns)}, updated_at = NOW() WHERE id = :cid"),
+        bind,
+    )
+    await session.commit()
+    return await get_trainer_client_for_card(session, trainer_id, client_id)
 
 
 async def get_trainer_client_last_completed_booking_service_defaults(

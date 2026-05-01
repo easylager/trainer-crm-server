@@ -7,7 +7,7 @@ from __future__ import annotations
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.api.routes.webapp_client_trainer_graph import (
+from src.application.client_trainer_primary_graph import (
     compute_primary_edge_meta,
     resolve_primary_catalog_service_id,
 )

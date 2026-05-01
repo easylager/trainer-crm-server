@@ -116,6 +116,19 @@ router = Router(name="trainer")
 _REPLY_KEYBOARD_CLEAR = "\u200b"
 
 
+def _format_trainer_client_row_display_name(client_row: dict | None) -> str:
+    """CRM-style full label: имя, отчество, фамилия (пропуски убираются)."""
+    if not client_row:
+        return "Клиент"
+    parts = [
+        (client_row.get("first_name") or "").strip(),
+        (client_row.get("middle_name") or "").strip(),
+        (client_row.get("last_name") or "").strip(),
+    ]
+    name = " ".join(p for p in parts if p)
+    return name or "Клиент"
+
+
 def _format_expires_ru_from_iso(iso_dt: str | None) -> str:
     """DD.MM.YYYY for subscription API timestamps (UTC ISO)."""
     if not iso_dt or not str(iso_dt).strip():
@@ -1467,7 +1480,7 @@ async def schedule_create_booking_choose_client(callback: CallbackQuery) -> None
     time_str = _format_time(start_time)
     rows: list[list[InlineKeyboardButton]] = []
     for c in clients:
-        name = ((c.get("first_name") or "") + " " + (c.get("last_name") or "")).strip() or "Клиент"
+        name = _format_trainer_client_row_display_name(c)
         rows.append([
             InlineKeyboardButton(
                 text=name,
@@ -1533,9 +1546,7 @@ async def _complete_schedule_create_booking(
     time_str = _format_time(start_time)
     async with async_session_factory() as session:
         client_card = await get_trainer_client_for_card(session, trainer_id, client_id)
-    first_name = (client_card or {}).get("first_name") or ""
-    last_name = (client_card or {}).get("last_name") or ""
-    client_name = f"{first_name} {last_name}".strip() or "Клиент"
+    client_name = _format_trainer_client_row_display_name(client_card)
     client_tg_id_raw = (client_card or {}).get("telegram_id")
     client_tg_id = int(client_tg_id_raw) if client_tg_id_raw else None
 
@@ -1653,10 +1664,7 @@ async def schedule_create_booking_choose_tariff(callback: CallbackQuery) -> None
     date_str = slot_date.strftime("%d.%m") if slot_date and hasattr(slot_date, "strftime") else "—"
     day_str = msg.TRAINER_DAYS[slot_date.weekday()] if slot_date and hasattr(slot_date, "weekday") else ""
     time_str = _format_time(start_time)
-    first_name = (client_card or {}).get("first_name") or ""
-    last_name = (client_card or {}).get("last_name") or ""
-    client_name = f"{first_name} {last_name}".strip() or "Клиент"
-
+    client_name = _format_trainer_client_row_display_name(client_card)
     default_variant_id = int(variants[0]["id"])
     rows: list[list[InlineKeyboardButton]] = []
     for v in variants:
@@ -2131,8 +2139,6 @@ async def on_booking_invite_client_to_bot(callback: CallbackQuery) -> None:
     # Use existing client_id to create a bind token.
     async with async_session_factory() as session:
         client_card = await get_trainer_client_for_card(session, trainer_id, client_id)
-        first_name = (client_card or {}).get("first_name") or ""
-        last_name = (client_card or {}).get("last_name") or ""
         token_uuid = await create_welcome_link_token(
             session,
             trainer_id=trainer_id,
@@ -2150,7 +2156,7 @@ async def on_booking_invite_client_to_bot(callback: CallbackQuery) -> None:
     # Send trainer the deep link.
     await callback.message.answer(
         msg.TRAINER_CLIENT_INVITE_LINK_FOR_TRAINER.format(
-            client_name=html.escape(f"{first_name} {last_name}".strip() or "Клиент"),
+            client_name=html.escape(_format_trainer_client_row_display_name(client_card)),
             deep_link=html.escape(deep_link),
         ),
         parse_mode=ParseMode.HTML,

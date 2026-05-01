@@ -110,6 +110,9 @@
         document.getElementById('detailSection').style.display = 'none';
         state.selectedClientId = null;
         document.body.classList.remove('client-detail-mode');
+        if (typeof renderList === 'function' && !state.clientsListLoading) {
+          renderList();
+        }
         if (headerTitleEl) headerTitleEl.textContent = defaultHeaderTitle || 'Мои клиенты';
         syncTrainerClientsHeaderBack();
       }
@@ -1044,7 +1047,7 @@
           var qLower = q.toLowerCase();
           var digits = q.replace(/\\D/g, '');
           state.filteredClients = pool.filter(function(c) {
-            var name = ((c.first_name || '') + ' ' + (c.last_name || '')).trim().toLowerCase();
+            var name = trainerClientDisplayName(c).toLowerCase();
             var phone = (c.phone || '').toLowerCase();
             var phoneDigits = (c.phone || '').replace(/\\D/g, '');
             return name.indexOf(qLower) !== -1
@@ -1147,9 +1150,23 @@
         var s = (displayName || '').trim();
         if (!s) return '?';
         var parts = s.split(/\s+/).filter(Boolean);
-        if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+        if (parts.length >= 2) {
+          var a = parts[0][0];
+          var b = parts[parts.length - 1][0];
+          return (a + b).toUpperCase();
+        }
         if (parts[0].length >= 2) return parts[0].slice(0, 2).toUpperCase();
         return parts[0][0].toUpperCase();
+      }
+
+      function trainerClientDisplayName(c) {
+        if (!c) return '';
+        var parts = [c.first_name, c.middle_name, c.last_name]
+          .map(function(x) {
+            return (x || '').trim();
+          })
+          .filter(Boolean);
+        return parts.join(' ');
       }
 
       function buildClientsListSkeletonHtml() {
@@ -1247,7 +1264,7 @@
           return;
         }
         var html = state.filteredClients.map(function(c) {
-          var name = ((c.first_name || '') + ' ' + (c.last_name || '')).trim() || 'Клиент';
+          var name = trainerClientDisplayName(c).trim() || 'Клиент';
           var initials = clientInitials(name);
           var phone = c.phone || 'Телефон не указан';
           var lastLabel = c.last_date
@@ -1759,11 +1776,118 @@
         }
       }
 
+      function mergeTrainerClientRowFromCard(cardClient) {
+        var cid = cardClient && cardClient.id;
+        if (cid == null) return null;
+        var ix = state.allClients.findIndex(function(c) {
+          return c.id === cid;
+        });
+        if (ix >= 0) {
+          Object.assign(state.allClients[ix], cardClient);
+          applyFilter();
+          return state.allClients[ix];
+        }
+        return cardClient;
+      }
+
+      function applyTrainerClientDetailHero(c) {
+        if (!c) return;
+        var raw = trainerClientDisplayName(c).trim();
+        var shown = raw || 'Клиент';
+        var h = document.getElementById('tcClientHeroName');
+        var av = document.querySelector('.tc-detail .tc-avatar');
+        if (h) h.textContent = shown;
+        if (av) av.textContent = clientInitials(shown === 'Клиент' && !raw ? '' : shown);
+        var fn = document.getElementById('tcIdFirstName');
+        var ln = document.getElementById('tcIdLastName');
+        var mn = document.getElementById('tcIdMiddleName');
+        if (fn) fn.value = (c.first_name || '').trim();
+        if (ln) ln.value = (c.last_name || '').trim();
+        if (mn) mn.value = (c.middle_name || '').trim();
+      }
+
+      function wireTrainerClientIdentityEditor(clientId) {
+        var toggle = document.getElementById('tcIdentityEditToggle');
+        var panel = document.getElementById('tcIdentityPanel');
+        var cancel = document.getElementById('tcIdentityCancel');
+        var save = document.getElementById('tcIdentitySave');
+        if (!toggle || !panel) return;
+        function closePanel() {
+          panel.hidden = true;
+          toggle.setAttribute('aria-expanded', 'false');
+        }
+        function openPanel() {
+          panel.hidden = false;
+          toggle.setAttribute('aria-expanded', 'true');
+          var fn = document.getElementById('tcIdFirstName');
+          if (fn) fn.focus();
+        }
+        toggle.addEventListener('click', function(ev) {
+          ev.preventDefault();
+          if (panel.hidden) openPanel();
+          else closePanel();
+        });
+        if (cancel) {
+          cancel.addEventListener('click', function(ev) {
+            ev.preventDefault();
+            var row = state.allClients.find(function(x) {
+              return x.id === clientId;
+            });
+            if (row) applyTrainerClientDetailHero(row);
+            closePanel();
+          });
+        }
+        if (save) {
+          save.addEventListener('click', function(ev) {
+            ev.preventDefault();
+            var fnEl = document.getElementById('tcIdFirstName');
+            var lnEl = document.getElementById('tcIdLastName');
+            var mnEl = document.getElementById('tcIdMiddleName');
+            var body = {
+              first_name: fnEl ? fnEl.value.trim() : '',
+              last_name: lnEl ? lnEl.value.trim() : '',
+              middle_name: mnEl ? mnEl.value.trim() : '',
+            };
+            save.disabled = true;
+            fetch(withInit('/api/webapp/trainer/clients/' + encodeURIComponent(clientId) + '/identity'), {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(body),
+            })
+              .then(function(r) {
+                return r.json().then(function(d) {
+                  if (!r.ok) throw new Error((d && d.detail) || r.statusText || 'Ошибка');
+                  return d;
+                });
+              })
+              .then(function(data) {
+                var cc = data.client;
+                mergeTrainerClientRowFromCard(cc);
+                applyTrainerClientDetailHero(cc);
+                closePanel();
+                showTcToast('ФИО сохранены');
+              })
+              .catch(function(err) {
+                alert(err.message || 'Ошибка');
+              })
+              .finally(function() {
+                save.disabled = false;
+              });
+          });
+        }
+      }
+
       function openClientDetail(id) {
-        var client = state.allClients.find(function(c) { return c.id === id; });
+        var client = state.allClients.find(function(c) {
+          return c.id === id;
+        });
         if (!client) return;
         state.selectedClientId = id;
-        var name = ((client.first_name || '') + ' ' + (client.last_name || '')).trim() || 'Клиент';
+        var displayNameRaw = trainerClientDisplayName(client);
+        var name = displayNameRaw.trim() || 'Клиент';
+        var fn0 = (client.first_name || '').trim();
+        var ln0 = (client.last_name || '').trim();
+        var mn0 = (client.middle_name || '').trim();
         var phone = client.phone || '—';
         var lastLabel = client.last_date
           ? (formatDate(client.last_date) + (client.last_start ? ' ' + formatTime(client.last_start) : ''))
@@ -1780,6 +1904,8 @@
         var ICO_SEND = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>';
         var ICO_MSG_BUBBLE =
           '<svg class="tc-hero-dm-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></svg>';
+        var ICO_PENCIL =
+          '<svg class="tc-name-edit-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg>';
         var canDm = trainerClientCanWriteTelegram(client);
         var heroDmBtn = '';
         if (canDm) {
@@ -1788,15 +1914,42 @@
             ICO_MSG_BUBBLE +
             '</button>';
         }
+        var heroActionsBar =
+          '<div class=\"tc-hero-actions\" role=\"toolbar\" aria-label=\"Действия\">' +
+          '<button type=\"button\" class=\"tc-name-edit-btn\" id=\"tcIdentityEditToggle\" aria-label=\"Редактировать ФИО\" title=\"Редактировать ФИО\" aria-expanded=\"false\">' +
+          ICO_PENCIL +
+          '</button>' +
+          heroDmBtn +
+          '</div>';
         var detail = '' +
           '<div class=\"tc-detail\">' +
           '<div class=\"tc-hero\">' +
             '<div class=\"tc-avatar\" aria-hidden=\"true\">' + escapeHtml(initials) + '</div>' +
             '<div class=\"tc-hero-text\">' +
-              '<h1 class=\"tc-name\">' + escapeHtml(name) + '</h1>' +
+              '<h1 class=\"tc-name\" id=\"tcClientHeroName\">' + escapeHtml(name) + '</h1>' +
+              '<div class=\"tc-identity-panel\" id=\"tcIdentityPanel\" hidden>' +
+                '<div class=\"tc-identity-fields\">' +
+                  '<label class=\"tc-identity-field\"><span class=\"tc-identity-label\">Имя</span>' +
+                  '<input type=\"text\" class=\"tc-identity-input\" id=\"tcIdFirstName\" maxlength=\"64\" autocomplete=\"given-name\" value=\"' +
+                  escapeHtml(fn0) +
+                  '\"></label>' +
+                  '<label class=\"tc-identity-field\"><span class=\"tc-identity-label\">Фамилия</span>' +
+                  '<input type=\"text\" class=\"tc-identity-input\" id=\"tcIdLastName\" maxlength=\"64\" autocomplete=\"family-name\" value=\"' +
+                  escapeHtml(ln0) +
+                  '\"></label>' +
+                  '<label class=\"tc-identity-field\"><span class=\"tc-identity-label\">Отчество</span>' +
+                  '<input type=\"text\" class=\"tc-identity-input\" id=\"tcIdMiddleName\" maxlength=\"64\" autocomplete=\"additional-name\" placeholder=\"Необязательно\" value=\"' +
+                  escapeHtml(mn0) +
+                  '\"></label>' +
+                '</div>' +
+                '<div class=\"tc-identity-actions\">' +
+                  '<button type=\"button\" class=\"bd-btn bd-btn--primary\" id=\"tcIdentitySave\">Сохранить</button>' +
+                  '<button type=\"button\" class=\"bd-btn bd-btn--surface\" id=\"tcIdentityCancel\">Отмена</button>' +
+                '</div>' +
+              '</div>' +
               (firstDateLabel ? '<p class=\"tc-since\">' + escapeHtml(firstDateLabel) + '</p>' : '') +
             '</div>' +
-            heroDmBtn +
+            heroActionsBar +
           '</div>' +
           '<div class=\"tc-stats\">' +
             '<span class=\"tc-stat\"><span class=\"tc-stat-label\">Последнее</span><strong id=\"clientLastLabel\">' + escapeHtml(lastLabel) + '</strong></span>' +
@@ -1873,6 +2026,23 @@
           }
         }
         wireTrainerClientTelegramDms();
+        wireTrainerClientIdentityEditor(id);
+        fetch(withInit('/api/webapp/trainer/clients/' + encodeURIComponent(id) + '/card'))
+          .then(function(r) {
+            return r.json().then(function(d) {
+              if (!r.ok) throw new Error((d && d.detail) || r.statusText || '');
+              return d;
+            });
+          })
+          .then(function(data) {
+            var cc = data && data.client;
+            if (!cc) return;
+            mergeTrainerClientRowFromCard(cc);
+            applyTrainerClientDetailHero(cc);
+          })
+          .catch(function() {
+            /* list snapshot already rendered */
+          });
         if (showBindWelcome) {
           var bindBtn = document.getElementById('btnClientBindWelcome');
           if (bindBtn) {

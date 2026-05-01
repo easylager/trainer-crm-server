@@ -1,7 +1,8 @@
 """
 Pure helpers for client ↔ trainer relationship graph (edges) and hub primary logic.
 
-No FastAPI imports — safe to use from multiple route modules without cycles.
+Lives in application layer so routes and use cases can import without loading ``api.routes`` package
+(which would pull ``webapp`` and cause circular imports with notification_service).
 
 Primary trainer resolution (strict product contract):
   1. Latest booking by slot start time (past or future), from DB bookings — not edge timestamps.

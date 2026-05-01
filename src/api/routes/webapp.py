@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query
 from fastapi.responses import JSONResponse, Response
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
@@ -78,6 +78,7 @@ from src.application.booking_use_cases import (
     list_trainer_clients,
     list_trainer_fill_slots_invite_candidates,
     list_trainer_client_history,
+    patch_trainer_client_identity_for_card,
     resolve_arena_for_client_self_booking,
     get_trainer_primary_arena_resolved,
     get_trainer_slot_for_mass_client_invite,
@@ -304,7 +305,7 @@ from src.api.miniapp_auth.vk_launch_params import vk_launch_display_user_fields
 from src.api.routes.webapp_init_data import (
     strip_client_name_field as _strip_client_name_field,
 )
-from src.api.routes.webapp_client_trainer_graph import (
+from src.application.client_trainer_primary_graph import (
     compute_primary_edge_meta as _compute_primary_edge_meta,
     resolve_primary_catalog_service_id as _resolve_primary_catalog_service_id,
 )
@@ -4646,6 +4647,27 @@ async def get_trainer_clients(
     return {"clients": clients}
 
 
+async def _trainer_miniapp_client_card_enriched_payload(session: AsyncSession, client: dict) -> dict:
+    """Attach freshest telegram username when possible (same as bare card row)."""
+    u_row = {
+        "client_telegram_id": client.get("telegram_id"),
+        "client_telegram_username": (client.get("telegram_username") or "").strip() or None,
+    }
+    if u_row.get("client_telegram_id") is not None:
+        await enrich_booking_dicts_with_client_telegram_usernames(session, [u_row])
+        if u_row.get("client_telegram_username"):
+            client["telegram_username"] = u_row["client_telegram_username"]
+    return {"client": client}
+
+
+class TrainerClientIdentityPatchBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    first_name: str | None = Field(default=None, max_length=64)
+    last_name: str | None = Field(default=None, max_length=64)
+    middle_name: str | None = Field(default=None, max_length=64)
+
+
 @router.get("/trainer/clients/{client_id:int}/card")
 async def get_trainer_client_card(
     client_id: int,
@@ -4659,15 +4681,30 @@ async def get_trainer_client_card(
     client = await get_trainer_client_for_card(session, trainer_id, client_id)
     if not client:
         raise HTTPException(status_code=404, detail="Клиент не найден или нет доступа")
-    u_row = {
-        "client_telegram_id": client.get("telegram_id"),
-        "client_telegram_username": (client.get("telegram_username") or "").strip() or None,
-    }
-    if u_row.get("client_telegram_id") is not None:
-        await enrich_booking_dicts_with_client_telegram_usernames(session, [u_row])
-        if u_row.get("client_telegram_username"):
-            client["telegram_username"] = u_row["client_telegram_username"]
-    return {"client": client}
+    return await _trainer_miniapp_client_card_enriched_payload(session, client)
+
+
+@router.patch("/trainer/clients/{client_id:int}/identity")
+async def patch_trainer_client_identity(
+    client_id: int,
+    body: TrainerClientIdentityPatchBody,
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Trainer-editable CRM identity (имя / фамилия / отчество). Booking forms stay unchanged elsewhere."""
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+    payload = body.model_dump(exclude_unset=True)
+    if not payload:
+        raise HTTPException(status_code=400, detail="Укажите хотя бы одно поле")
+    try:
+        client = await patch_trainer_client_identity_for_card(session, trainer_id, client_id, updates=payload)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Некорректные данные")
+    if not client:
+        raise HTTPException(status_code=404, detail="Клиент не найден или нет доступа")
+    return await _trainer_miniapp_client_card_enriched_payload(session, client)
 
 
 @router.get("/trainer/clients/{client_id:int}/booking-defaults")

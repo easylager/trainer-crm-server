@@ -409,6 +409,7 @@ class Client(Base):
     vk_user_id: Mapped[Optional[int]] = mapped_column(BigInteger, unique=True, nullable=True, index=True)
     telegram_username: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
     first_name: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    middle_name: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     last_name: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     phone: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     phone_normalized: Mapped[Optional[str]] = mapped_column(String(32), nullable=True, index=True)
