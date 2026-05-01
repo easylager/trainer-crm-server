@@ -3368,7 +3368,7 @@
         var step = 15;
         if (kind === 'uniform_step') {
           var s = parseInt(preset.step_minutes, 10);
-          if (!isNaN(s) && s >= 5) step = s;
+          if (!isNaN(s) && [10, 15, 30, 60].indexOf(s) >= 0) step = s;
         }
         for (var m = h0 * 60; m <= h1 * 60; m += step) out.push(m);
         return out;

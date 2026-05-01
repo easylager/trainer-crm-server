@@ -408,7 +408,7 @@
           var step = 15;
           if (kind === 'uniform_step') {
             var s = parseInt(preset.step_minutes, 10);
-            if (!isNaN(s) && s >= 5) step = s;
+            if (!isNaN(s) && [10, 15, 30, 60].indexOf(s) >= 0) step = s;
           }
           for (var mm = h0 * 60; mm <= h1 * 60; mm += step) out.push(mm);
           return out;
@@ -1268,8 +1268,8 @@
           var initials = clientInitials(name);
           var phone = c.phone || 'Телефон не указан';
           var lastLabel = c.last_date
-            ? ('Последнее занятие: ' + formatDate(c.last_date) + (c.last_start ? ' ' + formatTime(c.last_start) : ''))
-            : 'Был(а) на занятии ранее';
+            ? ('Последнее проведённое: ' + formatDate(c.last_date) + (c.last_start ? ' ' + formatTime(c.last_start) : ''))
+            : 'Проведённых занятий ещё не было';
           var needsInvite = c.telegram_id == null || c.telegram_id === '';
           var badge =
             needsInvite

@@ -1707,20 +1707,40 @@ async def list_trainer_clients(
 ) -> list[dict]:
     """
     Distinct clients that have at least one non-cancelled booking with this trainer.
-    Sorted by last session date/time (most recent first).
-    last_date/last_start are from the same booking (the most recent one).
+    Sorted by most recent slot among non-cancelled bookings (activity).
+    last_date/last_start = last *completed* session only; NULL if none yet.
     """
     r = await session.execute(
         text(
             """
-            WITH last_per_client AS (
+            WITH eligible_clients AS (
+                SELECT DISTINCT b.client_id
+                FROM bookings b
+                WHERE b.trainer_id = :tid
+                  AND b.status NOT IN ('cancelled', 'declined', 'trainer_removed')
+            ),
+            last_completed_per_client AS (
                 SELECT
                     b.client_id,
                     s.slot_date AS last_date,
                     s.start_time AS last_start,
                     ROW_NUMBER() OVER (
                         PARTITION BY b.client_id
-                        ORDER BY s.slot_date DESC, s.start_time DESC
+                        ORDER BY s.slot_date DESC, s.start_time DESC NULLS LAST
+                    ) AS rn
+                FROM bookings b
+                JOIN slots s ON s.id = b.slot_id
+                WHERE b.trainer_id = :tid
+                  AND b.status = 'completed'
+            ),
+            recent_booking_per_client AS (
+                SELECT
+                    b.client_id,
+                    s.slot_date AS sort_date,
+                    s.start_time AS sort_start,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY b.client_id
+                        ORDER BY s.slot_date DESC, s.start_time DESC NULLS LAST
                     ) AS rn
                 FROM bookings b
                 JOIN slots s ON s.id = b.slot_id
@@ -1735,18 +1755,19 @@ async def list_trainer_clients(
                 c.first_name,
                 c.last_name,
                 c.middle_name,
-                l.last_date,
-                l.last_start,
+                lc.last_date,
+                lc.last_start,
                 (SELECT MIN(s2.slot_date)
                  FROM bookings b2
                  JOIN slots s2 ON s2.id = b2.slot_id
                  WHERE b2.client_id = c.id
                    AND b2.trainer_id = :tid
                    AND b2.status NOT IN ('cancelled', 'declined', 'trainer_removed')) AS first_date
-            FROM last_per_client l
-            JOIN clients c ON c.id = l.client_id
-            WHERE l.rn = 1
-            ORDER BY l.last_date DESC, l.last_start DESC NULLS LAST
+            FROM eligible_clients e
+            JOIN clients c ON c.id = e.client_id
+            JOIN recent_booking_per_client rb ON rb.client_id = c.id AND rb.rn = 1
+            LEFT JOIN last_completed_per_client lc ON lc.client_id = c.id AND lc.rn = 1
+            ORDER BY rb.sort_date DESC, rb.sort_start DESC NULLS LAST
             LIMIT :lim
             """
         ),
@@ -2093,6 +2114,7 @@ async def get_trainer_client_for_card(
     """
     One client row for the trainer mini-app card when opened by id (e.g. from a training group).
     Allowed if the client has a non-cancelled booking with this trainer or is an active/trial group member.
+    last_date/last_start refer to the latest *completed* session only (NULL if none).
     """
     r = await session.execute(
         text(
@@ -2135,14 +2157,14 @@ async def get_trainer_client_for_card(
                FROM bookings b
                JOIN slots s ON s.id = b.slot_id
                WHERE b.client_id = :cid AND b.trainer_id = :tid
-                 AND b.status NOT IN ('cancelled', 'declined', 'trainer_removed')
+                 AND b.status = 'completed'
                ORDER BY s.slot_date DESC, s.start_time DESC NULLS LAST
                LIMIT 1) AS last_date,
               (SELECT s.start_time
                FROM bookings b
                JOIN slots s ON s.id = b.slot_id
                WHERE b.client_id = :cid AND b.trainer_id = :tid
-                 AND b.status NOT IN ('cancelled', 'declined', 'trainer_removed')
+                 AND b.status = 'completed'
                ORDER BY s.slot_date DESC, s.start_time DESC NULLS LAST
                LIMIT 1) AS last_start,
               (SELECT MIN(s2.slot_date)

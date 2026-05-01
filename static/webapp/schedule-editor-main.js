@@ -2153,7 +2153,7 @@
         return Math.min(480, Math.max(15, d));
       }
 
-      /** Calendar baseline slot without booking — cannot deselect (same as pinned chip). */
+      /** Calendar baseline slot without booking — tap again on chip to remove from day (bookings stay locked). */
       function isMinutePinnedBaseline(m) {
         return (
           state.editMode === 'calendar' &&
@@ -2312,15 +2312,20 @@
         updateTelegramBack();
       }
 
-      /** True if at least one start time was added beyond the slots that existed when opening the day editor. */
+      /** True when calendar day edit has something to save: new starts, removed free baseline slots, or precise slots. */
       function hasCalendarNewSlotSelection() {
         if (state.editMode !== 'calendar' || !state.calendarBaselineStarts) return true;
+        if ((state.preciseSlots || []).length > 0) return true;
         var base = state.calendarBaselineStarts;
         var hasNew = false;
         state.selectedStarts.forEach(function(m) {
           if (!base.has(m)) hasNew = true;
         });
-        return hasNew;
+        var removedFreeBaseline = false;
+        base.forEach(function(m) {
+          if (!state.lockedStarts.has(m) && !state.selectedStarts.has(m)) removedFreeBaseline = true;
+        });
+        return hasNew || removedFreeBaseline;
       }
 
       function updateEditDoneButton() {
@@ -2329,7 +2334,7 @@
         if (state.editMode === 'calendar' && state.calendarBaselineStarts) {
           var ok = hasCalendarNewSlotSelection();
           btn.disabled = !ok;
-          btn.title = ok ? '' : 'Добавьте хотя бы одно новое время';
+          btn.title = ok ? '' : 'Добавьте время, уберите свободный слот или сохраните точное время';
         } else {
           btn.disabled = false;
           btn.title = '';
@@ -4277,8 +4282,8 @@
         document.getElementById('editTitle').textContent = 'Слоты на ' + formatDateKey(slotDate);
         var useCalGroup = slotIntentUseGroupUi();
         document.getElementById('editHint').textContent = useCalGroup
-          ? 'Групповые слоты: «Мест в слоте» и услуга — для новых начал. Уже открытые слоты снять нельзя. «Готово» — после выбора хотя бы одного нового времени.'
-          : 'Индивидуальные слоты. Уже открытые и занятые слоты снять нельзя. «Готово» — после выбора хотя бы одного нового времени.';
+          ? 'Групповые слоты: параметры для новых начал. Свободное окно снимите повторным нажатием на время; со записью — нельзя. «Готово» — когда есть изменения.'
+          : 'Индивидуальные слоты: нажмите на время — добавить или убрать свободное окно. Запись на слот снять нельзя. «Готово» — когда есть изменения.';
         var capWrap = document.getElementById('slotCapacityWrap');
         var capInput = document.getElementById('slotCapacityInput');
         if (capInput) capInput.setAttribute('min', useCalGroup ? '2' : '1');
@@ -4404,7 +4409,7 @@
             } else if (locked) {
               ariaBits.push('нельзя убрать');
             } else if (pinned) {
-              ariaBits.push('открытый слот, не снимается');
+              ariaBits.push('открытый слот, нажмите чтобы убрать');
             }
             var btnAttrs = ' aria-label="' + escapeHtml(ariaBits.join(' · ')) + '"';
             if (blockedByOverlap || locked) {
@@ -4435,7 +4440,7 @@
         }
         grid.innerHTML = html;
         grid.setAttribute('aria-describedby', 'scheduleTimeGridHint');
-        grid.querySelectorAll('.hour-chip:not(.locked):not(.pinned):not(.duration-blocked)').forEach(function(btn) {
+        grid.querySelectorAll('.hour-chip:not(.locked):not(.duration-blocked)').forEach(function(btn) {
           btn.onclick = function() {
             const m = parseInt(btn.dataset.minute, 10);
             if (state.selectedStarts.has(m)) state.selectedStarts.delete(m);
