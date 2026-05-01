@@ -980,18 +980,28 @@
         return getRhythmDismissUntilMs(hintId) > Date.now();
       }
 
-      /** True when schedule-editor создал слоты недавно — один проход резолвера читает флаг (TTL в sessionStorage). */
+      /** True when schedule-editor недавно создал слоты — TTL в localStorage (переживает перезагрузку WebView; sessionStorage Telegram часто чистится). */
       function readTrainerHubFillSlotsRhythmBoostPending() {
         try {
-          var raw = sessionStorage.getItem(HUB_FILL_SLOTS_RHYTHM_BOOST_KEY);
+          var raw = localStorage.getItem(HUB_FILL_SLOTS_RHYTHM_BOOST_KEY);
+          if (!raw) {
+            try {
+              var legacy = sessionStorage.getItem(HUB_FILL_SLOTS_RHYTHM_BOOST_KEY);
+              if (legacy) {
+                localStorage.setItem(HUB_FILL_SLOTS_RHYTHM_BOOST_KEY, legacy);
+                sessionStorage.removeItem(HUB_FILL_SLOTS_RHYTHM_BOOST_KEY);
+                raw = legacy;
+              }
+            } catch (e0) {}
+          }
           if (!raw) return false;
           var ts = parseInt(raw, 10);
           if (isNaN(ts)) {
-            sessionStorage.removeItem(HUB_FILL_SLOTS_RHYTHM_BOOST_KEY);
+            localStorage.removeItem(HUB_FILL_SLOTS_RHYTHM_BOOST_KEY);
             return false;
           }
           if (Date.now() - ts > HUB_FILL_SLOTS_RHYTHM_BOOST_TTL_MS) {
-            sessionStorage.removeItem(HUB_FILL_SLOTS_RHYTHM_BOOST_KEY);
+            localStorage.removeItem(HUB_FILL_SLOTS_RHYTHM_BOOST_KEY);
             return false;
           }
           return true;
@@ -1173,25 +1183,30 @@
             action: 'trainer_clients_invite_bot',
           });
         }
-        var remindThisWeekBoost =
+        var mailingRecipients = fillSlotsCandidates > 0;
+        var mailingRecipientsShow =
+          mailingRecipients &&
+          (availNext > 0 ||
+            (availThis > 0 &&
+              availNext === 0 &&
+              hubFillSlotsRhythmBoostActiveThisResolverPass));
+        /* После сохранения слотов в редакторе: показать «Напомнить» даже если список для рассылки пуст (временно по продукту). */
+        var mailingVacancyAfterNewSlots =
           hubFillSlotsRhythmBoostActiveThisResolverPass &&
-          availThis > 0 &&
-          fillSlotsCandidates > 0 &&
-          availNext === 0;
+          (availNext > 0 || availThis > 0) &&
+          !mailingRecipients;
         if (
           !slotRhythmDeferredForTemplateOnboarding &&
-          fillSlotsCandidates > 0 &&
           !isRhythmHintDismissed('open_loop_free_next') &&
-          (availNext > 0 || remindThisWeekBoost)
+          (mailingRecipientsShow || mailingVacancyAfterNewSlots)
         ) {
           var availRemind = availNext > 0 ? availNext : availThis;
           var remindPri = hubFillSlotsRhythmBoostActiveThisResolverPass
             ? HUB_RHYTHM_FILL_SLOTS_NOTIFY_PRIORITY_BOOST
             : 72;
-          out.push({
-            id: 'open_loop_free_next',
-            priority: remindPri,
-            text:
+          var mailingBody;
+          if (mailingRecipientsShow) {
+            mailingBody =
               (availNext > 0 ? 'На следующей неделе ' : 'На этой неделе ') +
               availRemind +
               ' ' +
@@ -1201,7 +1216,24 @@
                 'свободных слота',
                 'свободных слотов',
               ) +
-              ' — кому из клиентов в боте напомнить о записи? Мы отобрали тех, у кого ещё нет будущей тренировки.',
+              ' — кому из клиентов в боте напомнить о записи? Мы отобрали тех, у кого ещё нет будущей тренировки.';
+          } else {
+            mailingBody =
+              (availNext > 0 ? 'На следующей неделе ' : 'На этой неделе ') +
+              availRemind +
+              ' ' +
+              pluralRu(
+                availRemind,
+                'свободный слот',
+                'свободных слота',
+                'свободных слотов',
+              ) +
+              '. Кому из клиентов в боте напомнить о записи?';
+          }
+          out.push({
+            id: 'open_loop_free_next',
+            priority: remindPri,
+            text: mailingBody,
             ctaLabel: 'Напомнить',
             action: 'fill_slots_invites',
           });
@@ -1210,7 +1242,9 @@
           !slotRhythmDeferredForTemplateOnboarding &&
           availNext > 0 &&
           fillSlotsCandidates === 0 &&
-          !isRhythmHintDismissed('open_loop_free_next_growth')
+          !isRhythmHintDismissed('open_loop_free_next_growth') &&
+          /* Не дублировать «ссылку на запись», если уже показали хинт рассылки после новых слотов. */
+          !(hubFillSlotsRhythmBoostActiveThisResolverPass && availNext > 0)
         ) {
           var growthPri = hubFillSlotsRhythmBoostActiveThisResolverPass
             ? HUB_RHYTHM_FILL_SLOTS_NOTIFY_PRIORITY_BOOST

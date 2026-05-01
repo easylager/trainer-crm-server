@@ -82,11 +82,34 @@
 
       const DAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 
-      /** Must match trainer-home-main.js HUB_FILL_SLOTS_RHYTHM_BOOST_KEY — приоритет хинта «Напомнить». */
+      /** Same key as trainer-home-main.js — localStorage; при каждом сохранении слотов снимаем ×-mute рассылки. */
       const SCHEDULE_EDITOR_HUB_FILL_SLOTS_BOOST_KEY = 'trainer_hub_fill_slots_rhythm_boost_v1';
-      function markScheduleEditorHubFillSlotsRhythmBoost() {
+      function clearTrainerHubRhythmDismissForFillSlotsHints(optTrainerId) {
         try {
-          sessionStorage.setItem(SCHEDULE_EDITOR_HUB_FILL_SLOTS_BOOST_KEY, String(Date.now()));
+          var tid = '';
+          if (optTrainerId != null && optTrainerId !== '' && !isNaN(Number(optTrainerId))) {
+            tid = String(parseInt(String(optTrainerId), 10));
+          } else if (
+            typeof state !== 'undefined' &&
+            state &&
+            state.trainerId != null &&
+            !isNaN(Number(state.trainerId))
+          ) {
+            tid = String(parseInt(String(state.trainerId), 10));
+          }
+          if (!tid) return;
+          localStorage.removeItem('trainer_hub_rhythm_dismiss_v1_' + tid + '_open_loop_free_next');
+          localStorage.removeItem('trainer_hub_rhythm_dismiss_v1_' + tid + '_open_loop_free_next_growth');
+        } catch (e) {}
+      }
+      function markScheduleEditorHubFillSlotsRhythmBoost(optTrainerId) {
+        try {
+          var now = String(Date.now());
+          localStorage.setItem(SCHEDULE_EDITOR_HUB_FILL_SLOTS_BOOST_KEY, now);
+          try {
+            sessionStorage.removeItem(SCHEDULE_EDITOR_HUB_FILL_SLOTS_BOOST_KEY);
+          } catch (e1) {}
+          clearTrainerHubRhythmDismissForFillSlotsHints(optTrainerId);
         } catch (e) {}
       }
 
@@ -4648,7 +4671,7 @@
           .then(function(data) {
             if (data.ok) {
               const n = data.slots_created != null ? data.slots_created : 0;
-              if (n > 0) markScheduleEditorHubFillSlotsRhythmBoost();
+              if (n > 0) markScheduleEditorHubFillSlotsRhythmBoost(data.trainer_id);
               showToast('Шаблон применён. Создано слотов: ' + n, 2800);
               setTimeout(function() {
                 showFirstApplyWeekShareToastIfNeeded(data.trainer_id);
