@@ -24,8 +24,8 @@
       href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=optional"
     />
   </noscript>
-  <link rel="preload" href="schedule-editor-main.js?v=202605026" as="script" />
-  <link rel="stylesheet" href="mini-app-schedule-editor.css?v=20260584" />
+  <link rel="preload" href="schedule-editor-main.js?v=20260603" as="script" />
+  <link rel="stylesheet" href="mini-app-schedule-editor.css?v=20260603" />
   <link rel="stylesheet" href="mini-app-trainer-nav.css?v=20260429" />
 </head>
 <body>
@@ -203,6 +203,13 @@
   <div id="screenEdit" style="display: none;">
     <div class="screen-title" id="editTitle">Время слотов</div>
     <div class="screen-hint" id="editHint">Длительность одна на весь экран; начала отмечайте по сетке ниже (как у основной площадки в профиле).</div>
+
+    <!-- Slot-add mode switcher — only shown for calendar edit, hidden in template mode -->
+    <div id="slotAddModeSwitcher" class="slot-add-mode-switcher" style="display:none;" role="group" aria-label="Способ добавить слот">
+      <button type="button" class="slot-add-mode-btn slot-add-mode-btn--active" id="btnSlotModeGrid">Быстро</button>
+      <button type="button" class="slot-add-mode-btn" id="btnSlotModePrecise">Точное время</button>
+    </div>
+
     <div id="slotDurationWrap" class="slot-flow-panel schedule-edit-duration-panel">
       <div class="slot-flow-field slot-flow-field--wide">
         <label for="slotDurationSelect" class="slot-flow-label">Длительность</label>
@@ -230,6 +237,107 @@
         <div class="schedule-hour-grid" id="hourGrid" role="group" aria-labelledby="scheduleTimeGridLabel" aria-describedby="scheduleTimeGridHint"></div>
       </div>
     </div>
+    <!-- Precise slot entry form — shown when mode=precise (calendar only). -->
+    <!-- Day-glance timeline + smart suggestions + stepper time picker + live preview. -->
+    <div id="preciseSlotForm" class="precise-slot-form" style="display:none;" aria-label="Добавить точный слот">
+
+      <!-- Day-at-a-glance timeline: shows existing slots/bookings + draft preview -->
+      <section class="precise-day-glance" aria-labelledby="preciseDayGlanceTitle">
+        <header class="precise-day-glance__head">
+          <span class="precise-day-glance__eyebrow" id="preciseDayGlanceTitle">День в одном взгляде</span>
+          <span class="precise-day-glance__legend" aria-hidden="true">
+            <span class="precise-day-glance__legend-dot precise-day-glance__legend-dot--free"></span>свободно
+            <span class="precise-day-glance__legend-dot precise-day-glance__legend-dot--slot"></span>слот
+            <span class="precise-day-glance__legend-dot precise-day-glance__legend-dot--booked"></span>запись
+          </span>
+        </header>
+        <div class="precise-day-glance__rail-wrap">
+          <div class="precise-day-glance__rail" id="preciseTimelineRail" role="img" aria-label="Расписание дня"></div>
+          <div class="precise-day-glance__ticks" id="preciseTimelineTicks" aria-hidden="true"></div>
+        </div>
+        <div class="precise-day-glance__suggest-wrap" id="preciseFreeGapsWrap" hidden>
+          <span class="precise-day-glance__suggest-label">Свободно</span>
+          <div class="precise-day-glance__chips" id="preciseFreeGapsList" role="group" aria-label="Подсказки свободных окон"></div>
+        </div>
+      </section>
+
+      <!-- Stepper time picker + duration chips -->
+      <section class="precise-compose" aria-labelledby="preciseComposeTitle">
+        <h4 class="precise-compose__title" id="preciseComposeTitle">Когда и насколько</h4>
+
+        <div class="precise-compose__grid">
+          <div class="precise-stepper-block">
+            <span class="precise-stepper-block__label">Начало</span>
+            <div class="precise-stepper-row">
+              <div class="precise-stepper" data-step-target="hour">
+                <button type="button" class="precise-stepper__btn precise-stepper__btn--up" data-step-dir="up" aria-label="Час +1">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 14 12 8 18 14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </button>
+                <input type="number" id="preciseStartH" class="precise-stepper__value" min="0" max="23" value="8" inputmode="numeric" aria-label="Часы">
+                <button type="button" class="precise-stepper__btn precise-stepper__btn--down" data-step-dir="down" aria-label="Час −1">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 10 12 16 18 10" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </button>
+                <span class="precise-stepper__cap">час</span>
+              </div>
+              <span class="precise-stepper-colon" aria-hidden="true">:</span>
+              <div class="precise-stepper" data-step-target="minute">
+                <button type="button" class="precise-stepper__btn precise-stepper__btn--up" data-step-dir="up" aria-label="Минуты +5">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 14 12 8 18 14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </button>
+                <input type="number" id="preciseStartM" class="precise-stepper__value" min="0" max="59" value="0" inputmode="numeric" aria-label="Минуты">
+                <button type="button" class="precise-stepper__btn precise-stepper__btn--down" data-step-dir="down" aria-label="Минуты −5">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 10 12 16 18 10" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </button>
+                <span class="precise-stepper__cap">мин</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="precise-dur-block">
+            <span class="precise-stepper-block__label">Длительность</span>
+            <div class="precise-dur-chips" id="preciseDurChips" role="group" aria-label="Длительность слота">
+              <button type="button" class="precise-dur-chip" data-dur="30">30</button>
+              <button type="button" class="precise-dur-chip selected" data-dur="45">45</button>
+              <button type="button" class="precise-dur-chip" data-dur="60">60</button>
+              <button type="button" class="precise-dur-chip" data-dur="75">75</button>
+              <button type="button" class="precise-dur-chip" data-dur="90">90</button>
+              <button type="button" class="precise-dur-chip" data-dur="120">120</button>
+              <button type="button" class="precise-dur-chip precise-dur-chip--custom" data-dur="custom">Своё</button>
+            </div>
+            <p class="precise-dur-unit" aria-hidden="true">минут</p>
+            <input type="number" id="preciseDurCustom" class="precise-dur-custom-input" min="15" max="480" inputmode="numeric" placeholder="15–480 минут" style="display:none;" aria-label="Своя длительность в минутах">
+          </div>
+        </div>
+
+        <!-- Live preview pill -->
+        <div class="precise-preview" id="precisePreview" data-status="ok" aria-live="polite">
+          <div class="precise-preview__time">
+            <span class="precise-preview__start" id="precisePreviewStart">08:00</span>
+            <span class="precise-preview__arrow" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="17" y2="12"/><polyline points="13 7 19 12 13 17"/></svg>
+            </span>
+            <span class="precise-preview__end" id="precisePreviewEnd">08:45</span>
+          </div>
+          <div class="precise-preview__meta">
+            <span class="precise-preview__dur" id="precisePreviewDur">45 мин</span>
+            <span class="precise-preview__status" id="precisePreviewStatus">Можно добавить</span>
+          </div>
+        </div>
+
+        <p class="precise-slot-error field-error" id="preciseSlotError" role="alert" hidden></p>
+        <button type="button" class="btn-block btn-primary precise-add-btn" id="btnAddPreciseSlot">
+          <span class="precise-add-btn__icon" aria-hidden="true">＋</span>
+          <span>Добавить слот</span>
+        </button>
+      </section>
+    </div>
+
+    <!-- List of already-added precise slots (visible in both modes when list is non-empty) -->
+    <div id="preciseSlotsAdded" class="precise-slots-added" style="display:none;" aria-live="polite">
+      <p class="slot-flow-label precise-slots-added-title">Добавлено вручную</p>
+      <div id="preciseSlotsAddedList" class="precise-slots-added-list"></div>
+    </div>
+
     <div id="templateCapacityPanel" class="template-cap-panel slot-flow-panel" style="display:none;">
       <div id="templateDefaultCapRow" class="slot-flow-grid" style="margin-bottom:12px;">
         <div class="slot-flow-field">
@@ -559,6 +667,6 @@
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
   <script src="mini-app-trainer-home.js"></script>
-  <script defer src="schedule-editor-main.js?v=202605026"></script>
+  <script defer src="schedule-editor-main.js?v=20260603"></script>
 </body>
 </html>

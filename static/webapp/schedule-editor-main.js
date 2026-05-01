@@ -1463,6 +1463,11 @@
         /** Minutes from midnight (0–1439) for selected slot starts */
         selectedStarts: new Set(),
         lockedStarts: new Set(),
+        /** Precise (off-grid) slots added manually: [{startMinutes, durationMinutes}] */
+        preciseSlots: [],
+        /** 'grid' | 'precise' */
+        slotAddMode: 'grid',
+        preciseDraftDuration: 45,
         applyWeekStart: null,
         /** When true, current/partial week lists Mon… + ended slots (backfill). */
         showPastThisWeek: false,
@@ -1923,6 +1928,25 @@
         return 45;
       }
 
+      /** Most frequent integer in list (tie-break: first among max count); empty → null. */
+      function mostFrequentInt(values) {
+        if (!values || !values.length) return null;
+        var freq = {};
+        values.forEach(function(v) {
+          var k = String(v);
+          freq[k] = (freq[k] || 0) + 1;
+        });
+        var bestKey = String(values[0]);
+        var bestC = 0;
+        Object.keys(freq).forEach(function(k) {
+          if (freq[k] > bestC) {
+            bestC = freq[k];
+            bestKey = k;
+          }
+        });
+        return parseInt(bestKey, 10);
+      }
+
       /** Calendar slot row at this day's start minute (individual flow excludes group-generated rows). */
       function calendarSlotRowByStartMinute(sm) {
         if (state.editMode !== 'calendar' || !state.editDate) return null;
@@ -2032,7 +2056,7 @@
           sub.textContent = 'Допустимые начала задаёт площадка';
         } else if (k === 'uniform_step') {
           var sm = parseInt(p.step_minutes, 10);
-          if (isNaN(sm) || sm < 5) sm = 15;
+          if (isNaN(sm) || sm < 10) sm = 15;
           sub.textContent = 'Слева — час, справа слоты с шагом ' + sm + ' мин';
         } else {
           sub.textContent = 'Слева — час, справа четверти (:00 … :45)';
@@ -2110,7 +2134,7 @@
           }
         } else if (kind === 'uniform_step') {
           var step = parseInt(preset.step_minutes, 10);
-          if (isNaN(step) || step < 5) step = 15;
+          if (isNaN(step) || step < 10) step = 15;
           if ([10, 15, 30, 60].indexOf(step) < 0) step = 15;
           for (var m = h0 * 60; m <= h1 * 60; m += step) {
             out.push(m);
@@ -2132,7 +2156,7 @@
           base = 'Сетка: :' + String(mo).padStart(2, '0') + ' каждый час';
         } else if (k === 'uniform_step') {
           var sm = parseInt(p.step_minutes, 10);
-          if (isNaN(sm) || sm < 5) sm = 15;
+          if (isNaN(sm) || sm < 10) sm = 15;
           base = 'Отметьте начала (шаг ' + sm + ' мин)';
         } else {
           base = 'Отметьте начала (шаг 15 мин)';
@@ -2191,7 +2215,7 @@
 
       /**
        * Start minute overlaps another anchored slot's wall span — not usable as another start for candidateDur.
-       * Excludes overlapping the interval's anchor itself (that's the pillar chip).
+       * Also checks precise off-grid slots so grid chips are visually blocked by them.
        */
       function classifyIntervalConsumptionBlock(candidateSm, candidateDur) {
         var hasBookingOverlap = false;
@@ -2202,6 +2226,11 @@
           if (!intervalsOverlapMin(anchor, anchorDur, candidateSm, candidateDur)) return;
           if (state.lockedStarts.has(anchor)) hasBookingOverlap = true;
           else hasSelectionOverlap = true;
+        });
+        // Precise slots also block grid chips
+        (state.preciseSlots || []).forEach(function(ps) {
+          if (!intervalsOverlapMin(ps.startMinutes, ps.durationMinutes, candidateSm, candidateDur)) return;
+          hasSelectionOverlap = true;
         });
         if (hasBookingOverlap) return 'booking';
         if (hasSelectionOverlap) return 'selection';
@@ -2315,6 +2344,7 @@
       /** True if at least one start time was added beyond the slots that existed when opening the day editor. */
       function hasCalendarNewSlotSelection() {
         if (state.editMode !== 'calendar' || !state.calendarBaselineStarts) return true;
+        if ((state.preciseSlots || []).length > 0) return true;
         var base = state.calendarBaselineStarts;
         var hasNew = false;
         state.selectedStarts.forEach(function(m) {
@@ -2334,6 +2364,575 @@
           btn.disabled = false;
           btn.title = '';
         }
+      }
+
+      // ─── Precise slot mode ────────────────────────────────────────────────────
+      // Stepper-driven time picker + day-glance timeline + free-gap suggestions
+      // + live conflict-aware preview. Designed for single-tap creation of
+      // off-grid slots when the 15-minute «Быстро» grid is too coarse.
+
+      /**
+       * Returns total interval minutes for all grid-selected + precise slots as [start, end] pairs.
+       * Used for cross-mode overlap detection.
+       */
+      function allEditIntervals() {
+        var pairs = [];
+        var gridDur = getEditDurationMinutes();
+        state.selectedStarts.forEach(function(m) {
+          pairs.push([m, m + gridDur]);
+        });
+        (state.preciseSlots || []).forEach(function(ps) {
+          pairs.push([ps.startMinutes, ps.startMinutes + ps.durationMinutes]);
+        });
+        return pairs;
+      }
+
+      /** Check whether a proposed [startM, endM) interval overlaps any existing edit interval. */
+      function preciseIntervalOverlapsAny(startM, endM, skipPreciseIdx) {
+        var gridDur = getEditDurationMinutes();
+        var conflict = null;
+        // Check grid-selected starts
+        state.selectedStarts.forEach(function(m) {
+          if (conflict) return;
+          if (intervalsOverlapMin(m, gridDur, startM, endM - startM)) {
+            conflict = state.lockedStarts.has(m) ? 'booking' : 'grid';
+          }
+        });
+        if (conflict) return conflict;
+        // Check already-added precise slots
+        (state.preciseSlots || []).forEach(function(ps, idx) {
+          if (conflict || idx === skipPreciseIdx) return;
+          if (intervalsOverlapMin(ps.startMinutes, ps.durationMinutes, startM, endM - startM)) {
+            conflict = 'precise';
+          }
+        });
+        // Check booked/locked baseline slots from the day that are not in the grid
+        state.lockedStarts.forEach(function(m) {
+          if (conflict || state.selectedStarts.has(m)) return;
+          if (intervalsOverlapMin(m, gridDur, startM, endM - startM)) conflict = 'booking';
+        });
+        return conflict;
+      }
+
+      function parsePreciseDraftMinutes() {
+        var h = parseInt(document.getElementById('preciseStartH').value, 10);
+        var m = parseInt(document.getElementById('preciseStartM').value, 10);
+        if (isNaN(h) || isNaN(m) || h < 0 || h > 23 || m < 0 || m > 59) return null;
+        return h * 60 + m;
+      }
+
+      function getPreciseDraftDuration() {
+        var chips = document.getElementById('preciseDurChips');
+        if (!chips) return state.preciseDraftDuration || 45;
+        var active = chips.querySelector('.precise-dur-chip.selected');
+        if (!active) return state.preciseDraftDuration || 45;
+        var v = active.dataset.dur;
+        if (v === 'custom') {
+          var ci = parseInt(document.getElementById('preciseDurCustom').value, 10);
+          return (isNaN(ci) || ci < 15) ? 45 : Math.min(480, ci);
+        }
+        return parseInt(v, 10) || 45;
+      }
+
+      /** Visible day window from arena schedule preset (e.g. 06:00–24:00 — endHour exclusive). */
+      function getPreciseDayWindow() {
+        var preset = state.scheduleGridPreset || defaultScheduleGridPreset();
+        var h0 = Math.max(0, Math.min(23, parseInt(preset.hour_start, 10)));
+        if (isNaN(h0)) h0 = 6;
+        var h1 = Math.max(0, Math.min(23, parseInt(preset.hour_end, 10)));
+        if (isNaN(h1)) h1 = 23;
+        if (h1 < h0) { var x = h0; h0 = h1; h1 = x; }
+        var startMin = h0 * 60;
+        var endMin = (h1 + 1) * 60; /* inclusive last hour */
+        if (endMin > 24 * 60) endMin = 24 * 60;
+        return { startMin: startMin, endMin: endMin, hourStart: h0, hourEndIncl: h1 };
+      }
+
+      /**
+       * Collects every "busy" interval that should be visible on the day timeline:
+       * existing booked slots, currently-selected grid slots (will become slots after save),
+       * already-added precise slots. Sorted by start.
+       * kind: 'booked' | 'slot' | 'precise'
+       */
+      function collectPreciseDayBusyIntervals() {
+        if (state.editMode === 'calendar' && state.editDate) {
+          var gridDur = getEditDurationMinutes();
+          var rows = (state.slots || []).filter(function(s) {
+            return s.slot_date === state.editDate && !s.training_group_id;
+          });
+          var byStart = new Map();
+          rows.forEach(function(s) {
+            var sm = parseStartToMinutes(s.start_time);
+            var dur = slotDurationFromRow(s);
+            var occ = (s.active_bookings != null) ? parseInt(s.active_bookings, 10) : 0;
+            var booked = (s.status || '') === 'booked' || occ > 0;
+            byStart.set(sm, { startMin: sm, endMin: sm + dur, kind: booked ? 'booked' : 'slot' });
+          });
+          state.selectedStarts.forEach(function(m) {
+            if (!byStart.has(m)) {
+              byStart.set(m, { startMin: m, endMin: m + gridDur, kind: 'slot' });
+            }
+          });
+          state.lockedStarts.forEach(function(m) {
+            if (!byStart.has(m)) {
+              byStart.set(m, { startMin: m, endMin: m + gridDur, kind: 'booked' });
+            }
+          });
+          var out = Array.from(byStart.values());
+          (state.preciseSlots || []).forEach(function(ps) {
+            out.push({ startMin: ps.startMinutes, endMin: ps.startMinutes + ps.durationMinutes, kind: 'precise' });
+          });
+          out.sort(function(a, b) { return a.startMin - b.startMin || a.endMin - b.endMin; });
+          return out;
+        }
+        if (state.editMode === 'template' && state.editDay != null && !slotIntentUseGroupUi()) {
+          var gridDurT = getEditDurationMinutes();
+          var outT = [];
+          state.selectedStarts.forEach(function(m) {
+            outT.push({ startMin: m, endMin: m + gridDurT, kind: 'slot' });
+          });
+          (state.preciseSlots || []).forEach(function(ps) {
+            outT.push({ startMin: ps.startMinutes, endMin: ps.startMinutes + ps.durationMinutes, kind: 'precise' });
+          });
+          outT.sort(function(a, b) { return a.startMin - b.startMin || a.endMin - b.endMin; });
+          return outT;
+        }
+        return [];
+      }
+
+      /** Merges overlapping busy intervals into a single coverage list — used for free-gap math. */
+      function mergeBusyCoverage(busy) {
+        if (!busy.length) return [];
+        var sorted = busy.slice().sort(function(a, b) { return a.startMin - b.startMin; });
+        var merged = [{ startMin: sorted[0].startMin, endMin: sorted[0].endMin }];
+        for (var i = 1; i < sorted.length; i++) {
+          var last = merged[merged.length - 1];
+          if (sorted[i].startMin <= last.endMin) {
+            if (sorted[i].endMin > last.endMin) last.endMin = sorted[i].endMin;
+          } else {
+            merged.push({ startMin: sorted[i].startMin, endMin: sorted[i].endMin });
+          }
+        }
+        return merged;
+      }
+
+      /**
+       * Free gaps inside the day window: gaps where a 15+ min slot can fit AND not in the past.
+       * Returns sorted list of { startMin, endMin, length }.
+       */
+      function computePreciseFreeGaps(busy, win) {
+        var minLen = 15;
+        var nowGate = state.editDate ? null : 0;
+        var coverage = mergeBusyCoverage(busy);
+        var gaps = [];
+        var cursor = win.startMin;
+        for (var i = 0; i < coverage.length; i++) {
+          var b = coverage[i];
+          if (b.startMin > cursor) gaps.push({ startMin: cursor, endMin: Math.min(b.startMin, win.endMin) });
+          cursor = Math.max(cursor, b.endMin);
+          if (cursor >= win.endMin) break;
+        }
+        if (cursor < win.endMin) gaps.push({ startMin: cursor, endMin: win.endMin });
+        // Drop past-only gaps & enforce min length
+        var out = [];
+        for (var j = 0; j < gaps.length; j++) {
+          var g = gaps[j];
+          if (state.editDate) {
+            // Push start forward to first non-past 5-minute mark
+            var startM = g.startMin;
+            while (startM < g.endMin && isCalendarSlotStartInPast(state.editDate, startM)) startM += 5;
+            if (startM >= g.endMin) continue;
+            g = { startMin: startM, endMin: g.endMin };
+          }
+          var len = g.endMin - g.startMin;
+          if (len < minLen) continue;
+          g.length = len;
+          out.push(g);
+        }
+        return out;
+      }
+
+      /** Renders existing slots/bookings/precise as colored bands on a normalized rail. */
+      function renderPreciseTimelineRail(busy, win) {
+        var rail = document.getElementById('preciseTimelineRail');
+        if (!rail) return;
+        var totalMin = win.endMin - win.startMin;
+        rail.style.setProperty('--precise-rail-hours', String(Math.max(1, Math.round(totalMin / 60))));
+        rail.innerHTML = '';
+        if (totalMin <= 0) return;
+        // Render free gaps as soft green bands first (visual reassurance + tappable)
+        var gaps = computePreciseFreeGaps(busy, win);
+        gaps.forEach(function(g) {
+          var leftPct = ((g.startMin - win.startMin) / totalMin) * 100;
+          var widthPct = ((g.endMin - g.startMin) / totalMin) * 100;
+          if (widthPct < 0.6) return; /* too thin to render meaningfully */
+          var band = document.createElement('button');
+          band.type = 'button';
+          band.className = 'precise-day-glance__band precise-day-glance__band--free';
+          band.style.left = leftPct + '%';
+          band.style.width = widthPct + '%';
+          band.setAttribute('aria-label', 'Свободно с ' + formatMinuteClock(g.startMin) + ' до ' + formatMinuteClock(g.endMin));
+          band.onclick = function() { applyPreciseFreeGapToDraft(g); };
+          rail.appendChild(band);
+        });
+        // Render busy bands on top
+        busy.forEach(function(b) {
+          if (b.endMin <= win.startMin || b.startMin >= win.endMin) return;
+          var s = Math.max(b.startMin, win.startMin);
+          var e = Math.min(b.endMin, win.endMin);
+          var leftPct = ((s - win.startMin) / totalMin) * 100;
+          var widthPct = ((e - s) / totalMin) * 100;
+          if (widthPct < 0.6) return;
+          var band = document.createElement('div');
+          band.className = 'precise-day-glance__band precise-day-glance__band--' +
+            (b.kind === 'booked' ? 'booked' : (b.kind === 'precise' ? 'slot' : 'slot'));
+          band.style.left = leftPct + '%';
+          band.style.width = widthPct + '%';
+          band.title = formatMinuteClock(b.startMin) + '–' + formatMinuteClock(b.endMin);
+          if (widthPct > 9) {
+            var lab = document.createElement('span');
+            lab.className = 'precise-day-glance__band-label';
+            lab.textContent = formatMinuteClock(b.startMin);
+            band.appendChild(lab);
+          }
+          rail.appendChild(band);
+        });
+        // Hour ticks
+        var ticks = document.getElementById('preciseTimelineTicks');
+        if (ticks) {
+          ticks.innerHTML = '';
+          var hourCount = Math.max(2, Math.round(totalMin / 60));
+          var stride = hourCount > 8 ? 3 : (hourCount > 4 ? 2 : 1);
+          var first = Math.ceil(win.startMin / 60);
+          var last = Math.floor(win.endMin / 60);
+          for (var h = first; h <= last; h += stride) {
+            var tick = document.createElement('span');
+            tick.className = 'precise-day-glance__tick';
+            tick.textContent = String(h).padStart(2, '0');
+            ticks.appendChild(tick);
+          }
+        }
+      }
+
+      /** Quick-fill chips for trainer: tap "Свободно с 09:00 (75 мин)" to prefill the form. */
+      function renderPreciseFreeGapChips(gaps) {
+        var wrap = document.getElementById('preciseFreeGapsWrap');
+        var list = document.getElementById('preciseFreeGapsList');
+        if (!wrap || !list) return;
+        list.innerHTML = '';
+        if (!gaps.length) {
+          wrap.hidden = true;
+          return;
+        }
+        var topGaps = gaps.slice(0, 4); /* keep UI tight on phones */
+        topGaps.forEach(function(g) {
+          var chip = document.createElement('button');
+          chip.type = 'button';
+          chip.className = 'precise-day-glance__chip';
+          var lenLabel = g.length >= 120
+            ? 'до ' + formatMinuteClock(g.endMin)
+            : g.length + ' мин';
+          chip.innerHTML =
+            '<span>с ' + formatMinuteClock(g.startMin) + '</span>' +
+            '<span class="precise-day-glance__chip-len">' + lenLabel + '</span>';
+          chip.onclick = function() { applyPreciseFreeGapToDraft(g); };
+          list.appendChild(chip);
+        });
+        wrap.hidden = false;
+      }
+
+      /** Choose a duration that fits the gap, preferring trainer's last selection. */
+      function pickFittingDuration(gapLen) {
+        var preferred = state.preciseDraftDuration || 45;
+        if (gapLen >= preferred) return preferred;
+        var presets = [60, 45, 30, 90, 75, 120];
+        for (var i = 0; i < presets.length; i++) {
+          if (presets[i] <= gapLen) return presets[i];
+        }
+        return Math.max(15, gapLen);
+      }
+
+      function applyPreciseFreeGapToDraft(gap) {
+        var sh = document.getElementById('preciseStartH');
+        var sm = document.getElementById('preciseStartM');
+        if (sh) sh.value = String(Math.floor(gap.startMin / 60));
+        if (sm) sm.value = String(gap.startMin % 60);
+        var dur = pickFittingDuration(gap.length);
+        applyPreciseDuration(dur);
+        updatePrecisePreview();
+      }
+
+      /** Programmatically pick a duration: highlight matching chip, or set custom input. */
+      function applyPreciseDuration(durMin) {
+        var chips = document.getElementById('preciseDurChips');
+        var custInp = document.getElementById('preciseDurCustom');
+        if (!chips) return;
+        var matched = null;
+        chips.querySelectorAll('.precise-dur-chip').forEach(function(b) { b.classList.remove('selected'); });
+        chips.querySelectorAll('.precise-dur-chip[data-dur]').forEach(function(b) {
+          if (matched) return;
+          var v = b.dataset.dur;
+          if (v !== 'custom' && parseInt(v, 10) === durMin) {
+            b.classList.add('selected');
+            matched = b;
+          }
+        });
+        if (!matched) {
+          var customBtn = chips.querySelector('.precise-dur-chip[data-dur="custom"]');
+          if (customBtn) customBtn.classList.add('selected');
+          if (custInp) {
+            custInp.style.display = 'block';
+            custInp.value = String(Math.max(15, Math.min(480, durMin)));
+          }
+        } else if (custInp) {
+          custInp.style.display = 'none';
+        }
+        state.preciseDraftDuration = durMin;
+      }
+
+      /** Centralized validation: returns { status, startMin, endMin, dur, message }. */
+      function evaluatePreciseDraft() {
+        var startM = parsePreciseDraftMinutes();
+        var dur = getPreciseDraftDuration();
+        if (startM == null) {
+          return { status: 'invalid', message: 'Укажите время', dur: dur };
+        }
+        if (isNaN(dur) || dur < 15) {
+          return { status: 'invalid', startMin: startM, message: 'Минимум 15 минут', dur: dur };
+        }
+        if (dur > 480) {
+          return { status: 'invalid', startMin: startM, message: 'Максимум 8 часов', dur: dur };
+        }
+        var endM = startM + dur;
+        if (endM > 24 * 60) {
+          return { status: 'invalid', startMin: startM, endMin: endM, dur: dur, message: 'Выходит за полночь' };
+        }
+        if (state.editMode === 'calendar' && state.editDate && isCalendarSlotStartInPast(state.editDate, startM)) {
+          return { status: 'invalid', startMin: startM, endMin: endM, dur: dur, message: 'Время уже прошло' };
+        }
+        var overlap = preciseIntervalOverlapsAny(startM, endM, -1);
+        if (overlap === 'booking') {
+          return { status: 'conflict', startMin: startM, endMin: endM, dur: dur, message: 'Пересекается с записью' };
+        }
+        if (overlap) {
+          return { status: 'conflict', startMin: startM, endMin: endM, dur: dur, message: 'Пересекается со слотом' };
+        }
+        return { status: 'ok', startMin: startM, endMin: endM, dur: dur, message: 'Можно добавить' };
+      }
+
+      /** Updates preview pill, draft band on the timeline, and disables Add button when invalid. */
+      function updatePrecisePreview() {
+        var ev = evaluatePreciseDraft();
+        var preview = document.getElementById('precisePreview');
+        var startEl = document.getElementById('precisePreviewStart');
+        var endEl = document.getElementById('precisePreviewEnd');
+        var durEl = document.getElementById('precisePreviewDur');
+        var statusEl = document.getElementById('precisePreviewStatus');
+        var addBtn = document.getElementById('btnAddPreciseSlot');
+        if (preview) preview.setAttribute('data-status', ev.status);
+        if (startEl) startEl.textContent = ev.startMin != null ? formatMinuteClock(ev.startMin) : '—:—';
+        if (endEl) endEl.textContent = ev.endMin != null ? formatMinuteClock(ev.endMin) : '—:—';
+        if (durEl) durEl.textContent = (ev.dur && !isNaN(ev.dur)) ? (ev.dur + ' мин') : '—';
+        if (statusEl) statusEl.textContent = ev.message || '';
+        if (addBtn) addBtn.disabled = ev.status !== 'ok';
+        // Inline error stays empty during real-time editing — only on tap of Add (validateAndAddPreciseSlot).
+        setPreciseError('');
+        renderPreciseDraftBand(ev);
+      }
+
+      /** Pulsing band on the timeline for the current draft (red when conflict). */
+      function renderPreciseDraftBand(ev) {
+        var rail = document.getElementById('preciseTimelineRail');
+        if (!rail) return;
+        var existing = rail.querySelector('.precise-day-glance__band--draft');
+        if (existing) existing.remove();
+        if (ev.startMin == null || ev.endMin == null) return;
+        var win = getPreciseDayWindow();
+        if (ev.endMin <= win.startMin || ev.startMin >= win.endMin) return;
+        var totalMin = win.endMin - win.startMin;
+        var s = Math.max(ev.startMin, win.startMin);
+        var e = Math.min(ev.endMin, win.endMin);
+        var leftPct = ((s - win.startMin) / totalMin) * 100;
+        var widthPct = Math.max(1.2, ((e - s) / totalMin) * 100);
+        var band = document.createElement('div');
+        band.className = 'precise-day-glance__band precise-day-glance__band--draft' +
+          (ev.status === 'conflict' ? ' precise-day-glance__band--draft-conflict' : '');
+        band.style.left = leftPct + '%';
+        band.style.width = widthPct + '%';
+        rail.appendChild(band);
+      }
+
+      /** Re-renders whole layout: timeline + chips. Call after busy intervals change. */
+      function renderPreciseLayout() {
+        if (state.slotAddMode !== 'precise') return;
+        if (state.editMode === 'template' && slotIntentUseGroupUi()) return;
+        var win = getPreciseDayWindow();
+        var busy = collectPreciseDayBusyIntervals();
+        renderPreciseTimelineRail(busy, win);
+        var gaps = computePreciseFreeGaps(busy, win);
+        renderPreciseFreeGapChips(gaps);
+        updatePrecisePreview();
+      }
+
+      function renderPreciseSlotsAdded() {
+        var wrap = document.getElementById('preciseSlotsAdded');
+        var list = document.getElementById('preciseSlotsAddedList');
+        if (!wrap || !list) return;
+        var slots = state.preciseSlots || [];
+        wrap.style.display = slots.length ? 'block' : 'none';
+        list.innerHTML = '';
+        slots.forEach(function(ps, idx) {
+          var endM = ps.startMinutes + ps.durationMinutes;
+          var tag = document.createElement('div');
+          tag.className = 'precise-slot-tag';
+          tag.innerHTML =
+            '<span class="precise-slot-tag__time">' +
+            formatMinuteClock(ps.startMinutes) + '–' + formatMinuteClock(endM) +
+            '</span>' +
+            '<span class="precise-slot-tag__dur">' + ps.durationMinutes + ' мин</span>' +
+            '<button type="button" class="precise-slot-tag__remove" data-idx="' + idx + '" aria-label="Удалить слот ' + formatMinuteClock(ps.startMinutes) + '">' +
+            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>' +
+            '</button>';
+          tag.querySelector('.precise-slot-tag__remove').onclick = function() {
+            state.preciseSlots.splice(parseInt(this.dataset.idx, 10), 1);
+            renderPreciseSlotsAdded();
+            renderHourGrid();
+            renderPreciseLayout();
+            updateEditDoneButton();
+          };
+          list.appendChild(tag);
+        });
+      }
+
+      function setPreciseError(msg) {
+        var el = document.getElementById('preciseSlotError');
+        if (!el) return;
+        if (msg) { el.textContent = msg; el.hidden = false; }
+        else { el.textContent = ''; el.hidden = true; }
+      }
+
+      function validateAndAddPreciseSlot() {
+        var ev = evaluatePreciseDraft();
+        if (ev.status !== 'ok') {
+          setPreciseError(ev.message || 'Проверьте время и длительность');
+          return;
+        }
+        if (!state.preciseSlots) state.preciseSlots = [];
+        state.preciseSlots.push({ startMinutes: ev.startMin, durationMinutes: ev.dur });
+        setPreciseError('');
+        renderPreciseSlotsAdded();
+        renderHourGrid();
+        updateEditDoneButton();
+        // Snap start to end of just-added slot — trainers usually add adjacent windows.
+        var sh = document.getElementById('preciseStartH');
+        var smEl = document.getElementById('preciseStartM');
+        var nextStart = Math.min(ev.endMin, 24 * 60 - 15);
+        if (sh) sh.value = String(Math.floor(nextStart / 60) % 24);
+        if (smEl) smEl.value = String(nextStart % 60);
+        renderPreciseLayout();
+      }
+
+      /** Hour ±1 wraps 0–23; Minute ±5 wraps with hour carry — ergonomic for one-thumb use. */
+      function stepPreciseField(target, dir) {
+        var sh = document.getElementById('preciseStartH');
+        var sm = document.getElementById('preciseStartM');
+        if (!sh || !sm) return;
+        var h = parseInt(sh.value, 10);
+        var m = parseInt(sm.value, 10);
+        if (isNaN(h)) h = 8;
+        if (isNaN(m)) m = 0;
+        if (target === 'hour') {
+          h = (h + (dir === 'up' ? 1 : -1) + 24) % 24;
+        } else {
+          var step = 5;
+          var totalMin = h * 60 + m;
+          totalMin = (totalMin + (dir === 'up' ? step : -step) + 24 * 60) % (24 * 60);
+          h = Math.floor(totalMin / 60);
+          m = totalMin % 60;
+        }
+        sh.value = String(h);
+        sm.value = String(m);
+        updatePrecisePreview();
+      }
+
+      function setSlotAddMode(mode) {
+        state.slotAddMode = mode;
+        var btnGrid = document.getElementById('btnSlotModeGrid');
+        var btnPrec = document.getElementById('btnSlotModePrecise');
+        var durationWrap = document.getElementById('slotDurationWrap');
+        var gridSection = document.querySelector('.schedule-time-grid-section');
+        var preciseForm = document.getElementById('preciseSlotForm');
+        if (btnGrid) btnGrid.classList.toggle('slot-add-mode-btn--active', mode === 'grid');
+        if (btnPrec) btnPrec.classList.toggle('slot-add-mode-btn--active', mode === 'precise');
+        var isPrecise = mode === 'precise';
+        if (durationWrap) durationWrap.style.display = isPrecise ? 'none' : '';
+        if (gridSection) gridSection.style.display = isPrecise ? 'none' : '';
+        if (preciseForm) preciseForm.style.display = isPrecise ? 'block' : 'none';
+        setPreciseError('');
+        if (isPrecise) {
+          // Seed start time near the first free gap if available so trainer lands on a sensible default.
+          var win = getPreciseDayWindow();
+          var busy = collectPreciseDayBusyIntervals();
+          var gaps = computePreciseFreeGaps(busy, win);
+          if (gaps.length) {
+            var sh = document.getElementById('preciseStartH');
+            var smEl = document.getElementById('preciseStartM');
+            // Honor any value the trainer already typed; otherwise prefill.
+            var typedStart = parsePreciseDraftMinutes();
+            if (typedStart == null || typedStart < win.startMin) {
+              if (sh) sh.value = String(Math.floor(gaps[0].startMin / 60));
+              if (smEl) smEl.value = String(gaps[0].startMin % 60);
+            }
+          }
+          renderPreciseLayout();
+        }
+      }
+
+      function initPreciseFormEvents() {
+        var btnGrid = document.getElementById('btnSlotModeGrid');
+        var btnPrec = document.getElementById('btnSlotModePrecise');
+        if (btnGrid) btnGrid.onclick = function() { setSlotAddMode('grid'); };
+        if (btnPrec) btnPrec.onclick = function() { setSlotAddMode('precise'); };
+
+        var sh = document.getElementById('preciseStartH');
+        var sm = document.getElementById('preciseStartM');
+        var custInp = document.getElementById('preciseDurCustom');
+        if (sh) sh.addEventListener('input', updatePrecisePreview);
+        if (sm) sm.addEventListener('input', updatePrecisePreview);
+        if (custInp) custInp.addEventListener('input', updatePrecisePreview);
+
+        // Stepper buttons: hour ±1 / minute ±5
+        document.querySelectorAll('.precise-stepper').forEach(function(stp) {
+          var target = stp.dataset.stepTarget;
+          stp.querySelectorAll('.precise-stepper__btn').forEach(function(btn) {
+            btn.onclick = function(ev) {
+              ev.preventDefault();
+              stepPreciseField(target, btn.dataset.stepDir);
+            };
+          });
+        });
+
+        var chips = document.getElementById('preciseDurChips');
+        if (chips) {
+          chips.querySelectorAll('.precise-dur-chip').forEach(function(btn) {
+            btn.onclick = function() {
+              chips.querySelectorAll('.precise-dur-chip').forEach(function(b) { b.classList.remove('selected'); });
+              btn.classList.add('selected');
+              if (btn.dataset.dur === 'custom') {
+                if (custInp) custInp.style.display = 'block';
+                var ci = parseInt(custInp ? custInp.value : '', 10);
+                if (!isNaN(ci) && ci >= 15) state.preciseDraftDuration = Math.min(480, ci);
+              } else {
+                if (custInp) custInp.style.display = 'none';
+                state.preciseDraftDuration = parseInt(btn.dataset.dur, 10) || 45;
+              }
+              updatePrecisePreview();
+            };
+          });
+        }
+
+        var addBtn = document.getElementById('btnAddPreciseSlot');
+        if (addBtn) addBtn.onclick = validateAndAddPreciseSlot;
       }
 
       function buildServiceOptionsHtml(selectedId) {
@@ -2467,6 +3066,8 @@
         state.calendarBaselineStarts = null;
         state.selectedStarts = new Set();
         state.lockedStarts = new Set();
+        state.preciseSlots = [];
+        state.slotAddMode = 'grid';
         if (opts.reloadSlots) {
           loadSlots({
             onComplete: function() {
@@ -4147,17 +4748,45 @@
         var allowedTemplateStarts = new Set(
           allowedStartMinutesFromScheduleGridPreset(state.scheduleGridPreset || defaultScheduleGridPreset())
         );
-        state.selectedStarts = new Set(
-          existing
-            .map(function(t) { return parseStartToMinutes(t.start_time); })
-            .filter(function(m) { return allowedTemplateStarts.has(m); })
-        );
+        var useTplGroup = slotIntentUseGroupUi();
+        state.preciseSlots = [];
+        state.slotAddMode = 'grid';
         var durTpl = document.getElementById('slotDurationSelect');
-        if (durTpl) {
-          var dms = existing.map(function(t) { return parseInt(t.duration_minutes, 10); }).filter(function(x) { return !isNaN(x); });
-          var fallbackDur = state.defaultSlotDurationMinutes || 45;
-          var dval = dms.length && dms.every(function(x) { return x === dms[0]; }) ? dms[0] : fallbackDur;
-          durTpl.value = String(normalizeDurationToScheduleSelect(Math.min(480, Math.max(15, dval))));
+        if (useTplGroup) {
+          state.selectedStarts = new Set(
+            existing
+              .map(function(t) { return parseStartToMinutes(t.start_time); })
+              .filter(function(m) { return allowedTemplateStarts.has(m); })
+          );
+          if (durTpl) {
+            var dms = existing.map(function(t) { return parseInt(t.duration_minutes, 10); }).filter(function(x) { return !isNaN(x); });
+            var fallbackDur = state.defaultSlotDurationMinutes || 45;
+            var dval = dms.length && dms.every(function(x) { return x === dms[0]; }) ? dms[0] : fallbackDur;
+            durTpl.value = String(normalizeDurationToScheduleSelect(Math.min(480, Math.max(15, dval))));
+          }
+        } else {
+          var existingIndiv = existing.filter(function(t) {
+            var c = (t.capacity != null) ? parseInt(t.capacity, 10) : 1;
+            return !isNaN(c) && c <= 1;
+          });
+          var gridAlignedRows = existingIndiv.filter(function(t) {
+            return allowedTemplateStarts.has(parseStartToMinutes(t.start_time));
+          });
+          var gridDurs = gridAlignedRows.map(slotDurationFromRow);
+          var gridDefaultDur =
+            gridDurs.length ? mostFrequentInt(gridDurs) : (state.defaultSlotDurationMinutes || 45);
+          gridDefaultDur = Math.min(480, Math.max(15, gridDefaultDur));
+          state.selectedStarts = new Set();
+          existingIndiv.forEach(function(t) {
+            var sm = parseStartToMinutes(t.start_time);
+            var dur = slotDurationFromRow(t);
+            var onGrid = allowedTemplateStarts.has(sm);
+            if (onGrid && dur === gridDefaultDur) state.selectedStarts.add(sm);
+            else state.preciseSlots.push({ startMinutes: sm, durationMinutes: dur });
+          });
+          if (durTpl) {
+            durTpl.value = String(normalizeDurationToScheduleSelect(gridDefaultDur));
+          }
         }
         syncDurationUIFromScheduleGrid();
         var cgw = document.getElementById('calendarGroupServiceWrap');
@@ -4169,12 +4798,11 @@
         document.getElementById('tabCalendar').style.display = 'none';
         document.getElementById('tabTemplate').style.display = 'none';
         document.getElementById('editTitle').textContent = DAYS[day] + ': время в шаблоне';
-        var useTplGroup = slotIntentUseGroupUi();
         document.getElementById('editHint').textContent = useTplGroup
           ? 'Групповые слоты: места, услуга и площадка задаются один раз — для всех отмеченных начал.'
           : scheduleGridFixedDurationMinutes() != null
-            ? 'Индивидуальные слоты. ' + scheduleGridHintSuffix() + ' — «Готово» сохранит шаблон на этот день.'
-            : 'Индивидуальные слоты. ' + scheduleGridHintSuffix() + ' и длительность — «Готово» сохранит шаблон на этот день.';
+            ? 'Индивидуально: вкладка «Быстро» по сетке или «Точное время» вне сетки. ' + scheduleGridHintSuffix() + ' «Готово» сохранит шаблон.'
+            : 'Индивидуально: «Быстро» или «Точное время» с нужной длительностью. ' + scheduleGridHintSuffix() + ' «Готово» сохранит шаблон.';
         var capWrap = document.getElementById('slotCapacityWrap');
         if (capWrap) capWrap.style.display = 'none';
         var tdef = document.getElementById('templateDefaultCapacityInput');
@@ -4193,6 +4821,9 @@
         var tpan = document.getElementById('templateCapacityPanel');
         if (tpan) tpan.style.display = useTplGroup ? 'block' : 'none';
         if (tgar) tgar.style.display = 'none';
+        var tplSwitcher = document.getElementById('slotAddModeSwitcher');
+        if (tplSwitcher) tplSwitcher.style.display = useTplGroup ? 'none' : 'flex';
+        setSlotAddMode('grid');
         document.getElementById('screenEdit').style.display = 'block';
         if (useTplGroup) {
           loadTrainerServicesIfNeeded().then(function() {
@@ -4221,10 +4852,12 @@
             }
             pruneSelectedStartsForOverlap(getEditDurationMinutes());
             renderHourGrid();
+            renderPreciseSlotsAdded();
           });
         } else {
           pruneSelectedStartsForOverlap(getEditDurationMinutes());
           renderHourGrid();
+          renderPreciseSlotsAdded();
         }
         updateTelegramBack();
       }
@@ -4345,9 +4978,20 @@
             if (caw) caw.style.display = 'none';
           }
         }
+        // Reset precise state for this day
+        state.preciseSlots = [];
+        state.slotAddMode = 'grid';
+        // Show mode switcher only for individual calendar slots
+        var switcher = document.getElementById('slotAddModeSwitcher');
+        if (switcher) switcher.style.display = useCalGroup ? 'none' : 'flex';
+        var precForm = document.getElementById('preciseSlotForm');
+        if (precForm) precForm.style.display = 'none';
+        var precAdded = document.getElementById('preciseSlotsAdded');
+        if (precAdded) precAdded.style.display = 'none';
         document.getElementById('screenEdit').style.display = 'block';
         pruneSelectedStartsForOverlap(getEditDurationMinutes());
         renderHourGrid();
+        renderPreciseSlotsAdded();
         updateTelegramBack();
       }
 
@@ -4450,6 +5094,8 @@
         updateEditDoneButton();
       }
 
+      initPreciseFormEvents();
+
       (function wireSlotDurationOverlap() {
         var sel = document.getElementById('slotDurationSelect');
         if (!sel) return;
@@ -4457,6 +5103,7 @@
           var d = getEditDurationMinutes();
           pruneSelectedStartsForOverlap(d);
           renderHourGrid();
+          renderPreciseLayout();
         });
       })();
 
@@ -4503,8 +5150,26 @@
               group_arena_id: groupArenaPayload,
             };
           } else {
-            slotsPayload = startsSorted.map(function(m0) {
-              return { hour: Math.floor(m0 / 60), minute: m0 % 60, capacity: 1 };
+            var precTpl = state.preciseSlots || [];
+            slotsPayload = [];
+            startsSorted.forEach(function(m0) {
+              slotsPayload.push({
+                hour: Math.floor(m0 / 60),
+                minute: m0 % 60,
+                capacity: 1,
+                duration_minutes: durationMinutes,
+              });
+            });
+            precTpl.forEach(function(ps) {
+              slotsPayload.push({
+                hour: Math.floor(ps.startMinutes / 60),
+                minute: ps.startMinutes % 60,
+                capacity: 1,
+                duration_minutes: ps.durationMinutes,
+              });
+            });
+            slotsPayload.sort(function(a, b) {
+              return (a.hour * 60 + a.minute) - (b.hour * 60 + b.minute);
             });
             templateBody = {
               day_of_week: state.editDay,
@@ -4538,12 +5203,26 @@
           } else {
             capacity = 1;
           }
-          var postBody = {
-            slot_date: state.editDate,
-            start_times: startsSorted.map(function(m0) { return formatMinuteClock(m0); }),
-            duration_minutes: durationMinutes,
-            capacity: capacity,
-          };
+          var precSlots = state.preciseSlots || [];
+          var postBody;
+          if (precSlots.length > 0) {
+            // Mixed mode: build slot_entries combining grid starts + precise slots
+            var slotEntries = [];
+            startsSorted.forEach(function(m0) {
+              slotEntries.push({ start_time: formatMinuteClock(m0), duration_minutes: durationMinutes });
+            });
+            precSlots.forEach(function(ps) {
+              slotEntries.push({ start_time: formatMinuteClock(ps.startMinutes), duration_minutes: ps.durationMinutes });
+            });
+            postBody = { slot_date: state.editDate, slot_entries: slotEntries, capacity: capacity };
+          } else {
+            postBody = {
+              slot_date: state.editDate,
+              start_times: startsSorted.map(function(m0) { return formatMinuteClock(m0); }),
+              duration_minutes: durationMinutes,
+              capacity: capacity,
+            };
+          }
           if (slotIntentUseGroupUi() && capacity > 1) {
             var gsel = document.getElementById('calendarGroupServiceSelect');
             var gid = gsel ? parseInt(gsel.value, 10) : NaN;
@@ -4576,14 +5255,14 @@
           })
             .then(function(r) {
               if (r.ok) {
-                // Only count starts added in this session (not slots that were already on the day).
-                var nNew = 0;
+                // Count new grid starts (not in baseline) + all precise slots
+                var nNew = precSlots.length;
                 if (state.calendarBaselineStarts) {
                   startsSorted.forEach(function(m) {
                     if (!state.calendarBaselineStarts.has(m)) nNew++;
                   });
                 } else {
-                  nNew = startsSorted.length;
+                  nNew += startsSorted.length;
                 }
                 if (nNew > 0) markScheduleEditorHubFillSlotsRhythmBoost();
                 var msg =
@@ -4600,6 +5279,8 @@
                 state.calendarBaselineStarts = null;
                 state.selectedStarts = new Set();
                 state.lockedStarts = new Set();
+                state.preciseSlots = [];
+                state.slotAddMode = 'grid';
                 showDayPickScreen();
                 loadSlots();
               } else {

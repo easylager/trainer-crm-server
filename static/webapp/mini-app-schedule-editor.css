@@ -1544,7 +1544,7 @@
           0 2px 8px rgba(0, 0, 0, 0.18);
       }
     }
-    /* One row per clock hour: rail + quarter chips — less visual noise than a single wrap wall */
+    /* One row per clock hour: rail + minute chips (wrap when шаг сетки мелкий, например 10 мин). */
     .schedule-hour-grid {
       display: flex;
       flex-direction: column;
@@ -1593,14 +1593,8 @@
     }
     .schedule-hour-row__chips {
       display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(2.75rem, 1fr));
       gap: 8px;
-    }
-    @media (max-width: 340px) {
-      .schedule-hour-row__chips {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 8px 10px;
-      }
     }
     .hour-chip {
       box-sizing: border-box;
@@ -2634,4 +2628,577 @@
     }
     .se-crm-lock-banner__cta {
       margin: 0;
+    }
+
+    /* ─── Slot-add mode switcher (Быстро / Точное время) ───────────────────── */
+    .slot-add-mode-switcher {
+      display: flex;
+      gap: 0;
+      background: var(--tg-theme-secondary-bg-color);
+      border-radius: 10px;
+      padding: 3px;
+      margin: 0 0 16px;
+    }
+    .slot-add-mode-btn {
+      flex: 1;
+      padding: 9px 12px;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      font-family: inherit;
+      background: transparent;
+      color: var(--tg-theme-hint-color);
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s, box-shadow 0.15s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .slot-add-mode-btn--active {
+      background: var(--tg-theme-bg-color);
+      color: var(--tg-theme-text-color);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.09);
+    }
+
+    /* ─── Precise slot form (redesigned: day-glance + stepper + live preview) ── */
+    .precise-slot-form {
+      margin: 0 0 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    /* ─── Day-at-a-glance timeline ────────────────────────────────────────── */
+    .precise-day-glance {
+      background: color-mix(in srgb, var(--tg-theme-secondary-bg-color) 78%, transparent);
+      border-radius: 14px;
+      padding: 14px 14px 12px;
+      border: 1px solid color-mix(in srgb, var(--tg-theme-hint-color) 14%, transparent);
+    }
+    .precise-day-glance__head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+    .precise-day-glance__eyebrow {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--tg-theme-hint-color);
+    }
+    .precise-day-glance__legend {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--tg-theme-hint-color);
+      letter-spacing: 0.02em;
+    }
+    .precise-day-glance__legend-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 2px;
+      margin-right: 2px;
+      margin-left: 6px;
+    }
+    .precise-day-glance__legend-dot:first-child { margin-left: 0; }
+    .precise-day-glance__legend-dot--free {
+      background: color-mix(in srgb, #34c759 70%, transparent);
+    }
+    .precise-day-glance__legend-dot--slot {
+      background: color-mix(in srgb, var(--app-cta-fill) 50%, transparent);
+    }
+    .precise-day-glance__legend-dot--booked {
+      background: color-mix(in srgb, var(--app-cta-fill) 95%, #000 0%);
+    }
+    .precise-day-glance__rail-wrap {
+      position: relative;
+      margin-bottom: 8px;
+    }
+    .precise-day-glance__rail {
+      position: relative;
+      width: 100%;
+      height: 36px;
+      border-radius: 10px;
+      background:
+        repeating-linear-gradient(
+          90deg,
+          color-mix(in srgb, var(--tg-theme-hint-color) 9%, transparent) 0,
+          color-mix(in srgb, var(--tg-theme-hint-color) 9%, transparent) 1px,
+          transparent 1px,
+          transparent calc(100% / var(--precise-rail-hours, 18))
+        ),
+        color-mix(in srgb, var(--tg-theme-bg-color) 92%, var(--tg-theme-hint-color) 8%);
+      overflow: hidden;
+      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tg-theme-hint-color) 12%, transparent);
+    }
+    .precise-day-glance__band {
+      position: absolute;
+      top: 6px;
+      bottom: 6px;
+      border-radius: 6px;
+      transition: opacity 0.18s, transform 0.18s;
+    }
+    .precise-day-glance__band--free {
+      background: linear-gradient(180deg,
+        color-mix(in srgb, #34c759 22%, transparent),
+        color-mix(in srgb, #34c759 14%, transparent));
+      border: 1px dashed color-mix(in srgb, #34c759 55%, transparent);
+      cursor: pointer;
+    }
+    .precise-day-glance__band--free:active { transform: scaleY(0.94); opacity: 0.85; }
+    .precise-day-glance__band--slot {
+      background: color-mix(in srgb, var(--app-cta-fill) 38%, transparent);
+      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--app-cta-fill) 70%, transparent);
+    }
+    .precise-day-glance__band--booked {
+      background: var(--app-cta-fill);
+      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--app-cta-fill) 90%, #000 12%);
+    }
+    .precise-day-glance__band--draft {
+      background: color-mix(in srgb, var(--tg-theme-text-color) 24%, transparent);
+      border: 2px dashed var(--tg-theme-text-color);
+      box-shadow: 0 0 0 2px color-mix(in srgb, var(--tg-theme-text-color) 22%, transparent);
+      animation: preciseDraftPulse 1.4s ease-in-out infinite;
+      pointer-events: none;
+      z-index: 2;
+    }
+    .precise-day-glance__band--draft.precise-day-glance__band--draft-conflict {
+      background: color-mix(in srgb, #ff3b30 28%, transparent);
+      border-color: #ff3b30;
+      box-shadow: 0 0 0 2px color-mix(in srgb, #ff3b30 30%, transparent);
+    }
+    @keyframes preciseDraftPulse {
+      0%, 100% { opacity: 0.78; }
+      50% { opacity: 1; }
+    }
+    .precise-day-glance__band-label {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 10px;
+      font-weight: 700;
+      color: rgba(0, 0, 0, 0.78);
+      letter-spacing: 0.02em;
+      white-space: nowrap;
+      pointer-events: none;
+      font-variant-numeric: tabular-nums;
+    }
+    .precise-day-glance__band--booked .precise-day-glance__band-label { color: var(--app-cta-text, #1a1a1a); }
+    .precise-day-glance__ticks {
+      position: relative;
+      display: flex;
+      justify-content: space-between;
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--tg-theme-hint-color);
+      font-variant-numeric: tabular-nums;
+      padding: 0 1px;
+      margin-top: 6px;
+    }
+    .precise-day-glance__tick {
+      flex: 0 0 auto;
+    }
+    .precise-day-glance__suggest-wrap {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 6px;
+      padding-top: 10px;
+      border-top: 1px solid color-mix(in srgb, var(--tg-theme-hint-color) 12%, transparent);
+    }
+    .precise-day-glance__suggest-label {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--tg-theme-hint-color);
+      flex-shrink: 0;
+    }
+    .precise-day-glance__chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .precise-day-glance__chip {
+      padding: 7px 11px;
+      border-radius: 999px;
+      border: 1px solid color-mix(in srgb, #34c759 50%, transparent);
+      background: color-mix(in srgb, #34c759 14%, var(--tg-theme-bg-color));
+      color: var(--tg-theme-text-color);
+      font-size: 12px;
+      font-weight: 700;
+      font-family: inherit;
+      font-variant-numeric: tabular-nums;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      transition: transform 0.12s, background 0.12s;
+      display: inline-flex;
+      align-items: baseline;
+      gap: 5px;
+    }
+    .precise-day-glance__chip:active { transform: scale(0.96); }
+    .precise-day-glance__chip-len {
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--tg-theme-hint-color);
+      letter-spacing: 0.02em;
+    }
+    .precise-day-glance__chip--more {
+      border-style: dashed;
+      background: transparent;
+      color: var(--tg-theme-hint-color);
+      border-color: color-mix(in srgb, var(--tg-theme-hint-color) 35%, transparent);
+    }
+
+    /* ─── Compose card (stepper + duration + preview + add button) ────────── */
+    .precise-compose {
+      background: var(--tg-theme-bg-color);
+      border-radius: 14px;
+      padding: 16px 14px 14px;
+      border: 1px solid color-mix(in srgb, var(--tg-theme-hint-color) 12%, transparent);
+      box-shadow: 0 1px 3px color-mix(in srgb, var(--tg-theme-text-color) 5%, transparent);
+    }
+    .precise-compose__title {
+      margin: 0 0 14px;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--tg-theme-hint-color);
+    }
+    .precise-compose__grid {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 18px 16px;
+      align-items: start;
+      margin-bottom: 14px;
+    }
+    /* Phones <460px: stack vertically to avoid cramped chip row next to time stepper. */
+    @media (max-width: 460px) {
+      .precise-compose__grid {
+        grid-template-columns: 1fr;
+        gap: 18px;
+      }
+    }
+    .precise-stepper-block {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      align-items: flex-start;
+    }
+    .precise-stepper-block__label {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--tg-theme-hint-color);
+    }
+    .precise-stepper-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .precise-stepper-colon {
+      font-size: 28px;
+      font-weight: 800;
+      color: color-mix(in srgb, var(--tg-theme-text-color) 50%, transparent);
+      line-height: 1;
+      padding-bottom: 14px;
+      font-variant-numeric: tabular-nums;
+    }
+    .precise-stepper {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      width: 64px;
+    }
+    .precise-stepper__btn {
+      width: 100%;
+      height: 22px;
+      border: none;
+      border-radius: 7px;
+      background: color-mix(in srgb, var(--tg-theme-secondary-bg-color) 85%, transparent);
+      color: var(--tg-theme-hint-color);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+      transition: background 0.12s, color 0.12s, transform 0.08s;
+    }
+    .precise-stepper__btn svg { width: 18px; height: 18px; }
+    .precise-stepper__btn:active {
+      background: var(--app-cta-fill);
+      color: var(--app-cta-text, #1a1a1a);
+      transform: scale(0.96);
+    }
+    .precise-stepper__value {
+      width: 100%;
+      text-align: center;
+      padding: 8px 4px;
+      border-radius: 10px;
+      border: 1.5px solid color-mix(in srgb, var(--tg-theme-hint-color) 22%, transparent);
+      background: color-mix(in srgb, var(--app-cta-fill) 6%, var(--tg-theme-bg-color));
+      color: var(--tg-theme-text-color);
+      font-size: 26px;
+      font-weight: 800;
+      font-family: inherit;
+      font-variant-numeric: tabular-nums;
+      line-height: 1;
+      -moz-appearance: textfield;
+      appearance: textfield;
+      transition: border-color 0.15s, background 0.15s;
+      box-sizing: border-box;
+    }
+    .precise-stepper__value:focus {
+      outline: none;
+      border-color: var(--app-cta-fill);
+      background: var(--tg-theme-bg-color);
+    }
+    .precise-stepper__value::-webkit-inner-spin-button,
+    .precise-stepper__value::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+    .precise-stepper__cap {
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--tg-theme-hint-color);
+      letter-spacing: 0.04em;
+      text-transform: lowercase;
+    }
+
+    /* Duration chips */
+    .precise-dur-block {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      min-width: 0;
+    }
+    .precise-dur-chips {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(0, 1fr));
+      gap: 5px;
+    }
+    @media (max-width: 360px) {
+      .precise-dur-chips {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+      }
+    }
+    .precise-dur-chip {
+      padding: 9px 4px;
+      border-radius: 9px;
+      border: 1.5px solid color-mix(in srgb, var(--tg-theme-hint-color) 22%, transparent);
+      background: color-mix(in srgb, var(--tg-theme-secondary-bg-color) 60%, transparent);
+      color: var(--tg-theme-text-color);
+      font-size: 13px;
+      font-weight: 700;
+      font-family: inherit;
+      font-variant-numeric: tabular-nums;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      transition: background 0.12s, border-color 0.12s, color 0.12s, transform 0.08s;
+      min-width: 0;
+      text-overflow: ellipsis;
+      overflow: hidden;
+      white-space: nowrap;
+    }
+    .precise-dur-chip:active { transform: scale(0.96); }
+    .precise-dur-chip.selected {
+      background: var(--app-cta-fill);
+      border-color: var(--app-cta-fill);
+      color: var(--app-cta-text, #1a1a1a);
+      box-shadow: 0 1px 4px color-mix(in srgb, var(--app-cta-fill) 35%, transparent);
+    }
+    .precise-dur-chip--custom {
+      font-size: 12px;
+    }
+    .precise-dur-unit {
+      margin: -4px 0 0;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--tg-theme-hint-color);
+      letter-spacing: 0.04em;
+    }
+    .precise-dur-custom-input {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1.5px solid color-mix(in srgb, var(--tg-theme-hint-color) 22%, transparent);
+      background: color-mix(in srgb, var(--app-cta-fill) 5%, var(--tg-theme-bg-color));
+      color: var(--tg-theme-text-color);
+      font-size: 15px;
+      font-weight: 600;
+      font-family: inherit;
+      font-variant-numeric: tabular-nums;
+      box-sizing: border-box;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .precise-dur-custom-input:focus {
+      outline: none;
+      border-color: var(--app-cta-fill);
+      background: var(--tg-theme-bg-color);
+    }
+
+    /* Live preview pill */
+    .precise-preview {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px 14px;
+      border-radius: 12px;
+      background: linear-gradient(180deg,
+        color-mix(in srgb, var(--app-cta-fill) 10%, var(--tg-theme-bg-color)),
+        color-mix(in srgb, var(--app-cta-fill) 4%, var(--tg-theme-bg-color)));
+      border: 1.5px solid color-mix(in srgb, var(--app-cta-fill) 35%, transparent);
+      transition: background 0.18s, border-color 0.18s;
+      margin-bottom: 12px;
+    }
+    .precise-preview[data-status="conflict"] {
+      background: color-mix(in srgb, #ff3b30 10%, var(--tg-theme-bg-color));
+      border-color: color-mix(in srgb, #ff3b30 50%, transparent);
+    }
+    .precise-preview[data-status="invalid"] {
+      background: color-mix(in srgb, var(--tg-theme-hint-color) 8%, var(--tg-theme-bg-color));
+      border-color: color-mix(in srgb, var(--tg-theme-hint-color) 28%, transparent);
+    }
+    .precise-preview__time {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 19px;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+      color: var(--tg-theme-text-color);
+      letter-spacing: -0.01em;
+      flex-shrink: 0;
+    }
+    .precise-preview__arrow {
+      color: color-mix(in srgb, var(--app-cta-fill) 90%, transparent);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .precise-preview__arrow svg { width: 22px; height: 22px; }
+    .precise-preview[data-status="conflict"] .precise-preview__arrow { color: #ff3b30; }
+    .precise-preview[data-status="invalid"] .precise-preview__arrow { color: var(--tg-theme-hint-color); }
+    .precise-preview__meta {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 2px;
+      min-width: 0;
+      text-align: right;
+    }
+    .precise-preview__dur {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--tg-theme-hint-color);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      font-variant-numeric: tabular-nums;
+    }
+    .precise-preview__status {
+      font-size: 12px;
+      font-weight: 700;
+      color: color-mix(in srgb, #34c759 88%, var(--tg-theme-text-color) 12%);
+    }
+    .precise-preview[data-status="conflict"] .precise-preview__status {
+      color: #ff3b30;
+    }
+    .precise-preview[data-status="invalid"] .precise-preview__status {
+      color: var(--tg-theme-hint-color);
+    }
+
+    .precise-slot-error {
+      margin: 0 0 10px;
+      font-size: 13px;
+      font-weight: 600;
+      color: #ff3b30;
+    }
+    .precise-add-btn {
+      margin: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .precise-add-btn[disabled] {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+    .precise-add-btn__icon {
+      font-size: 18px;
+      font-weight: 800;
+      line-height: 1;
+    }
+
+    /* ─── Added precise slots list ──────────────────────────────────────────── */
+    .precise-slots-added {
+      margin: 12px 0 16px;
+      background: color-mix(in srgb, var(--tg-theme-secondary-bg-color) 80%, transparent);
+      border-radius: 12px;
+      padding: 12px 12px 8px;
+    }
+    .precise-slots-added-title {
+      margin: 0 0 8px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--tg-theme-hint-color);
+    }
+    .precise-slots-added-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .precise-slot-tag {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--tg-theme-bg-color);
+      border-radius: 8px;
+      padding: 8px 10px 8px 12px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+    }
+    .precise-slot-tag__time {
+      flex: 1;
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--tg-theme-text-color);
+      font-variant-numeric: tabular-nums;
+    }
+    .precise-slot-tag__dur {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--tg-theme-hint-color);
+      white-space: nowrap;
+    }
+    .precise-slot-tag__remove {
+      flex-shrink: 0;
+      width: 28px;
+      height: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: none;
+      border-radius: 6px;
+      background: color-mix(in srgb, var(--tg-theme-hint-color) 12%, transparent);
+      color: var(--tg-theme-hint-color);
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      transition: background 0.12s, color 0.12s;
+    }
+    .precise-slot-tag__remove:active {
+      background: color-mix(in srgb, #ff3b30 20%, transparent);
+      color: #ff3b30;
     }
