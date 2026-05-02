@@ -2749,6 +2749,10 @@
       function normalizePhoneHub(s) {
         var raw = String(s || '').trim();
         if (!raw) return '';
+        if (typeof window.extractNational375Digits === 'function') {
+          var nd = window.extractNational375Digits(raw);
+          if (nd.length === 9) return '+375' + nd;
+        }
         var d = raw.replace(/\D/g, '');
         if (!d) return raw.slice(0, HUB_PHONE_MAX);
         if (d.length === 12 && d.indexOf('375') === 0) return '+' + d;
@@ -2762,25 +2766,6 @@
         if (t.length > HUB_PHONE_MAX) return 'Телефон: не длиннее 32 символов.';
         if (!PHONE_BY_RE_HUB.test(t)) return 'Укажите корректный номер телефона.';
         return null;
-      }
-
-      /**
-       * Hub «новый клиент»: поле без +375 (префикс в UI). Маска XX XXX-XX-XX по мере ввода.
-       * Вставка +37529… или 8029… нормализуется к 9 национальным цифрам.
-       */
-      function formatHubBookNewPhoneInput(ev) {
-        var el = ev && ev.target ? ev.target : ev;
-        if (!el) return;
-        var d = String(el.value || '').replace(/\D/g, '');
-        if (d.indexOf('375') === 0) d = d.slice(3);
-        if (d.indexOf('80') === 0) d = d.slice(2);
-        if (d.length > 9) d = d.slice(0, 9);
-        var f = '';
-        if (d.length > 0) f = d.slice(0, 2);
-        if (d.length > 2) f += ' ' + d.slice(2, 5);
-        if (d.length > 5) f += '-' + d.slice(5, 7);
-        if (d.length > 7) f += '-' + d.slice(7, 9);
-        el.value = f;
       }
 
       function hubToast(msg) {
@@ -2913,7 +2898,9 @@
         if (phoneEl) {
           phoneEl.value = '291111111';
           try {
-            formatHubBookNewPhoneInput({ target: phoneEl });
+            if (typeof window.applyNational375MaskedToInput === 'function') {
+              window.applyNational375MaskedToInput(phoneEl);
+            }
           } catch (eFmt) {}
         }
       }
@@ -3076,6 +3063,8 @@
         var ch = document.getElementById('hubBookStepChoice');
         var ex = document.getElementById('hubBookStepExisting');
         var nw = document.getElementById('hubBookStepNew');
+        var modal = document.getElementById('hubModalBookGroupSlot');
+        if (modal) modal.classList.remove('hub-book-flow-overlay--new-client');
         if (ch) ch.style.display = 'block';
         if (ex) ex.style.display = 'none';
         if (nw) nw.style.display = 'none';
@@ -3863,6 +3852,8 @@
         var bn = document.getElementById('hubBookOptNew');
         if (bn) {
           bn.onclick = function() {
+            var modal = document.getElementById('hubModalBookGroupSlot');
+            if (modal) modal.classList.add('hub-book-flow-overlay--new-client');
             document.getElementById('hubBookStepChoice').style.display = 'none';
             document.getElementById('hubBookStepNew').style.display = 'block';
           };
@@ -3880,9 +3871,10 @@
           };
         }
         var hubPhoneInp = document.getElementById('hubBookNewPhone');
-        if (hubPhoneInp && hubPhoneInp.dataset.byMask !== '1') {
-          hubPhoneInp.dataset.byMask = '1';
-          hubPhoneInp.addEventListener('input', formatHubBookNewPhoneInput);
+        if (hubPhoneInp && hubPhoneInp.dataset.crmNat375Mask !== '1') {
+          if (typeof window.wireNational375PhoneInputMask === 'function') {
+            window.wireNational375PhoneInputMask(hubPhoneInp);
+          }
         }
         var bsearch = document.getElementById('hubBookClientSearch');
         var tmr = null;

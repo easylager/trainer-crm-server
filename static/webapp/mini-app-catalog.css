@@ -1755,6 +1755,10 @@
     #screenBookingForm .catalog-phone-input {
       padding-left: 56px;
       font-variant-numeric: tabular-nums;
+      touch-action: auto;
+      -webkit-user-select: text;
+      user-select: text;
+      -webkit-touch-callout: default;
     }
     .booking-slot-label { font-size: 15px; margin-bottom: 12px; color: var(--tg-theme-hint-color); }
     .booking-service-line {

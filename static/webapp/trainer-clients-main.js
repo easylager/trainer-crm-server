@@ -62,6 +62,8 @@
         inviteWelcomeMeta: null,
         /** Deep link ?focus=invite_bot — list only clients without telegram_id + banner (from hub rhythm hint). */
         focusInviteBot: false,
+        /** Incremented on each history fetch — stale responses after quick-book must not repaint UI. */
+        clientHistoryLoadGen: 0,
       };
 
       function initReturnContextFromQuery() {
@@ -228,7 +230,9 @@
       /** After quick-book, refresh «Следующее» on the open client card without full reload. */
       function refreshClientNextBookingBlock(clientId) {
         if (clientId == null || clientId === '') return;
-        fetch(withInit('/api/webapp/trainer/clients/' + encodeURIComponent(clientId) + '/next-booking'))
+        fetch(withInit('/api/webapp/trainer/clients/' + encodeURIComponent(clientId) + '/next-booking'), {
+          cache: 'no-store',
+        })
           .then(function(r) { return r.json(); })
           .then(function(data) {
             var nextEl = document.getElementById('clientNextBooking');
@@ -253,6 +257,13 @@
               nextEl.textContent = '—';
             }
           });
+      }
+
+      /** History + next booking on open card (after quick-book; avoids duplicate fetch logic). */
+      function refreshClientCardBookingsUi(clientId) {
+        if (clientId == null || clientId === '') return;
+        loadClientHistory(clientId);
+        refreshClientNextBookingBlock(clientId);
       }
 
       (function tcClientQuickBookModule() {
@@ -630,7 +641,7 @@
           if (!wrap || !host) return;
           var sid = qb.bookServiceId;
           var svc = (qb.bookServices || []).filter(function(x) {
-            return x.id === sid;
+            return Number(x.id) === Number(sid);
           })[0];
           var tiers = svc && svc.price_tiers ? svc.price_tiers : [];
           if (tiers.length <= 1) {
@@ -708,6 +719,12 @@
                 return a.is_primary;
               })[0];
               qb.bookArenaId = primary ? primary.id : arenas.length ? arenas[0].id : null;
+              if (defaults.arena_id != null) {
+                var da = parseInt(defaults.arena_id, 10);
+                if (!isNaN(da) && arenas.some(function(a) { return Number(a.id) === da; })) {
+                  qb.bookArenaId = da;
+                }
+              }
       
               var sel = document.getElementById('tcQbProfileServiceSelect');
               if (!sel) return;
@@ -719,9 +736,9 @@
                 sel.appendChild(opt);
               });
               var defSid = defaults.service_id != null ? parseInt(defaults.service_id, 10) : NaN;
-              var picked = qb.bookServices.length ? qb.bookServices[0].id : null;
+              var picked = qb.bookServices.length ? Number(qb.bookServices[0].id) : null;
               if (!isNaN(defSid) && qb.bookServices.some(function(s) {
-                return s.id === defSid;
+                return Number(s.id) === defSid;
               })) {
                 picked = defSid;
               }
@@ -936,9 +953,12 @@
               btn.disabled = true;
               postQuickBooking()
                 .then(function() {
+                  var rid = cid != null && cid !== '' ? cid : state.selectedClientId;
                   closeAll();
                   showTcToast('Запись создана');
-                  refreshClientNextBookingBlock(cid);
+                  if (rid != null && rid !== '') {
+                    refreshClientCardBookingsUi(rid);
+                  }
                 })
                 .catch(function(e) {
                   alert(e.message || 'Ошибка сети');
@@ -1300,15 +1320,19 @@
       }
 
       function loadClientHistory(id) {
+        if (id == null || id === '') return;
+        var gen = ++state.clientHistoryLoadGen;
         var host = document.getElementById('clientHistoryHost');
         var url = '/api/webapp/trainer/clients/' + encodeURIComponent(id) + '/history?limit=10';
         url = withInit(url);
-        fetch(url).then(function(r) {
+        fetch(url, { cache: 'no-store' })
+          .then(function(r) {
           return r.json().then(function(data) {
             if (!r.ok) throw new Error(data.detail || r.statusText);
             return data;
           });
         }).then(function(data) {
+          if (gen !== state.clientHistoryLoadGen) return;
           var items = data.items || [];
           var total = typeof data.total === 'number' ? data.total : items.length;
           var totalWrap = document.getElementById('clientTotalWrap');
@@ -1331,8 +1355,10 @@
               var status = (it.status || '').toLowerCase();
               var statusLabel = status === 'completed' ? 'прошло' : status === 'pending' ? 'ожидает' : status === 'confirmed' ? 'подтверждено' : status || '—';
               var serviceName = (it.service_name || '').trim() || '—';
+              var tierLab = (it.price_tier_label || '').trim();
+              var serviceHtml = escapeHtml(serviceName) + (tierLab ? ' · ' + escapeHtml(tierLab) : '');
               var line1 = dateStr + (timeStr ? ' ' + timeStr : '') + ' · ' + place + ' · ' + statusLabel;
-              return '<div class="history-item">' + escapeHtml(line1) + '<div class="history-item-service">' + escapeHtml(serviceName) + '</div></div>';
+              return '<div class="history-item">' + escapeHtml(line1) + '<div class="history-item-service">' + serviceHtml + '</div></div>';
             };
             html += '<div class="history-list">';
             first.forEach(function(it) { html += renderItem(it); });
@@ -1363,6 +1389,7 @@
             };
           }
         }).catch(function() {
+          if (gen !== state.clientHistoryLoadGen) return;
           var totalCount = document.getElementById('clientTotalCount');
           if (totalCount) {
             totalCount.textContent = '—';
@@ -2513,6 +2540,17 @@
       initReturnContextFromQuery();
       initListFocusFromQuery();
       syncTrainerClientsHeaderBack();
+      /* Back-forward cache: returning from schedule-editor can restore stale client HTML. */
+      window.addEventListener('pageshow', function(ev) {
+        if (!ev.persisted) return;
+        try {
+          var ds = document.getElementById('detailSection');
+          if (!ds || ds.style.display === 'none') return;
+          var sid = state.selectedClientId;
+          if (sid == null || sid === '') return;
+          refreshClientCardBookingsUi(sid);
+        } catch (eP) { /* noop */ }
+      });
       if (initData && window.TrainerMiniAppGate) {
         window.TrainerMiniAppGate.fetchAccess(initData)
           .then(function (a) {

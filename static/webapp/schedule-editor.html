@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Расписание</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="mini-app-telegram-chrome.js?v=20260501"></script>
+  <script src="mini-app-telegram-chrome.js?v=202605040"></script>
   <link rel="stylesheet" href="theme.css?v=20260429" />
   <link rel="stylesheet" href="mini-app-components.css?v=20260429" />
   <script src="mini-app-confirm.js"></script>
@@ -24,8 +24,8 @@
       href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=optional"
     />
   </noscript>
-  <link rel="preload" href="schedule-editor-main.js?v=202605027" as="script" />
-  <link rel="stylesheet" href="mini-app-schedule-editor.css?v=202605027" />
+  <link rel="preload" href="schedule-editor-main.js?v=202605041" as="script" />
+  <link rel="stylesheet" href="mini-app-schedule-editor.css?v=202605034" />
   <link rel="stylesheet" href="mini-app-trainer-nav.css?v=20260429" />
 </head>
 <body>
@@ -399,7 +399,7 @@
     <div class="modal book-flow-modal" style="max-width: 420px;">
       <p class="quick-book-kicker">Быстрая запись</p>
       <h3 class="book-modal-title">Услуга и тариф</h3>
-      <p class="book-choice-lead quick-book-lead">Клиент уже выбран. По умолчанию — услуга и тариф с последнего проведённого занятия; при необходимости измените.</p>
+      <p class="book-choice-lead quick-book-lead">Клиент уже выбран. По умолчанию — услуга и тариф с последнего занятия; при необходимости измените.</p>
       <div id="quickBookServiceLoadingWrap" class="quick-book-service-loading-wrap">
         <div id="quickBookServiceSkel" class="quick-book-service-skel" aria-hidden="true">
           <div class="quick-book-service-skel-inner">
@@ -531,7 +531,7 @@
             <label class="book-field-label" for="bookNewPhone">Телефон <span class="book-req" aria-hidden="true">*</span></label>
             <div class="hub-phone-input-wrap">
               <span class="hub-phone-prefix" aria-hidden="true">+375</span>
-              <input type="tel" id="bookNewPhone" class="input hub-phone-input" placeholder="29 123-45-67" autocomplete="tel" inputmode="numeric" maxlength="14" aria-required="true">
+              <input type="text" id="bookNewPhone" class="input hub-phone-input" placeholder="29 123-45-67" autocomplete="tel" inputmode="tel" maxlength="14" aria-required="true">
             </div>
             <label class="book-field-label" for="bookNewFirstName">Имя <span class="book-req" aria-hidden="true">*</span></label>
             <input type="text" id="bookNewFirstName" class="input" placeholder="Иван" autocomplete="given-name" maxlength="120" aria-required="true">
@@ -558,6 +558,6 @@
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
   <script src="mini-app-trainer-home.js"></script>
-  <script defer src="schedule-editor-main.js?v=202605027"></script>
+  <script defer src="schedule-editor-main.js?v=202605041"></script>
 </body>
 </html>

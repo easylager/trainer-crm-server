@@ -1601,30 +1601,18 @@
         });
       }
 
-      /**
-       * Client booking form: national part only in #bookingPhone (+375 shown as prefix in HTML).
-       * Mask XX XXX-XX-XX; POST body uses E.164 +375 + 9 digits.
-       */
-      function formatCatalogBookingPhoneInput(ev) {
-        var el = ev && ev.target ? ev.target : ev;
-        if (!el) return;
-        var d = String(el.value || '').replace(/\D/g, '');
-        if (d.indexOf('375') === 0) d = d.slice(3);
-        if (d.indexOf('80') === 0) d = d.slice(2);
-        if (d.length > 9) d = d.slice(0, 9);
-        var f = '';
-        if (d.length > 0) f = d.slice(0, 2);
-        if (d.length > 2) f += ' ' + d.slice(2, 5);
-        if (d.length > 5) f += '-' + d.slice(5, 7);
-        if (d.length > 7) f += '-' + d.slice(7, 9);
-        el.value = f;
-      }
-
       function normalizeCatalogBookingPhoneFromField(raw) {
-        var d = String(raw || '').replace(/\D/g, '');
-        if (d.indexOf('375') === 0) d = d.slice(3);
-        if (d.indexOf('80') === 0) d = d.slice(2);
-        if (d.length > 9) d = d.slice(0, 9);
+        var d =
+          typeof window.extractNational375Digits === 'function'
+            ? window.extractNational375Digits(raw)
+            : (function () {
+                var x = String(raw || '').replace(/\D/g, '');
+                while (x.length >= 2 && x.slice(0, 2) === '00') x = x.slice(2);
+                while (x.length > 9 && x.indexOf('375') === 0) x = x.slice(3);
+                if (x.indexOf('80') === 0 && x.length >= 9) x = x.slice(2);
+                while (x.length > 9 && x.indexOf('375') === 0) x = x.slice(3);
+                return x.length > 9 ? x.slice(0, 9) : x;
+              })();
         if (d.length !== 9) return '';
         return '+375' + d;
       }
@@ -1637,15 +1625,25 @@
           el.value = '';
           return;
         }
-        var d = raw.replace(/\D/g, '');
-        if (d.indexOf('375') === 0) d = d.slice(3);
-        if (d.indexOf('80') === 0) d = d.slice(2);
+        var d =
+          typeof window.extractNational375Digits === 'function'
+            ? window.extractNational375Digits(raw)
+            : (function () {
+                var x = raw.replace(/\D/g, '');
+                while (x.length >= 2 && x.slice(0, 2) === '00') x = x.slice(2);
+                while (x.length > 9 && x.indexOf('375') === 0) x = x.slice(3);
+                if (x.indexOf('80') === 0 && x.length >= 9) x = x.slice(2);
+                while (x.length > 9 && x.indexOf('375') === 0) x = x.slice(3);
+                return x.length > 9 ? x.slice(0, 9) : x;
+              })();
         if (d.length < 9) {
           el.value = '';
           return;
         }
         el.value = d.slice(0, 9);
-        formatCatalogBookingPhoneInput({ target: el });
+        if (typeof window.applyNational375MaskedToInput === 'function') {
+          window.applyNational375MaskedToInput(el);
+        }
       }
 
       function persistTrainerSelection(trainerId) {
@@ -3212,9 +3210,10 @@
 
       (function wireCatalogBookingPhoneMask() {
         var el = document.getElementById('bookingPhone');
-        if (!el || el.dataset.byMask === '1') return;
-        el.dataset.byMask = '1';
-        el.addEventListener('input', formatCatalogBookingPhoneInput);
+        if (!el || el.dataset.crmNat375Mask === '1') return;
+        if (typeof window.wireNational375PhoneInputMask === 'function') {
+          window.wireNational375PhoneInputMask(el);
+        }
       })();
 
       document.getElementById('btnSubmitBooking').onclick = function() {

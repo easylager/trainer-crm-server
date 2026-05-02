@@ -122,6 +122,8 @@
       const BD_ICONS = {
         service: '<svg class="bd-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><path d="M3.27 6.96L12 12.01l8.73-5.05"/></svg>',
         session: '<svg class="bd-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/></svg>',
+        tariff: '<svg class="bd-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2H2v10l9.29 9.29a1 1 0 001.41 0l6.59-6.59a1 1 0 000-1.41L12 2z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg>',
+        price: '<svg class="bd-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/></svg>',
         comment: '<svg class="bd-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>',
         send: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>',
         check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',
@@ -139,6 +141,15 @@
         if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
         if (parts[0].length >= 2) return parts[0].slice(0, 2).toUpperCase();
         return parts[0][0].toUpperCase();
+      }
+
+      /** Effective booking price from API (kopecks); BYN string for detail rows. */
+      function formatTrainerDetailPriceFromCents(cents) {
+        if (cents == null || cents === '') return '';
+        var n = parseInt(String(cents), 10);
+        if (isNaN(n)) return '';
+        var v = n / 100;
+        return v.toFixed(v % 1 === 0 ? 0 : 2).replace('.', ',') + ' BYN';
       }
       const MONTHS = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
       const MONTHS_GENITIVE = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
@@ -165,28 +176,16 @@
         return null;
       }
 
-      /** National digits only (9) from masked «новый клиент» field; paste +375… / 80… supported. */
+      /** National digits only (9) from masked «новый клиент» field; pasted full MSISDN normalized like chrome helper. */
       function nationalDigitsFromBookNewPhoneField(raw) {
+        if (typeof window.extractNational375Digits === 'function') {
+          return window.extractNational375Digits(raw);
+        }
         var d = String(raw || '').replace(/\D/g, '');
-        if (d.indexOf('375') === 0) d = d.slice(3);
-        if (d.indexOf('80') === 0) d = d.slice(2);
+        while (d.length >= 2 && d.slice(0, 2) === '00') d = d.slice(2);
+        if (d.indexOf('375') === 0 && d.length > 9) d = d.slice(3);
+        else if (d.indexOf('80') === 0 && d.length >= 9) d = d.slice(2);
         return d.length > 9 ? d.slice(0, 9) : d;
-      }
-
-      /** Mask XX XXX-XX-XX while typing (prefix +375 is outside the input). */
-      function formatBookNewPhoneInput(ev) {
-        var el = ev && ev.target ? ev.target : ev;
-        if (!el) return;
-        var d = String(el.value || '').replace(/\D/g, '');
-        if (d.indexOf('375') === 0) d = d.slice(3);
-        if (d.indexOf('80') === 0) d = d.slice(2);
-        if (d.length > 9) d = d.slice(0, 9);
-        var f = '';
-        if (d.length > 0) f = d.slice(0, 2);
-        if (d.length > 2) f += ' ' + d.slice(2, 5);
-        if (d.length > 5) f += '-' + d.slice(5, 7);
-        if (d.length > 7) f += '-' + d.slice(7, 9);
-        el.value = f;
       }
 
       function apiUrl(path) { return '/api/webapp' + path; }
@@ -1181,6 +1180,14 @@
           html += '<div class="bd-rows">';
           html += '<div class="bd-row">' + BD_ICONS.service + '<div class="bd-row-text"><div class="bd-row-label">Услуга · арена</div><div class="bd-row-value">' + escapeHtml(b.services_str || '—') + ' · ' + escapeHtml(b.arenas_str || '—') + '</div></div></div>';
           html += '<div class="bd-row">' + BD_ICONS.session + '<div class="bd-row-text"><div class="bd-row-label">Занятие</div><div class="bd-row-value">' + (b.session_num || 1) + '-е занятие</div></div></div>';
+          var tierLab = (b.price_tier_label || '').trim();
+          if (tierLab) {
+            html += '<div class="bd-row">' + BD_ICONS.tariff + '<div class="bd-row-text"><div class="bd-row-label">Тариф</div><div class="bd-row-value">' + escapeHtml(tierLab) + '</div></div></div>';
+          }
+          var bpc = b.booking_price_cents;
+          if (bpc != null && bpc !== '' && !isNaN(parseInt(String(bpc), 10))) {
+            html += '<div class="bd-row">' + BD_ICONS.price + '<div class="bd-row-text"><div class="bd-row-label">Стоимость</div><div class="bd-row-value">' + escapeHtml(formatTrainerDetailPriceFromCents(bpc)) + '</div></div></div>';
+          }
           if (b.client_comment) {
             html += '<div class="bd-row bd-comment">' + BD_ICONS.comment + '<div class="bd-row-text"><div class="bd-row-label">Комментарий</div><div class="bd-row-value">' + escapeHtml(b.client_comment) + '</div></div></div>';
           }
@@ -1695,6 +1702,8 @@
         state.quickBookProfileClientName = null;
         state.quickBookLockedClientId = null;
         setBookChoicePairPending(false);
+        var bookFlowOv = document.getElementById('modalBookClient');
+        if (bookFlowOv) bookFlowOv.classList.remove('book-flow-overlay--new-client');
       }
 
       function setBookClientSearchSectionVisible(visible) {
@@ -1742,7 +1751,7 @@
           return;
         }
         var sid = state.bookServiceId;
-        var svc = (state.bookServices || []).filter(function(x) { return x.id === sid; })[0];
+        var svc = (state.bookServices || []).filter(function(x) { return Number(x.id) === Number(sid); })[0];
         var tiers = (svc && svc.price_tiers) ? svc.price_tiers : [];
         var wrap = document.getElementById(which === 'existing' ? 'bookPriceTierWrapExisting' : 'bookPriceTierWrapNew');
         var host = document.getElementById(which === 'existing' ? 'bookPriceTierRadiosExisting' : 'bookPriceTierRadiosNew');
@@ -1793,7 +1802,7 @@
         var host = document.getElementById('quickBookProfilePriceTierRadios');
         if (!wrap || !host) return;
         var sid = state.bookServiceId;
-        var svc = (state.bookServices || []).filter(function(x) { return x.id === sid; })[0];
+        var svc = (state.bookServices || []).filter(function(x) { return Number(x.id) === Number(sid); })[0];
         var tiers = (svc && svc.price_tiers) ? svc.price_tiers : [];
         if (tiers.length <= 1) {
           wrap.style.display = 'none';
@@ -3067,6 +3076,23 @@
             var arenas = state.trainerArenas || [];
             var primary = arenas.filter(function(a) { return a.is_primary; })[0];
             state.bookArenaId = primary ? primary.id : (arenas.length ? arenas[0].id : null);
+            var srcBooking =
+              state.rescheduleSourceBookingId &&
+              state.selectedBooking &&
+              Number(state.selectedBooking.id) === Number(state.rescheduleSourceBookingId)
+                ? state.selectedBooking
+                : null;
+            if (srcBooking && srcBooking.arena_id != null) {
+              var ra = parseInt(srcBooking.arena_id, 10);
+              if (!isNaN(ra) && arenas.some(function(a) { return Number(a.id) === ra; })) {
+                state.bookArenaId = ra;
+              }
+            } else if (defaults.arena_id != null) {
+              var da = parseInt(defaults.arena_id, 10);
+              if (!isNaN(da) && arenas.some(function(a) { return Number(a.id) === da; })) {
+                state.bookArenaId = da;
+              }
+            }
             var fn = (defaults.client_first_name || '').trim();
             var ln = (defaults.client_last_name || '').trim();
             state.quickBookProfileClientName = (fn + ' ' + ln).trim() || 'Клиент';
@@ -3084,8 +3110,14 @@
               sel.appendChild(opt);
             });
             var defSid = defaults.service_id != null ? parseInt(defaults.service_id, 10) : NaN;
-            var picked = state.bookServices.length ? state.bookServices[0].id : null;
-            if (!isNaN(defSid) && state.bookServices.some(function(s) { return s.id === defSid; })) {
+            if (srcBooking && srcBooking.service_id != null) {
+              var osid = parseInt(srcBooking.service_id, 10);
+              if (!isNaN(osid) && state.bookServices.some(function(s) { return Number(s.id) === osid; })) {
+                defSid = osid;
+              }
+            }
+            var picked = state.bookServices.length ? Number(state.bookServices[0].id) : null;
+            if (!isNaN(defSid) && state.bookServices.some(function(s) { return Number(s.id) === defSid; })) {
               picked = defSid;
             }
             state.bookServiceId = picked;
@@ -3116,6 +3148,10 @@
             }
 
             var defVid = defaults.service_price_variant_id != null ? parseInt(defaults.service_price_variant_id, 10) : null;
+            if (srcBooking && srcBooking.service_price_variant_id != null) {
+              var ov = parseInt(srcBooking.service_price_variant_id, 10);
+              if (!isNaN(ov)) defVid = ov;
+            }
             syncQuickBookProfilePriceTierRadios(defVid);
 
             updateTelegramBack();
@@ -3182,6 +3218,8 @@
       function runBookModalShellAndFetch() {
         var prefilledClient = !!state.deepLinkClientId;
         state.bookModalStep = prefilledClient ? 'existing' : 'choice';
+        var bookModalOv = document.getElementById('modalBookClient');
+        if (bookModalOv) bookModalOv.classList.remove('book-flow-overlay--new-client');
         document.getElementById('bookClientSearch').value = '';
         document.getElementById('bookNewPhone').value = '';
         document.getElementById('bookNewFirstName').value = '';
@@ -3932,6 +3970,8 @@
 
       document.getElementById('bookOptExisting').onclick = function() {
         if (!state.trainerHasBookClients) return;
+        var bookOvExisting = document.getElementById('modalBookClient');
+        if (bookOvExisting) bookOvExisting.classList.remove('book-flow-overlay--new-client');
         document.getElementById('bookStepChoice').classList.remove('active');
         document.getElementById('bookStepChoice').style.display = 'none';
         document.getElementById('bookStepExisting').style.display = 'block';
@@ -3943,6 +3983,8 @@
         loadBookClients();
       };
       document.getElementById('bookOptNew').onclick = function() {
+        var bookOvNew = document.getElementById('modalBookClient');
+        if (bookOvNew) bookOvNew.classList.add('book-flow-overlay--new-client');
         document.getElementById('bookStepChoice').classList.remove('active');
         document.getElementById('bookStepChoice').style.display = 'none';
         document.getElementById('bookStepNew').style.display = 'block';
@@ -3957,21 +3999,28 @@
         document.getElementById('bookStepChoice').classList.add('active');
       };
       document.getElementById('bookBackFromNew').onclick = function() {
+        var bookOvBack = document.getElementById('modalBookClient');
+        if (bookOvBack) bookOvBack.classList.remove('book-flow-overlay--new-client');
         document.getElementById('bookStepNew').style.display = 'none';
         document.getElementById('bookStepNew').classList.remove('active');
         document.getElementById('bookStepChoice').style.display = 'block';
         document.getElementById('bookStepChoice').classList.add('active');
       };
-      // Tap overlay to close keyboard (don't close modal)
-      document.querySelectorAll('.modal-overlay').forEach(function(overlay) {
-        overlay.addEventListener('click', function(e) {
-          if (e.target !== overlay) return;
-          var el = document.activeElement;
-          if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT')) {
-            el.blur();
-          }
+      // Tap overlay to dismiss keyboard (skip when blur-only phone masking applies — overlay blur fights iOS paste/callout)
+      (function bindModalOverlayDismissKeyboard() {
+        var skipBlur =
+          typeof window.miniAppIsTouchPrimary === 'function' && window.miniAppIsTouchPrimary();
+        document.querySelectorAll('.modal-overlay').forEach(function(overlay) {
+          overlay.addEventListener('click', function(e) {
+            if (e.target !== overlay) return;
+            if (skipBlur) return;
+            var el = document.activeElement;
+            if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT')) {
+              el.blur();
+            }
+          });
         });
-      });
+      })();
       // screenEdit (групповые слоты, «Мест в слоте» и т.д.): тап вне полей — blur в Mini App WebView
       (function bindScreenEditBlurOnOutsidePointer() {
         var screen = document.getElementById('screenEdit');
@@ -4008,9 +4057,10 @@
 
       (function wireBookNewPhoneMask() {
         var el = document.getElementById('bookNewPhone');
-        if (!el || el.dataset.byMask === '1') return;
-        el.dataset.byMask = '1';
-        el.addEventListener('input', formatBookNewPhoneInput);
+        if (!el || el.dataset.crmNat375Mask === '1') return;
+        if (typeof window.wireNational375PhoneInputMask === 'function') {
+          window.wireNational375PhoneInputMask(el);
+        }
       })();
 
       document.getElementById('bookNewSubmit').onclick = function() {

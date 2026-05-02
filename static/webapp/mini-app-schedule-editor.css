@@ -1212,6 +1212,10 @@
       color: var(--tg-theme-text-color);
       -webkit-text-fill-color: var(--tg-theme-text-color);
       caret-color: var(--tg-theme-text-color);
+      touch-action: auto;
+      -webkit-user-select: text;
+      user-select: text;
+      -webkit-touch-callout: default;
     }
     .book-new-client .hub-phone-input-wrap .hub-phone-input:focus,
     .book-new-client .hub-phone-input-wrap .hub-phone-input:focus-visible {
@@ -1799,6 +1803,28 @@
     .modal-overlay.book-flow-overlay {
       align-items: center;
       justify-content: center;
+      overflow-y: hidden;
+      overscroll-behavior: contain;
+    }
+    /* iOS Telegram WebKit: centered sheet jumps during paste/callout — top-pin «новый клиент». */
+    @media (hover: none), (pointer: coarse), (max-width: 640px) {
+      #modalBookClient.modal-overlay.book-flow-overlay.book-flow-overlay--new-client {
+        align-items: flex-start;
+        justify-content: center;
+        padding-top: max(10px, env(safe-area-inset-top));
+        padding-bottom: max(14px, env(safe-area-inset-bottom));
+        -webkit-backdrop-filter: none;
+        backdrop-filter: none;
+      }
+      #modalBookClient.modal-overlay.book-flow-overlay.book-flow-overlay--new-client .modal.book-flow-modal {
+        margin-top: 0;
+        max-height: calc(100vh - 28px);
+      }
+      @supports (height: 100dvh) {
+        #modalBookClient.modal-overlay.book-flow-overlay.book-flow-overlay--new-client .modal.book-flow-modal {
+          max-height: calc(100dvh - 28px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+        }
+      }
     }
     .modal {
       background: #FFFBEB !important;
@@ -1816,6 +1842,7 @@
       padding: 22px 22px 20px;
       border-radius: 22px;
       overflow-x: hidden;
+      overscroll-behavior-y: contain;
       box-shadow:
         0 0 0 1px rgba(247, 166, 0, 0.14),
         0 24px 48px -12px rgba(0, 0, 0, 0.28);

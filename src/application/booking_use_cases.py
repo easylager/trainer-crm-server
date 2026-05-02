@@ -1383,7 +1383,8 @@ async def get_trainer_booking_detail_payload(
     trainer_id: int,
 ) -> dict | None:
     """
-    One booking for trainer detail API: same row shape as list_bookings_for_trainer items.
+    One booking for trainer detail API (GET /trainer/bookings/:id).
+    Same core fields as hub list rows, plus ``booking_price_cents`` and ``price_tier_label`` when resolvable.
     Includes past slots and statuses (e.g. completed); excludes wrong trainer.
     """
     r = await session.execute(
@@ -1406,12 +1407,20 @@ async def get_trainer_booking_detail_payload(
                    """
             + SQL_BOOKING_ARENA_DISPLAY
             + """ AS arenas_str,
+                   b.service_id, b.service_price_variant_id,
+                   """
+            + SQL_BOOKING_RESOLVED_ARENA_ID
+            + """ AS resolved_arena_id,
                    EXISTS (SELECT 1 FROM booking_problem_reports pr WHERE pr.booking_id = b.id) AS problem_reported,
-                   EXISTS (SELECT 1 FROM booking_client_no_show cns WHERE cns.booking_id = b.id) AS client_no_show_recorded
+                   EXISTS (SELECT 1 FROM booking_client_no_show cns WHERE cns.booking_id = b.id) AS client_no_show_recorded,
+                   COALESCE(b.booking_price_cents, spv.price_cents, ts.price_cents) AS price_cents_effective,
+                   COALESCE(spv.tier_kind, b.price_tier_kind) AS tier_kind_raw
             FROM bookings b
             JOIN clients c ON c.id = b.client_id
             JOIN slots s ON s.id = b.slot_id
             JOIN services srv ON srv.id = b.service_id
+            LEFT JOIN trainer_service_price_variants spv ON spv.id = b.service_price_variant_id
+            LEFT JOIN trainer_services ts ON ts.trainer_id = b.trainer_id AND ts.service_id = b.service_id
             WHERE b.id = :bid AND b.trainer_id = :tid
               AND b.status <> :purged_status
             """
@@ -1421,6 +1430,10 @@ async def get_trainer_booking_detail_payload(
     row = r.fetchone()
     if not row:
         return None
+    raw_tier = row[22] if len(row) > 22 else None
+    ptk = normalize_price_tier_kind(raw_tier) if raw_tier else None
+    tier_label = price_tier_label_ru(ptk) if ptk else None
+    pc_eff = row[21] if len(row) > 21 else None
     return {
         "id": row[0],
         "slot_id": row[1],
@@ -1438,8 +1451,13 @@ async def get_trainer_booking_detail_payload(
         "status": (row[13] or "confirmed").strip(),
         "services_str": (row[14] or "").strip() or None,
         "arenas_str": _normalize_trainer_arenas_display(row[15] if len(row) > 15 else None),
-        "problem_reported": bool(row[16]),
-        "client_no_show_recorded": bool(row[17]),
+        "service_id": int(row[16]) if row[16] is not None else None,
+        "service_price_variant_id": int(row[17]) if row[17] is not None else None,
+        "arena_id": int(row[18]) if row[18] is not None else None,
+        "problem_reported": bool(row[19]),
+        "client_no_show_recorded": bool(row[20]),
+        "booking_price_cents": int(pc_eff) if pc_eff is not None else None,
+        "price_tier_label": tier_label,
     }
 
 
@@ -2241,20 +2259,41 @@ async def patch_trainer_client_identity_for_card(
     return await get_trainer_client_for_card(session, trainer_id, client_id)
 
 
-async def get_trainer_client_last_completed_booking_service_defaults(
+async def get_trainer_client_last_booking_service_defaults(
     session: AsyncSession,
     trainer_id: int,
     client_id: int,
-) -> tuple[int | None, int | None]:
-    """service_id and service_price_variant_id from the latest completed session (trainer + client)."""
+) -> tuple[int | None, int | None, int | None]:
+    """Last non-cancelled booking by created_at: service_id, price variant (or tier_kind fallback), resolved arena."""
     r = await session.execute(
         text(
             """
-            SELECT b.service_id, b.service_price_variant_id
+            SELECT
+                b.service_id,
+                COALESCE(
+                    b.service_price_variant_id,
+                    (
+                        SELECT spv.id
+                        FROM trainer_service_price_variants spv
+                        WHERE spv.trainer_id = b.trainer_id
+                          AND spv.service_id = b.service_id
+                          AND b.price_tier_kind IS NOT NULL
+                          AND (
+                            spv.tier_kind = b.price_tier_kind
+                            OR LOWER(TRIM(spv.tier_kind)) = LOWER(TRIM(b.price_tier_kind))
+                          )
+                        ORDER BY spv.sort_order NULLS LAST, spv.id
+                        LIMIT 1
+                    )
+                ) AS effective_variant_id,
+                """
+            + SQL_BOOKING_RESOLVED_ARENA_ID
+            + """ AS resolved_arena_id
             FROM bookings b
             JOIN slots s ON s.id = b.slot_id
-            WHERE b.trainer_id = :tid AND b.client_id = :cid AND b.status = 'completed'
-            ORDER BY s.slot_date DESC, s.start_time DESC NULLS LAST
+            WHERE b.trainer_id = :tid AND b.client_id = :cid
+              AND b.status NOT IN ('cancelled', 'declined', 'trainer_removed')
+            ORDER BY b.created_at DESC NULLS LAST, b.id DESC
             LIMIT 1
             """
         ),
@@ -2262,8 +2301,12 @@ async def get_trainer_client_last_completed_booking_service_defaults(
     )
     row = r.fetchone()
     if not row:
-        return None, None
-    return row[0], row[1]
+        return None, None, None
+    sid_raw, vid_raw, aid_raw = row[0], row[1], row[2]
+    sid = int(sid_raw) if sid_raw is not None else None
+    vid = int(vid_raw) if vid_raw is not None else None
+    aid = int(aid_raw) if aid_raw is not None else None
+    return sid, vid, aid
 
 
 async def get_trainer_client_latest_booking_service_id(
@@ -2430,7 +2473,7 @@ async def list_trainer_client_history(
 ) -> list[dict]:
     """
     Last N non-cancelled bookings for this trainer and client.
-    Includes date, time, arena (best-effort), duration, service_name and status.
+    Includes date, time, arena (best-effort), duration, service_name, tariff label and status.
     """
     r = await session.execute(
         text(
@@ -2443,10 +2486,12 @@ async def list_trainer_client_history(
                 (EXTRACT(EPOCH FROM (s.end_time - s.start_time)) / 60)::int AS duration_minutes,
                 COALESCE(a2.name, '') AS arena_name,
                 COALESCE(srv.name, '—') AS service_name,
-                b.status
+                b.status,
+                COALESCE(spv.tier_kind, b.price_tier_kind) AS tier_kind_raw
             FROM bookings b
             JOIN slots s ON s.id = b.slot_id
             JOIN services srv ON srv.id = b.service_id
+            LEFT JOIN trainer_service_price_variants spv ON spv.id = b.service_price_variant_id
             LEFT JOIN LATERAL (
                 SELECT a.name
                 FROM arenas a
@@ -2464,19 +2509,25 @@ async def list_trainer_client_history(
         {"tid": trainer_id, "cid": client_id, "lim": limit},
     )
     rows = r.fetchall()
-    return [
-        {
-            "id": row[0],
-            "slot_date": row[1],
-            "start_time": row[2],
-            "end_time": row[3],
-            "duration_minutes": row[4] if row[4] is not None else 45,
-            "arena_name": (row[5] or "").strip() or None,
-            "service_name": (row[6] or "").strip() or "—",
-            "status": (row[7] or "").strip() or "confirmed",
-        }
-        for row in rows
-    ]
+    items: list[dict] = []
+    for row in rows:
+        raw_tier = row[8] if len(row) > 8 else None
+        ptk = normalize_price_tier_kind(raw_tier) if raw_tier else None
+        tier_label = price_tier_label_ru(ptk) if ptk else None
+        items.append(
+            {
+                "id": row[0],
+                "slot_date": row[1],
+                "start_time": row[2],
+                "end_time": row[3],
+                "duration_minutes": row[4] if row[4] is not None else 45,
+                "arena_name": (row[5] or "").strip() or None,
+                "service_name": (row[6] or "").strip() or "—",
+                "status": (row[7] or "").strip() or "confirmed",
+                "price_tier_label": tier_label,
+            }
+        )
+    return items
 
 
 async def count_trainer_client_sessions(

@@ -85,6 +85,8 @@
       const BD_ICONS = {
         service: '<svg class="bd-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><path d="M3.27 6.96L12 12.01l8.73-5.05"/></svg>',
         session: '<svg class="bd-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/></svg>',
+        tariff: '<svg class="bd-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2H2v10l9.29 9.29a1 1 0 001.41 0l6.59-6.59a1 1 0 000-1.41L12 2z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg>',
+        price: '<svg class="bd-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/></svg>',
         comment: '<svg class="bd-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>',
         send: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>',
         check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',
@@ -155,6 +157,14 @@
         if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
         if (parts[0].length >= 2) return parts[0].slice(0, 2).toUpperCase();
         return parts[0][0].toUpperCase();
+      }
+
+      function formatTrainerDetailPriceFromCents(cents) {
+        if (cents == null || cents === '') return '';
+        var n = parseInt(String(cents), 10);
+        if (isNaN(n)) return '';
+        var v = n / 100;
+        return v.toFixed(v % 1 === 0 ? 0 : 2).replace('.', ',') + ' BYN';
       }
 
       const tg = window.Telegram && window.Telegram.WebApp;
@@ -553,6 +563,14 @@
           html += '<div class="bd-rows">';
           html += '<div class="bd-row">' + BD_ICONS.service + '<div class="bd-row-text"><div class="bd-row-label">Услуга · арена</div><div class="bd-row-value">' + escapeHtml(b.services_str || '—') + ' · ' + escapeHtml(b.arenas_str || '—') + '</div></div></div>';
           html += '<div class="bd-row">' + BD_ICONS.session + '<div class="bd-row-text"><div class="bd-row-label">Занятие</div><div class="bd-row-value">' + (b.session_num || 1) + '-е занятие</div></div></div>';
+          var tierLab = (b.price_tier_label || '').trim();
+          if (tierLab) {
+            html += '<div class="bd-row">' + BD_ICONS.tariff + '<div class="bd-row-text"><div class="bd-row-label">Тариф</div><div class="bd-row-value">' + escapeHtml(tierLab) + '</div></div></div>';
+          }
+          var bpc = b.booking_price_cents;
+          if (bpc != null && bpc !== '' && !isNaN(parseInt(String(bpc), 10))) {
+            html += '<div class="bd-row">' + BD_ICONS.price + '<div class="bd-row-text"><div class="bd-row-label">Стоимость</div><div class="bd-row-value">' + escapeHtml(formatTrainerDetailPriceFromCents(bpc)) + '</div></div></div>';
+          }
           if (b.client_comment) {
             html += '<div class="bd-row bd-comment">' + BD_ICONS.comment + '<div class="bd-row-text"><div class="bd-row-label">Комментарий</div><div class="bd-row-value">' + escapeHtml(b.client_comment) + '</div></div></div>';
           }

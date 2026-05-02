@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Тренеры и запись</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="mini-app-telegram-chrome.js?v=20260556"></script>
+  <script src="mini-app-telegram-chrome.js?v=202605040"></script>
   <link rel="stylesheet" href="theme.css?v=20260426" />
   <link rel="stylesheet" href="mini-app-components.css?v=20260426" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -23,8 +23,8 @@
     />
   </noscript>
   <script src="client-mini-app-theme.js"></script>
-  <link rel="preload" href="catalog-main.js?v=20260573" as="script" />
-  <link rel="stylesheet" href="mini-app-catalog.css?v=20260571" />
+  <link rel="preload" href="catalog-main.js?v=20260576" as="script" />
+  <link rel="stylesheet" href="mini-app-catalog.css?v=20260573" />
   <link rel="stylesheet" href="mini-app-client-nav.css?v=20260426" />
   <!-- Leaflet (mini-map for arena multi-select). Loaded on every page so back/forward keeps tiles cached;
        library is ~40KB gz, used only when #screenArena renders. OSM tiles require attribution by license. -->
@@ -189,7 +189,7 @@
       <label for="bookingPhone">Телефон *</label>
       <div class="catalog-phone-input-wrap">
         <span class="catalog-phone-prefix" aria-hidden="true">+375</span>
-        <input type="tel" id="bookingPhone" class="catalog-phone-input" placeholder="29 123-45-67" autocomplete="tel" inputmode="numeric" maxlength="14" />
+        <input type="text" id="bookingPhone" class="catalog-phone-input" placeholder="29 123-45-67" autocomplete="tel" inputmode="tel" maxlength="14" />
       </div>
     </div>
     <div class="form-block">
@@ -254,7 +254,7 @@
     </div>
   </div>
 
-  <script defer src="catalog-main.js?v=20260573"></script>
+  <script defer src="catalog-main.js?v=20260576"></script>
   <script defer src="mini-app-client-home.js"></script>
 </body>
 </html>

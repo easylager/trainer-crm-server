@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Запись</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="mini-app-telegram-chrome.js?v=20260556"></script>
+  <script src="mini-app-telegram-chrome.js?v=202605040"></script>
   <link rel="stylesheet" href="theme.css" />
   <link rel="stylesheet" href="mini-app-components.css" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -248,6 +248,10 @@
     #screenForm .book-phone-input-wrap .book-phone-input {
       padding-left: 58px;
       font-variant-numeric: tabular-nums;
+      touch-action: auto;
+      -webkit-user-select: text;
+      user-select: text;
+      -webkit-touch-callout: default;
     }
     .price-tier-radios label {
       display: flex;
@@ -532,7 +536,7 @@
       <label for="phone">Телефон *</label>
       <div class="book-phone-input-wrap">
         <span class="book-phone-prefix" aria-hidden="true">+375</span>
-        <input type="tel" id="phone" class="book-phone-input" placeholder="29 123-45-67" autocomplete="tel" inputmode="numeric" maxlength="14" />
+        <input type="text" id="phone" class="book-phone-input" placeholder="29 123-45-67" autocomplete="tel" inputmode="tel" maxlength="14" />
       </div>
     </div>
     <div class="form-block">
@@ -746,26 +750,18 @@
         el.style.display = 'block';
       }
 
-      function formatBookPhoneInput(ev) {
-        var el = ev && ev.target ? ev.target : ev;
-        if (!el) return;
-        var d = String(el.value || '').replace(/\D/g, '');
-        if (d.indexOf('375') === 0) d = d.slice(3);
-        if (d.indexOf('80') === 0) d = d.slice(2);
-        if (d.length > 9) d = d.slice(0, 9);
-        var f = '';
-        if (d.length > 0) f = d.slice(0, 2);
-        if (d.length > 2) f += ' ' + d.slice(2, 5);
-        if (d.length > 5) f += '-' + d.slice(5, 7);
-        if (d.length > 7) f += '-' + d.slice(7, 9);
-        el.value = f;
-      }
-
       function normalizeBookPhoneForApi(raw) {
-        var d = String(raw || '').replace(/\D/g, '');
-        if (d.indexOf('375') === 0) d = d.slice(3);
-        if (d.indexOf('80') === 0) d = d.slice(2);
-        if (d.length > 9) d = d.slice(0, 9);
+        var d =
+          typeof window.extractNational375Digits === 'function'
+            ? window.extractNational375Digits(raw)
+            : (function () {
+                var x = String(raw || '').replace(/\D/g, '');
+                while (x.length >= 2 && x.slice(0, 2) === '00') x = x.slice(2);
+                while (x.length > 9 && x.indexOf('375') === 0) x = x.slice(3);
+                if (x.indexOf('80') === 0 && x.length >= 9) x = x.slice(2);
+                while (x.length > 9 && x.indexOf('375') === 0) x = x.slice(3);
+                return x.length > 9 ? x.slice(0, 9) : x;
+              })();
         if (d.length !== 9) return '';
         return '+375' + d;
       }
@@ -777,15 +773,25 @@
           el.value = '';
           return;
         }
-        var d = String(clientPhone).replace(/\D/g, '');
-        if (d.indexOf('375') === 0) d = d.slice(3);
-        if (d.indexOf('80') === 0) d = d.slice(2);
+        var d =
+          typeof window.extractNational375Digits === 'function'
+            ? window.extractNational375Digits(clientPhone)
+            : (function () {
+                var x = String(clientPhone).replace(/\D/g, '');
+                while (x.length >= 2 && x.slice(0, 2) === '00') x = x.slice(2);
+                while (x.length > 9 && x.indexOf('375') === 0) x = x.slice(3);
+                if (x.indexOf('80') === 0 && x.length >= 9) x = x.slice(2);
+                while (x.length > 9 && x.indexOf('375') === 0) x = x.slice(3);
+                return x.length > 9 ? x.slice(0, 9) : x;
+              })();
         if (d.length < 9) {
           el.value = '';
           return;
         }
         el.value = d.slice(0, 9);
-        formatBookPhoneInput({ target: el });
+        if (typeof window.applyNational375MaskedToInput === 'function') {
+          window.applyNational375MaskedToInput(el);
+        }
       }
 
       function renderPriceTierUi(effServiceId) {
@@ -1237,9 +1243,10 @@
 
       (function wireBookPhoneMask() {
         var el = document.getElementById('phone');
-        if (!el || el.dataset.byMask === '1') return;
-        el.dataset.byMask = '1';
-        el.addEventListener('input', formatBookPhoneInput);
+        if (!el || el.dataset.crmNat375Mask === '1') return;
+        if (typeof window.wireNational375PhoneInputMask === 'function') {
+          window.wireNational375PhoneInputMask(el);
+        }
       })();
 
       document.getElementById('prevWeek').onclick = function() {

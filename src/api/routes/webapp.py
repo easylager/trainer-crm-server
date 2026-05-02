@@ -69,7 +69,7 @@ from src.application.booking_use_cases import (
     get_trainer_booking_detail_payload,
     get_trainer_client_next_booking,
     get_trainer_client_for_card,
-    get_trainer_client_last_completed_booking_service_defaults,
+    get_trainer_client_last_booking_service_defaults,
     get_trainer_client_latest_booking_service_id,
     get_trainer_group_slot_hub,
     resolve_client_catalog_service_for_trainer,
@@ -2020,6 +2020,9 @@ def _serialize_booking(b: dict, *, problem_flow_enabled: bool | None = None) -> 
         "session_num": b.get("session_num") or 1,
         "services_str": b.get("services_str"),
         "arenas_str": b.get("arenas_str"),
+        "service_id": b.get("service_id"),
+        "service_price_variant_id": b.get("service_price_variant_id"),
+        "arena_id": b.get("arena_id"),
         "status": (b.get("status") or "confirmed").strip(),
         "slot_capacity": max(1, int(b.get("slot_capacity") or 1)),
         "slot_active_bookings": max(0, int(b.get("slot_active_bookings") or 0)),
@@ -2028,6 +2031,10 @@ def _serialize_booking(b: dict, *, problem_flow_enabled: bool | None = None) -> 
         "client_no_show_recorded": bool(b.get("client_no_show_recorded")),
         "first_client_online_pending": bool(b.get("first_client_online_pending")),
     }
+    bpc = b.get("booking_price_cents")
+    out["booking_price_cents"] = int(bpc) if bpc is not None else None
+    ptl = b.get("price_tier_label")
+    out["price_tier_label"] = (str(ptl).strip() if ptl else "") or None
     if problem_flow_enabled is not None:
         out["problem_flow_enabled"] = bool(problem_flow_enabled)
     return out
@@ -4713,17 +4720,18 @@ async def get_trainer_client_booking_defaults(
     principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
-    """Defaults for quick book from client profile: last completed service/tier + client name."""
+    """Defaults for quick book from client profile: last session's service/tier + client name."""
     trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
     client = await get_trainer_client_for_card(session, trainer_id, client_id)
     if not client:
         raise HTTPException(status_code=404, detail="Клиент не найден или нет доступа")
-    sid, vid = await get_trainer_client_last_completed_booking_service_defaults(session, trainer_id, client_id)
+    sid, vid, arena_id = await get_trainer_client_last_booking_service_defaults(session, trainer_id, client_id)
     return {
         "service_id": sid,
         "service_price_variant_id": vid,
+        "arena_id": arena_id,
         "client_first_name": (client.get("first_name") or "").strip() or None,
         "client_last_name": (client.get("last_name") or "").strip() or None,
     }

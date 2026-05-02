@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
   <title>Группы</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="mini-app-telegram-chrome.js"></script>
+  <script src="mini-app-telegram-chrome.js?v=202605040"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link
@@ -48,8 +48,8 @@
       window.__applyTrainerGroupsTheme = applyTrainerGroupsTheme;
     })();
   </script>
-  <link rel="preload" href="trainer-groups-main.js?v=20260562" as="script" />
-  <link rel="stylesheet" href="mini-app-trainer-groups.css?v=20260562" />
+  <link rel="preload" href="trainer-groups-main.js?v=202605067" as="script" />
+  <link rel="stylesheet" href="mini-app-trainer-groups.css?v=202605066" />
 </head>
 <body>
   <div id="screenList" data-screen class="active">
@@ -251,7 +251,7 @@
             <label class="book-field-label" for="addMemberPhone">Телефон <span class="book-req" aria-hidden="true">*</span></label>
             <div class="hub-phone-input-wrap">
               <span class="hub-phone-prefix" aria-hidden="true">+375</span>
-              <input type="tel" id="addMemberPhone" class="input hub-phone-input" placeholder="29 123-45-67" autocomplete="tel" inputmode="numeric" maxlength="14" aria-required="true" />
+              <input type="text" id="addMemberPhone" class="input hub-phone-input" placeholder="29 123-45-67" autocomplete="tel" inputmode="tel" maxlength="14" aria-required="true" />
             </div>
             <label class="book-field-label" for="addMemberFn">Имя <span class="book-req" aria-hidden="true">*</span></label>
             <input type="text" id="addMemberFn" class="input" placeholder="Иван" autocomplete="given-name" maxlength="120" aria-required="true" />
@@ -329,6 +329,6 @@
   <div id="tgAppToast" class="tg-app-toast" role="status" aria-live="polite"></div>
 
   <script defer src="mini-app-trainer-home.js"></script>
-  <script defer src="trainer-groups-main.js?v=20260562"></script>
+  <script defer src="trainer-groups-main.js?v=202605067"></script>
 </body>
 </html>

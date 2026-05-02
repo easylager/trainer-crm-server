@@ -456,5 +456,94 @@ window.wireHubSlotMessageButtons = function (root) {
     installFetchGuard: installFetchGuard,
   };
 
+  /**
+   * Prefer blur-only phone masking (no live `input` handler).
+   * WebKit (Telegram iOS) closes the paste/callout when `value` is rewritten during the gesture.
+   * Use maxTouchPoints first — WKWebView may report `pointer: fine` on phones/tablets.
+   */
+  global.miniAppIsTouchPrimary = function () {
+    try {
+      if ((global.navigator.maxTouchPoints || 0) > 0) return true;
+      var mq = global.matchMedia;
+      return !!(mq && mq('(hover: none) and (pointer: coarse)').matches);
+    } catch (e) {
+      return false;
+    }
+  };
+
+  /** Up to 9 national digits; strips 00… / 375 / 80 from pasted full MSISDN so UI +375 prefix never duplicates. */
+  global.extractNational375Digits = function (raw) {
+    var d = String(raw || '').replace(/\D/g, '');
+    while (d.length >= 2 && d.slice(0, 2) === '00') d = d.slice(2);
+    while (d.length > 9 && d.indexOf('375') === 0) d = d.slice(3);
+    if (d.indexOf('80') === 0 && d.length >= 9) d = d.slice(2);
+    while (d.length > 9 && d.indexOf('375') === 0) d = d.slice(3);
+    if (d.length > 9) d = d.slice(0, 9);
+    return d;
+  };
+
+  /** «XX XXX-XX-XX» for inputs that render +375 outside the field. */
+  global.formatNational375MaskedFragment = function (digits) {
+    var d = global.extractNational375Digits(digits);
+    var f = '';
+    if (d.length > 0) f = d.slice(0, 2);
+    if (d.length > 2) f += ' ' + d.slice(2, 5);
+    if (d.length > 5) f += '-' + d.slice(5, 7);
+    if (d.length > 7) f += '-' + d.slice(7, 9);
+    return f;
+  };
+
+  /** Idempotent mask apply (national fragment only). */
+  global.applyNational375MaskedToInput = function (el) {
+    if (!el) return;
+    var f = global.formatNational375MaskedFragment(el.value);
+    if (String(el.value || '') !== f) el.value = f;
+  };
+
+  /** Merge clipboard into selection, normalize pasted +375… to national fragment (single-field UX). */
+  function handleNational375PhonePaste(e) {
+    var cd = e.clipboardData || global.clipboardData;
+    if (!cd || typeof cd.getData !== 'function') return;
+    var text = cd.getData('text/plain');
+    if (text == null || String(text).trim() === '') return;
+    e.preventDefault();
+    var el = e.target;
+    var cur = String(el.value || '');
+    var start = typeof el.selectionStart === 'number' ? el.selectionStart : cur.length;
+    var end = typeof el.selectionEnd === 'number' ? el.selectionEnd : start;
+    var merged = cur.slice(0, start) + String(text) + cur.slice(end);
+    var masked = global.formatNational375MaskedFragment(merged);
+    el.value = masked;
+    try {
+      var len = masked.length;
+      el.setSelectionRange(len, len);
+    } catch (errCaret) {}
+    try {
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+    } catch (errIn) {}
+    if (!global.miniAppIsTouchPrimary()) {
+      global.applyNational375MaskedToInput(el);
+    }
+  }
+
+  /**
+   * Belarus +375 booking-style fields (national digits in control).
+   * Paste: strip duplicated country code from buffer; touch: still blur-format for typed digits.
+   */
+  global.wireNational375PhoneInputMask = function (el) {
+    if (!el || el.tagName !== 'INPUT' || el.dataset.crmNat375Mask === '1') return;
+    el.dataset.crmNat375Mask = '1';
+    el.addEventListener('paste', handleNational375PhonePaste, false);
+    if (global.miniAppIsTouchPrimary()) {
+      el.addEventListener('blur', function () {
+        global.applyNational375MaskedToInput(el);
+      });
+      return;
+    }
+    el.addEventListener('input', function () {
+      global.applyNational375MaskedToInput(el);
+    });
+  };
+
   installFetchGuard();
 })(window);

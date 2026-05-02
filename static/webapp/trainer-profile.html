@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Профиль тренера</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="mini-app-telegram-chrome.js?v=202605021"></script>
+  <script src="mini-app-telegram-chrome.js?v=202605040"></script>
   <link rel="stylesheet" href="theme.css?v=20260492" />
   <link rel="stylesheet" href="mini-app-components.css?v=20260419" />
   <script src="mini-app-confirm.js"></script>
@@ -24,7 +24,7 @@
       href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=optional"
     />
   </noscript>
-  <link rel="preload" href="trainer-profile-main.js?v=20260570" as="script" />
+  <link rel="preload" href="trainer-profile-main.js?v=20260572" as="script" />
   <link rel="stylesheet" href="mini-app-trainer-profile.css?v=20260556" />
   <link rel="stylesheet" href="mini-app-trainer-nav.css?v=20260419" />
 </head>
@@ -141,7 +141,7 @@
             <label for="phone"><span class="required-dot"></span>Телефон</label>
             <div class="phone-input-wrap">
               <span class="phone-prefix">+375</span>
-              <input id="phone" type="tel" autocomplete="tel" maxlength="32" placeholder="29 123 45 67" inputmode="tel" />
+              <input id="phone" type="text" autocomplete="tel" maxlength="32" placeholder="29 123 45 67" inputmode="tel" />
             </div>
             <div class="field-hint">Номер в формате +375 XX XXX XX XX</div>
           </div>
@@ -491,7 +491,7 @@
     </div>
   </div>
 
-  <script defer src="trainer-profile-main.js?v=20260570"></script>
+  <script defer src="trainer-profile-main.js?v=20260572"></script>
   <script defer src="mini-app-trainer-home.js?v=20260563"></script>
 </body>
 </html>

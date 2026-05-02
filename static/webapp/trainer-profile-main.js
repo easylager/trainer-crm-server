@@ -954,7 +954,16 @@
         if (!el) return true;
         var msg = null;
         if (fieldId === 'phone') {
-          var digits = el.value.replace(/\D/g, '');
+          var digits =
+            typeof window.extractNational375Digits === 'function'
+              ? window.extractNational375Digits(el.value)
+              : (function () {
+                  var v = el.value.replace(/\D/g, '');
+                  while (v.length >= 2 && v.slice(0, 2) === '00') v = v.slice(2);
+                  if (v.startsWith('375') && v.length > 9) v = v.slice(3);
+                  else if (v.startsWith('80') && v.length >= 9) v = v.slice(2);
+                  return v.slice(0, 9);
+                })();
           if (digits.length > 0) {
             var fullPhone = '+375' + digits;
             msg = validatePhoneMessage(fullPhone);
@@ -1626,7 +1635,16 @@
         function phoneStr() {
           var el = document.getElementById('phone');
           if (!el) return '';
-          var digits = el.value.replace(/\D/g, '');
+          var digits =
+            typeof window.extractNational375Digits === 'function'
+              ? window.extractNational375Digits(el.value)
+              : (function () {
+                  var v = el.value.replace(/\D/g, '');
+                  while (v.length >= 2 && v.slice(0, 2) === '00') v = v.slice(2);
+                  if (v.startsWith('375') && v.length > 9) v = v.slice(3);
+                  else if (v.startsWith('80') && v.length >= 9) v = v.slice(2);
+                  return v.slice(0, 9);
+                })();
           if (!digits) return '';
           return '+375' + digits;
         }
@@ -2988,11 +3006,20 @@
         function setPhone(phone) {
           var el = document.getElementById('phone');
           if (!el) return;
-          if (!phone) { el.value = ''; return; }
-          var digits = String(phone).replace(/\D/g, '');
-          if (digits.startsWith('375')) digits = digits.slice(3);
-          else if (digits.startsWith('80')) digits = digits.slice(2);
-          if (digits.length > 9) digits = digits.slice(0, 9);
+          if (!phone) {
+            el.value = '';
+            return;
+          }
+          var digits =
+            typeof window.extractNational375Digits === 'function'
+              ? window.extractNational375Digits(String(phone))
+              : (function () {
+                  var d = String(phone).replace(/\D/g, '');
+                  while (d.length >= 2 && d.slice(0, 2) === '00') d = d.slice(2);
+                  if (d.startsWith('375')) d = d.slice(3);
+                  else if (d.startsWith('80')) d = d.slice(2);
+                  return d.length > 9 ? d.slice(0, 9) : d;
+                })();
           var formatted = '';
           if (digits.length > 0) formatted += digits.slice(0, 2);
           if (digits.length > 2) formatted += ' ' + digits.slice(2, 5);
@@ -5197,6 +5224,23 @@
       PROFILE_FIELD_IDS.forEach(function(id) {
         var el = document.getElementById(id);
         if (!el) return;
+        if (id === 'phone') {
+          el.addEventListener('paste', function (ev) {
+            var cd = ev.clipboardData || window.clipboardData;
+            if (!cd || typeof cd.getData !== 'function') return;
+            var text = cd.getData('text/plain');
+            if (text == null || String(text).trim() === '') return;
+            ev.preventDefault();
+            var cur = String(el.value || '');
+            var start = typeof el.selectionStart === 'number' ? el.selectionStart : cur.length;
+            var end = typeof el.selectionEnd === 'number' ? el.selectionEnd : start;
+            el.value = cur.slice(0, start) + String(text) + cur.slice(end);
+            formatPhoneInput(el);
+            validateFieldRealtime('phone');
+            setDirty();
+            markFieldValid('phone');
+          });
+        }
         el.addEventListener('input', function() {
           if (id === 'phone') {
             formatPhoneInput(el);
@@ -5321,17 +5365,23 @@
       })();
       
       function formatPhoneInput(el) {
-        var val = el.value.replace(/\D/g, '');
-        if (val.startsWith('375')) val = val.slice(3);
-        else if (val.startsWith('80')) val = val.slice(2);
-        if (val.length > 9) val = val.slice(0, 9);
-        
+        var val =
+          typeof window.extractNational375Digits === 'function'
+            ? window.extractNational375Digits(el.value)
+            : (function () {
+                var v = el.value.replace(/\D/g, '');
+                while (v.length >= 2 && v.slice(0, 2) === '00') v = v.slice(2);
+                if (v.startsWith('375') && v.length > 9) v = v.slice(3);
+                else if (v.startsWith('80') && v.length >= 9) v = v.slice(2);
+                return v.slice(0, 9);
+              })();
+
         var formatted = '';
         if (val.length > 0) formatted += val.slice(0, 2);
         if (val.length > 2) formatted += ' ' + val.slice(2, 5);
         if (val.length > 5) formatted += ' ' + val.slice(5, 7);
         if (val.length > 7) formatted += ' ' + val.slice(7, 9);
-        
+
         el.value = formatted;
       }
       

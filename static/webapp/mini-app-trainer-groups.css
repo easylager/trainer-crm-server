@@ -1499,12 +1499,34 @@
       background: rgba(26, 26, 26, 0.42);
       -webkit-backdrop-filter: blur(12px);
       backdrop-filter: blur(12px);
+      overflow-y: hidden;
+      overscroll-behavior: contain;
+    }
+    @media (hover: none), (pointer: coarse), (max-width: 640px) {
+      #modalAddMember.modal-overlay.book-flow-overlay.book-flow-overlay--new-client {
+        align-items: flex-start;
+        justify-content: center;
+        padding-top: max(10px, env(safe-area-inset-top));
+        padding-bottom: max(14px, env(safe-area-inset-bottom));
+        -webkit-backdrop-filter: none;
+        backdrop-filter: none;
+      }
+      #modalAddMember.modal-overlay.book-flow-overlay.book-flow-overlay--new-client .modal.book-flow-modal {
+        margin-top: 0;
+        max-height: calc(100vh - 28px);
+      }
+      @supports (height: 100dvh) {
+        #modalAddMember.modal-overlay.book-flow-overlay.book-flow-overlay--new-client .modal.book-flow-modal {
+          max-height: calc(100dvh - 28px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+        }
+      }
     }
     #modalAddMember .modal.book-flow-modal {
       position: relative;
       max-width: 360px;
       max-height: min(85vh, 560px);
       overflow-y: auto;
+      overscroll-behavior-y: contain;
       padding: 22px 20px 20px;
       border-radius: 22px;
       overflow-x: hidden;
@@ -1811,6 +1833,10 @@
       color: var(--tg-theme-text-color);
       -webkit-text-fill-color: var(--tg-theme-text-color);
       caret-color: var(--tg-theme-text-color);
+      touch-action: auto;
+      -webkit-user-select: text;
+      user-select: text;
+      -webkit-touch-callout: default;
     }
     .book-new-client .hub-phone-input-wrap .hub-phone-input:focus,
     .book-new-client .hub-phone-input-wrap .hub-phone-input:focus-visible {

@@ -1007,7 +1007,9 @@
       background: rgba(26, 26, 26, 0.42);
       -webkit-backdrop-filter: blur(12px);
       backdrop-filter: blur(12px);
-      overflow-y: auto;
+      /* Scroll only the sheet — nested overflow on overlay steals long-press / paste on inputs (Telegram iOS WebKit). */
+      overflow-y: hidden;
+      overscroll-behavior: contain;
       -webkit-overflow-scrolling: touch;
     }
     #hubModalQuickBookDatetime .hub-book-modal.modal.book-flow-modal,
@@ -1025,10 +1027,34 @@
       overflow-x: hidden;
       max-height: 85vh;
       overflow-y: auto;
+      overscroll-behavior-y: contain;
       background: var(--tg-theme-bg-color);
       box-shadow:
         0 0 0 1px rgba(247, 166, 0, 0.14),
         0 24px 48px -12px rgba(0, 0, 0, 0.28);
+    }
+    /*
+     * iOS Telegram WebView: centered fixed modal + keyboard/callout viewport changes makes
+     * the sheet jump, which dismisses the native "Paste" menu. New-client form is top-pinned.
+     */
+    @media (hover: none), (pointer: coarse), (max-width: 640px) {
+      #hubModalBookGroupSlot.hub-book-flow-overlay.hub-book-flow-overlay--new-client {
+        align-items: flex-start;
+        justify-content: center;
+        padding-top: max(10px, env(safe-area-inset-top));
+        padding-bottom: max(14px, env(safe-area-inset-bottom));
+        -webkit-backdrop-filter: none;
+        backdrop-filter: none;
+      }
+      #hubModalBookGroupSlot.hub-book-flow-overlay.hub-book-flow-overlay--new-client .hub-book-modal.modal.book-flow-modal {
+        margin-top: 0;
+        max-height: calc(100vh - 28px);
+      }
+      @supports (height: 100dvh) {
+        #hubModalBookGroupSlot.hub-book-flow-overlay.hub-book-flow-overlay--new-client .hub-book-modal.modal.book-flow-modal {
+          max-height: calc(100dvh - 28px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+        }
+      }
     }
     #hubModalQuickBookDatetime .book-modal-title,
     #hubModalBookGroupSlot .book-modal-title,
@@ -1951,6 +1977,10 @@
       color: var(--tg-theme-text-color);
       -webkit-text-fill-color: var(--tg-theme-text-color);
       caret-color: var(--tg-theme-text-color);
+      touch-action: auto;
+      -webkit-user-select: text;
+      user-select: text;
+      -webkit-touch-callout: default;
     }
     #hubModalBookGroupSlot .hub-phone-input-wrap .hub-phone-input:focus,
     #hubModalBookGroupSlot .hub-phone-input-wrap .hub-phone-input:focus-visible {

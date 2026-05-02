@@ -82,22 +82,15 @@
 
   /** Belarus new-client phone: national digits in field; +375 is fixed in UI (aligned with schedule-editor). */
   function nationalDigitsFromGroupsNewPhone(raw) {
+    if (typeof window.extractNational375Digits === 'function') {
+      return window.extractNational375Digits(raw);
+    }
     var d = String(raw || '').replace(/\D/g, '');
-    if (d.indexOf('375') === 0) d = d.slice(3);
-    if (d.indexOf('80') === 0) d = d.slice(2);
+    while (d.length >= 2 && d.slice(0, 2) === '00') d = d.slice(2);
+    while (d.length > 9 && d.indexOf('375') === 0) d = d.slice(3);
+    if (d.indexOf('80') === 0 && d.length >= 9) d = d.slice(2);
+    while (d.length > 9 && d.indexOf('375') === 0) d = d.slice(3);
     return d.length > 9 ? d.slice(0, 9) : d;
-  }
-
-  function formatGroupsAddMemberPhone(ev) {
-    var el = ev && ev.target ? ev.target : ev;
-    if (!el) return;
-    var d = nationalDigitsFromGroupsNewPhone(el.value);
-    var f = '';
-    if (d.length > 0) f = d.slice(0, 2);
-    if (d.length > 2) f += ' ' + d.slice(2, 5);
-    if (d.length > 5) f += '-' + d.slice(5, 7);
-    if (d.length > 7) f += '-' + d.slice(7, 9);
-    el.value = f;
   }
 
   var DAYS = [
@@ -263,6 +256,10 @@
     var choice = document.getElementById('addMemberStepChoice');
     var existing = document.getElementById('addMemberStepExisting');
     var neu = document.getElementById('addMemberStepNew');
+    var modalAm = document.getElementById('modalAddMember');
+    if (modalAm) {
+      modalAm.classList.toggle('book-flow-overlay--new-client', step === 'new');
+    }
     if (choice) choice.classList.toggle('active', step === 'choice');
     if (existing) existing.classList.toggle('active', step === 'existing');
     if (neu) neu.classList.toggle('active', step === 'new');
@@ -561,9 +558,10 @@
       });
     }
     var addPh = document.getElementById('addMemberPhone');
-    if (addPh) {
-      addPh.addEventListener('input', formatGroupsAddMemberPhone);
-      addPh.addEventListener('blur', formatGroupsAddMemberPhone);
+    if (addPh && addPh.dataset.crmNat375Mask !== '1') {
+      if (typeof window.wireNational375PhoneInputMask === 'function') {
+        window.wireNational375PhoneInputMask(addPh);
+      }
     }
   }
 
