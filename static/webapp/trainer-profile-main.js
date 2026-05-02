@@ -5558,5 +5558,54 @@
         }
       })();
 
+      /**
+       * Telegram / mobile WebView: tap on “empty” layout does not blur focused inputs — keyboard stays up.
+       * Blur on capture-phase touch/mouse when the hit target is not a text field (and not a label delegating focus).
+       */
+      (function wireDismissKeyboardOnOutsideTap() {
+        var root = document.getElementById('mainContent');
+        if (!root || root.dataset.dismissKbTap === '1') return;
+        root.dataset.dismissKbTap = '1';
+
+        function isTextLikeInput(el) {
+          if (!el || el.tagName !== 'INPUT') return false;
+          var tp = (el.type || '').toLowerCase();
+          return (
+            tp !== 'checkbox' &&
+            tp !== 'radio' &&
+            tp !== 'button' &&
+            tp !== 'submit' &&
+            tp !== 'reset' &&
+            tp !== 'file' &&
+            tp !== 'hidden' &&
+            tp !== 'range' &&
+            tp !== 'color'
+          );
+        }
+
+        function isTextEntryElement(el) {
+          if (!el || !el.tagName) return false;
+          var tag = el.tagName.toUpperCase();
+          if (tag === 'TEXTAREA') return true;
+          if (tag === 'SELECT') return true;
+          if (tag === 'INPUT') return isTextLikeInput(el);
+          return false;
+        }
+
+        function tryDismiss(ev) {
+          var t = ev.target;
+          if (!t || typeof t.closest !== 'function') return;
+          if (isTextEntryElement(t)) return;
+          if (t.closest('label')) return;
+          var ae = document.activeElement;
+          if (!ae || typeof ae.blur !== 'function') return;
+          if (!isTextEntryElement(ae)) return;
+          ae.blur();
+        }
+
+        document.addEventListener('touchstart', tryDismiss, { passive: true, capture: true });
+        document.addEventListener('mousedown', tryDismiss, true);
+      })();
+
       loadInitial();
     })();

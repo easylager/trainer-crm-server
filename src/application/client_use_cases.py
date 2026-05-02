@@ -194,10 +194,11 @@ async def get_or_create_client_by_phone(
     phone: str,
     first_name: str | None = None,
     last_name: str | None = None,
+    middle_name: str | None = None,
 ) -> int:
     """
     Resolve client by normalized phone (trainer-added, no telegram_id).
-    If found: optionally update first_name/last_name; return client_id.
+    If found: optionally update first_name/last_name/middle_name; return client_id.
     If not found: create with telegram_id=NULL, phone, phone_normalized, names; return client_id.
     Caller must commit.
     """
@@ -206,9 +207,10 @@ async def get_or_create_client_by_phone(
         raise ValueError("Phone required (digits)")
     first_name = (first_name or "").strip()[:64] or None
     last_name = (last_name or "").strip()[:64] or None
+    middle_name = (middle_name or "").strip()[:64] or None
     r = await session.execute(
         text("""
-            SELECT id, first_name, last_name FROM clients
+            SELECT id, first_name, last_name, middle_name FROM clients
             WHERE phone_normalized = :pn
         """),
         {"pn": phone_norm},
@@ -224,6 +226,9 @@ async def get_or_create_client_by_phone(
         if last_name is not None:
             updates.append("last_name = :last_name")
             params["last_name"] = last_name
+        if middle_name is not None:
+            updates.append("middle_name = :middle_name")
+            params["middle_name"] = middle_name
         if updates:
             await session.execute(
                 text("UPDATE clients SET updated_at = now(), " + ", ".join(updates) + " WHERE id = :cid"),
@@ -234,12 +239,13 @@ async def get_or_create_client_by_phone(
     phone_display = (phone or "").strip()[:32] or phone_norm[:32]
     r = await session.execute(
         text("""
-            INSERT INTO clients (telegram_id, first_name, last_name, phone, phone_normalized)
-            VALUES (NULL, :first_name, :last_name, :phone, :phone_normalized)
+            INSERT INTO clients (telegram_id, first_name, middle_name, last_name, phone, phone_normalized)
+            VALUES (NULL, :first_name, :middle_name, :last_name, :phone, :phone_normalized)
             RETURNING id
         """),
         {
             "first_name": first_name,
+            "middle_name": middle_name,
             "last_name": last_name,
             "phone": phone_display,
             "phone_normalized": phone_norm,

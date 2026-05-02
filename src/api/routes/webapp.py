@@ -74,6 +74,7 @@ from src.application.booking_use_cases import (
     get_trainer_group_slot_hub,
     resolve_client_catalog_service_for_trainer,
     is_slot_end_in_past_local,
+    link_trainer_client_roster,
     list_bookings_for_trainer,
     list_trainer_clients,
     list_trainer_fill_slots_invite_candidates,
@@ -4497,17 +4498,19 @@ class TrainerQuickBookingBody(BaseModel):
 
 
 class TrainerCreateClientBody(BaseModel):
-    """Create client by phone (no telegram_id); for trainer recording from schedule."""
+    """Create or update client by phone (no telegram_id); link to trainer CRM roster."""
+
     phone: str
     first_name: str = Field(min_length=1, max_length=64)
-    last_name: str = Field(default="", max_length=64)  # optional when booking from schedule
+    last_name: str = Field(default="", max_length=64)
+    middle_name: str = Field(default="", max_length=64)
 
     @field_validator("phone", mode="before")
     @classmethod
     def _phone_belarus_by(cls, v: object) -> str:
         return coerce_required_belarus_phone(v)
 
-    @field_validator("first_name", "last_name", mode="before")
+    @field_validator("first_name", "last_name", "middle_name", mode="before")
     @classmethod
     def _strip_names(cls, v: object) -> str:
         if v is None:
@@ -4616,7 +4619,7 @@ async def get_trainer_clients(
     principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
-    """List clients that have at least one booking with this trainer. Optional search by name/phone. Auth: trainer initData."""
+    """List clients linked to this trainer (bookings, groups, or manual roster). Optional search by name/phone. Auth: trainer initData."""
     trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
@@ -5069,7 +5072,7 @@ async def post_trainer_clients(
     principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
-    """Create or get client by phone (no telegram_id). For recording from schedule. Auth: trainer initData."""
+    """Create or get client by phone (no telegram_id) and attach to trainer CRM. Auth: trainer initData."""
     trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail="Trainer not linked or not active")
@@ -5078,8 +5081,10 @@ async def post_trainer_clients(
             session,
             body.phone,
             first_name=body.first_name,
-            last_name=body.last_name,
+            last_name=body.last_name or None,
+            middle_name=body.middle_name or None,
         )
+        await link_trainer_client_roster(session, trainer_id, client_id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     await session.commit()

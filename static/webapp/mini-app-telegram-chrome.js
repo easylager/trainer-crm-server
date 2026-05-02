@@ -493,11 +493,44 @@ window.wireHubSlotMessageButtons = function (root) {
     return f;
   };
 
-  /** Idempotent mask apply (national fragment only). */
+  /** Digits strictly before caret (mask chars excluded) — stable anchor when reformatting. */
+  function national375DigitsBeforeCaret(str, caretIndex) {
+    var n = 0;
+    var lim = Math.min(Math.max(0, caretIndex), str.length);
+    for (var i = 0; i < lim; i++) {
+      if (/\d/.test(str.charAt(i))) n++;
+    }
+    return n;
+  }
+
+  /** Index after the digitCount-th digit (0 = before any digit); for restoring caret after mask apply. */
+  function national375IndexAfterDigitCount(str, digitCount) {
+    if (digitCount <= 0) return 0;
+    var seen = 0;
+    for (var i = 0; i < str.length; i++) {
+      if (/\d/.test(str.charAt(i))) {
+        seen++;
+        if (seen === digitCount) return i + 1;
+      }
+    }
+    return str.length;
+  }
+
+  /** Idempotent mask apply (national fragment). Preserves caret by digit index so mid-field edits stay usable. */
   global.applyNational375MaskedToInput = function (el) {
     if (!el) return;
-    var f = global.formatNational375MaskedFragment(el.value);
-    if (String(el.value || '') !== f) el.value = f;
+    var oldV = String(el.value || '');
+    var start = typeof el.selectionStart === 'number' ? el.selectionStart : oldV.length;
+    var end = typeof el.selectionEnd === 'number' ? el.selectionEnd : start;
+    var caret = Math.min(start, end);
+    var digitsBefore = national375DigitsBeforeCaret(oldV, caret);
+    var f = global.formatNational375MaskedFragment(oldV);
+    if (oldV === f) return;
+    el.value = f;
+    var newPos = national375IndexAfterDigitCount(f, digitsBefore);
+    try {
+      el.setSelectionRange(newPos, newPos);
+    } catch (errCaret) {}
   };
 
   /** Merge clipboard into selection, normalize pasted +375… to national fragment (single-field UX). */
@@ -518,29 +551,20 @@ window.wireHubSlotMessageButtons = function (root) {
       var len = masked.length;
       el.setSelectionRange(len, len);
     } catch (errCaret) {}
-    try {
-      el.dispatchEvent(new Event('input', { bubbles: true }));
-    } catch (errIn) {}
-    if (!global.miniAppIsTouchPrimary()) {
-      global.applyNational375MaskedToInput(el);
-    }
   }
 
   /**
    * Belarus +375 booking-style fields (national digits in control).
-   * Paste: strip duplicated country code from buffer; touch: still blur-format for typed digits.
+   * Paste: custom handler; input/blur apply mask with caret preserved (assign-without-care breaks taps between digits).
    */
   global.wireNational375PhoneInputMask = function (el) {
     if (!el || el.tagName !== 'INPUT' || el.dataset.crmNat375Mask === '1') return;
     el.dataset.crmNat375Mask = '1';
     el.addEventListener('paste', handleNational375PhonePaste, false);
-    if (global.miniAppIsTouchPrimary()) {
-      el.addEventListener('blur', function () {
-        global.applyNational375MaskedToInput(el);
-      });
-      return;
-    }
     el.addEventListener('input', function () {
+      global.applyNational375MaskedToInput(el);
+    });
+    el.addEventListener('blur', function () {
       global.applyNational375MaskedToInput(el);
     });
   };

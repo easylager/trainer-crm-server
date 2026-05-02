@@ -1733,18 +1733,24 @@ async def list_trainer_clients(
     limit: int = 50,
 ) -> list[dict]:
     """
-    Distinct clients that have at least one non-cancelled booking with this trainer.
-    Sorted by most recent slot among non-cancelled bookings (activity).
+    Distinct clients linked to this trainer: any non-cancelled booking, explicit CRM roster row, or training group.
+    Sorted by most recent non-cancelled slot when present; roster-only clients follow by add time.
     last_date/last_start = last *completed* session only; NULL if none yet.
     """
     r = await session.execute(
         text(
             """
             WITH eligible_clients AS (
-                SELECT DISTINCT b.client_id
-                FROM bookings b
-                WHERE b.trainer_id = :tid
-                  AND b.status NOT IN ('cancelled', 'declined', 'trainer_removed')
+                SELECT DISTINCT client_id FROM (
+                    SELECT b.client_id AS client_id
+                    FROM bookings b
+                    WHERE b.trainer_id = :tid
+                      AND b.status NOT IN ('cancelled', 'declined', 'trainer_removed')
+                    UNION
+                    SELECT r.client_id
+                    FROM trainer_client_roster r
+                    WHERE r.trainer_id = :tid
+                ) u
             ),
             last_completed_per_client AS (
                 SELECT
@@ -1773,6 +1779,11 @@ async def list_trainer_clients(
                 JOIN slots s ON s.id = b.slot_id
                 WHERE b.trainer_id = :tid
                   AND b.status NOT IN ('cancelled', 'declined', 'trainer_removed')
+            ),
+            roster_touch AS (
+                SELECT client_id, created_at AS roster_added_at
+                FROM trainer_client_roster
+                WHERE trainer_id = :tid
             )
             SELECT
                 c.id,
@@ -1792,9 +1803,13 @@ async def list_trainer_clients(
                    AND b2.status NOT IN ('cancelled', 'declined', 'trainer_removed')) AS first_date
             FROM eligible_clients e
             JOIN clients c ON c.id = e.client_id
-            JOIN recent_booking_per_client rb ON rb.client_id = c.id AND rb.rn = 1
+            LEFT JOIN recent_booking_per_client rb ON rb.client_id = c.id AND rb.rn = 1
             LEFT JOIN last_completed_per_client lc ON lc.client_id = c.id AND lc.rn = 1
-            ORDER BY rb.sort_date DESC, rb.sort_start DESC NULLS LAST
+            LEFT JOIN roster_touch ro ON ro.client_id = c.id
+            ORDER BY rb.sort_date DESC NULLS LAST,
+                     rb.sort_start DESC NULLS LAST,
+                     ro.roster_added_at DESC NULLS LAST,
+                     c.id DESC
             LIMIT :lim
             """
         ),
@@ -2102,13 +2117,31 @@ async def count_trainer_fill_slots_invite_candidates(session: AsyncSession, trai
     return int(row[0] or 0) if row else 0
 
 
+async def link_trainer_client_roster(
+    session: AsyncSession,
+    trainer_id: int,
+    client_id: int,
+) -> None:
+    """Idempotent CRM link so the client appears under this trainer before any booking."""
+    await session.execute(
+        text(
+            """
+            INSERT INTO trainer_client_roster (trainer_id, client_id)
+            VALUES (:tid, :cid)
+            ON CONFLICT (trainer_id, client_id) DO NOTHING
+            """
+        ),
+        {"tid": trainer_id, "cid": client_id},
+    )
+
+
 async def trainer_has_access_to_client(
     session: AsyncSession,
     trainer_id: int,
     client_id: int,
 ) -> bool:
     """
-    True if this trainer may manage this client (non-cancelled booking or active/trial group member).
+    True if this trainer may manage this client (non-cancelled booking, roster link, or active/trial group member).
     Same rule as get_trainer_client_for_card visibility.
     """
     r = await session.execute(
@@ -2125,6 +2158,10 @@ async def trainer_has_access_to_client(
                 WHERE g.trainer_id = :tid AND m.client_id = :cid
                   AND m.status IN ('active', 'trial')
             )
+            OR EXISTS (
+                SELECT 1 FROM trainer_client_roster r
+                WHERE r.trainer_id = :tid AND r.client_id = :cid
+            )
             """
         ),
         {"tid": trainer_id, "cid": client_id},
@@ -2140,7 +2177,7 @@ async def get_trainer_client_for_card(
 ) -> dict | None:
     """
     One client row for the trainer mini-app card when opened by id (e.g. from a training group).
-    Allowed if the client has a non-cancelled booking with this trainer or is an active/trial group member.
+    Allowed if booking (non-cancelled), roster link, or active/trial group member.
     last_date/last_start refer to the latest *completed* session only (NULL if none).
     """
     r = await session.execute(
@@ -2158,6 +2195,10 @@ async def get_trainer_client_for_card(
                   INNER JOIN training_groups g ON g.id = m.training_group_id
                   WHERE g.trainer_id = :tid AND m.client_id = :cid
                     AND m.status IN ('active', 'trial')
+                )
+                OR EXISTS (
+                  SELECT 1 FROM trainer_client_roster r2
+                  WHERE r2.trainer_id = :tid AND r2.client_id = :cid
                 )
               ) AS allowed,
               c.id,

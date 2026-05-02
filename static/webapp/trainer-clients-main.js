@@ -28,17 +28,95 @@
           });
         }
       }
-      var initData = tg && tg.initData ? tg.initData : '';
+      /** Telegram can populate WebApp.initData after our deferred script runs — read fresh each time (see schedule-editor). */
+      function getTrainerWebAppInitData() {
+        var wtg = window.Telegram && window.Telegram.WebApp;
+        return wtg && wtg.initData ? wtg.initData : '';
+      }
       var headerTitleEl = document.querySelector('.header-title');
       var defaultHeaderTitle = headerTitleEl ? headerTitleEl.textContent : '';
 
       function withInit(url) {
-        if (!initData) return url;
-        return url + (url.indexOf('?') === -1 ? '?' : '&') + 'init_data=' + encodeURIComponent(initData);
+        var id = getTrainerWebAppInitData();
+        if (!id) return url;
+        return url + (url.indexOf('?') === -1 ? '?' : '&') + 'init_data=' + encodeURIComponent(id);
+      }
+
+      var TC_PHONE_MAX_LEN = 32;
+      var TC_PHONE_BY_RE = /^\+375\d{9}$/;
+      function normalizePhoneTrainerClient(raw) {
+        var s = String(raw || '').trim();
+        if (!s) return '';
+        var d = s.replace(/\D/g, '');
+        if (!d) return s.slice(0, TC_PHONE_MAX_LEN);
+        if (d.length === 12 && d.indexOf('375') === 0) return '+' + d;
+        if (d.length === 11 && d.indexOf('80') === 0) return '+375' + d.slice(2);
+        if (d.length === 9) return '+375' + d;
+        return s.replace(/\s+/g, '').replace(/-/g, '').replace(/\(/g, '').replace(/\)/g, '').replace(/\./g, '').slice(0, TC_PHONE_MAX_LEN);
+      }
+      function validatePhoneTrainerClient(normalized) {
+        if (!normalized) return 'Укажите номер телефона.';
+        if (normalized.length > TC_PHONE_MAX_LEN) return 'Телефон: не длиннее 32 символов.';
+        if (!TC_PHONE_BY_RE.test(normalized)) return 'Укажите корректный номер Беларуси (+375 и 9 цифр).';
+        return null;
+      }
+      /** National fragment in UI (+375 shown beside) → E.164; uses same helpers as schedule/book. */
+      function phoneFromTcAddClientNationalField() {
+        var el = document.getElementById('tcAddClientPhone');
+        var raw = el ? String(el.value || '').trim() : '';
+        if (typeof window.extractNational375Digits === 'function') {
+          var nd = window.extractNational375Digits(raw);
+          if (nd.length > 0) return '+375' + nd;
+          return '';
+        }
+        return normalizePhoneTrainerClient(raw);
+      }
+      (function wireTcAddClientPhoneMask() {
+        var el = document.getElementById('tcAddClientPhone');
+        if (!el || el.dataset.crmNat375Mask === '1') return;
+        if (typeof window.wireNational375PhoneInputMask === 'function') {
+          window.wireNational375PhoneInputMask(el);
+        }
+      })();
+      function setAddClientErr(msg) {
+        var el = document.getElementById('tcAddClientErr');
+        if (!el) return;
+        if (msg) {
+          el.textContent = msg;
+          el.hidden = false;
+        } else {
+          el.textContent = '';
+          el.hidden = true;
+        }
+      }
+      function closeAddClientModal() {
+        var m = document.getElementById('tcModalAddClient');
+        if (!m) return;
+        m.style.display = 'none';
+        m.setAttribute('aria-hidden', 'true');
+        setAddClientErr('');
+      }
+      function openAddClientModal() {
+        var m = document.getElementById('tcModalAddClient');
+        if (!m) return;
+        var pe = document.getElementById('tcAddClientPhone');
+        var fe = document.getElementById('tcAddClientFirst');
+        var le = document.getElementById('tcAddClientLast');
+        var me = document.getElementById('tcAddClientMiddle');
+        if (pe) pe.value = '';
+        if (fe) fe.value = '';
+        if (le) le.value = '';
+        if (me) me.value = '';
+        setAddClientErr('');
+        m.style.display = 'flex';
+        m.setAttribute('aria-hidden', 'false');
+        setTimeout(function() {
+          if (pe) pe.focus();
+        }, 120);
       }
 
       function postClientInviteLinkFirstCopyRecorded() {
-        if (!initData) return;
+        if (!getTrainerWebAppInitData()) return;
         fetch(withInit('/api/webapp/trainer/welcome-link/first-copy'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -93,7 +171,8 @@
         var path = (window.location.pathname || '').replace(/[^/]+$/, '') || '/webapp/';
         var u = path + 'schedule-editor?open_booking=' + encodeURIComponent(String(state.returnBookingId));
         if (state.returnFromHub) u += '&from=hub';
-        if (initData) u += (u.indexOf('?') >= 0 ? '&' : '?') + 'init_data=' + encodeURIComponent(initData);
+        var idNav = getTrainerWebAppInitData();
+        if (idNav) u += (u.indexOf('?') >= 0 ? '&' : '?') + 'init_data=' + encodeURIComponent(idNav);
         window.location.href = u;
       }
 
@@ -123,7 +202,8 @@
         if (!state.returnGroupId) return;
         var path = (window.location.pathname || '').replace(/[^/]+$/, '') || '/webapp/';
         var u = path + 'trainer-groups?id=' + encodeURIComponent(String(state.returnGroupId));
-        if (initData) u += (u.indexOf('?') >= 0 ? '&' : '?') + 'init_data=' + encodeURIComponent(initData);
+        var idNav2 = getTrainerWebAppInitData();
+        if (idNav2) u += (u.indexOf('?') >= 0 ? '&' : '?') + 'init_data=' + encodeURIComponent(idNav2);
         window.location.href = u;
       }
 
@@ -169,7 +249,8 @@
               } catch (eRm) { /* noop */ }
               var pathR = (window.location.pathname || '').replace(/[^/]+$/, '') || '/webapp/';
               var uR = pathR + 'trainer-requests?request_id=' + encodeURIComponent(String(retReqId));
-              if (initData) uR += (uR.indexOf('?') >= 0 ? '&' : '?') + 'init_data=' + encodeURIComponent(initData);
+              var idR = getTrainerWebAppInitData();
+              if (idR) uR += (uR.indexOf('?') >= 0 ? '&' : '?') + 'init_data=' + encodeURIComponent(idR);
               window.location.href = uR;
             };
             return;
@@ -190,11 +271,14 @@
         var el = document.getElementById('stateMessage');
         var inner = el && el.querySelector('.state-panel-inner');
         if (!text) {
-          el.style.display = 'none';
+          if (el) {
+            el.style.display = 'none';
+            el.className = 'loading state-panel';
+          }
           if (inner) inner.textContent = '';
-          el.className = 'loading state-panel';
           return;
         }
+        if (!el) return;
         if (inner) inner.textContent = text;
         el.className = (kind === 'error' ? 'error' : 'loading') + ' state-panel';
         el.style.display = 'block';
@@ -1280,7 +1364,7 @@
             return;
           }
           listEl.innerHTML =
-            '<div class="empty"><div class="empty-inner"><div class="empty-title">Пока пусто</div>Пока нет клиентов с записями. Как только клиенты начнут записываться, они появятся здесь.</div></div>';
+            '<div class="empty"><div class="empty-inner"><div class="empty-title">Пока пусто</div>Добавьте клиента кнопкой ниже или дождитесь первой записи — тогда список пополнится автоматически.</div></div>';
           return;
         }
         var html = state.filteredClients.map(function(c) {
@@ -2306,7 +2390,8 @@
             renderList();
             var cardUrl = withInit('/api/webapp/trainer/clients/' + encodeURIComponent(idFromUrl) + '/card');
             var hdrs = { Accept: 'application/json', 'Content-Type': 'application/json' };
-            if (initData) hdrs['X-Telegram-Init-Data'] = initData;
+            var idDeep = getTrainerWebAppInitData();
+            if (idDeep) hdrs['X-Telegram-Init-Data'] = idDeep;
             fetch(cardUrl, { headers: hdrs })
               .then(function(r) {
                 return r.json().then(function(data) {
@@ -2537,6 +2622,92 @@
         });
       }
 
+      var modalAddClient = document.getElementById('tcModalAddClient');
+      var btnOpenAddClient = document.getElementById('btnOpenAddClient');
+      if (btnOpenAddClient) {
+        btnOpenAddClient.onclick = function() {
+          openAddClientModal();
+        };
+      }
+      if (modalAddClient) {
+        modalAddClient.addEventListener('click', function(ev) {
+          if (ev.target === modalAddClient) closeAddClientModal();
+        });
+      }
+      var btnAddClientCancel = document.getElementById('tcAddClientCancel');
+      if (btnAddClientCancel) btnAddClientCancel.onclick = function() { closeAddClientModal(); };
+      var btnAddClientSubmit = document.getElementById('tcAddClientSubmit');
+      if (btnAddClientSubmit) {
+        btnAddClientSubmit.onclick = function() {
+          setAddClientErr('');
+          var phone = phoneFromTcAddClientNationalField();
+          var phErr = validatePhoneTrainerClient(phone);
+          if (phErr) {
+            setAddClientErr(phErr);
+            return;
+          }
+          var first = (document.getElementById('tcAddClientFirst').value || '').trim();
+          if (!first) {
+            setAddClientErr('Укажите имя.');
+            return;
+          }
+          var last = (document.getElementById('tcAddClientLast').value || '').trim();
+          var middle = (document.getElementById('tcAddClientMiddle').value || '').trim();
+          btnAddClientSubmit.disabled = true;
+          var hdrs = { Accept: 'application/json', 'Content-Type': 'application/json' };
+          var idPost = getTrainerWebAppInitData();
+          if (idPost) hdrs['X-Telegram-Init-Data'] = idPost;
+          fetch(withInit('/api/webapp/trainer/clients'), {
+            method: 'POST',
+            headers: hdrs,
+            body: JSON.stringify({
+              phone: phone,
+              first_name: first,
+              last_name: last,
+              middle_name: middle,
+            }),
+          })
+            .then(function(r) {
+              return r.json().then(function(data) {
+                if (!r.ok) {
+                  var d = data.detail;
+                  var msg = Array.isArray(d) ? (d[0] && d[0].msg) || 'Ошибка' : d || 'Ошибка';
+                  throw new Error(typeof msg === 'string' ? msg : 'Ошибка');
+                }
+                return data;
+              });
+            })
+            .then(function(data) {
+              var cid = parseInt(String(data.client_id), 10);
+              if (isNaN(cid) || cid <= 0) throw new Error('Некорректный ответ сервера');
+              var cardUrl = withInit('/api/webapp/trainer/clients/' + encodeURIComponent(cid) + '/card');
+              return fetch(cardUrl, { headers: hdrs }).then(function(r2) {
+                return r2.json().then(function(d2) {
+                  if (!r2.ok) throw new Error((d2 && d2.detail) || r2.statusText);
+                  return d2;
+                });
+              });
+            })
+            .then(function(d2) {
+              var c = d2.client;
+              if (!c || c.id == null) throw new Error('Нет данных');
+              closeAddClientModal();
+              state.allClients = state.allClients.filter(function(x) { return x.id !== c.id; });
+              state.allClients.unshift(c);
+              if (state.focusInviteBot) applyFilter();
+              else state.filteredClients = state.allClients.slice();
+              renderList();
+              openClientDetail(c.id);
+            })
+            .catch(function(err) {
+              setAddClientErr(err.message || 'Не удалось сохранить');
+            })
+            .finally(function() {
+              btnAddClientSubmit.disabled = false;
+            });
+        };
+      }
+
       initReturnContextFromQuery();
       initListFocusFromQuery();
       syncTrainerClientsHeaderBack();
@@ -2551,19 +2722,62 @@
           refreshClientCardBookingsUi(sid);
         } catch (eP) { /* noop */ }
       });
-      if (initData && window.TrainerMiniAppGate) {
-        window.TrainerMiniAppGate.fetchAccess(initData)
-          .then(function (a) {
-            if (a && !window.TrainerMiniAppGate.isActive(a)) {
-              window.TrainerMiniAppGate.showBlockingOverlay(a);
-              return;
-            }
+      /**
+       * Access check then list load. If GET /access never settles (tunnel drop), still load list after timeout.
+       * When initData appears late, wait like schedule-editor (~15s) so gate + fetches see real init_data.
+       */
+      function runTrainerClientsBootAfterGate() {
+        var id = getTrainerWebAppInitData();
+        if (id && window.TrainerMiniAppGate) {
+          var accessDone = false;
+          var tAccess = setTimeout(function () {
+            if (accessDone) return;
+            accessDone = true;
             loadClients();
-          })
-          .catch(function () {
-            loadClients();
-          });
+          }, 12000);
+          window.TrainerMiniAppGate.fetchAccess(id)
+            .then(function (a) {
+              if (accessDone) {
+                /* List may have loaded on timeout; still enforce gate if account is not active. */
+                if (a && !window.TrainerMiniAppGate.isActive(a)) {
+                  window.TrainerMiniAppGate.showBlockingOverlay(a);
+                }
+                return;
+              }
+              accessDone = true;
+              clearTimeout(tAccess);
+              if (a && !window.TrainerMiniAppGate.isActive(a)) {
+                window.TrainerMiniAppGate.showBlockingOverlay(a);
+                return;
+              }
+              loadClients();
+            })
+            .catch(function () {
+              if (accessDone) return;
+              accessDone = true;
+              clearTimeout(tAccess);
+              loadClients();
+            });
+        } else {
+          loadClients();
+        }
+      }
+
+      if (tg && !getTrainerWebAppInitData()) {
+        var _nInit = 0;
+        var _ivInit = setInterval(function () {
+          _nInit++;
+          if (getTrainerWebAppInitData()) {
+            clearInterval(_ivInit);
+            runTrainerClientsBootAfterGate();
+            return;
+          }
+          if (_nInit >= 300) {
+            clearInterval(_ivInit);
+            runTrainerClientsBootAfterGate();
+          }
+        }, 50);
       } else {
-        loadClients();
+        runTrainerClientsBootAfterGate();
       }
     })();

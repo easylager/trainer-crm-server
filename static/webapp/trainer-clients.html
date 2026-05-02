@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Мои клиенты</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="mini-app-telegram-chrome.js?v=20260501"></script>
+  <script src="mini-app-telegram-chrome.js?v=202605022"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=optional" media="print" onload="this.media='all'" />
@@ -37,8 +37,8 @@
       window.__applyTrainerClientsTheme = applyTrainerClientsTheme;
     })();
   </script>
-  <link rel="preload" href="trainer-clients-main.js?v=202605045" as="script" />
-  <link rel="stylesheet" href="mini-app-trainer-clients.css?v=202605042" />
+  <link rel="preload" href="trainer-clients-main.js?v=202605021e" as="script" />
+  <link rel="stylesheet" href="mini-app-trainer-clients.css?v=202605021f" />
   <link rel="stylesheet" href="mini-app-trainer-nav.css?v=20260422" />
 </head>
 <body>
@@ -60,6 +60,15 @@
   </div>
   <div class="search-box">
     <input id="searchInput" class="search-input" type="search" placeholder="Поиск по имени или телефону">
+  </div>
+  <div class="tc-add-client-bar">
+    <button type="button" class="btn-tc-add-client" id="btnOpenAddClient" aria-haspopup="dialog">
+      <span class="btn-tc-add-client__icon" aria-hidden="true">+</span>
+      <span class="btn-tc-add-client__text">Добавить клиента</span>
+    </button>
+  </div>
+  <div id="stateMessage" class="state-panel loading" style="display:none;" role="status">
+    <div class="state-panel-inner"></div>
   </div>
   <div id="clientsSection">
     <div id="clientsList">
@@ -165,12 +174,52 @@
     </div>
   </div>
 
-  <div id="stateMessage" class="loading state-panel" style="display:none;" role="status" aria-live="polite">
-    <div class="state-panel-inner"></div>
+  <div id="tcModalAddClient" class="modal-overlay tc-client-qb-overlay tc-add-client-overlay" style="display: none;" aria-hidden="true">
+    <div class="modal tc-client-qb-card tc-add-client-card" role="dialog" aria-labelledby="tcAddClientTitle">
+      <p class="tc-add-client-kicker">Новый контакт</p>
+      <h3 id="tcAddClientTitle" class="book-modal-title">Добавить клиента</h3>
+      <p class="book-choice-lead">Сохранится в вашем списке — запись можно оформить позже из расписания.</p>
+      <div class="quick-book-fields tc-add-client-fields">
+        <div class="book-field-stack">
+          <label class="book-field-label" for="tcAddClientPhone"><span class="tc-req-dot" aria-hidden="true"></span>Телефон</label>
+          <div class="hub-phone-input-wrap tc-add-client-phone-wrap">
+            <span class="hub-phone-prefix" aria-hidden="true">+375</span>
+            <input
+              type="text"
+              id="tcAddClientPhone"
+              class="input hub-phone-input"
+              placeholder="29 123-45-67"
+              autocomplete="tel"
+              inputmode="numeric"
+              maxlength="14"
+              aria-describedby="tcAddClientPhoneHint"
+            />
+          </div>
+          <p id="tcAddClientPhoneHint" class="tc-add-client-phone-hint">Код страны уже учтён — введите 9 цифр номера.</p>
+        </div>
+        <div class="book-field-stack">
+          <label class="book-field-label" for="tcAddClientFirst"><span class="tc-req-dot" aria-hidden="true"></span>Имя</label>
+          <input type="text" id="tcAddClientFirst" class="input tc-qb-input" autocomplete="given-name" maxlength="64" placeholder="Например, Анна" />
+        </div>
+        <div class="book-field-stack">
+          <label class="book-field-label" for="tcAddClientLast">Фамилия <span class="book-field-label-hint">(необязательно)</span></label>
+          <input type="text" id="tcAddClientLast" class="input tc-qb-input" autocomplete="family-name" maxlength="64" placeholder="По желанию" />
+        </div>
+        <div class="book-field-stack">
+          <label class="book-field-label" for="tcAddClientMiddle">Отчество <span class="book-field-label-hint">(необязательно)</span></label>
+          <input type="text" id="tcAddClientMiddle" class="input tc-qb-input" autocomplete="additional-name" maxlength="64" placeholder="По желанию" />
+        </div>
+      </div>
+      <p id="tcAddClientErr" class="tc-add-client-err" hidden role="alert"></p>
+      <div class="modal-actions tc-qb-actions tc-qb-actions--stack">
+        <button type="button" class="btn-block btn-primary" id="tcAddClientSubmit">Сохранить</button>
+        <button type="button" class="btn-block btn-secondary" id="tcAddClientCancel">Отмена</button>
+      </div>
+    </div>
   </div>
 
   <script src="mini-app-trainer-gate.js"></script>
-  <script defer src="trainer-clients-main.js?v=202605045"></script>
+  <script defer src="trainer-clients-main.js?v=202605021e"></script>
   <script defer src="mini-app-trainer-home.js"></script>
 </body>
 </html>

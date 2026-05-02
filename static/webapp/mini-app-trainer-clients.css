@@ -40,6 +40,9 @@
     body.client-detail-mode .header {
       justify-content: flex-end;
     }
+    body.client-detail-mode .tc-add-client-bar {
+      display: none;
+    }
     .search-box {
       margin-bottom: 14px;
     }
@@ -62,6 +65,90 @@
       outline: none;
       border-color: rgba(245, 166, 35, 0.45);
       box-shadow: 0 0 0 3px rgba(245, 166, 35, 0.18);
+    }
+    /* Primary CTA: add client (CRM roster without booking) */
+    .tc-add-client-bar {
+      margin: 0 0 14px;
+    }
+    .btn-tc-add-client {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      padding: 14px 18px;
+      border-radius: 16px;
+      border: 1px solid rgba(245, 166, 35, 0.38);
+      background: linear-gradient(145deg, rgba(245, 166, 35, 0.2) 0%, rgba(245, 166, 35, 0.06) 100%);
+      color: var(--tg-theme-text-color);
+      font-family: var(--app-font-sans);
+      font-size: 15px;
+      font-weight: 650;
+      letter-spacing: -0.02em;
+      cursor: pointer;
+      box-shadow: 0 4px 18px rgba(0, 0, 0, 0.08);
+      transition: transform 0.12s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+    .btn-tc-add-client:active {
+      transform: scale(0.99);
+    }
+    .btn-tc-add-client__icon {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      border-radius: 999px;
+      background: var(--tg-theme-button-color);
+      color: var(--tg-theme-button-text-color);
+      font-size: 20px;
+      font-weight: 700;
+      line-height: 1;
+    }
+    #tcModalAddClient.tc-add-client-overlay .tc-add-client-card {
+      position: relative;
+      border-radius: 22px;
+      border: 1px solid rgba(245, 166, 35, 0.22);
+      overflow: hidden;
+    }
+    #tcModalAddClient.tc-add-client-overlay .tc-add-client-card::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background: radial-gradient(120% 80% at 100% 0%, rgba(245, 166, 35, 0.12), transparent 55%);
+      opacity: 0.9;
+    }
+    #tcModalAddClient.tc-add-client-overlay .tc-add-client-card > * {
+      position: relative;
+      z-index: 1;
+    }
+    .tc-add-client-kicker {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--tg-theme-hint-color);
+      margin: 0 0 6px;
+    }
+    .tc-req-dot {
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      margin-right: 6px;
+      vertical-align: 0.1em;
+      background: var(--tg-theme-button-color);
+      box-shadow: 0 0 0 2px rgba(245, 166, 35, 0.22);
+    }
+    .tc-add-client-err {
+      font-size: 14px;
+      color: #e85d4c;
+      margin: 14px 0 0;
+      line-height: 1.35;
+    }
+    .tc-add-client-err[hidden] {
+      display: none !important;
     }
     /* Hub rhythm deep link: ?focus=invite_bot — who still needs Telegram bind */
     .tc-list-focus-banner {
@@ -655,7 +742,8 @@
     /* In-page quick book (same overlay pattern as trainer hub). */
     #tcModalQuickBookDatetime.tc-client-qb-overlay,
     #tcModalQuickBookService.tc-client-qb-overlay,
-    #tcModalBookConfirm.tc-client-qb-overlay {
+    #tcModalBookConfirm.tc-client-qb-overlay,
+    #tcModalAddClient.tc-client-qb-overlay {
       position: fixed;
       left: 0;
       right: 0;
@@ -672,12 +760,15 @@
       background: rgba(26, 26, 26, 0.42);
       -webkit-backdrop-filter: blur(12px);
       backdrop-filter: blur(12px);
-      overflow-y: auto;
+      /* Sheet scrolls inside .modal only — overlay scrolling breaks iOS long-press / Paste (hub, schedule book-flow). */
+      overflow-y: hidden;
+      overscroll-behavior: contain;
       -webkit-overflow-scrolling: touch;
     }
     #tcModalQuickBookDatetime .tc-client-qb-card.modal,
     #tcModalQuickBookService .tc-client-qb-card.modal,
-    #tcModalBookConfirm .tc-client-qb-card.modal {
+    #tcModalBookConfirm .tc-client-qb-card.modal,
+    #tcModalAddClient .tc-client-qb-card.modal {
       position: relative;
       max-width: 360px;
       width: 100%;
@@ -687,13 +778,35 @@
       overflow-x: hidden;
       max-height: 85vh;
       overflow-y: auto;
+      overscroll-behavior-y: contain;
       background: var(--tg-theme-bg-color);
       box-shadow:
         0 0 0 1px rgba(247, 166, 0, 0.14),
         0 24px 48px -12px rgba(0, 0, 0, 0.28);
     }
+    /* iOS Telegram WebKit: centered sheet + backdrop jump dismisses native Paste — match schedule «новый клиент». */
+    @media (hover: none), (pointer: coarse), (max-width: 640px) {
+      #tcModalAddClient.tc-client-qb-overlay.tc-add-client-overlay {
+        align-items: flex-start;
+        justify-content: center;
+        padding-top: max(10px, env(safe-area-inset-top));
+        padding-bottom: max(14px, env(safe-area-inset-bottom));
+        -webkit-backdrop-filter: none;
+        backdrop-filter: none;
+      }
+      #tcModalAddClient.tc-client-qb-overlay.tc-add-client-overlay .tc-client-qb-card.modal {
+        margin-top: 0;
+        max-height: calc(100vh - 28px);
+      }
+      @supports (height: 100dvh) {
+        #tcModalAddClient.tc-client-qb-overlay.tc-add-client-overlay .tc-client-qb-card.modal {
+          max-height: calc(100dvh - 28px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+        }
+      }
+    }
     #tcModalQuickBookDatetime .book-modal-title,
-    #tcModalQuickBookService .book-modal-title {
+    #tcModalQuickBookService .book-modal-title,
+    #tcModalAddClient .book-modal-title {
       margin: 0 0 4px;
       font-size: 1.125rem;
       font-weight: 700;
@@ -709,7 +822,8 @@
       color: var(--tg-theme-hint-color);
     }
     #tcModalQuickBookDatetime .book-choice-lead,
-    #tcModalQuickBookService .book-choice-lead {
+    #tcModalQuickBookService .book-choice-lead,
+    #tcModalAddClient .book-choice-lead {
       margin: 0 0 18px;
       font-size: 14px;
       line-height: 1.45;
@@ -729,7 +843,8 @@
       color: var(--tg-theme-text-color);
     }
     #tcModalQuickBookDatetime .book-field-label,
-    #tcModalQuickBookService .book-field-label {
+    #tcModalQuickBookService .book-field-label,
+    #tcModalAddClient .book-field-label {
       display: block;
       font-size: 11px;
       font-weight: 700;
@@ -738,9 +853,96 @@
       color: var(--tg-theme-hint-color);
       margin: 0 0 8px;
     }
+    #tcModalAddClient .book-field-label .book-field-label-hint {
+      display: inline;
+      font-weight: 600;
+      letter-spacing: 0;
+      text-transform: none;
+      font-size: 12px;
+      color: var(--tg-theme-hint-color);
+      opacity: 0.75;
+    }
     #tcModalQuickBookDatetime .book-field-stack,
-    #tcModalQuickBookService .book-field-stack {
+    #tcModalQuickBookService .book-field-stack,
+    #tcModalAddClient .book-field-stack {
       margin-bottom: 16px;
+      min-width: 0;
+    }
+    #tcModalAddClient .quick-book-fields .book-field-stack:last-child {
+      margin-bottom: 0;
+    }
+    /* +375 prefix + national digits (parity with schedule «новый клиент» / trainer-groups). */
+    #tcModalAddClient .tc-add-client-phone-wrap.hub-phone-input-wrap {
+      position: relative;
+      width: 100%;
+      border-radius: 14px;
+      background: var(--tg-theme-secondary-bg-color);
+      box-sizing: border-box;
+      min-height: 48px;
+      transition: box-shadow 160ms ease;
+    }
+    #tcModalAddClient .tc-add-client-phone-wrap:focus-within {
+      box-shadow:
+        inset 0 0 0 1px rgba(247, 166, 0, 0.55),
+        0 0 0 3px rgba(247, 166, 0, 0.12);
+    }
+    #tcModalAddClient .tc-add-client-phone-wrap .hub-phone-prefix {
+      position: absolute;
+      left: 14px;
+      top: 50%;
+      transform: translateY(-50%);
+      z-index: 1;
+      font-size: 15px;
+      font-weight: 600;
+      line-height: 1.2;
+      color: var(--tg-theme-text-color);
+      pointer-events: none;
+      letter-spacing: 0.02em;
+      font-variant-numeric: tabular-nums;
+      font-family: var(--app-font-sans);
+    }
+    #tcModalAddClient .tc-add-client-phone-wrap .hub-phone-input {
+      display: block;
+      width: 100%;
+      min-width: 0;
+      margin: 0;
+      padding: 13px 14px 13px 56px;
+      min-height: 48px;
+      box-sizing: border-box;
+      border-radius: 14px;
+      border: none;
+      background: transparent;
+      box-shadow: none;
+      font-size: 15px;
+      font-weight: 600;
+      line-height: 1.2;
+      font-family: var(--app-font-sans);
+      font-variant-numeric: tabular-nums;
+      -webkit-appearance: none;
+      appearance: none;
+      outline: none;
+      color: var(--tg-theme-text-color);
+      -webkit-text-fill-color: var(--tg-theme-text-color);
+      caret-color: var(--tg-theme-text-color);
+      touch-action: auto;
+      -webkit-touch-callout: default;
+    }
+    #tcModalAddClient .tc-add-client-phone-wrap .hub-phone-input:focus,
+    #tcModalAddClient .tc-add-client-phone-wrap .hub-phone-input:focus-visible {
+      outline: none;
+      box-shadow: none;
+    }
+    #tcModalAddClient .tc-add-client-phone-wrap .hub-phone-input::placeholder {
+      font-weight: 600;
+      opacity: 0.55;
+      color: var(--tg-theme-hint-color);
+      -webkit-text-fill-color: var(--tg-theme-hint-color);
+    }
+    #tcModalAddClient .tc-add-client-phone-hint {
+      margin: 8px 0 0;
+      font-size: 12px;
+      line-height: 1.35;
+      color: var(--tg-theme-hint-color);
     }
     #tcModalQuickBookDatetime #tcQuickBookHint.tc-quickbook-hint {
       margin: 2px 0 10px;
@@ -769,12 +971,15 @@
     #tcModalQuickBookDatetime .tc-qb-input,
     #tcModalQuickBookDatetime select.tc-qb-input,
     #tcModalQuickBookService .tc-qb-input,
-    #tcModalQuickBookService select.tc-qb-input {
+    #tcModalQuickBookService select.tc-qb-input,
+    #tcModalAddClient .tc-qb-input,
+    #tcModalAddClient select.tc-qb-input {
       width: 100%;
       padding: 13px 14px;
       border-radius: 14px;
       border: none;
       font-size: 15px;
+      font-family: var(--app-font-sans);
       box-sizing: border-box;
       background: var(--tg-theme-secondary-bg-color);
       color: var(--tg-theme-text-color);
@@ -784,10 +989,16 @@
       box-shadow: inset 0 0 0 1px transparent;
       transition: box-shadow 160ms ease, background-color 160ms ease;
     }
+    #tcModalAddClient .tc-qb-input::placeholder {
+      color: var(--tg-theme-hint-color);
+      opacity: 0.88;
+    }
     #tcModalQuickBookDatetime .tc-qb-input:focus,
     #tcModalQuickBookDatetime .tc-qb-input:focus-visible,
     #tcModalQuickBookService .tc-qb-input:focus,
-    #tcModalQuickBookService .tc-qb-input:focus-visible {
+    #tcModalQuickBookService .tc-qb-input:focus-visible,
+    #tcModalAddClient .tc-qb-input:focus,
+    #tcModalAddClient .tc-qb-input:focus-visible {
       box-shadow:
         inset 0 0 0 1px rgba(247, 166, 0, 0.55),
         0 0 0 3px rgba(247, 166, 0, 0.12);
@@ -867,20 +1078,34 @@
     }
     #tcModalQuickBookDatetime .tc-qb-actions,
     #tcModalQuickBookService .tc-qb-actions,
-    #tcModalBookConfirm .tc-qb-actions {
+    #tcModalBookConfirm .tc-qb-actions,
+    #tcModalAddClient .tc-qb-actions {
       display: flex;
       flex-direction: row;
       gap: 10px;
       margin-top: 8px;
     }
-    #tcModalQuickBookService .tc-qb-actions--stack {
+    #tcModalQuickBookService .tc-qb-actions--stack,
+    #tcModalAddClient .tc-qb-actions--stack {
       flex-direction: column;
+    }
+    #tcModalAddClient .tc-qb-actions.tc-qb-actions--stack {
+      margin-top: 18px;
+      gap: 12px;
     }
     #tcModalQuickBookDatetime .tc-qb-actions .btn-block,
     #tcModalQuickBookService .tc-qb-actions .btn-block,
-    #tcModalBookConfirm .tc-qb-actions .btn-block {
+    #tcModalBookConfirm .tc-qb-actions .btn-block,
+    #tcModalAddClient .tc-qb-actions .btn-block {
       flex: 1;
       min-width: 0;
+    }
+    #tcModalQuickBookService .tc-qb-actions.tc-qb-actions--stack .btn-block,
+    #tcModalAddClient .tc-qb-actions.tc-qb-actions--stack .btn-block {
+      /* Row modals use flex:1 for equal width; in column that steals height — keep natural CTA size. */
+      flex: 0 0 auto;
+      width: 100%;
+      min-height: 48px;
     }
     .tc-toast {
       position: fixed;

@@ -462,6 +462,17 @@ class TrainerClientTag(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class TrainerClientRoster(Base):
+    """Explicit CRM link: trainer added client in «Мои клиенты» before any booking."""
+
+    __tablename__ = "trainer_client_roster"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    trainer_id: Mapped[int] = mapped_column(ForeignKey("trainers.id", ondelete="CASCADE"), nullable=False, index=True)
+    client_id: Mapped[int] = mapped_column(ForeignKey("clients.id", ondelete="CASCADE"), nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 # --- Trainer schedule: weekly template → generated slots for booking ---
 
 class TrainerScheduleTemplate(Base):
