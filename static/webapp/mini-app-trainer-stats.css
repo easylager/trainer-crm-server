@@ -307,13 +307,17 @@
       margin-top: 5px;
     }
 
+    .trend-bars-footnote {
+      margin-top: 12px;
+      text-align: center;
+    }
     .chart-bars {
       display: flex;
       align-items: flex-end;
       justify-content: space-between;
-      gap: 6px;
-      height: 128px;
-      padding: 0 4px;
+      gap: 8px;
+      min-height: 0;
+      padding: 0 4px 4px;
     }
     .chart-bar-wrap {
       flex: 1;
@@ -322,10 +326,18 @@
       align-items: center;
       min-width: 0;
     }
+    .chart-bar-track {
+      height: 140px;
+      width: 100%;
+      max-width: 46px;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      margin: 0 auto;
+    }
     .chart-bar {
       width: 100%;
-      max-width: 40px;
-      min-height: 4px;
+      min-height: 0;
       border-radius: 10px 10px 0 0;
       background: linear-gradient(180deg, var(--accent) 0%, var(--accent-dim) 100%);
       transition: height 0.45s cubic-bezier(0.34, 1.2, 0.64, 1);
@@ -344,20 +356,29 @@
       display: flex;
       align-items: flex-end;
       justify-content: space-between;
-      gap: 4px;
-      height: 100px;
-      padding: 0 2px;
+      gap: 6px;
+      min-height: 0;
+      padding: 0 2px 4px;
     }
     .trend-bar-wrap {
       flex: 1;
       display: flex;
       flex-direction: column;
       align-items: center;
+      min-width: 0;
+    }
+    .trend-bar-track {
+      height: 128px;
+      width: 100%;
+      max-width: 36px;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      margin: 0 auto;
     }
     .trend-bar {
       width: 100%;
-      max-width: 32px;
-      min-height: 4px;
+      min-height: 0;
       border-radius: 8px 8px 0 0;
       background: var(--accent-dim);
       margin: 0 auto;
@@ -1132,21 +1153,6 @@
     }
     .money-month-sub strong { color: var(--tg-theme-text-color); }
 
-    .lead-rate-badge {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      min-height: 36px;
-      padding: 8px 12px;
-      border-radius: 12px;
-      font-size: 18px;
-      font-weight: 800;
-      letter-spacing: -0.02em;
-      background: color-mix(in srgb, var(--tg-theme-button-color) 14%, var(--tg-theme-secondary-bg-color));
-      border: 1px solid color-mix(in srgb, var(--tg-theme-button-color) 28%, transparent);
-      color: var(--tg-theme-text-color);
-    }
-
     .coach-card {
       border-radius: 16px;
       padding: 16px 16px 14px;
@@ -1202,12 +1208,6 @@
       transition: width 0.5s cubic-bezier(0.34, 1.2, 0.64, 1);
     }
 
-    .leads-row {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 10px;
-      margin-top: 4px;
-    }
     .finance-row .col-money {
       display: flex;
       flex-direction: column;

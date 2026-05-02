@@ -138,6 +138,8 @@ CLIENT_SUPPORT_CALLBACK = "client:support"
 _client_support_awaiting: set[int] = set()
 REQUEST_CALLBACK = "request"
 SETTINGS_CALLBACK = "settings"
+# Invite/bind «Главная» when WEBAPP_BASE_URL is not HTTPS — mirror /home (mini_app_https may still yield API HTTPS).
+CLIENT_HOME_WEBAPP_CALLBACK = "client_home_webapp"
 SETTINGS_CITY_PREFIX = "settings_city:"
 SETTINGS_SERVICE_PREFIX = "settings_service:"
 # Catalog flow: select trainer → "Выбран" + Записаться/Настройки (used from catalog and from settings "Выбор тренера").
@@ -309,19 +311,20 @@ def _invite_welcome_text(trainer: dict | None, base: str) -> str:
     return msg.CLIENT_WELCOME_INVITE.format(name=name, cta=cta)
 
 
-def _bind_first_impression_markup(base: str) -> InlineKeyboardMarkup:
-    """После invite/bind одна кнопка — каталог (тренер + запись); без «Главная» и «Мои записи»."""
-    b = (base or "").rstrip("/")
+def _bind_first_impression_markup() -> InlineKeyboardMarkup:
+    """После invite/bind одна кнопка — клиентский хаб Mini App (`/webapp/client-home`)."""
     label = msg.CLIENT_BUTTON_TRAINER_AND_BOOKING
-    if b.startswith("https://"):
+    https_base, _ = mini_app_https_base(Settings())
+    if https_base and https_base.lower().startswith("https://"):
+        hub_url = f"{https_base.rstrip('/')}/webapp/client-home"
         return InlineKeyboardMarkup(
             inline_keyboard=[
-                [InlineKeyboardButton(text=label, web_app=WebAppInfo(url=f"{b}/webapp/catalog"))],
+                [InlineKeyboardButton(text=label, web_app=WebAppInfo(url=hub_url))],
             ]
         )
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text=label, callback_data=CATALOG_CALLBACK)],
+            [InlineKeyboardButton(text=label, callback_data=CLIENT_HOME_WEBAPP_CALLBACK)],
         ]
     )
 
@@ -572,12 +575,11 @@ async def cmd_start(message: Message) -> None:
         if token_type == WELCOME_TOKEN_TYPE_CLIENT_BIND:
             async with async_session_factory() as db_session:
                 trainer = await get_trainer(db_session, int(trainer_id))
-            base = (Settings().webapp_base_url or "").rstrip("/")
             name = html.escape(_trainer_name(trainer) if trainer else "Тренер")
             await message.answer(
                 msg.CLIENT_WELCOME_BIND_FIRST_IMPRESSION.format(name=name),
                 parse_mode=ParseMode.HTML,
-                reply_markup=_bind_first_impression_markup(base),
+                reply_markup=_bind_first_impression_markup(),
             )
         elif token_type == WELCOME_TOKEN_TYPE_CERT:
             cert_code = payload_data.get("cert_code")
@@ -918,9 +920,8 @@ async def cmd_start(message: Message) -> None:
     await message.answer(msg.CLIENT_START_WELCOME)
 
 
-@router.message(Command("home"))
-async def cmd_home(message: Message) -> None:
-    """Client hub Mini App: contextual hero + links to catalog, bookings, requests, passes."""
+async def _send_client_home_webapp_offer(message: Message) -> None:
+    """Открыть клиентский хаб в Mini App или сообщить, что нужен HTTPS (как /home)."""
     base, _ = mini_app_https_base(Settings())
     if not base or not base.lower().startswith("https://"):
         await message.answer(msg.CLIENT_HOME_HTTPS_REQUIRED)
@@ -932,6 +933,12 @@ async def cmd_home(message: Message) -> None:
         ]
     )
     await message.answer(msg.CLIENT_HOME_OPEN_WEBAPP, parse_mode=ParseMode.HTML, reply_markup=kb)
+
+
+@router.message(Command("home"))
+async def cmd_home(message: Message) -> None:
+    """Client hub Mini App: contextual hero + links to catalog, bookings, requests, passes."""
+    await _send_client_home_webapp_offer(message)
 
 
 @router.message(Command("settings"))
@@ -2810,6 +2817,14 @@ async def pick_responder(callback: CallbackQuery) -> None:
     back_row = [[InlineKeyboardButton(text=msg.CLIENT_BOOK_BUTTON_BACK, callback_data=CATALOG_CALLBACK)]]
     full_kb = InlineKeyboardMarkup(inline_keyboard=keyboard.inline_keyboard + back_row)
     await callback.message.answer(text, reply_markup=full_kb)
+
+
+@router.callback_query(lambda c: c.data == CLIENT_HOME_WEBAPP_CALLBACK)
+async def on_client_home_webapp_callback(callback: CallbackQuery) -> None:
+    """Fallback когда в разметке invite/bind не смогли встроить Web App URL (нет HTTPS base)."""
+    await callback.answer()
+    if callback.message:
+        await _send_client_home_webapp_offer(callback.message)
 
 
 @router.callback_query(lambda c: c.data == CATALOG_CALLBACK)

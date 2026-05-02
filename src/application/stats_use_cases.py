@@ -469,10 +469,10 @@ async def get_trainer_stats_dashboard(session: AsyncSession, trainer_id: int) ->
             "pct": round(100 * cnt / max_day_count, 0) if max_day_count else 0,
         })
 
-    # Weekly trend: last 6 weeks (each Mon–Sun)
+    # Weekly trend: 6 calendar weeks Mon–Sun, oldest first; last bucket == current week (matches daily chart).
     weekly_trend = []
     for w in range(5, -1, -1):
-        ws = week_start - timedelta(days=7 * (w + 1))
+        ws = week_start - timedelta(days=7 * w)
         we = ws + timedelta(days=6)
         r = await session.execute(
             text("""

@@ -29,6 +29,16 @@
         });
       }
 
+      /** % of fixed cap; height is applied inside .chart-bar-track / .trend-bar-track (explicit px — bare % on flex column was collapsing). */
+      var STATS_DAY_BAR_CAP = 12;
+      var STATS_WEEK_BAR_CAP = 12 * 7;
+      function barHeightPct(count, cap) {
+        var c = count || 0;
+        if (c <= 0) return 0;
+        var capN = cap > 0 ? cap : 1;
+        return Math.min(100, Math.round((10000 * c) / capN) / 100);
+      }
+
       function formatWeekRange(ws, we) {
         if (!ws || !we) return '—';
         var a = String(ws).split('-');
@@ -192,17 +202,6 @@
         html += '</div>';
         html += '</div></div>';
 
-        html += '<div class="section"><div class="section-title">Лиды CRM · 30 дней</div><div class="card">';
-        html += '<div class="leads-row">';
-        html += '<div class="kpi-card" style="margin:0;"><div class="kpi-label">Заявок вам</div><div class="kpi-value">' + (d.client_requests_to_trainer_30d != null ? d.client_requests_to_trainer_30d : 0) + '</div><div class="kpi-sub">Адресно тренеру</div></div>';
-        html += '<div class="kpi-card" style="margin:0;"><div class="kpi-label">Откликов</div><div class="kpi-value">' + (d.client_request_responses_30d != null ? d.client_request_responses_30d : 0) + '</div><div class="kpi-sub">Вы ответили</div></div>';
-        html += '</div>';
-        if ((d.client_requests_to_trainer_30d || 0) > 0 && d.lead_response_rate_30d != null) {
-          html += '<div style="margin-top:14px;text-align:center;"><span class="lead-rate-badge">' + d.lead_response_rate_30d + '% ответов</span>';
-          html += '<p class="kpi-sub" style="margin-top:10px;">Доля заявок, по которым был отправлен ответ в CRM</p></div>';
-        }
-        html += '</div></div>';
-
         html += '<div class="section"><div class="section-title">Неделя по дням</div><div class="card">';
         var dayRows = d.bookings_by_day || [];
         var maxDay = 0;
@@ -212,9 +211,11 @@
         } else {
           html += '<div class="chart-bars">';
           dayRows.forEach(function(day) {
-            var pct = Math.max(day.pct || 0, 5);
+            var pct = barHeightPct(day.count, STATS_DAY_BAR_CAP);
             html += '<div class="chart-bar-wrap">';
+            html += '<div class="chart-bar-track">';
             html += '<div class="chart-bar" style="height:' + pct + '%"></div>';
+            html += '</div>';
             html += '<div class="chart-bar-label">' + (day.day_label || '') + '</div>';
             html += '<div class="chart-bar-value">' + (day.count || 0) + '</div>';
             html += '</div>';
@@ -223,18 +224,19 @@
         }
         html += '</div></div>';
 
-        var trendMax = d.trend_max || 1;
         html += '<div class="section"><div class="section-title">6 недель · занятия</div><div class="card">';
         html += '<div class="trend-bars">';
         (d.weekly_trend || []).forEach(function(w, i) {
           var isLast = i === (d.weekly_trend.length - 1);
-          var h = trendMax > 0 ? Math.max(10, (w.count / trendMax) * 100) : 10;
+          var h = barHeightPct(w.count, STATS_WEEK_BAR_CAP);
           html += '<div class="trend-bar-wrap">';
+          html += '<div class="trend-bar-track">';
           html += '<div class="trend-bar' + (isLast ? ' active' : '') + '" style="height:' + h + '%"></div>';
+          html += '</div>';
           html += '<div class="trend-bar-label">' + (w.week_label || '') + '</div>';
           html += '</div>';
         });
-        html += '</div><p class="kpi-sub" style="margin-top:12px;text-align:center;">Последний столбец — текущая неделя</p></div></div>';
+        html += '</div><p class="kpi-sub trend-bars-footnote">Последний столбец — текущая неделя</p></div></div>';
 
         var loadPct = d.load_pct != null ? d.load_pct : 0;
         html += '<div class="section"><div class="section-title">Загрузка слотов</div><div class="card">';
