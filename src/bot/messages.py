@@ -1122,6 +1122,36 @@ GROUP_RSVP_BUTTON_YES = "✅ Буду"
 GROUP_RSVP_BUTTON_NO = "❌ Не смогу"
 
 
+def format_trainer_client_repeat_gap_request_html(
+    *,
+    client_name: str,
+    service_name: str | None,
+    arena_name: str | None,
+    date_str: str,
+    day_str: str,
+    time_str: str,
+    duration_minutes: int,
+) -> str:
+    """Trainer push: client tapped repeat; exact slot missing but calendar gap fits the session interval."""
+    svc_line = ""
+    if service_name:
+        svc_line = f"\n🎯 <b>Услуга:</b> {html.escape(service_name)}"
+    arena_line = ""
+    if arena_name:
+        arena_line = f"\n📍 <b>Площадка:</b> {html.escape(arena_name)}"
+    block_after_time = f"{svc_line}{arena_line}\n" if (svc_line or arena_line) else "\n"
+    return (
+        "🔄 <b>Клиент хочет повторить занятие</b>\n\n"
+        f"<b>{html.escape(client_name)}</b> нажал «Повторить в это же время» "
+        f"на ту же дату через неделю ({html.escape(date_str)}, {html.escape(day_str)}) "
+        f"в {html.escape(time_str)} (~{int(duration_minutes)} мин)."
+        f"{block_after_time}"
+        "Важно: в вашем расписании <b>нет отдельного слота</b> с таким временем начала, "
+        "при этом других пересечений на это окно нет — можно оформить запись.\n\n"
+        "<b>Создать запись для клиента?</b>"
+    )
+
+
 def format_client_booking_completed_notice_html(
     *,
     date: str,
@@ -1218,9 +1248,8 @@ CLIENT_BUTTON_BECOME_REGULAR = "📅 Стать постоянным клиен�
 CLIENT_BUTTON_BOOK_AGAIN_COMPLETED = "📅 Записаться повторно"
 CLIENT_REPEAT_BOOKED = "✅ Записали вас на следующую неделю на <b>{date}</b> ({day}) {time}."
 CLIENT_REPEAT_SLOT_BOOKED = (
-    "На это время на следующую неделю слот уже занят. "
-    "Можете <b>стать постоянным</b> — тогда на следующие недели это время будет резервироваться за вами при создании расписания; "
-    "или выбрать другое время в каталоге."
+    "На это время через неделю у тренера уже есть занятость — повторить автоматически не получится. "
+    "Выберите другое время в каталоге или напишите тренеру."
 )
 CLIENT_REPEAT_SLOT_TAKEN_BY_REGULAR = (
     "На это время уже закреплён другой постоянный клиент. "
@@ -1229,6 +1258,18 @@ CLIENT_REPEAT_SLOT_TAKEN_BY_REGULAR = (
 CLIENT_REPEAT_NO_SLOT_YET = (
     "На это время на следующую неделю в расписании тренера пока нет окна. "
     "Когда тренер добавит слот — мы запишем вас и напишем."
+)
+CLIENT_REPEAT_GAP_TRAINER_NOTIFIED = (
+    "Мы отправили тренеру уведомление: вы хотите прийти снова в то же время через неделю, "
+    "а в расписании пока нет слота на это начало.\n\n"
+    "Как только тренер подтвердит или создаст запись — вам придёт сообщение. Спасибо за терпение."
+)
+CLIENT_REPEAT_GAP_ALREADY_NOTIFIED = (
+    "Мы уже отправили тренеру такой запрос — ждите ответа или напишите ему напрямую."
+)
+CLIENT_REPEAT_GAP_TRAINER_OFFLINE = (
+    "Мы сохранили ваш запрос на повтор через неделю. "
+    "Тренер мог не получить автоматическое уведомление в боте — напишите ему, чтобы уточнить время."
 )
 CLIENT_RECURRING_DONE = (
     "Вы закреплены как постоянный клиент: каждую неделю в <b>{day}</b> в {time} слот будет резервироваться за вами. "

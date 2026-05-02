@@ -716,9 +716,12 @@ async def create_trainer_quick_booking(
     arena_id: int | None = None,
     service_price_variant_id: int | None = None,
     is_sandbox: bool = False,
+    allow_off_grid_interval: bool = False,
 ) -> tuple[int, int, bool, bool] | None:
     """
-    Create an individual slot at date/start_minutes (15 min grid) if needed, then a trainer-initiated booking.
+    Create an individual slot at date/start_minutes if needed, then a trainer-initiated booking.
+
+    ``allow_off_grid_interval``: do not enforce arena/trainer start grid (repeat-last-session / precise starts).
 
     ValueError is raised by ensure_individual_slot_for_quick_book (caller maps to HTTP 400).
     ServicePriceVariantRequired is re-raised after rollback.
@@ -726,7 +729,12 @@ async def create_trainer_quick_booking(
     from src.application.trainer_schedule_use_cases import ensure_individual_slot_for_quick_book
 
     slot_id = await ensure_individual_slot_for_quick_book(
-        session, trainer_id, slot_date, start_minutes, duration_minutes
+        session,
+        trainer_id,
+        slot_date,
+        start_minutes,
+        duration_minutes,
+        allow_off_grid_interval=allow_off_grid_interval,
     )
     try:
         booking_id, mile = await create_booking(
@@ -885,6 +893,7 @@ async def trainer_repeat_booking_same_time_next_week(
             service_id,
             arena_id=resolved_arena,
             service_price_variant_id=spv_id,
+            allow_off_grid_interval=True,
         )
     except ServicePriceVariantRequired:
         return {"success": False, "error": "price_tier_required"}
@@ -3631,14 +3640,17 @@ async def get_completed_booking_for_repeat(
     booking_id: int,
     client_telegram_id: int,
 ) -> dict | None:
-    """Completed booking by id and client; for repeat/recurring flows. Returns trainer_id, client_id, service_id, slot_date, start_time, end_time."""
+    """Completed booking by id and client; repeat flows include service_name and arena_name for trainer pings."""
     r = await session.execute(
         text("""
             SELECT b.id, b.trainer_id, b.client_id, b.service_id, s.slot_date, s.start_time, s.end_time,
-                   b.service_price_variant_id
+                   b.service_price_variant_id, sv.name AS service_name,
+                   NULLIF(TRIM(ar.name), '') AS arena_name
             FROM bookings b
             JOIN clients c ON c.id = b.client_id
             JOIN slots s ON s.id = b.slot_id
+            LEFT JOIN services sv ON sv.id = b.service_id
+            LEFT JOIN arenas ar ON ar.id = COALESCE(b.arena_id, s.arena_id)
             WHERE b.id = :bid AND c.telegram_id = :ctid AND b.status = 'completed'
         """),
         {"bid": booking_id, "ctid": client_telegram_id},
@@ -3646,6 +3658,8 @@ async def get_completed_booking_for_repeat(
     row = r.fetchone()
     if not row:
         return None
+    sn = row[8]
+    an = row[9]
     return {
         "id": row[0],
         "trainer_id": row[1],
@@ -3655,6 +3669,8 @@ async def get_completed_booking_for_repeat(
         "start_time": row[5],
         "end_time": row[6],
         "service_price_variant_id": int(row[7]) if row[7] is not None else None,
+        "service_name": (sn or "").strip() or None,
+        "arena_name": (an or "").strip() or None,
     }
 
 

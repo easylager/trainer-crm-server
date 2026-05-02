@@ -156,6 +156,7 @@ async def get_slot_status_on_date(
             SELECT id, slot_date, end_time, status
             FROM slots
             WHERE trainer_id = :tid AND slot_date = :d AND start_time = :st
+              AND status <> 'cancelled'
         """),
         {"tid": trainer_id, "d": slot_date, "st": st},
     )
@@ -179,6 +180,7 @@ async def get_slot_status_next_week(
             SELECT id, slot_date, end_time, status
             FROM slots
             WHERE trainer_id = :tid AND slot_date = :d AND start_time = :st
+              AND status <> 'cancelled'
         """),
         {"tid": trainer_id, "d": slot_date, "st": start_time},
     )
@@ -194,6 +196,58 @@ async def find_available_slot_next_week(
     """Available slot next week: same weekday and start_time. Returns slot id, slot_date, end_time or None."""
     status, slot_info = await get_slot_status_next_week(session, trainer_id, day_of_week, start_time)
     return slot_info if status == "available" else None
+
+
+async def trainer_calendar_interval_clear(
+    session: AsyncSession,
+    trainer_id: int,
+    slot_date: date,
+    interval_start: time,
+    interval_end: time,
+) -> bool:
+    """
+    True when no non-cancelled slot overlaps [interval_start, interval_end) on that day.
+    Used for «repeat same time»: calendar gap without a matching slot row.
+    """
+    ist = (
+        interval_start.replace(second=0, microsecond=0)
+        if hasattr(interval_start, "replace")
+        else interval_start
+    )
+    ien = interval_end.replace(second=0, microsecond=0) if hasattr(interval_end, "replace") else interval_end
+    r = await session.execute(
+        text("""
+            SELECT 1 FROM slots
+            WHERE trainer_id = :tid AND slot_date = :d AND status <> 'cancelled'
+              AND start_time < :ien AND end_time > :ist
+            LIMIT 1
+        """),
+        {"tid": trainer_id, "d": slot_date, "ist": ist, "ien": ien},
+    )
+    return r.fetchone() is None
+
+
+async def try_insert_client_repeat_gap_notification(
+    session: AsyncSession,
+    booking_id: int,
+    target_slot_date: date,
+) -> bool:
+    """
+    Idempotent trainer ping for repeat-without-slot flow.
+    Returns True if this call inserted the first row for (booking, target date).
+    """
+    r = await session.execute(
+        text("""
+            INSERT INTO client_repeat_gap_notifications (booking_id, target_slot_date)
+            VALUES (:bid, :d)
+            ON CONFLICT (booking_id, target_slot_date) DO NOTHING
+            RETURNING id
+        """),
+        {"bid": booking_id, "d": target_slot_date},
+    )
+    inserted = r.fetchone() is not None
+    await session.commit()
+    return inserted
 
 
 async def add_slot_wait_request(

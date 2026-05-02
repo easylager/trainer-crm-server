@@ -558,22 +558,32 @@ async def ensure_individual_slot_for_quick_book(
     slot_date: date,
     start_minutes: int,
     duration_minutes: int = DEFAULT_SLOT_DURATION_MINUTES,
+    *,
+    allow_off_grid_interval: bool = False,
 ) -> int:
     """
     Returns slot_id for an individual slot at start_minutes (arena schedule grid, same rules as schedule editor).
     Reuses an existing empty slot if it matches the same [start, end) interval.
 
+    ``allow_off_grid_interval``: skip arena/uniform grid checks — used when copying an interval from an existing
+    booking («same time next week» / precise-time sessions); overlap rules still apply.
+
     Raises ValueError on invalid time, group slot, booked slot, or interval overlap.
     """
     dm = int(duration_minutes)
-    if dm < 15 or dm > 24 * 60:
+    if allow_off_grid_interval:
+        # Mirror a real session interval (may start at :07 etc.); keep overlap checks below.
+        if dm < 5 or dm > 24 * 60:
+            raise ValueError("Некорректная длительность")
+    elif dm < 15 or dm > 24 * 60:
         raise ValueError("Некорректная длительность")
     if start_minutes < 0 or start_minutes > 23 * 60 + 59:
         raise ValueError("Некорректное время начала")
-    preset = await get_schedule_grid_preset_for_trainer(session, trainer_id)
-    if start_minutes not in allowed_start_minutes_from_preset(preset):
-        raise ValueError("Время начала не соответствует сетке площадки.")
-    validate_duration_for_preset(dm, preset)
+    if not allow_off_grid_interval:
+        preset = await get_schedule_grid_preset_for_trainer(session, trainer_id)
+        if start_minutes not in allowed_start_minutes_from_preset(preset):
+            raise ValueError("Время начала не соответствует сетке площадки.")
+        validate_duration_for_preset(dm, preset)
     new_end = start_minutes + dm
     if new_end > 24 * 60:
         raise ValueError("Некорректная длительность для выбранного времени")

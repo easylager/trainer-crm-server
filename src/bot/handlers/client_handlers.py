@@ -12,6 +12,7 @@ from collections import defaultdict
 from datetime import date, datetime, timedelta
 
 from aiogram import Bot, F, Router
+from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ChatAction, ParseMode
 from aiogram.filters import Command, CommandStart
 from aiogram.types import (
@@ -27,7 +28,14 @@ from aiogram.types import (
 )
 
 from src.application.booking_use_cases import (
+    create_booking,
+    generate_reminders_for_booking,
+    get_booking_for_client_feedback,
+    get_completed_booking_for_repeat,
+    get_first_service_id_for_trainer,
     get_trainer_default_city_and_service,
+    get_trainer_telegram_id,
+    list_bookings_for_client,
     resolve_welcome_session_city_service,
     trainer_has_access_to_client,
 )
@@ -61,21 +69,15 @@ from src.application.client_request_use_cases import (
     list_my_requests_with_responses,
     replace_client_request_with_new,
 )
-from src.application.booking_use_cases import (
-    create_booking,
-    generate_reminders_for_booking,
-    get_booking_for_client_feedback,
-    get_completed_booking_for_repeat,
-    get_first_service_id_for_trainer,
-    list_bookings_for_client,
-)
 from src.application.recurring_use_cases import (
     add_slot_wait_request,
     create_recurring_client_slot,
     find_available_slot_next_week,
     get_active_recurring_for_booking,
-    get_slot_status_next_week,
+    get_slot_status_on_date,
     has_other_active_recurring,
+    trainer_calendar_interval_clear,
+    try_insert_client_repeat_gap_notification,
 )
 from src.application.trainer_schedule_use_cases import (
     get_slot,
@@ -187,6 +189,8 @@ _request_edit_state: dict[int, int | dict] = {}
 FEEDBACK_BOOKING_PREFIX = "feedback_booking:"
 FEEDBACK_RATING_PREFIX = "feedback_rating:"
 REPEAT_BOOKING_PREFIX = "repeat_booking:"
+# Must match trainer_handlers.TRAINER_REPEAT_WEEK_PREFIX (trainer bot callback).
+TRAINER_REPEAT_WEEK_CALLBACK_PREFIX = "trainer_repeat_week:"
 MAKE_RECURRING_PREFIX = "make_recurring:"
 BOOK_AVAILABLE_SLOT_PREFIX = "book_available_slot:"
 _feedback_state: dict[int, dict] = {}
@@ -1797,15 +1801,24 @@ async def on_feedback_review_message(message: Message) -> None:
 
 
 # --- Repeat / Become regular: scenarios ---
-# Repeat (Повторить): 1) slot next week available → book, success. 2) slot booked → no wait;
-#   if another client has recurring for this time → "закреплён за другим постоянным"; else "слот занят, можно стать постоянным или другое время".
-# 3) No slot yet → add wait_request, "когда тренер добавит слот — запишем и напишем".
-# Become permanent (Стать постоянным): 1) This client already recurring → "уже закреплено". 2) Another client has recurring for (trainer, day, time) → "закреплено за другим". 3) OK → create recurring; if slot next week free → also book and say "записали на следующую неделю".
+# Repeat (Повторить): target = slot_date + 7; exact slot available → book. booked → honest message (+ recurring hint).
+#   No exact slot but calendar interval clear → idempotent trainer ping + client «ждите». Else → wait_request.
+
+
+def _repeat_interval_duration_minutes(start_time: object, end_time: object) -> int:
+    """Wall-clock length of [start, end) on one day for repeat / trainer gap notices."""
+    try:
+        if start_time and end_time and hasattr(start_time, "hour") and hasattr(end_time, "hour"):
+            delta = datetime.combine(date.today(), end_time) - datetime.combine(date.today(), start_time)
+            return max(1, int(delta.total_seconds() // 60))
+    except (TypeError, ValueError):
+        pass
+    return 45
 
 
 @router.callback_query(lambda c: c.data and c.data.startswith(REPEAT_BOOKING_PREFIX))
 async def on_repeat_booking(callback: CallbackQuery) -> None:
-    """Repeat same time next week: book if slot available; else honest message (booked / taken by regular) or add wait."""
+    """Repeat same clock interval on slot_date + 7: book exact slot, ping trainer if calendar gap, or waitlist."""
     await callback.answer()
     raw = (callback.data or "").replace(REPEAT_BOOKING_PREFIX, "").strip()
     booking_id = safe_parse_id(raw)
@@ -1819,11 +1832,16 @@ async def on_repeat_booking(callback: CallbackQuery) -> None:
         return
     trainer_id = booking["trainer_id"]
     client_id = booking["client_id"]
-    slot_date = booking["slot_date"]
+    slot_date_val = booking["slot_date"]
+    slot_d = slot_date_val.date() if hasattr(slot_date_val, "date") else slot_date_val
+    target_date = slot_d + timedelta(days=7)
     start_time = booking["start_time"]
-    day_of_week = slot_date.weekday()
+    end_time = booking["end_time"]
+    st = start_time.replace(second=0, microsecond=0) if hasattr(start_time, "replace") else start_time
+    et = end_time.replace(second=0, microsecond=0) if hasattr(end_time, "replace") else end_time
+    day_of_week = slot_d.weekday()
     async with async_session_factory() as db_session:
-        status, slot_info = await get_slot_status_next_week(db_session, trainer_id, day_of_week, start_time)
+        status, slot_info = await get_slot_status_on_date(db_session, trainer_id, target_date, st)
     if status == "available" and slot_info:
         service_id = booking.get("service_id")
         if not service_id:
@@ -1845,7 +1863,7 @@ async def on_repeat_booking(callback: CallbackQuery) -> None:
                     await generate_reminders_for_booking(db_session, new_booking_id)
                 date_str = slot_info["slot_date"].strftime("%d.%m") if hasattr(slot_info["slot_date"], "strftime") else str(slot_info["slot_date"])
                 day_str = msg.TRAINER_DAYS[slot_info["slot_date"].weekday()] if hasattr(slot_info["slot_date"], "weekday") else ""
-                time_str = start_time.strftime("%H:%M") if hasattr(start_time, "strftime") else ""
+                time_str = st.strftime("%H:%M") if hasattr(st, "strftime") else ""
                 await callback.message.answer(
                     msg.CLIENT_REPEAT_BOOKED.format(date=date_str, day=day_str, time=time_str)
                 )
@@ -1853,7 +1871,7 @@ async def on_repeat_booking(callback: CallbackQuery) -> None:
     if status == "booked":
         async with async_session_factory() as db_session:
             taken_by_regular = await has_other_active_recurring(
-                db_session, trainer_id, day_of_week, start_time, exclude_client_id=client_id
+                db_session, trainer_id, day_of_week, st, exclude_client_id=client_id
             )
         # Remove Repeat/Become regular buttons from the message so they don't stay visible
         try:
@@ -1868,8 +1886,90 @@ async def on_repeat_booking(callback: CallbackQuery) -> None:
         )
         return
     async with async_session_factory() as db_session:
-        await add_slot_wait_request(db_session, trainer_id, client_id, day_of_week, start_time)
-    await callback.message.answer(msg.CLIENT_REPEAT_NO_SLOT_YET)
+        interval_clear = await trainer_calendar_interval_clear(db_session, trainer_id, target_date, st, et)
+    if not interval_clear:
+        async with async_session_factory() as db_session:
+            await add_slot_wait_request(db_session, trainer_id, client_id, day_of_week, st)
+        await callback.message.answer(msg.CLIENT_REPEAT_NO_SLOT_YET)
+        return
+
+    async with async_session_factory() as db_session:
+        inserted = await try_insert_client_repeat_gap_notification(db_session, booking_id, target_date)
+
+    if inserted:
+        trainer_tid: int | None = None
+        client_display = "Клиент"
+        trainer_notify_ok = False
+        async with async_session_factory() as db_session:
+            trainer_tid = await get_trainer_telegram_id(db_session, trainer_id)
+            rnm = await db_session.execute(
+                text("SELECT first_name, last_name FROM clients WHERE id = :cid"),
+                {"cid": client_id},
+            )
+            nrow = rnm.fetchone()
+        if nrow:
+            fn, ln = (nrow[0] or ""), (nrow[1] or "")
+            client_display = (str(fn) + " " + str(ln)).strip() or "Клиент"
+
+        if trainer_tid:
+            settings = Settings()
+            trainer_bot = Bot(
+                token=settings.telegram_bot_token_trainer,
+                default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+            )
+            date_str = target_date.strftime("%d.%m")
+            day_str = msg.TRAINER_DAYS[target_date.weekday()]
+            time_str = st.strftime("%H:%M") if hasattr(st, "strftime") else str(st)
+            trainer_text = msg.format_trainer_client_repeat_gap_request_html(
+                client_name=client_display,
+                service_name=booking.get("service_name"),
+                arena_name=booking.get("arena_name"),
+                date_str=date_str,
+                day_str=day_str,
+                time_str=time_str,
+                duration_minutes=_repeat_interval_duration_minutes(st, et),
+            )
+            kb = InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [
+                        InlineKeyboardButton(
+                            text=msg.TRAINER_BUTTON_BOOK_SAME_TIME_NEXT_WEEK,
+                            callback_data=f"{TRAINER_REPEAT_WEEK_CALLBACK_PREFIX}{booking_id}",
+                        ),
+                    ],
+                ],
+            )
+            try:
+                await trainer_bot.send_message(
+                    chat_id=int(trainer_tid),
+                    text=trainer_text,
+                    reply_markup=kb,
+                )
+                trainer_notify_ok = True
+            except Exception as e:
+                logging.warning(
+                    "repeat_gap trainer notify failed booking_id=%s trainer_id=%s: %s",
+                    booking_id,
+                    trainer_id,
+                    e,
+                )
+            finally:
+                await trainer_bot.session.close()
+        else:
+            logging.warning(
+                "repeat_gap: no trainer telegram_id trainer_id=%s booking_id=%s",
+                trainer_id,
+                booking_id,
+            )
+
+        await callback.message.answer(
+            msg.CLIENT_REPEAT_GAP_TRAINER_NOTIFIED
+            if trainer_notify_ok
+            else msg.CLIENT_REPEAT_GAP_TRAINER_OFFLINE
+        )
+        return
+
+    await callback.message.answer(msg.CLIENT_REPEAT_GAP_ALREADY_NOTIFIED)
 
 
 @router.callback_query(lambda c: c.data and c.data.startswith(MAKE_RECURRING_PREFIX))

@@ -199,20 +199,12 @@ async def _send_client_booking_completed_push(
         trainer_name=(b.get("trainer_name") or "Тренер"),
         service_name=b.get("service_name"),
     )
-    slot_date_val = b["slot_date"]
-    target_date = (
-        slot_date_val.date() if hasattr(slot_date_val, "date") else slot_date_val
-    ) + timedelta(days=7)
-    async with async_session_factory() as check_session:
-        status_next, _ = await get_slot_status_on_date(
-            check_session, b["trainer_id"], target_date, b["start_time"]
-        )
     kb = msg.build_client_booking_completed_inline_keyboard(
         webapp_base_url=(Settings().webapp_base_url or ""),
         trainer_id=b["trainer_id"],
         booking_id=booking_id,
         trainer_telegram_id=b.get("trainer_telegram_id"),
-        show_repeat_row=(status_next != "booked"),
+        show_repeat_row=True,
     )
     try:
         await client_bot.send_message(
