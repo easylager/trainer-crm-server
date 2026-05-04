@@ -11,6 +11,7 @@ from src.application.arena_schedule_preset import (
     allowed_start_minutes_from_preset,
     fixed_slot_duration_minutes,
     get_schedule_grid_preset_for_trainer,
+    get_schedule_grid_preset_for_trainer_arena,
     validate_duration_for_preset,
     validate_start_minutes_for_preset,
 )
@@ -560,6 +561,7 @@ async def ensure_individual_slot_for_quick_book(
     duration_minutes: int = DEFAULT_SLOT_DURATION_MINUTES,
     *,
     allow_off_grid_interval: bool = False,
+    arena_id: int | None = None,
 ) -> int:
     """
     Returns slot_id for an individual slot at start_minutes (arena schedule grid, same rules as schedule editor).
@@ -579,8 +581,22 @@ async def ensure_individual_slot_for_quick_book(
         raise ValueError("Некорректная длительность")
     if start_minutes < 0 or start_minutes > 23 * 60 + 59:
         raise ValueError("Некорректное время начала")
+    slot_arena_id: int | None
+    if arena_id is not None:
+        r_own = await session.execute(
+            text("SELECT 1 FROM trainer_arenas WHERE trainer_id = :tid AND arena_id = :aid"),
+            {"tid": trainer_id, "aid": int(arena_id)},
+        )
+        if not r_own.fetchone():
+            raise ValueError("Площадка не привязана к вашему профилю")
+        slot_arena_id = int(arena_id)
+    else:
+        slot_arena_id = await trainer_default_slot_arena_id(session, trainer_id)
     if not allow_off_grid_interval:
-        preset = await get_schedule_grid_preset_for_trainer(session, trainer_id)
+        if slot_arena_id is not None:
+            preset = await get_schedule_grid_preset_for_trainer_arena(session, trainer_id, slot_arena_id)
+        else:
+            preset = await get_schedule_grid_preset_for_trainer(session, trainer_id)
         if start_minutes not in allowed_start_minutes_from_preset(preset):
             raise ValueError("Время начала не соответствует сетке площадки.")
         validate_duration_for_preset(dm, preset)
@@ -591,6 +607,8 @@ async def ensure_individual_slot_for_quick_book(
     start_t = time_from_minutes(start_minutes)
     end_t = _time_end(start_t, dm)
 
+    slot_arena_effective_default = await trainer_default_slot_arena_id(session, trainer_id)
+
     r = await session.execute(
         text(
             """
@@ -598,6 +616,7 @@ async def ensure_individual_slot_for_quick_book(
               (EXTRACT(HOUR FROM s.start_time)::int * 60 + EXTRACT(MINUTE FROM s.start_time)::int) AS sm,
               (EXTRACT(HOUR FROM s.end_time)::int * 60 + EXTRACT(MINUTE FROM s.end_time)::int) AS em,
               s.capacity,
+              s.arena_id,
               (SELECT COUNT(*)::int FROM bookings b
                WHERE b.slot_id = s.id AND b.status IN ('pending', 'confirmed')) AS active_cnt
             FROM slots s
@@ -612,7 +631,11 @@ async def ensure_individual_slot_for_quick_book(
         sm = int(row[1])
         em = int(row[2])
         cap = max(1, int(row[3] or 1))
-        active_cnt = int(row[4] or 0)
+        row_arena_id: int | None = int(row[4]) if row[4] is not None else None
+        row_effective_arena: int | None = (
+            row_arena_id if row_arena_id is not None else slot_arena_effective_default
+        )
+        active_cnt = int(row[5] or 0)
         if em < sm:
             em = sm + 24 * 60
         if not _intervals_overlap_half_open(start_minutes, new_end, sm, em):
@@ -622,6 +645,10 @@ async def ensure_individual_slot_for_quick_book(
                 "На это время уже есть групповой слот — используйте расписание.",
             )
         if sm == start_minutes and em == new_end:
+            if row_effective_arena != slot_arena_id:
+                raise ValueError(
+                    "На это время уже есть слот на другой площадке. Выберите другое время или другую арену.",
+                )
             if active_cnt >= 1:
                 raise ValueError("Это время уже занято.")
             return sid
@@ -629,7 +656,6 @@ async def ensure_individual_slot_for_quick_book(
             raise ValueError("Это время уже занято.")
         raise ValueError("Время пересекается с другим слотом в расписании.")
 
-    default_arena = await trainer_default_slot_arena_id(session, trainer_id)
     r2 = await session.execute(
         text(
             """
@@ -643,7 +669,7 @@ async def ensure_individual_slot_for_quick_book(
             "d": slot_date,
             "st": start_t,
             "end": end_t,
-            "aid": default_arena,
+            "aid": slot_arena_id,
         },
     )
     new_id = r2.fetchone()

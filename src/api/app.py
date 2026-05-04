@@ -1,12 +1,13 @@
 """FastAPI app: health check and API routers. No business logic here."""
 import logging
 from pathlib import Path
+from typing import Optional
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from starlette.middleware.gzip import GZipMiddleware
 from starlette.staticfiles import StaticFiles
 
@@ -415,6 +416,45 @@ def webapp_palette_ice_reference():
     if not path.is_file():
         raise HTTPException(status_code=404, detail="File not found")
     return _webapp_file_response(path)
+
+
+@app.get("/webapp/client-register")
+def webapp_client_register_page(trainer_id: Optional[int] = Query(None)):
+    """Client self-registration Mini App: collect phone + name, link to trainer roster.
+
+    Embeds ``trainer_id`` in a meta tag so the Mini App still works when the WebView
+    drops ``location.search`` (Continue would otherwise no-op with a hidden global error).
+    """
+    path = _WEBAPP_DIR / "client-register.html"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Web App not found")
+    html = path.read_text(encoding="utf-8")
+    tid = ""
+    if trainer_id is not None and trainer_id > 0:
+        tid = str(int(trainer_id))
+    meta = f'  <meta name="trainer-crm-register-trainer-id" content="{tid}">\n'
+    marker = "</head>"
+    if marker not in html:
+        raise HTTPException(status_code=500, detail="Invalid client-register template")
+    html = html.replace(marker, meta + marker, 1)
+    return HTMLResponse(
+        content=html,
+        media_type="text/html",
+        headers=_WEBAPP_NO_CACHE_HEADERS,
+    )
+
+
+@app.get("/webapp/client-register-main.js")
+def webapp_client_register_main_js(request: Request):
+    """Client self-registration page logic (split from client-register.html). Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "client-register-main.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
 
 
 @app.get("/webapp/client-buy-pass")

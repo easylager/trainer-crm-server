@@ -57,6 +57,7 @@ from src.application.booking_use_cases import (
     compute_booking_reminder_schedule,
     explain_trainer_booking_failure,
     decline_booking,
+    detach_trainer_client_from_roster_miniapp,
     format_reminder_plan_ru,
     generate_reminders_for_booking,
     get_booking_milestone_display_for_trainer,
@@ -83,15 +84,22 @@ from src.application.booking_use_cases import (
     resolve_arena_for_client_self_booking,
     get_trainer_primary_arena_resolved,
     get_trainer_slot_for_mass_client_invite,
+    trainer_client_roster_link_exists,
 )
 from src.application.client_username_enrich import enrich_booking_dicts_with_client_telegram_usernames
+from src.application.trainer_client_registration_notify import (
+    notify_trainer_client_registered_from_invite,
+)
 from src.application.client_use_cases import (
+    attach_telegram_id_to_client,
+    get_client_by_phone,
     get_client_id_by_telegram_id,
     get_client_phone_for_webapp,
     get_client_profile_basic,
     get_client_telegram_id,
     get_or_create_client,
     get_or_create_client_by_phone,
+    normalize_phone,
 )
 from src.application.client_request_use_cases import (
     add_trainer_pending_request_booking,
@@ -247,6 +255,7 @@ from src.shared.webapp_http_messages import (
 from src.billing.payment_gateway import create_checkout
 from src.application.arena_schedule_preset import (
     get_schedule_grid_preset_for_trainer,
+    get_schedule_grid_preset_for_trainer_arena,
     schedule_grid_preset_to_api,
 )
 from src.application.trainer_schedule_use_cases import (
@@ -568,6 +577,10 @@ async def get_trainer_access_for_webapp(
 async def get_schedule(
     from_date: date | None = Query(None, description="YYYY-MM-DD"),
     to_date: date | None = Query(None, description="YYYY-MM-DD"),
+    arena_id: int | None = Query(
+        None,
+        description="When set, schedule_grid matches this trainer-linked arena (quick book / multi-venue).",
+    ),
     view: Literal["list"] | None = Query(
         None,
         description="view=list: slots only (compact JSON for read-only schedule screen; omits schedule_grid).",
@@ -628,6 +641,8 @@ async def get_schedule(
                 row["booking_count"] = int(bsum["booking_count"])
             if bsum.get("bookings") is not None:
                 row["bookings"] = bsum["bookings"]
+            if bool(bsum.get("has_sandbox_booking")):
+                row["has_sandbox_booking"] = True
         out_slots.append(row)
     if view == "list":
         return {"trainer_id": trainer_id, "slots": out_slots}
@@ -638,7 +653,13 @@ async def get_schedule(
     )
     profile = trainer_row.get("profile") or {}
     session_duration_minutes = profile.get("session_duration_minutes")
-    grid_preset = await get_schedule_grid_preset_for_trainer(session, trainer_id)
+    if arena_id is not None:
+        try:
+            grid_preset = await get_schedule_grid_preset_for_trainer_arena(session, trainer_id, int(arena_id))
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+    else:
+        grid_preset = await get_schedule_grid_preset_for_trainer(session, trainer_id)
     return {
         "trainer_id": trainer_id,
         "slots": out_slots,
@@ -880,7 +901,8 @@ async def post_schedule_slots(
     if minutes_set:
         background_tasks.add_task(_bg_notify_slot_waitlist, trainer_id)
 
-    return {"ok": True}
+    # Mini app: schedule-editor clears hub rhythm dismiss + sets fill-slots boost (per-trainer storage).
+    return {"ok": True, "trainer_id": trainer_id}
 
 
 class ScheduleApplyWeekBody(BaseModel):
@@ -2031,6 +2053,7 @@ def _serialize_booking(b: dict, *, problem_flow_enabled: bool | None = None) -> 
         "problem_reported": bool(b.get("problem_reported")),
         "client_no_show_recorded": bool(b.get("client_no_show_recorded")),
         "first_client_online_pending": bool(b.get("first_client_online_pending")),
+        "is_sandbox": bool(b.get("is_sandbox")),
     }
     bpc = b.get("booking_price_cents")
     out["booking_price_cents"] = int(bpc) if bpc is not None else None
@@ -2361,8 +2384,9 @@ async def get_trainer_hub_fill_slots_invites(
     session: AsyncSession = Depends(get_session),
     limit: int = Query(3, ge=1, le=250),
     include_with_upcoming: bool = Query(
-        False,
-        description="Include clients who already have a future session (hub modal full list).",
+        True,
+        description="When true (default), all CRM-scoped clients linked to Telegram; ranked with «no upcoming» first. "
+        "Set false for legacy focused list (only without a future session).",
     ),
     slot_id: int | None = Query(None, description="When set, validate freed slot for «offer this window» copy."),
     exclude_client_id: int | None = Query(
@@ -3879,7 +3903,8 @@ async def get_trainer_public_booking_link(
 @router.get("/trainer/welcome-link")
 async def get_trainer_welcome_link(
     service_id: int | None = Query(
-        None, description="Required when trainer has multiple services; pins catalog prefill"
+        None,
+        description="Optional; pins catalog prefill. If omitted with several services, first catalog service is used.",
     ),
     principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
@@ -3895,11 +3920,6 @@ async def get_trainer_welcome_link(
         raise HTTPException(
             status_code=400,
             detail="В профиле нет услуг — добавьте услугу в профиле.",
-        )
-    if err == "service_required":
-        raise HTTPException(
-            status_code=400,
-            detail="Укажите услугу — у вас несколько услуг в каталоге.",
         )
     if err == "invalid_service":
         raise HTTPException(status_code=400, detail="Неверная услуга.")
@@ -3941,7 +3961,8 @@ async def post_trainer_welcome_link_first_copy(
 async def get_trainer_client_welcome_link(
     client_id: int,
     service_id: int | None = Query(
-        None, description="Required when trainer has multiple services; pins catalog prefill"
+        None,
+        description="Optional; pins catalog prefill. If omitted with several services, first catalog service is used.",
     ),
     principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
@@ -3969,11 +3990,6 @@ async def get_trainer_client_welcome_link(
             status_code=400,
             detail="В профиле нет услуг — добавьте услугу в профиле.",
         )
-    if err == "service_required":
-        raise HTTPException(
-            status_code=400,
-            detail="Укажите услугу — у вас несколько услуг в каталоге.",
-        )
     if err == "invalid_service":
         raise HTTPException(status_code=400, detail="Неверная услуга.")
     assert resolved_service_id is not None
@@ -3991,6 +4007,146 @@ async def get_trainer_client_welcome_link(
         f"https://t.me/{settings.client_bot_username.lstrip('@')}?start=welcome_t_{token_id}"
     )
     return {"welcome_link": link}
+
+
+@router.get("/trainer/hub/universal-invite-link")
+async def get_trainer_hub_universal_invite_link(
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+):
+    """
+    Permanent universal invite link for trainer's hub share button.
+    Returns welcome_ref_{trainer_id} deep link — works for all clients regardless of subscription tier.
+    Unknown clients are routed to the self-registration Mini App form.
+    """
+    trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+    settings = Settings()
+    if not settings.client_bot_username:
+        return {"link": None}
+    username = settings.client_bot_username.lstrip("@")
+    link = f"https://t.me/{username}?start=welcome_ref_{trainer_id}"
+    return {"link": link}
+
+
+class ClientSelfRegisterBody(BaseModel):
+    """Self-registration payload from the client-register Mini App."""
+
+    trainer_id: int
+    phone: str
+    first_name: str
+    last_name: str | None = None
+
+
+@router.post("/client/self-register")
+async def post_client_self_register(
+    body: ClientSelfRegisterBody,
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+):
+    """
+    Client self-registration via the trainer's universal invite link.
+    Looks up by phone: links Telegram ID to existing trainer-created client,
+    or creates a new client row and adds them to the trainer's roster.
+    """
+    telegram_id = client_catalog_telegram_key(principal)
+
+    phone_norm = normalize_phone(body.phone)
+    if not phone_norm or len(phone_norm) < 9:
+        raise HTTPException(status_code=422, detail="Некорректный номер телефона.")
+    # Belarus: +375 + 9 digits = 12 normalized digits
+    if not phone_norm.startswith("375") or len(phone_norm) != 12:
+        raise HTTPException(
+            status_code=422,
+            detail="Введите номер Беларуси в формате +375 XX XXX-XX-XX.",
+        )
+
+    first_name = (body.first_name or "").strip()[:64]
+    if not first_name:
+        raise HTTPException(status_code=422, detail="Укажите имя.")
+
+    trainer = await get_trainer(session, body.trainer_id)
+    if not trainer:
+        raise HTTPException(status_code=404, detail="Тренер не найден.")
+
+    existing_by_phone = await get_client_by_phone(session, body.phone)
+    if (
+        existing_by_phone
+        and existing_by_phone.get("telegram_id") is not None
+        and int(existing_by_phone["telegram_id"]) != telegram_id
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="Этот номер уже используется другим аккаунтом Telegram.",
+        )
+
+    existing_phone_client_id = int(existing_by_phone["id"]) if existing_by_phone else None
+    had_roster_before = (
+        await trainer_client_roster_link_exists(session, body.trainer_id, existing_phone_client_id)
+        if existing_phone_client_id is not None
+        else False
+    )
+    prior_tid_client_id = await get_client_id_by_telegram_id(session, telegram_id)
+    last_name = (body.last_name or "").strip()[:64] or None
+    client_id = await get_or_create_client(
+        session,
+        telegram_id,
+        phone=body.phone,
+        first_name=first_name,
+        last_name=last_name,
+    )
+    roster_link_created = await link_trainer_client_roster(session, body.trainer_id, client_id)
+    await session.commit()
+
+    notify_event = None
+    if roster_link_created:
+        notify_event = "new_client"
+    elif (
+        existing_by_phone
+        and existing_phone_client_id == client_id
+        and existing_by_phone.get("telegram_id") is None
+        and had_roster_before
+    ):
+        notify_event = "telegram_linked"
+
+    if notify_event is not None:
+        await notify_trainer_client_registered_from_invite(
+            session=session,
+            trainer_id=body.trainer_id,
+            client_id=client_id,
+            event=notify_event,
+        )
+
+    if existing_by_phone and int(existing_by_phone["id"]) == client_id:
+        if existing_by_phone.get("telegram_id") is None:
+            status = "linked"
+        else:
+            status = "already_registered"
+    elif prior_tid_client_id is None and existing_by_phone is None:
+        status = "created"
+    else:
+        status = "already_registered"
+
+    return {"status": status, "client_id": client_id}
+
+
+@router.get("/client/register/trainer-info/{trainer_id}")
+async def get_client_register_trainer_info(
+    trainer_id: int,
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+):
+    """
+    Public trainer info for the self-registration form (name + photo).
+    Auth: client initData (unregistered users are allowed — no client row required).
+    """
+    hints = await trainer_display_hints_by_ids(session, [trainer_id])
+    hint = hints.get(trainer_id)
+    if not hint:
+        raise HTTPException(status_code=404, detail="Тренер не найден.")
+    name = hint.get("trainer_display_name") or "Тренер"
+    return {"id": trainer_id, "name": name}
 
 
 @router.get("/trainer/welcome-link/pass")
@@ -4715,6 +4871,28 @@ async def patch_trainer_client_identity(
     if not client:
         raise HTTPException(status_code=404, detail="Клиент не найден или нет доступа")
     return await _trainer_miniapp_client_card_enriched_payload(session, client)
+
+
+@router.post("/trainer/clients/{client_id:int}/detach")
+async def post_trainer_client_detach_from_roster(
+    client_id: int,
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """
+    Remove manual roster link + cancel trainer's upcoming bookings with this client.
+    Refused while the client is active/trial in a group operated by this trainer.
+    """
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+    try:
+        result = await detach_trainer_client_from_roster_miniapp(session, trainer_id, client_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    if result is None:
+        raise HTTPException(status_code=404, detail="Клиент не найден или нет доступа")
+    return {"success": True, **result}
 
 
 @router.get("/trainer/clients/{client_id:int}/booking-defaults")

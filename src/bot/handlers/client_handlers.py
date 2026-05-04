@@ -28,6 +28,7 @@ from aiogram.types import (
 )
 
 from src.application.booking_use_cases import (
+    count_trainer_services,
     create_booking,
     generate_reminders_for_booking,
     get_booking_for_client_feedback,
@@ -46,9 +47,11 @@ from src.application.client_use_cases import (
     attach_telegram_id_to_client,
     get_client_by_phone,
     get_client_id_by_telegram_id,
+    get_client_phone_for_webapp,
     get_client_telegram_id,
     get_or_create_client,
     get_client_profile_basic,
+    normalize_phone,
 )
 from src.application.client_session_use_cases import (
     clear_selected_service,
@@ -228,6 +231,23 @@ def _trainer_name(trainer: dict) -> str:
     profile = trainer.get("profile") or {}
     name = (profile.get("first_name") or "") + " " + (profile.get("last_name") or "")
     return name.strip() or "Тренер"
+
+
+def _book_webapp_service_id_query_param(
+    *,
+    default_service_id: int | None,
+    trainer_services_count: int,
+    explicit_service_from_link: bool = False,
+) -> int | None:
+    """
+    Build ?service_id= for /webapp/book. When the trainer offers several services and the link
+    did not pin one, omit service_id so the Mini App adds force_service_choice=1 and shows picker.
+    """
+    if explicit_service_from_link and default_service_id is not None:
+        return default_service_id
+    if trainer_services_count <= 1:
+        return default_service_id
+    return None
 
 
 def _trainer_book_rows(
@@ -562,6 +582,12 @@ async def cmd_start(message: Message) -> None:
                 trainer_id,
                 preferred_service_id=preferred_svc,
             )
+            n_trainer_svc = await count_trainer_services(db_session, int(trainer_id))
+            book_url_svc = _book_webapp_service_id_query_param(
+                default_service_id=service_id,
+                trainer_services_count=n_trainer_svc,
+                explicit_service_from_link=preferred_svc is not None,
+            )
             if city_id is not None:
                 await set_city(telegram_id, city_id, db_session)
             if service_id is not None:
@@ -636,7 +662,7 @@ async def cmd_start(message: Message) -> None:
                         )
                     keyboard = InlineKeyboardMarkup(
                         inline_keyboard=cert_rows
-                        + _trainer_book_rows(base, trainer_id, service_id=service_id)
+                        + _trainer_book_rows(base, trainer_id, service_id=book_url_svc)
                     )
                     await message.answer(cert_body, reply_markup=keyboard, parse_mode=ParseMode.HTML)
                 else:
@@ -649,7 +675,7 @@ async def cmd_start(message: Message) -> None:
                 await message.answer(
                     welcome_body,
                     reply_markup=_trainer_book_markup(
-                        base, trainer_id, include_catalog_alternative=False, service_id=service_id
+                        base, trainer_id, include_catalog_alternative=False, service_id=book_url_svc
                     ),
                 )
         elif token_type == WELCOME_TOKEN_TYPE_PASS:
@@ -660,7 +686,7 @@ async def cmd_start(message: Message) -> None:
             pass_pid = payload_data.get("pass_product_id")
             pass_pid_i = int(pass_pid) if pass_pid is not None else None
             keyboard = InlineKeyboardMarkup(
-                inline_keyboard=_trainer_book_rows(base, trainer_id, service_id=service_id)
+                inline_keyboard=_trainer_book_rows(base, trainer_id, service_id=book_url_svc)
                 + [
                     [
                         InlineKeyboardButton(
@@ -683,7 +709,7 @@ async def cmd_start(message: Message) -> None:
             await message.answer(
                 welcome_body,
                 reply_markup=_trainer_book_markup(
-                    base, trainer_id, include_catalog_alternative=False, service_id=service_id
+                    base, trainer_id, include_catalog_alternative=False, service_id=book_url_svc
                 ),
             )
         return
@@ -707,6 +733,11 @@ async def cmd_start(message: Message) -> None:
             trainer_id = bound["trainer_id"]
             async with async_session_factory() as db_session:
                 city_id, service_id = await get_trainer_default_city_and_service(db_session, trainer_id)
+                n_trainer_svc = await count_trainer_services(db_session, int(trainer_id))
+                book_url_cert = _book_webapp_service_id_query_param(
+                    default_service_id=service_id,
+                    trainer_services_count=n_trainer_svc,
+                )
                 if city_id is not None:
                     await set_city(telegram_id, city_id, db_session)
                 if service_id is not None:
@@ -758,7 +789,7 @@ async def cmd_start(message: Message) -> None:
                     ]
                 )
             keyboard = InlineKeyboardMarkup(
-                inline_keyboard=cert_rows2 + _trainer_book_rows(base, trainer_id, service_id=service_id)
+                inline_keyboard=cert_rows2 + _trainer_book_rows(base, trainer_id, service_id=book_url_cert)
             )
             await message.answer(cert_body, reply_markup=keyboard, parse_mode=ParseMode.HTML)
         else:
@@ -783,6 +814,11 @@ async def cmd_start(message: Message) -> None:
             await db_session.commit()
         async with async_session_factory() as db_session:
             city_id, service_id = await get_trainer_default_city_and_service(db_session, trainer_id_share)
+            n_trainer_svc = await count_trainer_services(db_session, int(trainer_id_share))
+            book_url_share = _book_webapp_service_id_query_param(
+                default_service_id=service_id,
+                trainer_services_count=n_trainer_svc,
+            )
             if city_id is not None:
                 await set_city(telegram_id, city_id, db_session)
             if service_id is not None:
@@ -799,36 +835,65 @@ async def cmd_start(message: Message) -> None:
         await message.answer(
             welcome_body,
             reply_markup=_trainer_book_markup(
-                base, trainer_id_share, include_catalog_alternative=False, service_id=service_id
+                base, trainer_id_share, include_catalog_alternative=False, service_id=book_url_share
             ),
         )
         return
 
-    # Generic invite: welcome_ref_<trainer_id> — no cert/pass, just set trainer and city/service
+    # Generic invite: welcome_ref_<trainer_id> — universal entry point.
+    # Client with saved phone → book flow; no phone yet (even if clients row exists) → registration form.
     trainer_id_ref = _parse_welcome_ref(payload)
     if trainer_id_ref is not None:
         async with async_session_factory() as db_session:
-            await get_or_create_client(db_session, telegram_id)
-            await db_session.commit()
+            phone_for_identify = await get_client_phone_for_webapp(db_session, telegram_id)
+        phone_known = normalize_phone(phone_for_identify) is not None
+        base = (Settings().webapp_base_url or "").rstrip("/")
         async with async_session_factory() as db_session:
-            city_id, service_id = await get_trainer_default_city_and_service(db_session, trainer_id_ref)
-            if city_id is not None:
-                await set_city(telegram_id, city_id, db_session)
-            if service_id is not None:
-                await set_service(telegram_id, service_id, db_session)
-            await set_selected_trainer(telegram_id, trainer_id_ref, db_session)
             trainer = await get_trainer(db_session, trainer_id_ref)
             await record_profile_view_commit(
                 db_session,
                 trainer_id=int(trainer_id_ref),
                 source=DEMAND_SOURCE_CLIENT_APP,
             )
-        base = (Settings().webapp_base_url or "").rstrip("/")
+        if not phone_known and base.lower().startswith("https://"):
+            # No reachable phone yet: route to self-registration form in Mini App
+            name = html.escape(_trainer_name(trainer) if trainer else "тренер")
+            register_url = f"{base}/webapp/client-register?trainer_id={trainer_id_ref}"
+            keyboard = InlineKeyboardMarkup(
+                inline_keyboard=[[
+                    InlineKeyboardButton(
+                        text=msg.CLIENT_UNIVERSAL_INVITE_REGISTER_BTN,
+                        web_app=WebAppInfo(url=register_url),
+                    )
+                ]]
+            )
+            await message.answer(
+                msg.CLIENT_UNIVERSAL_INVITE_UNKNOWN.format(name=name),
+                parse_mode=ParseMode.HTML,
+                reply_markup=keyboard,
+            )
+            return
+        # Phone on file or no HTTPS: proceed as normal booking flow
+        async with async_session_factory() as db_session:
+            await get_or_create_client(db_session, telegram_id)
+            await db_session.commit()
+        async with async_session_factory() as db_session:
+            city_id, service_id = await get_trainer_default_city_and_service(db_session, trainer_id_ref)
+            n_trainer_svc = await count_trainer_services(db_session, int(trainer_id_ref))
+            book_url_welcome = _book_webapp_service_id_query_param(
+                default_service_id=service_id,
+                trainer_services_count=n_trainer_svc,
+            )
+            if city_id is not None:
+                await set_city(telegram_id, city_id, db_session)
+            if service_id is not None:
+                await set_service(telegram_id, service_id, db_session)
+            await set_selected_trainer(telegram_id, trainer_id_ref, db_session)
         welcome_body = _invite_welcome_text(trainer, base)
         await message.answer(
             welcome_body,
             reply_markup=_trainer_book_markup(
-                base, trainer_id_ref, include_catalog_alternative=False, service_id=service_id
+                base, trainer_id_ref, include_catalog_alternative=False, service_id=book_url_welcome
             ),
         )
         return
@@ -841,6 +906,11 @@ async def cmd_start(message: Message) -> None:
             await db_session.commit()
         async with async_session_factory() as db_session:
             city_id, service_id = await get_trainer_default_city_and_service(db_session, pass_trainer_id)
+            n_trainer_svc = await count_trainer_services(db_session, int(pass_trainer_id))
+            book_url_pass = _book_webapp_service_id_query_param(
+                default_service_id=service_id,
+                trainer_services_count=n_trainer_svc,
+            )
             if city_id is not None:
                 await set_city(telegram_id, city_id, db_session)
             if service_id is not None:
@@ -855,7 +925,7 @@ async def cmd_start(message: Message) -> None:
         name = html.escape(_trainer_name(trainer) if trainer else "Тренер")
         base = (Settings().webapp_base_url or "").rstrip("/")
         keyboard = InlineKeyboardMarkup(
-            inline_keyboard=_trainer_book_rows(base, pass_trainer_id, service_id=service_id)
+            inline_keyboard=_trainer_book_rows(base, pass_trainer_id, service_id=book_url_pass)
             + [
                 [
                     InlineKeyboardButton(

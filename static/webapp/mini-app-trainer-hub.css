@@ -738,6 +738,24 @@
       background: color-mix(in srgb, var(--tg-theme-secondary-bg-color) 85%, var(--tg-theme-hint-color) 15%);
       border: 1px solid color-mix(in srgb, var(--tg-theme-hint-color) 28%, transparent);
     }
+    /* Sandbox / trial booking — dashed outline so it never reads as a «real» paying slot at a glance. */
+    .hub-bookings-stack .hub-sandbox-pill {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 8px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      vertical-align: middle;
+      border: 1px dashed color-mix(in srgb, var(--tg-theme-button-color) 55%, var(--tg-theme-hint-color) 45%);
+      background: color-mix(in srgb, var(--tg-theme-button-color) 12%, transparent);
+      color: color-mix(in srgb, var(--tg-theme-button-color) 65%, var(--tg-theme-text-color) 35%);
+    }
+    .hub-bookings-stack .hub-sandbox-pill.hub-sandbox-pill--inline {
+      align-self: center;
+      flex-shrink: 0;
+      margin-left: 0;
+    }
     @supports not (color: color-mix(in srgb, red, blue)) {
       .hub-bookings-stack .hub-problem-pill {
         background: var(--tg-theme-secondary-bg-color);
@@ -1011,6 +1029,53 @@
       overflow-y: hidden;
       overscroll-behavior: contain;
       -webkit-overflow-scrolling: touch;
+    }
+    /* Quick-book: дата/время открывается поверх модалки «Записать клиента», иначе оба overlay z-index 260 и DOM ставит книгу выше — шаг скрыт. */
+    #hubModalQuickBookDatetime.hub-book-flow-overlay {
+      z-index: 270;
+    }
+    /* Подтверждение записи поверх datetime (270), чтобы при переходе без «дыры» под нижней модалкой мигать нечему. */
+    #hubModalBookGroupConfirm.hub-book-flow-overlay {
+      z-index: 275;
+    }
+    /* Instant feedback while POST booking (prevents double-tap duplicate requests). */
+    #hubModalBookGroupConfirm.hub-book-confirm--busy .modal.book-flow-modal {
+      pointer-events: none;
+    }
+    .hub-global-booking-busy {
+      position: fixed;
+      left: 50%;
+      bottom: max(24px, env(safe-area-inset-bottom));
+      transform: translateX(-50%);
+      z-index: 285;
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 18px;
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--tg-theme-secondary-bg-color) 92%, #000 8%);
+      box-shadow: 0 8px 28px rgba(0, 0, 0, 0.22);
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--tg-theme-text-color);
+      pointer-events: none;
+    }
+    .hub-global-booking-busy[hidden] {
+      display: none !important;
+    }
+    .hub-global-booking-busy__spinner {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      border: 2px solid color-mix(in srgb, var(--tg-theme-hint-color) 55%, transparent);
+      border-top-color: var(--tg-theme-button-color, #f5a623);
+      animation: hubBookingSpin 0.65s linear infinite;
+    }
+    @keyframes hubBookingSpin {
+      to {
+        transform: rotate(360deg);
+      }
     }
     #hubModalQuickBookDatetime .hub-book-modal.modal.book-flow-modal,
     #hubModalBookGroupSlot .hub-book-modal.modal.book-flow-modal,
@@ -1495,6 +1560,11 @@
       cursor: pointer;
       font: inherit;
     }
+    /* Service/tariff step: «Назад» сразу под лидом — не между тарифом и «Далее». */
+    #hubModalBookGroupSlot .book-modal-back.hub-book-back--service-step {
+      margin: -2px 0 12px 0;
+      padding: 0 4px 0 0;
+    }
     #hubModalBookGroupSlot .book-modal-back-icon {
       width: 18px;
       height: 18px;
@@ -1606,11 +1676,70 @@
     #hubModalQuickBookDatetime .hub-quickbook-datetime-wrap:not(.hub-quickbook-datetime-wrap--duration-custom) .hub-qb-skel-field--optional {
       display: none;
     }
-    /* Quick book step «услуга / тариф»: skeleton while services + clients load */
+    /* Quick book «Записать клиента»: скелетон пока GET my-services + clients (режим клиент-сначала или sandbox). */
     #hubModalBookGroupSlot .hub-book-choice-skel {
       margin-bottom: 4px;
     }
-    /* Lead copy (sandbox: «пробная запись…» / default) — two lines like .book-choice-lead */
+    /*
+     * While the skeleton is visible, do not reserve space for the real `.btn-book-option` pair
+     * (`visibility:hidden` still participates in layout — was doubling card height vs final UI).
+     */
+    #hubModalBookGroupSlot #hubBookChoiceSkel:not([hidden]) ~ #hubBookChoiceActions {
+      display: none !important;
+    }
+    #hubModalBookGroupSlot .hub-book-choice-skel-clientfirst[hidden],
+    #hubModalBookGroupSlot .hub-book-choice-skel-sandbox[hidden] {
+      display: none !important;
+    }
+    #hubModalBookGroupSlot .hub-book-choice-skel-opt {
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      gap: 14px;
+      width: 100%;
+      padding: 14px 14px 14px 12px;
+      margin-bottom: 10px;
+      border-radius: 16px;
+      box-sizing: border-box;
+      background: var(--tg-theme-secondary-bg-color);
+      min-height: 76px;
+    }
+    #hubModalBookGroupSlot .hub-book-choice-skel-opt:last-child {
+      margin-bottom: 0;
+    }
+    #hubModalBookGroupSlot .hub-book-choice-skel-opt-icon {
+      flex-shrink: 0;
+      width: 48px;
+      height: 48px;
+      border-radius: 14px;
+    }
+    #hubModalBookGroupSlot .hub-book-choice-skel-opt-body {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    #hubModalBookGroupSlot .hub-book-choice-skel-opt-title {
+      width: 56%;
+      max-width: 200px;
+      height: 15px;
+      border-radius: 7px;
+    }
+    #hubModalBookGroupSlot .hub-book-choice-skel-opt-sub {
+      width: 82%;
+      max-width: 240px;
+      height: 12px;
+      border-radius: 6px;
+    }
+    #hubModalBookGroupSlot .hub-book-choice-skel-opt-chev {
+      flex-shrink: 0;
+      width: 14px;
+      height: 22px;
+      border-radius: 4px;
+      opacity: 0.85;
+    }
+    /* Sandbox subtree: два ряда лида под подставленный текст пробной записи + услуга/тариф. */
     #hubModalBookGroupSlot .hub-book-choice-skel-lead {
       display: flex;
       flex-direction: column;
@@ -2591,6 +2720,10 @@
     .hub-schedule-rhythm-hint__actions .btn-sm.btn-primary {
       background: var(--tg-theme-button-color);
       color: var(--tg-theme-button-text-color);
+    }
+    .hub-schedule-rhythm-hint__actions .btn-sm.btn-secondary {
+      background: var(--tg-theme-secondary-bg-color);
+      color: var(--tg-theme-text-color);
     }
     .hub-schedule-rhythm-hint__dismiss {
       width: 32px;

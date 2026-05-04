@@ -474,6 +474,7 @@ async def test_post_schedule_slots_with_start_times_strings(
                 },
             )
     assert resp.status_code == 200
+    assert resp.json().get("trainer_id") == trainer_id
 
     r = await db_session.execute(
         text(

@@ -1495,6 +1495,108 @@ async def test_onboarding_checklist_open_loop_aggregates(
 
 
 @pytest.mark.asyncio
+async def test_onboarding_checklist_open_loop_no_telegram_includes_roster_only(
+    app_use_test_db,
+    db_session,
+) -> None:
+    """Roster-only clients (no booking) with null telegram match trainer client list / hub hint."""
+    tg = _fresh_trainer_telegram_id()
+    r = await db_session.execute(text("INSERT INTO trainers (status) VALUES ('active') RETURNING id"))
+    tid = r.fetchone()[0]
+    await db_session.execute(
+        text("UPDATE trainers SET telegram_id = :tg WHERE id = :id"),
+        {"tg": tg, "id": tid},
+    )
+    await db_session.execute(
+        text(
+            "INSERT INTO trainer_profiles (trainer_id, first_name, last_name, age) "
+            "VALUES (:tid, 'Roster', 'Only', 30)"
+        ),
+        {"tid": tid},
+    )
+    p_x, pn_x = "+37544" + str(600_000 + (uuid.uuid4().int % 9_000)), "37544" + str(600_000 + (uuid.uuid4().int % 9_000))
+    r_c = await db_session.execute(
+        text(
+            """
+            INSERT INTO clients (telegram_id, first_name, phone, phone_normalized)
+            VALUES (NULL, 'RosterOnly', :phone, :pn)
+            RETURNING id
+            """
+        ),
+        {"phone": p_x, "pn": pn_x},
+    )
+    cid = r_c.fetchone()[0]
+    await db_session.execute(
+        text(
+            "INSERT INTO trainer_client_roster (trainer_id, client_id) VALUES (:tid, :cid)"
+        ),
+        {"tid": tid, "cid": cid},
+    )
+    await db_session.commit()
+
+    with patch_trainer_init_auth(tg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.get(
+                "/api/webapp/trainer/onboarding/checklist",
+                headers={"X-Telegram-Init-Data": "mock"},
+            )
+    assert resp.status_code == 200
+    assert resp.json().get("open_loop_clients_no_telegram_count") == 1
+
+
+@pytest.mark.asyncio
+async def test_onboarding_checklist_open_loop_no_upcoming_includes_roster_only(
+    app_use_test_db,
+    db_session,
+) -> None:
+    """Roster-only CRM rows count toward «no next booking» (same scope as client list)."""
+    tg = _fresh_trainer_telegram_id()
+    r = await db_session.execute(text("INSERT INTO trainers (status) VALUES ('active') RETURNING id"))
+    tid = r.fetchone()[0]
+    await db_session.execute(
+        text("UPDATE trainers SET telegram_id = :tg WHERE id = :id"),
+        {"tg": tg, "id": tid},
+    )
+    await db_session.execute(
+        text(
+            "INSERT INTO trainer_profiles (trainer_id, first_name, last_name, age) "
+            "VALUES (:tid, 'NoNext', 'Roster', 30)"
+        ),
+        {"tid": tid},
+    )
+    p_x, pn_x = "+37544" + str(500_000 + (uuid.uuid4().int % 9_000)), "37544" + str(500_000 + (uuid.uuid4().int % 9_000))
+    r_c = await db_session.execute(
+        text(
+            """
+            INSERT INTO clients (telegram_id, first_name, phone, phone_normalized)
+            VALUES (NULL, 'NrUn', :phone, :pn)
+            RETURNING id
+            """
+        ),
+        {"phone": p_x, "pn": pn_x},
+    )
+    cid = r_c.fetchone()[0]
+    await db_session.execute(
+        text(
+            "INSERT INTO trainer_client_roster (trainer_id, client_id) VALUES (:tid, :cid)"
+        ),
+        {"tid": tid, "cid": cid},
+    )
+    await db_session.commit()
+
+    with patch_trainer_init_auth(tg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.get(
+                "/api/webapp/trainer/onboarding/checklist",
+                headers={"X-Telegram-Init-Data": "mock"},
+            )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body.get("open_loop_clients_no_upcoming_count") == 1
+    assert body.get("open_loop_clients_no_telegram_count") == 1
+
+
+@pytest.mark.asyncio
 async def test_trainer_hub_fill_slots_invites_prefers_clients_without_upcoming(
     app_use_test_db,
     db_session,
@@ -1625,7 +1727,7 @@ async def test_trainer_hub_fill_slots_invites_prefers_clients_without_upcoming(
     with patch_trainer_init_auth(tg):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             resp = await client.get(
-                "/api/webapp/trainer/hub/fill-slots-invites",
+                "/api/webapp/trainer/hub/fill-slots-invites?include_with_upcoming=false",
                 headers={"X-Telegram-Init-Data": "mock"},
             )
     assert resp.status_code == 200
@@ -1854,3 +1956,43 @@ async def test_trainer_hub_fill_slots_invites_send_posts_to_client_bot(
     call_kw = mock_send.await_args.kwargs
     assert int(call_kw["chat_id"]) == int(client_tg)
     assert "reply_markup" in call_kw
+
+
+@pytest.mark.asyncio
+async def test_trainer_hub_quick_book_parallel_prefetch_endpoints(
+    app_use_test_db,
+    db_session,
+) -> None:
+    """Hub «Записать клиента» загружает GET /trainer/my-services и /trainer/clients параллельно — оба 200 и одна схема auth."""
+    tg = _fresh_trainer_telegram_id()
+    r = await db_session.execute(text("INSERT INTO trainers (status) VALUES ('active') RETURNING id"))
+    tid = r.fetchone()[0]
+    await db_session.execute(
+        text("UPDATE trainers SET telegram_id = :tg WHERE id = :id"),
+        {"tg": tg, "id": tid},
+    )
+    await db_session.execute(
+        text(
+            "INSERT INTO trainer_profiles (trainer_id, first_name, last_name, age) "
+            "VALUES (:tid, 'Hub', 'Book', 28)"
+        ),
+        {"tid": tid},
+    )
+    await db_session.commit()
+
+    with patch_trainer_init_auth(tg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            svc = await client.get(
+                "/api/webapp/trainer/my-services",
+                headers={"X-Telegram-Init-Data": "mock"},
+            )
+            cl = await client.get(
+                "/api/webapp/trainer/clients",
+                headers={"X-Telegram-Init-Data": "mock"},
+            )
+    assert svc.status_code == 200
+    assert cl.status_code == 200
+    body_svc = svc.json()
+    body_cl = cl.json()
+    assert isinstance(body_svc.get("services"), list)
+    assert isinstance(body_cl.get("clients"), list)

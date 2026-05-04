@@ -3406,11 +3406,16 @@
           bookings.forEach(function(b) {
             var st = (b.status || '').toLowerCase();
             var stLabel = st === 'pending' ? 'Ожидает подтверждения' : 'Подтверждено';
+            var sandboxPill = b.is_sandbox
+              ? ' <span class="schedule-sandbox-pill schedule-sandbox-pill--inline" role="status">проба</span>'
+              : '';
             var bid = parseInt(b.booking_id, 10);
             var btn = document.createElement('button');
             btn.type = 'button';
             btn.className = 'group-slot-row';
-            btn.innerHTML = '<span><span class="g-name">' + escapeHtml(String(b.client_preview || 'Клиент')) + '</span><br><span class="g-st">' + stLabel + '</span></span><span aria-hidden="true" style="color:var(--tg-theme-hint-color);font-size:18px;">›</span>';
+            btn.innerHTML =
+              '<span><span class="g-name">' + escapeHtml(String(b.client_preview || 'Клиент')) + sandboxPill +
+              '</span><br><span class="g-st">' + stLabel + '</span></span><span aria-hidden="true" style="color:var(--tg-theme-hint-color);font-size:18px;">›</span>';
             btn.onclick = function() {
               state.groupHubSlotId = slotId;
               state.bookingDetailReturn = 'group';
@@ -3515,6 +3520,9 @@
               + '>';
             html += '<div class="slot-row-left">';
             html += '<span class="slot-time">' + escapeHtml(s.start_time || '') + '–' + escapeHtml(s.end_time || '') + '</span>';
+            if (s.has_sandbox_booking && !groupHub) {
+              html += '<span class="schedule-sandbox-pill" role="status" aria-label="Пробная запись">проба</span>';
+            }
             if (s.training_group_id && s.training_group_name) {
               html += '<div class="slot-cohort-hint">Группа: ' + escapeHtml(s.training_group_name) + '</div>';
             }
@@ -3546,6 +3554,9 @@
             html += '<div class="slot-meta">';
             if (groupHub) {
               html += '<span class="slot-group-chip">' + occ + '/' + cap + '</span>';
+              if (s.has_sandbox_booking) {
+                html += '<span class="schedule-sandbox-pill schedule-sandbox-pill--inline" role="status">проба</span>';
+              }
               if (spotsLeft > 0) {
                 html += '<span class="slot-status available" style="font-size:11px;padding:4px 8px;">ещё места</span>';
               } else {
@@ -4630,7 +4641,12 @@
             body: JSON.stringify(postBody),
           })
             .then(function(r) {
-              if (r.ok) {
+              return r.json().then(function(data) {
+                if (!r.ok) {
+                  var d = data.detail || 'Ошибка';
+                  showToast(typeof d === 'string' ? d : 'Ошибка сохранения');
+                  return;
+                }
                 // Only count starts added in this session (not slots that were already on the day).
                 var nNew = 0;
                 if (state.calendarBaselineStarts) {
@@ -4640,7 +4656,13 @@
                 } else {
                   nNew = startsSorted.length;
                 }
-                if (nNew > 0) markScheduleEditorHubFillSlotsRhythmBoost();
+                if (nNew > 0) {
+                  var tidMark =
+                    data && data.trainer_id != null && !isNaN(parseInt(String(data.trainer_id), 10))
+                      ? parseInt(String(data.trainer_id), 10)
+                      : state.trainerId;
+                  markScheduleEditorHubFillSlotsRhythmBoost(tidMark);
+                }
                 var msg =
                   nNew === 0
                     ? 'Расписание на день обновлено'
@@ -4657,12 +4679,7 @@
                 state.lockedStarts = new Set();
                 showDayPickScreen();
                 loadSlots();
-              } else {
-                r.json().then(function(o) {
-                  var d = o.detail || 'Ошибка';
-                  showToast(typeof d === 'string' ? d : 'Ошибка сохранения');
-                });
-              }
+              });
             })
             .catch(function() { showToast('Ошибка сети'); });
         }

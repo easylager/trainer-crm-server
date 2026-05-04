@@ -51,9 +51,9 @@
     })();
   </script>
   <!-- Bump ?v= when mini-app-trainer-hub.css changes (immutable cache on /webapp/…). -->
-  <link rel="stylesheet" href="mini-app-trainer-hub.css?v=20260576" />
+  <link rel="stylesheet" href="mini-app-trainer-hub.css?v=20260583" />
   <!-- Early download of main hub script (defer runs at end of body); improves time-to-interactive vs. discover-at-bottom. -->
-  <link rel="preload" href="trainer-home-main.js?v=202605034" as="script" />
+  <link rel="preload" href="trainer-home-main.js?v=202605067" as="script" />
 
   <!-- ─── Splash loader (inline to guarantee render before external CSS) ─── -->
   <style>
@@ -460,6 +460,7 @@
       <p class="hub-schedule-rhythm-hint__text" id="hubRhythmSlot0Text"></p>
       <div class="hub-schedule-rhythm-hint__actions">
         <button type="button" class="btn-sm btn-primary" id="hubRhythmSlot0Cta" data-hub-rhythm-cta="1"></button>
+        <button type="button" class="btn-sm btn-secondary hub-rhythm-slot-cta2" id="hubRhythmSlot0Cta2" data-hub-rhythm-cta2="1" hidden></button>
         <button type="button" class="hub-schedule-rhythm-hint__dismiss" id="hubRhythmSlot0Dismiss" data-hub-rhythm-dismiss="1" aria-label="Скрыть подсказку">×</button>
       </div>
     </div>
@@ -467,6 +468,7 @@
       <p class="hub-schedule-rhythm-hint__text" id="hubRhythmSlot1Text"></p>
       <div class="hub-schedule-rhythm-hint__actions">
         <button type="button" class="btn-sm btn-primary" id="hubRhythmSlot1Cta" data-hub-rhythm-cta="1"></button>
+        <button type="button" class="btn-sm btn-secondary hub-rhythm-slot-cta2" id="hubRhythmSlot1Cta2" data-hub-rhythm-cta2="1" hidden></button>
         <button type="button" class="hub-schedule-rhythm-hint__dismiss" id="hubRhythmSlot1Dismiss" data-hub-rhythm-dismiss="1" aria-label="Скрыть подсказку">×</button>
       </div>
     </div>
@@ -738,7 +740,7 @@
     <div class="modal hub-fill-slots-invites-modal" role="dialog" aria-labelledby="hubFillSlotsInvitesTitle">
       <h3 id="hubFillSlotsInvitesTitle" class="book-modal-title">Напоминание о записи</h3>
       <p class="book-choice-lead hub-fill-slots-invites-lead">
-        Выберите вручную или кнопками <b>Без записи</b> / <b>Все</b> под списком. У каждого видно статус следующей тренировки. Сообщение уходит в <b>клиентском боте</b> с кнопкой «Записаться».
+        Отметьте клиентов. Письмо уходит в <b>клиентском боте</b>; фильтры <b>Без записи</b> / <b>Все</b> — под списком.
       </p>
       <div id="hubFillSlotsInvitesHost" class="hub-fill-slots-invites-host"></div>
       <div class="modal-actions hub-fill-slots-invites-footer-actions">
@@ -750,8 +752,8 @@
 
   <div id="hubModalShareBookingLink" class="modal-overlay hub-book-flow-overlay hub-share-link-overlay" style="display:none;" aria-hidden="true">
     <div class="modal hub-share-link-modal" role="dialog" aria-labelledby="hubShareLinkTitle">
-      <h3 id="hubShareLinkTitle" class="book-modal-title">Ссылка на запись</h3>
-      <p id="hubShareLinkLead" class="book-choice-lead"></p>
+      <h3 id="hubShareLinkTitle" class="book-modal-title">Пригласительная ссылка</h3>
+      <p id="hubShareLinkLead" class="book-choice-lead">Мы уведомим вас в боте тренера, когда клиент перейдёт по ссылке: нового добавим в список; если он уже у вас в базе без Telegram — привяжем аккаунт.</p>
       <div id="hubShareLinkServiceWrap" class="book-field-stack" style="display:none;">
         <label class="book-field-label" for="hubShareLinkServiceSelect">Услуга</label>
         <div class="hub-modal-select-wrap">
@@ -775,55 +777,69 @@
       <h3 class="book-modal-title">Записать клиента</h3>
       <div id="hubBookStepChoice" class="book-step">
         <p class="book-choice-lead">Кого записать на занятие?</p>
+        <button type="button" class="book-modal-back hub-book-back--service-step" id="hubBookBackFromService" style="display: none;" hidden aria-hidden="true">
+          <svg class="book-modal-back-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+          Назад
+        </button>
         <div id="hubBookChoiceSkel" class="hub-book-choice-skel" hidden aria-hidden="true">
-          <div class="hub-book-choice-skel-lead" aria-hidden="true">
-            <div class="hub-skel-line hub-book-choice-skel-lead-line hub-skel-shimmer"></div>
-            <div class="hub-skel-line hub-book-choice-skel-lead-line hub-book-choice-skel-lead-line--short hub-skel-shimmer"></div>
-          </div>
-          <div class="hub-skel-line hub-book-choice-skel-eyebrow hub-skel-shimmer" aria-hidden="true"></div>
-          <div class="hub-book-choice-skel-picks">
-            <div class="hub-skel-line hub-book-choice-skel-pill hub-skel-shimmer" aria-hidden="true"></div>
-          </div>
-          <div class="hub-skel-line hub-book-choice-skel-eyebrow hub-book-choice-skel-eyebrow--narrow hub-skel-shimmer" aria-hidden="true"></div>
-          <div class="hub-book-choice-skel-tiers">
-            <div class="hub-book-choice-skel-tier" aria-hidden="true">
-              <span class="hub-book-choice-skel-radio hub-skel-shimmer"></span>
-              <span class="hub-skel-line hub-book-choice-skel-tier-line hub-skel-shimmer"></span>
+          <!-- Default: клиент первым → две строки как .btn-book-option (без «фейковой услуги/тарифа» сверху). -->
+          <div class="hub-book-choice-skel-clientfirst" hidden aria-hidden="true">
+            <div class="hub-book-choice-skel-opt" aria-hidden="true">
+              <span class="hub-book-choice-skel-opt-icon hub-skel-shimmer"></span>
+              <div class="hub-book-choice-skel-opt-body">
+                <span class="hub-skel-line hub-book-choice-skel-opt-title hub-skel-shimmer"></span>
+                <span class="hub-skel-line hub-book-choice-skel-opt-sub hub-skel-shimmer"></span>
+              </div>
+              <span class="hub-book-choice-skel-opt-chev hub-skel-shimmer"></span>
             </div>
-            <div class="hub-book-choice-skel-tier" aria-hidden="true">
-              <span class="hub-book-choice-skel-radio hub-skel-shimmer"></span>
-              <span class="hub-skel-line hub-book-choice-skel-tier-line hub-skel-shimmer"></span>
+            <div class="hub-book-choice-skel-opt" aria-hidden="true">
+              <span class="hub-book-choice-skel-opt-icon hub-skel-shimmer"></span>
+              <div class="hub-book-choice-skel-opt-body">
+                <span class="hub-skel-line hub-book-choice-skel-opt-title hub-skel-shimmer"></span>
+                <span class="hub-skel-line hub-book-choice-skel-opt-sub hub-skel-shimmer"></span>
+              </div>
+              <span class="hub-book-choice-skel-opt-chev hub-skel-shimmer"></span>
             </div>
           </div>
-          <!-- Sandbox: matches .book-modal-divider + .book-new-client (услуга и тариф уже выше). -->
-          <div class="hub-book-choice-skel-newcard" hidden aria-hidden="true">
-            <div class="hub-book-choice-skel-nc-label hub-skel-shimmer"></div>
-            <div class="hub-skel-line hub-book-choice-skel-field-eyebrow hub-skel-shimmer"></div>
-            <div class="hub-book-choice-skel-phone-row">
-              <span class="hub-book-choice-skel-phone-prefix hub-skel-shimmer"></span>
-              <span class="hub-book-choice-skel-phone-input hub-skel-shimmer"></span>
+          <!-- Sandbox: услуга/тариф + форма нового клиента — как финальный пробный экран. -->
+          <div class="hub-book-choice-skel-sandbox" hidden aria-hidden="true">
+            <div class="hub-book-choice-skel-lead" aria-hidden="true">
+              <div class="hub-skel-line hub-book-choice-skel-lead-line hub-skel-shimmer"></div>
+              <div class="hub-skel-line hub-book-choice-skel-lead-line hub-book-choice-skel-lead-line--short hub-skel-shimmer"></div>
             </div>
-            <div class="hub-skel-line hub-book-choice-skel-field-eyebrow hub-skel-shimmer"></div>
-            <div class="hub-skel-line hub-book-choice-skel-input hub-skel-shimmer"></div>
-            <div class="hub-skel-line hub-book-choice-skel-field-eyebrow hub-book-choice-skel-field-eyebrow--short hub-skel-shimmer"></div>
-            <div class="hub-skel-line hub-book-choice-skel-input hub-book-choice-skel-input--short hub-skel-shimmer"></div>
-            <div class="hub-book-choice-skel-submit hub-skel-shimmer"></div>
+            <div class="hub-skel-line hub-book-choice-skel-eyebrow hub-skel-shimmer" aria-hidden="true"></div>
+            <div class="hub-book-choice-skel-picks">
+              <div class="hub-skel-line hub-book-choice-skel-pill hub-skel-shimmer" aria-hidden="true"></div>
+            </div>
+            <div class="hub-skel-line hub-book-choice-skel-eyebrow hub-book-choice-skel-eyebrow--narrow hub-skel-shimmer" aria-hidden="true"></div>
+            <div class="hub-book-choice-skel-tiers">
+              <div class="hub-book-choice-skel-tier" aria-hidden="true">
+                <span class="hub-book-choice-skel-radio hub-skel-shimmer"></span>
+                <span class="hub-skel-line hub-book-choice-skel-tier-line hub-skel-shimmer"></span>
+              </div>
+              <div class="hub-book-choice-skel-tier" aria-hidden="true">
+                <span class="hub-book-choice-skel-radio hub-skel-shimmer"></span>
+                <span class="hub-skel-line hub-book-choice-skel-tier-line hub-skel-shimmer"></span>
+              </div>
+            </div>
+            <div class="hub-skel-line hub-book-choice-skel-eyebrow hub-book-choice-skel-eyebrow--narrow hub-skel-shimmer" aria-hidden="true"></div>
+            <div class="hub-book-choice-skel-picks">
+              <div class="hub-skel-line hub-book-choice-skel-pill hub-skel-shimmer" aria-hidden="true"></div>
+            </div>
+            <div class="hub-book-choice-skel-newcard" hidden aria-hidden="true">
+              <div class="hub-book-choice-skel-nc-label hub-skel-shimmer"></div>
+              <div class="hub-skel-line hub-book-choice-skel-field-eyebrow hub-skel-shimmer"></div>
+              <div class="hub-book-choice-skel-phone-row">
+                <span class="hub-book-choice-skel-phone-prefix hub-skel-shimmer"></span>
+                <span class="hub-book-choice-skel-phone-input hub-skel-shimmer"></span>
+              </div>
+              <div class="hub-skel-line hub-book-choice-skel-field-eyebrow hub-skel-shimmer"></div>
+              <div class="hub-skel-line hub-book-choice-skel-input hub-skel-shimmer"></div>
+              <div class="hub-skel-line hub-book-choice-skel-field-eyebrow hub-book-choice-skel-field-eyebrow--short hub-skel-shimmer"></div>
+              <div class="hub-skel-line hub-book-choice-skel-input hub-book-choice-skel-input--short hub-skel-shimmer"></div>
+              <div class="hub-book-choice-skel-submit hub-skel-shimmer"></div>
+            </div>
           </div>
-        </div>
-        <div id="hubBookServiceWrap" class="book-field-stack" style="display: none;">
-          <div id="hubBookServiceFieldLabel" class="book-field-label">Услуга</div>
-          <div
-            id="hubBookServicePickList"
-            class="hub-book-service-picklist"
-            role="listbox"
-            aria-labelledby="hubBookServiceFieldLabel"
-          ></div>
-          <!-- Native <select> UI mis-anchors under modal blur + overflow in Telegram/iOS WebKit; keep for sync only. -->
-          <select id="hubBookServiceSelect" class="hub-book-service-select-native" tabindex="-1" aria-hidden="true"></select>
-        </div>
-        <div id="hubBookPriceTierWrap" class="book-field-stack" style="display: none;">
-          <label class="book-field-label">Тариф</label>
-          <div id="hubBookPriceTierRadios" class="book-price-tier-radios"></div>
         </div>
         <div id="hubBookChoiceActions" class="hub-book-choice-actions">
           <button type="button" class="btn-book-option" id="hubBookOptExisting" style="display: none;" aria-hidden="true">
@@ -842,11 +858,38 @@
             </span>
             <span class="btn-book-option-body">
               <span class="btn-book-option-text">Добавить нового</span>
-              <span class="btn-book-option-hint">Телефон, имя — и записать</span>
+              <span class="btn-book-option-hint">Телефон, имя — дальше услуга и время</span>
             </span>
             <span class="btn-book-option-arrow" aria-hidden="true">›</span>
           </button>
         </div>
+        <div id="hubBookServiceWrap" class="book-field-stack" style="display: none;">
+          <div id="hubBookServiceFieldLabel" class="book-field-label">Услуга</div>
+          <div
+            id="hubBookServicePickList"
+            class="hub-book-service-picklist"
+            role="listbox"
+            aria-labelledby="hubBookServiceFieldLabel"
+          ></div>
+          <!-- Native <select> UI mis-anchors under modal blur + overflow in Telegram/iOS WebKit; keep for sync only. -->
+          <select id="hubBookServiceSelect" class="hub-book-service-select-native" tabindex="-1" aria-hidden="true"></select>
+        </div>
+        <div id="hubBookPriceTierWrap" class="book-field-stack" style="display: none;">
+          <label class="book-field-label">Тариф</label>
+          <div id="hubBookPriceTierRadios" class="book-price-tier-radios"></div>
+        </div>
+        <div id="hubBookArenaWrap" class="book-field-stack" style="display: none;">
+          <div id="hubBookArenaFieldLabel" class="book-field-label">Площадка</div>
+          <div
+            id="hubBookArenaPickList"
+            class="hub-book-service-picklist"
+            role="listbox"
+            aria-labelledby="hubBookArenaFieldLabel"
+          ></div>
+        </div>
+        <button type="button" class="btn-block btn-primary" id="hubBookQuickServiceNext" style="display: none;" hidden aria-hidden="true">
+          Далее
+        </button>
       </div>
       <div id="hubBookStepExisting" style="display: none;">
         <button type="button" class="book-modal-back" id="hubBookBackFromExisting">
@@ -909,6 +952,6 @@
   <script src="mini-app-trainer-gate.js?v=20260548"></script>
   <script src="mini-app-trainer-celebration.js"></script>
   <!-- Bump ?v= when trainer-home-main.js changes (immutable cache on /webapp/…). -->
-  <script defer src="trainer-home-main.js?v=202605034"></script>
+  <script defer src="trainer-home-main.js?v=202605067"></script>
 </body>
 </html>

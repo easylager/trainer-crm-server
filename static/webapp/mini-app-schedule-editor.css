@@ -167,6 +167,23 @@
     }
     .slot-row .slot-row-left { flex: 1; min-width: 0; }
     .slot-row .slot-time { font-weight: 600; font-size: 15px; }
+    .schedule-sandbox-pill {
+      display: inline-block;
+      margin-left: 8px;
+      padding: 2px 8px;
+      border-radius: 8px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      vertical-align: middle;
+      border: 1px dashed color-mix(in srgb, var(--tg-theme-button-color) 55%, var(--tg-theme-hint-color) 45%);
+      background: color-mix(in srgb, var(--tg-theme-button-color) 12%, transparent);
+      color: color-mix(in srgb, var(--tg-theme-button-color) 65%, var(--tg-theme-text-color) 35%);
+    }
+    .schedule-sandbox-pill--inline {
+      margin-left: 0;
+      flex-shrink: 0;
+    }
     .slot-cohort-hint {
       font-size: 11px;
       color: var(--tg-theme-hint-color);

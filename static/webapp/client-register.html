@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Профиль</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="mini-app-telegram-chrome.js?v=202605052"></script>
+  <link rel="stylesheet" href="theme.css?v=20260425" />
+  <link rel="stylesheet" href="mini-app-components.css?v=20260425" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    rel="stylesheet"
+    href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=optional"
+    media="print"
+    onload="this.media='all'"
+  />
+  <noscript>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=optional" />
+  </noscript>
+  <script src="client-mini-app-theme.js"></script>
+  <style>
+    html, body {
+      height: 100%;
+      margin: 0;
+    }
+    .cr-shell {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      background: var(--tg-theme-bg-color, #1c1c1e);
+    }
+
+    /* ── Hero ── */
+    .cr-hero {
+      padding: 28px 20px 20px;
+      text-align: center;
+    }
+    .cr-hero-title {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--tg-theme-text-color, #fff);
+      margin: 0 0 8px;
+      line-height: 1.3;
+    }
+    .cr-hero-sub {
+      font-size: 14px;
+      color: var(--tg-theme-hint-color, #999);
+      margin: 0;
+      line-height: 1.5;
+    }
+    .cr-hero-trainer-name {
+      font-weight: 600;
+      color: var(--tg-theme-text-color, #fff);
+    }
+
+    /* ── Card ── */
+    .cr-card {
+      margin: 0 16px;
+      background: var(--tg-theme-secondary-bg-color, #2c2c2e);
+      border-radius: 16px;
+      padding: 20px;
+    }
+
+    /* ── Field stack (mirroring trainer-clients «Добавить клиента») ── */
+    .cr-field-stack {
+      margin-bottom: 18px;
+    }
+    .cr-field-stack:last-child { margin-bottom: 0; }
+
+    .cr-field-label {
+      display: block;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--tg-theme-hint-color, #999);
+      margin: 0 0 8px;
+    }
+    .cr-field-label-hint {
+      display: inline;
+      font-weight: 600;
+      letter-spacing: 0;
+      text-transform: none;
+      font-size: 12px;
+      opacity: 0.75;
+    }
+
+    /* Orange required dot */
+    .cr-req-dot {
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      margin-right: 6px;
+      vertical-align: 0.1em;
+      background: var(--tg-theme-button-color, #f5a623);
+      box-shadow: 0 0 0 2px rgba(245, 166, 35, 0.22);
+    }
+
+    /* ── Phone wrap (+375 prefix + national input) ── */
+    .cr-phone-wrap {
+      position: relative;
+      width: 100%;
+      border-radius: 14px;
+      background: var(--tg-theme-bg-color, #1c1c1e);
+      box-sizing: border-box;
+      min-height: 48px;
+      transition: box-shadow 160ms ease;
+    }
+    .cr-phone-wrap:focus-within {
+      box-shadow:
+        inset 0 0 0 1px rgba(247, 166, 0, 0.55),
+        0 0 0 3px rgba(247, 166, 0, 0.12);
+    }
+    .cr-phone-prefix {
+      position: absolute;
+      left: 14px;
+      top: 50%;
+      transform: translateY(-50%);
+      z-index: 1;
+      font-size: 15px;
+      font-weight: 600;
+      line-height: 1.2;
+      color: var(--tg-theme-text-color, #fff);
+      pointer-events: none;
+      letter-spacing: 0.02em;
+      font-variant-numeric: tabular-nums;
+    }
+    .cr-phone-input {
+      display: block;
+      width: 100%;
+      min-width: 0;
+      margin: 0;
+      padding: 13px 14px 13px 56px;
+      min-height: 48px;
+      box-sizing: border-box;
+      border-radius: 14px;
+      border: none;
+      background: transparent;
+      font-size: 15px;
+      font-weight: 600;
+      line-height: 1.2;
+      font-family: inherit;
+      font-variant-numeric: tabular-nums;
+      -webkit-appearance: none;
+      appearance: none;
+      outline: none;
+      color: var(--tg-theme-text-color, #fff);
+      -webkit-text-fill-color: var(--tg-theme-text-color, #fff);
+      caret-color: var(--tg-theme-text-color, #fff);
+    }
+    .cr-phone-input:focus, .cr-phone-input:focus-visible { outline: none; box-shadow: none; }
+    .cr-phone-input::placeholder {
+      font-weight: 600;
+      opacity: 0.45;
+      color: var(--tg-theme-hint-color, #999);
+      -webkit-text-fill-color: var(--tg-theme-hint-color, #999);
+    }
+    .cr-phone-hint {
+      margin: 8px 0 0;
+      font-size: 12px;
+      line-height: 1.35;
+      color: var(--tg-theme-hint-color, #999);
+    }
+
+    /* ── Text input ── */
+    .cr-input {
+      display: block;
+      width: 100%;
+      box-sizing: border-box;
+      padding: 13px 14px;
+      min-height: 48px;
+      border-radius: 14px;
+      border: none;
+      background: var(--tg-theme-bg-color, #1c1c1e);
+      font-size: 15px;
+      font-weight: 500;
+      font-family: inherit;
+      -webkit-appearance: none;
+      appearance: none;
+      outline: none;
+      color: var(--tg-theme-text-color, #fff);
+      -webkit-text-fill-color: var(--tg-theme-text-color, #fff);
+      caret-color: var(--tg-theme-text-color, #fff);
+      transition: box-shadow 160ms ease;
+    }
+    .cr-input:focus {
+      outline: none;
+      box-shadow:
+        inset 0 0 0 1px rgba(247, 166, 0, 0.55),
+        0 0 0 3px rgba(247, 166, 0, 0.12);
+    }
+    .cr-input::placeholder {
+      opacity: 0.45;
+      color: var(--tg-theme-hint-color, #999);
+      -webkit-text-fill-color: var(--tg-theme-hint-color, #999);
+    }
+
+    /* ── Inline field error ── */
+    .cr-error {
+      display: none;
+      margin: 6px 0 0;
+      font-size: 13px;
+      line-height: 1.35;
+      color: #e85d4c;
+    }
+    .cr-error.cr-error--visible { display: block; }
+
+    /* ── Global error ── */
+    .cr-global-error {
+      display: none;
+      margin: 12px 16px 0;
+      padding: 12px 14px;
+      background: rgba(232, 93, 76, 0.12);
+      border-radius: 12px;
+      font-size: 14px;
+      color: #e85d4c;
+      line-height: 1.4;
+    }
+    .cr-global-error.cr-global-error--visible { display: block; }
+
+    /* ── Actions ── */
+    .cr-actions {
+      padding: 16px 16px 36px;
+      margin-top: auto;
+    }
+
+    /* ── Spinner inside primary button ── */
+    .cr-spinner {
+      width: 18px;
+      height: 18px;
+      border: 2.5px solid rgba(0, 0, 0, 0.22);
+      border-top-color: currentColor;
+      border-radius: 50%;
+      animation: cr-spin 0.7s linear infinite;
+      display: none;
+      flex-shrink: 0;
+    }
+    .cr-btn-submit.cr-loading .cr-spinner { display: block; }
+    @keyframes cr-spin { to { transform: rotate(360deg); } }
+
+    /* ── Success screen ── */
+    .cr-success-screen {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 48px 24px;
+      flex: 1;
+    }
+    .cr-success-screen.cr-success-screen--visible { display: flex; }
+    .cr-success-icon { font-size: 56px; margin-bottom: 20px; }
+    .cr-success-title {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--tg-theme-text-color, #fff);
+      margin: 0 0 10px;
+    }
+    .cr-success-sub {
+      font-size: 15px;
+      color: var(--tg-theme-hint-color, #999);
+      line-height: 1.5;
+      margin: 0;
+    }
+
+    /* ── Override btn-primary gap for spinner ── */
+    .cr-btn-submit {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div class="cr-shell" id="crShell">
+
+    <!-- Hero -->
+    <div class="cr-hero" id="crHero">
+      <h1 class="cr-hero-title" id="crHeroTitle">Короткий профиль</h1>
+      <p class="cr-hero-sub" id="crHeroSub">
+        Несколько полей — и вы можете продолжить в приложении со всеми функциями.
+      </p>
+    </div>
+
+    <!-- Form -->
+    <div class="cr-card" id="crFormCard">
+
+      <!-- Phone -->
+      <div class="cr-field-stack">
+        <label class="cr-field-label" for="crPhone">
+          <span class="cr-req-dot" aria-hidden="true"></span>Телефон
+        </label>
+        <div class="cr-phone-wrap">
+          <span class="cr-phone-prefix" aria-hidden="true">+375</span>
+          <input
+            type="text"
+            id="crPhone"
+            class="cr-phone-input"
+            placeholder="29 123-45-67"
+            autocomplete="tel"
+            inputmode="numeric"
+            maxlength="14"
+            aria-describedby="crPhoneHint"
+            aria-required="true"
+          />
+        </div>
+        <p class="cr-phone-hint" id="crPhoneHint">Код страны уже учтён — введите 9 цифр номера.</p>
+        <span class="cr-error" id="crPhoneError" role="alert"></span>
+      </div>
+
+      <!-- First name -->
+      <div class="cr-field-stack">
+        <label class="cr-field-label" for="crFirstName">
+          <span class="cr-req-dot" aria-hidden="true"></span>Имя
+        </label>
+        <input
+          type="text"
+          id="crFirstName"
+          class="cr-input"
+          placeholder="Например, Анна"
+          autocomplete="given-name"
+          maxlength="64"
+          aria-required="true"
+        />
+        <span class="cr-error" id="crFirstNameError" role="alert"></span>
+      </div>
+
+      <!-- Last name -->
+      <div class="cr-field-stack">
+        <label class="cr-field-label" for="crLastName">
+          Фамилия <span class="cr-field-label-hint">(необязательно)</span>
+        </label>
+        <input
+          type="text"
+          id="crLastName"
+          class="cr-input"
+          placeholder="По желанию"
+          autocomplete="family-name"
+          maxlength="64"
+        />
+      </div>
+    </div>
+
+    <!-- Global error -->
+    <div class="cr-global-error" id="crGlobalError" role="alert"></div>
+
+    <!-- Submit -->
+    <div class="cr-actions" id="crActions">
+      <button type="button" class="btn-primary btn-block cr-btn-submit" id="crBtnSubmit">
+        <span class="cr-spinner" aria-hidden="true"></span>
+        <span class="cr-btn-label">Продолжить</span>
+      </button>
+    </div>
+
+    <!-- Success -->
+    <div class="cr-success-screen" id="crSuccessScreen" aria-live="polite">
+      <div class="cr-success-icon" aria-hidden="true">✅</div>
+      <h2 class="cr-success-title">Готово!</h2>
+      <p class="cr-success-sub">Профиль сохранён. Открываем приложение…</p>
+    </div>
+
+  </div>
+
+  <script src="client-register-main.js?v=202605062"></script>
+</body>
+</html>

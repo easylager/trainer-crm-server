@@ -150,6 +150,54 @@ async def get_schedule_grid_preset_for_trainer(
     }
 
 
+async def get_schedule_grid_preset_for_trainer_arena(
+    session: AsyncSession,
+    trainer_id: int,
+    arena_id: int,
+) -> dict[str, Any]:
+    """
+    Grid preset for a specific trainer-linked arena (quick book / schedule preview when several venues).
+    Raises ValueError if the arena is not linked to the trainer.
+    """
+    aid = int(arena_id)
+    r0 = await session.execute(
+        text("SELECT 1 FROM trainer_arenas WHERE trainer_id = :tid AND arena_id = :aid"),
+        {"tid": trainer_id, "aid": aid},
+    )
+    if not r0.fetchone():
+        raise ValueError("Площадка не привязана к вашему профилю")
+    r = await session.execute(
+        text("SELECT schedule_grid_step_minutes FROM trainers WHERE id = :tid"),
+        {"tid": trainer_id},
+    )
+    row_t = r.fetchone()
+    trainer_step = normalize_trainer_schedule_grid_step(row_t[0] if row_t else None)
+    r2 = await session.execute(
+        text(
+            """
+            SELECT grid_kind, minute_offset, hour_start, hour_end, slot_duration_minutes
+            FROM arena_schedule_presets
+            WHERE arena_id = :aid
+            """
+        ),
+        {"aid": aid},
+    )
+    row2 = r2.fetchone()
+    if not row2:
+        p = trainer_uniform_preset(trainer_step)
+        p["arena_id"] = aid
+        return p
+    return {
+        "kind": (row2[0] or GRID_QUARTER_15).strip(),
+        "minute_offset": int(row2[1] or 0),
+        "hour_start": int(row2[2] if row2[2] is not None else DEFAULT_SCHEDULE_HOUR_START),
+        "hour_end": int(row2[3] if row2[3] is not None else DEFAULT_SCHEDULE_HOUR_END),
+        "slot_duration_minutes": int(row2[4]) if row2[4] is not None else None,
+        "arena_id": aid,
+        "step_minutes": 15 if (row2[0] or GRID_QUARTER_15).strip() == GRID_QUARTER_15 else None,
+    }
+
+
 def schedule_grid_preset_to_api(preset: dict[str, Any]) -> dict[str, Any]:
     """JSON-safe payload for GET /schedule."""
     raw_dur = preset.get("slot_duration_minutes")

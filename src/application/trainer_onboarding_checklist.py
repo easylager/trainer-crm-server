@@ -15,9 +15,8 @@ so onboarding «первая запись» does not regress after cancel.
 ``available_slots_this_week_count`` / ``available_slots_next_week_count`` = free slots only (hub rhythm).
 ``bookings_this_week_count`` / ``bookings_next_week_count`` = non-cancelled bookings in that week window.
 ``open_loop_pending_bookings_count`` = future sessions with status ``pending`` (trainer confirm).
-``open_loop_clients_no_upcoming_count`` = distinct clients (bookings or active/trial group) with no upcoming
-session (slot end in the future, ``pending``/``confirmed``).
-``open_loop_clients_no_telegram_count`` = those clients (same scope as CRM visibility) with ``telegram_id`` null.
+``open_loop_clients_no_upcoming_count`` = distinct clients in the same ``rel`` scope as CRM (bookings, roster, groups) with no future pending/confirmed session.
+``open_loop_clients_no_telegram_count`` = clients in the same scope as ``list_trainer_clients`` (non-removed bookings, explicit roster, or active/trial group) with ``telegram_id`` null.
 ``fill_slots_invite_candidates_count`` = clients eligible for hub «напомнить о слотах»: CRM scope, Telegram linked,
 no upcoming pending/confirmed session (same filter as ``list_trainer_fill_slots_invite_candidates``).
 ``has_crm_subscription_access`` = active trial/paid row with CRM base (``get_trainer_entitlements``); when false after
@@ -348,13 +347,17 @@ async def get_trainer_onboarding_checklist(session: AsyncSession, trainer_id: in
                             SELECT b.client_id
                             FROM bookings b
                             WHERE b.trainer_id = :tid
-                              AND b.status NOT IN ('cancelled', 'declined')
+                              AND b.status NOT IN ('cancelled', 'declined', 'trainer_removed')
                             UNION
                             SELECT m.client_id
                             FROM training_group_members m
                             INNER JOIN training_groups g ON g.id = m.training_group_id
                             WHERE g.trainer_id = :tid
                               AND m.status IN ('active', 'trial')
+                            UNION
+                            SELECT r.client_id
+                            FROM trainer_client_roster r
+                            WHERE r.trainer_id = :tid
                         ) q
                     ),
                     has_upcoming AS (
@@ -382,7 +385,12 @@ async def get_trainer_onboarding_checklist(session: AsyncSession, trainer_id: in
                               SELECT 1 FROM bookings b
                               WHERE b.client_id = c.id
                                 AND b.trainer_id = :tid
-                                AND b.status NOT IN ('cancelled', 'declined')
+                                AND b.status NOT IN ('cancelled', 'declined', 'trainer_removed')
+                          )
+                          OR EXISTS (
+                              SELECT 1 FROM trainer_client_roster r
+                              WHERE r.client_id = c.id
+                                AND r.trainer_id = :tid
                           )
                           OR EXISTS (
                               SELECT 1 FROM training_group_members m

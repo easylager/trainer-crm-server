@@ -471,6 +471,22 @@ window.wireHubSlotMessageButtons = function (root) {
     }
   };
 
+  /** Strip leading Belarus country dial tokens; UI already shows +375. Only trims left-spaces removed with tokens (no `.trim()` of whole string). */
+  global.stripLeadingDialCodeTokensFor375Field = function (str) {
+    var t = String(str || '').replace(/^\uFEFF/, '');
+    for (var i = 0; i < 8; i++) {
+      var prev = t;
+      t = t
+        .replace(/^\s+/, '')
+        .replace(/^\+\s*375/i, '')
+        .replace(/^375(?=\d)/i, '')
+        .replace(/^80(?=\d)/i, '')
+        .replace(/^\+(?=\s*\d)/, '');
+      if (t === prev) break;
+    }
+    return t;
+  };
+
   /** Up to 9 national digits; strips 00… / 375 / 80 from pasted full MSISDN so UI +375 prefix never duplicates. */
   global.extractNational375Digits = function (raw) {
     var d = String(raw || '').replace(/\D/g, '');
@@ -516,16 +532,104 @@ window.wireHubSlotMessageButtons = function (root) {
     return str.length;
   }
 
+  /** «(XX) XXX-XX-XX» — fragment after literal +375 in the UI (operator in parens). */
+  global.formatNational375MaskedFragmentParen = function (raw) {
+    var d = global.extractNational375Digits(raw);
+    var n = d.length;
+    if (n === 0) return '';
+    if (n === 1) return '(' + d;
+    if (n === 2) return '(' + d + ')';
+    var out = '(' + d.slice(0, 2) + ') ' + d.slice(2, Math.min(n, 5));
+    if (n > 5) out += '-' + d.slice(5, Math.min(n, 7));
+    if (n > 7) out += '-' + d.slice(7, 9);
+    return out;
+  };
+
+  /** Idempotent ``(XX) XXX-XX-XX`` apply; caret by digit index (same as fragment mask). */
+  global.applyNational375ParenMaskedToInput = function (el) {
+    if (!el) return;
+    var raw = String(el.value || '');
+    var ss = typeof el.selectionStart === 'number' ? el.selectionStart : raw.length;
+    var se = typeof el.selectionEnd === 'number' ? el.selectionEnd : ss;
+    var caret = Math.min(ss, se);
+    var work = global.stripLeadingDialCodeTokensFor375Field(raw);
+    var digitsBefore;
+    if (work !== raw) {
+      var chop = raw.length - work.length;
+      var caret2 = caret - chop;
+      if (caret2 < 0) caret2 = 0;
+      digitsBefore = national375DigitsBeforeCaret(work, caret2);
+    } else {
+      digitsBefore = national375DigitsBeforeCaret(work, caret);
+    }
+    var f = global.formatNational375MaskedFragmentParen(work);
+    if (work === f) return;
+    el.value = f;
+    var newPos = national375IndexAfterDigitCount(f, digitsBefore);
+    try {
+      el.setSelectionRange(newPos, newPos);
+    } catch (errCaret) {}
+  };
+
+  /** Paste helper for +(375) fragment with parentheses grouping. */
+  function handleNational375ParenPhonePaste(e) {
+    var cd = e.clipboardData || global.clipboardData;
+    if (!cd || typeof cd.getData !== 'function') return;
+    var textRaw = cd.getData('text/plain');
+    if (textRaw == null || String(textRaw).trim() === '') return;
+    e.preventDefault();
+    var el = e.target;
+    var cur = String(el.value || '');
+    var start = typeof el.selectionStart === 'number' ? el.selectionStart : cur.length;
+    var end = typeof el.selectionEnd === 'number' ? el.selectionEnd : start;
+    var pasteNationals = global.extractNational375Digits(String(textRaw));
+    var merged;
+    if (pasteNationals.length >= 9) {
+      merged = String(textRaw);
+    } else {
+      var pasteChunk = global.stripLeadingDialCodeTokensFor375Field(String(textRaw));
+      merged = cur.slice(0, start) + pasteChunk + cur.slice(end);
+    }
+    var masked = global.formatNational375MaskedFragmentParen(merged);
+    el.value = masked;
+    try {
+      var len = masked.length;
+      el.setSelectionRange(len, len);
+    } catch (errPasteCaret) {}
+  }
+
+  /** Same as ``wireNational375PhoneInputMask`` but renders ``(29) XXX-XX-XX`` (after UI +375). */
+  global.wireNational375ParenPhoneInputMask = function (el) {
+    if (!el || el.tagName !== 'INPUT' || el.dataset.crmNat375ParenMask === '1') return;
+    el.dataset.crmNat375ParenMask = '1';
+    el.addEventListener('paste', handleNational375ParenPhonePaste, false);
+    el.addEventListener('input', function () {
+      global.applyNational375ParenMaskedToInput(el);
+    });
+    el.addEventListener('blur', function () {
+      global.applyNational375ParenMaskedToInput(el);
+    });
+  };
+
   /** Idempotent mask apply (national fragment). Preserves caret by digit index so mid-field edits stay usable. */
   global.applyNational375MaskedToInput = function (el) {
     if (!el) return;
-    var oldV = String(el.value || '');
-    var start = typeof el.selectionStart === 'number' ? el.selectionStart : oldV.length;
-    var end = typeof el.selectionEnd === 'number' ? el.selectionEnd : start;
-    var caret = Math.min(start, end);
-    var digitsBefore = national375DigitsBeforeCaret(oldV, caret);
-    var f = global.formatNational375MaskedFragment(oldV);
-    if (oldV === f) return;
+    var raw = String(el.value || '');
+    var ss = typeof el.selectionStart === 'number' ? el.selectionStart : raw.length;
+    var se = typeof el.selectionEnd === 'number' ? el.selectionEnd : ss;
+    var caret = Math.min(ss, se);
+    var work = global.stripLeadingDialCodeTokensFor375Field(raw);
+    var digitsBefore;
+    if (work !== raw) {
+      var chop = raw.length - work.length;
+      var caret2 = caret - chop;
+      if (caret2 < 0) caret2 = 0;
+      digitsBefore = national375DigitsBeforeCaret(work, caret2);
+    } else {
+      digitsBefore = national375DigitsBeforeCaret(work, caret);
+    }
+    var f = global.formatNational375MaskedFragment(work);
+    if (work === f) return;
     el.value = f;
     var newPos = national375IndexAfterDigitCount(f, digitsBefore);
     try {
@@ -537,20 +641,27 @@ window.wireHubSlotMessageButtons = function (root) {
   function handleNational375PhonePaste(e) {
     var cd = e.clipboardData || global.clipboardData;
     if (!cd || typeof cd.getData !== 'function') return;
-    var text = cd.getData('text/plain');
-    if (text == null || String(text).trim() === '') return;
+    var textRaw = cd.getData('text/plain');
+    if (textRaw == null || String(textRaw).trim() === '') return;
     e.preventDefault();
     var el = e.target;
     var cur = String(el.value || '');
     var start = typeof el.selectionStart === 'number' ? el.selectionStart : cur.length;
     var end = typeof el.selectionEnd === 'number' ? el.selectionEnd : start;
-    var merged = cur.slice(0, start) + String(text) + cur.slice(end);
+    var pasteNationals = global.extractNational375Digits(String(textRaw));
+    var merged;
+    if (pasteNationals.length >= 9) {
+      merged = String(textRaw);
+    } else {
+      var pasteChunk = global.stripLeadingDialCodeTokensFor375Field(String(textRaw));
+      merged = cur.slice(0, start) + pasteChunk + cur.slice(end);
+    }
     var masked = global.formatNational375MaskedFragment(merged);
     el.value = masked;
     try {
       var len = masked.length;
       el.setSelectionRange(len, len);
-    } catch (errCaret) {}
+    } catch (errPasteCaret) {}
   }
 
   /**

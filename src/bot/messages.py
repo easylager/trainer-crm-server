@@ -121,6 +121,18 @@ CLIENT_LINK_CODE_DEV = " (для проверки код: <code>{code}</code>)"
 CLIENT_LINK_SUCCESS = "Готово! Ваш профиль привязан. Теперь можете записаться к тренеру."
 CLIENT_LINK_CODE_WRONG = "Неверный код. Введите код из сообщения."
 
+# Trainer bot: client completed public invite registration form.
+TRAINER_CLIENT_REGISTERED_NEW_HTML = (
+    "🆕 <b>Новый клиент по твоей ссылке</b>\n\n"
+    "{client_label} заполнил(а) короткий профиль и добавлен(а) в раздел «Клиенты»."
+)
+TRAINER_CLIENT_REGISTERED_LINKED_HTML = (
+    "✅ <b>Клиент теперь в боте</b>\n\n"
+    "{client_label} заполнил(а) профиль по твоей ссылке. "
+    "Telegram привязан к существующей карточке в разделе «Клиенты»."
+)
+TRAINER_CLIENT_REGISTERED_OPEN_PROFILE_BTN = "Открыть профиль клиента"
+
 # Client: errors and hints (what to do next)
 CLIENT_ERROR_BOOKING_CLOSED = "Эта запись уже закрыта или недоступна. Выберите другого тренера или время в каталоге."
 CLIENT_ERROR_BOOKING_UNAVAILABLE = "Эта запись недоступна. Выберите слот в каталоге или нажмите «Записаться»."
@@ -215,6 +227,13 @@ CLIENT_BUTTON_MY_REQUESTS = "Мои заявки и отклики"
 CLIENT_BUTTON_MY_BOOKINGS = "Мои записи"
 # После invite/bind: клиентский хаб Mini App (`/webapp/client-home`).
 CLIENT_BUTTON_TRAINER_AND_BOOKING = "Главная"
+
+# Universal invite — registration Mini App: neutral copy (profile to continue).
+CLIENT_UNIVERSAL_INVITE_UNKNOWN = (
+    "👋 <b>Привет! Вас пригласил тренер {name}.</b>\n\n"
+    "Заполните короткий профиль — так вы сможете продолжить и пользоваться приложением без ограничений."
+)
+CLIENT_UNIVERSAL_INVITE_REGISTER_BTN = "Продолжить"
 # Абонементы: выданные тренером, список в Mini App
 CLIENT_PASSES_INFO = (
     "Абонементы — это карточки с условиями у каждого тренера в каталоге. "
@@ -2168,6 +2187,7 @@ TRAINER_BOOKING_NOTIFICATION = (
     "📞 {phone}\n"
     "📅 <b>{date} ({day}) {time}</b> — {duration} мин.\n"
     "🎯 {service}\n"
+    "💳 <b>Тариф:</b> {tariff}\n"
     "📍 {city} · 🏟 {arenas}\n"
     "💬 <b>Комментарий:</b> {comment}\n\n"
     "<b>Действия:</b> подтвердите, отклоните или напишите клиенту — кнопки ниже.\n\n"
@@ -2179,6 +2199,7 @@ TRAINER_BOOKING_NOTIFICATION_NO_COMMENT = (
     "📞 {phone}\n"
     "📅 <b>{date} ({day}) {time}</b> — {duration} мин.\n"
     "🎯 {service}\n"
+    "💳 <b>Тариф:</b> {tariff}\n"
     "📍 {city} · 🏟 {arenas}\n\n"
     "<b>Действия:</b> подтвердите, отклоните или напишите клиенту — кнопки ниже.\n\n"
     "<i>Слот занят; клиент получит напоминания автоматически.</i>"

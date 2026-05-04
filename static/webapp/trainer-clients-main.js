@@ -115,14 +115,6 @@
         }, 120);
       }
 
-      function postClientInviteLinkFirstCopyRecorded() {
-        if (!getTrainerWebAppInitData()) return;
-        fetch(withInit('/api/webapp/trainer/welcome-link/first-copy'), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-        }).catch(function() {});
-      }
-
       var state = {
         allClients: [],
         filteredClients: [],
@@ -136,9 +128,7 @@
         returnGroupId: null,
         /** While GET /trainer/clients is in flight — list shows skeleton (stable layout). */
         clientsListLoading: false,
-        /** Cached GET /trainer/welcome-link/eligibility for invite link flow. */
-        inviteWelcomeMeta: null,
-        /** Deep link ?focus=invite_bot — list only clients without telegram_id + banner (from hub rhythm hint). */
+        /** Deep link ?focus=invite_bot — list clients without telegram_id + banner (e.g. saved link). */
         focusInviteBot: false,
         /** Incremented on each history fetch — stale responses after quick-book must not repaint UI. */
         clientHistoryLoadGen: 0,
@@ -187,7 +177,7 @@
 
       function backToListFromDetail() {
         document.getElementById('clientsSection').style.display = 'block';
-        document.querySelector('.search-box').style.display = 'block';
+        setInviteBotCompactListUi(!!state.focusInviteBot);
         document.getElementById('detailSection').style.display = 'none';
         state.selectedClientId = null;
         document.body.classList.remove('client-detail-mode');
@@ -1167,6 +1157,36 @@
         if (b) b.hidden = true;
       }
 
+      /** Invite-bot focus: list-only screen (no search / add client). Mirrors html.tc-invite-bot-compact from inline boot script. */
+      function setInviteBotCompactListUi(on) {
+        var root = document.documentElement;
+        if (on) root.classList.add('tc-invite-bot-compact');
+        else root.classList.remove('tc-invite-bot-compact');
+        var sb = document.querySelector('.search-box');
+        var bar = document.querySelector('.tc-add-client-bar');
+        if (sb) sb.style.display = on ? 'none' : '';
+        if (bar) bar.style.display = on ? 'none' : '';
+      }
+
+      function postClientInviteLinkFirstCopyRecorded() {
+        if (!getTrainerWebAppInitData()) return;
+        fetch(withInit('/api/webapp/trainer/welcome-link/first-copy'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        }).catch(function() {});
+      }
+
+      function fetchTrainerHubStyleWelcomeLink() {
+        return fetch(withInit('/api/webapp/trainer/welcome-link'), {
+          headers: { 'Content-Type': 'application/json' },
+        }).then(function(r) {
+          return r.json().then(function(o) {
+            if (!r.ok) throw new Error((o && o.detail) || r.statusText || 'Ошибка');
+            return o;
+          });
+        });
+      }
+
       function pluralRuClients(n) {
         var n10 = n % 10;
         var n100 = n % 100;
@@ -1186,7 +1206,7 @@
             count +
             ' ' +
             pluralRuClients(count) +
-            ' без Telegram в боте. Откройте карточку и отправьте персональную ссылку — кнопка «Ссылка в клиентский бот (привязка профиля)».';
+            ' без Telegram в боте. Нажмите «Скопировать ссылку» — это та же общая пригласительная ссылка, что на главной странице кабинета (копирование без выбора услуги). Отправьте её каждому клиенту в чат; после перехода и привязки мы пришлём уведомление в бот тренера.';
         }
       }
 
@@ -1197,9 +1217,46 @@
           btnAll.onclick = function() {
             state.focusInviteBot = false;
             hideInviteBotBanner();
+            var ds = document.getElementById('detailSection');
+            var onDetail = ds && ds.style.display !== 'none';
+            if (onDetail) {
+              backToListFromDetail();
+            } else {
+              setInviteBotCompactListUi(false);
+            }
             var si = document.getElementById('searchInput');
             if (si) si.value = '';
             applyFilter();
+          };
+        }
+        var btnCopy = document.getElementById('tcListFocusCopyInvite');
+        if (btnCopy && !btnCopy.dataset.wiredInviteCopy) {
+          btnCopy.dataset.wiredInviteCopy = '1';
+          btnCopy.onclick = function() {
+            if (btnCopy.disabled) return;
+            btnCopy.disabled = true;
+            setStateMessage('');
+            fetchTrainerHubStyleWelcomeLink()
+              .then(function(o) {
+                var link = o && o.welcome_link;
+                if (!link) {
+                  setStateMessage('Ссылка недоступна. Откройте мини-приложение из бота тренера.', 'error');
+                  return;
+                }
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                  return navigator.clipboard.writeText(link).then(function() {
+                    postClientInviteLinkFirstCopyRecorded();
+                    showTcToast('Ссылка скопирована — отправьте её клиентам');
+                  });
+                }
+                alert(link);
+              })
+              .catch(function(err) {
+                setStateMessage((err && err.message) || 'Не удалось получить ссылку.', 'error');
+              })
+              .finally(function() {
+                btnCopy.disabled = false;
+              });
           };
         }
       }
@@ -1211,11 +1268,13 @@
         if (!noTg.length) {
           state.focusInviteBot = false;
           hideInviteBotBanner();
+          setInviteBotCompactListUi(false);
           state.filteredClients = state.allClients.slice();
           renderList();
           showTcToast('Все клиенты уже в боте.');
           return;
         }
+        setInviteBotCompactListUi(true);
         showInviteBotBannerUi(noTg.length);
         wireInviteBotBannerActions();
         applyFilter();
@@ -1226,6 +1285,7 @@
           applyInviteBotFocusAfterLoad();
         } else {
           hideInviteBotBanner();
+          setInviteBotCompactListUi(false);
           state.filteredClients = state.allClients.slice();
           renderList();
         }
@@ -1917,6 +1977,74 @@
         if (mn) mn.value = (c.middle_name || '').trim();
       }
 
+      function wireTrainerClientDetach(clientId) {
+        var modal = document.getElementById('tcModalDetachClient');
+        var btnOpen = document.getElementById('tcDetachClientBtn');
+        var btnCancel = document.getElementById('tcDetachCancel');
+        var btnOk = document.getElementById('tcDetachConfirm');
+        if (!modal || !btnOpen || !btnCancel || !btnOk) return;
+        function closeM() {
+          modal.style.display = 'none';
+          modal.setAttribute('aria-hidden', 'true');
+          btnOk.disabled = false;
+        }
+        btnOpen.onclick = function(ev) {
+          ev.preventDefault();
+          modal.style.display = 'flex';
+          modal.setAttribute('aria-hidden', 'false');
+        };
+        btnCancel.onclick = function(ev) {
+          ev.preventDefault();
+          closeM();
+        };
+        modal.onclick = function(ev) {
+          if (ev.target === modal) closeM();
+        };
+        btnOk.onclick = function(ev) {
+          ev.preventDefault();
+          btnOk.disabled = true;
+          fetch(withInit('/api/webapp/trainer/clients/' + encodeURIComponent(clientId) + '/detach'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: '{}',
+          })
+            .then(function(r) {
+              return r.json().then(function(d) {
+                var msg =
+                  typeof (d && d.detail) === 'string'
+                    ? d.detail
+                    : r.statusText || 'Ошибка';
+                if (!r.ok) throw new Error(msg);
+                return d;
+              });
+            })
+            .then(function(d) {
+              closeM();
+              var n =
+                typeof d.cancelled_upcoming_bookings === 'number'
+                  ? d.cancelled_upcoming_bookings
+                  : 0;
+              var roster = !!d.roster_removed;
+              var parts = [];
+              if (n > 0) parts.push('Отменено предстоящих записей: ' + n + '.');
+              if (roster) parts.push('Клиент убран из быстрого списка.');
+              if (!parts.length) parts.push('Готово.');
+              showTcToast(parts.join(' '));
+              state.allClients = state.allClients.filter(function(c) {
+                return c.id !== clientId;
+              });
+              applyFilter();
+              backToListFromDetail();
+            })
+            .catch(function(err) {
+              alert(err.message || 'Ошибка');
+            })
+            .finally(function() {
+              btnOk.disabled = false;
+            });
+        };
+      }
+
       function wireTrainerClientIdentityEditor(clientId) {
         var toggle = document.getElementById('tcIdentityEditToggle');
         var panel = document.getElementById('tcIdentityPanel');
@@ -2017,6 +2145,8 @@
           '<svg class="tc-hero-dm-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></svg>';
         var ICO_PENCIL =
           '<svg class="tc-name-edit-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg>';
+        var ICO_TRASH =
+          '<svg class="tc-remove-client-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>';
         var canDm = trainerClientCanWriteTelegram(client);
         var heroDmBtn = '';
         if (canDm) {
@@ -2029,6 +2159,9 @@
           '<div class=\"tc-hero-actions\" role=\"toolbar\" aria-label=\"Действия\">' +
           '<button type=\"button\" class=\"tc-name-edit-btn\" id=\"tcIdentityEditToggle\" aria-label=\"Редактировать ФИО\" title=\"Редактировать ФИО\" aria-expanded=\"false\">' +
           ICO_PENCIL +
+          '</button>' +
+          '<button type=\"button\" class=\"tc-remove-client-btn\" id=\"tcDetachClientBtn\" aria-label=\"Убрать из списка\" title=\"Убрать из списка\">' +
+          ICO_TRASH +
           '</button>' +
           heroDmBtn +
           '</div>';
@@ -2090,11 +2223,9 @@
         var showBindWelcome = client.telegram_id == null;
         if (showBindWelcome) {
           detail +=
-            '<button type=\"button\" class=\"bd-btn bd-btn--surface\" id=\"btnClientBindWelcome\">Ссылка в клиентский бот (привязка профиля)</button>' +
-            '<div id=\"clientPersonalWelcomeBlock\" class=\"tc-client-bind-welcome\" style=\"display:none;\">' +
-            '<div class=\"detail-label tc-client-bind-welcome__label\">Одноразовая ссылка для этого клиента</div>' +
-            '<div id=\"clientPersonalWelcomeUrl\" class=\"invite-link-url\"></div>' +
-            '<button type=\"button\" class=\"bd-btn bd-btn--surface\" id=\"btnCopyClientPersonalWelcome\">Скопировать ссылку</button>' +
+            '<div class=\"tc-client-bind-welcome\" role=\"status\">' +
+            '<div class=\"detail-label tc-client-bind-welcome__label\">Клиент ещё не в Telegram-боте</div>' +
+            '<p class=\"tc-client-bind-welcome__hint\">Чтобы привязать профиль и получать напоминания, отправьте ту же общую пригласительную ссылку, что на главной странице кабинета — кнопка со значком связи справа вверху. Одна ссылка для всех клиентов.</p>' +
             '</div>';
         }
         detail +=
@@ -2138,6 +2269,7 @@
         }
         wireTrainerClientTelegramDms();
         wireTrainerClientIdentityEditor(id);
+        wireTrainerClientDetach(id);
         fetch(withInit('/api/webapp/trainer/clients/' + encodeURIComponent(id) + '/card'))
           .then(function(r) {
             return r.json().then(function(d) {
@@ -2154,76 +2286,6 @@
           .catch(function() {
             /* list snapshot already rendered */
           });
-        if (showBindWelcome) {
-          var bindBtn = document.getElementById('btnClientBindWelcome');
-          if (bindBtn) {
-            bindBtn.onclick = function() {
-              var cid = state.selectedClientId;
-              if (!cid) return;
-              bindBtn.disabled = true;
-              setStateMessage('');
-              loadInviteWelcomeMeta()
-                .then(function(meta) {
-                  return resolveWelcomeServiceIdFromMeta(meta);
-                })
-                .then(function(sid) {
-                  var u =
-                    withInit('/api/webapp/trainer/clients/' + encodeURIComponent(cid) + '/welcome-link') +
-                    '&service_id=' +
-                    encodeURIComponent(sid);
-                  return fetch(u, { headers: { 'Content-Type': 'application/json' } }).then(function(r) {
-                    return r.json().then(function(o) {
-                      if (!r.ok) throw new Error((o && o.detail) || r.statusText || 'Ошибка');
-                      return o;
-                    });
-                  });
-                })
-                .then(function(o) {
-                  var link = o.welcome_link;
-                  var block = document.getElementById('clientPersonalWelcomeBlock');
-                  var urlEl = document.getElementById('clientPersonalWelcomeUrl');
-                  if (link && block && urlEl) {
-                    urlEl.textContent = link;
-                    block.style.display = 'block';
-                    setStateMessage(
-                      'Ссылка одноразовая: пусть клиент откроет её в Telegram с своего аккаунта.',
-                      'hint'
-                    );
-                  } else {
-                    setStateMessage('Ссылка недоступна. Откройте мини-приложение из бота тренера.', 'error');
-                  }
-                })
-                .catch(function(err) {
-                  if (err && err.message === 'Отменено') return;
-                  setStateMessage(err.message || 'Ошибка', 'error');
-                })
-                .finally(function() {
-                  bindBtn.disabled = false;
-                });
-            };
-          }
-          var copyBindBtn = document.getElementById('btnCopyClientPersonalWelcome');
-          if (copyBindBtn) {
-            copyBindBtn.onclick = function() {
-              var el = document.getElementById('clientPersonalWelcomeUrl');
-              var link = el && el.textContent;
-              if (!link) return;
-              if (navigator.clipboard && navigator.clipboard.writeText) {
-                navigator.clipboard
-                  .writeText(link)
-                  .then(function() {
-                    postClientInviteLinkFirstCopyRecorded();
-                    alert('Ссылка скопирована');
-                  })
-                  .catch(function() {
-                    alert(link);
-                  });
-              } else {
-                alert(link);
-              }
-            };
-          }
-        }
         // Load dossier (replaces old note loading)
         loadDossier(id);
         loadClientHistory(id);
@@ -2448,167 +2510,6 @@
       document.getElementById('searchInput').addEventListener('input', function() {
         applyFilter();
       });
-
-      function loadInviteWelcomeMeta() {
-        if (state.inviteWelcomeMeta) {
-          return Promise.resolve(state.inviteWelcomeMeta);
-        }
-        return fetch(withInit('/api/webapp/trainer/welcome-link/eligibility'), {
-          headers: { 'Content-Type': 'application/json' },
-        })
-          .then(function(r) {
-            return r.json().then(function(data) {
-              if (!r.ok) throw new Error((data && data.detail) || r.statusText || 'Ошибка');
-              return data;
-            });
-          })
-          .then(function(meta) {
-            state.inviteWelcomeMeta = meta;
-            return meta;
-          });
-      }
-
-      /**
-       * Resolve service_id for welcome-style links (generic or per-client bind).
-       * When trainer has multiple services, opens a lightweight overlay to pick one.
-       */
-      function resolveWelcomeServiceIdFromMeta(meta) {
-        return new Promise(function(resolve, reject) {
-          var services = (meta && meta.services) || [];
-          if (!services.length) {
-            reject(new Error('В профиле нет услуг — добавьте услугу в профиле.'));
-            return;
-          }
-          if (!meta.require_service_choice) {
-            resolve(services[0].id);
-            return;
-          }
-          var overlay = document.createElement('div');
-          overlay.className = 'tag-picker-overlay';
-          overlay.id = 'welcomeSvcPickerOverlay';
-          overlay.setAttribute('role', 'dialog');
-          overlay.innerHTML =
-            '<div class="tag-picker" onclick="event.stopPropagation()">' +
-            '<div class="tag-picker-title">Услуга для ссылки</div>' +
-            '<select id="welcomeSvcPickerSelect" class="invite-service-select" aria-label="Услуга"></select>' +
-            '<div class="tag-picker-actions">' +
-            '<button type="button" class="tag-picker-close" id="welcomeSvcPickerCancel">Отмена</button>' +
-            '<button type="button" class="tag-picker-add" id="welcomeSvcPickerOk">Далее</button>' +
-            '</div></div>';
-          document.body.appendChild(overlay);
-          var sel = document.getElementById('welcomeSvcPickerSelect');
-          var ph = document.createElement('option');
-          ph.value = '';
-          ph.textContent = '— Выберите услугу —';
-          sel.appendChild(ph);
-          services.forEach(function(s) {
-            var opt = document.createElement('option');
-            opt.value = String(s.id);
-            opt.textContent = s.name || ('Услуга #' + s.id);
-            sel.appendChild(opt);
-          });
-          function cleanup() {
-            if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
-          }
-          overlay.onclick = function(e) {
-            if (e.target !== overlay) return;
-            cleanup();
-            reject(new Error('Отменено'));
-          };
-          document.getElementById('welcomeSvcPickerCancel').onclick = function(e) {
-            e.stopPropagation();
-            cleanup();
-            reject(new Error('Отменено'));
-          };
-          document.getElementById('welcomeSvcPickerOk').onclick = function(e) {
-            e.stopPropagation();
-            var sid = parseInt(sel.value, 10);
-            if (!sid) {
-              alert('Выберите услугу');
-              return;
-            }
-            cleanup();
-            resolve(sid);
-          };
-        });
-      }
-
-      function fetchGenericWelcomeLink(serviceId) {
-        var base = withInit('/api/webapp/trainer/welcome-link');
-        var url = base + '&service_id=' + encodeURIComponent(serviceId);
-        return fetch(url, { headers: { 'Content-Type': 'application/json' } }).then(function(r) {
-          return r.json().then(function(o) {
-            if (!r.ok) throw new Error((o && o.detail) || r.statusText || 'Ошибка');
-            return o;
-          });
-        });
-      }
-
-      document.getElementById('btnShowInviteLink').onclick = function() {
-        var block = document.getElementById('inviteLinkBlock');
-        var urlEl = document.getElementById('inviteLinkUrl');
-        if (block.style.display === 'block' && urlEl.textContent) return;
-        var btn = this;
-        var row = document.getElementById('inviteServiceRow');
-        var sel = document.getElementById('inviteServiceSelect');
-        btn.disabled = true;
-        loadInviteWelcomeMeta()
-          .then(function(meta) {
-            var services = (meta && meta.services) || [];
-            if (!services.length) {
-              throw new Error('В профиле нет услуг — добавьте услугу в профиле.');
-            }
-            if (meta.require_service_choice) {
-              row.hidden = false;
-              if (!sel.options.length) {
-                var ph = document.createElement('option');
-                ph.value = '';
-                ph.textContent = '— Выберите услугу —';
-                sel.appendChild(ph);
-                services.forEach(function(s) {
-                  var opt = document.createElement('option');
-                  opt.value = String(s.id);
-                  opt.textContent = s.name || ('Услуга #' + s.id);
-                  sel.appendChild(opt);
-                });
-              }
-              var sid = parseInt(sel.value, 10);
-              if (!sid) {
-                setStateMessage('Выберите услугу и нажмите кнопку ещё раз.', 'hint');
-                return null;
-              }
-              return fetchGenericWelcomeLink(sid);
-            }
-            return fetchGenericWelcomeLink(services[0].id);
-          })
-          .then(function(o) {
-            if (!o) return;
-            var link = o.welcome_link;
-            if (link) {
-              setStateMessage('');
-              urlEl.textContent = link;
-              block.style.display = 'block';
-            } else {
-              setStateMessage('Пригласительная ссылка недоступна. Откройте из бота тренера.', 'error');
-            }
-          })
-          .catch(function(err) {
-            setStateMessage(err.message || 'Ошибка загрузки ссылки.', 'error');
-          })
-          .finally(function() {
-            btn.disabled = false;
-          });
-      };
-      document.getElementById('btnCopyInviteLink').onclick = function() {
-        var link = document.getElementById('inviteLinkUrl').textContent;
-        if (!link) return;
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-          navigator.clipboard.writeText(link).then(function() {
-            postClientInviteLinkFirstCopyRecorded();
-            alert('Ссылка скопирована');
-          }).catch(function() { alert(link); });
-        } else { alert(link); }
-      };
 
       // Tap outside "Заметка тренера" → blur and dismiss keyboard (important in Telegram WebView)
       var detailSectionEl = document.getElementById('detailSection');

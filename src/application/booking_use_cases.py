@@ -431,6 +431,16 @@ async def get_trainer_default_city_and_service(
     return (city_id, service_id)
 
 
+async def count_trainer_services(session: AsyncSession, trainer_id: int) -> int:
+    """Number of services on the trainer's roster (for book URL: multi-service → service picker)."""
+    r = await session.execute(
+        text("SELECT COUNT(*)::int FROM trainer_services WHERE trainer_id = :tid"),
+        {"tid": trainer_id},
+    )
+    row = r.fetchone()
+    return int(row[0]) if row and row[0] is not None else 0
+
+
 async def resolve_welcome_session_city_service(
     session: AsyncSession,
     trainer_id: int,
@@ -479,7 +489,9 @@ async def resolve_service_id_for_generic_welcome_link(
 ) -> tuple[int | None, str | None]:
     """
     Choose which service_id to embed in a new generic welcome token.
-    Returns (service_id, error_key) where error_key is None, or no_services / service_required / invalid_service.
+    Returns (service_id, error_key) where error_key is None, or no_services / invalid_service.
+    When trainer has multiple services and ``requested_service_id`` is omitted, uses the first
+    catalog service (same order as ``list_trainer_services_for_welcome_link``) so links work without UI.
     """
     rows = await list_trainer_services_for_welcome_link(session, trainer_id)
     ids = [r["id"] for r in rows]
@@ -491,7 +503,7 @@ async def resolve_service_id_for_generic_welcome_link(
             return None, "invalid_service"
         return only, None
     if requested_service_id is None:
-        return None, "service_required"
+        return ids[0], None
     if requested_service_id not in ids:
         return None, "invalid_service"
     return requested_service_id, None
@@ -735,6 +747,7 @@ async def create_trainer_quick_booking(
         start_minutes,
         duration_minutes,
         allow_off_grid_interval=allow_off_grid_interval,
+        arena_id=arena_id,
     )
     try:
         booking_id, mile = await create_booking(
@@ -1414,7 +1427,8 @@ async def get_trainer_booking_detail_payload(
                    EXISTS (SELECT 1 FROM booking_problem_reports pr WHERE pr.booking_id = b.id) AS problem_reported,
                    EXISTS (SELECT 1 FROM booking_client_no_show cns WHERE cns.booking_id = b.id) AS client_no_show_recorded,
                    COALESCE(b.booking_price_cents, spv.price_cents, ts.price_cents) AS price_cents_effective,
-                   COALESCE(spv.tier_kind, b.price_tier_kind) AS tier_kind_raw
+                   COALESCE(spv.tier_kind, b.price_tier_kind) AS tier_kind_raw,
+                   COALESCE(b.is_sandbox, false) AS is_sandbox
             FROM bookings b
             JOIN clients c ON c.id = b.client_id
             JOIN slots s ON s.id = b.slot_id
@@ -1458,6 +1472,7 @@ async def get_trainer_booking_detail_payload(
         "client_no_show_recorded": bool(row[20]),
         "booking_price_cents": int(pc_eff) if pc_eff is not None else None,
         "price_tier_label": tier_label,
+        "is_sandbox": bool(row[23]) if len(row) > 23 else False,
     }
 
 
@@ -1512,7 +1527,8 @@ async def list_bookings_for_trainer(
                         AND b.notified_at IS NULL
                         AND """
             + _SQL_PRIOR_TRAINER_NOTIFIED_BOOKING_COUNT
-            + """ = 0) AS first_client_online_pending
+            + """ = 0) AS first_client_online_pending,
+                       COALESCE(b.is_sandbox, false) AS is_sandbox
                 FROM bookings b
                 JOIN clients c ON c.id = b.client_id
                 JOIN slots s ON s.id = b.slot_id
@@ -1524,8 +1540,9 @@ async def list_bookings_for_trainer(
             )
             SELECT id, slot_id, telegram_id, telegram_username, phone, client_first_name, client_last_name,
                    client_comment, created_at, slot_date, start_time, end_time,
-                   session_num, services_str, arenas_str, status, slot_capacity, slot_active_bookings, hub_in_session, problem_reported, client_no_show_recorded,
-                   first_client_online_pending
+                   session_num, services_str, arenas_str, status, slot_capacity, slot_active_bookings,
+                   hub_in_session, problem_reported, client_no_show_recorded,
+                   first_client_online_pending, is_sandbox
             FROM upcoming
             ORDER BY hub_sort_in_session ASC, slot_date ASC, start_time ASC
             LIMIT :lim
@@ -1557,6 +1574,7 @@ async def list_bookings_for_trainer(
             "problem_reported": bool(row[19]) if len(row) > 19 else False,
             "client_no_show_recorded": bool(row[20]) if len(row) > 20 else False,
             "first_client_online_pending": bool(row[21]) if len(row) > 21 else False,
+            "is_sandbox": bool(row[22]) if len(row) > 22 else False,
         }
         for row in rows
     ]
@@ -1592,7 +1610,8 @@ async def get_trainer_group_slot_hub(
         text(
             """
             SELECT b.id, COALESCE(b.status, 'confirmed'),
-                   c.first_name, c.last_name, c.phone
+                   c.first_name, c.last_name, c.phone,
+                   COALESCE(b.is_sandbox, false)
             FROM bookings b
             JOIN clients c ON c.id = b.client_id
             WHERE b.slot_id = :sid AND b.trainer_id = :tid
@@ -1615,6 +1634,7 @@ async def get_trainer_group_slot_hub(
                 "booking_id": int(br[0]),
                 "client_preview": name or ph or "Клиент",
                 "status": st_raw,
+                "is_sandbox": bool(br[5]),
             }
         )
 
@@ -1653,6 +1673,7 @@ async def active_booking_summaries_by_slot_for_trainer_range(
     For slots with at least one booking in range: slot_id -> display fields for schedule UI.
     Group slots: aggregated client_preview and booking_count; booking_id is first id for drill-down.
     ``bookings`` lists pending/confirmed rows for the group hub UI (booking_id, client_preview, status).
+    Slot-level ``has_sandbox_booking`` flags sandbox / trial bookings for UI badges.
     """
     r = await session.execute(
         text(
@@ -1664,7 +1685,8 @@ async def active_booking_summaries_by_slot_for_trainer_range(
             + SQL_BOOKING_ARENA_DISPLAY
             + """ AS arenas_str,
                    c.first_name AS client_first_name, c.last_name AS client_last_name, c.phone AS client_phone,
-                   s.capacity
+                   s.capacity,
+                   COALESCE(b.is_sandbox, false)
             FROM bookings b
             JOIN slots s ON s.id = b.slot_id
             JOIN clients c ON c.id = b.client_id
@@ -1685,6 +1707,7 @@ async def active_booking_summaries_by_slot_for_trainer_range(
     for slot_id, rows in groups.items():
         first_row = rows[0]
         capacity = max(1, int(first_row[8]))
+        has_sandbox_booking = any(bool(r_[9]) for r_ in rows)
         previews: list[str] = []
         for r_ in rows:
             fn = (r_[5] or "").strip() if r_[5] else ""
@@ -1712,6 +1735,7 @@ async def active_booking_summaries_by_slot_for_trainer_range(
                     "booking_id": bid,
                     "client_preview": name or ph or "Клиент",
                     "status": st_raw,
+                    "is_sandbox": bool(r_[9]),
                 }
             )
         out[slot_id] = {
@@ -1722,6 +1746,7 @@ async def active_booking_summaries_by_slot_for_trainer_range(
             "client_preview": client_preview,
             "booking_count": n,
             "capacity": capacity,
+            "has_sandbox_booking": has_sandbox_booking,
             "bookings": booking_entries,
         }
     return out
@@ -1868,7 +1893,7 @@ async def list_trainer_fill_slots_invite_candidates(
     include_with_upcoming: bool = False,
 ) -> list[dict]:
     """
-    Clients for hub «напомнить про слоты»: CRM scope (booking or active/trial group), Telegram linked.
+    Clients for hub «напомнить про слоты»: CRM scope (booking, explicit roster, or active/trial group), Telegram linked.
 
     By default excludes clients who already have a future pending/confirmed session (focused nudge).
     With ``include_with_upcoming=True``, returns everyone in scope (still sorted: без записи first).
@@ -1892,6 +1917,10 @@ async def list_trainer_fill_slots_invite_candidates(
                     INNER JOIN training_groups g ON g.id = m.training_group_id
                     WHERE g.trainer_id = :tid
                       AND m.status IN ('active', 'trial')
+                    UNION
+                    SELECT r.client_id
+                    FROM trainer_client_roster r
+                    WHERE r.trainer_id = :tid
                 ) q
             ),
             has_upcoming AS (
@@ -2069,6 +2098,10 @@ async def count_trainer_fill_slots_invite_candidates(session: AsyncSession, trai
                     INNER JOIN training_groups g ON g.id = m.training_group_id
                     WHERE g.trainer_id = :tid
                       AND m.status IN ('active', 'trial')
+                    UNION
+                    SELECT r.client_id
+                    FROM trainer_client_roster r
+                    WHERE r.trainer_id = :tid
                 ) q
             ),
             has_upcoming AS (
@@ -2121,18 +2154,40 @@ async def link_trainer_client_roster(
     session: AsyncSession,
     trainer_id: int,
     client_id: int,
-) -> None:
+) -> bool:
     """Idempotent CRM link so the client appears under this trainer before any booking."""
-    await session.execute(
+    r = await session.execute(
         text(
             """
             INSERT INTO trainer_client_roster (trainer_id, client_id)
             VALUES (:tid, :cid)
             ON CONFLICT (trainer_id, client_id) DO NOTHING
+            RETURNING id
             """
         ),
         {"tid": trainer_id, "cid": client_id},
     )
+    return r.fetchone() is not None
+
+
+async def trainer_client_roster_link_exists(
+    session: AsyncSession,
+    trainer_id: int,
+    client_id: int,
+) -> bool:
+    """True when this client is already explicitly present in trainer's CRM roster."""
+    r = await session.execute(
+        text(
+            """
+            SELECT 1
+            FROM trainer_client_roster
+            WHERE trainer_id = :tid AND client_id = :cid
+            LIMIT 1
+            """
+        ),
+        {"tid": trainer_id, "cid": client_id},
+    )
+    return r.fetchone() is not None
 
 
 async def trainer_has_access_to_client(
@@ -2681,12 +2736,14 @@ async def get_bookings_pending_notification(session: AsyncSession) -> list[dict]
                    """
             + SQL_BOOKING_ARENA_DISPLAY
             + """ AS arenas_str,
+                   COALESCE(spv.tier_kind, b.price_tier_kind) AS tier_kind_raw,
                    """
             + _SQL_PRIOR_TRAINER_NOTIFIED_BOOKING_COUNT
             + """ AS prior_notified_push_count
             FROM bookings b
             JOIN clients c ON c.id = b.client_id
             JOIN slots s ON s.id = b.slot_id
+            LEFT JOIN trainer_service_price_variants spv ON spv.id = b.service_price_variant_id
             LEFT JOIN services srv ON srv.id = b.service_id
             LEFT JOIN client_requests cr ON cr.id = b.client_request_id
             LEFT JOIN cities ci ON ci.id = cr.city_id
@@ -2698,27 +2755,34 @@ async def get_bookings_pending_notification(session: AsyncSession) -> list[dict]
         """),
     )
     rows = r.fetchall()
-    return [
-        {
-            "id": row[0],
-            "trainer_id": row[1],
-            "slot_id": row[2],
-            "client_telegram_id": row[3],
-            "client_phone": row[4] or "",
-            "client_comment": row[5],
-            "slot_date": row[6],
-            "start_time": row[7],
-            "end_time": row[8],
-            "client_name": (row[9] or "").strip() or "Клиент",
-            "service_name": (row[10] or "—").strip(),
-            "city_name": (row[11] or "—").strip(),
-            "arenas_str": (row[12] or "").strip() or "—",
-            "is_first_client_online_booking": (
-                int(row[13]) == 0 if len(row) > 13 and row[13] is not None else False
-            ),
-        }
-        for row in rows
-    ]
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        raw_tier = row[13] if len(row) > 13 else None
+        ptk = normalize_price_tier_kind(raw_tier) if raw_tier else None
+        tier_label = price_tier_label_ru(ptk) if ptk else None
+        prior_raw = row[14] if len(row) > 14 else None
+        out.append(
+            {
+                "id": row[0],
+                "trainer_id": row[1],
+                "slot_id": row[2],
+                "client_telegram_id": row[3],
+                "client_phone": row[4] or "",
+                "client_comment": row[5],
+                "slot_date": row[6],
+                "start_time": row[7],
+                "end_time": row[8],
+                "client_name": (row[9] or "").strip() or "Клиент",
+                "service_name": (row[10] or "—").strip(),
+                "city_name": (row[11] or "—").strip(),
+                "arenas_str": (row[12] or "").strip() or "—",
+                "price_tier_label": tier_label,
+                "is_first_client_online_booking": (
+                    int(prior_raw) == 0 if prior_raw is not None else False
+                ),
+            }
+        )
+    return out
 
 
 async def mark_booking_notified(session: AsyncSession, booking_id: int) -> None:
@@ -2758,6 +2822,77 @@ async def cancel_booking(session: AsyncSession, booking_id: int, trainer_id: int
     await session.commit()
     invalidate_slots_for_trainer(trainer_id)
     return True
+
+
+async def detach_trainer_client_from_roster_miniapp(
+    session: AsyncSession,
+    trainer_id: int,
+    client_id: int,
+) -> dict[str, Any] | None:
+    """
+    Cancels trainer's upcoming pending/confirmed bookings with this client, removes CRM roster row.
+    Blocked while the client is active/trial in a group operated by this trainer.
+    Returns None if the trainer has no CRM access to the client (same rule as card auth).
+    """
+    if not await trainer_has_access_to_client(session, trainer_id, client_id):
+        return None
+
+    row_g = await session.execute(
+        text(
+            """
+            SELECT 1 FROM training_group_members m
+            INNER JOIN training_groups g ON g.id = m.training_group_id
+            WHERE g.trainer_id = :tid AND m.client_id = :cid
+              AND m.status IN ('active', 'trial')
+            LIMIT 1
+            """
+        ),
+        {"tid": trainer_id, "cid": client_id},
+    )
+    if row_g.fetchone():
+        raise ValueError(
+            "Клиент состоит в активной группе. Сначала исключите его из группового занятия — "
+            "потом можно убрать из списка."
+        )
+
+    rb = await session.execute(
+        text(
+            """
+            SELECT b.id FROM bookings b
+            JOIN slots s ON s.id = b.slot_id
+            WHERE b.trainer_id = :tid AND b.client_id = :cid
+              AND b.status IN ('pending', 'confirmed')
+              AND s.status IN ('available', 'booked')
+              AND """
+            + _SQL_SLOT_END_TS
+            + """ > CURRENT_TIMESTAMP
+            ORDER BY b.id
+            """
+        ),
+        {"tid": trainer_id, "cid": client_id},
+    )
+    bid_rows = rb.fetchall()
+    cancelled_upcoming = 0
+    for (bid,) in bid_rows:
+        if await cancel_booking(session, int(bid), trainer_id):
+            cancelled_upcoming += 1
+
+    rr = await session.execute(
+        text(
+            """
+            DELETE FROM trainer_client_roster
+            WHERE trainer_id = :tid AND client_id = :cid
+            RETURNING 1
+            """
+        ),
+        {"tid": trainer_id, "cid": client_id},
+    )
+    roster_removed = rr.fetchone() is not None
+    await session.commit()
+    return {
+        "cancelled_upcoming_bookings": cancelled_upcoming,
+        "roster_removed": roster_removed,
+    }
 
 
 async def cancel_booking_by_client(

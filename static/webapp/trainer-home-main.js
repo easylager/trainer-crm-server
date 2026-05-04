@@ -135,24 +135,43 @@
        * форму…», the second try works. Mirrors waitForInitThen in trainer-groups-main.js.
        */
       function waitForTrainerInitDataThen(callback) {
+        try {
+          var tg0 = window.Telegram && window.Telegram.WebApp;
+          if (tg0 && typeof tg0.ready === 'function') tg0.ready();
+        } catch (eReady) {}
         if (getInitData()) {
           callback();
           return;
         }
-        var n = 0;
-        var maxTicks = 100;
-        var iv = setInterval(function() {
-          n++;
+        requestAnimationFrame(function() {
           if (getInitData()) {
-            clearInterval(iv);
             callback();
             return;
           }
-          if (n >= maxTicks) {
-            clearInterval(iv);
-            callback();
-          }
-        }, 50);
+          requestAnimationFrame(function() {
+            if (getInitData()) {
+              callback();
+              return;
+            }
+            var n = 0;
+            var maxTicks = 140;
+            var iv = setInterval(function() {
+              n++;
+              if (getInitData()) {
+                clearInterval(iv);
+                callback();
+                return;
+              }
+              if (n >= maxTicks) {
+                clearInterval(iv);
+                /* One extra beat: cold WebView sometimes delivers initData right after idle. */
+                setTimeout(function() {
+                  callback();
+                }, 420);
+              }
+            }, 50);
+          });
+        });
       }
       /** Set after GET /trainer/access when initData present (onboarding vs active). */
       var trainerAccessSnapshot = null;
@@ -280,6 +299,22 @@
         var raw = getInitData();
         if (raw) url += (url.indexOf('?') >= 0 ? '&' : '?') + 'init_data=' + encodeURIComponent(raw);
         return url;
+      }
+
+      /** GET with AbortSignal timeout — Telegram WebView sometimes leaves fetch hanging without failing. */
+      var HUB_QB_FETCH_TIMEOUT_MS = 22000;
+      function hubFetchJsonForQuickBookPrepare(path) {
+        var ctrl = new AbortController();
+        var tid = setTimeout(function() {
+          ctrl.abort();
+        }, HUB_QB_FETCH_TIMEOUT_MS);
+        return fetch(apiUrlWithQuery(path), {
+          headers: headersJson(),
+          cache: 'no-store',
+          signal: ctrl.signal,
+        }).finally(function() {
+          clearTimeout(tid);
+        });
       }
 
       /** Same aggregate as «Профиль»: if шапка shows «Одобрено», hub must not stay in onboarding lock. */
@@ -883,7 +918,7 @@
             closeHubFirstBookingSoftGate();
             hubQuickBookIsSandbox = false;
             ensureTrainerSectionsAccess(function() {
-              openHubQuickBookDatetimeModal();
+              openHubQuickBookClientFlowFirst();
             });
           };
         }
@@ -892,7 +927,7 @@
             closeHubFirstBookingSoftGate();
             hubQuickBookIsSandbox = true;
             ensureTrainerSectionsAccess(function() {
-              openHubQuickBookDatetimeModal();
+              openHubQuickBookClientFlowFirst();
             });
           };
         }
@@ -1133,55 +1168,48 @@
               action: 'schedule',
             });
           } else if (fillSlotsCandidates > 0) {
-            /* noNextBase used «все без записи»; список «Напомнить» = только с telegram_id (fill_slots). */
+            /* Ритм-хинт считает «без записи»; модалка «Напомнить» всё равно подгружает всех с Telegram + фильтр в UI. */
             var remindN = fillSlotsCandidates;
-            var extraNoTg = Math.max(0, openLoopNoUpcoming - remindN);
+            /* Must match open_loop_clients_no_telegram_count, not (no_upcoming − remindN): no-TG with an upcoming booking are still not reachable by «Напомнить». */
+            var clientsNotInBot = openLoopNoTg;
             var noNextRemind =
               remindN +
               ' ' +
               pluralRu(remindN, 'ученик', 'ученика', 'учеников') +
-              ' пока без следующей записи' +
-              (extraNoTg > 0
+              ' без следующей записи' +
+              (clientsNotInBot > 0
                 ? ' · ещё ' +
-                  extraNoTg +
+                  clientsNotInBot +
                   ' ' +
-                  pluralRu(extraNoTg, 'клиент', 'клиента', 'клиентов') +
-                  ' в базе ' +
-                  pluralRu(extraNoTg, 'не подключён', 'не подключены', 'не подключены') +
-                  ' к боту — в списке «Напомнить» только подключённые'
+                  pluralRu(clientsNotInBot, 'клиент', 'клиента', 'клиентов') +
+                  ' не в боте — «Напомнить» им не уйдёт; пришлите общую ссылку с главной (кнопка «Связь»)'
                 : '') +
               '.';
-            out.push({
+            var remindCand = {
               id: 'open_loop_no_next',
               priority: 97,
               text: noNextRemind,
               ctaLabel: 'Напомнить',
               action: 'fill_slots_invites',
-            });
+            };
+            if (clientsNotInBot > 0) {
+              remindCand.cta2Label = 'Клиенты без бота';
+              remindCand.cta2Action = 'trainer_clients_invite_bot';
+            }
+            out.push(remindCand);
           } else {
             out.push({
               id: 'open_loop_no_next',
               priority: 97,
               text:
                 noNextBase +
-                '. Через бота напомнить о записи можно только подключённым клиентам — пригласите по ссылке из карточки.',
-              ctaLabel: 'Кого пригласить',
+                '. Напоминание в боте — только подключённым. Остальным: общая ссылка с главной (кнопка «Связь»).',
+              ctaLabel: 'Клиенты без бота',
               action: 'trainer_clients_invite_bot',
+              cta2Label: 'Рассылка в боте',
+              cta2Action: 'fill_slots_invites',
             });
           }
-        }
-        if (openLoopNoTg > 0 && !isRhythmHintDismissed('open_loop_no_telegram')) {
-          out.push({
-            id: 'open_loop_no_telegram',
-            priority: 88,
-            text:
-              openLoopNoTg +
-              ' ' +
-              pluralRu(openLoopNoTg, 'клиент', 'клиента', 'клиентов') +
-              ' ещё не в боте — подключение по персональной ссылке из карточки.',
-            ctaLabel: 'Кого пригласить',
-            action: 'trainer_clients_invite_bot',
-          });
         }
         var mailingRecipients = fillSlotsCandidates > 0;
         var mailingRecipientsShow =
@@ -1195,11 +1223,15 @@
           hubFillSlotsRhythmBoostActiveThisResolverPass &&
           (availNext > 0 || availThis > 0) &&
           !mailingRecipients;
-        if (
-          !slotRhythmDeferredForTemplateOnboarding &&
+        var blockOpenLoopFreeNextForTemplate =
+          slotRhythmDeferredForTemplateOnboarding && !hubFillSlotsRhythmBoostActiveThisResolverPass;
+        var showOpenLoopFreeNext =
           !isRhythmHintDismissed('open_loop_free_next') &&
-          (mailingRecipientsShow || mailingVacancyAfterNewSlots)
-        ) {
+          !blockOpenLoopFreeNextForTemplate &&
+          (hubFillSlotsRhythmBoostActiveThisResolverPass ||
+            mailingRecipientsShow ||
+            mailingVacancyAfterNewSlots);
+        if (showOpenLoopFreeNext) {
           var availRemind = availNext > 0 ? availNext : availThis;
           var remindPri = hubFillSlotsRhythmBoostActiveThisResolverPass
             ? HUB_RHYTHM_FILL_SLOTS_NOTIFY_PRIORITY_BOOST
@@ -1216,8 +1248,8 @@
                 'свободных слота',
                 'свободных слотов',
               ) +
-              ' — кому из клиентов в боте напомнить о записи? Мы отобрали тех, у кого ещё нет будущей тренировки.';
-          } else {
+              ' — кому из клиентов в боте напомнить о записи?';
+          } else if (mailingVacancyAfterNewSlots) {
             mailingBody =
               (availNext > 0 ? 'На следующей неделе ' : 'На этой неделе ') +
               availRemind +
@@ -1229,6 +1261,10 @@
                 'свободных слотов',
               ) +
               '. Кому из клиентов в боте напомнить о записи?';
+          } else {
+            /* Boost right after schedule-editor save: hub bootstrap counts may still be zero for a moment. */
+            mailingBody =
+              'Слоты в расписании обновлены — напомнить клиентам в боте о возможности записи?';
           }
           out.push({
             id: 'open_loop_free_next',
@@ -1262,11 +1298,9 @@
                 'свободных слота',
                 'свободных слотов',
               ) +
-              (hubOnlineBookingEnabled
-                ? ' — хороший повод привлечь новых клиентов. Поделитесь ссылкой на запись.'
-                : ' — хороший повод привлечь новых клиентов.'),
-            ctaLabel: hubOnlineBookingEnabled ? 'Ссылка на запись' : 'Пригласить в бот',
-            action: hubOnlineBookingEnabled ? 'share_link' : 'trainer_clients_invite_bot',
+              ' — хороший повод привлечь новых клиентов. Поделитесь ссылкой.',
+            ctaLabel: 'Пригласительная ссылка',
+            action: 'share_link',
           });
         }
 
@@ -1296,7 +1330,8 @@
           });
         }
 
-        if (hubOnlineBookingEnabled) {
+        // Universal invite link is available to all trainers (no booking tier gate)
+        {
           var hasSomethingToShare =
             wd >= 1 ||
             !!d.has_future_slots ||
@@ -1311,8 +1346,8 @@
               id: 'share_link',
               priority: 72,
               text:
-                'Поделитесь ссылкой, чтобы клиенты записывались сами: кнопка с цепочкой справа вверху или «Получить ссылку» ниже в этом блоке.',
-              ctaLabel: 'Получить ссылку',
+                'Поделитесь пригласительной ссылкой с клиентами. Кнопка со значком связи справа вверху.',
+              ctaLabel: 'Скопировать ссылку',
               action: 'share_link',
             });
           }
@@ -1342,6 +1377,42 @@
               'После завершённой записи можно кратко зафиксировать заметки в карточке клиента — так проще вести следующие занятия.',
             ctaLabel: 'Профиль клиента',
             action: 'client_notes',
+          });
+        }
+
+        /* Same session: at most one of «без следующей записи» vs «свободные слоты — напомнить» (duplicate «Напомнить», high cognitive load). Winner = higher priority (e.g. post–schedule-editor boost 130 beats 97). */
+        (function dedupeHubRemindSlotHeadlines() {
+          var cluster = out.filter(function(c) {
+            return c.id === 'open_loop_no_next' || c.id === 'open_loop_free_next';
+          });
+          if (cluster.length <= 1) return;
+          cluster.sort(function(a, b) {
+            return b.priority - a.priority;
+          });
+          var winner = cluster[0];
+          out = out.filter(function(c) {
+            if (c.id !== 'open_loop_no_next' && c.id !== 'open_loop_free_next') return true;
+            return c === winner;
+          });
+        })();
+
+        if (
+          openLoopNoTg > 0 &&
+          !isRhythmHintDismissed('open_loop_no_telegram') &&
+          !out.some(function(c) {
+            return c.id === 'open_loop_no_next';
+          })
+        ) {
+          out.push({
+            id: 'open_loop_no_telegram',
+            priority: 88,
+            text:
+              openLoopNoTg +
+              ' ' +
+              pluralRu(openLoopNoTg, 'клиент', 'клиента', 'клиентов') +
+              ' ещё не в боте. Откройте список по кнопке и отправьте им одну общую пригласительную ссылку с главной страницы кабинета (значок связи справа вверху).',
+            ctaLabel: 'Клиенты без бота',
+            action: 'trainer_clients_invite_bot',
           });
         }
 
@@ -1466,11 +1537,27 @@
           container.style.display = 'flex';
           var txt = document.getElementById('hubRhythmSlot' + s + 'Text');
           var cta = document.getElementById('hubRhythmSlot' + s + 'Cta');
+          var cta2 = document.getElementById('hubRhythmSlot' + s + 'Cta2');
           if (txt) {
             if (cand.textHtml) txt.innerHTML = cand.textHtml;
             else txt.textContent = cand.text;
           }
-          if (cta) cta.textContent = cand.ctaLabel;
+          if (cta) {
+            cta.textContent = cand.ctaLabel;
+            cta.className = 'btn-sm btn-primary';
+          }
+          if (cta2) {
+            if (cand.cta2Label && cand.cta2Action) {
+              cta2.textContent = cand.cta2Label;
+              cta2.removeAttribute('hidden');
+              cta2.style.display = '';
+              cta2.className = 'btn-sm btn-secondary hub-rhythm-slot-cta2';
+            } else {
+              cta2.textContent = '';
+              cta2.setAttribute('hidden', 'hidden');
+              cta2.style.display = 'none';
+            }
+          }
         }
         if (hubRhythmHintsReady) {
           hideHubRhythmHintsSkeleton();
@@ -1512,6 +1599,16 @@
             ctaBtn.onclick = function() {
               var cand = hubLastRhythmPicked[ix];
               runRhythmCandidateAction(cand);
+            };
+          }
+          var cta2Btn = document.getElementById(prefix + 'Cta2');
+          if (cta2Btn && !cta2Btn.dataset.wiredRhythmSlot) {
+            cta2Btn.dataset.wiredRhythmSlot = '1';
+            cta2Btn.onclick = function() {
+              var cand = hubLastRhythmPicked[ix];
+              if (cand && cand.cta2Action) {
+                runRhythmCandidateAction({ action: cand.cta2Action });
+              }
             };
           }
         });
@@ -1811,7 +1908,7 @@
             if (ctaBReal2.disabled) return;
             hubQuickBookIsSandbox = false;
             ensureTrainerSectionsAccess(function() {
-              openHubQuickBookDatetimeModal();
+              openHubQuickBookClientFlowFirst();
             });
           };
         }
@@ -1821,7 +1918,7 @@
             if (ctaBSandbox2.disabled) return;
             hubQuickBookIsSandbox = true;
             ensureTrainerSectionsAccess(function() {
-              openHubQuickBookDatetimeModal();
+              openHubQuickBookClientFlowFirst();
             });
           };
         }
@@ -2083,7 +2180,7 @@
         if (h === '__book_client__') {
           ensureTrainerSectionsAccess(function() {
             hubQuickBookIsSandbox = false;
-            openHubQuickBookDatetimeModal();
+            openHubQuickBookClientFlowFirst();
           });
           return;
         }
@@ -2558,6 +2655,13 @@
         return '<span class="hub-problem-pill" role="status">отчёт отправлен</span>';
       }
 
+      function hubSandboxPillHtml(b) {
+        if (!b || !b.is_sandbox) return '';
+        return (
+          '<span class="hub-sandbox-pill" role="status" aria-label="Пробная запись">проба</span>'
+        );
+      }
+
       /** Same labels/classes as schedule-editor calendar rows (booked slots). */
       function hubBookingSlotRowHtml(b, timeRange) {
         var bst = String(b.status || 'confirmed').toLowerCase();
@@ -2594,14 +2698,15 @@
             '<div class="slot-row slot-booked-click slot-group-hub-preview ' + rowMod + '" data-bid="' + String(b.id) + '" data-slot-id="' + String(b.slot_id != null ? b.slot_id : '') + '" data-slot-date="' + escapeHtml(b.slot_date || '') + '" role="button" tabindex="0">' +
               '<div class="slot-row-left">' +
                 '<div class="hub-slot-time-row">' +
-                '<span class="slot-time">' + escapeHtml(timeRange) + '</span>' +
-                hubSessionNowPillHtml(b) + hubProblemReportPillHtml(b) +
-                '</div>' +
+                  '<span class="slot-time">' + escapeHtml(timeRange) + '</span>' +
+                  hubSessionNowPillHtml(b) + hubSandboxPillHtml(b) + hubProblemReportPillHtml(b) +
+                  '</div>' +
                 metaHtml +
                 '<div class="slot-group-meter-wrap" aria-hidden="true"><div class="slot-group-meter-fill" style="width:' + pct + '%"></div></div>' +
               '</div>' +
               '<div class="slot-meta slot-meta--group">' +
                 '<span class="slot-group-chip">' + occ + '/' + cap + '</span>' +
+                (b.is_sandbox ? '<span class="hub-sandbox-pill hub-sandbox-pill--inline" role="status">проба</span>' : '') +
                 spotsPill +
                 pendingExtra +
               '</div>' +
@@ -2628,10 +2733,10 @@
         return (
           '<div class="slot-row slot-booked-click ' + rowMod + '" data-bid="' + String(b.id) + '">' +
             '<div class="slot-row-left">' +
-              '<div class="hub-slot-time-row">' +
-              '<span class="slot-time">' + escapeHtml(timeRange) + '</span>' +
-              hubSessionNowPillHtml(b) + hubProblemReportPillHtml(b) +
-              '</div>' +
+                '<div class="hub-slot-time-row">' +
+                  '<span class="slot-time">' + escapeHtml(timeRange) + '</span>' +
+                  hubSessionNowPillHtml(b) + hubSandboxPillHtml(b) + hubProblemReportPillHtml(b) +
+                  '</div>' +
               '<div class="slot-venue">📍 ' + venueInner + '</div>' +
               '<div class="slot-client-hint">' + escapeHtml(clientLabel(b)) + '</div>' +
             '</div>' +
@@ -2701,6 +2806,9 @@
             bookings.forEach(function(bk) {
               var st = (bk.status || '').toLowerCase();
               var stLabel = st === 'pending' ? 'Ожидает подтверждения' : 'Подтверждено';
+              var sandboxPill = bk.is_sandbox
+                ? ' <span class="hub-sandbox-pill hub-sandbox-pill--inline" role="status">проба</span>'
+                : '';
               var bid = parseInt(bk.booking_id, 10);
               var btn = document.createElement('button');
               btn.type = 'button';
@@ -2708,6 +2816,7 @@
               btn.innerHTML =
                 '<span><span class="g-name">' +
                 escapeHtml(String(bk.client_preview || 'Клиент')) +
+                sandboxPill +
                 '</span><br><span class="g-st">' +
                 stLabel +
                 '</span></span><span aria-hidden="true" style="color:var(--tg-theme-hint-color);font-size:18px;">›</span>';
@@ -2864,16 +2973,32 @@
       var hubBookPriceVariantId = null;
       var hubBookQuickPayload = null;
       var hubBookQuickServices = [];
+      var hubBookTrainerArenas = [];
+      /** Selected arena for quick-book (trainer hub); preset grid + POST /trainer/booking/quick. */
+      var hubBookArenaId = null;
       var hubQuickBookScheduleGrid = null;
       var hubQuickBookSlotsForDay = [];
-      /** ISO date (`YYYY-MM-DD`) for which `hubQuickBookSlotsForDay` was last loaded from `/schedule`. */
+      /** ISO date for which hub quick-book loaded `/schedule` slots; paired with `hubQuickBookSlotsArenaKey`. */
       var hubQuickBookSlotsIsoDate = null;
+      var hubQuickBookSlotsArenaKey = null;
       /** Monotonic counter to ignore stale `/schedule` responses when the user changes date quickly. */
       var hubQuickBookScheduleFetchGen = 0;
       var hubQuickBookRefreshTimer = null;
       var hubBookSlotWhenLabel = '';
       var hubBookPendingClientId = null;
       var hubBookPendingClientName = '';
+      /** Prevents double-start of async booking (double-tap «Далее» / «Записать»). */
+      var hubBookQuickChainInFlight = false;
+      var hubBookConfirmPrimaryLabelCached = null;
+      /** Incremented on each open «Записать клиента» — stale fetches must not close a newer session. */
+      var hubQuickBookPrepareGen = 0;
+      var HUB_QB_PREPARE_MAX_ATTEMPTS = 6;
+      /** True when hub quick-book started as client → service → datetime (not group-slot booking). */
+      var hubBookClientFirstQuickMode = false;
+      /** When client-first flow is showing the service/tariff step (tiers UI allowed without hubBookQuickPayload). */
+      var hubBookClientFirstServiceStepOpen = false;
+      /** How we entered client-first service step: from new-client form vs from existing-client list. */
+      var hubBookClientFirstServiceFromNew = false;
       /** From last GET /trainer/clients (or prefetch). True ⇒ show «Выбрать из списка» immediately; else probing until fetch. */
       var hubTrainerHasClientsCache = null;
       var HUB_BOOK_OPT_EXISTING_HINT = 'Существующий клиент';
@@ -2995,6 +3120,26 @@
           sk.setAttribute('aria-hidden', on ? 'false' : 'true');
           if (on) sk.setAttribute('role', 'status');
           else sk.removeAttribute('role');
+          var cf = sk.querySelector('.hub-book-choice-skel-clientfirst');
+          var sb = sk.querySelector('.hub-book-choice-skel-sandbox');
+          if (cf && sb) {
+            if (!on) {
+              cf.setAttribute('hidden', 'hidden');
+              cf.setAttribute('aria-hidden', 'true');
+              sb.setAttribute('hidden', 'hidden');
+              sb.setAttribute('aria-hidden', 'true');
+            } else if (hubQuickBookIsSandbox) {
+              cf.setAttribute('hidden', 'hidden');
+              cf.setAttribute('aria-hidden', 'true');
+              sb.removeAttribute('hidden');
+              sb.setAttribute('aria-hidden', 'false');
+            } else {
+              sb.setAttribute('hidden', 'hidden');
+              sb.setAttribute('aria-hidden', 'true');
+              cf.removeAttribute('hidden');
+              cf.setAttribute('aria-hidden', 'false');
+            }
+          }
           var nc = sk.querySelector('.hub-book-choice-skel-newcard');
           if (nc) {
             var showNew = !!on && !!hubQuickBookIsSandbox;
@@ -3021,10 +3166,62 @@
         }
       }
 
+      /** Disables confirm modal actions and shows progress (blocks double-submit to API). */
+      function setHubBookConfirmSubmitting(on) {
+        var ov = document.getElementById('hubModalBookGroupConfirm');
+        var yes = document.getElementById('hubBookConfirmYes');
+        var no = document.getElementById('hubBookConfirmNo');
+        if (!yes || !no) return;
+        if (on) {
+          if (hubBookConfirmPrimaryLabelCached == null) {
+            hubBookConfirmPrimaryLabelCached = (yes.textContent || '').trim() || 'Записать';
+          }
+          yes.textContent = 'Записываем…';
+          yes.disabled = true;
+          no.disabled = true;
+          yes.setAttribute('aria-busy', 'true');
+          if (ov) {
+            ov.setAttribute('aria-busy', 'true');
+            ov.classList.add('hub-book-confirm--busy');
+          }
+        } else {
+          yes.textContent = hubBookConfirmPrimaryLabelCached || 'Записать';
+          yes.disabled = false;
+          no.disabled = false;
+          yes.removeAttribute('aria-busy');
+          if (ov) {
+            ov.removeAttribute('aria-busy');
+            ov.classList.remove('hub-book-confirm--busy');
+          }
+        }
+      }
+
+      function setHubGlobalBookingBusy(on) {
+        var id = 'hubGlobalBookingBusy';
+        var el = document.getElementById(id);
+        if (on) {
+          if (!el) {
+            el = document.createElement('div');
+            el.id = id;
+            el.className = 'hub-global-booking-busy';
+            el.setAttribute('role', 'status');
+            el.setAttribute('aria-live', 'polite');
+            el.innerHTML =
+              '<span class="hub-global-booking-busy__spinner" aria-hidden="true"></span>' +
+              '<span class="hub-global-booking-busy__text">Создаём запись…</span>';
+            document.body.appendChild(el);
+          }
+          el.hidden = false;
+        } else if (el) {
+          el.hidden = true;
+        }
+      }
+
       function closeHubBookGroupModals() {
         var m = document.getElementById('hubModalBookGroupSlot');
         var c = document.getElementById('hubModalBookGroupConfirm');
         clearHubBookChoiceQuickUi();
+        setHubBookConfirmSubmitting(false);
         if (m) {
           m.style.display = 'none';
           m.setAttribute('aria-hidden', 'true');
@@ -3035,6 +3232,41 @@
         }
         hubBookPendingClientId = null;
         hubBookPendingClientName = null;
+        hubDockBookStepNewUnderModalChrome();
+      }
+
+      /** Default DOM: `#hubBookStepNew` sits under choice/existing branches, above cancel (standalone new-client step). */
+      function hubDockBookStepNewUnderModalChrome() {
+        var slotOv = document.getElementById('hubModalBookGroupSlot');
+        if (!slotOv) return;
+        var modal =
+          slotOv.querySelector('.modal.book-flow-modal.hub-book-modal') ||
+          slotOv.querySelector('.modal.book-flow-modal');
+        var nw = document.getElementById('hubBookStepNew');
+        var cancelBtn = document.getElementById('hubBookCancel');
+        var backNew = document.getElementById('hubBookBackFromNew');
+        if (!modal || !nw || !cancelBtn) return;
+        if (nw.parentNode !== modal) {
+          modal.insertBefore(nw, cancelBtn);
+        }
+        if (backNew) backNew.style.display = '';
+      }
+
+      /**
+       * Onboarding sandbox: tuck phone/name block inside service step above «Далее» — one coherent scroll pane
+       * (nested modal columns were collapsing together on narrow webviews).
+       */
+      function hubEmbedSandboxBookStepNewBeforeQuickNext() {
+        if (!hubQuickBookIsSandbox || !hubBookClientFirstQuickMode) return;
+        var choice = document.getElementById('hubBookStepChoice');
+        var nw = document.getElementById('hubBookStepNew');
+        var nextBtn = document.getElementById('hubBookQuickServiceNext');
+        var backNew = document.getElementById('hubBookBackFromNew');
+        if (!choice || !nw || !nextBtn) return;
+        if (nw.parentNode !== choice) {
+          choice.insertBefore(nw, nextBtn);
+        }
+        if (backNew) backNew.style.display = 'none';
       }
 
       function resetHubBookSlotState() {
@@ -3045,9 +3277,16 @@
         hubBookQuickServices = [];
         hubQuickBookSlotsForDay = [];
         hubQuickBookSlotsIsoDate = null;
+        hubQuickBookSlotsArenaKey = null;
         hubQuickBookScheduleFetchGen += 1;
         hubBookSlotWhenLabel = '';
         hubQuickBookIsSandbox = false;
+        hubBookClientFirstQuickMode = false;
+        hubBookClientFirstServiceStepOpen = false;
+        hubBookClientFirstServiceFromNew = false;
+        hubBookTrainerArenas = [];
+        hubBookArenaId = null;
+        hubSyncClientFirstQuickServiceChrome();
         ensureHubBookChoiceLeadDefault();
         var leadR = document.querySelector('#hubBookStepChoice .book-choice-lead');
         if (leadR && hubBookChoiceLeadDefault != null) leadR.textContent = hubBookChoiceLeadDefault;
@@ -3056,7 +3295,10 @@
         var backNewR = document.getElementById('hubBookBackFromNew');
         if (backNewR) backNewR.style.display = '';
         setHubBookServiceVisibility(false);
+        setHubBookArenaVisibility(false);
         fillHubBookServiceSelect([]);
+        fillHubBookArenaPicklist([]);
+        hubDockBookStepNewUnderModalChrome();
       }
 
       function resetHubBookSteps() {
@@ -3064,7 +3306,10 @@
         var ex = document.getElementById('hubBookStepExisting');
         var nw = document.getElementById('hubBookStepNew');
         var modal = document.getElementById('hubModalBookGroupSlot');
+        hubDockBookStepNewUnderModalChrome();
         if (modal) modal.classList.remove('hub-book-flow-overlay--new-client');
+        if (hubBookClientFirstQuickMode) hubExitClientFirstServiceStep(true);
+        else hubSyncClientFirstQuickServiceChrome();
         if (ch) ch.style.display = 'block';
         if (ex) ex.style.display = 'none';
         if (nw) nw.style.display = 'none';
@@ -3080,6 +3325,66 @@
         var wrap = document.getElementById('hubBookServiceWrap');
         if (!wrap) return;
         wrap.style.display = show ? 'block' : 'none';
+      }
+
+      function hubQuickBookArenaCacheKey() {
+        return hubBookArenaId != null ? String(hubBookArenaId) : '';
+      }
+
+      function setHubBookArenaVisibility(show) {
+        var wrap = document.getElementById('hubBookArenaWrap');
+        if (!wrap) return;
+        wrap.style.display = show ? 'block' : 'none';
+      }
+
+      /** Prefer last booking's arena when linked; else primary / first linked arena. */
+      function hubPickDefaultArenaId(arenas, preferredId) {
+        var list = arenas || [];
+        if (!list.length) return null;
+        if (preferredId != null) {
+          var want = parseInt(String(preferredId), 10);
+          if (!isNaN(want) && list.some(function(a) { return a.id === want; })) return want;
+        }
+        var prim = list.filter(function(a) { return a.is_primary; })[0];
+        if (prim) return prim.id;
+        return list[0].id;
+      }
+
+      function syncHubBookArenaPickHighlight() {
+        var pick = document.getElementById('hubBookArenaPickList');
+        if (!pick) return;
+        var aid = hubBookArenaId != null ? String(hubBookArenaId) : '';
+        pick.querySelectorAll('.hub-book-service-pick').forEach(function(b) {
+          var id = b.getAttribute('data-arena-id') || '';
+          var on = !!aid && id === aid;
+          b.setAttribute('aria-selected', on ? 'true' : 'false');
+          b.classList.toggle('is-selected', on);
+        });
+      }
+
+      /** Renders arena chips when the trainer has more than one linked venue. */
+      function fillHubBookArenaPicklist(arenas) {
+        var pick = document.getElementById('hubBookArenaPickList');
+        if (!pick) return;
+        pick.innerHTML = '';
+        (arenas || []).forEach(function(a) {
+          var b = document.createElement('button');
+          b.type = 'button';
+          b.className = 'hub-book-service-pick';
+          b.setAttribute('role', 'option');
+          b.setAttribute('data-arena-id', String(a.id));
+          b.textContent = String(a.name || 'Площадка');
+          b.onclick = function() {
+            hubBookArenaId = a.id;
+            syncHubBookArenaPickHighlight();
+            hubQuickBookSlotsIsoDate = null;
+            hubQuickBookSlotsArenaKey = null;
+            hubQuickBookScheduleFetchGen += 1;
+            scheduleHubQuickBookRefresh();
+          };
+          pick.appendChild(b);
+        });
+        syncHubBookArenaPickHighlight();
       }
 
       /** Keeps visible service “cards” in sync with `hubBookServiceId` / hidden `<select>`. */
@@ -3148,11 +3453,339 @@
         return adult ? adult.id : tiers[0].id;
       }
 
+      /**
+       * На шаге «услуга/тариф» прячем блок с двумя кнопками (из списка / нового) — иначе экран
+       * визуально совпадает с первым шагом и кажется, что «Далее» ничего не меняет.
+       */
+      function hubSyncClientFirstQuickChoiceActionsVisible(showChoicePair) {
+        var ca = document.getElementById('hubBookChoiceActions');
+        if (!ca || !hubBookClientFirstQuickMode) return;
+        ca.style.display = showChoicePair ? '' : 'none';
+      }
+
+      /** Show/hide «Назад» + «Далее» when client-first flow is on service/tariff step. */
+      function hubSyncClientFirstQuickServiceChrome() {
+        var nextBtn = document.getElementById('hubBookQuickServiceNext');
+        var backSvc = document.getElementById('hubBookBackFromService');
+        var show = !!(hubBookClientFirstQuickMode && hubBookClientFirstServiceStepOpen);
+        if (nextBtn) {
+          nextBtn.style.display = show ? '' : 'none';
+          if (show) nextBtn.removeAttribute('hidden');
+          else nextBtn.setAttribute('hidden', 'hidden');
+          nextBtn.setAttribute('aria-hidden', show ? 'false' : 'true');
+        }
+        if (backSvc) {
+          var showBack = !!(show && !hubQuickBookIsSandbox);
+          backSvc.style.display = showBack ? '' : 'none';
+          if (showBack) backSvc.removeAttribute('hidden');
+          else backSvc.setAttribute('hidden', 'hidden');
+          backSvc.setAttribute('aria-hidden', showBack ? 'false' : 'true');
+        }
+      }
+
+      /** «Добавить и записать» vs «Далее» on new-client hub form (depends on flow). */
+      function applyHubBookNewSubmitButtonLabel() {
+        var btn = document.getElementById('hubBookNewSubmit');
+        if (!btn) return;
+        /* Sandbox uses one shared «Далее» on the service step (phone + услуги on one screen). */
+        if (hubQuickBookIsSandbox && hubBookClientFirstQuickMode) {
+          btn.style.display = 'none';
+          btn.textContent = 'Добавить и записать';
+          return;
+        }
+        btn.style.display = '';
+        if (hubBookSlotId != null || !hubBookClientFirstQuickMode) {
+          btn.textContent = 'Добавить и записать';
+          return;
+        }
+        btn.textContent = 'Далее';
+      }
+
+      function hubApplyBookingDefaultsPayload(def) {
+        def = def || {};
+        var svcList = hubBookQuickServices || [];
+        var arList = hubBookTrainerArenas || [];
+        var dsidRaw = def.service_id != null ? parseInt(String(def.service_id), 10) : NaN;
+        var wants = !isNaN(dsidRaw) && svcList.some(function(s) { return s.id === dsidRaw; });
+        hubBookServiceId = wants ? dsidRaw : (svcList.length ? svcList[0].id : null);
+        var sel = document.getElementById('hubBookServiceSelect');
+        if (sel && hubBookServiceId != null) sel.value = String(hubBookServiceId);
+        syncHubBookServicePickHighlight();
+        syncHubBookPriceTierRadios();
+        hubBookArenaId = hubPickDefaultArenaId(arList, def.arena_id);
+        fillHubBookArenaPicklist(arList);
+        var vidRaw = def.service_price_variant_id != null ? parseInt(String(def.service_price_variant_id), 10) : NaN;
+        if (!isNaN(vidRaw)) {
+          var host = document.getElementById('hubBookPriceTierRadios');
+          var inp = host && host.querySelector('input[value="' + String(vidRaw) + '"]');
+          if (inp) {
+            inp.checked = true;
+            hubBookPriceVariantId = parseInt(inp.value, 10);
+          }
+        }
+      }
+
+      function hubEnterClientFirstServiceStep(leadHint) {
+        hubBookClientFirstServiceStepOpen = true;
+        hubSyncClientFirstQuickChoiceActionsVisible(false);
+        setHubBookServiceVisibility(true);
+        syncHubBookPriceTierRadios();
+        hubSyncClientFirstQuickServiceChrome();
+        setHubBookArenaVisibility((hubBookTrainerArenas || []).length > 1);
+        applyHubBookNewSubmitButtonLabel();
+        if (leadHint) {
+          var lead = document.querySelector('#hubBookStepChoice .book-choice-lead');
+          if (lead) lead.textContent = leadHint;
+        }
+        try {
+          var svcTop = document.getElementById('hubBookServiceWrap');
+          if (svcTop && svcTop.style.display !== 'none' && typeof svcTop.scrollIntoView === 'function') {
+            svcTop.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+          }
+        } catch (eScroll) { /* noop */ }
+      }
+
+      function hubExitClientFirstServiceStep(resetLead) {
+        hubBookClientFirstServiceStepOpen = false;
+        if (hubBookClientFirstQuickMode) {
+          setHubBookServiceVisibility(false);
+          setHubBookArenaVisibility(false);
+          hubSyncClientFirstQuickChoiceActionsVisible(!!resetLead);
+        }
+        syncHubBookPriceTierRadios();
+        hubSyncClientFirstQuickServiceChrome();
+        if (resetLead) {
+          ensureHubBookChoiceLeadDefault();
+          var lead = document.querySelector('#hubBookStepChoice .book-choice-lead');
+          if (lead && hubBookChoiceLeadDefault != null) lead.textContent = hubBookChoiceLeadDefault;
+        }
+      }
+
+      /**
+       * Starts hub «Записать клиента»: client (existing/new) → service/tariffs → datetime → POST.
+       * Last booking presets: GET /trainer/clients/{id}/booking-defaults.
+       * Uses multi-retry + fetch timeouts — Telegram WebView often drops the first request or delays initData.
+       */
+      function openHubQuickBookClientFlowFirst() {
+        hubBookClientFirstQuickMode = true;
+        hubBookClientFirstServiceStepOpen = false;
+        hubBookClientFirstServiceFromNew = false;
+        hubBookQuickPayload = null;
+        if (!openHubBookModalShell()) return;
+        hubQuickBookPrepareGen += 1;
+        var prepareGen = hubQuickBookPrepareGen;
+        hubSyncClientFirstQuickServiceChrome();
+        applyHubBookNewSubmitButtonLabel();
+        setHubBookChoiceQuickLoading(true);
+        setHubBookServiceVisibility(false);
+        fillHubBookServiceSelect([]);
+        var ptHost = document.getElementById('hubBookPriceTierRadios');
+        var ptWrap = document.getElementById('hubBookPriceTierWrap');
+        if (ptHost) ptHost.innerHTML = '';
+        if (ptWrap) ptWrap.style.display = 'none';
+        hubBookSlotId = null;
+        hubBookPriceVariantId = null;
+        hubBookSlotWhenLabel = '';
+
+        function failHubQuickBookPrepare(forGen) {
+          if (forGen != null && forGen !== hubQuickBookPrepareGen) return;
+          setHubBookChoiceQuickLoading(false);
+          hubTrainerHasClientsCache = null;
+          setHubBookOptExistingVisible(false);
+          closeHubBookGroupModals();
+          resetHubBookSlotState();
+          hubToast('Не удалось подготовить форму записи. Повторите попытку.');
+        }
+
+        function runHubQuickBookPrepareAttempt(attemptIdx) {
+          if (prepareGen !== hubQuickBookPrepareGen) return;
+          if (!getInitData()) {
+            failHubQuickBookPrepare(prepareGen);
+            return;
+          }
+          Promise.all([
+            hubFetchJsonForQuickBookPrepare('/trainer/my-services').then(function(r) {
+              if (!r.ok) return Promise.reject(new Error('services'));
+              return r.json();
+            }),
+            hubFetchJsonForQuickBookPrepare('/trainer/clients').then(function(r) {
+              return r.json().then(function(j) {
+                if (!r.ok) return Promise.reject(new Error('clients'));
+                return j;
+              });
+            }),
+          ])
+            .then(function(results) {
+              if (prepareGen !== hubQuickBookPrepareGen) return;
+              setHubBookChoiceQuickLoading(false);
+              var servicePayload = results[0] || {};
+              var clientsPayload = results[1] || {};
+              hubBookQuickServices = servicePayload.services || [];
+              if (!hubBookQuickServices.length) {
+                hubApplyTrainerHasClientsFromPayload(clientsPayload);
+                setHubBookOptExistingVisible(false);
+                closeHubBookGroupModals();
+                resetHubBookSlotState();
+                hubToast('Добавьте услугу в профиле, чтобы записывать клиентов.');
+                return;
+              }
+              hubBookServiceId = hubBookQuickServices[0].id;
+              fillHubBookServiceSelect(hubBookQuickServices);
+              hubBookTrainerArenas = servicePayload.arenas || [];
+              hubBookArenaId = hubPickDefaultArenaId(hubBookTrainerArenas);
+              fillHubBookArenaPicklist(hubBookTrainerArenas);
+              hubBookQuickPayload = null;
+              var hasClients = hubApplyTrainerHasClientsFromPayload(clientsPayload);
+              ensureHubBookChoiceLeadDefault();
+              if (hubQuickBookIsSandbox) {
+                hubBookClientFirstServiceStepOpen = true;
+                setHubBookServiceVisibility(true);
+                syncHubBookPriceTierRadios();
+                hubSyncClientFirstQuickServiceChrome();
+                var leadSx = document.querySelector('#hubBookStepChoice .book-choice-lead');
+                if (leadSx) {
+                  leadSx.textContent =
+                    'Пробная запись: услуга и тариф, контакт ниже можно заменить. Затем нажмите «Далее» и выберите дату.';
+                }
+                var caSx = document.getElementById('hubBookChoiceActions');
+                if (caSx) caSx.style.display = 'none';
+                var stepNewSx = document.getElementById('hubBookStepNew');
+                if (stepNewSx) stepNewSx.style.display = 'block';
+                var chSx = document.getElementById('hubBookStepChoice');
+                if (chSx) chSx.style.display = 'block';
+                var backSx = document.getElementById('hubBookBackFromNew');
+                if (backSx) backSx.style.display = 'none';
+                applyHubSandboxNewClientPrefill();
+                setHubBookOptExistingVisible(false);
+                applyHubBookNewSubmitButtonLabel();
+                setHubBookArenaVisibility((hubBookTrainerArenas || []).length > 1);
+                hubEmbedSandboxBookStepNewBeforeQuickNext();
+              } else {
+                hubBookClientFirstServiceStepOpen = false;
+                setHubBookServiceVisibility(false);
+                syncHubBookPriceTierRadios();
+                hubSyncClientFirstQuickServiceChrome();
+                var leadN = document.querySelector('#hubBookStepChoice .book-choice-lead');
+                if (leadN && hubBookChoiceLeadDefault != null) leadN.textContent = hubBookChoiceLeadDefault;
+                var caN = document.getElementById('hubBookChoiceActions');
+                if (caN) caN.style.display = '';
+                var stepNewN = document.getElementById('hubBookStepNew');
+                if (stepNewN) stepNewN.style.display = 'none';
+                var backN = document.getElementById('hubBookBackFromNew');
+                if (backN) backN.style.display = '';
+                resetHubBookSteps();
+                setHubBookOptExistingVisible(hasClients);
+                applyHubBookNewSubmitButtonLabel();
+              }
+              requestAnimationFrame(function() {
+                setHubBookChoicePairPending(false);
+              });
+            })
+            .catch(function() {
+              if (prepareGen !== hubQuickBookPrepareGen) return;
+              var canRetry = attemptIdx + 1 < HUB_QB_PREPARE_MAX_ATTEMPTS && !!getInitData();
+              if (canRetry) {
+                var delay =
+                  Math.min(4000, 260 + Math.floor(480 * Math.pow(1.75, attemptIdx))) +
+                  Math.floor(Math.random() * 140);
+                setTimeout(function() {
+                  runHubQuickBookPrepareAttempt(attemptIdx + 1);
+                }, delay);
+                return;
+              }
+              failHubQuickBookPrepare(prepareGen);
+            });
+        }
+
+        waitForTrainerInitDataThen(function() {
+          if (prepareGen !== hubQuickBookPrepareGen) return;
+          if (!getInitData()) {
+            setHubBookChoiceQuickLoading(false);
+            hubTrainerHasClientsCache = null;
+            setHubBookOptExistingVisible(false);
+            closeHubBookGroupModals();
+            resetHubBookSlotState();
+            hubToast('Сессия ещё подключается. Подождите секунду и откройте запись снова.');
+            return;
+          }
+          runHubQuickBookPrepareAttempt(0);
+        });
+      }
+
+      /** After datetime confirmed: create trainer client then quick-book (same as legacy one-shot submit). */
+      function hubPostNewClientQuickBookChain() {
+        if (hubBookQuickChainInFlight) return;
+        var phoneEl = document.getElementById('hubBookNewPhone');
+        var firstEl = document.getElementById('hubBookNewFirstName');
+        var lastEl = document.getElementById('hubBookNewLastName');
+        var phoneRaw = phoneEl ? (phoneEl.value || '').trim() : '';
+        var first = firstEl ? (firstEl.value || '').trim() : '';
+        var last = lastEl ? (lastEl.value || '').trim() : '';
+        if (!/[\d]/.test(phoneRaw)) {
+          hubToast('Введите номер телефона (цифры).');
+          return;
+        }
+        var phone = normalizePhoneHub(phoneRaw);
+        var errPhone = validatePhoneHubMsg(phone);
+        if (errPhone) {
+          hubToast(errPhone);
+          return;
+        }
+        first = (first || '').trim();
+        if (!first) {
+          hubToast('Укажите имя клиента.');
+          return;
+        }
+        if (hubBookServiceId == null) {
+          hubToast('Выберите услугу.');
+          return;
+        }
+        hubBookQuickChainInFlight = true;
+        setHubGlobalBookingBusy(true);
+        var wasQuickSandbox = hubQuickBookIsSandbox;
+        fetch(apiUrlWithQuery('/trainer/clients'), {
+          method: 'POST',
+          headers: headersJson(),
+          body: JSON.stringify({ phone: phone, first_name: first, last_name: last || '' }),
+        })
+          .then(function(r) {
+            if (!r.ok) return r.json().then(function(o) { throw new Error(hubApiErrorMessage(o)); });
+            return r.json();
+          })
+          .then(function(data) {
+            hubTrainerHasClientsCache = true;
+            return hubPostBooking(data.client_id);
+          })
+          .then(function(res) {
+            closeHubBookGroupModals();
+            resetHubBookSlotState();
+            var bid = res.booking && res.booking.booking_id != null ? Number(res.booking.booking_id) : null;
+            if (bid && !isNaN(bid)) stashHubPendingBookingHighlight(bid);
+            var baseText = 'Клиент добавлен и запись успешно создана.';
+            var tail =
+              wasQuickSandbox
+                ? ' Запись появится в «Ближайших записях». Отменить можно в «Детали записи».'
+                : ' Запись появится в «Ближайших записях».';
+            presentHubBookingSuccess(res.booking, baseText + tail);
+            loadBookings();
+            loadOnboardingChecklist();
+          })
+          .catch(function(e) {
+            hubToast(e.message || 'Ошибка');
+          })
+          .finally(function() {
+            hubBookQuickChainInFlight = false;
+            setHubGlobalBookingBusy(false);
+          });
+      }
+
       function syncHubBookPriceTierRadios() {
         var wrap = document.getElementById('hubBookPriceTierWrap');
         var host = document.getElementById('hubBookPriceTierRadios');
         if (!wrap || !host) return;
-        if (!hubBookQuickPayload) {
+        /* Quick-book tiers: datetime step already chose slot, or client-first flow is on service step. Group slot hides tiers here. */
+        var allowTierUi = hubBookQuickPayload != null || hubBookClientFirstServiceStepOpen === true;
+        if (!allowTierUi) {
           wrap.style.display = 'none';
           host.innerHTML = '';
           hubBookPriceVariantId = null;
@@ -3466,8 +4099,8 @@
               ? parseInt(durEl.value, 10)
               : 45;
         if (fixedDm == null && (isNaN(dm) || dm < 15)) dm = 45;
-        // Duration-only changes reuse cached `/schedule` payload to avoid layout "jumps" from refetch + disabled selects.
-        if (hubQuickBookSlotsIsoDate === isoDate) {
+        var cacheArena = hubQuickBookArenaCacheKey();
+        if (hubQuickBookSlotsIsoDate === isoDate && hubQuickBookSlotsArenaKey === cacheArena) {
           hubRebuildQuickBookTimeSelect(isoDate, dm);
           setHubQuickBookDatetimeLoading(false);
           return Promise.resolve();
@@ -3475,6 +4108,7 @@
         // Paint times from preset grid immediately — empty <select> until /schedule returned caused visible flicker.
         hubQuickBookSlotsForDay = [];
         hubQuickBookSlotsIsoDate = null;
+        hubQuickBookSlotsArenaKey = null;
         hubRebuildQuickBookTimeSelect(isoDate, dm);
         var fetchGen = ++hubQuickBookScheduleFetchGen;
         sel.disabled = true;
@@ -3483,8 +4117,16 @@
         if (!silentLoadingHint) {
           setHubQuickBookHint('Загрузка сетки расписания…', true);
         }
+        var schedulePath =
+          '/schedule?from_date=' +
+          encodeURIComponent(isoDate) +
+          '&to_date=' +
+          encodeURIComponent(isoDate);
+        if (hubBookArenaId != null) {
+          schedulePath += '&arena_id=' + encodeURIComponent(String(hubBookArenaId));
+        }
         return fetch(
-          apiUrlWithQuery('/schedule?from_date=' + encodeURIComponent(isoDate) + '&to_date=' + encodeURIComponent(isoDate)),
+          apiUrlWithQuery(schedulePath),
           { headers: headersJson() }
         )
           .then(function(r) {
@@ -3500,6 +4142,7 @@
               return d === isoDate || String(d) === isoDate;
             });
             hubQuickBookSlotsIsoDate = isoDate;
+            hubQuickBookSlotsArenaKey = hubQuickBookArenaCacheKey();
             hubRebuildQuickBookTimeSelect(isoDate, dm);
             sel.disabled = false;
             setHubQuickBookDatetimeLoading(false);
@@ -3509,6 +4152,7 @@
             hubApplyQuickBookScheduleGrid(null);
             hubQuickBookSlotsForDay = [];
             hubQuickBookSlotsIsoDate = null;
+            hubQuickBookSlotsArenaKey = null;
             sel.disabled = false;
             sel.innerHTML = '';
             hubAllowedStartMinutesFromGrid().forEach(function(m) {
@@ -3564,128 +4208,12 @@
         hubSyncQuickBookDurationFromGrid();
         hubQuickBookSlotsForDay = [];
         hubQuickBookSlotsIsoDate = null;
+        hubQuickBookSlotsArenaKey = null;
         hubQuickBookScheduleFetchGen += 1;
         setHubQuickBookHint('', false);
         modal.style.display = 'flex';
         modal.setAttribute('aria-hidden', 'false');
         hubRefreshQuickBookTimeOptions(dateEl.value || today, { silentLoadingHint: true });
-      }
-
-      function openHubQuickBookClientFlow(slotDate, startTime, durationMinutes) {
-        if (!openHubBookModalShell()) return;
-        setHubBookChoiceQuickLoading(true);
-        setHubBookServiceVisibility(false);
-        fillHubBookServiceSelect([]);
-        var ptHost = document.getElementById('hubBookPriceTierRadios');
-        var ptWrap = document.getElementById('hubBookPriceTierWrap');
-        if (ptHost) ptHost.innerHTML = '';
-        if (ptWrap) ptWrap.style.display = 'none';
-        hubBookSlotId = null;
-        hubBookPriceVariantId = null;
-        hubBookQuickPayload = {
-          slot_date: slotDate,
-          start_time: startTime,
-          duration_minutes: durationMinutes,
-        };
-        hubBookSlotWhenLabel = slotDate + ' ' + startTime;
-
-        function failHubQuickBookPrepare() {
-          setHubBookChoiceQuickLoading(false);
-          hubTrainerHasClientsCache = null;
-          setHubBookOptExistingVisible(false);
-          closeHubBookGroupModals();
-          resetHubBookSlotState();
-          hubToast('Не удалось подготовить форму записи. Повторите попытку.');
-        }
-
-        function runHubQuickBookPrepare(isFirstAttempt) {
-          Promise.all([
-            fetch(apiUrlWithQuery('/trainer/my-services'), { headers: headersJson(), cache: 'no-store' }).then(
-              function(r) {
-                return r.ok ? r.json() : Promise.reject(new Error('services'));
-              }
-            ),
-            fetch(apiUrlWithQuery('/trainer/clients'), { headers: headersJson(), cache: 'no-store' }).then(
-              function(r) {
-                return r.json().then(function(j) {
-                  if (!r.ok) return Promise.reject(new Error('clients'));
-                  return j;
-                });
-              }
-            ),
-          ])
-            .then(function(results) {
-              setHubBookChoiceQuickLoading(false);
-              var servicePayload = results[0] || {};
-              var clientsPayload = results[1] || {};
-              hubBookQuickServices = servicePayload.services || [];
-              if (!hubBookQuickServices.length) {
-                hubApplyTrainerHasClientsFromPayload(clientsPayload);
-                setHubBookOptExistingVisible(false);
-                closeHubBookGroupModals();
-                resetHubBookSlotState();
-                hubToast('Добавьте услугу в профиле, чтобы записывать клиентов.');
-                return;
-              }
-              hubBookServiceId = hubBookQuickServices[0].id;
-              fillHubBookServiceSelect(hubBookQuickServices);
-              setHubBookServiceVisibility(true);
-              syncHubBookPriceTierRadios();
-              var hasClients = hubApplyTrainerHasClientsFromPayload(clientsPayload);
-              ensureHubBookChoiceLeadDefault();
-              if (hubQuickBookIsSandbox) {
-                var leadSx = document.querySelector('#hubBookStepChoice .book-choice-lead');
-                if (leadSx) {
-                  leadSx.textContent =
-                    'Пробная запись: проверьте услугу; контакт ниже можно заменить или оставить для примера.';
-                }
-                var caSx = document.getElementById('hubBookChoiceActions');
-                if (caSx) caSx.style.display = 'none';
-                var stepNewSx = document.getElementById('hubBookStepNew');
-                if (stepNewSx) stepNewSx.style.display = 'block';
-                var backSx = document.getElementById('hubBookBackFromNew');
-                if (backSx) backSx.style.display = 'none';
-                applyHubSandboxNewClientPrefill();
-                setHubBookOptExistingVisible(false);
-              } else {
-                var leadN = document.querySelector('#hubBookStepChoice .book-choice-lead');
-                if (leadN && hubBookChoiceLeadDefault != null) leadN.textContent = hubBookChoiceLeadDefault;
-                var caN = document.getElementById('hubBookChoiceActions');
-                if (caN) caN.style.display = '';
-                var stepNewN = document.getElementById('hubBookStepNew');
-                if (stepNewN) stepNewN.style.display = 'none';
-                var backN = document.getElementById('hubBookBackFromNew');
-                if (backN) backN.style.display = '';
-                resetHubBookSteps();
-                setHubBookOptExistingVisible(hasClients);
-              }
-              requestAnimationFrame(function() {
-                setHubBookChoicePairPending(false);
-              });
-            })
-            .catch(function() {
-              if (isFirstAttempt && getInitData()) {
-                setTimeout(function() {
-                  runHubQuickBookPrepare(false);
-                }, 450);
-                return;
-              }
-              failHubQuickBookPrepare();
-            });
-        }
-
-        waitForTrainerInitDataThen(function() {
-          if (!getInitData()) {
-            setHubBookChoiceQuickLoading(false);
-            hubTrainerHasClientsCache = null;
-            setHubBookOptExistingVisible(false);
-            closeHubBookGroupModals();
-            resetHubBookSlotState();
-            hubToast('Сессия ещё подключается. Подождите секунду и откройте запись снова.');
-            return;
-          }
-          runHubQuickBookPrepare(true);
-        });
       }
 
       function loadHubBookClients(q) {
@@ -3724,6 +4252,39 @@
                 var clientName = (row.getAttribute('data-client-name') || 'Клиент').replace(/&quot;/g, '"');
                 hubBookPendingClientId = clientId;
                 hubBookPendingClientName = clientName;
+                if (hubBookClientFirstQuickMode) {
+                  hubBookClientFirstServiceFromNew = false;
+                  list.innerHTML =
+                    '<p style="text-align:center;padding:16px;color:var(--tg-theme-hint-color);">Загрузка…</p>';
+                  fetch(
+                    apiUrlWithQuery(
+                      '/trainer/clients/' + encodeURIComponent(String(clientId)) + '/booking-defaults'
+                    ),
+                    { headers: headersJson(), cache: 'no-store' }
+                  )
+                    .then(function(r) {
+                      return r.ok ? r.json() : {};
+                    })
+                    .then(function(def) {
+                      var stepEx = document.getElementById('hubBookStepExisting');
+                      var stepCh = document.getElementById('hubBookStepChoice');
+                      if (stepEx) stepEx.style.display = 'none';
+                      if (stepCh) stepCh.style.display = 'block';
+                      hubApplyBookingDefaultsPayload(def || {});
+                      hubEnterClientFirstServiceStep(
+                        'Услуга и тариф — как в прошлый раз. Поменяйте при необходимости.'
+                      );
+                    })
+                    .catch(function() {
+                      var stepEx2 = document.getElementById('hubBookStepExisting');
+                      var stepCh2 = document.getElementById('hubBookStepChoice');
+                      if (stepEx2) stepEx2.style.display = 'none';
+                      if (stepCh2) stepCh2.style.display = 'block';
+                      hubApplyBookingDefaultsPayload({});
+                      hubEnterClientFirstServiceStep(null);
+                    });
+                  return;
+                }
                 var txt = document.getElementById('hubBookConfirmText');
                 if (txt) {
                   txt.textContent = 'Записать ' + clientName + ' на ' + (hubBookSlotWhenLabel || 'слот') + '?';
@@ -3748,6 +4309,10 @@
       }
 
       function openHubBookGroupSlotModal(slotId, serviceId, whenLabel) {
+        hubBookClientFirstQuickMode = false;
+        hubBookClientFirstServiceStepOpen = false;
+        hubBookClientFirstServiceFromNew = false;
+        hubSyncClientFirstQuickServiceChrome();
         var sid = parseInt(String(slotId), 10);
         var svc = serviceId != null ? parseInt(String(serviceId), 10) : NaN;
         if (isNaN(sid) || isNaN(svc)) {
@@ -3762,6 +4327,7 @@
         setHubBookServiceVisibility(false);
         fillHubBookServiceSelect([]);
         if (!openHubBookModalShell()) return;
+        applyHubBookNewSubmitButtonLabel();
         syncHubBookPriceTierRadios();
         fetch(apiUrlWithQuery('/trainer/clients'), { headers: headersJson() })
           .then(function(r) {
@@ -3803,6 +4369,9 @@
             client_id: clientId,
             service_id: hubBookServiceId,
           };
+          if (hubBookArenaId != null) {
+            payload.arena_id = hubBookArenaId;
+          }
           if (hubBookPriceVariantId != null) {
             payload.service_price_variant_id = hubBookPriceVariantId;
           }
@@ -3842,6 +4411,7 @@
         var bo = document.getElementById('hubBookOptExisting');
         if (bo) {
           bo.onclick = function() {
+            hubDockBookStepNewUnderModalChrome();
             document.getElementById('hubBookStepChoice').style.display = 'none';
             document.getElementById('hubBookStepExisting').style.display = 'block';
             document.getElementById('hubBookClientList').innerHTML =
@@ -3852,10 +4422,12 @@
         var bn = document.getElementById('hubBookOptNew');
         if (bn) {
           bn.onclick = function() {
+            hubDockBookStepNewUnderModalChrome();
             var modal = document.getElementById('hubModalBookGroupSlot');
             if (modal) modal.classList.add('hub-book-flow-overlay--new-client');
             document.getElementById('hubBookStepChoice').style.display = 'none';
             document.getElementById('hubBookStepNew').style.display = 'block';
+            applyHubBookNewSubmitButtonLabel();
           };
         }
         var be = document.getElementById('hubBookBackFromExisting');
@@ -3887,11 +4459,71 @@
             }, 300);
           };
         }
+        var qSvcNext = document.getElementById('hubBookQuickServiceNext');
+        if (qSvcNext) {
+          qSvcNext.onclick = function() {
+            if (!hubBookClientFirstQuickMode) return;
+            if (hubBookServiceId == null) {
+              hubToast('Выберите услугу.');
+              return;
+            }
+            var sidCv = hubBookServiceId;
+            var svcCv = (hubBookQuickServices || []).filter(function(x) { return x.id === sidCv; })[0];
+            var tiersCv = (svcCv && svcCv.price_tiers) ? svcCv.price_tiers : [];
+            if (tiersCv.length > 1 && hubBookPriceVariantId == null) {
+              hubToast('Выберите тариф.');
+              return;
+            }
+            var ars = hubBookTrainerArenas || [];
+            if (ars.length > 1 && hubBookArenaId == null) {
+              hubToast('Выберите площадку.');
+              return;
+            }
+            openHubQuickBookDatetimeModal();
+          };
+        }
+        var qBackSvc = document.getElementById('hubBookBackFromService');
+        if (qBackSvc) {
+          qBackSvc.onclick = function() {
+            if (!hubBookClientFirstQuickMode) return;
+            hubDockBookStepNewUnderModalChrome();
+            hubBookQuickPayload = null;
+            var resetLeadSvc = hubBookClientFirstServiceFromNew === false;
+            hubExitClientFirstServiceStep(resetLeadSvc);
+            applyHubBookNewSubmitButtonLabel();
+            var cameFromNew = hubBookClientFirstServiceFromNew;
+            var stepChB = document.getElementById('hubBookStepChoice');
+            if (cameFromNew) {
+              if (stepChB) stepChB.style.display = 'none';
+              var stepNwB = document.getElementById('hubBookStepNew');
+              if (stepNwB) stepNwB.style.display = 'block';
+              hubBookClientFirstServiceFromNew = false;
+            } else {
+              hubBookPendingClientId = null;
+              hubBookPendingClientName = '';
+              document.getElementById('hubBookStepExisting').style.display = 'block';
+              if (stepChB) stepChB.style.display = 'none';
+              var qinpB = document.getElementById('hubBookClientSearch');
+              loadHubBookClients(qinpB ? qinpB.value.trim() : '');
+            }
+          };
+        }
         var cno = document.getElementById('hubBookConfirmNo');
         if (cno) {
           cno.onclick = function() {
             document.getElementById('hubModalBookGroupConfirm').style.display = 'none';
             document.getElementById('hubModalBookGroupSlot').style.display = 'flex';
+            if (hubBookClientFirstQuickMode && hubBookPendingClientId != null && hubBookQuickPayload != null) {
+              hubBookQuickPayload = null;
+              hubBookClientFirstServiceStepOpen = true;
+              hubSyncClientFirstQuickChoiceActionsVisible(false);
+              setHubBookServiceVisibility(true);
+              setHubBookArenaVisibility((hubBookTrainerArenas || []).length > 1);
+              syncHubBookPriceTierRadios();
+              hubSyncClientFirstQuickServiceChrome();
+              if (hubQuickBookIsSandbox) hubEmbedSandboxBookStepNewBeforeQuickNext();
+              return;
+            }
             hubBookPendingClientId = null;
           };
         }
@@ -3900,8 +4532,10 @@
           cyes.onclick = function() {
             var cid = hubBookPendingClientId;
             if (cid == null) return;
+            if (cyes.disabled) return;
             var successText = hubBookQuickPayload ? 'Запись успешно создана.' : 'Клиент записан в группу.';
             var wasQuickSandbox = hubQuickBookIsSandbox;
+            setHubBookConfirmSubmitting(true);
             hubPostBooking(cid)
               .then(function(res) {
                 closeHubBookGroupModals();
@@ -3918,6 +4552,9 @@
               })
               .catch(function(e) {
                 hubToast(e.message || 'Ошибка');
+              })
+              .finally(function() {
+                setHubBookConfirmSubmitting(false);
               });
           };
         }
@@ -3945,6 +4582,20 @@
               hubToast('Укажите имя клиента.');
               return;
             }
+
+            if (hubBookClientFirstQuickMode && hubBookSlotId == null && !hubQuickBookIsSandbox) {
+              hubDockBookStepNewUnderModalChrome();
+              hubBookPendingClientId = null;
+              hubBookClientFirstServiceFromNew = true;
+              document.getElementById('hubBookStepNew').style.display = 'none';
+              document.getElementById('hubBookStepChoice').style.display = 'block';
+              var modalGo = document.getElementById('hubModalBookGroupSlot');
+              if (modalGo) modalGo.classList.remove('hub-book-flow-overlay--new-client');
+              hubApplyBookingDefaultsPayload({});
+              hubEnterClientFirstServiceStep('Выберите услугу и тариф.');
+              return;
+            }
+
             sub.disabled = true;
             var wasQuickSandbox = hubQuickBookIsSandbox;
             fetch(apiUrlWithQuery('/trainer/clients'), {
@@ -4000,6 +4651,18 @@
             if (ev.target === ovc) {
               ovc.style.display = 'none';
               document.getElementById('hubModalBookGroupSlot').style.display = 'flex';
+              if (hubBookClientFirstQuickMode && hubBookPendingClientId != null && hubBookQuickPayload != null) {
+                hubBookQuickPayload = null;
+                hubBookClientFirstServiceStepOpen = true;
+                hubSyncClientFirstQuickChoiceActionsVisible(false);
+                setHubBookServiceVisibility(true);
+                setHubBookArenaVisibility((hubBookTrainerArenas || []).length > 1);
+                syncHubBookPriceTierRadios();
+                hubSyncClientFirstQuickServiceChrome();
+                if (hubQuickBookIsSandbox) hubEmbedSandboxBookStepNewBeforeQuickNext();
+              } else {
+                hubBookPendingClientId = null;
+              }
             }
           };
         }
@@ -4042,8 +4705,38 @@
               return;
             }
             var startTime = formatMinuteClockHub(startMinutes);
+            if (hubBookClientFirstQuickMode) {
+              hubBookQuickPayload = {
+                slot_date: slotDate,
+                start_time: startTime,
+                duration_minutes: duration,
+              };
+              hubBookSlotWhenLabel = slotDate + ' ' + startTime;
+              /* Hide the book modal *before* closing datetime: otherwise one paint shows the service step underneath. */
+              var mSlotUnder = document.getElementById('hubModalBookGroupSlot');
+              if (mSlotUnder) {
+                mSlotUnder.style.display = 'none';
+                mSlotUnder.setAttribute('aria-hidden', 'true');
+              }
+              if (hubBookPendingClientId != null) {
+                var nm = hubBookPendingClientName || 'Клиент';
+                var txtCf = document.getElementById('hubBookConfirmText');
+                if (txtCf) txtCf.textContent = 'Записать ' + nm + ' на ' + hubBookSlotWhenLabel + '?';
+                var cfOv = document.getElementById('hubModalBookGroupConfirm');
+                if (cfOv) {
+                  cfOv.style.display = 'flex';
+                  cfOv.setAttribute('aria-hidden', 'false');
+                }
+              }
+              closeHubQuickBookDatetimeModal(true);
+              if (hubBookPendingClientId != null) {
+                return;
+              }
+              hubPostNewClientQuickBookChain();
+              return;
+            }
             closeHubQuickBookDatetimeModal(true);
-            openHubQuickBookClientFlow(slotDate, startTime, duration);
+            hubToast('Сессия записи устарела. Закройте окно и откройте «Записать клиента» снова.');
           };
         }
         var qDate = document.getElementById('hubQuickBookDate');
@@ -4603,7 +5296,7 @@
         var lead = document.querySelector('.hub-fill-slots-invites-lead');
         if (lead) {
           lead.innerHTML =
-            'Выберите вручную или кнопками <b>Без записи</b> / <b>Все</b> под списком. У каждого видно статус следующей тренировки. Сообщение уходит в <b>клиентском боте</b> с кнопкой «Записаться».';
+            'Отметьте клиентов. Письмо уходит в <b>клиентском боте</b>; фильтры <b>Без записи</b> / <b>Все</b> — под списком.';
         }
         overlay.style.display = 'none';
         overlay.setAttribute('aria-hidden', 'true');
@@ -4870,10 +5563,10 @@
         if (lead) {
           if (hubFillSlotsInviteContext.slotId) {
             lead.innerHTML =
-              'Отметьте клиентов — им придёт предложение в <b>клиентском боте</b> про <b>конкретное окно</b> (дата и время) с кнопкой «Записаться» на него.';
+              'Это окно в сообщении (дата и время). Клиент жмёт «Записаться» в своём боте.';
           } else {
             lead.innerHTML =
-              'Выберите вручную или кнопками <b>Без записи</b> / <b>Все</b> под списком. У каждого видно статус следующей тренировки. Сообщение уходит в <b>клиентском боте</b> с кнопкой «Записаться».';
+              'Отметьте клиентов. Письмо уходит в <b>клиентском боте</b>; фильтры <b>Без записи</b> / <b>Все</b> — под списком.';
           }
         }
         ensureTrainerSectionsAccess(function() {
@@ -4998,7 +5691,8 @@
       function applyHubShareButtonVisibility() {
         var btn = document.getElementById('hubShareBookingLinkBtn');
         if (!btn) return;
-        var allowed = !!getInitData() && hubOnlineBookingEnabled;
+        // Universal invite link works for all trainers — not gated on online booking tier
+        var allowed = !!getInitData();
         btn.hidden = !allowed;
         btn.disabled = !allowed;
       }
@@ -5119,9 +5813,12 @@
                   ? 'Услуга #' + String(s0.id)
                   : 'услугу';
             leadEl.textContent =
-              'Клиенты по ссылке ниже смогут записаться к вам на «' + nm + '».';
+              'Запись на «' +
+              nm +
+              '». Мы уведомим вас, как только клиент перейдёт по ссылке: нового контакта добавим в список; если он уже у вас в списке без Telegram — привяжем аккаунт.';
           } else {
-            leadEl.textContent = 'Выберите услугу — ссылка будет относиться к выбранному варианту.';
+            leadEl.textContent =
+              'Выберите услугу — она подставится в ссылку. Мы уведомим вас в боте тренера, как только клиент перейдёт по ней: нового добавим в список; если он уже у вас в базе без Telegram — привяжем аккаунт.';
           }
         }
         serviceWrap.style.display = services.length > 1 ? '' : 'none';
@@ -5280,50 +5977,49 @@
             }
             ensureTrainerSectionsAccess(function() {
               hubQuickBookIsSandbox = false;
-              openHubQuickBookDatetimeModal();
+              openHubQuickBookClientFlowFirst();
             });
           };
         }
         var btnShare = document.getElementById('hubShareBookingLinkBtn');
         if (btnShare) {
           btnShare.onclick = function() {
-            ensureTrainerSectionsAccess(function() {
-              if (!hubOnlineBookingEnabled) {
-                hubToast('Функция доступна на тарифе с онлайн-записью.');
-                return;
-              }
-              requestHubPublicBookingLink()
-                .then(function(payload) {
-                  var link = payload && payload.booking_link ? String(payload.booking_link).trim() : '';
-                  if (!link) {
-                    throw new Error('Ссылка недоступна. Обратитесь в поддержку или откройте из бота тренера.');
-                  }
-                  if (copyTextViaExecCommandHub(link)) {
+            // Universal invite link: works for all trainers, no subscription gate, no service selection.
+            // Fetched fresh each click (response is fast — trainer_id lookup only).
+            fetch(apiUrlWithQuery('/trainer/hub/universal-invite-link'), { headers: headersJson() })
+              .then(function(r) {
+                return r.json().then(function(data) {
+                  if (!r.ok) throw new Error((data && data.detail) || r.statusText || 'Ошибка');
+                  return data;
+                });
+              })
+              .then(function(data) {
+                var link = data && data.link ? String(data.link).trim() : '';
+                if (!link) {
+                  hubToast('Ссылка недоступна. Попробуйте позже.');
+                  return;
+                }
+                if (copyTextViaExecCommandHub(link)) {
+                  dismissHubShareLinkGrowthHintPersisted();
+                  postHubClientInviteLinkFirstCopyRecorded();
+                  hubToast('Ссылка скопирована — отправьте её клиентам.');
+                  return;
+                }
+                copyTextToClipboardHub(link).then(function(ok) {
+                  if (ok) {
                     dismissHubShareLinkGrowthHintPersisted();
                     postHubClientInviteLinkFirstCopyRecorded();
-                    hubToast('Ссылка на запись скопирована. Отправьте её клиентам.');
+                    hubToast('Ссылка скопирована — отправьте её клиентам.');
                     return;
                   }
-                  return copyTextToClipboardHub(link).then(function(ok) {
-                    if (ok) {
-                      dismissHubShareLinkGrowthHintPersisted();
-                      postHubClientInviteLinkFirstCopyRecorded();
-                      hubToast('Ссылка на запись скопирована. Отправьте её клиентам.');
-                      return;
-                    }
-                    openHubShareBookingLinkModal({ services: [] }, { skipPrefetchOnce: true });
-                    showHubShareLinkManualCopy(
-                      link,
-                      'Автокопирование недоступно — скопируйте ссылку вручную.',
-                      false
-                    );
-                  });
-                })
-                .catch(function(err) {
-                  if (err && err.message) hubToast(err.message);
-                  else hubToast('Не удалось сформировать ссылку.');
+                  // Clipboard unavailable: show fallback modal with manual copy
+                  openHubShareBookingLinkModal({ services: [] }, { skipPrefetchOnce: true });
+                  showHubShareLinkManualCopy(link, 'Скопируйте ссылку вручную из поля выше.', false);
                 });
-            });
+              })
+              .catch(function(err) {
+                hubToast((err && err.message) || 'Не удалось сформировать ссылку.');
+              });
           };
         }
         wireHubShareBookingLinkModal();

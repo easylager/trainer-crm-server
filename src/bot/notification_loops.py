@@ -1083,6 +1083,8 @@ async def run_booking_notifier_loop(trainer_bot: Bot) -> None:
                     service = b.get("service_name") or "—"
                     city = b.get("city_name") or "—"
                     arenas = b.get("arenas_str") or "—"
+                    pl = (b.get("price_tier_label") or "").strip()
+                    tariff_display = pl or "—"
                     if comment:
                         text = msg.TRAINER_BOOKING_NOTIFICATION.format(
                             date=html_lib.escape(date_str),
@@ -1094,6 +1096,7 @@ async def run_booking_notifier_loop(trainer_bot: Bot) -> None:
                             service=html_lib.escape(service),
                             city=html_lib.escape(city),
                             arenas=html_lib.escape(arenas),
+                            tariff=html_lib.escape(tariff_display),
                             comment=html_lib.escape(comment),
                         )
                     else:
@@ -1107,6 +1110,7 @@ async def run_booking_notifier_loop(trainer_bot: Bot) -> None:
                             service=html_lib.escape(service),
                             city=html_lib.escape(city),
                             arenas=html_lib.escape(arenas),
+                            tariff=html_lib.escape(tariff_display),
                         )
                     if b.get("is_first_client_online_booking"):
                         text = msg.TRAINER_FIRST_ONLINE_BOOKING_NOTIFICATION_PREFIX + text
