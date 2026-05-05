@@ -18,6 +18,7 @@ from sqlalchemy import text
 
 from src.api.app import app
 from src.api.miniapp_auth.types import MiniAppPlatform, MiniAppPrincipal
+from src.shared.webapp_http_messages import TRAINER_WEBAPP_FORBIDDEN_DETAIL
 
 
 def _fresh_trainer_telegram_id() -> int:
@@ -150,7 +151,7 @@ async def test_schedule_get_403_when_trainer_not_active(
                 headers={"X-Telegram-Init-Data": "mock"},
             )
     assert resp.status_code == 403
-    assert "not active" in (resp.json().get("detail") or "").lower()
+    assert resp.json().get("detail") == TRAINER_WEBAPP_FORBIDDEN_DETAIL
 
 
 @pytest.mark.asyncio
