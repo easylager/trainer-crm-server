@@ -414,24 +414,30 @@ async def _build_pass_order_notification(
     webapp_https = base.lower().startswith("https://")
 
     product = await get_pass_product(session, pass_product_id, int(p["trainer_id"]))
-    client_name = " ".join(
-        filter(None, [p.get("client_first_name"), p.get("client_last_name")])
-    ).strip() or "Клиент"
+    name_parts = [
+        (p.get("client_first_name") or "").strip(),
+        (p.get("client_middle_name") or "").strip(),
+        (p.get("client_last_name") or "").strip(),
+    ]
+    client_name = " ".join(x for x in name_parts if x).strip() or "Клиент"
 
     if product:
         pass_name = product.get("name") or "Абонемент"
-        sessions_total = product.get("sessions_total") or 0
-        service_name = product.get("service_name") or p.get("service_name") or "Услуга"
+        pinned_sid = product.get("service_id")
+        svc = (product.get("service_name") or "").strip()
+        if pinned_sid is not None and svc:
+            service_line = svc
+        else:
+            service_line = "Любая"
     else:
         pass_name = "Абонемент"
-        sessions_total = 0
-        service_name = p.get("service_name") or "Услуга"
+        req_svc = (p.get("service_name") or "").strip()
+        service_line = req_svc if req_svc else "Любая"
 
     text = msg.TRAINER_PASS_ORDER_NOTIFICATION.format(
         client_name=html_lib.escape(client_name),
         pass_name=html_lib.escape(pass_name),
-        sessions=sessions_total,
-        service=html_lib.escape(service_name),
+        service_line=html_lib.escape(service_line),
     )
 
     rows: list[list[InlineKeyboardButton]] = []
@@ -1788,16 +1794,13 @@ async def run_daily_morning_digest_loop(trainer_bot: Bot) -> None:
 
 async def run_weekly_sunday_digest_loop(trainer_bot: Bot) -> None:
     """
-    Ticks every DIGEST_LOOP_INTERVAL_SEC, but only acts on Sundays. Sends the weekly digest
-    at the same resolved send_at as the daily one (shared send_time setting).
+    Ticks every DIGEST_LOOP_INTERVAL_SEC, but only acts on Sundays. Sends the weekly digest in the
+    evening (default 20:00 Minsk), independent of digest_send_time (which schedules only the daily digest).
     """
-    from datetime import time as time_of_day
-
     from src.application.trainer_digest_use_cases import (
-        get_trainer_daily_digest,
         get_trainer_weekly_digest,
         now_minsk,
-        resolve_digest_send_time,
+        resolve_weekly_digest_send_time,
     )
     from src.application.trainer_notification_prefs import (
         get_trainer_push_window_bounds,
@@ -1829,16 +1832,10 @@ async def run_weekly_sunday_digest_loop(trainer_bot: Bot) -> None:
                         else:
                             start_h, end_h = await get_trainer_push_window_bounds(session, tid)
 
-                        daily = await get_trainer_daily_digest(session, tid, today)
-                        send_at = resolve_digest_send_time(
-                            digest_send_time=cand["digest_send_time"],
-                            first_session_start=daily["first_session_start"],
+                        send_at = resolve_weekly_digest_send_time(
                             push_window_start_hour=start_h,
                             push_window_end_hour=end_h,
                         )
-                        if send_at is None:
-                            # No sessions today AND no explicit time — default Sunday send at push_window start.
-                            send_at = time_of_day(hour=start_h)
 
                         delta = _time_diff_minutes(now_t, send_at)
                         if delta < 0 or delta >= DIGEST_SEND_GRACE_MIN:

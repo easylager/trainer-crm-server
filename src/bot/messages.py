@@ -526,8 +526,9 @@ TRAINER_REQUEST_NOTIFICATION_NO_COMMENT = (
 )
 TRAINER_PASS_ORDER_NOTIFICATION = (
     "📦 <b>Клиент хочет абонемент</b>\n\n"
-    "<b>{client_name}</b> — <b>{pass_name}</b>\n"
-    "{sessions} занятий · {service}\n\n"
+    "<b>Клиент</b> — {client_name}\n"
+    "<b>Абонемент</b> — {pass_name}\n"
+    "<b>Услуга</b> — {service_line}\n\n"
     "Напишите клиенту, обсудите оплату и выдайте абонемент."
 )
 TRAINER_PASS_ORDER_BTN_WRITE = "✍️ Написать клиенту"
@@ -2361,9 +2362,13 @@ def format_trainer_first_booking_milestone_rich_html(
     map_link: str | None = None,
     client_comment: str | None = None,
     client_has_telegram: bool | None = None,
+    sandbox_demo_identity: bool = False,
 ) -> str:
     """
     Rich «первая запись» card for trainer bot (HTML). Escapes user-controlled fields.
+
+    When ``sandbox_demo_identity`` is True (sandbox booking **and** sandbox client row), the Telegram
+    invite/teaser paragraph is omitted — there's nothing real to invite.
     """
     cn = html.escape((client_name or "").strip() or "Клиент")
     phone = (client_phone or "").strip()
@@ -2410,11 +2415,13 @@ def format_trainer_first_booking_milestone_rich_html(
     if comment_raw:
         comment_section = f"💬 <b>Комментарий клиента</b>\n{html.escape(truncate_text(comment_raw, 400))}"
 
+    # Demo onboarding booking + phantom client: skip «Пригласить в бота» copy — no real Telegram invite target.
     tg_line = ""
-    if client_has_telegram is True:
-        tg_line = TRAINER_FIRST_BOOKING_TG_OK_LINE_HTML
-    elif client_has_telegram is False:
-        tg_line = TRAINER_FIRST_BOOKING_NO_TG_NUDGE_HTML
+    if not sandbox_demo_identity:
+        if client_has_telegram is True:
+            tg_line = TRAINER_FIRST_BOOKING_TG_OK_LINE_HTML
+        elif client_has_telegram is False:
+            tg_line = TRAINER_FIRST_BOOKING_NO_TG_NUDGE_HTML
 
     blocks: list[str] = [
         "🎉 <b>Старт засчитан: это ваша первая запись в Ice Pro!</b>\n\n"
@@ -2440,9 +2447,13 @@ def build_trainer_first_booking_milestone_reply_markup(
     webapp_base: str,
     booking_id: int,
     client_telegram_id: int | None,
+    is_sandbox: bool = False,
 ):
     """
     Inline keyboard for the first-booking celebration (must match trainer bot callback prefixes).
+
+    Sandbox milestone: same celebration text and details button, but the «Написать клиенту» and
+    «Пригласить в бот» buttons are dropped — the demo identity has no real Telegram account.
     """
     from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 
@@ -2462,7 +2473,7 @@ def build_trainer_first_booking_milestone_reply_markup(
                 ),
             ]
         )
-    if client_telegram_id:
+    if client_telegram_id and not is_sandbox:
         rows.append(
             [
                 InlineKeyboardButton(
@@ -2479,7 +2490,7 @@ def build_trainer_first_booking_milestone_reply_markup(
             ),
         ]
     )
-    if not client_telegram_id:
+    if not client_telegram_id and not is_sandbox:
         rows.append(
             [
                 InlineKeyboardButton(
@@ -2509,6 +2520,7 @@ def format_trainer_first_booking_milestone_from_booking_row(info: dict) -> str:
     time_str = _trainer_slot_time_hhmm(st)
     raw_tid = info.get("client_telegram_id")
     has_tg = bool(raw_tid)
+    sandbox_demo = bool(info.get("is_sandbox")) and bool(info.get("client_is_sandbox"))
     return format_trainer_first_booking_milestone_rich_html(
         client_name=(info.get("client_name") or "").strip() or "Клиент",
         client_phone=(info.get("client_phone") or "").strip(),
@@ -2525,6 +2537,7 @@ def format_trainer_first_booking_milestone_from_booking_row(info: dict) -> str:
         map_link=info.get("map_link"),
         client_comment=info.get("client_comment"),
         client_has_telegram=has_tg,
+        sandbox_demo_identity=sandbox_demo,
     )
 
 

@@ -497,12 +497,16 @@ async def get_or_create_client_by_phone(
     first_name: str | None = None,
     last_name: str | None = None,
     middle_name: str | None = None,
+    is_sandbox: bool = False,
 ) -> int:
     """
     Resolve client by normalized phone (trainer-added, no telegram_id).
     If found: optionally update first_name/last_name/middle_name; return client_id.
     If not found: create with telegram_id=NULL, phone, phone_normalized, names; return client_id.
     Caller must commit.
+
+    ``is_sandbox`` only applies on creation. We never silently flip sandbox state on an existing
+    client to avoid leaking demo identity into a real CRM record (or vice versa).
     """
     phone_norm = normalize_phone(phone)
     if not phone_norm:
@@ -541,8 +545,10 @@ async def get_or_create_client_by_phone(
     phone_display = (phone or "").strip()[:32] or phone_norm[:32]
     r = await session.execute(
         text("""
-            INSERT INTO clients (telegram_id, first_name, middle_name, last_name, phone, phone_normalized)
-            VALUES (NULL, :first_name, :middle_name, :last_name, :phone, :phone_normalized)
+            INSERT INTO clients (
+                telegram_id, first_name, middle_name, last_name, phone, phone_normalized, is_sandbox
+            )
+            VALUES (NULL, :first_name, :middle_name, :last_name, :phone, :phone_normalized, :is_sandbox)
             RETURNING id
         """),
         {
@@ -551,10 +557,36 @@ async def get_or_create_client_by_phone(
             "last_name": last_name,
             "phone": phone_display,
             "phone_normalized": phone_norm,
+            "is_sandbox": bool(is_sandbox),
         },
     )
     (client_id,) = r.fetchone()
     return client_id
+
+
+def sandbox_phone_for_trainer(trainer_id: int) -> str:
+    """Deterministic per-trainer phantom phone for sandbox client identity.
+
+    Format ``+37500{trainer_id:07d}`` — uses BY country code with operator prefix ``00`` which
+    is not assigned to any real mobile carrier, so collisions with real numbers are impossible.
+    """
+    return f"+37500{int(trainer_id):07d}"
+
+
+async def get_or_create_sandbox_client_for_trainer(
+    session: AsyncSession,
+    trainer_id: int,
+    first_name: str | None = None,
+    last_name: str | None = None,
+) -> int:
+    """One sandbox client per trainer: idempotent across retries, isolated from real CRM scope."""
+    return await get_or_create_client_by_phone(
+        session=session,
+        phone=sandbox_phone_for_trainer(trainer_id),
+        first_name=(first_name or "Александр"),
+        last_name=(last_name or "К."),
+        is_sandbox=True,
+    )
 
 
 async def get_client_by_phone(session: AsyncSession, phone: str) -> dict | None:
@@ -585,16 +617,29 @@ async def attach_telegram_id_to_client(
     session: AsyncSession,
     client_id: int,
     telegram_id: int,
+    telegram_username: str | None = None,
 ) -> bool:
     """Attach telegram_id to client (e.g. after phone verification). Returns True if updated."""
-    r = await session.execute(
-        text("""
-            UPDATE clients SET telegram_id = :tid, updated_at = now()
-            WHERE id = :cid AND telegram_id IS NULL
-            RETURNING id
-        """),
-        {"tid": telegram_id, "cid": client_id},
-    )
+    raw_un = (telegram_username or "").strip()[:64]
+    un = raw_un if raw_un else None
+    if un:
+        r = await session.execute(
+            text("""
+                UPDATE clients SET telegram_id = :tid, telegram_username = :un, updated_at = now()
+                WHERE id = :cid AND telegram_id IS NULL
+                RETURNING id
+            """),
+            {"tid": telegram_id, "cid": client_id, "un": un},
+        )
+    else:
+        r = await session.execute(
+            text("""
+                UPDATE clients SET telegram_id = :tid, updated_at = now()
+                WHERE id = :cid AND telegram_id IS NULL
+                RETURNING id
+            """),
+            {"tid": telegram_id, "cid": client_id},
+        )
     return r.fetchone() is not None
 
 

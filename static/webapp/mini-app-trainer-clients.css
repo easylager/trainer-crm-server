@@ -209,6 +209,69 @@
       background: rgba(245, 166, 35, 0.22);
       color: var(--tg-theme-text-color);
     }
+    /* Sandbox pill: muted (not amber) so a demo identity reads as «not for production» at a glance. */
+    .client-badge--sandbox {
+      flex-shrink: 0;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 999px;
+      font-family: var(--app-font-sans);
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+      background: color-mix(in srgb, var(--tg-theme-hint-color) 22%, transparent);
+      color: var(--tg-theme-hint-color);
+      border: 1px dashed color-mix(in srgb, var(--tg-theme-hint-color) 55%, transparent);
+    }
+    .client-card--sandbox {
+      border-style: dashed !important;
+      border-color: color-mix(in srgb, var(--tg-theme-hint-color) 45%, transparent) !important;
+      background: color-mix(in srgb, var(--tg-theme-secondary-bg-color) 96%, transparent) !important;
+    }
+    .client-card--sandbox .client-name {
+      color: var(--tg-theme-text-color);
+      opacity: 0.92;
+    }
+    .client-card--sandbox .client-meta {
+      color: var(--tg-theme-hint-color);
+    }
+    /* Sandbox detail banner: sits above the hero so the «это пример» framing comes first. */
+    .tc-sandbox-banner {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      padding: 12px 14px;
+      margin: 0 0 12px;
+      border-radius: 12px;
+      border: 1px dashed color-mix(in srgb, var(--tg-theme-hint-color) 50%, transparent);
+      background: color-mix(in srgb, var(--tg-theme-hint-color) 8%, transparent);
+    }
+    .tc-sandbox-banner__pill {
+      flex-shrink: 0;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 999px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      background: color-mix(in srgb, var(--tg-theme-hint-color) 25%, transparent);
+      color: var(--tg-theme-hint-color);
+    }
+    .tc-sandbox-banner__text {
+      margin: 0;
+      font-size: 13px;
+      line-height: 1.45;
+      color: var(--tg-theme-hint-color);
+    }
+    /* Scoped destructive button shape; uses theme amber for safety contrast on light/dark. */
+    .tc-sandbox-delete-btn.bd-btn--danger {
+      background: transparent;
+      color: var(--tg-theme-button-color);
+      border: 1px solid color-mix(in srgb, var(--tg-theme-button-color) 50%, transparent);
+    }
+    .tc-sandbox-delete-btn.bd-btn--danger:active {
+      background: color-mix(in srgb, var(--tg-theme-button-color) 12%, transparent);
+    }
     .section-title {
       font-size: 13px;
       font-weight: 600;

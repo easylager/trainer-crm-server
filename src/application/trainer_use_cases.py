@@ -37,6 +37,7 @@ from src.infrastructure.db.models import (
 )
 from src.infrastructure.repositories import TrainerRepository
 from src.shared.audit import ACTOR_API, audit_log
+from src.shared.service_ui_accent import normalize_service_ui_accent
 
 logger = logging.getLogger(__name__)
 
@@ -126,10 +127,11 @@ def _group_price_cents_from_service_payload(s: dict[str, Any]) -> int | None:
 
 def _services_to_entries(
     services: list[dict[str, Any]],
-) -> list[tuple[int, list[tuple[str, int]], str | None, int | None, str | None]]:
+) -> list[tuple[int, list[tuple[str, int]], str | None, int | None, str | None, str | None]]:
     """
     Convert API services to repo entries:
-    (service_id, [(tier_kind, price_cents), ...], description, group_price_cents|None, client_notice|None).
+    (service_id, [(tier_kind, price_cents), ...], description, group_price_cents|None, client_notice|None,
+    ui_accent|None).
     """
     from src.shared.price_tier_kind import (
         PRICE_TIER_ADULT,
@@ -138,12 +140,13 @@ def _services_to_entries(
         price_tier_sort_key,
     )
 
-    result: list[tuple[int, list[tuple[str, int]], str | None, int | None, str | None]] = []
+    result: list[tuple[int, list[tuple[str, int]], str | None, int | None, str | None, str | None]] = []
     for s in services:
         sid = int(s["service_id"])
         desc = _service_description_from_payload(s)
         group_pc = _group_price_cents_from_service_payload(s)
         notice = _service_client_notice_from_payload(s)
+        ui_accent = normalize_service_ui_accent(s.get("ui_accent"))
         tiers_raw = s.get("price_tiers")
         if isinstance(tiers_raw, list) and len(tiers_raw) > 0:
             merged: dict[str, int] = {}
@@ -159,7 +162,7 @@ def _services_to_entries(
                     continue
                 merged[tk] = cents
             ordered = sorted(merged.items(), key=lambda x: price_tier_sort_key(x[0]))
-            result.append((sid, ordered, desc, group_pc, notice))
+            result.append((sid, ordered, desc, group_pc, notice, ui_accent))
             continue
         price_byn = s.get("price_byn")
         child_byn = s.get("price_child_byn")
@@ -169,7 +172,7 @@ def _services_to_entries(
         if child_byn is not None:
             tiers.append((PRICE_TIER_CHILD, int(round(float(child_byn) * 100))))
         tiers.sort(key=lambda x: price_tier_sort_key(x[0]))
-        result.append((sid, tiers, desc, group_pc, notice))
+        result.append((sid, tiers, desc, group_pc, notice, ui_accent))
     return result
 
 

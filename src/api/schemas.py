@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 from src.shared.profile_phone import PHONE_MAX_LEN, coerce_optional_phone_for_profile
 from src.shared.price_tier_kind import normalize_price_tier_kind
+from src.shared.service_ui_accent import normalize_service_ui_accent
 
 # Allowed trainer lifecycle statuses
 TrainerStatus = Literal[
@@ -27,6 +28,7 @@ LEN_PHONE = PHONE_MAX_LEN
 LEN_DESCRIPTION = 5000
 LEN_TRAINER_SERVICE_DESCRIPTION = 800
 LEN_TRAINER_SERVICE_CLIENT_NOTICE = 400
+LEN_TRAINER_SERVICE_UI_ACCENT = 24
 LEN_FILE_KEY = 512
 MAX_EDUCATION_DOCUMENT_PHOTOS = 12
 
@@ -109,6 +111,19 @@ class TrainerServiceItem(BaseModel):
         ge=0,
         description="Optional per-seat price for group slots (capacity>1). If omitted, anchor price applies.",
     )
+    ui_accent: str | None = Field(
+        default=None,
+        max_length=LEN_TRAINER_SERVICE_UI_ACCENT,
+        description="Preset border accent for hub/schedule rows (slug, e.g. sky).",
+    )
+
+    @field_validator("ui_accent", mode="before")
+    @classmethod
+    def _validate_ui_accent(cls, v: object) -> str | None:
+        n = normalize_service_ui_accent(v)
+        if v is not None and isinstance(v, str) and v.strip() and n is None:
+            raise ValueError("Неизвестный цвет услуги.")
+        return n
 
     @field_validator("description", mode="before")
     @classmethod
@@ -145,6 +160,29 @@ class TrainerServiceItem(BaseModel):
         if self.price_child_byn is not None and self.price_byn is None:
             raise ValueError("Укажите цену для взрослых или уберите детскую цену.")
         return self
+
+
+class TrainerServiceUiAccentItem(BaseModel):
+    """One service's schedule/hub border accent (trainer must offer this service_id)."""
+
+    service_id: int = Field(..., ge=1)
+    ui_accent: str | None = Field(default=None, max_length=LEN_TRAINER_SERVICE_UI_ACCENT)
+
+    @field_validator("ui_accent", mode="before")
+    @classmethod
+    def _validate_ui_accent_item(cls, v: object) -> str | None:
+        n = normalize_service_ui_accent(v)
+        if v is not None and isinstance(v, str) and v.strip() and n is None:
+            raise ValueError("Неизвестный цвет услуги.")
+        return n
+
+
+class TrainerServiceUiAccentsPatchBody(BaseModel):
+    items: list[TrainerServiceUiAccentItem] = Field(
+        default_factory=list,
+        max_length=32,
+        description="Per-service ui_accent updates; unknown service_id → 422.",
+    )
 
 
 class TrainerCreateBody(BaseModel):

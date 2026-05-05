@@ -542,6 +542,8 @@
 
       /** Fixed tariff codes (must match server price_tier_kind). */
       var SERVICE_TIER_ORDER = ['child', 'adult', 'two_children', 'two_adults', 'adult_and_child'];
+      /** Align with ``src/shared/service_ui_accent.py`` — kept when saving profile so existing accents are not dropped. */
+      var SERVICE_UI_ACCENT_SLUGS = ['sky', 'amber', 'emerald', 'violet', 'rose', 'slate'];
       var SERVICE_TIER_DEFS = [
         { code: 'child', label: 'Детский' },
         { code: 'adult', label: 'Взрослый' },
@@ -1576,6 +1578,10 @@
           var row = { service_id: s.service_id, price_tiers: tiers, description: descOut };
           if (noticeOut != null) row.client_notice = noticeOut;
           if (gpOut != null) row.group_price_byn = gpOut;
+          if (s.ui_accent != null && String(s.ui_accent).trim()) {
+            var uas = String(s.ui_accent).trim().toLowerCase();
+            if (SERVICE_UI_ACCENT_SLUGS.indexOf(uas) >= 0) row.ui_accent = uas;
+          }
           return row;
         }).sort(function(a, b) { return a.service_id - b.service_id; });
         var arena_ids = (state.trainer && state.trainer.arena_ids) ? state.trainer.arena_ids.slice().sort(function(a,b){ return a-b; }) : [];
@@ -1651,6 +1657,10 @@
         var cityEl = document.getElementById('city_id');
         var cityVal = cityEl && cityEl.value !== '' ? Number(cityEl.value) : null;
         var services = [];
+        var uiAccentByServiceId = {};
+        (state.trainer && state.trainer.services ? state.trainer.services : []).forEach(function(sv) {
+          if (sv.service_id != null) uiAccentByServiceId[sv.service_id] = sv.ui_accent;
+        });
         state.servicesCatalog.forEach(function(s) {
           var cb = document.getElementById('svc_' + s.id);
           if (cb && cb.checked) {
@@ -1675,6 +1685,13 @@
               if (gpel && gpel.value.trim() !== '') {
                 var gpg = Number(gpel.value);
                 if (!isNaN(gpg) && gpg >= 0) svcObj.group_price_byn = gpg;
+              }
+              if (Object.prototype.hasOwnProperty.call(uiAccentByServiceId, s.id)) {
+                var uaRaw = uiAccentByServiceId[s.id];
+                if (uaRaw != null && String(uaRaw).trim()) {
+                  var uax = String(uaRaw).trim().toLowerCase();
+                  if (SERVICE_UI_ACCENT_SLUGS.indexOf(uax) >= 0) svcObj.ui_accent = uax;
+                }
               }
               services.push(svcObj);
             }

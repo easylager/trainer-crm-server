@@ -42,6 +42,7 @@ from src.application.booking_use_cases import (
 )
 from src.application.subscription_tier_use_cases import trainer_allows_online_booking
 from src.application.certificate_use_cases import activate_certificate_by_code
+from src.application.client_username_enrich import sync_client_telegram_username_from_client_bot
 from src.application.client_use_cases import (
     apply_certificate_recipient_to_client,
     attach_telegram_id_to_client,
@@ -553,12 +554,16 @@ async def cmd_start(message: Message) -> None:
                     return
                 async with async_session_factory() as db_session:
                     ok = await attach_telegram_id_to_client(
-                        db_session, int(bind_client_id), telegram_id
+                        db_session,
+                        int(bind_client_id),
+                        telegram_id,
+                        telegram_username=uname,
                     )
                     if ok:
                         await get_or_create_client(
                             db_session, telegram_id, telegram_username=uname
                         )
+                    await sync_client_telegram_username_from_client_bot(db_session, telegram_id)
                     await db_session.commit()
                 if not ok:
                     await message.answer(msg.CLIENT_WELCOME_BIND_FAILED)
@@ -571,6 +576,7 @@ async def cmd_start(message: Message) -> None:
                     await get_or_create_client(
                         db_session, telegram_id, telegram_username=uname
                     )
+                    await sync_client_telegram_username_from_client_bot(db_session, telegram_id)
                     await db_session.commit()
         else:
             async with async_session_factory() as db_session:
@@ -3140,8 +3146,14 @@ async def on_link_phone_message(message: Message) -> None:
             _link_phone_state.pop(telegram_id, None)
             await message.answer(msg.CLIENT_ERROR_TRY_AGAIN)
             return
+        un_link = None
+        if message.from_user and (message.from_user.username or "").strip():
+            un_link = (message.from_user.username or "").strip()[:64]
         async with async_session_factory() as db_session:
-            ok = await attach_telegram_id_to_client(db_session, client_id, telegram_id)
+            ok = await attach_telegram_id_to_client(
+                db_session, client_id, telegram_id, telegram_username=un_link
+            )
+            await sync_client_telegram_username_from_client_bot(db_session, telegram_id)
             await db_session.commit()
         _link_phone_state.pop(telegram_id, None)
         if not ok:

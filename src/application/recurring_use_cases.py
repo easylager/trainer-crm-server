@@ -235,7 +235,19 @@ async def try_insert_client_repeat_gap_notification(
     """
     Idempotent trainer ping for repeat-without-slot flow.
     Returns True if this call inserted the first row for (booking, target date).
+
+    Sandbox bookings are silently skipped: a demo identity must never pin trainers' bot with a
+    «client wants to repeat» nudge. In practice sandbox clients have no telegram_id, so this is a
+    belt-and-suspenders guard.
     """
+    r_sb = await session.execute(
+        text("SELECT is_sandbox FROM bookings WHERE id = :bid"),
+        {"bid": booking_id},
+    )
+    row_sb = r_sb.fetchone()
+    if row_sb and bool(row_sb[0]):
+        return False
+
     r = await session.execute(
         text("""
             INSERT INTO client_repeat_gap_notifications (booking_id, target_slot_date)

@@ -55,6 +55,7 @@ from src.application.booking_use_cases import (
     create_booking,
     create_trainer_quick_booking,
     compute_booking_reminder_schedule,
+    compute_hub_bookings_summary,
     explain_trainer_booking_failure,
     decline_booking,
     detach_trainer_client_from_roster_miniapp,
@@ -99,6 +100,7 @@ from src.application.client_use_cases import (
     get_client_telegram_id,
     get_or_create_client,
     get_or_create_client_by_phone,
+    get_or_create_sandbox_client_for_trainer,
     normalize_phone,
 )
 from src.application.client_request_use_cases import (
@@ -249,6 +251,7 @@ from src.application.demand_signals_use_cases import (
 from src.infrastructure.db import async_session_factory
 from src.infrastructure.db.models import SUBSCRIPTION_TIERS, TRAINER_STATUS_ACTIVE
 from src.shared.webapp_http_messages import (
+    TRAINER_WEBAPP_FORBIDDEN_DETAIL,
     WEBAPP_DETAIL_SUBSCRIPTION_ANALYTICS_REQUIRED,
     WEBAPP_DETAIL_SUBSCRIPTION_CRM_REQUIRED,
 )
@@ -483,6 +486,7 @@ async def _send_trainer_post_booking_feedback(
                 webapp_base=settings_push.webapp_base_url or "",
                 booking_id=booking_id,
                 client_telegram_id=client_tg_id,
+                is_sandbox=is_sandbox,
             )
             await trainer_bot.send_message(
                 chat_id=trainer_telegram_id,
@@ -490,14 +494,21 @@ async def _send_trainer_post_booking_feedback(
                 reply_markup=milestone_kb,
             )
         else:
-            reminder_plan = _build_client_reminder_plan_text_for_trainer(
-                slot_date,
-                start_time,
-                client_has_telegram=bool(client_tg_id),
-            )
-            client_confirmation = "не применимо: у клиента не привязан Telegram"
-            if client_tg_id:
-                client_confirmation = msg.TRAINER_CREATE_BOOKING_CLIENT_CONFIRMATION_QUEUED
+            # Sandbox copy: replace Telegram-attached / not-attached lines with a calm preview note,
+            # so the trainer doesn't see «не привязан Telegram» for a phantom identity. The
+            # ``Пригласить в бот`` button is also dropped — there's no one to invite.
+            if is_sandbox:
+                reminder_plan = "не отправляются — это пример"
+                client_confirmation = "не отправляется — это пример"
+            else:
+                reminder_plan = _build_client_reminder_plan_text_for_trainer(
+                    slot_date,
+                    start_time,
+                    client_has_telegram=bool(client_tg_id),
+                )
+                client_confirmation = "не применимо: у клиента не привязан Telegram"
+                if client_tg_id:
+                    client_confirmation = msg.TRAINER_CREATE_BOOKING_CLIENT_CONFIRMATION_QUEUED
             keyboard_rows: list[list[InlineKeyboardButton]] = [
                 [
                     InlineKeyboardButton(
@@ -506,7 +517,7 @@ async def _send_trainer_post_booking_feedback(
                     )
                 ]
             ]
-            if not client_tg_id:
+            if not client_tg_id and not is_sandbox:
                 keyboard_rows.append(
                     [
                         InlineKeyboardButton(
@@ -594,7 +605,7 @@ async def get_schedule(
     """
     trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
 
     today = date.today()
     if from_date is None:
@@ -643,6 +654,9 @@ async def get_schedule(
                 row["bookings"] = bsum["bookings"]
             if bool(bsum.get("has_sandbox_booking")):
                 row["has_sandbox_booking"] = True
+        # Individual slots often have NULL service on the slot row; accent + labels need the booking's catalog id.
+        if row.get("service_id") is None and bsum and bsum.get("booking_service_id") is not None:
+            row["service_id"] = int(bsum["booking_service_id"])
         out_slots.append(row)
     if view == "list":
         return {"trainer_id": trainer_id, "slots": out_slots}
@@ -679,7 +693,7 @@ async def get_schedule_templates(
     """List weekly template entries (day_of_week, start_time, duration). Auth: trainer initData."""
     trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     templates = await list_templates(session, trainer_id)
     grid_preset = await get_schedule_grid_preset_for_trainer(session, trainer_id)
     return {
@@ -733,7 +747,7 @@ async def put_schedule_templates_day(
     """Set template for one week day: replace template rows for that weekday (per-hour capacity). Auth: trainer."""
     trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     # Require CRM tier to edit templates
     if not await trainer_has_crm_access(session, trainer_id):
         raise HTTPException(status_code=403, detail=WEBAPP_DETAIL_SUBSCRIPTION_CRM_REQUIRED)
@@ -845,7 +859,7 @@ async def post_schedule_slots(
     """Set slots for one calendar day: replace available slots. Auth: trainer."""
     trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     # Require CRM tier to create/update slots
     if not await trainer_has_crm_access(session, trainer_id):
         raise HTTPException(status_code=403, detail=WEBAPP_DETAIL_SUBSCRIPTION_CRM_REQUIRED)
@@ -919,7 +933,7 @@ async def post_schedule_apply_week(
     """Replace one week with template (free slots only); then apply recurring. Auth: trainer."""
     trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     # Require CRM tier to apply template and recurring bookings
     if not await trainer_has_crm_access(session, trainer_id):
         raise HTTPException(status_code=403, detail=WEBAPP_DETAIL_SUBSCRIPTION_CRM_REQUIRED)
@@ -948,7 +962,7 @@ async def delete_schedule_slot(
     """Delete one applied slot (available only). Auth: trainer."""
     trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     if not await trainer_has_crm_access(session, trainer_id):
         raise HTTPException(status_code=403, detail=WEBAPP_DETAIL_SUBSCRIPTION_CRM_REQUIRED)
     deleted = await schedule_delete_slot(session, trainer_id, slot_id)
@@ -2070,12 +2084,12 @@ async def _trainer_bookings_grouped_days_payload(
     *,
     limit: int,
 ) -> dict[str, Any]:
-    """Same shape as GET /trainer/bookings: ``{\"days\": [...]}``."""
+    """GET /trainer/bookings shape: ``days``, ``today_sessions``, ``week_sessions`` (deduped hub counts)."""
     flow_ok = booking_problem_api_allowed_for_trainer(trainer_id)
     lim = max(1, min(100, limit))
     bookings = await list_bookings_for_trainer(session, trainer_id, limit=lim)
     if not bookings:
-        return {"days": []}
+        return {"days": [], **compute_hub_bookings_summary(bookings)}
     await enrich_booking_dicts_with_client_telegram_usernames(session, bookings)
     days_list: list[dict[str, Any]] = []
     for slot_date, group in groupby(bookings, key=lambda b: b["slot_date"]):
@@ -2090,7 +2104,7 @@ async def _trainer_bookings_grouped_days_payload(
                 "bookings": [_serialize_booking(b, problem_flow_enabled=flow_ok) for b in day_bookings],
             }
         )
-    return {"days": days_list}
+    return {"days": days_list, **compute_hub_bookings_summary(bookings)}
 
 
 def _serialize_trainer_dashboard(data: dict) -> dict:
@@ -2110,7 +2124,7 @@ async def get_trainer_stats_api(
     """Full stats dashboard for trainer Mini App: KPIs, trends, by-day, insights. Auth: trainer initData."""
     trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     if not await trainer_has_analytics_access(session, trainer_id):
         raise HTTPException(status_code=403, detail=WEBAPP_DETAIL_SUBSCRIPTION_ANALYTICS_REQUIRED)
     data = await get_trainer_stats_dashboard(session, trainer_id)
@@ -2127,7 +2141,7 @@ async def get_trainer_revenue_range_api(
     """Accrual revenue breakdown for an arbitrary inclusive date range (Mini App «Бухгалтерия»)."""
     trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     if not await trainer_has_analytics_access(session, trainer_id):
         raise HTTPException(status_code=403, detail=WEBAPP_DETAIL_SUBSCRIPTION_ANALYTICS_REQUIRED)
     try:
@@ -2204,7 +2218,7 @@ async def get_trainer_hub_revenue_mtd(
     """Hub KPI: accrual revenue from the 1st of the current month through today (Europe/Minsk). No analytics module gate."""
     trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     return await get_trainer_hub_revenue_month_to_date(session, trainer_id)
 
 
@@ -2399,7 +2413,7 @@ async def get_trainer_hub_fill_slots_invites(
     """
     trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     clients = await list_trainer_fill_slots_invite_candidates(
         session,
         trainer_id,
@@ -2466,7 +2480,7 @@ async def post_trainer_hub_fill_slots_invites_send(
     """
     trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     out = await send_trainer_fill_slots_invites(
         session,
         trainer_id,
@@ -2647,7 +2661,7 @@ async def get_trainer_subscription_plans(
     """List paid subscription plans for trainer to choose (Месяц, 3 месяца, Год, 1.5 года). Auth: trainer initData."""
     trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     plans = await list_paid_subscription_plans(session)
     return {"plans": plans}
 
@@ -2664,7 +2678,7 @@ async def get_trainer_subscription_payment_url(
     """
     trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     plan_name: str | None = None
     period_start = period_end = None
     referral_bonus_days_applied = 0
@@ -2765,7 +2779,7 @@ async def post_trainer_subscription_stub_confirm(
     # zero-amount referral invoices must still be confirmable in production.
     trainer_id = await get_trainer_id_linked_any_status_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     from sqlalchemy import text
 
     r = await session.execute(
@@ -2806,7 +2820,7 @@ async def get_trainer_subscription_tier_catalog(
     """
     trainer_id = await get_trainer_id_linked_any_status_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     await ensure_trainer_welcome_trial(session, trainer_id)
     
     tiers = await get_subscription_tier_catalog(session)
@@ -2836,7 +2850,7 @@ async def get_trainer_subscription_tier_status(
     """
     trainer_id = await get_trainer_id_linked_any_status_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     await ensure_trainer_welcome_trial(session, trainer_id)
 
     status = await get_trainer_subscription_status(session, trainer_id)
@@ -2874,7 +2888,7 @@ async def post_trainer_subscription_bepaid_checkout(
         )
     trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
 
     if body.tier is not None and body.modules is not None:
         raise HTTPException(status_code=400, detail="Send either tier or modules, not both")
@@ -2955,7 +2969,7 @@ async def post_trainer_subscription_invoice_request(
         )
     trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
 
     if body.tier is not None and body.modules is not None:
         raise HTTPException(status_code=400, detail="Send either tier or modules, not both")
@@ -3008,7 +3022,7 @@ async def post_trainer_subscription_mock_checkout(
         )
     trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
 
     if body.tier is not None and body.modules is not None:
         raise HTTPException(status_code=400, detail="Send either tier or modules, not both")
@@ -3058,7 +3072,7 @@ async def get_trainer_pass_products(
     """List trainer's pass products. Auth: trainer initData."""
     trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     if not await trainer_has_crm_access(session, trainer_id):
         raise HTTPException(status_code=403, detail=WEBAPP_DETAIL_SUBSCRIPTION_CRM_REQUIRED)
     items = await list_pass_products(session, trainer_id, active_only=active_only)
@@ -3082,7 +3096,7 @@ async def post_trainer_pass_product(
     """Create a pass product. Auth: trainer initData."""
     trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     if not await trainer_has_crm_access(session, trainer_id):
         raise HTTPException(status_code=403, detail=WEBAPP_DETAIL_SUBSCRIPTION_CRM_REQUIRED)
     product_id = await create_pass_product(
@@ -3116,7 +3130,7 @@ async def patch_trainer_pass_product(
     """Update pass product. Auth: trainer initData."""
     trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     if not await trainer_has_crm_access(session, trainer_id):
         raise HTTPException(status_code=403, detail=WEBAPP_DETAIL_SUBSCRIPTION_CRM_REQUIRED)
     patch = body.model_dump(exclude_unset=True)
@@ -3140,7 +3154,7 @@ async def delete_trainer_pass_product(
     """Delete pass product only if no purchases. Auth: trainer initData."""
     trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     if not await trainer_has_crm_access(session, trainer_id):
         raise HTTPException(status_code=403, detail=WEBAPP_DETAIL_SUBSCRIPTION_CRM_REQUIRED)
     try:
@@ -3560,7 +3574,7 @@ async def get_trainer_certificate_products(
     """List trainer's certificate products. Auth: trainer initData."""
     trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     items = await list_certificate_products(session, trainer_id, active_only=active_only)
     return {"items": items}
 
@@ -3581,7 +3595,7 @@ async def post_trainer_certificate_product(
     """Create certificate product. amount_cents=null means 'any amount'. Auth: trainer initData."""
     trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     product_id = await create_certificate_product(
         session,
         trainer_id,
@@ -3610,7 +3624,7 @@ async def patch_trainer_certificate_product(
     """Update certificate product. Auth: trainer initData. Use model_dump(exclude_unset=True) to only send changed fields."""
     trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     payload = body.model_dump(exclude_unset=True)
     name = payload.get("name") if "name" in payload else None
     amount_cents = payload.get("amount_cents") if "amount_cents" in payload else AMOUNT_CENTS_UNSET
@@ -3641,7 +3655,7 @@ async def delete_trainer_certificate_product(
     """Delete certificate product. Auth: trainer initData."""
     trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     ok = await delete_certificate_product(session, product_id, trainer_id)
     if not ok:
         raise HTTPException(status_code=404, detail="Product not found")
@@ -3657,7 +3671,7 @@ async def get_trainer_certificates(
     """List certificate instances issued by this trainer. Auth: trainer initData."""
     trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     items = await list_trainer_certificate_instances(session, trainer_id, active_only=active_only)
     return {"items": items}
 
@@ -3680,7 +3694,7 @@ async def post_trainer_certificate_issue(
     """Issue a certificate: create instance, generate PDF, save file_url; optionally send PDF to recipient_email. Idempotent by Idempotency-Key. Auth: trainer initData."""
     trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     if idempotency_key:
         cached = await get_idempotency_response(session, idempotency_key)
         if cached is not None:
@@ -3787,7 +3801,7 @@ async def get_trainer_certificate_file(
     """Download certificate PDF. Auth: trainer initData; certificate must belong to trainer."""
     trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     file_key = await get_certificate_file_key(session, certificate_id, trainer_id)
     if not file_key:
         raise HTTPException(status_code=404, detail="Certificate not found or file not ready")
@@ -3810,7 +3824,7 @@ async def get_trainer_welcome_link_eligibility(
     """Services list and whether trainer must pick one for generic welcome link."""
     trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     services = await list_trainer_services_for_welcome_link(session, trainer_id)
     return {
         "require_service_choice": len(services) > 1,
@@ -3826,7 +3840,7 @@ async def get_trainer_public_booking_link_eligibility(
     """Services list for reusable public booking link. Auth: trainer initData."""
     trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     if not await trainer_allows_online_booking(session, trainer_id):
         raise HTTPException(
             status_code=403,
@@ -3856,7 +3870,7 @@ async def get_trainer_public_booking_link(
     """
     trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     if not await trainer_allows_online_booking(session, trainer_id):
         raise HTTPException(
             status_code=403,
@@ -3912,7 +3926,7 @@ async def get_trainer_welcome_link(
     """Generic one-time invite link. Auth: trainer initData."""
     trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     resolved_service_id, err = await resolve_service_id_for_generic_welcome_link(
         session, trainer_id, service_id
     )
@@ -3950,9 +3964,9 @@ async def post_trainer_welcome_link_first_copy(
     """
     from src.application.trainer_client_invite_tracking import record_trainer_client_invite_link_first_copy
 
-    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
+    trainer_id = await get_trainer_id_linked_any_status_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     ts = await record_trainer_client_invite_link_first_copy(session, trainer_id)
     return {"first_copied_at": ts.isoformat() if ts else None}
 
@@ -3973,7 +3987,7 @@ async def get_trainer_client_welcome_link(
     """
     trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     client = await get_trainer_client_for_card(session, trainer_id, client_id)
     if not client:
         raise HTTPException(status_code=404, detail="Клиент не найден или нет доступа")
@@ -4018,10 +4032,13 @@ async def get_trainer_hub_universal_invite_link(
     Permanent universal invite link for trainer's hub share button.
     Returns welcome_ref_{trainer_id} deep link — works for all clients regardless of subscription tier.
     Unknown clients are routed to the self-registration Mini App form.
+
+    Auth: any linked trainer row (same as hub lifecycle / onboarding), not catalog ``active`` —
+    trainers waiting moderation must still share invite links from the hub.
     """
-    trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
+    trainer_id = await get_trainer_id_linked_any_status_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     settings = Settings()
     if not settings.client_bot_username:
         return {"link": None}
@@ -4158,7 +4175,7 @@ async def get_trainer_welcome_link_pass(
     """One-time pass invite link. Auth: trainer initData."""
     trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     from src.application.pass_product_use_cases import get_pass_product
     product = await get_pass_product(session, pass_product_id, trainer_id)
     if not product:
@@ -4188,7 +4205,7 @@ async def post_trainer_welcome_link_cert(
     """One-time cert welcome link: issue cert (no recipient name/phone), create token, return link. Auth: trainer initData."""
     trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     try:
         instance = await issue_certificate(
             session,
@@ -4229,7 +4246,7 @@ async def post_trainer_certificates_redeem_by_code(
     """Redeem certificate by code. Auth: trainer initData."""
     trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     try:
         result = await redeem_certificate(session, trainer_id, code=(body.code or "").strip())
     except ValueError as e:
@@ -4248,7 +4265,7 @@ async def post_trainer_certificate_redeem_by_id(
     """Redeem certificate by instance id. Auth: trainer initData."""
     trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     result = await redeem_certificate(session, trainer_id, certificate_instance_id=certificate_id)
     if not result:
         raise HTTPException(status_code=404, detail="Certificate not found or already redeemed")
@@ -4275,7 +4292,7 @@ async def get_trainer_bookings(
     """List trainer's upcoming bookings grouped by day. Auth: trainer initData."""
     trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
 
     return await _trainer_bookings_grouped_days_payload(session, trainer_id, limit=limit)
 
@@ -4289,7 +4306,7 @@ async def get_trainer_group_slot_hub_api(
     """Group slot summary + booking rows (trainer hub modal). Auth: trainer initData."""
     trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     hub = await get_trainer_group_slot_hub(session, trainer_id, slot_id)
     if not hub:
         raise HTTPException(status_code=404, detail="Slot not found or not a group slot")
@@ -4305,7 +4322,7 @@ async def get_trainer_booking_detail(
     """One booking detail with recurring info. Auth: trainer initData."""
     trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
 
     b = await get_trainer_booking_detail_payload(session, booking_id, trainer_id)
     if not b:
@@ -4349,7 +4366,7 @@ async def get_trainer_booking_client_no_show_options_route(
     """PASS/CERT: copy for «Клиент не пришёл» modal (no booking_problem_reports)."""
     trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     if not booking_problem_api_allowed_for_trainer(trainer_id):
         raise HTTPException(status_code=403, detail="booking_problem_rollout")
     data = await get_trainer_booking_client_no_show_options(session, booking_id, trainer_id)
@@ -4372,7 +4389,7 @@ async def post_trainer_booking_client_no_show_route(
 ):
     trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     if not booking_problem_api_allowed_for_trainer(trainer_id):
         raise HTTPException(status_code=403, detail="booking_problem_rollout")
     err, msg = await submit_trainer_booking_client_no_show(
@@ -4413,7 +4430,7 @@ async def get_trainer_booking_problem_options_route(
     """Presets + payment class + pass/cert no-show policy (PRD E3); copy for trainer consent (E2)."""
     trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     if not booking_problem_api_allowed_for_trainer(trainer_id):
         raise HTTPException(status_code=403, detail="booking_problem_rollout")
     data = await get_trainer_booking_problem_options(session, booking_id, trainer_id)
@@ -4431,7 +4448,7 @@ async def post_trainer_booking_problem_route(
 ):
     trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     if not booking_problem_api_allowed_for_trainer(trainer_id):
         raise HTTPException(status_code=403, detail="booking_problem_rollout")
     err, msg = await submit_trainer_booking_problem(
@@ -4470,7 +4487,7 @@ async def post_trainer_booking_confirm(
 ):
     trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     info = await confirm_booking(session, booking_id, trainer_id)
     if not info:
         raise HTTPException(status_code=400, detail="Booking not found or not pending")
@@ -4529,7 +4546,7 @@ async def post_trainer_booking_decline(
 ):
     trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     comment = (body.comment or "").strip()
     if not comment:
         raise HTTPException(status_code=400, detail="Comment required for decline")
@@ -4571,7 +4588,7 @@ async def post_trainer_booking_cancel(
 ):
     trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     ok = await cancel_booking(session, booking_id, trainer_id)
     if not ok:
         raise HTTPException(status_code=400, detail="Cancel failed")
@@ -4601,7 +4618,7 @@ async def delete_trainer_booking_schedule_history(
     """
     trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     ok, code = await purge_past_booking_from_schedule_history(session, trainer_id, booking_id)
     if ok:
         return {"success": True}
@@ -4622,7 +4639,7 @@ async def post_trainer_booking_complete(
     """Mark booking as conducted (completed). Redeems one pass session if client has a matching pass. Auth: trainer initData."""
     trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     result = await mark_booking_completed_by_trainer(session, booking_id, trainer_id)
     if not result:
         raise HTTPException(status_code=400, detail="Booking not found or not confirmed")
@@ -4660,6 +4677,9 @@ class TrainerCreateClientBody(BaseModel):
     first_name: str = Field(min_length=1, max_length=64)
     last_name: str = Field(default="", max_length=64)
     middle_name: str = Field(default="", max_length=64)
+    #: Sandbox client (onboarding demo): server overrides phone with deterministic per-trainer phantom,
+    #: and sets ``clients.is_sandbox=true`` so the row is excluded from CRM scope, stats and rhythm hints.
+    is_sandbox: bool = False
 
     @field_validator("phone", mode="before")
     @classmethod
@@ -4686,10 +4706,10 @@ async def get_trainer_my_services(
     """List services offered by this trainer (for booking: choose service). Auth: trainer initData."""
     trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     r = await session.execute(
         text("""
-            SELECT s.id, s.name, ts.description
+            SELECT s.id, s.name, ts.description, ts.ui_accent
             FROM trainer_services ts
             JOIN services s ON s.id = ts.service_id
             WHERE ts.trainer_id = :tid
@@ -4732,11 +4752,18 @@ async def get_trainer_my_services(
         s = str(row[2]).strip()
         return s if s else None
 
+    def _service_row_ui_accent(row: tuple[Any, ...]) -> str | None:
+        if len(row) < 4 or row[3] is None:
+            return None
+        u = str(row[3]).strip().lower()
+        return u if u else None
+
     services = [
         {
             "id": row[0],
             "name": (row[1] or "").strip() or "—",
             "description": _service_row_description(row),
+            "ui_accent": _service_row_ui_accent(row),
             "price_tiers": tiers_by_sid.get(int(row[0]), []),
         }
         for row in rows
@@ -4778,7 +4805,7 @@ async def get_trainer_clients(
     """List clients linked to this trainer (bookings, groups, or manual roster). Optional search by name/phone. Auth: trainer initData."""
     trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     clients = await list_trainer_clients(session, trainer_id, limit=100)
     if q and (q := (q or "").strip()):
         q_lower = q.lower()
@@ -4843,7 +4870,7 @@ async def get_trainer_client_card(
     """Single client summary for card UI (booking roster or active/trial training group member)."""
     trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     client = await get_trainer_client_for_card(session, trainer_id, client_id)
     if not client:
         raise HTTPException(status_code=404, detail="Клиент не найден или нет доступа")
@@ -4860,7 +4887,7 @@ async def patch_trainer_client_identity(
     """Trainer-editable CRM identity (имя / фамилия / отчество). Booking forms stay unchanged elsewhere."""
     trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     payload = body.model_dump(exclude_unset=True)
     if not payload:
         raise HTTPException(status_code=400, detail="Укажите хотя бы одно поле")
@@ -4885,7 +4912,7 @@ async def post_trainer_client_detach_from_roster(
     """
     trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     try:
         result = await detach_trainer_client_from_roster_miniapp(session, trainer_id, client_id)
     except ValueError as e:
@@ -4904,7 +4931,7 @@ async def get_trainer_client_booking_defaults(
     """Defaults for quick book from client profile: last session's service/tier + client name."""
     trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     client = await get_trainer_client_for_card(session, trainer_id, client_id)
     if not client:
         raise HTTPException(status_code=404, detail="Клиент не найден или нет доступа")
@@ -4928,7 +4955,7 @@ async def get_trainer_client_history(
     """Last bookings for this client with this trainer. Auth: trainer initData."""
     trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     items = await list_trainer_client_history(session, trainer_id, client_id, limit=limit)
     total = await count_trainer_client_sessions(session, trainer_id, client_id)
     return {"items": items, "total": total}
@@ -4943,7 +4970,7 @@ async def get_trainer_client_next_booking_route(
     """Next upcoming booking for this client with this trainer, or null. Auth: trainer initData."""
     trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     next_booking = await get_trainer_client_next_booking(session, trainer_id, client_id)
     upcoming_count = await count_trainer_client_upcoming(session, trainer_id, client_id)
     return {"next_booking": next_booking, "upcoming_count": upcoming_count}
@@ -4958,7 +4985,7 @@ async def get_trainer_client_passes(
     """List pass instances for this client (issued by this trainer). Auth: trainer initData."""
     trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     items = await list_pass_instances_for_trainer_client(session, trainer_id, client_id)
     return {"items": items}
 
@@ -4972,7 +4999,7 @@ async def get_trainer_client_certificates(
     """List certificate instances for this client (issued by this trainer). Auth: trainer initData."""
     trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     items = await list_certificate_instances_for_trainer_client(session, trainer_id, client_id)
     return {"items": items}
 
@@ -4991,7 +5018,7 @@ async def post_trainer_client_pass_issue(
     """Issue a pass to this client (trainer recorded external payment). Auth: trainer initData."""
     trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     try:
         instance = await issue_pass_to_client(
             session, trainer_id, client_id, body.pass_product_id
@@ -5057,7 +5084,7 @@ async def get_trainer_client_note_route(
     """Get trainer's private note about this client. Auth: trainer initData."""
     trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     note = await get_trainer_client_note(session, trainer_id, client_id)
     return {"note": (note or {}).get("note", "")}
 
@@ -5072,7 +5099,7 @@ async def post_trainer_client_note_route(
     """Create or update trainer's private note about this client. Auth: trainer initData."""
     trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     result = await upsert_trainer_client_note(session, trainer_id, client_id, body.note)
     return {"note": result.get("note", "")}
 
@@ -5118,7 +5145,7 @@ async def get_client_dossier_route(
     """Get full client dossier: profile, tags, entries. Auth: trainer initData."""
     trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     return await get_full_client_dossier(session, trainer_id, client_id)
 
 
@@ -5132,7 +5159,7 @@ async def update_client_dossier_profile_route(
     """Update client profile fields. Auth: trainer initData."""
     trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     return await upsert_client_dossier_profile(
         session, trainer_id, client_id,
         note=body.note,
@@ -5153,7 +5180,7 @@ async def list_client_entries_route(
     """List timeline entries for a client. Auth: trainer initData."""
     trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     entries = await list_client_entries(session, trainer_id, client_id, limit=limit)
     return {"entries": entries}
 
@@ -5168,7 +5195,7 @@ async def add_client_entry_route(
     """Add a timeline entry. Auth: trainer initData."""
     trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     try:
         entry = await add_client_entry(session, trainer_id, client_id, body.content)
         return {"entry": entry}
@@ -5186,7 +5213,7 @@ async def delete_client_entry_route(
     """Delete a timeline entry. Auth: trainer initData."""
     trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     deleted = await delete_client_entry(session, trainer_id, entry_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Entry not found")
@@ -5202,7 +5229,7 @@ async def list_client_tags_route(
     """List tags for a client. Auth: trainer initData."""
     trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     tags = await list_client_tags(session, trainer_id, client_id)
     return {"tags": tags, "suggested": SUGGESTED_TAGS}
 
@@ -5217,7 +5244,7 @@ async def add_client_tag_route(
     """Add a tag to a client. Auth: trainer initData."""
     trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     try:
         tag = await add_client_tag(session, trainer_id, client_id, body.tag, body.category)
         if tag is None:
@@ -5237,7 +5264,7 @@ async def remove_client_tag_route(
     """Remove a tag from a client. Auth: trainer initData."""
     trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     deleted = await remove_client_tag(session, trainer_id, tag_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Tag not found")
@@ -5253,20 +5280,93 @@ async def post_trainer_clients(
     """Create or get client by phone (no telegram_id) and attach to trainer CRM. Auth: trainer initData."""
     trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     try:
-        client_id = await get_or_create_client_by_phone(
-            session,
-            body.phone,
-            first_name=body.first_name,
-            last_name=body.last_name or None,
-            middle_name=body.middle_name or None,
-        )
+        if body.is_sandbox:
+            # Sandbox path: ignore the user-supplied phone — we use a deterministic per-trainer
+            # phantom so two trainers' demos never collide and a sandbox identity can never silently
+            # become a real client (see ``sandbox_phone_for_trainer``).
+            client_id = await get_or_create_sandbox_client_for_trainer(
+                session,
+                trainer_id,
+                first_name=body.first_name or None,
+                last_name=body.last_name or None,
+            )
+        else:
+            client_id = await get_or_create_client_by_phone(
+                session,
+                body.phone,
+                first_name=body.first_name,
+                last_name=body.last_name or None,
+                middle_name=body.middle_name or None,
+            )
         await link_trainer_client_roster(session, trainer_id, client_id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     await session.commit()
-    return {"client_id": client_id}
+    return {"client_id": client_id, "is_sandbox": bool(body.is_sandbox)}
+
+
+@router.delete("/trainer/clients/{client_id}/sandbox")
+async def delete_trainer_sandbox_client(
+    client_id: int,
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+):
+    """Hard-delete a sandbox client + every booking/slot it touched (FK cascade).
+
+    Only works on rows where ``clients.is_sandbox = true`` AND every booking is sandbox — this
+    guarantees the endpoint can never wipe a real CRM client even if a caller passes the wrong id.
+    """
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
+    r = await session.execute(
+        text("SELECT is_sandbox FROM clients WHERE id = :cid"),
+        {"cid": int(client_id)},
+    )
+    row = r.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Клиент не найден")
+    if not bool(row[0]):
+        raise HTTPException(status_code=403, detail="Удалить можно только тестового клиента")
+    # Defence in depth: refuse if any non-sandbox booking touches this client (paranoid guard).
+    r_real = await session.execute(
+        text(
+            "SELECT EXISTS(SELECT 1 FROM bookings WHERE client_id = :cid AND NOT is_sandbox)"
+        ),
+        {"cid": int(client_id)},
+    )
+    if bool(r_real.scalar()):
+        raise HTTPException(status_code=409, detail="У клиента есть реальные записи — удаление запрещено")
+    # Free up slots that the sandbox bookings occupied (status='booked' → 'available') before delete.
+    await session.execute(
+        text(
+            """
+            UPDATE slots SET status = 'available'
+            WHERE id IN (
+                SELECT slot_id FROM bookings
+                WHERE client_id = :cid AND is_sandbox AND slot_id IS NOT NULL
+            )
+            AND status = 'booked'
+            """
+        ),
+        {"cid": int(client_id)},
+    )
+    await session.execute(
+        text("DELETE FROM bookings WHERE client_id = :cid AND is_sandbox"),
+        {"cid": int(client_id)},
+    )
+    await session.execute(
+        text("DELETE FROM trainer_client_roster WHERE client_id = :cid AND trainer_id = :tid"),
+        {"cid": int(client_id), "tid": trainer_id},
+    )
+    await session.execute(
+        text("DELETE FROM clients WHERE id = :cid AND is_sandbox"),
+        {"cid": int(client_id)},
+    )
+    await session.commit()
+    return {"deleted": True}
 
 
 @router.post("/trainer/booking")
@@ -5278,7 +5378,7 @@ async def post_trainer_booking(
     """Create booking: trainer assigns client to slot (from schedule). Auth: trainer initData."""
     trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     if not await trainer_has_crm_access(session, trainer_id):
         raise HTTPException(status_code=403, detail=WEBAPP_DETAIL_SUBSCRIPTION_CRM_REQUIRED)
     notify_tid = _trainer_bot_notify_telegram_id(principal)
@@ -5352,7 +5452,7 @@ async def post_trainer_booking_quick(
     """Create individual slot at date/hour if needed, then booking. Requires CRM (same as creating slots)."""
     trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     if not await trainer_has_crm_access(session, trainer_id):
         raise HTTPException(status_code=403, detail=WEBAPP_DETAIL_SUBSCRIPTION_CRM_REQUIRED)
     notify_tid = _trainer_bot_notify_telegram_id(principal)
@@ -5369,6 +5469,24 @@ async def post_trainer_booking_quick(
         start_minutes = int(body.start_hour) * 60
     else:
         raise HTTPException(status_code=400, detail="Укажите время начала (start_time или start_hour).")
+
+    # Sandbox identity invariant: a sandbox booking can only target a sandbox client and vice versa.
+    # Without this guard a real client could end up with a sandbox booking (or a sandbox client with a
+    # real booking) — both cases would leak the demo identity into rhythm hints, stats, and reminders.
+    r_sb = await session.execute(
+        text("SELECT is_sandbox FROM clients WHERE id = :cid"),
+        {"cid": int(body.client_id)},
+    )
+    row_sb = r_sb.fetchone()
+    if not row_sb:
+        raise HTTPException(status_code=400, detail="Клиент не найден")
+    client_is_sandbox = bool(row_sb[0])
+    if client_is_sandbox != bool(body.is_sandbox):
+        raise HTTPException(
+            status_code=400,
+            detail="Sandbox-запись возможна только на тестового клиента",
+        )
+
     try:
         result = await create_trainer_quick_booking(
             session,
@@ -5441,7 +5559,7 @@ async def post_trainer_onboarding_sandbox_booking(
     """
     trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     if not await trainer_has_crm_access(session, trainer_id):
         raise HTTPException(status_code=403, detail=WEBAPP_DETAIL_SUBSCRIPTION_CRM_REQUIRED)
     notify_tid = _trainer_bot_notify_telegram_id(principal)
@@ -5454,24 +5572,10 @@ async def post_trainer_onboarding_sandbox_booking(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 
-    # Idempotent sandbox client: one per trainer, identified by a deterministic phantom phone.
-    sandbox_phone = f"+37500{trainer_id:07d}"
-    r_c = await session.execute(
-        text("SELECT id FROM clients WHERE phone_normalized = :p"),
-        {"p": sandbox_phone},
+    client_id = await get_or_create_sandbox_client_for_trainer(
+        session, trainer_id, first_name="Пример", last_name="К."
     )
-    row_c = r_c.fetchone()
-    if row_c:
-        client_id = row_c[0]
-    else:
-        r_new = await session.execute(
-            text(
-                "INSERT INTO clients (phone, phone_normalized, first_name, last_name)"
-                " VALUES (:p, :p, :fn, :ln) RETURNING id"
-            ),
-            {"p": sandbox_phone, "fn": "Пример", "ln": "К."},
-        )
-        client_id = r_new.fetchone()[0]
+    await link_trainer_client_roster(session, trainer_id, client_id)
     await session.commit()
 
     r_svc = await session.execute(
@@ -5532,7 +5636,7 @@ async def post_trainer_booking_make_regular(
 ):
     trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     booking = await get_booking_with_slot(session, booking_id, trainer_id)
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found")
@@ -5551,7 +5655,7 @@ async def post_trainer_recurring_remove(
 ):
     trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     ok = await cancel_recurring_client_slot(session, trainer_id, recurring_id)
     if not ok:
         raise HTTPException(status_code=404, detail="Recurring not found")
@@ -5668,7 +5772,7 @@ async def get_trainer_requests_summary(
     """Lightweight hub: count of requests the trainer has not answered yet. Auth: trainer initData."""
     trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     n = await count_unanswered_requests_for_trainer(session, trainer_id)
     return {"unanswered_count": n}
 
@@ -5682,7 +5786,7 @@ async def get_trainer_requests(
     logger.info("GET /trainer/requests authenticated")
     trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     items = await list_requests_for_trainer(session, trainer_id)
     if not items:
         logger.info("trainer_requests_empty trainer_id=%s (profile city+service may not match any request)", trainer_id)
@@ -5706,7 +5810,7 @@ async def post_trainer_request_respond(
     """Respond to request (optional comment). Auth: trainer initData."""
     trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     comment = (body.trainer_comment or "").strip() or None
     resp_id = await create_request_response(session, request_id, trainer_id, trainer_comment=comment)
     if resp_id is None:
@@ -5723,7 +5827,7 @@ async def post_trainer_request_decline(
     """Decline request (hide from trainer list). Auth: trainer initData."""
     trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     ok = await create_request_decline(session, request_id, trainer_id)
     if not ok:
         raise HTTPException(status_code=400, detail="Decline failed")
@@ -5739,7 +5843,7 @@ async def post_trainer_request_remind_slots(
     """Set 'remind me when I have slots' for this request. Auth: trainer initData."""
     trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     was_new = await add_trainer_pending_request_booking(session, trainer_id, request_id)
     return {"success": True, "remind_slots_pending": True, "was_new": was_new}
 
@@ -5753,7 +5857,7 @@ async def get_trainer_request_slots(
     """Available slots for next 2 weeks (for booking client from request). Auth: trainer initData."""
     trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     client_info = await get_request_client_for_trainer_booking(session, request_id, trainer_id)
     if not client_info:
         raise HTTPException(status_code=404, detail="Request not found or not responded")
@@ -5798,7 +5902,7 @@ async def post_trainer_request_book(
     """Create booking for client from request (trainer books client). Auth: trainer initData."""
     trainer_id = await get_trainer_id_by_telegram_id_from_principal(session, principal)
     if not trainer_id:
-        raise HTTPException(status_code=403, detail="Trainer not linked or not active")
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     client_info = await get_request_client_for_trainer_booking(session, request_id, trainer_id)
     if not client_info:
         raise HTTPException(status_code=404, detail="Request not found or not responded")

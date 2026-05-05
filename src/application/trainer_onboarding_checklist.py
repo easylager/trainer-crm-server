@@ -183,6 +183,7 @@ async def get_trainer_onboarding_checklist(session: AsyncSession, trainer_id: in
                     JOIN slots s ON s.id = b.slot_id
                     WHERE b.trainer_id = :tid
                       AND b.status NOT IN ('cancelled', 'declined')
+                      AND NOT b.is_sandbox
                       AND s.slot_date >= :d_this_from
                       AND s.slot_date <= :d_this_to
                 ) AS bookings_this,
@@ -192,6 +193,7 @@ async def get_trainer_onboarding_checklist(session: AsyncSession, trainer_id: in
                     JOIN slots s ON s.id = b.slot_id
                     WHERE b.trainer_id = :tid
                       AND b.status NOT IN ('cancelled', 'declined')
+                      AND NOT b.is_sandbox
                       AND s.slot_date >= :d_next_from
                       AND s.slot_date <= :d_next_to
                 ) AS bookings_next
@@ -298,7 +300,7 @@ async def get_trainer_onboarding_checklist(session: AsyncSession, trainer_id: in
             """
             SELECT EXISTS(
                 SELECT 1 FROM bookings
-                WHERE trainer_id = :tid AND status = 'completed'
+                WHERE trainer_id = :tid AND status = 'completed' AND NOT is_sandbox
             )
             """
         ),
@@ -309,7 +311,7 @@ async def get_trainer_onboarding_checklist(session: AsyncSession, trainer_id: in
         text(
             """
             SELECT client_id FROM bookings
-            WHERE trainer_id = :tid AND status = 'completed'
+            WHERE trainer_id = :tid AND status = 'completed' AND NOT is_sandbox
             ORDER BY id DESC
             LIMIT 1
             """
@@ -324,6 +326,9 @@ async def get_trainer_onboarding_checklist(session: AsyncSession, trainer_id: in
     out["schedule_unlocked"] = bool(is_active or pending_ttv_unlock)
     out["trainer_id"] = trainer_id
 
+    # Open-loop rhythm hints: every CTE here MUST exclude sandbox identity (both ``b.is_sandbox`` and
+    # ``c.is_sandbox``). Otherwise the demo client surfaces in «no upcoming session» / «invite to bot»
+    # nudges — that's the leak we're closing.
     r_oloop = await session.execute(
         text(
             """
@@ -334,6 +339,7 @@ async def get_trainer_onboarding_checklist(session: AsyncSession, trainer_id: in
                     JOIN slots s ON s.id = b.slot_id
                     WHERE b.trainer_id = :tid
                       AND b.status = 'pending'
+                      AND NOT b.is_sandbox
                       AND s.status IN ('available', 'booked')
                       AND """
             + _SQL_SLOT_END_TS
@@ -346,18 +352,25 @@ async def get_trainer_onboarding_checklist(session: AsyncSession, trainer_id: in
                         FROM (
                             SELECT b.client_id
                             FROM bookings b
+                            JOIN clients c ON c.id = b.client_id
                             WHERE b.trainer_id = :tid
                               AND b.status NOT IN ('cancelled', 'declined', 'trainer_removed')
+                              AND NOT b.is_sandbox
+                              AND NOT c.is_sandbox
                             UNION
                             SELECT m.client_id
                             FROM training_group_members m
                             INNER JOIN training_groups g ON g.id = m.training_group_id
+                            INNER JOIN clients c ON c.id = m.client_id
                             WHERE g.trainer_id = :tid
                               AND m.status IN ('active', 'trial')
+                              AND NOT c.is_sandbox
                             UNION
                             SELECT r.client_id
                             FROM trainer_client_roster r
+                            INNER JOIN clients c ON c.id = r.client_id
                             WHERE r.trainer_id = :tid
+                              AND NOT c.is_sandbox
                         ) q
                     ),
                     has_upcoming AS (
@@ -366,6 +379,7 @@ async def get_trainer_onboarding_checklist(session: AsyncSession, trainer_id: in
                         JOIN slots s ON s.id = b.slot_id
                         WHERE b.trainer_id = :tid
                           AND b.status IN ('pending', 'confirmed')
+                          AND NOT b.is_sandbox
                           AND s.status IN ('available', 'booked')
                           AND """
             + _SQL_SLOT_END_TS
@@ -380,12 +394,14 @@ async def get_trainer_onboarding_checklist(session: AsyncSession, trainer_id: in
                     SELECT COUNT(DISTINCT c.id)::int
                     FROM clients c
                     WHERE c.telegram_id IS NULL
+                      AND NOT c.is_sandbox
                       AND (
                           EXISTS (
                               SELECT 1 FROM bookings b
                               WHERE b.client_id = c.id
                                 AND b.trainer_id = :tid
                                 AND b.status NOT IN ('cancelled', 'declined', 'trainer_removed')
+                                AND NOT b.is_sandbox
                           )
                           OR EXISTS (
                               SELECT 1 FROM trainer_client_roster r

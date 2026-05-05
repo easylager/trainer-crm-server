@@ -416,6 +416,9 @@ class Client(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     problematic: Mapped[bool] = mapped_column(nullable=False, server_default="false")
+    # Onboarding demo identity: a sandbox client is excluded from CRM scope, stats, rhythm hints,
+    # automated notifications and reminders. Lives only to show the trainer how the system feels.
+    is_sandbox: Mapped[bool] = mapped_column(nullable=False, server_default="false")
 
     bookings: Mapped[list["Booking"]] = relationship(back_populates="client", lazy="raise")
     client_requests: Mapped[list["ClientRequest"]] = relationship(back_populates="client", lazy="raise")
@@ -643,7 +646,8 @@ class Booking(Base):
     status: Mapped[str] = mapped_column(
         String(32), nullable=False, server_default="pending"
     )  # pending|confirmed|completed|cancelled|declined|no_show|payment_dispute|trainer_removed
-    # Onboarding demo booking: excluded from stats, revenue, and first-booking milestones.
+    # Onboarding demo booking: excluded from stats, revenue, rhythm hints, reminders, repeat-gap pings,
+    # inactive-client loop. Still claims the first-booking milestone so TTV step 2 mirrors real UX.
     is_sandbox: Mapped[bool] = mapped_column(nullable=False, server_default="false")
 
     client: Mapped["Client"] = relationship(back_populates="bookings", lazy="raise")

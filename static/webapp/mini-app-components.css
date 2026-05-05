@@ -1133,6 +1133,40 @@ body { background: var(--tg-theme-bg-color) !important; color: var(--tg-theme-te
 .bd-skel-row-line--w1 { width: 88%; }
 .bd-skel-row-line--w2 { width: 62%; }
 #scheduleContent { contain: layout; }
+
+/* Per-service left rail: hub «ближайшие» + schedule rows (tokens in theme.css) */
+.slot-row[class*='slot-row--svc-accent-'] {
+  position: relative;
+}
+.slot-row[class*='slot-row--svc-accent-']::before {
+  content: '';
+  position: absolute;
+  left: 8px;
+  top: 10px;
+  bottom: 10px;
+  width: 3px;
+  border-radius: 2px;
+  pointer-events: none;
+}
+.slot-row.slot-row--svc-accent-sky::before {
+  background: var(--svc-accent-sky);
+}
+.slot-row.slot-row--svc-accent-amber::before {
+  background: var(--svc-accent-amber);
+}
+.slot-row.slot-row--svc-accent-emerald::before {
+  background: var(--svc-accent-emerald);
+}
+.slot-row.slot-row--svc-accent-violet::before {
+  background: var(--svc-accent-violet);
+}
+.slot-row.slot-row--svc-accent-rose::before {
+  background: var(--svc-accent-rose);
+}
+.slot-row.slot-row--svc-accent-slate::before {
+  background: var(--svc-accent-slate);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .ma-skel-shimmer {
     animation: none !important;

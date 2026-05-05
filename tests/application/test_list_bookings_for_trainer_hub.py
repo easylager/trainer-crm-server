@@ -192,6 +192,7 @@ async def test_hub_tomorrow_still_listed(db_session) -> None:
     bookings = await list_bookings_for_trainer(db_session, trainer_id, limit=50)
     assert len(bookings) == 1
     assert bookings[0]["hub_in_session"] is False
+    assert bookings[0]["service_id"] == service_id
 
 
 @pytest.mark.asyncio

@@ -1996,3 +1996,79 @@ async def test_trainer_hub_quick_book_parallel_prefetch_endpoints(
     body_cl = cl.json()
     assert isinstance(body_svc.get("services"), list)
     assert isinstance(body_cl.get("clients"), list)
+
+
+@pytest.mark.asyncio
+async def test_patch_service_ui_accents_then_my_services(
+    app_use_test_db,
+    db_session,
+) -> None:
+    """PATCH /trainer/profile/service-ui-accents updates trainer_services; GET /trainer/my-services echoes ui_accent."""
+    tg = _fresh_trainer_telegram_id()
+    r = await db_session.execute(text("INSERT INTO trainers (status) VALUES ('active') RETURNING id"))
+    tid = r.fetchone()[0]
+    await db_session.execute(
+        text("UPDATE trainers SET telegram_id = :tg WHERE id = :id"),
+        {"tg": tg, "id": tid},
+    )
+    await db_session.execute(
+        text(
+            "INSERT INTO trainer_profiles (trainer_id, first_name, last_name, age) "
+            "VALUES (:tid, 'Accent', 'Trainer', 31)"
+        ),
+        {"tid": tid},
+    )
+    rs = await db_session.execute(text("SELECT id FROM services ORDER BY id LIMIT 1"))
+    sid = int(rs.scalar())
+    await db_session.execute(
+        text(
+            "INSERT INTO trainer_services (trainer_id, service_id, price_cents) "
+            "VALUES (:tid, :sid, 5000)"
+        ),
+        {"tid": tid, "sid": sid},
+    )
+    await db_session.commit()
+
+    with patch_trainer_init_auth(tg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            bad = await client.patch(
+                "/api/webapp/trainer/profile/service-ui-accents",
+                headers={"X-Telegram-Init-Data": "mock"},
+                json={"items": [{"service_id": 9_999_999, "ui_accent": "sky"}]},
+            )
+            assert bad.status_code == 422
+            inv = await client.patch(
+                "/api/webapp/trainer/profile/service-ui-accents",
+                headers={"X-Telegram-Init-Data": "mock"},
+                json={"items": [{"service_id": sid, "ui_accent": "not-a-real-slug"}]},
+            )
+            assert inv.status_code == 422
+            ok = await client.patch(
+                "/api/webapp/trainer/profile/service-ui-accents",
+                headers={"X-Telegram-Init-Data": "mock"},
+                json={"items": [{"service_id": sid, "ui_accent": "sky"}]},
+            )
+            assert ok.status_code == 200
+            svc1 = await client.get(
+                "/api/webapp/trainer/my-services",
+                headers={"X-Telegram-Init-Data": "mock"},
+            )
+            assert svc1.status_code == 200
+            row1 = next((x for x in (svc1.json().get("services") or []) if int(x["id"]) == sid), None)
+            assert row1 is not None
+            assert row1.get("ui_accent") == "sky"
+            clear = await client.patch(
+                "/api/webapp/trainer/profile/service-ui-accents",
+                headers={"X-Telegram-Init-Data": "mock"},
+                json={"items": [{"service_id": sid, "ui_accent": None}]},
+            )
+            assert clear.status_code == 200
+            svc = await client.get(
+                "/api/webapp/trainer/my-services",
+                headers={"X-Telegram-Init-Data": "mock"},
+            )
+    assert svc.status_code == 200
+    items = svc.json().get("services") or []
+    row = next((x for x in items if int(x["id"]) == sid), None)
+    assert row is not None
+    assert row.get("ui_accent") is None

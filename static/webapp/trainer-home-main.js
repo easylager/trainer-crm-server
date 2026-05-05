@@ -212,8 +212,13 @@
       /** Last bookings payload from /trainer/bookings — used to refresh empty-state HTML after onboarding loads. */
       var hubLastBookingsDays = null;
       var hubLastTodayCount = 0;
+      /** Today's sessions not yet started (Europe/Minsk); excludes current slot — aligned with backend ``today_sessions.remaining``. */
+      var hubLastTodayRemaining = 0;
       var hubLastFirstWhen = '';
+      /** Deduped hub rows in loaded window — aligned with ``week_sessions.total``. */
       var hubLastWeekCount = 0;
+      /** Same window: slots not yet started (Europe/Minsk) — aligned with ``week_sessions.remaining``. */
+      var hubLastWeekRemaining = 0;
       var hubLastUpcomingListCount = 0;
       /** Bookings with status pending — drives summary hint + week card highlight. */
       var hubLastPendingCount = 0;
@@ -1964,7 +1969,7 @@
                 }
                 if (data.bookings && data.bookings.days) {
                   setStateMessage('');
-                  renderBookings(data.bookings.days);
+                  renderBookings(data.bookings);
                 } else {
                   loadBookings();
                 }
@@ -2457,12 +2462,42 @@
           });
       }
 
-      function setStats(todayCount, weekCount) {
+      /**
+       * Hub summary tiles: «N всего» / «M осталось», or one number when total === remaining.
+       */
+      function hubFillDualStatValue(el, cardEl, total, remaining, titleText) {
+        if (!el) return;
+        if (total <= 0) {
+          el.classList.remove('hub-stat-value--dual');
+          el.textContent = '0';
+          if (cardEl) cardEl.removeAttribute('title');
+          return;
+        }
+        var rem =
+          typeof remaining === 'number' && remaining >= 0 ? remaining : total;
+        if (total === rem) {
+          el.classList.remove('hub-stat-value--dual');
+          el.textContent = String(total);
+          if (cardEl && titleText) cardEl.setAttribute('title', titleText);
+          return;
+        }
+        el.classList.add('hub-stat-value--dual');
+        el.innerHTML =
+          '<span class="hub-stat-dual-line"><span class="hub-stat-dual-num">' +
+          String(total) +
+          '</span> всего</span>' +
+          '<span class="hub-stat-dual-line hub-stat-dual-line--sub"><span class="hub-stat-dual-num">' +
+          String(rem) +
+          '</span> осталось</span>';
+        if (cardEl && titleText) cardEl.setAttribute('title', titleText);
+      }
+
+      function setStats(todayTotal, weekTotal, todayRemaining, weekRemaining) {
         var wrap = document.getElementById('hubStats');
         var todayValue = document.getElementById('statTodayValue');
         var weekValue = document.getElementById('statWeekValue');
         var revenueValue = document.getElementById('statRevenueValue');
-        
+
         if (!wrap || !todayValue || !weekValue || !revenueValue) {
           renderHubSummaryHints();
           return;
@@ -2474,26 +2509,38 @@
           renderHubSummaryHints();
           return;
         }
-        
+
         wrap.style.display = 'grid';
         wrap.setAttribute('aria-hidden', 'false');
-        
-        todayValue.textContent = todayCount === 0 ? '0' : String(todayCount);
-        weekValue.textContent = weekCount === 0 ? '0' : String(weekCount);
+
+        var todayCard = document.getElementById('statToday');
+        var weekCard = document.getElementById('statWeek');
+        hubFillDualStatValue(
+          todayValue,
+          todayCard,
+          todayTotal,
+          todayRemaining,
+          'Всего занятий на сегодня (минское время). «Осталось» — слот ещё не начался; идущее занятие не считается.'
+        );
+        hubFillDualStatValue(
+          weekValue,
+          weekCard,
+          weekTotal,
+          weekRemaining,
+          'Занятия в загруженном окне недели. «Осталось» — ещё не начавшиеся слоты по минскому времени.'
+        );
+
         revenueValue.textContent =
           hubMtdRevenueText != null && hubMtdRevenueText !== '' ? hubMtdRevenueText : '—';
-        
-        // Highlight today's card if there are bookings
-        var todayCard = document.getElementById('statToday');
+
         if (todayCard) {
-          if (todayCount > 0) {
+          if (todayTotal > 0) {
             todayCard.classList.add('stat-highlight');
           } else {
             todayCard.classList.remove('stat-highlight');
           }
         }
 
-        var weekCard = document.getElementById('statWeek');
         if (weekCard) {
           if (hubLastPendingCount > 0) {
             weekCard.classList.add('stat-highlight');
@@ -2527,7 +2574,7 @@
         if (!getInitData()) {
           title.textContent = 'Войдите через бота';
           subtitle.textContent = 'Откройте экран из бота тренера — подтянутся записи и быстрый доступ к разделам.';
-          setStats(0, 0);
+          setStats(0, 0, 0, 0);
           syncHubHeroScheduleClick();
           return;
         }
@@ -2542,7 +2589,7 @@
           subtitle.textContent = firstLine
             ? 'Первая в ' + firstLine + ' — карточки на сегодня в списке выше.'
             : 'Сегодняшние занятия перечислены в блоке выше.';
-          setStats(count, weekCount || 0);
+          setStats(count, weekCount || 0, hubLastTodayRemaining, hubLastWeekRemaining);
           syncHubHeroScheduleClick();
           return;
         }
@@ -2551,7 +2598,7 @@
         if (!onb) {
           title.textContent = 'Ваш день';
           subtitle.textContent = 'Предстоящих записей на сегодня нет.';
-          setStats(0, weekCount || 0);
+          setStats(0, hubLastWeekCount || 0, 0, hubLastWeekRemaining || 0);
           syncHubHeroScheduleClick();
           return;
         }
@@ -2561,14 +2608,14 @@
             title.textContent = 'Сделайте первую запись';
             subtitle.textContent =
               'Выберите «Записать реального клиента» или «Попробовать на примере» — запись появится прямо здесь.';
-            setStats(0, weekCount || 0);
+            setStats(0, hubLastWeekCount || 0, 0, hubLastWeekRemaining || 0);
             syncHubHeroScheduleClick();
             return;
           }
           title.textContent = 'Сначала анкета';
           subtitle.textContent =
             'Закройте шаг в блоке «Первые шаги» выше (кнопка «Продолжить»), затем сразу делайте первую запись.';
-          setStats(0, weekCount || 0);
+          setStats(0, hubLastWeekCount || 0, 0, hubLastWeekRemaining || 0);
           syncHubHeroScheduleClick();
           return;
         }
@@ -2577,7 +2624,7 @@
           title.textContent = 'Скоро полный доступ';
           subtitle.textContent =
             'В «Первые шаги» видно статус: при одобрении анкеты откроются заявки и полный доступ. Расписание уже можно вести.';
-          setStats(0, weekCount || 0);
+          setStats(0, hubLastWeekCount || 0, 0, hubLastWeekRemaining || 0);
           syncHubHeroScheduleClick();
           return;
         }
@@ -2590,7 +2637,7 @@
           subtitle.textContent =
             'Записей на сегодня нет — когда клиенты запишутся, они появятся здесь.';
         }
-        setStats(0, weekCount || 0);
+        setStats(0, hubLastWeekCount || 0, 0, hubLastWeekRemaining || 0);
         syncHubHeroScheduleClick();
       }
 
@@ -2638,7 +2685,12 @@
         if (isNaN(cap) || cap > 1) return false;
         var tid = b.client_telegram_id;
         var un = (b.client_telegram_username || '').replace(/^@/, '').trim();
-        return (tid != null && tid !== '') || !!un;
+        if (!!un) return true;
+        if (tid == null || tid === '') return false;
+        /* Telegram Web: tg://user?id= is unsupported — only @username deep links work. */
+        var w = window.Telegram && window.Telegram.WebApp;
+        if (w && w.platform === 'web') return false;
+        return true;
       }
 
       /** PRD E1: backend marks row as inside [start,end); compact label for current session. */
@@ -2658,7 +2710,69 @@
       function hubSandboxPillHtml(b) {
         if (!b || !b.is_sandbox) return '';
         return (
-          '<span class="hub-sandbox-pill" role="status" aria-label="Пробная запись">проба</span>'
+          '<span class="hub-sandbox-pill" role="status" aria-label="Тестовая запись">тест</span>'
+        );
+      }
+
+      function syncHubMyServicesAccentMap(servicesList) {
+        (servicesList || []).forEach(function(s) {
+          if (s == null || s.id == null) return;
+          var slug = s.ui_accent != null ? String(s.ui_accent).trim().toLowerCase() : '';
+          if (!slug || HUB_SERVICE_UI_ACCENT_SLUGS.indexOf(slug) < 0) {
+            delete hubMyServicesAccentByServiceId[s.id];
+            return;
+          }
+          hubMyServicesAccentByServiceId[s.id] = slug;
+        });
+      }
+
+      function hubBookingServiceAccentSlug(serviceId) {
+        var sid = serviceId != null ? parseInt(String(serviceId), 10) : NaN;
+        if (isNaN(sid)) return '';
+        var slug = hubMyServicesAccentByServiceId[sid];
+        if (!slug || HUB_SERVICE_UI_ACCENT_SLUGS.indexOf(slug) < 0) return '';
+        return slug;
+      }
+
+      var HUB_SERVICE_SHORT_ALIASES = {
+        'персональная тренировка': 'Персоналка',
+        'персональная': 'Персоналка',
+        'индивидуальная тренировка': 'Индив',
+        'групповая тренировка': 'Группа',
+        'силовая тренировка': 'Силовая',
+        'реабилитационная тренировка': 'Реабил',
+        'растяжка': 'Растяжка',
+      };
+
+      function hubServiceShortLabel(serviceName) {
+        var raw = serviceName == null ? '' : String(serviceName).trim();
+        if (!raw) return '';
+        var normalized = raw
+          .toLowerCase()
+          .replace(/[ё]/g, 'е')
+          .replace(/[^a-zA-Zа-яА-Я0-9\s-]/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+        if (!normalized) return '';
+        if (HUB_SERVICE_SHORT_ALIASES[normalized]) return HUB_SERVICE_SHORT_ALIASES[normalized];
+        var words = normalized.split(/\s+/).filter(Boolean);
+        var base = words.slice(0, 2).join(' ');
+        if (!base) return '';
+        base = base.charAt(0).toUpperCase() + base.slice(1);
+        if (base.length <= 14) return base;
+        return base.slice(0, 13).trimEnd() + '…';
+      }
+
+      function hubServiceBadgeHtml(serviceId, serviceName) {
+        var label = hubServiceShortLabel(serviceName);
+        if (!label) return '';
+        var slug = hubBookingServiceAccentSlug(serviceId);
+        var slugCls = slug ? ' svc-badge--' + slug : '';
+        return (
+          '<span class="svc-badge' + slugCls + '" role="status">' +
+            '<span class="svc-badge-dot" aria-hidden="true"></span>' +
+            '<span class="svc-badge-label">' + escapeHtml(label) + '</span>' +
+          '</span>'
         );
       }
 
@@ -2671,6 +2785,7 @@
         var rowMod = pending ? 'slot-booking-pending' : 'slot-booking-confirmed';
         var cap = parseInt(String(b.slot_capacity != null ? b.slot_capacity : '1'), 10);
         if (isNaN(cap) || cap < 1) cap = 1;
+        var serviceBadge = hubServiceBadgeHtml(b.service_id, b.services_str);
 
         /* Group slot: match schedule-editor group hub — occupancy meter + chip; no client name in preview */
         if (cap > 1) {
@@ -2694,6 +2809,10 @@
           var pendingExtra = pending
             ? '<span class="slot-status booked-pending hub-group-spots-pill">' + statusLabel + '</span>'
             : '';
+          var badgeRow =
+            serviceBadge !== ''
+              ? '<div class="slot-service-badge-row">' + serviceBadge + '</div>'
+              : '';
           return (
             '<div class="slot-row slot-booked-click slot-group-hub-preview ' + rowMod + '" data-bid="' + String(b.id) + '" data-slot-id="' + String(b.slot_id != null ? b.slot_id : '') + '" data-slot-date="' + escapeHtml(b.slot_date || '') + '" role="button" tabindex="0">' +
               '<div class="slot-row-left">' +
@@ -2701,12 +2820,13 @@
                   '<span class="slot-time">' + escapeHtml(timeRange) + '</span>' +
                   hubSessionNowPillHtml(b) + hubSandboxPillHtml(b) + hubProblemReportPillHtml(b) +
                   '</div>' +
+                badgeRow +
                 metaHtml +
                 '<div class="slot-group-meter-wrap" aria-hidden="true"><div class="slot-group-meter-fill" style="width:' + pct + '%"></div></div>' +
               '</div>' +
               '<div class="slot-meta slot-meta--group">' +
                 '<span class="slot-group-chip">' + occ + '/' + cap + '</span>' +
-                (b.is_sandbox ? '<span class="hub-sandbox-pill hub-sandbox-pill--inline" role="status">проба</span>' : '') +
+                (b.is_sandbox ? '<span class="hub-sandbox-pill hub-sandbox-pill--inline" role="status">тест</span>' : '') +
                 spotsPill +
                 pendingExtra +
               '</div>' +
@@ -2730,6 +2850,10 @@
             '</svg>' +
             '</button>';
         }
+        var badgeRowSingle =
+          serviceBadge !== ''
+            ? '<div class="slot-service-badge-row">' + serviceBadge + '</div>'
+            : '';
         return (
           '<div class="slot-row slot-booked-click ' + rowMod + '" data-bid="' + String(b.id) + '">' +
             '<div class="slot-row-left">' +
@@ -2737,6 +2861,7 @@
                   '<span class="slot-time">' + escapeHtml(timeRange) + '</span>' +
                   hubSessionNowPillHtml(b) + hubSandboxPillHtml(b) + hubProblemReportPillHtml(b) +
                   '</div>' +
+              badgeRowSingle +
               '<div class="slot-venue">📍 ' + venueInner + '</div>' +
               '<div class="slot-client-hint">' + escapeHtml(clientLabel(b)) + '</div>' +
             '</div>' +
@@ -2807,7 +2932,7 @@
               var st = (bk.status || '').toLowerCase();
               var stLabel = st === 'pending' ? 'Ожидает подтверждения' : 'Подтверждено';
               var sandboxPill = bk.is_sandbox
-                ? ' <span class="hub-sandbox-pill hub-sandbox-pill--inline" role="status">проба</span>'
+                ? ' <span class="hub-sandbox-pill hub-sandbox-pill--inline" role="status">тест</span>'
                 : '';
               var bid = parseInt(bk.booking_id, 10);
               var btn = document.createElement('button');
@@ -2973,6 +3098,13 @@
       var hubBookPriceVariantId = null;
       var hubBookQuickPayload = null;
       var hubBookQuickServices = [];
+      /** service_id (catalog id) → accent slug; filled from GET /trainer/my-services + quick-book prepare. */
+      var hubMyServicesAccentByServiceId = {};
+      var hubMyServicesAccentPrefetchInFlight = false;
+      var hubMyServicesAccentPrefetchDone = false;
+      /** Last bookings payload so a late my-services fetch can re-run renderBookings. */
+      var hubLastBookingsPayloadForAccentRefetch = null;
+      var HUB_SERVICE_UI_ACCENT_SLUGS = ['sky', 'amber', 'emerald', 'violet', 'rose', 'slate'];
       var hubBookTrainerArenas = [];
       /** Selected arena for quick-book (trainer hub); preset grid + POST /trainer/booking/quick. */
       var hubBookArenaId = null;
@@ -2987,6 +3119,8 @@
       var hubBookSlotWhenLabel = '';
       var hubBookPendingClientId = null;
       var hubBookPendingClientName = '';
+      /** Selected roster row: must match POST /trainer/booking/quick ``is_sandbox`` vs ``clients.is_sandbox``. */
+      var hubBookPendingClientIsSandbox = false;
       /** Prevents double-start of async booking (double-tap «Далее» / «Записать»). */
       var hubBookQuickChainInFlight = false;
       var hubBookConfirmPrimaryLabelCached = null;
@@ -3232,6 +3366,7 @@
         }
         hubBookPendingClientId = null;
         hubBookPendingClientName = null;
+        hubBookPendingClientIsSandbox = false;
         hubDockBookStepNewUnderModalChrome();
       }
 
@@ -3562,9 +3697,34 @@
       }
 
       /**
+       * Waits until background prepare populated hubBookQuickServices (GET /trainer/my-services).
+       * User can tap faster than the hub prepare fetch finishes — without this, service step breaks.
+       */
+      function hubWhenQuickBookServicesReady(done, timeoutMs) {
+        var limit = timeoutMs != null ? timeoutMs : 14000;
+        var deadline = Date.now() + limit;
+        (function tick() {
+          if ((hubBookQuickServices || []).length) {
+            done();
+            return;
+          }
+          if (Date.now() > deadline) {
+            hubToast('Не удалось загрузить услуги. Закройте окно и попробуйте снова.');
+            var qinp = document.getElementById('hubBookClientSearch');
+            loadHubBookClients(qinp ? qinp.value.trim() : '');
+            return;
+          }
+          setTimeout(tick, 45);
+        })();
+      }
+
+      /**
        * Starts hub «Записать клиента»: client (existing/new) → service/tariffs → datetime → POST.
        * Last booking presets: GET /trainer/clients/{id}/booking-defaults.
        * Uses multi-retry + fetch timeouts — Telegram WebView often drops the first request or delays initData.
+       *
+       * Обычный режим: первый экран показывается сразу (кнопки не прячем под skeleton — см. CSS pending).
+       * Sandbox / «Пример»: прежний skeleton до загрузки услуг (нет промежуточного выбора).
        */
       function openHubQuickBookClientFlowFirst() {
         hubBookClientFirstQuickMode = true;
@@ -3574,11 +3734,39 @@
         if (!openHubBookModalShell()) return;
         hubQuickBookPrepareGen += 1;
         var prepareGen = hubQuickBookPrepareGen;
+        hubBookQuickServices = [];
+        hubBookTrainerArenas = [];
+        hubBookArenaId = null;
+        hubBookServiceId = null;
         hubSyncClientFirstQuickServiceChrome();
         applyHubBookNewSubmitButtonLabel();
-        setHubBookChoiceQuickLoading(true);
+        if (hubQuickBookIsSandbox) {
+          setHubBookChoiceQuickLoading(true);
+        } else {
+          setHubBookChoicePairPending(false);
+          setHubBookChoiceQuickLoading(false);
+          clearHubBookChoiceQuickUi();
+          primeHubBookChoicePairLayout();
+          if (hubTrainerHasClientsCache === false) {
+            setHubBookOptExistingVisible(false);
+          } else if (hubTrainerHasClientsCache === true) {
+            setHubBookOptExistingVisible(true);
+          } else {
+            var exProbe = document.getElementById('hubBookOptExisting');
+            if (exProbe) {
+              exProbe.style.display = '';
+              exProbe.setAttribute('aria-hidden', 'false');
+              exProbe.disabled = false;
+              exProbe.removeAttribute('aria-busy');
+              exProbe.classList.add('hub-book-opt-existing--probing');
+              var hintPb = exProbe.querySelector('.btn-book-option-hint');
+              if (hintPb) hintPb.textContent = HUB_BOOK_OPT_EXISTING_HINT;
+            }
+          }
+        }
         setHubBookServiceVisibility(false);
         fillHubBookServiceSelect([]);
+        fillHubBookArenaPicklist([]);
         var ptHost = document.getElementById('hubBookPriceTierRadios');
         var ptWrap = document.getElementById('hubBookPriceTierWrap');
         if (ptHost) ptHost.innerHTML = '';
@@ -3621,6 +3809,7 @@
               var servicePayload = results[0] || {};
               var clientsPayload = results[1] || {};
               hubBookQuickServices = servicePayload.services || [];
+              syncHubMyServicesAccentMap(hubBookQuickServices);
               if (!hubBookQuickServices.length) {
                 hubApplyTrainerHasClientsFromPayload(clientsPayload);
                 setHubBookOptExistingVisible(false);
@@ -3645,7 +3834,7 @@
                 var leadSx = document.querySelector('#hubBookStepChoice .book-choice-lead');
                 if (leadSx) {
                   leadSx.textContent =
-                    'Пробная запись: услуга и тариф, контакт ниже можно заменить. Затем нажмите «Далее» и выберите дату.';
+                    'Тестовая запись: услуга и тариф, контакт ниже можно заменить. Затем нажмите «Далее» и выберите дату.';
                 }
                 var caSx = document.getElementById('hubBookChoiceActions');
                 if (caSx) caSx.style.display = 'none';
@@ -3661,19 +3850,32 @@
                 setHubBookArenaVisibility((hubBookTrainerArenas || []).length > 1);
                 hubEmbedSandboxBookStepNewBeforeQuickNext();
               } else {
-                hubBookClientFirstServiceStepOpen = false;
-                setHubBookServiceVisibility(false);
-                syncHubBookPriceTierRadios();
-                hubSyncClientFirstQuickServiceChrome();
-                var leadN = document.querySelector('#hubBookStepChoice .book-choice-lead');
-                if (leadN && hubBookChoiceLeadDefault != null) leadN.textContent = hubBookChoiceLeadDefault;
-                var caN = document.getElementById('hubBookChoiceActions');
-                if (caN) caN.style.display = '';
-                var stepNewN = document.getElementById('hubBookStepNew');
-                if (stepNewN) stepNewN.style.display = 'none';
-                var backN = document.getElementById('hubBookBackFromNew');
-                if (backN) backN.style.display = '';
-                resetHubBookSteps();
+                var exEl = document.getElementById('hubBookStepExisting');
+                var nwEl = document.getElementById('hubBookStepNew');
+                /* User may tap «Выбрать из списка» before prepare resolves — resetHubBookSteps would wipe that navigation. */
+                var pastInitialChoice =
+                  hubBookClientFirstServiceStepOpen ||
+                  (exEl && exEl.style.display !== 'none') ||
+                  (nwEl && nwEl.style.display !== 'none');
+
+                if (!pastInitialChoice) {
+                  hubBookClientFirstServiceStepOpen = false;
+                  setHubBookServiceVisibility(false);
+                  syncHubBookPriceTierRadios();
+                  hubSyncClientFirstQuickServiceChrome();
+                  var leadN = document.querySelector('#hubBookStepChoice .book-choice-lead');
+                  if (leadN && hubBookChoiceLeadDefault != null) leadN.textContent = hubBookChoiceLeadDefault;
+                  var caN = document.getElementById('hubBookChoiceActions');
+                  if (caN) caN.style.display = '';
+                  var stepNewN = document.getElementById('hubBookStepNew');
+                  if (stepNewN) stepNewN.style.display = 'none';
+                  var backN = document.getElementById('hubBookBackFromNew');
+                  if (backN) backN.style.display = '';
+                  resetHubBookSteps();
+                } else {
+                  syncHubBookPriceTierRadios();
+                  hubSyncClientFirstQuickServiceChrome();
+                }
                 setHubBookOptExistingVisible(hasClients);
                 applyHubBookNewSubmitButtonLabel();
               }
@@ -3743,10 +3945,16 @@
         hubBookQuickChainInFlight = true;
         setHubGlobalBookingBusy(true);
         var wasQuickSandbox = hubQuickBookIsSandbox;
+        // Sandbox identity is now created server-side as a real ``clients.is_sandbox=true`` row with
+        // a deterministic per-trainer phantom phone (the user's typed phone is ignored on the
+        // server). Passing the flag here keeps the request shape clean and makes intent explicit.
+        var clientPayload = wasQuickSandbox
+          ? { phone: phone, first_name: first || 'Александр', last_name: last || 'К.', is_sandbox: true }
+          : { phone: phone, first_name: first, last_name: last || '' };
         fetch(apiUrlWithQuery('/trainer/clients'), {
           method: 'POST',
           headers: headersJson(),
-          body: JSON.stringify({ phone: phone, first_name: first, last_name: last || '' }),
+          body: JSON.stringify(clientPayload),
         })
           .then(function(r) {
             if (!r.ok) return r.json().then(function(o) { throw new Error(hubApiErrorMessage(o)); });
@@ -3754,7 +3962,7 @@
           })
           .then(function(data) {
             hubTrainerHasClientsCache = true;
-            return hubPostBooking(data.client_id);
+            return hubPostBooking(data.client_id, !!data.is_sandbox);
           })
           .then(function(res) {
             closeHubBookGroupModals();
@@ -4234,15 +4442,28 @@
               var name = ((c.first_name || '') + ' ' + (c.last_name || '')).trim() || 'Клиент';
               var phone = (c.phone || '').trim();
               var noBot = !c.telegram_id;
+              var isSb = !!c.is_sandbox;
+              var bodyInner =
+                escapeHtml(name) +
+                (phone ? '<br><span class="phone">' + escapeHtml(phone) + '</span>' : '') +
+                (noBot
+                  ? '<br><span class="hub-book-client-row__nobot">Без бота</span>'
+                  : '');
               html +=
-                '<button type="button" class="client-row" data-client-id="' +
+                '<button type="button" class="client-row' +
+                (isSb ? ' hub-book-client-row--sandbox' : '') +
+                '" data-client-id="' +
                 c.id +
+                '" data-is-sandbox="' +
+                (isSb ? '1' : '0') +
                 '" data-client-name="' +
                 escapeHtml(name).replace(/"/g, '&quot;') +
                 '">' +
-                escapeHtml(name) +
-                (phone ? '<br><span class="phone">' + escapeHtml(phone) + '</span>' : '') +
-                (noBot ? '<br><span style="font-size:11px;color:var(--tg-theme-hint-color);">Без бота</span>' : '') +
+                (isSb
+                  ? '<span class="hub-book-client-row__main">' +
+                    bodyInner +
+                    '</span><span class="hub-book-client-row__badge"><span class="hub-sandbox-pill hub-sandbox-pill--clientpick" role="status">тест</span></span>'
+                  : bodyInner) +
                 '</button>';
             });
             list.innerHTML = html;
@@ -4252,37 +4473,40 @@
                 var clientName = (row.getAttribute('data-client-name') || 'Клиент').replace(/&quot;/g, '"');
                 hubBookPendingClientId = clientId;
                 hubBookPendingClientName = clientName;
+                hubBookPendingClientIsSandbox = row.getAttribute('data-is-sandbox') === '1';
                 if (hubBookClientFirstQuickMode) {
                   hubBookClientFirstServiceFromNew = false;
                   list.innerHTML =
                     '<p style="text-align:center;padding:16px;color:var(--tg-theme-hint-color);">Загрузка…</p>';
-                  fetch(
-                    apiUrlWithQuery(
-                      '/trainer/clients/' + encodeURIComponent(String(clientId)) + '/booking-defaults'
-                    ),
-                    { headers: headersJson(), cache: 'no-store' }
-                  )
-                    .then(function(r) {
-                      return r.ok ? r.json() : {};
-                    })
-                    .then(function(def) {
-                      var stepEx = document.getElementById('hubBookStepExisting');
-                      var stepCh = document.getElementById('hubBookStepChoice');
-                      if (stepEx) stepEx.style.display = 'none';
-                      if (stepCh) stepCh.style.display = 'block';
-                      hubApplyBookingDefaultsPayload(def || {});
-                      hubEnterClientFirstServiceStep(
-                        'Услуга и тариф — как в прошлый раз. Поменяйте при необходимости.'
-                      );
-                    })
-                    .catch(function() {
-                      var stepEx2 = document.getElementById('hubBookStepExisting');
-                      var stepCh2 = document.getElementById('hubBookStepChoice');
-                      if (stepEx2) stepEx2.style.display = 'none';
-                      if (stepCh2) stepCh2.style.display = 'block';
-                      hubApplyBookingDefaultsPayload({});
-                      hubEnterClientFirstServiceStep(null);
-                    });
+                  hubWhenQuickBookServicesReady(function() {
+                    fetch(
+                      apiUrlWithQuery(
+                        '/trainer/clients/' + encodeURIComponent(String(clientId)) + '/booking-defaults'
+                      ),
+                      { headers: headersJson(), cache: 'no-store' }
+                    )
+                      .then(function(r) {
+                        return r.ok ? r.json() : {};
+                      })
+                      .then(function(def) {
+                        var stepEx = document.getElementById('hubBookStepExisting');
+                        var stepCh = document.getElementById('hubBookStepChoice');
+                        if (stepEx) stepEx.style.display = 'none';
+                        if (stepCh) stepCh.style.display = 'block';
+                        hubApplyBookingDefaultsPayload(def || {});
+                        hubEnterClientFirstServiceStep(
+                          'Услуга и тариф — как в прошлый раз. Поменяйте при необходимости.'
+                        );
+                      })
+                      .catch(function() {
+                        var stepEx2 = document.getElementById('hubBookStepExisting');
+                        var stepCh2 = document.getElementById('hubBookStepChoice');
+                        if (stepEx2) stepEx2.style.display = 'none';
+                        if (stepCh2) stepCh2.style.display = 'block';
+                        hubApplyBookingDefaultsPayload({});
+                        hubEnterClientFirstServiceStep(null);
+                      });
+                  });
                   return;
                 }
                 var txt = document.getElementById('hubBookConfirmText');
@@ -4356,7 +4580,11 @@
         return 'Ошибка';
       }
 
-      function hubPostBooking(clientId) {
+      /**
+       * @param quickBookingClientIsSandbox When quick-booking: must match ``clients.is_sandbox`` for ``client_id``
+       * (server rejects mismatched sandbox flags). Omit second arg only for legacy paths — prefers explicit booleans.
+       */
+      function hubPostBooking(clientId, quickBookingClientIsSandbox) {
         var url = '/trainer/booking';
         var payload;
         if (hubBookQuickPayload) {
@@ -4375,7 +4603,9 @@
           if (hubBookPriceVariantId != null) {
             payload.service_price_variant_id = hubBookPriceVariantId;
           }
-          if (hubQuickBookIsSandbox) payload.is_sandbox = true;
+          var explicitSb =
+            quickBookingClientIsSandbox !== undefined && quickBookingClientIsSandbox !== null;
+          payload.is_sandbox = explicitSb ? !!quickBookingClientIsSandbox : !!hubQuickBookIsSandbox;
         } else {
           payload = { slot_id: hubBookSlotId, client_id: clientId, service_id: hubBookServiceId };
         }
@@ -4501,6 +4731,7 @@
             } else {
               hubBookPendingClientId = null;
               hubBookPendingClientName = '';
+              hubBookPendingClientIsSandbox = false;
               document.getElementById('hubBookStepExisting').style.display = 'block';
               if (stepChB) stepChB.style.display = 'none';
               var qinpB = document.getElementById('hubBookClientSearch');
@@ -4525,6 +4756,7 @@
               return;
             }
             hubBookPendingClientId = null;
+            hubBookPendingClientIsSandbox = false;
           };
         }
         var cyes = document.getElementById('hubBookConfirmYes');
@@ -4534,9 +4766,9 @@
             if (cid == null) return;
             if (cyes.disabled) return;
             var successText = hubBookQuickPayload ? 'Запись успешно создана.' : 'Клиент записан в группу.';
-            var wasQuickSandbox = hubQuickBookIsSandbox;
+            var wasQuickSandbox = hubBookQuickPayload ? hubBookPendingClientIsSandbox : hubQuickBookIsSandbox;
             setHubBookConfirmSubmitting(true);
-            hubPostBooking(cid)
+            hubPostBooking(cid, hubBookPendingClientIsSandbox)
               .then(function(res) {
                 closeHubBookGroupModals();
                 resetHubBookSlotState();
@@ -4584,8 +4816,13 @@
             }
 
             if (hubBookClientFirstQuickMode && hubBookSlotId == null && !hubQuickBookIsSandbox) {
+              if (!(hubBookQuickServices || []).length) {
+                hubToast('Подождите — подгружаем услуги…');
+                return;
+              }
               hubDockBookStepNewUnderModalChrome();
               hubBookPendingClientId = null;
+              hubBookPendingClientIsSandbox = false;
               hubBookClientFirstServiceFromNew = true;
               document.getElementById('hubBookStepNew').style.display = 'none';
               document.getElementById('hubBookStepChoice').style.display = 'block';
@@ -4608,7 +4845,7 @@
                 return r.json();
               })
               .then(function(data) {
-                return hubPostBooking(data.client_id);
+                return hubPostBooking(data.client_id, false);
               })
               .then(function(res) {
                 hubTrainerHasClientsCache = true;
@@ -4662,6 +4899,7 @@
                 if (hubQuickBookIsSandbox) hubEmbedSandboxBookStepNewBeforeQuickNext();
               } else {
                 hubBookPendingClientId = null;
+                hubBookPendingClientIsSandbox = false;
               }
             }
           };
@@ -4910,20 +5148,138 @@
         });
       }
 
-      function renderBookings(days) {
-        var daysForHub = dedupeHubBookingsDays(days || []);
+      function hubTodayYmdMinsk() {
+        try {
+          return new Intl.DateTimeFormat('en-CA', {
+            timeZone: 'Europe/Minsk',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+          }).format(new Date());
+        } catch (eMinsk) {
+          var t = new Date();
+          return (
+            t.getFullYear() +
+            '-' +
+            String(t.getMonth() + 1).padStart(2, '0') +
+            '-' +
+            String(t.getDate()).padStart(2, '0')
+          );
+        }
+      }
+
+      /** Belarus / trainer hub: wall clock Europe/Minsk ≈ UTC+3 (no DST). */
+      function hubMinskWallStartUtcMs(slotDateStr, startHHMM) {
+        var p = String(slotDateStr || '').split('-');
+        var tt = String(startHHMM || '').slice(0, 5).split(':');
+        if (p.length !== 3 || tt.length !== 2) return null;
+        var y = parseInt(p[0], 10);
+        var mo = parseInt(p[1], 10) - 1;
+        var d = parseInt(p[2], 10);
+        var h = parseInt(tt[0], 10);
+        var mi = parseInt(tt[1], 10);
+        if ([y, mo, d, h, mi].some(function(x) {
+          return isNaN(x);
+        }))
+          return null;
+        return Date.UTC(y, mo, d, h - 3, mi, 0);
+      }
+
+      function hubEstimateRemainingStartsToday(daysForHub) {
+        var todayStr = hubTodayYmdMinsk();
+        var dayRow = null;
+        (daysForHub || []).some(function(d) {
+          if (d && d.date === todayStr) {
+            dayRow = d;
+            return true;
+          }
+          return false;
+        });
+        if (!dayRow || !dayRow.bookings) return 0;
+        var bs = dedupeHubDayBookings(dayRow.bookings);
+        var nowMs = Date.now();
+        var rem = 0;
+        bs.forEach(function(b) {
+          if (!b || b.slot_date == null || b.start_time == null) return;
+          var ms = hubMinskWallStartUtcMs(String(b.slot_date), String(b.start_time));
+          if (ms != null && ms > nowMs) rem++;
+        });
+        return rem;
+      }
+
+      /** Fallback when API omits week_sessions: all deduped hub rows with start strictly after now (Minsk wall). */
+      function hubEstimateRemainingAllBookings(daysForHub) {
+        var nowMs = Date.now();
+        var rem = 0;
+        (daysForHub || []).forEach(function(d) {
+          var bs = dedupeHubDayBookings(d.bookings || []);
+          bs.forEach(function(b) {
+            if (!b || b.slot_date == null || b.start_time == null) return;
+            var ms = hubMinskWallStartUtcMs(String(b.slot_date), String(b.start_time));
+            if (ms != null && ms > nowMs) rem++;
+          });
+        });
+        return rem;
+      }
+
+      function renderBookings(daysOrPayload) {
+        var rawDays = Array.isArray(daysOrPayload)
+          ? daysOrPayload
+          : daysOrPayload && daysOrPayload.days;
+        var todaySessions =
+          daysOrPayload &&
+          typeof daysOrPayload === 'object' &&
+          !Array.isArray(daysOrPayload)
+            ? daysOrPayload.today_sessions
+            : null;
+        var weekSessions =
+          daysOrPayload &&
+          typeof daysOrPayload === 'object' &&
+          !Array.isArray(daysOrPayload)
+            ? daysOrPayload.week_sessions
+            : null;
+        var daysForHub = dedupeHubBookingsDays(rawDays || []);
         hubLastBookingsDays = daysForHub;
+        hubLastBookingsPayloadForAccentRefetch =
+          daysOrPayload && typeof daysOrPayload === 'object' && !Array.isArray(daysOrPayload)
+            ? daysOrPayload
+            : { days: rawDays || [], today_sessions: todaySessions, week_sessions: weekSessions };
+        if (
+          getInitData() &&
+          !hubMyServicesAccentPrefetchDone &&
+          !hubMyServicesAccentPrefetchInFlight &&
+          daysForHub.some(function(d) {
+            return (d.bookings || []).some(function(b) {
+              return b && b.service_id != null;
+            });
+          })
+        ) {
+          hubMyServicesAccentPrefetchInFlight = true;
+          fetch(apiUrlWithQuery('/trainer/my-services'), { headers: headersJson(), cache: 'no-store' })
+            .then(function(r) {
+              return r.json().then(function(j) {
+                return { ok: r.ok, j: j };
+              });
+            })
+            .then(function(x) {
+              if (x.ok && x.j && x.j.services) syncHubMyServicesAccentMap(x.j.services);
+            })
+            .catch(function() {
+              /* noop */
+            })
+            .finally(function() {
+              hubMyServicesAccentPrefetchDone = true;
+              hubMyServicesAccentPrefetchInFlight = false;
+              if (hubLastBookingsPayloadForAccentRefetch) {
+                renderBookings(hubLastBookingsPayloadForAccentRefetch);
+              }
+            });
+        }
         var block = document.getElementById('bookingsBlock');
         var todayCount = 0;
         var weekCount = 0;
 
-        var today = new Date();
-        var todayStr =
-          today.getFullYear() +
-          '-' +
-          String(today.getMonth() + 1).padStart(2, '0') +
-          '-' +
-          String(today.getDate()).padStart(2, '0');
+        var todayStr = hubTodayYmdMinsk();
 
         var pending = 0;
         daysForHub.forEach(function(d) {
@@ -4955,9 +5311,16 @@
           firstWhen = (b0.start_time || '').slice(0, 5);
         }
 
-        hubLastTodayCount = todayCount;
+        var tsTotal = todaySessions && typeof todaySessions.total === 'number' ? todaySessions.total : null;
+        var tsRem = todaySessions && typeof todaySessions.remaining === 'number' ? todaySessions.remaining : null;
+        var wsTotal = weekSessions && typeof weekSessions.total === 'number' ? weekSessions.total : null;
+        var wsRem = weekSessions && typeof weekSessions.remaining === 'number' ? weekSessions.remaining : null;
+
+        hubLastTodayCount = tsTotal != null ? tsTotal : todayCount;
+        hubLastTodayRemaining = tsRem != null ? tsRem : hubEstimateRemainingStartsToday(daysForHub);
         hubLastFirstWhen = firstWhen;
-        hubLastWeekCount = weekCount;
+        hubLastWeekCount = wsTotal != null ? wsTotal : weekCount;
+        hubLastWeekRemaining = wsRem != null ? wsRem : hubEstimateRemainingAllBookings(daysForHub);
 
         var maxN = HUB_UPCOMING_BOOKINGS_MAX;
         var totalBookings = 0;
@@ -5049,8 +5412,10 @@
         setStateMessage('', '');
         hubLastBookingsDays = null;
         hubLastTodayCount = 0;
+        hubLastTodayRemaining = 0;
         hubLastFirstWhen = '';
         hubLastWeekCount = 0;
+        hubLastWeekRemaining = 0;
         hubLastUpcomingListCount = 0;
         hubLastPendingCount = 0;
         hubMtdRevenueText = null;
@@ -5096,8 +5461,10 @@
           setStateMessage('', '');
           hubLastBookingsDays = null;
           hubLastTodayCount = 0;
+          hubLastTodayRemaining = 0;
           hubLastFirstWhen = '';
           hubLastWeekCount = 0;
+          hubLastWeekRemaining = 0;
           hubLastUpcomingListCount = 0;
           hubLastPendingCount = 0;
           hubMtdRevenueText = null;
@@ -5159,8 +5526,10 @@
               setStateMessage('', '');
               hubLastBookingsDays = null;
               hubLastTodayCount = 0;
+              hubLastTodayRemaining = 0;
               hubLastFirstWhen = '';
               hubLastWeekCount = 0;
+              hubLastWeekRemaining = 0;
               hubLastUpcomingListCount = 0;
               hubLastPendingCount = 0;
               hubMtdRevenueText = null;
@@ -5173,7 +5542,7 @@
               return;
             }
             setStateMessage('');
-            renderBookings((o.data && o.data.days) || []);
+            renderBookings(o.data || {});
             /* Refresh checklist so has_completed_booking / last client id stay in sync after mark-complete in schedule. */
             loadOnboardingChecklist();
           })
@@ -5191,8 +5560,10 @@
                   } else {
                     hubLastBookingsDays = null;
                     hubLastTodayCount = 0;
+                    hubLastTodayRemaining = 0;
                     hubLastFirstWhen = '';
                     hubLastWeekCount = 0;
+                    hubLastWeekRemaining = 0;
                     hubLastUpcomingListCount = 0;
                     hubLastPendingCount = 0;
                     hubMtdRevenueText = null;
@@ -5207,8 +5578,10 @@
                 .catch(function() {
                   hubLastBookingsDays = null;
                   hubLastTodayCount = 0;
+                  hubLastTodayRemaining = 0;
                   hubLastFirstWhen = '';
                   hubLastWeekCount = 0;
+                  hubLastWeekRemaining = 0;
                   hubLastUpcomingListCount = 0;
                   hubLastPendingCount = 0;
                   hubMtdRevenueText = null;
@@ -5222,8 +5595,10 @@
             } else {
               hubLastBookingsDays = null;
               hubLastTodayCount = 0;
+              hubLastTodayRemaining = 0;
               hubLastFirstWhen = '';
               hubLastWeekCount = 0;
+              hubLastWeekRemaining = 0;
               hubLastUpcomingListCount = 0;
               hubLastPendingCount = 0;
               hubMtdRevenueText = null;
@@ -6351,7 +6726,7 @@
         }
         if (bs && bs.bookings && bs.bookings.days) {
           setStateMessage('');
-          renderBookings(bs.bookings.days);
+          renderBookings(bs.bookings);
         } else {
           loadBookings();
         }

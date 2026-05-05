@@ -18,6 +18,8 @@ Two aggregators and one scheduler helper:
   Priority: explicit ``trainers.digest_send_time`` → иначе утренний слот по умолчанию (08:00) или
   раньше, если первая тренировка требует (``min(08:00, first_session - lead)``), без отправки
   днём «как за час до вечерней тренировки». Clamped to push window.
+- Weekly Sunday digest: ``resolve_weekly_digest_send_time`` — вечерний слот по умолчанию (не зависит
+  от ``digest_send_time``, чтобы не совпадать с утренним обзором).
 
 Drought ladder order (first match wins; case 7 = silence):
   1. Open catalog requests > 0
@@ -67,6 +69,8 @@ DROUGHT_SLOT_HORIZON_DAYS = 14
 
 # Авто-режим (digest_send_time IS NULL): слот утром, не «за час» до вечерней тренировки.
 MORNING_DIGEST_AUTO_DEFAULT_T = time(8, 0)
+# Sunday ledger + forward-plan digest — deliberately not tied to morning digest settings.
+WEEKLY_DIGEST_DEFAULT_SEND_T = time(20, 0)
 
 
 async def _digest_catalog_pulse_for_local_range(
@@ -714,6 +718,35 @@ def resolve_digest_send_time(
     return candidate
 
 
+def resolve_weekly_digest_send_time(
+    *,
+    push_window_start_hour: int,
+    push_window_end_hour: int,
+) -> time:
+    """
+    Wall-clock moment for **Sunday weekly** Telegram digest (Europe/Minsk).
+
+    Fixed evening default (~20:00); ``digest_send_time`` does **not** apply here (that knob is daily).
+    Same-day push window clamp: ``[start_h, end_h)`` — if default hits the excluded end hour,
+    target the last feasible hour inside the window.
+    """
+    candidate = WEEKLY_DIGEST_DEFAULT_SEND_T
+    lower = time(hour=push_window_start_hour)
+    upper = time(hour=push_window_end_hour) if push_window_end_hour < 24 else None
+
+    if candidate < lower:
+        candidate = lower
+
+    if upper is not None and candidate >= upper:
+        h = push_window_end_hour - 1
+        if h < push_window_start_hour:
+            candidate = lower
+        else:
+            candidate = time(hour=h, minute=0)
+
+    return candidate
+
+
 def now_minsk() -> datetime:
     """Current Europe/Minsk wall-clock time (scheduler convenience)."""
     return datetime.now(ZoneInfo(NOTIFICATION_TZ))
@@ -723,6 +756,7 @@ __all__ = [
     "get_trainer_daily_digest",
     "get_trainer_weekly_digest",
     "resolve_digest_send_time",
+    "resolve_weekly_digest_send_time",
     "now_minsk",
     "GAP_MIN_MINUTES",
     "DROUGHT_CONSECUTIVE_DAYS",

@@ -840,14 +840,18 @@ async def get_pending_request_notifications(session: AsyncSession, limit: int = 
     Pairs (request, trainer) where request is new, not yet notified.
     - Personal (r.trainer_id set): only that trainer gets the row.
     - General (r.trainer_id NULL): all trainers matching city+service.
-    Returns list of dicts: request_id, trainer_id, trainer_telegram_id, city_name, service_name, comment.
+    Returns list of dicts: request_id, trainer_id, trainer_telegram_id, city_name, service_name, comment,
+    client_id, client_telegram_id, client_first_name, client_middle_name, client_last_name.
     """
     r = await session.execute(
         text("""
             (
             SELECT r.id, t.id AS trainer_id, t.telegram_id,
                    c.name AS city_name, s.name AS service_name, r.comment,
-                   r.client_id, cl.telegram_id AS client_telegram_id
+                   r.client_id, cl.telegram_id AS client_telegram_id,
+                   cl.first_name AS client_first_name,
+                   cl.middle_name AS client_middle_name,
+                   cl.last_name AS client_last_name
             FROM client_requests r
             INNER JOIN clients cl ON cl.id = r.client_id
             INNER JOIN cities c ON c.id = r.city_id
@@ -860,7 +864,10 @@ async def get_pending_request_notifications(session: AsyncSession, limit: int = 
             (
             SELECT r.id, t.id AS trainer_id, t.telegram_id,
                    c.name AS city_name, s.name AS service_name, r.comment,
-                   r.client_id, cl.telegram_id AS client_telegram_id
+                   r.client_id, cl.telegram_id AS client_telegram_id,
+                   cl.first_name AS client_first_name,
+                   cl.middle_name AS client_middle_name,
+                   cl.last_name AS client_last_name
             FROM client_requests r
             INNER JOIN clients cl ON cl.id = r.client_id
             INNER JOIN cities c ON c.id = r.city_id
@@ -886,6 +893,9 @@ async def get_pending_request_notifications(session: AsyncSession, limit: int = 
             "comment": row[5],
             "client_id": row[6],
             "client_telegram_id": row[7],
+            "client_first_name": row[8],
+            "client_middle_name": row[9],
+            "client_last_name": row[10],
         }
         for row in rows
     ]

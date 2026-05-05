@@ -20,29 +20,33 @@ from src.shared.trainer_status import normalize_trainer_status_value
 # Legacy display; DB column `label` kept for compatibility; tier_kind is source of truth.
 TRAINER_SERVICE_DEFAULT_TIER_LABEL = "Основной"
 
-# set_trainer_services: (service_id, tiers) | +description | +group_price_cents | +client_notice (optional).
+# set_trainer_services: (service_id, tiers) | +description | +group_price_cents | +client_notice | +ui_accent (optional).
 TrainerServiceWriteEntry = (
     tuple[int, list[tuple[str, int]]]
     | tuple[int, list[tuple[str, int]], str | None]
     | tuple[int, list[tuple[str, int]], str | None, int | None]
     | tuple[int, list[tuple[str, int]], str | None, int | None, str | None]
+    | tuple[int, list[tuple[str, int]], str | None, int | None, str | None, str | None]
 )
 
 
 def _normalize_trainer_service_write_entry(
     entry: TrainerServiceWriteEntry,
-) -> tuple[int, list[tuple[str, int]], str | None, int | None, str | None]:
+) -> tuple[int, list[tuple[str, int]], str | None, int | None, str | None, str | None]:
     if len(entry) == 2:
         sid, tiers = entry
-        return sid, tiers, None, None, None
+        return sid, tiers, None, None, None, None
     if len(entry) == 3:
         sid, tiers, desc = entry
-        return sid, tiers, desc, None, None
+        return sid, tiers, desc, None, None, None
     if len(entry) == 4:
         sid, tiers, desc, gpc = entry
-        return sid, tiers, desc, gpc, None
-    sid, tiers, desc, gpc, notice = entry
-    return sid, tiers, desc, gpc, notice
+        return sid, tiers, desc, gpc, None, None
+    if len(entry) == 5:
+        sid, tiers, desc, gpc, notice = entry
+        return sid, tiers, desc, gpc, notice, None
+    sid, tiers, desc, gpc, notice, ui_accent = entry
+    return sid, tiers, desc, gpc, notice, ui_accent
 
 
 def _sql_public_catalog_education_predicate(table_alias: str = "e") -> str:
@@ -164,7 +168,9 @@ class TrainerRepository:
             return sorted_tiers[0][1]
 
         for raw in entries:
-            sid, tiers, svc_description, group_price_cents, client_notice = _normalize_trainer_service_write_entry(raw)
+            sid, tiers, svc_description, group_price_cents, client_notice, ui_accent = (
+                _normalize_trainer_service_write_entry(raw)
+            )
             merged: dict[str, int] = {}
             for tier_kind, pc in tiers:
                 tk = normalize_price_tier_kind(tier_kind)
@@ -175,8 +181,8 @@ class TrainerRepository:
             anchor = _anchor_cents(clean_tiers)
             await self._session.execute(
                 text("""
-                    INSERT INTO trainer_services (trainer_id, service_id, price_cents, description, group_price_cents, client_notice)
-                    VALUES (:tid, :sid, :price_cents, :descr, :group_pc, :client_notice)
+                    INSERT INTO trainer_services (trainer_id, service_id, price_cents, description, group_price_cents, client_notice, ui_accent)
+                    VALUES (:tid, :sid, :price_cents, :descr, :group_pc, :client_notice, :ui_accent)
                 """),
                 {
                     "tid": trainer_id,
@@ -185,6 +191,7 @@ class TrainerRepository:
                     "descr": svc_description,
                     "group_pc": group_price_cents,
                     "client_notice": client_notice,
+                    "ui_accent": ui_accent,
                 },
             )
             for order, (tk, pc) in enumerate(clean_tiers):
@@ -198,6 +205,24 @@ class TrainerRepository:
                     """),
                     {"tid": trainer_id, "sid": sid, "lbl": lbl, "pc": pc, "ord": order, "tk": tk},
                 )
+
+    async def patch_trainer_service_ui_accents(
+        self,
+        trainer_id: int,
+        items: list[tuple[int, str | None]],
+    ) -> None:
+        """Update ui_accent for trainer_services rows. Caller must ensure each service_id belongs to trainer."""
+        for service_id, ui_accent in items:
+            await self._session.execute(
+                text(
+                    """
+                    UPDATE trainer_services
+                    SET ui_accent = :ua
+                    WHERE trainer_id = :tid AND service_id = :sid
+                    """
+                ),
+                {"tid": trainer_id, "sid": service_id, "ua": ui_accent},
+            )
 
     async def set_trainer_arenas(self, trainer_id: int, arena_ids: list[int]) -> None:
         """Replace trainer's arenas with given ids."""
@@ -251,7 +276,7 @@ class TrainerRepository:
     async def set_digest_settings(
         self, trainer_id: int, *, digest_enabled: bool, digest_send_time: time | None
     ) -> None:
-        """Morning/weekly digest toggle + fixed Europe/Minsk send time; NULL = auto morning slot (~8:00), not tied to evening sessions."""
+        """Digest toggle + Europe/Minsk time for daily digest only; weekly Sunday fires separately (evening — see notification_loops)."""
         await self._session.execute(
             text(
                 "UPDATE trainers SET digest_enabled = :en, digest_send_time = :st WHERE id = :tid"
@@ -359,7 +384,7 @@ class TrainerRepository:
         out["photos"] = [{"file_key": r[0], "file_key_list": r[1], "sort_order": r[2]} for r in rph.fetchall()]
         rsv = await self._session.execute(
             text(
-                "SELECT service_id, price_cents, description, group_price_cents, client_notice FROM trainer_services WHERE trainer_id = :id ORDER BY service_id"
+                "SELECT service_id, price_cents, description, group_price_cents, client_notice, ui_accent FROM trainer_services WHERE trainer_id = :id ORDER BY service_id"
             ),
             {"id": trainer_id},
         )
@@ -421,6 +446,11 @@ class TrainerRepository:
                     ns = str(r[4]).strip()
                     if ns:
                         notice_out = ns
+                ui_accent_out: str | None = None
+                if len(r) > 5 and r[5] is not None:
+                    ua = str(r[5]).strip().lower()
+                    if ua:
+                        ui_accent_out = ua
                 if tiers:
                     prices = [t["price_cents"] for t in tiers]
                     p_min, p_max = min(prices), max(prices)
@@ -440,6 +470,7 @@ class TrainerRepository:
                     "group_price_cents": gpc_row,
                     "group_price_byn": round(gpc_row / 100, 2) if gpc_row is not None else None,
                     "client_notice": notice_out,
+                    "ui_accent": ui_accent_out,
                 }
                 out["services"].append(svc_dict)
         else:
@@ -1252,7 +1283,7 @@ class TrainerRepository:
             })
         rsv = await self._session.execute(
             text(
-                f"SELECT trainer_id, service_id, price_cents, description, group_price_cents, client_notice FROM trainer_services WHERE trainer_id IN ({placeholders}) ORDER BY trainer_id, service_id"
+                f"SELECT trainer_id, service_id, price_cents, description, group_price_cents, client_notice, ui_accent FROM trainer_services WHERE trainer_id IN ({placeholders}) ORDER BY trainer_id, service_id"
             ),
             id_params,
         )
@@ -1316,6 +1347,11 @@ class TrainerRepository:
                 ns = str(row[5]).strip()
                 if ns:
                     notice_row = ns
+            ui_accent_row: str | None = None
+            if len(row) > 6 and row[6] is not None:
+                uas = str(row[6]).strip().lower()
+                if uas:
+                    ui_accent_row = uas
             tiers = tiers_by_tid_sid.get((tid, sid), [])
             if tiers:
                 prices = [t["price_cents"] for t in tiers]
@@ -1337,6 +1373,7 @@ class TrainerRepository:
                     "group_price_cents": gpc_row,
                     "group_price_byn": round(gpc_row / 100, 2) if gpc_row is not None else None,
                     "client_notice": notice_row,
+                    "ui_accent": ui_accent_row,
                 }
             )
         rar = await self._session.execute(

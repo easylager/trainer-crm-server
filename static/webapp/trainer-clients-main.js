@@ -1430,17 +1430,22 @@
         var html = state.filteredClients.map(function(c) {
           var name = trainerClientDisplayName(c).trim() || 'Клиент';
           var initials = clientInitials(name);
-          var phone = c.phone || 'Телефон не указан';
+          var isSandbox = !!c.is_sandbox;
+          var phone = isSandbox ? 'Тестовый клиент' : (c.phone || 'Телефон не указан');
           var lastLabel = c.last_date
             ? ('Последнее проведённое: ' + formatDate(c.last_date) + (c.last_start ? ' ' + formatTime(c.last_start) : ''))
-            : 'Проведённых занятий ещё не было';
-          var needsInvite = c.telegram_id == null || c.telegram_id === '';
+            : (isSandbox ? 'Демо-запись для знакомства с системой' : 'Проведённых занятий ещё не было');
+          var needsInvite = !isSandbox && (c.telegram_id == null || c.telegram_id === '');
+          // Sandbox pill replaces the «нет в боте» badge — for a demo identity that label is noise.
           var badge =
-            needsInvite
-              ? '<span class="client-badge client-badge--no-tg">Нет в боте</span>'
-              : '';
+            isSandbox
+              ? '<span class="client-badge client-badge--sandbox" role="status">Пример</span>'
+              : (needsInvite
+                  ? '<span class="client-badge client-badge--no-tg">Нет в боте</span>'
+                  : '');
+          var cardCls = 'client-card' + (isSandbox ? ' client-card--sandbox' : '');
           return (
-            '<button type=\"button\" class=\"client-card\" data-id=\"' + c.id + '\">' +
+            '<button type=\"button\" class=\"' + cardCls + '\" data-id=\"' + c.id + '\">' +
               '<div class=\"client-avatar\" aria-hidden=\"true\">' + escapeHtml(initials) + '</div>' +
               '<div class=\"client-main\">' +
                 '<div class=\"client-name-row\">' +
@@ -2122,16 +2127,19 @@
         });
         if (!client) return;
         state.selectedClientId = id;
+        var isSandbox = !!client.is_sandbox;
         var displayNameRaw = trainerClientDisplayName(client);
         var name = displayNameRaw.trim() || 'Клиент';
         var fn0 = (client.first_name || '').trim();
         var ln0 = (client.last_name || '').trim();
         var mn0 = (client.middle_name || '').trim();
-        var phone = client.phone || '—';
+        var phone = isSandbox ? '—' : (client.phone || '—');
         var lastLabel = client.last_date
           ? (formatDate(client.last_date) + (client.last_start ? ' ' + formatTime(client.last_start) : ''))
           : '—';
-        var firstDateLabel = client.first_date ? ('Клиент с ' + formatDate(client.first_date)) : '';
+        var firstDateLabel = isSandbox
+          ? ''
+          : (client.first_date ? ('Клиент с ' + formatDate(client.first_date)) : '');
         var initials = clientInitials(name);
         var phoneDisplay = phone !== '—'
           ? '<a class=\"tc-tel\" href=\"tel:' + escapeHtml(String(phone).replace(/\\s+/g, '')) + '\">' + escapeHtml(phone) + '</a>'
@@ -2147,7 +2155,7 @@
           '<svg class="tc-name-edit-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg>';
         var ICO_TRASH =
           '<svg class="tc-remove-client-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>';
-        var canDm = trainerClientCanWriteTelegram(client);
+        var canDm = !isSandbox && trainerClientCanWriteTelegram(client);
         var heroDmBtn = '';
         if (canDm) {
           heroDmBtn =
@@ -2155,18 +2163,33 @@
             ICO_MSG_BUBBLE +
             '</button>';
         }
-        var heroActionsBar =
-          '<div class=\"tc-hero-actions\" role=\"toolbar\" aria-label=\"Действия\">' +
-          '<button type=\"button\" class=\"tc-name-edit-btn\" id=\"tcIdentityEditToggle\" aria-label=\"Редактировать ФИО\" title=\"Редактировать ФИО\" aria-expanded=\"false\">' +
-          ICO_PENCIL +
-          '</button>' +
-          '<button type=\"button\" class=\"tc-remove-client-btn\" id=\"tcDetachClientBtn\" aria-label=\"Убрать из списка\" title=\"Убрать из списка\">' +
-          ICO_TRASH +
-          '</button>' +
-          heroDmBtn +
-          '</div>';
+        // Sandbox hero: hide identity-edit and detach-from-roster — both don't fit a demo identity.
+        // The single «Удалить пример» button below replaces them with a clear, scoped destructive action.
+        var heroActionsBar = isSandbox
+          ? ''
+          : (
+            '<div class=\"tc-hero-actions\" role=\"toolbar\" aria-label=\"Действия\">' +
+            '<button type=\"button\" class=\"tc-name-edit-btn\" id=\"tcIdentityEditToggle\" aria-label=\"Редактировать ФИО\" title=\"Редактировать ФИО\" aria-expanded=\"false\">' +
+            ICO_PENCIL +
+            '</button>' +
+            '<button type=\"button\" class=\"tc-remove-client-btn\" id=\"tcDetachClientBtn\" aria-label=\"Убрать из списка\" title=\"Убрать из списка\">' +
+            ICO_TRASH +
+            '</button>' +
+            heroDmBtn +
+            '</div>'
+          );
+        var sandboxBanner = isSandbox
+          ? (
+            '<div class=\"tc-sandbox-banner\" role=\"note\">' +
+            '<span class=\"tc-sandbox-banner__pill\">Пример</span>' +
+            '<p class=\"tc-sandbox-banner__text\">Тестовый клиент — нужен, чтобы посмотреть, как работают записи и карточка. ' +
+            'Не учитывается в статистике, рассылках и подсказках. Можно удалить в любой момент.</p>' +
+            '</div>'
+          )
+          : '';
         var detail = '' +
-          '<div class=\"tc-detail\">' +
+          '<div class=\"tc-detail' + (isSandbox ? ' tc-detail--sandbox' : '') + '\">' +
+          sandboxBanner +
           '<div class=\"tc-hero\">' +
             '<div class=\"tc-avatar\" aria-hidden=\"true\">' + escapeHtml(initials) + '</div>' +
             '<div class=\"tc-hero-text\">' +
@@ -2208,30 +2231,38 @@
               '<div class=\"detail-value is-loading\" id=\"clientPassesCertsContent\">' + buildClientPassesSkeletonHtml() + '</div>' +
             '</div>' +
           '</div>' +
-          '<div id=\"dossierContainer\">' + buildClientDossierSkeletonHtml() + '</div>' +
+          (isSandbox ? '' : '<div id=\"dossierContainer\">' + buildClientDossierSkeletonHtml() + '</div>') +
           '<div class=\"tc-actions\">' +
             '<button type=\"button\" class=\"bd-btn bd-btn--primary\" id=\"btnBookClient\">' +
             '<span class=\"tc-action-btn__icon\" aria-hidden=\"true\">' + ICO_CAL + '</span>' +
-            '<span class=\"tc-action-btn__label\">Записать на занятие</span></button>' +
-            '<button type=\"button\" class=\"bd-btn bd-btn--secondary\" id=\"btnIssuePass\">' + ICO_TICKET + ' Выдать абонемент</button>';
-        if (phone && phone !== '—') {
-          detail += '<button type=\"button\" class=\"bd-btn bd-btn--surface\" id=\"btnCopyPhone\">' + ICO_PHONE + ' Скопировать телефон</button>';
-        }
-        if (canDm) {
-          detail += '<button type=\"button\" class=\"bd-btn bd-btn--surface\" id=\"btnWriteClient\">' + ICO_SEND + ' Написать в TG</button>';
-        }
-        var showBindWelcome = client.telegram_id == null;
-        if (showBindWelcome) {
+            '<span class=\"tc-action-btn__label\">Записать на занятие</span></button>';
+        if (!isSandbox) {
+          detail += '<button type=\"button\" class=\"bd-btn bd-btn--secondary\" id=\"btnIssuePass\">' + ICO_TICKET + ' Выдать абонемент</button>';
+          if (phone && phone !== '—') {
+            detail += '<button type=\"button\" class=\"bd-btn bd-btn--surface\" id=\"btnCopyPhone\">' + ICO_PHONE + ' Скопировать телефон</button>';
+          }
+          if (canDm) {
+            detail += '<button type=\"button\" class=\"bd-btn bd-btn--surface\" id=\"btnWriteClient\">' + ICO_SEND + ' Написать в TG</button>';
+          }
+          var showBindWelcome = client.telegram_id == null;
+          if (showBindWelcome) {
+            detail +=
+              '<div class=\"tc-client-bind-welcome\" role=\"status\">' +
+              '<div class=\"detail-label tc-client-bind-welcome__label\">Клиент ещё не в Telegram-боте</div>' +
+              '<p class=\"tc-client-bind-welcome__hint\">Чтобы привязать профиль и получать напоминания, отправьте ту же общую пригласительную ссылку, что на главной странице кабинета — кнопка со значком связи справа вверху. Одна ссылка для всех клиентов.</p>' +
+              '</div>';
+          }
+        } else {
+          // Sandbox: scoped destructive action — deletes phantom client + every demo booking, no
+          // confirm dialog from the trainer's side besides a single confirm() prompt below.
           detail +=
-            '<div class=\"tc-client-bind-welcome\" role=\"status\">' +
-            '<div class=\"detail-label tc-client-bind-welcome__label\">Клиент ещё не в Telegram-боте</div>' +
-            '<p class=\"tc-client-bind-welcome__hint\">Чтобы привязать профиль и получать напоминания, отправьте ту же общую пригласительную ссылку, что на главной странице кабинета — кнопка со значком связи справа вверху. Одна ссылка для всех клиентов.</p>' +
-            '</div>';
+            '<button type=\"button\" class=\"bd-btn bd-btn--danger tc-sandbox-delete-btn\" id=\"btnDeleteSandbox\">' +
+            ICO_TRASH + ' Удалить пример</button>';
         }
         detail +=
-          '</div><div id=\"clientHistoryHost\" class=\"tc-history-host\">' +
-          buildClientHistorySkeletonHtml() +
-          '</div></div>';
+          '</div>' +
+          (isSandbox ? '' : '<div id=\"clientHistoryHost\" class=\"tc-history-host\">' + buildClientHistorySkeletonHtml() + '</div>') +
+          '</div>';
         document.getElementById('clientDetail').innerHTML = detail;
         document.getElementById('clientsSection').style.display = 'none';
         document.querySelector('.search-box').style.display = 'none';
@@ -2350,6 +2381,40 @@
             var path = (window.location.pathname || '').replace(/[^/]+$/, '') || '/webapp/';
             var passUrl = path + 'trainer-pass-products?client_id=' + encodeURIComponent(id);
             window.location.href = passUrl;
+          };
+        }
+        var deleteSandboxBtn = document.getElementById('btnDeleteSandbox');
+        if (deleteSandboxBtn) {
+          deleteSandboxBtn.onclick = function() {
+            if (deleteSandboxBtn.disabled) return;
+            if (!window.confirm('Удалить тестового клиента и все связанные с ним пробные записи? Это действие нельзя отменить.')) return;
+            deleteSandboxBtn.disabled = true;
+            var url = withInit('/api/webapp/trainer/clients/' + encodeURIComponent(id) + '/sandbox');
+            fetch(url, { method: 'DELETE', headers: { 'Content-Type': 'application/json' } })
+              .then(function(r) {
+                if (!r.ok) {
+                  return r.json().then(function(data) {
+                    throw new Error((data && data.detail) || r.statusText || 'Ошибка удаления');
+                  }, function() {
+                    throw new Error(r.statusText || 'Ошибка удаления');
+                  });
+                }
+                return r.json().catch(function() { return {}; });
+              })
+              .then(function() {
+                state.allClients = state.allClients.filter(function(x) { return x.id !== id; });
+                applyFilter();
+                renderList();
+                document.getElementById('detailSection').style.display = 'none';
+                document.getElementById('clientsSection').style.display = '';
+                var sb = document.querySelector('.search-box');
+                if (sb) sb.style.display = '';
+                document.body.classList.remove('client-detail-mode');
+              })
+              .catch(function(err) {
+                deleteSandboxBtn.disabled = false;
+                alert((err && err.message) || 'Не удалось удалить пример');
+              });
           };
         }
         updateReturnBookingBackUi();

@@ -27,6 +27,7 @@ from src.api.schemas import (
     TrainerEducationCreateBody,
     TrainerEducationPatchBody,
     TrainerProfilePatchBody,
+    TrainerServiceUiAccentsPatchBody,
 )
 from src.api.routes.public import _enrich_trainer_photo_urls
 from src.application.trainer_link import get_trainer_id_linked_any_status_from_principal
@@ -310,6 +311,41 @@ async def patch_trainer_profile_for_webapp(
     if not ok:
         raise HTTPException(status_code=404, detail="Trainer not found")
     audit_log("trainer.profile_updated", ACTOR_API, "webapp_trainer_profile", {"trainer_id": trainer_id})
+    return {"ok": True}
+
+
+@router.patch("/trainer/profile/service-ui-accents")
+async def patch_trainer_service_ui_accents_for_webapp(
+    body: TrainerServiceUiAccentsPatchBody,
+    session: AsyncSession = Depends(get_session),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
+) -> dict[str, bool]:
+    """Update hub/schedule border accent presets per offered service. Auth: trainer initData."""
+    trainer_id = await _linked_trainer_id(session, principal)
+    if not body.items:
+        return {"ok": True}
+    r_allowed = await session.execute(
+        text("SELECT service_id FROM trainer_services WHERE trainer_id = :tid"),
+        {"tid": trainer_id},
+    )
+    allowed = {int(row[0]) for row in r_allowed.fetchall()}
+    requested_ids = {it.service_id for it in body.items}
+    bad = sorted(requested_ids - allowed)
+    if bad:
+        raise HTTPException(
+            status_code=422,
+            detail="Услуги не в вашем каталоге: " + ", ".join(str(x) for x in bad),
+        )
+    repo = TrainerRepository(session)
+    pairs = [(it.service_id, it.ui_accent) for it in body.items]
+    await repo.patch_trainer_service_ui_accents(trainer_id, pairs)
+    await session.commit()
+    audit_log(
+        "trainer.service_ui_accents_updated",
+        ACTOR_API,
+        "webapp_trainer_profile",
+        {"trainer_id": trainer_id, "count": len(pairs)},
+    )
     return {"ok": True}
 
 

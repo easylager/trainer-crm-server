@@ -190,6 +190,7 @@ async def get_admin_money_stats(session: AsyncSession) -> dict:
                         LEFT JOIN pass_redemptions pr ON pr.booking_id = b.id
                         LEFT JOIN certificate_booking_credits cbc ON cbc.booking_id = b.id
                         WHERE b.status = 'completed'
+                          AND NOT b.is_sandbox -- Onboarding demo never contributes to platform GMV.
                           AND s.slot_date >= :ds AND s.slot_date <= :de
                     ),
                     pass_cents AS (
@@ -538,6 +539,7 @@ async def get_admin_growth_stats(session: AsyncSession) -> dict:
                     SELECT trainer_id, MIN(created_at) AS first_booking_at
                     FROM bookings
                     WHERE status NOT IN ('cancelled', 'declined')
+                      AND NOT is_sandbox -- Real time-to-first-booking; demo doesn't count.
                     GROUP BY trainer_id
                 )
                 SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM (fb.first_booking_at - t.created_at)) / 86400.0)
@@ -629,7 +631,7 @@ async def get_admin_growth_stats(session: AsyncSession) -> dict:
                     t.id, t.created_at, t.status,
                     NULLIF(TRIM(CONCAT(COALESCE(p.first_name, ''), ' ', COALESCE(p.last_name, ''))), '') AS name,
                     EXISTS(SELECT 1 FROM trainer_referrals tr WHERE tr.referred_id = t.id)               AS is_referred,
-                    EXISTS(SELECT 1 FROM bookings b WHERE b.trainer_id = t.id AND b.status NOT IN ('cancelled','declined')) AS has_booking,
+                    EXISTS(SELECT 1 FROM bookings b WHERE b.trainer_id = t.id AND b.status NOT IN ('cancelled','declined') AND NOT b.is_sandbox) AS has_booking,
                     EXISTS(SELECT 1 FROM trainer_invoices inv WHERE inv.trainer_id = t.id AND inv.status = 'paid')          AS has_paid
                 FROM trainers t
                 LEFT JOIN trainer_profiles p ON p.trainer_id = t.id

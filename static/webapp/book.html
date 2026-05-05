@@ -551,10 +551,10 @@
       <p class="success-hint">Окно можно закрыть крестиком вверху Telegram.</p>
       <div class="success-share-nudge" id="successShareNudge" style="display: none;">
         <div class="success-share-nudge-text">
-          <strong id="successShareTitle">Позовите кого-нибудь</strong>
-          <span>Поделитесь тренером — 1 касание</span>
+          <strong id="successShareTitle">Пригласите знакомых к вашему тренеру</strong>
+          <span>Поделитесь ссылкой одним касанием</span>
         </div>
-        <button type="button" class="success-share-btn" id="btnShareTrainer" aria-label="Поделиться тренером">
+        <button type="button" class="success-share-btn" id="btnShareTrainer" aria-label="Поделиться ссылкой на тренера">
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
           Поделиться
         </button>
@@ -1370,9 +1370,8 @@
             if (!(data.share_text || '').trim() && !(data.share_url || '').trim()) return;
             bookSharePayload = data;
             var title = document.getElementById('successShareTitle');
-            if (title && data.trainer_name) {
-              var first = String(data.trainer_name).trim().split(/\s+/)[0];
-              title.textContent = 'Позовите тренироваться с ' + first;
+            if (title) {
+              title.textContent = 'Пригласите знакомых к вашему тренеру';
             }
             nudge.style.display = 'flex';
           })

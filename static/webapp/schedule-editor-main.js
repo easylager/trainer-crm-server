@@ -118,6 +118,16 @@
        * omit reschedule, cancel, and regular-client actions. Set to false to show them again.
        */
       const SCHEDULE_EDITOR_HIDE_GROUP_CONTEXT_BOOKING_ACTIONS = true;
+      const SCHEDULE_SERVICE_UI_ACCENT_SLUGS = ['sky', 'amber', 'emerald', 'violet', 'rose', 'slate'];
+      const SCHEDULE_SERVICE_SHORT_ALIASES = {
+        'персональная тренировка': 'Персоналка',
+        'персональная': 'Персоналка',
+        'индивидуальная тренировка': 'Индив',
+        'групповая тренировка': 'Группа',
+        'силовая тренировка': 'Силовая',
+        'реабилитационная тренировка': 'Реабил',
+        'растяжка': 'Растяжка',
+      };
 
       const BD_ICONS = {
         service: '<svg class="bd-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><path d="M3.27 6.96L12 12.01l8.73-5.05"/></svg>',
@@ -133,6 +143,54 @@
         linkOff: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M10 13a5 5 0 0 1 7.54.54 3 3 0 0 0 1.3 1.38"/><path d="M14 11a5 5 0 0 1 4.95 5.47"/><path d="M16 16a5 5 0 0 1-4.95 5"/><path d="M2 2l20 20"/><path d="M7.7 7.7A4 4 0 0 0 6 11c0 1.22.52 2.33 1.36 3.11"/><path d="M8.6 8.6A4 4 0 0 1 12 8a4 4 0 0 1 3.17 6.27"/></svg>',
         alert: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>'
       };
+
+      function scheduleEditorServiceAccentSlug(serviceId) {
+        var sid = serviceId != null ? parseInt(String(serviceId), 10) : NaN;
+        if (isNaN(sid)) return '';
+        var list = state.trainerServices || [];
+        for (var i = 0; i < list.length; i++) {
+          if (Number(list[i].id) === sid) {
+            var a = list[i].ui_accent;
+            if (a == null || !String(a).trim()) return '';
+            var slug = String(a).trim().toLowerCase();
+            if (SCHEDULE_SERVICE_UI_ACCENT_SLUGS.indexOf(slug) < 0) return '';
+            return slug;
+          }
+        }
+        return '';
+      }
+
+      function scheduleEditorServiceShortLabel(serviceName) {
+        var raw = serviceName == null ? '' : String(serviceName).trim();
+        if (!raw) return '';
+        var normalized = raw
+          .toLowerCase()
+          .replace(/[ё]/g, 'е')
+          .replace(/[^a-zA-Zа-яА-Я0-9\s-]/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+        if (!normalized) return '';
+        if (SCHEDULE_SERVICE_SHORT_ALIASES[normalized]) return SCHEDULE_SERVICE_SHORT_ALIASES[normalized];
+        var words = normalized.split(/\s+/).filter(Boolean);
+        var base = words.slice(0, 2).join(' ');
+        if (!base) return '';
+        base = base.charAt(0).toUpperCase() + base.slice(1);
+        if (base.length <= 14) return base;
+        return base.slice(0, 13).trimEnd() + '…';
+      }
+
+      function scheduleEditorServiceBadgeHtml(serviceId, serviceName) {
+        var label = scheduleEditorServiceShortLabel(serviceName);
+        if (!label) return '';
+        var slug = scheduleEditorServiceAccentSlug(serviceId);
+        var slugCls = slug ? ' svc-badge--' + slug : '';
+        return (
+          '<span class="svc-badge' + slugCls + '" role="status">' +
+            '<span class="svc-badge-dot" aria-hidden="true"></span>' +
+            '<span class="svc-badge-label">' + escapeHtml(label) + '</span>' +
+          '</span>'
+        );
+      }
 
       function bookingInitials(displayName) {
         var s = (displayName || '').trim();
@@ -1139,6 +1197,13 @@
           var initials = bookingInitials(client);
           var html = '';
           html += '<div class="booking-detail">';
+          if (b.is_sandbox) {
+            html +=
+              '<div class="bd-test-booking-banner" role="status">' +
+              '<span class="schedule-sandbox-pill schedule-sandbox-pill--inline">тест</span>' +
+              '<span class="bd-test-booking-banner__text">Тестовая запись — для знакомства с системой, без напоминаний клиенту.</span>' +
+              '</div>';
+          }
           html += '<div class="bd-hero"><div class="bd-hero-inner">';
           html += '<div class="bd-hero-kicker">Дата и время</div>';
           html += '<div class="bd-hero-time">' + escapeHtml(b.start_time || '—') + ' – ' + escapeHtml(b.end_time || '—') + '</div>';
@@ -1155,7 +1220,7 @@
             html += '<a class="bd-client-profile-hit" href="' + escapeHtml(profileUrl) + '" aria-label="Профиль клиента: заметки и история">';
             html += '<div class="bd-avatar" aria-hidden="true">' + escapeHtml(initials) + '</div>';
             html += '<div class="bd-client-body">';
-            html += '<div class="bd-client-name">' + escapeHtml(client) + (b.client_has_telegram === false ? ' <span class="no-bot">Без бота</span>' : '') + '</div>';
+            html += '<div class="bd-client-name">' + escapeHtml(client) + (b.client_has_telegram === false && !b.is_sandbox ? ' <span class="no-bot">Без бота</span>' : '') + '</div>';
             html += '<span class="bd-client-profile-hint">Профиль и заметки</span>';
             html += '</div>';
             html += '<svg class="bd-client-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>';
@@ -1169,7 +1234,7 @@
             html += '<div class="bd-client">';
             html += '<div class="bd-avatar" aria-hidden="true">' + escapeHtml(initials) + '</div>';
             html += '<div class="bd-client-body">';
-            html += '<div class="bd-client-name">' + escapeHtml(client) + (b.client_has_telegram === false ? ' <span class="no-bot">Без бота</span>' : '') + '</div>';
+            html += '<div class="bd-client-name">' + escapeHtml(client) + (b.client_has_telegram === false && !b.is_sandbox ? ' <span class="no-bot">Без бота</span>' : '') + '</div>';
             if (b.client_phone) {
               var telRaw = String(b.client_phone).replace(/\s+/g, '');
               html += '<a class="bd-tel" href="tel:' + escapeHtml(telRaw) + '">' + escapeHtml(b.client_phone) + '</a>';
@@ -1201,8 +1266,6 @@
           var stRaw = (b.status || '').toLowerCase();
           var bookingEnded = isSlotEndedInPast(b);
           var canCancelBooking = stRaw === 'confirmed' && !bookingEnded;
-          var tid = b.client_telegram_id;
-          var canDmUsername = !!(b.client_telegram_username || '').replace(/^@/, '').trim();
           var bookingDetailFromGroupSlot =
             state.bookingDetailReturn === 'group' || state.bookingDetailReturn === 'hub_group';
           var suppressGroupSlotBookingActions =
@@ -1217,7 +1280,7 @@
             primaryActions.push({ cls: 'bd-btn--secondary', action: 'reschedule', icon: BD_ICONS.session, label: 'Перенести запись' });
             primaryActions.push({ cls: 'bd-btn--outline-danger', action: 'cancel', icon: BD_ICONS.cancelOutline, label: 'Отменить запись' });
           }
-          if (canDmUsername || (tid != null && tid !== '')) {
+          if (scheduleDetailTrainerCanWriteClient(b)) {
             extraActions.push({ cls: 'bd-btn--surface', action: 'write_client', icon: BD_ICONS.send, label: 'Написать клиенту' });
           }
           var canReportProblem = stRaw !== 'cancelled' && stRaw !== 'declined';
@@ -1547,9 +1610,9 @@
         ev.preventDefault();
         var booking = state.selectedBooking;
         if (!booking) return;
+        if (!scheduleDetailTrainerCanWriteClient(booking)) return;
         var un = String(booking.client_telegram_username || '').replace(/^@/, '').trim();
         var tid = booking.client_telegram_id;
-        if (!un && (tid == null || tid === '')) return;
         if (typeof window.openTelegramChatFromMiniApp === 'function') {
           window.openTelegramChatFromMiniApp({ username: un, telegramId: tid });
         }
@@ -2222,6 +2285,17 @@
         return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
       }
 
+      /** Same rule as trainer-home hub DM: Web cannot open tg://user?id= without @username. */
+      function scheduleDetailTrainerCanWriteClient(b) {
+        var un = (b.client_telegram_username || '').replace(/^@/, '').trim();
+        if (!!un) return true;
+        var tid = b.client_telegram_id;
+        if (tid == null || tid === '') return false;
+        var w = window.Telegram && window.Telegram.WebApp;
+        if (w && w.platform === 'web') return false;
+        return true;
+      }
+
       function setActiveTab(tabName) {
         state.tab = tabName;
         document.querySelectorAll('.tab').forEach(function(x) { x.classList.toggle('active', x.dataset.tab === tabName); });
@@ -2713,29 +2787,31 @@
               state.pendingBookFlowFromHub = false;
               openQuickBookModalFromHub();
             }
-            if (fromHubQuickBook) {
-              requestAnimationFrame(function() {
-                renderCalendar();
-              });
-            } else {
-              renderCalendar();
-            }
-            flushPendingGroupHubModal();
-            if (state.pendingBookGroupSlotId) {
-              var sidPb = state.pendingBookGroupSlotId;
-              state.pendingBookGroupSlotId = null;
-              var slotRowPb = (state.slots || []).find(function(x) { return x.id === sidPb; });
-              if (slotRowPb) {
-                setTimeout(function() { openBookModalForSlot(sidPb); }, 60);
+            return loadTrainerServicesIfNeeded().then(function() {
+              if (fromHubQuickBook) {
+                requestAnimationFrame(function() {
+                  renderCalendar();
+                });
               } else {
-                showToast('Слот на другой неделе — перелистните календарь или откройте запись из расписания.');
+                renderCalendar();
               }
-            }
-            if (typeof opts.onComplete === 'function') {
-              try {
-                opts.onComplete();
-              } catch (eCb) { /* ignore */ }
-            }
+              flushPendingGroupHubModal();
+              if (state.pendingBookGroupSlotId) {
+                var sidPb = state.pendingBookGroupSlotId;
+                state.pendingBookGroupSlotId = null;
+                var slotRowPb = (state.slots || []).find(function(x) { return x.id === sidPb; });
+                if (slotRowPb) {
+                  setTimeout(function() { openBookModalForSlot(sidPb); }, 60);
+                } else {
+                  showToast('Слот на другой неделе — перелистните календарь или откройте запись из расписания.');
+                }
+              }
+              if (typeof opts.onComplete === 'function') {
+                try {
+                  opts.onComplete();
+                } catch (eCb) { /* ignore */ }
+              }
+            });
           })
           .catch(function(err) {
             if (err === 'retry-init') {
@@ -3407,7 +3483,7 @@
             var st = (b.status || '').toLowerCase();
             var stLabel = st === 'pending' ? 'Ожидает подтверждения' : 'Подтверждено';
             var sandboxPill = b.is_sandbox
-              ? ' <span class="schedule-sandbox-pill schedule-sandbox-pill--inline" role="status">проба</span>'
+              ? ' <span class="schedule-sandbox-pill schedule-sandbox-pill--inline" role="status">тест</span>'
               : '';
             var bid = parseInt(b.booking_id, 10);
             var btn = document.createElement('button');
@@ -3504,6 +3580,10 @@
               }
             }
             const pct = cap > 0 ? Math.min(100, Math.round((occ / cap) * 100)) : 0;
+            var serviceBadge = '';
+            if (groupHub || bookedClick) {
+              serviceBadge = scheduleEditorServiceBadgeHtml(s.service_id, s.service_label);
+            }
             html += '<div class="slot-row' + (slotPast ? ' slot-past' : '')
               + (cohortSlot ? ' slot-cohort' : '')
               + (groupHub ? ' slot-group-hub' : '')
@@ -3511,7 +3591,8 @@
               + (!groupHub && bookedClick ? ' slot-booked-click' : '')
               + (bookingPending ? ' slot-booking-pending' : '')
               + (bookingConfirmed ? ' slot-booking-confirmed' : '')
-              + (bookingCompleted ? ' slot-booking-completed' : '') + '"'
+              + (bookingCompleted ? ' slot-booking-completed' : '')
+              + '"'
               + (!groupHub && bookableAvailable ? ' data-slot-id="' + s.id + '" role="button" tabindex="0"' : '')
               + (groupHub ? ' data-slot-id="' + s.id + '" data-group-hub="1" role="button" tabindex="0"' : '')
               + (cohortSlot ? ' data-training-group-id="' + String(s.training_group_id) + '" role="button" tabindex="0"' : '')
@@ -3519,9 +3600,14 @@
               + (!groupHub && bookedClick ? ' data-booking-status="' + escapeHtml(bst) + '"' : '')
               + '>';
             html += '<div class="slot-row-left">';
+            html += '<div class="slot-time-row">';
             html += '<span class="slot-time">' + escapeHtml(s.start_time || '') + '–' + escapeHtml(s.end_time || '') + '</span>';
             if (s.has_sandbox_booking && !groupHub) {
-              html += '<span class="schedule-sandbox-pill" role="status" aria-label="Пробная запись">проба</span>';
+              html += '<span class="schedule-sandbox-pill" role="status" aria-label="Тестовая запись">тест</span>';
+            }
+            html += '</div>';
+            if (serviceBadge) {
+              html += '<div class="slot-service-badge-row">' + serviceBadge + '</div>';
             }
             if (s.training_group_id && s.training_group_name) {
               html += '<div class="slot-cohort-hint">Группа: ' + escapeHtml(s.training_group_name) + '</div>';
@@ -3555,7 +3641,7 @@
             if (groupHub) {
               html += '<span class="slot-group-chip">' + occ + '/' + cap + '</span>';
               if (s.has_sandbox_booking) {
-                html += '<span class="schedule-sandbox-pill schedule-sandbox-pill--inline" role="status">проба</span>';
+                html += '<span class="schedule-sandbox-pill schedule-sandbox-pill--inline" role="status">тест</span>';
               }
               if (spotsLeft > 0) {
                 html += '<span class="slot-status available" style="font-size:11px;padding:4px 8px;">ещё места</span>';

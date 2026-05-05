@@ -272,6 +272,39 @@
       font-variant-numeric: tabular-nums;
       min-height: 1.1em;
     }
+
+    .hub-stat-value.hub-stat-value--dual {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 2px;
+      line-height: 1.15;
+      min-height: 2.35em;
+      margin-bottom: 4px;
+    }
+
+    .hub-stat-value.hub-stat-value--dual .hub-stat-dual-line {
+      font-size: 21px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+      color: var(--tg-theme-text-color);
+    }
+
+    .hub-stat-value.hub-stat-value--dual .hub-stat-dual-line--sub {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--tg-theme-hint-color);
+      letter-spacing: 0.02em;
+    }
+
+    .hub-stat-value.hub-stat-value--dual .hub-stat-dual-num {
+      font-variant-numeric: tabular-nums;
+    }
+
+    .hub-stat-value.hub-stat-value--dual .hub-stat-dual-line--sub .hub-stat-dual-num {
+      color: inherit;
+    }
     
     .hub-stat-label {
       font-size: 12px;
@@ -709,6 +742,43 @@
       align-items: center;
       gap: 6px 10px;
     }
+    .hub-bookings-stack .slot-service-badge-row {
+      margin-top: 4px;
+    }
+    .hub-bookings-stack .svc-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      max-width: 100%;
+      padding: 2px 8px;
+      border-radius: 999px;
+      border: 1px solid color-mix(in srgb, var(--tg-theme-hint-color) 22%, transparent);
+      background: color-mix(in srgb, var(--tg-theme-secondary-bg-color) 86%, transparent);
+      color: var(--tg-theme-text-color);
+      font-size: 11px;
+      font-weight: 600;
+      line-height: 1.2;
+    }
+    .hub-bookings-stack .svc-badge-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      background: color-mix(in srgb, var(--tg-theme-hint-color) 72%, transparent);
+    }
+    .hub-bookings-stack .svc-badge-label {
+      min-width: 0;
+      max-width: 13ch;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .hub-bookings-stack .svc-badge.svc-badge--sky .svc-badge-dot { background: var(--svc-accent-sky); }
+    .hub-bookings-stack .svc-badge.svc-badge--amber .svc-badge-dot { background: var(--svc-accent-amber); }
+    .hub-bookings-stack .svc-badge.svc-badge--emerald .svc-badge-dot { background: var(--svc-accent-emerald); }
+    .hub-bookings-stack .svc-badge.svc-badge--violet .svc-badge-dot { background: var(--svc-accent-violet); }
+    .hub-bookings-stack .svc-badge.svc-badge--rose .svc-badge-dot { background: var(--svc-accent-rose); }
+    .hub-bookings-stack .svc-badge.svc-badge--slate .svc-badge-dot { background: var(--svc-accent-slate); }
     .hub-bookings-stack .hub-session-now-pill {
       display: inline-block;
       margin-left: 8px;
@@ -1875,7 +1945,7 @@
       opacity: 0.45;
       pointer-events: none;
     }
-    /* «Записать клиента»: пока грузятся услуги/клиенты — обе кнопки скрыты, но занимают место (нет «сначала только новый» на iOS). */
+    /* Обычный hub quick-book больше не держит первый экран в pending; sandbox всё ещё может скрывать кнопки до загрузки. */
     #hubModalBookGroupSlot .hub-book-choice-actions--pending .btn-book-option {
       visibility: hidden;
     }
@@ -2025,6 +2095,38 @@
       box-sizing: border-box;
     }
     #hubModalBookGroupSlot .client-row .phone { font-size: 13px; color: var(--tg-theme-hint-color); }
+    #hubModalBookGroupSlot .hub-book-client-row__nobot {
+      font-size: 11px;
+      color: var(--tg-theme-hint-color);
+    }
+    #hubModalBookGroupSlot .book-client-list .client-row.hub-book-client-row--sandbox {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      border: 1px dashed color-mix(in srgb, var(--tg-theme-hint-color) 55%, transparent);
+      background: var(--tg-theme-secondary-bg-color);
+    }
+    #hubModalBookGroupSlot .hub-book-client-row__main {
+      flex: 1;
+      min-width: 0;
+      text-align: left;
+    }
+    #hubModalBookGroupSlot .hub-book-client-row__badge {
+      flex-shrink: 0;
+      align-self: center;
+    }
+    #hubModalBookGroupSlot .hub-sandbox-pill.hub-sandbox-pill--clientpick {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 8px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      border: 1px dashed color-mix(in srgb, var(--tg-theme-hint-color) 55%, transparent);
+      background: transparent;
+      color: var(--tg-theme-hint-color);
+    }
     #hubModalBookGroupSlot .book-modal-divider {
       margin: 8px 0 0;
       padding: 18px 16px 16px;

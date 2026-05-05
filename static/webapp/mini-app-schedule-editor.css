@@ -166,7 +166,53 @@
       border: 2px solid transparent;
     }
     .slot-row .slot-row-left { flex: 1; min-width: 0; }
+    .slot-row .slot-time-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px 10px;
+    }
+    .slot-row .slot-time-row .schedule-sandbox-pill {
+      margin-left: 0;
+    }
+    .slot-row .slot-service-badge-row {
+      margin-top: 4px;
+    }
     .slot-row .slot-time { font-weight: 600; font-size: 15px; }
+    .slot-row .svc-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      max-width: 100%;
+      padding: 2px 8px;
+      border-radius: 999px;
+      border: 1px solid color-mix(in srgb, var(--tg-theme-hint-color) 22%, transparent);
+      background: color-mix(in srgb, var(--tg-theme-secondary-bg-color) 86%, transparent);
+      color: var(--tg-theme-text-color);
+      font-size: 11px;
+      font-weight: 600;
+      line-height: 1.2;
+    }
+    .slot-row .svc-badge-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      background: color-mix(in srgb, var(--tg-theme-hint-color) 72%, transparent);
+    }
+    .slot-row .svc-badge-label {
+      min-width: 0;
+      max-width: 13ch;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .slot-row .svc-badge.svc-badge--sky .svc-badge-dot { background: var(--svc-accent-sky); }
+    .slot-row .svc-badge.svc-badge--amber .svc-badge-dot { background: var(--svc-accent-amber); }
+    .slot-row .svc-badge.svc-badge--emerald .svc-badge-dot { background: var(--svc-accent-emerald); }
+    .slot-row .svc-badge.svc-badge--violet .svc-badge-dot { background: var(--svc-accent-violet); }
+    .slot-row .svc-badge.svc-badge--rose .svc-badge-dot { background: var(--svc-accent-rose); }
+    .slot-row .svc-badge.svc-badge--slate .svc-badge-dot { background: var(--svc-accent-slate); }
     .schedule-sandbox-pill {
       display: inline-block;
       margin-left: 8px;
@@ -2059,6 +2105,25 @@
       pointer-events: none;
     }
     .bd-hero-inner { position: relative; z-index: 1; }
+    /* Sandbox booking detail: visible «тест» framing without looking like an error state. */
+    .bd-test-booking-banner {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      margin-bottom: 14px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: 1px dashed color-mix(in srgb, var(--tg-theme-hint-color) 48%, transparent);
+      background: color-mix(in srgb, var(--tg-theme-hint-color) 7%, transparent);
+    }
+    .bd-test-booking-banner__text {
+      flex: 1;
+      min-width: 0;
+      font-size: 13px;
+      line-height: 1.45;
+      color: var(--tg-theme-hint-color);
+      padding-top: 1px;
+    }
     .bd-hero-kicker {
       font-size: 11px;
       font-weight: 600;

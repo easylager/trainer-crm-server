@@ -3,6 +3,7 @@ Booking use cases: create booking (slot + client_id, comment), list for trainer,
 """
 from collections import defaultdict
 from datetime import date, datetime, time, timedelta, timezone
+from collections.abc import Sequence
 from typing import Any
 from urllib.parse import quote
 
@@ -1068,11 +1069,14 @@ async def generate_reminders_for_booking(session: AsyncSession, booking_id: int)
     - If booking created earlier than slot_date: try 24h and 2h reminders (night windows snap to 08:00 same day).
     - If both fail (e.g. early slot next day booked late afternoon): one reminder the previous evening at 20:00 local.
     - If booking created on slot_date: only 2h-style path (with the same snap rule).
+
+    Sandbox bookings are silently skipped — a demo client must never receive automated reminders,
+    even if a caller forgets the ``is_sandbox`` branch.
     """
     r = await session.execute(
         text(
             """
-            SELECT b.id, c.telegram_id, b.created_at, s.slot_date, s.start_time
+            SELECT b.id, c.telegram_id, b.created_at, s.slot_date, s.start_time, b.is_sandbox
             FROM bookings b
             JOIN clients c ON c.id = b.client_id
             JOIN slots s ON s.id = b.slot_id
@@ -1083,6 +1087,8 @@ async def generate_reminders_for_booking(session: AsyncSession, booking_id: int)
     )
     row = r.fetchone()
     if not row:
+        return
+    if bool(row[5]):
         return
     client_telegram_id = row[1]
     if client_telegram_id is None:
@@ -1161,6 +1167,8 @@ async def get_pending_trainer_booked_notifications(
             WHERE b.client_notified_trainer_booked_at IS NULL
               AND b.notified_at IS NULL
               AND c.telegram_id IS NOT NULL
+              AND NOT b.is_sandbox -- Sandbox bookings never push to clients (demo identity).
+              AND NOT c.is_sandbox
               AND b.status = 'confirmed' -- Only confirmed bookings get this push.
             LIMIT :lim
         """),
@@ -1328,7 +1336,9 @@ async def get_booking_milestone_display_for_trainer(
                    ar.latitude AS arena_lat,
                    ar.longitude AS arena_lon,
                    ar.arena_city_name,
-                   (SELECT t.telegram_id FROM trainers t WHERE t.id = b.trainer_id) AS trainer_telegram_id
+                   (SELECT t.telegram_id FROM trainers t WHERE t.id = b.trainer_id) AS trainer_telegram_id,
+                   COALESCE(b.is_sandbox, false) AS is_sandbox,
+                   COALESCE(c.is_sandbox, false) AS client_is_sandbox
             FROM bookings b
             JOIN clients c ON c.id = b.client_id
             JOIN slots s ON s.id = b.slot_id
@@ -1387,6 +1397,8 @@ async def get_booking_milestone_display_for_trainer(
         "arena_city_name": city_raw or None,
         "map_link": map_link,
         "trainer_telegram_id": int(trainer_tid) if trainer_tid is not None else None,
+        "is_sandbox": bool(row2[20]),
+        "client_is_sandbox": bool(row2[21]),
     }
 
 
@@ -1528,7 +1540,8 @@ async def list_bookings_for_trainer(
                         AND """
             + _SQL_PRIOR_TRAINER_NOTIFIED_BOOKING_COUNT
             + """ = 0) AS first_client_online_pending,
-                       COALESCE(b.is_sandbox, false) AS is_sandbox
+                       COALESCE(b.is_sandbox, false) AS is_sandbox,
+                       b.service_id AS service_id
                 FROM bookings b
                 JOIN clients c ON c.id = b.client_id
                 JOIN slots s ON s.id = b.slot_id
@@ -1542,7 +1555,7 @@ async def list_bookings_for_trainer(
                    client_comment, created_at, slot_date, start_time, end_time,
                    session_num, services_str, arenas_str, status, slot_capacity, slot_active_bookings,
                    hub_in_session, problem_reported, client_no_show_recorded,
-                   first_client_online_pending, is_sandbox
+                   first_client_online_pending, is_sandbox, service_id
             FROM upcoming
             ORDER BY hub_sort_in_session ASC, slot_date ASC, start_time ASC
             LIMIT :lim
@@ -1575,9 +1588,101 @@ async def list_bookings_for_trainer(
             "client_no_show_recorded": bool(row[20]) if len(row) > 20 else False,
             "first_client_online_pending": bool(row[21]) if len(row) > 21 else False,
             "is_sandbox": bool(row[22]) if len(row) > 22 else False,
+            "service_id": int(row[23]) if len(row) > 23 and row[23] is not None else None,
         }
         for row in rows
     ]
+
+
+def _booking_row_calendar_date(val: Any) -> date | None:
+    """Normalize slot_date from DB/driver to a calendar date (Europe/Minsk wall date)."""
+    if val is None:
+        return None
+    if isinstance(val, datetime):
+        return val.date()
+    if type(val) is date:
+        return val
+    return None
+
+
+def _booking_slot_start_datetime(b: dict, tz: ZoneInfo) -> datetime | None:
+    """Local start instant for hub row (Europe/Minsk wall clock)."""
+    sd = _booking_row_calendar_date(b.get("slot_date"))
+    st_raw = b.get("start_time")
+    if sd is None or st_raw is None:
+        return None
+    if isinstance(st_raw, datetime):
+        tm = st_raw.time()
+    elif isinstance(st_raw, time):
+        tm = st_raw
+    else:
+        return None
+    try:
+        return datetime.combine(sd, tm, tzinfo=tz)
+    except (TypeError, ValueError):
+        return None
+
+
+def dedupe_trainer_hub_booking_rows(bookings: Sequence[dict]) -> list[dict]:
+    """
+    One logical «занятие» per hub row: merge group-slot participants (matches trainer-home-main.js).
+    """
+    seen_slot: dict[int, dict] = {}
+    out: list[dict] = []
+    for b in bookings:
+        cap = max(1, int(b.get("slot_capacity") or 1))
+        sid = b.get("slot_id")
+        if cap > 1 and sid is not None:
+            sk = int(sid)
+            if sk in seen_slot:
+                prev = seen_slot[sk]
+                if str(b.get("status") or "").strip().lower() == "pending":
+                    prev["status"] = "pending"
+                if b.get("first_client_online_pending"):
+                    prev["first_client_online_pending"] = True
+                continue
+            row = dict(b)
+            seen_slot[sk] = row
+            out.append(row)
+            continue
+        out.append(dict(b))
+    return out
+
+
+def compute_hub_bookings_summary(bookings: Sequence[dict]) -> dict[str, dict[str, int]]:
+    """
+    Trainer hub stat cards after group-slot dedupe (Europe/Minsk).
+
+    ``today_sessions`` / ``week_sessions``: ``total`` row counts in scope.
+    ``remaining`` — slots whose local start is strictly after «now» (in-progress excluded).
+    """
+    tz = ZoneInfo(NOTIFICATION_TZ)
+    now = datetime.now(tz)
+    today_minsk = now.date()
+
+    rows = dedupe_trainer_hub_booking_rows(bookings)
+    today_rows = [
+        b for b in rows if _booking_row_calendar_date(b.get("slot_date")) == today_minsk
+    ]
+
+    def remaining_for(booking_rows: list[dict]) -> int:
+        n = 0
+        for b in booking_rows:
+            st_dt = _booking_slot_start_datetime(b, tz)
+            if st_dt is not None and now < st_dt:
+                n += 1
+        return n
+
+    return {
+        "today_sessions": {
+            "total": len(today_rows),
+            "remaining": remaining_for(today_rows),
+        },
+        "week_sessions": {
+            "total": len(rows),
+            "remaining": remaining_for(rows),
+        },
+    }
 
 
 async def get_trainer_group_slot_hub(
@@ -1674,6 +1779,7 @@ async def active_booking_summaries_by_slot_for_trainer_range(
     Group slots: aggregated client_preview and booking_count; booking_id is first id for drill-down.
     ``bookings`` lists pending/confirmed rows for the group hub UI (booking_id, client_preview, status).
     Slot-level ``has_sandbox_booking`` flags sandbox / trial bookings for UI badges.
+    ``booking_service_id`` is catalog ``services.id`` from the first booking row (schedule UI accent when slot has no service_id).
     """
     r = await session.execute(
         text(
@@ -1686,7 +1792,8 @@ async def active_booking_summaries_by_slot_for_trainer_range(
             + """ AS arenas_str,
                    c.first_name AS client_first_name, c.last_name AS client_last_name, c.phone AS client_phone,
                    s.capacity,
-                   COALESCE(b.is_sandbox, false)
+                   COALESCE(b.is_sandbox, false),
+                   b.service_id
             FROM bookings b
             JOIN slots s ON s.id = b.slot_id
             JOIN clients c ON c.id = b.client_id
@@ -1708,6 +1815,9 @@ async def active_booking_summaries_by_slot_for_trainer_range(
         first_row = rows[0]
         capacity = max(1, int(first_row[8]))
         has_sandbox_booking = any(bool(r_[9]) for r_ in rows)
+        booking_catalog_sid = (
+            int(first_row[10]) if len(first_row) > 10 and first_row[10] is not None else None
+        )
         previews: list[str] = []
         for r_ in rows:
             fn = (r_[5] or "").strip() if r_[5] else ""
@@ -1748,6 +1858,8 @@ async def active_booking_summaries_by_slot_for_trainer_range(
             "capacity": capacity,
             "has_sandbox_booking": has_sandbox_booking,
             "bookings": booking_entries,
+            # Catalog services.id from the primary booking row (schedule accent when slot.service_id is NULL).
+            "booking_service_id": booking_catalog_sid,
         }
     return out
 
@@ -1825,13 +1937,15 @@ async def list_trainer_clients(
                  JOIN slots s2 ON s2.id = b2.slot_id
                  WHERE b2.client_id = c.id
                    AND b2.trainer_id = :tid
-                   AND b2.status NOT IN ('cancelled', 'declined', 'trainer_removed')) AS first_date
+                   AND b2.status NOT IN ('cancelled', 'declined', 'trainer_removed')) AS first_date,
+                c.is_sandbox
             FROM eligible_clients e
             JOIN clients c ON c.id = e.client_id
             LEFT JOIN recent_booking_per_client rb ON rb.client_id = c.id AND rb.rn = 1
             LEFT JOIN last_completed_per_client lc ON lc.client_id = c.id AND lc.rn = 1
             LEFT JOIN roster_touch ro ON ro.client_id = c.id
-            ORDER BY rb.sort_date DESC NULLS LAST,
+            ORDER BY c.is_sandbox ASC,
+                     rb.sort_date DESC NULLS LAST,
                      rb.sort_start DESC NULLS LAST,
                      ro.roster_added_at DESC NULLS LAST,
                      c.id DESC
@@ -1853,6 +1967,7 @@ async def list_trainer_clients(
             "last_date": row[7],
             "last_start": row[8],
             "first_date": row[9],
+            "is_sandbox": bool(row[10]),
         }
         for row in rows
     ]
@@ -1901,6 +2016,9 @@ async def list_trainer_fill_slots_invite_candidates(
     cap = 250 if include_with_upcoming else 10
     lim = max(1, min(int(limit), cap))
     upcoming_filter_sql = "" if include_with_upcoming else "WHERE has_upcoming_flag = 0"
+    # Sandbox isolation: drop demo identity at every CTE source — bookings (b.is_sandbox), roster
+    # join, and the final clients filter. A sandbox client never has telegram_id, but we still belt-
+    # and-suspenders the filter via c.is_sandbox to guard against future schema drift.
     r = await session.execute(
         text(
             """
@@ -1911,6 +2029,7 @@ async def list_trainer_fill_slots_invite_candidates(
                     FROM bookings b
                     WHERE b.trainer_id = :tid
                       AND b.status NOT IN ('cancelled', 'declined', 'trainer_removed')
+                      AND NOT b.is_sandbox
                     UNION
                     SELECT m.client_id
                     FROM training_group_members m
@@ -1929,6 +2048,7 @@ async def list_trainer_fill_slots_invite_candidates(
                 JOIN slots s ON s.id = b.slot_id
                 WHERE b.trainer_id = :tid
                   AND b.status IN ('pending', 'confirmed')
+                  AND NOT b.is_sandbox
                   AND s.status IN ('available', 'booked')
                   AND """
             + _SQL_SLOT_END_TS
@@ -1946,6 +2066,7 @@ async def list_trainer_fill_slots_invite_candidates(
                 JOIN slots s ON s.id = b.slot_id
                 WHERE b.trainer_id = :tid
                   AND b.status NOT IN ('cancelled', 'declined', 'trainer_removed')
+                  AND NOT b.is_sandbox
                 GROUP BY b.client_id
             ),
             scored AS (
@@ -1959,7 +2080,9 @@ async def list_trainer_fill_slots_invite_candidates(
                     ls.last_date,
                     ls.last_ts
                 FROM rel r
-                INNER JOIN clients c ON c.id = r.client_id AND c.telegram_id IS NOT NULL
+                INNER JOIN clients c ON c.id = r.client_id
+                    AND c.telegram_id IS NOT NULL
+                    AND NOT c.is_sandbox
                 LEFT JOIN has_upcoming hu ON hu.client_id = c.id
                 LEFT JOIN last_sess ls ON ls.client_id = c.id
             )
@@ -2081,7 +2204,11 @@ async def get_trainer_slot_for_mass_client_invite(
 
 
 async def count_trainer_fill_slots_invite_candidates(session: AsyncSession, trainer_id: int) -> int:
-    """Count clients matching ``list_trainer_fill_slots_invite_candidates`` (telegram + no upcoming)."""
+    """Count clients matching ``list_trainer_fill_slots_invite_candidates`` (telegram + no upcoming).
+
+    Mirrors ``list_trainer_fill_slots_invite_candidates`` sandbox isolation: demo identity is
+    dropped at the bookings CTE and at the final clients join.
+    """
     r = await session.execute(
         text(
             """
@@ -2092,6 +2219,7 @@ async def count_trainer_fill_slots_invite_candidates(session: AsyncSession, trai
                     FROM bookings b
                     WHERE b.trainer_id = :tid
                       AND b.status NOT IN ('cancelled', 'declined', 'trainer_removed')
+                      AND NOT b.is_sandbox
                     UNION
                     SELECT m.client_id
                     FROM training_group_members m
@@ -2110,6 +2238,7 @@ async def count_trainer_fill_slots_invite_candidates(session: AsyncSession, trai
                 JOIN slots s ON s.id = b.slot_id
                 WHERE b.trainer_id = :tid
                   AND b.status IN ('pending', 'confirmed')
+                  AND NOT b.is_sandbox
                   AND s.status IN ('available', 'booked')
                   AND """
             + _SQL_SLOT_END_TS
@@ -2127,6 +2256,7 @@ async def count_trainer_fill_slots_invite_candidates(session: AsyncSession, trai
                 JOIN slots s ON s.id = b.slot_id
                 WHERE b.trainer_id = :tid
                   AND b.status NOT IN ('cancelled', 'declined', 'trainer_removed')
+                  AND NOT b.is_sandbox
                 GROUP BY b.client_id
             ),
             scored AS (
@@ -2135,7 +2265,9 @@ async def count_trainer_fill_slots_invite_candidates(session: AsyncSession, trai
                     CASE WHEN hu.client_id IS NULL THEN 0 ELSE 1 END AS has_upcoming_flag,
                     ls.last_ts
                 FROM rel r
-                INNER JOIN clients c ON c.id = r.client_id AND c.telegram_id IS NOT NULL
+                INNER JOIN clients c ON c.id = r.client_id
+                    AND c.telegram_id IS NOT NULL
+                    AND NOT c.is_sandbox
                 LEFT JOIN has_upcoming hu ON hu.client_id = c.id
                 LEFT JOIN last_sess ls ON ls.client_id = c.id
             )
@@ -2262,7 +2394,8 @@ async def get_trainer_client_for_card(
               c.phone,
               c.first_name,
               c.last_name,
-              c.middle_name
+              c.middle_name,
+              c.is_sandbox
             FROM clients c
             WHERE c.id = :cid
             """
@@ -2308,6 +2441,7 @@ async def get_trainer_client_for_card(
         "first_name": row[5] or "",
         "last_name": row[6] or "",
         "middle_name": row[7] or "",
+        "is_sandbox": bool(row[8]),
         "last_date": d[0] if d else None,
         "last_start": d[1] if d else None,
         "first_date": d[2] if d else None,
@@ -3027,7 +3161,9 @@ async def confirm_booking(session: AsyncSession, booking_id: int, trainer_id: in
                    ar.latitude AS arena_lat,
                    ar.longitude AS arena_lon,
                    ar.arena_city_name,
-                   (SELECT t.telegram_id FROM trainers t WHERE t.id = b.trainer_id) AS trainer_telegram_id
+                   (SELECT t.telegram_id FROM trainers t WHERE t.id = b.trainer_id) AS trainer_telegram_id,
+                   COALESCE(b.is_sandbox, false) AS is_sandbox,
+                   COALESCE(c.is_sandbox, false) AS client_is_sandbox
             FROM bookings b
             JOIN clients c ON c.id = b.client_id
             JOIN slots s ON s.id = b.slot_id
@@ -3092,6 +3228,8 @@ async def confirm_booking(session: AsyncSession, booking_id: int, trainer_id: in
         "trainer_telegram_id": int(trainer_tid) if trainer_tid is not None else None,
         "first_booking_milestone": ms,
         "share_catalog_tip": st_tip,
+        "is_sandbox": bool(row2[20]),
+        "client_is_sandbox": bool(row2[21]),
     }
 
 
@@ -3495,7 +3633,12 @@ async def reverse_booking_completion_for_problem_report(session: AsyncSession, b
 
 
 async def list_bookings_to_complete(session: AsyncSession, limit: int = 50) -> list[dict]:
-    """Bookings with status in ('pending', 'confirmed') and slot end (Europe/Minsk wall time) already in the past."""
+    """Bookings with status in ('pending', 'confirmed') and slot end (Europe/Minsk wall time) already in the past.
+
+    Sandbox bookings are excluded: they're a demo and shouldn't auto-complete in the background loop
+    (which would also trigger client-completion pushes — those are blocked separately, but we drop
+    sandbox here too to keep the pipeline clean).
+    """
     r = await session.execute(
         text("""
             SELECT b.id, c.telegram_id, b.trainer_id,
@@ -3511,6 +3654,7 @@ async def list_bookings_to_complete(session: AsyncSession, limit: int = 50) -> l
             JOIN trainers t ON t.id = b.trainer_id
             LEFT JOIN trainer_profiles p ON p.trainer_id = b.trainer_id
             WHERE b.status IN ('pending', 'confirmed') AND s.status IN ('available', 'booked')
+              AND NOT b.is_sandbox
               AND """ + _SQL_SLOT_END_TS + """ < CURRENT_TIMESTAMP
               AND NOT EXISTS (SELECT 1 FROM booking_problem_reports pr WHERE pr.booking_id = b.id)
             ORDER BY s.slot_date, s.end_time
@@ -3560,6 +3704,8 @@ async def list_bookings_pending_client_completion_push(
             WHERE b.status = 'completed'
               AND b.client_booking_completed_push_sent_at IS NULL
               AND c.telegram_id IS NOT NULL
+              AND NOT b.is_sandbox -- Demo bookings never push to clients.
+              AND NOT c.is_sandbox
             ORDER BY b.id
             LIMIT :lim
         """),
@@ -3965,6 +4111,9 @@ async def get_clients_for_inactive_notification(
     kind: INACTIVE_KIND_10_DAYS or INACTIVE_KIND_30_DAYS. Returns client_id, telegram_id, first_name.
     """
     days = 10 if kind == INACTIVE_KIND_10_DAYS else 30
+    # Sandbox clients are demo identities — they should never trigger inactive-client pings,
+    # otherwise the trainer (or worse, the phantom phone) gets an «давно не виделись» nudge after
+    # an onboarding sandbox session.
     r = await session.execute(
         text("""
             WITH last_session AS (
@@ -3972,13 +4121,15 @@ async def get_clients_for_inactive_notification(
                 FROM bookings b
                 JOIN slots s ON s.id = b.slot_id
                 WHERE b.status NOT IN ('cancelled', 'declined', 'trainer_removed')
+                  AND NOT b.is_sandbox
                 GROUP BY b.client_id
             ),
             candidates AS (
                 SELECT c.id AS client_id, c.telegram_id, c.first_name, ls.last_session_end_at
                 FROM clients c
                 JOIN last_session ls ON ls.client_id = c.id
-                WHERE ls.last_session_end_at < CURRENT_TIMESTAMP
+                WHERE NOT c.is_sandbox
+                  AND ls.last_session_end_at < CURRENT_TIMESTAMP
                   AND (CURRENT_DATE - DATE(ls.last_session_end_at)) = :days
             )
             SELECT ca.client_id, ca.telegram_id, ca.first_name

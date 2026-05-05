@@ -749,9 +749,9 @@
           var scopeHtml = (it.service_name && String(it.service_name).trim())
             ? '🎯 Услуга: <strong>' + escapeHtml(String(it.service_name).trim()) + '</strong>'
             : '🎯 На <strong>все услуги</strong> этого тренера';
+          // Price is only in .pass-offer-price-pill; avoid duplicating it in chips row.
           var chips = '<span class="pass-offer-chip">' + (it.sessions_total || 0) + ' занятий</span>';
           var totalStr = formatMoneyTotal(it.price_cents);
-          if (totalStr) chips += '<span class="pass-offer-chip">' + escapeHtml(totalStr) + '</span>';
           var pill = totalStr ? '<div class="pass-offer-price-pill">' + escapeHtml(totalStr) + '</div>' : '';
           html += '<article class="pass-offer-card">';
           html += '<div class="pass-offer-top"><div>';

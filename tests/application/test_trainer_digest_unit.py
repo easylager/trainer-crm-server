@@ -7,6 +7,7 @@ from datetime import time
 from src.application.trainer_digest_use_cases import (
     _compute_gaps,
     resolve_digest_send_time,
+    resolve_weekly_digest_send_time,
 )
 
 
@@ -152,6 +153,38 @@ def test_resolve_respects_trainer_widened_window() -> None:
             push_window_end_hour=22,
         )
         == time(6, 0)
+    )
+
+
+def test_weekly_evening_default_in_standard_push_window() -> None:
+    assert (
+        resolve_weekly_digest_send_time(
+            push_window_start_hour=8,
+            push_window_end_hour=22,
+        )
+        == time(20, 0)
+    )
+
+
+def test_weekly_moves_earlier_when_window_ends_before_20() -> None:
+    """If end_hour is exclusive at 20:00, 20:00 is out — drop to 19:00."""
+    assert (
+        resolve_weekly_digest_send_time(
+            push_window_start_hour=8,
+            push_window_end_hour=20,
+        )
+        == time(19, 0)
+    )
+
+
+def test_weekly_clamps_not_before_window_start_if_late_start() -> None:
+    """Window starts after default evening → schedule at lower bound."""
+    assert (
+        resolve_weekly_digest_send_time(
+            push_window_start_hour=21,
+            push_window_end_hour=24,
+        )
+        == time(21, 0)
     )
 
 
