@@ -67,4 +67,6 @@ secrets/
 .DS_Store
 Thumbs.db
 
+# Personal résumés (HTML/PDF локально; остальной docs/ проекта продолжаем версионировать)
+docs/cv-max-vasilenko-*
 

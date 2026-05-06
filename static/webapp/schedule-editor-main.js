@@ -81,6 +81,8 @@
       })();
 
       const DAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+      /** Uppercase two-letter labels for the fixed bottom week strip (Mon=0 … Sun=6). */
+      const SCHEDULE_STRIP_DOW = ['ПН', 'ВТ', 'СР', 'ЧТ', 'ПТ', 'СБ', 'ВС'];
 
       /** Same key as trainer-home-main.js — localStorage; при каждом сохранении слотов снимаем ×-mute рассылки. */
       const SCHEDULE_EDITOR_HUB_FILL_SLOTS_BOOST_KEY = 'trainer_hub_fill_slots_rhythm_boost_v1';
@@ -388,6 +390,7 @@
             loadSlots();
           };
         }
+        renderScheduleWeekDayStrip();
       }
 
       function renderTemplateLoadFailure() {
@@ -538,6 +541,7 @@
         if (det) det.classList.toggle('active', view === 'detail');
         if (dec) dec.classList.toggle('active', view === 'decline');
         updateTelegramBack();
+        syncScheduleWeekDayStripVisibility();
       }
 
       function updateTelegramBack() {
@@ -1536,6 +1540,8 @@
         applyWeekStart: null,
         /** When true, current/partial week lists Mon… + ended slots (backfill). */
         showPastThisWeek: false,
+        /** `YYYY-MM-DD` within current `weekStart` week — bottom strip highlight + scroll target. */
+        scheduleStripSelectedDate: null,
         bookSlotId: null,
         bookModalStep: 'choice',
         pendingBookClientId: null,
@@ -2308,6 +2314,7 @@
         if (tabName === 'calendar') loadSlots();
         else loadTemplates();
         updateTelegramBack();
+        syncScheduleWeekDayStripVisibility();
       }
 
       document.querySelectorAll('.tab').forEach(function(t) {
@@ -2723,6 +2730,114 @@
           btn.setAttribute('aria-expanded', 'false');
           if (label) label.textContent = pastSlotsToggleLabel(n);
         }
+      }
+
+      /** ISO date for Mon+dayIndex within the trainer's current calendar week. */
+      function weekDateStrFromMonday(weekStart, dayIndex) {
+        var d = new Date(weekStart);
+        d.setHours(0, 0, 0, 0);
+        d.setDate(d.getDate() + dayIndex);
+        return dateToStr(d);
+      }
+
+      function syncScheduleWeekDayStripVisibility() {
+        var el = document.getElementById('scheduleWeekDayStrip');
+        if (!el) return;
+        var main = document.getElementById('screenMain');
+        var mainOn = main && main.classList.contains('active');
+        var show = mainOn && state.tab === 'calendar';
+        el.hidden = !show;
+        try {
+          document.documentElement.classList.toggle('se-week-day-strip-visible', show);
+        } catch (eDoc) { /* ignore */ }
+      }
+
+      function renderScheduleWeekDayStrip() {
+        var root = document.getElementById('scheduleWeekDayStrip');
+        if (!root) return;
+        if (!state.weekStart) state.weekStart = getMonday(new Date());
+        var todayStr = dateToStr(new Date());
+        var html = '';
+        for (var i = 0; i < 7; i++) {
+          var dateStr = weekDateStrFromMonday(state.weekStart, i);
+          var isWeekend = i >= 5;
+          var isToday = dateStr === todayStr;
+          var isSel = !!(state.scheduleStripSelectedDate && state.scheduleStripSelectedDate === dateStr);
+          var cls = 'schedule-week-day-strip__btn';
+          if (isWeekend) cls += ' schedule-week-day-strip__btn--weekend';
+          if (isToday) cls += ' schedule-week-day-strip__btn--today';
+          if (isSel) cls += ' schedule-week-day-strip__btn--selected';
+          var domNum = parseInt(dateStr.slice(8, 10), 10);
+          html +=
+            '<button type="button" class="' +
+            cls +
+            '" data-strip-date="' +
+            dateStr +
+            '" aria-label="' +
+            SCHEDULE_STRIP_DOW[i] +
+            ', ' +
+            domNum +
+            '">' +
+            '<span class="schedule-week-day-strip__dow" aria-hidden="true">' +
+            SCHEDULE_STRIP_DOW[i] +
+            '</span>' +
+            '<span class="schedule-week-day-strip__dom" aria-hidden="true">' +
+            domNum +
+            '</span>' +
+            '</button>';
+        }
+        root.innerHTML = html;
+        syncScheduleWeekDayStripVisibility();
+      }
+
+      function scrollCalendarToDaySection(dateStr) {
+        var n = 0;
+        function tryScroll() {
+          var el = document.getElementById('cal-day-' + dateStr);
+          if (el) {
+            try {
+              el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            } catch (eScroll) {
+              try {
+                el.scrollIntoView(true);
+              } catch (e2) { /* ignore */ }
+            }
+            return;
+          }
+          n++;
+          if (n > 10) {
+            var filterHint =
+              state.slotFilter !== 'all'
+                ? ' С фильтром «' +
+                  (state.slotFilter === 'available' ? 'Свободны' : 'Заняты') +
+                  '» этот день может быть скрыт.'
+                : '';
+            showToast('Нет слотов на этот день.' + filterHint);
+            return;
+          }
+          requestAnimationFrame(tryScroll);
+        }
+        requestAnimationFrame(tryScroll);
+      }
+
+      /**
+       * Bottom strip: scroll to that day. Choosing a calendar day **before today** enables
+       * «Показать прошлые» so Mon–Wed (past) appear in the list.
+       */
+      function onScheduleStripPickDay(dateStr) {
+        if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return;
+        var todayStr = dateToStr(new Date());
+        var entirePast = isEntireWeekInPast(state.weekStart);
+        var needPastReveal = !entirePast && dateStr < todayStr && !state.showPastThisWeek;
+        state.scheduleStripSelectedDate = dateStr;
+        if (needPastReveal) {
+          state.showPastThisWeek = true;
+          renderCalendar();
+          scrollCalendarToDaySection(dateStr);
+          return;
+        }
+        renderScheduleWeekDayStrip();
+        scrollCalendarToDaySection(dateStr);
       }
 
       /**
@@ -3536,6 +3651,7 @@
         if (days.length === 0) {
           content.innerHTML = buildCalendarEmptyStateHtml(state.slotFilter, entirePast);
           updatePastRevealChrome();
+          renderScheduleWeekDayStrip();
           return;
         }
         let html = '';
@@ -3544,7 +3660,7 @@
             .filter(function(s) { return !s.training_group_id; })
             .sort(function(a, b) { return (a.start_time || '').localeCompare(b.start_time || ''); });
           if (!daySlots.length) return;
-          html += '<div class="day-block"><div class="day-title">' + escapeHtml(formatDateKey(dateKey)) + '</div>';
+          html += '<div class="day-block cal-day-anchor" id="cal-day-' + dateKey + '"><div class="day-title">' + escapeHtml(formatDateKey(dateKey)) + '</div>';
           daySlots.forEach(function(s) {
             const status = s.status || 'available';
             const cap = (s.capacity != null) ? parseInt(s.capacity, 10) : 1;
@@ -3663,6 +3779,7 @@
         if (!html) {
           content.innerHTML = buildCalendarEmptyStateHtml(state.slotFilter, entirePast);
           updatePastRevealChrome();
+          renderScheduleWeekDayStrip();
           return;
         }
         content.innerHTML = html;
@@ -3754,6 +3871,7 @@
           row.onkeydown = function(e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openBookModalForSlot(parseInt(row.dataset.slotId, 10)); } };
         });
         updatePastRevealChrome();
+        renderScheduleWeekDayStrip();
       }
 
       function clientsRequestUrl(q) {
@@ -4870,12 +4988,14 @@
 
       document.getElementById('weekPrev').onclick = function() {
         state.showPastThisWeek = false;
+        state.scheduleStripSelectedDate = null;
         state.weekStart.setDate(state.weekStart.getDate() - 7);
         syncAddSlotsButtonEligibility();
         loadSlots();
       };
       document.getElementById('weekNext').onclick = function() {
         state.showPastThisWeek = false;
+        state.scheduleStripSelectedDate = null;
         state.weekStart.setDate(state.weekStart.getDate() + 7);
         syncAddSlotsButtonEligibility();
         loadSlots();
@@ -4890,12 +5010,14 @@
 
       document.getElementById('dayPickWeekPrev').onclick = function() {
         state.showPastThisWeek = false;
+        state.scheduleStripSelectedDate = null;
         if (!state.weekStart) state.weekStart = getMonday(new Date());
         state.weekStart.setDate(state.weekStart.getDate() - 7);
         loadSlots({ onComplete: rescheduleDayPickAfterWeekChangeIfVisible });
       };
       document.getElementById('dayPickWeekNext').onclick = function() {
         state.showPastThisWeek = false;
+        state.scheduleStripSelectedDate = null;
         if (!state.weekStart) state.weekStart = getMonday(new Date());
         state.weekStart.setDate(state.weekStart.getDate() + 7);
         loadSlots({ onComplete: rescheduleDayPickAfterWeekChangeIfVisible });
@@ -4905,6 +5027,17 @@
         state.showPastThisWeek = !state.showPastThisWeek;
         renderCalendar();
       };
+
+      (function wireScheduleWeekDayStripNav() {
+        var root = document.getElementById('scheduleWeekDayStrip');
+        if (!root) return;
+        root.addEventListener('click', function(ev) {
+          var btn = ev.target && ev.target.closest && ev.target.closest('[data-strip-date]');
+          if (!btn) return;
+          var ds = btn.getAttribute('data-strip-date');
+          if (ds) onScheduleStripPickDay(ds);
+        });
+      })();
 
       state.weekStart = getMonday(new Date());
 

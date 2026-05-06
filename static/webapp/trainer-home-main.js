@@ -215,9 +215,9 @@
       /** Today's sessions not yet started (Europe/Minsk); excludes current slot — aligned with backend ``today_sessions.remaining``. */
       var hubLastTodayRemaining = 0;
       var hubLastFirstWhen = '';
-      /** Deduped hub rows in loaded window — aligned with ``week_sessions.total``. */
+      /** For hero/fallback only: row count in truncated hub list (may be < full week). */
       var hubLastWeekCount = 0;
-      /** Same window: slots not yet started (Europe/Minsk) — aligned with ``week_sessions.remaining``. */
+      /** Calendar week (Mon–Sun, Minsk): not-yet-started slots — API ``week_sessions.remaining``. */
       var hubLastWeekRemaining = 0;
       var hubLastUpcomingListCount = 0;
       /** Bookings with status pending — drives summary hint + week card highlight. */
@@ -2527,7 +2527,7 @@
           weekCard,
           weekTotal,
           weekRemaining,
-          'Занятия в загруженном окне недели. «Осталось» — ещё не начавшиеся слоты по минскому времени.'
+          'Календарная неделя с понедельника по воскресенье (Минск). «Осталось» — слот ещё не начался; идущее занятие не считается.'
         );
 
         revenueValue.textContent =

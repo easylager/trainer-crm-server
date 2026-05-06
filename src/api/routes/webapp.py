@@ -55,7 +55,7 @@ from src.application.booking_use_cases import (
     create_booking,
     create_trainer_quick_booking,
     compute_booking_reminder_schedule,
-    compute_hub_bookings_summary,
+    get_trainer_hub_session_summary_counts,
     explain_trainer_booking_failure,
     decline_booking,
     detach_trainer_client_from_roster_miniapp,
@@ -2084,12 +2084,23 @@ async def _trainer_bookings_grouped_days_payload(
     *,
     limit: int,
 ) -> dict[str, Any]:
-    """GET /trainer/bookings shape: ``days``, ``today_sessions``, ``week_sessions`` (deduped hub counts)."""
+    """GET /trainer/bookings shape: ``days``, ``today_sessions``, ``week_sessions`` (hub-aligned SQL counts)."""
     flow_ok = booking_problem_api_allowed_for_trainer(trainer_id)
     lim = max(1, min(100, limit))
+    summary_counts = await get_trainer_hub_session_summary_counts(session, trainer_id)
+    hub_summary = {
+        "today_sessions": {
+            "total": summary_counts["today_total"],
+            "remaining": summary_counts["today_remaining"],
+        },
+        "week_sessions": {
+            "total": summary_counts["week_total"],
+            "remaining": summary_counts["week_remaining"],
+        },
+    }
     bookings = await list_bookings_for_trainer(session, trainer_id, limit=lim)
     if not bookings:
-        return {"days": [], **compute_hub_bookings_summary(bookings)}
+        return {"days": [], **hub_summary}
     await enrich_booking_dicts_with_client_telegram_usernames(session, bookings)
     days_list: list[dict[str, Any]] = []
     for slot_date, group in groupby(bookings, key=lambda b: b["slot_date"]):
@@ -2104,7 +2115,7 @@ async def _trainer_bookings_grouped_days_payload(
                 "bookings": [_serialize_booking(b, problem_flow_enabled=flow_ok) for b in day_bookings],
             }
         )
-    return {"days": days_list, **compute_hub_bookings_summary(bookings)}
+    return {"days": days_list, **hub_summary}
 
 
 def _serialize_trainer_dashboard(data: dict) -> dict:

@@ -7,7 +7,10 @@ from datetime import date, time, timedelta
 import pytest
 from sqlalchemy import text
 
-from src.application.booking_use_cases import list_bookings_for_trainer
+from src.application.booking_use_cases import (
+    get_trainer_hub_session_summary_counts,
+    list_bookings_for_trainer,
+)
 
 from tests.conftest import belarus_test_phone, unique_test_telegram_id
 from tests.db_catalog_helpers import require_seed_arena_city_name, require_seed_service_id
@@ -279,3 +282,107 @@ async def test_hub_first_client_online_pending_only_before_any_notified_push(db_
     by_id2 = {b["id"]: b for b in rows2}
     assert by_id2[bid_first]["first_client_online_pending"] is False
     assert by_id2[bid_second]["first_client_online_pending"] is False
+
+
+@pytest.mark.asyncio
+async def test_hub_session_summary_week_total_not_capped_by_list_limit(db_session) -> None:
+    """Hub tiles must count the full Minsk calendar week, not the truncated /trainer/bookings LIMIT."""
+    trainer_id, service_id = await _seed_trainer_with_service(db_session)
+    for i in range(5):
+        tg = unique_test_telegram_id()
+        phone, phone_n = belarus_test_phone(tg)
+        r = await db_session.execute(
+            text(
+                """
+                INSERT INTO clients (telegram_id, first_name, last_name, phone, phone_normalized)
+                VALUES (:tg, 'C', 'L', :phone, :pn) RETURNING id
+                """
+            ),
+            {"tg": tg, "phone": phone, "pn": phone_n},
+        )
+        (cid,) = r.fetchone()
+        r = await db_session.execute(
+            text(
+                """
+                WITH m AS (SELECT CURRENT_TIMESTAMP AT TIME ZONE 'Europe/Minsk' AS n)
+                INSERT INTO slots (trainer_id, slot_date, start_time, end_time, status)
+                SELECT :tid,
+                       (n + make_interval(hours => 2 + (:i * 2)))::date,
+                       (n + make_interval(hours => 2 + (:i * 2)))::time,
+                       (n + make_interval(hours => 3 + (:i * 2)))::time,
+                       'booked'
+                FROM m
+                RETURNING id
+                """
+            ),
+            {"tid": trainer_id, "i": i},
+        )
+        (sid,) = r.fetchone()
+        await db_session.execute(
+            text(
+                """
+                INSERT INTO bookings (slot_id, trainer_id, client_id, service_id, status)
+                VALUES (:sid, :tid, :cid, :svc, 'confirmed')
+                """
+            ),
+            {"sid": sid, "tid": trainer_id, "cid": cid, "svc": service_id},
+        )
+    await db_session.commit()
+
+    listed = await list_bookings_for_trainer(db_session, trainer_id, limit=2)
+    assert len(listed) == 2
+
+    summary = await get_trainer_hub_session_summary_counts(db_session, trainer_id)
+    assert summary["week_total"] == 5
+
+
+@pytest.mark.asyncio
+async def test_hub_session_summary_group_slot_counts_once(db_session) -> None:
+    trainer_id, service_id = await _seed_trainer_with_service(db_session)
+    clients: list[int] = []
+    for _ in range(2):
+        tg = unique_test_telegram_id()
+        phone, phone_n = belarus_test_phone(tg)
+        r = await db_session.execute(
+            text(
+                """
+                INSERT INTO clients (telegram_id, first_name, last_name, phone, phone_normalized)
+                VALUES (:tg, 'C', 'L', :phone, :pn) RETURNING id
+                """
+            ),
+            {"tg": tg, "phone": phone, "pn": phone_n},
+        )
+        (cid,) = r.fetchone()
+        clients.append(int(cid))
+    r = await db_session.execute(
+        text(
+            """
+            WITH m AS (SELECT CURRENT_TIMESTAMP AT TIME ZONE 'Europe/Minsk' AS n)
+            INSERT INTO slots (trainer_id, slot_date, start_time, end_time, status, capacity)
+            SELECT :tid,
+                   (n + make_interval(hours => 4))::date,
+                   (n + make_interval(hours => 4))::time,
+                   (n + make_interval(hours => 5))::time,
+                   'booked',
+                   3
+            FROM m
+            RETURNING id
+            """
+        ),
+        {"tid": trainer_id},
+    )
+    (slot_id,) = r.fetchone()
+    for cid in clients:
+        await db_session.execute(
+            text(
+                """
+                INSERT INTO bookings (slot_id, trainer_id, client_id, service_id, status)
+                VALUES (:sid, :tid, :cid, :svc, 'confirmed')
+                """
+            ),
+            {"sid": slot_id, "tid": trainer_id, "cid": cid, "svc": service_id},
+        )
+    await db_session.commit()
+
+    summary = await get_trainer_hub_session_summary_counts(db_session, trainer_id)
+    assert summary["week_total"] == 1

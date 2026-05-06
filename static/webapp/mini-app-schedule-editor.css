@@ -98,6 +98,91 @@
       text-align: center;
       line-height: 1.3;
     }
+
+    /* Bottom Mon–Sun strip: jump within the loaded week (schedule-editor-main.js) */
+    html.se-week-day-strip-visible #tabCalendar.tab-content.active {
+      padding-bottom: calc(78px + env(safe-area-inset-bottom, 0px));
+    }
+    .schedule-week-day-strip {
+      position: fixed;
+      left: 10px;
+      right: 10px;
+      bottom: max(10px, env(safe-area-inset-bottom, 0px));
+      z-index: 90;
+      display: flex;
+      align-items: stretch;
+      justify-content: space-between;
+      gap: 4px;
+      padding: 8px 6px;
+      border-radius: 16px;
+      box-sizing: border-box;
+      background: color-mix(in srgb, var(--tg-theme-text-color) 86%, var(--tg-theme-bg-color));
+      box-shadow: 0 6px 28px rgba(0, 0, 0, 0.2);
+      font-family: var(--app-font-sans);
+      -webkit-tap-highlight-color: transparent;
+    }
+    .schedule-week-day-strip[hidden] {
+      display: none !important;
+    }
+    .schedule-week-day-strip__btn {
+      flex: 1 1 0;
+      min-width: 0;
+      margin: 0;
+      padding: 6px 2px 7px;
+      border: none;
+      border-radius: 12px;
+      background: transparent;
+      cursor: pointer;
+      font: inherit;
+      color: color-mix(in srgb, var(--tg-theme-bg-color) 90%, var(--tg-theme-text-color) 10%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 2px;
+      line-height: 1.1;
+    }
+    .schedule-week-day-strip__btn:active {
+      opacity: 0.92;
+    }
+    .schedule-week-day-strip__btn--weekend:not(.schedule-week-day-strip__btn--selected) {
+      color: color-mix(in srgb, var(--app-danger) 40%, var(--app-cta-fill) 60%);
+    }
+    .schedule-week-day-strip__btn--today:not(.schedule-week-day-strip__btn--selected) {
+      color: var(--app-cta-fill);
+    }
+    .schedule-week-day-strip__btn--selected {
+      background: var(--app-cta-fill);
+      color: var(--app-cta-text);
+      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--app-cta-text) 14%, transparent);
+    }
+    .schedule-week-day-strip__btn--selected.schedule-week-day-strip__btn--weekend,
+    .schedule-week-day-strip__btn--selected.schedule-week-day-strip__btn--today {
+      color: var(--app-cta-text);
+    }
+    .schedule-week-day-strip__dow {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+    }
+    .schedule-week-day-strip__dom {
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .cal-day-anchor {
+      scroll-margin-bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+      scroll-margin-top: 10px;
+    }
+    @media (prefers-color-scheme: dark) {
+      .schedule-week-day-strip {
+        background: color-mix(in srgb, var(--tg-theme-secondary-bg-color) 78%, #0d0d0d 22%);
+        box-shadow: 0 8px 36px rgba(0, 0, 0, 0.55);
+      }
+      .schedule-week-day-strip__btn {
+        color: color-mix(in srgb, var(--tg-theme-text-color) 92%, var(--tg-theme-hint-color) 8%);
+      }
+    }
+
     .empty.calendar-past-nudge {
       font-size: 14px;
       line-height: 1.45;
@@ -2032,6 +2117,10 @@
     .toast.toast-visible {
       opacity: 1;
       transform: translateY(0);
+    }
+    /** Week-day strip is fixed ~64px + bottom inset — lift toast so it never covers the strip. */
+    html.se-week-day-strip-visible .toast {
+      bottom: calc(84px + env(safe-area-inset-bottom, 0px));
     }
     /* Single WebView: main schedule vs booking detail / decline */
     #screenMain[data-screen], #screenBookingDetail[data-screen], #screenBookingDecline[data-screen] {

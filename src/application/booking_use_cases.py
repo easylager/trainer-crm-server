@@ -1594,6 +1594,97 @@ async def list_bookings_for_trainer(
     ]
 
 
+_SQL_HUB_BOOKING_SCOPE = """b.trainer_id = :tid
+                  AND s.status IN ('available', 'booked')
+                  AND b.status IN ('pending', 'confirmed')
+                  AND """ + _SQL_SLOT_END_TS + """ > CURRENT_TIMESTAMP"""
+
+
+async def get_trainer_hub_session_summary_counts(session: AsyncSession, trainer_id: int) -> dict[str, int]:
+    """
+    Trainer-home summary tiles (today / calendar week Mon–Sun, Europe/Minsk).
+
+    Matches ``list_bookings_for_trainer`` filters but counts **distinct slots** so group-capacity slots
+    are one logical session. Totals ignore the list LIMIT — week is true ISO-style week in Minsk, not «first N rows».
+    """
+    sql = """
+        WITH cal AS (
+            SELECT
+                (CURRENT_TIMESTAMP AT TIME ZONE '""" + NOTIFICATION_TZ + """')::date AS today_d,
+                (CURRENT_TIMESTAMP AT TIME ZONE '""" + NOTIFICATION_TZ + """')::date
+                    - (
+                        (
+                            EXTRACT(
+                                ISODOW FROM (
+                                    CURRENT_TIMESTAMP AT TIME ZONE '""" + NOTIFICATION_TZ + """'
+                                )::date
+                            )
+                        )::int
+                        - 1
+                    ) AS week_monday_d
+        )
+        SELECT cal.today_d,
+               cal.week_monday_d,
+               cal.week_monday_d + 6 AS week_sunday_d,
+               COALESCE((
+                   SELECT COUNT(DISTINCT s.id)::int
+                   FROM bookings b
+                   JOIN slots s ON s.id = b.slot_id
+                   JOIN clients c ON c.id = b.client_id
+                   CROSS JOIN cal
+                   WHERE """ + _SQL_HUB_BOOKING_SCOPE + """
+                     AND s.slot_date = cal.today_d
+               ), 0) AS today_total,
+               COALESCE((
+                   SELECT COUNT(DISTINCT s.id)::int
+                   FROM bookings b
+                   JOIN slots s ON s.id = b.slot_id
+                   JOIN clients c ON c.id = b.client_id
+                   CROSS JOIN cal
+                   WHERE """ + _SQL_HUB_BOOKING_SCOPE + """
+                     AND s.slot_date = cal.today_d
+                     AND """ + _SQL_SLOT_START_TS + """ > CURRENT_TIMESTAMP
+               ), 0) AS today_remaining,
+               COALESCE((
+                   SELECT COUNT(DISTINCT s.id)::int
+                   FROM bookings b
+                   JOIN slots s ON s.id = b.slot_id
+                   JOIN clients c ON c.id = b.client_id
+                   CROSS JOIN cal
+                   WHERE """ + _SQL_HUB_BOOKING_SCOPE + """
+                     AND s.slot_date >= cal.week_monday_d
+                     AND s.slot_date <= cal.week_monday_d + 6
+               ), 0) AS week_total,
+               COALESCE((
+                   SELECT COUNT(DISTINCT s.id)::int
+                   FROM bookings b
+                   JOIN slots s ON s.id = b.slot_id
+                   JOIN clients c ON c.id = b.client_id
+                   CROSS JOIN cal
+                   WHERE """ + _SQL_HUB_BOOKING_SCOPE + """
+                     AND s.slot_date >= cal.week_monday_d
+                     AND s.slot_date <= cal.week_monday_d + 6
+                     AND """ + _SQL_SLOT_START_TS + """ > CURRENT_TIMESTAMP
+               ), 0) AS week_remaining
+        FROM cal
+    """
+    r = await session.execute(text(sql), {"tid": trainer_id})
+    row = r.fetchone()
+    if not row:
+        return {
+            "today_total": 0,
+            "today_remaining": 0,
+            "week_total": 0,
+            "week_remaining": 0,
+        }
+    return {
+        "today_total": int(row[3] or 0),
+        "today_remaining": int(row[4] or 0),
+        "week_total": int(row[5] or 0),
+        "week_remaining": int(row[6] or 0),
+    }
+
+
 def _booking_row_calendar_date(val: Any) -> date | None:
     """Normalize slot_date from DB/driver to a calendar date (Europe/Minsk wall date)."""
     if val is None:
@@ -1651,10 +1742,10 @@ def dedupe_trainer_hub_booking_rows(bookings: Sequence[dict]) -> list[dict]:
 
 def compute_hub_bookings_summary(bookings: Sequence[dict]) -> dict[str, dict[str, int]]:
     """
-    Trainer hub stat cards after group-slot dedupe (Europe/Minsk).
+    Pure-Python hub summary from an in-memory row list (tests / local tooling).
 
-    ``today_sessions`` / ``week_sessions``: ``total`` row counts in scope.
-    ``remaining`` — slots whose local start is strictly after «now» (in-progress excluded).
+    Production ``GET /trainer/bookings`` uses :func:`get_trainer_hub_session_summary_counts` instead so
+    totals are not capped by the list LIMIT and ``week_sessions`` tracks a true Mon–Sun calendar week.
     """
     tz = ZoneInfo(NOTIFICATION_TZ)
     now = datetime.now(tz)
