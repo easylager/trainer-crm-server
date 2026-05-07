@@ -1915,16 +1915,14 @@
         if (overlay) overlay.remove();
       }
 
-      /** @see mini-app-telegram-chrome.js openTelegramChatFromMiniApp (t.me vs tg://, platform=web). */
-      function trainerClientCanWriteTelegram(c) {
-        if (!c) return false;
-        var un = (c.telegram_username || '').replace(/^@/, '').trim();
-        var tid = c.telegram_id;
-        return !!un || (tid != null && tid !== '');
-      }
-
       function openTrainerClientTelegramDm(c) {
         if (!c) return;
+        var H = window.TrainerRelayHelpers;
+        var ctx = H ? H.contextFromTrainerClient(c) : null;
+        if (ctx && H.shouldUseRelayModal(ctx)) {
+          H.openRelaySendModalForContext(ctx, { subtitle: trainerClientDisplayName(c) });
+          return;
+        }
         var un = String(c.telegram_username || '').replace(/^@/, '').trim();
         var tid = c.telegram_id;
         if (typeof window.openTelegramChatFromMiniApp === 'function') {
@@ -2155,11 +2153,25 @@
           '<svg class="tc-name-edit-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg>';
         var ICO_TRASH =
           '<svg class="tc-remove-client-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>';
-        var canDm = !isSandbox && trainerClientCanWriteTelegram(client);
+        var Htc = window.TrainerRelayHelpers;
+        var tcRelayCtx = Htc ? Htc.contextFromTrainerClient(client) : null;
+        var canDm = !isSandbox && !!(tcRelayCtx && Htc.canShowTrainerMessageButton(tcRelayCtx));
+        var heroRelayCls =
+          !isSandbox && tcRelayCtx && Htc.shouldUseRelayModal(tcRelayCtx) ? ' tc-hero-dm--relay' : '';
+        var dmHeroTip =
+          heroRelayCls
+            ? 'Сообщение через бота клиента — ответ в бот тренера'
+            : 'Написать в Telegram';
         var heroDmBtn = '';
         if (canDm) {
           heroDmBtn =
-            '<button type=\"button\" class=\"tc-hero-dm\" id=\"tcClientHeroDm\" aria-label=\"Написать в Telegram\" title=\"Написать в Telegram\">' +
+            '<button type=\"button\" class=\"tc-hero-dm' +
+            heroRelayCls +
+            '\" id=\"tcClientHeroDm\" aria-label=\"' +
+            escapeHtml(dmHeroTip) +
+            '\" title=\"' +
+            escapeHtml(dmHeroTip) +
+            '\">' +
             ICO_MSG_BUBBLE +
             '</button>';
         }
@@ -2242,7 +2254,14 @@
             detail += '<button type=\"button\" class=\"bd-btn bd-btn--surface\" id=\"btnCopyPhone\">' + ICO_PHONE + ' Скопировать телефон</button>';
           }
           if (canDm) {
-            detail += '<button type=\"button\" class=\"bd-btn bd-btn--surface\" id=\"btnWriteClient\">' + ICO_SEND + ' Написать в TG</button>';
+            var dmBtnRelay = !!(tcRelayCtx && Htc.shouldUseRelayModal(tcRelayCtx));
+            var dmBtnTip = dmBtnRelay ? ' через бота' : '';
+            detail +=
+              '<button type=\"button\" class=\"bd-btn bd-btn--surface\" id=\"btnWriteClient\">' +
+              ICO_SEND +
+              ' Написать клиенту' +
+              dmBtnTip +
+              '</button>';
           }
           var showBindWelcome = client.telegram_id == null;
           if (showBindWelcome) {

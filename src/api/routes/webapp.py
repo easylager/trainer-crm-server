@@ -88,6 +88,17 @@ from src.application.booking_use_cases import (
     trainer_client_roster_link_exists,
 )
 from src.application.client_username_enrich import enrich_booking_dicts_with_client_telegram_usernames
+from src.application.trainer_client_relay_use_cases import (
+    RELAY_SENDER_TRAINER,
+    assert_trainer_may_use_relay,
+    close_relay_session,
+    get_open_session_id,
+    insert_relay_message,
+    open_relay_session,
+    sanitize_relay_body,
+    trainer_public_display_name,
+)
+from src.application.trainer_relay_delivery import send_client_relay_from_trainer
 from src.application.trainer_client_registration_notify import (
     notify_trainer_client_registered_from_invite,
 )
@@ -5080,6 +5091,74 @@ async def post_trainer_client_pass_issue(
         except Exception as e:  # noqa: BLE001
             logger.warning("Failed to send pass-issued notification to client %s: %s", client_id, e)
     return instance
+
+
+class TrainerRelayMessageBody(BaseModel):
+    text: str = Field(..., min_length=1, max_length=4000)
+
+
+@router.post("/trainer/clients/{client_id:int}/relay-messages")
+async def trainer_post_client_relay_message_route(
+    client_id: int,
+    body: TrainerRelayMessageBody,
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+):
+    """Send a relay message from trainer to client's bot chat (fallback when Telegram DM lacks @username)."""
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
+    c_row, err = await assert_trainer_may_use_relay(session, trainer_id=trainer_id, client_id=client_id)
+    if err == "not_found":
+        raise HTTPException(status_code=404, detail="Клиент не найден")
+    if err == "forbidden":
+        raise HTTPException(status_code=403, detail="Нет доступа к клиенту")
+    if err == "sandbox":
+        raise HTTPException(status_code=400, detail="Для примера-клиента переписка не используется")
+    if err == "no_telegram":
+        raise HTTPException(status_code=400, detail="У клиента не привязан Telegram")
+    assert c_row is not None
+    body_text = sanitize_relay_body(body.text)
+    if body_text is None:
+        raise HTTPException(status_code=400, detail="Введите текст сообщения")
+
+    display = await trainer_public_display_name(session, trainer_id=trainer_id)
+    c_tg = int(c_row["telegram_id"])
+    sess_id: int | None = None
+    try:
+        sess_id = await open_relay_session(session, trainer_id=trainer_id, client_id=int(client_id))
+        await insert_relay_message(session, session_id=sess_id, sender_role=RELAY_SENDER_TRAINER, body_text=body_text)
+        await session.flush()
+        await send_client_relay_from_trainer(
+            client_telegram_id=c_tg,
+            trainer_display_name=display,
+            body_text=body_text,
+            session_id=int(sess_id),
+        )
+        await session.commit()
+    except Exception:
+        await session.rollback()
+        logger.exception("trainer relay outbound failed trainer_id=%s client_id=%s", trainer_id, client_id)
+        raise HTTPException(status_code=502, detail="Не удалось отправить сообщение в бот клиента. Попробуйте позже.")
+    assert sess_id is not None
+    return {"ok": True, "session_id": int(sess_id)}
+
+
+@router.post("/trainer/clients/{client_id:int}/relay/close")
+async def trainer_close_client_relay_route(
+    client_id: int,
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+):
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
+    sid = await get_open_session_id(session, trainer_id=trainer_id, client_id=int(client_id))
+    if sid is None:
+        return {"closed": False}
+    await close_relay_session(session, session_id=int(sid), trainer_id=int(trainer_id))
+    await session.commit()
+    return {"closed": True}
 
 
 class TrainerClientNoteBody(BaseModel):

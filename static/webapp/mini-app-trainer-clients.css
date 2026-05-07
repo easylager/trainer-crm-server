@@ -581,6 +581,9 @@
       transform: scale(0.96);
       opacity: 0.92;
     }
+    .tc-hero-dm.tc-hero-dm--relay {
+      border-style: dashed;
+    }
     .tc-hero-dm-icon {
       width: 18px;
       height: 18px;

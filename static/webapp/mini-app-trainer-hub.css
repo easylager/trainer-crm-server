@@ -890,8 +890,10 @@
       outline: 2px solid color-mix(in srgb, var(--tg-theme-button-color) 55%, transparent);
       outline-offset: 2px;
     }
-    .hub-bookings-stack .hub-slot-msg-icon {
-      width: 16px;
+    .hub-bookings-stack .hub-slot-msg.hub-slot-msg--relay {
+      border-style: dashed;
+      border-color: color-mix(in srgb, var(--tg-theme-button-color) 52%, transparent);
+    }
       height: 16px;
       flex-shrink: 0;
       stroke: currentColor;

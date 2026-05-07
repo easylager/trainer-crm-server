@@ -98,6 +98,23 @@
                 function (ev) {
                   ev.preventDefault();
                   ev.stopPropagation();
+                  if (btn.getAttribute('data-hub-relay') === '1') {
+                    var H = window.TrainerRelayHelpers;
+                    if (H && typeof H.openRelayFromHubButton === 'function' && H.openRelayFromHubButton(btn)) {
+                      return;
+                    }
+                    var wg = window.Telegram && window.Telegram.WebApp;
+                    if (wg && typeof wg.showAlert === 'function') {
+                      try {
+                        wg.showAlert(
+                          'Не удалось открыть переписку через бота. Обновите страницу или откройте мини-приложение снова.'
+                        );
+                      } catch (eRelayPf) {
+                        /* noop */
+                      }
+                    }
+                    return;
+                  }
                   if (typeof window.openTelegramChatFromMiniApp === 'function') {
                     window.openTelegramChatFromMiniApp({
                       username: btn.getAttribute('data-dm-un'),
@@ -2680,19 +2697,6 @@
         return false;
       }
 
-      function hubTrainerCanWriteClient(b) {
-        var cap = parseInt(String(b.slot_capacity != null ? b.slot_capacity : '1'), 10);
-        if (isNaN(cap) || cap > 1) return false;
-        var tid = b.client_telegram_id;
-        var un = (b.client_telegram_username || '').replace(/^@/, '').trim();
-        if (!!un) return true;
-        if (tid == null || tid === '') return false;
-        /* Telegram Web: tg://user?id= is unsupported — only @username deep links work. */
-        var w = window.Telegram && window.Telegram.WebApp;
-        if (w && w.platform === 'web') return false;
-        return true;
-      }
-
       /** PRD E1: backend marks row as inside [start,end); compact label for current session. */
       function hubSessionNowPillHtml(b) {
         if (!b || !b.hub_in_session) return '';
@@ -2839,12 +2843,34 @@
           ? escapeHtml(arena)
           : '<span class="venue-muted">не указано</span>';
         var msgBtn = '';
-        if (hubTrainerCanWriteClient(b)) {
+        var Hhub = window.TrainerRelayHelpers;
+        var hubCtx = Hhub ? Hhub.contextFromHubBooking(b) : null;
+        if (hubCtx && Hhub.canShowTrainerMessageButton(hubCtx)) {
+          var useRelay = Hhub.shouldUseRelayModal(hubCtx);
+          var relayAttr = useRelay
+            ? ' data-hub-relay="1" data-client-id="' +
+              escapeHtml(String(b.client_id)) +
+              '" data-client-label="' +
+              escapeHtml(clientLabel(b)) +
+              '" data-client-phone="' +
+              escapeHtml(String((b.client_phone || '').trim())) +
+              '"'
+            : '';
+          var tip = useRelay
+            ? 'Сообщение через бота клиента (ответ — в бот тренера)'
+            : 'Написать клиенту в Telegram';
           msgBtn =
-            '<button type="button" class="hub-slot-msg" data-hub-dm="trainer"' +
+            '<button type="button" class="hub-slot-msg' +
+            (useRelay ? ' hub-slot-msg--relay' : '') +
+            '" data-hub-dm="trainer"' +
+            relayAttr +
             ' data-dm-un="' + escapeHtml((b.client_telegram_username || '').replace(/^@/, '')) + '"' +
             ' data-dm-tid="' + escapeHtml(b.client_telegram_id != null ? String(b.client_telegram_id) : '') + '"' +
-            ' aria-label="Написать клиенту в Telegram" title="Написать в Telegram">' +
+            ' aria-label="' +
+            escapeHtml(tip) +
+            '" title="' +
+            escapeHtml(tip) +
+            '">' +
             '<svg class="hub-slot-msg-icon" viewBox="0 0 24 24" aria-hidden="true">' +
             '<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/>' +
             '</svg>' +
@@ -5385,6 +5411,13 @@
           if (msgBtn) {
             ev.preventDefault();
             ev.stopPropagation();
+            if (msgBtn.getAttribute('data-hub-relay') === '1') {
+              var Hoff = window.TrainerRelayHelpers;
+              if (Hoff && typeof Hoff.openRelayFromHubButton === 'function' && Hoff.openRelayFromHubButton(msgBtn)) {
+                /* opened */
+              }
+              return;
+            }
             openTelegramDmMiniApp(msgBtn.getAttribute('data-dm-un'), msgBtn.getAttribute('data-dm-tid'));
             return;
           }

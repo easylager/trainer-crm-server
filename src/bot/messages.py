@@ -21,6 +21,61 @@ CLIENT_START_WELCOME = (
     "Нажмите кнопку <b>Главная</b> слева от поля ввода — там каталог, записи и заявки. Помощь: /guide"
 )
 CLIENT_FALLBACK = "Нажмите кнопку <b>Главная</b> слева от поля ввода. Помощь: /guide"
+
+# Bot-mediated relay when trainer ↔ client can't use native Telegram DM
+CLIENT_RELAY_FOOTER = (
+    "\n\n—\nВы можете ответить тренеру — отправьте обычное сообщение здесь в бот.\n"
+    "<b>Закончить переписку</b> — кнопкой ниже."
+)
+CLIENT_RELAY_END_BUTTON = "Закончить переписку"
+TRAINER_RELAY_REPLY_PROMPT = (
+    "Напишите ответ следующим сообщением — я отправлю его клиенту в бота. Прервать: /cancel"
+)
+def build_client_relay_keyboard(session_id: int):
+    """End-only for client DM (callback rly_xc:)."""
+    from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+
+    sid = int(session_id)
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=CLIENT_RELAY_END_BUTTON, callback_data=f"rly_xc:{sid}")],
+        ]
+    )
+
+
+def build_trainer_relay_keyboard(session_id: int):
+    """Reply + close for trainer notification."""
+    from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+
+    sid = int(session_id)
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="Ответить", callback_data=f"rly_r:{sid}"),
+                InlineKeyboardButton(text="Закончить", callback_data=f"rly_xt:{sid}"),
+            ],
+        ]
+    )
+
+
+def format_client_relay_from_trainer_html(*, trainer_name: str, body_text: str) -> str:
+    safe_name = html.escape((trainer_name or "").strip() or "Тренер")
+    escaped_body = html.escape(body_text.strip())
+    return (
+        f"💬 <b>Сообщение от тренера {safe_name}</b>\n\n{escaped_body}" + CLIENT_RELAY_FOOTER
+    )
+
+
+def format_trainer_relay_from_client_html(*, client_name: str, body_text: str) -> str:
+    safe_name = html.escape((client_name or "").strip() or "Клиент")
+    escaped_body = html.escape(body_text.strip())
+    return f"💬 <b>Ответ клиента {safe_name}</b>\n\n{escaped_body}"
+
+TRAINER_RELAY_SESSION_CLOSED_HINT = (
+    "Переписка через бота завершена. Новое сообщение — снова из раздела «Мои клиенты» или записи."
+)
+CLIENT_RELAY_SESSION_CLOSED_HINT = "Переписка через бота с тренером завершена."
+
 # Client hub Mini App (HTTPS): contextual home + links to catalog, bookings, requests, passes
 CLIENT_HOME_OPEN_WEBAPP = (
     "<b>Главная</b> — ближайшие записи, заявки и быстрые переходы: тренеры, записи, отклики, абонементы."

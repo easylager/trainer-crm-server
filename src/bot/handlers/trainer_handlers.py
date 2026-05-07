@@ -94,6 +94,13 @@ from src.application.trainer_schedule_use_cases import (
     replace_week_with_template,
     this_week_monday,
 )
+from src.application.trainer_client_relay_use_cases import (
+    close_relay_session,
+    relay_session_context_for_id,
+    sanitize_relay_body,
+)
+from src.application.trainer_relay_delivery import send_client_plain_notification
+from src.bot.handlers.relay_handlers import deliver_trainer_pending_relay_reply
 from src.bot import messages as msg
 from src.bot.trainer_cancel_client_notify import send_trainer_cancel_notification_for_booking_now
 from src.bot.trainer_bot_state import trainer_booking_note_awaiting, trainer_support_awaiting
@@ -114,6 +121,9 @@ router = Router(name="trainer")
 
 # Telegram: remove stale reply keyboard (cannot combine with InlineKeyboardMarkup in one message).
 _REPLY_KEYBOARD_CLEAR = "\u200b"
+
+# Relay: awaiting plain-text reply → client bot (session id by trainer telegram user id).
+_relay_trainer_pending_session: dict[int, int] = {}
 
 
 def _format_trainer_client_row_display_name(client_row: dict | None) -> str:
@@ -3143,11 +3153,87 @@ async def on_trainer_faq_callback(callback: CallbackQuery) -> None:
     await callback.message.answer(msg.TRAINER_FAQ_COMING_SOON)
 
 
+async def _parse_relay_sid(data: str, prefix: str) -> int | None:
+    if not data or not data.startswith(prefix):
+        return None
+    try:
+        return int(data.split(":", 1)[1])
+    except (IndexError, ValueError):
+        return None
+
+
+@router.callback_query(lambda c: c.data and str(c.data).startswith("rly_r:"))
+async def relay_trainer_begin_reply(callback: CallbackQuery) -> None:
+    await callback.answer()
+    sid = _parse_relay_sid(callback.data or "", "rly_r:")
+    if sid is None or not callback.message:
+        return
+    uid = callback.from_user.id if callback.from_user else 0
+    if not uid:
+        return
+    async with async_session_factory() as session:
+        trainer_id = await get_trainer_id_by_telegram_id(session, uid)
+        if not trainer_id:
+            await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
+            return
+        ctx = await relay_session_context_for_id(session, session_id=int(sid), trainer_id=int(trainer_id))
+        if not ctx or ctx.get("status") != "open":
+            await callback.message.answer("<b>Сессия переписки уже закрыта.</b>")
+            return
+        # Drop other pending relays for this trainer to avoid ambiguity.
+        if uid in _relay_trainer_pending_session:
+            del _relay_trainer_pending_session[uid]
+        _relay_trainer_pending_session[uid] = int(sid)
+    await callback.message.answer(msg.TRAINER_RELAY_REPLY_PROMPT)
+
+
+@router.callback_query(lambda c: c.data and str(c.data).startswith("rly_xt:"))
+async def relay_trainer_close_chat(callback: CallbackQuery) -> None:
+    """Trainer ends relay from notification button."""
+    await callback.answer()
+    sid = _parse_relay_sid(callback.data or "", "rly_xt:")
+    if sid is None or not callback.message:
+        return
+    uid = callback.from_user.id if callback.from_user else 0
+    if not uid:
+        return
+    c_tg: int | None = None
+    async with async_session_factory() as session:
+        trainer_id = await get_trainer_id_by_telegram_id(session, uid)
+        if not trainer_id:
+            await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
+            return
+        ctx = await relay_session_context_for_id(session, session_id=int(sid), trainer_id=int(trainer_id))
+        if not ctx:
+            await callback.message.answer("Сессия не найдена.")
+            return
+        c_raw = ctx.get("client_telegram_id")
+        if c_raw is not None:
+            c_tg = int(c_raw)
+        await close_relay_session(session, session_id=int(sid), trainer_id=int(trainer_id))
+        await session.commit()
+    try:
+        await callback.message.edit_reply_markup(reply_markup=None)
+    except Exception:
+        pass
+    await callback.message.answer(msg.TRAINER_RELAY_SESSION_CLOSED_HINT)
+    _relay_trainer_pending_session.pop(uid, None)
+    if c_tg:
+        try:
+            await send_client_plain_notification(
+                telegram_chat_id=c_tg,
+                html_text=msg.CLIENT_RELAY_SESSION_CLOSED_HINT,
+            )
+        except Exception:
+            pass
+
+
 @router.message(Command("cancel"))
 async def cmd_cancel_idle(message: Message) -> None:
     telegram_id = message.from_user.id if message.from_user else 0
     _trainer_booking_note_state.pop(telegram_id, None)
     trainer_booking_note_awaiting.discard(telegram_id)
+    _relay_trainer_pending_session.pop(telegram_id, None)
     await message.answer(msg.TRAINER_CANCEL_IDLE)
 
 
@@ -3155,6 +3241,28 @@ async def cmd_cancel_idle(message: Message) -> None:
 async def fallback(message: Message) -> None:
     """Any other message: handle support state or direct to main menu."""
     telegram_id = message.from_user.id if message.from_user else 0
+    if telegram_id in _relay_trainer_pending_session and message.text:
+        sid = _relay_trainer_pending_session.get(telegram_id)
+        if sid is not None:
+            body = sanitize_relay_body(message.text)
+            if body is None:
+                await message.answer("Текст сообщения пустой. Напишите ответ или отправьте /cancel.")
+                return
+            async with async_session_factory() as session:
+                trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+            if not trainer_id:
+                _relay_trainer_pending_session.pop(telegram_id, None)
+                await message.answer(msg.TRAINER_ONLY_VIA_SITE)
+                return
+            _relay_trainer_pending_session.pop(telegram_id, None)
+            await deliver_trainer_pending_relay_reply(
+                trainer_id=int(trainer_id),
+                trainer_telegram_id=int(telegram_id),
+                session_id=int(sid),
+                body_text=body,
+            )
+            await message.answer("Готово — сообщение отправлено клиенту в бота.")
+            return
     if telegram_id in trainer_support_awaiting:
         trainer_support_awaiting.discard(telegram_id)
         text = (message.text or "").strip()[: 4000]

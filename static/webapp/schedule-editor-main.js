@@ -1284,8 +1284,11 @@
             primaryActions.push({ cls: 'bd-btn--secondary', action: 'reschedule', icon: BD_ICONS.session, label: 'Перенести запись' });
             primaryActions.push({ cls: 'bd-btn--outline-danger', action: 'cancel', icon: BD_ICONS.cancelOutline, label: 'Отменить запись' });
           }
-          if (scheduleDetailTrainerCanWriteClient(b)) {
-            extraActions.push({ cls: 'bd-btn--surface', action: 'write_client', icon: BD_ICONS.send, label: 'Написать клиенту' });
+          if (window.TrainerRelayHelpers) {
+            var Wctx = window.TrainerRelayHelpers.contextFromScheduleBooking(b);
+            if (window.TrainerRelayHelpers.canShowTrainerMessageButton(Wctx)) {
+              extraActions.push({ cls: 'bd-btn--surface', action: 'write_client', icon: BD_ICONS.send, label: 'Написать клиенту' });
+            }
           }
           var canReportProblem = stRaw !== 'cancelled' && stRaw !== 'declined';
           // E7: false when rollout=off or pilot excludes this trainer (API sets problem_flow_enabled).
@@ -1477,6 +1480,43 @@
         );
       }
 
+      function scheduleWeekSwipeNavHintLsKey(trainerId) {
+        if (trainerId == null || trainerId === '' || isNaN(Number(trainerId))) return null;
+        return 'schedule_editor_week_swipe_nav_hint_v1_' + String(trainerId);
+      }
+
+      /** Heuristic only: show swipe-related copy/toasts — avoids bothering pure mouse/trackpad desktops. */
+      function deviceLikelySupportsTouchSwipeNavigation() {
+        try {
+          if (typeof window.matchMedia === 'function') {
+            var mqCoarse = window.matchMedia('(any-pointer: coarse)');
+            if (mqCoarse && mqCoarse.matches) return true;
+          }
+        } catch (eMq) { /* ignore */ }
+        var mtp = Number(navigator.maxTouchPoints || 0) || 0;
+        return mtp > 0;
+      }
+
+      /** One toast per trainer — discoverability without hiding arrows (arrows stay for all screens). */
+      function maybeShowScheduleWeekSwipeNavHintOnce() {
+        if (!deviceLikelySupportsTouchSwipeNavigation()) return;
+        var tid = state.trainerId;
+        var tidNum = tid != null ? parseInt(String(tid), 10) : NaN;
+        if (isNaN(tidNum) || tidNum < 1) return;
+        var key = scheduleWeekSwipeNavHintLsKey(tidNum);
+        if (!key) return;
+        try {
+          if (localStorage.getItem(key) === '1') return;
+        } catch (eR) { /* ignore */ }
+        try {
+          localStorage.setItem(key, '1');
+        } catch (eW) { /* quota / private mode */ }
+        showToast(
+          'Неделю можно листать свайпом влево/вправо по расписанию. Стрелки над датой тоже работают.',
+          4400
+        );
+      }
+
       /** When opened in trainer-clients iframe (?embed=1), tell parent to close overlay and show UX there. */
       function notifyTrainerClientsEmbed(payload) {
         if (!state.scheduleEditorEmbed) return false;
@@ -1542,6 +1582,10 @@
         showPastThisWeek: false,
         /** `YYYY-MM-DD` within current `weekStart` week — bottom strip highlight + scroll target. */
         scheduleStripSelectedDate: null,
+        /** Prevents stacked week navigations while /schedule fetch is in flight (buttons + swipe). */
+        scheduleLoadInFlight: false,
+        /** After horizontal week swipe on day-pick rows (buttons), block synthetic clicks opening a day editor. */
+        scheduleDayPickSwipeSuppressUntil: 0,
         bookSlotId: null,
         bookModalStep: 'choice',
         pendingBookClientId: null,
@@ -1616,7 +1660,16 @@
         ev.preventDefault();
         var booking = state.selectedBooking;
         if (!booking) return;
-        if (!scheduleDetailTrainerCanWriteClient(booking)) return;
+        var Sed = window.TrainerRelayHelpers;
+        if (!Sed) return;
+        var sdCtx = Sed.contextFromScheduleBooking(booking);
+        if (!Sed.canShowTrainerMessageButton(sdCtx)) return;
+        if (Sed.shouldUseRelayModal(sdCtx)) {
+          Sed.openRelaySendModalForContext(sdCtx, {
+            subtitle: Sed.scheduleBookingSubtitle(booking),
+          });
+          return;
+        }
         var un = String(booking.client_telegram_username || '').replace(/^@/, '').trim();
         var tid = booking.client_telegram_id;
         if (typeof window.openTelegramChatFromMiniApp === 'function') {
@@ -2291,17 +2344,6 @@
         return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
       }
 
-      /** Same rule as trainer-home hub DM: Web cannot open tg://user?id= without @username. */
-      function scheduleDetailTrainerCanWriteClient(b) {
-        var un = (b.client_telegram_username || '').replace(/^@/, '').trim();
-        if (!!un) return true;
-        var tid = b.client_telegram_id;
-        if (tid == null || tid === '') return false;
-        var w = window.Telegram && window.Telegram.WebApp;
-        if (w && w.platform === 'web') return false;
-        return true;
-      }
-
       function setActiveTab(tabName) {
         state.tab = tabName;
         document.querySelectorAll('.tab').forEach(function(x) { x.classList.toggle('active', x.dataset.tab === tabName); });
@@ -2345,6 +2387,7 @@
         state.pendingTemplateDay = null;
         state.calendarBaselineStarts = null;
         updateTelegramBack();
+        syncScheduleWeekDayStripVisibility();
       }
 
       function isGroupClassesFeatureEnabled() {
@@ -2531,7 +2574,7 @@
         }
         if (!html) {
           list.innerHTML =
-            '<div class="empty">В этой неделе нельзя добавить слоты — здесь только прошлые дни. Нажмите «›» (следующая неделя) выше.</div>';
+            '<div class="empty">В этой неделе нельзя добавить слоты — здесь только прошлые дни. Переключитесь на актуальную неделю.</div>';
         } else {
           list.innerHTML = html;
           document.querySelector('.tabs').style.display = 'none';
@@ -2539,8 +2582,15 @@
           document.getElementById('tabTemplate').style.display = 'none';
           document.getElementById('screenDayPick').style.display = 'block';
           updateTelegramBack();
+          syncScheduleWeekDayStripVisibility();
           document.querySelectorAll('#dayPickList .template-day-card').forEach(function(btn) {
-            btn.onclick = function() {
+            btn.onclick = function(ev) {
+              var sup = Number(state.scheduleDayPickSwipeSuppressUntil) || 0;
+              if (sup && Date.now() < sup) {
+                if (ev && typeof ev.preventDefault === 'function') ev.preventDefault();
+                if (ev && typeof ev.stopPropagation === 'function') ev.stopPropagation();
+                return;
+              }
               document.getElementById('screenDayPick').style.display = 'none';
               openEditCalendarDay(btn.dataset.date);
             };
@@ -2654,7 +2704,7 @@
         return end < t;
       }
 
-      /** «Добавить слоты на день» — только когда неделя календаря не целиком в прошлом (и есть CRM). */
+      /** «Добавить слоты на неделю» — только когда неделя календаря не целиком в прошлом (и есть CRM). */
       function syncAddSlotsButtonEligibility() {
         var el = document.getElementById('btnAddSlots');
         if (!el) return;
@@ -2690,13 +2740,17 @@
           'Добавьте слоты кнопкой выше или задайте повтор во вкладке «Шаблон недели» — так неделя заполняется быстрее.';
         if (entirePast) {
           title = 'Эта неделя в прошлом';
-          hint = 'Выберите текущую или будущую неделю стрелками у дат выше — там можно добавить слоты.';
+          hint = deviceLikelySupportsTouchSwipeNavigation()
+            ? 'Выберите текущую или будущую неделю стрелками над датой или свайпом влево/вправо по расписанию — там можно добавить слоты.'
+            : 'Выберите текущую или будущую неделю стрелками у дат выше — там можно добавить слоты.';
         } else if (slotFilter === 'available') {
           title = 'Нет свободных слотов';
           hint = 'Попробуйте фильтр «Все» или добавьте новые окна на день.';
         } else if (slotFilter === 'booked') {
           title = 'Нет занятых слотов';
-          hint = 'Попробуйте фильтр «Все» или перелистайте неделю стрелками.';
+          hint = deviceLikelySupportsTouchSwipeNavigation()
+            ? 'Попробуйте фильтр «Все», перелистайте неделю стрелками или свайпом влево/вправо по расписанию.'
+            : 'Попробуйте фильтр «Все» или перелистайте неделю стрелками.';
         }
         var html =
           '<div class="calendar-empty-state">' +
@@ -2745,7 +2799,12 @@
         if (!el) return;
         var main = document.getElementById('screenMain');
         var mainOn = main && main.classList.contains('active');
-        var show = mainOn && state.tab === 'calendar';
+        var dayPickEl = document.getElementById('screenDayPick');
+        var dayPickOpen = dayPickEl && dayPickEl.style.display === 'block';
+        var editEl = document.getElementById('screenEdit');
+        var editOpen = editEl && editEl.style.display === 'block';
+        /* Strip only for the main week calendar list — not day-pick overlay or per-day slot editor. */
+        var show = mainOn && state.tab === 'calendar' && !dayPickOpen && !editOpen;
         el.hidden = !show;
         try {
           document.documentElement.classList.toggle('se-week-day-strip-visible', show);
@@ -2875,6 +2934,7 @@
         var pastWrap = document.getElementById('calendarPastRevealWrap');
         if (pastWrap) pastWrap.hidden = true;
         document.getElementById('calendarContent').innerHTML = buildCalendarSkeletonHtml();
+        state.scheduleLoadInFlight = true;
         fetch(apiUrlWithQuery('/schedule?from_date=' + encodeURIComponent(from) + '&to_date=' + encodeURIComponent(to)), { headers: headers() })
           .then(function(r) {
             if (!r.ok) {
@@ -2909,6 +2969,9 @@
                 });
               } else {
                 renderCalendar();
+                requestAnimationFrame(function() {
+                  maybeShowScheduleWeekSwipeNavHintOnce();
+                });
               }
               flushPendingGroupHubModal();
               if (state.pendingBookGroupSlotId) {
@@ -2937,6 +3000,9 @@
             }
             hideFlowBookBootOverlay();
             renderCalendarLoadFailure();
+          })
+          .finally(function() {
+            state.scheduleLoadInFlight = false;
           });
       }
 
@@ -4619,6 +4685,7 @@
         pruneSelectedStartsForOverlap(getEditDurationMinutes());
         renderHourGrid();
         updateTelegramBack();
+        syncScheduleWeekDayStripVisibility();
       }
 
       function renderHourGrid() {
@@ -4986,19 +5053,23 @@
         cancelSlotIntentModal();
       };
 
-      document.getElementById('weekPrev').onclick = function() {
+      /** deltaWeeks: -1 prev, +1 next — shared by week buttons and horizontal swipe on mobile/Telegram WebView. */
+      function shiftTrainerScheduleWeek(deltaWeeks, loadOpts) {
+        if (state.scheduleLoadInFlight) return;
+        loadOpts = loadOpts || {};
         state.showPastThisWeek = false;
         state.scheduleStripSelectedDate = null;
-        state.weekStart.setDate(state.weekStart.getDate() - 7);
+        if (!state.weekStart) state.weekStart = getMonday(new Date());
+        state.weekStart.setDate(state.weekStart.getDate() + 7 * deltaWeeks);
         syncAddSlotsButtonEligibility();
-        loadSlots();
+        loadSlots(loadOpts);
+      }
+
+      document.getElementById('weekPrev').onclick = function() {
+        shiftTrainerScheduleWeek(-1);
       };
       document.getElementById('weekNext').onclick = function() {
-        state.showPastThisWeek = false;
-        state.scheduleStripSelectedDate = null;
-        state.weekStart.setDate(state.weekStart.getDate() + 7);
-        syncAddSlotsButtonEligibility();
-        loadSlots();
+        shiftTrainerScheduleWeek(1);
       };
 
       function rescheduleDayPickAfterWeekChangeIfVisible() {
@@ -5009,19 +5080,169 @@
       }
 
       document.getElementById('dayPickWeekPrev').onclick = function() {
-        state.showPastThisWeek = false;
-        state.scheduleStripSelectedDate = null;
-        if (!state.weekStart) state.weekStart = getMonday(new Date());
-        state.weekStart.setDate(state.weekStart.getDate() - 7);
-        loadSlots({ onComplete: rescheduleDayPickAfterWeekChangeIfVisible });
+        shiftTrainerScheduleWeek(-1, { onComplete: rescheduleDayPickAfterWeekChangeIfVisible });
       };
       document.getElementById('dayPickWeekNext').onclick = function() {
-        state.showPastThisWeek = false;
-        state.scheduleStripSelectedDate = null;
-        if (!state.weekStart) state.weekStart = getMonday(new Date());
-        state.weekStart.setDate(state.weekStart.getDate() + 7);
-        loadSlots({ onComplete: rescheduleDayPickAfterWeekChangeIfVisible });
+        shiftTrainerScheduleWeek(1, { onComplete: rescheduleDayPickAfterWeekChangeIfVisible });
       };
+
+      (function wireScheduleWeekSwipeGestures() {
+        var MIN_DX = 52;
+        var HORIZ_RATIO = 1.15;
+        /** Before this slop we do not commit horizontal vs vertical (avoids fighting scroll). */
+        var LOCK_SLOP_PX = 14;
+        /** If still ambiguous after this travel, assume vertical scroll (safe default). */
+        var AMBIGUOUS_FALLBACK_PX = 26;
+
+        /** Day-pick rows are <button>; must still allow swipe to start there (otherwise only margins/title swipe). */
+        function targetStartsOnExcludedControl(tgt, swipeRootEl) {
+          if (!tgt || !tgt.closest) return true;
+          if (tgt.closest('input, textarea, select, label, a[href]')) return true;
+          if (swipeRootEl && swipeRootEl.id === 'screenDayPick') {
+            return !!tgt.closest('#dayPickWeekPrev, #dayPickWeekNext');
+          }
+          return !!tgt.closest('button');
+        }
+
+        function resetSwipeChrome(rootEl) {
+          rootEl.classList.remove('schedule-calendar-swipe--horizontal');
+        }
+
+        /**
+         * Once the gesture locks as horizontal, non-passive touchmove + preventDefault stops
+         * WebView vertical scroll jitter (Telegram tab / elastic scroll) during week swipe.
+         * Swipe left (dx < 0) → next week; swipe right → previous.
+         */
+        function attach(rootEl, getLoadOpts) {
+          if (!rootEl || !rootEl.addEventListener) return;
+          rootEl.classList.add('schedule-calendar-swipe-root');
+          var track = null;
+
+          function findTouch(ev, touchId) {
+            var touches = ev.touches;
+            var j;
+            if (!touches || !touchId) return null;
+            for (j = 0; j < touches.length; j++) {
+              if (touches[j].identifier === touchId) return touches[j];
+            }
+            return null;
+          }
+
+          rootEl.addEventListener('touchstart', function(ev) {
+            track = null;
+            if (state.scheduleLoadInFlight) return;
+            if (ev.touches.length !== 1) return;
+            if (targetStartsOnExcludedControl(ev.target, rootEl)) return;
+            var t = ev.touches[0];
+            track = {
+              x: t.clientX,
+              y: t.clientY,
+              id: t.identifier,
+              /** null = undecided, 'v' = user is scrolling vertically, 'h' = horizontal week swipe */
+              mode: null,
+            };
+          }, { passive: true });
+
+          rootEl.addEventListener('touchmove', function(ev) {
+            if (!track || state.scheduleLoadInFlight) return;
+            var tMove = findTouch(ev, track.id);
+            if (!tMove) return;
+
+            var dx = tMove.clientX - track.x;
+            var dy = tMove.clientY - track.y;
+            var adx = Math.abs(dx);
+            var ady = Math.abs(dy);
+
+            if (track.mode === null) {
+              if (adx < LOCK_SLOP_PX && ady < LOCK_SLOP_PX) return;
+
+              var wantH = adx >= LOCK_SLOP_PX && adx > ady * HORIZ_RATIO;
+              var wantV = ady >= LOCK_SLOP_PX && ady > adx * HORIZ_RATIO;
+
+              if (wantH && !wantV) {
+                track.mode = 'h';
+                rootEl.classList.add('schedule-calendar-swipe--horizontal');
+              } else if (wantV && !wantH) {
+                track.mode = 'v';
+                return;
+              } else if (Math.max(adx, ady) >= AMBIGUOUS_FALLBACK_PX) {
+                if (rootEl && rootEl.id === 'screenDayPick' && adx >= ady) {
+                  track.mode = 'h';
+                  rootEl.classList.add('schedule-calendar-swipe--horizontal');
+                } else {
+                  track.mode = 'v';
+                  return;
+                }
+              } else {
+                return;
+              }
+            }
+
+            if (track.mode === 'h') {
+              try {
+                ev.preventDefault();
+              } catch (ePe) { /* ignore */ }
+            }
+          }, { passive: false });
+
+          rootEl.addEventListener('touchcancel', function() {
+            if (track) resetSwipeChrome(rootEl);
+            track = null;
+          }, { passive: true });
+
+          rootEl.addEventListener('touchend', function(ev) {
+            if (!track || state.scheduleLoadInFlight) {
+              resetSwipeChrome(rootEl);
+              track = null;
+              return;
+            }
+            var tEnd = null;
+            var i;
+            for (i = 0; i < ev.changedTouches.length; i++) {
+              if (ev.changedTouches[i].identifier === track.id) {
+                tEnd = ev.changedTouches[i];
+                break;
+              }
+            }
+            if (!tEnd) {
+              resetSwipeChrome(rootEl);
+              track = null;
+              return;
+            }
+
+            var wasVerticalIntent = track.mode === 'v';
+            var dxEnd = tEnd.clientX - track.x;
+            var dyEnd = tEnd.clientY - track.y;
+            resetSwipeChrome(rootEl);
+            track = null;
+
+            if (wasVerticalIntent) return;
+
+            var adx = Math.abs(dxEnd);
+            var ady = Math.abs(dyEnd);
+            if (adx < MIN_DX || adx < ady * HORIZ_RATIO) return;
+
+            var deltaWeeks = dxEnd < 0 ? 1 : -1;
+            var tgApp = window.Telegram && window.Telegram.WebApp;
+            if (tgApp && tgApp.HapticFeedback && typeof tgApp.HapticFeedback.selectionChanged === 'function') {
+              try {
+                tgApp.HapticFeedback.selectionChanged();
+              } catch (eH) { /* ignore */ }
+            }
+            shiftTrainerScheduleWeek(deltaWeeks, typeof getLoadOpts === 'function' ? getLoadOpts() : {});
+            if (rootEl && rootEl.id === 'screenDayPick') {
+              state.scheduleDayPickSwipeSuppressUntil = Date.now() + 420;
+            }
+          }, { passive: true });
+        }
+
+        attach(document.getElementById('tabCalendar'), function() {
+          return {};
+        });
+        attach(document.getElementById('screenDayPick'), function() {
+          return { onComplete: rescheduleDayPickAfterWeekChangeIfVisible };
+        });
+      })();
 
       document.getElementById('btnTogglePastThisWeek').onclick = function() {
         state.showPastThisWeek = !state.showPastThisWeek;

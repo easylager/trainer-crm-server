@@ -476,6 +476,42 @@ class TrainerClientRoster(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+RELAY_SESSION_OPEN = "open"
+RELAY_SESSION_CLOSED = "closed"
+RELAY_SENDER_TRAINER = "trainer"
+RELAY_SENDER_CLIENT = "client"
+
+
+class TrainerClientRelaySession(Base):
+    """Bot-mediated chat when trainer↔client cannot use native Telegram DM (e.g. no @username)."""
+
+    __tablename__ = "trainer_client_relay_sessions"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    trainer_id: Mapped[int] = mapped_column(ForeignKey("trainers.id", ondelete="CASCADE"), nullable=False)
+    client_id: Mapped[int] = mapped_column(ForeignKey("clients.id", ondelete="CASCADE"), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, server_default="open")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+    closed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class TrainerClientRelayMessage(Base):
+    __tablename__ = "trainer_client_relay_messages"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    session_id: Mapped[int] = mapped_column(
+        ForeignKey("trainer_client_relay_sessions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    sender_role: Mapped[str] = mapped_column(String(16), nullable=False)
+    body_text: Mapped[str] = mapped_column(Text(), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 # --- Trainer schedule: weekly template → generated slots for booking ---
 
 class TrainerScheduleTemplate(Base):

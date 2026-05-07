@@ -319,6 +319,21 @@ window.wireHubSlotMessageButtons = function (root) {
       function (ev) {
         ev.preventDefault();
         ev.stopPropagation();
+        if (btn.getAttribute('data-hub-relay') === '1') {
+          var Rh = window.TrainerRelayHelpers;
+          if (Rh && typeof Rh.openRelayFromHubButton === 'function' && Rh.openRelayFromHubButton(btn)) {
+            return;
+          }
+          var wg = window.Telegram && window.Telegram.WebApp;
+          if (wg && typeof wg.showAlert === 'function') {
+            try {
+              wg.showAlert('Не удалось открыть переписку через бота. Обновите страницу или откройте мини-приложение снова.');
+            } catch (eRelay) {
+              /* noop */
+            }
+          }
+          return;
+        }
         if (typeof window.openTelegramChatFromMiniApp === 'function') {
           window.openTelegramChatFromMiniApp({
             username: btn.getAttribute('data-dm-un'),

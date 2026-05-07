@@ -13,7 +13,7 @@ from datetime import date, datetime, timedelta
 
 from aiogram import Bot, F, Router
 from aiogram.client.default import DefaultBotProperties
-from aiogram.enums import ChatAction, ParseMode
+from aiogram.enums import ChatAction, ChatType, ParseMode
 from aiogram.filters import Command, CommandStart
 from aiogram.types import (
     BufferedInputFile,
@@ -106,6 +106,10 @@ from src.application.welcome_link_use_cases import (
 )
 from src.infrastructure.db.models import DEMAND_SOURCE_CLIENT_APP, DEMAND_SOURCE_CLIENT_SHARE, SUPPORT_FROM_CLIENT
 from src.application.trainer_invite_links import SHARE_REF_PREFIX
+from src.bot.handlers.relay_handlers import (
+    maybe_route_client_relay_text_reply,
+    on_client_bot_relay_close_callback,
+)
 from src.bot import messages as msg
 from src.shared.config import Settings
 from src.shared.mini_app_https import mini_app_https_base
@@ -3195,10 +3199,19 @@ async def on_group_rsvp_callback(callback: CallbackQuery) -> None:
             await callback.message.answer(message_text)
 
 
+@router.callback_query(F.data.startswith("rly_xc:"))
+async def client_relay_close_callback(callback: CallbackQuery) -> None:
+    """Client ends bot-mediated chat with trainer."""
+    await on_client_bot_relay_close_callback(callback)
+
+
 @router.message()
 async def fallback(message: Message) -> None:
     """Any other message: handle support state or direct to main menu."""
     telegram_id = message.from_user.id if message.from_user else 0
+    if message.text and getattr(message.chat, "type", None) == ChatType.PRIVATE:
+        if await maybe_route_client_relay_text_reply(message):
+            return
     if telegram_id in _client_support_awaiting:
         _client_support_awaiting.discard(telegram_id)
         text = (message.text or "").strip()[: 4000]

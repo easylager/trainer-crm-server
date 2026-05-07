@@ -1415,7 +1415,7 @@ async def get_trainer_booking_detail_payload(
     r = await session.execute(
         text(
             """
-            SELECT b.id, b.slot_id,
+            SELECT b.id, b.slot_id, b.client_id,
                    c.telegram_id, c.telegram_username, c.phone, c.first_name AS client_first_name, c.last_name AS client_last_name,
                    b.client_comment, b.created_at,
                    s.slot_date, s.start_time, s.end_time,
@@ -1456,35 +1456,36 @@ async def get_trainer_booking_detail_payload(
     row = r.fetchone()
     if not row:
         return None
-    raw_tier = row[22] if len(row) > 22 else None
+    raw_tier = row[23] if len(row) > 23 else None
     ptk = normalize_price_tier_kind(raw_tier) if raw_tier else None
     tier_label = price_tier_label_ru(ptk) if ptk else None
-    pc_eff = row[21] if len(row) > 21 else None
+    pc_eff = row[22] if len(row) > 22 else None
     return {
         "id": row[0],
         "slot_id": row[1],
-        "client_telegram_id": row[2],
-        "client_telegram_username": (row[3] or "").strip() or None,
-        "client_phone": row[4] or "",
-        "client_first_name": row[5],
-        "client_last_name": row[6],
-        "client_comment": row[7],
-        "created_at": row[8],
-        "slot_date": row[9],
-        "start_time": row[10],
-        "end_time": row[11],
-        "session_num": row[12],
-        "status": (row[13] or "confirmed").strip(),
-        "services_str": (row[14] or "").strip() or None,
-        "arenas_str": _normalize_trainer_arenas_display(row[15] if len(row) > 15 else None),
-        "service_id": int(row[16]) if row[16] is not None else None,
-        "service_price_variant_id": int(row[17]) if row[17] is not None else None,
-        "arena_id": int(row[18]) if row[18] is not None else None,
-        "problem_reported": bool(row[19]),
-        "client_no_show_recorded": bool(row[20]),
+        "client_id": int(row[2]) if row[2] is not None else None,
+        "client_telegram_id": row[3],
+        "client_telegram_username": (row[4] or "").strip() or None,
+        "client_phone": row[5] or "",
+        "client_first_name": row[6],
+        "client_last_name": row[7],
+        "client_comment": row[8],
+        "created_at": row[9],
+        "slot_date": row[10],
+        "start_time": row[11],
+        "end_time": row[12],
+        "session_num": row[13],
+        "status": (row[14] or "confirmed").strip(),
+        "services_str": (row[15] or "").strip() or None,
+        "arenas_str": _normalize_trainer_arenas_display(row[16] if len(row) > 16 else None),
+        "service_id": int(row[17]) if row[17] is not None else None,
+        "service_price_variant_id": int(row[18]) if row[18] is not None else None,
+        "arena_id": int(row[19]) if row[19] is not None else None,
+        "problem_reported": bool(row[20]),
+        "client_no_show_recorded": bool(row[21]),
         "booking_price_cents": int(pc_eff) if pc_eff is not None else None,
         "price_tier_label": tier_label,
-        "is_sandbox": bool(row[23]) if len(row) > 23 else False,
+        "is_sandbox": bool(row[24]) if len(row) > 24 else False,
     }
 
 
@@ -1551,7 +1552,7 @@ async def list_bookings_for_trainer(
                   AND b.status IN ('pending', 'confirmed')
                   AND """ + _SQL_SLOT_END_TS + """ > CURRENT_TIMESTAMP
             )
-            SELECT id, slot_id, telegram_id, telegram_username, phone, client_first_name, client_last_name,
+            SELECT id, slot_id, client_id, telegram_id, telegram_username, phone, client_first_name, client_last_name,
                    client_comment, created_at, slot_date, start_time, end_time,
                    session_num, services_str, arenas_str, status, slot_capacity, slot_active_bookings,
                    hub_in_session, problem_reported, client_no_show_recorded,
@@ -1567,28 +1568,29 @@ async def list_bookings_for_trainer(
         {
             "id": row[0],
             "slot_id": row[1],
-            "client_telegram_id": row[2],
-            "client_telegram_username": (row[3] or "").strip() or None,
-            "client_phone": row[4] or "",
-            "client_first_name": row[5],
-            "client_last_name": row[6],
-            "client_comment": row[7],
-            "created_at": row[8],
-            "slot_date": row[9],
-            "start_time": row[10],
-            "end_time": row[11],
-            "session_num": row[12],
-            "services_str": (row[13] or "").strip() or None,
-            "arenas_str": _normalize_trainer_arenas_display(row[14] if len(row) > 14 else None),
-            "status": (row[15] or "confirmed").strip() if len(row) > 15 else "confirmed",
-            "slot_capacity": max(1, int(row[16])) if len(row) > 16 and row[16] is not None else 1,
-            "slot_active_bookings": max(0, int(row[17])) if len(row) > 17 and row[17] is not None else 0,
-            "hub_in_session": bool(row[18]) if len(row) > 18 else False,
-            "problem_reported": bool(row[19]) if len(row) > 19 else False,
-            "client_no_show_recorded": bool(row[20]) if len(row) > 20 else False,
-            "first_client_online_pending": bool(row[21]) if len(row) > 21 else False,
-            "is_sandbox": bool(row[22]) if len(row) > 22 else False,
-            "service_id": int(row[23]) if len(row) > 23 and row[23] is not None else None,
+            "client_id": int(row[2]) if row[2] is not None else None,
+            "client_telegram_id": row[3],
+            "client_telegram_username": (row[4] or "").strip() or None,
+            "client_phone": row[5] or "",
+            "client_first_name": row[6],
+            "client_last_name": row[7],
+            "client_comment": row[8],
+            "created_at": row[9],
+            "slot_date": row[10],
+            "start_time": row[11],
+            "end_time": row[12],
+            "session_num": row[13],
+            "services_str": (row[14] or "").strip() or None,
+            "arenas_str": _normalize_trainer_arenas_display(row[15] if len(row) > 15 else None),
+            "status": (row[16] or "confirmed").strip() if len(row) > 16 else "confirmed",
+            "slot_capacity": max(1, int(row[17])) if len(row) > 17 and row[17] is not None else 1,
+            "slot_active_bookings": max(0, int(row[18])) if len(row) > 18 and row[18] is not None else 0,
+            "hub_in_session": bool(row[19]) if len(row) > 19 else False,
+            "problem_reported": bool(row[20]) if len(row) > 20 else False,
+            "client_no_show_recorded": bool(row[21]) if len(row) > 21 else False,
+            "first_client_online_pending": bool(row[22]) if len(row) > 22 else False,
+            "is_sandbox": bool(row[23]) if len(row) > 23 else False,
+            "service_id": int(row[24]) if len(row) > 24 and row[24] is not None else None,
         }
         for row in rows
     ]
