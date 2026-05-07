@@ -171,13 +171,11 @@
         '" class="trainer-relay-sub" hidden></p>' +
         '<div class="trainer-relay-callout" role="note">' +
         '<p class="trainer-relay-callout__text">' +
-        '<strong>Персональный чат в Telegram с этим клиентом сейчас открыть нельзя:</strong>' +
-        ' обычно нет открытого @username, а из браузера нельзя открыть диалог только по служебному id. ' +
-        '<strong>Связаться можно так:</strong> отправьте сообщение через бота клиента (поле ниже). ' +
-        'Если в карточке указан телефон — можете позвонить: номер в буфер скопирует кнопка «Скопировать телефон» внизу.' +
+        'Личные сообщения в Telegram этому клиенту недоступны — текст ниже доставляется через его бота. ' +
+        'Телефон для звонка — кнопка «Скопировать телефон», если номер указан в карточке.' +
         '</p></div>' +
         '<p class="trainer-relay-hint">' +
-        'Сообщение уйдёт в чат клиентского бота; ответ клиента придёт вам в тренерский бот.' +
+        'Ответ клиента придёт в ваш тренерский бот.' +
         '</p>' +
         '<div class="trainer-relay-field">' +
         '<label for="' +
@@ -205,7 +203,7 @@
         '<p id="' +
         NO_PHONE_ID +
         '" class="trainer-relay-no-phone" hidden role="note">' +
-        'Телефон в карточке не указан — для связи остаётся только сообщение через бота выше.' +
+        'Телефона в карточке нет — только сообщение выше.' +
         '</p>' +
         '</div></div>'
     );
@@ -398,6 +396,7 @@
 
   /**
    * @param { { clientId: number|string, subtitle?: string, clientPhone?: string, onSent?: function() } } opts
+   * @returns { boolean } True when relay UI was shown or user was notified (no secondary fallback alerts).
    */
   function openSendModal(opts) {
     opts = opts || {};
@@ -407,7 +406,7 @@
         global.document.removeEventListener('DOMContentLoaded', once);
         openSendModal(opts);
       });
-      return;
+      return true;
     }
     ensureModal();
     var idata = getInitData();
@@ -418,32 +417,36 @@
           tgMiss.showAlert(
             'Нет авторизации Telegram. Закройте мини-приложение и откройте снова из бота тренера.'
           );
-          return;
+          return true;
         } catch (eM) {
           /* noop */
         }
       }
       global.alert('Нет авторизации Telegram. Откройте мини-приложение из бота тренера.');
-      return;
+      return true;
     }
     if (isNaN(cid) || cid < 1) {
       var tgBad = global.Telegram && global.Telegram.WebApp;
       if (tgBad && typeof tgBad.showAlert === 'function') {
         try {
           tgBad.showAlert('Не удалось определить клиента.');
-          return;
+          return true;
         } catch (eB) {
           /* noop */
         }
       }
-      return;
+      try {
+        global.alert('Не удалось определить клиента.');
+      } catch (eBb) {
+        /* noop */
+      }
+      return true;
     }
     pending = {
       clientId: cid,
       onSent: opts.onSent,
       clientPhone: normalizeClientPhoneForCopy(opts.clientPhone != null ? opts.clientPhone : opts.phone || ''),
     };
-    var root = global.document.getElementById(MODAL_ID);
     var ta = global.document.getElementById(TEXT_ID);
     var sub = global.document.getElementById(SUBTITLE_ID);
     if (ta) {
@@ -463,11 +466,93 @@
     }
     setErr('');
     syncPhoneCopyRow();
+    var root = global.document.getElementById(MODAL_ID);
     if (root) root.setAttribute('aria-hidden', 'false');
+    if (!root) {
+      try {
+        var stale = global.document.getElementById(MODAL_ID);
+        if (stale && stale.parentNode) stale.parentNode.removeChild(stale);
+      } catch (eStale) {
+        /* noop */
+      }
+      ensureModal();
+      root = global.document.getElementById(MODAL_ID);
+      if (root) root.setAttribute('aria-hidden', 'false');
+    }
+    return !!root;
+  }
+
+  function trainerHubCoerceRelayFlag(raw) {
+    if (raw === true || raw === 1 || raw === '1') return true;
+    if (typeof raw === 'string' && raw.trim().toLowerCase() === 'true') return true;
+    return false;
+  }
+
+  /** Hub message icon: relay modal vs t.me — must match TrainerRelayHelpers.shouldUseRelayModal + chrome fallback. */
+  function hubBookingButtonWantsRelay(btn) {
+    if (!btn) return false;
+    if (
+      trainerHubCoerceRelayFlag(global.TRAINER_WEBAPP_FORCE_CLIENT_CHAT_RELAY) ||
+      trainerHubCoerceRelayFlag(global.TRAINER_HUB_FORCE_CLIENT_CHAT_RELAY)
+    ) {
+      return true;
+    }
+    return btn.getAttribute('data-hub-relay') === '1';
+  }
+
+  function resolveRelayClientIdFromHubButton(btn) {
+    var cid = parseInt(String(btn.getAttribute('data-client-id') || ''), 10);
+    if (!isNaN(cid) && cid >= 1) return cid;
+    var bid = String(btn.getAttribute('data-booking-id') || '').trim();
+    if (!bid) return NaN;
+    var map = global.__hubRelayClientIdByBookingId;
+    var fromMap = map && Object.prototype.hasOwnProperty.call(map, bid) ? map[bid] : null;
+    if (fromMap == null) return NaN;
+    var c2 = parseInt(String(fromMap), 10);
+    return !isNaN(c2) && c2 >= 1 ? c2 : NaN;
+  }
+
+  function relayAlertBrokenHub(msg) {
+    var tgA = global.Telegram && global.Telegram.WebApp;
+    if (tgA && typeof tgA.showAlert === 'function') {
+      try {
+        tgA.showAlert(msg);
+        return true;
+      } catch (e1) {
+        /* noop */
+      }
+    }
+    try {
+      global.alert(msg);
+    } catch (e2) {
+      /* noop */
+    }
+    return true;
+  }
+
+  /**
+   * Hub «написать» icon — resilient to stale HTML caches (booking-id map + modal re-mount).
+   */
+  function openRelayFromBookingButton(btn) {
+    if (!btn || !hubBookingButtonWantsRelay(btn)) return false;
+    var cid = resolveRelayClientIdFromHubButton(btn);
+    if (isNaN(cid) || cid < 1) {
+      relayAlertBrokenHub(
+        'Не удалось связать запись с клиентом. Закройте мини-приложение и откройте снова из бота — подтянется список «Ближайшие записи».'
+      );
+      return true;
+    }
+    return !!openSendModal({
+      clientId: cid,
+      subtitle: btn.getAttribute('data-client-label') || '',
+      clientPhone: btn.getAttribute('data-client-phone') || '',
+    });
   }
 
   global.TrainerClientRelayUi = {
     openSendModal: openSendModal,
     closeModal: closeModal,
+    openRelayFromBookingButton: openRelayFromBookingButton,
+    hubBookingButtonWantsRelay: hubBookingButtonWantsRelay,
   };
 })(typeof window !== 'undefined' ? window : globalThis);

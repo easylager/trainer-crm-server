@@ -99,11 +99,17 @@ from src.application.trainer_client_relay_use_cases import (
     relay_session_context_for_id,
     sanitize_relay_body,
 )
-from src.application.trainer_relay_delivery import send_client_plain_notification
+from src.application.trainer_relay_delivery import send_client_plain_notification, sweep_idle_relay_sessions_and_notify
 from src.bot.handlers.relay_handlers import deliver_trainer_pending_relay_reply
 from src.bot import messages as msg
 from src.bot.trainer_cancel_client_notify import send_trainer_cancel_notification_for_booking_now
-from src.bot.trainer_bot_state import trainer_booking_note_awaiting, trainer_support_awaiting
+from src.bot.trainer_bot_state import (
+    clear_trainer_relay_reply_pending,
+    peek_trainer_relay_reply_pending,
+    set_trainer_relay_reply_pending,
+    trainer_booking_note_awaiting,
+    trainer_support_awaiting,
+)
 from src.bot.trainer_gate_text import trainer_first_link_onboarding_html, trainer_gate_message
 from src.bot.trainer_menu_commands import sync_trainer_menu_commands
 from src.bot.share_catalog_tip import send_trainer_share_catalog_tip_to_chat
@@ -121,9 +127,6 @@ router = Router(name="trainer")
 
 # Telegram: remove stale reply keyboard (cannot combine with InlineKeyboardMarkup in one message).
 _REPLY_KEYBOARD_CLEAR = "\u200b"
-
-# Relay: awaiting plain-text reply → client bot (session id by trainer telegram user id).
-_relay_trainer_pending_session: dict[int, int] = {}
 
 
 def _format_trainer_client_row_display_name(client_row: dict | None) -> str:
@@ -1560,8 +1563,11 @@ async def _complete_schedule_create_booking(
     client_tg_id_raw = (client_card or {}).get("telegram_id")
     client_tg_id = int(client_tg_id_raw) if client_tg_id_raw else None
 
+    client_is_sandbox = bool((client_card or {}).get("is_sandbox"))
     m_first, m_tip = booking_milestones
     settings_w = Settings()
+    async with async_session_factory() as session:
+        has_crm_sub = await _trainer_has_crm_subscription(session, trainer_id)
     if m_first:
         async with async_session_factory() as session:
             info_for_card = await get_booking_milestone_display_for_trainer(
@@ -1577,7 +1583,10 @@ async def _complete_schedule_create_booking(
         milestone_kb = msg.build_trainer_first_booking_milestone_reply_markup(
             webapp_base=settings_w.webapp_base_url or "",
             booking_id=booking_id,
+            client_id=client_id,
             client_telegram_id=client_tg_id,
+            trainer_has_crm=has_crm_sub,
+            is_sandbox=client_is_sandbox,
         )
         await callback.message.answer(card_html, parse_mode=ParseMode.HTML, reply_markup=milestone_kb)
     else:
@@ -1787,10 +1796,10 @@ async def show_booking_detail(callback: CallbackQuery) -> None:
     telegram_id = callback.from_user.id if callback.from_user else 0
     async with async_session_factory() as session:
         trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
-    if not trainer_id:
-        await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
-        return
-    async with async_session_factory() as session:
+        if not trainer_id:
+            await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
+            return
+        has_crm = await _trainer_has_crm_subscription(session, trainer_id)
         bookings = await list_bookings_for_trainer(session, trainer_id)
     b = next((x for x in bookings if x["id"] == booking_id), None)
     if not b:
@@ -1803,9 +1812,24 @@ async def show_booking_detail(callback: CallbackQuery) -> None:
             session, trainer_id, booking["client_id"],
             b["slot_date"].weekday(), b["start_time"],
         ) if booking else None
+    base = (Settings().webapp_base_url or "").rstrip("/")
+    https = base.startswith("https://")
+    cid = int(booking["client_id"]) if booking and booking.get("client_id") is not None else None
+    use_webapp_write = bool(booking and https and has_crm and cid is not None)
+    write_btn = (
+        InlineKeyboardButton(
+            text=msg.TRAINER_BOOKINGS_BUTTON_WRITE,
+            web_app=WebAppInfo(url=f"{base}/webapp/trainer-clients?client_id={cid}&open_write=1"),
+        )
+        if use_webapp_write
+        else InlineKeyboardButton(
+            text=msg.TRAINER_BOOKINGS_BUTTON_WRITE,
+            callback_data=f"{WRITE_BOOKING_PREFIX}{booking_id}",
+        )
+    )
     rows = [
         [
-            InlineKeyboardButton(text=msg.TRAINER_BOOKINGS_BUTTON_WRITE, callback_data=f"{WRITE_BOOKING_PREFIX}{booking_id}"),
+            write_btn,
             InlineKeyboardButton(text=msg.TRAINER_BOOKINGS_BUTTON_CANCEL, callback_data=f"{CANCEL_BOOKING_PREFIX}{booking_id}"),
         ],
     ]
@@ -1813,26 +1837,23 @@ async def show_booking_detail(callback: CallbackQuery) -> None:
         rows.append([InlineKeyboardButton(text=msg.TRAINER_BOOKINGS_BUTTON_REMOVE_REGULARITY, callback_data=f"{REMOVE_RECURRING_PREFIX}{recurring['id']}")])
     else:
         rows.append([InlineKeyboardButton(text=msg.TRAINER_BOOKINGS_BUTTON_MAKE_REGULAR, callback_data=f"{MAKE_RECURRING_TRAINER_PREFIX}{booking_id}")])
-    base = (Settings().webapp_base_url or "").rstrip("/")
     if (
         booking
-        and base.startswith("https://")
+        and https
         and booking.get("client_id") is not None
+        and has_crm
     ):
-        async with async_session_factory() as session:
-            has_crm = await _trainer_has_crm_subscription(session, trainer_id)
-        if has_crm:
-            rows.insert(
-                1,
-                [
-                    InlineKeyboardButton(
-                        text=msg.TRAINER_BUTTON_CLIENT_CARD_WEBAPP,
-                        web_app=WebAppInfo(
-                            url=f"{base}/webapp/trainer-clients?client_id={int(booking['client_id'])}"
-                        ),
+        rows.insert(
+            1,
+            [
+                InlineKeyboardButton(
+                    text=msg.TRAINER_BUTTON_CLIENT_CARD_WEBAPP,
+                    web_app=WebAppInfo(
+                        url=f"{base}/webapp/trainer-clients?client_id={int(booking['client_id'])}"
                     ),
-                ],
-            )
+                ),
+            ],
+        )
     rows.append([InlineKeyboardButton(text=msg.TRAINER_BOOKINGS_BUTTON_BACK_TO_LIST, callback_data=BOOKINGS_CALLBACK)])
     keyboard = InlineKeyboardMarkup(inline_keyboard=rows)
     await callback.message.edit_text(text, reply_markup=keyboard)
@@ -1939,6 +1960,8 @@ async def on_confirm_booking(callback: CallbackQuery) -> None:
     if not info:
         await callback.message.answer(msg.TRAINER_ERROR_BOOKING_NOT_FOUND)
         return
+    async with async_session_factory() as session:
+        has_crm_sub = await _trainer_has_crm_subscription(session, trainer_id)
     d = info["slot_date"]
     date_str = d.strftime("%d.%m") if hasattr(d, "strftime") else str(d)
     dow = msg.TRAINER_DAYS[d.weekday()] if hasattr(d, "weekday") else ""
@@ -1967,7 +1990,9 @@ async def on_confirm_booking(callback: CallbackQuery) -> None:
         echo_kb = msg.build_trainer_booking_confirmed_echo_reply_markup(
             webapp_base=settings_echo.webapp_base_url or "",
             booking_id=booking_id,
+            client_id=info.get("client_id"),
             client_telegram_id=info.get("client_telegram_id"),
+            trainer_has_crm=has_crm_sub,
         )
         await callback.message.answer(
             text_trainer,
@@ -1979,7 +2004,10 @@ async def on_confirm_booking(callback: CallbackQuery) -> None:
         milestone_kb = msg.build_trainer_first_booking_milestone_reply_markup(
             webapp_base=settings_echo.webapp_base_url or "",
             booking_id=booking_id,
+            client_id=info.get("client_id"),
             client_telegram_id=info.get("client_telegram_id"),
+            trainer_has_crm=has_crm_sub,
+            is_sandbox=bool(info.get("client_is_sandbox")),
         )
         await callback.message.answer(card_html, parse_mode=ParseMode.HTML, reply_markup=milestone_kb)
     # Notify client via client bot (separate token)
@@ -2274,6 +2302,7 @@ async def on_booking_add_note_start(callback: CallbackQuery) -> None:
         "start_time": start_time,
     }
     trainer_booking_note_awaiting.add(telegram_id)
+    clear_trainer_relay_reply_pending(telegram_id)
     await callback.message.answer(
         msg.TRAINER_ADD_BOOKING_NOTE_PROMPT.format(
             client_name=html.escape(client_name),
@@ -3136,6 +3165,7 @@ async def on_trainer_invite_callback(callback: CallbackQuery) -> None:
 async def on_trainer_support_callback(callback: CallbackQuery) -> None:
     await callback.answer()
     tid = callback.from_user.id if callback.from_user else 0
+    clear_trainer_relay_reply_pending(tid)
     trainer_support_awaiting.add(tid)
     await callback.message.answer(msg.TRAINER_SUPPORT_PROMPT)
 
@@ -3153,7 +3183,7 @@ async def on_trainer_faq_callback(callback: CallbackQuery) -> None:
     await callback.message.answer(msg.TRAINER_FAQ_COMING_SOON)
 
 
-async def _parse_relay_sid(data: str, prefix: str) -> int | None:
+def _parse_relay_sid(data: str, prefix: str) -> int | None:
     if not data or not data.startswith(prefix):
         return None
     try:
@@ -3171,6 +3201,7 @@ async def relay_trainer_begin_reply(callback: CallbackQuery) -> None:
     uid = callback.from_user.id if callback.from_user else 0
     if not uid:
         return
+    await sweep_idle_relay_sessions_and_notify()
     async with async_session_factory() as session:
         trainer_id = await get_trainer_id_by_telegram_id(session, uid)
         if not trainer_id:
@@ -3180,10 +3211,7 @@ async def relay_trainer_begin_reply(callback: CallbackQuery) -> None:
         if not ctx or ctx.get("status") != "open":
             await callback.message.answer("<b>Сессия переписки уже закрыта.</b>")
             return
-        # Drop other pending relays for this trainer to avoid ambiguity.
-        if uid in _relay_trainer_pending_session:
-            del _relay_trainer_pending_session[uid]
-        _relay_trainer_pending_session[uid] = int(sid)
+        set_trainer_relay_reply_pending(uid, int(sid))
     await callback.message.answer(msg.TRAINER_RELAY_REPLY_PROMPT)
 
 
@@ -3217,7 +3245,7 @@ async def relay_trainer_close_chat(callback: CallbackQuery) -> None:
     except Exception:
         pass
     await callback.message.answer(msg.TRAINER_RELAY_SESSION_CLOSED_HINT)
-    _relay_trainer_pending_session.pop(uid, None)
+    clear_trainer_relay_reply_pending(uid)
     if c_tg:
         try:
             await send_client_plain_notification(
@@ -3233,7 +3261,7 @@ async def cmd_cancel_idle(message: Message) -> None:
     telegram_id = message.from_user.id if message.from_user else 0
     _trainer_booking_note_state.pop(telegram_id, None)
     trainer_booking_note_awaiting.discard(telegram_id)
-    _relay_trainer_pending_session.pop(telegram_id, None)
+    clear_trainer_relay_reply_pending(telegram_id)
     await message.answer(msg.TRAINER_CANCEL_IDLE)
 
 
@@ -3241,28 +3269,28 @@ async def cmd_cancel_idle(message: Message) -> None:
 async def fallback(message: Message) -> None:
     """Any other message: handle support state or direct to main menu."""
     telegram_id = message.from_user.id if message.from_user else 0
-    if telegram_id in _relay_trainer_pending_session and message.text:
-        sid = _relay_trainer_pending_session.get(telegram_id)
-        if sid is not None:
-            body = sanitize_relay_body(message.text)
-            if body is None:
-                await message.answer("Текст сообщения пустой. Напишите ответ или отправьте /cancel.")
-                return
-            async with async_session_factory() as session:
-                trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
-            if not trainer_id:
-                _relay_trainer_pending_session.pop(telegram_id, None)
-                await message.answer(msg.TRAINER_ONLY_VIA_SITE)
-                return
-            _relay_trainer_pending_session.pop(telegram_id, None)
-            await deliver_trainer_pending_relay_reply(
-                trainer_id=int(trainer_id),
-                trainer_telegram_id=int(telegram_id),
-                session_id=int(sid),
-                body_text=body,
-            )
-            await message.answer("Готово — сообщение отправлено клиенту в бота.")
+    sid_pending = peek_trainer_relay_reply_pending(telegram_id)
+    if sid_pending is not None and message.text:
+        sid = sid_pending
+        body = sanitize_relay_body(message.text)
+        if body is None:
+            await message.answer("Текст пустой — напишите ответ текстом.")
             return
+        async with async_session_factory() as session:
+            trainer_id = await get_trainer_id_by_telegram_id(session, telegram_id)
+        if not trainer_id:
+            clear_trainer_relay_reply_pending(telegram_id)
+            await message.answer(msg.TRAINER_ONLY_VIA_SITE)
+            return
+        clear_trainer_relay_reply_pending(telegram_id)
+        await deliver_trainer_pending_relay_reply(
+            trainer_id=int(trainer_id),
+            trainer_telegram_id=int(telegram_id),
+            session_id=int(sid),
+            body_text=body,
+        )
+        await message.answer("Готово — отправили клиенту в бота.")
+        return
     if telegram_id in trainer_support_awaiting:
         trainer_support_awaiting.discard(telegram_id)
         text = (message.text or "").strip()[: 4000]

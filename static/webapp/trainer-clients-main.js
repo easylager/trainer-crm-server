@@ -132,8 +132,19 @@
         focusInviteBot: false,
         /** Incremented on each history fetch — stale responses after quick-book must not repaint UI. */
         clientHistoryLoadGen: 0,
+        /** ``?client_id=&open_write=1`` → open relay/DM after card merge (trainer bot CRM write). */
+        pendingOpenWriteForClientId: null,
       };
 
+      /** Consume deep-link flag; prefers merged /card row for relay-ready fields. */
+      function finalizePendingOpenWriteModal(clientId, preferredSnapshot) {
+        if (state.pendingOpenWriteForClientId !== clientId) return;
+        state.pendingOpenWriteForClientId = null;
+        setTimeout(function() {
+          var c = state.allClients.find(function(x) { return x.id === clientId; }) || preferredSnapshot;
+          if (c) openTrainerClientTelegramDm(c);
+        }, 160);
+      }
       function initReturnContextFromQuery() {
         try {
           var p = new URLSearchParams(window.location.search || '');
@@ -152,6 +163,12 @@
               var gidi = parseInt(gid, 10);
               if (!isNaN(gidi) && gidi > 0) state.returnGroupId = gidi;
             }
+          }
+          var ow = p.get('open_write');
+          var cidOw = p.get('client_id');
+          if (ow === '1' && cidOw) {
+            var idOw = parseInt(cidOw, 10);
+            if (!isNaN(idOw) && idOw > 0) state.pendingOpenWriteForClientId = idOw;
           }
         } catch (e) { /* noop */ }
       }
@@ -1915,13 +1932,18 @@
         if (overlay) overlay.remove();
       }
 
+      /**
+       * Client card «Написать»: prefer native Telegram DM when Mini App allows (public @username);
+       * relay modal only when DM is unreliable — mirrors hub / schedule-editor (TrainerRelayHelpers).
+       */
       function openTrainerClientTelegramDm(c) {
         if (!c) return;
         var H = window.TrainerRelayHelpers;
         var ctx = H ? H.contextFromTrainerClient(c) : null;
         if (ctx && H.shouldUseRelayModal(ctx)) {
-          H.openRelaySendModalForContext(ctx, { subtitle: trainerClientDisplayName(c) });
-          return;
+          if (H.openRelaySendModalForContext(ctx, { subtitle: trainerClientDisplayName(c) })) {
+            return;
+          }
         }
         var un = String(c.telegram_username || '').replace(/^@/, '').trim();
         var tid = c.telegram_id;
@@ -2156,8 +2178,9 @@
         var Htc = window.TrainerRelayHelpers;
         var tcRelayCtx = Htc ? Htc.contextFromTrainerClient(client) : null;
         var canDm = !isSandbox && !!(tcRelayCtx && Htc.canShowTrainerMessageButton(tcRelayCtx));
-        var heroRelayCls =
-          !isSandbox && tcRelayCtx && Htc.shouldUseRelayModal(tcRelayCtx) ? ' tc-hero-dm--relay' : '';
+        var useRelayModalUi =
+          !isSandbox && !!(tcRelayCtx && Htc.shouldUseRelayModal(tcRelayCtx));
+        var heroRelayCls = useRelayModalUi ? ' tc-hero-dm--relay' : '';
         var dmHeroTip =
           heroRelayCls
             ? 'Сообщение через бота клиента — ответ в бот тренера'
@@ -2175,17 +2198,13 @@
             ICO_MSG_BUBBLE +
             '</button>';
         }
-        // Sandbox hero: hide identity-edit and detach-from-roster — both don't fit a demo identity.
-        // The single «Удалить пример» button below replaces them with a clear, scoped destructive action.
+        // Sandbox: no hero toolbar; demo removal is «Удалить пример» in actions. Real clients: edit + message only.
         var heroActionsBar = isSandbox
           ? ''
           : (
             '<div class=\"tc-hero-actions\" role=\"toolbar\" aria-label=\"Действия\">' +
             '<button type=\"button\" class=\"tc-name-edit-btn\" id=\"tcIdentityEditToggle\" aria-label=\"Редактировать ФИО\" title=\"Редактировать ФИО\" aria-expanded=\"false\">' +
             ICO_PENCIL +
-            '</button>' +
-            '<button type=\"button\" class=\"tc-remove-client-btn\" id=\"tcDetachClientBtn\" aria-label=\"Убрать из списка\" title=\"Убрать из списка\">' +
-            ICO_TRASH +
             '</button>' +
             heroDmBtn +
             '</div>'
@@ -2254,7 +2273,7 @@
             detail += '<button type=\"button\" class=\"bd-btn bd-btn--surface\" id=\"btnCopyPhone\">' + ICO_PHONE + ' Скопировать телефон</button>';
           }
           if (canDm) {
-            var dmBtnRelay = !!(tcRelayCtx && Htc.shouldUseRelayModal(tcRelayCtx));
+            var dmBtnRelay = !!useRelayModalUi;
             var dmBtnTip = dmBtnRelay ? ' через бота' : '';
             detail +=
               '<button type=\"button\" class=\"bd-btn bd-btn--surface\" id=\"btnWriteClient\">' +
@@ -2329,11 +2348,16 @@
           })
           .then(function(data) {
             var cc = data && data.client;
-            if (!cc) return;
+            if (!cc) {
+              finalizePendingOpenWriteModal(id, client);
+              return;
+            }
             mergeTrainerClientRowFromCard(cc);
             applyTrainerClientDetailHero(cc);
+            finalizePendingOpenWriteModal(id, cc);
           })
           .catch(function() {
+            finalizePendingOpenWriteModal(id, client);
             /* list snapshot already rendered */
           });
         // Load dossier (replaces old note loading)

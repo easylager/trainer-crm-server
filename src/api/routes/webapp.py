@@ -21,8 +21,16 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from aiogram import Bot
-from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
+from aiogram.enums import ParseMode
+from aiogram.exceptions import (
+    TelegramBadRequest,
+    TelegramForbiddenError,
+    TelegramNetworkError,
+    TelegramRetryAfter,
+    TelegramServerError,
+    TelegramUnauthorizedError,
+)
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 
 from src.api.deps import get_session
@@ -98,7 +106,7 @@ from src.application.trainer_client_relay_use_cases import (
     sanitize_relay_body,
     trainer_public_display_name,
 )
-from src.application.trainer_relay_delivery import send_client_relay_from_trainer
+from src.application.trainer_relay_delivery import send_client_relay_from_trainer, sweep_idle_relay_sessions_and_notify
 from src.application.trainer_client_registration_notify import (
     notify_trainer_client_registered_from_invite,
 )
@@ -493,10 +501,13 @@ async def _send_trainer_post_booking_feedback(
                     "🎉 <b>Старт засчитан: это ваша первая запись в Ice Pro!</b>\n\n"
                     + msg.TRAINER_FIRST_BOOKING_MILESTONE_FOOTER_HTML
                 )
+            has_crm_push = await trainer_has_crm_access(session, trainer_id)
             milestone_kb = msg.build_trainer_first_booking_milestone_reply_markup(
                 webapp_base=settings_push.webapp_base_url or "",
                 booking_id=booking_id,
+                client_id=client_id,
                 client_telegram_id=client_tg_id,
+                trainer_has_crm=has_crm_push,
                 is_sandbox=is_sandbox,
             )
             await trainer_bot.send_message(
@@ -592,6 +603,7 @@ async def get_trainer_access_for_webapp(
         "trainer_status": norm_status,
         "is_active": is_active,
         "schedule_unlocked": schedule_unlocked,
+        "force_client_chat_relay": bool(Settings().trainer_webapp_force_client_chat_relay),
     }
 
 
@@ -2055,6 +2067,7 @@ def _serialize_booking(b: dict, *, problem_flow_enabled: bool | None = None) -> 
     out = {
         "id": b["id"],
         "slot_id": b.get("slot_id"),
+        "client_id": b.get("client_id"),
         "client_telegram_id": b.get("client_telegram_id"),
         "client_telegram_username": (b.get("client_telegram_username") or "").strip() or None,
         "client_has_telegram": b.get("client_telegram_id") is not None,
@@ -2273,6 +2286,7 @@ async def get_trainer_hub_bootstrap(
         "trainer_status": norm_status,
         "is_active": is_active,
         "schedule_unlocked": schedule_unlocked,
+        "force_client_chat_relay": bool(Settings().trainer_webapp_force_client_chat_relay),
     }
 
     # Same semantics as get_trainer_id_linked_any_status / get_trainer_id_by_telegram_id without extra queries
@@ -2358,6 +2372,7 @@ async def get_trainer_hub_bootstrap(
                 partial_errors["bookings"] = str(r_book)
             else:
                 bookings = r_book
+                bookings["force_client_chat_relay"] = bool(Settings().trainer_webapp_force_client_chat_relay)
             if isinstance(r_sub, BaseException):
                 partial_errors["subscription_status"] = str(r_sub)
             else:
@@ -4316,7 +4331,9 @@ async def get_trainer_bookings(
     if not trainer_id:
         raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
 
-    return await _trainer_bookings_grouped_days_payload(session, trainer_id, limit=limit)
+    payload = await _trainer_bookings_grouped_days_payload(session, trainer_id, limit=limit)
+    payload["force_client_chat_relay"] = bool(Settings().trainer_webapp_force_client_chat_relay)
+    return payload
 
 
 @router.get("/trainer/slots/{slot_id:int}/group-hub")
@@ -5122,6 +5139,8 @@ async def trainer_post_client_relay_message_route(
     if body_text is None:
         raise HTTPException(status_code=400, detail="Введите текст сообщения")
 
+    await sweep_idle_relay_sessions_and_notify()
+
     display = await trainer_public_display_name(session, trainer_id=trainer_id)
     c_tg = int(c_row["telegram_id"])
     sess_id: int | None = None
@@ -5136,6 +5155,94 @@ async def trainer_post_client_relay_message_route(
             session_id=int(sess_id),
         )
         await session.commit()
+    except TelegramForbiddenError as e:
+        await session.rollback()
+        logger.warning(
+            "trainer relay outbound forbidden trainer_id=%s client_id=%s client_tg=%s: %s",
+            trainer_id,
+            client_id,
+            c_tg,
+            e,
+        )
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Не удалось доставить сообщение: клиент не открывал бота записи или заблокировал его. "
+                "Попросите клиента зайти в этого бота и нажать «Главная» или отправить /start, затем повторите."
+            ),
+        ) from None
+    except TelegramBadRequest as e:
+        await session.rollback()
+        em = str(e).lower()
+        logger.warning(
+            "trainer relay outbound bad_request trainer_id=%s client_id=%s client_tg=%s: %s",
+            trainer_id,
+            client_id,
+            c_tg,
+            e,
+        )
+        if any(
+            x in em
+            for x in (
+                "chat not found",
+                "chat_id is empty",
+                "peer_id",
+                "user not found",
+                "have no access",
+            )
+        ):
+            detail = "Не найден чат клиента в Telegram. Проверьте, что клиент пользуется тем же аккаунтом в боте записи."
+        elif "message is too long" in em:
+            detail = "Сообщение слишком длинное для Telegram."
+        elif "parse entities" in em or "can't parse" in em:
+            detail = "Текст содержит символы, которые Telegram не принял. Упростите сообщение."
+        else:
+            detail = "Telegram отклонил сообщение. Попробуйте позже или упростите текст."
+        raise HTTPException(status_code=400, detail=detail) from None
+    except TelegramUnauthorizedError as e:
+        await session.rollback()
+        logger.error("trainer relay client bot TELEGRAM_BOT_TOKEN_CLIENT rejected: %s", e)
+        raise HTTPException(
+            status_code=503,
+            detail="Сервер не может обратиться к боту записи. Проверьте конфигурацию токена бота клиента.",
+        ) from None
+    except TelegramNetworkError as e:
+        await session.rollback()
+        logger.warning("trainer relay telegram network trainer_id=%s client_id=%s: %s", trainer_id, client_id, e)
+        raise HTTPException(
+            status_code=503,
+            detail="Не удаётся связаться с Telegram с сервера. Повторите через минуту.",
+        ) from None
+    except TelegramRetryAfter:
+        await session.rollback()
+        logger.warning(
+            "trainer relay telegram retry_after trainer_id=%s client_id=%s",
+            trainer_id,
+            client_id,
+        )
+        raise HTTPException(
+            status_code=429,
+            detail="Telegram просит подождать перед следующей отправкой. Попробуйте через минуту.",
+        ) from None
+    except TelegramServerError as e:
+        await session.rollback()
+        logger.warning("trainer relay telegram server_error: %s", e)
+        raise HTTPException(
+            status_code=503,
+            detail="Telegram временно недоступен. Попробуйте через минуту.",
+        ) from None
+    except IntegrityError as e:
+        await session.rollback()
+        logger.exception(
+            "trainer relay db integrity trainer_id=%s client_id=%s (migrations?): %s",
+            trainer_id,
+            client_id,
+            e,
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="Ошибка сохранения переписки на сервере. Проверьте обновление БД и повторите.",
+        ) from None
     except Exception:
         await session.rollback()
         logger.exception("trainer relay outbound failed trainer_id=%s client_id=%s", trainer_id, client_id)

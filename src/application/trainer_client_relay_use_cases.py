@@ -7,7 +7,7 @@ Client receives via **client** bot; trainer receives via **trainer** bot — two
 from __future__ import annotations
 
 import html
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,6 +20,9 @@ RELAY_SENDER_TRAINER = "trainer"
 RELAY_SENDER_CLIENT = "client"
 
 RELAY_BODY_MAX_LEN = 3800
+
+# Strict product rule: auto-close inactive relay threads after 24h (not env-configurable).
+RELAY_SESSION_IDLE_MINUTES = 24 * 60
 
 
 async def relay_client_row_for_checks(session: AsyncSession, *, client_id: int) -> dict | None:
@@ -83,6 +86,53 @@ async def open_relay_session(
     if not row:
         raise RuntimeError("relay_session_insert_failed")
     return int(row[0])
+
+
+async def close_idle_open_relay_sessions(session: AsyncSession) -> list[dict]:
+    """
+    Mark open sessions with updated_at older than fixed 24h cutoff as closed.
+    Returns rows for optional Telegram hints (trainer/client tg ids).
+    """
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=RELAY_SESSION_IDLE_MINUTES)
+    # CTE keeps joins in a plain SELECT (no UPDATE-target alias limits in FROM/JOIN ON).
+    r = await session.execute(
+        text(
+            """
+            WITH doomed AS (
+                SELECT rs_inner.id AS id,
+                       t.telegram_id AS trainer_telegram_id,
+                       c.telegram_id AS client_telegram_id
+                FROM trainer_client_relay_sessions AS rs_inner
+                INNER JOIN trainers AS t ON t.id = rs_inner.trainer_id
+                INNER JOIN clients AS c ON c.id = rs_inner.client_id
+                WHERE rs_inner.status = :open
+                  AND rs_inner.updated_at < :cutoff
+            )
+            UPDATE trainer_client_relay_sessions AS rs
+            SET status = :closed,
+                closed_at = NOW(),
+                updated_at = NOW()
+            FROM doomed
+            WHERE rs.id = doomed.id
+            RETURNING rs.id,
+                      doomed.trainer_telegram_id AS trainer_telegram_id,
+                      doomed.client_telegram_id AS client_telegram_id
+            """
+        ),
+        {
+            "closed": RELAY_SESSION_CLOSED,
+            "open": RELAY_SESSION_OPEN,
+            "cutoff": cutoff,
+        },
+    )
+    return [
+        {
+            "session_id": int(row[0]),
+            "trainer_telegram_id": int(row[1]) if row[1] is not None else None,
+            "client_telegram_id": int(row[2]) if row[2] is not None else None,
+        }
+        for row in r.fetchall()
+    ]
 
 
 async def insert_relay_message(
@@ -217,7 +267,7 @@ async def relay_session_context_for_id(
     row = r.fetchone()
     if not row:
         return None
-    fn, ln = row[7], row[8]
+    fn, ln = row[6], row[7]
     nm = ((fn or "").strip() + " " + (ln or "").strip()).strip()
     return {
         "session_id": int(row[0]),

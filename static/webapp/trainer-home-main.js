@@ -98,9 +98,32 @@
                 function (ev) {
                   ev.preventDefault();
                   ev.stopPropagation();
-                  if (btn.getAttribute('data-hub-relay') === '1') {
-                    var H = window.TrainerRelayHelpers;
-                    if (H && typeof H.openRelayFromHubButton === 'function' && H.openRelayFromHubButton(btn)) {
+                  var UiRg = window.TrainerClientRelayUi;
+                  var wf = window.TRAINER_WEBAPP_FORCE_CLIENT_CHAT_RELAY;
+                  var hubWF = window.TRAINER_HUB_FORCE_CLIENT_CHAT_RELAY;
+                  var relayForceGlobal =
+                    wf === true ||
+                    wf === 1 ||
+                    wf === '1' ||
+                    hubWF === true ||
+                    hubWF === 1 ||
+                    hubWF === '1';
+                  var hubWantsRelay =
+                    UiRg && typeof UiRg.hubBookingButtonWantsRelay === 'function'
+                      ? UiRg.hubBookingButtonWantsRelay(btn)
+                      : btn.getAttribute('data-hub-relay') === '1' || relayForceGlobal;
+                  if (hubWantsRelay) {
+                    var UiRf = window.TrainerClientRelayUi;
+                    var openedRf =
+                      UiRf &&
+                      typeof UiRf.openRelayFromBookingButton === 'function' &&
+                      UiRf.openRelayFromBookingButton(btn);
+                    if (!openedRf) {
+                      var H = window.TrainerRelayHelpers;
+                      openedRf =
+                        H && typeof H.openRelayFromHubButton === 'function' && H.openRelayFromHubButton(btn);
+                    }
+                    if (openedRf) {
                       return;
                     }
                     var wg = window.Telegram && window.Telegram.WebApp;
@@ -192,6 +215,7 @@
       }
       /** Set after GET /trainer/access when initData present (onboarding vs active). */
       var trainerAccessSnapshot = null;
+      var hubForceClientChatRelay = false;
 
       var ICONS = {
         cal: '<svg class="hub-tile-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>',
@@ -651,6 +675,7 @@
             var prof = results[1];
             trainerAccessSnapshot = a;
             mergeHubAccessFromProfilePayload(prof);
+            syncHubForceClientChatRelayFromTrainerAccess();
             applyHubLockedState();
             if (trainerAccessSnapshot && window.TrainerMiniAppGate.isActive(trainerAccessSnapshot)) {
               completeHubSectionNavigation(pathWithQuery);
@@ -704,6 +729,7 @@
         ]).then(function(results) {
           trainerAccessSnapshot = results[0];
           mergeHubAccessFromProfilePayload(results[1]);
+          syncHubForceClientChatRelayFromTrainerAccess();
           applyHubLockedState();
           if (trainerAccessSnapshot && window.TrainerMiniAppGate.isActive(trainerAccessSnapshot)) onAllowed();
           else showTrainerOnboardingNavAlert();
@@ -2008,6 +2034,7 @@
                   var prof = results[1];
                   if (a) trainerAccessSnapshot = a;
                   mergeHubAccessFromProfilePayload(prof);
+                  syncHubForceClientChatRelayFromTrainerAccess();
                   applyHubLockedState();
                   if (trainerAccessSnapshot && window.TrainerMiniAppGate.isActive(trainerAccessSnapshot)) {
                     loadBookings();
@@ -2780,6 +2807,41 @@
         );
       }
 
+      /** Reads QA flag from last server access snapshot (bootstrap / MiniAppGate.fetchAccess when present). */
+      function syncHubForceClientChatRelayFromTrainerAccess() {
+        hubForceClientChatRelay = !!(trainerAccessSnapshot && trainerAccessSnapshot.force_client_chat_relay);
+        if (typeof window !== 'undefined') window.TRAINER_HUB_FORCE_CLIENT_CHAT_RELAY = hubForceClientChatRelay;
+      }
+
+      /**
+       * Individual hub row: DM / relay button — must not depend solely on TrainerRelayHelpers (CDN cache / load order).
+       * Mirrors TrainerRelayHelpers.relayEligible + username-based direct DM.
+       */
+      function hubTrainerContactEligibleForBooking(b) {
+        if (!b || b.is_sandbox) return null;
+        var cap = parseInt(String(b.slot_capacity != null ? b.slot_capacity : '1'), 10);
+        if (isNaN(cap) || cap < 1) cap = 1;
+        if (cap > 1) return null;
+        var cid = b.client_id;
+        if (cid == null || cid === '') return null;
+        var tid = b.client_telegram_id;
+        if (tid == null || tid === '') return null;
+        var un = String(b.client_telegram_username || '')
+          .replace(/^@/, '')
+          .trim();
+        return {
+          clientId: cid,
+          telegramId: tid,
+          telegramUsername: un,
+        };
+      }
+
+      function hubTrainerContactUseRelay(contact) {
+        if (!contact) return false;
+        if (hubForceClientChatRelay) return true;
+        return !contact.telegramUsername;
+      }
+
       /** Same labels/classes as schedule-editor calendar rows (booked slots). */
       function hubBookingSlotRowHtml(b, timeRange) {
         var bst = String(b.status || 'confirmed').toLowerCase();
@@ -2843,19 +2905,19 @@
           ? escapeHtml(arena)
           : '<span class="venue-muted">не указано</span>';
         var msgBtn = '';
-        var Hhub = window.TrainerRelayHelpers;
-        var hubCtx = Hhub ? Hhub.contextFromHubBooking(b) : null;
-        if (hubCtx && Hhub.canShowTrainerMessageButton(hubCtx)) {
-          var useRelay = Hhub.shouldUseRelayModal(hubCtx);
-          var relayAttr = useRelay
-            ? ' data-hub-relay="1" data-client-id="' +
-              escapeHtml(String(b.client_id)) +
-              '" data-client-label="' +
-              escapeHtml(clientLabel(b)) +
-              '" data-client-phone="' +
-              escapeHtml(String((b.client_phone || '').trim())) +
-              '"'
-            : '';
+        var hubContact = hubTrainerContactEligibleForBooking(b);
+        if (hubContact) {
+          var useRelay = hubTrainerContactUseRelay(hubContact);
+          /* data-client-* needed for QA flag TRAINER_WEBAPP_FORCE_CLIENT_CHAT_RELAY: chrome delegates before HTML is re-built for relay-marked buttons. */
+          var clientRelayDataAttrs =
+            ' data-client-id="' +
+            escapeHtml(String(hubContact.clientId)) +
+            '" data-client-label="' +
+            escapeHtml(clientLabel(b)) +
+            '" data-client-phone="' +
+            escapeHtml(String((b.client_phone || '').trim())) +
+            '"';
+          var relayAttr = useRelay ? ' data-hub-relay="1"' + clientRelayDataAttrs : clientRelayDataAttrs;
           var tip = useRelay
             ? 'Сообщение через бота клиента (ответ — в бот тренера)'
             : 'Написать клиенту в Telegram';
@@ -2863,9 +2925,12 @@
             '<button type="button" class="hub-slot-msg' +
             (useRelay ? ' hub-slot-msg--relay' : '') +
             '" data-hub-dm="trainer"' +
+            (b.id != null && b.id !== ''
+              ? ' data-booking-id="' + escapeHtml(String(b.id)) + '"'
+              : '') +
             relayAttr +
-            ' data-dm-un="' + escapeHtml((b.client_telegram_username || '').replace(/^@/, '')) + '"' +
-            ' data-dm-tid="' + escapeHtml(b.client_telegram_id != null ? String(b.client_telegram_id) : '') + '"' +
+            ' data-dm-un="' + escapeHtml(hubContact.telegramUsername || '') + '"' +
+            ' data-dm-tid="' + escapeHtml(String(hubContact.telegramId)) + '"' +
             ' aria-label="' +
             escapeHtml(tip) +
             '" title="' +
@@ -5258,13 +5323,32 @@
           !Array.isArray(daysOrPayload)
             ? daysOrPayload.today_sessions
             : null;
-        var weekSessions =
+            var weekSessions =
           daysOrPayload &&
           typeof daysOrPayload === 'object' &&
           !Array.isArray(daysOrPayload)
             ? daysOrPayload.week_sessions
             : null;
+        if (
+          daysOrPayload &&
+          typeof daysOrPayload === 'object' &&
+          !Array.isArray(daysOrPayload) &&
+          typeof daysOrPayload.force_client_chat_relay !== 'undefined'
+        ) {
+          hubForceClientChatRelay = !!daysOrPayload.force_client_chat_relay;
+          if (typeof window !== 'undefined') window.TRAINER_HUB_FORCE_CLIENT_CHAT_RELAY = hubForceClientChatRelay;
+        }
         var daysForHub = dedupeHubBookingsDays(rawDays || []);
+        var relayClientByBookingId = {};
+        daysForHub.forEach(function(d) {
+          (d.bookings || []).forEach(function(b) {
+            var hc = hubTrainerContactEligibleForBooking(b);
+            if (!hc || b.id == null || b.id === '') return;
+            relayClientByBookingId[String(b.id)] = hc.clientId;
+          });
+        });
+        if (typeof window !== 'undefined') window.__hubRelayClientIdByBookingId = relayClientByBookingId;
+
         hubLastBookingsDays = daysForHub;
         hubLastBookingsPayloadForAccentRefetch =
           daysOrPayload && typeof daysOrPayload === 'object' && !Array.isArray(daysOrPayload)
@@ -5411,10 +5495,40 @@
           if (msgBtn) {
             ev.preventDefault();
             ev.stopPropagation();
-            if (msgBtn.getAttribute('data-hub-relay') === '1') {
-              var Hoff = window.TrainerRelayHelpers;
-              if (Hoff && typeof Hoff.openRelayFromHubButton === 'function' && Hoff.openRelayFromHubButton(msgBtn)) {
-                /* opened */
+            var UiRgBlock = window.TrainerClientRelayUi;
+            var wfB = window.TRAINER_WEBAPP_FORCE_CLIENT_CHAT_RELAY;
+            var hubFb = window.TRAINER_HUB_FORCE_CLIENT_CHAT_RELAY;
+            var relayForceBlock =
+              wfB === true ||
+              wfB === 1 ||
+              wfB === '1' ||
+              hubFb === true ||
+              hubFb === 1 ||
+              hubFb === '1';
+            var hubWantsRelayBlock =
+              UiRgBlock && typeof UiRgBlock.hubBookingButtonWantsRelay === 'function'
+                ? UiRgBlock.hubBookingButtonWantsRelay(msgBtn)
+                : msgBtn.getAttribute('data-hub-relay') === '1' || relayForceBlock;
+            if (hubWantsRelayBlock) {
+              var UiHub = window.TrainerClientRelayUi;
+              var openedHub =
+                UiHub &&
+                typeof UiHub.openRelayFromBookingButton === 'function' &&
+                UiHub.openRelayFromBookingButton(msgBtn);
+              if (!openedHub) {
+                var Hoff = window.TrainerRelayHelpers;
+                openedHub =
+                  Hoff && typeof Hoff.openRelayFromHubButton === 'function' && Hoff.openRelayFromHubButton(msgBtn);
+              }
+              if (!openedHub) {
+                var wgFb = window.Telegram && window.Telegram.WebApp;
+                if (wgFb && typeof wgFb.showAlert === 'function') {
+                  try {
+                    wgFb.showAlert(
+                      'Не удалось открыть переписку через бота. Обновите страницу или откройте мини-приложение снова.'
+                    );
+                  } catch (eFb) { /* noop */ }
+                }
               }
               return;
             }
@@ -5545,6 +5659,7 @@
                 return window.TrainerMiniAppGate.fetchAccess(getInitData())
                   .then(function(a) {
                     trainerAccessSnapshot = a;
+                    syncHubForceClientChatRelayFromTrainerAccess();
                     applyHubLockedState();
                     renderBookingsOnboardingBlock(a);
                   })
@@ -5587,6 +5702,7 @@
               window.TrainerMiniAppGate.fetchAccess(getInitData())
                 .then(function(a) {
                   trainerAccessSnapshot = a;
+                  syncHubForceClientChatRelayFromTrainerAccess();
                   applyHubLockedState();
                   if (!window.TrainerMiniAppGate.isActive(a)) {
                     renderBookingsOnboardingBlock(a);
@@ -6673,7 +6789,10 @@
       /** Maps GET /trainer/hub/bootstrap payload into hub globals (single round-trip). */
       function applyHubBootstrapPayload(payload) {
         if (!payload || typeof payload !== 'object') return;
-        if (payload.access) trainerAccessSnapshot = payload.access;
+        if (payload.access) {
+          trainerAccessSnapshot = payload.access;
+          syncHubForceClientChatRelayFromTrainerAccess();
+        }
         if (payload.profile) mergeHubAccessFromProfilePayload({ ok: true, data: payload.profile });
         if (payload.onboarding_checklist) applyOnboardingChecklist(payload.onboarding_checklist);
         if (payload.subscription_status) {
@@ -6817,6 +6936,7 @@
                 var prof = results[1];
                 trainerAccessSnapshot = a;
                 mergeHubAccessFromProfilePayload(prof);
+                syncHubForceClientChatRelayFromTrainerAccess();
                 runHubAfterAccess({});
               });
             }

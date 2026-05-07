@@ -30,6 +30,17 @@
     }).then(function (r) {
       return r.json().then(function (d) {
         if (!r.ok) throw new Error((d && d.detail) || r.statusText || 'access');
+        /* Mirrors Settings.trainer_webapp_force_client_chat_relay — TrainerRelayHelpers + hub delegates read these. */
+        if (
+          typeof global.document !== 'undefined' &&
+          d &&
+          typeof d === 'object' &&
+          Object.prototype.hasOwnProperty.call(d, 'force_client_chat_relay')
+        ) {
+          var forceRelay = !!d.force_client_chat_relay;
+          global.TRAINER_WEBAPP_FORCE_CLIENT_CHAT_RELAY = forceRelay;
+          global.TRAINER_HUB_FORCE_CLIENT_CHAT_RELAY = forceRelay;
+        }
         return d;
       });
     });

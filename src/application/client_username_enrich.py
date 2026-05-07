@@ -52,6 +52,8 @@ async def sync_client_telegram_username_from_client_bot(
     Client may omit `Message.from_user.username` while still having a public @handle visible via bot API.
     """
     settings = Settings()
+    if settings.disable_client_telegram_username_enrich:
+        return
     token = (settings.telegram_bot_token_client or "").strip()
     if not token:
         return
@@ -94,6 +96,8 @@ async def enrich_booking_dicts_with_client_telegram_usernames(
     if not by_tid:
         return
     settings = Settings()
+    if settings.disable_client_telegram_username_enrich:
+        return
     token = (settings.telegram_bot_token_client or "").strip()
     if not token:
         return

@@ -662,6 +662,32 @@ def webapp_trainer_home_main_js(request: Request):
     )
 
 
+@app.get("/webapp/trainer-client-relay-ui.js")
+def webapp_trainer_client_relay_ui_js(request: Request):
+    """Relay message sheet → POST relay-messages; trainer-home, schedule-editor, trainer-clients."""
+    path = _WEBAPP_DIR / "trainer-client-relay-ui.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/trainer-relay-helpers.js")
+def webapp_trainer_relay_helpers_js(request: Request):
+    """DM vs relay eligibility; loaded with trainer-client-relay-ui on trainer-facing pages."""
+    path = _WEBAPP_DIR / "trainer-relay-helpers.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
 @app.get("/webapp/schedule-editor-main.js")
 def webapp_schedule_editor_main_js(request: Request):
     """Schedule editor page logic (split from schedule-editor.html). Use ``?v=…`` for long cache."""

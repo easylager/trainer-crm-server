@@ -1,6 +1,6 @@
 """Trainer–client relay chat via bots (fallback when Telegram DM unavailable).
 
-Revision ID: 0145_trainer_client_relay_sessions
+Revision ID: 0145_trainer_relay
 Revises: 0144_trainer_services_ui_accent
 """
 
@@ -9,7 +9,7 @@ from __future__ import annotations
 from alembic import op
 import sqlalchemy as sa
 
-revision = "0145_trainer_client_relay_sessions"
+revision = "0145_trainer_relay"
 down_revision = "0144_trainer_services_ui_accent"
 branch_labels = None
 depends_on = None

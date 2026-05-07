@@ -109,6 +109,7 @@ from src.application.trainer_invite_links import SHARE_REF_PREFIX
 from src.bot.handlers.relay_handlers import (
     maybe_route_client_relay_text_reply,
     on_client_bot_relay_close_callback,
+    on_client_bot_relay_reply_callback,
 )
 from src.bot import messages as msg
 from src.shared.config import Settings
@@ -3197,6 +3198,11 @@ async def on_group_rsvp_callback(callback: CallbackQuery) -> None:
             await callback.message.edit_text(message_text)
         except Exception:
             await callback.message.answer(message_text)
+
+
+@router.callback_query(F.data.startswith("rly_ck:"))
+async def client_relay_reply_callback(callback: CallbackQuery) -> None:
+    await on_client_bot_relay_reply_callback(callback)
 
 
 @router.callback_query(F.data.startswith("rly_xc:"))

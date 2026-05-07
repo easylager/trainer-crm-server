@@ -58,26 +58,23 @@
     };
   }
 
-  /** t.me / tg:// — blocked on Telegram Web when only telegram_id (no @username). */
+  /**
+   * Open chat inside Mini App WebView — only https://t.me/username is reliable everywhere.
+   * Without @username we always route through relay (trainer → client bot), not tg://user?id=
+   */
   function canDirectTelegramDm(ctx) {
     if (!ctx) return false;
     if (isNaN(ctx.slotCapacity) || ctx.slotCapacity > 1) return false;
-    if (ctx.telegramUsername) return true;
-    var tid = ctx.telegramId;
-    if (tid == null || tid === '') return false;
-    var w = global.Telegram && global.Telegram.WebApp;
-    if (w && w.platform === 'web') return false;
-    return true;
+    return !!ctx.telegramUsername;
   }
 
-  /** Client in bot, no public @username — relay API + client bot delivery. */
+  /** Client linked to Telegram + CRM id — relay can deliver when no @username (or DM not desired). */
   function relayEligible(ctx) {
     if (!ctx || ctx.isSandbox) return false;
     if (isNaN(ctx.slotCapacity) || ctx.slotCapacity > 1) return false;
     if (ctx.clientId == null || ctx.clientId === '') return false;
     var tid = ctx.telegramId;
     if (tid == null || tid === '') return false;
-    if (ctx.telegramUsername) return false;
     return true;
   }
 
@@ -85,8 +82,27 @@
     return relayEligible(ctx) || canDirectTelegramDm(ctx);
   }
 
+  function coerceTrainerWebappRelayFlag(raw) {
+    if (raw === true || raw === 1 || raw === '1') return true;
+    if (typeof raw === 'string' && raw.trim().toLowerCase() === 'true') return true;
+    return false;
+  }
+
+  /** True when TRAINER_WEBAPP_FORCE_CLIENT_CHAT_RELAY=1 (synced from GET /trainer/access by MiniAppGate). */
+  function isTrainerWebappForceClientChatRelayEnv() {
+    return (
+      coerceTrainerWebappRelayFlag(global.TRAINER_WEBAPP_FORCE_CLIENT_CHAT_RELAY) ||
+      coerceTrainerWebappRelayFlag(global.TRAINER_HUB_FORCE_CLIENT_CHAT_RELAY)
+    );
+  }
+
+  /**
+   * Prefer native t.me DM when client has public @username unless env forces relay for QA.
+   */
   function shouldUseRelayModal(ctx) {
-    return relayEligible(ctx) && !canDirectTelegramDm(ctx);
+    if (!relayEligible(ctx)) return false;
+    if (isTrainerWebappForceClientChatRelayEnv()) return true;
+    return !canDirectTelegramDm(ctx);
   }
 
   function scheduleBookingSubtitle(b) {
@@ -124,10 +140,19 @@
 
   /**
    * Reads data-* written by hub row HTML — keeps chrome + handlers free of duplicated parsing.
+   * Prefer TrainerClientRelayUi.openRelayFromBookingButton when present (handles stale relay-helper caches).
    * @returns { boolean }
    */
   function openRelayFromHubButton(btn) {
-    if (!btn || btn.getAttribute('data-hub-relay') !== '1') return false;
+    if (!btn) return false;
+    var relayUi = global.TrainerClientRelayUi;
+    if (relayUi && typeof relayUi.openRelayFromBookingButton === 'function') {
+      return relayUi.openRelayFromBookingButton(btn);
+    }
+    /* Legacy fallback if relay UI script failed to load */
+    var relayMarked = btn.getAttribute('data-hub-relay') === '1';
+    var forceRelay = isTrainerWebappForceClientChatRelayEnv();
+    if (!relayMarked && !forceRelay) return false;
     var cid = parseInt(String(btn.getAttribute('data-client-id') || ''), 10);
     var label = btn.getAttribute('data-client-label') || '';
     var phoneRaw = btn.getAttribute('data-client-phone') || '';
@@ -150,6 +175,7 @@
     relayEligible: relayEligible,
     canShowTrainerMessageButton: canShowTrainerMessageButton,
     shouldUseRelayModal: shouldUseRelayModal,
+    isTrainerWebappForceClientChatRelay: isTrainerWebappForceClientChatRelayEnv,
     scheduleBookingSubtitle: scheduleBookingSubtitle,
     openRelaySendModalForContext: openRelaySendModalForContext,
     openRelayFromHubButton: openRelayFromHubButton,

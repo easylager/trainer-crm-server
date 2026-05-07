@@ -310,6 +310,33 @@
           });
       }
 
+      /**
+       * Hydrates TrainerMiniAppGate + window.TRAINER_WEBAPP_FORCE_CLIENT_CHAT_RELAY from GET /trainer/access.
+       * open_booking= deep link used runAfterScheduleCrmGate-only and skipped this, so relay force never applied before detail UI.
+       */
+      function withTrainerMiniAppAccessThen(done) {
+        if (
+          tg &&
+          tg.initData &&
+          window.TrainerMiniAppGate &&
+          typeof window.TrainerMiniAppGate.fetchAccess === 'function'
+        ) {
+          window.TrainerMiniAppGate.fetchAccess(tg.initData)
+            .then(function(a) {
+              if (a && !window.TrainerMiniAppGate.isActive(a)) {
+                window.TrainerMiniAppGate.showBlockingOverlay(a);
+                return;
+              }
+              done();
+            })
+            .catch(function() {
+              done();
+            });
+          return;
+        }
+        done();
+      }
+
       function assertScheduleCrmWriteAllowed() {
         if (state.scheduleCrmWriteAllowed) return true;
         var msg =
@@ -1287,7 +1314,10 @@
           if (window.TrainerRelayHelpers) {
             var Wctx = window.TrainerRelayHelpers.contextFromScheduleBooking(b);
             if (window.TrainerRelayHelpers.canShowTrainerMessageButton(Wctx)) {
-              extraActions.push({ cls: 'bd-btn--surface', action: 'write_client', icon: BD_ICONS.send, label: 'Написать клиенту' });
+              var writeBtnLabel = window.TrainerRelayHelpers.shouldUseRelayModal(Wctx)
+                ? 'Написать клиенту в чат'
+                : 'Написать клиенту';
+              extraActions.push({ cls: 'bd-btn--surface', action: 'write_client', icon: BD_ICONS.send, label: writeBtnLabel });
             }
           }
           var canReportProblem = stRaw !== 'cancelled' && stRaw !== 'declined';
@@ -5339,8 +5369,10 @@
               state.hubGroupSlotReturnId = null;
             }
             runAfterScheduleCrmGate(function() {
-              openBookingDetail(bid);
-              prefetchSlotsInBackground();
+              withTrainerMiniAppAccessThen(function() {
+                openBookingDetail(bid);
+                prefetchSlotsInBackground();
+              });
             });
             return;
           }
@@ -5355,21 +5387,7 @@
             loadSlots();
           });
         }
-        if (tg && tg.initData && window.TrainerMiniAppGate) {
-          window.TrainerMiniAppGate.fetchAccess(tg.initData)
-            .then(function (a) {
-              if (a && !window.TrainerMiniAppGate.isActive(a)) {
-                window.TrainerMiniAppGate.showBlockingOverlay(a);
-                return;
-              }
-              startScheduleLoads();
-            })
-            .catch(function () {
-              startScheduleLoads();
-            });
-        } else {
-          startScheduleLoads();
-        }
+        withTrainerMiniAppAccessThen(startScheduleLoads);
       }
 
       /** Telegram often fills initData later when Web App opens from reply keyboard (not inline); wait up to ~15s. */

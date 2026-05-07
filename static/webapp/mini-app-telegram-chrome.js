@@ -319,9 +319,32 @@ window.wireHubSlotMessageButtons = function (root) {
       function (ev) {
         ev.preventDefault();
         ev.stopPropagation();
-        if (btn.getAttribute('data-hub-relay') === '1') {
-          var Rh = window.TrainerRelayHelpers;
-          if (Rh && typeof Rh.openRelayFromHubButton === 'function' && Rh.openRelayFromHubButton(btn)) {
+        var UiRelayGate = window.TrainerClientRelayUi;
+        var wf = window.TRAINER_WEBAPP_FORCE_CLIENT_CHAT_RELAY;
+        var hubF = window.TRAINER_HUB_FORCE_CLIENT_CHAT_RELAY;
+        var forceRelayGlob =
+          wf === true ||
+          wf === 1 ||
+          wf === '1' ||
+          hubF === true ||
+          hubF === 1 ||
+          hubF === '1';
+        var hubUseRelay =
+          UiRelayGate && typeof UiRelayGate.hubBookingButtonWantsRelay === 'function'
+            ? UiRelayGate.hubBookingButtonWantsRelay(btn)
+            : btn.getAttribute('data-hub-relay') === '1' || forceRelayGlob;
+        if (hubUseRelay) {
+          var UiRelay = window.TrainerClientRelayUi;
+          var openedRelay =
+            UiRelay &&
+            typeof UiRelay.openRelayFromBookingButton === 'function' &&
+            UiRelay.openRelayFromBookingButton(btn);
+          if (!openedRelay) {
+            var Rh = window.TrainerRelayHelpers;
+            openedRelay =
+              Rh && typeof Rh.openRelayFromHubButton === 'function' && Rh.openRelayFromHubButton(btn);
+          }
+          if (openedRelay) {
             return;
           }
           var wg = window.Telegram && window.Telegram.WebApp;

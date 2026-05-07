@@ -21,11 +21,27 @@ from src.application.trainer_relay_delivery import (
     send_client_relay_from_trainer,
     send_trainer_plain_notification,
     send_trainer_relay_from_client,
+    sweep_idle_relay_sessions_and_notify,
 )
 from src.bot import messages as msg
+from src.bot.trainer_bot_state import (
+    set_trainer_relay_reply_pending,
+    trainer_booking_note_awaiting,
+    trainer_support_awaiting,
+)
 from src.infrastructure.db import async_session_factory
 
 logger = logging.getLogger(__name__)
+
+
+def _relay_callback_session_id(callback_data: str | None, prefix: str) -> int | None:
+    raw = callback_data or ""
+    if not raw.startswith(prefix):
+        return None
+    try:
+        return int(raw.split(":", 1)[1])
+    except (IndexError, ValueError):
+        return None
 
 
 async def maybe_route_client_relay_text_reply(message: Message) -> bool:
@@ -40,6 +56,7 @@ async def maybe_route_client_relay_text_reply(message: Message) -> bool:
     raw = sanitize_relay_body(message.text or "")
     if raw is None:
         return False
+    await sweep_idle_relay_sessions_and_notify()
     async with async_session_factory() as session:
         ctx = await relay_open_session_context_for_client_telegram(session, client_telegram_id=int(uid))
         if not ctx:
@@ -70,7 +87,39 @@ async def maybe_route_client_relay_text_reply(message: Message) -> bool:
         )
     except Exception:
         logger.exception("relay_delivery_client_to_trainer_failed sid=%s", sid)
+        return True
+    tg_tr = int(trainer_tg)
+    # Same UX as client side: trainer can reply with the next message without tapping «Ответить».
+    # Skip when another text-awaiting workflow is active (those handlers consume the next message).
+    if tg_tr not in trainer_support_awaiting and tg_tr not in trainer_booking_note_awaiting:
+        set_trainer_relay_reply_pending(tg_tr, sid)
     return True
+
+
+async def on_client_bot_relay_reply_callback(callback: CallbackQuery) -> None:
+    """Mirrors trainer «Ответить»: reassurance + RBAC check (optional; text routes without this too)."""
+    sid = _relay_callback_session_id(callback.data, "rly_ck:")
+    if sid is None:
+        await callback.answer("Неверная кнопка.", show_alert=True)
+        return
+    uid = callback.from_user.id if callback.from_user else 0
+    if not uid:
+        await callback.answer()
+        return
+    await callback.answer()
+    if not callback.message:
+        return
+    await sweep_idle_relay_sessions_and_notify()
+    async with async_session_factory() as session:
+        row = await relay_session_context_for_id(session, session_id=int(sid))
+        if (
+            not row
+            or row.get("status") != "open"
+            or int(row.get("client_telegram_id") or 0) != int(uid)
+        ):
+            await callback.message.answer("<b>Сессия переписки уже недоступна.</b>")
+            return
+    await callback.message.answer(msg.CLIENT_RELAY_REPLY_PROMPT)
 
 
 async def on_client_bot_relay_close_callback(callback: CallbackQuery) -> bool:
@@ -120,6 +169,7 @@ async def deliver_trainer_pending_relay_reply(
     raw = sanitize_relay_body(body_text)
     if raw is None:
         return
+    await sweep_idle_relay_sessions_and_notify()
     async with async_session_factory() as session:
         row = await relay_session_context_for_id(session, session_id=int(session_id), trainer_id=int(trainer_id))
         if not row or row.get("status") != "open":

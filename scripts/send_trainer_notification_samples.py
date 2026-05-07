@@ -62,6 +62,7 @@ from src.shared.config import Settings
 MOCK_BOOKING_ID = 900001
 MOCK_REQUEST_ID = 800001
 MOCK_CLIENT_TELEGRAM_ID = 123456789
+MOCK_CLIENT_ID = 700001
 
 
 def _sample_signals(
@@ -853,7 +854,9 @@ async def main() -> None:
         echo_kb1 = msg.build_trainer_booking_confirmed_echo_reply_markup(
             webapp_base=base,
             booking_id=MOCK_BOOKING_ID,
+            client_id=MOCK_CLIENT_ID,
             client_telegram_id=MOCK_CLIENT_TELEGRAM_ID,
+            trainer_has_crm=True,
         )
         await bot.send_message(chat_id=chat_id, text=echo1, reply_markup=echo_kb1)
         echo2 = msg.format_trainer_booking_confirmed_echo_html(
@@ -872,7 +875,9 @@ async def main() -> None:
         echo_kb2 = msg.build_trainer_booking_confirmed_echo_reply_markup(
             webapp_base=base,
             booking_id=MOCK_BOOKING_ID + 5,
+            client_id=MOCK_CLIENT_ID + 1,
             client_telegram_id=None,
+            trainer_has_crm=True,
         )
         await bot.send_message(chat_id=chat_id, text=echo2, reply_markup=echo_kb2)
 

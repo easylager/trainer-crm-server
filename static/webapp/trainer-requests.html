@@ -1141,6 +1141,8 @@
   </div>
 
   <script src="mini-app-trainer-gate.js"></script>
+  <script src="trainer-client-relay-ui.js?v=202605090"></script>
+  <script src="trainer-relay-helpers.js?v=202605090"></script>
   <script>
     (function() {
       fetch('/api/webapp/trainer/requests/ping?step=script').catch(function() {});
@@ -1543,6 +1545,33 @@
               ev.preventDefault();
               var tid = req.client_telegram_id;
               if (tid == null || tid === '') return;
+              var H = window.TrainerRelayHelpers;
+              var ctx =
+                H && typeof H.contextFromTrainerClient === 'function'
+                  ? H.contextFromTrainerClient({
+                      id: req.client_id,
+                      telegram_id: tid,
+                      telegram_username: '',
+                      is_sandbox: false,
+                      phone: '',
+                    })
+                  : null;
+              if (
+                ctx &&
+                H &&
+                typeof H.shouldUseRelayModal === 'function' &&
+                H.shouldUseRelayModal(ctx) &&
+                typeof H.openRelaySendModalForContext === 'function'
+              ) {
+                var sub =
+                  H.scheduleBookingSubtitle && typeof H.scheduleBookingSubtitle === 'function'
+                    ? H.scheduleBookingSubtitle({
+                        client_first_name: req.client_first_name,
+                        client_last_name: req.client_last_name,
+                      })
+                    : '';
+                if (H.openRelaySendModalForContext(ctx, { subtitle: sub })) return;
+              }
               var opened = false;
               if (typeof window.openTelegramChatFromMiniApp === 'function') {
                 opened = !!window.openTelegramChatFromMiniApp({ telegramId: tid });

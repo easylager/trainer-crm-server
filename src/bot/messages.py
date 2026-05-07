@@ -23,53 +23,42 @@ CLIENT_START_WELCOME = (
 CLIENT_FALLBACK = "Нажмите кнопку <b>Главная</b> слева от поля ввода. Помощь: /guide"
 
 # Bot-mediated relay when trainer ↔ client can't use native Telegram DM
-CLIENT_RELAY_FOOTER = (
-    "\n\n—\nВы можете ответить тренеру — отправьте обычное сообщение здесь в бот.\n"
-    "<b>Закончить переписку</b> — кнопкой ниже."
-)
-CLIENT_RELAY_END_BUTTON = "Закончить переписку"
-TRAINER_RELAY_REPLY_PROMPT = (
-    "Напишите ответ следующим сообщением — я отправлю его клиенту в бота. Прервать: /cancel"
-)
-def build_client_relay_keyboard(session_id: int):
-    """End-only for client DM (callback rly_xc:)."""
+CLIENT_RELAY_REPLY_PROMPT = "Напишите здесь — тренер увидит сообщение сразу."
+TRAINER_RELAY_REPLY_PROMPT = "Напиши здесь — отправим клиенту."
+RELAY_SESSION_IDLE_CLOSED_HINT = "<b>Переписка через бота закрыта</b> — долго не было сообщений."
+
+
+def _relay_reply_only_markup(callback_prefix: str, session_id: int):
+    """Single «Ответить» inline row; trainer uses ``rly_r``, client bot uses ``rly_ck``."""
     from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
     sid = int(session_id)
+    pfx = (callback_prefix or "").strip().rstrip(":")
     return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text=CLIENT_RELAY_END_BUTTON, callback_data=f"rly_xc:{sid}")],
-        ]
+        inline_keyboard=[[InlineKeyboardButton(text="Ответить", callback_data=f"{pfx}:{sid}")]],
     )
 
 
-def build_trainer_relay_keyboard(session_id: int):
-    """Reply + close for trainer notification."""
-    from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+def build_trainer_relay_reply_only_keyboard(session_id: int):
+    """Re-arm reply mode for trainer (callback rly_r:)."""
+    return _relay_reply_only_markup("rly_r", session_id)
 
-    sid = int(session_id)
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(text="Ответить", callback_data=f"rly_r:{sid}"),
-                InlineKeyboardButton(text="Закончить", callback_data=f"rly_xt:{sid}"),
-            ],
-        ]
-    )
+
+def build_client_relay_reply_only_keyboard(session_id: int):
+    """Same UX on client bot (callback rly_ck:)."""
+    return _relay_reply_only_markup("rly_ck", session_id)
 
 
 def format_client_relay_from_trainer_html(*, trainer_name: str, body_text: str) -> str:
     safe_name = html.escape((trainer_name or "").strip() or "Тренер")
     escaped_body = html.escape(body_text.strip())
-    return (
-        f"💬 <b>Сообщение от тренера {safe_name}</b>\n\n{escaped_body}" + CLIENT_RELAY_FOOTER
-    )
+    return f"💬 <b>Сообщение от тренера {safe_name}</b>\n\n{escaped_body}"
 
 
 def format_trainer_relay_from_client_html(*, client_name: str, body_text: str) -> str:
     safe_name = html.escape((client_name or "").strip() or "Клиент")
     escaped_body = html.escape(body_text.strip())
-    return f"💬 <b>Ответ клиента {safe_name}</b>\n\n{escaped_body}"
+    return f"💬 <b>Сообщение от клиента {safe_name}</b>\n\n{escaped_body}"
 
 TRAINER_RELAY_SESSION_CLOSED_HINT = (
     "Переписка через бота завершена. Новое сообщение — снова из раздела «Мои клиенты» или записи."
@@ -2330,14 +2319,17 @@ def build_trainer_booking_confirmed_echo_reply_markup(
     *,
     webapp_base: str,
     booking_id: int,
-    client_telegram_id: int | None,
+    client_id: int | None = None,
+    client_telegram_id: int | None = None,
+    trainer_has_crm: bool = False,
 ):
-    """WebApp slot detail + deep link to client when Telegram id is known."""
+    """WebApp slot detail + write client (CRM WebApp relay/DM) or tg:// fallback."""
     from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 
     base = (webapp_base or "").rstrip("/")
     rows: list[list[InlineKeyboardButton]] = []
-    if base.lower().startswith("https://"):
+    https = base.lower().startswith("https://")
+    if https:
         rows.append(
             [
                 InlineKeyboardButton(
@@ -2348,7 +2340,21 @@ def build_trainer_booking_confirmed_echo_reply_markup(
                 ),
             ]
         )
-    if client_telegram_id:
+    if trainer_has_crm and client_id is not None and https:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=TRAINER_BOOKING_CONFIRMED_BTN_WRITE,
+                    web_app=WebAppInfo(
+                        url=(
+                            f"{base}/webapp/trainer-clients?"
+                            f"client_id={int(client_id)}&open_write=1"
+                        )
+                    ),
+                ),
+            ]
+        )
+    elif client_telegram_id:
         rows.append(
             [
                 InlineKeyboardButton(
@@ -2501,7 +2507,9 @@ def build_trainer_first_booking_milestone_reply_markup(
     *,
     webapp_base: str,
     booking_id: int,
-    client_telegram_id: int | None,
+    client_id: int | None = None,
+    client_telegram_id: int | None = None,
+    trainer_has_crm: bool = False,
     is_sandbox: bool = False,
 ):
     """
@@ -2517,7 +2525,8 @@ def build_trainer_first_booking_milestone_reply_markup(
     booking_invite_prefix = "booking_invite_client:"
     rows: list[list[InlineKeyboardButton]] = []
     base = (webapp_base or "").rstrip("/")
-    if base.lower().startswith("https://"):
+    https = base.lower().startswith("https://")
+    if https:
         rows.append(
             [
                 InlineKeyboardButton(
@@ -2528,7 +2537,21 @@ def build_trainer_first_booking_milestone_reply_markup(
                 ),
             ]
         )
-    if client_telegram_id and not is_sandbox:
+    if not is_sandbox and trainer_has_crm and client_id is not None and https:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=TRAINER_BOOKING_CONFIRMED_BTN_WRITE,
+                    web_app=WebAppInfo(
+                        url=(
+                            f"{base}/webapp/trainer-clients?"
+                            f"client_id={int(client_id)}&open_write=1"
+                        )
+                    ),
+                ),
+            ]
+        )
+    elif client_telegram_id and not is_sandbox:
         rows.append(
             [
                 InlineKeyboardButton(
