@@ -32,9 +32,8 @@
         cityName: '',
         serviceId: null,
         serviceName: '',
-        // Canonical multi-arena filter. arenaId/arenaName below are *derived* single-context
-        // (set only when exactly one arena is picked) to keep legacy code paths working
-        // (slot-list filter, "non-primary arena" alert, /client/booking body).
+        // Canonical multi-arena filter for trainer *list*. arenaId/arenaName are derived for
+        // legacy single-arena API (session POST, back-links from book.html).
         arenaIds: [],
         arenaNames: [],
         arenaId: null,
@@ -48,9 +47,13 @@
         selectedTrainer: null,
         /** When trainer has multiple price tiers for filtered service — required by POST /client/booking */
         catalogBookingPriceVariantId: null,
+        /** GET /client/session?for_trainer_id → booking_context_service_price_variant_id (last tier for that service). */
+        bookingContextServicePriceVariantId: null,
         /** Per slot selection — POST /client/booking Idempotency-Key (retry after dropped response). */
         catalogBookingIdempotencyKey: null,
         slotsForTrainer: [],
+        /** Subset of trainer arenas used as GET /client/slots arena_ids= (OR). Empty ⇒ all venues. */
+        trainerSlotsArenaIds: [],
         selectedSlot: null,
         returnToSummary: false,
         requestForTrainer: null,
@@ -80,9 +83,7 @@
       };
 
       /**
-       * Single source of truth for arena selection. Pass arrays of equal length;
-       * mirrors single-context fields when exactly one arena is selected so that
-       * "non-primary arena" alert and slot-list (which take a single arena_id) keep working.
+       * Single source of truth for arena selection in the catalog list flow.
        */
       function setArenaSelection(ids, names) {
         var safeIds = Array.isArray(ids) ? ids.filter(function(v) { return v != null; }).map(function(v) { return parseInt(v, 10); }).filter(function(v) { return !isNaN(v); }) : [];
@@ -97,6 +98,7 @@
           state.arenaId = null;
           state.arenaName = safeIds.length === 0 ? 'Любая' : (safeIds.length + ' арены');
         }
+        // Card `/client/slots` filter stays on `trainerSlotsArenaIds`; do not mutate it here.
       }
       function clearArenaSelection() {
         setArenaSelection([], []);
@@ -124,21 +126,6 @@
         if (idx >= 0 && names[idx]) return names[idx];
         return '';
       }
-      function isNonPrimaryArenaFilter() {
-        if (state.arenaId == null) return false;
-        var t = state.selectedTrainer;
-        if (!t || t.primary_arena_id == null) return false;
-        return state.arenaId !== t.primary_arena_id;
-      }
-
-      /** Switch catalog filter to trainer's primary arena (online booking). */
-      function applyTrainerPrimaryArenaToCatalogFilter(t) {
-        if (!t || t.primary_arena_id == null) return false;
-        var label = primaryVenueLabel(t) || 'Основная площадка';
-        setArenaSelection([t.primary_arena_id], [label]);
-        return true;
-      }
-      /** Slot row from /client/slots: arena + address + map (server builds map_link). */
       function buildSlotVenueBlockHtml(slot) {
         if (!slot) return '';
         var name = (slot.arena_name && String(slot.arena_name).trim()) || '';
@@ -177,22 +164,12 @@
         var slot = state.selectedSlot;
         var slotHtml = buildSlotVenueBlockHtml(slot);
         var label = primaryVenueLabel(state.selectedTrainer);
-        var nonPrimary = isNonPrimaryArenaFilter();
         var chunks = [];
         if (slotHtml) chunks.push(slotHtml);
-        if (nonPrimary && label) {
-          var filterName = (state.arenaName && state.arenaName !== 'Любая') ? state.arenaName : 'другой арене';
-          chunks.push(
-            '<div class="booking-venue-filter-alert">Вы смотрите тренера по фильтру «' +
-              escapeHtml(filterName) +
-              '». <strong>Онлайн-запись оформляется на основную площадку: ' +
-              escapeHtml(label) +
-              '.</strong> Чтобы заниматься на площадке из фильтра — оставьте заявку: тренер согласует место и запишет вас сам.</div>'
-          );
-        } else if (!slotHtml && label) {
+        else if (label) {
           chunks.push('<div class="booking-venue-slot-lines">Площадка: ' + escapeHtml(label) + '</div>');
         }
-        el.className = 'booking-venue-hint' + (nonPrimary ? ' booking-venue-hint--alert' : '');
+        el.className = 'booking-venue-hint';
         if (!chunks.length) {
           el.style.display = 'none';
           el.innerHTML = '';
@@ -321,6 +298,13 @@
           return;
         }
         block.style.display = 'block';
+        var hintedVid = state.bookingContextServicePriceVariantId;
+        var hintOk =
+          hintedVid != null &&
+          tiers.some(function(tier) {
+            return Number(tier.id) === Number(hintedVid);
+          });
+        var preferredId = hintOk ? Number(hintedVid) : null;
         tiers.forEach(function(tier) {
           var lab = document.createElement('label');
           var inp = document.createElement('input');
@@ -339,10 +323,19 @@
           });
           host.appendChild(lab);
         });
-        var first = host.querySelector('input');
-        if (first) {
-          first.checked = true;
-          state.catalogBookingPriceVariantId = parseInt(first.value, 10);
+        var pick =
+          preferredId != null
+            ? host.querySelector('input[name="catalogPriceTierChoice"][value="' + preferredId + '"]')
+            : null;
+        if (pick) {
+          pick.checked = true;
+          state.catalogBookingPriceVariantId = preferredId;
+        } else {
+          var first = host.querySelector('input');
+          if (first) {
+            first.checked = true;
+            state.catalogBookingPriceVariantId = parseInt(first.value, 10);
+          }
         }
       }
 
@@ -1026,12 +1019,14 @@
           state.selectedTrainer = full || t;
           state.trainerName = trainerName(state.selectedTrainer);
           reconcileCatalogServiceWithTrainerAsync(state.selectedTrainer).then(function() {
+            initTrainerSlotsArenaFilterFromCatalog(state.selectedTrainer);
             renderTrainerDetail();
             showScreen('screenTrainerDetail');
           });
         }).catch(function() {
           state.selectedTrainer = t;
           reconcileCatalogServiceWithTrainerAsync(t).then(function() {
+            initTrainerSlotsArenaFilterFromCatalog(t);
             renderTrainerDetail();
             showScreen('screenTrainerDetail');
           });
@@ -1105,6 +1100,7 @@
           state.selectedTrainer = t;
           state.trainerName = trainerName(t);
           reconcileCatalogServiceWithTrainerAsync(t).then(function() {
+            initTrainerSlotsArenaFilterFromCatalog(t);
             renderTrainerDetail();
             showScreen('screenTrainerDetail');
           });
@@ -1560,6 +1556,11 @@
           session.client_last_name != null && session.client_last_name !== undefined
             ? String(session.client_last_name).trim()
             : '';
+        var bpvRaw = session.booking_context_service_price_variant_id;
+        state.bookingContextServicePriceVariantId =
+          bpvRaw != null && bpvRaw !== '' && !isNaN(Number(bpvRaw)) && Number(bpvRaw) > 0
+            ? Number(bpvRaw)
+            : null;
       }
 
       function updateBookingNameFieldsVisibility() {
@@ -2733,6 +2734,11 @@
           if (tn) q += '&trainer_name=' + encodeURIComponent(tn);
         }
         if (state.serviceId != null) q += '&service_id=' + encodeURIComponent(state.serviceId);
+        if (state.trainerSlotsArenaIds && state.trainerSlotsArenaIds.length) {
+          q += '&arena_ids=' + encodeURIComponent(
+            state.trainerSlotsArenaIds.slice().sort(function(a, b) { return a - b; }).join(',')
+          );
+        }
         if (initData) q += '&init_data=' + encodeURIComponent(initData);
         var headers = {};
         if (initData) headers['X-Telegram-Init-Data'] = initData;
@@ -2742,6 +2748,186 @@
             return data;
           });
         });
+      }
+
+      /** When opening a trainer card: intersect catalog arena filter with trainer's venues (empty ⇒ all). */
+      function initTrainerSlotsArenaFilterFromCatalog(t) {
+        if (!t || !t.arena_ids || !t.arena_ids.length) {
+          state.trainerSlotsArenaIds = [];
+          return;
+        }
+        var tarenas = (t.arena_ids || []).map(Number);
+        var picked = [];
+        (state.arenaIds || []).forEach(function(cid) {
+          var n = Number(cid);
+          if (isNaN(n)) return;
+          if (tarenas.indexOf(n) >= 0) picked.push(n);
+        });
+        state.trainerSlotsArenaIds = picked;
+      }
+
+      function clearTrainerArenaSlotFilterBar() {
+        var wrap = document.getElementById('trainerDetailArenaSlotFilter');
+        if (!wrap) return;
+        wrap.innerHTML = '';
+        wrap.style.display = 'none';
+      }
+
+      /** Multi-arena trainers: toggle GET /client/slots?arena_ids= without touching list-level catalog filter. */
+      function paintTrainerArenaSlotFilterBar(t) {
+        var el = document.getElementById('trainerDetailArenaSlotFilter');
+        if (!el) return;
+        var ids = (t && t.arena_ids) ? t.arena_ids : [];
+        var names = (t && t.arena_names) ? t.arena_names : [];
+        if (ids.length <= 1) {
+          el.innerHTML = '';
+          el.style.display = 'none';
+          return;
+        }
+        el.style.display = 'block';
+        var idnums = [];
+        for (var z = 0; z < ids.length; z++) {
+          var zx = Number(ids[z]);
+          if (!isNaN(zx)) idnums.push(zx);
+        }
+        var allMode = !state.trainerSlotsArenaIds || state.trainerSlotsArenaIds.length === 0;
+        var html = '';
+        html += '<div class="trainer-detail-arena-filter">';
+        html += '<div class="trainer-detail-arena-filter-title">Показать слоты</div>';
+        html += '<div class="trainer-detail-arena-filter-chips" role="group" aria-label="Площадки">';
+        html +=
+          '<button type="button" class="trainer-detail-arena-chip' +
+          (allMode ? ' trainer-detail-arena-chip--active' : '') +
+          '" data-catalog-arena-filter="all">Все площадки</button>';
+        for (var i = 0; i < ids.length; i++) {
+          var aid = Number(ids[i]);
+          if (isNaN(aid)) continue;
+          var nm = (names[i] && String(names[i]).trim()) ? String(names[i]).trim() : 'Площадка ' + aid;
+          var sel = !allMode && state.trainerSlotsArenaIds.indexOf(aid) >= 0;
+          html +=
+            '<button type="button" class="trainer-detail-arena-chip' +
+            (sel ? ' trainer-detail-arena-chip--active' : '') +
+            '" data-catalog-arena-filter="' +
+            aid +
+            '">' +
+            escapeHtml(nm) +
+            '</button>';
+        }
+        html += '</div></div>';
+        el.innerHTML = html;
+        el.querySelectorAll('[data-catalog-arena-filter]').forEach(function(btn) {
+          btn.onclick = function() {
+            var raw = btn.getAttribute('data-catalog-arena-filter');
+            if (raw === 'all') {
+              state.trainerSlotsArenaIds = [];
+            } else {
+              var id = parseInt(raw, 10);
+              if (isNaN(id)) return;
+              var cur = state.trainerSlotsArenaIds.slice();
+              if (cur.length === 0) {
+                cur = [id];
+              } else {
+                var ix = cur.indexOf(id);
+                if (ix >= 0) cur.splice(ix, 1);
+                else cur.push(id);
+              }
+              if (cur.length === 0 || cur.length >= idnums.length) cur = [];
+              state.trainerSlotsArenaIds = cur;
+            }
+            refetchTrainerSlotsForCard();
+          };
+        });
+      }
+
+      function refetchTrainerSlotsForCard() {
+        var tt = state.selectedTrainer;
+        if (!tt || tt.can_book !== true) return;
+        paintTrainerArenaSlotFilterBar(tt);
+        document.getElementById('trainerDetailSlots').innerHTML = '<div class="slots-empty">Загрузка слотов…</div>';
+        document.getElementById('trainerDetailActions').innerHTML = '';
+        loadSlotsForTrainer(tt.id, tt)
+          .then(function(d) {
+            paintTrainerSlotsAndActionsSection(tt, d);
+          })
+          .catch(function() {
+            document.getElementById('trainerDetailSlots').innerHTML =
+              '<div class="slots-title">Ближайшие слоты</div><div class="slots-empty">Не удалось загрузить слоты</div>';
+            var errActions = document.getElementById('trainerDetailActions');
+            errActions.innerHTML = '<button type="button" class="btn-secondary btn-block" data-action="leave-request">Оставить заявку</button>';
+            appendTrainerActionChips(errActions, tt, false);
+            document.getElementById('trainerDetailSecondary').innerHTML = '';
+          });
+      }
+
+      function paintTrainerSlotsAndActionsSection(t, data) {
+        state.slotsForTrainer = (data && data.slots) || [];
+        var slotsEl = document.getElementById('trainerDetailSlots');
+        var actionsEl = document.getElementById('trainerDetailActions');
+        var slots = state.slotsForTrainer;
+        var slotsHtml = '<div class="slots-title">Ближайшие слоты</div>';
+        if (slots.length === 0) {
+          slotsHtml += '<div class="slots-empty">Сейчас нет свободных слотов.</div>';
+          slotsHtml += '<div class="slots-empty slots-empty-hint">Оставьте заявку — тренер предложит удобное время.</div>';
+        } else {
+          var showCount = Math.min(slots.length, 6);
+          for (var i = 0; i < showCount; i++) {
+            var s = slots[i];
+            slotsHtml +=
+              '<button type="button" class="slot-row" data-slot-index="' +
+              i +
+              '">' +
+              '<span class="slot-row-main"><span class="slot-row-line">' +
+              formatSlotLabel(s) +
+              '</span>' +
+              slotGroupSpotsPillHtml(s) +
+              '</span><span>→</span></button>';
+          }
+          if (slots.length > showCount) {
+            slotsHtml +=
+              '<button type="button" class="slot-row slot-row-more" id="btnShowAllSlots">Ещё слоты (' +
+              (slots.length - showCount) +
+              ') →</button>';
+          }
+        }
+        slotsEl.innerHTML = slotsHtml;
+        slotsEl.querySelectorAll('.slot-row[data-slot-index]').forEach(function(btn) {
+          btn.onclick = function() {
+            var ii = parseInt(btn.dataset.slotIndex, 10);
+            state.selectedSlot = state.slotsForTrainer[ii];
+            assignCatalogBookingIdempotencyKeyForSlot();
+            document.getElementById('bookingFormSlotLabel').textContent =
+              'Выбрано: ' + formatSlotSelectionSummary(state.selectedSlot);
+            document.getElementById('bookingComment').value = '';
+            refreshClientPhoneForBookingForm(function() {
+              prefillBookingPhoneField();
+              updateBookingVenueHint();
+              updateBookingFormServiceAndTiers();
+              showScreen('screenBookingForm');
+            });
+          };
+        });
+        var btnMore = document.getElementById('btnShowAllSlots');
+        if (btnMore)
+          btnMore.onclick = function() {
+            renderSlotPickList();
+            showScreen('screenSlotPick');
+          };
+        actionsEl.innerHTML = '';
+        if (slots.length > 0) {
+          actionsEl.innerHTML += '<button type="button" class="btn-primary btn-block" id="btnBookFromDetail">Записаться</button>';
+        }
+        actionsEl.innerHTML += '<button type="button" class="btn-secondary btn-block" data-action="leave-request">Оставить заявку</button>';
+        if (t.has_pass_products || t.has_certificate_products) {
+          actionsEl.innerHTML += '<button type="button" class="btn-secondary btn-block" data-action="buy-pass">Абонементы/Сертификаты</button>';
+        }
+        appendTrainerActionChips(actionsEl, t, slots.length === 0);
+        var btnBook = document.getElementById('btnBookFromDetail');
+        if (btnBook)
+          btnBook.onclick = function() {
+            renderSlotPickList();
+            showScreen('screenSlotPick');
+          };
+        document.getElementById('trainerDetailSecondary').innerHTML = '';
       }
 
       /**
@@ -2778,7 +2964,7 @@
           });
           html += '</div>';
         }
-        html += '<p class="trainer-detail-arena-hint">Запись в каталоге — на основную площадку. Нужна другая? Оставьте заявку — тренер согласует.</p>';
+        html += '<p class="trainer-detail-arena-hint">Запись доступна на те площадки, где у тренера есть свободные слоты. Ниже можно отфильтровать по арене.</p>';
         html += '</div>';
         return html;
       }
@@ -3006,6 +3192,7 @@
         document.getElementById('trainerDetailActions').innerHTML = '';
         var canBook = t.can_book === true;
         if (!canBook) {
+          clearTrainerArenaSlotFilterBar();
           var phoneLine = '';
           var ph = (p.phone || '').trim();
           var ct = (p.contacts || '').trim();
@@ -3054,92 +3241,19 @@
           document.getElementById('trainerDetailSecondary').innerHTML = '';
           return;
         }
-        loadSlotsForTrainer(t.id, t).then(function(data) {
-          state.slotsForTrainer = data.slots || [];
-          var slotsEl = document.getElementById('trainerDetailSlots');
-          var actionsEl = document.getElementById('trainerDetailActions');
-          var slots = state.slotsForTrainer;
-          var slotsHtml = '<div class="slots-title">Ближайшие слоты</div>';
-          if (isNonPrimaryArenaFilter()) {
-            var primArenaName = primaryVenueLabel(t);
-            var btnPrimarySlotsLabel = primArenaName
-              ? ('Слоты на основной площадке: «' + escapeHtml(primArenaName) + '»')
-              : 'Показать слоты на основной площадке';
-            slotsEl.innerHTML = slotsHtml +
-              '<div class="slots-empty">Онлайн-запись только на основную площадку тренера. Чтобы заниматься на другой арене, оставьте заявку — тренер согласует место и время.</div>';
-            actionsEl.innerHTML = '';
-            actionsEl.innerHTML += '<button type="button" class="btn-primary btn-block" id="btnCatalogSlotsPrimaryArena">' + btnPrimarySlotsLabel + '</button>';
-            actionsEl.innerHTML += '<button type="button" class="btn-secondary btn-block" data-action="leave-request">Оставить заявку</button>';
-            if (t.has_pass_products || t.has_certificate_products) {
-              actionsEl.innerHTML += '<button type="button" class="btn-secondary btn-block" data-action="buy-pass">Абонементы/Сертификаты</button>';
-            }
-            appendTrainerActionChips(actionsEl, t, false);
-            var btnPrim = document.getElementById('btnCatalogSlotsPrimaryArena');
-            if (btnPrim) {
-              btnPrim.onclick = function() {
-                var tr = state.selectedTrainer;
-                if (!applyTrainerPrimaryArenaToCatalogFilter(tr)) return;
-                renderSummary();
-                persistTrainerSelection(tr.id);
-                renderTrainerDetail();
-              };
-            }
+        paintTrainerArenaSlotFilterBar(t);
+        loadSlotsForTrainer(t.id, t)
+          .then(function(data) {
+            paintTrainerSlotsAndActionsSection(t, data);
+          })
+          .catch(function() {
+            document.getElementById('trainerDetailSlots').innerHTML =
+              '<div class="slots-title">Ближайшие слоты</div><div class="slots-empty">Не удалось загрузить слоты</div>';
+            var errActions = document.getElementById('trainerDetailActions');
+            errActions.innerHTML = '<button type="button" class="btn-secondary btn-block" data-action="leave-request">Оставить заявку</button>';
+            appendTrainerActionChips(errActions, t, false);
             document.getElementById('trainerDetailSecondary').innerHTML = '';
-            return;
-          }
-          if (slots.length === 0) {
-            slotsHtml += '<div class="slots-empty">Сейчас нет свободных слотов.</div>';
-            slotsHtml += '<div class="slots-empty slots-empty-hint">Оставьте заявку — тренер предложит удобное время.</div>';
-          } else {
-            var showCount = Math.min(slots.length, 6);
-            for (var i = 0; i < showCount; i++) {
-              var s = slots[i];
-              slotsHtml += '<button type="button" class="slot-row" data-slot-index="' + i + '">' +
-                '<span class="slot-row-main"><span class="slot-row-line">' + formatSlotLabel(s) + '</span>' +
-                slotGroupSpotsPillHtml(s) + '</span><span>→</span></button>';
-            }
-            if (slots.length > showCount) {
-              slotsHtml += '<button type="button" class="slot-row slot-row-more" id="btnShowAllSlots">Ещё слоты (' + (slots.length - showCount) + ') →</button>';
-            }
-          }
-          slotsEl.innerHTML = slotsHtml;
-          slotsEl.querySelectorAll('.slot-row[data-slot-index]').forEach(function(btn) {
-            btn.onclick = function() {
-              var i = parseInt(btn.dataset.slotIndex, 10);
-              state.selectedSlot = state.slotsForTrainer[i];
-              assignCatalogBookingIdempotencyKeyForSlot();
-              document.getElementById('bookingFormSlotLabel').textContent = 'Выбрано: ' + formatSlotSelectionSummary(state.selectedSlot);
-              document.getElementById('bookingComment').value = '';
-              refreshClientPhoneForBookingForm(function() {
-                prefillBookingPhoneField();
-                updateBookingVenueHint();
-                updateBookingFormServiceAndTiers();
-                showScreen('screenBookingForm');
-              });
-            };
           });
-          var btnMore = document.getElementById('btnShowAllSlots');
-          if (btnMore) btnMore.onclick = function() { renderSlotPickList(); showScreen('screenSlotPick'); };
-          // Очищаем и добавляем кнопки с новым дизайном
-          actionsEl.innerHTML = '';
-          if (slots.length > 0) {
-            actionsEl.innerHTML += '<button type="button" class="btn-primary btn-block" id="btnBookFromDetail">Записаться</button>';
-          }
-          actionsEl.innerHTML += '<button type="button" class="btn-secondary btn-block" data-action="leave-request">Оставить заявку</button>';
-          if (t.has_pass_products || t.has_certificate_products) {
-            actionsEl.innerHTML += '<button type="button" class="btn-secondary btn-block" data-action="buy-pass">Абонементы/Сертификаты</button>';
-          }
-          appendTrainerActionChips(actionsEl, t, slots.length === 0);
-          var btnBook = document.getElementById('btnBookFromDetail');
-          if (btnBook) btnBook.onclick = function() { renderSlotPickList(); showScreen('screenSlotPick'); };
-          document.getElementById('trainerDetailSecondary').innerHTML = '';
-        }).catch(function() {
-          document.getElementById('trainerDetailSlots').innerHTML = '<div class="slots-title">Ближайшие слоты</div><div class="slots-empty">Не удалось загрузить слоты</div>';
-          var errActions = document.getElementById('trainerDetailActions');
-          errActions.innerHTML = '<button type="button" class="btn-secondary btn-block" data-action="leave-request">Оставить заявку</button>';
-          appendTrainerActionChips(errActions, t, false);
-          document.getElementById('trainerDetailSecondary').innerHTML = '';
-        });
       }
 
       function renderSlotPickList() {
@@ -3503,7 +3617,15 @@
             if (!tid) return null;
             var id = parseInt(tid, 10);
             if (!id) return null;
-            return { trainer_id: id, city_id: p.get('city_id'), service_id: p.get('service_id'), arena_id: p.get('arena_id'), arena_ids: p.get('arena_ids'), offset: p.get('offset') };
+            return {
+              trainer_id: id,
+              city_id: p.get('city_id'),
+              service_id: p.get('service_id'),
+              arena_id: p.get('arena_id'),
+              arena_ids: p.get('arena_ids'),
+              offset: p.get('offset'),
+              service_price_variant_id: p.get('service_price_variant_id'),
+            };
           })();
           if (returnCtx) {
             if (returnCtx.city_id != null) state.cityId = parseInt(returnCtx.city_id, 10) || null;
@@ -3519,6 +3641,11 @@
               else clearArenaSelection();
             }
             if (returnCtx.offset != null) state.offset = Math.max(0, parseInt(returnCtx.offset, 10) || 0);
+            var dVariant = returnCtx.service_price_variant_id;
+            if (dVariant != null && dVariant !== '') {
+              var dv = parseInt(dVariant, 10);
+              if (!isNaN(dv) && dv > 0) state.bookingContextServicePriceVariantId = dv;
+            }
           }
           function showInitialScreen() {
             if (state.cityId && state.serviceId) {
@@ -3539,6 +3666,7 @@
                 state.selectedTrainer = t;
                 state.trainerName = trainerName(t);
                 reconcileCatalogServiceWithTrainerAsync(t).then(function() {
+                  initTrainerSlotsArenaFilterFromCatalog(t);
                   renderTrainerDetail();
                   showScreen('screenTrainerDetail');
                 });
@@ -3551,6 +3679,7 @@
                     state.selectedTrainer = t2;
                     state.trainerName = trainerName(t2);
                     reconcileCatalogServiceWithTrainerAsync(t2).then(function() {
+                      initTrainerSlotsArenaFilterFromCatalog(t2);
                       renderTrainerDetail();
                       showScreen('screenTrainerDetail');
                     });
@@ -3575,6 +3704,7 @@
                     state.selectedTrainer = t2;
                     state.trainerName = trainerName(t2);
                     reconcileCatalogServiceWithTrainerAsync(t2).then(function() {
+                      initTrainerSlotsArenaFilterFromCatalog(t2);
                       renderTrainerDetail();
                       showScreen('screenTrainerDetail');
                     });
@@ -3602,6 +3732,7 @@
                 state.selectedTrainer = t;
                 state.trainerName = trainerName(t);
                 reconcileCatalogServiceWithTrainerAsync(t).then(function() {
+                  initTrainerSlotsArenaFilterFromCatalog(t);
                   renderTrainerDetail();
                   showScreen('screenTrainerDetail');
                 });

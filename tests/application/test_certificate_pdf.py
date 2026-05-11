@@ -25,6 +25,7 @@ def test_build_certificate_pdf_template_overlay() -> None:
         issued_at=date(2026, 3, 30),
         expires_at=None,
         activation_url="https://t.me/test_bot?start=cert_ABC-TEST-1",
+        client_bot_display_name="@test_bot",
     )
     assert len(b) > 1000
     doc = fitz.open(stream=b, filetype="pdf")

@@ -153,6 +153,12 @@ class Settings(BaseSettings):
 
     # Client bot: username for deep links (e.g. t.me/<username>?start=cert_XXX). Required for certificate email links.
     client_bot_username: str | None = None
+    # Gift certificate PDF: client-facing branding (instructions reference the Telegram mini-app paths below).
+    certificate_pdf_brand_display_name: str = "ICE STUDIO"
+    certificate_pdf_brand_tagline_ru: str = (
+        "Мы — ваш сервис записи на тренировки: абонементы и подарочные сертификаты в одном приложении. "
+        "Документ сформирован официально. Сохраните PDF — по нему вы всегда сможете найти код, если понадобится."
+    )
     # Trainer bot: username for deep links (t.me/<username>?start=link_<token>). Used by admin /trainer_welcome_link.
     trainer_bot_username: str | None = None
     # SMTP for sending certificate link emails. When any is missing, email sending is disabled.

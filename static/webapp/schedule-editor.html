@@ -24,8 +24,8 @@
       href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=optional"
     />
   </noscript>
-  <link rel="preload" href="schedule-editor-main.js?v=20260603" as="script" />
-  <link rel="stylesheet" href="mini-app-schedule-editor.css?v=20260603" />
+  <link rel="preload" href="schedule-editor-main.js?v=20260611" as="script" />
+  <link rel="stylesheet" href="mini-app-schedule-editor.css?v=20260609" />
   <link rel="stylesheet" href="mini-app-trainer-nav.css?v=20260429" />
 </head>
 <body>
@@ -144,7 +144,7 @@
     </div>
     <div id="templateList"></div>
   </div>
-  <nav id="scheduleWeekDayStrip" class="schedule-week-day-strip" aria-label="Перейти к дню недели" hidden></nav>
+  <nav id="scheduleWeekDayStrip" class="schedule-week-day-strip" aria-label="Выбор дня и переключение недели" hidden></nav>
   </div>
 
   <div id="screenBookingDetail" data-screen>
@@ -332,10 +332,27 @@
       </section>
     </div>
 
-    <!-- List of already-added precise slots (visible in both modes when list is non-empty) -->
+    <div id="calendarPreciseArenaWrap" class="slot-flow-panel" style="display:none;margin-top:12px;" aria-live="polite">
+      <div class="slot-flow-field slot-flow-field--wide">
+        <label for="calendarPreciseArenaSelect" class="slot-flow-label">Площадка для слотов «Точное время»</label>
+        <select id="calendarPreciseArenaSelect" class="slot-flow-select"></select>
+        <p class="slot-flow-help">Только добавленные вручную окна ниже привязаны к этой площадке; маркеры на сетке — к площадке по умолчанию.</p>
+      </div>
+    </div>
+
+    <div id="templatePreciseArenaWrap" class="slot-flow-panel" style="display:none;margin-top:12px;" aria-live="polite">
+      <div class="slot-flow-field slot-flow-field--wide">
+        <label for="templatePreciseArenaSelect" class="slot-flow-label">Площадка для слотов «Точное время» (шаблон)</label>
+        <select id="templatePreciseArenaSelect" class="slot-flow-select"></select>
+        <p class="slot-flow-help">Для окон вне сетки в этом дне шаблона. Отметки на сетке по-прежнему используют площадку по умолчанию при генерации недели.</p>
+      </div>
+    </div>
+
+    <!-- «Добавлено вручную» — только на вкладке «Точное время» (schedule-editor-main.js) -->
     <div id="preciseSlotsAdded" class="precise-slots-added" style="display:none;" aria-live="polite">
       <p class="slot-flow-label precise-slots-added-title">Добавлено вручную</p>
       <div id="preciseSlotsAddedList" class="precise-slots-added-list"></div>
+      <p id="preciseSlotsSaveHint" class="precise-slots-save-hint" style="display:none;" role="note">Чтобы сохранить, нажмите «Готово».</p>
     </div>
 
     <div id="templateCapacityPanel" class="template-cap-panel slot-flow-panel" style="display:none;">
@@ -669,6 +686,6 @@
   <script src="mini-app-trainer-home.js"></script>
   <script src="trainer-client-relay-ui.js?v=202605090"></script>
   <script src="trainer-relay-helpers.js?v=202605090"></script>
-  <script defer src="schedule-editor-main.js?v=20260603"></script>
+  <script defer src="schedule-editor-main.js?v=20260611"></script>
 </body>
 </html>

@@ -50,6 +50,10 @@ def serialize_client_booking(b: dict) -> dict:
         "service_client_notice": (
             (b.get("service_client_notice") or "").strip() or None
         ),
+        "hub_in_session": bool(b.get("hub_in_session")),
+        "arena_id": b.get("arena_id"),
+        "service_price_variant_id": b.get("service_price_variant_id"),
+        "trainer_city_id": b.get("trainer_city_id"),
     }
 
 

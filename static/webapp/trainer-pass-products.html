@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-  <title>Абонементы и сертификаты</title>
+  <title>Абонементы</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script src="mini-app-telegram-chrome.js"></script>
   <script src="mini-app-confirm.js"></script>
@@ -39,7 +39,7 @@
       window.__applyTrainerPassProductsTheme = applyAppTheme;
     })();
   </script>
-  <link rel="preload" href="trainer-pass-products-main.js?v=20260422" as="script" />
+  <link rel="preload" href="trainer-pass-products-main.js?v=20260513" as="script" />
   <link rel="stylesheet" href="mini-app-trainer-pass-products.css?v=20260501" />
   <link rel="stylesheet" href="mini-app-trainer-nav.css?v=20260422" />
 </head>
@@ -52,23 +52,28 @@
     <div class="pp-hero">
       <div class="pp-hero-inner">
         <p class="pp-hero-kicker">Продажи</p>
-        <h1 class="pp-hero-title">Абонементы и сертификаты</h1>
-        <p class="pp-hero-sub">Каталог, выдача клиентам и welcome-ссылки — в одном месте.</p>
+        <h1 class="pp-hero-title">Абонементы</h1>
+        <p class="pp-hero-sub">Каталог и выдача клиентам — в одном месте.</p>
       </div>
     </div>
+    <!-- TODO(certificates-tab): Restore second tab + panelCerts when gift certificate PDF/UX is production-ready (mirror client-passes-certificates.html). -->
+    <!--
     <div class="tabs">
       <button type="button" class="tab active" id="tabPasses" data-tab="passes">Абонементы</button>
       <button type="button" class="tab" id="tabCerts" data-tab="certs">Сертификаты</button>
     </div>
+    -->
     <div id="panelPasses" class="tab-panel active">
       <p class="products-hint" id="productsHint" style="display:none;">Нажмите на абонемент, чтобы изменить или удалить</p>
       <div id="listContent">
         <div class="pp-state pp-state--loading"><div class="pp-state-icon" aria-hidden="true">⏳</div><p class="pp-state-title">Загрузка</p><div class="pp-loading-dots" aria-hidden="true"><span></span><span></span><span></span></div></div>
       </div>
       <button type="button" class="pp-btn pp-btn--primary pp-stack-btn" id="btnIssuePass">📦 Выдать абонемент</button>
-      <button type="button" class="pp-btn pp-btn--soft pp-stack-btn" id="btnPassWelcomeLink">🔗 Создать welcome-ссылку (абонемент)</button>
+      <!-- Temporarily hidden: pass-product welcome link — re-enable when product is ready (keep screenPassWelcomeLink + API). -->
+      <!-- <button type="button" class="pp-btn pp-btn--soft pp-stack-btn" id="btnPassWelcomeLink">🔗 Создать welcome-ссылку (абонемент)</button> -->
       <button type="button" class="pp-btn pp-btn--soft pp-stack-btn" id="btnAdd">+ Добавить абонемент</button>
     </div>
+    <!--
     <div id="panelCerts" class="tab-panel">
       <p class="products-hint" id="certsHint" style="display:none;">Нажмите на сертификат, чтобы изменить или удалить</p>
       <div id="certListContent">
@@ -78,6 +83,7 @@
       <button type="button" class="pp-btn pp-btn--soft pp-stack-btn" id="btnAddCert">+ Добавить сертификат</button>
       <p class="cert-issued-hint">Списание с сертификата происходит автоматически, когда вы отмечаете занятие как «Проведено» в расписании.</p>
     </div>
+    -->
   </div>
 
   <div id="screenCertIssue" data-screen>
@@ -256,11 +262,11 @@
     <div class="pp-form-fields">
       <div class="form-group-checkbox">
         <label>
-          <input type="checkbox" id="certAnyAmount" checked>
-          <span>Любая сумма (клиент и тренер договариваются)</span>
+          <input type="checkbox" id="certAnyAmount">
+          <span>Любая сумма</span>
         </label>
       </div>
-      <div class="form-group" id="certAmountGroup" style="display: none;">
+      <div class="form-group" id="certAmountGroup">
         <label for="certAmountByn">Сумма, BYN</label>
         <input type="number" id="certAmountByn" min="1" step="1" placeholder="100" inputmode="numeric">
       </div>
@@ -278,7 +284,7 @@
     <button type="button" class="btn-delete" id="btnDeleteCert" style="display: none;">Удалить сертификат</button>
   </div>
   <script src="mini-app-trainer-gate.js"></script>
-  <script defer src="trainer-pass-products-main.js?v=20260422"></script>
+  <script defer src="trainer-pass-products-main.js?v=20260513"></script>
   <script defer src="mini-app-trainer-home.js"></script>
 </body>
 </html>

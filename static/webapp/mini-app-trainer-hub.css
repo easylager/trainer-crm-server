@@ -2814,6 +2814,16 @@
       align-items: center;
       gap: 8px;
     }
+    /* Secondary CTA left of primary (DOM order is primary, then secondary). */
+    .hub-schedule-rhythm-hint__actions.hub-rhythm-actions--secondary-first .hub-rhythm-slot-cta2 {
+      order: 1;
+    }
+    .hub-schedule-rhythm-hint__actions.hub-rhythm-actions--secondary-first .btn-sm.btn-primary {
+      order: 2;
+    }
+    .hub-schedule-rhythm-hint__actions.hub-rhythm-actions--secondary-first .hub-schedule-rhythm-hint__dismiss {
+      order: 3;
+    }
     .hub-schedule-rhythm-hint__actions .btn-sm {
       padding: 8px 12px;
       font-size: 12px;

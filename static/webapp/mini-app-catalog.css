@@ -428,7 +428,7 @@
       font-weight: 600;
       color: var(--tg-theme-text-color);
     }
-    /* Arenas: primary vs secondary + client hint (catalog self-booking = primary only) */
+    /* Arenas: primary vs secondary + short client hint */
     .trainer-detail-stat--arenas {
       grid-column: 1 / -1;
     }
@@ -482,6 +482,42 @@
       margin: 10px 0 0;
       padding-top: 10px;
       border-top: 1px solid rgba(128, 128, 128, 0.18);
+    }
+    .trainer-detail-arena-slot-filter {
+      padding: 0 2px 4px;
+      margin-bottom: 8px;
+    }
+    .trainer-detail-arena-filter-title {
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      color: var(--tg-theme-hint-color);
+      margin-bottom: 8px;
+    }
+    .trainer-detail-arena-filter-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .trainer-detail-arena-chip {
+      -webkit-appearance: none;
+      appearance: none;
+      font: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      padding: 8px 12px;
+      border-radius: 999px;
+      border: 2px solid rgba(128, 128, 128, 0.22);
+      background: var(--tg-theme-secondary-bg-color);
+      color: var(--tg-theme-text-color);
+      cursor: pointer;
+      touch-action: manipulation;
+      transition: border-color 0.12s ease, background 0.12s ease;
+    }
+    .trainer-detail-arena-chip--active {
+      border-color: color-mix(in srgb, var(--tg-theme-button-color) 55%, transparent);
+      background: color-mix(in srgb, var(--tg-theme-button-color) 16%, var(--tg-theme-secondary-bg-color));
+      color: var(--tg-theme-button-color);
     }
     /* Callout: описание только когда клиент зашёл с выбранной в каталоге услугой (см. renderTrainerDetail). */
     .trainer-detail-service-callout {

@@ -58,6 +58,41 @@
       font-size: 14px;
       font-weight: 600;
     }
+    .cert-sample-preview {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+      margin-bottom: 18px;
+      padding: 14px 14px 16px;
+      border-radius: 14px;
+      background: var(--tg-theme-secondary-bg-color);
+      border: 1px solid rgba(128, 128, 128, 0.2);
+    }
+    .cert-sample-preview__icon { font-size: 28px; line-height: 1; flex-shrink: 0; }
+    .cert-sample-preview__title {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--tg-theme-text-color);
+      margin: 0 0 6px;
+      letter-spacing: -0.02em;
+    }
+    .cert-sample-preview__text {
+      margin: 0 0 12px;
+      font-size: 14px;
+      line-height: 1.45;
+      color: var(--tg-theme-hint-color);
+    }
+    .cert-sample-preview__btn {
+      display: inline-block;
+      padding: 10px 14px;
+      border-radius: 12px;
+      font-size: 14px;
+      font-weight: 600;
+      text-decoration: none;
+      background: var(--tg-theme-button-color);
+      color: var(--tg-theme-button-text-color);
+      box-shadow: 0 3px 12px rgba(16, 185, 129, 0.22);
+    }
   </style>
   <link rel="stylesheet" href="mini-app-client-nav.css" />
 </head>
@@ -76,6 +111,14 @@
     <div class="cert-activate-row">
       <input id="certCodeInput" class="cert-code-input" type="text" placeholder="Например, CERT-ABC123">
       <button type="button" class="btn-primary" id="btnActivateCert">Активировать</button>
+    </div>
+  </div>
+  <div class="cert-sample-preview" id="certSamplePreview">
+    <div class="cert-sample-preview__icon" aria-hidden="true">📄</div>
+    <div>
+      <div class="cert-sample-preview__title">Пример PDF на почте</div>
+      <p class="cert-sample-preview__text">Так выглядит вложение с подарочным сертификатом (тестовые данные). Настоящий файл тренер отправит на ваш email после оплаты.</p>
+      <a class="cert-sample-preview__btn" id="certSamplePdfLink" href="#" target="_blank" rel="noopener noreferrer">Открыть пример PDF</a>
     </div>
   </div>
   <div id="listContent"></div>
@@ -115,7 +158,20 @@
         if (status === 'cancelled') return 'Отменён';
         return status || 'Активен';
       }
+      function updateCertSamplePdfHref() {
+        var a = document.getElementById('certSamplePdfLink');
+        if (!a) return;
+        var q = initData() ? '?init_data=' + encodeURIComponent(initData()) : '';
+        var path = '/api/webapp/client/certificates/sample-pdf' + q;
+        try {
+          a.href = new URL(path, window.location.origin).href;
+        } catch (e) {
+          a.href = path;
+        }
+      }
+
       function loadList() {
+        updateCertSamplePdfHref();
         var url = '/api/webapp/client/certificates' + (initData() ? '?init_data=' + encodeURIComponent(initData()) : '');
         document.getElementById('listContent').innerHTML = '<div class="loading">Загрузка…</div>';
         fetch(url, { headers: headers() })
@@ -198,6 +254,16 @@
           activateCertificate();
         }
       });
+
+      var certSamplePdfLink = document.getElementById('certSamplePdfLink');
+      if (certSamplePdfLink) {
+        certSamplePdfLink.addEventListener('click', function(ev) {
+          if (tg && typeof tg.openLink === 'function') {
+            ev.preventDefault();
+            tg.openLink(certSamplePdfLink.href, { try_instant_view: false });
+          }
+        });
+      }
 
       loadList();
     })();

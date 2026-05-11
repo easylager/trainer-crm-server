@@ -704,18 +704,18 @@ async def cmd_start(message: Message) -> None:
                     await message.answer(cert_body, reply_markup=keyboard, parse_mode=ParseMode.HTML)
                 else:
                     await message.answer(msg.CLIENT_CERT_CODE_INVALID)
-                else:
-                    async with async_session_factory() as db_session:
-                        trainer = await get_trainer(db_session, trainer_id)
-                    base = (Settings().webapp_base_url or "").rstrip("/")
-                    welcome_body = _welcome_pass_invite_body(trainer)
-                    await message.answer(
-                        welcome_body,
-                        parse_mode=ParseMode.HTML,
-                        reply_markup=_trainer_book_and_buy_pass_markup(
-                            base, trainer_id, service_id=book_url_svc
-                        ),
-                    )
+            else:
+                async with async_session_factory() as db_session:
+                    trainer = await get_trainer(db_session, trainer_id)
+                base = (Settings().webapp_base_url or "").rstrip("/")
+                welcome_body = _welcome_pass_invite_body(trainer)
+                await message.answer(
+                    welcome_body,
+                    parse_mode=ParseMode.HTML,
+                    reply_markup=_trainer_book_and_buy_pass_markup(
+                        base, trainer_id, service_id=book_url_svc
+                    ),
+                )
         elif token_type == WELCOME_TOKEN_TYPE_PASS:
             async with async_session_factory() as db_session:
                 trainer = await get_trainer(db_session, trainer_id)

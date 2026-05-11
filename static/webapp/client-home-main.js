@@ -81,6 +81,14 @@
           .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
       }
 
+      /** PRD E1 parity with trainer hub: server sets hub_in_session inside [start, end) in Minsk wall time. */
+      function hubSessionNowPillHtml(b) {
+        if (!b || !b.hub_in_session) return '';
+        return (
+          '<span class="hub-session-now-pill" role="status" aria-label="Текущее занятие">сейчас</span>'
+        );
+      }
+
       function initials(name) {
         if (!name) return '?';
         var parts = String(name).trim().split(/\s+/);
@@ -232,7 +240,10 @@
                 '<span class="hub-next-card-eyebrow-dot"></span>' +
                 'Ближайшая тренировка' +
               '</div>' +
-              '<div class="hub-next-card-time">' + esc(time) + '</div>' +
+              '<div class="hub-next-card-time-row">' +
+                '<div class="hub-next-card-time">' + esc(time) + '</div>' +
+                hubSessionNowPillHtml(b) +
+              '</div>' +
               '<div class="hub-next-card-date">' + esc(dateLabel) + ' · ' + esc(String(dur)) + ' мин</div>' +
               '<div class="hub-next-card-meta">' +
                 '<span class="hub-next-card-trainer">' +
@@ -596,7 +607,10 @@
             parts.push(
               '<div class="hub-booking-row ' + rowClass + '" data-bid="' + esc(String(b.id)) + '">' +
                 '<div class="hub-booking-time-col">' +
-                  '<div class="hub-booking-time">' + esc(time) + '</div>' +
+                  '<div class="hub-booking-time-block">' +
+                    '<div class="hub-booking-time">' + esc(time) + '</div>' +
+                    hubSessionNowPillHtml(b) +
+                  '</div>' +
                   '<div class="hub-booking-dur">' + esc(String(dur)) + ' мин</div>' +
                 '</div>' +
                 '<div class="hub-booking-divider"></div>' +

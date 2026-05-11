@@ -529,7 +529,7 @@ class TrainerScheduleTemplate(Base):
     )  # Required when capacity > 1 (group slot for this service).
     arena_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("arenas.id", ondelete="SET NULL"), nullable=True, index=True
-    )  # When capacity > 1: venue fixed on generated slots (mirrors slots.arena_id).
+    )  # Group: venue on rows; individual: optional override (NULL → trainer default when generating slots).
 
     trainer: Mapped["Trainer"] = relationship(back_populates="schedule_templates", lazy="raise")
 

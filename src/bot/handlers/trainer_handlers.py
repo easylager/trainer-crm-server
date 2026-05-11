@@ -7,6 +7,7 @@ import html
 from datetime import date, datetime, time, timedelta
 from itertools import groupby
 
+from aiogram.exceptions import TelegramBadRequest
 from aiogram import Bot, F, Router
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ChatAction, ParseMode
@@ -40,6 +41,7 @@ from src.application.booking_use_cases import (
     list_bookings_for_trainer,
     list_trainer_clients,
     set_booking_trainer_review,
+    trainer_has_access_to_client,
     trainer_repeat_booking_same_time_next_week,
 )
 from src.application.client_dossier_use_cases import add_client_entry_with_date
@@ -57,6 +59,7 @@ from src.application.client_request_use_cases import (
     clear_trainer_pending_request_booking,
     create_request_decline,
     create_request_response,
+    get_client_request_notification_payload_for_trainer,
     get_request_client_for_trainer_booking,
     list_requests_for_trainer,
 )
@@ -97,6 +100,7 @@ from src.application.trainer_schedule_use_cases import (
 )
 from src.application.trainer_client_relay_use_cases import (
     close_relay_session,
+    open_relay_session,
     relay_session_context_for_id,
     sanitize_relay_body,
 )
@@ -2541,6 +2545,117 @@ async def show_request_detail(callback: CallbackQuery) -> None:
         ]
     keyboard = InlineKeyboardMarkup(inline_keyboard=button_rows)
     await callback.message.edit_text(text, reply_markup=keyboard)
+
+
+async def _trainer_open_relay_chat_for_client_request(
+    *,
+    callback: CallbackQuery,
+    trainer_telegram_id: int,
+    request_id: int,
+) -> None:
+    """Shared: open relay after callback.answer() (avoids Telegram callback timeout)."""
+    await sweep_idle_relay_sessions_and_notify()
+    async with async_session_factory() as session:
+        p = await get_client_request_notification_payload_for_trainer(
+            session,
+            trainer_telegram_id=trainer_telegram_id,
+            request_id=request_id,
+        )
+        if not p:
+            if callback.message:
+                await callback.message.answer(msg.TRAINER_ERROR_REQUEST_GONE)
+            return
+        trainer_row_id = await get_trainer_id_by_telegram_id(session, trainer_telegram_id)
+        if not trainer_row_id:
+            if callback.message:
+                await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
+            return
+        cid = p.get("client_id")
+        if cid is None:
+            if callback.message:
+                await callback.message.answer(msg.TRAINER_ERROR_REQUEST_GONE)
+            return
+        if p.get("client_telegram_id") is None:
+            if callback.message:
+                await callback.message.answer(msg.TRAINER_CERT_ORDER_RELAY_NO_CLIENT_TELEGRAM)
+            return
+        if not await trainer_has_access_to_client(session, int(trainer_row_id), int(cid)):
+            if callback.message:
+                await callback.message.answer(msg.TRAINER_CERT_ORDER_RELAY_TRAINER_CANT_ACCESS_CLIENT)
+            return
+        sid = await open_relay_session(session, trainer_id=int(trainer_row_id), client_id=int(cid))
+        await session.commit()
+
+    set_trainer_relay_reply_pending(int(trainer_telegram_id), int(sid))
+    if callback.message:
+        await callback.message.answer(msg.TRAINER_RELAY_REPLY_PROMPT)
+
+
+def _client_request_relay_callback_request_id(data: str) -> int | None:
+    """Parse request id from cq_rly: or legacy co_rly: callback_data."""
+    if data.startswith(msg.CLIENT_REQUEST_RELAY_CHAT_PREFIX):
+        return safe_parse_id(data[len(msg.CLIENT_REQUEST_RELAY_CHAT_PREFIX) :])
+    if data.startswith(msg.CERT_ORDER_FALLBACK_RELAY_CALLBACK_PREFIX):
+        return safe_parse_id(data[len(msg.CERT_ORDER_FALLBACK_RELAY_CALLBACK_PREFIX) :])
+    return None
+
+
+@router.callback_query(
+    lambda c: c.data
+    and (
+        str(c.data).startswith(msg.CLIENT_REQUEST_RELAY_CHAT_PREFIX)
+        or str(c.data).startswith(msg.CERT_ORDER_FALLBACK_RELAY_CALLBACK_PREFIX)
+    )
+)
+async def on_client_request_relay_chat(callback: CallbackQuery) -> None:
+    """«Написать клиенту» в пуше по заявке (абонемент/сертификат) или legacy co_rly: — relay в боте."""
+    if not callback.message:
+        await callback.answer()
+        return
+    tg_id = callback.from_user.id if callback.from_user else 0
+    req_id = _client_request_relay_callback_request_id(str(callback.data or ""))
+    if not tg_id or req_id is None:
+        await callback.answer(msg.TRAINER_ERROR_REQUEST_BOOK_PAYLOAD_SHORT, show_alert=True)
+        return
+    await callback.answer()
+    await _trainer_open_relay_chat_for_client_request(
+        callback=callback,
+        trainer_telegram_id=int(tg_id),
+        request_id=int(req_id),
+    )
+
+
+@router.callback_query(F.data.startswith(msg.CERT_ORDER_FALLBACK_PROMPT_CALLBACK_PREFIX))
+async def on_cert_order_fallback_followup_message(callback: CallbackQuery) -> None:
+    """Legacy «Чат не открылся» — сразу открывает relay (старые уведомления с tg:// + этой кнопкой)."""
+    if not callback.message:
+        await callback.answer()
+        return
+    tg_id = callback.from_user.id if callback.from_user else 0
+    raw = callback.data or ""
+    req_id = safe_parse_id(raw[len(msg.CERT_ORDER_FALLBACK_PROMPT_CALLBACK_PREFIX) :])
+    if not tg_id or req_id is None:
+        await callback.answer(msg.TRAINER_ERROR_REQUEST_BOOK_PAYLOAD_SHORT, show_alert=True)
+        return
+    await callback.answer()
+    await _trainer_open_relay_chat_for_client_request(
+        callback=callback,
+        trainer_telegram_id=int(tg_id),
+        request_id=int(req_id),
+    )
+
+
+@router.callback_query(F.data.startswith(msg.CERT_ORDER_FALLBACK_DISMISS_CALLBACK_PREFIX))
+async def on_cert_order_fallback_followup_dismiss(callback: CallbackQuery) -> None:
+    """Remove buttons from the fallback follow-up message."""
+    await callback.answer()
+    if not callback.message:
+        return
+    try:
+        await callback.message.edit_reply_markup(reply_markup=None)
+    except TelegramBadRequest as e:
+        if "message is not modified" not in str(e).lower():
+            raise
 
 
 @router.callback_query(lambda c: c.data and c.data.startswith(REQUEST_RESPOND_PREFIX))

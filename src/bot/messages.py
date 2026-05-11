@@ -576,7 +576,38 @@ TRAINER_PASS_ORDER_NOTIFICATION = (
     "Напишите клиенту, обсудите оплату и выдайте абонемент."
 )
 TRAINER_PASS_ORDER_BTN_WRITE = "✍️ Написать клиенту"
+# Same row as DM link: relay still works when trainer_app polling is up (optional second tap).
+TRAINER_ORDER_WRITE_VIA_BOT_BTN = "🤖 Через бота"
 TRAINER_PASS_ORDER_BTN_ISSUE = "📦 Выдать абонемент"
+TRAINER_ORDER_BTN_WRITE_VIA_BOT = "💬 Написать через бот"
+# Pass/cert catalog pushes: «Написать клиенту» = tg:// DM; опционально «Через бота» = relay (нужен polling trainer_app).
+CLIENT_REQUEST_RELAY_CHAT_PREFIX = "cq_rly:"
+# Legacy inline keyboards still в чатах: «Чат не открылся» / второй шаг после старых tg://‑кнопок.
+CERT_ORDER_FALLBACK_PROMPT_CALLBACK_PREFIX = "co_fb:"
+CERT_ORDER_FALLBACK_DISMISS_CALLBACK_PREFIX = "co_fdx:"
+# Legacy: было «Написать через бот» во втором сообщении — тот же relay, что и cq_rly:.
+CERT_ORDER_FALLBACK_RELAY_CALLBACK_PREFIX = "co_rly:"
+TRAINER_CERT_ORDER_BTN_IF_CHAT_BLOCKED = "💬 Чат не открылся"
+TRAINER_CERT_ORDER_FALLBACK_FOLLOWUP_TEXT = (
+    "Не удалось открыть личный чат. У клиента могут быть закрыты входящие сообщения.\n\n"
+    "Можете связаться с клиентом через бота — кнопка ниже."
+)
+TRAINER_CERT_ORDER_RELAY_NO_CLIENT_TELEGRAM = (
+    "У клиента нет Telegram — переписка через бота недоступна. Свяжитесь по email или в мини-приложении."
+)
+TRAINER_CERT_ORDER_RELAY_TRAINER_CANT_ACCESS_CLIENT = (
+    "Сейчас нельзя написать этому клиенту через бота (нет активной связи в CRM)."
+)
+TRAINER_CERT_ORDER_FALLBACK_BTN_CANCEL = "Отмена"
+TRAINER_CERT_ORDER_NOTIFICATION = (
+    "🎁 <b>Клиент заказывает сертификат</b>\n\n"
+    "<b>Клиент (заказчик)</b> — {client_name}\n"
+    "<b>Сертификат</b> — {cert_name}\n"
+    "<b>Получатель</b> — {recipient_name}\n"
+    "<b>Email для PDF</b> — {recipient_email}\n\n"
+    "Свяжитесь для оплаты и выдайте сертификат."
+)
+TRAINER_CERT_ORDER_BTN_ISSUE = "🎁 Выдать сертификат"
 CLIENT_RESPONSE_NOTIFICATION = (
     "📩 <b>Отклик по вашей заявке</b>\n\n"
     "Тренер ответил — откройте список откликов кнопкой ниже: там можно написать или записаться."

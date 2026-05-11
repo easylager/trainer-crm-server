@@ -80,6 +80,7 @@ from src.application.booking_use_cases import (
     get_trainer_client_next_booking,
     get_trainer_client_for_card,
     get_trainer_client_last_booking_service_defaults,
+    get_trainer_client_last_booking_price_variant_for_service,
     get_trainer_client_latest_booking_service_id,
     get_trainer_group_slot_hub,
     resolve_client_catalog_service_for_trainer,
@@ -141,6 +142,11 @@ from src.application.client_pass_order_use_cases import (
     split_pass_order_comment,
     submit_pass_product_order_request,
 )
+from src.application.client_cert_order_use_cases import (
+    get_primary_cert_order_catalog,
+    split_cert_order_comment,
+    submit_certificate_product_order_request,
+)
 from src.application.client_session_use_cases import (
     get_or_create_session as get_client_session,
     get_session as read_client_bot_session,
@@ -165,6 +171,7 @@ from src.application.client_trainer_edge_use_cases import (
     unsubscribe_notify_slots as uc_unsubscribe_notify_slots,
 )
 from src.application.catalog_use_cases import list_arenas, list_cities, list_services
+from src.application.trainer_schedule_use_cases import trainer_default_slot_arena_id
 from src.application.recurring_use_cases import (
     cancel_recurring_client_slot,
     create_recurring_client_slot,
@@ -221,6 +228,7 @@ from src.application.certificate_use_cases import (
     AMOUNT_CENTS_UNSET,
     create_certificate_product,
     delete_certificate_product,
+    get_certificate_product,
     get_certificate_file_key,
     get_idempotency_response,
     insert_certificate_email_outbox,
@@ -314,7 +322,7 @@ from src.application.trainer_use_cases import (
 from src.bot import messages as msg
 from src.bot.share_catalog_tip import send_trainer_share_catalog_tip_to_chat
 from src.bot.trainer_cancel_client_notify import send_trainer_cancel_notification_for_booking_now
-from src.shared.ttl_cache import get_slots_cached, set_slots_cached
+from src.shared.ttl_cache import get_slots_cached, invalidate_slots_for_trainer, set_slots_cached
 from src.shared.config import Settings
 from src.shared.map_links import build_yandex_by_map_url
 from src.shared.notification_hours import NOTIFICATION_TZ, working_hours_between
@@ -749,6 +757,10 @@ class ScheduleTemplateSlotBody(BaseModel):
         le=480,
         description="Optional per-slot duration; omit to use top-level duration_minutes for this row.",
     )
+    arena_id: int | None = Field(
+        default=None,
+        description="For capacity == 1 only: venue for this template row; omit → default arena when generating slots.",
+    )
 
 
 class ScheduleTemplateDayBody(BaseModel):
@@ -819,6 +831,7 @@ async def put_schedule_templates_day(
     minute_to_cap: dict[int, int] = {}
     minute_to_service: dict[int, int | None] = {}
     minute_to_duration: dict[int, int] = {}
+    minute_to_row_arena: dict[int, int] = {}
     for s in slots:
         sm = s.hour * 60 + s.minute
         if sm in minute_to_cap:
@@ -827,6 +840,11 @@ async def put_schedule_templates_day(
         row_dur = int(s.duration_minutes) if s.duration_minutes is not None else int(body.duration_minutes)
         minute_to_duration[sm] = row_dur
         if s.capacity > 1:
+            if s.arena_id is not None:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Для групповых слотов в шаблоне указывайте площадку через «Площадка для группы», а не через поле слота.",
+                )
             if s.service_id is None:
                 raise HTTPException(
                     status_code=400,
@@ -837,6 +855,15 @@ async def put_schedule_templates_day(
             minute_to_service[sm] = int(s.service_id)
         else:
             minute_to_service[sm] = None
+            if s.arena_id is not None:
+                aid_cell = int(s.arena_id)
+                r_own = await session.execute(
+                    text("SELECT 1 FROM trainer_arenas WHERE trainer_id = :tid AND arena_id = :aid"),
+                    {"tid": trainer_id, "aid": aid_cell},
+                )
+                if not r_own.fetchone():
+                    raise HTTPException(status_code=400, detail="Площадка не привязана к вашему профилю")
+                minute_to_row_arena[sm] = aid_cell
     try:
         await replace_templates_for_day(
             session,
@@ -847,6 +874,7 @@ async def put_schedule_templates_day(
             minute_to_service,
             group_arena_id=int(body.group_arena_id) if body.group_arena_id is not None else None,
             minute_to_duration=minute_to_duration,
+            minute_to_arena_id=minute_to_row_arena if minute_to_row_arena else None,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
@@ -869,10 +897,14 @@ def _hhmm_strings_to_minutes(values: list[str]) -> set[int]:
 
 
 class SlotEntryBody(BaseModel):
-    """Single precise slot: start time + individual duration (bypasses arena grid validation)."""
+    """Single slot row: start time + duration; optional venue when capacity=1 (mixed grid + precise)."""
 
     start_time: str = Field(..., description="HH:MM start of the slot")
     duration_minutes: int = Field(ge=15, le=480)
+    arena_id: int | None = Field(
+        default=None,
+        description="When capacity=1, optional venue for this start; omitted → trainer default slot arena",
+    )
 
 
 class ScheduleSlotsDayBody(BaseModel):
@@ -882,7 +914,10 @@ class ScheduleSlotsDayBody(BaseModel):
     duration_minutes: int = Field(default=45, ge=15, le=480)
     capacity: int = Field(default=1, ge=1, le=500)
     group_service_id: int | None = Field(default=None, description="services.id for group slots (capacity > 1)")
-    arena_id: int | None = Field(default=None, description="Venue for new group slots (capacity > 1); fixed on slot")
+    arena_id: int | None = Field(
+        default=None,
+        description="Venue for new group slots (capacity > 1), or uniform venue for slot_entries without per-entry arena_id",
+    )
     # Per-slot pairs: each entry carries its own duration and bypasses arena grid alignment check.
     slot_entries: list[SlotEntryBody] | None = Field(default=None)
 
@@ -943,12 +978,28 @@ async def post_schedule_slots(
     if body.slot_entries is not None:
         # Per-slot precise mode: each entry carries its own start + duration, no grid validation.
         per_slot: dict[int, int] = {}
+        per_slot_arena: dict[int, int] = {}
         for entry in body.slot_entries:
             try:
                 m_set = _hhmm_strings_to_minutes([entry.start_time])
             except ValueError as e:
                 raise HTTPException(status_code=400, detail=str(e)) from e
-            per_slot[next(iter(m_set))] = entry.duration_minutes
+            start_m = next(iter(m_set))
+            per_slot[start_m] = entry.duration_minutes
+            if entry.arena_id is not None:
+                if body.capacity != 1:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Площадку на уровне одного слота можно задать только для индивидуальных слотов.",
+                    )
+                aid_ent = int(entry.arena_id)
+                rchk_ent = await session.execute(
+                    text("SELECT 1 FROM trainer_arenas WHERE trainer_id = :tid AND arena_id = :aid"),
+                    {"tid": trainer_id, "aid": aid_ent},
+                )
+                if not rchk_ent.fetchone():
+                    raise HTTPException(status_code=400, detail="Площадка не привязана к вашему профилю")
+                per_slot_arena[start_m] = aid_ent
         try:
             await replace_slots_for_day(
                 session,
@@ -960,12 +1011,14 @@ async def post_schedule_slots(
                 group_service_id=body.group_service_id,
                 slot_arena_id=arena_arg,
                 per_slot_duration=per_slot,
+                per_slot_arena_id=per_slot_arena if per_slot_arena else None,
             )
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
         if per_slot:
             background_tasks.add_task(_bg_notify_slot_waitlist, trainer_id)
-        return {"ok": True}
+        invalidate_slots_for_trainer(trainer_id)
+        return {"ok": True, "trainer_id": trainer_id}
 
     if body.start_times is not None:
         try:
@@ -995,6 +1048,7 @@ async def post_schedule_slots(
         background_tasks.add_task(_bg_notify_slot_waitlist, trainer_id)
 
     # Mini app: schedule-editor clears hub rhythm dismiss + sets fill-slots boost (per-trainer storage).
+    invalidate_slots_for_trainer(trainer_id)
     return {"ok": True, "trainer_id": trainer_id}
 
 
@@ -1050,7 +1104,35 @@ async def delete_schedule_slot(
     return {"ok": True}
 
 
-# --- Client booking Mini App (initData validated with client bot token) ---
+def _client_slots_arena_ids_query_param(raw: str | None) -> frozenset[int] | None:
+    """Comma-separated positive arena IDs (OR semantics). Blank or invalid tokens ⇒ no filter."""
+    if raw is None or not str(raw).strip():
+        return None
+    out: list[int] = []
+    for part in str(raw).replace(" ", "").split(","):
+        if not part or not part.isdigit():
+            continue
+        v = int(part)
+        if v > 0:
+            out.append(v)
+    return frozenset(out) if out else None
+
+
+def _filter_client_slots_payload_by_arenas(rows: list[dict], arena_ids: frozenset[int] | None) -> list[dict]:
+    """Post-filter serialized slot rows without burning a cache entry per arena combination."""
+    if not arena_ids:
+        return rows
+    filtered: list[dict] = []
+    for row in rows:
+        aid = row.get("arena_id")
+        if aid is None:
+            continue
+        try:
+            if int(aid) in arena_ids:
+                filtered.append(row)
+        except (TypeError, ValueError):
+            continue
+    return filtered
 
 
 def _client_catalog_slot_map_link(s: dict) -> str | None:
@@ -1078,6 +1160,10 @@ async def get_client_slots(
         None,
         description="Catalog/service context: show individual slots + group slots for this service only",
     ),
+    arena_ids: str | None = Query(
+        None,
+        description="Comma-separated arena IDs (OR); filters serialized slots",
+    ),
     session: AsyncSession = Depends(get_session),
     principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
 ):
@@ -1085,11 +1171,14 @@ async def get_client_slots(
     Available slots for a trainer (client view). Pass min_hours and trainer_name from
     catalog when opening card to avoid extra get_trainer round-trip.
     Pass service_id from catalog filter so group slots are scoped to that service.
+    arena_ids restricts the response to slots on those venues (NULL slot venues resolve
+    to the trainer schedule default arena for filtering and JSON).
     Without service_id, only individual (capacity 1) slots are returned — unless the
     client's bot session already pins the same trainer and a service (welcome link,
     book button without query param): then group slots for that service are included.
     """
     client_telegram_id = client_catalog_telegram_key(principal)
+    arena_filter = _client_slots_arena_ids_query_param(arena_ids)
 
     if not await trainer_allows_online_booking(session, trainer_id):
         trainer_row = await get_trainer(session, trainer_id)
@@ -1129,7 +1218,11 @@ async def get_client_slots(
 
     cached_slots = get_slots_cached(trainer_id, min_hours_val, filter_service_id)
     if cached_slots is not None:
-        return {"trainer_name": trainer_name_val, "slots": cached_slots, "online_booking_available": True}
+        return {
+            "trainer_name": trainer_name_val,
+            "slots": _filter_client_slots_payload_by_arenas(cached_slots, arena_filter),
+            "online_booking_available": True,
+        }
 
     this_m = _this_week_monday()
     next_m = this_m + timedelta(days=7)
@@ -1155,12 +1248,17 @@ async def get_client_slots(
         available = filtered
     else:
         available = [s for s in available if max(1, int(s.get("capacity") or 1)) == 1]
-    serialized = []
+    default_arena_for_slot = await trainer_default_slot_arena_id(session, trainer_id)
+    serialized_full: list[dict] = []
     for s in available:
         an = (s.get("arena_name") or "").strip() or None
         aa = (s.get("arena_address") or "").strip() or None
         acn = (s.get("arena_city_name") or "").strip() or None
-        serialized.append(
+        raw_slot_arena = s.get("arena_id")
+        eff_slot_arena = (
+            int(raw_slot_arena) if raw_slot_arena is not None else default_arena_for_slot
+        )
+        serialized_full.append(
             {
                 "id": s["id"],
                 "slot_date": s["slot_date"].isoformat()
@@ -1178,15 +1276,19 @@ async def get_client_slots(
                     max(1, int(s.get("capacity") or 1)) - int(s.get("active_bookings") or 0),
                 ),
                 "service_id": s.get("service_id"),
-                "arena_id": s.get("arena_id"),
+                "arena_id": eff_slot_arena,
                 "arena_name": an,
                 "arena_address": aa,
                 "arena_city_name": acn,
                 "map_link": _client_catalog_slot_map_link(s),
             }
         )
-    set_slots_cached(trainer_id, min_hours_val, serialized, filter_service_id)
-    return {"trainer_name": trainer_name_val, "slots": serialized, "online_booking_available": True}
+    set_slots_cached(trainer_id, min_hours_val, serialized_full, filter_service_id)
+    return {
+        "trainer_name": trainer_name_val,
+        "slots": _filter_client_slots_payload_by_arenas(serialized_full, arena_filter),
+        "online_booking_available": True,
+    }
 
 
 def _this_week_monday() -> date:
@@ -1321,19 +1423,41 @@ async def post_client_booking(
             arena_for_booking = None
             used_primary_despite_filter = False
         else:
-            sess_row = await get_client_session(telegram_id, session)
-            sess_arena = sess_row.get("selected_arena_id") if sess_row else None
-            resolved, err, used_primary_despite_filter = await resolve_arena_for_client_self_booking(
-                session, trainer_id, sess_arena
-            )
-            if err == "no_venue":
-                raise HTTPException(
-                    status_code=400,
-                    detail="У тренера не настроена основная площадка — запись через каталог недоступна.",
+            slot_arena_sa = slot.get("arena_id")
+            if slot_arena_sa is not None:
+                r_sa = await session.execute(
+                    text("SELECT 1 FROM trainer_arenas WHERE trainer_id = :tid AND arena_id = :aid"),
+                    {"tid": trainer_id, "aid": int(slot_arena_sa)},
                 )
-            if err == "invalid_arena":
-                raise HTTPException(status_code=400, detail="Выбранная арена недоступна для этого тренера.")
-            arena_for_booking = resolved
+                if not r_sa.fetchone():
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Слот привязан к площадке, недоступной для этого тренера.",
+                    )
+                arena_for_booking = int(slot_arena_sa)
+                sess_row = await get_client_session(telegram_id, session)
+                sess_arena = sess_row.get("selected_arena_id") if sess_row else None
+                primary_sa = await get_trainer_primary_arena_resolved(session, trainer_id)
+                used_primary_despite_filter = bool(
+                    sess_arena is not None
+                    and primary_sa is not None
+                    and int(sess_arena) != int(primary_sa)
+                    and int(slot_arena_sa) == int(primary_sa)
+                )
+            else:
+                sess_row = await get_client_session(telegram_id, session)
+                sess_arena = sess_row.get("selected_arena_id") if sess_row else None
+                resolved, err, used_primary_despite_filter = await resolve_arena_for_client_self_booking(
+                    session, trainer_id, sess_arena
+                )
+                if err == "no_venue":
+                    raise HTTPException(
+                        status_code=400,
+                        detail="У тренера не настроена основная площадка — запись через каталог недоступна.",
+                    )
+                if err == "invalid_arena":
+                    raise HTTPException(status_code=400, detail="Выбранная арена недоступна для этого тренера.")
+                arena_for_booking = resolved
 
     try:
         booking_id, _ = await create_booking(
@@ -1424,6 +1548,7 @@ async def get_client_session_state(
     suggested_sid: int | None = None
     tid_for_suggest = for_trainer_id if for_trainer_id is not None else trainer_id
     tid_for_suggest_int: int | None = int(tid_for_suggest) if tid_for_suggest else None
+    client_row_id: int | None = None
     if tid_for_suggest_int is not None:
         client_row_id = await get_client_id_by_telegram_id(session, telegram_id)
         if client_row_id is not None:
@@ -1442,6 +1567,15 @@ async def get_client_session_state(
         book_ctx_sid, book_ctx_nm = await resolve_client_catalog_service_for_trainer(
             session, int(for_trainer_id), row, *hint_ids
         )
+    book_ctx_vid: int | None = None
+    if (
+        for_trainer_id is not None
+        and book_ctx_sid is not None
+        and client_row_id is not None
+    ):
+        book_ctx_vid = await get_trainer_client_last_booking_price_variant_for_service(
+            session, int(for_trainer_id), client_row_id, int(book_ctx_sid)
+        )
     payload = {
         "city_id": city_id,
         "city_name": city_name,
@@ -1457,6 +1591,7 @@ async def get_client_session_state(
         # Per-trainer booking/catalog choice when for_trainer_id was passed (see resolve_client_catalog_service_for_trainer).
         "booking_context_service_id": book_ctx_sid,
         "booking_context_service_name": book_ctx_nm,
+        "booking_context_service_price_variant_id": book_ctx_vid,
         "client_phone": client_phone,
         "needs_profile_name": needs_profile_name,
         "client_first_name": cfn or None,
@@ -1544,11 +1679,10 @@ async def _bg_notify_slot_waitlist(trainer_id: int) -> None:
         pass
 
 
-async def _bg_notify_trainer_pass_order_request(request_id: int) -> None:
+async def _bg_notify_trainer_client_request_immediate(request_id: int) -> None:
     """
-    Immediate trainer DM for a pass-product request created via Mini App.
-    notification_service still polls for retries / other trainers; this avoids silent gaps when
-    that process is down or when quiet-hours batch skipped the row until later.
+    Immediate trainer DM for a personalized client_request (pass order, certificate order, etc.).
+    Avoids gaps when the batch notifier is delayed.
     """
     from aiogram import Bot
     from aiogram.client.default import DefaultBotProperties
@@ -1572,7 +1706,7 @@ async def _bg_notify_trainer_pass_order_request(request_id: int) -> None:
             )
     except Exception:
         logger.exception(
-            "Background pass-order trainer notify failed (request_id=%s)",
+            "Background client_request trainer notify failed (request_id=%s)",
             request_id,
         )
     finally:
@@ -1711,7 +1845,7 @@ async def post_client_pass_order_request(
         if idem_cache_key:
             await set_idempotency_response(session, idem_cache_key, dict(out))
         background_tasks.add_task(
-            _bg_notify_trainer_pass_order_request, int(result["request_id"])
+            _bg_notify_trainer_client_request_immediate, int(result["request_id"])
         )
         return out
     err = str(result.get("error") or "unknown")
@@ -1738,6 +1872,103 @@ async def post_client_pass_order_request(
             "Заявка уже отправлена ранее.",
         ),
         "client_mismatch": (403, "Не удалось подтвердить аккаунт."),
+    }
+    status_code, detail = mapping.get(err, (400, "Не удалось отправить заявку."))
+    raise HTTPException(status_code=status_code, detail=detail)
+
+
+class ClientCertOrderRequestBody(BaseModel):
+    certificate_product_id: int = Field(..., ge=1)
+    recipient_email: str = Field(..., min_length=3, max_length=320)
+    recipient_name: str = Field(..., min_length=1, max_length=200)
+    nominal_byn: float | None = Field(
+        None,
+        gt=0,
+        description="BYN face value when the certificate product has no fixed amount (any-amount product).",
+    )
+
+
+@router.get("/client/cert-order/catalog")
+async def get_client_cert_order_catalog_endpoint(
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+):
+    """Active certificate products for the client's derived primary trainer (order-via-request UX)."""
+    telegram_id = client_catalog_telegram_key(principal)
+    return await get_primary_cert_order_catalog(session, telegram_id)
+
+
+@router.post("/client/cert-order/request")
+async def post_client_cert_order_request(
+    background_tasks: BackgroundTasks,
+    body: ClientCertOrderRequestBody,
+    cred: MiniappCredentialIn = Depends(require_miniapp_credential_in),
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
+):
+    """Create a personalized «order certificate» client_request to the primary trainer."""
+    telegram_id = client_catalog_telegram_key(principal)
+    ik = (idempotency_key or "").strip()
+    idem_cache_key = (f"coc{telegram_id}_{ik}"[:64]) if ik else ""
+    if idem_cache_key:
+        cached = await get_idempotency_response(session, idem_cache_key)
+        if isinstance(cached, dict) and cached.get("success") is True:
+            return cached
+
+    client_id = await _ensure_client_for_webapp_miniapp(
+        session,
+        principal,
+        cred.raw,
+        phone=None,
+        first_name=None,
+        last_name=None,
+    )
+    result = await submit_certificate_product_order_request(
+        session,
+        client_id=client_id,
+        telegram_id=telegram_id,
+        certificate_product_id=body.certificate_product_id,
+        recipient_email=body.recipient_email,
+        recipient_name=body.recipient_name,
+        nominal_byn=body.nominal_byn,
+    )
+    if result.get("ok"):
+        out: dict[str, object] = {"success": True, "request_id": result["request_id"]}
+        if idem_cache_key:
+            await set_idempotency_response(session, idem_cache_key, dict(out))
+        background_tasks.add_task(
+            _bg_notify_trainer_client_request_immediate, int(result["request_id"])
+        )
+        return out
+    err = str(result.get("error") or "unknown")
+    mapping: dict[str, tuple[int, str]] = {
+        "no_primary_trainer": (
+            400,
+            "Нет основного тренера — запишитесь к тренеру или добавьте его в избранное.",
+        ),
+        "product_not_found": (404, "Этот сертификат недоступен."),
+        "trainer_city_missing": (
+            422,
+            "У тренера не заполнен город в профиле. Напишите ему в Telegram.",
+        ),
+        "trainer_service_missing": (
+            422,
+            "У тренера не настроены услуги. Напишите ему напрямую.",
+        ),
+        "duplicate_pending": (
+            409,
+            "Заявка на этот сертификат уже отправлена. Дождитесь ответа тренера.",
+        ),
+        "daily_limit": (
+            429,
+            "Заявка уже отправлена ранее.",
+        ),
+        "client_mismatch": (403, "Не удалось подтвердить аккаунт."),
+        "invalid_email": (422, "Укажите корректный email."),
+        "recipient_name_required": (422, "Укажите имя получателя."),
+        "nominal_required": (422, "Укажите сумму сертификата (номинал в BYN)."),
+        "nominal_invalid": (422, "Некорректная сумма. Укажите разумный номинал в BYN."),
     }
     status_code, detail = mapping.get(err, (400, "Не удалось отправить заявку."))
     raise HTTPException(status_code=status_code, detail=detail)
@@ -1934,6 +2165,44 @@ async def get_client_certificates(
         return {"items": []}
     items = await list_client_certificate_instances(session, client_id)
     return {"items": items}
+
+
+@router.get("/client/certificates/sample-pdf")
+async def get_client_certificate_sample_pdf(
+    _principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+) -> Response:
+    """
+    PDF preview with synthetic data (same layout as email attachment).
+    Validates client Mini App credentials; CRM client profile is optional.
+    """
+    from src.application.certificate_pdf import build_certificate_pdf
+
+    issued = date.today()
+    expires_at = issued + timedelta(days=365)
+    _s = Settings()
+    bot_username = (_s.client_bot_username or "").strip().lstrip("@")
+    activation_url = f"https://t.me/{bot_username}?start=cert_PREVIEW-DEMO" if bot_username else None
+    client_bot_display = f"@{bot_username}" if bot_username else None
+    pdf = build_certificate_pdf(
+        trainer_name="Анна Примерова",
+        product_name="Подарочный сертификат",
+        amount_cents=10000,
+        code="CERT-SAMPLE-PREVIEW",
+        recipient_name="Имя получателя (пример)",
+        purchased_by_name="Покупатель (пример)",
+        issued_at=issued,
+        expires_at=expires_at,
+        activation_url=activation_url,
+        client_bot_display_name=client_bot_display,
+    )
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": 'inline; filename="certificate-sample.pdf"',
+            "Cache-Control": "private, max-age=300",
+        },
+    )
 
 
 class ClientCertificateActivateBody(BaseModel):
@@ -3839,6 +4108,7 @@ async def post_trainer_certificate_issue(
             issued_at=issued_at,
             expires_at=expires_at,
             activation_url=_activation,
+            client_bot_display_name=f"@{_un}" if _un else None,
         )
         file_key = upload_certificate_file(pdf_bytes, trainer_id, instance["id"])
         await update_certificate_file_url(session, instance["id"], trainer_id, file_key)
@@ -5915,6 +6185,53 @@ async def post_trainer_recurring_remove(
 # --- Trainer client requests Mini App (list, respond, decline, remind, book client) ---
 
 
+def _format_certificate_amount_label_ru(amount_cents: int | None) -> str:
+    """Short label for trainer UI: fixed nominal vs «any amount» certificate products."""
+    if amount_cents is None:
+        return "Любая сумма"
+    v = int(amount_cents) / 100
+    s = f"{v:.2f}".rstrip("0").rstrip(".")
+    return f"{s} BYN"
+
+
+async def _enrich_trainer_request_certificate_products(
+    session: AsyncSession, trainer_id: int, items: list[dict],
+) -> None:
+    """Fill certificate_product_name + certificate_amount_label for certificate order requests."""
+    cache: dict[int, dict | None] = {}
+
+    async def _prod(pid: int) -> dict | None:
+        if pid not in cache:
+            cache[pid] = await get_certificate_product(session, pid, trainer_id)
+        return cache[pid]
+
+    for it in items:
+        if it.get("request_subtype") != "certificate_product_order":
+            continue
+        raw_pid = it.get("certificate_product_id")
+        if raw_pid is None:
+            continue
+        try:
+            pid = int(raw_pid)
+        except (TypeError, ValueError):
+            continue
+        product = await _prod(pid)
+        if product:
+            name = (product.get("name") or "").strip()
+            it["certificate_product_name"] = name or "Подарочный сертификат"
+            fixed = product.get("amount_cents")
+            req_cents = it.get("cert_requested_nominal_cents")
+            if fixed is None and req_cents is not None:
+                it["certificate_amount_label"] = _format_certificate_amount_label_ru(int(req_cents))
+            elif fixed is None:
+                it["certificate_amount_label"] = "Любая сумма (клиент не указал — старая заявка)"
+            else:
+                it["certificate_amount_label"] = _format_certificate_amount_label_ru(fixed)
+        else:
+            it["certificate_product_name"] = "Сертификат (продукт недоступен)"
+            it["certificate_amount_label"] = "—"
+
+
 def _serialize_trainer_request(req: dict) -> dict:
     """Request dict to JSON-safe for trainer requests list/detail."""
     created_at = req.get("created_at")
@@ -5922,14 +6239,72 @@ def _serialize_trainer_request(req: dict) -> dict:
         created_at = created_at.isoformat()
     elif created_at is not None:
         created_at = str(created_at)
-    _pid_marked, comment_body = split_pass_order_comment(req.get("comment"))
-    subtype = "pass_product_order" if _pid_marked is not None else None
+    comment_raw = req.get("comment")
+    _pid_marked, comment_body_pass = split_pass_order_comment(comment_raw)
+    if _pid_marked is not None:
+        return {
+            "id": req["id"],
+            "city_id": req["city_id"],
+            "service_id": req["service_id"],
+            "comment": comment_raw,
+            "comment_body": comment_body_pass,
+            "created_at": created_at,
+            "city_name": req.get("city_name"),
+            "service_name": req.get("service_name"),
+            "is_personalized": bool(req.get("is_personalized")),
+            "has_responded": bool(req.get("has_responded")),
+            "remind_slots_pending": bool(req.get("remind_slots_pending")),
+            "client_id": req.get("client_id"),
+            "client_telegram_id": req.get("client_telegram_id"),
+            "client_telegram_username": (req.get("client_telegram_username") or "").strip() or None,
+            "client_first_name": req.get("client_first_name"),
+            "client_last_name": req.get("client_last_name"),
+            "request_subtype": "pass_product_order",
+            "pass_product_id": _pid_marked,
+            "certificate_product_id": None,
+            "cert_recipient_email": None,
+            "cert_recipient_name": None,
+            "cert_purchased_by_name": None,
+        }
+    _cid_marked, cert_meta, comment_body_cert = split_cert_order_comment(comment_raw)
+    if _cid_marked is not None:
+        _req_nom = cert_meta.get("requested_nominal_cents")
+        _req_nom_int: int | None
+        try:
+            _req_nom_int = int(_req_nom) if _req_nom is not None else None
+        except (TypeError, ValueError):
+            _req_nom_int = None
+        return {
+            "id": req["id"],
+            "city_id": req["city_id"],
+            "service_id": req["service_id"],
+            "comment": comment_raw,
+            "comment_body": comment_body_cert,
+            "created_at": created_at,
+            "city_name": req.get("city_name"),
+            "service_name": req.get("service_name"),
+            "is_personalized": bool(req.get("is_personalized")),
+            "has_responded": bool(req.get("has_responded")),
+            "remind_slots_pending": bool(req.get("remind_slots_pending")),
+            "client_id": req.get("client_id"),
+            "client_telegram_id": req.get("client_telegram_id"),
+            "client_telegram_username": (req.get("client_telegram_username") or "").strip() or None,
+            "client_first_name": req.get("client_first_name"),
+            "client_last_name": req.get("client_last_name"),
+            "request_subtype": "certificate_product_order",
+            "pass_product_id": None,
+            "certificate_product_id": _cid_marked,
+            "cert_recipient_email": cert_meta.get("recipient_email"),
+            "cert_recipient_name": cert_meta.get("recipient_name"),
+            "cert_purchased_by_name": cert_meta.get("purchased_by_name"),
+            "cert_requested_nominal_cents": _req_nom_int,
+        }
     return {
         "id": req["id"],
         "city_id": req["city_id"],
         "service_id": req["service_id"],
-        "comment": req.get("comment"),
-        "comment_body": comment_body if subtype else (req.get("comment") or None),
+        "comment": comment_raw,
+        "comment_body": (comment_raw or "").strip() or None,
         "created_at": created_at,
         "city_name": req.get("city_name"),
         "service_name": req.get("service_name"),
@@ -5938,11 +6313,15 @@ def _serialize_trainer_request(req: dict) -> dict:
         "remind_slots_pending": bool(req.get("remind_slots_pending")),
         "client_id": req.get("client_id"),
         "client_telegram_id": req.get("client_telegram_id"),
+        "client_telegram_username": (req.get("client_telegram_username") or "").strip() or None,
         "client_first_name": req.get("client_first_name"),
         "client_last_name": req.get("client_last_name"),
-        "request_subtype": subtype,
-        "pass_product_id": _pid_marked,
-        "client_telegram_id": req.get("client_telegram_id"),
+        "request_subtype": None,
+        "pass_product_id": None,
+        "certificate_product_id": None,
+        "cert_recipient_email": None,
+        "cert_recipient_name": None,
+        "cert_purchased_by_name": None,
     }
 
 
@@ -6043,7 +6422,9 @@ async def get_trainer_requests(
     new_list = [r for r in items if not r.get("has_responded")]
     in_progress_list = [r for r in items if r.get("has_responded")]
     combined = new_list + in_progress_list
-    return {"items": [_serialize_trainer_request(r) for r in combined]}
+    serialized = [_serialize_trainer_request(r) for r in combined]
+    await _enrich_trainer_request_certificate_products(session, trainer_id, serialized)
+    return {"items": serialized}
 
 
 class TrainerRespondBody(BaseModel):

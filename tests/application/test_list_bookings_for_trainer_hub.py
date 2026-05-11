@@ -386,3 +386,177 @@ async def test_hub_session_summary_group_slot_counts_once(db_session) -> None:
 
     summary = await get_trainer_hub_session_summary_counts(db_session, trainer_id)
     assert summary["week_total"] == 1
+
+
+@pytest.mark.asyncio
+async def test_hub_session_summary_today_total_includes_completed_sessions(db_session) -> None:
+    """Hub «всего» counts sessions that already ended today; «осталось» only not-yet-started."""
+    trainer_id, service_id = await _seed_trainer_with_service(db_session)
+    r = await db_session.execute(
+        text(
+            """
+            SELECT EXTRACT(HOUR FROM (CURRENT_TIMESTAMP AT TIME ZONE 'Europe/Minsk'))::int AS h
+            """
+        )
+    )
+    (h,) = r.fetchone()
+    if h is None or h < 11 or h >= 19:
+        pytest.skip("Need Minsk hour in [11, 19) for fixed 08:00 past and 20:00 future on same date")
+
+    clients: list[int] = []
+    for _ in range(2):
+        tg = unique_test_telegram_id()
+        phone, phone_n = belarus_test_phone(tg)
+        r = await db_session.execute(
+            text(
+                """
+                INSERT INTO clients (telegram_id, first_name, last_name, phone, phone_normalized)
+                VALUES (:tg, 'C', 'L', :phone, :pn) RETURNING id
+                """
+            ),
+            {"tg": tg, "phone": phone, "pn": phone_n},
+        )
+        (cid,) = r.fetchone()
+        clients.append(int(cid))
+
+    r = await db_session.execute(
+        text(
+            """
+            INSERT INTO slots (trainer_id, slot_date, start_time, end_time, status)
+            SELECT :tid,
+                   (CURRENT_TIMESTAMP AT TIME ZONE 'Europe/Minsk')::date,
+                   TIME '08:00',
+                   TIME '09:00',
+                   'booked'
+            RETURNING id
+            """
+        ),
+        {"tid": trainer_id},
+    )
+    (slot_past,) = r.fetchone()
+    r = await db_session.execute(
+        text(
+            """
+            INSERT INTO slots (trainer_id, slot_date, start_time, end_time, status)
+            SELECT :tid,
+                   (CURRENT_TIMESTAMP AT TIME ZONE 'Europe/Minsk')::date,
+                   TIME '20:00',
+                   TIME '21:00',
+                   'booked'
+            RETURNING id
+            """
+        ),
+        {"tid": trainer_id},
+    )
+    (slot_future,) = r.fetchone()
+    await db_session.execute(
+        text(
+            """
+            INSERT INTO bookings (slot_id, trainer_id, client_id, service_id, status)
+            VALUES (:sid, :tid, :cid, :svc, 'confirmed')
+            """
+        ),
+        {"sid": slot_past, "tid": trainer_id, "cid": clients[0], "svc": service_id},
+    )
+    await db_session.execute(
+        text(
+            """
+            INSERT INTO bookings (slot_id, trainer_id, client_id, service_id, status)
+            VALUES (:sid, :tid, :cid, :svc, 'confirmed')
+            """
+        ),
+        {"sid": slot_future, "tid": trainer_id, "cid": clients[1], "svc": service_id},
+    )
+    await db_session.commit()
+
+    summary = await get_trainer_hub_session_summary_counts(db_session, trainer_id)
+    assert summary["today_total"] == 2
+    assert summary["today_remaining"] == 1
+    assert summary["week_total"] >= 2
+    assert summary["week_remaining"] >= 1
+
+
+@pytest.mark.asyncio
+async def test_hub_session_summary_counts_completed_booking_rows(db_session) -> None:
+    """After mark-complete, booking is ``completed`` — must still appear in «всего», not in «осталось»."""
+    trainer_id, service_id = await _seed_trainer_with_service(db_session)
+    r = await db_session.execute(
+        text(
+            """
+            SELECT EXTRACT(HOUR FROM (CURRENT_TIMESTAMP AT TIME ZONE 'Europe/Minsk'))::int AS h
+            """
+        )
+    )
+    (h,) = r.fetchone()
+    if h is None or h < 11 or h >= 19:
+        pytest.skip("Need Minsk hour in [11, 19) for fixed 08:00 past and 20:00 future on same date")
+
+    clients: list[int] = []
+    for _ in range(2):
+        tg = unique_test_telegram_id()
+        phone, phone_n = belarus_test_phone(tg)
+        r = await db_session.execute(
+            text(
+                """
+                INSERT INTO clients (telegram_id, first_name, last_name, phone, phone_normalized)
+                VALUES (:tg, 'C', 'L', :phone, :pn) RETURNING id
+                """
+            ),
+            {"tg": tg, "phone": phone, "pn": phone_n},
+        )
+        (cid,) = r.fetchone()
+        clients.append(int(cid))
+
+    r = await db_session.execute(
+        text(
+            """
+            INSERT INTO slots (trainer_id, slot_date, start_time, end_time, status)
+            SELECT :tid,
+                   (CURRENT_TIMESTAMP AT TIME ZONE 'Europe/Minsk')::date,
+                   TIME '08:00',
+                   TIME '09:00',
+                   'booked'
+            RETURNING id
+            """
+        ),
+        {"tid": trainer_id},
+    )
+    (slot_past,) = r.fetchone()
+    r = await db_session.execute(
+        text(
+            """
+            INSERT INTO slots (trainer_id, slot_date, start_time, end_time, status)
+            SELECT :tid,
+                   (CURRENT_TIMESTAMP AT TIME ZONE 'Europe/Minsk')::date,
+                   TIME '20:00',
+                   TIME '21:00',
+                   'booked'
+            RETURNING id
+            """
+        ),
+        {"tid": trainer_id},
+    )
+    (slot_future,) = r.fetchone()
+    await db_session.execute(
+        text(
+            """
+            INSERT INTO bookings (slot_id, trainer_id, client_id, service_id, status)
+            VALUES (:sid, :tid, :cid, :svc, 'completed')
+            """
+        ),
+        {"sid": slot_past, "tid": trainer_id, "cid": clients[0], "svc": service_id},
+    )
+    await db_session.execute(
+        text(
+            """
+            INSERT INTO bookings (slot_id, trainer_id, client_id, service_id, status)
+            VALUES (:sid, :tid, :cid, :svc, 'confirmed')
+            """
+        ),
+        {"sid": slot_future, "tid": trainer_id, "cid": clients[1], "svc": service_id},
+    )
+    await db_session.commit()
+
+    summary = await get_trainer_hub_session_summary_counts(db_session, trainer_id)
+    assert summary["today_total"] == 2
+    assert summary["today_remaining"] == 1

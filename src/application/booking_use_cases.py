@@ -1598,18 +1598,37 @@ async def list_bookings_for_trainer(
     ]
 
 
+# Hub/session summary: occurrences that «were on the calendar» (never cancelled/archived variants).
+_SQL_HUB_BOOKING_STATUSES_SUMMARY = (
+    "'pending', 'confirmed', 'completed', 'no_show', 'payment_dispute'"
+)
+
 _SQL_HUB_BOOKING_SCOPE = """b.trainer_id = :tid
                   AND s.status IN ('available', 'booked')
-                  AND b.status IN ('pending', 'confirmed')
+                  AND b.status IN (""" + _SQL_HUB_BOOKING_STATUSES_SUMMARY + """)
                   AND """ + _SQL_SLOT_END_TS + """ > CURRENT_TIMESTAMP"""
+
+_SQL_HUB_BOOKING_SUMMARY_BASE = """b.trainer_id = :tid
+                  AND s.status IN ('available', 'booked')
+                  AND b.status IN (""" + _SQL_HUB_BOOKING_STATUSES_SUMMARY + """)"""
 
 
 async def get_trainer_hub_session_summary_counts(session: AsyncSession, trainer_id: int) -> dict[str, int]:
     """
     Trainer-home summary tiles (today / calendar week Mon–Sun, Europe/Minsk).
 
-    Matches ``list_bookings_for_trainer`` filters but counts **distinct slots** so group-capacity slots
-    are one logical session. Totals ignore the list LIMIT — week is true ISO-style week in Minsk, not «first N rows».
+    **Totals** («всего»): distinct slots with bookings on that calendar day / week —
+    includes sessions that already **ended** (still «сегодня» / эта неделя).
+
+    **Remaining** («осталось»): same scope but slot **start** is strictly in the future
+    (`start > now`); in-progress and finished sessions do not count — matches hub tooltips.
+
+    Status filter matches schedule «real sessions»: ``pending``, ``confirmed``, ``completed``,
+    ``no_show``, ``payment_dispute`` (excludes cancelled / declined / ``trainer_removed``).
+    This is **wider** than ``list_bookings_for_trainer`` (upcoming-only), so totals include
+    past completed sessions on that calendar day/week.
+
+    Counts **distinct slots** so group-capacity slots are one logical session.
     """
     sql = """
         WITH cal AS (
@@ -1636,7 +1655,7 @@ async def get_trainer_hub_session_summary_counts(session: AsyncSession, trainer_
                    JOIN slots s ON s.id = b.slot_id
                    JOIN clients c ON c.id = b.client_id
                    CROSS JOIN cal
-                   WHERE """ + _SQL_HUB_BOOKING_SCOPE + """
+                   WHERE """ + _SQL_HUB_BOOKING_SUMMARY_BASE + """
                      AND s.slot_date = cal.today_d
                ), 0) AS today_total,
                COALESCE((
@@ -1645,7 +1664,7 @@ async def get_trainer_hub_session_summary_counts(session: AsyncSession, trainer_
                    JOIN slots s ON s.id = b.slot_id
                    JOIN clients c ON c.id = b.client_id
                    CROSS JOIN cal
-                   WHERE """ + _SQL_HUB_BOOKING_SCOPE + """
+                   WHERE """ + _SQL_HUB_BOOKING_SUMMARY_BASE + """
                      AND s.slot_date = cal.today_d
                      AND """ + _SQL_SLOT_START_TS + """ > CURRENT_TIMESTAMP
                ), 0) AS today_remaining,
@@ -1655,7 +1674,7 @@ async def get_trainer_hub_session_summary_counts(session: AsyncSession, trainer_
                    JOIN slots s ON s.id = b.slot_id
                    JOIN clients c ON c.id = b.client_id
                    CROSS JOIN cal
-                   WHERE """ + _SQL_HUB_BOOKING_SCOPE + """
+                   WHERE """ + _SQL_HUB_BOOKING_SUMMARY_BASE + """
                      AND s.slot_date >= cal.week_monday_d
                      AND s.slot_date <= cal.week_monday_d + 6
                ), 0) AS week_total,
@@ -1665,7 +1684,7 @@ async def get_trainer_hub_session_summary_counts(session: AsyncSession, trainer_
                    JOIN slots s ON s.id = b.slot_id
                    JOIN clients c ON c.id = b.client_id
                    CROSS JOIN cal
-                   WHERE """ + _SQL_HUB_BOOKING_SCOPE + """
+                   WHERE """ + _SQL_HUB_BOOKING_SUMMARY_BASE + """
                      AND s.slot_date >= cal.week_monday_d
                      AND s.slot_date <= cal.week_monday_d + 6
                      AND """ + _SQL_SLOT_START_TS + """ > CURRENT_TIMESTAMP
@@ -1748,8 +1767,11 @@ def compute_hub_bookings_summary(bookings: Sequence[dict]) -> dict[str, dict[str
     """
     Pure-Python hub summary from an in-memory row list (tests / local tooling).
 
-    Production ``GET /trainer/bookings`` uses :func:`get_trainer_hub_session_summary_counts` instead so
-    totals are not capped by the list LIMIT and ``week_sessions`` tracks a true Mon–Sun calendar week.
+    **Totals** count every row after slot dedupe (including sessions that already ended today / this week).
+    **Remaining** counts slots whose start is strictly in the future in Minsk (same rule as SQL).
+
+    Production ``GET /trainer/bookings`` uses :func:`get_trainer_hub_session_summary_counts`; that list is
+    usually upcoming-only — then Python totals match the capped list, not necessarily full-calendar totals.
     """
     tz = ZoneInfo(NOTIFICATION_TZ)
     now = datetime.now(tz)
@@ -2634,6 +2656,51 @@ async def get_trainer_client_last_booking_service_defaults(
     return sid, vid, aid
 
 
+async def get_trainer_client_last_booking_price_variant_for_service(
+    session: AsyncSession,
+    trainer_id: int,
+    client_id: int,
+    service_id: int,
+) -> int | None:
+    """
+    Latest non-cancelled booking for this trainer+client+service: effective price-variant id
+    (service_price_variant_id or tier_kind-derived row), newest by booking created_at.
+    """
+    r = await session.execute(
+        text(
+            """
+            SELECT COALESCE(
+                b.service_price_variant_id,
+                (
+                    SELECT spv.id
+                    FROM trainer_service_price_variants spv
+                    WHERE spv.trainer_id = b.trainer_id
+                      AND spv.service_id = b.service_id
+                      AND b.price_tier_kind IS NOT NULL
+                      AND (
+                        spv.tier_kind = b.price_tier_kind
+                        OR LOWER(TRIM(spv.tier_kind)) = LOWER(TRIM(b.price_tier_kind))
+                      )
+                    ORDER BY spv.sort_order NULLS LAST, spv.id
+                    LIMIT 1
+                )
+            ) AS effective_variant_id
+            FROM bookings b
+            JOIN slots s ON s.id = b.slot_id
+            WHERE b.trainer_id = :tid AND b.client_id = :cid AND b.service_id = :sid
+              AND b.status NOT IN ('cancelled', 'declined', 'trainer_removed')
+            ORDER BY b.created_at DESC NULLS LAST, b.id DESC
+            LIMIT 1
+            """
+        ),
+        {"tid": trainer_id, "cid": client_id, "sid": service_id},
+    )
+    row = r.fetchone()
+    if not row or row[0] is None:
+        return None
+    return int(row[0])
+
+
 async def get_trainer_client_latest_booking_service_id(
     session: AsyncSession,
     trainer_id: int,
@@ -2684,7 +2751,12 @@ async def list_bookings_for_client(
                    a.latitude AS arena_lat,
                    a.longitude AS arena_lon,
                    COALESCE(b.booking_price_cents, spv.price_cents, ts.price_cents) AS price_cents,
-                   NULLIF(TRIM(COALESCE(ts.client_notice, '')), '') AS service_client_notice
+                   NULLIF(TRIM(COALESCE(ts.client_notice, '')), '') AS service_client_notice,
+                   (""" + _SQL_SLOT_START_TS + """ <= CURRENT_TIMESTAMP
+                     AND """ + _SQL_SLOT_END_TS + """ > CURRENT_TIMESTAMP) AS hub_in_session,
+                   (""" + SQL_BOOKING_RESOLVED_ARENA_ID + """) AS resolved_arena_id,
+                   b.service_price_variant_id,
+                   p.city_id AS trainer_city_id
             FROM bookings b
             JOIN clients c ON c.id = b.client_id
             JOIN slots s ON s.id = b.slot_id
@@ -2747,6 +2819,10 @@ async def list_bookings_for_client(
             "map_link": map_link,
             "price_cents": int(row[20]) if row[20] is not None else None,
             "service_client_notice": (row[21] or "").strip() or None,
+            "hub_in_session": bool(row[22]),
+            "arena_id": int(row[23]) if row[23] is not None else None,
+            "service_price_variant_id": int(row[24]) if row[24] is not None else None,
+            "trainer_city_id": int(row[25]) if row[25] is not None else None,
         })
     return out
 

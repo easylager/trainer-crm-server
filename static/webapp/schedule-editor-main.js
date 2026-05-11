@@ -1687,6 +1687,8 @@
         trainerScheduleArenas: [],
         /** Calendar day editor: start minutes that already had slots when the screen opened (cannot deselect). */
         calendarBaselineStarts: null,
+        /** Calendar individual: precise-slot keys at editor open — for toast counts (omit already-existing intervals). */
+        calendarBaselinePreciseKeys: null,
         /** Book-client modal: group slot (capacity &gt; 1) — fixed service, no price tier UI. */
         bookSlotIsGroup: false,
         bookSlotGroupServiceId: null,
@@ -2047,6 +2049,49 @@
         const d = new Date(dateStr + 'T12:00:00');
         const wd = d.getDay();
         return d.getDate() + '.' + String(d.getMonth() + 1).padStart(2, '0') + ' (' + DAYS[wd === 0 ? 6 : wd - 1] + ')';
+      }
+
+      /** Same as formatDateKey but without weekday — when day name is shown separately (e.g. day-pick list). */
+      function formatDateKeyNoWeekday(dateStr) {
+        const d = new Date(dateStr + 'T12:00:00');
+        return d.getDate() + '.' + String(d.getMonth() + 1).padStart(2, '0');
+      }
+
+      /** Russian plural for «N слот(а/ов)» — used in day-pick rows. */
+      function ruSlotCountLabel(n) {
+        n = Math.max(0, parseInt(String(n), 10) || 0);
+        var mod100 = n % 100;
+        var mod10 = n % 10;
+        var w = 'слотов';
+        if (mod100 < 11 || mod100 > 14) {
+          if (mod10 === 1) w = 'слот';
+          else if (mod10 >= 2 && mod10 <= 4) w = 'слота';
+        }
+        return String(n) + ' ' + w;
+      }
+
+      /**
+       * Slots already on the calendar for this date, matching current add-slots intent (individual vs group).
+       * Mirrors openEditCalendarDay filters: no training_group rows, not cancelled.
+       */
+      function countExistingSlotsForDayPick(dateStr) {
+        var useGroup = slotIntentUseGroupUi();
+        var rows = state.slots || [];
+        var n = 0;
+        for (var i = 0; i < rows.length; i++) {
+          var s = rows[i];
+          if (s.slot_date !== dateStr) continue;
+          if (s.training_group_id) continue;
+          if (String(s.status || '').toLowerCase() === 'cancelled') continue;
+          var c = s.capacity != null ? parseInt(String(s.capacity), 10) : 1;
+          if (isNaN(c)) c = 1;
+          if (useGroup) {
+            if (c > 1) n++;
+          } else {
+            if (c <= 1) n++;
+          }
+        }
+        return n;
       }
 
       /** Hide grid starts already before now — «Добавить слоты» is future-facing only (local clock). */
@@ -2451,6 +2496,7 @@
         state.pendingIntentFlow = null;
         state.pendingTemplateDay = null;
         state.calendarBaselineStarts = null;
+        state.calendarBaselinePreciseKeys = null;
         updateTelegramBack();
         syncScheduleWeekDayStripVisibility();
       }
@@ -2543,6 +2589,13 @@
       // Stepper-driven time picker + day-glance timeline + free-gap suggestions
       // + live conflict-aware preview. Designed for single-tap creation of
       // off-grid slots when the 15-minute «Быстро» grid is too coarse.
+
+      /** Stable identity for calendar precise rows when diffing editor-open baseline vs current (toast counts). */
+      function calendarPreciseSlotStableKey(ps) {
+        if (!ps) return '';
+        var aid = ps.arenaId != null && !isNaN(Number(ps.arenaId)) ? String(Number(ps.arenaId)) : '';
+        return String(ps.startMinutes) + '|' + String(ps.durationMinutes) + '|' + aid;
+      }
 
       /**
        * Returns total interval minutes for all grid-selected + precise slots as [start, end] pairs.
@@ -2653,7 +2706,21 @@
           });
           var out = Array.from(byStart.values());
           (state.preciseSlots || []).forEach(function(ps) {
-            out.push({ startMin: ps.startMinutes, endMin: ps.startMinutes + ps.durationMinutes, kind: 'precise' });
+            var dup = rows.some(function(s) {
+              var capR = (s.capacity != null) ? parseInt(s.capacity, 10) : 1;
+              if (isNaN(capR) || capR > 1) return false;
+              return (
+                parseStartToMinutes(s.start_time) === ps.startMinutes &&
+                slotDurationFromRow(s) === ps.durationMinutes
+              );
+            });
+            if (!dup) {
+              out.push({
+                startMin: ps.startMinutes,
+                endMin: ps.startMinutes + ps.durationMinutes,
+                kind: 'precise',
+              });
+            }
           });
           out.sort(function(a, b) { return a.startMin - b.startMin || a.endMin - b.endMin; });
           return out;
@@ -2723,6 +2790,61 @@
           out.push(g);
         }
         return out;
+      }
+
+      /**
+       * After confirming a precise slot: jump draft clock to earliest valid position for the **current duration**
+       * that fits merged free gaps (same math as timeline). Prefers positions >= end of the slot just appended.
+       */
+      function snapPreciseDraftStartAfterSuccessfulAdd(lastAddedEv) {
+        var win = getPreciseDayWindow();
+        var dur = getPreciseDraftDuration();
+        if (isNaN(dur) || dur < 15) {
+          dur = Math.max(15, Math.min((lastAddedEv && lastAddedEv.dur) || 45, 480));
+        }
+        if (dur > 480) dur = 480;
+        var step = 5;
+        function firstLoInGap(g, prefFloor) {
+          var lo = Math.max(g.startMin, prefFloor || 0);
+          lo = Math.ceil(lo / step) * step;
+          if (lo < g.startMin) lo = g.startMin;
+          for (; lo + dur <= g.endMin; lo += step) {
+            if (state.editMode === 'calendar' && state.editDate && isCalendarSlotStartInPast(state.editDate, lo)) {
+              continue;
+            }
+            /** Safety net besides gap envelope (keeps parity with classifyPreview). */
+            if (preciseIntervalOverlapsAny(lo, lo + dur, -1)) continue;
+            return lo;
+          }
+          return null;
+        }
+        function pickWithGaps(prefFloor, gaps) {
+          var chosen = null;
+          for (var gi = 0; gi < gaps.length; gi++) {
+            var g = gaps[gi];
+            if (g.endMin - g.startMin < dur) continue;
+            var s = firstLoInGap(g, prefFloor);
+            if (s != null && (chosen == null || s < chosen)) chosen = s;
+          }
+          return chosen;
+        }
+        var gapsOnce = computePreciseFreeGaps(collectPreciseDayBusyIntervals(), win);
+        var pref = typeof lastAddedEv.endMin === 'number' ? lastAddedEv.endMin : win.startMin;
+        pref = Math.max(pref, win.startMin);
+        var nextStart = pickWithGaps(pref, gapsOnce);
+        if (nextStart == null) {
+          /** Prefer any legal start still **at or after** the block we just chained off — never snap backward earlier in the day. */
+          var cand = pickWithGaps(win.startMin, gapsOnce);
+          if (cand != null && cand >= pref) nextStart = cand;
+        }
+        if (nextStart == null) {
+          /** Nothing ahead fits this duration — stay at preference; preview stays honest (trainer knows add succeeded). */
+          nextStart = Math.min(Math.max(pref, win.startMin), 24 * 60 - dur);
+        }
+        var sh = document.getElementById('preciseStartH');
+        var smEl = document.getElementById('preciseStartM');
+        if (sh) sh.value = String(Math.floor(nextStart / 60) % 24);
+        if (smEl) smEl.value = String(nextStart % 60);
       }
 
       /** Renders existing slots/bookings/precise as colored bands on a normalized rail. */
@@ -2947,34 +3069,133 @@
         updatePrecisePreview();
       }
 
+      function syncPreciseManualSlotsPanelDisplay() {
+        var wrap = document.getElementById('preciseSlotsAdded');
+        var hint = document.getElementById('preciseSlotsSaveHint');
+        if (!wrap) return;
+        var n = (state.preciseSlots || []).length;
+        var showManual = n > 0 && state.slotAddMode === 'precise';
+        wrap.style.display = showManual ? 'block' : 'none';
+        if (hint) hint.style.display = showManual ? 'block' : 'none';
+      }
+
       function renderPreciseSlotsAdded() {
         var wrap = document.getElementById('preciseSlotsAdded');
         var list = document.getElementById('preciseSlotsAddedList');
         if (!wrap || !list) return;
         var slots = state.preciseSlots || [];
-        wrap.style.display = slots.length ? 'block' : 'none';
         list.innerHTML = '';
+        var baseline = state.calendarBaselinePreciseKeys;
         slots.forEach(function(ps, idx) {
           var endM = ps.startMinutes + ps.durationMinutes;
           var tag = document.createElement('div');
-          tag.className = 'precise-slot-tag';
+          var stableKey = calendarPreciseSlotStableKey(ps);
+          var isPersistedPrecise =
+            ps.locked || (baseline instanceof Set && baseline.has(stableKey));
+          var tagClass = 'precise-slot-tag' + (ps.locked ? ' precise-slot-tag--locked' : '');
+          if (!isPersistedPrecise) tagClass += ' precise-slot-tag--new';
+          tag.className = tagClass;
+          var removeBtnHtml = ps.locked
+            ? ''
+            : '<button type="button" class="precise-slot-tag__remove" data-idx="' +
+              idx +
+              '" aria-label="Удалить слот ' +
+              formatMinuteClock(ps.startMinutes) +
+              '">' +
+              '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>' +
+              '</button>';
           tag.innerHTML =
             '<span class="precise-slot-tag__time">' +
-            formatMinuteClock(ps.startMinutes) + '–' + formatMinuteClock(endM) +
+            formatMinuteClock(ps.startMinutes) +
+            '–' +
+            formatMinuteClock(endM) +
             '</span>' +
-            '<span class="precise-slot-tag__dur">' + ps.durationMinutes + ' мин</span>' +
-            '<button type="button" class="precise-slot-tag__remove" data-idx="' + idx + '" aria-label="Удалить слот ' + formatMinuteClock(ps.startMinutes) + '">' +
-            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>' +
-            '</button>';
-          tag.querySelector('.precise-slot-tag__remove').onclick = function() {
-            state.preciseSlots.splice(parseInt(this.dataset.idx, 10), 1);
-            renderPreciseSlotsAdded();
-            renderHourGrid();
-            renderPreciseLayout();
-            updateEditDoneButton();
-          };
+            '<span class="precise-slot-tag__dur">' +
+            ps.durationMinutes +
+            ' мин' +
+            (ps.locked ? ' · запись' : '') +
+            '</span>' +
+            removeBtnHtml;
+          if (!ps.locked) {
+            tag.querySelector('.precise-slot-tag__remove').onclick = function() {
+              state.preciseSlots.splice(parseInt(this.dataset.idx, 10), 1);
+              renderPreciseSlotsAdded();
+              renderHourGrid();
+              renderPreciseLayout();
+              updateEditDoneButton();
+            };
+          }
           list.appendChild(tag);
         });
+        syncPreciseManualSlotsPanelDisplay();
+        syncPreciseArenaWrapsAfterSlotsChanged();
+      }
+
+      /** Calendar individual: arena for «Точное время» only (hidden on Быстро tab). */
+      function syncCalendarPreciseArenaWrapVisibility() {
+        var wrap = document.getElementById('calendarPreciseArenaWrap');
+        if (!wrap) return;
+        var useCalGroup =
+          state.editMode === 'calendar' && typeof slotIntentUseGroupUi === 'function' && slotIntentUseGroupUi();
+        var ars = state.trainerScheduleArenas || [];
+        var show =
+          state.editMode === 'calendar' &&
+          !useCalGroup &&
+          state.slotAddMode === 'precise' &&
+          ars.length > 1;
+        wrap.style.display = show ? 'block' : 'none';
+        if (!show) return;
+        var sel = document.getElementById('calendarPreciseArenaSelect');
+        if (!sel) return;
+        var prev = sel.value;
+        sel.innerHTML = '';
+        ars.forEach(function(a) {
+          var o = document.createElement('option');
+          o.value = String(a.id);
+          o.textContent = (a.name || '—') + (a.is_primary ? ' · основная' : '');
+          sel.appendChild(o);
+        });
+        if (prev && ars.some(function(x) { return String(x.id) === prev; })) sel.value = prev;
+        else {
+          var prim = ars.filter(function(x) { return x.is_primary; })[0];
+          sel.value = String((prim || ars[0]).id);
+        }
+      }
+
+      /** Template individual: arena for «Точное время» tab only. */
+      function syncTemplatePreciseArenaWrapVisibility() {
+        var wrap = document.getElementById('templatePreciseArenaWrap');
+        if (!wrap) return;
+        var useTplGroup =
+          state.editMode === 'template' && typeof slotIntentUseGroupUi === 'function' && slotIntentUseGroupUi();
+        var ars = state.trainerScheduleArenas || [];
+        var show =
+          state.editMode === 'template' &&
+          !useTplGroup &&
+          state.slotAddMode === 'precise' &&
+          ars.length > 1;
+        wrap.style.display = show ? 'block' : 'none';
+        if (!show) return;
+        var sel = document.getElementById('templatePreciseArenaSelect');
+        if (!sel) return;
+        var prev = sel.value;
+        sel.innerHTML = '';
+        ars.forEach(function(a) {
+          var o = document.createElement('option');
+          o.value = String(a.id);
+          o.textContent = (a.name || '—') + (a.is_primary ? ' · основная' : '');
+          sel.appendChild(o);
+        });
+        if (prev && ars.some(function(x) { return String(x.id) === prev; })) sel.value = prev;
+        else {
+          var prim = ars.filter(function(x) { return x.is_primary; })[0];
+          sel.value = String((prim || ars[0]).id);
+        }
+      }
+
+      function syncPreciseArenaWrapsAfterSlotsChanged() {
+        syncCalendarPreciseArenaWrapVisibility();
+        syncTemplatePreciseArenaWrapVisibility();
       }
 
       function setPreciseError(msg) {
@@ -2996,12 +3217,7 @@
         renderPreciseSlotsAdded();
         renderHourGrid();
         updateEditDoneButton();
-        // Snap start to end of just-added slot — trainers usually add adjacent windows.
-        var sh = document.getElementById('preciseStartH');
-        var smEl = document.getElementById('preciseStartM');
-        var nextStart = Math.min(ev.endMin, 24 * 60 - 15);
-        if (sh) sh.value = String(Math.floor(nextStart / 60) % 24);
-        if (smEl) smEl.value = String(nextStart % 60);
+        snapPreciseDraftStartAfterSuccessfulAdd(ev);
         renderPreciseLayout();
       }
 
@@ -3059,6 +3275,8 @@
           }
           renderPreciseLayout();
         }
+        syncPreciseArenaWrapsAfterSlotsChanged();
+        syncPreciseManualSlotsPanelDisplay();
       }
 
       function initPreciseFormEvents() {
@@ -3198,12 +3416,19 @@
           d.setDate(d.getDate() + i);
           const dateStr = dateToStr(d);
           if (dateStr < todayStr) continue;
+          var slotCount = countExistingSlotsForDayPick(dateStr);
+          var countLabel = ruSlotCountLabel(slotCount);
           html +=
-            '<button type="button" class="template-day-card" data-date="' +
+            '<button type="button" class="template-day-card template-day-card--day-pick" data-date="' +
             escapeHtml(dateStr) +
+            '" aria-label="' +
+            escapeHtml(DAYS[i] + ', ' + formatDateKeyNoWeekday(dateStr) + ', ' + countLabel) +
             '">';
+          html += '<span class="day-pick-slot-count"><span class="day-pick-slot-count__text">' + escapeHtml(countLabel) + '</span></span>';
+          html += '<span class="day-pick-date-block">';
           html += '<span class="day-name">' + DAYS[i] + '</span>';
-          html += '<span class="day-slots">' + formatDateKey(dateStr) + '</span>';
+          html += '<span class="day-slots">' + formatDateKeyNoWeekday(dateStr) + '</span>';
+          html += '</span>';
           html += '<span class="arrow">→</span></button>';
         }
         if (!html) {
@@ -3244,6 +3469,7 @@
         state.editDate = null;
         state.editDay = null;
         state.calendarBaselineStarts = null;
+        state.calendarBaselinePreciseKeys = null;
         state.selectedStarts = new Set();
         state.lockedStarts = new Set();
         state.preciseSlots = [];
@@ -3430,6 +3656,44 @@
         return dateToStr(d);
       }
 
+      /**
+       * Week strip edges: coarse primary pointer (phones) ⇒ <span>, not <button>, so horizontal week swipe can
+       * still start from the strip (wireScheduleWeekSwipeGestures excludes touch targets that match button).
+       * Fine pointers (mouse) get native <button> chevrons.
+       */
+      function scheduleStripUseNativeNavButtons() {
+        try {
+          return !!(window.matchMedia && window.matchMedia('(pointer: fine)').matches);
+        } catch (eMq) {
+          return false;
+        }
+      }
+
+      function scheduleStripWeekNavMarkup(delta) {
+        var useBtn = scheduleStripUseNativeNavButtons();
+        var label = delta < 0 ? 'Предыдущая неделя' : 'Следующая неделя';
+        var svgChevLeft =
+          '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>';
+        var svgChevRight =
+          '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>';
+        var inner = delta < 0 ? svgChevLeft : svgChevRight;
+        var cls =
+          'schedule-week-day-strip__wkNav' +
+          (useBtn ? ' schedule-week-day-strip__wkNav--btn' : ' schedule-week-day-strip__wkNav--touch');
+        var attrs =
+          ' class="' +
+          cls +
+          '" data-strip-week-delta="' +
+          String(delta) +
+          '" aria-label="' +
+          escapeHtml(label) +
+          '"';
+        if (useBtn) {
+          return '<button type="button"' + attrs + '>' + inner + '</button>';
+        }
+        return '<span role="button" tabindex="0"' + attrs + '>' + inner + '</span>';
+      }
+
       function syncScheduleWeekDayStripVisibility() {
         var el = document.getElementById('scheduleWeekDayStrip');
         if (!el) return;
@@ -3453,6 +3717,8 @@
         if (!state.weekStart) state.weekStart = getMonday(new Date());
         var todayStr = dateToStr(new Date());
         var html = '';
+        html += scheduleStripWeekNavMarkup(-1);
+        html += '<div class="schedule-week-day-strip__days">';
         for (var i = 0; i < 7; i++) {
           var dateStr = weekDateStrFromMonday(state.weekStart, i);
           var isWeekend = i >= 5;
@@ -3481,6 +3747,8 @@
             '</span>' +
             '</button>';
         }
+        html += '</div>';
+        html += scheduleStripWeekNavMarkup(1);
         root.innerHTML = html;
         syncScheduleWeekDayStripVisibility();
       }
@@ -5151,6 +5419,18 @@
           existingIndiv.forEach(function(t) {
             var sm = parseStartToMinutes(t.start_time);
             var dur = slotDurationFromRow(t);
+            var arenaFromTpl =
+              t.arena_id != null && !isNaN(parseInt(String(t.arena_id), 10))
+                ? parseInt(String(t.arena_id), 10)
+                : null;
+            if (arenaFromTpl != null) {
+              state.preciseSlots.push({
+                startMinutes: sm,
+                durationMinutes: dur,
+                arenaId: arenaFromTpl,
+              });
+              return;
+            }
             var onGrid = allowedTemplateStarts.has(sm);
             if (onGrid && dur === gridDefaultDur) state.selectedStarts.add(sm);
             else state.preciseSlots.push({ startMinutes: sm, durationMinutes: dur });
@@ -5159,6 +5439,9 @@
             durTpl.value = String(normalizeDurationToScheduleSelect(gridDefaultDur));
           }
         }
+        state.calendarBaselinePreciseKeys = useTplGroup
+          ? new Set()
+          : new Set((state.preciseSlots || []).map(calendarPreciseSlotStableKey));
         syncDurationUIFromScheduleGrid();
         var cgw = document.getElementById('calendarGroupServiceWrap');
         var cawCal = document.getElementById('calendarGroupArenaWrap');
@@ -5226,9 +5509,11 @@
             renderPreciseSlotsAdded();
           });
         } else {
-          pruneSelectedStartsForOverlap(getEditDurationMinutes());
-          renderHourGrid();
-          renderPreciseSlotsAdded();
+          loadTrainerServicesIfNeeded().then(function() {
+            pruneSelectedStartsForOverlap(getEditDurationMinutes());
+            renderHourGrid();
+            renderPreciseSlotsAdded();
+          });
         }
         updateTelegramBack();
       }
@@ -5253,24 +5538,77 @@
         } else if (state.slotEditIntent !== 'group' && state.slotEditIntent !== 'individual') {
           state.slotEditIntent = detectSlotIntentFromRows(daySlots);
         }
+        var gridDefaultDurForCalUi = Math.min(
+          480,
+          Math.max(15, state.defaultSlotDurationMinutes || 45)
+        );
+        var useCalGroup = slotIntentUseGroupUi();
         var allowedCalendarStarts = new Set(
           allowedStartMinutesFromScheduleGridPreset(state.scheduleGridPreset || defaultScheduleGridPreset())
         );
         state.selectedStarts = new Set();
         state.lockedStarts = new Set();
-        daySlots.forEach(function(s) {
-          var m = parseStartToMinutes(s.start_time);
-          if (!allowedCalendarStarts.has(m)) return;
-          state.selectedStarts.add(m);
-          var occ = (s.active_bookings != null) ? parseInt(s.active_bookings, 10) : 0;
-          if ((s.status || '') === 'booked' || occ > 0) state.lockedStarts.add(m);
-        });
-        state.calendarBaselineStarts = new Set(state.selectedStarts);
+        if (useCalGroup) {
+          state.preciseSlots = [];
+          daySlots.forEach(function(s) {
+            var m = parseStartToMinutes(s.start_time);
+            if (!allowedCalendarStarts.has(m)) return;
+            state.selectedStarts.add(m);
+            var occ = (s.active_bookings != null) ? parseInt(s.active_bookings, 10) : 0;
+            if ((s.status || '') === 'booked' || occ > 0) state.lockedStarts.add(m);
+          });
+          state.calendarBaselineStarts = new Set(state.selectedStarts);
+          state.calendarBaselinePreciseKeys = new Set();
+        } else {
+          /** Match template UX: splits grid-aligned vs off-grid («точное время») so сохранить день не удаляет уже созданные интервалы. */
+          var individualRows = daySlots.filter(function(s) {
+            if (String(s.status || '').toLowerCase() === 'cancelled') return false;
+            var c = (s.capacity != null) ? parseInt(s.capacity, 10) : 1;
+            return !isNaN(c) && c <= 1;
+          });
+          var gridDursHydr = individualRows
+            .filter(function(t) {
+              return allowedCalendarStarts.has(parseStartToMinutes(t.start_time));
+            })
+            .map(slotDurationFromRow);
+          var gridDefaultDurHydr =
+            gridDursHydr.length ? mostFrequentInt(gridDursHydr) : state.defaultSlotDurationMinutes || 45;
+          gridDefaultDurHydr = Math.min(480, Math.max(15, gridDefaultDurHydr));
+          gridDefaultDurForCalUi = gridDefaultDurHydr;
+          state.preciseSlots = [];
+          individualRows.forEach(function(s) {
+            var m = parseStartToMinutes(s.start_time);
+            var dur = slotDurationFromRow(s);
+            var occ = (s.active_bookings != null) ? parseInt(s.active_bookings, 10) : 0;
+            var booked = String(s.status || '').toLowerCase() === 'booked' || occ > 0;
+            var onGrid = allowedCalendarStarts.has(m);
+            if (onGrid && dur === gridDefaultDurHydr) {
+              state.selectedStarts.add(m);
+              if (booked) state.lockedStarts.add(m);
+            } else {
+              var psHydr = { startMinutes: m, durationMinutes: dur };
+              if (booked || occ > 0) psHydr.locked = true;
+              var aidRaw = s.arena_id != null ? parseInt(String(s.arena_id), 10) : NaN;
+              if (!isNaN(aidRaw)) psHydr.arenaId = aidRaw;
+              state.preciseSlots.push(psHydr);
+            }
+          });
+          state.calendarBaselineStarts = new Set(state.selectedStarts);
+          state.calendarBaselinePreciseKeys = new Set(
+            (state.preciseSlots || []).map(function(ps) {
+              return calendarPreciseSlotStableKey(ps);
+            })
+          );
+        }
         var durElCal = document.getElementById('slotDurationSelect');
         if (durElCal && daySlots.length) {
-          var durs = daySlots.map(slotDurationFromRow);
-          var dcal = durs.length && durs.every(function(x) { return x === durs[0]; }) ? durs[0] : 45;
-          durElCal.value = String(Math.min(480, Math.max(15, dcal)));
+          if (useCalGroup) {
+            var durs = daySlots.map(slotDurationFromRow);
+            var dcal = durs.length && durs.every(function(x) { return x === durs[0]; }) ? durs[0] : 45;
+            durElCal.value = String(Math.min(480, Math.max(15, dcal)));
+          } else {
+            durElCal.value = String(normalizeDurationToScheduleSelect(gridDefaultDurForCalUi));
+          }
         } else if (durElCal) {
           durElCal.value = String(normalizeDurationToScheduleSelect(state.defaultSlotDurationMinutes || 45));
         }
@@ -5279,7 +5617,6 @@
         document.getElementById('tabCalendar').style.display = 'none';
         document.getElementById('tabTemplate').style.display = 'none';
         document.getElementById('editTitle').textContent = 'Слоты на ' + formatDateKey(slotDate);
-        var useCalGroup = slotIntentUseGroupUi();
         document.getElementById('editHint').textContent = useCalGroup
           ? 'Групповые слоты: параметры для новых начал. Свободное окно снимите повторным нажатием на время; со записью — нельзя. «Готово» — когда есть изменения.'
           : 'Индивидуальные слоты: нажмите на время — добавить или убрать свободное окно. Запись на слот снять нельзя. «Готово» — когда есть изменения.';
@@ -5349,22 +5686,23 @@
             if (caw) caw.style.display = 'none';
           }
         }
-        // Reset precise state for this day
-        state.preciseSlots = [];
+        /** Default to chip grid UX; queued precise rows were hydrated above when editing calendar individual slots. */
         state.slotAddMode = 'grid';
         // Show mode switcher only for individual calendar slots
         var switcher = document.getElementById('slotAddModeSwitcher');
         if (switcher) switcher.style.display = useCalGroup ? 'none' : 'flex';
-        var precForm = document.getElementById('preciseSlotForm');
-        if (precForm) precForm.style.display = 'none';
-        var precAdded = document.getElementById('preciseSlotsAdded');
-        if (precAdded) precAdded.style.display = 'none';
+        // Must sync DOM (duration + grid vs precise) — after «Точное время» a raw display:none on
+        // preciseSlotForm leaves stale hidden grid + wrong active tab until user re-taps a mode.
+        setSlotAddMode('grid');
         document.getElementById('screenEdit').style.display = 'block';
         pruneSelectedStartsForOverlap(getEditDurationMinutes());
         renderHourGrid();
         renderPreciseSlotsAdded();
         updateTelegramBack();
         syncScheduleWeekDayStripVisibility();
+        loadTrainerServicesIfNeeded().then(function() {
+          syncPreciseArenaWrapsAfterSlotsChanged();
+        });
       }
 
       function renderHourGrid() {
@@ -5523,6 +5861,20 @@
             };
           } else {
             var precTpl = state.preciseSlots || [];
+            var arsTpl = state.trainerScheduleArenas || [];
+            var multiArenaTpl = arsTpl.length > 1;
+            var tplPrecArenaPick = null;
+            var tplNeedArena =
+              multiArenaTpl && precTpl.some(function(ps) { return ps.arenaId == null; });
+            if (tplNeedArena) {
+              var paTpl = document.getElementById('templatePreciseArenaSelect');
+              var pavTpl = paTpl ? parseInt(paTpl.value, 10) : NaN;
+              if (isNaN(pavTpl)) {
+                alert('Выберите площадку для слотов «Точное время» в шаблоне.');
+                return;
+              }
+              tplPrecArenaPick = pavTpl;
+            }
             slotsPayload = [];
             startsSorted.forEach(function(m0) {
               slotsPayload.push({
@@ -5533,12 +5885,17 @@
               });
             });
             precTpl.forEach(function(ps) {
-              slotsPayload.push({
+              var rowTpl = {
                 hour: Math.floor(ps.startMinutes / 60),
                 minute: ps.startMinutes % 60,
                 capacity: 1,
                 duration_minutes: ps.durationMinutes,
-              });
+              };
+              if (multiArenaTpl) {
+                var aeTpl = ps.arenaId != null ? ps.arenaId : tplPrecArenaPick;
+                if (aeTpl != null) rowTpl.arena_id = aeTpl;
+              }
+              slotsPayload.push(rowTpl);
             });
             slotsPayload.sort(function(a, b) {
               return (a.hour * 60 + a.minute) - (b.hour * 60 + b.minute);
@@ -5580,11 +5937,32 @@
           if (precSlots.length > 0) {
             // Mixed mode: build slot_entries combining grid starts + precise slots
             var slotEntries = [];
+            var arsPrec = state.trainerScheduleArenas || [];
+            var multiArenaPrec = arsPrec.length > 1;
+            var precArenaPayload = null;
+            var needArenaPick = multiArenaPrec && precSlots.some(function(ps) { return ps.arenaId == null; });
+            if (needArenaPick) {
+              var pasPick = document.getElementById('calendarPreciseArenaSelect');
+              var paidPick = pasPick ? parseInt(pasPick.value, 10) : NaN;
+              if (isNaN(paidPick)) {
+                alert('Выберите площадку для слотов «Точное время» (или у слотов из каталога уже задана своя).');
+                return;
+              }
+              precArenaPayload = paidPick;
+            }
             startsSorted.forEach(function(m0) {
               slotEntries.push({ start_time: formatMinuteClock(m0), duration_minutes: durationMinutes });
             });
             precSlots.forEach(function(ps) {
-              slotEntries.push({ start_time: formatMinuteClock(ps.startMinutes), duration_minutes: ps.durationMinutes });
+              var entPrec = {
+                start_time: formatMinuteClock(ps.startMinutes),
+                duration_minutes: ps.durationMinutes,
+              };
+              if (multiArenaPrec) {
+                var aidEnt = ps.arenaId != null ? ps.arenaId : precArenaPayload;
+                if (aidEnt != null) entPrec.arena_id = aidEnt;
+              }
+              slotEntries.push(entPrec);
             });
             postBody = { slot_date: state.editDate, slot_entries: slotEntries, capacity: capacity };
           } else {
@@ -5632,14 +6010,22 @@
                   showToast(typeof d === 'string' ? d : 'Ошибка сохранения');
                   return;
                 }
-                // Count new grid starts (not in baseline) + all precise-tab slots added in this save
-                var nNew = precSlots.length;
+                // Net additions vs editor-open snapshot (full POST replaces the day — toast should reflect real delta).
+                var nNew = 0;
                 if (state.calendarBaselineStarts) {
                   startsSorted.forEach(function(m) {
                     if (!state.calendarBaselineStarts.has(m)) nNew++;
                   });
                 } else {
                   nNew += startsSorted.length;
+                }
+                var precBaseSet = state.calendarBaselinePreciseKeys;
+                if (precBaseSet instanceof Set) {
+                  (precSlots || []).forEach(function(ps) {
+                    if (!precBaseSet.has(calendarPreciseSlotStableKey(ps))) nNew++;
+                  });
+                } else {
+                  nNew += (precSlots || []).length;
                 }
                 if (nNew > 0) {
                   var tidMark =
@@ -5660,6 +6046,7 @@
                 state.editDate = null;
                 state.editDay = null;
                 state.calendarBaselineStarts = null;
+                state.calendarBaselinePreciseKeys = null;
                 state.selectedStarts = new Set();
                 state.lockedStarts = new Set();
                 state.preciseSlots = [];
@@ -5969,10 +6356,24 @@
         var root = document.getElementById('scheduleWeekDayStrip');
         if (!root) return;
         root.addEventListener('click', function(ev) {
+          var wkNav = ev.target && ev.target.closest && ev.target.closest('[data-strip-week-delta]');
+          if (wkNav) {
+            var d = parseInt(wkNav.getAttribute('data-strip-week-delta'), 10);
+            if (!isNaN(d) && d !== 0) shiftTrainerScheduleWeek(d);
+            return;
+          }
           var btn = ev.target && ev.target.closest && ev.target.closest('[data-strip-date]');
           if (!btn) return;
           var ds = btn.getAttribute('data-strip-date');
           if (ds) onScheduleStripPickDay(ds);
+        });
+        root.addEventListener('keydown', function(ev) {
+          if (ev.key !== 'Enter' && ev.key !== ' ') return;
+          var wkNav = ev.target && ev.target.closest && ev.target.closest('[data-strip-week-delta]');
+          if (!wkNav) return;
+          ev.preventDefault();
+          var d2 = parseInt(wkNav.getAttribute('data-strip-week-delta'), 10);
+          if (!isNaN(d2) && d2 !== 0) shiftTrainerScheduleWeek(d2);
         });
       })();
 

@@ -39,6 +39,33 @@
       }
       function apiUrl(path) { return '/api/webapp' + path; }
 
+      var state = {
+        items: [],
+        editingId: null,
+        certItems: [],
+        editingCertId: null,
+        editingCert: null,
+        activeTab: 'passes',
+        clients: [],
+        services: [],
+        prefillClientIdForPassIssue: null,
+        prefillPassProductIdForPassIssue: null,
+        prefillCertProductIdForIssue: null,
+        prefillCertRecipientEmail: null,
+        prefillCertRecipientName: null,
+        prefillCertPurchasedByName: null,
+        prefillClientIdForCertIssue: null,
+        passIssueFilteredClients: [],
+        passIssueSelectedClientId: null,
+        passIssueSelectedClient: null,
+        certIssueSubmitting: false,
+        certIssueIdempotencyKey: null,
+        certIssuePurchasedByName: null,
+      };
+
+      /** When true, list screen shows passes only (tab bar + panelCerts HTML commented). Restore when gift certificate PDF/UX is ready. */
+      var CERT_CATALOG_TABS_DISABLED = true;
+
       function postClientInviteLinkFirstCopyRecorded() {
         if (!initData) return;
         fetch(apiUrl('/trainer/welcome-link/first-copy') + initDataParam(), {
@@ -53,6 +80,7 @@
         if (el) el.classList.add('active');
       }
       function setTab(tab) {
+        if (CERT_CATALOG_TABS_DISABLED && tab === 'certs') tab = 'passes';
         state.activeTab = tab;
         document.querySelectorAll('.tab').forEach(function(t) { t.classList.toggle('active', t.dataset.tab === tab); });
         document.querySelectorAll('.tab-panel').forEach(function(p) {
@@ -60,8 +88,14 @@
           p.classList.toggle('active', (tab === 'passes' && isPasses) || (tab === 'certs' && !isPasses));
         });
       }
-
-      var state = { items: [], editingId: null, certItems: [], editingCertId: null, editingCert: null, activeTab: 'passes', clients: [], services: [], prefillClientIdForPassIssue: null, prefillPassProductIdForPassIssue: null, passIssueFilteredClients: [], passIssueSelectedClientId: null, passIssueSelectedClient: null, certIssueSubmitting: false, certIssueIdempotencyKey: null };
+      (function applyUrlTabFromQuery() {
+        if (CERT_CATALOG_TABS_DISABLED) return;
+        var params = new URLSearchParams(window.location.search || '');
+        var tab = (params.get('tab') || '').toLowerCase();
+        if (tab === 'certs' || tab === 'cert' || tab === 'certificates') {
+          setTab('certs');
+        }
+      })();
 
       function formatPrice(cents) {
         if (cents == null) return '—';
@@ -365,11 +399,15 @@
           });
       };
 
-      document.getElementById('tabPasses').onclick = function() { setTab('passes'); };
-      document.getElementById('tabCerts').onclick = function() {
-        setTab('certs');
-        if (state.certItems.length === 0) loadCertList();
-      };
+      var tabPassesBtn = document.getElementById('tabPasses');
+      if (tabPassesBtn) tabPassesBtn.onclick = function() { setTab('passes'); };
+      var tabCertsBtn = document.getElementById('tabCerts');
+      if (tabCertsBtn) {
+        tabCertsBtn.onclick = function() {
+          setTab('certs');
+          if (state.certItems.length === 0) loadCertList();
+        };
+      }
 
       document.getElementById('certAnyAmount').onchange = function() {
         document.getElementById('certAmountGroup').style.display = document.getElementById('certAnyAmount').checked ? 'none' : 'block';
@@ -381,6 +419,7 @@
       }
       function renderCertList() {
         var wrap = document.getElementById('certListContent');
+        if (!wrap) return;
         var hintEl = document.getElementById('certsHint');
         if (hintEl) hintEl.style.display = state.certItems.length > 0 ? 'block' : 'none';
         if (state.certItems.length === 0) {
@@ -406,7 +445,9 @@
       }
       function loadCertList() {
         if (window.TrainerMiniAppGate && window.TrainerMiniAppGate.shouldBlockFeatureFetch()) return;
-        document.getElementById('certListContent').innerHTML = '<div class="pp-state pp-state--loading"><div class="pp-state-icon" aria-hidden="true">⏳</div><p class="pp-state-title">Загрузка</p><div class="pp-loading-dots" aria-hidden="true"><span></span><span></span><span></span></div></div>';
+        var host = document.getElementById('certListContent');
+        if (!host) return;
+        host.innerHTML = '<div class="pp-state pp-state--loading"><div class="pp-state-icon" aria-hidden="true">⏳</div><p class="pp-state-title">Загрузка</p><div class="pp-loading-dots" aria-hidden="true"><span></span><span></span><span></span></div></div>';
         fetch(apiUrl('/trainer/certificate-products') + initDataParam(), { headers: headers() })
           .then(function(r) { return r.json(); })
           .then(function(data) {
@@ -414,12 +455,12 @@
             renderCertList();
           })
           .catch(function() {
-            document.getElementById('certListContent').innerHTML = '<div class="pp-state pp-state--error"><div class="pp-state-icon" aria-hidden="true">⚠️</div><p class="pp-state-title">Не удалось загрузить</p><p class="pp-state-text">Проверьте соединение и откройте экран из бота.</p></div>';
+            host.innerHTML = '<div class="pp-state pp-state--error"><div class="pp-state-icon" aria-hidden="true">⚠️</div><p class="pp-state-title">Не удалось загрузить</p><p class="pp-state-text">Проверьте соединение и откройте экран из бота.</p></div>';
           });
       }
       function openCertForm(cert) {
         document.getElementById('certFormTitle').textContent = cert ? 'Редактировать сертификат' : 'Новый сертификат';
-        var anyAmount = cert ? cert.amount_cents == null : true;
+        var anyAmount = cert ? cert.amount_cents == null : false;
         document.getElementById('certAnyAmount').checked = anyAmount;
         document.getElementById('certAmountGroup').style.display = anyAmount ? 'none' : 'block';
         document.getElementById('certAmountByn').value = cert && cert.amount_cents != null ? String(Math.round(cert.amount_cents / 100)) : '';
@@ -429,11 +470,14 @@
         state.editingCertId = cert ? cert.id : null;
         state.editingCert = cert || null;
       }
-      document.getElementById('btnAddCert').onclick = function() {
-        state.editingCertId = null;
-        openCertForm(null);
-        showScreen('screenCertForm');
-      };
+      var btnAddCertEl = document.getElementById('btnAddCert');
+      if (btnAddCertEl) {
+        btnAddCertEl.onclick = function() {
+          state.editingCertId = null;
+          openCertForm(null);
+          showScreen('screenCertForm');
+        };
+      }
 
       function filterCertIssueClients() {
         var q = (document.getElementById('certIssueClientSearch').value || '').trim();
@@ -487,6 +531,36 @@
           };
         });
       }
+      function applyCertIssuePrefillFromState() {
+        if (state.prefillCertProductIdForIssue) {
+          var sel = document.getElementById('issueProductSelect');
+          if (sel) sel.value = String(state.prefillCertProductIdForIssue);
+        }
+        var rn = document.getElementById('issueRecipientName');
+        var re = document.getElementById('issueRecipientEmail');
+        if (rn && state.prefillCertRecipientName) rn.value = state.prefillCertRecipientName;
+        if (re && state.prefillCertRecipientEmail) re.value = state.prefillCertRecipientEmail;
+        if (state.prefillCertPurchasedByName) {
+          state.certIssuePurchasedByName = state.prefillCertPurchasedByName;
+        }
+        var cid = state.prefillClientIdForCertIssue;
+        if (cid && (state.clients || []).length) {
+          var cl = state.clients.find(function(c) { return c.id === cid; });
+          if (cl) {
+            state.certIssueSelectedClientId = cid;
+            state.certIssueSelectedClient = cl;
+            document.getElementById('certIssueClientSearchGroup').style.display = 'none';
+            document.getElementById('certIssueSelectedGroup').style.display = 'block';
+            document.getElementById('certIssueSelectedName').textContent = [cl.first_name, cl.last_name].filter(Boolean).join(' ').trim() || cl.phone || 'Клиент #' + cl.id;
+            var ph = (cl.phone || '').trim();
+            var pEl = document.getElementById('certIssueSelectedPhone');
+            if (pEl) {
+              pEl.textContent = ph || '';
+              pEl.style.display = ph ? '' : 'none';
+            }
+          }
+        }
+      }
       function openCertIssueScreen() {
         state.certIssueSelectedClientId = null;
         state.certIssueSelectedClient = null;
@@ -506,26 +580,36 @@
         renderCertIssueClientList();
         document.getElementById('issueRecipientName').value = '';
         document.getElementById('issueRecipientEmail').value = '';
+        state.certIssuePurchasedByName = null;
         document.getElementById('certIssueResult').style.display = 'none';
         document.getElementById('certIssueEmailSent').style.display = 'none';
         document.getElementById('certIssueDownloadLink').style.display = 'none';
+        applyCertIssuePrefillFromState();
         showScreen('screenCertIssue');
       }
-      document.getElementById('btnIssueCert').onclick = function() {
-        function openWhenReady() {
-          openCertIssueScreen();
-        }
-        var certsPromise = state.certItems.length > 0
-          ? Promise.resolve()
-          : fetch(apiUrl('/trainer/certificate-products') + initDataParam(), { headers: headers() })
+      var btnIssueCertEl = document.getElementById('btnIssueCert');
+      if (btnIssueCertEl) {
+        btnIssueCertEl.onclick = function() {
+          state.prefillCertProductIdForIssue = null;
+          state.prefillCertRecipientEmail = null;
+          state.prefillCertRecipientName = null;
+          state.prefillCertPurchasedByName = null;
+          state.prefillClientIdForCertIssue = null;
+          function openWhenReady() {
+            openCertIssueScreen();
+          }
+          var certsPromise = state.certItems.length > 0
+            ? Promise.resolve()
+            : fetch(apiUrl('/trainer/certificate-products') + initDataParam(), { headers: headers() })
+                .then(function(r) { return r.json(); })
+                .then(function(data) { state.certItems = data.items || []; });
+          var clientsPromise = fetch(apiUrl('/trainer/clients') + initDataParam(), { headers: headers() })
               .then(function(r) { return r.json(); })
-              .then(function(data) { state.certItems = data.items || []; });
-        var clientsPromise = fetch(apiUrl('/trainer/clients') + initDataParam(), { headers: headers() })
-          .then(function(r) { return r.json(); })
-          .then(function(data) { state.clients = data.clients || []; })
-          .catch(function() { state.clients = []; });
-        Promise.all([certsPromise, clientsPromise]).then(openWhenReady);
-      };
+              .then(function(data) { state.clients = data.clients || []; })
+              .catch(function() { state.clients = []; });
+          Promise.all([certsPromise, clientsPromise]).then(openWhenReady);
+        };
+      }
       document.getElementById('certIssueClientSearch').addEventListener('input', filterCertIssueClients);
       document.getElementById('certIssueChangeClient').onclick = function() {
         state.certIssueSelectedClientId = null;
@@ -549,6 +633,7 @@
         if (!recipientName) { alert('Укажите имя получателя — оно будет указано в сертификате'); return; }
         var body = { certificate_product_id: productId, recipient_name: recipientName };
         if (recipientEmail) body.recipient_email = recipientEmail;
+        if (state.certIssuePurchasedByName) body.purchased_by_name = state.certIssuePurchasedByName;
 
         var btn = document.getElementById('btnSubmitCertIssue');
         var btnText = btn.textContent;
@@ -630,15 +715,18 @@
         document.getElementById('passWelcomeLinkResult').style.display = 'none';
         showScreen('screenPassWelcomeLink');
       }
-      document.getElementById('btnPassWelcomeLink').onclick = function() {
-        var promise = state.items.length > 0
-          ? Promise.resolve()
-          : fetch(apiUrl('/trainer/pass-products') + initDataParam(), { headers: headers() })
-              .then(function(r) { return r.json(); })
-              .then(function(data) { state.items = data.items || []; })
-              .catch(function() { state.items = []; });
-        promise.then(openPassWelcomeLinkScreen).catch(function() { state.items = []; openPassWelcomeLinkScreen(); });
-      };
+      var btnPassWelcomeLinkEl = document.getElementById('btnPassWelcomeLink');
+      if (btnPassWelcomeLinkEl) {
+        btnPassWelcomeLinkEl.onclick = function() {
+          var promise = state.items.length > 0
+            ? Promise.resolve()
+            : fetch(apiUrl('/trainer/pass-products') + initDataParam(), { headers: headers() })
+                .then(function(r) { return r.json(); })
+                .then(function(data) { state.items = data.items || []; })
+                .catch(function() { state.items = []; });
+          promise.then(openPassWelcomeLinkScreen).catch(function() { state.items = []; openPassWelcomeLinkScreen(); });
+        };
+      }
       document.getElementById('btnCancelPassWelcomeLink').onclick = function() {
         showScreen('screenList');
         setTab('passes');
@@ -838,23 +926,55 @@
       }
       (function checkPassIssuePrefill() {
         var params = new URLSearchParams(window.location.search || '');
-        var cid = params.get('client_id');
-        if (cid) {
-          var clientId = parseInt(cid, 10);
+        /* Certificate-order deep links also carry client_id; do not open pass-issue flow for those. */
+        if (params.get('certificate_product_id')) return;
+        var ppidRaw = params.get('pass_product_id');
+        if (!ppidRaw) return;
+        var ppid = parseInt(ppidRaw, 10);
+        if (!ppid) return;
+        state.prefillPassProductIdForPassIssue = ppid;
+        var cidRaw = params.get('client_id');
+        if (cidRaw) {
+          var clientId = parseInt(cidRaw, 10);
           if (clientId) state.prefillClientIdForPassIssue = clientId;
         }
-        var ppidRaw = params.get('pass_product_id');
-        if (ppidRaw) {
-          var ppid = parseInt(ppidRaw, 10);
-          if (ppid) state.prefillPassProductIdForPassIssue = ppid;
-        }
-        if (!state.prefillClientIdForPassIssue && !state.prefillPassProductIdForPassIssue) return;
+        if (!state.prefillClientIdForPassIssue) return;
         setTab('passes');
         var itemsP = fetch(apiUrl('/trainer/pass-products') + initDataParam(), { headers: headers() }).then(function(r) { return r.json(); }).then(function(data) { state.items = data.items || []; });
         var clientsP = fetch(apiUrl('/trainer/clients') + initDataParam(), { headers: headers() }).then(function(r) { return r.json(); }).then(function(data) { state.clients = data.clients || []; }).catch(function() { state.clients = []; });
         Promise.all([itemsP, clientsP]).then(function() {
           if (state.items.filter(function(p) { return p.is_active; }).length === 0 || !state.clients.length) return;
           openPassIssueScreen();
+        });
+      })();
+      (function checkCertIssuePrefillFromRequest() {
+        var params = new URLSearchParams(window.location.search || '');
+        var cpidRaw = params.get('certificate_product_id');
+        if (!cpidRaw) return;
+        var cpid = parseInt(cpidRaw, 10);
+        if (!cpid) return;
+        state.prefillCertProductIdForIssue = cpid;
+        state.prefillCertRecipientEmail = (params.get('recipient_email') || '').trim();
+        state.prefillCertRecipientName = (params.get('recipient_name') || '').trim();
+        var pbn = (params.get('purchased_by_name') || '').trim();
+        state.prefillCertPurchasedByName = pbn || null;
+        var cidRaw = params.get('client_id');
+        if (cidRaw) {
+          var cid = parseInt(cidRaw, 10);
+          if (cid) state.prefillClientIdForCertIssue = cid;
+        }
+        setTab('certs');
+        var certsP = fetch(apiUrl('/trainer/certificate-products') + initDataParam(), { headers: headers() })
+          .then(function(r) { return r.json(); })
+          .then(function(data) { state.certItems = data.items || []; });
+        var clientsP = fetch(apiUrl('/trainer/clients') + initDataParam(), { headers: headers() })
+          .then(function(r) { return r.json(); })
+          .then(function(data) { state.clients = data.clients || []; })
+          .catch(function() { state.clients = []; });
+        Promise.all([certsP, clientsP]).then(function() {
+          var active = (state.certItems || []).filter(function(c) { return c.is_active; });
+          if (!active.length) return;
+          openCertIssueScreen();
         });
       })();
     })();

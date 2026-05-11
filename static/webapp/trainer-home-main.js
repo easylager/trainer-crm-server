@@ -263,6 +263,8 @@
       var hubLastUpcomingListCount = 0;
       /** Bookings with status pending — drives summary hint + week card highlight. */
       var hubLastPendingCount = 0;
+      /** Pending только среди первых HUB_UPCOMING_BOOKINGS_MAX карточек «Ближайшие» — как на экране. */
+      var hubLastPendingInNearestStripCount = 0;
       /** Formatted revenue for hub «С 1-го числа» (MTD API), or null. */
       var hubMtdRevenueText = null;
       /** Client requests without trainer response (GET /trainer/requests/summary). */
@@ -1185,18 +1187,33 @@
 
         /* Open loops (Zeigarnik): unfinished business, not just “do X” maintenance — sorted by priority below. */
         if (openLoopPending > 0 && !isRhythmHintDismissed('open_loop_pending')) {
-          out.push({
+          /*
+           * Checklist считает все pending; блок «Ближайшие» показывает только HUB_UPCOMING_BOOKINGS_MAX карточек.
+           * hubLastPendingInNearestStripCount совпадает с видимым списком.
+           */
+          var hubBookingsHydrated = hubLastBookingsDays !== null;
+          var pendingInNearList = hubLastPendingInNearestStripCount;
+          var pendingOnlyBeyondHubWindow = hubBookingsHydrated && pendingInNearList === 0;
+
+          var openLoopText =
+            'Осталось подтвердить ' +
+            openLoopPending +
+            ' ' +
+            pluralRu(openLoopPending, 'запись', 'записи', 'записей') +
+            ' — до подтверждения клиент не увидит занятие как согласованное.';
+          var openLoopCand = {
             id: 'open_loop_pending',
             priority: 103,
-            text:
-              'Осталось подтвердить ' +
-              openLoopPending +
-              ' ' +
-              pluralRu(openLoopPending, 'запись', 'записи', 'записей') +
-              ' — до подтверждения клиент не увидит занятие как согласованное.',
+            text: openLoopText,
             ctaLabel: 'К ближайшим',
             action: 'hub_upcoming_bookings',
-          });
+          };
+          if (pendingOnlyBeyondHubWindow) {
+            openLoopCand.cta2Label = 'Расписание';
+            openLoopCand.cta2Action = 'schedule';
+            openLoopCand.secondaryCtaFirst = true;
+          }
+          out.push(openLoopCand);
         }
         if (openLoopNoUpcoming > 0 && !isRhythmHintDismissed('open_loop_no_next')) {
           var hasFutureAvailSlots = !!d.has_future_available_slots;
@@ -1578,6 +1595,8 @@
             container.setAttribute('hidden', 'hidden');
             container.style.display = 'none';
             container.dataset.hubRhythmHintId = '';
+            var actionsEmpty = container.querySelector('.hub-schedule-rhythm-hint__actions');
+            if (actionsEmpty) actionsEmpty.classList.remove('hub-rhythm-actions--secondary-first');
             continue;
           }
           container.dataset.hubRhythmHintId = cand.id;
@@ -1604,6 +1623,14 @@
               cta2.textContent = '';
               cta2.setAttribute('hidden', 'hidden');
               cta2.style.display = 'none';
+            }
+          }
+          var actionsRow = container.querySelector('.hub-schedule-rhythm-hint__actions');
+          if (actionsRow) {
+            if (cand.secondaryCtaFirst && cand.cta2Label && cand.cta2Action) {
+              actionsRow.classList.add('hub-rhythm-actions--secondary-first');
+            } else {
+              actionsRow.classList.remove('hub-rhythm-actions--secondary-first');
             }
           }
         }
@@ -2519,7 +2546,7 @@
           return;
         }
         var rem =
-          typeof remaining === 'number' && remaining >= 0 ? remaining : total;
+          typeof remaining === 'number' && remaining >= 0 && !isNaN(remaining) ? remaining : 0;
         el.classList.add('hub-stat-value--dual');
         el.innerHTML =
           '<span class="hub-stat-dual-line"><span class="hub-stat-dual-num">' +
@@ -5308,6 +5335,14 @@
         return rem;
       }
 
+      /** Non-negative int from hub summary payload, or null if absent/invalid. */
+      function hubTrainerSessionSummaryInt(v) {
+        if (v === null || v === undefined || v === '') return null;
+        var n = typeof v === 'number' ? v : parseInt(String(v), 10);
+        if (!Number.isFinite(n) || n < 0) return null;
+        return Math.floor(n);
+      }
+
       function renderBookings(daysOrPayload) {
         var rawDays = Array.isArray(daysOrPayload)
           ? daysOrPayload
@@ -5416,16 +5451,16 @@
           firstWhen = (b0.start_time || '').slice(0, 5);
         }
 
-        var tsTotal = todaySessions && typeof todaySessions.total === 'number' ? todaySessions.total : null;
-        var tsRem = todaySessions && typeof todaySessions.remaining === 'number' ? todaySessions.remaining : null;
-        var wsTotal = weekSessions && typeof weekSessions.total === 'number' ? weekSessions.total : null;
-        var wsRem = weekSessions && typeof weekSessions.remaining === 'number' ? weekSessions.remaining : null;
+        var tsTotal = hubTrainerSessionSummaryInt(todaySessions && todaySessions.total);
+        var tsRem = hubTrainerSessionSummaryInt(todaySessions && todaySessions.remaining);
+        var wsTotal = hubTrainerSessionSummaryInt(weekSessions && weekSessions.total);
+        var wsRem = hubTrainerSessionSummaryInt(weekSessions && weekSessions.remaining);
 
-        hubLastTodayCount = tsTotal != null ? tsTotal : todayCount;
-        hubLastTodayRemaining = tsRem != null ? tsRem : hubEstimateRemainingStartsToday(daysForHub);
+        hubLastTodayCount = tsTotal !== null ? tsTotal : todayCount;
+        hubLastTodayRemaining = tsRem !== null ? tsRem : hubEstimateRemainingStartsToday(daysForHub);
         hubLastFirstWhen = firstWhen;
-        hubLastWeekCount = wsTotal != null ? wsTotal : weekCount;
-        hubLastWeekRemaining = wsRem != null ? wsRem : hubEstimateRemainingAllBookings(daysForHub);
+        hubLastWeekCount = wsTotal !== null ? wsTotal : weekCount;
+        hubLastWeekRemaining = wsRem !== null ? wsRem : hubEstimateRemainingAllBookings(daysForHub);
 
         var maxN = HUB_UPCOMING_BOOKINGS_MAX;
         var totalBookings = 0;
@@ -5434,6 +5469,7 @@
         });
 
         var count = 0;
+        var pendingInNearestStrip = 0;
         var parts = [];
         var hasFirstOnline = false;
         daysForHub.forEach(function(d) {
@@ -5450,6 +5486,7 @@
           parts.push('<div class="hub-bookings-stack">');
           bs.forEach(function(b) {
             if (count >= maxN) return;
+            if (b && String(b.status || '').toLowerCase() === 'pending') pendingInNearestStrip += 1;
             var timeRange = (b.start_time || '') + '–' + (b.end_time || '');
             parts.push(hubBookingSlotRowHtml(b, timeRange));
             count++;
@@ -5457,6 +5494,7 @@
           parts.push('</div>');
         });
 
+        hubLastPendingInNearestStripCount = pendingInNearestStrip;
         hubLastUpcomingListCount = count;
         syncHubHeroCompact();
         applyHubHero();
@@ -5467,6 +5505,7 @@
           block.onclick = null;
           wireEmptyScheduleButton();
           tryOpenHubGroupModalFromUrl();
+          renderHubSummaryHints();
           return;
         }
         if (hasFirstOnline) {
@@ -5547,6 +5586,8 @@
           if (bid) navigateTo('schedule-editor?open_booking=' + encodeURIComponent(bid) + '&from=hub');
         };
         tryOpenHubGroupModalFromUrl();
+        /* Rhythm + summary strip read hubLast* pending — refresh right after list hydrates (bootstrap order). */
+        renderHubSummaryHints();
       }
 
       /** Upcoming bookings: friendly onboarding instead of red «network» when account not active yet. */
@@ -5560,6 +5601,7 @@
         hubLastWeekRemaining = 0;
         hubLastUpcomingListCount = 0;
         hubLastPendingCount = 0;
+        hubLastPendingInNearestStripCount = 0;
         hubMtdRevenueText = null;
         syncHubHeroCompact();
         applyHubHero();
@@ -5609,6 +5651,7 @@
           hubLastWeekRemaining = 0;
           hubLastUpcomingListCount = 0;
           hubLastPendingCount = 0;
+          hubLastPendingInNearestStripCount = 0;
           hubMtdRevenueText = null;
           syncHubHeroCompact();
           applyHubHero();
@@ -5675,6 +5718,7 @@
               hubLastWeekRemaining = 0;
               hubLastUpcomingListCount = 0;
               hubLastPendingCount = 0;
+              hubLastPendingInNearestStripCount = 0;
               hubMtdRevenueText = null;
               syncHubHeroCompact();
               applyHubHero();
@@ -5710,6 +5754,7 @@
                     hubLastWeekRemaining = 0;
                     hubLastUpcomingListCount = 0;
                     hubLastPendingCount = 0;
+                    hubLastPendingInNearestStripCount = 0;
                     hubMtdRevenueText = null;
                     syncHubHeroCompact();
                     applyHubHero();
@@ -5728,6 +5773,7 @@
                   hubLastWeekRemaining = 0;
                   hubLastUpcomingListCount = 0;
                   hubLastPendingCount = 0;
+                  hubLastPendingInNearestStripCount = 0;
                   hubMtdRevenueText = null;
                   syncHubHeroCompact();
                   applyHubHero();
@@ -5745,6 +5791,7 @@
               hubLastWeekRemaining = 0;
               hubLastUpcomingListCount = 0;
               hubLastPendingCount = 0;
+              hubLastPendingInNearestStripCount = 0;
               hubMtdRevenueText = null;
               syncHubHeroCompact();
               applyHubHero();

@@ -153,11 +153,145 @@
       transition: opacity 0.2s ease;
       flex-shrink: 0;
     }
-    .slot-card:hover .slot-arrow {
-      opacity: 1;
+    .slot-card .slot-venue-row {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 2px;
     }
-    
-    /* Дополнительные стили для темной темы */
+    .slot-venue-pill {
+      display: inline-block;
+      max-width: 100%;
+      font-size: 12px;
+      font-weight: 600;
+      line-height: 1.35;
+      color: var(--tg-theme-hint-color);
+      opacity: 0.92;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .book-selection-hero {
+      margin-bottom: 20px;
+      padding: 16px 18px;
+      background: var(--tg-theme-secondary-bg-color);
+      border-radius: 16px;
+      border: 1px solid rgba(247, 166, 0, 0.28);
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+      text-align: center;
+    }
+    .selected-slot-summary {
+      font-size: 15px;
+      font-weight: 600;
+      line-height: 1.4;
+      color: var(--tg-theme-text-color);
+    }
+    .btn-book-service-details {
+      margin-top: 12px;
+      width: 100%;
+      padding: 10px 14px;
+      border-radius: 12px;
+      border: 1px solid color-mix(in srgb, var(--tg-theme-button-color) 40%, transparent);
+      background: var(--tg-theme-bg-color);
+      color: var(--tg-theme-button-color);
+      font: inherit;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+    .btn-book-service-details:active {
+      opacity: 0.88;
+    }
+    .book-service-detail-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 120;
+      display: none;
+      align-items: flex-end;
+      justify-content: center;
+      background: rgba(0, 0, 0, 0.45);
+      padding: 12px;
+      padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    }
+    .book-service-detail-sheet {
+      width: min(560px, 100%);
+      max-height: min(78vh, 520px);
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      border-radius: 18px 18px 14px 14px;
+      background: var(--tg-theme-bg-color);
+      border: 1px solid rgba(128, 128, 128, 0.16);
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.24);
+      padding: 16px 18px 18px;
+      text-align: left;
+    }
+    .book-service-detail-sheet-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+    .book-service-detail-sheet-head .book-service-detail-title {
+      flex: 1;
+      margin: 0;
+      padding-right: 0;
+      text-align: left;
+    }
+    .book-service-detail-close {
+      flex-shrink: 0;
+      width: 36px;
+      height: 36px;
+      border: none;
+      border-radius: 12px;
+      background: var(--tg-theme-secondary-bg-color);
+      color: var(--tg-theme-hint-color);
+      font-size: 22px;
+      line-height: 1;
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+    .book-service-detail-section {
+      margin-bottom: 16px;
+    }
+    .book-service-detail-section:last-child {
+      margin-bottom: 0;
+    }
+    .book-service-detail-kicker {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--tg-theme-hint-color);
+      margin-bottom: 6px;
+    }
+    .book-service-detail-body {
+      font-size: 14px;
+      line-height: 1.45;
+      color: var(--tg-theme-text-color);
+      white-space: pre-wrap;
+    }
+    .book-service-detail-important {
+      margin-top: 4px;
+      padding: 12px 14px;
+      border-radius: 12px;
+      background: rgba(255, 59, 48, 0.07);
+      border: 1px solid rgba(255, 59, 48, 0.2);
+    }
+    .book-service-detail-important-lead {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--app-danger, #ff3b30);
+      margin-bottom: 8px;
+    }
+    .book-service-detail-important-items {
+      font-size: 13px;
+      line-height: 1.45;
+      color: var(--tg-theme-text-color);
+      white-space: pre-wrap;
+    }
     @media (prefers-color-scheme: dark) {
       .slot-card {
         box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
@@ -520,7 +654,10 @@
     </div>
   </div>
   <div id="screenForm" style="display: none;">
-    <div id="selectedSlotLabel" style="margin-bottom: 20px; padding: 16px 18px; background: var(--tg-theme-secondary-bg-color); border-radius: 16px; border: 1px solid rgba(247, 166, 0, 0.28); font-size: 15px; font-weight: 600; text-align: center; box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);"></div>
+    <div id="bookSelectionHero" class="book-selection-hero">
+      <div id="selectedSlotSummary" class="selected-slot-summary"></div>
+      <button type="button" id="btnBookServiceDetails" class="btn-book-service-details" hidden>Подробнее</button>
+    </div>
     <div id="bookVenueHint" class="book-venue-hint" style="display: none;" aria-live="polite"></div>
     <div id="priceTierBlock" class="form-block" style="display: none;">
       <label>Категория цены</label>
@@ -559,6 +696,15 @@
           Поделиться
         </button>
       </div>
+    </div>
+  </div>
+  <div id="bookServiceDetailOverlay" class="book-service-detail-overlay" aria-hidden="true">
+    <div class="book-service-detail-sheet" role="dialog" aria-modal="true" aria-labelledby="bookServiceDetailTitle">
+      <div class="book-service-detail-sheet-head">
+        <h3 class="book-service-detail-title" id="bookServiceDetailTitle"></h3>
+        <button type="button" class="book-service-detail-close" id="bookServiceDetailClose" aria-label="Закрыть">×</button>
+      </div>
+      <div id="bookServiceDetailBody"></div>
     </div>
   </div>
   <div id="servicePickOverlay" class="service-pick-overlay" aria-hidden="true">
@@ -661,9 +807,14 @@
       let lastSlotsQueryServiceId = null;
       let bookTrainerDetailCache = null;
       let selectedPriceVariantId = null;
+      /** From GET /client/session?for_trainer_id — last variant for booking_context service (if any). */
+      let sessionPriceVariantHint = null;
       /** POST /client/booking: safe retry if the response body was lost after commit. */
       let bookSubmitIdempotencyKey = null;
+      /** Effective service for booking form (used for tiers + «Подробнее»). */
+      let bookFormEffectiveServiceId = null;
 
+      const BOOK_NOTICE_PREFIX = 'В стоимость не входят:';
       function bookParseBookingJsonResponse(text) {
         try { return JSON.parse(text || 'null'); } catch (e) { return null; }
       }
@@ -697,6 +848,17 @@
           .replace(/"/g, '&quot;');
       }
 
+      /** Same rules as catalog card: strip fixed «не входит» prefix for the highlighted block. */
+      function parseBookClientNoticeItems(raw) {
+        var str = (raw || '').trim();
+        if (!str) return '';
+        var rePlural = /^В стоимость не входят:\s*/i;
+        if (rePlural.test(str)) return str.replace(rePlural, '').replace(/\.\s*$/, '').trim();
+        var reSingular = /^В стоимость не входит:\s*/i;
+        if (reSingular.test(str)) return str.replace(reSingular, '').replace(/\.\s*$/, '').trim();
+        return str;
+      }
+
       function primaryVenueFromPublicTrainer(t) {
         if (!t) return '';
         var pn = (t.primary_arena_name && String(t.primary_arena_name).trim()) || '';
@@ -709,6 +871,13 @@
           if (ix >= 0 && names[ix]) return String(names[ix]).trim();
         }
         return (names[0] && String(names[0]).trim()) || '';
+      }
+
+      /** Short venue line for slot list (API already resolves default arena). */
+      function slotArenaShortLabel(slot) {
+        var n = slot && slot.arena_name && String(slot.arena_name).trim();
+        if (n) return n;
+        return primaryVenueFromPublicTrainer(bookTrainerDetailCache) || '';
       }
 
       function syncBookVenueHint(slot) {
@@ -748,6 +917,75 @@
         }
         el.innerHTML = parts.join('');
         el.style.display = 'block';
+      }
+
+      function resolveBookServiceRow(serviceId) {
+        var t = bookTrainerDetailCache;
+        var services = (t && t.services) ? t.services : [];
+        if (serviceId == null || !Number.isFinite(Number(serviceId))) return null;
+        return services.find(function(x) {
+          return Number(x.service_id) === Number(serviceId);
+        }) || null;
+      }
+
+      function syncBookServiceDetailsTrigger(serviceId) {
+        bookFormEffectiveServiceId =
+          serviceId != null && Number.isFinite(Number(serviceId)) ? Number(serviceId) : null;
+        var btn = document.getElementById('btnBookServiceDetails');
+        if (!btn) return;
+        var row = resolveBookServiceRow(bookFormEffectiveServiceId);
+        var desc = row && row.description && String(row.description).trim();
+        var notice = row && row.client_notice && String(row.client_notice).trim();
+        btn.hidden = !(desc || notice);
+      }
+
+      function openBookServiceDetailModal() {
+        var row = resolveBookServiceRow(bookFormEffectiveServiceId);
+        if (!row) return;
+        var desc = row.description && String(row.description).trim();
+        var notice = row.client_notice && String(row.client_notice).trim();
+        if (!desc && !notice) return;
+        var titleEl = document.getElementById('bookServiceDetailTitle');
+        var bodyEl = document.getElementById('bookServiceDetailBody');
+        var overlay = document.getElementById('bookServiceDetailOverlay');
+        if (!titleEl || !bodyEl || !overlay) return;
+        titleEl.textContent = (row.service_name && String(row.service_name).trim()) || 'Услуга';
+        var parts = [];
+        if (desc) {
+          parts.push(
+            '<div class="book-service-detail-section">' +
+              '<div class="book-service-detail-kicker">Описание услуги</div>' +
+              '<div class="book-service-detail-body">' +
+              escapeHtmlBook(desc).replace(/\n/g, '<br>') +
+              '</div></div>'
+          );
+        }
+        if (notice) {
+          var parsed = parseBookClientNoticeItems(notice);
+          var noticeShow = (parsed && parsed.trim()) || notice.trim();
+          if (noticeShow) {
+            parts.push(
+              '<div class="book-service-detail-section">' +
+                '<div class="book-service-detail-important">' +
+                '<div class="book-service-detail-important-lead">' +
+                escapeHtmlBook(BOOK_NOTICE_PREFIX) +
+                '</div>' +
+                '<div class="book-service-detail-important-items">' +
+                escapeHtmlBook(noticeShow).replace(/\n/g, '<br>') +
+                '</div></div></div>'
+            );
+          }
+        }
+        bodyEl.innerHTML = parts.join('');
+        overlay.style.display = 'flex';
+        overlay.setAttribute('aria-hidden', 'false');
+      }
+
+      function closeBookServiceDetailModal() {
+        var overlay = document.getElementById('bookServiceDetailOverlay');
+        if (!overlay) return;
+        overlay.style.display = 'none';
+        overlay.setAttribute('aria-hidden', 'true');
       }
 
       function normalizeBookPhoneForApi(raw) {
@@ -814,6 +1052,13 @@
         }
         block.style.display = 'block';
         host.innerHTML = '';
+        var hinted = sessionPriceVariantHint;
+        var hintOk =
+          hinted != null &&
+          tiers.some(function(tier) {
+            return Number(tier.id) === Number(hinted);
+          });
+        var preferredId = hintOk ? Number(hinted) : null;
         tiers.forEach(function(tier) {
           const lab = document.createElement('label');
           const inp = document.createElement('input');
@@ -832,10 +1077,19 @@
           });
           host.appendChild(lab);
         });
-        const first = host.querySelector('input');
-        if (first) {
-          first.checked = true;
-          selectedPriceVariantId = parseInt(first.value, 10);
+        var pick =
+          preferredId != null
+            ? host.querySelector('input[name="priceTierChoice"][value="' + preferredId + '"]')
+            : null;
+        if (pick) {
+          pick.checked = true;
+          selectedPriceVariantId = preferredId;
+        } else {
+          const first = host.querySelector('input');
+          if (first) {
+            first.checked = true;
+            selectedPriceVariantId = parseInt(first.value, 10);
+          }
         }
       }
       const thisMonday = getMonday(new Date());
@@ -880,6 +1134,14 @@
             needsProfileName = !!data.needs_profile_name;
             clientFirstName = data.client_first_name != null ? String(data.client_first_name).trim() : '';
             clientLastName = data.client_last_name != null ? String(data.client_last_name).trim() : '';
+            sessionPriceVariantHint = null;
+            if (trainerId) {
+              const bpv = data.booking_context_service_price_variant_id;
+              sessionPriceVariantHint =
+                bpv != null && String(bpv) !== '' && Number.isFinite(Number(bpv)) && Number(bpv) > 0
+                  ? Number(bpv)
+                  : null;
+            }
           }
         } catch (e) {}
       }
@@ -1023,6 +1285,9 @@
         const sidForSlots = effectiveServiceId();
         lastSlotsQueryServiceId = sidForSlots;
         if (sidForSlots != null) q += '&service_id=' + encodeURIComponent(sidForSlots);
+        if (Number.isFinite(Number(sessionArenaId)) && Number(sessionArenaId) > 0) {
+          q += '&arena_ids=' + encodeURIComponent(String(sessionArenaId));
+        }
         var hdr = { Accept: 'application/json' };
         if (initData) hdr['X-Telegram-Init-Data'] = initData;
         const res = await fetch('/api/webapp/client/slots?' + q, { headers: hdr, cache: 'no-store' });
@@ -1058,8 +1323,22 @@
           const daySlots = byDay[dateKey].sort(function(a, b) { return (a.start_time || '').localeCompare(b.start_time || ''); });
           html += '<div class="day-block"><div class="day-title">' + formatDateKey(dateKey) + '</div>';
           daySlots.forEach(function(s) {
-            html += '<button type="button" class="slot-card" data-slot-id="' + s.id + '" data-date="' + s.slot_date + '" data-time="' + (s.start_time || '') + '–' + (s.end_time || '') + '">';
+            var venue = slotArenaShortLabel(s);
+            html += '<button type="button" class="slot-card" data-slot-id="' + s.id + '" data-date="' + s.slot_date + '" data-time="' + (s.start_time || '') + '–' + (s.end_time || '') + '"';
+            if (venue) {
+              html +=
+                ' aria-label="' +
+                escapeHtmlBook((s.start_time || '') + '–' + (s.end_time || '') + ', ' + venue) +
+                '"';
+            }
+            html += '>';
             html += '<span class="slot-card-body"><span class="slot-time">' + (s.start_time || '') + '–' + (s.end_time || '') + '</span>';
+            if (venue) {
+              html +=
+                '<span class="slot-venue-row"><span class="slot-venue-pill">' +
+                escapeHtmlBook(venue) +
+                '</span></span>';
+            }
             var cap = (s.capacity != null) ? parseInt(s.capacity, 10) : 1;
             var sl = (s.spots_left != null) ? parseInt(s.spots_left, 10) : null;
             if (cap > 1 && sl != null && !isNaN(sl) && sl > 0) {
@@ -1165,11 +1444,13 @@
             slotLine = String(srow.service_name).trim() + ' · ' + slotLine;
           }
         }
-        document.getElementById('selectedSlotLabel').textContent = 'Выбрано: ' + slotLine;
+        document.getElementById('selectedSlotSummary').textContent = 'Выбрано: ' + slotLine;
+        syncBookServiceDetailsTrigger(effSid);
         syncBookVenueHint(selSlot);
       }
 
       function showSlots() {
+        closeBookServiceDetailModal();
         var vh = document.getElementById('bookVenueHint');
         if (vh) {
           vh.style.display = 'none';
@@ -1246,6 +1527,27 @@
         if (!el || el.dataset.crmNat375Mask === '1') return;
         if (typeof window.wireNational375PhoneInputMask === 'function') {
           window.wireNational375PhoneInputMask(el);
+        }
+      })();
+
+      (function wireBookServiceDetailUi() {
+        var btn = document.getElementById('btnBookServiceDetails');
+        var overlay = document.getElementById('bookServiceDetailOverlay');
+        var closeBtn = document.getElementById('bookServiceDetailClose');
+        var sheet = overlay ? overlay.querySelector('.book-service-detail-sheet') : null;
+        if (btn) {
+          btn.addEventListener('click', function() {
+            openBookServiceDetailModal();
+          });
+        }
+        if (closeBtn) closeBtn.addEventListener('click', closeBookServiceDetailModal);
+        if (overlay && sheet) {
+          overlay.addEventListener('click', function(ev) {
+            if (ev.target === overlay) closeBookServiceDetailModal();
+          });
+          sheet.addEventListener('click', function(ev) {
+            ev.stopPropagation();
+          });
         }
       })();
 

@@ -15,7 +15,8 @@ def _key_trainers(limit: int, offset: int, city_id: int | None, service_id: int 
 
 
 def _key_slots(trainer_id: int, min_hours: int, service_id: int | None) -> tuple:
-    return ("slots", trainer_id, min_hours, service_id)
+    # v2 cache: normalized arena_id on each slot row for client payloads
+    return ("slots", "v2", trainer_id, min_hours, service_id)
 
 
 def get_trainers_cached(
@@ -70,6 +71,14 @@ def set_slots_cached(trainer_id: int, min_hours: int, slots: list, service_id: i
 
 def invalidate_slots_for_trainer(trainer_id: int) -> None:
     """Drop cached /client/slots lists when availability changes (slots CRUD or booking create/cancel/decline)."""
-    to_del = [k for k in _CACHE if isinstance(k, tuple) and k[0] == "slots" and k[1] == trainer_id]
+    to_del: list[tuple] = []
+    for k in _CACHE:
+        if not isinstance(k, tuple) or len(k) < 2 or k[0] != "slots":
+            continue
+        if k[1] == "v2":
+            if len(k) >= 3 and k[2] == trainer_id:
+                to_del.append(k)
+        elif k[1] == trainer_id:
+            to_del.append(k)
     for k in to_del:
         _CACHE.pop(k, None)

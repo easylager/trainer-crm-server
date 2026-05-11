@@ -335,6 +335,16 @@
     html[data-app-theme="dark"] .badge.pass-order {
       color: #fde68a;
     }
+    .request-card .badge.cert-order,
+    .badge.cert-order {
+      background: rgba(16, 185, 129, 0.14);
+      border: none;
+      color: #059669;
+      font-weight: 700;
+    }
+    html[data-app-theme="dark"] .badge.cert-order {
+      color: #6ee7b7;
+    }
     .request-card .arrow-wrap {
       display: flex;
       align-items: center;
@@ -577,6 +587,118 @@
       background: rgba(247, 166, 0, 0.09);
       border-color: rgba(247, 166, 0, 0.22);
       color: #a8a8ae;
+    }
+    #screenDetail.detail-screen--cert-order .detail-hero {
+      background: linear-gradient(
+        145deg,
+        rgba(16, 185, 129, 0.45) 0%,
+        rgba(16, 185, 129, 0.16) 40%,
+        rgba(16, 185, 129, 0.06) 72%,
+        var(--req-surface) 100%
+      );
+    }
+    #screenDetail.detail-screen--cert-order .detail-kicker::before {
+      background: #10b981;
+      box-shadow: 0 0 14px rgba(16, 185, 129, 0.65);
+    }
+    #screenDetail.detail-screen--cert-order .detail-hero-inner {
+      position: relative;
+      overflow: hidden;
+    }
+    #screenDetail.detail-screen--cert-order .detail-hero-inner::before {
+      content: '';
+      position: absolute;
+      top: -35%;
+      right: -12%;
+      width: 160px;
+      height: 160px;
+      border-radius: 42px;
+      background: radial-gradient(circle, rgba(16, 185, 129, 0.22) 0%, transparent 68%);
+      pointer-events: none;
+    }
+    #screenDetail.detail-screen--cert-order .detail-kicker {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    #screenDetail.detail-screen--cert-order .detail-title-main {
+      font-size: 22px;
+      letter-spacing: -0.04em;
+      line-height: 1.32;
+      position: relative;
+      z-index: 1;
+    }
+    #screenDetail.detail-screen--cert-order .detail-badge-row {
+      position: relative;
+      z-index: 1;
+    }
+    #screenDetail.detail-screen--cert-order .detail-client-row {
+      margin-bottom: 12px;
+    }
+    .detail-cert-flow-hint {
+      margin: 0 0 18px;
+      padding: 14px 17px;
+      border-radius: 16px;
+      font-size: 13px;
+      line-height: 1.52;
+      color: var(--req-muted);
+      background: rgba(16, 185, 129, 0.08);
+      border: 1px solid rgba(16, 185, 129, 0.22);
+    }
+    .detail-cert-order-summary {
+      margin: 0 0 16px;
+      padding: 16px 17px;
+      border-radius: 16px;
+      background: var(--req-surface);
+      border: 1px solid rgba(16, 185, 129, 0.28);
+      box-shadow: 0 4px 18px rgba(0, 0, 0, 0.06);
+    }
+    html[data-app-theme="dark"] .detail-cert-order-summary {
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+      border-color: rgba(16, 185, 129, 0.35);
+    }
+    .detail-cert-order-summary__title {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--req-muted);
+      margin-bottom: 8px;
+    }
+    .detail-cert-order-summary__name {
+      font-size: 17px;
+      font-weight: 700;
+      color: var(--req-text);
+      line-height: 1.35;
+      margin-bottom: 6px;
+    }
+    .detail-cert-order-summary__pay {
+      font-size: 15px;
+      color: var(--req-text);
+      margin-bottom: 12px;
+    }
+    .detail-cert-order-summary__pay strong {
+      color: #10b981;
+      font-weight: 800;
+    }
+    html[data-app-theme="dark"] .detail-cert-order-summary__pay strong {
+      color: #34d399;
+    }
+    .detail-cert-order-summary__ctx {
+      font-size: 12px;
+      color: var(--req-muted);
+      margin-bottom: 10px;
+    }
+    .detail-cert-order-summary__row {
+      font-size: 13px;
+      line-height: 1.45;
+      color: var(--req-muted);
+      margin-top: 6px;
+    }
+    .detail-cert-order-summary__row strong {
+      color: var(--req-text);
+      font-weight: 600;
     }
     #detailActions.action-buttons--pass {
       display: flex;
@@ -1086,6 +1208,7 @@
       </div>
     </div>
     <p class="detail-pass-flow-hint" id="detailPassFlowHint" style="display: none;"></p>
+    <div id="detailCertOrderSummary" class="detail-cert-order-summary" style="display: none;" aria-live="polite"></div>
     <div class="detail-client-row" id="detailClientRow">
       <div class="detail-client-avatar" id="detailClientAvatar">—</div>
       <div class="detail-client-meta">
@@ -1306,6 +1429,11 @@
       }
 
       function requestCardMeta(r) {
+        if (r.request_subtype === 'certificate_product_order') {
+          var name = (r.certificate_product_name || '').trim() || 'Сертификат';
+          var prev = clientPreview(r);
+          return (name + ' — ' + prev).slice(0, 88);
+        }
         var raw = (r.comment_body || '').trim();
         if (!raw) raw = (r.comment || '').trim();
         if (!raw) return clientPreview(r);
@@ -1348,11 +1476,12 @@
           const meta = requestCardMeta(r);
           const personalBadge = r.is_personalized ? '<span class="badge personalized">Для вас</span>' : '';
           const passBadge = r.request_subtype === 'pass_product_order' ? '<span class="badge pass-order">Абонемент</span>' : '';
+          const certBadge = r.request_subtype === 'certificate_product_order' ? '<span class="badge cert-order">Сертификат</span>' : '';
           return '<button type="button" class="request-card request-card--new" data-request-id="' + r.id + '">' +
             '<span class="request-card__stripe" aria-hidden="true"></span>' +
             '<div class="request-card__body">' +
             '<div class="main"><div class="title">' + escapeHtml(title) + '</div><div class="meta">' + escapeHtml(meta) + '</div></div>' +
-            '<div class="badges-row">' + personalBadge + passBadge + '<span class="badge new">Новая</span></div>' +
+            '<div class="badges-row">' + personalBadge + passBadge + certBadge + '<span class="badge new">Новая</span></div>' +
             '<span class="arrow-wrap" aria-hidden="true">→</span></div></button>';
         }).join('');
 
@@ -1362,11 +1491,12 @@
           const meta = requestCardMeta(r);
           const personalBadge = r.is_personalized ? '<span class="badge personalized">Для вас</span>' : '';
           const passBadge = r.request_subtype === 'pass_product_order' ? '<span class="badge pass-order">Абонемент</span>' : '';
+          const certBadge = r.request_subtype === 'certificate_product_order' ? '<span class="badge cert-order">Сертификат</span>' : '';
           return '<button type="button" class="request-card request-card--progress" data-request-id="' + r.id + '">' +
             '<span class="request-card__stripe" aria-hidden="true"></span>' +
             '<div class="request-card__body">' +
             '<div class="main"><div class="title">' + escapeHtml(title) + '</div><div class="meta">' + escapeHtml(meta) + '</div></div>' +
-            '<div class="badges-row">' + personalBadge + passBadge + '<span class="badge done">В работе</span></div>' +
+            '<div class="badges-row">' + personalBadge + passBadge + certBadge + '<span class="badge done">В работе</span></div>' +
             '<span class="arrow-wrap" aria-hidden="true">→</span></div></button>';
         }).join('');
 
@@ -1399,21 +1529,71 @@
         req.remind_slots_pending = !!req.remind_slots_pending;
 
         var isPassOrder = req.request_subtype === 'pass_product_order';
+        var isCertOrder = req.request_subtype === 'certificate_product_order';
+        var isCatalogOrder = isPassOrder || isCertOrder;
         var detailScreen = document.getElementById('screenDetail');
-        if (detailScreen) detailScreen.classList.toggle('detail-screen--pass-order', isPassOrder);
+        if (detailScreen) {
+          detailScreen.classList.toggle('detail-screen--pass-order', isPassOrder);
+          detailScreen.classList.toggle('detail-screen--cert-order', isCertOrder);
+        }
 
         var detailKickerEl = document.getElementById('detailKicker');
-        if (detailKickerEl) detailKickerEl.textContent = isPassOrder ? 'Заявка на абонемент' : 'Заявка';
+        if (detailKickerEl) {
+          if (isPassOrder) detailKickerEl.textContent = 'Заявка на абонемент';
+          else if (isCertOrder) detailKickerEl.textContent = 'Заявка на сертификат';
+          else detailKickerEl.textContent = 'Заявка';
+        }
 
         var passFlowHintEl = document.getElementById('detailPassFlowHint');
         if (passFlowHintEl) {
           if (isPassOrder) {
+            passFlowHintEl.className = 'detail-pass-flow-hint';
             passFlowHintEl.style.display = 'block';
             passFlowHintEl.textContent =
-              'Свяжитесь с клиентом в Telegram, примите оплату и выдайте абонемент в разделе «Абонементы».';
+              'Примите оплату и выдайте абонемент в разделе «Абонементы». Кнопка «Написать клиенту» в уведомлении Telegram открывает переписку с клиентом через бота (сообщение уйдёт в чат клиента).';
+          } else if (isCertOrder) {
+            passFlowHintEl.className = 'detail-cert-flow-hint';
+            passFlowHintEl.style.display = 'block';
+            passFlowHintEl.textContent =
+              'Примите оплату и выдайте сертификат в разделе «Сертификаты». Кнопка «Написать клиенту» в этом уведомлении Telegram открывает переписку с клиентом через бота (сообщение уйдёт в чат клиента).';
           } else {
             passFlowHintEl.style.display = 'none';
             passFlowHintEl.textContent = '';
+          }
+        }
+
+        var certSumEl = document.getElementById('detailCertOrderSummary');
+        if (certSumEl) {
+          if (!isCertOrder) {
+            certSumEl.style.display = 'none';
+            certSumEl.innerHTML = '';
+          } else {
+            certSumEl.style.display = 'block';
+            var pname = (req.certificate_product_name || '').trim() || 'Подарочный сертификат';
+            var ctxLine = escapeHtml((req.city_name || '—') + ' · ' + (req.service_name || '—'));
+            var sumHtml =
+              '<div class="detail-cert-order-summary__title">Продукт</div>' +
+              '<div class="detail-cert-order-summary__name">' + escapeHtml(pname) + '</div>' +
+              '<div class="detail-cert-order-summary__ctx">Контекст заявки: ' + ctxLine + '</div>';
+            if ((req.cert_purchased_by_name || '').trim()) {
+              sumHtml +=
+                '<div class="detail-cert-order-summary__row">Заказ оформляет: <strong>' +
+                escapeHtml(String(req.cert_purchased_by_name).trim()) +
+                '</strong></div>';
+            }
+            if ((req.cert_recipient_name || '').trim()) {
+              sumHtml +=
+                '<div class="detail-cert-order-summary__row">Имя получателя (в сертификате): <strong>' +
+                escapeHtml(String(req.cert_recipient_name).trim()) +
+                '</strong></div>';
+            }
+            if ((req.cert_recipient_email || '').trim()) {
+              sumHtml +=
+                '<div class="detail-cert-order-summary__row">Email для PDF: <strong>' +
+                escapeHtml(String(req.cert_recipient_email).trim()) +
+                '</strong></div>';
+            }
+            certSumEl.innerHTML = sumHtml;
           }
         }
 
@@ -1422,8 +1602,16 @@
         var titleBadges = [];
         if (req.is_personalized) titleBadges.push('<span class="badge personalized">Заявка для вас</span>');
         if (isPassOrder) titleBadges.push('<span class="badge pass-order">Абонемент</span>');
+        if (isCertOrder) titleBadges.push('<span class="badge cert-order">Сертификат</span>');
         if (req.has_responded) titleBadges.push('<span class="detail-badge-in-progress">В работе</span>');
-        if (titleMainEl) titleMainEl.textContent = (req.city_name || '—') + ' · ' + (req.service_name || '—');
+        if (titleMainEl) {
+          if (isCertOrder) {
+            var cname = (req.certificate_product_name || '').trim() || 'Заказ сертификата';
+            titleMainEl.textContent = cname;
+          } else {
+            titleMainEl.textContent = (req.city_name || '—') + ' · ' + (req.service_name || '—');
+          }
+        }
         if (badgesEl) {
           badgesEl.innerHTML = titleBadges.join('');
           badgesEl.style.display = titleBadges.length ? 'flex' : 'none';
@@ -1445,7 +1633,7 @@
         var commentBody = ((req.comment_body || req.comment) || '').trim();
         var commentWrap = document.getElementById('detailCommentWrap');
         var commentEl = document.getElementById('detailComment');
-        if (commentBody && !isPassOrder) {
+        if (commentBody && !isCatalogOrder) {
           commentEl.textContent = commentBody;
           commentWrap.style.display = 'block';
         } else {
@@ -1498,7 +1686,7 @@
 
         var infoRow = document.getElementById('detailInfoRow');
         var infoPopover = document.getElementById('detailInfoPopover');
-        if (!isPassOrder && req.has_responded) {
+        if (!isCatalogOrder && req.has_responded) {
           infoRow.style.display = 'flex';
           infoPopover.innerHTML = DETAIL_HINT_HTML;
           infoPopover.style.display = 'none';
@@ -1513,7 +1701,7 @@
 
         var remindStatusEl = document.getElementById('detailRemindStatus');
         if (remindStatusEl) {
-          if (!isPassOrder && req.has_responded && req.remind_slots_pending) {
+          if (!isCatalogOrder && req.has_responded && req.remind_slots_pending) {
             remindStatusEl.textContent = '✓ Напоминание включено: напишем в боте, когда в расписании появятся свободные окна.';
             remindStatusEl.style.display = 'block';
           } else {
@@ -1527,10 +1715,57 @@
         actions.className = 'action-buttons';
         actions.removeAttribute('data-variant');
 
+        function wireWriteClientButton(btn) {
+          if (!btn) return;
+          btn.onclick = function (ev) {
+            ev.preventDefault();
+            var tid = req.client_telegram_id;
+            if (tid == null || tid === '') return;
+            var clientUn = String(req.client_telegram_username || '').replace(/^@/, '').trim();
+            var H = window.TrainerRelayHelpers;
+            var ctx =
+              H && typeof H.contextFromTrainerClient === 'function'
+                ? H.contextFromTrainerClient({
+                    id: req.client_id,
+                    telegram_id: tid,
+                    telegram_username: clientUn,
+                    is_sandbox: false,
+                    phone: '',
+                  })
+                : null;
+            if (
+              ctx &&
+              H &&
+              typeof H.shouldUseRelayModal === 'function' &&
+              H.shouldUseRelayModal(ctx) &&
+              typeof H.openRelaySendModalForContext === 'function'
+            ) {
+              var sub =
+                H.scheduleBookingSubtitle && typeof H.scheduleBookingSubtitle === 'function'
+                  ? H.scheduleBookingSubtitle({
+                      client_first_name: req.client_first_name,
+                      client_last_name: req.client_last_name,
+                    })
+                  : '';
+              if (H.openRelaySendModalForContext(ctx, { subtitle: sub })) return;
+            }
+            var opened = false;
+            if (typeof window.openTelegramChatFromMiniApp === 'function') {
+              opened = !!window.openTelegramChatFromMiniApp({ username: clientUn, telegramId: tid });
+            }
+            if (!opened) {
+              try {
+                window.location.assign('tg://user?id=' + encodeURIComponent(String(tid)));
+              } catch (e1) {
+                /* noop */
+              }
+            }
+          };
+        }
+
         if (isPassOrder) {
           actions.classList.add('action-buttons--pass');
           actions.setAttribute('data-variant', 'pass');
-          // Pass-order: only two focused actions — no respond/decline workflow
           var hasClientTg = !!(req.client_telegram_id);
           if (hasClientTg) {
             actions.innerHTML +=
@@ -1539,52 +1774,7 @@
           if (req.client_id && req.pass_product_id) {
             actions.innerHTML += '<button type="button" class="bd-btn bd-btn--secondary" id="btnIssuePassFromRequest">Выдать абонемент</button>';
           }
-          var writeClientBtn = document.getElementById('btnWriteClient');
-          if (writeClientBtn) {
-            writeClientBtn.onclick = function (ev) {
-              ev.preventDefault();
-              var tid = req.client_telegram_id;
-              if (tid == null || tid === '') return;
-              var H = window.TrainerRelayHelpers;
-              var ctx =
-                H && typeof H.contextFromTrainerClient === 'function'
-                  ? H.contextFromTrainerClient({
-                      id: req.client_id,
-                      telegram_id: tid,
-                      telegram_username: '',
-                      is_sandbox: false,
-                      phone: '',
-                    })
-                  : null;
-              if (
-                ctx &&
-                H &&
-                typeof H.shouldUseRelayModal === 'function' &&
-                H.shouldUseRelayModal(ctx) &&
-                typeof H.openRelaySendModalForContext === 'function'
-              ) {
-                var sub =
-                  H.scheduleBookingSubtitle && typeof H.scheduleBookingSubtitle === 'function'
-                    ? H.scheduleBookingSubtitle({
-                        client_first_name: req.client_first_name,
-                        client_last_name: req.client_last_name,
-                      })
-                    : '';
-                if (H.openRelaySendModalForContext(ctx, { subtitle: sub })) return;
-              }
-              var opened = false;
-              if (typeof window.openTelegramChatFromMiniApp === 'function') {
-                opened = !!window.openTelegramChatFromMiniApp({ telegramId: tid });
-              }
-              if (!opened) {
-                try {
-                  window.location.assign('tg://user?id=' + encodeURIComponent(String(tid)));
-                } catch (e1) {
-                  /* noop */
-                }
-              }
-            };
-          }
+          wireWriteClientButton(document.getElementById('btnWriteClient'));
           var issueBtn = document.getElementById('btnIssuePassFromRequest');
           if (issueBtn) {
             issueBtn.onclick = function() {
@@ -1592,6 +1782,41 @@
                 '&pass_product_id=' + encodeURIComponent(String(req.pass_product_id));
               var idt = initData();
               if (idt) u += '&init_data=' + encodeURIComponent(idt);
+              window.location.href = u;
+            };
+          }
+        } else if (isCertOrder) {
+          actions.classList.add('action-buttons--pass');
+          actions.setAttribute('data-variant', 'cert');
+          var hasClientTgC = !!(req.client_telegram_id);
+          if (hasClientTgC) {
+            actions.innerHTML +=
+              '<button type="button" class="bd-btn bd-btn--primary" id="btnWriteClient">Написать клиенту</button>';
+          }
+          if (req.client_id && req.certificate_product_id) {
+            actions.innerHTML += '<button type="button" class="bd-btn bd-btn--secondary" id="btnIssueCertFromRequest">Выдать сертификат</button>';
+          }
+          wireWriteClientButton(document.getElementById('btnWriteClient'));
+          var issueCertBtn = document.getElementById('btnIssueCertFromRequest');
+          if (issueCertBtn) {
+            issueCertBtn.onclick = function() {
+              var parts = [
+                'tab=certs',
+                'client_id=' + encodeURIComponent(String(req.client_id)),
+                'certificate_product_id=' + encodeURIComponent(String(req.certificate_product_id)),
+              ];
+              if (req.cert_recipient_email) {
+                parts.push('recipient_email=' + encodeURIComponent(String(req.cert_recipient_email)));
+              }
+              if (req.cert_recipient_name) {
+                parts.push('recipient_name=' + encodeURIComponent(String(req.cert_recipient_name)));
+              }
+              if (req.cert_purchased_by_name) {
+                parts.push('purchased_by_name=' + encodeURIComponent(String(req.cert_purchased_by_name)));
+              }
+              var u = '/webapp/trainer-pass-products?' + parts.join('&');
+              var idt = initData();
+              if (idt) u += (u.indexOf('?') >= 0 ? '&' : '?') + 'init_data=' + encodeURIComponent(idt);
               window.location.href = u;
             };
           }

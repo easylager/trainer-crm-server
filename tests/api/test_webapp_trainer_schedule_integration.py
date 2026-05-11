@@ -701,6 +701,108 @@ async def test_put_templates_day_200_group_capacity_when_enabled(
 
 
 @pytest.mark.asyncio
+async def test_put_templates_day_individual_precise_arena_persists_and_apply_week(
+    app_use_test_db,
+    db_session,
+) -> None:
+    """Individual template row may set arena_id (off-grid precise); apply-week creates slot with that arena."""
+    r_ids = await db_session.execute(
+        text("SELECT id FROM arenas WHERE COALESCE(is_active, true) ORDER BY id LIMIT 2 OFFSET 0"),
+    )
+    aid_rows = [int(x[0]) for x in r_ids.fetchall()]
+    if len(aid_rows) < 2:
+        pytest.skip("need 2 arenas in DB for multi-venue template test")
+    aid_primary, aid_secondary = aid_rows[0], aid_rows[1]
+
+    tg = _fresh_trainer_telegram_id()
+    trainer_id = await _create_active_trainer(db_session, tg, with_crm=True)
+    for aid in (aid_primary, aid_secondary):
+        await db_session.execute(
+            text("INSERT INTO trainer_arenas (trainer_id, arena_id) VALUES (:tid, :aid)"),
+            {"tid": trainer_id, "aid": aid},
+        )
+    await db_session.execute(
+        text("UPDATE trainers SET primary_arena_id = :aid WHERE id = :tid"),
+        {"aid": aid_primary, "tid": trainer_id},
+    )
+    await db_session.commit()
+
+    with patch_trainer_webapp_init(tg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            put = await client.put(
+                "/api/webapp/schedule/templates/day",
+                headers={"X-Telegram-Init-Data": "mock", "Content-Type": "application/json"},
+                json={
+                    "day_of_week": 4,
+                    "duration_minutes": 60,
+                    "slots": [
+                        {"hour": 9, "minute": 0, "capacity": 1},
+                        {
+                            "hour": 14,
+                            "minute": 7,
+                            "capacity": 1,
+                            "duration_minutes": 45,
+                            "arena_id": aid_secondary,
+                        },
+                    ],
+                },
+            )
+    assert put.status_code == 200, put.text
+
+    r = await db_session.execute(
+        text(
+            """
+            SELECT EXTRACT(HOUR FROM start_time)::int,
+                   EXTRACT(MINUTE FROM start_time)::int,
+                   duration_minutes,
+                   capacity,
+                   arena_id
+            FROM trainer_schedule_templates
+            WHERE trainer_id = :tid AND day_of_week = 4
+            ORDER BY start_time
+            """
+        ),
+        {"tid": trainer_id},
+    )
+    rows_tpl = r.fetchall()
+    assert len(rows_tpl) == 2
+    assert int(rows_tpl[0][0]) == 9 and int(rows_tpl[0][1]) == 0 and rows_tpl[0][4] is None
+    assert int(rows_tpl[1][0]) == 14 and int(rows_tpl[1][1]) == 7
+    assert int(rows_tpl[1][2]) == 45 and int(rows_tpl[1][3]) == 1
+    assert int(rows_tpl[1][4]) == aid_secondary
+
+    mon = _monday_on_or_before(date.today() + timedelta(days=30))
+
+    async def _noop_notify(*_a, **_kw):
+        return None
+
+    with patch_trainer_webapp_init(tg):
+        with patch("src.api.routes.webapp.run_after_schedule_changed", _noop_notify):
+            with patch("src.api.routes.webapp.Bot", return_value=MagicMock()):
+                async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                    resp = await client.post(
+                        "/api/webapp/schedule/apply-week",
+                        headers={"X-Telegram-Init-Data": "mock", "Content-Type": "application/json"},
+                        json={"week_start": mon.isoformat()},
+                    )
+    assert resp.status_code == 200
+    slot_d = mon + timedelta(days=4)
+    r_slots = await db_session.execute(
+        text(
+            """
+            SELECT arena_id FROM slots
+            WHERE trainer_id = :tid AND slot_date = :d
+              AND EXTRACT(HOUR FROM start_time)::int = 14
+              AND EXTRACT(MINUTE FROM start_time)::int = 7
+            """
+        ),
+        {"tid": trainer_id, "d": slot_d},
+    )
+    srow = r_slots.fetchone()
+    assert srow is not None and int(srow[0]) == aid_secondary
+
+
+@pytest.mark.asyncio
 async def test_put_templates_day_403_without_crm_tier(
     app_use_test_db,
     db_session,

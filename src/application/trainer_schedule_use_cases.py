@@ -128,12 +128,15 @@ async def replace_templates_for_day(
     minute_to_service_id: dict[int, int | None] | None = None,
     group_arena_id: int | None = None,
     minute_to_duration: dict[int, int] | None = None,
+    minute_to_arena_id: dict[int, int] | None = None,
 ) -> None:
     """
     Set template for one day: replace all template rows for that weekday.
     ``minute_to_capacity`` maps minutes-from-midnight (0–1439) to slot capacity (1 = individual, >1 = group).
     For capacity > 1, ``minute_to_service_id[m]`` must be the services.id for that group slot.
     ``group_arena_id`` is stored on each group row (capacity>1); if None, uses trainer default arena.
+    ``minute_to_arena_id``: optional venue per individual start minute (capacity 1); stored on template row,
+    reproduced on generated slots; omitted key → ``arena_id`` NULL → materialization uses trainer default arena.
     ``minute_to_duration``: optional per-start duration (minutes). When any start is off the arena grid or
     durations differ, preset start-grid validation is skipped (same idea as calendar ``slot_entries``);
     each distinct duration is still checked against fixed-duration preset rules.
@@ -201,11 +204,14 @@ async def replace_templates_for_day(
                 },
             )
         else:
+            indiv_aid = None
+            if minute_to_arena_id is not None:
+                indiv_aid = minute_to_arena_id.get(int(m))
             await session.execute(
                 text("""
                     INSERT INTO trainer_schedule_templates
                         (trainer_id, day_of_week, start_time, duration_minutes, capacity, service_id, arena_id)
-                    VALUES (:tid, :dow, :st, :dur, :cap, NULL, NULL)
+                    VALUES (:tid, :dow, :st, :dur, :cap, NULL, :aid)
                 """),
                 {
                     "tid": trainer_id,
@@ -213,6 +219,7 @@ async def replace_templates_for_day(
                     "st": start_t,
                     "dur": row_dur,
                     "cap": cap,
+                    "aid": indiv_aid,
                 },
             )
     await session.commit()
@@ -448,6 +455,7 @@ async def replace_slots_for_day(
     group_service_id: int | None = None,
     slot_arena_id: int | None = None,
     per_slot_duration: dict[int, int] | None = None,
+    per_slot_arena_id: dict[int, int] | None = None,
 ) -> None:
     """
     Set slots for one calendar day.
@@ -460,6 +468,8 @@ async def replace_slots_for_day(
     - ``per_slot_duration``: optional start_minute→duration_minutes map for precise (off-grid) slots.
       When provided, grid validation is skipped — caller is responsible for sensible times.
     For ``capacity`` > 1, ``group_service_id`` must be set.
+    ``per_slot_arena_id``: optional start_minute → arena_id overrides for newly inserted slots
+    (e.g. precise-time entries on a secondary venue while grid stays on default arena).
     """
     cap = max(1, min(int(capacity), 500))
     if cap > 1 and group_service_id is None:
@@ -563,6 +573,9 @@ async def replace_slots_for_day(
         start_time = time_from_minutes(int(m))
         end_time = _time_end(start_time, slot_dur)
         svc = int(group_service_id) if cap > 1 else None
+        insert_aid = arena_for_new_slots
+        if per_slot_arena_id and start_m in per_slot_arena_id:
+            insert_aid = per_slot_arena_id[start_m]
         await session.execute(
             text("""
                 INSERT INTO slots (trainer_id, slot_date, start_time, end_time, status, capacity, service_id, arena_id)
@@ -575,7 +588,7 @@ async def replace_slots_for_day(
                 "end": end_time,
                 "cap": cap,
                 "svc": svc,
-                "aid": arena_for_new_slots,
+                "aid": insert_aid,
             },
         )
         new_intervals.append((start_m, end_m))

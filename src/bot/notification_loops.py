@@ -48,10 +48,12 @@ from src.application.client_request_use_cases import (
 from src.application.client_pass_order_use_cases import (
     split_pass_order_comment,
 )
+from src.application.client_cert_order_use_cases import split_cert_order_comment
 from src.application.pass_product_use_cases import get_pass_product
 from src.application.recurring_use_cases import get_slot_status_on_date
 from src.application.certificate_use_cases import (
     expire_certificates_past_expiry,
+    get_certificate_product,
     process_certificate_email_outbox_batch,
 )
 from src.application.subscription_tier_use_cases import trainer_has_crm_access
@@ -330,31 +332,40 @@ async def _deliver_trainer_new_request_message(
             pass_product_id=pass_product_id,
         )
     else:
-        if comment_raw:
-            text = msg.TRAINER_REQUEST_NOTIFICATION.format(
-                city=html_lib.escape(str(p.get("city_name") or "")),
-                service=html_lib.escape(str(p.get("service_name") or "")),
-                comment=html_lib.escape(comment_raw),
+        certificate_product_id, cert_meta, _c_body = split_cert_order_comment(comment_raw)
+        if certificate_product_id is not None:
+            text, kb = await build_cert_order_trainer_notification(
+                session,
+                p=p,
+                certificate_product_id=certificate_product_id,
+                cert_meta=cert_meta,
             )
         else:
-            text = msg.TRAINER_REQUEST_NOTIFICATION_NO_COMMENT.format(
-                city=html_lib.escape(str(p.get("city_name") or "")),
-                service=html_lib.escape(str(p.get("service_name") or "")),
+            if comment_raw:
+                text = msg.TRAINER_REQUEST_NOTIFICATION.format(
+                    city=html_lib.escape(str(p.get("city_name") or "")),
+                    service=html_lib.escape(str(p.get("service_name") or "")),
+                    comment=html_lib.escape(comment_raw),
+                )
+            else:
+                text = msg.TRAINER_REQUEST_NOTIFICATION_NO_COMMENT.format(
+                    city=html_lib.escape(str(p.get("city_name") or "")),
+                    service=html_lib.escape(str(p.get("service_name") or "")),
+                )
+            kb = InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [
+                        InlineKeyboardButton(
+                            text=msg.TRAINER_BUTTON_RESPOND,
+                            callback_data=f"{REQUEST_RESPOND_PREFIX}{p['request_id']}",
+                        ),
+                        InlineKeyboardButton(
+                            text=msg.TRAINER_BUTTON_DECLINE,
+                            callback_data=f"{REQUEST_DECLINE_PREFIX}{p['request_id']}",
+                        ),
+                    ],
+                ]
             )
-        kb = InlineKeyboardMarkup(
-            inline_keyboard=[
-                [
-                    InlineKeyboardButton(
-                        text=msg.TRAINER_BUTTON_RESPOND,
-                        callback_data=f"{REQUEST_RESPOND_PREFIX}{p['request_id']}",
-                    ),
-                    InlineKeyboardButton(
-                        text=msg.TRAINER_BUTTON_DECLINE,
-                        callback_data=f"{REQUEST_DECLINE_PREFIX}{p['request_id']}",
-                    ),
-                ],
-            ]
-        )
 
     try:
         await trainer_bot.send_message(chat_id=tid, text=text, reply_markup=kb)
@@ -411,6 +422,46 @@ async def process_request_notifications_batch(
             logger.warning("Request notifier send to %s: %s", tid, e)
 
 
+def _trainer_order_write_client_row(
+    *,
+    request_id: int,
+    client_id: object | None,
+    client_telegram_id: object | None,
+) -> list[InlineKeyboardButton] | None:
+    """
+    «Написать клиенту»: deep-link в личный чат (без callback — работает без polling trainer_app).
+    Второй тап «Через бота» — relay, если trainer_app запущен.
+    """
+    if client_id is None:
+        return None
+    rid = int(request_id)
+    ctid: int | None = None
+    if client_telegram_id is not None:
+        try:
+            cti = int(client_telegram_id)
+        except (TypeError, ValueError):
+            cti = 0
+        if cti > 0:
+            ctid = cti
+    if ctid is not None:
+        return [
+            InlineKeyboardButton(
+                text=msg.TRAINER_PASS_ORDER_BTN_WRITE,
+                url=f"tg://user?id={ctid}",
+            ),
+            InlineKeyboardButton(
+                text=msg.TRAINER_ORDER_WRITE_VIA_BOT_BTN,
+                callback_data=f"{msg.CLIENT_REQUEST_RELAY_CHAT_PREFIX}{rid}",
+            ),
+        ]
+    return [
+        InlineKeyboardButton(
+            text=msg.TRAINER_PASS_ORDER_BTN_WRITE,
+            callback_data=f"{msg.CLIENT_REQUEST_RELAY_CHAT_PREFIX}{rid}",
+        ),
+    ]
+
+
 async def _build_pass_order_notification(
     session: AsyncSession,
     *,
@@ -451,20 +502,18 @@ async def _build_pass_order_notification(
         service_line=html_lib.escape(service_line),
     )
 
+    client_id = p.get("client_id")
+    rid = int(p["request_id"])
     rows: list[list[InlineKeyboardButton]] = []
 
-    # "Write to client" — direct Telegram DM
-    client_telegram_id = p.get("client_telegram_id")
-    if client_telegram_id:
-        rows.append([
-            InlineKeyboardButton(
-                text=msg.TRAINER_PASS_ORDER_BTN_WRITE,
-                url=f"tg://user?id={int(client_telegram_id)}",
-            )
-        ])
+    write_row = _trainer_order_write_client_row(
+        request_id=rid,
+        client_id=client_id,
+        client_telegram_id=p.get("client_telegram_id"),
+    )
+    if write_row:
+        rows.append(write_row)
 
-    # "Issue pass" — open pass-products mini-app with client + product prefilled
-    client_id = p.get("client_id")
     if webapp_https and client_id and pass_product_id:
         issue_url = (
             f"{base}/webapp/trainer-pass-products"
@@ -483,6 +532,93 @@ async def _build_pass_order_notification(
             callback_data="passes",
         )
     ]])
+    return text, kb
+
+
+async def build_cert_order_trainer_notification(
+    session: AsyncSession,
+    *,
+    p: dict,
+    certificate_product_id: int,
+    cert_meta: dict,
+) -> tuple[str, InlineKeyboardMarkup]:
+    """
+    Trainer push about certificate order.
+    «Написать клиенту» — tg:// deep link; «Через бота» — relay (callback), если нужен лог в боте.
+    """
+    from urllib.parse import quote
+
+    settings = Settings()
+    base = (settings.webapp_base_url or "").rstrip("/")
+    webapp_https = base.lower().startswith("https://")
+
+    product = await get_certificate_product(session, certificate_product_id, int(p["trainer_id"]))
+    name_parts = [
+        (p.get("client_first_name") or "").strip(),
+        (p.get("client_middle_name") or "").strip(),
+        (p.get("client_last_name") or "").strip(),
+    ]
+    client_name = " ".join(x for x in name_parts if x).strip() or "Клиент"
+
+    cert_name = (
+        (product.get("name") or "").strip() or "Подарочный сертификат"
+        if product
+        else "Подарочный сертификат"
+    )
+    recipient_name = (cert_meta.get("recipient_name") or "").strip() or "—"
+    recipient_email = (cert_meta.get("recipient_email") or "").strip() or "—"
+
+    text = msg.TRAINER_CERT_ORDER_NOTIFICATION.format(
+        client_name=html_lib.escape(client_name),
+        cert_name=html_lib.escape(cert_name),
+        recipient_name=html_lib.escape(recipient_name),
+        recipient_email=html_lib.escape(recipient_email),
+    )
+
+    rid = int(p["request_id"])
+    client_id = p.get("client_id")
+    rows: list[list[InlineKeyboardButton]] = []
+
+    write_row = _trainer_order_write_client_row(
+        request_id=rid,
+        client_id=client_id,
+        client_telegram_id=p.get("client_telegram_id"),
+    )
+    if write_row:
+        rows.append(write_row)
+
+    if webapp_https and client_id and certificate_product_id:
+        r_email = (cert_meta.get("recipient_email") or "").strip()
+        r_name = (cert_meta.get("recipient_name") or "").strip()
+        p_bn = (cert_meta.get("purchased_by_name") or "").strip()
+        issue_url = (
+            f"{base}/webapp/trainer-pass-products?tab=certs"
+            f"&client_id={int(client_id)}"
+            f"&certificate_product_id={int(certificate_product_id)}"
+            f"&recipient_email={quote(r_email)}"
+            f"&recipient_name={quote(r_name)}"
+        )
+        if p_bn:
+            issue_url += f"&purchased_by_name={quote(p_bn)}"
+        rows.append([
+            InlineKeyboardButton(
+                text=msg.TRAINER_CERT_ORDER_BTN_ISSUE,
+                web_app=WebAppInfo(url=issue_url),
+            ),
+        ])
+
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=rows
+        if rows
+        else [
+            [
+                InlineKeyboardButton(
+                    text=msg.TRAINER_BUTTON_PASSES,
+                    callback_data="passes",
+                )
+            ]
+        ]
+    )
     return text, kb
 
 

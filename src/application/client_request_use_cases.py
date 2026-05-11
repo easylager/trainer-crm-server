@@ -431,6 +431,7 @@ async def list_requests_for_trainer(
                    ) AS remind_slots_pending,
                    r.client_id,
                    cl.telegram_id AS client_telegram_id,
+                   NULLIF(TRIM(cl.telegram_username), '') AS client_telegram_username,
                    COALESCE(TRIM(cl.first_name), '') AS client_first_name,
                    TRIM(cl.last_name) AS client_last_name
             FROM client_requests r
@@ -468,8 +469,9 @@ async def list_requests_for_trainer(
             "remind_slots_pending": bool(row[9]),
             "client_id": row[10],
             "client_telegram_id": row[11],
-            "client_first_name": (row[12] or "").strip() or None,
-            "client_last_name": (row[13] or "").strip() or None,
+            "client_telegram_username": (row[12] or "").strip() or None,
+            "client_first_name": (row[13] or "").strip() or None,
+            "client_last_name": (row[14] or "").strip() or None,
         }
         for row in rows
     ]
@@ -899,6 +901,58 @@ async def get_pending_request_notifications(session: AsyncSession, limit: int = 
         }
         for row in rows
     ]
+
+
+async def get_client_request_notification_payload_for_trainer(
+    session: AsyncSession,
+    *,
+    trainer_telegram_id: int,
+    request_id: int,
+) -> dict | None:
+    """
+    Same shape as get_pending_request_notifications rows, scoped to one request and verifying
+    Telegram identity belongs to this trainer — for inline keyboards that reference request_id.
+    """
+    r = await session.execute(
+        text(
+            """
+            SELECT r.id,
+                   t.id AS trainer_id,
+                   t.telegram_id AS trainer_telegram_id,
+                   c.name AS city_name,
+                   s.name AS service_name,
+                   r.comment,
+                   r.client_id,
+                   cl.telegram_id AS client_telegram_id,
+                   cl.first_name AS client_first_name,
+                   cl.middle_name AS client_middle_name,
+                   cl.last_name AS client_last_name
+            FROM client_requests r
+            INNER JOIN clients cl ON cl.id = r.client_id
+            INNER JOIN cities c ON c.id = r.city_id
+            INNER JOIN services s ON s.id = r.service_id
+            INNER JOIN trainers t ON t.id = r.trainer_id AND t.telegram_id IS NOT NULL
+            WHERE r.id = :rid AND t.telegram_id = :ttid AND r.trainer_id IS NOT NULL AND r.status != 'archived'
+            """
+        ),
+        {"rid": request_id, "ttid": trainer_telegram_id},
+    )
+    row = r.fetchone()
+    if not row:
+        return None
+    return {
+        "request_id": row[0],
+        "trainer_id": row[1],
+        "trainer_telegram_id": row[2],
+        "city_name": row[3],
+        "service_name": row[4],
+        "comment": row[5],
+        "client_id": row[6],
+        "client_telegram_id": row[7],
+        "client_first_name": row[8],
+        "client_middle_name": row[9],
+        "client_last_name": row[10],
+    }
 
 
 async def mark_request_trainer_notified(

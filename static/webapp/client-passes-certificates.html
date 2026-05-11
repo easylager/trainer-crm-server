@@ -97,6 +97,13 @@
       line-height: 1.45;
       color: var(--tg-theme-hint-color);
     }
+    .pass-shop-cert-scope {
+      margin: -4px 0 16px;
+      font-size: 13px;
+      line-height: 1.4;
+      color: var(--tg-theme-hint-color);
+    }
+    .pass-shop-cert-scope strong { color: var(--tg-theme-text-color); font-weight: 600; }
     .pass-shop-list { display: flex; flex-direction: column; gap: 12px; }
     .pass-offer-card {
       display: flex;
@@ -544,6 +551,90 @@
       color: var(--tg-theme-button-text-color);
       box-shadow: 0 4px 14px rgba(247, 166, 0, 0.28);
     }
+    .cert-order-field {
+      margin-bottom: 14px;
+    }
+    .cert-order-field label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--tg-theme-hint-color);
+      margin-bottom: 6px;
+    }
+    .cert-order-input {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 12px 14px;
+      border-radius: 12px;
+      border: 1px solid rgba(128, 128, 128, 0.22);
+      font: inherit;
+      font-size: 15px;
+      background: var(--tg-theme-secondary-bg-color);
+      color: var(--tg-theme-text-color);
+    }
+    .cert-order-input::placeholder { color: var(--tg-theme-hint-color); }
+    .cert-order-field-hint {
+      margin: 6px 0 0;
+      font-size: 13px;
+      line-height: 1.35;
+      color: var(--tg-theme-hint-color);
+    }
+    .pass-shop-section.cert-tone {
+      background: linear-gradient(
+        160deg,
+        rgba(16, 185, 129, 0.12) 0%,
+        var(--tg-theme-secondary-bg-color) 38%
+      );
+      border: 1px solid rgba(16, 185, 129, 0.28);
+    }
+    .cert-offer-price-pill {
+      background: rgba(16, 185, 129, 0.2);
+      border: 1px solid rgba(16, 185, 129, 0.35);
+    }
+    .cert-sample-preview {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+      margin: 14px 0 18px;
+      padding: 14px 14px 16px;
+      border-radius: 14px;
+      background: var(--tg-theme-secondary-bg-color);
+      border: 1px solid rgba(128, 128, 128, 0.2);
+    }
+    .cert-sample-preview__icon {
+      font-size: 28px;
+      line-height: 1;
+      flex-shrink: 0;
+    }
+    .cert-sample-preview__title {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--tg-theme-text-color);
+      margin: 0 0 6px;
+      letter-spacing: -0.02em;
+    }
+    .cert-sample-preview__text {
+      margin: 0 0 12px;
+      font-size: 14px;
+      line-height: 1.45;
+      color: var(--tg-theme-hint-color);
+    }
+    .cert-sample-preview__btn {
+      display: inline-block;
+      padding: 10px 14px;
+      border-radius: 12px;
+      font-size: 14px;
+      font-weight: 600;
+      text-decoration: none;
+      background: var(--tg-theme-button-color);
+      color: var(--tg-theme-button-text-color);
+      box-shadow: 0 3px 12px rgba(16, 185, 129, 0.22);
+    }
+    .cert-sample-preview__btn:active {
+      opacity: 0.92;
+    }
   </style>
   <link rel="stylesheet" href="mini-app-client-nav.css" />
 </head>
@@ -555,10 +646,13 @@
       <button type="button" class="btn-app-back" id="btnBack" hidden data-skip-history-back="true">Назад</button>
     </div>
   </div>
+  <!-- TODO(certificates-tab): Restore tab bar + certs panel + cert-orderModal below when gift certificate PDF/UX is production-ready (keep parity with trainer-pass-products.html). -->
+  <!--
   <div class="tabs" role="tablist">
     <button type="button" class="tab active" id="tabPasses" data-tab="passes" role="tab" aria-selected="true">Абонементы</button>
     <button type="button" class="tab" id="tabCerts" data-tab="certs" role="tab" aria-selected="false">Сертификаты</button>
   </div>
+  -->
 
   <div id="panelPasses" class="panel active" role="tabpanel">
     <div id="pass-screenList" data-pass-screen class="active">
@@ -591,6 +685,7 @@
     </div>
   </div>
 
+  <!--
   <div id="panelCerts" class="panel" role="tabpanel">
     <div id="cert-activateBlock">
       <label for="certCodeInput">Введите код подарочного сертификата</label>
@@ -599,8 +694,45 @@
         <button type="button" class="btn-primary" id="cert-btnActivateCert">Активировать</button>
       </div>
     </div>
+    <div class="cert-sample-preview" id="certSamplePreview">
+      <div class="cert-sample-preview__icon" aria-hidden="true">📄</div>
+      <div>
+        <div class="cert-sample-preview__title">Пример PDF на почте</div>
+        <p class="cert-sample-preview__text">Так выглядит вложение с подарочным сертификатом (тестовые данные: имя, сумма, код). Настоящий файл тренер отправит на ваш email после оплаты.</p>
+        <a class="cert-sample-preview__btn" id="certSamplePdfLink" href="#" target="_blank" rel="noopener noreferrer">Открыть пример PDF</a>
+      </div>
+    </div>
+    <div id="cert-shopSection" class="pass-shop-section cert-tone" hidden></div>
     <div id="cert-listContent"></div>
   </div>
+  -->
+
+  <!--
+  <div id="cert-orderModal" class="pass-order-modal-root" hidden>
+    <button type="button" class="pass-order-modal-backdrop" id="cert-orderBackdrop" aria-label="Закрыть"></button>
+    <div class="pass-order-modal-sheet" role="dialog" aria-modal="true" aria-labelledby="cert-orderTitle">
+      <h3 id="cert-orderTitle">Заказ сертификата</h3>
+      <p class="pass-order-modal-text" id="cert-orderProductText"></p>
+      <div class="cert-order-field">
+        <label for="cert-orderEmail">Email для отправки PDF</label>
+        <input type="email" id="cert-orderEmail" class="cert-order-input" placeholder="name@example.com" autocomplete="email">
+      </div>
+      <div class="cert-order-field">
+        <label for="cert-orderName">Имя получателя</label>
+        <input type="text" id="cert-orderName" class="cert-order-input" placeholder="Как указать в сертификате" autocomplete="name">
+      </div>
+      <div class="cert-order-field" id="cert-orderAmountWrap" hidden>
+        <label for="cert-orderAmount">Сумма сертификата, BYN</label>
+        <input type="number" id="cert-orderAmount" class="cert-order-input" inputmode="decimal" min="1" max="500000" step="0.01" placeholder="Например, 50" autocomplete="transaction-amount">
+        <p class="cert-order-field-hint">Обязательно: на какую сумму оформить сертификат (минимум 1 BYN).</p>
+      </div>
+      <div class="pass-order-modal-actions">
+        <button type="button" class="pass-order-modal-btn secondary" id="cert-orderCancel">Отмена</button>
+        <button type="button" class="pass-order-modal-btn primary" id="cert-orderSend">Отправить тренеру</button>
+      </div>
+    </div>
+  </div>
+  -->
 
   <div id="pass-orderConfirmModal" class="pass-order-modal-root" hidden>
     <button type="button" class="pass-order-modal-backdrop" id="pass-orderConfirmBackdrop" aria-label="Закрыть"></button>
@@ -690,6 +822,7 @@
         }
       }
 
+      /* TODO(certificates-tab): Restore when gift certificate PDF/UX is ready — uncomment tab markup + panelCerts + cert-orderModal; restore handlers below.
       function getInitialTab() {
         var p = new URLSearchParams(window.location.search || '');
         var t = (p.get('tab') || '').toLowerCase();
@@ -714,12 +847,18 @@
         headerTitle.textContent = isPasses ? '📦 Мои абонементы' : '🎁 Мои сертификаты';
         if (!isPasses) {
           showPassScreen('pass-screenList');
+          loadCertsPanel();
         }
       }
 
       tabPasses.onclick = function() { setTab('passes'); };
-      tabCerts.onclick = function() { setTab('certs'); };
+      tabCerts.onclick = function() { setTab('certs'); loadCertsPanel(); };
       setTab(getInitialTab());
+      */
+      (function passesOnlyModeHeader() {
+        var ht = document.getElementById('headerTitle');
+        if (ht) ht.textContent = '📦 Мои абонементы';
+      })();
 
       // --- Passes (same logic as client-passes.html) ---
       var passState = { items: [], current: null };
@@ -1013,15 +1152,232 @@
         if (status === 'cancelled') return 'Отменён';
         return status || 'Активен';
       }
-      function loadCertsList() {
-        var url = '/api/webapp/client/certificates' + (initData() ? '?init_data=' + encodeURIComponent(initData()) : '');
-        document.getElementById('cert-listContent').innerHTML = '<div class="loading">Загрузка…</div>';
-        fetch(url, { headers: headers() })
-          .then(function(r) { return r.json(); })
-          .then(function(data) {
+      function renderCertShopFromCatalog(catalog) {
+        var sec = document.getElementById('cert-shopSection');
+        if (!sec) return false;
+        if (!catalog || !catalog.items || catalog.items.length === 0 || !catalog.trainer_id) {
+          sec.hidden = true;
+          sec.innerHTML = '';
+          return false;
+        }
+        var trainerName = catalog.trainer_display_name || 'Тренер';
+        var html = '';
+        html += '<p class="pass-shop-kicker">У вашего тренера</p>';
+        html += '<h2 class="pass-shop-headline">' + escapeHtml(trainerName) + '</h2>';
+        html += '<p class="pass-shop-sub">Выберите номинал и отправьте заявку — тренер свяжется с вами для оплаты и сможет выслать сертификат на email.</p>';
+        html += '<p class="pass-shop-cert-scope">🎯 Сертификат можно будет потратить на <strong>любые услуги</strong> этого тренера.</p>';
+        html += '<div class="pass-shop-list">';
+        catalog.items.forEach(function(it) {
+          var nom = formatAmount(it.amount_cents);
+          var title = (it.name && String(it.name).trim()) ? String(it.name).trim() : 'Подарочный сертификат';
+          var subt = '';
+          if (nom === 'Любая сумма') {
+            subt = '<p class="pass-offer-scope">Номинал согласуете при отправке заявки</p>';
+          }
+          html += '<article class="pass-offer-card">';
+          html +=
+            '<div class="pass-offer-top">' +
+            '<div><h3 class="pass-offer-name">' +
+            escapeHtml(title) +
+            '</h3>' +
+            subt +
+            '</div></div>';
+          var anyAmt = it.amount_cents == null || it.amount_cents === undefined ? '1' : '0';
+          html +=
+            '<div class="pass-offer-actions"><button type="button" class="btn-order-pass btn-order-cert" data-product-id="' +
+            it.id +
+            '" data-product-label="' +
+            escapeAttr(title) +
+            '" data-any-amount="' +
+            anyAmt +
+            '">Заказать у тренера</button></div>';
+          html += '</article>';
+        });
+        html += '</div>';
+        sec.innerHTML = html;
+        sec.hidden = false;
+        sec.querySelectorAll('.btn-order-cert').forEach(function(btn) {
+          btn.onclick = function() {
+            var pid = parseInt(btn.getAttribute('data-product-id'), 10);
+            if (!pid) return;
+            var label = btn.getAttribute('data-product-label') || 'Сертификат';
+            var anyAmount = btn.getAttribute('data-any-amount') === '1';
+            openCertOrderModal(pid, label, btn, anyAmount);
+          };
+        });
+        return true;
+      }
+
+      var certOrderModal = document.getElementById('cert-orderModal');
+      var certOrderState = { productId: null, productLabel: null, button: null, anyAmount: false };
+
+      function closeCertOrderModal() {
+        if (certOrderModal) certOrderModal.hidden = true;
+        certOrderState.productId = null;
+        certOrderState.productLabel = null;
+        certOrderState.button = null;
+        certOrderState.anyAmount = false;
+      }
+
+      function openCertOrderModal(productId, productLabel, sourceBtn, anyAmount) {
+        certOrderState.productId = productId;
+        certOrderState.productLabel = productLabel;
+        certOrderState.button = sourceBtn;
+        certOrderState.anyAmount = !!anyAmount;
+        var t = document.getElementById('cert-orderProductText');
+        if (t) {
+          var lines = ['Заявка на: <strong>' + escapeHtml(productLabel) + '</strong>'];
+          if (certOrderState.anyAmount) {
+            lines.push('<span style="font-size:14px;">Номинал «любая сумма»: укажите сумму в BYN в поле ниже.</span>');
+          }
+          lines.push('<span style="font-size:14px;">Укажите email и имя получателя — тренер увидит их в заявке.</span>');
+          t.innerHTML = lines.join('<br>');
+        }
+        var em = document.getElementById('cert-orderEmail');
+        var nm = document.getElementById('cert-orderName');
+        var wrap = document.getElementById('cert-orderAmountWrap');
+        var am = document.getElementById('cert-orderAmount');
+        if (em) em.value = '';
+        if (nm) nm.value = '';
+        if (am) am.value = '';
+        if (wrap) wrap.hidden = !certOrderState.anyAmount;
+        if (certOrderModal) certOrderModal.hidden = false;
+      }
+
+      (function wireCertOrderModal() {
+        var cancel = document.getElementById('cert-orderCancel');
+        var send = document.getElementById('cert-orderSend');
+        var backdrop = document.getElementById('cert-orderBackdrop');
+        if (cancel) cancel.onclick = closeCertOrderModal;
+        if (backdrop) backdrop.onclick = closeCertOrderModal;
+        if (send) {
+          send.onclick = function() {
+            var pid = certOrderState.productId;
+            var btn = certOrderState.button;
+            var email = (document.getElementById('cert-orderEmail').value || '').trim();
+            var name = (document.getElementById('cert-orderName').value || '').trim();
+            if (!email || email.indexOf('@') < 1) {
+              alert('Укажите корректный email');
+              return;
+            }
+            if (!name) {
+              alert('Укажите имя получателя');
+              return;
+            }
+            var nominalByn = null;
+            if (certOrderState.anyAmount) {
+              var rawAmt = (document.getElementById('cert-orderAmount').value || '')
+                .trim()
+                .replace(',', '.');
+              var n = parseFloat(rawAmt);
+              if (!rawAmt || isNaN(n) || n < 1) {
+                alert('Укажите сумму сертификата не менее 1 BYN');
+                return;
+              }
+              if (n > 500000) {
+                alert('Слишком большая сумма. Укажите разумный номинал.');
+                return;
+              }
+              nominalByn = n;
+            }
+            closeCertOrderModal();
+            if (!pid || !btn) return;
+            var ik =
+              typeof crypto !== 'undefined' && crypto.randomUUID
+                ? crypto.randomUUID()
+                : 'coc-' + String(pid) + '-' + Date.now() + '-' + Math.random().toString(16).slice(2);
+            submitCertProductOrder(pid, email, name, btn, ik, nominalByn);
+          };
+        }
+      })();
+
+      function submitCertProductOrder(certProductId, recipientEmail, recipientName, btn, idempotencyKey, nominalByn) {
+        if (!btn || btn.disabled) return;
+        var prev = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = 'Отправка…';
+        var url = '/api/webapp/client/cert-order/request' + (initData() ? '?init_data=' + encodeURIComponent(initData()) : '');
+        var reqHeaders = headers();
+        if (idempotencyKey) reqHeaders['Idempotency-Key'] = idempotencyKey;
+        var certBody = {
+          certificate_product_id: certProductId,
+          recipient_email: recipientEmail,
+          recipient_name: recipientName
+        };
+        if (nominalByn != null) certBody.nominal_byn = nominalByn;
+        fetch(url, {
+          method: 'POST',
+          headers: reqHeaders,
+          body: JSON.stringify(certBody)
+        })
+          .then(function(r) {
+            return r.json().then(function(d) { return { ok: r.ok, data: d }; });
+          })
+          .then(function(o) {
+            btn.disabled = false;
+            btn.textContent = prev;
+            if (o.ok && o.data && o.data.success) {
+              var msg = 'Заявка отправлена тренеру. Он свяжется с вами для оплаты.';
+              if (tg && typeof tg.showPopup === 'function') {
+                tg.showPopup({ title: 'Готово', message: msg, buttons: [{ type: 'ok' }] });
+              } else {
+                alert(msg);
+              }
+              loadCertsPanel();
+              return;
+            }
+            var detail = o.data && (o.data.detail || o.data.message);
+            var errText = detail || 'Не удалось отправить заявку.';
+            if (tg && typeof tg.showPopup === 'function') {
+              tg.showPopup({ title: 'Не получилось', message: String(errText), buttons: [{ type: 'ok' }] });
+            } else {
+              alert(errText);
+            }
+          })
+          .catch(function() {
+            btn.disabled = false;
+            btn.textContent = prev;
+            alert('Ошибка сети. Попробуйте ещё раз.');
+          });
+      }
+
+      function updateCertSamplePdfHref() {
+        var a = document.getElementById('certSamplePdfLink');
+        if (!a) return;
+        var q = initData() ? '?init_data=' + encodeURIComponent(initData()) : '';
+        var path = '/api/webapp/client/certificates/sample-pdf' + q;
+        try {
+          a.href = new URL(path, window.location.origin).href;
+        } catch (e) {
+          a.href = path;
+        }
+      }
+
+      function loadCertsPanel() {
+        var listEl = document.getElementById('cert-listContent');
+        var shopEl = document.getElementById('cert-shopSection');
+        if (!listEl || !shopEl) return;
+        shopEl.hidden = true;
+        shopEl.innerHTML = '';
+        listEl.innerHTML = '<div class="loading">Загрузка…</div>';
+
+        updateCertSamplePdfHref();
+
+        var q = initData() ? '?init_data=' + encodeURIComponent(initData()) : '';
+        var certsUrl = '/api/webapp/client/certificates' + q;
+        var catalogUrl = '/api/webapp/client/cert-order/catalog' + q;
+
+        Promise.all([
+          fetch(certsUrl, { headers: headers() }).then(function(r) { return r.json(); }),
+          fetch(catalogUrl, { headers: headers() }).then(function(r) { return r.json(); }).catch(function() { return { items: [] }; })
+        ])
+          .then(function(pair) {
+            var data = pair[0];
+            var catalog = pair[1];
+            renderCertShopFromCatalog(catalog);
             var items = data.items || [];
             if (items.length === 0) {
-              document.getElementById('cert-listContent').innerHTML = '<div class="empty">Пока нет сертификатов.</div>';
+              listEl.innerHTML = '<div class="empty">Пока нет сертификатов.</div>';
               return;
             }
             var html = '';
@@ -1035,10 +1391,10 @@
               html += '<div class="meta">' + meta + '</div>';
               html += '</div>';
             });
-            document.getElementById('cert-listContent').innerHTML = html;
+            listEl.innerHTML = html;
           })
           .catch(function() {
-            document.getElementById('cert-listContent').innerHTML = '<div class="error">Не удалось загрузить. Откройте из бота.</div>';
+            listEl.innerHTML = '<div class="error">Не удалось загрузить. Откройте из бота.</div>';
           });
       }
 
@@ -1078,7 +1434,7 @@
                 alert('Сертификат активирован. Выберите тренера в каталоге и запишитесь на занятие.');
               }
               codeInput.value = '';
-              loadCertsList();
+              loadCertsPanel();
             } else {
               var detail = o.data && (o.data.detail || o.data.message);
               alert(detail || 'Код не найден или уже использован. Проверьте код или обратитесь к тренеру.');
@@ -1089,15 +1445,29 @@
           });
       }
 
-      document.getElementById('cert-btnActivateCert').onclick = activateCertificate;
-      document.getElementById('certCodeInput').addEventListener('keydown', function(e) {
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          activateCertificate();
-        }
-      });
+      var certActivateBtn = document.getElementById('cert-btnActivateCert');
+      if (certActivateBtn) certActivateBtn.onclick = activateCertificate;
+      var certCodeInputEl = document.getElementById('certCodeInput');
+      if (certCodeInputEl) {
+        certCodeInputEl.addEventListener('keydown', function(e) {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            activateCertificate();
+          }
+        });
+      }
 
-      loadCertsList();
+      var certSamplePdfLink = document.getElementById('certSamplePdfLink');
+      if (certSamplePdfLink) {
+        certSamplePdfLink.addEventListener('click', function(ev) {
+          if (tg && typeof tg.openLink === 'function') {
+            ev.preventDefault();
+            tg.openLink(certSamplePdfLink.href, { try_instant_view: false });
+          }
+        });
+      }
+
+      /* loadCertsPanel(); — certs panel commented out (TODO certificates-tab) */
     })();
   </script>
   <script src="mini-app-client-home.js"></script>

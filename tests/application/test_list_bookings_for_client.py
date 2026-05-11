@@ -90,3 +90,52 @@ async def test_client_list_excludes_ended_slots_keeps_future(db_session) -> None
         {"id": ids[0]},
     )
     assert int(r_only.scalar()) == int(slot_future)
+
+
+@pytest.mark.asyncio
+async def test_client_list_hub_in_session_flag(db_session) -> None:
+    """Same window as trainer hub: start <= now < end (Minsk) → hub_in_session True."""
+    trainer_id, service_id = await _seed_trainer_with_service(db_session)
+    tg = unique_test_telegram_id()
+    phone, phone_n = belarus_test_phone(tg)
+    r = await db_session.execute(
+        text(
+            """
+            INSERT INTO clients (telegram_id, first_name, last_name, phone, phone_normalized)
+            VALUES (:tg, 'C', 'L', :phone, :pn) RETURNING id
+            """
+        ),
+        {"tg": tg, "phone": phone, "pn": phone_n},
+    )
+    (client_id,) = r.fetchone()
+
+    r_slot = await db_session.execute(
+        text("""
+            INSERT INTO slots (trainer_id, slot_date, start_time, end_time, status)
+            VALUES (
+                :tid,
+                (CURRENT_TIMESTAMP AT TIME ZONE 'Europe/Minsk')::date,
+                ((CURRENT_TIMESTAMP AT TIME ZONE 'Europe/Minsk') - INTERVAL '45 minutes')::time,
+                ((CURRENT_TIMESTAMP AT TIME ZONE 'Europe/Minsk') + INTERVAL '2 hours')::time,
+                'booked'
+            )
+            RETURNING id
+        """),
+        {"tid": trainer_id},
+    )
+    (slot_now,) = r_slot.fetchone()
+
+    await db_session.execute(
+        text(
+            """
+            INSERT INTO bookings (slot_id, trainer_id, client_id, service_id, status)
+            VALUES (:sid, :tid, :cid, :svc, 'confirmed')
+            """
+        ),
+        {"sid": slot_now, "tid": trainer_id, "cid": client_id, "svc": service_id},
+    )
+    await db_session.commit()
+
+    rows = await list_bookings_for_client(db_session, tg, limit=50)
+    assert len(rows) == 1
+    assert rows[0]["hub_in_session"] is True

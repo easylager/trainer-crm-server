@@ -1,8 +1,9 @@
 """
 Gift certificate PDF:
-- **Production:** single ReportLab canvas (`_legacy_build_certificate_pdf`) — one coordinate system, aligned price/QR.
-- Optional: PyMuPDF template + overlay kept for AcroForm experiments; not used in `build_certificate_pdf`.
+- **Production:** A5 portrait: спокойный фон страницы + центральная белая карточка (бренд, сумма, получатель, шаги в Telegram, код).
+- Optional: PyMuPDF template + overlay для экспериментов; статичный шаблон A4 — отдельно.
 """
+
 from __future__ import annotations
 
 import logging
@@ -10,6 +11,7 @@ from datetime import date
 from io import BytesIO
 from pathlib import Path
 from typing import Any, Optional
+import re
 from xml.sax.saxutils import escape
 
 from reportlab.lib import colors
@@ -28,6 +30,7 @@ except ImportError:  # pragma: no cover
     fitz = None
 
 from src.application.certificate_layout import CertificateOverlayLayout, RectFrac, load_certificate_layout
+from src.shared.config import Settings
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +53,8 @@ _REGISTERED = False
 
 _A4_W = float(A4[0])
 _A4_H = float(A4[1])
+# Issued certificate (trainer flow): compact A5 portrait (~148×210 mm).
+_CERT_ISSUE_PAGE = (148 * mm, 210 * mm)
 
 
 def _root() -> Path:
@@ -120,10 +125,101 @@ def _format_amount(cents: int) -> str:
     return f"{int(v)}" if v == int(v) else f"{v:.2f}"
 
 
+def _bot_display_resolve(
+    *,
+    client_bot_display_name: Optional[str],
+    activation_url: Optional[str],
+) -> Optional[str]:
+    """Prefer explicit @trainer_bot from API; otherwise parse ``t.me/<user>`` from activation_url."""
+    s = (client_bot_display_name or "").strip()
+    if s:
+        return s if s.startswith("@") else f"@{s}"
+    raw = (activation_url or "").strip()
+    if not raw:
+        return None
+    m = re.search(r"(?:https?://)?t\.me/([^/?#]+)", raw, flags=re.I)
+    if not m:
+        return None
+    uname = (m.group(1) or "").strip()
+    if not uname:
+        return None
+    return uname if uname.startswith("@") else f"@{uname}"
+
+
+def _certificate_card_instructions_markup(bot_display: Optional[str]) -> str:
+    """Trust-first numbered steps matching Telegram mini-app navigation (Paragraph XML)."""
+    intro = (
+        "<font color='#64748b'><i>Всё оформлено официально: после активации баланс появится в вашем аккаунте. "
+        "Сохраните эту карточку — пригодится, если понадобится восстановить код.</i></font>"
+    )
+    footer = (
+        "<font color='#64748b'>Не получается активировать — напишите того, кто подарил сертификат, или в поддержку бота.</font>"
+    )
+    header = "<font color='#0f172a'><b>Как активировать подарочный сертификат</b></font>"
+    if not bot_display:
+        qr_line = "<b>Сначала откройте нашего Telegram-бота через QR ниже или по ссылке из письма.</b>"
+        body = (
+            f"{intro}<br/><br/>"
+            f"{qr_line}<br/><br/>"
+            "1. В чате с ботом нажмите <b>«Обзор»</b>.<br/>"
+            "2. Откройте <b>«Абонементы / Сертификаты»</b>.<br/>"
+            "3. Перейдите на вкладку <b>«Сертификаты»</b>.<br/>"
+            "4. Введите <b>код из тёмной полосы</b> на этой карточке.<br/>"
+            "5. После активации можно записаться к вашему тренеру в приложении.<br/><br/>"
+            f"{footer}"
+        )
+        return f"{header}<br/><br/>{body}"
+
+    bd = escape(bot_display)
+    body = (
+        f"{intro}<br/><br/>"
+        "1. Откройте <b>Telegram</b>.<br/>"
+        f"2. Найдите бота <b>{bd}</b> — отсканируйте <b>QR на карточке</b> или введите имя в поиске.<br/>"
+        "3. У бота нажмите <b>«Обзор»</b>.<br/>"
+        "4. Откройте <b>«Абонементы / Сертификаты»</b>.<br/>"
+        "5. Перейдите на вкладку <b>«Сертификаты»</b>.<br/>"
+        "6. Введите <b>код подарочного сертификата</b> из тёмной полосы ниже.<br/>"
+        "7. После успешной активации можете записаться к вашему тренеру в каталоге.<br/><br/>"
+        f"{footer}"
+    )
+    return f"{header}<br/><br/>{body}"
+
+
 def _draw_accent_line(c: canvas.Canvas, x: float, y: float, length: float, thickness: float = 1.5) -> None:
     c.setStrokeColor(_hex(AMBER))
     c.setLineWidth(thickness)
     c.line(x, y, x + length, y)
+
+
+_CARD_PAGE_BG = "#d8e0ed"
+_CARD_SHADOW_FILL = "#b8c4d9"
+_CARD_FACE = "#ffffff"
+_CARD_BORDER = "#94a3b8"
+
+
+def _pdf_card_sheet_background(canvas_obj: canvas.Canvas, pw: float, ph: float) -> None:
+    canvas_obj.setFillColor(_hex(_CARD_PAGE_BG))
+    canvas_obj.rect(0, 0, pw, ph, fill=1, stroke=0)
+
+
+def _pdf_draw_white_card(
+    canvas_obj: canvas.Canvas,
+    *,
+    x: float,
+    y: float,
+    cw: float,
+    ch: float,
+    r: float,
+) -> None:
+    """Drop shadow + white face + cool border."""
+    canvas_obj.saveState()
+    canvas_obj.setFillColor(_hex(_CARD_SHADOW_FILL))
+    canvas_obj.roundRect(x - 0.7 * mm, y - 1.0 * mm, cw + 1.4 * mm, ch + 1.0 * mm, r + 0.6 * mm, fill=1, stroke=0)
+    canvas_obj.restoreState()
+    canvas_obj.setFillColor(_hex(_CARD_FACE))
+    canvas_obj.setStrokeColor(_hex(_CARD_BORDER))
+    canvas_obj.setLineWidth(0.7)
+    canvas_obj.roundRect(x, y, cw, ch, r, fill=1, stroke=1)
 
 
 def build_static_certificate_background_pdf_bytes() -> bytes:
@@ -478,7 +574,9 @@ def _build_on_template(
         doc.close()
 
 
-def _qr_png_bytes(payload: str) -> Optional[bytes]:
+def _qr_png_bytes(
+    payload: str, *, box_size: int = 3, border: int = 1
+) -> Optional[bytes]:
     """PNG bytes for QR or None if qrcode/PIL missing."""
     if not (payload or "").strip():
         return None
@@ -487,7 +585,12 @@ def _qr_png_bytes(payload: str) -> Optional[bytes]:
         from PIL import Image
     except ImportError:
         return None
-    qr = qrcode.QRCode(version=None, error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=4, border=2)
+    qr = qrcode.QRCode(
+        version=None,
+        error_correction=qrcode.constants.ERROR_CORRECT_M,
+        box_size=box_size,
+        border=border,
+    )
     qr.add_data(payload)
     qr.make(fit=True)
     img = qr.make_image(fill_color="black", back_color="white")
@@ -510,182 +613,256 @@ def _legacy_build_certificate_pdf(
     issued_at: Optional[date] = None,
     expires_at: Optional[date] = None,
     activation_url: Optional[str] = None,
+    client_bot_display_name: Optional[str] = None,
 ) -> bytes:
+    """Фон страницы + центральная карточка: бренд из настроек, сумма, получатель, шаги Telegram, код."""
     _register_fonts()
+    w, h = _CERT_ISSUE_PAGE
     buf = BytesIO()
-    w, h = A4
-    c = canvas.Canvas(buf, pagesize=A4)
+    cnv = canvas.Canvas(buf, pagesize=(w, h))
+    cfg = Settings()
+    brand_display = (cfg.certificate_pdf_brand_display_name or "ICE STUDIO").strip()
+    tagline_txt = (cfg.certificate_pdf_brand_tagline_ru or "").strip()
+    bot_display = _bot_display_resolve(
+        client_bot_display_name=client_bot_display_name,
+        activation_url=activation_url,
+    )
+    qr_img = (
+        _qr_png_bytes(str(activation_url).strip(), box_size=3, border=1)
+        if (activation_url or "").strip()
+        else None
+    )
 
-    margin = 24 * mm
-    col_w = (w - 2 * margin) / 12
+    qr_side = 18.5 * mm
+    qr_pad = 2 * mm
+    qr_shell = qr_side + 2 * qr_pad
+    ink = "#0f172a"
+    muted = "#64748b"
+    rule_tc = "#cbd5e1"
+    stripe_bg = "#0f172a"
+    stripe_hi = "#3b82f6"
 
-    c.setFillColor(_hex(CREAM))
-    c.rect(0, 0, w, h, fill=1, stroke=0)
+    _pdf_card_sheet_background(cnv, w, h)
 
-    c.setStrokeColor(_hex(CREAM_RICH))
-    c.setLineWidth(0.3)
-    step = int(8 * mm)
-    for i in range(0, int(w + h), step):
-        c.line(i - h, 0, i, h)
+    mx, my = 10 * mm, 10 * mm
+    cw, ch = w - 2 * mx, h - 2 * my
+    cr = 5 * mm
+    _pdf_draw_white_card(cnv, x=mx, y=my, cw=cw, ch=ch, r=cr)
 
-    y = h - 28 * mm
+    pad_inner = 8 * mm
+    ix = mx + pad_inner
+    iy_top = my + ch - pad_inner
+    iw = cw - 2 * pad_inner
+    qr_reserve = (qr_shell + 5 * mm) if qr_img else 4 * mm
+    col_w = max(52 * mm, iw - qr_reserve)
 
-    c.setFillColor(_hex(TEXT_DARK))
-    c.setFont(_FONT_BOLD, 22)
-    c.drawString(margin, y, CERTIFICATE_BRAND_FOOTER)
+    stripe_left = mx + 9 * mm
+    stripe_w_inner = cw - 18 * mm
+    stripe_h = 29 * mm
+    stripe_bottom = my + 11 * mm
+    stripe_top = stripe_bottom + stripe_h
 
-    c.setFillColor(_hex(AMBER))
-    c.circle(margin + 76 * mm, y + 6 * mm, 2.5 * mm, fill=1, stroke=0)
+    cnv.saveState()
+    cnv.setFillColor(_hex(stripe_bg))
+    cnv.roundRect(stripe_left, stripe_bottom, stripe_w_inner, stripe_h, 4 * mm, fill=1, stroke=0)
+    cnv.restoreState()
 
-    c.setFillColor(_hex(TEXT_MUTED))
-    c.setFont(_FONT_SEMI, 8)
-    c.drawString(margin, y - 8 * mm, "ПОДАРОЧНЫЙ СЕРТИФИКАТ")
+    p_code_lbl_st = ParagraphStyle(
+        "codelb",
+        fontName=_FONT_SEMI,
+        fontSize=7.05,
+        alignment=1,
+        textColor=colors.HexColor("#94a3b8"),
+        leading=8.6,
+    )
+    pclr = Paragraph(escape("код активации в Telegram"), p_code_lbl_st)
+    _, hclr = pclr.wrap(stripe_w_inner, 16 * mm)
+    pclr.drawOn(cnv, stripe_left, stripe_bottom + stripe_h - hclr - 6 * mm)
 
-    _draw_accent_line(c, margin, y - 14 * mm, col_w * 4, 2)
+    code_plain = ((code or "").strip() or "—").replace("\n", " ")
+    cnv.setFillColor(colors.HexColor("#f8fafc"))
+    cnv.setFont("Courier-Bold", 12.2)
+    cnv.drawCentredString(mx + cw / 2, stripe_bottom + 8 * mm, code_plain)
 
-    y -= 32 * mm
+    cnv.setStrokeColor(_hex(stripe_hi))
+    cnv.setLineWidth(0.85)
+    cnv.line(
+        stripe_left + 14 * mm,
+        stripe_top - 1 * mm,
+        stripe_left + stripe_w_inner - 14 * mm,
+        stripe_top - 1 * mm,
+    )
 
-    name_x = margin
-    c.setFillColor(_hex(TEXT_WARM))
-    c.setFont(_FONT_SEMI, 9)
-    c.drawString(name_x, y, "ДЛЯ")
-    y -= 12 * mm
+    if qr_img:
+        ql = ix + iw - qr_shell
+        qb = iy_top - 6 * mm - qr_shell
+        cnv.saveState()
+        cnv.setFillColor(colors.white)
+        cnv.setStrokeColor(_hex(rule_tc))
+        cnv.setLineWidth(0.45)
+        cnv.roundRect(ql, qb, qr_shell, qr_shell, 2.8 * mm, fill=1, stroke=1)
+        cnv.restoreState()
+        cnv.drawImage(
+            ImageReader(BytesIO(qr_img)),
+            ql + qr_pad,
+            qb + qr_pad,
+            width=qr_side,
+            height=qr_side,
+            mask="auto",
+        )
 
-    recipient = (recipient_name or "").strip() or "Получателя"
-    name_size = 48 if len(recipient) <= 10 else (36 if len(recipient) <= 18 else 28)
+    stack = stripe_top + 8 * mm
+    ins_budget = iy_top - 15 * mm - stack
+    if ins_budget < 28 * mm:
+        ins_budget = 28 * mm
+    ins_fs = 6.75 if ins_budget >= 70 * mm else 6.38
+    ins_lead = 8.45 if ins_budget >= 70 * mm else 7.92
+    p_ins_st = ParagraphStyle(
+        "ins",
+        fontName=_FONT,
+        fontSize=ins_fs,
+        leading=ins_lead,
+        textColor=_hex("#334155"),
+    )
+    p_ins = Paragraph(_certificate_card_instructions_markup(bot_display), p_ins_st)
+    _, hi_meas = p_ins.wrap(iw - 3 * mm, ins_budget + 40 * mm)
+    hi_use = min(hi_meas, ins_budget)
+    if hi_meas > ins_budget:
+        p_ins_st.fontSize = 6.35
+        p_ins_st.leading = 7.88
+        p_ins = Paragraph(_certificate_card_instructions_markup(bot_display), p_ins_st)
+        _, hi_meas = p_ins.wrap(iw - 3 * mm, ins_budget)
+        hi_use = min(hi_meas, ins_budget)
+    _, hf_ins = p_ins.wrap(iw - 3 * mm, hi_use)
+    p_ins.drawOn(cnv, ix + 1 * mm, stack)
+    stack += hf_ins + 10 * mm
 
-    c.setFillColor(_hex(TEXT_DARK))
-    c.setFont(_FONT_BOLD, name_size)
+    meta_txt = "<b>%s</b>:&nbsp;%s<br/><b>%s</b>:&nbsp;%s" % (
+        escape("Тренер"),
+        escape((trainer_name or "").strip() or "—"),
+        escape("Действителен до"),
+        escape(_format_date(expires_at) if expires_at else "бессрочно"),
+    )
+    pst_meta = ParagraphStyle(
+        "meta",
+        fontName=_FONT,
+        fontSize=7.75,
+        leading=10.6,
+        textColor=_hex(muted),
+    )
+    p_meta = Paragraph(meta_txt, pst_meta)
+    _, hm = p_meta.wrap(col_w, 42 * mm)
+    p_meta.drawOn(cnv, ix, stack)
+    stack += hm + 11 * mm
 
-    if len(recipient) > 25:
-        words = recipient.split()
-        mid = len(words) // 2
-        line1 = " ".join(words[:mid])
-        line2 = " ".join(words[mid:])
-        c.drawString(name_x, y, line1)
-        y -= name_size * 0.8
-        c.drawString(name_x, y, line2)
-        y -= name_size * 0.6
+    pst_prod = ParagraphStyle(
+        "prd",
+        fontName=_FONT,
+        fontSize=8.5,
+        leading=11,
+        textColor=_hex("#475569"),
+    )
+    p_prod = Paragraph(escape((product_name or "Сертификат на услуги вашего тренера").strip()), pst_prod)
+    _, hp = p_prod.wrap(col_w, 44 * mm)
+    p_prod.drawOn(cnv, ix, stack)
+    stack += hp + 10 * mm
+
+    amt_plain = _format_amount(amount_cents)
+    if amt_plain == "Любая сумма":
+        pst_amt = ParagraphStyle("amtlo", fontName=_FONT_BOLD, fontSize=12.8, leading=15, textColor=_hex(ink))
+        p_amt = Paragraph("<b>%s</b>" % escape("Номинал согласуется при выдаче — любая сумма"), pst_amt)
     else:
-        c.drawString(name_x, y, recipient)
-        y -= name_size * 0.8
+        pst_amt = ParagraphStyle("amtfx", fontName=_FONT, fontSize=11, leading=24, textColor=_hex(ink))
+        amt_sz = "22" if len(amt_plain) <= 7 else ("18" if len(amt_plain) <= 11 else "16")
+        p_amt = Paragraph(
+            '<font face="%s" size="%s"><b>%s</b></font> <font face="%s" color="#64748b" size="11"><b>BYN</b></font>'
+            % (_FONT_BOLD, amt_sz, escape(amt_plain), _FONT_SEMI),
+            pst_amt,
+        )
+    _, ha = p_amt.wrap(col_w, 32 * mm)
+    p_amt.drawOn(cnv, ix, stack)
+    stack += ha + 9 * mm
 
-    y -= 12 * mm
+    recipient_plain = ((recipient_name or "").strip() or "Получатель").replace("\n", " ")
+    r_sz = 15 if len(recipient_plain) <= 28 else (13 if len(recipient_plain) <= 42 else 11.8)
+    pst_rec = ParagraphStyle(
+        "rec",
+        fontName=_FONT_BOLD,
+        fontSize=r_sz,
+        leading=r_sz + 3,
+        textColor=_hex(ink),
+    )
+    p_rec = Paragraph(escape(recipient_plain), pst_rec)
+    _, hr = p_rec.wrap(col_w, 42 * mm)
+    p_rec.drawOn(cnv, ix, stack)
+    stack += hr + 7 * mm
 
-    left_x = margin
-    left_w = col_w * 7
+    pst_lab = ParagraphStyle(
+        "lab",
+        fontName=_FONT_SEMI,
+        fontSize=6.95,
+        leading=9,
+        textColor=_hex(muted),
+    )
+    p_lab = Paragraph(escape("получатель"), pst_lab)
+    _, hl = p_lab.wrap(col_w, 14 * mm)
+    p_lab.drawOn(cnv, ix, stack)
+    stack += hl + 9 * mm
 
-    right_x = margin + col_w * 8
-    right_w = col_w * 4
+    pst_cap = ParagraphStyle(
+        "cap",
+        fontName=_FONT_SEMI,
+        fontSize=8.2,
+        leading=10.5,
+        textColor=_hex("#334155"),
+    )
+    p_cap = Paragraph(escape("Подарочный сертификат"), pst_cap)
+    _, hc = p_cap.wrap(col_w, 22 * mm)
+    p_cap.drawOn(cnv, ix, stack)
+    stack += hc + 12 * mm
 
-    product = (product_name or "Сертификат").strip()
-    c.setFillColor(_hex(TEXT_DARK))
-    c.setFont(_FONT_SEMI, 16)
+    cnv.setStrokeColor(_hex(rule_tc))
+    cnv.setLineWidth(0.55)
+    cnv.line(ix, stack, ix + iw, stack)
+    stack += 13 * mm
 
-    if len(product) > 35:
-        style = ParagraphStyle("Prod", fontName=_FONT_SEMI, fontSize=16, leading=20, textColor=_hex(TEXT_DARK))
-        p = Paragraph(escape(product), style)
-        pw, ph = p.wrap(left_w, 40 * mm)
-        p.drawOn(c, left_x, y - ph + 4 * mm)
-        prod_h = ph
-    else:
-        c.drawString(left_x, y, product)
-        prod_h = 6 * mm
+    pst_br = ParagraphStyle(
+        "brd",
+        fontName=_FONT_BOLD,
+        fontSize=17.5,
+        leading=20,
+        textColor=_hex(ink),
+    )
+    p_brand = Paragraph(escape(brand_display), pst_br)
+    _, hb = p_brand.wrap(col_w, 40 * mm)
+    p_brand.drawOn(cnv, ix, stack)
+    stack += hb + 5 * mm
 
-    badge_h = 32 * mm
-    badge_y = y - badge_h + prod_h
+    pst_tag = ParagraphStyle(
+        "tag",
+        fontName=_FONT,
+        fontSize=7.82,
+        leading=11.1,
+        textColor=_hex(muted),
+    )
+    p_tag = Paragraph(escape(tagline_txt), pst_tag)
+    _, ht = p_tag.wrap(col_w, 52 * mm)
+    p_tag.drawOn(cnv, ix, stack)
+    stack += ht
 
-    c.setFillColor(_hex(AMBER))
-    c.roundRect(right_x, badge_y, right_w, badge_h, 4 * mm, fill=1, stroke=0)
+    overshoot = (stack + 6 * mm) - iy_top
+    if overshoot > 0.8 * mm and logger.isEnabledFor(logging.WARNING):
+        logger.warning("certificate_pdf: card overflow by %.2f pt — shorten CERTIFICATE_* env tagline", overshoot)
 
-    c.setFillColor(_hex(AMBER_BRIGHT))
-    c.roundRect(right_x, badge_y + badge_h - 8 * mm, right_w, 8 * mm, 4 * mm, fill=1, stroke=0)
-
-    amount_str = _format_amount(amount_cents)
-    # Badge: main amber is badge_y..badge_y+24mm; top 8mm is lighter amber (drawn second).
-    c.setFillColor(_hex(TEXT_DARK))
-    c.setFont(_FONT_BOLD, 24)
-    c.drawCentredString(right_x + right_w / 2, badge_y + 12 * mm, amount_str)
-
-    c.setFont(_FONT_SEMI, 10)
-    c.drawCentredString(right_x + right_w / 2, badge_y + badge_h - 4 * mm, "BYN")
-
-    y -= max(prod_h + 16 * mm, badge_h + 8 * mm)
-
-    detail_y = y
-
-    c.setFillColor(_hex(TEXT_MUTED))
-    c.setFont(_FONT, 10)
-    c.drawString(left_x, detail_y, "Тренер")
-    c.setFillColor(_hex(TEXT_DARK))
-    c.setFont(_FONT_SEMI, 10)
-    c.drawString(left_x + 18 * mm, detail_y, (trainer_name or "").strip() or "—")
-    detail_y -= 8 * mm
-
-    c.setFillColor(_hex(TEXT_MUTED))
-    c.setFont(_FONT, 10)
-    c.drawString(left_x, detail_y, "До")
-    c.setFillColor(_hex(TEXT_DARK))
-    c.setFont(_FONT_SEMI, 10)
-    expires_str = _format_date(expires_at) if expires_at else "бессрочно"
-    c.drawString(left_x + 18 * mm, detail_y, expires_str)
-
-    # detail_y is «До» row baseline; strip top = detail_y − 24mm → ~24mm band above charcoal bar for QR.
-    strip_top = detail_y - 24 * mm
-    code_h = 28 * mm
-    code_y = strip_top - code_h
-    if activation_url:
-        png = _qr_png_bytes(activation_url)
-        if png:
-            m = 2 * mm
-            gap_top = detail_y - m
-            gap_bottom = strip_top + m
-            gap_h = gap_top - gap_bottom
-            if gap_h >= 8 * mm:
-                qr_side = min(22 * mm, gap_h - 1 * mm)
-                qr_side = max(10 * mm, qr_side)
-                y_qr = gap_bottom + (gap_h - qr_side) / 2
-                x_qr = right_x + (right_w - qr_side) / 2
-                c.drawImage(ImageReader(BytesIO(png)), x_qr, y_qr, width=qr_side, height=qr_side, mask="auto")
-
-    c.setFillColor(_hex(CHARCOAL))
-    c.rect(0, code_y, w, code_h, fill=1, stroke=0)
-
-    c.setFillColor(_hex(AMBER))
-    c.rect(0, code_y + code_h - 3 * mm, w, 3 * mm, fill=1, stroke=0)
-
-    c.setFillColor(_hex("#9a9a9e"))
-    c.setFont(_FONT, 8)
-    c.drawCentredString(w / 2, code_y + code_h - 10 * mm, "КОД АКТИВАЦИИ")
-
-    code_str = (code or "").strip() or "—"
-    c.setFillColor(colors.white)
-    c.setFont(_FONT_BOLD, 28)
-    code_w = c.stringWidth(code_str, _FONT_BOLD, 28)
-    start_x = (w - code_w) / 2
-    c.drawString(start_x, code_y + 8 * mm, code_str)
-
-    y = code_y - 16 * mm
-
-    c.setFillColor(_hex(TEXT_MUTED))
-    c.setFont(_FONT, 8)
-    issue_str = f"Выдан {_format_date(issued_at)}"
+    foot = "%s · выдан %s" % (brand_display, _format_date(issued_at))
     if (purchased_by_name or "").strip():
-        issue_str += f" • {purchased_by_name.strip()}"
-    c.drawString(margin, y, issue_str)
+        foot += " · %s" % purchased_by_name.strip()
+    cnv.setFillColor(_hex(muted))
+    cnv.setFont(_FONT, 6.6)
+    cnv.drawCentredString(w / 2, max(4.8 * mm, my - 4 * mm), foot)
 
-    y -= 8 * mm
-    c.drawString(margin, y, CERTIFICATE_BOT_HINT)
-
-    c.setFillColor(_hex(TEXT_DARK))
-    c.setFont(_FONT_BOLD, 9)
-    c.drawRightString(w - margin, 12 * mm, CERTIFICATE_BRAND_FOOTER)
-
-    c.setFillColor(_hex(AMBER))
-    c.rect(0, 0, w, 2 * mm, fill=1, stroke=0)
-
-    c.showPage()
-    c.save()
+    cnv.showPage()
+    cnv.save()
     buf.seek(0)
     return buf.getvalue()
 
@@ -701,10 +878,10 @@ def build_certificate_pdf(
     issued_at: Optional[date] = None,
     expires_at: Optional[date] = None,
     activation_url: Optional[str] = None,
+    client_bot_display_name: Optional[str] = None,
 ) -> bytes:
     """
-    Single ReportLab layout: price/BYN/QR share one coordinate system (no PyMuPDF overlay drift).
-    activation_url: optional deep link for QR (e.g. t.me/bot?start=cert_CODE).
+    A5 portrait: фон страницы + центральная карточка. Брендинг через Settings (certificate_pdf_brand_*).
     """
     return _legacy_build_certificate_pdf(
         trainer_name=trainer_name,
@@ -716,4 +893,5 @@ def build_certificate_pdf(
         issued_at=issued_at,
         expires_at=expires_at,
         activation_url=activation_url,
+        client_bot_display_name=client_bot_display_name,
     )
