@@ -24,6 +24,7 @@ from src.bot.notification_loops import (
     run_inactive_client_loop,
     run_lead_mode_recovery_loop,
     run_no_response_reminder_loop,
+    run_recurring_materialization_loop,
     run_reminder_loop,
     run_request_notifier_loop,
     run_response_notifier_loop,
@@ -85,6 +86,7 @@ async def main() -> None:
     # Background jobs (no bot)
     other_tasks = [
         asyncio.create_task(run_certificate_email_outbox_loop(), name="certificate_email_outbox"),
+        asyncio.create_task(run_recurring_materialization_loop(), name="recurring_materialization"),
     ]
     all_tasks = client_tasks + trainer_tasks + other_tasks
 

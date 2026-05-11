@@ -525,6 +525,7 @@ async def create_booking(
     *,
     allow_overbook: bool = False,
     is_sandbox: bool = False,
+    recurring_client_slot_id: int | None = None,
 ) -> tuple[int | None, tuple[bool, bool]]:
     """
     Create booking: insert row; slot becomes 'booked' only when pending+confirmed count reaches capacity.
@@ -651,11 +652,11 @@ async def create_booking(
                 INSERT INTO bookings (
                     slot_id, trainer_id, client_id, service_id, client_comment, client_request_id,
                     status, arena_id, service_price_variant_id, booking_price_cents, price_tier_kind,
-                    is_sandbox
+                    is_sandbox, recurring_client_slot_id
                 )
                 VALUES (
                     :sid, :tid, :cid, :svc_id, :comment, :req_id, :status, :arena_id, :vvid, :bpc, :ptk,
-                    :is_sandbox
+                    :is_sandbox, :rcs_id
                 )
                 RETURNING id
             """),
@@ -672,6 +673,7 @@ async def create_booking(
                 "bpc": booking_price_cents,
                 "ptk": price_tier_kind,
                 "is_sandbox": is_sandbox,
+                "rcs_id": recurring_client_slot_id,
             },
         )
         (booking_id,) = r.fetchone()
@@ -3023,11 +3025,14 @@ async def mark_booking_notified(session: AsyncSession, booking_id: int) -> None:
 async def cancel_booking(session: AsyncSession, booking_id: int, trainer_id: int) -> bool:
     """
     Cancel booking: booking status to 'cancelled', slot occupancy synced (group slots may stay partially filled).
+    Recurring-auto bookings: records a week skip so materialization will not recreate the same calendar week.
     Returns True if booking was found and cancelled.
     """
     r = await session.execute(
         text("""
-            SELECT b.slot_id FROM bookings b
+            SELECT b.slot_id, b.recurring_client_slot_id, s.slot_date
+            FROM bookings b
+            JOIN slots s ON s.id = b.slot_id
             WHERE b.id = :bid AND b.trainer_id = :tid AND b.status IN ('pending', 'confirmed')
         """),
         {"bid": booking_id, "tid": trainer_id},
@@ -3036,10 +3041,18 @@ async def cancel_booking(session: AsyncSession, booking_id: int, trainer_id: int
     if not row:
         return False
     slot_id = int(row[0])
+    recurring_for_skip = row[1]
+    slot_date_for_skip = row[2]
     await session.execute(
         text("UPDATE bookings SET status = 'cancelled' WHERE id = :bid"),
         {"bid": booking_id},
     )
+    if recurring_for_skip is not None and slot_date_for_skip is not None:
+        from src.application.recurring_use_cases import record_recurring_materialization_week_skip
+
+        await record_recurring_materialization_week_skip(
+            session, int(recurring_for_skip), slot_date_for_skip
+        )
     await sync_slot_status_for_occupancy(session, slot_id)
     await session.execute(
         text("UPDATE reminders SET status = 'cancelled' WHERE booking_id = :bid"),
@@ -3140,7 +3153,7 @@ async def cancel_booking_by_client(
         text("""
             SELECT t.telegram_id, b.trainer_id, s.slot_date, s.start_time,
                    TRIM(COALESCE(c.first_name, '') || ' ' || COALESCE(c.last_name, '')) AS client_name,
-                   c.id, c.telegram_id
+                   c.id, c.telegram_id, b.recurring_client_slot_id
             FROM bookings b
             JOIN clients c ON c.id = b.client_id AND c.telegram_id = :ctid
             JOIN slots s ON s.id = b.slot_id
@@ -3162,6 +3175,7 @@ async def cancel_booking_by_client(
     )
     client_id = int(row[5]) if row[5] is not None else None
     client_tid = int(row[6]) if row[6] is not None else None
+    recurring_for_skip = row[7]
 
     r = await session.execute(
         text("""
@@ -3183,6 +3197,12 @@ async def cancel_booking_by_client(
         """),
         {"bid": booking_id, "reason": reason_val},
     )
+    if recurring_for_skip is not None and slot_date is not None:
+        from src.application.recurring_use_cases import record_recurring_materialization_week_skip
+
+        await record_recurring_materialization_week_skip(
+            session, int(recurring_for_skip), slot_date
+        )
     await sync_slot_status_for_occupancy(session, slot_id_cancel)
     await session.execute(
         text("UPDATE reminders SET status = 'cancelled' WHERE booking_id = :bid"),

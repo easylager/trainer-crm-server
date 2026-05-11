@@ -1418,6 +1418,12 @@
 
       function makeRegularFromBooking(bookingId) {
         postJsonTrainer('/trainer/bookings/' + bookingId + '/make_regular', null).then(function(res) {
+          var n = res && typeof res.materialized_bookings === 'number' ? res.materialized_bookings : 0;
+          if (n > 0) {
+            showToast('Добавлено записей по регулярности: ' + n);
+          } else {
+            showToast('Регулярное время сохранено');
+          }
           openBookingDetail(bookingId);
         }).catch(function() { alert('Ошибка'); });
       }

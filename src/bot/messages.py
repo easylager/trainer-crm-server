@@ -1015,23 +1015,32 @@ def format_client_pass_issued_html(
     sessions_total: int,
     sessions_remaining: int,
     trainer_name: str,
-    service_name: str | None,
+    service_names: list[str] | None = None,
 ) -> str:
     """
     Telegram HTML for client when trainer issues a pass (external payment).
-    Trainer/product/service names are escaped.
+    Trainer/product names are escaped.
+    service_names: empty/None = unrestricted (all trainer services); otherwise list of covered services.
     """
     pn = html.escape((product_name or "").strip() or "Абонемент")
     tn = html.escape((trainer_name or "").strip() or "Тренер")
     st = int(sessions_total) if sessions_total is not None else 0
     sr = int(sessions_remaining) if sessions_remaining is not None else st
     w_st = _ru_sessions_word(st)
-    w_sr = _ru_sessions_word(sr)
-    sn = (service_name or "").strip()
-    if sn:
-        scope = f"🎯 Услуга: <b>{html.escape(sn)}</b>\n<i>Списывается при занятиях по этой услуге.</i>"
-    else:
+    names = [((n or "").strip()) for n in (service_names or []) if ((n or "").strip())]
+    if not names:
         scope = "🎯 На <b>все услуги</b> тренера — подходит любая запись к нему из каталога"
+    elif len(names) == 1:
+        scope = (
+            f"🎯 Услуга: <b>{html.escape(names[0])}</b>\n"
+            "<i>Списывается при занятиях по этой услуге.</i>"
+        )
+    else:
+        joined = ", ".join(html.escape(n) for n in names)
+        scope = (
+            f"🎯 Услуги: <b>{joined}</b>\n"
+            "<i>Списывается при занятиях по любой из перечисленных услуг.</i>"
+        )
 
     if st == sr:
         balance_line = f"📊 Осталось: <b>{sr}</b> / <b>{st}</b> {w_st}"

@@ -685,6 +685,10 @@ class Booking(Base):
     # Onboarding demo booking: excluded from stats, revenue, rhythm hints, reminders, repeat-gap pings,
     # inactive-client loop. Still claims the first-booking milestone so TTV step 2 mirrors real UX.
     is_sandbox: Mapped[bool] = mapped_column(nullable=False, server_default="false")
+    # Set when this booking was created by recurring materialization (trainer CRM «постоянный клиент»).
+    recurring_client_slot_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("recurring_client_slots.id", ondelete="SET NULL"), nullable=True, index=True
+    )
 
     client: Mapped["Client"] = relationship(back_populates="bookings", lazy="raise")
 
@@ -773,13 +777,21 @@ class TrainerPassProduct(Base):
     name: Mapped[str] = mapped_column(String(128), nullable=False)
     sessions_total: Mapped[int] = mapped_column(Integer(), nullable=False)
     price_cents: Mapped[int] = mapped_column(Integer(), nullable=False)
-    service_id: Mapped[Optional[int]] = mapped_column(
-        ForeignKey("services.id", ondelete="SET NULL"), nullable=True, index=True
-    )
     is_active: Mapped[bool] = mapped_column(nullable=False, server_default="true")
     sort_order: Mapped[int] = mapped_column(Integer(), server_default="0", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class TrainerPassProductService(Base):
+    """Pass applies to listed services only; absence of rows for a product means all trainer services."""
+
+    __tablename__ = "trainer_pass_product_services"
+
+    pass_product_id: Mapped[int] = mapped_column(
+        ForeignKey("trainer_pass_products.id", ondelete="CASCADE"), primary_key=True
+    )
+    service_id: Mapped[int] = mapped_column(ForeignKey("services.id", ondelete="CASCADE"), primary_key=True)
 
 
 # Client-owned pass instance: trainer issued after client paid externally (no platform payment)

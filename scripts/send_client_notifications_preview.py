@@ -417,7 +417,7 @@ async def main() -> None:
             sessions_total=8,
             sessions_remaining=8,
             trainer_name=MOCK_TRAINER_NAME,
-            service_name=MOCK_SERVICE,
+            service_names=[MOCK_SERVICE],
         )
         await _send(bot, chat_id, "Абонемент выдан (на услугу)", pass_with_svc, pass_kb)
         pass_all = msg.format_client_pass_issued_html(
@@ -425,9 +425,17 @@ async def main() -> None:
             sessions_total=5,
             sessions_remaining=3,
             trainer_name=MOCK_TRAINER_NAME,
-            service_name=None,
+            service_names=[],
+        )
+        pass_multi = msg.format_client_pass_issued_html(
+            product_name="Пакет «Комби»",
+            sessions_total=10,
+            sessions_remaining=10,
+            trainer_name=MOCK_TRAINER_NAME,
+            service_names=["Йога", "Пилатес"],
         )
         await _send(bot, chat_id, "Абонемент выдан (на все услуги)", pass_all, pass_kb)
+        await _send(bot, chat_id, "Абонемент выдан (несколько услуг)", pass_multi, pass_kb)
 
         # 19. Отчёт о проблеме (клиент)
         problem = msg.format_client_booking_problem_notice_html(

@@ -687,3 +687,37 @@
       .btn-save:active,
       .btn-cancel:active,
       .btn-copy:active { transform: none; }
+    }
+    .pp-label {
+      display: block;
+      font-size: 15px;
+      font-weight: 500;
+      margin-bottom: 4px;
+      color: var(--tg-theme-text-color, #1a1a1a);
+    }
+    .pp-field-hint {
+      font-size: 13px;
+      line-height: 1.4;
+      color: var(--tg-theme-hint-color, #666);
+      margin: 0 0 10px;
+    }
+    .pp-services-multiselect {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-height: 200px;
+      overflow-y: auto;
+      padding: 8px 10px;
+      border-radius: 12px;
+      border: 1px solid rgba(247, 166, 0, 0.3);
+      background: var(--tg-theme-secondary-bg-color, #fff3cc);
+    }
+    .pp-svc-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      font-size: 15px;
+      line-height: 1.35;
+    }
+    .pp-svc-row input { margin-top: 3px; flex-shrink: 0; }
+

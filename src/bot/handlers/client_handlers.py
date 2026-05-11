@@ -302,6 +302,32 @@ def _trainer_book_markup(
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
+def _trainer_book_and_buy_pass_markup(
+    base: str,
+    trainer_id: int,
+    *,
+    service_id: int | None = None,
+    pass_product_id: int | None = None,
+) -> InlineKeyboardMarkup:
+    """Welcome-link UX: запись + каталог абонементов тренера (строго как поток с pass_product в ссылке)."""
+    rows = list(_trainer_book_rows(base, trainer_id, service_id=service_id))
+    b = (base or "").rstrip("/")
+    if b.lower().startswith("https://"):
+        rows.append([
+            InlineKeyboardButton(
+                text=msg.CLIENT_BUTTON_BUY_PASS,
+                web_app=WebAppInfo(url=_client_buy_pass_webapp_url(base, trainer_id, pass_product_id)),
+            )
+        ])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def _welcome_pass_invite_body(trainer: dict | None) -> str:
+    """Единый текст после welcome-токена / ref: имя тренера + два действия ниже."""
+    name = html.escape(_trainer_name(trainer) if trainer else "Тренер")
+    return msg.CLIENT_PASS_WELCOME.format(name=name)
+
+
 # Mirrors redirect username rules so /r/tg/{id} does not 404 when the user taps «Написать».
 _CLIENT_TG_USERNAME_RE = re.compile(r"^[A-Za-z0-9_]{5,64}$")
 
@@ -678,49 +704,41 @@ async def cmd_start(message: Message) -> None:
                     await message.answer(cert_body, reply_markup=keyboard, parse_mode=ParseMode.HTML)
                 else:
                     await message.answer(msg.CLIENT_CERT_CODE_INVALID)
-            else:
-                async with async_session_factory() as db_session:
-                    trainer = await get_trainer(db_session, trainer_id)
-                base = (Settings().webapp_base_url or "").rstrip("/")
-                welcome_body = _invite_welcome_text(trainer, base)
-                await message.answer(
-                    welcome_body,
-                    reply_markup=_trainer_book_markup(
-                        base, trainer_id, include_catalog_alternative=False, service_id=book_url_svc
-                    ),
-                )
+                else:
+                    async with async_session_factory() as db_session:
+                        trainer = await get_trainer(db_session, trainer_id)
+                    base = (Settings().webapp_base_url or "").rstrip("/")
+                    welcome_body = _welcome_pass_invite_body(trainer)
+                    await message.answer(
+                        welcome_body,
+                        parse_mode=ParseMode.HTML,
+                        reply_markup=_trainer_book_and_buy_pass_markup(
+                            base, trainer_id, service_id=book_url_svc
+                        ),
+                    )
         elif token_type == WELCOME_TOKEN_TYPE_PASS:
             async with async_session_factory() as db_session:
                 trainer = await get_trainer(db_session, trainer_id)
-            name = html.escape(_trainer_name(trainer) if trainer else "Тренер")
             base = (Settings().webapp_base_url or "").rstrip("/")
             pass_pid = payload_data.get("pass_product_id")
             pass_pid_i = int(pass_pid) if pass_pid is not None else None
-            keyboard = InlineKeyboardMarkup(
-                inline_keyboard=_trainer_book_rows(base, trainer_id, service_id=book_url_svc)
-                + [
-                    [
-                        InlineKeyboardButton(
-                            text=msg.CLIENT_BUTTON_BUY_PASS,
-                            web_app=WebAppInfo(
-                                url=_client_buy_pass_webapp_url(
-                                    base, int(trainer_id), pass_pid_i
-                                )
-                            ),
-                        )
-                    ],
-                ]
+            await message.answer(
+                _welcome_pass_invite_body(trainer),
+                parse_mode=ParseMode.HTML,
+                reply_markup=_trainer_book_and_buy_pass_markup(
+                    base, trainer_id, service_id=book_url_svc, pass_product_id=pass_pid_i
+                ),
             )
-            await message.answer(msg.CLIENT_PASS_WELCOME.format(name=name), reply_markup=keyboard)
         else:
             async with async_session_factory() as db_session:
                 trainer = await get_trainer(db_session, trainer_id)
             base = (Settings().webapp_base_url or "").rstrip("/")
-            welcome_body = _invite_welcome_text(trainer, base)
+            welcome_body = _welcome_pass_invite_body(trainer)
             await message.answer(
                 welcome_body,
-                reply_markup=_trainer_book_markup(
-                    base, trainer_id, include_catalog_alternative=False, service_id=book_url_svc
+                parse_mode=ParseMode.HTML,
+                reply_markup=_trainer_book_and_buy_pass_markup(
+                    base, trainer_id, service_id=book_url_svc
                 ),
             )
         return
@@ -842,11 +860,12 @@ async def cmd_start(message: Message) -> None:
                 source=DEMAND_SOURCE_CLIENT_SHARE,
             )
         base = (Settings().webapp_base_url or "").rstrip("/")
-        welcome_body = _invite_welcome_text(trainer, base)
+        welcome_body = _welcome_pass_invite_body(trainer)
         await message.answer(
             welcome_body,
-            reply_markup=_trainer_book_markup(
-                base, trainer_id_share, include_catalog_alternative=False, service_id=book_url_share
+            parse_mode=ParseMode.HTML,
+            reply_markup=_trainer_book_and_buy_pass_markup(
+                base, trainer_id_share, service_id=book_url_share
             ),
         )
         return
@@ -900,11 +919,12 @@ async def cmd_start(message: Message) -> None:
             if service_id is not None:
                 await set_service(telegram_id, service_id, db_session)
             await set_selected_trainer(telegram_id, trainer_id_ref, db_session)
-        welcome_body = _invite_welcome_text(trainer, base)
+        welcome_body = _welcome_pass_invite_body(trainer)
         await message.answer(
             welcome_body,
-            reply_markup=_trainer_book_markup(
-                base, trainer_id_ref, include_catalog_alternative=False, service_id=book_url_welcome
+            parse_mode=ParseMode.HTML,
+            reply_markup=_trainer_book_and_buy_pass_markup(
+                base, trainer_id_ref, service_id=book_url_welcome
             ),
         )
         return
@@ -933,24 +953,17 @@ async def cmd_start(message: Message) -> None:
                 trainer_id=int(pass_trainer_id),
                 source=DEMAND_SOURCE_CLIENT_APP,
             )
-        name = html.escape(_trainer_name(trainer) if trainer else "Тренер")
         base = (Settings().webapp_base_url or "").rstrip("/")
-        keyboard = InlineKeyboardMarkup(
-            inline_keyboard=_trainer_book_rows(base, pass_trainer_id, service_id=book_url_pass)
-            + [
-                [
-                    InlineKeyboardButton(
-                        text=msg.CLIENT_BUTTON_BUY_PASS,
-                        web_app=WebAppInfo(
-                            url=_client_buy_pass_webapp_url(
-                                base, int(pass_trainer_id), int(pass_product_id)
-                            )
-                        ),
-                    )
-                ],
-            ]
+        await message.answer(
+            _welcome_pass_invite_body(trainer),
+            parse_mode=ParseMode.HTML,
+            reply_markup=_trainer_book_and_buy_pass_markup(
+                base,
+                pass_trainer_id,
+                service_id=book_url_pass,
+                pass_product_id=int(pass_product_id),
+            ),
         )
-        await message.answer(msg.CLIENT_PASS_WELCOME.format(name=name), reply_markup=keyboard)
         return
 
     parsed = _parse_client_start(payload)

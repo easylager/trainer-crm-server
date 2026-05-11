@@ -16,7 +16,10 @@ from src.application.booking_use_cases import (
     reverse_booking_completion_for_problem_report,
 )
 from src.application.certificate_use_cases import redeem_certificate_balance_for_booking
-from src.application.pass_product_use_cases import redeem_pass_session_for_booking
+from src.application.pass_product_use_cases import (
+    SQL_PASS_PRODUCT_COVERS_BOOKING_SERVICE,
+    redeem_pass_session_for_booking,
+)
 from src.shared.audit import ACTOR_API, audit_log
 
 # P1: auto write-off on no-show; P2: problem outcome without redemption (PRD Epic E3).
@@ -176,18 +179,18 @@ async def classify_booking_problem_payment_class(
         return "PASS"
     r2 = await session.execute(
         text(
-            """
+            f"""
             SELECT 1
             FROM pass_instances pi
             JOIN trainer_pass_products p ON p.id = pi.pass_product_id
             WHERE pi.client_id = :cid AND p.trainer_id = :tid
               AND pi.status = 'active' AND pi.sessions_remaining > 0
-              AND (p.service_id = :sid OR p.service_id IS NULL)
+              AND {SQL_PASS_PRODUCT_COVERS_BOOKING_SERVICE}
               AND (pi.expires_at IS NULL OR pi.expires_at > CURRENT_TIMESTAMP)
             LIMIT 1
             """
         ),
-        {"cid": client_id, "tid": trainer_id, "sid": service_id},
+        {"cid": client_id, "tid": trainer_id, "booking_service_id": service_id},
     )
     if r2.fetchone():
         return "PASS"

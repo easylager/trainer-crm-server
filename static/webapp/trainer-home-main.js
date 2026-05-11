@@ -2507,7 +2507,8 @@
       }
 
       /**
-       * Hub summary tiles: «N всего» / «M осталось», or one number when total === remaining.
+       * Hub summary tiles: «N всего» / «M осталось».
+       * When nothing has started yet, N === M is normal — still show both lines (users expect «осталось»).
        */
       function hubFillDualStatValue(el, cardEl, total, remaining, titleText) {
         if (!el) return;
@@ -2519,12 +2520,6 @@
         }
         var rem =
           typeof remaining === 'number' && remaining >= 0 ? remaining : total;
-        if (total === rem) {
-          el.classList.remove('hub-stat-value--dual');
-          el.textContent = String(total);
-          if (cardEl && titleText) cardEl.setAttribute('title', titleText);
-          return;
-        }
         el.classList.add('hub-stat-value--dual');
         el.innerHTML =
           '<span class="hub-stat-dual-line"><span class="hub-stat-dual-num">' +

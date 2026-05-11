@@ -131,6 +131,10 @@ class Settings(BaseSettings):
     notification_lead_mode_recovery_interval_sec: int = 86400
     # notification_service: poll for slot end → auto-complete booking → «Записать снова» trainer push. Clamped to 15–600 s in worker.
     booking_complete_poll_interval_sec: int = 60
+    # Recurring «постоянный клиент»: how many ISO weeks ahead to auto-fill bookings (horizon + notification loop).
+    recurring_materialization_horizon_weeks: int = 8
+    # notification_service: top up recurring auto-bookings toward the horizon (seconds). Default 6h.
+    recurring_materialization_loop_interval_sec: int = 21600
     # Last N seconds before slot end (Europe/Minsk): send trainer one «предложите повтор» push with WebApp buttons. 0 = disabled.
     trainer_session_wrapup_lead_seconds: int = 60
 

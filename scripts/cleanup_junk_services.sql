@@ -35,9 +35,8 @@ WHERE service_id IN (SELECT id FROM services WHERE name IN ('Test Service', 'E2E
 DELETE FROM client_requests
 WHERE service_id IN (SELECT id FROM services WHERE name IN ('Test Service', 'E2E Service'));
 
--- pass products: FK SET NULL on delete
-UPDATE trainer_pass_products
-SET service_id = NULL
+-- pass products: junction + products (column service_id removed in 0147)
+DELETE FROM trainer_pass_product_services
 WHERE service_id IN (SELECT id FROM services WHERE name IN ('Test Service', 'E2E Service'));
 
 -- client_sessions may point at selected_service_id

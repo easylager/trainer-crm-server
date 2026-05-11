@@ -113,19 +113,43 @@
           : 'Неактивен (скрыт из каталога)';
       }
 
-      function fillServiceSelect() {
-        var sel = document.getElementById('inputServiceId');
-        if (!sel) return;
-        var current = sel.value;
-        sel.innerHTML = '<option value="">Любая услуга</option>';
-        (state.services || []).forEach(function(s) {
-          var opt = document.createElement('option');
-          opt.value = s.id;
-          opt.textContent = s.name || '—';
-          sel.appendChild(opt);
+      function getPassProductSelectedServiceIds() {
+        var host = document.getElementById('passProductServicesHost');
+        if (!host) return [];
+        var ids = [];
+        host.querySelectorAll('input.pp-svc-cb:checked').forEach(function(cb) {
+          var v = parseInt(cb.value, 10);
+          if (!isNaN(v)) ids.push(v);
         });
-        if (current) sel.value = current;
+        return ids;
       }
+
+      function renderPassProductServiceCheckboxes(selectedIds) {
+        var host = document.getElementById('passProductServicesHost');
+        if (!host) return;
+        var sel = {};
+        (selectedIds || []).forEach(function(id) { sel[String(id)] = true; });
+        host.innerHTML = '';
+        if (!(state.services || []).length) {
+          host.innerHTML = '<div class="cert-issued-empty">Нет услуг — добавьте услуги в профиле тренера.</div>';
+          return;
+        }
+        (state.services || []).forEach(function(s) {
+          var row = document.createElement('label');
+          row.className = 'pp-svc-row';
+          var cb = document.createElement('input');
+          cb.type = 'checkbox';
+          cb.className = 'pp-svc-cb';
+          cb.value = String(s.id);
+          if (sel[String(s.id)]) cb.checked = true;
+          row.appendChild(cb);
+          var span = document.createElement('span');
+          span.textContent = s.name || ('Услуга #' + s.id);
+          row.appendChild(span);
+          host.appendChild(row);
+        });
+      }
+
       function openForm(product) {
         document.getElementById('formTitle').textContent = product ? 'Редактировать абонемент' : 'Новый абонемент';
         document.getElementById('inputName').value = product ? product.name : '';
@@ -136,15 +160,17 @@
         document.getElementById('groupActive').style.display = product ? 'block' : 'none';
         document.getElementById('btnDeleteProduct').style.display = product ? 'block' : 'none';
         state.editingId = product ? product.id : null;
-        var serviceIdVal = product && product.service_id ? String(product.service_id) : '';
+        var preSelected = product && Array.isArray(product.service_ids) ? product.service_ids.slice() : [];
+        function applyCb() {
+          renderPassProductServiceCheckboxes(preSelected);
+        }
         if (state.services.length === 0) {
           fetch(apiUrl('/trainer/my-services') + initDataParam(), { headers: headers() })
             .then(function(r) { return r.json(); })
-            .then(function(data) { state.services = data.services || []; fillServiceSelect(); document.getElementById('inputServiceId').value = serviceIdVal; })
-            .catch(function() { fillServiceSelect(); document.getElementById('inputServiceId').value = serviceIdVal; });
+            .then(function(data) { state.services = data.services || []; applyCb(); })
+            .catch(function() { applyCb(); });
         } else {
-          fillServiceSelect();
-          document.getElementById('inputServiceId').value = serviceIdVal;
+          applyCb();
         }
       }
 
@@ -745,10 +771,9 @@
         if (isNaN(priceByn) || priceByn < 0) { alert('Укажите цену в BYN'); return; }
         var priceCents = priceByn * 100;
 
-        var serviceVal = document.getElementById('inputServiceId').value;
-        var serviceId = serviceVal ? parseInt(serviceVal, 10) : null;
+        var serviceIds = getPassProductSelectedServiceIds();
         if (state.editingId) {
-          var body = { name: name, sessions_total: sessions, price_cents: priceCents, is_active: document.getElementById('inputActive').checked, service_id: serviceId };
+          var body = { name: name, sessions_total: sessions, price_cents: priceCents, is_active: document.getElementById('inputActive').checked, service_ids: serviceIds };
           fetch(apiUrl('/trainer/pass-products/' + state.editingId), {
             method: 'PATCH',
             headers: headers(),
@@ -761,7 +786,7 @@
             })
             .catch(function() { alert('Ошибка сети'); });
         } else {
-          var body = { name: name, sessions_total: sessions, price_cents: priceCents, service_id: serviceId };
+          var body = { name: name, sessions_total: sessions, price_cents: priceCents, service_ids: serviceIds };
           fetch(apiUrl('/trainer/pass-products'), {
             method: 'POST',
             headers: headers(),

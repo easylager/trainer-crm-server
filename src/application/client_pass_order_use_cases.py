@@ -18,7 +18,11 @@ from src.application.booking_use_cases import (
 from src.application.client_request_use_cases import create_client_request
 from src.application.client_session_use_cases import get_session as read_client_bot_session
 from src.application.client_trainer_edge_use_cases import get_all_edges
-from src.application.pass_product_use_cases import list_pass_products
+from src.application.pass_product_use_cases import (
+    enrich_pass_items_with_catalog_reference_prices,
+    get_pass_product,
+    list_pass_products,
+)
 
 PASS_ORDER_LINE_PREFIX = "__PASS_ORDER__:pass_product_id="
 
@@ -60,22 +64,55 @@ async def _enrich_pass_products_pricing(session: AsyncSession, trainer_id: int, 
         ]
         if pass_rates:
             default_single = max(pass_rates)
-    for p in items:
-        sid = p.get("service_id")
-        single = price_by_service.get(sid) if sid else default_single
-        p["price_per_session_cents"] = single
-        if p.get("sessions_total") and p.get("price_cents"):
-            p["pass_price_per_session_cents"] = int(p["price_cents"]) // int(p["sessions_total"])
-        else:
-            p["pass_price_per_session_cents"] = None
-        if single is not None and p.get("sessions_total") and p.get("price_cents"):
-            pass_per_session = int(p["price_cents"]) // int(p["sessions_total"])
-            savings = int(single) - pass_per_session
-            p["savings_per_session_cents"] = max(0, savings)
-            p["savings_total_cents"] = max(0, savings) * int(p["sessions_total"])
-        else:
-            p["savings_per_session_cents"] = None
-            p["savings_total_cents"] = None
+    enrich_pass_items_with_catalog_reference_prices(
+        items,
+        price_by_service=price_by_service,
+        default_single_reference=default_single,
+    )
+
+
+async def _trainer_city_and_request_service_for_pass(
+    session: AsyncSession,
+    trainer_id: int,
+    restricted_service_ids: list[int],
+) -> tuple[int | None, int | None]:
+    """Pick client_request.service_id: smallest id among allowed trainer services, or any if unrestricted."""
+    rc = await session.execute(
+        text("SELECT city_id FROM trainer_profiles WHERE trainer_id = :tid LIMIT 1"),
+        {"tid": trainer_id},
+    )
+    crow = rc.fetchone()
+    city_id = int(crow[0]) if crow and crow[0] is not None else None
+
+    sids = sorted({int(x) for x in restricted_service_ids if x is not None})
+    if sids:
+        r = await session.execute(
+            text(
+                """
+                SELECT MIN(service_id)::int FROM trainer_services
+                WHERE trainer_id = :tid AND service_id = ANY(CAST(:sids AS INTEGER[]))
+                """
+            ),
+            {"tid": trainer_id, "sids": sids},
+        )
+        mrow = r.fetchone()
+        sid = int(mrow[0]) if mrow and mrow[0] is not None else None
+        if sid is None:
+            r = await session.execute(
+                text("SELECT MIN(service_id)::int FROM trainer_services WHERE trainer_id = :tid"),
+                {"tid": trainer_id},
+            )
+            mrow2 = r.fetchone()
+            sid = int(mrow2[0]) if mrow2 and mrow2[0] is not None else None
+        return city_id, sid
+
+    r = await session.execute(
+        text("SELECT MIN(service_id)::int FROM trainer_services WHERE trainer_id = :tid"),
+        {"tid": trainer_id},
+    )
+    mrow = r.fetchone()
+    sid = int(mrow[0]) if mrow and mrow[0] is not None else None
+    return city_id, sid
 
 
 async def get_primary_pass_order_catalog(session: AsyncSession, telegram_id: int) -> dict:
@@ -97,7 +134,9 @@ async def get_primary_pass_order_catalog(session: AsyncSession, telegram_id: int
         return {"trainer_id": None, "trainer_display_name": None, "items": []}
 
     trainer_id = int(primary_edge["trainer_id"])
-    raw_svc = resolve_primary_catalog_service_id(primary_edge, primary_src, sess_row.get("selected_service_id") if sess_row else None)
+    raw_svc = resolve_primary_catalog_service_id(
+        primary_edge, primary_src, sess_row.get("selected_service_id") if sess_row else None
+    )
     service_id_hint, _svc_name = await coerce_service_id_and_name_for_trainer_catalog(session, trainer_id, raw_svc)
 
     rnm = await session.execute(
@@ -126,29 +165,6 @@ async def get_primary_pass_order_catalog(session: AsyncSession, telegram_id: int
         "primary_catalog_service_id": service_id_hint,
         "items": items,
     }
-
-
-async def _trainer_city_and_default_service(
-    session: AsyncSession, trainer_id: int, product_service_id: int | None
-) -> tuple[int | None, int | None]:
-    rc = await session.execute(
-        text("SELECT city_id FROM trainer_profiles WHERE trainer_id = :tid LIMIT 1"),
-        {"tid": trainer_id},
-    )
-    crow = rc.fetchone()
-    city_id = int(crow[0]) if crow and crow[0] is not None else None
-
-    sid = product_service_id
-    if sid is None:
-        r = await session.execute(
-            text(
-                "SELECT MIN(service_id)::int FROM trainer_services WHERE trainer_id = :tid"
-            ),
-            {"tid": trainer_id},
-        )
-        mrow = r.fetchone()
-        sid = int(mrow[0]) if mrow and mrow[0] is not None else None
-    return city_id, sid
 
 
 async def _pending_pass_order_exists(
@@ -234,29 +250,16 @@ async def submit_pass_product_order_request(
 
     trainer_id = int(primary_edge["trainer_id"])
 
-    rprod = await session.execute(
-        text(
-            """
-            SELECT id, name, sessions_total, price_cents, service_id
-            FROM trainer_pass_products
-            WHERE id = :pid AND trainer_id = :tid AND is_active = true
-            """
-        ),
-        {"pid": pass_product_id, "tid": trainer_id},
-    )
-    prow = rprod.fetchone()
-    if not prow:
+    prod = await get_pass_product(session, pass_product_id, trainer_id)
+    if not prod or not prod.get("is_active"):
         return {"ok": False, "error": "product_not_found"}
 
-    _pid, pname, sessions_total, price_cents, prod_service_id = (
-        int(prow[0]),
-        (prow[1] or "").strip() or "Абонемент",
-        int(prow[2] or 0),
-        int(prow[3] or 0),
-        prow[4],
-    )
+    pname = (prod["name"] or "").strip() or "Абонемент"
+    sessions_total = int(prod["sessions_total"] or 0)
+    price_cents = int(prod["price_cents"] or 0)
+    restricted = list(prod.get("service_ids") or [])
 
-    city_id, service_id = await _trainer_city_and_default_service(session, trainer_id, prod_service_id)
+    city_id, service_id = await _trainer_city_and_request_service_for_pass(session, trainer_id, restricted)
     if city_id is None:
         return {"ok": False, "error": "trainer_city_missing"}
     if service_id is None:

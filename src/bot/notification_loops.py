@@ -141,6 +141,15 @@ def _lead_mode_recovery_loop_interval_sec() -> int:
     except (TypeError, ValueError):
         v = 86400
     return max(5, min(v, 86400))
+
+
+def _recurring_materialization_loop_interval_sec() -> int:
+    """Sleep between recurring horizon top-up ticks."""
+    try:
+        v = int(Settings().recurring_materialization_loop_interval_sec)
+    except (TypeError, ValueError):
+        v = 21600
+    return max(300, min(v, 86400))
 # Morning/weekly digest ritual: tick every minute so we hit per-trainer send_at with ≤60s jitter.
 DIGEST_LOOP_INTERVAL_SEC = 60
 # Grace window after a trainer's send_at during which we may still fire today's digest
@@ -423,12 +432,14 @@ async def _build_pass_order_notification(
 
     if product:
         pass_name = product.get("name") or "Абонемент"
-        pinned_sid = product.get("service_id")
-        svc = (product.get("service_name") or "").strip()
-        if pinned_sid is not None and svc:
-            service_line = svc
-        else:
+        label = (product.get("service_name") or "").strip()
+        sids = product.get("service_ids") or []
+        if not sids:
             service_line = "Любая"
+        elif label:
+            service_line = label
+        else:
+            service_line = "Несколько услуг"
     else:
         pass_name = "Абонемент"
         req_svc = (p.get("service_name") or "").strip()
@@ -1574,6 +1585,45 @@ async def run_lead_mode_recovery_loop(trainer_bot: Bot) -> None:
         except Exception as e:
             logger.exception("Lead Mode recovery loop: %s", e)
         await asyncio.sleep(_lead_mode_recovery_loop_interval_sec())
+
+
+async def run_recurring_materialization_loop() -> None:
+    """
+    Periodically fills recurring-client auto-bookings up to recurring_materialization_horizon_weeks
+    (CRM subscription tier only). Complements immediate materialize on «Сделать постоянным клиентом».
+    """
+    from sqlalchemy import text
+
+    from src.application.recurring_use_cases import materialize_recurring_horizon
+
+    while True:
+        await asyncio.sleep(_recurring_materialization_loop_interval_sec())
+        try:
+            async with async_session_factory() as session:
+                r = await session.execute(
+                    text(
+                        """
+                        SELECT DISTINCT trainer_id FROM recurring_client_slots
+                        WHERE status = 'active'
+                        """
+                    )
+                )
+                tids = [int(row[0]) for row in r.fetchall()]
+                total = 0
+                for tid in tids:
+                    n = await materialize_recurring_horizon(
+                        session,
+                        tid,
+                        horizon_weeks=Settings().recurring_materialization_horizon_weeks,
+                        recurring_ids=None,
+                    )
+                    total += n
+                if total:
+                    logger.info("Recurring materialization: created %d booking(s)", total)
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.exception("Recurring materialization loop: %s", e)
 
 
 async def run_certificate_email_outbox_loop() -> None:

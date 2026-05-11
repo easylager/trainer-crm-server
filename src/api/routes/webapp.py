@@ -169,6 +169,7 @@ from src.application.recurring_use_cases import (
     cancel_recurring_client_slot,
     create_recurring_client_slot,
     get_active_recurring_for_booking,
+    materialize_recurring_horizon,
 )
 from src.application.trainer_access_state import (
     TrainerAccessState,
@@ -209,6 +210,7 @@ from src.application.support_use_cases import (
 from src.application.pass_product_use_cases import (
     create_pass_product,
     delete_pass_product,
+    enrich_pass_items_with_catalog_reference_prices,
     issue_pass_to_client,
     list_client_pass_instances,
     list_pass_instances_for_trainer_client,
@@ -1576,43 +1578,31 @@ async def get_client_pass_products(
     session: AsyncSession = Depends(get_session),
     _principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
 ):
-    """List active pass products for a trainer (for purchase). Enriched with price_per_session_cents and savings when product has service_id."""
+    """List active pass products for a trainer (for purchase). Enriched with savings using covered service prices."""
     # Only trainers with online tier expose pass products in catalog (clients can book)
     if not await trainer_allows_online_booking(session, trainer_id):
         raise HTTPException(status_code=404, detail="Trainer not found")
     items = await list_pass_products(session, trainer_id, active_only=True)
-    from sqlalchemy import text
+
     r = await session.execute(
         text("SELECT service_id, price_cents FROM trainer_services WHERE trainer_id = :tid"),
         {"tid": trainer_id},
     )
     price_by_service = {row[0]: row[1] for row in r.fetchall() if row[1] is not None}
     default_single = min(price_by_service.values()) if price_by_service else None
-    # When trainer has no service prices: use max pass per-session price as "single" reference so we can show savings
     if default_single is None and items:
         pass_rates = [
             p["price_cents"] // p["sessions_total"]
-            for p in items if p.get("sessions_total") and p.get("price_cents")
+            for p in items
+            if p.get("sessions_total") and p.get("price_cents")
         ]
         if pass_rates:
             default_single = max(pass_rates)
-    for p in items:
-        sid = p.get("service_id")
-        single = price_by_service.get(sid) if sid else default_single
-        p["price_per_session_cents"] = single
-        # Always expose pass price per session so client can show "X BYN за занятие"
-        if p.get("sessions_total") and p.get("price_cents"):
-            p["pass_price_per_session_cents"] = p["price_cents"] // p["sessions_total"]
-        else:
-            p["pass_price_per_session_cents"] = None
-        if single is not None and p.get("sessions_total") and p.get("price_cents"):
-            pass_per_session = p["price_cents"] // p["sessions_total"]
-            savings = single - pass_per_session
-            p["savings_per_session_cents"] = max(0, savings)
-            p["savings_total_cents"] = max(0, savings) * p["sessions_total"]
-        else:
-            p["savings_per_session_cents"] = None
-            p["savings_total_cents"] = None
+    enrich_pass_items_with_catalog_reference_prices(
+        items,
+        price_by_service=price_by_service,
+        default_single_reference=default_single,
+    )
     return {"items": items}
 
 
@@ -3120,7 +3110,7 @@ class PassProductCreateBody(BaseModel):
     name: str
     sessions_total: int
     price_cents: int
-    service_id: int | None = None
+    service_ids: list[int] = Field(default_factory=list)
     sort_order: int = 0
 
 
@@ -3136,15 +3126,18 @@ async def post_trainer_pass_product(
         raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     if not await trainer_has_crm_access(session, trainer_id):
         raise HTTPException(status_code=403, detail=WEBAPP_DETAIL_SUBSCRIPTION_CRM_REQUIRED)
-    product_id = await create_pass_product(
-        session,
-        trainer_id,
-        name=body.name,
-        sessions_total=body.sessions_total,
-        price_cents=body.price_cents,
-        service_id=body.service_id,
-        sort_order=body.sort_order,
-    )
+    try:
+        product_id = await create_pass_product(
+            session,
+            trainer_id,
+            name=body.name,
+            sessions_total=body.sessions_total,
+            price_cents=body.price_cents,
+            service_ids=list(body.service_ids or []),
+            sort_order=body.sort_order,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
     return {"success": True, "id": product_id}
 
 
@@ -3152,7 +3145,7 @@ class PassProductPatchBody(BaseModel):
     name: str | None = None
     sessions_total: int | None = None
     price_cents: int | None = None
-    service_id: int | None = None
+    service_ids: list[int] | None = None
     is_active: bool | None = None
     sort_order: int | None = None
 
@@ -3171,12 +3164,10 @@ async def patch_trainer_pass_product(
     if not await trainer_has_crm_access(session, trainer_id):
         raise HTTPException(status_code=403, detail=WEBAPP_DETAIL_SUBSCRIPTION_CRM_REQUIRED)
     patch = body.model_dump(exclude_unset=True)
-    ok = await update_pass_product(
-        session,
-        product_id,
-        trainer_id,
-        _patch=patch if patch else None,
-    )
+    try:
+        ok = await update_pass_product(session, product_id, trainer_id, **patch)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
     if not ok:
         raise HTTPException(status_code=404, detail="Product not found")
     return {"success": True}
@@ -5079,7 +5070,7 @@ async def post_trainer_client_pass_issue(
                 sessions_total=instance["sessions_total"],
                 sessions_remaining=instance["sessions_remaining"],
                 trainer_name=trainer_name,
-                service_name=instance.get("service_name"),
+                service_names=instance.get("service_names"),
             )
             base_url = (Settings().api_base_url or "").rstrip("/")
             kb = InlineKeyboardMarkup(
@@ -5841,7 +5832,15 @@ async def post_trainer_booking_make_regular(
         session, trainer_id, booking["client_id"],
         booking["slot_date"].weekday(), booking["start_time"], booking["end_time"],
     )
-    return {"success": True, "recurring_id": recurring_id}
+    materialized = 0
+    if recurring_id:
+        materialized = await materialize_recurring_horizon(
+            session,
+            trainer_id,
+            horizon_weeks=Settings().recurring_materialization_horizon_weeks,
+            recurring_ids=[recurring_id],
+        )
+    return {"success": True, "recurring_id": recurring_id, "materialized_bookings": materialized}
 
 
 @router.post("/trainer/recurring/{recurring_id:int}/remove")

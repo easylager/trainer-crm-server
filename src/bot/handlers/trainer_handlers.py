@@ -49,6 +49,7 @@ from src.application.recurring_use_cases import (
     cancel_recurring_client_slot,
     create_recurring_client_slot,
     get_active_recurring_for_booking,
+    materialize_recurring_horizon,
 )
 from src.application.welcome_link_use_cases import WELCOME_TOKEN_TYPE_CLIENT_BIND, create_welcome_link_token
 from src.application.client_request_use_cases import (
@@ -1885,9 +1886,13 @@ async def on_make_recurring_trainer(callback: CallbackQuery) -> None:
         recurring_id = await create_recurring_client_slot(
             session, trainer_id, client_id, day_of_week, start_time, end_time
         )
-    if recurring_id is None:
-        await callback.message.answer(msg.TRAINER_RECURRING_DONE)
-        return
+        if recurring_id:
+            await materialize_recurring_horizon(
+                session,
+                trainer_id,
+                horizon_weeks=Settings().recurring_materialization_horizon_weeks,
+                recurring_ids=[recurring_id],
+            )
     await callback.message.answer(msg.TRAINER_RECURRING_DONE)
 
 

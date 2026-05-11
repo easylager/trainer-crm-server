@@ -335,15 +335,24 @@ async def test_trainer_booking_problem_pass_branch_policy_in_options(
         text(
             """
             INSERT INTO trainer_pass_products (
-              trainer_id, name, sessions_total, price_cents, service_id, is_active, sort_order
+              trainer_id, name, sessions_total, price_cents, is_active, sort_order
             )
-            VALUES (:tid, 'Ab5', 5, 50_000, :sid, true, 0)
+            VALUES (:tid, 'Ab5', 5, 50_000, true, 0)
             RETURNING id
             """
         ),
-        {"tid": trainer_id, "sid": service_id},
+        {"tid": trainer_id},
     )
     (ppid,) = rpp.fetchone()
+    await db_session.execute(
+        text(
+            """
+            INSERT INTO trainer_pass_product_services (pass_product_id, service_id)
+            VALUES (:ppid, :sid)
+            """
+        ),
+        {"ppid": ppid, "sid": service_id},
+    )
     await db_session.execute(
         text(
             """

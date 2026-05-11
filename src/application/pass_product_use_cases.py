@@ -1,18 +1,141 @@
 """
 Pass products: trainer-defined subscription products (e.g. 5 sessions for 200 BYN).
-List, create, update, delete. Used by trainer Mini App and (later) client purchase flow.
+Scopes: zero linked services = all trainer catalog services; non-empty junction = listed services only.
+Used by trainer Mini App, client catalog, redemption on completed bookings.
 """
+
+from __future__ import annotations
+
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+_SQL_PASS_PRODUCT_COVERS_BOOKING_SERVICE = """(
+    NOT EXISTS (
+        SELECT 1 FROM trainer_pass_product_services t_scope
+        WHERE t_scope.pass_product_id = p.id
+    )
+    OR EXISTS (
+        SELECT 1 FROM trainer_pass_product_services t_scope
+        WHERE t_scope.pass_product_id = p.id AND t_scope.service_id = CAST(:booking_service_id AS INTEGER)
+    )
+)"""
+
+SQL_PASS_PRODUCT_COVERS_BOOKING_SERVICE = _SQL_PASS_PRODUCT_COVERS_BOOKING_SERVICE.strip()
+
+
+async def _normalized_trainer_pass_service_ids(
+    session: AsyncSession,
+    trainer_id: int,
+    raw_ids: list[int],
+) -> list[int]:
+    """Deduped sorted ids that exist on trainer_services; raises ValueError if any id invalid."""
+    ids = sorted({int(x) for x in raw_ids if x is not None})
+    if not ids:
+        return []
+    r = await session.execute(
+        text(
+            """
+            SELECT ts.service_id FROM trainer_services ts
+            WHERE ts.trainer_id = :tid AND ts.service_id = ANY(CAST(:sids AS INTEGER[]))
+            """
+        ),
+        {"tid": trainer_id, "sids": ids},
+    )
+    found = {row[0] for row in r.fetchall()}
+    missing = [i for i in ids if i not in found]
+    if missing:
+        raise ValueError("Одна или несколько услуг не входят в ваш каталог")
+    return ids
+
+
+async def _replace_pass_product_services(
+    session: AsyncSession,
+    *,
+    pass_product_id: int,
+    trainer_id: int,
+    service_ids: list[int],
+) -> None:
+    validated = await _normalized_trainer_pass_service_ids(session, trainer_id, service_ids)
+    await session.execute(
+        text("DELETE FROM trainer_pass_product_services WHERE pass_product_id = :pid"),
+        {"pid": pass_product_id},
+    )
+    for sid in validated:
+        await session.execute(
+            text(
+                """
+                INSERT INTO trainer_pass_product_services (pass_product_id, service_id)
+                VALUES (:pid, :sid)
+                ON CONFLICT DO NOTHING
+                """
+            ),
+            {"pid": pass_product_id, "sid": sid},
+        )
+
+
+def enrich_pass_items_with_catalog_reference_prices(
+    items: list[dict],
+    *,
+    price_by_service: dict[int, int],
+    default_single_reference: int | None,
+) -> None:
+    """Mutates items with price_per_session_cents, pass_price_per_session_cents, savings_* (catalog UX)."""
+    for p in items:
+        sids = p.get("service_ids") or []
+        if sids:
+            priced = [price_by_service[s] for s in sids if s in price_by_service]
+            single = min(priced) if priced else default_single_reference
+        else:
+            single = default_single_reference
+        p["price_per_session_cents"] = single
+        if p.get("sessions_total") and p.get("price_cents"):
+            p["pass_price_per_session_cents"] = int(p["price_cents"]) // int(p["sessions_total"])
+        else:
+            p["pass_price_per_session_cents"] = None
+        if single is not None and p.get("sessions_total") and p.get("price_cents"):
+            pass_per_session = int(p["price_cents"]) // int(p["sessions_total"])
+            savings = int(single) - pass_per_session
+            p["savings_per_session_cents"] = max(0, savings)
+            p["savings_total_cents"] = max(0, savings) * int(p["sessions_total"])
+        else:
+            p["savings_per_session_cents"] = None
+            p["savings_total_cents"] = None
+
 
 async def list_pass_products(session: AsyncSession, trainer_id: int, active_only: bool = False) -> list[dict]:
-    """List pass products for trainer with service name. Sorted by sort_order, id."""
+    """List pass products. service_ids (empty = unrestricted); service_name = joined labels for UI."""
     q = """
-        SELECT p.id, p.trainer_id, p.name, p.sessions_total, p.price_cents, p.service_id, p.is_active, p.sort_order, p.created_at,
-               COALESCE(s.name, '') AS service_name
+        SELECT
+            p.id,
+            p.trainer_id,
+            p.name,
+            p.sessions_total,
+            p.price_cents,
+            p.is_active,
+            p.sort_order,
+            p.created_at,
+            COALESCE(
+                (
+                    SELECT ARRAY_AGG(sub.service_id ORDER BY sub.service_id)
+                    FROM trainer_pass_product_services AS sub
+                    WHERE sub.pass_product_id = p.id
+                ),
+                CAST(ARRAY[] AS INTEGER[])
+            ) AS service_ids,
+            COALESCE(
+                (
+                    SELECT STRING_AGG(
+                        COALESCE(NULLIF(TRIM(srv.name), ''), '#' || tps.service_id::text),
+                        ', '
+                        ORDER BY srv.name NULLS LAST, tps.service_id
+                    )
+                    FROM trainer_pass_product_services tps
+                    LEFT JOIN services srv ON srv.id = tps.service_id
+                    WHERE tps.pass_product_id = p.id
+                ),
+                ''
+            ) AS services_label
         FROM trainer_pass_products p
-        LEFT JOIN services s ON s.id = p.service_id
         WHERE p.trainer_id = :tid
     """
     if active_only:
@@ -27,10 +150,10 @@ async def list_pass_products(session: AsyncSession, trainer_id: int, active_only
             "name": row[2],
             "sessions_total": row[3],
             "price_cents": row[4],
-            "service_id": row[5],
-            "is_active": row[6],
-            "sort_order": row[7],
-            "created_at": row[8].isoformat() if hasattr(row[8], "isoformat") else str(row[8]),
+            "is_active": row[5],
+            "sort_order": row[6],
+            "created_at": row[7].isoformat() if hasattr(row[7], "isoformat") else str(row[7]),
+            "service_ids": list(row[8] or []),
             "service_name": (row[9] or "").strip() or None,
         }
         for row in rows
@@ -44,56 +167,49 @@ async def create_pass_product(
     name: str,
     sessions_total: int,
     price_cents: int,
-    service_id: int | None = None,
+    service_ids: list[int] | None = None,
     sort_order: int = 0,
 ) -> int:
-    """Create a pass product. Returns product id."""
+    """Create a pass product. Empty service_ids = unrestricted. Returns product id."""
+    validated = await _normalized_trainer_pass_service_ids(session, trainer_id, service_ids or [])
     r = await session.execute(
-        text("""
-            INSERT INTO trainer_pass_products (trainer_id, name, sessions_total, price_cents, service_id, sort_order)
-            VALUES (:tid, :name, :sessions_total, :price_cents, :service_id, :sort_order)
+        text(
+            """
+            INSERT INTO trainer_pass_products (trainer_id, name, sessions_total, price_cents, sort_order)
+            VALUES (:tid, :name, :sessions_total, :price_cents, :sort_order)
             RETURNING id
-        """),
+            """
+        ),
         {
             "tid": trainer_id,
             "name": name[:128],
             "sessions_total": sessions_total,
             "price_cents": price_cents,
-            "service_id": service_id,
             "sort_order": sort_order,
         },
     )
     (pk,) = r.fetchone()
+    for sid in validated:
+        await session.execute(
+            text(
+                """
+                INSERT INTO trainer_pass_product_services (pass_product_id, service_id)
+                VALUES (:pid, :sid)
+                """
+            ),
+            {"pid": pk, "sid": sid},
+        )
     await session.commit()
     return pk
 
 
 async def get_pass_product(session: AsyncSession, product_id: int, trainer_id: int) -> dict | None:
-    """Get one product by id; must belong to trainer. Includes service_name."""
-    r = await session.execute(
-        text("""
-            SELECT p.id, p.trainer_id, p.name, p.sessions_total, p.price_cents, p.service_id, p.is_active, p.sort_order,
-                   COALESCE(s.name, '') AS service_name
-            FROM trainer_pass_products p
-            LEFT JOIN services s ON s.id = p.service_id
-            WHERE p.id = :id AND p.trainer_id = :tid
-        """),
-        {"id": product_id, "tid": trainer_id},
-    )
-    row = r.fetchone()
-    if not row:
-        return None
-    return {
-        "id": row[0],
-        "trainer_id": row[1],
-        "name": row[2],
-        "sessions_total": row[3],
-        "price_cents": row[4],
-        "service_id": row[5],
-        "is_active": row[6],
-        "sort_order": row[7],
-        "service_name": (row[8] or "").strip() or None,
-    }
+    """Get one product with service_ids and comma-joined service_name (None = unrestricted)."""
+    items = await list_pass_products(session, trainer_id, active_only=False)
+    for it in items:
+        if int(it["id"]) == int(product_id):
+            return it
+    return None
 
 
 async def update_pass_product(
@@ -104,13 +220,21 @@ async def update_pass_product(
     name: str | None = None,
     sessions_total: int | None = None,
     price_cents: int | None = None,
-    service_id: int | None = None,
+    service_ids: list[int] | None = None,
     is_active: bool | None = None,
     sort_order: int | None = None,
 ) -> bool:
-    """Update product fields. Only provided fields are changed. Returns True if updated."""
+    """Update product fields. service_ids replaces junction when provided (empty list = unrestricted)."""
+    if service_ids is not None:
+        ex = await session.execute(
+            text("SELECT 1 FROM trainer_pass_products WHERE id = :id AND trainer_id = :tid"),
+            {"id": product_id, "tid": trainer_id},
+        )
+        if not ex.fetchone():
+            return False
+        await _normalized_trainer_pass_service_ids(session, trainer_id, service_ids)
     updates = []
-    params = {"id": product_id, "tid": trainer_id}
+    params: dict = {"id": product_id, "tid": trainer_id}
     if name is not None:
         updates.append("name = :name")
         params["name"] = name[:128]
@@ -120,32 +244,37 @@ async def update_pass_product(
     if price_cents is not None:
         updates.append("price_cents = :price_cents")
         params["price_cents"] = price_cents
-    if service_id is not None:
-        updates.append("service_id = :service_id")
-        params["service_id"] = service_id
     if is_active is not None:
         updates.append("is_active = :is_active")
         params["is_active"] = is_active
     if sort_order is not None:
         updates.append("sort_order = :sort_order")
         params["sort_order"] = sort_order
-    if not updates:
-        return True
-    updates.append("updated_at = CURRENT_TIMESTAMP")
-    q = f"""
-        UPDATE trainer_pass_products
-        SET {", ".join(updates)}
-        WHERE id = :id AND trainer_id = :tid
-    """
-    r = await session.execute(text(q), params)
-    ok = r.rowcount > 0
-    if ok:
+    if updates:
+        updates.append("updated_at = CURRENT_TIMESTAMP")
+        q = f"""
+            UPDATE trainer_pass_products
+            SET {", ".join(updates)}
+            WHERE id = :id AND trainer_id = :tid
+        """
+        r = await session.execute(text(q), params)
+        if r.rowcount == 0:
+            return False
+    if service_ids is not None:
+        await _replace_pass_product_services(
+            session,
+            pass_product_id=product_id,
+            trainer_id=trainer_id,
+            service_ids=service_ids,
+        )
+    if updates or service_ids is not None:
         await session.commit()
-    return ok
+        return True
+    return True
 
 
 async def delete_pass_product(session: AsyncSession, product_id: int, trainer_id: int) -> bool:
-    """Delete product. Fails if pass_instances exist (RESTRICT). Returns True if deleted."""
+    """Delete product. CASCADE clears junction rows. Fails if pass_instances exist (RESTRICT)."""
     r = await session.execute(
         text("DELETE FROM trainer_pass_products WHERE id = :id AND trainer_id = :tid RETURNING id"),
         {"id": product_id, "tid": trainer_id},
@@ -161,9 +290,10 @@ async def list_pass_instances_for_trainer_client(
     trainer_id: int,
     client_id: int,
 ) -> list[dict]:
-    """List pass instances for this client issued by this trainer (product belongs to trainer). Active and used_up."""
+    """List pass instances for client (trainer-scoped products). Adds services_display."""
     r = await session.execute(
-        text("""
+        text(
+            """
             SELECT
                 pi.id,
                 pi.pass_product_id,
@@ -172,12 +302,26 @@ async def list_pass_instances_for_trainer_client(
                 pi.issued_at,
                 pi.status,
                 p.name AS product_name,
-                p.price_cents
+                p.price_cents,
+                COALESCE(
+                    (
+                        SELECT STRING_AGG(
+                            COALESCE(NULLIF(TRIM(srv.name), ''), '#' || tps.service_id::text),
+                            ', '
+                            ORDER BY srv.name NULLS LAST, tps.service_id
+                        )
+                        FROM trainer_pass_product_services tps
+                        LEFT JOIN services srv ON srv.id = tps.service_id
+                        WHERE tps.pass_product_id = p.id
+                    ),
+                    ''
+                ) AS scope_label
             FROM pass_instances pi
             JOIN trainer_pass_products p ON p.id = pi.pass_product_id AND p.trainer_id = :tid
             WHERE pi.client_id = :cid
             ORDER BY pi.issued_at DESC
-        """),
+            """
+        ),
         {"tid": trainer_id, "cid": client_id},
     )
     rows = r.fetchall()
@@ -191,6 +335,7 @@ async def list_pass_instances_for_trainer_client(
             "status": row[5],
             "product_name": row[6],
             "price_cents": row[7],
+            "service_name": (row[8] or "").strip() or None,
         }
         for row in rows
     ]
@@ -201,12 +346,11 @@ async def list_client_pass_instances(
     client_id: int,
 ) -> list[dict]:
     """
-    List all pass instances for a client (for client-facing "My passes").
-    Single query with JOINs: product, trainer profile name, service name. No N+1.
-    Returns active and used_up; client sees trainer, service, sessions left, price per session.
+    Client-facing «Мои абонементы»: aggregated service scope label (comma-separated or None).
     """
     r = await session.execute(
-        text("""
+        text(
+            """
             SELECT
                 pi.id,
                 pi.pass_product_id,
@@ -218,17 +362,36 @@ async def list_client_pass_instances(
                 p.name AS product_name,
                 p.price_cents,
                 p.trainer_id,
-                p.service_id,
+                COALESCE(
+                    (
+                        SELECT ARRAY_AGG(sub.service_id ORDER BY sub.service_id)
+                        FROM trainer_pass_product_services AS sub
+                        WHERE sub.pass_product_id = p.id
+                    ),
+                    CAST(ARRAY[] AS INTEGER[])
+                ) AS svc_ids,
                 TRIM(COALESCE(prof.first_name, '') || ' ' || COALESCE(prof.last_name, '')) AS trainer_name,
-                COALESCE(srv.name, '') AS service_name
+                COALESCE(
+                    (
+                        SELECT STRING_AGG(
+                            COALESCE(NULLIF(TRIM(srv.name), ''), '#' || tps.service_id::text),
+                            ', '
+                            ORDER BY srv.name NULLS LAST, tps.service_id
+                        )
+                        FROM trainer_pass_product_services tps
+                        LEFT JOIN services srv ON srv.id = tps.service_id
+                        WHERE tps.pass_product_id = p.id
+                    ),
+                    ''
+                ) AS svc_scope_label
             FROM pass_instances pi
             JOIN trainer_pass_products p ON p.id = pi.pass_product_id
             LEFT JOIN trainer_profiles prof ON prof.trainer_id = p.trainer_id
-            LEFT JOIN services srv ON srv.id = p.service_id
             WHERE pi.client_id = :cid
               AND pi.status IN ('active', 'used_up')
             ORDER BY pi.status ASC, pi.issued_at DESC
-        """),
+            """
+        ),
         {"cid": client_id},
     )
     rows = r.fetchall()
@@ -239,22 +402,27 @@ async def list_client_pass_instances(
         price_per_session_cents = (price_cents // sessions_total) if sessions_total else 0
         issued_at = row[4]
         expires_at = row[5]
-        out.append({
-            "id": row[0],
-            "pass_product_id": row[1],
-            "sessions_remaining": row[2],
-            "sessions_total": sessions_total,
-            "issued_at": issued_at.isoformat() if hasattr(issued_at, "isoformat") else str(issued_at),
-            "expires_at": expires_at.isoformat() if expires_at and hasattr(expires_at, "isoformat") else (str(expires_at) if expires_at else None),
-            "status": row[6],
-            "product_name": (row[7] or "").strip() or "—",
-            "price_cents": price_cents,
-            "price_per_session_cents": price_per_session_cents,
-            "trainer_id": row[9],
-            "service_id": row[10],
-            "trainer_name": (row[11] or "").strip() or "Тренер",
-            "service_name": (row[12] or "").strip() or "—",
-        })
+        label = (row[12] or "").strip()
+        out.append(
+            {
+                "id": row[0],
+                "pass_product_id": row[1],
+                "sessions_remaining": row[2],
+                "sessions_total": sessions_total,
+                "issued_at": issued_at.isoformat() if hasattr(issued_at, "isoformat") else str(issued_at),
+                "expires_at": expires_at.isoformat()
+                if expires_at and hasattr(expires_at, "isoformat")
+                else (str(expires_at) if expires_at else None),
+                "status": row[6],
+                "product_name": (row[7] or "").strip() or "—",
+                "price_cents": price_cents,
+                "price_per_session_cents": price_per_session_cents,
+                "trainer_id": row[9],
+                "service_ids": list(row[10] or []),
+                "trainer_name": (row[11] or "").strip() or "Тренер",
+                "service_name": label if label else None,
+            }
+        )
     return out
 
 
@@ -265,57 +433,72 @@ async def issue_pass_to_client(
     pass_product_id: int,
 ) -> dict:
     """
-    Issue a pass to a client (trainer recorded external payment). Creates pass_instance.
-    Raises ValueError with message if product not found/inactive, client not found, or client has no booking with this trainer.
-    Returns created instance with product name, sessions_total, sessions_remaining, issued_at, id.
+    Issue pass_instance after external payment.
+    Returns snapshot including service_names for client notification HTML.
     """
     product = await get_pass_product(session, pass_product_id, trainer_id)
     if not product:
         raise ValueError("Product not found or not yours")
     if not product.get("is_active"):
         raise ValueError("Product is inactive")
-    # Client must exist and have at least one non-cancelled booking with this trainer
     r = await session.execute(
-        text("""
+        text(
+            """
             SELECT 1 FROM bookings b
             WHERE b.trainer_id = :tid AND b.client_id = :cid
               AND b.status NOT IN ('cancelled', 'declined', 'trainer_removed')
             LIMIT 1
-        """),
+            """
+        ),
         {"tid": trainer_id, "cid": client_id},
     )
     if not r.fetchone():
         raise ValueError("Client not found or has no sessions with you — add a booking first")
-    # Do not issue a second pass if client already has an active one for this trainer
     r = await session.execute(
-        text("""
+        text(
+            """
             SELECT 1 FROM pass_instances pi
             JOIN trainer_pass_products p ON p.id = pi.pass_product_id
             WHERE pi.client_id = :cid AND p.trainer_id = :tid
               AND pi.status = 'active' AND pi.sessions_remaining > 0
             LIMIT 1
-        """),
+            """
+        ),
         {"cid": client_id, "tid": trainer_id},
     )
     if r.fetchone():
         raise ValueError("У клиента уже есть активный абонемент")
     sessions_total = product["sessions_total"]
     r = await session.execute(
-        text("""
+        text(
+            """
             INSERT INTO pass_instances (client_id, pass_product_id, sessions_remaining, sessions_total, status)
             VALUES (:cid, :pid, :rem, :total, 'active')
             RETURNING id, client_id, pass_product_id, sessions_remaining, sessions_total, issued_at, status
-        """),
-        {
-            "cid": client_id,
-            "pid": pass_product_id,
-            "rem": sessions_total,
-            "total": sessions_total,
-        },
+            """
+        ),
+        {"cid": client_id, "pid": pass_product_id, "rem": sessions_total, "total": sessions_total},
     )
     row = r.fetchone()
     await session.commit()
     issued_at = row[5]
+
+    svc_ids = product.get("service_ids") or []
+    service_names: list[str] = []
+    if svc_ids:
+        rnm = await session.execute(
+            text(
+                """
+                SELECT s.id, COALESCE(NULLIF(TRIM(s.name), ''), '')
+                FROM services s WHERE s.id = ANY(CAST(:sids AS INTEGER[]))
+                ORDER BY s.name NULLS LAST, s.id
+                """
+            ),
+            {"sids": list(svc_ids)},
+        )
+        for sid, nm in rnm.fetchall():
+            service_names.append((nm or "").strip() or f"#{sid}")
+
     return {
         "id": row[0],
         "client_id": row[1],
@@ -326,8 +509,7 @@ async def issue_pass_to_client(
         "status": row[6],
         "product_name": product["name"],
         "price_cents": product["price_cents"],
-        "service_name": product.get("service_name"),
-        "service_id": product.get("service_id"),
+        "service_names": service_names,
     }
 
 
@@ -337,38 +519,30 @@ async def redeem_pass_session_for_booking(
     *,
     allow_booking_statuses: frozenset[str] | None = None,
 ) -> bool:
-    """
-    Deduct one pass session for a completed booking. Called when booking status becomes completed.
-    Finds an active pass_instance for this client+trainer (service match or product.service_id IS NULL),
-    decrements sessions_remaining; if 0, sets status to used_up. If no suitable pass, returns False (no error).
-    ``allow_booking_statuses`` extends the default (``completed`` only), e.g. ``no_show`` for problem E4 redemption.
-    Returns True if a session was redeemed.
-    """
+    """Deduct one session when booking status allows; unrestricted or multi-service scope matches booking.service_id."""
     allowed = allow_booking_statuses if allow_booking_statuses is not None else frozenset({"completed"})
     r = await session.execute(
-        text("""
-            SELECT id, client_id, trainer_id, service_id, status
-            FROM bookings WHERE id = :bid
-        """),
+        text("SELECT id, client_id, trainer_id, service_id, status FROM bookings WHERE id = :bid"),
         {"bid": booking_id},
     )
     row = r.fetchone()
     if not row or (row[4] or "").strip().lower() not in allowed:
         return False
     client_id, trainer_id, service_id = row[1], row[2], row[3]
-    # Pick one active pass: same trainer, service match or product.service_id IS NULL, sessions_remaining > 0
     r = await session.execute(
-        text("""
+        text(
+            f"""
             SELECT pi.id, pi.sessions_remaining
             FROM pass_instances pi
             JOIN trainer_pass_products p ON p.id = pi.pass_product_id
             WHERE pi.client_id = :cid AND p.trainer_id = :tid
               AND pi.status = 'active' AND pi.sessions_remaining > 0
-              AND (p.service_id = :sid OR p.service_id IS NULL)
+              AND {SQL_PASS_PRODUCT_COVERS_BOOKING_SERVICE}
             ORDER BY pi.expires_at ASC NULLS LAST, pi.sessions_remaining ASC
             LIMIT 1
-        """),
-        {"cid": client_id, "tid": trainer_id, "sid": service_id},
+            """
+        ),
+        {"cid": client_id, "tid": trainer_id, "booking_service_id": service_id},
     )
     inst = r.fetchone()
     if not inst:
@@ -377,17 +551,18 @@ async def redeem_pass_session_for_booking(
     new_rem = rem - 1
     new_status = "used_up" if new_rem <= 0 else "active"
     await session.execute(
-        text("""
-            UPDATE pass_instances SET sessions_remaining = :rem, status = :st WHERE id = :id
-        """),
+        text("UPDATE pass_instances SET sessions_remaining = :rem, status = :st WHERE id = :id"),
         {"rem": new_rem, "st": new_status, "id": inst_id},
     )
     await session.execute(
-        text("""
+        text(
+            """
             INSERT INTO pass_redemptions (booking_id, pass_instance_id)
             VALUES (:bid, :inst_id)
             ON CONFLICT (booking_id) DO NOTHING
-        """),
+            """
+        ),
         {"bid": booking_id, "inst_id": inst_id},
     )
     return True
+
