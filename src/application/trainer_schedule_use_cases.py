@@ -127,18 +127,46 @@ async def replace_templates_for_day(
     duration_minutes: int,
     minute_to_service_id: dict[int, int | None] | None = None,
     group_arena_id: int | None = None,
+    minute_to_duration: dict[int, int] | None = None,
 ) -> None:
     """
     Set template for one day: replace all template rows for that weekday.
     ``minute_to_capacity`` maps minutes-from-midnight (0–1439) to slot capacity (1 = individual, >1 = group).
     For capacity > 1, ``minute_to_service_id[m]`` must be the services.id for that group slot.
     ``group_arena_id`` is stored on each group row (capacity>1); if None, uses trainer default arena.
+    ``minute_to_duration``: optional per-start duration (minutes). When any start is off the arena grid or
+    durations differ, preset start-grid validation is skipped (same idea as calendar ``slot_entries``);
+    each distinct duration is still checked against fixed-duration preset rules.
     Single transaction.
     """
     svc_map = minute_to_service_id or {}
     preset = await get_schedule_grid_preset_for_trainer(session, trainer_id)
-    validate_start_minutes_for_preset(set(minute_to_capacity.keys()), preset)
-    validate_duration_for_preset(duration_minutes, preset)
+    allowed = allowed_start_minutes_from_preset(preset)
+    dur_map: dict[int, int] = {}
+    for m in minute_to_capacity.keys():
+        mi = int(m)
+        if minute_to_duration is not None and mi in minute_to_duration:
+            dur_map[mi] = max(15, min(480, int(minute_to_duration[mi])))
+        else:
+            dur_map[mi] = max(15, min(480, int(duration_minutes)))
+    off_grid = any(int(m) not in allowed for m in minute_to_capacity.keys())
+    unique_durs = {dur_map[int(m)] for m in minute_to_capacity.keys()}
+    loose_alignment = off_grid or len(unique_durs) > 1
+    if loose_alignment:
+        for dm in unique_durs:
+            validate_duration_for_preset(int(dm), preset)
+    else:
+        validate_start_minutes_for_preset(set(minute_to_capacity.keys()), preset)
+        validate_duration_for_preset(int(duration_minutes), preset)
+
+    intervals = sorted((int(m), int(m) + dur_map[int(m)]) for m in minute_to_capacity.keys())
+    for i in range(len(intervals)):
+        for j in range(i + 1, len(intervals)):
+            a0, a1 = intervals[i]
+            b0, b1 = intervals[j]
+            if _intervals_overlap_half_open(a0, a1, b0, b1):
+                raise ValueError("Интервалы слотов в шаблоне пересекаются.")
+
     default_arena = await trainer_default_slot_arena_id(session, trainer_id)
     await session.execute(
         text("""
@@ -151,6 +179,7 @@ async def replace_templates_for_day(
         cap = max(1, min(int(minute_to_capacity[m]), 500))
         sid = svc_map.get(m)
         start_t = time_from_minutes(int(m))
+        row_dur = dur_map[int(m)]
         if cap > 1:
             if sid is None:
                 raise ValueError("Group template slot requires service_id")
@@ -165,7 +194,7 @@ async def replace_templates_for_day(
                     "tid": trainer_id,
                     "dow": day_of_week,
                     "st": start_t,
-                    "dur": duration_minutes,
+                    "dur": row_dur,
                     "cap": cap,
                     "svc": int(sid),
                     "aid": aid,
@@ -182,7 +211,7 @@ async def replace_templates_for_day(
                     "tid": trainer_id,
                     "dow": day_of_week,
                     "st": start_t,
-                    "dur": duration_minutes,
+                    "dur": row_dur,
                     "cap": cap,
                 },
             )
@@ -418,6 +447,7 @@ async def replace_slots_for_day(
     capacity: int = 1,
     group_service_id: int | None = None,
     slot_arena_id: int | None = None,
+    per_slot_duration: dict[int, int] | None = None,
 ) -> None:
     """
     Set slots for one calendar day.
@@ -425,11 +455,11 @@ async def replace_slots_for_day(
     - Removes only **available individual** slots whose start time is **not** in ``start_minutes``
       (minutes from midnight). Booked slots are never removed.
     - Inserts a slot for each minute key in ``start_minutes`` that does not yet exist, using ``capacity``.
-    - **Does not** change ``capacity`` on slots that already exist — avoids turning every slot
-      into a group slot when the trainer edits the day and only wants new times to use the form value.
-    - Slots materialized from training groups (``training_group_id IS NOT NULL``) are intentionally
-      outside this flow and are not touched or used for overlap checks here.
-    For ``capacity`` > 1, ``group_service_id`` must be set (group slot is tied to that service).
+    - **Does not** change ``capacity`` on slots that already exist.
+    - Slots materialized from training groups are not touched.
+    - ``per_slot_duration``: optional start_minute→duration_minutes map for precise (off-grid) slots.
+      When provided, grid validation is skipped — caller is responsible for sensible times.
+    For ``capacity`` > 1, ``group_service_id`` must be set.
     """
     cap = max(1, min(int(capacity), 500))
     if cap > 1 and group_service_id is None:
@@ -438,8 +468,10 @@ async def replace_slots_for_day(
     arena_for_new_slots = slot_arena_id if slot_arena_id is not None else default_arena
     minute_set = {int(m) for m in start_minutes if 0 <= int(m) <= 23 * 60 + 59}
     preset = await get_schedule_grid_preset_for_trainer(session, trainer_id)
-    validate_start_minutes_for_preset(minute_set, preset)
-    validate_duration_for_preset(duration_minutes, preset)
+    # Skip grid-alignment check for precise off-grid entries (per_slot_duration path).
+    if per_slot_duration is None:
+        validate_start_minutes_for_preset(minute_set, preset)
+        validate_duration_for_preset(duration_minutes, preset)
     minute_list = sorted(minute_set)
 
     booking_guard = """
@@ -519,7 +551,9 @@ async def replace_slots_for_day(
         if int(m) in existing_minutes:
             continue
         start_m = int(m)
-        end_m = start_m + int(duration_minutes)
+        # Per-slot duration for precise/off-grid entries; fall back to uniform duration.
+        slot_dur = per_slot_duration[start_m] if per_slot_duration and start_m in per_slot_duration else int(duration_minutes)
+        end_m = start_m + slot_dur
         for sm, em in existing_intervals:
             if _intervals_overlap_half_open(start_m, end_m, sm, em):
                 raise ValueError("Время пересекается с другим слотом в расписании.")
@@ -527,7 +561,7 @@ async def replace_slots_for_day(
             if _intervals_overlap_half_open(start_m, end_m, sm, em):
                 raise ValueError("Время пересекается с другим слотом в расписании.")
         start_time = time_from_minutes(int(m))
-        end_time = _time_end(start_time, duration_minutes)
+        end_time = _time_end(start_time, slot_dur)
         svc = int(group_service_id) if cap > 1 else None
         await session.execute(
             text("""

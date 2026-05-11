@@ -743,6 +743,12 @@ class ScheduleTemplateSlotBody(BaseModel):
     minute: int = Field(default=0, ge=0, le=59)
     capacity: int = Field(default=1, ge=1, le=500)
     service_id: int | None = Field(default=None, description="Required when capacity > 1 (group slot for this service)")
+    duration_minutes: int | None = Field(
+        default=None,
+        ge=15,
+        le=480,
+        description="Optional per-slot duration; omit to use top-level duration_minutes for this row.",
+    )
 
 
 class ScheduleTemplateDayBody(BaseModel):
@@ -812,11 +818,14 @@ async def put_schedule_templates_day(
 
     minute_to_cap: dict[int, int] = {}
     minute_to_service: dict[int, int | None] = {}
+    minute_to_duration: dict[int, int] = {}
     for s in slots:
         sm = s.hour * 60 + s.minute
         if sm in minute_to_cap:
             raise HTTPException(status_code=400, detail="Повторяется время начала слота в шаблоне.")
         minute_to_cap[sm] = s.capacity
+        row_dur = int(s.duration_minutes) if s.duration_minutes is not None else int(body.duration_minutes)
+        minute_to_duration[sm] = row_dur
         if s.capacity > 1:
             if s.service_id is None:
                 raise HTTPException(
@@ -837,6 +846,7 @@ async def put_schedule_templates_day(
             body.duration_minutes,
             minute_to_service,
             group_arena_id=int(body.group_arena_id) if body.group_arena_id is not None else None,
+            minute_to_duration=minute_to_duration,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
@@ -858,19 +868,33 @@ def _hhmm_strings_to_minutes(values: list[str]) -> set[int]:
     return out
 
 
+class SlotEntryBody(BaseModel):
+    """Single precise slot: start time + individual duration (bypasses arena grid validation)."""
+
+    start_time: str = Field(..., description="HH:MM start of the slot")
+    duration_minutes: int = Field(ge=15, le=480)
+
+
 class ScheduleSlotsDayBody(BaseModel):
     slot_date: str  # YYYY-MM-DD
     start_hours: list[int] | None = None  # legacy: whole hours only
-    start_times: list[str] | None = None  # preferred: "HH:MM" starts
+    start_times: list[str] | None = None  # preferred: "HH:MM" starts, uniform duration
     duration_minutes: int = Field(default=45, ge=15, le=480)
     capacity: int = Field(default=1, ge=1, le=500)
     group_service_id: int | None = Field(default=None, description="services.id for group slots (capacity > 1)")
     arena_id: int | None = Field(default=None, description="Venue for new group slots (capacity > 1); fixed on slot")
+    # Per-slot pairs: each entry carries its own duration and bypasses arena grid alignment check.
+    slot_entries: list[SlotEntryBody] | None = Field(default=None)
 
     @model_validator(mode="after")
     def _one_time_source(self):
-        if self.start_times is not None and self.start_hours is not None:
-            raise ValueError("Укажите либо start_times, либо start_hours, не оба.")
+        sources = sum([
+            self.start_times is not None,
+            self.start_hours is not None,
+            self.slot_entries is not None,
+        ])
+        if sources > 1:
+            raise ValueError("Укажите только один способ: start_times, start_hours или slot_entries.")
         return self
 
 
@@ -913,6 +937,36 @@ async def post_schedule_slots(
         slot_date = date.fromisoformat(body.slot_date)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid slot_date")
+
+    arena_arg = int(body.arena_id) if body.capacity > 1 and body.arena_id is not None else None
+
+    if body.slot_entries is not None:
+        # Per-slot precise mode: each entry carries its own start + duration, no grid validation.
+        per_slot: dict[int, int] = {}
+        for entry in body.slot_entries:
+            try:
+                m_set = _hhmm_strings_to_minutes([entry.start_time])
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail=str(e)) from e
+            per_slot[next(iter(m_set))] = entry.duration_minutes
+        try:
+            await replace_slots_for_day(
+                session,
+                trainer_id,
+                slot_date,
+                set(per_slot.keys()),
+                duration_minutes=45,  # unused — per_slot_duration overrides
+                capacity=body.capacity,
+                group_service_id=body.group_service_id,
+                slot_arena_id=arena_arg,
+                per_slot_duration=per_slot,
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        if per_slot:
+            background_tasks.add_task(_bg_notify_slot_waitlist, trainer_id)
+        return {"ok": True}
+
     if body.start_times is not None:
         try:
             minutes_set = _hhmm_strings_to_minutes(body.start_times)
@@ -931,7 +985,7 @@ async def post_schedule_slots(
             body.duration_minutes,
             capacity=body.capacity,
             group_service_id=body.group_service_id,
-            slot_arena_id=int(body.arena_id) if body.capacity > 1 and body.arena_id is not None else None,
+            slot_arena_id=arena_arg,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
