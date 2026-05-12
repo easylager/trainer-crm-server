@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-  <title>Абонементы</title>
+  <title>Абонементы и сертификаты</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script src="mini-app-telegram-chrome.js"></script>
   <script src="mini-app-confirm.js"></script>
@@ -52,17 +52,14 @@
     <div class="pp-hero">
       <div class="pp-hero-inner">
         <p class="pp-hero-kicker">Продажи</p>
-        <h1 class="pp-hero-title">Абонементы</h1>
+        <h1 class="pp-hero-title">Абонементы и сертификаты</h1>
         <p class="pp-hero-sub">Каталог и выдача клиентам — в одном месте.</p>
       </div>
     </div>
-    <!-- TODO(certificates-tab): Restore second tab + panelCerts when gift certificate PDF/UX is production-ready (mirror client-passes-certificates.html). -->
-    <!--
     <div class="tabs">
       <button type="button" class="tab active" id="tabPasses" data-tab="passes">Абонементы</button>
       <button type="button" class="tab" id="tabCerts" data-tab="certs">Сертификаты</button>
     </div>
-    -->
     <div id="panelPasses" class="tab-panel active">
       <p class="products-hint" id="productsHint" style="display:none;">Нажмите на абонемент, чтобы изменить или удалить</p>
       <div id="listContent">
@@ -73,7 +70,6 @@
       <!-- <button type="button" class="pp-btn pp-btn--soft pp-stack-btn" id="btnPassWelcomeLink">🔗 Создать welcome-ссылку (абонемент)</button> -->
       <button type="button" class="pp-btn pp-btn--soft pp-stack-btn" id="btnAdd">+ Добавить абонемент</button>
     </div>
-    <!--
     <div id="panelCerts" class="tab-panel">
       <p class="products-hint" id="certsHint" style="display:none;">Нажмите на сертификат, чтобы изменить или удалить</p>
       <div id="certListContent">
@@ -83,7 +79,6 @@
       <button type="button" class="pp-btn pp-btn--soft pp-stack-btn" id="btnAddCert">+ Добавить сертификат</button>
       <p class="cert-issued-hint">Списание с сертификата происходит автоматически, когда вы отмечаете занятие как «Проведено» в расписании.</p>
     </div>
-    -->
   </div>
 
   <div id="screenCertIssue" data-screen>

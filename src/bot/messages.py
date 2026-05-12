@@ -115,6 +115,8 @@ CLIENT_BOOK_NO_ONLINE_TIER = (
     "Свяжитесь с тренером напрямую или оставьте заявку в каталоге."
 )
 CLIENT_BUTTON_BOOK = "Записаться"
+# After activating a gift certificate: single CTA to book with the issuing trainer
+CLIENT_BUTTON_CERT_TRAINER_BOOK = "Тренер и запись"
 CLIENT_BUTTON_BACK_TO_CATALOG = "В каталог"
 CLIENT_BUTTON_ANOTHER_TRAINER = "Выбрать другого тренера"
 CLIENT_BOOK_CHOOSE_SLOT = "📅 <b>Выберите время</b>\n\nДоступные слоты (эта и следующая неделя):"
@@ -1123,7 +1125,7 @@ def format_client_certificate_bound_html(
         "🎁 <b>Сертификат привязан к вашему аккаунту.</b>\n\n"
         f"Код: <code>{cd}</code> · <b>{ad}</b>\n"
         f"👤 <b>Тренер:</b> {tn}\n\n"
-        "Запишитесь или откройте сертификаты — кнопки ниже."
+        "Нажмите кнопку ниже — откроется карточка этого тренера в каталоге; запись на время — там же."
     )
 
 

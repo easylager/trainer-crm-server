@@ -63,9 +63,6 @@
         certIssuePurchasedByName: null,
       };
 
-      /** When true, list screen shows passes only (tab bar + panelCerts HTML commented). Restore when gift certificate PDF/UX is ready. */
-      var CERT_CATALOG_TABS_DISABLED = true;
-
       function postClientInviteLinkFirstCopyRecorded() {
         if (!initData) return;
         fetch(apiUrl('/trainer/welcome-link/first-copy') + initDataParam(), {
@@ -80,7 +77,6 @@
         if (el) el.classList.add('active');
       }
       function setTab(tab) {
-        if (CERT_CATALOG_TABS_DISABLED && tab === 'certs') tab = 'passes';
         state.activeTab = tab;
         document.querySelectorAll('.tab').forEach(function(t) { t.classList.toggle('active', t.dataset.tab === tab); });
         document.querySelectorAll('.tab-panel').forEach(function(p) {
@@ -89,7 +85,6 @@
         });
       }
       (function applyUrlTabFromQuery() {
-        if (CERT_CATALOG_TABS_DISABLED) return;
         var params = new URLSearchParams(window.location.search || '');
         var tab = (params.get('tab') || '').toLowerCase();
         if (tab === 'certs' || tab === 'cert' || tab === 'certificates') {

@@ -256,13 +256,40 @@ def _book_webapp_service_id_query_param(
     return None
 
 
+def _trainer_catalog_card_rows(
+    base: str,
+    trainer_id: int,
+    *,
+    city_id: int | None = None,
+    service_id: int | None = None,
+    arena_id: int | None = None,
+    button_text: str | None = None,
+) -> list[list[InlineKeyboardButton]]:
+    """Mini App: trainer catalog card (user books from there). Not /webapp/book deep link."""
+    label = (button_text or "").strip() or msg.CLIENT_BUTTON_BOOK
+    b = (base or "").rstrip("/")
+    if b.startswith("https://"):
+        q = f"trainer_id={int(trainer_id)}"
+        if city_id is not None:
+            q += f"&city_id={int(city_id)}"
+        if service_id is not None:
+            q += f"&service_id={int(service_id)}"
+        if arena_id is not None:
+            q += f"&arena_id={int(arena_id)}"
+        url = f"{b}/webapp/catalog?{q}"
+        return [[InlineKeyboardButton(text=label, web_app=WebAppInfo(url=url))]]
+    return [[InlineKeyboardButton(text=label, callback_data=f"{CATALOG_TRAINER_PREFIX}{trainer_id}")]]
+
+
 def _trainer_book_rows(
     base: str,
     trainer_id: int,
     *,
     service_id: int | None = None,
+    button_text: str | None = None,
 ) -> list[list[InlineKeyboardButton]]:
     """Primary booking CTA: Mini App when HTTPS is configured, else legacy callback."""
+    label = (button_text or "").strip() or msg.CLIENT_BUTTON_BOOK
     b = (base or "").rstrip("/")
     if b.startswith("https://"):
         url = f"{b}/webapp/book?trainer_id={trainer_id}&v=20260420d"
@@ -271,8 +298,8 @@ def _trainer_book_rows(
         else:
             # Deep links without explicit service must start from service picker, not stale client session.
             url += "&force_service_choice=1"
-        return [[InlineKeyboardButton(text=msg.CLIENT_BUTTON_BOOK, web_app=WebAppInfo(url=url))]]
-    return [[InlineKeyboardButton(text=msg.CLIENT_BUTTON_BOOK, callback_data="book")]]
+        return [[InlineKeyboardButton(text=label, web_app=WebAppInfo(url=url))]]
+    return [[InlineKeyboardButton(text=label, callback_data="book")]]
 
 
 def _client_buy_pass_webapp_url(
@@ -666,40 +693,14 @@ async def cmd_start(message: Message) -> None:
                         code=str(cert_code).strip(),
                         trainer_name=tname,
                     )
-                    cert_rows: list[list[InlineKeyboardButton]] = []
-                    if base.lower().startswith("https://"):
-                        cert_rows.append(
-                            [
-                                InlineKeyboardButton(
-                                    text=msg.CLIENT_BUTTON_BOOK,
-                                    web_app=WebAppInfo(url=f"{base}/webapp/catalog"),
-                                ),
-                            ]
-                        )
-                    cert_rows.append(
-                        [
-                            InlineKeyboardButton(
-                                text=msg.CLIENT_BUTTON_MY_PASSES_AND_CERTIFICATES,
-                                web_app=WebAppInfo(
-                                    url=client_passes_certificates_webapp_url(base, certificates_tab=True)
-                                ),
-                            ),
-                        ],
-                    )
-                    if base.lower().startswith("https://"):
-                        cert_rows.append(
-                            [
-                                InlineKeyboardButton(
-                                    text=msg.CLIENT_PASS_ISSUED_BTN_TERMS,
-                                    web_app=WebAppInfo(
-                                        url=client_passes_certificates_webapp_url(base, certificates_tab=True)
-                                    ),
-                                ),
-                            ]
-                        )
                     keyboard = InlineKeyboardMarkup(
-                        inline_keyboard=cert_rows
-                        + _trainer_book_rows(base, trainer_id, service_id=book_url_svc)
+                        inline_keyboard=_trainer_catalog_card_rows(
+                            base,
+                            trainer_id,
+                            city_id=city_id,
+                            service_id=service_id,
+                            button_text=msg.CLIENT_BUTTON_CERT_TRAINER_BOOK,
+                        )
                     )
                     await message.answer(cert_body, reply_markup=keyboard, parse_mode=ParseMode.HTML)
                 else:
@@ -762,11 +763,6 @@ async def cmd_start(message: Message) -> None:
             trainer_id = bound["trainer_id"]
             async with async_session_factory() as db_session:
                 city_id, service_id = await get_trainer_default_city_and_service(db_session, trainer_id)
-                n_trainer_svc = await count_trainer_services(db_session, int(trainer_id))
-                book_url_cert = _book_webapp_service_id_query_param(
-                    default_service_id=service_id,
-                    trainer_services_count=n_trainer_svc,
-                )
                 if city_id is not None:
                     await set_city(telegram_id, city_id, db_session)
                 if service_id is not None:
@@ -786,39 +782,14 @@ async def cmd_start(message: Message) -> None:
                 code=str(cert_code).strip(),
                 trainer_name=tname,
             )
-            cert_rows2: list[list[InlineKeyboardButton]] = []
-            if base.lower().startswith("https://"):
-                cert_rows2.append(
-                    [
-                        InlineKeyboardButton(
-                            text=msg.CLIENT_BUTTON_BOOK,
-                            web_app=WebAppInfo(url=f"{base}/webapp/catalog"),
-                        ),
-                    ]
-                )
-            cert_rows2.append(
-                [
-                    InlineKeyboardButton(
-                        text=msg.CLIENT_BUTTON_MY_PASSES_AND_CERTIFICATES,
-                        web_app=WebAppInfo(
-                            url=client_passes_certificates_webapp_url(base, certificates_tab=True)
-                        ),
-                    ),
-                ],
-            )
-            if base.lower().startswith("https://"):
-                cert_rows2.append(
-                    [
-                        InlineKeyboardButton(
-                            text=msg.CLIENT_PASS_ISSUED_BTN_TERMS,
-                            web_app=WebAppInfo(
-                                url=client_passes_certificates_webapp_url(base, certificates_tab=True)
-                            ),
-                        ),
-                    ]
-                )
             keyboard = InlineKeyboardMarkup(
-                inline_keyboard=cert_rows2 + _trainer_book_rows(base, trainer_id, service_id=book_url_cert)
+                inline_keyboard=_trainer_catalog_card_rows(
+                    base,
+                    trainer_id,
+                    city_id=city_id,
+                    service_id=service_id,
+                    button_text=msg.CLIENT_BUTTON_CERT_TRAINER_BOOK,
+                )
             )
             await message.answer(cert_body, reply_markup=keyboard, parse_mode=ParseMode.HTML)
         else:

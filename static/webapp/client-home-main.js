@@ -38,7 +38,7 @@
         { path: 'client-saved-trainers',     label: 'Сохранённые',        hint: 'Закладки из каталога',           icon: 'bookmark', badge: null },
         { path: 'client-bookings',           label: 'Мои записи',          hint: 'Все занятия',                    icon: 'cal',    badge: null },
         { path: 'client-requests',           label: 'Заявки',             hint: 'Подбор тренера',                 icon: 'inbox',  badge: 'NEW' },
-        { path: 'client-passes-certificates',label: 'Абонементы',       hint: 'Остаток, сроки, покупка', icon: 'ticket', badge: null },
+        { path: 'client-passes-certificates',label: 'Абонементы/Сертификаты', hint: 'Остаток, сроки, покупка', icon: 'ticket', badge: null },
       ];
 
       /* ── State ──────────────────────────────────────────────────────── */
@@ -453,7 +453,7 @@
       /**
        * Pill strip adapts to scenario:
        *   - has booking  → "Перенести", "Записаться снова", "Все записи"
-       *   - has trainer  → "Записаться", "Все записи", "Абонемент"
+       *   - has trainer  → "Записаться", "Все записи", "Абонементы/Сертификаты"
        *   - new client   → "Найти тренера" (primary), "Группы", "Как это работает"
        */
       function renderQuickStrip(scenario, nextBooking) {
@@ -467,7 +467,7 @@
               action: function() { navigateToCatalogBookAgain(nextBooking); },
             },
             { label: 'Все записи',       icon: 'cal',    action: function() { navigateTo('client-bookings'); } },
-            { label: 'Абонемент',        icon: 'ticket', action: function() { navigateTo('client-passes-certificates'); } },
+            { label: 'Абонементы/Сертификаты', icon: 'ticket', action: function() { navigateTo('client-passes-certificates'); } },
           ];
         } else if (scenario === 'has-trainer') {
           pills = [
@@ -486,7 +486,7 @@
               },
             },
             { label: 'Мои записи',    icon: 'cal',               action: function() { navigateTo('client-bookings'); } },
-            { label: 'Абонемент',     icon: 'ticket',            action: function() { navigateTo('client-passes-certificates'); } },
+            { label: 'Абонементы/Сертификаты', icon: 'ticket',            action: function() { navigateTo('client-passes-certificates'); } },
           ];
         } else if (scenario === 'has-saved') {
           pills = [

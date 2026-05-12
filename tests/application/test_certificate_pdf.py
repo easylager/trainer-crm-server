@@ -1,20 +1,13 @@
-"""Certificate PDF: template overlay / legacy."""
+"""Certificate PDF: HTML Story layout."""
+
 from datetime import date
 
 import fitz
 
-from src.application.certificate_pdf import build_certificate_pdf, build_static_certificate_background_pdf_bytes
+from src.application.certificate_pdf import build_certificate_pdf
 
 
-def test_static_background_is_valid_pdf() -> None:
-    b = build_static_certificate_background_pdf_bytes()
-    assert len(b) > 1000
-    doc = fitz.open(stream=b, filetype="pdf")
-    assert doc.page_count == 1
-    doc.close()
-
-
-def test_build_certificate_pdf_template_overlay() -> None:
+def test_build_certificate_pdf_single_page_html() -> None:
     b = build_certificate_pdf(
         trainer_name="Иван Иванов",
         product_name="Подарочный сертификат",

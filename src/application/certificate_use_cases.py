@@ -526,6 +526,7 @@ async def list_client_certificate_instances(
                 ci.id,
                 ci.trainer_id,
                 ci.amount_cents,
+                ci.amount_remaining_cents,
                 ci.code,
                 ci.status,
                 ci.issued_at,
@@ -545,11 +546,12 @@ async def list_client_certificate_instances(
             "id": row[0],
             "trainer_id": row[1],
             "amount_cents": row[2],
-            "code": row[3],
-            "status": row[4],
-            "issued_at": row[5].isoformat() if hasattr(row[5], "isoformat") else str(row[5]),
-            "redeemed_at": row[6].isoformat() if row[6] and hasattr(row[6], "isoformat") else (str(row[6]) if row[6] else None),
-            "trainer_name": (row[7] or "").strip() or "Тренер",
+            "amount_remaining_cents": row[3],
+            "code": row[4],
+            "status": row[5],
+            "issued_at": row[6].isoformat() if hasattr(row[6], "isoformat") else str(row[6]),
+            "redeemed_at": row[7].isoformat() if row[7] and hasattr(row[7], "isoformat") else (str(row[7]) if row[7] else None),
+            "trainer_name": (row[8] or "").strip() or "Тренер",
         }
         for row in rows
     ]

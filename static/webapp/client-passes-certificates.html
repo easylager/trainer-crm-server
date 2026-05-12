@@ -453,6 +453,55 @@
     .cert-card .meta { font-size: 14px; color: var(--tg-theme-hint-color); }
     .cert-card .code { font-family: monospace; font-size: 15px; letter-spacing: 1px; margin-top: 8px; }
     .cert-card.redeemed { opacity: 0.8; }
+    .cert-card.cert-card--hero {
+      padding: 18px 16px;
+      border-radius: 18px;
+      border: 2px solid rgba(247, 166, 0, 0.42);
+      background: linear-gradient(
+        160deg,
+        rgba(247, 166, 0, 0.14) 0%,
+        var(--tg-theme-bg-color) 52%
+      );
+      box-shadow: 0 6px 22px rgba(0, 0, 0, 0.07);
+    }
+    .cert-primary-kicker {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--tg-theme-hint-color);
+      margin: 0 0 8px;
+    }
+    .cert-card--hero .cert-remainder {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: var(--tg-theme-text-color);
+      margin: 6px 0 8px;
+      line-height: 1.2;
+    }
+    .cert-card--hero .cert-nominal-note {
+      font-size: 13px;
+      color: var(--tg-theme-hint-color);
+      margin: 0 0 10px;
+      line-height: 1.35;
+    }
+    .cert-primary-divider {
+      height: 3px;
+      margin: 0 0 22px;
+      background: rgba(128, 128, 128, 0.32);
+      border: none;
+      border-radius: 2px;
+    }
+    .cert-primary-kicker--block {
+      margin-bottom: 12px;
+    }
+    .cert-primary-host .cert-card--hero + .cert-card--hero {
+      margin-top: 10px;
+    }
+    .cert-primary-divider[hidden] { display: none !important; }
+    .cert-primary-host[hidden] { display: none !important; }
+    .cert-list-rest-empty { font-size: 14px; }
     .cert-activate-row { display: flex; gap: 8px; align-items: stretch; }
     .cert-code-input {
       flex: 1;
@@ -646,13 +695,10 @@
       <button type="button" class="btn-app-back" id="btnBack" hidden data-skip-history-back="true">Назад</button>
     </div>
   </div>
-  <!-- TODO(certificates-tab): Restore tab bar + certs panel + cert-orderModal below when gift certificate PDF/UX is production-ready (keep parity with trainer-pass-products.html). -->
-  <!--
   <div class="tabs" role="tablist">
     <button type="button" class="tab active" id="tabPasses" data-tab="passes" role="tab" aria-selected="true">Абонементы</button>
     <button type="button" class="tab" id="tabCerts" data-tab="certs" role="tab" aria-selected="false">Сертификаты</button>
   </div>
-  -->
 
   <div id="panelPasses" class="panel active" role="tabpanel">
     <div id="pass-screenList" data-pass-screen class="active">
@@ -685,8 +731,9 @@
     </div>
   </div>
 
-  <!--
   <div id="panelCerts" class="panel" role="tabpanel">
+    <div id="cert-primaryHost" class="cert-primary-host" hidden></div>
+    <div class="cert-primary-divider" id="certPrimaryDivider" hidden role="separator" aria-hidden="true"></div>
     <div id="cert-activateBlock">
       <label for="certCodeInput">Введите код подарочного сертификата</label>
       <div class="cert-activate-row">
@@ -705,9 +752,7 @@
     <div id="cert-shopSection" class="pass-shop-section cert-tone" hidden></div>
     <div id="cert-listContent"></div>
   </div>
-  -->
 
-  <!--
   <div id="cert-orderModal" class="pass-order-modal-root" hidden>
     <button type="button" class="pass-order-modal-backdrop" id="cert-orderBackdrop" aria-label="Закрыть"></button>
     <div class="pass-order-modal-sheet" role="dialog" aria-modal="true" aria-labelledby="cert-orderTitle">
@@ -732,7 +777,6 @@
       </div>
     </div>
   </div>
-  -->
 
   <div id="pass-orderConfirmModal" class="pass-order-modal-root" hidden>
     <button type="button" class="pass-order-modal-backdrop" id="pass-orderConfirmBackdrop" aria-label="Закрыть"></button>
@@ -822,7 +866,6 @@
         }
       }
 
-      /* TODO(certificates-tab): Restore when gift certificate PDF/UX is ready — uncomment tab markup + panelCerts + cert-orderModal; restore handlers below.
       function getInitialTab() {
         var p = new URLSearchParams(window.location.search || '');
         var t = (p.get('tab') || '').toLowerCase();
@@ -854,11 +897,6 @@
       tabPasses.onclick = function() { setTab('passes'); };
       tabCerts.onclick = function() { setTab('certs'); loadCertsPanel(); };
       setTab(getInitialTab());
-      */
-      (function passesOnlyModeHeader() {
-        var ht = document.getElementById('headerTitle');
-        if (ht) ht.textContent = '📦 Мои абонементы';
-      })();
 
       // --- Passes (same logic as client-passes.html) ---
       var passState = { items: [], current: null };
@@ -1137,6 +1175,64 @@
         if (cents == null || cents === 0) return 'Любая сумма';
         return (cents / 100).toFixed(0) + ' BYN';
       }
+      /** Balance / nominal on certificate cards (cents → BYN, trim trailing zeros). */
+      function formatCertMoney(cents) {
+        if (cents == null || cents === '') return '—';
+        var v = Number(cents) / 100;
+        if (!isFinite(v)) return '—';
+        var s = (Math.round(v * 100) / 100).toFixed(2).replace(/\.?0+$/, '');
+        return s + ' BYN';
+      }
+      function effectiveRemainingCents(c) {
+        var r = c.amount_remaining_cents;
+        if (r != null && r !== '' && !isNaN(Number(r)) && Number(r) >= 0) return Number(r);
+        if (c.amount_cents != null && c.amount_cents !== '') return Number(c.amount_cents);
+        return 0;
+      }
+      function isSpendableCert(c) {
+        var st = c.status;
+        if (st === 'redeemed' || st === 'expired' || st === 'cancelled') return false;
+        return effectiveRemainingCents(c) > 0;
+      }
+      /** All certificates with balance (active for client). Order = same as API list. */
+      function listSpendableCerts(items) {
+        var out = [];
+        for (var i = 0; i < items.length; i++) {
+          if (isSpendableCert(items[i])) out.push(items[i]);
+        }
+        return out;
+      }
+      function renderOneCertCard(c, hero, omitHeroKicker) {
+        var cardClass = 'cert-card';
+        if (c.status === 'redeemed' || c.status === 'expired' || c.status === 'cancelled') cardClass += ' redeemed';
+        if (hero) cardClass += ' cert-card--hero';
+        var rem = effectiveRemainingCents(c);
+        var nom = c.amount_cents != null && c.amount_cents !== '' ? Number(c.amount_cents) : null;
+        var remStr = formatCertMoney(rem);
+        var nomStr = nom != null ? formatCertMoney(nom) : remStr;
+        var html = '<div class="' + cardClass + '">';
+        if (hero && !omitHeroKicker) {
+          html += '<div class="cert-primary-kicker">Ваш активный сертификат</div>';
+        }
+        html += '<div class="title">' + escapeHtml(c.code) + '</div>';
+        if (hero) {
+          html += '<div class="cert-remainder">Остаток: ' + escapeHtml(remStr) + '</div>';
+          if (nom != null && rem !== nom) {
+            html += '<div class="cert-nominal-note">Номинал при выдаче: ' + escapeHtml(nomStr) + '</div>';
+          }
+          html += '<div class="meta">' + escapeHtml(c.trainer_name) + ' · ' + escapeHtml(statusLabel(c.status));
+          if (c.issued_at) html += ' · выдано ' + escapeHtml(formatDate(c.issued_at));
+          html += '</div>';
+        } else {
+          html += '<div class="meta">' + escapeHtml(c.trainer_name) + ' · остаток ' + escapeHtml(remStr);
+          if (nom != null && rem !== nom) html += ' · номинал ' + escapeHtml(nomStr);
+          html += ' · ' + escapeHtml(statusLabel(c.status));
+          if (c.issued_at) html += ' · выдано ' + escapeHtml(formatDate(c.issued_at));
+          html += '</div>';
+        }
+        html += '</div>';
+        return html;
+      }
       function formatDate(iso) {
         if (!iso) return '';
         try {
@@ -1356,10 +1452,17 @@
       function loadCertsPanel() {
         var listEl = document.getElementById('cert-listContent');
         var shopEl = document.getElementById('cert-shopSection');
+        var primaryHost = document.getElementById('cert-primaryHost');
+        var primaryDivider = document.getElementById('certPrimaryDivider');
         if (!listEl || !shopEl) return;
         shopEl.hidden = true;
         shopEl.innerHTML = '';
         listEl.innerHTML = '<div class="loading">Загрузка…</div>';
+        if (primaryHost) {
+          primaryHost.hidden = true;
+          primaryHost.innerHTML = '';
+        }
+        if (primaryDivider) primaryDivider.hidden = true;
 
         updateCertSamplePdfHref();
 
@@ -1376,22 +1479,45 @@
             var catalog = pair[1];
             renderCertShopFromCatalog(catalog);
             var items = data.items || [];
-            if (items.length === 0) {
-              listEl.innerHTML = '<div class="empty">Пока нет сертификатов.</div>';
+            var primaries = listSpendableCerts(items);
+            var primaryIdSet = {};
+            primaries.forEach(function(c) { primaryIdSet[c.id] = true; });
+
+            if (primaryHost) {
+              if (primaries.length === 0) {
+                primaryHost.hidden = true;
+                primaryHost.innerHTML = '';
+              } else {
+                primaryHost.hidden = false;
+                var blockTitle =
+                  primaries.length > 1
+                    ? '<div class="cert-primary-kicker cert-primary-kicker--block">Ваши активные сертификаты</div>'
+                    : '';
+                var omitKicker = primaries.length > 1;
+                var cardsHtml = primaries
+                  .map(function(c) {
+                    return renderOneCertCard(c, true, omitKicker);
+                  })
+                  .join('');
+                primaryHost.innerHTML = blockTitle + cardsHtml;
+              }
+            }
+            if (primaryDivider) {
+              primaryDivider.hidden = primaries.length === 0;
+            }
+
+            var rest = items.filter(function(c) {
+              return !primaryIdSet[c.id];
+            });
+            if (rest.length === 0) {
+              if (primaries.length === 0) {
+                listEl.innerHTML = '<div class="empty">Пока нет сертификатов.</div>';
+              } else {
+                listEl.innerHTML = '<div class="empty cert-list-rest-empty">Других сертификатов нет.</div>';
+              }
               return;
             }
-            var html = '';
-            items.forEach(function(c) {
-              var cardClass = 'cert-card';
-              if (c.status === 'redeemed' || c.status === 'expired' || c.status === 'cancelled') cardClass += ' redeemed';
-              var meta = escapeHtml(c.trainer_name) + ' · ' + formatAmount(c.amount_cents) + ' · ' + statusLabel(c.status);
-              if (c.issued_at) meta += ' · выдано ' + formatDate(c.issued_at);
-              html += '<div class="' + cardClass + '">';
-              html += '<div class="title">' + escapeHtml(c.code) + '</div>';
-              html += '<div class="meta">' + meta + '</div>';
-              html += '</div>';
-            });
-            listEl.innerHTML = html;
+            listEl.innerHTML = rest.map(function(c) { return renderOneCertCard(c, false); }).join('');
           })
           .catch(function() {
             listEl.innerHTML = '<div class="error">Не удалось загрузить. Откройте из бота.</div>';
@@ -1467,7 +1593,7 @@
         });
       }
 
-      /* loadCertsPanel(); — certs panel commented out (TODO certificates-tab) */
+      loadCertsPanel();
     })();
   </script>
   <script src="mini-app-client-home.js"></script>
