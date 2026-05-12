@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 
 def _root() -> Path:
+    """Repo root (directory that contains ``src/`` and ``static/``)."""
     return Path(__file__).resolve().parent.parent.parent
 
 
