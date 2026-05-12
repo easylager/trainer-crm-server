@@ -31,6 +31,7 @@ from aiogram.enums import ParseMode
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 
 from src.bot import messages as msg
+from src.shared.byr_currency_display import BYR_SIGN
 from src.shared.config import Settings
 
 # --- Mock slot / names (визуальный превью) ---
@@ -515,13 +516,13 @@ async def main() -> None:
             chat_id,
             "Сертификат выдан (шаблон)",
             msg.CLIENT_CERTIFICATE_ISSUED.format(
-                amount_display="150 BYN",
+                amount_display=f"150 {BYR_SIGN}",
                 code="MOCK-CERT-001",
                 trainer_name=MOCK_TRAINER_NAME,
             ),
         )
         cert_bound_preview = msg.format_client_certificate_bound_html(
-            amount_display="150 BYN",
+            amount_display=f"150 {BYR_SIGN}",
             code="MOCK-CERT-001",
             trainer_name=MOCK_TRAINER_NAME,
         )

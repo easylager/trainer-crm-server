@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import text
 
 from src.application.trainer_profile_pending import build_trainer_profile_for_moderation_card
+from src.shared.byr_currency_display import format_rubles_byn_display
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -123,7 +124,7 @@ def format_admin_trainer_moderation_caption(
             sname = html.escape((s.get("service_name") or "—").strip())
             pb = s.get("price_byn")
             if pb is not None:
-                parts.append(f"• {sname} — {html.escape(str(pb))} BYN")
+                parts.append(f"• {sname} — {html.escape(format_rubles_byn_display(float(pb)))}")
             else:
                 parts.append(f"• {sname} — цена не указана")
 

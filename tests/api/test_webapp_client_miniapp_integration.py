@@ -293,9 +293,11 @@ async def test_client_routes_401_without_init(app_use_test_db) -> None:
         r1 = await client.get("/api/webapp/client/session")
         r2 = await client.get("/api/webapp/client/slots?trainer_id=1")
         r3 = await client.post("/api/webapp/client/booking", json={"slot_id": 1, "phone": "+375291112233"})
+        r4 = await client.get("/api/webapp/client/activity-stats")
     assert r1.status_code == 401
     assert r2.status_code == 401
     assert r3.status_code == 401
+    assert r4.status_code == 401
 
 
 @pytest.mark.asyncio
@@ -309,6 +311,27 @@ async def test_client_routes_401_invalid_init_data(app_use_test_db) -> None:
     assert resp.status_code == 401
     assert resp.json().get("detail") == MINIAPP_CREDENTIAL_USER_DETAIL_RU
     assert resp.headers.get(MINIAPP_AUTH_ERROR_HEADER) == "1"
+
+
+@pytest.mark.asyncio
+async def test_client_activity_stats_zeros_when_no_client_row(app_use_test_db, db_session) -> None:
+    """TG user без строки clients: снимок нулевой (не ошибка)."""
+    await _require_seed_ids(db_session)
+    ctg = _fresh_client_telegram_id()
+    with patch_client_init_auth(ctg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.get(
+                "/api/webapp/client/activity-stats", headers={"X-Telegram-Init-Data": "mock"}
+            )
+    assert r.status_code == 200
+    body = r.json()
+    assert body.get("completed_total") == 0
+    assert body.get("completed_minutes_total") == 0
+    assert body.get("upcoming_bookings_count") == 0
+    assert body.get("last_completed_at") is None
+    assert body.get("first_completed_at") is None
+    assert body.get("streak_weeks") == 0
+    assert body.get("top_trainer") is None
 
 
 @pytest.mark.asyncio

@@ -329,7 +329,7 @@
       }
       function formatPassPrice(cents) {
         if (cents == null || cents === 0) return '';
-        return (cents / 100).toFixed(2).replace(/\.?0+$/, '') + ' BYN за занятие';
+        return (cents / 100).toFixed(2).replace(/\.?0+$/, '') + ' ⃅ за занятие';
       }
       function formatPassExpires(iso) {
         if (!iso) return '';
@@ -385,7 +385,7 @@
             }
             function formatPriceChip(cents) {
               if (cents == null || cents === 0) return '';
-              return (cents / 100).toFixed(2).replace(/\.?0+$/, '') + ' BYN';
+              return (cents / 100).toFixed(2).replace(/\.?0+$/, '') + ' ⃅';
             }
             function formatExpires(iso) {
               if (!iso) return '';

@@ -133,6 +133,7 @@ try:
     from zoneinfo import ZoneInfo
 except ImportError:
     from backports.zoneinfo import ZoneInfo  # type: ignore[no-redef]
+from src.shared.byr_currency_display import format_rubles_byn_display
 from src.shared.validation import MAX_COMMENT_LEN, safe_parse_id, truncate_text
 
 logger = logging.getLogger(__name__)
@@ -229,7 +230,7 @@ def _certificate_amount_display(cents: int | None) -> str:
     if cents is None:
         return "—"
     v = int(cents) / 100.0
-    return f"{int(v)} BYN" if v == int(v) else f"{v:.2f} BYN"
+    return format_rubles_byn_display(v)
 
 
 def _trainer_name(trainer: dict) -> str:
@@ -451,7 +452,7 @@ async def _my_requests_content(telegram_id: int) -> tuple[str, InlineKeyboardMar
 
 
 def _format_services_prices(services: list[dict]) -> str:
-    """Format 'Услуга: X BYN' or 'Услуга: по запросу' for each; join with ', '. Uses price_byn (rubles)."""
+    """Format 'Услуга: X ⃅' or 'Услуга: по запросу' for each; join with ', '. Uses price_byn (rubles)."""
     if not services:
         return "—"
     parts = []
@@ -459,7 +460,7 @@ def _format_services_prices(services: list[dict]) -> str:
         name = (s.get("service_name") or "").strip() or "—"
         byn = s.get("price_byn")
         if byn is not None:
-            parts.append(f"{name}: {int(byn)} BYN" if byn == int(byn) else f"{name}: {byn:.2f} BYN")
+            parts.append(f"{name}: {format_rubles_byn_display(byn)}")
         else:
             parts.append(f"{name}: по запросу")
     return ", ".join(parts)

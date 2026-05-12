@@ -767,9 +767,9 @@
         <input type="text" id="cert-orderName" class="cert-order-input" placeholder="Как указать в сертификате" autocomplete="name">
       </div>
       <div class="cert-order-field" id="cert-orderAmountWrap" hidden>
-        <label for="cert-orderAmount">Сумма сертификата, BYN</label>
+        <label for="cert-orderAmount">Сумма сертификата, ⃅</label>
         <input type="number" id="cert-orderAmount" class="cert-order-input" inputmode="decimal" min="1" max="500000" step="0.01" placeholder="Например, 50" autocomplete="transaction-amount">
-        <p class="cert-order-field-hint">Обязательно: на какую сумму оформить сертификат (минимум 1 BYN).</p>
+        <p class="cert-order-field-hint">Обязательно: на какую сумму оформить сертификат (минимум 1 ⃅).</p>
       </div>
       <div class="pass-order-modal-actions">
         <button type="button" class="pass-order-modal-btn secondary" id="cert-orderCancel">Отмена</button>
@@ -816,11 +816,11 @@
 
       function formatPassPrice(cents) {
         if (cents == null || cents === 0) return '';
-        return (cents / 100).toFixed(2).replace(/\.?0+$/, '') + ' BYN за занятие';
+        return (cents / 100).toFixed(2).replace(/\.?0+$/, '') + ' ⃅ за занятие';
       }
       function formatMoneyTotal(cents) {
         if (cents == null || cents === 0) return '';
-        return (cents / 100).toFixed(2).replace(/\.?0+$/, '') + ' BYN';
+        return (cents / 100).toFixed(2).replace(/\.?0+$/, '') + ' ⃅';
       }
       function formatPassExpires(iso) {
         if (!iso) return '';
@@ -1065,7 +1065,7 @@
 
             function formatPriceChip(cents) {
               if (cents == null || cents === 0) return '';
-              return (cents / 100).toFixed(2).replace(/\.?0+$/, '') + ' BYN';
+              return (cents / 100).toFixed(2).replace(/\.?0+$/, '') + ' ⃅';
             }
             function formatExpires(iso) {
               if (!iso) return '';
@@ -1173,15 +1173,15 @@
       // --- Certificates (same logic as client-certificates.html) ---
       function formatAmount(cents) {
         if (cents == null || cents === 0) return 'Любая сумма';
-        return (cents / 100).toFixed(0) + ' BYN';
+        return (cents / 100).toFixed(0) + ' ⃅';
       }
-      /** Balance / nominal on certificate cards (cents → BYN, trim trailing zeros). */
+      /** Balance / nominal on certificate cards (cents → ⃅, trim trailing zeros). */
       function formatCertMoney(cents) {
         if (cents == null || cents === '') return '—';
         var v = Number(cents) / 100;
         if (!isFinite(v)) return '—';
         var s = (Math.round(v * 100) / 100).toFixed(2).replace(/\.?0+$/, '');
-        return s + ' BYN';
+        return s + ' ⃅';
       }
       function effectiveRemainingCents(c) {
         var r = c.amount_remaining_cents;
@@ -1324,7 +1324,7 @@
         if (t) {
           var lines = ['Заявка на: <strong>' + escapeHtml(productLabel) + '</strong>'];
           if (certOrderState.anyAmount) {
-            lines.push('<span style="font-size:14px;">Номинал «любая сумма»: укажите сумму в BYN в поле ниже.</span>');
+            lines.push('<span style="font-size:14px;">Номинал «любая сумма»: укажите сумму в ⃅ в поле ниже.</span>');
           }
           lines.push('<span style="font-size:14px;">Укажите email и имя получателя — тренер увидит их в заявке.</span>');
           t.innerHTML = lines.join('<br>');
@@ -1367,7 +1367,7 @@
                 .replace(',', '.');
               var n = parseFloat(rawAmt);
               if (!rawAmt || isNaN(n) || n < 1) {
-                alert('Укажите сумму сертификата не менее 1 BYN');
+                alert('Укажите сумму сертификата не менее 1 ⃅');
                 return;
               }
               if (n > 500000) {

@@ -312,7 +312,7 @@
           inp.name = 'catalogPriceTierChoice';
           inp.value = String(tier.id);
           var pb = tier.price_byn;
-          var priceStr = (pb === Math.floor(pb) ? pb : Number(pb).toFixed(2)) + ' BYN';
+          var priceStr = (pb === Math.floor(pb) ? pb : Number(pb).toFixed(2)) + ' ⃅';
           lab.appendChild(inp);
           var tierTxt = document.createElement('span');
           tierTxt.className = 'tier-radio-text';
@@ -2215,10 +2215,10 @@
         if (minV == null && s.price_byn == null) return 'по запросу';
         if (minV != null && maxV != null && minV !== maxV) {
           var a = (minV === Math.floor(minV) ? minV : minV.toFixed(2));
-          return 'от ' + a + ' BYN';
+          return 'от ' + a + ' ⃅';
         }
         var v = minV != null ? minV : s.price_byn;
-        return (v === Math.floor(v) ? v : v.toFixed(2)) + ' BYN';
+        return (v === Math.floor(v) ? v : v.toFixed(2)) + ' ⃅';
       }
 
       /** Rows while /trainers or /training-groups fetch — matches list card layout (photo + text + arrow). */

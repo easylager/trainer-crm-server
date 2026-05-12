@@ -2476,9 +2476,9 @@
 
       function formatHubMoneyCents(cents) {
         var n = Number(cents);
-        if (!isFinite(n) || n < 0) return '0 BYN';
+        if (!isFinite(n) || n < 0) return '0 ⃅';
         var v = n / 100;
-        return v.toFixed(v % 1 === 0 ? 0 : 2) + ' BYN';
+        return v.toFixed(v % 1 === 0 ? 0 : 2) + ' ⃅';
       }
 
       /** Loads accrual MTD (sessions + pass + cert sales); updates hubMtdRevenueText and hero. */
@@ -4136,7 +4136,7 @@
           inp.name = gname;
           inp.value = String(tier.id);
           var pb = tier.price_byn;
-          var priceStr = (pb === Math.floor(pb) ? pb : Number(pb).toFixed(2)) + ' BYN';
+          var priceStr = (pb === Math.floor(pb) ? pb : Number(pb).toFixed(2)) + ' ⃅';
           lab.appendChild(inp);
           lab.appendChild(document.createTextNode(hubPriceTierLabelRu(tier) + ' — ' + priceStr));
           inp.addEventListener('change', function() {

@@ -10,7 +10,7 @@
 
   function formatPriceByn(priceByn) {
     if (priceByn == null) return 'по запросу';
-    return (priceByn === Math.floor(priceByn) ? priceByn : priceByn.toFixed(2)) + ' BYN';
+    return (priceByn === Math.floor(priceByn) ? priceByn : priceByn.toFixed(2)) + ' ⃅';
   }
 
   function buildRatingText(profile) {

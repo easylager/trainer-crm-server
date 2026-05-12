@@ -18,6 +18,7 @@ from src.application.client_session_use_cases import get_session as read_client_
 from src.application.client_trainer_edge_use_cases import get_all_edges
 from src.application.client_trainer_primary_graph import compute_primary_edge_meta
 from src.application.certificate_use_cases import get_certificate_product, list_certificate_products
+from src.shared.byr_currency_display import BYR_SIGN
 
 CERT_ORDER_LINE_PREFIX = "__CERT_ORDER__:certificate_product_id="
 CERT_ORDER_META_PREFIX = "__CERT_ORDER_META__:"
@@ -293,10 +294,10 @@ async def submit_certificate_product_order_request(
         ):
             return {"ok": False, "error": "nominal_invalid"}
         price_txt = f"{(requested_nominal_cents / 100):.2f}".rstrip("0").rstrip(".")
-        amount_line = f"{price_txt} BYN (номинал по выбору клиента)"
+        amount_line = f"{price_txt} {BYR_SIGN} (номинал по выбору клиента)"
     else:
         price_txt = f"{(int(amt) / 100):.2f}".rstrip("0").rstrip(".")
-        amount_line = f"{price_txt} BYN"
+        amount_line = f"{price_txt} {BYR_SIGN}"
 
     r_client = await session.execute(
         text(

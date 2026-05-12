@@ -12,7 +12,7 @@
  *
  * Card metadata is intent-driven, not historical:
  *   - primary  → "Следующая запись X числа" / "Запись доступна"
- *   - saved    → "Цена от X BYN", арена, услуги — почему вернуться сейчас
+ *   - saved    → "Цена от X ⃅", арена, услуги — почему вернуться сейчас
  *   - past     → "N занятий вместе" / "последняя X числа"
  */
 (function () {
@@ -77,7 +77,7 @@
   function priceByn(cents) {
     if (cents == null) return null;
     var byn = Math.round(cents / 100);
-    return 'от ' + byn + ' BYN';
+    return 'от ' + byn + ' ⃅';
   }
 
   /** "12 мая" / "сегодня" / "завтра" — concise upcoming/past date label. */

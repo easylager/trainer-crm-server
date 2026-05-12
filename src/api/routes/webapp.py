@@ -34,6 +34,7 @@ from aiogram.exceptions import (
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 
 from src.api.deps import get_session
+from src.shared.byr_currency_display import BYR_SIGN
 from src.shared.price_tier_kind import normalize_price_tier_kind, price_tier_label_ru, sql_order_case_tier_kind
 from src.shared.profile_phone import coerce_required_belarus_phone
 from src.application.booking_problem_notifications import send_booking_problem_telegram_notifications
@@ -111,6 +112,7 @@ from src.application.trainer_relay_delivery import send_client_relay_from_traine
 from src.application.trainer_client_registration_notify import (
     notify_trainer_client_registered_from_invite,
 )
+from src.application.client_stats_use_cases import get_client_activity_snapshot
 from src.application.client_use_cases import (
     attach_telegram_id_to_client,
     get_client_by_phone,
@@ -322,11 +324,11 @@ from src.application.trainer_use_cases import (
 from src.bot import messages as msg
 from src.bot.share_catalog_tip import send_trainer_share_catalog_tip_to_chat
 from src.bot.trainer_cancel_client_notify import send_trainer_cancel_notification_for_booking_now
-from src.shared.ttl_cache import get_slots_cached, invalidate_slots_for_trainer, set_slots_cached
 from src.shared.config import Settings
 from src.shared.map_links import build_yandex_by_map_url
 from src.shared.notification_hours import NOTIFICATION_TZ, working_hours_between
 from src.shared.telegram_webapp import InitDataAuthError, parse_user_json_from_init_data
+from src.shared.ttl_cache import get_slots_cached, invalidate_slots_for_trainer, set_slots_cached
 
 from src.api.miniapp_auth import (
     MiniAppPlatform,
@@ -1967,8 +1969,8 @@ async def post_client_cert_order_request(
         "client_mismatch": (403, "Не удалось подтвердить аккаунт."),
         "invalid_email": (422, "Укажите корректный email."),
         "recipient_name_required": (422, "Укажите имя получателя."),
-        "nominal_required": (422, "Укажите сумму сертификата (номинал в BYN)."),
-        "nominal_invalid": (422, "Некорректная сумма. Укажите разумный номинал в BYN."),
+        "nominal_required": (422, "Укажите сумму сертификата (номинал, " + BYR_SIGN + ")."),
+        "nominal_invalid": (422, "Некорректная сумма. Укажите разумный номинал, " + BYR_SIGN + "."),
     }
     status_code, detail = mapping.get(err, (400, "Не удалось отправить заявку."))
     raise HTTPException(status_code=status_code, detail=detail)
@@ -1984,13 +1986,27 @@ async def get_client_bookings(
     return await _client_bookings_days_payload(session, telegram_id)
 
 
+@router.get("/client/activity-stats")
+async def get_client_activity_stats(
+    session: AsyncSession = Depends(get_session),
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+) -> dict:
+    """
+    Client motivation dashboard: completed session totals, approximate time on mats,
+    rolling 30-day rhythm vs prior window, upcoming count, next numeric milestone.
+    """
+    telegram_id = client_catalog_telegram_key(principal)
+    client_id = await get_client_id_by_telegram_id(session, telegram_id)
+    return await get_client_activity_snapshot(session, client_id=client_id)
+
+
 @router.get("/client/hub/bootstrap")
 async def get_client_hub_bootstrap(
     principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
 ):
     """
-    Single round-trip for client home: bookings by day + requests list (same shapes as
-    ``GET /client/bookings`` and ``GET /client/requests``). Parallel DB reads on separate sessions.
+    Single round-trip for client home: bookings by day + requests + session edges + activity snippet.
+    ``activity`` holds ``streak_weeks`` and ``completed_total`` for a small streak ribbon on the hub.
     """
     telegram_id = client_catalog_telegram_key(principal)
 
@@ -2055,8 +2071,25 @@ async def get_client_hub_bootstrap(
                 "has_past_sessions": any(e.get("completed_count", 0) > 0 for e in edges),
             }
 
-    bookings, requests, client_session = await asyncio.gather(_bookings(), _requests(), _hub_session())
-    return {"bookings": bookings, "requests": requests, "client_session": client_session}
+    async def _activity() -> dict[str, Any]:
+        """Light motivation snippet for hub ribbon (week streak + total completed)."""
+        async with async_session_factory() as s:
+            cid = await get_client_id_by_telegram_id(s, telegram_id)
+            snap = await get_client_activity_snapshot(s, client_id=cid)
+            return {
+                "streak_weeks": int(snap.get("streak_weeks") or 0),
+                "completed_total": int(snap.get("completed_total") or 0),
+            }
+
+    bookings, requests, client_session, activity = await asyncio.gather(
+        _bookings(), _requests(), _hub_session(), _activity()
+    )
+    return {
+        "bookings": bookings,
+        "requests": requests,
+        "client_session": client_session,
+        "activity": activity,
+    }
 
 
 @router.get("/client/share-trainer/{trainer_id}")
@@ -6191,7 +6224,7 @@ def _format_certificate_amount_label_ru(amount_cents: int | None) -> str:
         return "Любая сумма"
     v = int(amount_cents) / 100
     s = f"{v:.2f}".rstrip("0").rstrip(".")
-    return f"{s} BYN"
+    return f"{s} {BYR_SIGN}"
 
 
 async def _enrich_trainer_request_certificate_products(

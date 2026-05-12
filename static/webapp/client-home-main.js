@@ -29,6 +29,7 @@
         bookmark: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m19 21-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/></svg>',
         repeat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>',
         plus:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>',
+        chart:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V10"/><path d="M10 20V4"/><path d="M16 20v-6"/><path d="M22 20V14"/></svg>',
       };
 
       /** Explore tiles shown at bottom — same in all scenarios. */
@@ -37,6 +38,7 @@
         { path: 'catalog?tab=catalog',       label: 'Тренеры и запись', hint: 'Каталог, фильтры, слоты',        icon: 'search', badge: null },
         { path: 'client-saved-trainers',     label: 'Сохранённые',        hint: 'Закладки из каталога',           icon: 'bookmark', badge: null },
         { path: 'client-bookings',           label: 'Мои записи',          hint: 'Все занятия',                    icon: 'cal',    badge: null },
+        { path: 'client-stats',            label: 'Ваша активность',     hint: 'Что уже сделали и что впереди', icon: 'chart',  badge: null },
         { path: 'client-requests',           label: 'Заявки',             hint: 'Подбор тренера',                 icon: 'inbox',  badge: 'NEW' },
         { path: 'client-passes-certificates',label: 'Абонементы/Сертификаты', hint: 'Остаток, сроки, покупка', icon: 'ticket', badge: null },
       ];
@@ -79,6 +81,41 @@
         return String(s)
           .replace(/&/g, '&amp;').replace(/</g, '&lt;')
           .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+      }
+
+      function pluralWeeksHub(n) {
+        n = Number(n) || 0;
+        var abs100 = n % 100;
+        var abs10 = n % 10;
+        if (abs100 >= 11 && abs100 <= 14) return 'недель';
+        if (abs10 === 1) return 'неделя';
+        if (abs10 >= 2 && abs10 <= 4) return 'недели';
+        return 'недель';
+      }
+
+      /** Duolingo-style streak line on hub; tap opens full «Ваша активность». */
+      function renderStreakRibbon(activity) {
+        var el = document.getElementById('hubStreakRibbon');
+        if (!el) return;
+        var sw = activity && activity.streak_weeks != null ? Number(activity.streak_weeks) : 0;
+        if (sw < 1) {
+          el.style.display = 'none';
+          el.innerHTML = '';
+          el.onclick = null;
+          return;
+        }
+        var line =
+          sw === 1
+            ? 'Вы занимаетесь уже неделю подряд!'
+            : 'Вы занимаетесь уже ' + sw + ' ' + pluralWeeksHub(sw) + ' подряд!';
+        el.style.display = 'flex';
+        el.innerHTML =
+          '<span>' +
+          esc(line) +
+          '</span><span class="hub-streak-ribbon__cta">Вся активность</span>';
+        el.onclick = function () {
+          navigateTo('client-stats');
+        };
       }
 
       /** PRD E1 parity with trainer hub: server sets hub_in_session inside [start, end) in Minsk wall time. */
@@ -859,6 +896,7 @@
           renderQuickStrip('new-client', null);
           renderExploreTiles();
           wireAllBookingsLink();
+          renderStreakRibbon(null);
           return;
         }
 
@@ -873,6 +911,7 @@
             var days = (hub.bookings || {}).days || [];
             var reqs = (hub.requests || {}).items || [];
             applyHubState(days, reqs, hub);
+            renderStreakRibbon(hub.activity || {});
           })
           .catch(function() {
             /* Fallback: parallel individual calls */
@@ -887,6 +926,7 @@
                 results[1].items || [],
                 { client_session: { selected_trainer_id: sess.trainer_id != null ? sess.trainer_id : null } }
               );
+              renderStreakRibbon(null);
             });
           })
           .catch(function() {
@@ -895,6 +935,7 @@
             clearNextBookingBlock();
             hideMyTrainerBlock();
             hideUpcomingSection();
+            renderStreakRibbon(null);
           });
       }
 

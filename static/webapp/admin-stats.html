@@ -208,7 +208,7 @@
         html += '<div><span>Сертификатов выдано:</span> <span>' + (d.certs_issued_total || 0) + '</span></div>';
         html += '<div><span>Сертификатов с остатком:</span> <span>' + (d.certs_with_balance_total || 0) + '</span></div>';
         var certByn = (d.cert_balance_cents_total || 0) / 100;
-        html += '<div><span>Остаток по сертификатам:</span> <span>' + (certByn % 1 === 0 ? certByn.toFixed(0) : certByn.toFixed(2)) + ' BYN</span></div>';
+        html += '<div><span>Остаток по сертификатам:</span> <span>' + (certByn % 1 === 0 ? certByn.toFixed(0) : certByn.toFixed(2)) + ' ⃅</span></div>';
         html += '<div><span>Сертификатов погашено (30 дн.):</span> <span>' + (d.certs_redeemed_30d_total || 0) + '</span></div>';
         html += '</div></div></div>';
         html += '<div class="section"><div class="section-title">⚠️ Тревожные звоночки</div>';

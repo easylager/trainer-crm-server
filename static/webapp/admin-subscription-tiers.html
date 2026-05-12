@@ -406,7 +406,7 @@
 
       // Format helpers
       function formatPrice(cents) {
-        return (cents / 100).toFixed(0) + ' BYN';
+        return (cents / 100).toFixed(0) + ' ⃅';
       }
       // Load tiers
       function loadTiers() {
@@ -471,7 +471,7 @@
 
       function renderViewMode(tier) {
         var html = '<div class="tier-period-matrix">';
-        html += '<div class="matrix-label">Цена за период (BYN)</div>';
+        html += '<div class="matrix-label">Цена за период (⃅)</div>';
         html += '<div class="period-matrix-row">';
         html += '<div class="summary-item"><div class="summary-value">' + formatPrice(periodCents(tier, 1)) + '</div><div class="summary-label">1 мес</div></div>';
         html += '<div class="summary-item"><div class="summary-value">' + formatPrice(periodCents(tier, 3)) + '</div><div class="summary-label">3 мес</div></div>';
@@ -499,7 +499,7 @@
         html += '</div>';
 
         html += '<div class="tier-period-matrix">';
-        html += '<div class="matrix-label">Цены за период (BYN)</div>';
+        html += '<div class="matrix-label">Цены за период (⃅)</div>';
         html += '<div class="form-row" style="grid-template-columns: repeat(3, 1fr);">';
         html += '<div class="form-group">';
         html += '<label class="form-label">1 мес</label>';

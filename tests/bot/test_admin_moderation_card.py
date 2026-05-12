@@ -1,5 +1,6 @@
 """Admin moderation card HTML: no per-education moderation status, rich profile fields."""
 from src.bot.admin_moderation_card import format_admin_education_block, format_admin_trainer_moderation_caption
+from src.shared.byr_currency_display import BYR_SIGN
 
 
 def test_education_block_has_no_moderation_status():
@@ -43,5 +44,5 @@ def test_moderation_caption_includes_services_and_arenas():
     assert "60 мин" in text
     assert "2 ч" in text
     assert "Тренировка" in text
-    assert "10.5 BYN" in text
+    assert f"10.5 {BYR_SIGN}" in text
     assert "Лёд-1" in text

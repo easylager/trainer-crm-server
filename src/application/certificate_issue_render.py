@@ -15,10 +15,9 @@ from typing import Optional
 
 import fitz
 
+from src.shared.byr_currency_display import BYR_SIGN
+
 logger = logging.getLogger(__name__)
-
-
-def _root() -> Path:
     return Path(__file__).resolve().parent.parent.parent
 
 
@@ -193,7 +192,7 @@ def _amount_row_html(amount_cents: int) -> str:
     plain = _format_amount(amount_cents)
     if plain == "Любая сумма":
         return f'<div class="amount-row"><span>{_esc(plain)}</span></div>'
-    return f'<div class="amount-row"><span>{_esc(plain)}</span><span class="curr">BYN</span></div>'
+    return f'<div class="amount-row"><span>{_esc(plain)}</span><span class="curr">{_esc(BYR_SIGN)}</span></div>'
 
 
 def _meta_html(trainer_name: str, expires_at: Optional[date]) -> str:

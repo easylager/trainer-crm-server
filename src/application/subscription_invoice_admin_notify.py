@@ -19,6 +19,7 @@ from src.application.subscription_tier_use_cases import format_subscription_labe
 from src.bot import messages as msg
 from src.infrastructure.db import async_session_factory
 from src.shared.config import Settings
+from src.shared.byr_currency_display import BYR_SIGN
 
 logger = logging.getLogger(__name__)
 
@@ -135,11 +136,11 @@ async def notify_admins_new_catalog_subscription_invoice(invoice_id: int) -> Non
         list_fmt = int(list_byn) if list_byn == int(list_byn) else round(list_byn, 2)
         referral_discount_line = (
             f"🔖 Реф.баланс: <b>−{bonus_days} дн.</b> к периоду "
-            f"(полная цена без бонусов: <b>{list_fmt} BYN</b>)\n"
+            f"(полная цена без бонусов: <b>{list_fmt} {BYR_SIGN}</b>)\n"
         )
     elif bonus_days > 0 and int(row.get("amount_cents") or 0) == 0:
         referral_discount_line = (
-            f"🔖 Период полностью покрыт реф.балансом: <b>{bonus_days} дн.</b> (к оплате 0 BYN)\n"
+            f"🔖 Период полностью покрыт реф.балансом: <b>{bonus_days} дн.</b> (к оплате 0 {BYR_SIGN})\n"
         )
     else:
         referral_discount_line = ""

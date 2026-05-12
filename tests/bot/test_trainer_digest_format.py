@@ -20,6 +20,7 @@ from src.bot.trainer_digest_format import (
     format_morning_digest_lite_owed_only,
     format_weekly_digest,
 )
+from src.shared.byr_currency_display import BYR_SIGN
 
 
 # =============================================================================
@@ -84,11 +85,11 @@ def test_duration_formatting(minutes: int, expected: str) -> None:
 @pytest.mark.parametrize(
     "cents,expected",
     [
-        (0, "0 BYN"),
-        (100, "1 BYN"),
-        (6000, "60 BYN"),
-        (6050, "60,50 BYN"),
-        (6099, "60,99 BYN"),
+        (0, f"0 {BYR_SIGN}"),
+        (100, f"1 {BYR_SIGN}"),
+        (6000, f"60 {BYR_SIGN}"),
+        (6050, f"60,50 {BYR_SIGN}"),
+        (6099, f"60,99 {BYR_SIGN}"),
     ],
 )
 def test_money_formatting(cents: int, expected: str) -> None:
@@ -448,7 +449,7 @@ def test_weekly_past_cash_only_renders_completed_and_cash_bullets() -> None:
         )
     )
     assert "<b>5</b> тренировок" in out
-    assert "<b>250 BYN</b> наличными" in out
+    assert f"<b>250 {BYR_SIGN}</b> наличными" in out
 
 
 def test_weekly_past_mixed_cash_and_pass_and_cert() -> None:
@@ -462,9 +463,9 @@ def test_weekly_past_mixed_cash_and_pass_and_cert() -> None:
             }
         )
     )
-    assert "<b>240 BYN</b> наличными" in out
+    assert f"<b>240 {BYR_SIGN}</b> наличными" in out
     assert "<b>3</b> тренировки по абонементам" in out
-    assert "<b>50 BYN</b> по сертификатам" in out
+    assert f"<b>50 {BYR_SIGN}</b> по сертификатам" in out
 
 
 def test_weekly_upcoming_with_heaviest_day_only_when_3plus() -> None:

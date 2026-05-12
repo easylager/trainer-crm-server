@@ -1563,7 +1563,7 @@
             }
             var expiresAt = data.expires_at ? String(data.expires_at).slice(0, 10) : '';
             var priceLine = data.price_cents != null
-              ? (Math.round(data.price_cents / 100) + ' BYN')
+              ? (Math.round(data.price_cents / 100) + ' ⃅')
               : null;
             var included;
             var features;
@@ -1619,7 +1619,7 @@
       function formatPrice(cents) {
         if (cents == null) return '—';
         var byn = (cents / 100).toFixed(0);
-        return byn + ' BYN';
+        return byn + ' ⃅';
       }
       function formatPeriod(days) {
         if (days >= 365) return Math.floor(days / 365) + ' год';
@@ -1740,7 +1740,7 @@
 
         html += '<div class="c-price-row">';
         html += '<span class="c-price-label">Стоимость базы</span>';
-        html += '<span class="c-price-value">' + (basePerMonth != null ? basePerMonth : '—') + ' BYN<span class="per"> / мес</span></span>';
+        html += '<span class="c-price-value">' + (basePerMonth != null ? basePerMonth : '—') + ' ⃅<span class="per"> / мес</span></span>';
         html += '</div>';
         html += '</div></div>';
 
@@ -1771,7 +1771,7 @@
             html += '<p class="c-desc">' + escapeHtml(moduleDesc(code, '')) + '</p>';
             html += '<div class="c-price-row">';
             html += '<span class="c-price-label">' + (selected ? 'Включено в подписку' : 'Добавит к подписке') + '</span>';
-            html += '<span class="c-price-value"><span class="plus">+</span>' + (mpm != null ? mpm : '—') + ' BYN<span class="per"> / мес</span></span>';
+            html += '<span class="c-price-value"><span class="plus">+</span>' + (mpm != null ? mpm : '—') + ' ⃅<span class="per"> / мес</span></span>';
             html += '</div>';
             html += '</div>';
             html += '</div>';
@@ -1803,14 +1803,14 @@
         html += '<div class="c-summary"><div class="c-summary-inner">';
         html += '<p class="c-summary-title">Ваша подписка</p>';
         html += '<ul class="c-summary-items">';
-        html += '<li><span class="k">' + escapeHtml(base.name_ru || 'CRM') + '</span><span class="v">' + (basePerMonth != null ? basePerMonth + ' BYN/мес' : '—') + '</span></li>';
+        html += '<li><span class="k">' + escapeHtml(base.name_ru || 'CRM') + '</span><span class="v">' + (basePerMonth != null ? basePerMonth + ' ⃅/мес' : '—') + '</span></li>';
         var anySelected = false;
         modules.forEach(function(m) {
           if (!selectedModules[m.code]) return;
           anySelected = true;
           var mc = m.prices_by_period ? m.prices_by_period[String(selectedPeriod)] : null;
           var mpm = mc != null && selectedPeriod > 0 ? Math.round(mc / selectedPeriod / 100) : null;
-          html += '<li><span class="k">+ ' + escapeHtml(m.name_ru || m.code) + '</span><span class="v">+' + (mpm != null ? mpm : '—') + ' BYN/мес</span></li>';
+          html += '<li><span class="k">+ ' + escapeHtml(m.name_ru || m.code) + '</span><span class="v">+' + (mpm != null ? mpm : '—') + ' ⃅/мес</span></li>';
         });
         if (!anySelected) {
           html += '<li class="is-muted"><span class="k">Модули не выбраны</span><span class="v">можно добавить в любой момент</span></li>';
@@ -1819,13 +1819,13 @@
 
         html += '<div class="c-summary-total">';
         html += '<span class="k">Итого</span>';
-        html += '<span class="v">' + (totalPerMonth != null ? totalPerMonth : '—') + ' BYN<span class="per">/ мес</span></span>';
+        html += '<span class="v">' + (totalPerMonth != null ? totalPerMonth : '—') + ' ⃅<span class="per">/ мес</span></span>';
         html += '</div>';
 
         var periodLabel = selectedPeriod === 1 ? '1 месяц' : selectedPeriod === 3 ? '3 месяца' : selectedPeriod === 12 ? '1 год' : (selectedPeriod + ' мес');
-        var periodLine = 'За ' + periodLabel + ': <strong>' + (totalForPeriod != null ? totalForPeriod : '—') + ' BYN</strong>';
+        var periodLine = 'За ' + periodLabel + ': <strong>' + (totalForPeriod != null ? totalForPeriod : '—') + ' ⃅</strong>';
         if (savingsByn) {
-          periodLine += ' · <span class="save">экономия ' + savingsByn + ' BYN</span>';
+          periodLine += ' · <span class="save">экономия ' + savingsByn + ' ⃅</span>';
         }
         html += '<p class="c-summary-period">' + periodLine + '</p>';
         html += '</div></div>';
@@ -2008,13 +2008,13 @@
             : 0;
           
           html += '<div class="tier-price">';
-          html += '<span class="amount">' + (perMonth != null ? Math.round(perMonth) : '—') + ' BYN</span>';
+          html += '<span class="amount">' + (perMonth != null ? Math.round(perMonth) : '—') + ' ⃅</span>';
           html += '<div class="period">/ мес</div>';
           if (selectedPeriod > 1 && totalPrice != null) {
-            html += '<div class="period">Итого: ' + Math.round(totalPrice) + ' BYN</div>';
+            html += '<div class="period">Итого: ' + Math.round(totalPrice) + ' ⃅</div>';
           }
           if (savings > 0) {
-            html += '<div class="price-savings">💰 Экономия: ' + Math.round(savings) + ' BYN</div>';
+            html += '<div class="price-savings">💰 Экономия: ' + Math.round(savings) + ' ⃅</div>';
           }
           html += '</div>';
           html += '</div></div></div>';
@@ -2136,10 +2136,10 @@
             if (selectedModules[k]) parts.push(k === 'online' ? 'онлайн' : k === 'analytics' ? 'аналитика' : 'группы');
           });
           document.getElementById('summaryTier').textContent = parts.join(' · ');
-          document.getElementById('summaryPrice').textContent = totalPrice != null ? Math.round(totalPrice) + ' BYN' : '—';
+          document.getElementById('summaryPrice').textContent = totalPrice != null ? Math.round(totalPrice) + ' ⃅' : '—';
           document.getElementById('btnPay').disabled = false;
           var periodText = selectedPeriod === 1 ? 'мес' : selectedPeriod === 3 ? '3 мес' : 'год';
-          document.getElementById('btnPay').textContent = 'Оплатить ' + Math.round(totalPrice) + ' BYN (' + periodText + ')';
+          document.getElementById('btnPay').textContent = 'Оплатить ' + Math.round(totalPrice) + ' ⃅ (' + periodText + ')';
           applyInvoicePayButtonLabel();
           return;
         }
@@ -2156,12 +2156,12 @@
         var totalPrice = tpc != null ? tpc / 100 : null;
         
         document.getElementById('summaryTier').textContent = tierData.name_ru;
-        document.getElementById('summaryPrice').textContent = totalPrice != null ? Math.round(totalPrice) + ' BYN' : '—';
+        document.getElementById('summaryPrice').textContent = totalPrice != null ? Math.round(totalPrice) + ' ⃅' : '—';
         document.getElementById('btnPay').disabled = totalPrice == null;
         
         var periodText = selectedPeriod === 1 ? 'мес' : selectedPeriod === 3 ? '3 мес' : 'год';
         document.getElementById('btnPay').textContent = totalPrice != null
-          ? ('Оплатить ' + Math.round(totalPrice) + ' BYN (' + periodText + ')')
+          ? ('Оплатить ' + Math.round(totalPrice) + ' ⃅ (' + periodText + ')')
           : 'Нет цены для периода';
         applyInvoicePayButtonLabel();
       }
@@ -2173,7 +2173,7 @@
           lines.push('<div class="inv-hint-row"><span class="inv-hint-k">Номер счёта (заявка)</span><span class="inv-hint-v">№ ' + escapeHtml(String(data.invoice_id)) + '</span></div>');
         }
         if (data && data.amount_cents != null) {
-          lines.push('<div class="inv-hint-row"><span class="inv-hint-k">Сумма</span><span class="inv-hint-v">' + Math.round(data.amount_cents / 100) + ' BYN</span></div>');
+          lines.push('<div class="inv-hint-row"><span class="inv-hint-k">Сумма</span><span class="inv-hint-v">' + Math.round(data.amount_cents / 100) + ' ⃅</span></div>');
         }
         if (data && data.plan_name) {
           lines.push('<div class="inv-hint-row"><span class="inv-hint-k">Позиция</span><span class="inv-hint-v">' + escapeHtml(data.plan_name) + '</span></div>');

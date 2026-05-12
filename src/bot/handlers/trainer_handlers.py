@@ -84,6 +84,7 @@ from src.application.trainer_use_cases import get_trainer
 from src.application.support_use_cases import create_support_message
 from src.infrastructure.db.models import SUPPORT_FROM_TRAINER
 from src.shared.audit import ACTOR_TRAINER_BOT, audit_log
+from src.shared.byr_currency_display import format_rubles_byn_display
 from src.shared.validation import MAX_COMMENT_LEN, MAX_REVIEW_LEN, safe_parse_id, truncate_text
 from src.application.trainer_schedule_use_cases import (
     add_template,
@@ -1516,10 +1517,7 @@ async def schedule_create_booking_choose_client(callback: CallbackQuery) -> None
 def _format_byn_amount(price_cents: int | None) -> str:
     if price_cents is None:
         return "цена не указана"
-    byn = price_cents / 100
-    if byn == int(byn):
-        return f"{int(byn)} BYN"
-    return f"{byn:.2f} BYN"
+    return format_rubles_byn_display(price_cents / 100)
 
 
 async def _complete_schedule_create_booking(

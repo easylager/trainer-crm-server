@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 
 from src.application.trial_roi_recap_use_cases import TrialRoiRecap
 from src.bot.messages import format_trainer_trial_roi_recap_html
+from src.shared.byr_currency_display import BYR_SIGN
 
 
 def _recap(**overrides) -> TrialRoiRecap:
@@ -44,10 +45,10 @@ def test_trial_roi_message_anchors_value_without_sales_cta() -> None:
     assert "<b>Короткая сводка по пробному периоду</b>" in text
     assert "провести <b>11</b> тренировок" in text
     assert "≈ <b>45 минут рутины снято</b>" in text
-    assert "Разовые занятия: <b>120 BYN</b>" in text
-    assert "Абонементы: <b>200 BYN</b>" in text
-    assert "Сертификаты: <b>100 BYN</b>" in text
-    assert "Итого в учёте: <b>420 BYN</b>" in text
+    assert f"Разовые занятия: <b>120 {BYR_SIGN}</b>" in text
+    assert f"Абонементы: <b>200 {BYR_SIGN}</b>" in text
+    assert f"Сертификаты: <b>100 {BYR_SIGN}</b>" in text
+    assert f"Итого в учёте: <b>420 {BYR_SIGN}</b>" in text
     assert "Через <b>2 дня</b> trial закончится" in text
     assert "профиль останется в каталоге" in text
     assert "Trial действует до 15.04.2026" in text

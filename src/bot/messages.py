@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import html
 
+from src.shared.byr_currency_display import BYR_SIGN, format_kopeks_byn_display, format_rubles_byn_display
 from src.shared.validation import truncate_text
 
 # --- Client bot ---
@@ -200,7 +201,8 @@ CLIENT_GUIDE = (
     "Всё в <b>меню слева</b> от поля ввода.\n\n"
     "• <b>Тренеры и запись</b> — выберите город/услугу/арену, откройте карточку тренера: там слоты, «Записаться» и «Оставить заявку».\n"
     "• <b>Мои заявки</b> — ваши заявки и отклики тренеров.\n"
-    "• <b>Мои записи</b> — ближайшие занятия; отмена — в разделе «Мои записи» или напишите тренеру.\n\n"
+    "• <b>Мои записи</b> — ближайшие занятия; отмена — в разделе «Мои записи» или напишите тренеру.\n"
+    "• <b>Ваша активность</b> — сколько тренировок уже за плечами и серия недель; на <b>Главной</b> при серии показываем короткую плашку — нажмите, чтобы открыть подробности.\n\n"
     "Не нашли ответ? Нажмите «Написать в поддержку» — ответим в этом чате."
 )
 CLIENT_SUPPORT_PROMPT = "Опишите вопрос или проблему — ответим в этом чате."
@@ -382,7 +384,7 @@ def format_client_trainer_booked_you_html(
         svc_lines.append(f"🎯 Тариф: <b>{html.escape(price_tier_label)}</b>")
     if booking_price_cents is not None:
         byn = booking_price_cents / 100.0
-        ps = f"{int(byn)} BYN" if byn == int(byn) else f"{byn:.2f} BYN"
+        ps = format_rubles_byn_display(byn)
         svc_lines.append(f"💳 <b>Цена:</b> {html.escape(ps)}")
     if svc_lines:
         parts.append("\n" + "\n".join(svc_lines) + "\n")
@@ -987,7 +989,7 @@ def _format_client_booking_confirmed_service_price_block(
         lines.append(f"🎯 <b>Услуга:</b> тариф <b>{html.escape(price_tier_label.strip())}</b>")
     if booking_price_cents is not None:
         byn = booking_price_cents / 100.0
-        ps = f"{int(byn)} BYN" if byn == int(byn) else f"{byn:.2f} BYN"
+        ps = format_rubles_byn_display(byn)
         lines.append(f"💳 <b>{html.escape(ps)}</b>")
     return ("\n".join(lines) + "\n") if lines else ""
 
@@ -1202,7 +1204,7 @@ def format_client_booking_reminder_text(
     service = (service_name or "").strip() or "—"
     if booking_price_cents is not None:
         byn = booking_price_cents / 100.0
-        price = f"{int(byn)} BYN" if byn == int(byn) else f"{byn:.2f} BYN"
+        price = format_rubles_byn_display(byn)
     else:
         price = "уточните у тренера"
     arena = (arena_name or "").strip() or "уточните у тренера"
@@ -1258,6 +1260,24 @@ def format_trainer_client_repeat_gap_request_html(
     )
 
 
+def format_client_week_streak_bonus_ru(weeks: int) -> str | None:
+    """Short Duolingo-style line for Telegram after completed session (retention)."""
+    n = int(weeks)
+    if n < 2:
+        return None
+    abs100 = n % 100
+    abs10 = n % 10
+    if abs100 >= 11 and abs100 <= 14:
+        word = "недель"
+    elif abs10 == 1:
+        word = "неделя"
+    elif abs10 >= 2 and abs10 <= 4:
+        word = "недели"
+    else:
+        word = "недель"
+    return f"\n\n🔥 <b>Уже {n} {word} подряд!</b> Так держать — загляните в «Ваша активность» на главной."
+
+
 def format_client_booking_completed_notice_html(
     *,
     date: str,
@@ -1266,6 +1286,7 @@ def format_client_booking_completed_notice_html(
     duration_minutes: int | None,
     trainer_name: str,
     service_name: str | None,
+    streak_weeks: int | None = None,
 ) -> str:
     """Push after session is marked completed (auto or trainer)."""
     ds = html.escape(date)
@@ -1277,11 +1298,17 @@ def format_client_booking_completed_notice_html(
     dur_part = ""
     if duration_minutes is not None:
         dur_part = f" – <b>{int(duration_minutes)}</b> мин"
+    streak_part = ""
+    if streak_weeks is not None and int(streak_weeks) >= 2:
+        bonus = format_client_week_streak_bonus_ru(int(streak_weeks))
+        if bonus:
+            streak_part = bonus
     return (
         "🏁 <b>Занятие завершено</b>\n\n"
         f"📅 <b>{ds}</b> ({dy}) · {ts}{dur_part}\n"
         f"👤 <b>Тренер:</b> {tn}\n"
         f"{svc_line}"
+        f"{streak_part}"
         "\nОставьте отзыв ⭐⭐⭐⭐⭐ — кнопка ниже. Можно также написать тренеру."
     )
 
@@ -1500,7 +1527,7 @@ def format_trainer_booking_session_wrapup_html(
     payment_line = ""
     if booking_price_cents is not None:
         byn = booking_price_cents / 100.0
-        ps = f"{int(byn)} BYN" if byn == int(byn) else f"{byn:.2f} BYN"
+        ps = format_rubles_byn_display(byn)
         payment_line = f"💳 <b>К оплате:</b> {html.escape(ps)}\n"
     rebook = ""
     if include_quick_rebook_line:
@@ -2335,7 +2362,7 @@ def format_trainer_booking_confirmed_echo_html(
         svc_lines.append(f"🎯 {html.escape(price_tier_label.strip())}")
     if booking_price_cents is not None:
         byn = booking_price_cents / 100.0
-        ps = f"{int(byn)} BYN" if byn == int(byn) else f"{byn:.2f} BYN"
+        ps = format_rubles_byn_display(byn)
         svc_lines.append(f"💳 <b>{html.escape(ps)}</b>")
     service_block = ("\n".join(svc_lines) + "\n") if svc_lines else ""
     an = (arena_name or "").strip()
@@ -2441,7 +2468,7 @@ def _milestone_service_tariff_price_html(
         lines.append(f"Тариф: <b>{html.escape(price_tier_label.strip())}</b>")
     if booking_price_cents is not None:
         byn = booking_price_cents / 100.0
-        ps = f"{int(byn)} BYN" if byn == int(byn) else f"{byn:.2f} BYN"
+        ps = format_rubles_byn_display(byn)
         lines.append(f"💰 <b>Цена:</b> {html.escape(ps)}")
     if not lines:
         return ""
@@ -2728,7 +2755,7 @@ TRAINER_STATS_RATING_NONE = "⭐ <b>Рейтинг</b>: пока нет оцен
 TRAINER_STATS_PASSES = "📦 <b>Абонементы</b>: активно {passes_active} (выдано за 30 дн.: {passes_issued_30d})"
 TRAINER_STATS_CERTS = (
     "🎁 <b>Сертификаты</b>: выдано {certificates_issued_total}, с остатком {certificates_with_balance} "
-    "(на сумму {certificate_balance_byn} BYN), погашено за 30 дн.: {certificates_redeemed_30d}"
+    "(на сумму {certificate_balance_byn} " + BYR_SIGN + "), погашено за 30 дн.: {certificates_redeemed_30d}"
 )
 TRAINER_STATS_OPEN_APP = "📊 Открой статистику в приложении — графики, тренды и инсайты по работе."
 TRAINER_BUTTON_STATS_APP = "📊 Открыть статистику"
@@ -2757,8 +2784,7 @@ TRAINER_SUBSCRIPTION_REMINDER_TRIAL = (
 
 
 def _money_byn(cents: int | None) -> str:
-    byn = (int(cents or 0)) / 100.0
-    return f"{int(byn)} BYN" if byn == int(byn) else f"{byn:.2f} BYN"
+    return format_kopeks_byn_display(int(cents or 0))
 
 
 def _ru_word(n: int, one: str, few: str, many: str) -> str:
@@ -3026,7 +3052,7 @@ ADMIN_SUBSCRIPTION_INVOICE_NOTIFY = (
     "Тренер: <b>{trainer_name}</b> (internal <code>{trainer_id}</code>)\n"
     "{plan_line}\n"
     "{referral_discount_line}"
-    "Сумма: <b>{amount_byn} BYN</b>\n"
+    "Сумма: <b>{amount_byn} " + BYR_SIGN + "</b>\n"
     "Период: {period_start} — {period_end}\n\n"
     "{trainer_contact_block}\n\n"
     "<i>Подтвердите оплату или измените состав кнопками ниже.</i>"
@@ -3035,7 +3061,7 @@ ADMIN_SUBSCRIPTION_INVOICES_TITLE = "💳 <b>Ожидающие счета по 
 ADMIN_SUBSCRIPTION_INVOICES_EMPTY = "Нет неоплаченных заявок."
 ADMIN_SUBSCRIPTION_INVOICES_LINE = (
     "{n}. №<code>{iid}</code> · тренер <code>{tid}</code> · {name}\n"
-    "   {plan_short} · {amt} BYN · {ps}—{pe} · статус <code>{st}</code>\n"
+    "   {plan_short} · {amt} " + BYR_SIGN + " · {ps}—{pe} · статус <code>{st}</code>\n"
     "   {link}\n"
 )
 ADMIN_SUBSCRIPTION_INVOICES_FOOTER = "\n<i>Команда: /subscription_invoices</i>"
@@ -3045,7 +3071,7 @@ ADMIN_SUBSCRIPTION_GRANT_EDIT_TITLE = (
     "⚙️ <b>Состав подписки № <code>{invoice_id}</code></b>\n"
     "Тренер: <b>{trainer_name}</b> (internal <code>{trainer_id}</code>)\n\n"
     "{plan_line}\n"
-    "Сумма: <b>{amount_byn} BYN</b> · период <b>{months}</b>\n\n"
+    "Сумма: <b>{amount_byn} " + BYR_SIGN + "</b> · период <b>{months}</b>\n\n"
     "«Продлить» = новый период. «Добавить» = модули в текущую подписку, цена пропорциональна остатку.\n"
     "{trainer_contact_block}"
 )
@@ -3055,7 +3081,7 @@ ADMIN_SUBSCRIPTION_GRANT_ACTIVATED = (
     "✅ <b>Подписка активирована</b>\n\n"
     "Счёт № <code>{invoice_id}</code> · тренер <b>{trainer_name}</b>\n"
     "Тариф: <b>{label}</b> · период <b>{months}</b>\n"
-    "Сумма: <b>{amount_byn} BYN</b>\n"
+    "Сумма: <b>{amount_byn} " + BYR_SIGN + "</b>\n"
     "Действует до <b>{expires_date}</b>.\n\n"
     "Тренеру отправлено уведомление."
 )
@@ -3130,7 +3156,7 @@ ADMIN_STATS_PASSES_ACTIVE = "абонементов активно (с оста�
 ADMIN_STATS_PASSES_ISSUED_30D = "абонементов выдано за 30 дней"
 ADMIN_STATS_CERTS_ISSUED = "сертификатов выдано всего"
 ADMIN_STATS_CERTS_WITH_BALANCE = "сертификатов с остатком (не погашены)"
-ADMIN_STATS_CERTS_BALANCE_BYN = "остаток по сертификатам (BYN)"
+ADMIN_STATS_CERTS_BALANCE_BYN = "остаток по сертификатам (" + BYR_SIGN + ")"
 ADMIN_STATS_CERTS_REDEEMED_30D = "сертификатов погашено за 30 дней"
 ADMIN_STATS_SIGNAL_PENDING = "На модерации {n} тренер(ов) — /pending"
 ADMIN_STATS_SIGNAL_REQUESTS_OPEN = "Заявок без отклика: {n} — клиенты ждут"

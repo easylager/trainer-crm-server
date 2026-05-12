@@ -23,6 +23,7 @@ from src.application.pass_product_use_cases import (
     get_pass_product,
     list_pass_products,
 )
+from src.shared.byr_currency_display import BYR_SIGN
 
 PASS_ORDER_LINE_PREFIX = "__PASS_ORDER__:pass_product_id="
 
@@ -273,7 +274,7 @@ async def submit_pass_product_order_request(
 
     price_txt = f"{(price_cents / 100):.2f}".rstrip("0").rstrip(".")
     human = (
-        f"Клиент запрашивает абонемент «{pname}»: {sessions_total} занятий, {price_txt} BYN.\n"
+        f"Клиент запрашивает абонемент «{pname}»: {sessions_total} занятий, {price_txt} {BYR_SIGN}.\n"
         "Свяжитесь для оплаты. После оплаты выдайте абонемент: раздел «Абонементы» → «Выдать абонемент»."
     )
     comment = build_pass_product_order_comment(pass_product_id=pass_product_id, human_block=human)

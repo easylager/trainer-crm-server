@@ -185,6 +185,28 @@ def webapp_client_home_page():
     return _webapp_file_response(path)
 
 
+@app.get("/webapp/client-stats")
+def webapp_client_stats_page():
+    """Client: completed-session stats and gentle rhythm hints (motivation, no leaderboards)."""
+    path = _WEBAPP_DIR / "client-stats.html"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Web App not found")
+    return _webapp_file_response(path)
+
+
+@app.get("/webapp/client-stats-main.js")
+def webapp_client_stats_main_js(request: Request):
+    """Client activity screen logic."""
+    path = _WEBAPP_DIR / "client-stats-main.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
 @app.get("/webapp/trainer-requests")
 def webapp_trainer_requests_page():
     """Serve the trainer 'Client requests' Mini App (list, respond, decline, book)."""

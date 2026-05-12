@@ -203,13 +203,13 @@
         return parts[0][0].toUpperCase();
       }
 
-      /** Effective booking price from API (kopecks); BYN string for detail rows. */
+      /** Effective booking price from API (kopecks); ⃅ string for detail rows. */
       function formatTrainerDetailPriceFromCents(cents) {
         if (cents == null || cents === '') return '';
         var n = parseInt(String(cents), 10);
         if (isNaN(n)) return '';
         var v = n / 100;
-        return v.toFixed(v % 1 === 0 ? 0 : 2).replace('.', ',') + ' BYN';
+        return v.toFixed(v % 1 === 0 ? 0 : 2).replace('.', ',') + ' ⃅';
       }
       const MONTHS = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
       const MONTHS_GENITIVE = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
@@ -1940,7 +1940,7 @@
           inp.name = gname;
           inp.value = String(tier.id);
           var pb = tier.price_byn;
-          var priceStr = (pb === Math.floor(pb) ? pb : Number(pb).toFixed(2)) + ' BYN';
+          var priceStr = (pb === Math.floor(pb) ? pb : Number(pb).toFixed(2)) + ' ⃅';
           lab.appendChild(inp);
           lab.appendChild(document.createTextNode(priceTierLabelRuSe(tier) + ' — ' + priceStr));
           inp.addEventListener('change', function() {
@@ -1988,7 +1988,7 @@
           inp.name = gname;
           inp.value = String(tier.id);
           var pb = tier.price_byn;
-          var priceStr = (pb === Math.floor(pb) ? pb : Number(pb).toFixed(2)) + ' BYN';
+          var priceStr = (pb === Math.floor(pb) ? pb : Number(pb).toFixed(2)) + ' ⃅';
           lab.appendChild(inp);
           lab.appendChild(document.createTextNode(priceTierLabelRuSe(tier) + ' — ' + priceStr));
           inp.addEventListener('change', function() {

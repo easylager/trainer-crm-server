@@ -754,7 +754,7 @@
             inp.name = gname;
             inp.value = String(tier.id);
             var pb = tier.price_byn;
-            var priceStr = (pb === Math.floor(pb) ? pb : Number(pb).toFixed(2)) + ' BYN';
+            var priceStr = (pb === Math.floor(pb) ? pb : Number(pb).toFixed(2)) + ' ⃅';
             lab.appendChild(inp);
             lab.appendChild(document.createTextNode(priceTierLabelRu(tier) + ' — ' + priceStr));
             inp.addEventListener('change', function() {
@@ -2390,7 +2390,7 @@
             }
             if (activeCerts.length) {
               var certLines = activeCerts.map(function(c) {
-                var amount = typeof c.amount_cents === 'number' ? (c.amount_cents / 100) + ' BYN' : '—';
+                var amount = typeof c.amount_cents === 'number' ? (c.amount_cents / 100) + ' ⃅' : '—';
                 return amount;
               });
               parts.push('Сертификаты: ' + activeCerts.length + ' активных (' + certLines.join(', ') + ')');

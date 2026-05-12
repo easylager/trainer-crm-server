@@ -61,11 +61,11 @@
     var byn = cents / 100;
     var compact = opts && opts.compact;
     if (compact && Math.abs(byn) >= 10000) {
-      if (Math.abs(byn) >= 1000000) return (byn / 1000000).toFixed(1).replace(/\.0$/, '') + ' млн BYN';
-      return (byn / 1000).toFixed(1).replace(/\.0$/, '') + ' тыс BYN';
+      if (Math.abs(byn) >= 1000000) return (byn / 1000000).toFixed(1).replace(/\.0$/, '') + ' млн ⃅';
+      return (byn / 1000).toFixed(1).replace(/\.0$/, '') + ' тыс ⃅';
     }
     var s = (byn % 1 === 0) ? byn.toFixed(0) : byn.toFixed(2);
-    return s.replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + ' BYN';
+    return s.replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + ' ⃅';
   }
 
   function formatNum(n) {

@@ -20,6 +20,7 @@ from datetime import date, time
 from typing import Any
 
 from src.bot import messages as msg
+from src.shared.byr_currency_display import format_kopeks_byn_display
 
 
 # =============================================================================
@@ -83,13 +84,8 @@ def _format_duration_minutes(minutes: int) -> str:
 
 
 def _format_money_cents(cents: int) -> str:
-    """Belarusian Ruble. 6000 → '60 BYN', 6050 → '60,50 BYN'."""
-    if cents <= 0:
-        return "0 BYN"
-    rubles, kop = divmod(int(cents), 100)
-    if kop == 0:
-        return f"{rubles} BYN"
-    return f"{rubles},{kop:02d} BYN"
+    """Belarusian ruble graphic sign; 6000 kopeks → ``60 ⃅`` style (see ``byr_currency_display``)."""
+    return format_kopeks_byn_display(int(cents))
 
 
 def _short_client_name(full_name: str) -> str:

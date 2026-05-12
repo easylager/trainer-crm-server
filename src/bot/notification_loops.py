@@ -37,6 +37,8 @@ from src.application.booking_use_cases import (
     mark_trainer_booked_notified,
     mark_trainer_completed_sent,
 )
+from src.application.client_stats_use_cases import get_client_activity_snapshot
+from src.application.client_use_cases import get_client_id_by_telegram_id
 from src.application.client_request_use_cases import (
     get_pending_no_response_reminders,
     get_pending_request_notifications,
@@ -202,6 +204,16 @@ async def _send_client_booking_completed_push(
         b.get("slot_date"), b.get("start_time")
     )
     duration = _reminder_duration_minutes(b.get("start_time"), b.get("end_time"))
+    streak_weeks: int | None = None
+    try:
+        cid = await get_client_id_by_telegram_id(session, int(chat_id))
+        if cid is not None:
+            snap = await get_client_activity_snapshot(session, client_id=cid)
+            sw = int(snap.get("streak_weeks") or 0)
+            if sw >= 2:
+                streak_weeks = sw
+    except Exception:
+        streak_weeks = None
     text = msg.format_client_booking_completed_notice_html(
         date=date_str,
         day=day_str,
@@ -209,6 +221,7 @@ async def _send_client_booking_completed_push(
         duration_minutes=b.get("duration_minutes") if b.get("duration_minutes") is not None else duration,
         trainer_name=(b.get("trainer_name") or "Тренер"),
         service_name=b.get("service_name"),
+        streak_weeks=streak_weeks,
     )
     kb = msg.build_client_booking_completed_inline_keyboard(
         webapp_base_url=(Settings().webapp_base_url or ""),

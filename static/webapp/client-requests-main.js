@@ -135,10 +135,10 @@
         if (minV == null && s.price_byn == null) return 'по запросу';
         if (minV != null && maxV != null && minV !== maxV) {
           var a = (minV === Math.floor(minV) ? minV : minV.toFixed(2));
-          return 'от ' + a + ' BYN';
+          return 'от ' + a + ' ⃅';
         }
         var v = minV != null ? minV : s.price_byn;
-        return (v === Math.floor(v) ? v : v.toFixed(2)) + ' BYN';
+        return (v === Math.floor(v) ? v : v.toFixed(2)) + ' ⃅';
       }
 
       function responderEducationTypeLabel(typeKey) {

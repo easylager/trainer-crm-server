@@ -94,7 +94,7 @@
 
       function formatPrice(cents) {
         if (cents == null) return '—';
-        return (cents / 100).toFixed(2).replace(/\.?0+$/, '') + ' BYN';
+        return (cents / 100).toFixed(2).replace(/\.?0+$/, '') + ' ⃅';
       }
 
       function escapeHtml(s) {
@@ -410,7 +410,7 @@
 
       function formatCertAmount(c) {
         if (c.amount_cents == null) return 'Любая сумма';
-        return (c.amount_cents / 100) + ' BYN';
+        return (c.amount_cents / 100) + ' ⃅';
       }
       function renderCertList() {
         var wrap = document.getElementById('certListContent');
@@ -763,14 +763,14 @@
       function buildCertProductName(anyAmount, amountCents) {
         if (anyAmount) return 'Подарочный сертификат';
         var byn = amountCents != null ? Math.round(amountCents / 100) : 0;
-        return byn > 0 ? ('Сертификат ' + byn + ' BYN') : 'Подарочный сертификат';
+        return byn > 0 ? ('Сертификат ' + byn + ' ⃅') : 'Подарочный сертификат';
       }
       document.getElementById('btnSaveCertForm').onclick = function() {
         var anyAmount = document.getElementById('certAnyAmount').checked;
         var amountCents = null;
         if (!anyAmount) {
           var byn = parseInt(document.getElementById('certAmountByn').value, 10);
-          if (isNaN(byn) || byn < 1) { alert('Укажите сумму в BYN'); return; }
+          if (isNaN(byn) || byn < 1) { alert('Укажите сумму в ⃅'); return; }
           amountCents = byn * 100;
         }
         var name = buildCertProductName(anyAmount, amountCents);
@@ -851,7 +851,7 @@
         var priceByn = parseInt(document.getElementById('inputPrice').value, 10);
         if (!name) { alert('Введите название'); return; }
         if (!sessions || sessions < 1) { alert('Укажите количество занятий'); return; }
-        if (isNaN(priceByn) || priceByn < 0) { alert('Укажите цену в BYN'); return; }
+        if (isNaN(priceByn) || priceByn < 0) { alert('Укажите цену в ⃅'); return; }
         var priceCents = priceByn * 100;
 
         var serviceIds = getPassProductSelectedServiceIds();

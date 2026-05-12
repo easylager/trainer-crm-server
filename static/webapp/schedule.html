@@ -164,7 +164,7 @@
         var n = parseInt(String(cents), 10);
         if (isNaN(n)) return '';
         var v = n / 100;
-        return v.toFixed(v % 1 === 0 ? 0 : 2).replace('.', ',') + ' BYN';
+        return v.toFixed(v % 1 === 0 ? 0 : 2).replace('.', ',') + ' ⃅';
       }
 
       const tg = window.Telegram && window.Telegram.WebApp;
