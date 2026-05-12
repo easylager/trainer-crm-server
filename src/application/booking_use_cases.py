@@ -1897,6 +1897,7 @@ async def active_booking_summaries_by_slot_for_trainer_range(
     ``bookings`` lists pending/confirmed rows for the group hub UI (booking_id, client_preview, status).
     Slot-level ``has_sandbox_booking`` flags sandbox / trial bookings for UI badges.
     ``booking_service_id`` is catalog ``services.id`` from the first booking row (schedule UI accent when slot has no service_id).
+    ``client_id`` / ``client_telegram_*`` / ``client_phone`` come from the first booking row (schedule mini-cards «Написать»).
     """
     r = await session.execute(
         text(
@@ -1910,7 +1911,10 @@ async def active_booking_summaries_by_slot_for_trainer_range(
                    c.first_name AS client_first_name, c.last_name AS client_last_name, c.phone AS client_phone,
                    s.capacity,
                    COALESCE(b.is_sandbox, false),
-                   b.service_id
+                   b.service_id,
+                   c.id AS client_row_id,
+                   c.telegram_id AS client_telegram_id,
+                   NULLIF(TRIM(COALESCE(c.telegram_username, '')), '') AS client_telegram_username
             FROM bookings b
             JOIN slots s ON s.id = b.slot_id
             JOIN clients c ON c.id = b.client_id
@@ -1977,6 +1981,10 @@ async def active_booking_summaries_by_slot_for_trainer_range(
             "bookings": booking_entries,
             # Catalog services.id from the primary booking row (schedule accent when slot.service_id is NULL).
             "booking_service_id": booking_catalog_sid,
+            "client_id": int(first_row[11]) if len(first_row) > 11 and first_row[11] is not None else None,
+            "client_telegram_id": int(first_row[12]) if len(first_row) > 12 and first_row[12] is not None else None,
+            "client_telegram_username": ((first_row[13] or "").strip() or None) if len(first_row) > 13 else None,
+            "client_phone": ((first_row[7] or "").strip() or None),
         }
     return out
 

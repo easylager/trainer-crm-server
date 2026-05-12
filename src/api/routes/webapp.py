@@ -689,10 +689,36 @@ async def get_schedule(
                 row["bookings"] = bsum["bookings"]
             if bool(bsum.get("has_sandbox_booking")):
                 row["has_sandbox_booking"] = True
+            cid = bsum.get("client_id")
+            if cid is not None:
+                row["client_id"] = int(cid)
+            ctid = bsum.get("client_telegram_id")
+            if ctid is not None:
+                row["client_telegram_id"] = int(ctid)
+            cun = (bsum.get("client_telegram_username") or "").strip()
+            if cun:
+                row["client_telegram_username"] = cun
+            cph = (bsum.get("client_phone") or "").strip()
+            if cph:
+                row["client_phone"] = cph
+        # Slot row often has no service_name; mini-cards need catalog label from the booking's service.
+        if not row.get("service_label") and bsum:
+            bsvc = (bsum.get("services_str") or "").strip()
+            if bsvc:
+                row["service_label"] = bsvc
         # Individual slots often have NULL service on the slot row; accent + labels need the booking's catalog id.
         if row.get("service_id") is None and bsum and bsum.get("booking_service_id") is not None:
             row["service_id"] = int(bsum["booking_service_id"])
         out_slots.append(row)
+    # Same as hub bookings list: getChat backfill when DB lacks telegram_username → DM vs relay matches «Ближайшие записи».
+    _sched_dm_enrich = [
+        r
+        for r in out_slots
+        if r.get("client_telegram_id") is not None
+        and not str(r.get("client_telegram_username") or "").strip()
+    ]
+    if _sched_dm_enrich:
+        await enrich_booking_dicts_with_client_telegram_usernames(session, _sched_dm_enrich)
     if view == "list":
         return {"trainer_id": trainer_id, "slots": out_slots}
 

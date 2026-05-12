@@ -82,5 +82,8 @@ async def test_venue_label_matches_booking_arenas_str(db_session) -> None:
     assert slot_id in summaries
     venue_label = summaries[slot_id]["venue_label"]
     assert summaries[slot_id].get("booking_service_id") == service_id
+    assert summaries[slot_id].get("client_id") == client_id
+    assert summaries[slot_id].get("client_telegram_id") == tg
+    assert summaries[slot_id].get("client_phone") == phone
 
     assert venue_label == arenas_str == arena_name

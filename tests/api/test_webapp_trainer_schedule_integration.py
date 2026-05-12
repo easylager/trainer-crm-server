@@ -1497,6 +1497,11 @@ async def test_schedule_and_booking_detail_include_completed_past_booking(
     assert match.get("status") == "booked"
     assert match.get("booking_id") == booking_id
     assert match.get("booking_status") == "completed"
+    assert match.get("client_id") == client_id
+    assert match.get("client_telegram_id") == ctg
+    svc_row = await db_session.execute(text("SELECT name FROM services WHERE id = :id"), {"id": service_id})
+    (svc_name,) = svc_row.fetchone()
+    assert match.get("service_label") == (svc_name or "").strip()
 
     assert detail.status_code == 200
     body = detail.json()

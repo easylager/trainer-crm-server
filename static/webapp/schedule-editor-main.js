@@ -194,6 +194,55 @@
         );
       }
 
+      /** «Написать клиенту» — same data-* contract as hub (wireHubSlotMessageButtons + TrainerRelayHelpers). */
+      function scheduleEditorSlotMessageButtonHtml(s, cap) {
+        var Sed = window.TrainerRelayHelpers;
+        if (!Sed || typeof Sed.contextFromScheduleBooking !== 'function') return '';
+        var capN = parseInt(String(cap != null ? cap : '1'), 10);
+        if (isNaN(capN) || capN < 1) capN = 1;
+        var syn = {
+          client_id: s.client_id,
+          client_telegram_id: s.client_telegram_id,
+          client_telegram_username: s.client_telegram_username,
+          is_sandbox: !!s.has_sandbox_booking,
+          slot_capacity: capN,
+          client_phone: String(s.client_phone || '').trim(),
+        };
+        var ctx = Sed.contextFromScheduleBooking(syn);
+        if (!Sed.canShowTrainerMessageButton(ctx)) return '';
+        var useRelay = Sed.shouldUseRelayModal(ctx);
+        var bid = s.booking_id != null ? String(s.booking_id) : '';
+        var label = (s.client_preview && String(s.client_preview).trim()) ? String(s.client_preview).trim() : 'Клиент';
+        var tip = useRelay
+          ? 'Сообщение через бота клиента (ответ — в бот тренера)'
+          : 'Написать клиенту в Telegram';
+        var clientRelayDataAttrs =
+          ' data-client-id="' +
+          escapeHtml(String(syn.client_id)) +
+          '" data-client-label="' +
+          escapeHtml(label) +
+          '" data-client-phone="' +
+          escapeHtml(syn.client_phone) +
+          '"';
+        var relayAttr = useRelay ? ' data-hub-relay="1"' + clientRelayDataAttrs : clientRelayDataAttrs;
+        var un = String(syn.client_telegram_username || '').replace(/^@/, '').trim();
+        var tid = syn.client_telegram_id;
+        return (
+          '<button type="button" class="hub-slot-msg' +
+          (useRelay ? ' hub-slot-msg--relay' : '') +
+          '" data-hub-dm="trainer"' +
+          (bid ? ' data-booking-id="' + escapeHtml(bid) + '"' : '') +
+          relayAttr +
+          ' data-dm-un="' + escapeHtml(un) + '"' +
+          ' data-dm-tid="' + escapeHtml(tid != null ? String(tid) : '') + '"' +
+          ' aria-label="' + escapeHtml(tip) + '" title="' + escapeHtml(tip) + '">' +
+          '<svg class="hub-slot-msg-icon" viewBox="0 0 24 24" aria-hidden="true">' +
+            '<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/>' +
+          '</svg>' +
+          '</button>'
+        );
+      }
+
       function bookingInitials(displayName) {
         var s = (displayName || '').trim();
         if (!s) return '?';
@@ -4746,6 +4795,9 @@
               }
             } else {
               html += '<span class="slot-status ' + statusClass + '">' + statusLabel + '</span>';
+              if (bookedClick && !cohortSlot) {
+                html += scheduleEditorSlotMessageButtonHtml(s, cap);
+              }
             }
             if (status === 'available' && occ === 0 && !cohortSlot) {
               html += '<button type="button" class="btn-slot-del" data-slot-id="' + s.id + '" aria-label="Удалить">×</button>';
@@ -4763,6 +4815,11 @@
           return;
         }
         content.innerHTML = html;
+        if (window.wireHubSlotMessageButtons) {
+          try {
+            window.wireHubSlotMessageButtons(content);
+          } catch (eWire) { /* noop */ }
+        }
         content.querySelectorAll('.btn-slot-del:not(.btn-booking-purge)').forEach(function(btn) {
           btn.onclick = function(e) {
             e.stopPropagation();
@@ -4839,6 +4896,7 @@
         content.querySelectorAll('.slot-booked-click').forEach(function(row) {
           row.onclick = function(e) {
             if (e.target.closest('.btn-booking-purge')) return;
+            if (e.target.closest('button.hub-slot-msg')) return;
             var bid = row.getAttribute('data-booking-id');
             if (bid) openBookingDetail(parseInt(bid, 10));
           };
