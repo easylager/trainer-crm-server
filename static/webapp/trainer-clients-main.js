@@ -753,10 +753,14 @@
             inp.type = 'radio';
             inp.name = gname;
             inp.value = String(tier.id);
-            var pb = tier.price_byn;
-            var priceStr = (pb === Math.floor(pb) ? pb : Number(pb).toFixed(2)) + ' ⃅';
+            var pb = Number(tier.price_byn);
+            if (!isFinite(pb)) pb = 0;
+            var numStr = pb === Math.floor(pb) ? String(Math.floor(pb)) : pb.toFixed(2);
+            var priceFrag = document.createElement('span');
+            priceFrag.textContent = numStr + ' BYN';
             lab.appendChild(inp);
-            lab.appendChild(document.createTextNode(priceTierLabelRu(tier) + ' — ' + priceStr));
+            lab.appendChild(document.createTextNode(priceTierLabelRu(tier) + ' — '));
+            lab.appendChild(priceFrag);
             inp.addEventListener('change', function() {
               qb.bookPriceVariantId = parseInt(inp.value, 10);
             });
@@ -2390,7 +2394,7 @@
             }
             if (activeCerts.length) {
               var certLines = activeCerts.map(function(c) {
-                var amount = typeof c.amount_cents === 'number' ? (c.amount_cents / 100) + ' ⃅' : '—';
+                var amount = typeof c.amount_cents === 'number' ? c.amount_cents / 100 + ' BYN' : '—';
                 return amount;
               });
               parts.push('Сертификаты: ' + activeCerts.length + ' активных (' + certLines.join(', ') + ')');

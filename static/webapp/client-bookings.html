@@ -613,7 +613,7 @@
         var n = parseInt(cents, 10);
         if (isNaN(n)) return '';
         var v = n / 100;
-        return v.toFixed(v % 1 === 0 ? 0 : 2).replace('.', ',') + ' ⃅';
+        return v.toFixed(v % 1 === 0 ? 0 : 2).replace('.', ',') + ' BYN';
       }
 
       window.openBookingDetail = function(bookingId) {

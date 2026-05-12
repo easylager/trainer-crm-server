@@ -452,7 +452,7 @@ async def _my_requests_content(telegram_id: int) -> tuple[str, InlineKeyboardMar
 
 
 def _format_services_prices(services: list[dict]) -> str:
-    """Format 'Услуга: X ⃅' or 'Услуга: по запросу' for each; join with ', '. Uses price_byn (rubles)."""
+    """Format 'Услуга: X + suffix' or 'Услуга: по запросу' for each; join with ', '. Uses price_byn (rubles)."""
     if not services:
         return "—"
     parts = []

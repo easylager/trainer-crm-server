@@ -767,9 +767,9 @@
         <input type="text" id="cert-orderName" class="cert-order-input" placeholder="Как указать в сертификате" autocomplete="name">
       </div>
       <div class="cert-order-field" id="cert-orderAmountWrap" hidden>
-        <label for="cert-orderAmount">Сумма сертификата, ⃅</label>
+        <label for="cert-orderAmount">Сумма сертификата, BYN</label>
         <input type="number" id="cert-orderAmount" class="cert-order-input" inputmode="decimal" min="1" max="500000" step="0.01" placeholder="Например, 50" autocomplete="transaction-amount">
-        <p class="cert-order-field-hint">Обязательно: на какую сумму оформить сертификат (минимум 1 ⃅).</p>
+        <p class="cert-order-field-hint">Обязательно: на какую сумму оформить сертификат (минимум 1 BYN).</p>
       </div>
       <div class="pass-order-modal-actions">
         <button type="button" class="pass-order-modal-btn secondary" id="cert-orderCancel">Отмена</button>
@@ -816,11 +816,13 @@
 
       function formatPassPrice(cents) {
         if (cents == null || cents === 0) return '';
-        return (cents / 100).toFixed(2).replace(/\.?0+$/, '') + ' ⃅ за занятие';
+        var s = (cents / 100).toFixed(2).replace(/\.?0+$/, '');
+        return escapeHtml(s) + ' BYN за занятие';
       }
       function formatMoneyTotal(cents) {
         if (cents == null || cents === 0) return '';
-        return (cents / 100).toFixed(2).replace(/\.?0+$/, '') + ' ⃅';
+        var s = (cents / 100).toFixed(2).replace(/\.?0+$/, '');
+        return escapeHtml(s) + ' BYN';
       }
       function formatPassExpires(iso) {
         if (!iso) return '';
@@ -853,7 +855,7 @@
         }
         var priceStr = formatPassPrice(p.price_per_session_cents);
         if (priceStr) {
-          rows += '<div class="bd-row">' + iconTag + '<div class="bd-row-text"><div class="bd-row-label">Оплата</div><div class="bd-row-value">' + escapeHtml(priceStr) + '</div></div></div>';
+          rows += '<div class="bd-row">' + iconTag + '<div class="bd-row-text"><div class="bd-row-label">Оплата</div><div class="bd-row-value">' + priceStr + '</div></div></div>';
         }
         var sec = document.getElementById('pass-detailSectionLabel');
         var rowsEl = document.getElementById('pass-detailRows');
@@ -929,7 +931,7 @@
           // Price is only in .pass-offer-price-pill; avoid duplicating it in chips row.
           var chips = '<span class="pass-offer-chip">' + (it.sessions_total || 0) + ' занятий</span>';
           var totalStr = formatMoneyTotal(it.price_cents);
-          var pill = totalStr ? '<div class="pass-offer-price-pill">' + escapeHtml(totalStr) + '</div>' : '';
+          var pill = totalStr ? '<div class="pass-offer-price-pill">' + totalStr + '</div>' : '';
           html += '<article class="pass-offer-card">';
           html += '<div class="pass-offer-top"><div>';
           html += '<h3 class="pass-offer-name">' + escapeHtml(it.name || 'Абонемент') + '</h3>';
@@ -1065,7 +1067,8 @@
 
             function formatPriceChip(cents) {
               if (cents == null || cents === 0) return '';
-              return (cents / 100).toFixed(2).replace(/\.?0+$/, '') + ' ⃅';
+              var s = (cents / 100).toFixed(2).replace(/\.?0+$/, '');
+              return escapeHtml(s) + ' BYN за занятие';
             }
             function formatExpires(iso) {
               if (!iso) return '';
@@ -1091,10 +1094,7 @@
               var chips = '';
               var priceNum = formatPriceChip(p.price_per_session_cents);
               if (priceNum) {
-                chips +=
-                  '<span class="pass-chip">💰 ' +
-                  escapeHtml(priceNum) +
-                  ' за занятие</span>';
+                chips += '<span class="pass-chip">💰 ' + priceNum + '</span>';
               }
               var expStr = formatExpires(p.expires_at);
               if (expStr) {
@@ -1173,15 +1173,15 @@
       // --- Certificates (same logic as client-certificates.html) ---
       function formatAmount(cents) {
         if (cents == null || cents === 0) return 'Любая сумма';
-        return (cents / 100).toFixed(0) + ' ⃅';
+        return escapeHtml(String(Math.round(Number(cents) / 100))) + ' BYN';
       }
-      /** Balance / nominal on certificate cards (cents → ⃅, trim trailing zeros). */
+      /** Balance / nominal on certificate cards (HTML fragment: escaped amount + NBRB SVG icon). */
       function formatCertMoney(cents) {
         if (cents == null || cents === '') return '—';
         var v = Number(cents) / 100;
         if (!isFinite(v)) return '—';
         var s = (Math.round(v * 100) / 100).toFixed(2).replace(/\.?0+$/, '');
-        return s + ' ⃅';
+        return escapeHtml(s) + ' BYN';
       }
       function effectiveRemainingCents(c) {
         var r = c.amount_remaining_cents;
@@ -1216,16 +1216,16 @@
         }
         html += '<div class="title">' + escapeHtml(c.code) + '</div>';
         if (hero) {
-          html += '<div class="cert-remainder">Остаток: ' + escapeHtml(remStr) + '</div>';
+          html += '<div class="cert-remainder">Остаток: ' + remStr + '</div>';
           if (nom != null && rem !== nom) {
-            html += '<div class="cert-nominal-note">Номинал при выдаче: ' + escapeHtml(nomStr) + '</div>';
+            html += '<div class="cert-nominal-note">Номинал при выдаче: ' + nomStr + '</div>';
           }
           html += '<div class="meta">' + escapeHtml(c.trainer_name) + ' · ' + escapeHtml(statusLabel(c.status));
           if (c.issued_at) html += ' · выдано ' + escapeHtml(formatDate(c.issued_at));
           html += '</div>';
         } else {
-          html += '<div class="meta">' + escapeHtml(c.trainer_name) + ' · остаток ' + escapeHtml(remStr);
-          if (nom != null && rem !== nom) html += ' · номинал ' + escapeHtml(nomStr);
+          html += '<div class="meta">' + escapeHtml(c.trainer_name) + ' · остаток ' + remStr;
+          if (nom != null && rem !== nom) html += ' · номинал ' + nomStr;
           html += ' · ' + escapeHtml(statusLabel(c.status));
           if (c.issued_at) html += ' · выдано ' + escapeHtml(formatDate(c.issued_at));
           html += '</div>';
@@ -1324,7 +1324,7 @@
         if (t) {
           var lines = ['Заявка на: <strong>' + escapeHtml(productLabel) + '</strong>'];
           if (certOrderState.anyAmount) {
-            lines.push('<span style="font-size:14px;">Номинал «любая сумма»: укажите сумму в ⃅ в поле ниже.</span>');
+            lines.push('<span style="font-size:14px;">Номинал «любая сумма»: укажите сумму в BYN в поле ниже.</span>');
           }
           lines.push('<span style="font-size:14px;">Укажите email и имя получателя — тренер увидит их в заявке.</span>');
           t.innerHTML = lines.join('<br>');
@@ -1367,7 +1367,7 @@
                 .replace(',', '.');
               var n = parseFloat(rawAmt);
               if (!rawAmt || isNaN(n) || n < 1) {
-                alert('Укажите сумму сертификата не менее 1 ⃅');
+                alert('Укажите сумму сертификата не менее 1 BYN');
                 return;
               }
               if (n > 500000) {

@@ -164,7 +164,8 @@
         var n = parseInt(String(cents), 10);
         if (isNaN(n)) return '';
         var v = n / 100;
-        return v.toFixed(v % 1 === 0 ? 0 : 2).replace('.', ',') + ' ⃅';
+        var numStr = v.toFixed(v % 1 === 0 ? 0 : 2).replace('.', ',');
+        return escapeHtml(numStr) + ' BYN';
       }
 
       const tg = window.Telegram && window.Telegram.WebApp;
@@ -569,7 +570,7 @@
           }
           var bpc = b.booking_price_cents;
           if (bpc != null && bpc !== '' && !isNaN(parseInt(String(bpc), 10))) {
-            html += '<div class="bd-row">' + BD_ICONS.price + '<div class="bd-row-text"><div class="bd-row-label">Стоимость</div><div class="bd-row-value">' + escapeHtml(formatTrainerDetailPriceFromCents(bpc)) + '</div></div></div>';
+            html += '<div class="bd-row">' + BD_ICONS.price + '<div class="bd-row-text"><div class="bd-row-label">Стоимость</div><div class="bd-row-value">' + formatTrainerDetailPriceFromCents(bpc) + '</div></div></div>';
           }
           if (b.client_comment) {
             html += '<div class="bd-row bd-comment">' + BD_ICONS.comment + '<div class="bd-row-text"><div class="bd-row-label">Комментарий</div><div class="bd-row-value">' + escapeHtml(b.client_comment) + '</div></div></div>';

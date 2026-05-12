@@ -117,7 +117,7 @@
 
       /**
        * Booking detail from a multi-client group slot (`state.bookingDetailReturn` is `group` or `hub_group`):
-       * omit reschedule, cancel, and regular-client actions. Set to false to show them again.
+       * omit reschedule and cancel (ambiguous UX / wrong slot scope). «Постоянный клиент» stays available — API is the same.
        */
       const SCHEDULE_EDITOR_HIDE_GROUP_CONTEXT_BOOKING_ACTIONS = true;
       const SCHEDULE_SERVICE_UI_ACCENT_SLUGS = ['sky', 'amber', 'emerald', 'violet', 'rose', 'slate'];
@@ -203,13 +203,14 @@
         return parts[0][0].toUpperCase();
       }
 
-      /** Effective booking price from API (kopecks); ⃅ string for detail rows. */
+      /** Effective booking price from API (kopecks); HTML fragment with NBRB SVG suffix. */
       function formatTrainerDetailPriceFromCents(cents) {
         if (cents == null || cents === '') return '';
         var n = parseInt(String(cents), 10);
         if (isNaN(n)) return '';
         var v = n / 100;
-        return v.toFixed(v % 1 === 0 ? 0 : 2).replace('.', ',') + ' ⃅';
+        var numStr = v.toFixed(v % 1 === 0 ? 0 : 2).replace('.', ',');
+        return escapeHtml(numStr) + ' BYN';
       }
       const MONTHS = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
       const MONTHS_GENITIVE = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
@@ -1282,7 +1283,7 @@
           }
           var bpc = b.booking_price_cents;
           if (bpc != null && bpc !== '' && !isNaN(parseInt(String(bpc), 10))) {
-            html += '<div class="bd-row">' + BD_ICONS.price + '<div class="bd-row-text"><div class="bd-row-label">Стоимость</div><div class="bd-row-value">' + escapeHtml(formatTrainerDetailPriceFromCents(bpc)) + '</div></div></div>';
+            html += '<div class="bd-row">' + BD_ICONS.price + '<div class="bd-row-text"><div class="bd-row-label">Стоимость</div><div class="bd-row-value">' + formatTrainerDetailPriceFromCents(bpc) + '</div></div></div>';
           }
           if (b.client_comment) {
             html += '<div class="bd-row bd-comment">' + BD_ICONS.comment + '<div class="bd-row-text"><div class="bd-row-label">Комментарий</div><div class="bd-row-value">' + escapeHtml(b.client_comment) + '</div></div></div>';
@@ -1335,7 +1336,8 @@
               extraActions.push({ cls: 'bd-btn--surface', action: 'client_problem', icon: BD_ICONS.alert, label: probBtnLabel });
             }
           }
-          if (!completed && !suppressGroupSlotBookingActions) {
+          // Recurring: not tied to «which slot tile opened detail» — show even from group / hub_group (see flag comment above).
+          if (!completed) {
             if (b.recurring_id) {
               extraActions.push({
                 cls: 'bd-btn--soft',
@@ -1939,10 +1941,14 @@
           inp.type = 'radio';
           inp.name = gname;
           inp.value = String(tier.id);
-          var pb = tier.price_byn;
-          var priceStr = (pb === Math.floor(pb) ? pb : Number(pb).toFixed(2)) + ' ⃅';
+          var pb = Number(tier.price_byn);
+          if (!isFinite(pb)) pb = 0;
+          var numStr = pb === Math.floor(pb) ? String(Math.floor(pb)) : pb.toFixed(2);
+          var priceFrag = document.createElement('span');
+          priceFrag.textContent = numStr + ' BYN';
           lab.appendChild(inp);
-          lab.appendChild(document.createTextNode(priceTierLabelRuSe(tier) + ' — ' + priceStr));
+          lab.appendChild(document.createTextNode(priceTierLabelRuSe(tier) + ' — '));
+          lab.appendChild(priceFrag);
           inp.addEventListener('change', function() {
             state.bookPriceVariantId = parseInt(inp.value, 10);
           });
@@ -1987,10 +1993,14 @@
           inp.type = 'radio';
           inp.name = gname;
           inp.value = String(tier.id);
-          var pb = tier.price_byn;
-          var priceStr = (pb === Math.floor(pb) ? pb : Number(pb).toFixed(2)) + ' ⃅';
+          var pb = Number(tier.price_byn);
+          if (!isFinite(pb)) pb = 0;
+          var numStr = pb === Math.floor(pb) ? String(Math.floor(pb)) : pb.toFixed(2);
+          var priceFrag = document.createElement('span');
+          priceFrag.textContent = numStr + ' BYN';
           lab.appendChild(inp);
-          lab.appendChild(document.createTextNode(priceTierLabelRuSe(tier) + ' — ' + priceStr));
+          lab.appendChild(document.createTextNode(priceTierLabelRuSe(tier) + ' — '));
+          lab.appendChild(priceFrag);
           inp.addEventListener('change', function() {
             state.bookPriceVariantId = parseInt(inp.value, 10);
           });
@@ -4640,7 +4650,7 @@
             const available = status === 'available' && spotsLeft > 0;
             const bookableAvailable = available && !cohortSlot;
             const slotPast = isSlotEndedInPast(s);
-            const groupHub = cap > 1 && occ > 0 && !cohortSlot;
+            const groupHub = cap > 1 && occ > 1 && !cohortSlot;
             const bookedClick = !!(s.booking_id) && !available && !groupHub && !cohortSlot;
             const bst = bookedClick ? String(s.booking_status || 'confirmed').toLowerCase() : '';
             const bookingPending = bookedClick && bst === 'pending';

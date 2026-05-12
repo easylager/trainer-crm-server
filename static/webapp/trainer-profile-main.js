@@ -1062,7 +1062,7 @@
       }
 
       /**
-       * Checked service: must have ≥1 tier checked, and every checked tier must have a valid ⃅ price.
+       * Checked service: must have ≥1 tier checked, and every checked tier must have a valid BYN price.
        * (Selecting two tariffs but filling only one must not pass.)
        */
       function domServicesPricesCoherent() {
@@ -1091,7 +1091,7 @@
       }
 
       var SERVICES_PRICE_HINT_RU =
-        'У каждого отмеченного тарифа должна быть цена в ⃅. Лишний тариф снимите галочкой.';
+        'У каждого отмеченного тарифа должна быть указана цена в BYN. Лишний тариф снимите галочкой.';
 
       /** Expand tiers and focus first missing price (or tariff) for onboarding clarity. */
       function focusFirstMissingServicePrice() {
@@ -1304,7 +1304,7 @@
         if (!dirty) {
           if (!domServicesPricesCoherent()) {
             hint.textContent =
-              'Откройте «Тарифы» у отмеченных услуг: нужен хотя бы один тариф с ценой в ⃅ (или снимите лишнюю услугу).';
+              'Откройте «Тарифы» у отмеченных услуг: нужен хотя бы один тариф с ценой в BYN (или снимите лишнюю услугу).';
           } else {
             hint.textContent = '';
             hint.hidden = true;
@@ -4132,7 +4132,7 @@
 
       /**
        * New catalog service checked: copy which tariffs are enabled from a peer (checkboxes only).
-       * Prices stay per-service — trainer enters ⃅ separately so two services can differ on the same tier.
+       * Prices stay per-service — trainer enters BYN amounts separately so two services can differ on the same tier.
        */
       function primeNewServiceTiersFromPeers(serviceId) {
         var anyTier = false;
@@ -4356,7 +4356,7 @@
             if (hasPrice) inp.value = String(pv);
             var suf = document.createElement('span');
             suf.className = 'price-suffix';
-            suf.textContent = '⃅';
+            suf.textContent = 'BYN';
             pw.appendChild(inp);
             pw.appendChild(suf);
             tr.appendChild(tchk);
@@ -4409,12 +4409,12 @@
           gInp.min = '0';
           gInp.id = 'price_group_' + id;
           gInp.disabled = !isSelected;
-          gInp.setAttribute('aria-label', 'Цена за человека на групповом занятии, ⃅');
+          gInp.setAttribute('aria-label', 'Цена за человека на групповом занятии, BYN');
           var gpv = getGroupPriceValue(id);
           if (gpv != null && !isNaN(gpv)) gInp.value = String(gpv);
           var gsuf = document.createElement('span');
           gsuf.className = 'price-suffix';
-          gsuf.textContent = '⃅';
+          gsuf.textContent = 'BYN';
           gpw.appendChild(gInp);
           gpw.appendChild(gsuf);
           gRow.appendChild(gSpacer);

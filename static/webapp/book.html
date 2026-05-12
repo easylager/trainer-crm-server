@@ -1066,11 +1066,12 @@
           inp.name = 'priceTierChoice';
           inp.value = String(tier.id);
           const pb = tier.price_byn;
-          const priceStr = (pb === Math.floor(pb) ? pb : Number(pb).toFixed(2)) + ' ⃅';
+          const priceNum = pb === Math.floor(pb) ? String(pb) : Number(pb).toFixed(2);
+          const priceHtml = escapeHtmlBook(priceNum) + ' BYN';
           lab.appendChild(inp);
           var tierTxt = document.createElement('span');
           tierTxt.className = 'tier-radio-text';
-          tierTxt.textContent = priceTierLabelRu(tier) + ' — ' + priceStr;
+          tierTxt.innerHTML = escapeHtmlBook(priceTierLabelRu(tier)) + ' — ' + priceHtml;
           lab.appendChild(tierTxt);
           inp.addEventListener('change', function() {
             selectedPriceVariantId = parseInt(inp.value, 10);

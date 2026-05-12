@@ -6,7 +6,8 @@
 """
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -597,3 +598,45 @@ async def test_public_training_groups_catalog_shape(app_use_test_db, db_session)
     assert r2.status_code == 200
     assert "items" in r2.json()
     assert r3.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_public_catalog_free_slots_14d_excludes_elapsed_same_day(
+    app_use_test_db, db_session
+) -> None:
+    """Past «available» slots today must not inflate free_slots_14d (Europe/Minsk wall clock vs NOW)."""
+    now_m = datetime.now(ZoneInfo("Europe/Minsk"))
+    if now_m.hour < 12:
+        pytest.skip("needs ≥12:00 Europe/Minsk so 01:00–04:00 same calendar day is unambiguously past")
+
+    sid, cid, aid = await _require_seed_ids(db_session)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        tid = await _create_active_trainer_via_api(
+            client, city_id=cid, service_ids=[sid], arena_ids=[aid] if aid else None
+        )
+        await _ensure_trainer_subscription_tier(db_session, tid, SUBSCRIPTION_TIER_ONLINE)
+
+    today = now_m.date()
+    tomorrow = today + timedelta(days=1)
+    await db_session.execute(
+        text(
+            """
+            INSERT INTO slots (trainer_id, slot_date, start_time, end_time, status, capacity)
+            VALUES
+              (:tid, :today, TIME '01:00', TIME '02:00', 'available', 1),
+              (:tid, :today, TIME '03:00', TIME '04:00', 'available', 1),
+              (:tid, :tomorrow, TIME '14:00', TIME '15:00', 'available', 1)
+            """
+        ),
+        {"tid": tid, "today": today, "tomorrow": tomorrow},
+    )
+    await db_session.commit()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get(
+            "/api/public/trainers",
+            params={"city_id": cid, "limit": 200},
+        )
+    assert resp.status_code == 200
+    ours = next(it for it in resp.json()["items"] if it["id"] == tid)
+    assert ours["free_slots_14d"] == 1

@@ -15,6 +15,7 @@ from src.shared.price_tier_kind import (
     price_tier_sort_key,
     sql_order_case_tier_kind,
 )
+from src.shared.notification_hours import NOTIFICATION_TZ
 from src.shared.trainer_status import normalize_trainer_status_value
 
 # Legacy display; DB column `label` kept for compatibility; tier_kind is source of truth.
@@ -1141,7 +1142,9 @@ class TrainerRepository:
         Returns (items, total_count).
 
         Each trainer dict also contains:
-        - free_slots_14d: count of available slots in the next 14 days (inclusive of today).
+        - free_slots_14d: available slots with slot_date in the next 14 days (from today) whose
+          start instant (slot_date + start_time in ``NOTIFICATION_TZ``) is still strictly after now.
+          Past slots on «сегодня» do not count (matches client perception of «свободно»).
         """
         # Normalize legacy single-id into the canonical list form. Dedupe to avoid useless params.
         effective_arena_ids: list[int] | None = None
@@ -1407,10 +1410,11 @@ class TrainerRepository:
                 WHERE trainer_id IN ({placeholders})
                   AND status = 'available'
                   AND slot_date >= :from_d AND slot_date <= :to_d
+                  AND ((slot_date + start_time) AT TIME ZONE :slot_tz) > NOW()
                 GROUP BY trainer_id
                 """
             ),
-            {**id_params, "from_d": today, "to_d": horizon_end},
+            {**id_params, "from_d": today, "to_d": horizon_end, "slot_tz": NOTIFICATION_TZ},
         )
         free_slots_by_id: dict[int, int] = {row[0]: row[1] or 0 for row in r_slots.fetchall()}
         # Catalog: show "Абонементы/Сертификаты" button only when trainer has at least one

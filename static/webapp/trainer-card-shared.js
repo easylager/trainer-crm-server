@@ -8,9 +8,10 @@
       .replace(/"/g, '&quot;');
   }
 
-  function formatPriceByn(priceByn) {
-    if (priceByn == null) return 'по запросу';
-    return (priceByn === Math.floor(priceByn) ? priceByn : priceByn.toFixed(2)) + ' ⃅';
+  function formatPriceBynHtml(priceByn) {
+    if (priceByn == null) return escapeHtml('по запросу');
+    var num = priceByn === Math.floor(priceByn) ? String(priceByn) : priceByn.toFixed(2);
+    return escapeHtml(num) + ' BYN';
   }
 
   function buildRatingText(profile) {
@@ -36,7 +37,7 @@
       return '<li class="' + itemClass + (selected ? (' ' + selectedClass) : '') + '">' +
         '<div class="trainer-service-item-row">' +
         '<span class="name service-name">' + escapeHtml(s.service_name || '—') + '</span>' +
-        '<span class="value service-price">' + escapeHtml(formatPriceByn(s.price_byn)) + '</span>' +
+        '<span class="value service-price">' + formatPriceBynHtml(s.price_byn) + '</span>' +
         '</div>' +
         (desc ? '<div class="trainer-service-item-desc">' + escapeHtml(desc).replace(/\n/g, '<br>') + '</div>' : '') +
       '</li>';

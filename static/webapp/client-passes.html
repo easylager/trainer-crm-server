@@ -329,7 +329,8 @@
       }
       function formatPassPrice(cents) {
         if (cents == null || cents === 0) return '';
-        return (cents / 100).toFixed(2).replace(/\.?0+$/, '') + ' ⃅ за занятие';
+        var s = (cents / 100).toFixed(2).replace(/\.?0+$/, '');
+        return escapeHtml(s) + ' BYN за занятие';
       }
       function formatPassExpires(iso) {
         if (!iso) return '';
@@ -360,7 +361,7 @@
         }
         var priceStr = formatPassPrice(p.price_per_session_cents);
         if (priceStr) {
-          rows += '<div class="bd-row">' + iconTag + '<div class="bd-row-text"><div class="bd-row-label">Оплата</div><div class="bd-row-value">' + escapeHtml(priceStr) + '</div></div></div>';
+          rows += '<div class="bd-row">' + iconTag + '<div class="bd-row-text"><div class="bd-row-label">Оплата</div><div class="bd-row-value">' + priceStr + '</div></div></div>';
         }
         var sec = document.getElementById('detailSectionLabel');
         var rowsEl = document.getElementById('detailRows');
@@ -385,7 +386,8 @@
             }
             function formatPriceChip(cents) {
               if (cents == null || cents === 0) return '';
-              return (cents / 100).toFixed(2).replace(/\.?0+$/, '') + ' ⃅';
+              var s = (cents / 100).toFixed(2).replace(/\.?0+$/, '');
+              return escapeHtml(s) + ' BYN за занятие';
             }
             function formatExpires(iso) {
               if (!iso) return '';
@@ -411,10 +413,7 @@
               var chips = '';
               var priceNum = formatPriceChip(p.price_per_session_cents);
               if (priceNum) {
-                chips +=
-                  '<span class="pass-chip">💰 ' +
-                  escapeHtml(priceNum) +
-                  ' за занятие</span>';
+                chips += '<span class="pass-chip">💰 ' + priceNum + '</span>';
               }
               var expStr = formatExpires(p.expires_at);
               if (expStr) {

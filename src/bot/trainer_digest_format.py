@@ -84,7 +84,7 @@ def _format_duration_minutes(minutes: int) -> str:
 
 
 def _format_money_cents(cents: int) -> str:
-    """Belarusian ruble graphic sign; 6000 kopeks → ``60 ⃅`` style (see ``byr_currency_display``)."""
+    """Belarusian ruble display suffix from ``byr_currency_display`` (plain text in digest)."""
     return format_kopeks_byn_display(int(cents))
 
 

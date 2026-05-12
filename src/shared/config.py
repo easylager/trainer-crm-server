@@ -103,6 +103,9 @@ class Settings(BaseSettings):
     # Base URL for Telegram Web App (trainer schedule). Must be HTTPS in production. Example: https://api.yoursite.com
     webapp_base_url: str = "http://localhost:8000"
 
+    # Plain-text suffix for amounts in bots, Telegram HTML, and Mini App UI (default BYN per ISO 4217).
+    byr_display_sign: str = "BYN"
+
     # Payment (bePaid): checkout token API. When not set, adapter returns stub URL for tests.
     bepaid_shop_id: str | None = None
     bepaid_secret_key: str | None = None

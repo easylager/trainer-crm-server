@@ -334,11 +334,11 @@
       }
       function formatPrice(cents) {
         if (cents == null) return '—';
-        return (cents / 100) + ' ⃅';
+        return (cents / 100) + ' BYN';
       }
-      function formatCertAmount(c) {
-        if (c.amount_cents == null) return 'Любая сумма';
-        return (c.amount_cents / 100) + ' ⃅';
+      function formatCertAmountHtml(c) {
+        if (c.amount_cents == null) return escapeHtml('Любая сумма');
+        return escapeHtml(String(c.amount_cents / 100)) + ' BYN';
       }
       var ICON_PASS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6.7 11.4l2.5 2.5c.4.4 1 .4 1.4 0l7.6-7.6"/><path d="M21 12V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h7"/><circle cx="16" cy="8" r="2"/><path d="M12 18h.01"/></svg>';
       var ICON_CERT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5" rx="1"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg>';
@@ -388,7 +388,7 @@
               var passPerSession = p.pass_price_per_session_cents != null ? (p.pass_price_per_session_cents / 100) : null;
               var meta = p.sessions_total + ' занятий · ' + formatPrice(p.price_cents);
               if (passPerSession != null) {
-                meta += ' · ' + (passPerSession % 1 === 0 ? passPerSession : passPerSession.toFixed(2)) + ' ⃅ за занятие';
+                meta += ' · ' + (passPerSession % 1 === 0 ? passPerSession : passPerSession.toFixed(2)) + ' BYN за занятие';
               }
               var savingsHtml = '';
               var savPer = p.savings_per_session_cents != null ? Number(p.savings_per_session_cents) : 0;
@@ -396,8 +396,8 @@
               if (savPer > 0) {
                 var perSession = savPer / 100;
                 var totalSav = savTotal / 100;
-                savingsHtml = '<div class="bp-savings">Экономия ' + (perSession % 1 === 0 ? perSession : perSession.toFixed(2)) + ' ⃅ за занятие';
-                if (totalSav > perSession) savingsHtml += ' · ' + (totalSav % 1 === 0 ? totalSav : totalSav.toFixed(2)) + ' ⃅ с абонемента';
+                savingsHtml = '<div class="bp-savings">Экономия ' + (perSession % 1 === 0 ? perSession : perSession.toFixed(2)) + ' BYN за занятие';
+                if (totalSav > perSession) savingsHtml += ' · ' + (totalSav % 1 === 0 ? totalSav : totalSav.toFixed(2)) + ' BYN с абонемента';
                 savingsHtml += '</div>';
               }
               var extraClass = '';
@@ -435,7 +435,7 @@
               certHtml += '<div class="bp-cert-inner">';
               certHtml += '<div class="bp-cert-ico">' + ICON_CERT + '</div>';
               certHtml += '<div>';
-              certHtml += '<div class="bp-cert-title">' + escapeHtml(formatCertAmount(c)) + '</div>';
+              certHtml += '<div class="bp-cert-title">' + formatCertAmountHtml(c) + '</div>';
               certHtml += '<p class="bp-cert-meta">Подарочный номинал. Как приобрести — по договорённости с тренером.</p>';
               certHtml += '</div></div></div>';
             });

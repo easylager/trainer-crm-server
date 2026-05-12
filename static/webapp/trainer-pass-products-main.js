@@ -92,9 +92,14 @@
         }
       })();
 
+      function formatPricePlain(cents) {
+        if (cents == null) return '—';
+        return (cents / 100).toFixed(2).replace(/\.?0+$/, '') + ' BYN';
+      }
+
       function formatPrice(cents) {
         if (cents == null) return '—';
-        return (cents / 100).toFixed(2).replace(/\.?0+$/, '') + ' ⃅';
+        return (cents / 100).toFixed(2).replace(/\.?0+$/, '') + ' BYN';
       }
 
       function escapeHtml(s) {
@@ -408,9 +413,14 @@
         document.getElementById('certAmountGroup').style.display = document.getElementById('certAnyAmount').checked ? 'none' : 'block';
       };
 
-      function formatCertAmount(c) {
+      function formatCertAmountPlain(c) {
         if (c.amount_cents == null) return 'Любая сумма';
-        return (c.amount_cents / 100) + ' ⃅';
+        return (c.amount_cents / 100) + ' BYN';
+      }
+
+      function formatCertAmountHtml(c) {
+        if (c.amount_cents == null) return escapeHtml('Любая сумма');
+        return escapeHtml(String(c.amount_cents / 100)) + ' BYN';
       }
       function renderCertList() {
         var wrap = document.getElementById('certListContent');
@@ -426,7 +436,7 @@
           var cardClass = 'cert-product-card';
           if (!c.is_active) cardClass += ' inactive';
           html += '<button type="button" class="' + cardClass + '" data-id="' + c.id + '">';
-          html += '<div class="main"><div class="title">' + escapeHtml(formatCertAmount(c)) + '</div></div>';
+          html += '<div class="main"><div class="title">' + formatCertAmountHtml(c) + '</div></div>';
           html += '<span class="arrow">→</span></button>';
         });
         wrap.innerHTML = html;
@@ -566,7 +576,7 @@
         activeCerts.forEach(function(c) {
           var opt = document.createElement('option');
           opt.value = c.id;
-          opt.textContent = formatCertAmount(c);
+          opt.textContent = formatCertAmountPlain(c);
           productSelect.appendChild(opt);
         });
         document.getElementById('certIssueClientSearch').value = '';
@@ -704,7 +714,7 @@
         activePasses.forEach(function(p) {
           var opt = document.createElement('option');
           opt.value = p.id;
-          opt.textContent = (p.name || '').trim() || (p.sessions_total + ' занятий · ' + formatPrice(p.price_cents));
+          opt.textContent = (p.name || '').trim() || (p.sessions_total + ' занятий · ' + formatPricePlain(p.price_cents));
           sel.appendChild(opt);
         });
         document.getElementById('passWelcomeLinkResult').style.display = 'none';
@@ -763,14 +773,14 @@
       function buildCertProductName(anyAmount, amountCents) {
         if (anyAmount) return 'Подарочный сертификат';
         var byn = amountCents != null ? Math.round(amountCents / 100) : 0;
-        return byn > 0 ? ('Сертификат ' + byn + ' ⃅') : 'Подарочный сертификат';
+        return byn > 0 ? ('Сертификат ' + byn + ' BYN') : 'Подарочный сертификат';
       }
       document.getElementById('btnSaveCertForm').onclick = function() {
         var anyAmount = document.getElementById('certAnyAmount').checked;
         var amountCents = null;
         if (!anyAmount) {
           var byn = parseInt(document.getElementById('certAmountByn').value, 10);
-          if (isNaN(byn) || byn < 1) { alert('Укажите сумму в ⃅'); return; }
+          if (isNaN(byn) || byn < 1) { alert('Укажите сумму в BYN'); return; }
           amountCents = byn * 100;
         }
         var name = buildCertProductName(anyAmount, amountCents);
@@ -851,7 +861,7 @@
         var priceByn = parseInt(document.getElementById('inputPrice').value, 10);
         if (!name) { alert('Введите название'); return; }
         if (!sessions || sessions < 1) { alert('Укажите количество занятий'); return; }
-        if (isNaN(priceByn) || priceByn < 0) { alert('Укажите цену в ⃅'); return; }
+        if (isNaN(priceByn) || priceByn < 0) { alert('Укажите цену в BYN'); return; }
         var priceCents = priceByn * 100;
 
         var serviceIds = getPassProductSelectedServiceIds();

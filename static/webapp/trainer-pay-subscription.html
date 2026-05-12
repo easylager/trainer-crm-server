@@ -356,7 +356,7 @@
         document.getElementById('btnPaySuccessDone').onclick = fetchStatusAndNavigateToHub;
         return;
       }
-      function formatPrice(cents) { return cents == null ? '—' : (cents / 100) + ' ⃅'; }
+      function formatPrice(cents) { return cents == null ? '—' : (cents / 100) + ' BYN'; }
       function formatPeriodDays(days) {
         if (days >= 365) {
           var y = Math.floor(days / 365);

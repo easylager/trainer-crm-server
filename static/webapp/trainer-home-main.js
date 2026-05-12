@@ -2476,9 +2476,14 @@
 
       function formatHubMoneyCents(cents) {
         var n = Number(cents);
-        if (!isFinite(n) || n < 0) return '0 ⃅';
-        var v = n / 100;
-        return v.toFixed(v % 1 === 0 ? 0 : 2) + ' ⃅';
+        var numStr;
+        if (!isFinite(n) || n < 0) {
+          numStr = '0';
+        } else {
+          var v = n / 100;
+          numStr = v.toFixed(v % 1 === 0 ? 0 : 2);
+        }
+        return numStr + ' BYN';
       }
 
       /** Loads accrual MTD (sessions + pass + cert sales); updates hubMtdRevenueText and hero. */
@@ -2875,11 +2880,12 @@
         if (isNaN(cap) || cap < 1) cap = 1;
         var serviceBadge = hubServiceBadgeHtml(b.service_id, b.services_str);
 
-        /* Group slot: match schedule-editor group hub — occupancy meter + chip; no client name in preview */
+        /* Multi-participant slot: meter + modal (same slot_id). Capacity alone (e.g. 2 seats, 1 client) stays a normal row — not «group training». */
         if (cap > 1) {
           var occ = parseInt(String(b.slot_active_bookings != null ? b.slot_active_bookings : ''), 10);
           if (isNaN(occ) || occ < 0) occ = 1;
           occ = Math.min(occ, cap);
+          if (occ > 1) {
           var spotsLeft = Math.max(0, cap - occ);
           var pct = cap > 0 ? Math.min(100, Math.round((occ / cap) * 100)) : 0;
           var svc = (b.services_str || '').trim();
@@ -2920,6 +2926,7 @@
               '</div>' +
             '</div>'
           );
+          }
         }
 
         var arena = (b.arenas_str || '').trim();
@@ -4135,10 +4142,14 @@
           inp.type = 'radio';
           inp.name = gname;
           inp.value = String(tier.id);
-          var pb = tier.price_byn;
-          var priceStr = (pb === Math.floor(pb) ? pb : Number(pb).toFixed(2)) + ' ⃅';
+          var pb = Number(tier.price_byn);
+          if (!isFinite(pb)) pb = 0;
+          var numStr = pb === Math.floor(pb) ? String(Math.floor(pb)) : pb.toFixed(2);
+          var priceFrag = document.createElement('span');
+          priceFrag.textContent = numStr + ' BYN';
           lab.appendChild(inp);
-          lab.appendChild(document.createTextNode(hubPriceTierLabelRu(tier) + ' — ' + priceStr));
+          lab.appendChild(document.createTextNode(hubPriceTierLabelRu(tier) + ' — '));
+          lab.appendChild(priceFrag);
           inp.addEventListener('change', function() {
             hubBookPriceVariantId = parseInt(inp.value, 10);
           });

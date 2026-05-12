@@ -132,13 +132,14 @@
       function formatResponderServicePrice(s) {
         var minV = s.price_byn_min != null ? s.price_byn_min : s.price_byn;
         var maxV = s.price_byn_max != null ? s.price_byn_max : s.price_byn;
-        if (minV == null && s.price_byn == null) return 'по запросу';
+        if (minV == null && s.price_byn == null) return escapeHtml('по запросу');
         if (minV != null && maxV != null && minV !== maxV) {
-          var a = (minV === Math.floor(minV) ? minV : minV.toFixed(2));
-          return 'от ' + a + ' ⃅';
+          var a = minV === Math.floor(minV) ? String(minV) : minV.toFixed(2);
+          return 'от ' + escapeHtml(a) + ' BYN';
         }
         var v = minV != null ? minV : s.price_byn;
-        return (v === Math.floor(v) ? v : v.toFixed(2)) + ' ⃅';
+        var numStr = v === Math.floor(v) ? String(v) : v.toFixed(2);
+        return escapeHtml(numStr) + ' BYN';
       }
 
       function responderEducationTypeLabel(typeKey) {
@@ -542,7 +543,7 @@
             html += '<div class="trainer-detail-service' + (matchRequest ? ' trainer-detail-service--request-selected' : '') + '">';
             html += '<div class="trainer-detail-service-top">';
             html += '<span class="trainer-detail-service-name">' + escapeHtml(serviceName) + '</span>';
-            html += '<span class="trainer-detail-service-price">' + escapeHtml(priceText) + '</span>';
+            html += '<span class="trainer-detail-service-price">' + priceText + '</span>';
             html += '</div>';
             html += '</div>';
           });
