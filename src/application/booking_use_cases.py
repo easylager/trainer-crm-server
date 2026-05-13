@@ -17,6 +17,7 @@ from src.infrastructure.repositories.client_trainer_edge_repository import Clien
 from src.application.client_use_cases import get_client_id_by_telegram_id
 from src.application.family_access_use_cases import list_family_access_telegram_ids_for_reminders
 from src.application.pass_product_use_cases import redeem_pass_session_for_booking
+from src.application.certificate_use_cases import redeem_certificate_balance_for_booking
 from src.shared.notification_hours import NOTIFICATION_TZ
 from src.shared.price_tier_kind import (
     PRICE_TIER_ADULT,
