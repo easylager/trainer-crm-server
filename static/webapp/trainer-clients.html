@@ -37,8 +37,8 @@
       window.__applyTrainerClientsTheme = applyTrainerClientsTheme;
     })();
   </script>
-  <link rel="preload" href="trainer-clients-main.js?v=202605141" as="script" />
-  <link rel="stylesheet" href="mini-app-trainer-clients.css?v=202605141" />
+  <link rel="preload" href="trainer-clients-main.js?v=20260619" as="script" />
+  <link rel="stylesheet" href="mini-app-trainer-clients.css?v=20260619" />
   <link rel="stylesheet" href="mini-app-trainer-nav.css?v=20260422" />
   <script>
     /* Before deferred main.js: hide search/add bar on first paint for ?focus=invite_bot (no client card deep link). */
@@ -103,38 +103,67 @@
   </div>
   <!-- Quick book: same in-page flow as trainer hub (no schedule-editor flash). -->
   <div id="tcModalQuickBookDatetime" class="modal-overlay tc-client-qb-overlay" style="display: none;" aria-hidden="true">
-    <div class="modal tc-client-qb-card" role="dialog" aria-labelledby="tcQuickBookTitle">
-      <h3 id="tcQuickBookTitle" class="book-modal-title">Записать на занятие</h3>
-      <p class="book-choice-lead">Выберите дату и время занятия</p>
-      <div class="book-field-stack">
-        <label class="book-field-label" for="tcQuickBookDate">Дата</label>
-        <div class="tc-qb-date-wrap">
-          <input type="date" id="tcQuickBookDate" class="input tc-qb-input" />
-        </div>
+    <div class="modal tc-client-qb-card tc-qb-datetime-sheet" role="dialog" aria-labelledby="tcQuickBookTitle">
+      <div class="tc-qb-datetime-hero">
+        <p class="tc-qb-kicker">Быстрая запись</p>
+        <h3 id="tcQuickBookTitle" class="book-modal-title">Записать на занятие</h3>
+        <p class="book-choice-lead tc-qb-datetime-hero-lead">Слот в календаре будет создан автоматически. Выберите дату и время.</p>
       </div>
-      <div class="book-field-stack">
-        <label class="book-field-label" for="tcQuickBookTime">Время начала</label>
-        <div class="tc-qb-select-wrap">
-          <select id="tcQuickBookTime" class="input tc-qb-input"></select>
+      <div id="tcQuickBookDatetimeLoadingWrap" class="tc-qb-datetime-loading-wrap tc-qb-datetime-wrap--duration-custom">
+        <div id="tcQuickBookDatetimeSkel" class="tc-qb-datetime-skel" aria-hidden="true">
+          <div class="tc-qb-fields tc-qb-datetime-skel-card">
+            <div class="book-field-stack tc-qb-datetime-skel-stack">
+              <div class="tc-qb-skel-label ma-skel-shimmer" aria-hidden="true"></div>
+              <div class="tc-qb-skel-input ma-skel-shimmer" aria-hidden="true"></div>
+            </div>
+            <div class="book-field-stack tc-qb-datetime-skel-stack">
+              <div class="tc-qb-skel-label ma-skel-shimmer" aria-hidden="true"></div>
+              <div class="tc-qb-skel-input ma-skel-shimmer" aria-hidden="true"></div>
+            </div>
+            <div class="book-field-stack tc-qb-datetime-skel-stack tc-qb-skel-duration">
+              <div class="tc-qb-skel-label ma-skel-shimmer" aria-hidden="true"></div>
+              <div class="tc-qb-skel-input ma-skel-shimmer" aria-hidden="true"></div>
+            </div>
+          </div>
+          <div class="tc-qb-datetime-skel-actions">
+            <div class="tc-qb-skel-btn tc-qb-skel-btn--primary ma-skel-shimmer" aria-hidden="true"></div>
+            <div class="tc-qb-skel-btn tc-qb-skel-btn--ghost ma-skel-shimmer" aria-hidden="true"></div>
+          </div>
         </div>
-      </div>
-      <div class="book-field-stack" id="tcQuickBookDurationStack">
-        <label class="book-field-label" for="tcQuickBookDuration">Длительность</label>
-        <div class="tc-qb-select-wrap">
-          <select id="tcQuickBookDuration" class="input tc-qb-input">
-            <option value="30">30 минут</option>
-            <option value="45" selected>45 минут</option>
-            <option value="60">60 минут</option>
-            <option value="90">90 минут</option>
-            <option value="120">120 минут</option>
-          </select>
+        <div class="tc-qb-datetime-live">
+          <div class="tc-qb-fields">
+            <div class="book-field-stack">
+              <label class="book-field-label" for="tcQuickBookDate">Дата</label>
+              <div class="tc-qb-date-shell">
+                <input type="date" id="tcQuickBookDate" class="tc-qb-date-input" autocomplete="off" />
+              </div>
+            </div>
+            <div class="book-field-stack">
+              <label class="book-field-label" for="tcQuickBookTime">Время начала</label>
+              <div class="tc-qb-select-wrap tc-qb-select-wrap--field">
+                <select id="tcQuickBookTime" class="tc-qb-field-select"></select>
+              </div>
+            </div>
+            <div class="book-field-stack" id="tcQuickBookDurationStack">
+              <label class="book-field-label" for="tcQuickBookDuration">Длительность</label>
+              <div class="tc-qb-select-wrap tc-qb-select-wrap--field">
+                <select id="tcQuickBookDuration" class="tc-qb-field-select">
+                  <option value="30">30 минут</option>
+                  <option value="45" selected>45 минут</option>
+                  <option value="60">60 минут</option>
+                  <option value="90">90 минут</option>
+                  <option value="120">120 минут</option>
+                </select>
+              </div>
+            </div>
+          </div>
+          <p id="tcQuickBookDurationFixedHint" class="tc-quickbook-hint tc-quickbook-hint--fixed" hidden aria-hidden="true"></p>
+          <p id="tcQuickBookHint" class="tc-quickbook-hint" aria-hidden="true"></p>
+          <div class="modal-actions tc-qb-actions tc-qb-datetime-actions">
+            <button type="button" class="btn-block btn-secondary" id="tcQuickBookCancel">Отмена</button>
+            <button type="button" class="btn-block btn-primary" id="tcQuickBookContinue">Далее</button>
+          </div>
         </div>
-      </div>
-      <p id="tcQuickBookDurationFixedHint" class="tc-quickbook-hint tc-quickbook-hint--fixed" hidden aria-hidden="true"></p>
-      <p id="tcQuickBookHint" class="tc-quickbook-hint" aria-hidden="true"></p>
-      <div class="modal-actions tc-qb-actions">
-        <button type="button" class="btn-block btn-secondary" id="tcQuickBookCancel">Отмена</button>
-        <button type="button" class="btn-block btn-primary" id="tcQuickBookContinue">Далее</button>
       </div>
     </div>
   </div>
@@ -248,7 +277,7 @@
   <script src="mini-app-trainer-gate.js"></script>
   <script src="trainer-client-relay-ui.js?v=202605090"></script>
   <script src="trainer-relay-helpers.js?v=202605090"></script>
-  <script defer src="trainer-clients-main.js?v=202605141"></script>
+  <script defer src="trainer-clients-main.js?v=20260619"></script>
   <script defer src="mini-app-trainer-home.js"></script>
 </body>
 </html>

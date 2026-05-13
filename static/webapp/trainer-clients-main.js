@@ -461,12 +461,21 @@
           selectEl.appendChild(o);
         }
 
+        function setTcQuickBookDatetimeLoading(on) {
+          var wrap = document.getElementById('tcQuickBookDatetimeLoadingWrap');
+          var modal = document.getElementById('tcModalQuickBookDatetime');
+          if (wrap) wrap.classList.toggle('tc-qb-datetime-loading-wrap--loading', !!on);
+          if (modal) modal.setAttribute('aria-busy', on ? 'true' : 'false');
+        }
+
         function syncTcQuickBookDurationFromGrid() {
           var stack = document.getElementById('tcQuickBookDurationStack');
           var hint = document.getElementById('tcQuickBookDurationFixedHint');
           var durEl = document.getElementById('tcQuickBookDuration');
+          var loadWrap = document.getElementById('tcQuickBookDatetimeLoadingWrap');
           if (!durEl) return;
           var fixed = tcFixedSlotDurationMinutes();
+          if (loadWrap) loadWrap.classList.toggle('tc-qb-datetime-wrap--duration-custom', fixed == null);
           if (fixed != null) {
             tcEnsureDurationSelectOption(durEl, fixed);
             durEl.value = String(fixed);
@@ -626,11 +635,13 @@
           if (fixedDm == null && (isNaN(dm) || dm < 15)) dm = 45;
           if (qb.slotsIsoDate === isoDate) {
             rebuildTimeSelect(isoDate, dm);
+            setTcQuickBookDatetimeLoading(false);
             return Promise.resolve();
           }
           var fetchGen = ++qb.fetchGen;
           sel.disabled = true;
           if (btnGo) btnGo.disabled = true;
+          setTcQuickBookDatetimeLoading(true);
           if (!silentLoadingHint) {
             setHint('Загрузка сетки расписания…', true);
           }
@@ -653,6 +664,7 @@
               qb.slotsIsoDate = isoDate;
               rebuildTimeSelect(isoDate, dm);
               sel.disabled = false;
+              setTcQuickBookDatetimeLoading(false);
             })
             .catch(function() {
               if (fetchGen !== qb.fetchGen) return;
@@ -669,6 +681,7 @@
               });
               if (btnGo) btnGo.disabled = false;
               setHint('Не удалось проверить занятость. Время можно выбрать вручную.', true);
+              setTcQuickBookDatetimeLoading(false);
             });
         }
       
@@ -685,6 +698,7 @@
         function closeDatetimeModal() {
           var m = document.getElementById('tcModalQuickBookDatetime');
           if (!m) return;
+          setTcQuickBookDatetimeLoading(false);
           if (qb.refreshTimer) {
             clearTimeout(qb.refreshTimer);
             qb.refreshTimer = null;
@@ -1171,6 +1185,7 @@
             alert('Не удалось открыть форму записи. Обновите страницу.');
             return;
           }
+          setTcQuickBookDatetimeLoading(true);
           var today = todayIsoLocal();
           dateEl.min = today;
           if (!dateEl.value || dateEl.value < today) dateEl.value = today;

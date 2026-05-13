@@ -893,6 +893,9 @@
         0 0 0 1px rgba(247, 166, 0, 0.14),
         0 24px 48px -12px rgba(0, 0, 0, 0.28);
     }
+    #tcModalQuickBookDatetime .tc-client-qb-card.tc-qb-datetime-sheet.modal {
+      max-width: 400px;
+    }
     /* iOS Telegram WebKit: centered sheet + backdrop jump dismisses native Paste — match schedule «новый клиент». */
     @media (hover: none), (pointer: coarse), (max-width: 640px) {
       #tcModalAddClient.tc-client-qb-overlay.tc-add-client-overlay {
@@ -978,13 +981,274 @@
       min-width: 0;
       max-width: 100%;
     }
-    /* iOS/WebKit: native type=date has a large intrinsic width — clip inside modal. */
-    #tcModalQuickBookDatetime .tc-qb-date-wrap {
+    /* Quick book datetime (client card): parity with schedule-editor modal — hero, field card, date shell, loading skeleton. */
+    #tcModalQuickBookDatetime .tc-qb-datetime-sheet.modal {
+      animation: tcQuickBookSheetIn 0.38s cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+    @keyframes tcQuickBookSheetIn {
+      from {
+        opacity: 0;
+        transform: translateY(12px) scale(0.985);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      #tcModalQuickBookDatetime .tc-qb-datetime-sheet.modal {
+        animation: none;
+      }
+    }
+    #tcModalQuickBookDatetime .tc-qb-datetime-hero {
+      position: relative;
+      border-radius: 18px;
+      padding: 16px 44px 16px 16px;
+      margin: 0 0 16px;
+      overflow: hidden;
+      background: linear-gradient(155deg, rgba(247, 166, 0, 0.14) 0%, rgba(247, 166, 0, 0.04) 48%, transparent 100%);
+      border: 1px solid rgba(247, 166, 0, 0.28);
+      box-shadow: 0 8px 28px rgba(0, 0, 0, 0.1);
+    }
+    @media (prefers-color-scheme: dark) {
+      #tcModalQuickBookDatetime .tc-qb-datetime-hero {
+        box-shadow: 0 10px 36px rgba(0, 0, 0, 0.42);
+      }
+    }
+    #tcModalQuickBookDatetime .tc-qb-datetime-hero::before {
+      content: '';
+      position: absolute;
+      top: -38%;
+      right: -22%;
+      width: 58%;
+      height: 125%;
+      background: radial-gradient(ellipse, rgba(247, 166, 0, 0.22) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    #tcModalQuickBookDatetime .tc-qb-kicker {
+      position: relative;
+      z-index: 1;
+      margin: 0 0 8px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--tg-theme-hint-color);
+    }
+    #tcModalQuickBookDatetime .tc-qb-datetime-hero .book-modal-title {
+      position: relative;
+      z-index: 1;
+      margin: 0 0 8px;
+      font-size: 1.1875rem;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1.2;
+    }
+    #tcModalQuickBookDatetime .tc-qb-datetime-hero .book-choice-lead.tc-qb-datetime-hero-lead {
+      position: relative;
+      z-index: 1;
+      margin: 0;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+    #tcModalQuickBookDatetime .tc-qb-datetime-loading-wrap {
+      position: relative;
+      min-width: 0;
+      width: 100%;
+    }
+    #tcModalQuickBookDatetime .tc-qb-datetime-live {
+      min-width: 0;
+      width: 100%;
+    }
+    #tcModalQuickBookDatetime .tc-qb-datetime-skel {
+      display: none;
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 0;
+      z-index: 2;
+      pointer-events: none;
+      background: var(--tg-theme-bg-color);
+    }
+    #tcModalQuickBookDatetime .tc-qb-datetime-loading-wrap--loading .tc-qb-datetime-skel {
+      display: block;
+    }
+    #tcModalQuickBookDatetime .tc-qb-datetime-loading-wrap--loading .tc-qb-datetime-live {
+      visibility: hidden;
+    }
+    #tcModalQuickBookDatetime .tc-qb-datetime-skel-card {
+      margin: 0 0 18px;
+    }
+    #tcModalQuickBookDatetime .tc-qb-datetime-skel .tc-qb-datetime-skel-stack {
+      margin: 0;
+      padding: 12px 14px;
+      border-bottom: 1px solid rgba(128, 128, 128, 0.08);
+    }
+    #tcModalQuickBookDatetime .tc-qb-datetime-skel .tc-qb-datetime-skel-stack:last-child {
+      border-bottom: none;
+    }
+    #tcModalQuickBookDatetime .tc-qb-skel-label {
+      width: 28%;
+      max-width: 100px;
+      height: 11px;
+      border-radius: 6px;
+      margin-bottom: 8px;
+    }
+    #tcModalQuickBookDatetime .tc-qb-skel-input {
+      width: 100%;
+      height: 48px;
+      border-radius: 14px;
+    }
+    #tcModalQuickBookDatetime .tc-qb-datetime-skel-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    #tcModalQuickBookDatetime .tc-qb-skel-btn {
+      width: 100%;
+      height: 48px;
+      border-radius: 14px;
+    }
+    #tcModalQuickBookDatetime .tc-qb-datetime-loading-wrap:not(.tc-qb-datetime-wrap--duration-custom) .tc-qb-skel-duration {
+      display: none;
+    }
+    #tcModalQuickBookDatetime .tc-qb-fields {
+      position: relative;
+      z-index: 1;
+      margin: 0 0 18px;
+      border-radius: 16px;
+      background: var(--tg-theme-secondary-bg-color);
+      border: 1px solid rgba(128, 128, 128, 0.12);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+      overflow: hidden;
+      min-width: 0;
+      max-width: 100%;
+    }
+    #tcModalQuickBookDatetime .tc-qb-fields .book-field-stack {
+      margin: 0;
+      padding: 12px 14px;
+      border-bottom: 1px solid rgba(128, 128, 128, 0.08);
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      min-width: 0;
+    }
+    #tcModalQuickBookDatetime .tc-qb-fields .book-field-stack:last-child {
+      border-bottom: none;
+    }
+    #tcModalQuickBookDatetime .tc-qb-fields .book-field-label {
+      margin-bottom: 6px;
+    }
+    /* WebKit: shell clips overflow; block flow inside avoids iOS Telegram width blowout (schedule-editor). */
+    #tcModalQuickBookDatetime .tc-qb-date-shell {
+      position: relative;
+      display: flex;
+      align-items: center;
       width: 100%;
       max-width: 100%;
       min-width: 0;
       overflow: hidden;
+      border-radius: 14px;
+      background: var(--tg-theme-bg-color);
+      box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.06);
+      transition: box-shadow 0.18s ease;
+    }
+    #tcModalQuickBookDatetime .tc-qb-date-shell:focus-within {
+      outline: none;
+      box-shadow:
+        0 0 0 3px color-mix(in srgb, var(--tg-theme-button-color) 30%, transparent),
+        inset 0 1px 2px rgba(0, 0, 0, 0.06);
+    }
+    #tcModalQuickBookDatetime .tc-qb-date-input {
+      position: relative;
+      flex: 1 1 0%;
+      display: block;
+      min-width: 0;
+      min-height: 48px;
+      padding: 13px 36px 13px 12px;
+      margin: 0;
+      border-radius: 0;
+      border: none;
+      font-size: 16px;
+      font-variant-numeric: tabular-nums;
       box-sizing: border-box;
+      line-height: 1.25;
+      font-family: inherit;
+      color: var(--tg-theme-text-color);
+      color-scheme: light dark;
+      background: transparent;
+      overflow: hidden;
+      -webkit-appearance: none;
+      appearance: none;
+      outline: none;
+    }
+    #tcModalQuickBookDatetime .tc-qb-date-input::-webkit-datetime-edit-fields-wrapper {
+      display: block;
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    #tcModalQuickBookDatetime .tc-qb-date-input::-webkit-datetime-edit {
+      display: block;
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    #tcModalQuickBookDatetime .tc-qb-date-input::-webkit-datetime-edit-month-field,
+    #tcModalQuickBookDatetime .tc-qb-date-input::-webkit-datetime-edit-day-field,
+    #tcModalQuickBookDatetime .tc-qb-date-input::-webkit-datetime-edit-year-field {
+      min-width: 0;
+    }
+    #tcModalQuickBookDatetime .tc-qb-date-input::-webkit-calendar-picker-indicator {
+      position: absolute;
+      right: 8px;
+      top: 50%;
+      transform: translateY(-50%);
+      margin: 0;
+      opacity: 0.88;
+    }
+    #tcModalQuickBookDatetime .tc-qb-field-select {
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      min-height: 48px;
+      padding: 13px 40px 13px 14px;
+      border-radius: 14px;
+      border: none;
+      margin-bottom: 0;
+      font-size: 15px;
+      font-variant-numeric: tabular-nums;
+      font-family: var(--app-font-sans);
+      box-sizing: border-box;
+      display: block;
+      background: var(--tg-theme-bg-color);
+      color: var(--tg-theme-text-color);
+      box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.06);
+      -webkit-appearance: none;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%238e8e93' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 12px center;
+      transition: box-shadow 0.18s ease;
+    }
+    #tcModalQuickBookDatetime .tc-qb-field-select:focus-visible {
+      outline: none;
+      box-shadow:
+        0 0 0 3px color-mix(in srgb, var(--tg-theme-button-color) 30%, transparent),
+        inset 0 1px 2px rgba(0, 0, 0, 0.06);
+    }
+    #tcModalQuickBookDatetime #tcQuickBookTime:disabled {
+      opacity: 0.72;
+    }
+    #tcModalQuickBookDatetime .tc-qb-datetime-actions {
+      margin-top: 0;
+    }
+    #tcModalQuickBookDatetime .tc-qb-datetime-actions .btn-primary {
+      box-shadow: var(--app-btn-shadow-cta, 0 2px 8px rgba(0, 0, 0, 0.12));
     }
     #tcModalAddClient .quick-book-fields .book-field-stack:last-child {
       margin-bottom: 0;
@@ -1086,8 +1350,6 @@
       transform: none;
       pointer-events: none;
     }
-    #tcModalQuickBookDatetime .tc-qb-input,
-    #tcModalQuickBookDatetime select.tc-qb-input,
     #tcModalQuickBookService .tc-qb-input,
     #tcModalQuickBookService select.tc-qb-input,
     #tcModalAddClient .tc-qb-input,
@@ -1111,8 +1373,6 @@
       color: var(--tg-theme-hint-color);
       opacity: 0.88;
     }
-    #tcModalQuickBookDatetime .tc-qb-input:focus,
-    #tcModalQuickBookDatetime .tc-qb-input:focus-visible,
     #tcModalQuickBookService .tc-qb-input:focus,
     #tcModalQuickBookService .tc-qb-input:focus-visible,
     #tcModalAddClient .tc-qb-input:focus,
@@ -1122,7 +1382,6 @@
         0 0 0 3px rgba(247, 166, 0, 0.12);
     }
     /* Same as trainer hub: strip native select chrome (Telegram/iOS glossy dropdown). */
-    #tcModalQuickBookDatetime select.tc-qb-input,
     #tcModalQuickBookService select.tc-qb-input {
       -webkit-appearance: none;
       appearance: none;
@@ -1130,62 +1389,9 @@
       background-image: none;
       font-family: inherit;
     }
-    /* Date field: align segments with theme (hub parity). */
-    #tcModalQuickBookDatetime input#tcQuickBookDate.tc-qb-input[type='date'] {
-      width: 100%;
-      max-width: 100%;
-      min-width: 0;
-      display: block;
-      line-height: 1.2;
-      font-family: inherit;
-      font-variant-numeric: tabular-nums;
-      color: var(--tg-theme-text-color);
-      color-scheme: light dark;
-    }
-    #tcModalQuickBookDatetime input#tcQuickBookDate.tc-qb-input[type='date']::-webkit-date-and-time-value {
-      color: var(--tg-theme-text-color);
-    }
-    #tcModalQuickBookDatetime input#tcQuickBookDate.tc-qb-input[type='date']::-webkit-datetime-edit {
-      width: 100%;
-      max-width: 100%;
-      min-width: 0;
-      padding: 0;
-      display: block;
-    }
-    #tcModalQuickBookDatetime input#tcQuickBookDate.tc-qb-input[type='date']::-webkit-datetime-edit-fields-wrapper {
-      width: 100%;
-      max-width: 100%;
-      min-width: 0;
-      display: flex;
-      align-items: center;
-      flex-wrap: nowrap;
-    }
-    #tcModalQuickBookDatetime input#tcQuickBookDate.tc-qb-input[type='date']::-webkit-datetime-edit-month-field,
-    #tcModalQuickBookDatetime input#tcQuickBookDate.tc-qb-input[type='date']::-webkit-datetime-edit-day-field {
-      min-width: 0;
-      flex: 1 1 auto;
-    }
-    #tcModalQuickBookDatetime input#tcQuickBookDate.tc-qb-input[type='date']::-webkit-datetime-edit-month-field,
-    #tcModalQuickBookDatetime input#tcQuickBookDate.tc-qb-input[type='date']::-webkit-datetime-edit-day-field,
-    #tcModalQuickBookDatetime input#tcQuickBookDate.tc-qb-input[type='date']::-webkit-datetime-edit-year-field,
-    #tcModalQuickBookDatetime input#tcQuickBookDate.tc-qb-input[type='date']::-webkit-datetime-edit-text {
-      color: var(--tg-theme-text-color);
-    }
-    #tcModalQuickBookDatetime input#tcQuickBookDate.tc-qb-input[type='date']::-webkit-datetime-edit-year-field {
-      min-width: 3.5ch;
-      flex: 0 0 auto;
-    }
-    #tcModalQuickBookDatetime input#tcQuickBookDate.tc-qb-input[type='date']::-webkit-calendar-picker-indicator {
-      opacity: 0.72;
-      flex-shrink: 0;
-      margin: 0;
-      padding: 0;
-    }
-    #tcModalQuickBookDatetime .tc-qb-select-wrap,
     #tcModalQuickBookService .tc-qb-select-wrap {
       position: relative;
     }
-    #tcModalQuickBookDatetime .tc-qb-select-wrap::after,
     #tcModalQuickBookService .tc-qb-select-wrap::after {
       content: '';
       position: absolute;
