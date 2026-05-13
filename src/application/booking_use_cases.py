@@ -2855,8 +2855,8 @@ async def get_trainer_client_last_booking_service_defaults(
     session: AsyncSession,
     trainer_id: int,
     client_id: int,
-) -> tuple[int | None, int | None, int | None]:
-    """Last non-cancelled booking by created_at: service_id, price variant (or tier_kind fallback), resolved arena."""
+) -> tuple[int | None, int | None, int | None, str | None]:
+    """Last non-cancelled booking by created_at: service_id, price variant (or tier_kind-derived), arena, raw tier kind."""
     r = await session.execute(
         text(
             """
@@ -2880,7 +2880,8 @@ async def get_trainer_client_last_booking_service_defaults(
                 ) AS effective_variant_id,
                 """
             + SQL_BOOKING_RESOLVED_ARENA_ID
-            + """ AS resolved_arena_id
+            + """ AS resolved_arena_id,
+                b.price_tier_kind AS last_price_tier_kind
             FROM bookings b
             JOIN slots s ON s.id = b.slot_id
             WHERE b.trainer_id = :tid AND b.client_id = :cid
@@ -2893,12 +2894,75 @@ async def get_trainer_client_last_booking_service_defaults(
     )
     row = r.fetchone()
     if not row:
-        return None, None, None
-    sid_raw, vid_raw, aid_raw = row[0], row[1], row[2]
+        return None, None, None, None
+    sid_raw, vid_raw, aid_raw, tier_raw = row[0], row[1], row[2], row[3]
     sid = int(sid_raw) if sid_raw is not None else None
     vid = int(vid_raw) if vid_raw is not None else None
     aid = int(aid_raw) if aid_raw is not None else None
-    return sid, vid, aid
+    tier_kind: str | None = None
+    if tier_raw is not None:
+        ts = str(tier_raw).strip()
+        tier_kind = ts if ts else None
+    return sid, vid, aid, tier_kind
+
+
+async def get_trainer_client_booking_defaults_from_booking_id(
+    session: AsyncSession,
+    trainer_id: int,
+    client_id: int,
+    booking_id: int,
+) -> tuple[int | None, int | None, int | None, str | None] | None:
+    """
+    Presets from one booking row (trainer wrap-up / «Записать снова» after session).
+    None if booking missing, wrong trainer/client, or status is cancelled/declined/trainer_removed.
+    """
+    r = await session.execute(
+        text(
+            """
+            SELECT
+                b.service_id,
+                COALESCE(
+                    b.service_price_variant_id,
+                    (
+                        SELECT spv.id
+                        FROM trainer_service_price_variants spv
+                        WHERE spv.trainer_id = b.trainer_id
+                          AND spv.service_id = b.service_id
+                          AND b.price_tier_kind IS NOT NULL
+                          AND (
+                            spv.tier_kind = b.price_tier_kind
+                            OR LOWER(TRIM(spv.tier_kind)) = LOWER(TRIM(b.price_tier_kind))
+                          )
+                        ORDER BY spv.sort_order NULLS LAST, spv.id
+                        LIMIT 1
+                    )
+                ) AS effective_variant_id,
+                """
+            + SQL_BOOKING_RESOLVED_ARENA_ID
+            + """ AS resolved_arena_id,
+                b.price_tier_kind AS last_price_tier_kind
+            FROM bookings b
+            JOIN slots s ON s.id = b.slot_id
+            WHERE b.id = :bid
+              AND b.trainer_id = :tid AND b.client_id = :cid
+              AND b.status NOT IN ('cancelled', 'declined', 'trainer_removed')
+            LIMIT 1
+            """
+        ),
+        {"bid": int(booking_id), "tid": int(trainer_id), "cid": int(client_id)},
+    )
+    row = r.fetchone()
+    if not row:
+        return None
+    sid_raw, vid_raw, aid_raw, tier_raw = row[0], row[1], row[2], row[3]
+    sid = int(sid_raw) if sid_raw is not None else None
+    vid = int(vid_raw) if vid_raw is not None else None
+    aid = int(aid_raw) if aid_raw is not None else None
+    tier_kind: str | None = None
+    if tier_raw is not None:
+        ts = str(tier_raw).strip()
+        tier_kind = ts if ts else None
+    return sid, vid, aid, tier_kind
 
 
 async def get_trainer_client_last_booking_price_variant_for_service(
@@ -2951,16 +3015,15 @@ async def get_trainer_client_latest_booking_service_id(
     trainer_id: int,
     client_id: int,
 ) -> int | None:
-    """Latest meaningful booking's service for this trainer+client (excl. cancelled/declined — not a 'chosen' service)."""
+    """Service from latest *created* non-cancelled booking (same recency rule as booking-defaults), not by slot date."""
     r = await session.execute(
         text(
             """
             SELECT b.service_id
             FROM bookings b
-            JOIN slots s ON s.id = b.slot_id
             WHERE b.trainer_id = :tid AND b.client_id = :cid
               AND b.status NOT IN ('cancelled', 'declined', 'trainer_removed')
-            ORDER BY s.slot_date DESC, s.start_time DESC NULLS LAST
+            ORDER BY b.created_at DESC NULLS LAST, b.id DESC
             LIMIT 1
             """
         ),

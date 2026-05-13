@@ -2866,12 +2866,14 @@
     #calendarContent { contain: layout; }
     /* Week swipe: pan-y for normal scroll; class + JS preventDefault while gesture is locked horizontal. */
     #tabCalendar.schedule-calendar-swipe-root,
-    #screenDayPick.schedule-calendar-swipe-root {
+    #screenDayPick.schedule-calendar-swipe-root,
+    #scheduleWeekDayStrip.schedule-calendar-swipe-root {
       touch-action: pan-y pinch-zoom;
       overscroll-behavior-y: contain;
     }
     #tabCalendar.schedule-calendar-swipe-root.schedule-calendar-swipe--horizontal,
-    #screenDayPick.schedule-calendar-swipe-root.schedule-calendar-swipe--horizontal {
+    #screenDayPick.schedule-calendar-swipe-root.schedule-calendar-swipe--horizontal,
+    #scheduleWeekDayStrip.schedule-calendar-swipe-root.schedule-calendar-swipe--horizontal {
       touch-action: none;
     }
     .ma-cal-skel-slot {

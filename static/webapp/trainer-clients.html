@@ -37,8 +37,8 @@
       window.__applyTrainerClientsTheme = applyTrainerClientsTheme;
     })();
   </script>
-  <link rel="preload" href="trainer-clients-main.js?v=202605137" as="script" />
-  <link rel="stylesheet" href="mini-app-trainer-clients.css?v=202605134" />
+  <link rel="preload" href="trainer-clients-main.js?v=202605141" as="script" />
+  <link rel="stylesheet" href="mini-app-trainer-clients.css?v=202605141" />
   <link rel="stylesheet" href="mini-app-trainer-nav.css?v=20260422" />
   <script>
     /* Before deferred main.js: hide search/add bar on first paint for ?focus=invite_bot (no client card deep link). */
@@ -108,7 +108,9 @@
       <p class="book-choice-lead">Выберите дату и время занятия</p>
       <div class="book-field-stack">
         <label class="book-field-label" for="tcQuickBookDate">Дата</label>
-        <input type="date" id="tcQuickBookDate" class="input tc-qb-input" />
+        <div class="tc-qb-date-wrap">
+          <input type="date" id="tcQuickBookDate" class="input tc-qb-input" />
+        </div>
       </div>
       <div class="book-field-stack">
         <label class="book-field-label" for="tcQuickBookTime">Время начала</label>
@@ -141,7 +143,7 @@
     <div class="modal tc-client-qb-card" role="dialog" aria-labelledby="tcQbSvcTitle">
       <p class="quick-book-kicker">Быстрая запись</p>
       <h3 id="tcQbSvcTitle" class="book-modal-title">Услуга и тариф</h3>
-      <p class="book-choice-lead">Клиент уже выбран. По умолчанию — услуга и тариф с последнего занятия; при необходимости измените.</p>
+      <p class="book-choice-lead">Клиент уже выбран. По умолчанию подставляются услуга, тариф и площадка из последней записи (как при создании); при необходимости измените.</p>
       <div class="book-field-stack">
         <label class="book-field-label" for="tcQbProfileServiceSelect">Услуга</label>
         <div class="tc-qb-select-wrap">
@@ -246,7 +248,7 @@
   <script src="mini-app-trainer-gate.js"></script>
   <script src="trainer-client-relay-ui.js?v=202605090"></script>
   <script src="trainer-relay-helpers.js?v=202605090"></script>
-  <script defer src="trainer-clients-main.js?v=202605137"></script>
+  <script defer src="trainer-clients-main.js?v=202605141"></script>
   <script defer src="mini-app-trainer-home.js"></script>
 </body>
 </html>

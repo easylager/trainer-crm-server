@@ -1678,6 +1678,8 @@
         scheduleLoadInFlight: false,
         /** After horizontal week swipe on day-pick rows (buttons), block synthetic clicks opening a day editor. */
         scheduleDayPickSwipeSuppressUntil: 0,
+        /** After horizontal week swipe on the bottom Mon–Sun strip, block synthetic clicks (day pick / week arrows). */
+        scheduleStripSwipeSuppressUntil: 0,
         bookSlotId: null,
         bookModalStep: 'choice',
         pendingBookClientId: null,
@@ -1687,8 +1689,8 @@
         bookPriceVariantId: null,
         trainerArenas: [],
         bookArenaId: null,
-        /** From CRM: /schedule-editor?client_id= — preselect client when booking a slot. */
-        deepLinkClientId: null,
+        /** From CRM / Telegram «Записать снова»: GET booking-defaults?from_booking_id= — presets from that session. */
+        presetBookingDefaultsId: null,
         /** Open «Проблема с клиентом» after load (schedule-editor?open_booking=&open_client_problem=1). */
         openClientProblemAfterDetail: false,
         /** 'hub' when opened via /schedule-editor?open_booking=&from=hub (return to trainer-home). */
@@ -1740,9 +1742,13 @@
         calendarBaselineStarts: null,
         /** Calendar individual: precise-slot keys at editor open — for toast counts (omit already-existing intervals). */
         calendarBaselinePreciseKeys: null,
-        /** Book-client modal: group slot (capacity &gt; 1) — fixed service, no price tier UI. */
+        /** Group slot (capacity &gt; 1) — fixed service, no price tier UI. */
         bookSlotIsGroup: false,
         bookSlotGroupServiceId: null,
+        /** «Выбрать из списка»: клиент выбран на шаге 1, услуга/тариф на шаге 2 (как в хабе). */
+        bookSelectedExistingClientId: null,
+        bookSelectedExistingClientName: '',
+        bookExistingServiceStepActive: false,
         /** At least one client with booking history (GET /trainer/clients non-empty). */
         trainerHasBookClients: false,
       };
@@ -1787,11 +1793,14 @@
           if (w2) w2.style.display = 'none';
           return;
         }
+        var hideExistingArena = !state.bookFlowQuick && !!state.bookSlotId;
         var arenas = state.trainerArenas || [];
         var show = arenas.length > 1;
         var wrap = document.getElementById('bookArenaWrap');
         var wrapNew = document.getElementById('bookArenaWrapNew');
-        if (wrap) wrap.style.display = show ? 'block' : 'none';
+        if (wrap) {
+          wrap.style.display = hideExistingArena ? 'none' : show ? 'block' : 'none';
+        }
         if (wrapNew) wrapNew.style.display = show ? 'block' : 'none';
         var primary = arenas.filter(function(a) { return a.is_primary; })[0];
         state.bookArenaId = primary ? primary.id : (arenas.length ? arenas[0].id : null);
@@ -1806,7 +1815,9 @@
           });
           if (state.bookArenaId != null) sel.value = String(state.bookArenaId);
         }
-        fill(document.getElementById('bookArenaSelect'));
+        if (!hideExistingArena) {
+          fill(document.getElementById('bookArenaSelect'));
+        }
         fill(document.getElementById('bookArenaSelectNew'));
         function onArenaChange() {
           state.bookArenaId = this.value ? parseInt(this.value, 10) : null;
@@ -1857,11 +1868,18 @@
 
       function trainerBookingPayload(clientId, serviceId) {
         var o = { slot_id: state.bookSlotId, client_id: clientId, service_id: serviceId };
-        if (!state.bookSlotIsGroup && state.trainerArenas && state.trainerArenas.length > 1 && state.bookArenaId != null) {
-          o.arena_id = state.bookArenaId;
-        }
         if (!state.bookSlotIsGroup && state.bookPriceVariantId != null) {
           o.service_price_variant_id = state.bookPriceVariantId;
+        }
+        /* Slot row already tied to a venue — do not let UI «площадка» override (individual slots). */
+        if (!state.bookFlowQuick && state.bookSlotId && !state.bookSlotIsGroup) {
+          var slot = state.slots.find(function(s) { return s.id === state.bookSlotId; });
+          var aid = slot && slot.arena_id != null ? parseInt(String(slot.arena_id), 10) : NaN;
+          if (!isNaN(aid)) o.arena_id = aid;
+          return o;
+        }
+        if (!state.bookSlotIsGroup && state.trainerArenas && state.trainerArenas.length > 1 && state.bookArenaId != null) {
+          o.arena_id = state.bookArenaId;
         }
         return o;
       }
@@ -1917,9 +1935,100 @@
         state.quickBookProfileAwaitingConfirm = false;
         state.quickBookProfileClientName = null;
         state.quickBookLockedClientId = null;
-        setBookChoicePairPending(false);
+        state.presetBookingDefaultsId = null;
+        state.bookSelectedExistingClientId = null;
+        state.bookSelectedExistingClientName = '';
+        state.bookExistingServiceStepActive = false;
         var bookFlowOv = document.getElementById('modalBookClient');
         if (bookFlowOv) bookFlowOv.classList.remove('book-flow-overlay--new-client');
+      }
+
+      function showBookExistingClientStep() {
+        var cEl = document.getElementById('bookExistingStepClient');
+        var sEl = document.getElementById('bookExistingStepService');
+        if (cEl) cEl.style.display = 'block';
+        if (sEl) {
+          sEl.style.display = 'none';
+          sEl.setAttribute('aria-hidden', 'true');
+        }
+        state.bookExistingServiceStepActive = false;
+      }
+
+      function showBookExistingServiceStep() {
+        var cEl = document.getElementById('bookExistingStepClient');
+        var sEl = document.getElementById('bookExistingStepService');
+        if (cEl) cEl.style.display = 'none';
+        if (sEl) {
+          sEl.style.display = 'block';
+          sEl.setAttribute('aria-hidden', 'false');
+        }
+        state.bookExistingServiceStepActive = true;
+      }
+
+      /**
+       * After client picked from roster: load per-client defaults (GET booking-defaults), then show service/tariff.
+       * Slot booking: арена слота фиксируется в POST; UI площадки для «из списка» не показываем.
+       */
+      function enterBookExistingServiceStepFromClient(clientId, displayNameOrNull) {
+        state.bookSelectedExistingClientId = clientId;
+        state.bookSelectedExistingClientName = (displayNameOrNull || '').trim() || '';
+
+        function applyDefaultsAndShow(defaults) {
+          defaults = defaults || {};
+          if (!state.bookSelectedExistingClientName) {
+            var fn = (defaults.client_first_name || '').trim();
+            var ln = (defaults.client_last_name || '').trim();
+            state.bookSelectedExistingClientName = (fn + ' ' + ln).trim() || 'Клиент';
+          }
+          var lead = document.getElementById('bookExistingClientLead');
+          if (lead) {
+            lead.textContent =
+              state.bookSelectedExistingClientName +
+              ' — услуга и тариф как в последней записи (можно изменить).';
+          }
+
+          var sel = document.getElementById('bookServiceSelect');
+          if (state.bookSlotIsGroup && state.bookSlotGroupServiceId != null) {
+            state.bookServiceId = state.bookSlotGroupServiceId;
+            if (sel) sel.value = String(state.bookServiceId);
+          } else {
+            var defSid = defaults.service_id != null ? parseInt(defaults.service_id, 10) : NaN;
+            var picked = state.bookServiceId;
+            if (!isNaN(defSid) && state.bookServices.some(function(s) { return Number(s.id) === defSid; })) {
+              picked = defSid;
+            }
+            state.bookServiceId = picked;
+            if (sel && state.bookServiceId != null) sel.value = String(state.bookServiceId);
+          }
+          if (sel) {
+            sel.onchange = function() {
+              state.bookServiceId = this.value ? parseInt(this.value, 10) : null;
+              syncBookPriceTierRadios('existing', null, null);
+            };
+          }
+          syncBookPriceTierRadios(
+            'existing',
+            defaults.service_price_variant_id,
+            defaults.price_tier_kind
+          );
+          fillTrainerArenasUI();
+          applyBookModalGroupUi();
+          showBookExistingServiceStep();
+          var modal = document.getElementById('modalBookClient');
+          if (modal) modal.scrollTop = 0;
+        }
+
+        fetch(
+          apiUrlWithQuery('/trainer/clients/' + encodeURIComponent(String(clientId)) + '/booking-defaults'),
+          { headers: headers(), cache: 'no-store' }
+        )
+          .then(function(r) {
+            return r.ok ? r.json() : {};
+          })
+          .then(applyDefaultsAndShow)
+          .catch(function() {
+            applyDefaultsAndShow({});
+          });
       }
 
       function setBookClientSearchSectionVisible(visible) {
@@ -1957,7 +2066,23 @@
         return adult ? adult.id : tiers[0].id;
       }
 
-      function syncBookPriceTierRadios(which) {
+      /** Match GET booking-defaults tier when variant id is missing or stale (else UI often picks adult first). */
+      function resolveQuickBookPriceTierIdFromDefaults(tiers, preferredVariantId, priceTierKind) {
+        if (!tiers || !tiers.length) return null;
+        if (tiers.length === 1) return tiers[0].id;
+        var pref = preferredVariantId != null ? parseInt(String(preferredVariantId), 10) : NaN;
+        if (!isNaN(pref) && tiers.some(function(t) { return Number(t.id) === pref; })) return pref;
+        var tk = (priceTierKind || '').toString().trim().toLowerCase();
+        if (tk) {
+          var hit = tiers.filter(function(t) {
+            return (t.tier_kind || '').toString().trim().toLowerCase() === tk;
+          })[0];
+          if (hit) return hit.id;
+        }
+        return null;
+      }
+
+      function syncBookPriceTierRadios(which, preferredVariantId, priceTierKind) {
         var wrapE = document.getElementById('bookPriceTierWrapExisting');
         var wrapN = document.getElementById('bookPriceTierWrapNew');
         if (state.bookSlotIsGroup) {
@@ -2003,7 +2128,8 @@
           });
           host.appendChild(lab);
         });
-        var preferredId = pickDefaultBookPriceTierId(tiers);
+        var resolved = resolveQuickBookPriceTierIdFromDefaults(tiers, preferredVariantId, priceTierKind);
+        var preferredId = resolved != null ? resolved : pickDefaultBookPriceTierId(tiers);
         var pickInp = preferredId != null ? host.querySelector('input[value="' + String(preferredId) + '"]') : null;
         if (pickInp) {
           pickInp.checked = true;
@@ -2012,12 +2138,12 @@
       }
 
       function syncAllBookPriceTierRadios() {
-        syncBookPriceTierRadios('existing');
-        syncBookPriceTierRadios('new');
+        syncBookPriceTierRadios('existing', null, null);
+        syncBookPriceTierRadios('new', null, null);
       }
 
       /** Price tiers for profile quick-book service modal (same rules as book modal). */
-      function syncQuickBookProfilePriceTierRadios(preferredVariantId) {
+      function syncQuickBookProfilePriceTierRadios(preferredVariantId, priceTierKind) {
         var wrap = document.getElementById('quickBookProfilePriceTierWrap');
         var host = document.getElementById('quickBookProfilePriceTierRadios');
         if (!wrap || !host) return;
@@ -2055,8 +2181,8 @@
           });
           host.appendChild(lab);
         });
-        var pref = preferredVariantId != null ? parseInt(preferredVariantId, 10) : NaN;
-        var matched = !isNaN(pref) ? host.querySelector('input[value="' + String(pref) + '"]') : null;
+        var resolved = resolveQuickBookPriceTierIdFromDefaults(tiers, preferredVariantId, priceTierKind);
+        var matched = resolved != null ? host.querySelector('input[value="' + String(resolved) + '"]') : null;
         if (matched) {
           matched.checked = true;
           state.bookPriceVariantId = parseInt(matched.value, 10);
@@ -4235,7 +4361,8 @@
       }
 
       /**
-       * After datetime, when client_id is in URL: load services + last completed defaults,
+       * After datetime, when client_id is in URL: load services + booking defaults
+       * (post-session: ?from_booking_id= → that row; else latest by created_at),
        * show service/tariff modal only (no modalBookClient), then final confirm.
        */
       function openQuickBookProfileServiceStep(mqDatetime, finishBtn) {
@@ -4262,11 +4389,15 @@
         }
         setQuickBookDatetimeLoading(false);
         updateTelegramBack();
+        var defPath = '/trainer/clients/' + encodeURIComponent(cid) + '/booking-defaults';
+        if (state.presetBookingDefaultsId) {
+          defPath += '?from_booking_id=' + encodeURIComponent(String(state.presetBookingDefaultsId));
+        }
         Promise.all([
           fetch(apiUrlWithQuery('/trainer/my-services'), { headers: headers() }).then(function(r) {
             return r.ok ? r.json() : Promise.reject(new Error('svc'));
           }),
-          fetch(apiUrlWithQuery('/trainer/clients/' + encodeURIComponent(cid) + '/booking-defaults'), { headers: headers() }).then(function(r) {
+          fetch(apiUrlWithQuery(defPath), { headers: headers() }).then(function(r) {
             return r.ok ? r.json() : Promise.reject(new Error('def'));
           }),
         ])
@@ -4279,6 +4410,7 @@
               state.bookFlowQuick = false;
               state.quickBookProfileServiceStep = false;
               state.quickBookLockedClientId = null;
+              state.presetBookingDefaultsId = null;
               showToast('Добавьте услугу в профиле');
               if (ms) {
                 ms.style.display = 'none';
@@ -4344,7 +4476,7 @@
             sel.value = picked != null ? String(picked) : '';
             sel.onchange = function() {
               state.bookServiceId = this.value ? parseInt(this.value, 10) : null;
-              syncQuickBookProfilePriceTierRadios(null);
+              syncQuickBookProfilePriceTierRadios(null, null);
             };
 
             var wrapA = document.getElementById('quickBookProfileArenaWrap');
@@ -4372,7 +4504,8 @@
               var ov = parseInt(srcBooking.service_price_variant_id, 10);
               if (!isNaN(ov)) defVid = ov;
             }
-            syncQuickBookProfilePriceTierRadios(defVid);
+            syncQuickBookProfilePriceTierRadios(defVid, defaults.price_tier_kind);
+            state.presetBookingDefaultsId = null;
 
             updateTelegramBack();
             if (finishBtn) finishBtn();
@@ -4382,6 +4515,7 @@
             state.bookFlowQuick = false;
             state.quickBookProfileServiceStep = false;
             state.quickBookLockedClientId = null;
+            state.presetBookingDefaultsId = null;
             showToast('Не удалось загрузить услуги');
             if (ms) {
               ms.style.display = 'none';
@@ -4453,6 +4587,7 @@
           document.getElementById('bookStepNew').style.display = 'none';
           document.getElementById('bookClientList').innerHTML = buildBookClientListSkeletonHtml();
           setBookClientSearchSectionVisible(false);
+          showBookExistingClientStep();
         } else {
           setBookClientSearchSectionVisible(true);
           document.getElementById('bookStepChoice').style.display = 'block';
@@ -4937,7 +5072,7 @@
               if (found) {
                 var autoName = ((found.first_name || '') + ' ' + (found.last_name || '')).trim() || 'Клиент';
                 list.innerHTML = '';
-                openBookConfirmForClient(found.id, autoName);
+                enterBookExistingServiceStepFromClient(found.id, autoName);
                 return;
               }
               showToast('Клиент из ссылки не найден в списке.');
@@ -4956,7 +5091,7 @@
               row.onclick = function() {
                 var clientId = parseInt(row.dataset.clientId, 10);
                 var clientName = (row.dataset.clientName || 'Клиент').replace(/&quot;/g, '"');
-                openBookConfirmForClient(clientId, clientName);
+                enterBookExistingServiceStepFromClient(clientId, clientName);
               };
             });
           })
@@ -5010,6 +5145,17 @@
           if (ms) {
             ms.style.display = 'flex';
             ms.setAttribute('aria-hidden', 'false');
+          }
+          updateTelegramBack();
+          return;
+        }
+        /* Two-step «из списка»: вернуть к выбору услуги/тарифа, не к списку клиентов. */
+        if (state.bookExistingServiceStepActive && state.bookSelectedExistingClientId != null) {
+          var mbc = document.getElementById('modalBookClient');
+          if (mbc) {
+            mbc.style.display = 'flex';
+            showBookExistingServiceStep();
+            mbc.scrollTop = 0;
           }
           updateTelegramBack();
           return;
@@ -5229,6 +5375,9 @@
         document.getElementById('bookStepChoice').style.display = 'none';
         document.getElementById('bookStepExisting').style.display = 'block';
         document.getElementById('bookStepExisting').classList.add('active');
+        state.bookSelectedExistingClientId = null;
+        state.bookSelectedExistingClientName = '';
+        showBookExistingClientStep();
         setBookClientSearchSectionVisible(true);
         var sel = document.getElementById('bookServiceSelect');
         if (sel && state.bookServiceId != null) sel.value = String(state.bookServiceId);
@@ -5246,6 +5395,9 @@
         if (sel && state.bookServiceId != null) sel.value = String(state.bookServiceId);
       };
       document.getElementById('bookBackFromExisting').onclick = function() {
+        state.bookSelectedExistingClientId = null;
+        state.bookSelectedExistingClientName = '';
+        showBookExistingClientStep();
         document.getElementById('bookStepExisting').style.display = 'none';
         document.getElementById('bookStepExisting').classList.remove('active');
         document.getElementById('bookStepChoice').style.display = 'block';
@@ -5259,6 +5411,41 @@
         document.getElementById('bookStepChoice').style.display = 'block';
         document.getElementById('bookStepChoice').classList.add('active');
       };
+      (function wireBookExistingServiceSubstep() {
+        var backSvc = document.getElementById('bookBackFromServiceExisting');
+        var btnNext = document.getElementById('btnBookExistingServiceNext');
+        if (backSvc) {
+          backSvc.onclick = function() {
+            showBookExistingClientStep();
+            var q = document.getElementById('bookClientSearch');
+            loadBookClients(q ? q.value.trim() : '');
+          };
+        }
+        if (btnNext) {
+          btnNext.onclick = function() {
+            var cid = state.bookSelectedExistingClientId;
+            if (cid == null) {
+              showToast('Выберите клиента');
+              return;
+            }
+            var serviceId = state.bookServiceId != null ? state.bookServiceId : (state.bookServices.length ? state.bookServices[0].id : null);
+            if (serviceId == null) {
+              showToast('Выберите услугу');
+              return;
+            }
+            if (!state.bookSlotIsGroup) {
+              var svc = (state.bookServices || []).filter(function(x) { return Number(x.id) === Number(serviceId); })[0];
+              var tiers = (svc && svc.price_tiers) ? svc.price_tiers : [];
+              if (tiers.length > 1 && state.bookPriceVariantId == null) {
+                showToast('Выберите тариф');
+                return;
+              }
+            }
+            var name = state.bookSelectedExistingClientName || 'Клиент';
+            openBookConfirmForClient(cid, name);
+          };
+        }
+      })();
       // Tap overlay to dismiss keyboard (skip when blur-only phone masking applies — overlay blur fights iOS paste/callout)
       (function bindModalOverlayDismissKeyboard() {
         var skipBlur =
@@ -6269,6 +6456,10 @@
         function targetStartsOnExcludedControl(tgt, swipeRootEl) {
           if (!tgt || !tgt.closest) return true;
           if (tgt.closest('input, textarea, select, label, a[href]')) return true;
+          /* Bottom week strip lives outside #tabCalendar — attach swipe on #scheduleWeekDayStrip; allow starting on day <button>s. */
+          if (swipeRootEl && swipeRootEl.id === 'scheduleWeekDayStrip') {
+            return false;
+          }
           if (swipeRootEl && swipeRootEl.id === 'screenDayPick') {
             return !!tgt.closest('#dayPickWeekPrev, #dayPickWeekNext');
           }
@@ -6337,7 +6528,7 @@
                 track.mode = 'v';
                 return;
               } else if (Math.max(adx, ady) >= AMBIGUOUS_FALLBACK_PX) {
-                if (rootEl && rootEl.id === 'screenDayPick' && adx >= ady) {
+                if (rootEl && (rootEl.id === 'screenDayPick' || rootEl.id === 'scheduleWeekDayStrip') && adx >= ady) {
                   track.mode = 'h';
                   rootEl.classList.add('schedule-calendar-swipe--horizontal');
                 } else {
@@ -6404,10 +6595,16 @@
             if (rootEl && rootEl.id === 'screenDayPick') {
               state.scheduleDayPickSwipeSuppressUntil = Date.now() + 420;
             }
+            if (rootEl && rootEl.id === 'scheduleWeekDayStrip') {
+              state.scheduleStripSwipeSuppressUntil = Date.now() + 420;
+            }
           }, { passive: true });
         }
 
         attach(document.getElementById('tabCalendar'), function() {
+          return {};
+        });
+        attach(document.getElementById('scheduleWeekDayStrip'), function() {
           return {};
         });
         attach(document.getElementById('screenDayPick'), function() {
@@ -6424,6 +6621,12 @@
         var root = document.getElementById('scheduleWeekDayStrip');
         if (!root) return;
         root.addEventListener('click', function(ev) {
+          var sup = Number(state.scheduleStripSwipeSuppressUntil) || 0;
+          if (sup && Date.now() < sup) {
+            if (ev && typeof ev.preventDefault === 'function') ev.preventDefault();
+            if (ev && typeof ev.stopPropagation === 'function') ev.stopPropagation();
+            return;
+          }
           var wkNav = ev.target && ev.target.closest && ev.target.closest('[data-strip-week-delta]');
           if (wkNav) {
             var d = parseInt(wkNav.getAttribute('data-strip-week-delta'), 10);
@@ -6467,6 +6670,11 @@
         var p = new URLSearchParams(window.location.search || '');
         var cidRaw = p.get('client_id');
         var clientIdFromUrl = cidRaw ? parseInt(cidRaw, 10) : null;
+        var fromBookingRaw = p.get('from_booking_id');
+        var fromBookingIdForPresets = fromBookingRaw ? parseInt(fromBookingRaw, 10) : null;
+        if (fromBookingIdForPresets != null && (isNaN(fromBookingIdForPresets) || fromBookingIdForPresets <= 0)) {
+          fromBookingIdForPresets = null;
+        }
         var ob = p.get('open_booking');
         var fromHub = (p.get('from') || '') === 'hub';
         var hubGroupSlotRaw = p.get('hub_group_slot');
@@ -6504,6 +6712,9 @@
         }
         if (clientIdFromUrl) {
           state.deepLinkClientId = clientIdFromUrl;
+          if (fromBookingIdForPresets != null) {
+            state.presetBookingDefaultsId = fromBookingIdForPresets;
+          }
         }
         if (ob) {
           state.pendingBookGroupSlotId = null;

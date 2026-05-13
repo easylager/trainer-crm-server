@@ -80,6 +80,7 @@ from src.application.booking_use_cases import (
     get_trainer_client_next_booking,
     get_trainer_client_for_card,
     get_trainer_client_last_booking_service_defaults,
+    get_trainer_client_booking_defaults_from_booking_id,
     get_trainer_client_last_booking_price_variant_for_service,
     get_trainer_client_latest_booking_service_id,
     get_trainer_group_slot_hub,
@@ -5683,21 +5684,40 @@ async def post_trainer_client_detach_from_roster(
 @router.get("/trainer/clients/{client_id:int}/booking-defaults")
 async def get_trainer_client_booking_defaults(
     client_id: int,
+    from_booking_id: int | None = Query(
+        None,
+        ge=1,
+        description="When set (e.g. post-session «Записать снова»), presets from this booking row instead of latest by created_at.",
+    ),
     principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
-    """Defaults for quick book from client profile: last session's service/tier + client name."""
+    """Defaults for quick book: last booking by created_at, or a specific booking when from_booking_id is set."""
     trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     client = await get_trainer_client_for_card(session, trainer_id, client_id)
     if not client:
         raise HTTPException(status_code=404, detail="Клиент не найден или нет доступа")
-    sid, vid, arena_id = await get_trainer_client_last_booking_service_defaults(session, trainer_id, client_id)
+    if from_booking_id is not None:
+        preset = await get_trainer_client_booking_defaults_from_booking_id(
+            session, trainer_id, client_id, int(from_booking_id)
+        )
+        if preset is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Запись не найдена или недоступна для пресетов",
+            )
+        sid, vid, arena_id, tier_kind = preset
+    else:
+        sid, vid, arena_id, tier_kind = await get_trainer_client_last_booking_service_defaults(
+            session, trainer_id, client_id
+        )
     return {
         "service_id": sid,
         "service_price_variant_id": vid,
         "arena_id": arena_id,
+        "price_tier_kind": tier_kind,
         "client_first_name": (client.get("first_name") or "").strip() or None,
         "client_last_name": (client.get("last_name") or "").strip() or None,
     }

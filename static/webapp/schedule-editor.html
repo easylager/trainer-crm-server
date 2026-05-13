@@ -24,8 +24,8 @@
       href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=optional"
     />
   </noscript>
-  <link rel="preload" href="schedule-editor-main.js?v=20260612" as="script" />
-  <link rel="stylesheet" href="mini-app-schedule-editor.css?v=20260614" />
+  <link rel="preload" href="schedule-editor-main.js?v=20260617" as="script" />
+  <link rel="stylesheet" href="mini-app-schedule-editor.css?v=20260615" />
   <link rel="stylesheet" href="mini-app-trainer-nav.css?v=20260429" />
 </head>
 <body>
@@ -612,27 +612,38 @@
         <button type="button" class="btn-block btn-book-cancel" id="modalBookCancel">Отмена</button>
       </div>
       <div id="bookStepExisting" class="book-step" data-step="existing" style="display:none;">
-        <button type="button" class="book-modal-back" id="bookBackFromExisting">
-          <svg class="book-modal-back-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
-          Назад
-        </button>
-        <div class="book-field-stack" id="bookServiceStackExisting">
-          <label class="book-field-label" for="bookServiceSelect">Услуга</label>
-          <select id="bookServiceSelect" class="input book-service-select"></select>
+        <div id="bookExistingStepClient">
+          <button type="button" class="book-modal-back" id="bookBackFromExisting">
+            <svg class="book-modal-back-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+            Назад
+          </button>
+          <p class="book-choice-lead">Выберите клиента</p>
+          <div class="book-field-stack" id="bookClientSearchWrap">
+            <label class="book-field-label" for="bookClientSearch">Поиск по имени или телефону</label>
+            <input type="text" id="bookClientSearch" class="input book-search-input" placeholder="Имя или телефон...">
+          </div>
+          <div id="bookClientList" class="client-list book-client-list"></div>
         </div>
-        <div class="book-field-stack" id="bookPriceTierWrapExisting" style="display:none;">
-          <label class="book-field-label">Тариф</label>
-          <div id="bookPriceTierRadiosExisting" class="book-price-tier-radios"></div>
+        <div id="bookExistingStepService" style="display: none;" aria-hidden="true">
+          <button type="button" class="book-modal-back" id="bookBackFromServiceExisting">
+            <svg class="book-modal-back-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+            К списку клиентов
+          </button>
+          <p id="bookExistingClientLead" class="book-choice-lead"></p>
+          <div class="book-field-stack" id="bookServiceStackExisting">
+            <label class="book-field-label" for="bookServiceSelect">Услуга</label>
+            <select id="bookServiceSelect" class="input book-service-select"></select>
+          </div>
+          <div class="book-field-stack" id="bookPriceTierWrapExisting" style="display:none;">
+            <label class="book-field-label">Тариф</label>
+            <div id="bookPriceTierRadiosExisting" class="book-price-tier-radios"></div>
+          </div>
+          <div class="book-field-stack" id="bookArenaWrap" style="display:none;">
+            <label class="book-field-label" for="bookArenaSelect">Площадка</label>
+            <select id="bookArenaSelect" class="input book-service-select"></select>
+          </div>
+          <button type="button" class="btn-block btn-primary" id="btnBookExistingServiceNext">Далее — подтверждение</button>
         </div>
-        <div class="book-field-stack" id="bookArenaWrap" style="display:none;">
-          <label class="book-field-label" for="bookArenaSelect">Площадка</label>
-          <select id="bookArenaSelect" class="input book-service-select"></select>
-        </div>
-        <div class="book-field-stack" id="bookClientSearchWrap">
-          <label class="book-field-label" for="bookClientSearch">Поиск по имени или телефону</label>
-          <input type="text" id="bookClientSearch" class="input book-search-input" placeholder="Имя или телефон...">
-        </div>
-        <div id="bookClientList" class="client-list book-client-list"></div>
       </div>
       <div id="bookStepNew" class="book-step" data-step="new" style="display:none;">
         <button type="button" class="book-modal-back" id="bookBackFromNew">
@@ -686,6 +697,6 @@
   <script src="mini-app-trainer-home.js"></script>
   <script src="trainer-client-relay-ui.js?v=202605090"></script>
   <script src="trainer-relay-helpers.js?v=202605090"></script>
-  <script defer src="schedule-editor-main.js?v=20260612"></script>
+  <script defer src="schedule-editor-main.js?v=20260617"></script>
 </body>
 </html>

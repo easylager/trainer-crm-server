@@ -3216,6 +3216,9 @@
       var hubBookServiceId = null;
       /** Quick-book only: chosen catalog tier (POST service_price_variant_id). */
       var hubBookPriceVariantId = null;
+      /** Consumed on next multi-tier sync after booking-defaults (must not run before service step is open). */
+      var hubBookPendingTierPresetVariantId = null;
+      var hubBookPendingTierPresetKind = null;
       var hubBookQuickPayload = null;
       var hubBookQuickServices = [];
       /** service_id (catalog id) → accent slug; filled from GET /trainer/my-services + quick-book prepare. */
@@ -3528,7 +3531,8 @@
         hubBookSlotId = null;
         hubBookServiceId = null;
         hubBookPriceVariantId = null;
-        hubBookQuickPayload = null;
+        hubBookPendingTierPresetVariantId = null;
+        hubBookPendingTierPresetKind = null;
         hubBookQuickServices = [];
         hubQuickBookSlotsForDay = [];
         hubQuickBookSlotsIsoDate = null;
@@ -3708,6 +3712,23 @@
         return adult ? adult.id : tiers[0].id;
       }
 
+      /** Last-booking preset: use variant id and/or API tier_kind (sync with schedule quick-book). */
+      function hubResolveBookingPriceTierId(svc, variantIdRaw, priceTierKindRaw) {
+        var tiers = (svc && svc.price_tiers) ? svc.price_tiers : [];
+        if (!tiers.length) return null;
+        if (tiers.length === 1) return tiers[0].id;
+        var vid = variantIdRaw != null ? parseInt(String(variantIdRaw), 10) : NaN;
+        if (!isNaN(vid) && tiers.some(function(t) { return Number(t.id) === vid; })) return vid;
+        var tk = (priceTierKindRaw || '').toString().trim().toLowerCase();
+        if (tk) {
+          var hit = tiers.filter(function(t) {
+            return (t.tier_kind || '').toString().trim().toLowerCase() === tk;
+          })[0];
+          if (hit) return hit.id;
+        }
+        return null;
+      }
+
       /**
        * На шаге «услуга/тариф» прячем блок с двумя кнопками (из списка / нового) — иначе экран
        * визуально совпадает с первым шагом и кажется, что «Далее» ничего не меняет.
@@ -3766,18 +3787,14 @@
         var sel = document.getElementById('hubBookServiceSelect');
         if (sel && hubBookServiceId != null) sel.value = String(hubBookServiceId);
         syncHubBookServicePickHighlight();
-        syncHubBookPriceTierRadios();
+        hubBookPendingTierPresetVariantId =
+          def.service_price_variant_id != null ? def.service_price_variant_id : null;
+        hubBookPendingTierPresetKind =
+          def.price_tier_kind != null && String(def.price_tier_kind).trim()
+            ? def.price_tier_kind
+            : null;
         hubBookArenaId = hubPickDefaultArenaId(arList, def.arena_id);
         fillHubBookArenaPicklist(arList);
-        var vidRaw = def.service_price_variant_id != null ? parseInt(String(def.service_price_variant_id), 10) : NaN;
-        if (!isNaN(vidRaw)) {
-          var host = document.getElementById('hubBookPriceTierRadios');
-          var inp = host && host.querySelector('input[value="' + String(vidRaw) + '"]');
-          if (inp) {
-            inp.checked = true;
-            hubBookPriceVariantId = parseInt(inp.value, 10);
-          }
-        }
       }
 
       function hubEnterClientFirstServiceStep(leadHint) {
@@ -4126,12 +4143,22 @@
           wrap.style.display = 'none';
           host.innerHTML = '';
           hubBookPriceVariantId = tiers.length === 1 ? tiers[0].id : null;
+          hubBookPendingTierPresetVariantId = null;
+          hubBookPendingTierPresetKind = null;
           return;
         }
         wrap.style.display = 'block';
         host.innerHTML = '';
         var gname = 'hub_bpt_' + String(sid || 0);
         var preferredId = hubPickDefaultPriceTierId(tiers);
+        var presetV = hubBookPendingTierPresetVariantId;
+        var presetK = hubBookPendingTierPresetKind;
+        if (presetV != null || (presetK != null && String(presetK).trim() !== '')) {
+          var resolved = hubResolveBookingPriceTierId(svc, presetV, presetK);
+          if (resolved != null) preferredId = resolved;
+        }
+        hubBookPendingTierPresetVariantId = null;
+        hubBookPendingTierPresetKind = null;
         tiers.forEach(function(tier) {
           var lab = document.createElement('label');
           lab.style.display = 'flex';

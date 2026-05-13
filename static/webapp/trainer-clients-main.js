@@ -390,6 +390,9 @@
           bookArenaId: null,
           trainerArenas: [],
           awaitingConfirm: false,
+          /** Background fetch when opening «Записать» — same defaults as step 2 (latest booking by created_at). */
+          bookingDefaultsPrefetch: null,
+          bookingDefaultsPrefetchGen: 0,
         };
       
         function todayIsoLocal() {
@@ -710,6 +713,8 @@
           closeConfirmModal();
           closeServiceModal();
           closeDatetimeModal();
+          qb.bookingDefaultsPrefetchGen += 1;
+          qb.bookingDefaultsPrefetch = null;
           qb.lockedClientId = null;
           qb.clientDisplayName = '';
         }
@@ -727,8 +732,23 @@
           })[0];
           return adult ? adult.id : tiers[0].id;
         }
-      
-        function syncPriceTierRadios(preferredVariantId) {
+
+        function resolveTcPriceTierIdFromDefaults(tiers, preferredVariantId, priceTierKind) {
+          if (!tiers || !tiers.length) return null;
+          if (tiers.length === 1) return tiers[0].id;
+          var pref = preferredVariantId != null ? parseInt(String(preferredVariantId), 10) : NaN;
+          if (!isNaN(pref) && tiers.some(function(t) { return Number(t.id) === pref; })) return pref;
+          var tk = (priceTierKind || '').toString().trim().toLowerCase();
+          if (tk) {
+            var hit = tiers.filter(function(t) {
+              return (t.tier_kind || '').toString().trim().toLowerCase() === tk;
+            })[0];
+            if (hit) return hit.id;
+          }
+          return null;
+        }
+
+        function syncPriceTierRadios(preferredVariantId, priceTierKind) {
           var wrap = document.getElementById('tcQbProfilePriceTierWrap');
           var host = document.getElementById('tcQbProfilePriceTierRadios');
           if (!wrap || !host) return;
@@ -768,8 +788,8 @@
             });
             host.appendChild(lab);
           });
-          var pref = preferredVariantId != null ? parseInt(preferredVariantId, 10) : NaN;
-          var matched = !isNaN(pref) ? host.querySelector('input[value="' + String(pref) + '"]') : null;
+          var resolved = resolveTcPriceTierIdFromDefaults(tiers, preferredVariantId, priceTierKind);
+          var matched = resolved != null ? host.querySelector('input[value="' + String(resolved) + '"]') : null;
           if (matched) {
             matched.checked = true;
             qb.bookPriceVariantId = parseInt(matched.value, 10);
@@ -790,91 +810,104 @@
           return ru + ' ' + formatMinuteClock(qb.startMinutes);
         }
       
+        function applyTcQuickBookServiceStep(servicesPayload, defaults) {
+          qb.bookServices = servicesPayload.services || [];
+          if (!qb.bookServices.length) {
+            showTcToast('Добавьте услугу в профиле');
+            closeDatetimeModal();
+            return;
+          }
+          qb.trainerArenas = servicesPayload.arenas || [];
+          var arenas = qb.trainerArenas || [];
+          var primary = arenas.filter(function(a) {
+            return a.is_primary;
+          })[0];
+          qb.bookArenaId = primary ? primary.id : arenas.length ? arenas[0].id : null;
+          if (defaults.arena_id != null) {
+            var da = parseInt(defaults.arena_id, 10);
+            if (!isNaN(da) && arenas.some(function(a) { return Number(a.id) === da; })) {
+              qb.bookArenaId = da;
+            }
+          }
+
+          var sel = document.getElementById('tcQbProfileServiceSelect');
+          if (!sel) return;
+          sel.innerHTML = '';
+          qb.bookServices.forEach(function(s) {
+            var opt = document.createElement('option');
+            opt.value = String(s.id);
+            opt.textContent = s.name || '—';
+            sel.appendChild(opt);
+          });
+          var defSid = defaults.service_id != null ? parseInt(defaults.service_id, 10) : NaN;
+          var picked = qb.bookServices.length ? Number(qb.bookServices[0].id) : null;
+          if (!isNaN(defSid) && qb.bookServices.some(function(s) {
+            return Number(s.id) === defSid;
+          })) {
+            picked = defSid;
+          }
+          qb.bookServiceId = picked;
+          sel.value = picked != null ? String(picked) : '';
+          sel.onchange = function() {
+            qb.bookServiceId = this.value ? parseInt(this.value, 10) : null;
+            syncPriceTierRadios(null, null);
+          };
+
+          var wrapA = document.getElementById('tcQbProfileArenaWrap');
+          var selA = document.getElementById('tcQbProfileArenaSelect');
+          if (wrapA && selA) {
+            var showA = arenas.length > 1;
+            wrapA.style.display = showA ? 'block' : 'none';
+            if (showA) {
+              selA.innerHTML = '';
+              arenas.forEach(function(a) {
+                var o = document.createElement('option');
+                o.value = String(a.id);
+                o.textContent = (a.name || '—') + (a.is_primary ? ' · основная' : '');
+                selA.appendChild(o);
+              });
+              selA.value = qb.bookArenaId != null ? String(qb.bookArenaId) : '';
+              selA.onchange = function() {
+                qb.bookArenaId = this.value ? parseInt(this.value, 10) : null;
+              };
+            }
+          }
+
+          var defVid = defaults.service_price_variant_id != null ? parseInt(defaults.service_price_variant_id, 10) : null;
+          syncPriceTierRadios(defVid, defaults.price_tier_kind);
+
+          var ms = document.getElementById('tcModalQuickBookService');
+          if (ms) {
+            ms.style.display = 'flex';
+            ms.setAttribute('aria-hidden', 'false');
+          }
+          closeDatetimeModal();
+        }
+
         function openServiceStepAfterDatetime() {
           var cid = qb.lockedClientId;
           if (!cid) return;
+
+          var pf = qb.bookingDefaultsPrefetch;
+          if (pf && pf.clientId === cid && pf.servicesPayload && pf.defaults) {
+            qb.bookingDefaultsPrefetch = null;
+            applyTcQuickBookServiceStep(pf.servicesPayload, pf.defaults);
+            return;
+          }
+
           Promise.all([
-            fetch(api('/trainer/my-services'), { headers: {} }).then(function(r) {
+            fetch(api('/trainer/my-services'), { headers: {}, cache: 'no-store' }).then(function(r) {
               return r.ok ? r.json() : Promise.reject(new Error('svc'));
             }),
-            fetch(api('/trainer/clients/' + encodeURIComponent(cid) + '/booking-defaults'), { headers: {} }).then(function(r) {
+            fetch(api('/trainer/clients/' + encodeURIComponent(cid) + '/booking-defaults'), {
+              headers: {},
+              cache: 'no-store',
+            }).then(function(r) {
               return r.ok ? r.json() : Promise.reject(new Error('def'));
             }),
           ])
             .then(function(results) {
-              var servicesPayload = results[0];
-              var defaults = results[1];
-              qb.bookServices = servicesPayload.services || [];
-              if (!qb.bookServices.length) {
-                showTcToast('Добавьте услугу в профиле');
-                closeDatetimeModal();
-                return;
-              }
-              qb.trainerArenas = servicesPayload.arenas || [];
-              var arenas = qb.trainerArenas || [];
-              var primary = arenas.filter(function(a) {
-                return a.is_primary;
-              })[0];
-              qb.bookArenaId = primary ? primary.id : arenas.length ? arenas[0].id : null;
-              if (defaults.arena_id != null) {
-                var da = parseInt(defaults.arena_id, 10);
-                if (!isNaN(da) && arenas.some(function(a) { return Number(a.id) === da; })) {
-                  qb.bookArenaId = da;
-                }
-              }
-      
-              var sel = document.getElementById('tcQbProfileServiceSelect');
-              if (!sel) return;
-              sel.innerHTML = '';
-              qb.bookServices.forEach(function(s) {
-                var opt = document.createElement('option');
-                opt.value = String(s.id);
-                opt.textContent = s.name || '—';
-                sel.appendChild(opt);
-              });
-              var defSid = defaults.service_id != null ? parseInt(defaults.service_id, 10) : NaN;
-              var picked = qb.bookServices.length ? Number(qb.bookServices[0].id) : null;
-              if (!isNaN(defSid) && qb.bookServices.some(function(s) {
-                return Number(s.id) === defSid;
-              })) {
-                picked = defSid;
-              }
-              qb.bookServiceId = picked;
-              sel.value = picked != null ? String(picked) : '';
-              sel.onchange = function() {
-                qb.bookServiceId = this.value ? parseInt(this.value, 10) : null;
-                syncPriceTierRadios(null);
-              };
-      
-              var wrapA = document.getElementById('tcQbProfileArenaWrap');
-              var selA = document.getElementById('tcQbProfileArenaSelect');
-              if (wrapA && selA) {
-                var showA = arenas.length > 1;
-                wrapA.style.display = showA ? 'block' : 'none';
-                if (showA) {
-                  selA.innerHTML = '';
-                  arenas.forEach(function(a) {
-                    var o = document.createElement('option');
-                    o.value = String(a.id);
-                    o.textContent = (a.name || '—') + (a.is_primary ? ' · основная' : '');
-                    selA.appendChild(o);
-                  });
-                  selA.value = qb.bookArenaId != null ? String(qb.bookArenaId) : '';
-                  selA.onchange = function() {
-                    qb.bookArenaId = this.value ? parseInt(this.value, 10) : null;
-                  };
-                }
-              }
-      
-              var defVid = defaults.service_price_variant_id != null ? parseInt(defaults.service_price_variant_id, 10) : null;
-              syncPriceTierRadios(defVid);
-      
-              var ms = document.getElementById('tcModalQuickBookService');
-              if (ms) {
-                ms.style.display = 'flex';
-                ms.setAttribute('aria-hidden', 'false');
-              }
-              closeDatetimeModal();
+              applyTcQuickBookServiceStep(results[0], results[1]);
             })
             .catch(function() {
               showTcToast('Не удалось загрузить услуги');
@@ -1100,7 +1133,37 @@
           qb.bookArenaId = null;
           qb.trainerArenas = [];
           qb.awaitingConfirm = false;
-      
+          qb.bookingDefaultsPrefetch = null;
+          qb.bookingDefaultsPrefetchGen += 1;
+          var prefetchSnap = qb.bookingDefaultsPrefetchGen;
+          var prefetchCid = clientId;
+          Promise.all([
+            fetch(api('/trainer/my-services'), { headers: {}, cache: 'no-store' }),
+            fetch(api('/trainer/clients/' + encodeURIComponent(prefetchCid) + '/booking-defaults'), {
+              headers: {},
+              cache: 'no-store',
+            }),
+          ])
+            .then(function(rs) {
+              return Promise.all(
+                rs.map(function(r) {
+                  return r.ok ? r.json() : Promise.reject(new Error('prefetch'));
+                })
+              );
+            })
+            .then(function(results) {
+              if (prefetchSnap !== qb.bookingDefaultsPrefetchGen) return;
+              if (qb.lockedClientId !== prefetchCid) return;
+              qb.bookingDefaultsPrefetch = {
+                clientId: prefetchCid,
+                servicesPayload: results[0],
+                defaults: results[1],
+              };
+            })
+            .catch(function() {
+              /* Step 2 will fetch if prefetch fails or initData was late. */
+            });
+
           var modal = document.getElementById('tcModalQuickBookDatetime');
           var dateEl = document.getElementById('tcQuickBookDate');
           var durEl = document.getElementById('tcQuickBookDuration');

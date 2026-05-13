@@ -660,6 +660,7 @@ async def _build_trainer_post_session_keyboard(
                     text=msg.TRAINER_BUTTON_BOOK_AGAIN,
                     web_app=WebAppInfo(
                         url=f"{base}/webapp/schedule-editor?flow=book&client_id={int(client_id)}"
+                        f"&from_booking_id={int(p['booking_id'])}"
                     ),
                 ),
             ],

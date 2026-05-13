@@ -233,6 +233,7 @@ async def run_once() -> None:
                             text=msg.TRAINER_BUTTON_BOOK_AGAIN,
                             web_app=WebAppInfo(
                                 url=f"{base_url}/webapp/schedule-editor?flow=book&client_id={int(cid)}"
+                                f"&from_booking_id={int(p['booking_id'])}"
                             ),
                         ),
                     ],

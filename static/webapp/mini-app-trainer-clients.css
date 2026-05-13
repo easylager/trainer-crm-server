@@ -976,6 +976,15 @@
     #tcModalAddClient .book-field-stack {
       margin-bottom: 16px;
       min-width: 0;
+      max-width: 100%;
+    }
+    /* iOS/WebKit: native type=date has a large intrinsic width — clip inside modal. */
+    #tcModalQuickBookDatetime .tc-qb-date-wrap {
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      overflow: hidden;
+      box-sizing: border-box;
     }
     #tcModalAddClient .quick-book-fields .book-field-stack:last-child {
       margin-bottom: 0;
@@ -1126,8 +1135,7 @@
       width: 100%;
       max-width: 100%;
       min-width: 0;
-      display: flex;
-      align-items: center;
+      display: block;
       line-height: 1.2;
       font-family: inherit;
       font-variant-numeric: tabular-nums;
@@ -1138,20 +1146,24 @@
       color: var(--tg-theme-text-color);
     }
     #tcModalQuickBookDatetime input#tcQuickBookDate.tc-qb-input[type='date']::-webkit-datetime-edit {
-      flex: 1;
       width: 100%;
+      max-width: 100%;
       min-width: 0;
       padding: 0;
-      display: flex;
-      align-items: center;
+      display: block;
     }
     #tcModalQuickBookDatetime input#tcQuickBookDate.tc-qb-input[type='date']::-webkit-datetime-edit-fields-wrapper {
       width: 100%;
       max-width: 100%;
       min-width: 0;
-      flex: 1;
       display: flex;
       align-items: center;
+      flex-wrap: nowrap;
+    }
+    #tcModalQuickBookDatetime input#tcQuickBookDate.tc-qb-input[type='date']::-webkit-datetime-edit-month-field,
+    #tcModalQuickBookDatetime input#tcQuickBookDate.tc-qb-input[type='date']::-webkit-datetime-edit-day-field {
+      min-width: 0;
+      flex: 1 1 auto;
     }
     #tcModalQuickBookDatetime input#tcQuickBookDate.tc-qb-input[type='date']::-webkit-datetime-edit-month-field,
     #tcModalQuickBookDatetime input#tcQuickBookDate.tc-qb-input[type='date']::-webkit-datetime-edit-day-field,
@@ -1160,11 +1172,14 @@
       color: var(--tg-theme-text-color);
     }
     #tcModalQuickBookDatetime input#tcQuickBookDate.tc-qb-input[type='date']::-webkit-datetime-edit-year-field {
-      min-width: 4.25ch;
-      flex-shrink: 0;
+      min-width: 3.5ch;
+      flex: 0 0 auto;
     }
     #tcModalQuickBookDatetime input#tcQuickBookDate.tc-qb-input[type='date']::-webkit-calendar-picker-indicator {
       opacity: 0.72;
+      flex-shrink: 0;
+      margin: 0;
+      padding: 0;
     }
     #tcModalQuickBookDatetime .tc-qb-select-wrap,
     #tcModalQuickBookService .tc-qb-select-wrap {
