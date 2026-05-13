@@ -243,6 +243,77 @@ async def test_generate_reminders_and_list_pending(db_session: AsyncSession) -> 
 
 
 @pytest.mark.asyncio
+async def test_same_day_two_bookings_merged_reminder_schedule(db_session: AsyncSession) -> None:
+    """Two bookings same calendar day → still two pending kinds (e.g. 24h + 2h), not four; merged_booking_ids set."""
+    day = date.today() + timedelta(days=3)
+    trainer_id, slot1, service_id = await _create_trainer_and_slot(
+        db_session, day, time(10, 0), time(11, 0)
+    )
+    r_slot2 = await db_session.execute(
+        text(
+            """
+            INSERT INTO slots (trainer_id, slot_date, start_time, end_time, status, capacity)
+            VALUES (:tid, :d, :st, :en, 'available', 1)
+            RETURNING id
+            """
+        ),
+        {
+            "tid": trainer_id,
+            "d": day,
+            "st": time(14, 0),
+            "en": time(15, 0),
+        },
+    )
+    slot2 = int(r_slot2.scalar_one())
+    await db_session.commit()
+    client_tg = unique_test_telegram_id()
+    client_id = await _create_client(db_session, client_tg)
+    b1, _ = await create_booking(
+        db_session, slot1, trainer_id, client_id, service_id=service_id
+    )
+    assert b1 is not None
+    await generate_reminders_for_booking(db_session, b1)
+    r = await db_session.execute(
+        text(
+            "SELECT COUNT(*) FROM reminders WHERE client_telegram_id = :t AND status = 'pending'"
+        ),
+        {"t": client_tg},
+    )
+    assert int(r.scalar() or 0) == 2
+    b2, _ = await create_booking(
+        db_session, slot2, trainer_id, client_id, service_id=service_id
+    )
+    assert b2 is not None
+    await generate_reminders_for_booking(db_session, b2)
+    r2 = await db_session.execute(
+        text(
+            "SELECT COUNT(*) FROM reminders WHERE client_telegram_id = :t AND status = 'pending'"
+        ),
+        {"t": client_tg},
+    )
+    assert int(r2.scalar() or 0) == 2
+    r3 = await db_session.execute(
+        text(
+            """
+            SELECT booking_id, merged_booking_ids, kind
+            FROM reminders
+            WHERE client_telegram_id = :t AND status = 'pending'
+            ORDER BY kind
+            """
+        ),
+        {"t": client_tg},
+    )
+    mrows = r3.fetchall()
+    assert len(mrows) == 2
+    assert all(int(row[0]) == int(b1) for row in mrows)
+    kinds = {row[2] for row in mrows}
+    assert "before_24h" in kinds and "before_2h" in kinds
+    merged = mrows[0][1]
+    assert merged is not None
+    assert [int(x) for x in list(merged)] == [int(b2)]
+
+
+@pytest.mark.asyncio
 async def test_list_bookings_to_complete_and_mark_completed(db_session: AsyncSession) -> None:
     """Past-slot pending booking appears in list_bookings_to_complete; mark_booking_completed_and_notify updates status and creates notification row."""
     yesterday = date.today() - timedelta(days=1)

@@ -25,9 +25,8 @@ from src.application.booking_use_cases import (
     cancel_booking,
     confirm_booking,
     create_booking,
-    compute_booking_reminder_schedule,
     decline_booking,
-    format_reminder_plan_ru,
+    format_trainer_reminder_plan_for_client_day,
     generate_reminders_for_booking,
     get_booking_for_trainer_feedback,
     get_booking_milestone_display_for_trainer,
@@ -356,36 +355,6 @@ def _slot_duration_minutes(slot_date, start_time, end_time) -> int | None:
         return max(1, int(sec // 60))
     except Exception:
         return None
-
-
-def _build_client_reminder_plan_text(
-    slot_date,
-    start_time,
-    *,
-    client_has_telegram: bool,
-) -> str:
-    """Human-readable reminder schedule for trainer post-action UX."""
-    if not client_has_telegram:
-        return "не запланированы: у клиента не привязан Telegram"
-    if slot_date is None or start_time is None:
-        return "запланируем автоматически после синхронизации слота"
-    try:
-        local_tz = ZoneInfo(NOTIFICATION_TZ)
-        now_local = datetime.now(local_tz)
-        slot_dt_local = datetime.combine(slot_date, start_time).replace(tzinfo=local_tz)
-    except Exception:
-        return "запланируем автоматически по правилам напоминаний"
-    if slot_dt_local <= now_local:
-        return "не ставим: слот уже начался или в прошлом"
-
-    plan = compute_booking_reminder_schedule(
-        anchor_local=now_local,
-        slot_date=slot_date,
-        start_time=start_time,
-    )
-    if not plan:
-        return "не планируются: поздняя запись или нет окна до начала слота"
-    return format_reminder_plan_ru(plan)
 
 
 def _week_range(week_start: date | str) -> tuple[str, str]:
@@ -1610,11 +1579,13 @@ async def _complete_schedule_create_booking(
                     )
                 ]
             )
-        reminder_plan = _build_client_reminder_plan_text(
-            slot_date,
-            start_time,
-            client_has_telegram=bool(client_tg_id),
-        )
+        async with async_session_factory() as session:
+            reminder_plan = await format_trainer_reminder_plan_for_client_day(
+                session,
+                client_id=client_id,
+                slot_date=slot_date,
+                client_has_telegram=bool(client_tg_id),
+            )
         client_confirmation = "не применимо: у клиента не привязан Telegram"
         if client_tg_id:
             client_confirmation = msg.TRAINER_CREATE_BOOKING_CLIENT_CONFIRMATION_QUEUED
@@ -1885,16 +1856,24 @@ async def on_make_recurring_trainer(callback: CallbackQuery) -> None:
     start_time = booking["start_time"]
     end_time = booking["end_time"]
     async with async_session_factory() as session:
+        if not await get_first_service_id_for_trainer(session, trainer_id):
+            await callback.message.answer(msg.TRAINER_RECURRING_NEEDS_SERVICE)
+            return
         recurring_id = await create_recurring_client_slot(
             session, trainer_id, client_id, day_of_week, start_time, end_time
         )
         if recurring_id:
-            await materialize_recurring_horizon(
+            hw = max(1, int(Settings().recurring_materialization_horizon_weeks))
+            materialized = await materialize_recurring_horizon(
                 session,
                 trainer_id,
-                horizon_weeks=Settings().recurring_materialization_horizon_weeks,
+                horizon_weeks=hw,
                 recurring_ids=[recurring_id],
             )
+            if materialized < hw:
+                await cancel_recurring_client_slot(session, trainer_id, recurring_id)
+                await callback.message.answer(msg.TRAINER_RECURRING_MATERIALIZE_INCOMPLETE)
+                return
     await callback.message.answer(msg.TRAINER_RECURRING_DONE)
 
 
@@ -1912,7 +1891,7 @@ async def on_remove_recurring(callback: CallbackQuery) -> None:
         await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
         return
     async with async_session_factory() as session:
-        ok = await cancel_recurring_client_slot(session, trainer_id, recurring_id)
+        ok, _removed = await cancel_recurring_client_slot(session, trainer_id, recurring_id)
     if not ok:
         await callback.message.answer(msg.TRAINER_ERROR_BOOKING_NOT_FOUND)
         return

@@ -179,6 +179,10 @@ TRAINER_CLIENT_REGISTERED_LINKED_HTML = (
     "Telegram привязан к существующей карточке в разделе «Клиенты»."
 )
 TRAINER_CLIENT_REGISTERED_OPEN_PROFILE_BTN = "Открыть профиль клиента"
+TRAINER_CLIENT_FAMILY_MEMBER_HTML = (
+    "👥 <b>Семейный доступ</b>\n\n"
+    "К карточке {client_label} подключился ещё один аккаунт в Telegram: {member_label}."
+)
 
 # Client: errors and hints (what to do next)
 CLIENT_ERROR_BOOKING_CLOSED = "Эта запись уже закрыта или недоступна. Выберите другого тренера или время в каталоге."
@@ -700,6 +704,80 @@ def build_client_booking_confirmed_inline_keyboard(
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
+def format_client_recurring_set_by_trainer_notification_html(
+    *,
+    trainer_name: str,
+    weekday_short: str,
+    time_range: str,
+    service_name: str | None,
+    booking_price_cents: int | None,
+    price_tier_label: str | None,
+    arena_display: str | None,
+    materialized_count: int,
+) -> str:
+    """Single client-bot message when trainer sets recurring from CRM (not one push per auto-booking)."""
+    tn = html.escape((trainer_name or "").strip() or "Тренер")
+    ws = html.escape((weekday_short or "").strip() or "—")
+    tr = html.escape((time_range or "").strip() or "—")
+    parts: list[str] = [
+        "✅ <b>Постоянное время закреплено</b>\n\n",
+        f"👤 <b>Тренер:</b> {tn}\n",
+        f"📆 <b>Каждую неделю:</b> {ws} · {tr}\n",
+        _format_client_booking_confirmed_service_price_block(
+            service_name, booking_price_cents, price_tier_label
+        ),
+    ]
+    ar = (arena_display or "").strip()
+    if ar:
+        parts.append(f"📍 <b>Место:</b> {html.escape(ar)}\n")
+    parts.append("\n")
+    if int(materialized_count or 0) > 0:
+        parts.append(
+            "Ближайшие занятия уже в <b>«Мои записи»</b>. На каждую дату отдельное сообщение не шлём — "
+            "откройте список, чтобы увидеть все запланированные слоты. Напоминания придут, как обычно.\n"
+        )
+    else:
+        parts.append(
+            "Следующие занятия появятся в <b>«Мои записи»</b>, когда в расписании тренера будет свободное окно на это время. "
+            "Напоминания пришлём, как после обычной записи.\n"
+        )
+    return "".join(parts)
+
+
+def build_client_recurring_set_inline_keyboard(
+    *,
+    trainer_telegram_id: int | None,
+    webapp_base_url: str | None,
+) -> "InlineKeyboardMarkup | None":
+    """After trainer sets recurring in CRM: open My bookings + write trainer (no per-booking deep link)."""
+    from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
+
+    base = (webapp_base_url or "").rstrip("/")
+    web_ok = base.lower().startswith("https://")
+    rows: list[list[InlineKeyboardButton]] = []
+    if web_ok:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=CLIENT_BUTTON_MY_BOOKINGS,
+                    web_app=WebAppInfo(url=f"{base}/webapp/client-bookings"),
+                )
+            ]
+        )
+    if trainer_telegram_id:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=CLIENT_BOOKING_CONFIRMED_BTN_WRITE_TRAINER,
+                    url=f"tg://user?id={int(trainer_telegram_id)}",
+                )
+            ]
+        )
+    if not rows:
+        return None
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
 def build_client_declined_booking_catalog_keyboard(*, webapp_base_url: str | None):
     """After decline: two catalog CTAs (same Mini App entry)."""
     from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
@@ -1141,6 +1219,20 @@ CLIENT_WELCOME_BIND_FIRST_IMPRESSION = (
     "<b>Ice Studio</b> — платформа для спорта и тренировок: мы соединяем тренеров и клиентов и поддерживаем развитие индустрии.\n\n"
     "Нажмите кнопку ниже — откроется главный экран приложения: записи, заявки и каталог."
 )
+CLIENT_FAMILY_ACCESS_WELCOME = (
+    "👨‍👩‍👧 <b>Семейный доступ</b>\n\n"
+    "<b>Вас пригласили подключиться к семейному аккаунту.</b>\n\n"
+    "Вы в одном аккаунте с семьёй: общие записи и абонементы. "
+    "Телефон в профиле общий — он был указан при регистрации.\n\n"
+    "Нажмите кнопку ниже — главный экран приложения."
+)
+CLIENT_FAMILY_ACCESS_ALREADY_OWNER = (
+    "Вы уже подключены к этому аккаунту как основной номер Telegram. "
+    "Ссылку семейного доступа можно отправить другому члену семьи."
+)
+CLIENT_FAMILY_ACCESS_LIMIT = (
+    "Семейный доступ: достигнут лимит приглашённых. Отзовите доступ у участника в приложении, чтобы пригласить другого."
+)
 CLIENT_WELCOME_INVITE_CTA_WEBAPP = (
     "Нажмите <b>«Записаться»</b> — выберите время и подтвердите запись в приложении."
 )
@@ -1186,36 +1278,78 @@ CLIENT_REMINDER_2H = (
 def format_client_booking_reminder_text(
     *,
     is_soon: bool,
-    date: str,
-    day: str,
-    time: str,
-    duration: int,
-    service_name: str | None,
-    booking_price_cents: int | None,
-    arena_name: str | None,
-    arena_address: str | None,
+    sessions: list[dict],
 ) -> str:
-    """Rich reminder copy with service, payable amount and venue details."""
+    """Rich reminder copy with service, payable amount and venue. ``sessions`` is one or more same-day rows."""
+    if not sessions:
+        return ""
+    if len(sessions) == 1:
+        s0 = sessions[0]
+        date, day, time_s = s0["date"], s0["day"], s0["time"]
+        duration = int(s0.get("duration") or 0)
+        service_name = s0.get("service_name")
+        booking_price_cents = s0.get("booking_price_cents")
+        arena_name = s0.get("arena_name")
+        arena_address = s0.get("arena_address")
+        title = (
+            "⏰ <b>Скоро: занятие через ~2 ч</b>"
+            if is_soon
+            else "🔔 <b>Напоминание: занятие завтра</b>"
+        )
+        service = (service_name or "").strip() or "—"
+        if booking_price_cents is not None:
+            byn = booking_price_cents / 100.0
+            price = format_rubles_byn_display(byn)
+        else:
+            price = "уточните у тренера"
+        arena = (arena_name or "").strip() or "уточните у тренера"
+        address = (arena_address or "").strip() or "см. «Мои записи»"
+        return (
+            f"{title}\n\n"
+            f"📅 <b>{html.escape(date)}</b> ({html.escape(day)}) · {html.escape(time_s)} – <b>{duration}</b> мин\n"
+            f"🎯 <b>{html.escape(service)}</b>\n"
+            f"💳 <b>{html.escape(price)}</b>\n"
+            f"📍 <b>{html.escape(arena)}</b>\n"
+            f"{html.escape(address)}\n\n"
+            "Сначала напишите тренеру при вопросах — карта и полный адрес в <b>«Мои записях»</b>."
+        )
+
     title = (
-        "⏰ <b>Скоро: занятие через ~2 ч</b>"
+        "⏰ <b>Скоро: несколько занятий</b>\n\n"
         if is_soon
-        else "🔔 <b>Напоминание: занятие завтра</b>"
+        else "🔔 <b>Напоминание о занятиях в этот день</b>\n\n"
     )
-    service = (service_name or "").strip() or "—"
-    if booking_price_cents is not None:
-        byn = booking_price_cents / 100.0
-        price = format_rubles_byn_display(byn)
+    same_date = len({s.get("date") for s in sessions}) == 1
+    if same_date:
+        head = (
+            f"📅 <b>{html.escape(str(sessions[0].get('date') or ''))}</b> "
+            f"({html.escape(str(sessions[0].get('day') or ''))})\n\n"
+        )
     else:
-        price = "уточните у тренера"
-    arena = (arena_name or "").strip() or "уточните у тренера"
-    address = (arena_address or "").strip() or "см. «Мои записи»"
+        head = ""
+    lines: list[str] = []
+    for s in sessions:
+        t = html.escape(str(s.get("time") or "—"))
+        dur = int(s.get("duration") or 0)
+        svc = html.escape(((s.get("service_name") or "").strip() or "—"))
+        if s.get("booking_price_cents") is not None:
+            byn = int(s["booking_price_cents"]) / 100.0
+            price = html.escape(format_rubles_byn_display(byn))
+        else:
+            price = html.escape("уточните у тренера")
+        ar = html.escape(((s.get("arena_name") or "").strip() or "уточните у тренера"))
+        if not same_date:
+            dpart = (
+                f"<b>{html.escape(str(s.get('date') or ''))}</b> ({html.escape(str(s.get('day') or ''))}) · "
+            )
+        else:
+            dpart = ""
+        lines.append(
+            f"• {dpart}{t} – <b>{dur}</b> мин · <b>{svc}</b> · 💳 {price} · 📍 {ar}"
+        )
+    body = head + "\n".join(lines)
     return (
-        f"{title}\n\n"
-        f"📅 <b>{html.escape(date)}</b> ({html.escape(day)}) · {html.escape(time)} – <b>{int(duration)}</b> мин\n"
-        f"🎯 <b>{html.escape(service)}</b>\n"
-        f"💳 <b>{html.escape(price)}</b>\n"
-        f"📍 <b>{html.escape(arena)}</b>\n"
-        f"{html.escape(address)}\n\n"
+        f"{title}{body}\n\n"
         "Сначала напишите тренеру при вопросах — карта и полный адрес в <b>«Мои записях»</b>."
     )
 # Group cohort RSVP (client bot)
@@ -2279,6 +2413,13 @@ TRAINER_BOOKINGS_BUTTON_MAKE_REGULAR = "📅 Сделать постоянным
 TRAINER_BOOKINGS_BUTTON_REMOVE_REGULARITY = "📅 Снять регулярность"
 TRAINER_RECURRING_DONE = "Клиент закреплён как постоянный: каждую неделю в это время слот будет автоматически бронироваться за ним."
 TRAINER_RECURRING_REMOVED = "Регулярность снята."
+TRAINER_RECURRING_NEEDS_SERVICE = (
+    "Не удалось закрепить: в профиле нет ни одной услуги. Добавьте услугу в каталоге — автозапись привязывается к ней."
+)
+TRAINER_RECURRING_MATERIALIZE_INCOMPLETE = (
+    "Не удалось создать все будущие записи: часть окон в расписании занята или пересекается с другим слотом. "
+    "Освободите время и попробуйте снова."
+)
 TRAINER_BOOKINGS_CHOOSE_WRITE = "Выбери запись, чтобы написать клиенту:"
 TRAINER_BOOKINGS_CHOOSE_CANCEL = "Какую запись отменить? Перед отменой предупреди клиента."
 TRAINER_BOOKINGS_WRITE_LINK = "Запись {date} {time}. Написать клиенту в Telegram?"

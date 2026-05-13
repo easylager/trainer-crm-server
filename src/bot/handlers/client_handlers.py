@@ -100,12 +100,14 @@ from src.application.group_attendance_use_cases import (
 from src.application.welcome_link_use_cases import (
     WELCOME_TOKEN_TYPE_CERT,
     WELCOME_TOKEN_TYPE_CLIENT_BIND,
+    WELCOME_TOKEN_TYPE_FAMILY_ACCESS,
     WELCOME_TOKEN_TYPE_GENERIC,
     WELCOME_TOKEN_TYPE_PASS,
     consume_welcome_link_token,
 )
 from src.infrastructure.db.models import DEMAND_SOURCE_CLIENT_APP, DEMAND_SOURCE_CLIENT_SHARE, SUPPORT_FROM_CLIENT
-from src.application.trainer_invite_links import SHARE_REF_PREFIX
+from src.application.family_access_use_cases import attach_family_member_from_invite
+from src.application.trainer_client_registration_notify import notify_trainers_family_access_member_joined
 from src.bot.handlers.relay_handlers import (
     maybe_route_client_relay_text_reply,
     on_client_bot_relay_close_callback,
@@ -637,6 +639,58 @@ async def cmd_start(message: Message) -> None:
                     )
                     await sync_client_telegram_username_from_client_bot(db_session, telegram_id)
                     await db_session.commit()
+        elif token_type == WELCOME_TOKEN_TYPE_FAMILY_ACCESS:
+            fam_client_id = payload_data.get("client_id")
+            if fam_client_id is None:
+                await message.answer(msg.CLIENT_WELCOME_LINK_USED)
+                return
+            uname_fam = None
+            if message.from_user and (message.from_user.username or "").strip():
+                uname_fam = (message.from_user.username or "").strip()[:64]
+            async with async_session_factory() as db_session:
+                allowed_fam = await trainer_has_access_to_client(
+                    db_session, int(trainer_id), int(fam_client_id)
+                )
+                owner_tid_fam = await get_client_telegram_id(db_session, int(fam_client_id))
+                other_fam = await get_client_id_by_telegram_id(db_session, telegram_id)
+            if not allowed_fam:
+                await message.answer(msg.CLIENT_WELCOME_BIND_FAILED)
+                return
+            if owner_tid_fam is not None and int(owner_tid_fam) == int(telegram_id):
+                await message.answer(msg.CLIENT_FAMILY_ACCESS_ALREADY_OWNER)
+                return
+            if other_fam is not None and int(other_fam) != int(fam_client_id):
+                await message.answer(msg.CLIENT_WELCOME_BIND_OTHER_PROFILE)
+                return
+            async with async_session_factory() as db_session:
+                ok_fam, err_fam, is_new_fam = await attach_family_member_from_invite(
+                    db_session,
+                    primary_client_id=int(fam_client_id),
+                    member_telegram_id=int(telegram_id),
+                    invited_by_telegram_id=None,
+                    telegram_username=uname_fam,
+                )
+                if ok_fam:
+                    await sync_client_telegram_username_from_client_bot(db_session, telegram_id)
+                await db_session.commit()
+            if not ok_fam:
+                if err_fam == "limit_reached":
+                    await message.answer(msg.CLIENT_FAMILY_ACCESS_LIMIT)
+                elif err_fam == "duplicate_client":
+                    await message.answer(msg.CLIENT_WELCOME_BIND_OTHER_PROFILE)
+                elif err_fam == "no_owner_telegram":
+                    await message.answer(msg.CLIENT_WELCOME_BIND_FAILED)
+                else:
+                    await message.answer(msg.CLIENT_WELCOME_BIND_FAILED)
+                return
+            if is_new_fam:
+                async with async_session_factory() as db_session:
+                    await notify_trainers_family_access_member_joined(
+                        session=db_session,
+                        primary_client_id=int(fam_client_id),
+                        member_telegram_id=int(telegram_id),
+                        member_telegram_username=uname_fam,
+                    )
         else:
             async with async_session_factory() as db_session:
                 await get_or_create_client(db_session, telegram_id)
@@ -669,6 +723,12 @@ async def cmd_start(message: Message) -> None:
             name = html.escape(_trainer_name(trainer) if trainer else "Тренер")
             await message.answer(
                 msg.CLIENT_WELCOME_BIND_FIRST_IMPRESSION.format(name=name),
+                parse_mode=ParseMode.HTML,
+                reply_markup=_bind_first_impression_markup(),
+            )
+        elif token_type == WELCOME_TOKEN_TYPE_FAMILY_ACCESS:
+            await message.answer(
+                msg.CLIENT_FAMILY_ACCESS_WELCOME,
                 parse_mode=ParseMode.HTML,
                 reply_markup=_bind_first_impression_markup(),
             )

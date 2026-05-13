@@ -130,6 +130,8 @@
         clientsListLoading: false,
         /** Deep link ?focus=invite_bot — list clients without telegram_id + banner (e.g. saved link). */
         focusInviteBot: false,
+        /** List API filter: only clients with active weekly recurring slots. */
+        filterRecurringOnly: false,
         /** Incremented on each history fetch — stale responses after quick-book must not repaint UI. */
         clientHistoryLoadGen: 0,
         /** ``?client_id=&open_write=1`` → open relay/DM after card merge (trainer bot CRM write). */
@@ -1148,6 +1150,13 @@
           .replace(/'/g, '&#39;');
       }
 
+      function syncRecurringFilterChipUi() {
+        var btn = document.getElementById('tcFilterRecurring');
+        if (!btn) return;
+        btn.classList.toggle('is-active', !!state.filterRecurringOnly);
+        btn.setAttribute('aria-pressed', state.filterRecurringOnly ? 'true' : 'false');
+      }
+
       function applyFilter() {
         var q = (document.getElementById('searchInput').value || '').trim();
         var pool = state.allClients;
@@ -1290,8 +1299,7 @@
           state.focusInviteBot = false;
           hideInviteBotBanner();
           setInviteBotCompactListUi(false);
-          state.filteredClients = state.allClients.slice();
-          renderList();
+          applyFilter();
           showTcToast('Все клиенты уже в боте.');
           return;
         }
@@ -1307,8 +1315,7 @@
         } else {
           hideInviteBotBanner();
           setInviteBotCompactListUi(false);
-          state.filteredClients = state.allClients.slice();
-          renderList();
+          applyFilter();
         }
       }
 
@@ -1431,8 +1438,14 @@
           return;
         }
         listEl.innerHTML = '';
-        if (!state.filteredClients.length) {
+          if (!state.filteredClients.length) {
           var qEmp = (document.getElementById('searchInput').value || '').trim();
+          if (!qEmp && state.filterRecurringOnly) {
+            listEl.innerHTML =
+              '<div class="empty"><div class="empty-inner"><div class="empty-title">Нет постоянных клиентов</div>' +
+              'У вас пока никто не закреплён на фиксированное время недели. Выключите фильтр «Постоянные» или закрепите слот в карточке клиента.</div></div>';
+            return;
+          }
           if (qEmp && state.allClients.length > 0) {
             var sub =
               state.focusInviteBot
@@ -1457,6 +1470,11 @@
             ? ('Последнее проведённое: ' + formatDate(c.last_date) + (c.last_start ? ' ' + formatTime(c.last_start) : ''))
             : (isSandbox ? 'Демо-запись для знакомства с системой' : 'Проведённых занятий ещё не было');
           var needsInvite = !isSandbox && (c.telegram_id == null || c.telegram_id === '');
+          var recCount = Number(c.recurring_slots_count) || 0;
+          var recurringPill =
+            !isSandbox && recCount > 0
+              ? '<span class="client-badge client-badge--recurring">Постоянный</span>'
+              : '';
           // Sandbox pill replaces the «нет в боте» badge — for a demo identity that label is noise.
           var badge =
             isSandbox
@@ -1471,6 +1489,7 @@
               '<div class=\"client-main\">' +
                 '<div class=\"client-name-row\">' +
                   '<span class=\"client-name\">' + escapeHtml(name) + '</span>' +
+                  recurringPill +
                   badge +
                 '</div>' +
                 '<div class=\"client-meta\">' + escapeHtml(phone) + '</div>' +
@@ -1518,7 +1537,7 @@
           } else {
             var first = items.slice(0, 5);
             var rest = items.slice(5);
-            var renderItem = function(it) {
+              var renderItem = function(it) {
               var dateStr = formatDate(it.slot_date);
               var timeStr = it.start_time ? formatTime(it.start_time) : '';
               var place = it.arena_name ? it.arena_name : '—';
@@ -1528,7 +1547,23 @@
               var tierLab = (it.price_tier_label || '').trim();
               var serviceHtml = escapeHtml(serviceName) + (tierLab ? ' · ' + escapeHtml(tierLab) : '');
               var line1 = dateStr + (timeStr ? ' ' + timeStr : '') + ' · ' + place + ' · ' + statusLabel;
-              return '<div class="history-item">' + escapeHtml(line1) + '<div class="history-item-service">' + serviceHtml + '</div></div>';
+              var recId = it.recurring_client_slot_id;
+              var recurringBadge =
+                recId != null && recId !== ''
+                  ? '<span class="client-badge client-badge--history-recurring">Постоянная</span>'
+                  : '';
+              return (
+                '<div class="history-item">' +
+                '<div class="history-item-top">' +
+                '<span class="history-item-line">' +
+                escapeHtml(line1) +
+                '</span>' +
+                recurringBadge +
+                '</div>' +
+                '<div class="history-item-service">' +
+                serviceHtml +
+                '</div></div>'
+              );
             };
             html += '<div class="history-list">';
             first.forEach(function(it) { html += renderItem(it); });
@@ -1602,8 +1637,19 @@
         var ICO_X = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
         var html = '<div class="dossier-tags" id="dossierTags">';
         dossierState.tags.forEach(function(t) {
-          html += '<span class="dossier-tag" data-id="' + t.id + '">' + escapeHtml(t.tag) +
-            '<button type="button" class="dossier-tag-remove" data-id="' + t.id + '">' + ICO_X + '</button></span>';
+          var isSys = (t.category || '') === 'system';
+          var rm = isSys
+            ? ''
+            : '<button type="button" class="dossier-tag-remove" data-id="' + t.id + '">' + ICO_X + '</button>';
+          html +=
+            '<span class="dossier-tag' +
+            (isSys ? ' dossier-tag--system' : '') +
+            '" data-id="' +
+            t.id +
+            '">' +
+            escapeHtml(t.tag) +
+            rm +
+            '</span>';
         });
         html += '<button type="button" class="dossier-tag-add" id="btnAddTag">+ Добавить</button>';
         html += '</div>';
@@ -1762,6 +1808,461 @@
             if (t) saveProfileField('season_goal', t);
           };
         });
+      }
+
+      function patchClientRecurringSlotsCount(clientId, n) {
+        var v = Math.max(0, parseInt(String(n), 10) || 0);
+        function patchArr(arr) {
+          if (!arr) return;
+          var c = arr.find(function(x) { return x.id === clientId; });
+          if (c) c.recurring_slots_count = v;
+        }
+        patchArr(state.allClients);
+        patchArr(state.filteredClients);
+      }
+
+      /** Python weekday: 0=Monday .. 6=Sunday (same as recurring API). */
+      function trainerRecurringWeekdayRu(dow) {
+        var names = ['Понедельник', 'Вторник', 'Среда', 'Четвер', 'Пятница', 'Суббота', 'Воскресенье'];
+        var i = parseInt(String(dow), 10);
+        if (isNaN(i) || i < 0 || i > 6) return '—';
+        return names[i];
+      }
+
+      function buildRecurringSuggestionCard(s) {
+        var bid = s.booking_id;
+        var arena = (s.arena_name && String(s.arena_name).trim()) ? escapeHtml(String(s.arena_name).trim()) : '—';
+        var svc = escapeHtml((s.service_name || '—').trim() || '—');
+        var tier = (s.price_tier_label && String(s.price_tier_label).trim())
+          ? escapeHtml(String(s.price_tier_label).trim())
+          : '';
+        var when =
+          escapeHtml(trainerRecurringWeekdayRu(s.day_of_week)) +
+          ' · ' +
+          escapeHtml(s.start_time || '') +
+          '–' +
+          escapeHtml(s.end_time || '');
+        var recId = s.recurring_slot_id;
+        var act = recId
+          ? (
+            '<button type="button" class="tc-rec-sugg-card__btn tc-rec-sugg-card__btn--cancel bd-btn bd-btn--surface" ' +
+            'data-rec-action="cancel" data-recurring-id="' +
+            String(recId) +
+            '" data-booking-id="' +
+            String(bid) +
+            '">Отменить</button>'
+          )
+          : (
+            '<button type="button" class="tc-rec-sugg-card__btn tc-rec-sugg-card__btn--apply bd-btn bd-btn--primary" ' +
+            'data-rec-action="apply" data-booking-id="' +
+            String(bid) +
+            '" data-apply-choice="' +
+            (s.apply_first_week_choice ? '1' : '0') +
+            '">Применить</button>'
+          );
+        return (
+          '<div class="tc-rec-sugg-card">' +
+          '<div class="tc-rec-sugg-card__body">' +
+          '<div class="tc-rec-sugg-card__when">' +
+          when +
+          '</div>' +
+          '<div class="tc-rec-sugg-card__service">' +
+          svc +
+          '</div>' +
+          '<div class="tc-rec-sugg-card__meta">' +
+          arena +
+          (tier ? '<span class="tc-rec-sugg-card__dot"> · </span>' + tier : '') +
+          '</div>' +
+          '</div>' +
+          '<div class="tc-rec-sugg-card__actions">' +
+          act +
+          '</div>' +
+          '</div>'
+        );
+      }
+
+      function openRecurringFirstWeekModal(onChoose) {
+        var modal = document.getElementById('tcModalRecurringFirstWeek');
+        var lead = document.getElementById('tcRecurringFirstWeekLead');
+        var bThis = document.getElementById('tcRecurringFwThis');
+        var bNext = document.getElementById('tcRecurringFwNext');
+        var bCancel = document.getElementById('tcRecurringFwCancel');
+        if (!modal || !lead || !bThis || !bNext || !bCancel) {
+          onChoose('this_week');
+          return;
+        }
+        function close() {
+          modal.style.display = 'none';
+          modal.setAttribute('aria-hidden', 'true');
+          modal.onclick = null;
+          bThis.onclick = bNext.onclick = bCancel.onclick = null;
+        }
+        lead.textContent =
+          'Ближайший такой слот на этой неделе ещё впереди. Включить её в автозаписи или начать со следующей?';
+        bThis.onclick = function(e) {
+          e.preventDefault();
+          close();
+          onChoose('this_week');
+        };
+        bNext.onclick = function(e) {
+          e.preventDefault();
+          close();
+          onChoose('next_week');
+        };
+        bCancel.onclick = function(e) {
+          e.preventDefault();
+          close();
+          onChoose(null);
+        };
+        modal.onclick = function(ev) {
+          if (ev.target === modal) {
+            close();
+            onChoose(null);
+          }
+        };
+        modal.style.display = 'flex';
+        modal.setAttribute('aria-hidden', 'false');
+      }
+
+      function postRecurringFromBooking(clientId, bookingId, firstWeekOpt) {
+        var body = { booking_id: bookingId };
+        if (firstWeekOpt) body.first_week = firstWeekOpt;
+        return fetch(
+          withInit(
+            '/api/webapp/trainer/clients/' + encodeURIComponent(clientId) + '/recurring/from-booking'
+          ),
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+          }
+        ).then(function(r) {
+          return r.json().then(function(d) {
+            if (!r.ok) throw new Error((d && d.detail) || r.statusText || 'Ошибка');
+            return d;
+          });
+        });
+      }
+
+      function loadRecurringSection(clientId, opts) {
+        opts = opts || {};
+        var silentRefresh = !!opts.silentRefresh;
+        var preserveUi = !!opts.preserveUi;
+
+        var host = document.getElementById('tcRecurringHost');
+        if (!host) return;
+        var snap = state.allClients.find(function(x) { return x.id === clientId; });
+        if (snap && snap.is_sandbox) {
+          host.innerHTML = '';
+          host.hidden = true;
+          return;
+        }
+
+        if (silentRefresh && !host.querySelector('details.tc-recurring-details')) {
+          silentRefresh = false;
+        }
+
+        var detailsWasOpen = false;
+        var extraListExpanded = false;
+        if (preserveUi) {
+          var detPrev = host.querySelector('details.tc-recurring-details');
+          if (detPrev) detailsWasOpen = !!detPrev.open;
+          var exWp = host.querySelector('#tcRecSuggExtra');
+          if (exWp && !exWp.hidden) extraListExpanded = true;
+        }
+
+        if (!silentRefresh) {
+          host.hidden = false;
+          host.innerHTML =
+            '<div class="tc-recurring-skel" aria-busy="true"><span class="ma-skel-shimmer">Загрузка…</span></div>';
+        }
+
+        var url = withInit('/api/webapp/trainer/clients/' + encodeURIComponent(clientId) + '/recurring');
+        fetch(url)
+          .then(function(r) {
+            return r.json().then(function(d) {
+              if (!r.ok) throw new Error((d && d.detail) || r.statusText || 'Ошибка');
+              return d;
+            });
+          })
+          .then(function(data) {
+            var slots = data.slots || [];
+            var upcoming = data.upcoming_bookings || [];
+            var sugg = data.booking_suggestions || [];
+            var hw = Number(data.materialization_horizon_weeks) || 3;
+            patchClientRecurringSlotsCount(clientId, slots.length);
+
+            var suggestedRec = {};
+            sugg.forEach(function(x) {
+              if (x.recurring_slot_id) suggestedRec[String(x.recurring_slot_id)] = true;
+            });
+            var orphanSlots = slots.filter(function(s) {
+              return !suggestedRec[String(s.id)];
+            });
+
+            if (!sugg.length && !orphanSlots.length) {
+              host.innerHTML = '';
+              host.hidden = true;
+              patchClientRecurringSlotsCount(clientId, 0);
+              if (typeof renderList === 'function' && !state.clientsListLoading) renderList();
+              return;
+            }
+
+            var nAct = slots.length;
+            var sumHint = (function(n) {
+              if (!n) return 'Нет закреплений';
+              var n10 = n % 10;
+              var n100 = n % 100;
+              var w = 'закреплений';
+              if (n10 === 1 && n100 !== 11) w = 'закрепление';
+              else if (n10 >= 2 && n10 <= 4 && (n100 < 10 || n100 >= 20)) w = 'закрепления';
+              return String(n) + ' ' + w;
+            })(nAct);
+            var orphanHtml = orphanSlots.length
+              ? (
+                '<div class="tc-recurring-subtitle">Другие закрепления</div>' +
+                '<div class="tc-recurring-slots">' +
+                orphanSlots
+                  .map(function(s) {
+                    return (
+                      '<div class="tc-recurring-slot-row">' +
+                      '<span class="tc-recurring-slot-label">' +
+                      escapeHtml(s.label || '') +
+                      '</span>' +
+                      '<button type="button" class="tc-recurring-remove bd-btn bd-btn--surface" data-rec-id="' +
+                      String(s.id) +
+                      '">Снять</button>' +
+                      '</div>'
+                    );
+                  })
+                  .join('') +
+                '</div>'
+              )
+              : '';
+            var upHtml = upcoming.length
+              ? (
+                '<div class="tc-recurring-upcoming"><div class="tc-recurring-subtitle">Ближайшие автозаписи</div><ul class="tc-recurring-up-list">' +
+                upcoming
+                  .slice(0, 8)
+                  .map(function(u) {
+                    return (
+                      '<li>' +
+                      escapeHtml(formatDate(u.slot_date)) +
+                      ' · ' +
+                      escapeHtml(formatTime(u.start_time)) +
+                      '</li>'
+                    );
+                  })
+                  .join('') +
+                '</ul></div>'
+              )
+              : '';
+            var first = sugg.slice(0, 3);
+            var rest = sugg.slice(3);
+            var suggMain = first.map(buildRecurringSuggestionCard).join('');
+            var suggExtra = rest.map(buildRecurringSuggestionCard).join('');
+            var expandRow =
+              rest.length
+                ? (
+                  '<div class="tc-rec-sugg-expand-row">' +
+                  '<button type="button" class="tc-rec-sugg-expand bd-btn bd-btn--surface" id="tcRecSuggExpand" aria-expanded="false" data-rest-count="' +
+                  String(rest.length) +
+                  '">' +
+                  'Показать ещё (' +
+                  String(rest.length) +
+                  ')</button>' +
+                  '</div>' +
+                  '<div class="tc-rec-sugg-extra" id="tcRecSuggExtra" hidden>' +
+                  suggExtra +
+                  '</div>'
+                )
+                : '';
+            var suggBlock = sugg.length
+              ? (
+                '<div class="tc-recurring-subtitle">По прошлым занятиям</div>' +
+                '<p class="tc-rec-sugg-lead">Закрепите день и время недели как у выбранной записи (до 10 разных вариантов по прошлым занятиям).</p>' +
+                '<div class="tc-rec-sugg-list">' +
+                suggMain +
+                '</div>' +
+                expandRow
+              )
+              : '';
+
+            host.innerHTML =
+              '<details class="tc-recurring-details tc-reveal-once">' +
+              '<summary class="tc-recurring-summary">' +
+              '<span class="tc-recurring-summary-title">Постоянные слоты</span>' +
+              '<span class="tc-recurring-summary-hint">' +
+              escapeHtml(sumHint) +
+              '</span>' +
+              '</summary>' +
+              '<div class="tc-recurring-body">' +
+              '<p class="tc-recurring-help">' +
+              'Окно автозаписей — примерно <strong>' +
+              String(hw) +
+              '</strong> ' +
+              (hw % 10 === 1 && hw % 100 !== 11
+                ? 'неделя'
+                : hw % 10 >= 2 && hw % 10 <= 4 && (hw % 100 < 10 || hw % 100 >= 20)
+                  ? 'недели'
+                  : 'недель') +
+              ' от текущей (от понедельника). Шаблон недели система не накатывает — только записи: в уже открытое окно на это время или отдельная ячейка под занятие. Если ближайший такой день ещё не прошёл, при «Применить» спросим: с этой недели или со следующей.' +
+              suggBlock +
+              orphanHtml +
+              upHtml +
+              '</div></details>';
+
+            function wireRemoveButtons() {
+              host.querySelectorAll('.tc-recurring-remove').forEach(function(btn) {
+                btn.onclick = function(e) {
+                  e.preventDefault();
+                  var rid = parseInt(btn.getAttribute('data-rec-id'), 10);
+                  if (!rid) return;
+                  if (!window.confirm('Снять закрепление? Предстоящие автозаписи по нему исчезнут из расписания — отдельного уведомления об отмене клиенту не будет.')) return;
+                  fetch(withInit('/api/webapp/trainer/recurring/' + encodeURIComponent(rid) + '/remove'), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                  })
+                    .then(function(r) {
+                      return r.json().then(function(d) {
+                        if (!r.ok) throw new Error((d && d.detail) || r.statusText || 'Ошибка');
+                        return d;
+                      });
+                    })
+                    .then(function(d) {
+                      var raw = d && d.removed_forward_bookings;
+                      var rm =
+                        typeof raw === 'number'
+                          ? raw
+                          : parseInt(String(raw), 10);
+                      if (!isNaN(rm) && rm > 0) {
+                        showTcToast('Закрепление снято. Убрано предстоящих автозаписей: ' + rm + '.');
+                      } else {
+                        showTcToast('Закрепление снято.');
+                      }
+                      loadRecurringSection(clientId, { silentRefresh: true, preserveUi: true });
+                      if (typeof renderList === 'function' && !state.clientsListLoading) renderList();
+                    })
+                    .catch(function(ex) {
+                      alert(ex.message || String(ex));
+                    });
+                };
+              });
+            }
+            wireRemoveButtons();
+
+            var exBtn = document.getElementById('tcRecSuggExpand');
+            var exWrap = document.getElementById('tcRecSuggExtra');
+            if (exBtn && exWrap && rest.length) {
+              exBtn.onclick = function() {
+                var willShow = exWrap.hidden;
+                var rc = parseInt(exBtn.getAttribute('data-rest-count') || '0', 10) || rest.length;
+                exWrap.hidden = !willShow;
+                exBtn.setAttribute('aria-expanded', willShow ? 'true' : 'false');
+                exBtn.textContent = willShow
+                  ? 'Свернуть'
+                  : 'Показать ещё (' + String(rc) + ')';
+              };
+            }
+
+            host.querySelectorAll('[data-rec-action="apply"]').forEach(function(btn) {
+              btn.onclick = function() {
+                var bid = parseInt(btn.getAttribute('data-booking-id'), 10);
+                if (!bid) return;
+                var needChoice = btn.getAttribute('data-apply-choice') === '1';
+                function runPost(firstWeekOpt) {
+                  btn.disabled = true;
+                  postRecurringFromBooking(clientId, bid, firstWeekOpt)
+                    .then(function(d) {
+                      var mat = d && d.materialized_bookings;
+                      var n = typeof mat === 'number' ? mat : parseInt(String(mat), 10);
+                      if (isNaN(n)) n = 0;
+                      if (n > 0) {
+                        showTcToast('Постоянное время закреплено. Создано автозаписей: ' + n + '.');
+                      } else {
+                        showTcToast(
+                          'Закреплено, автозаписей пока 0: нет места на это время впереди (занято или нет подходящего слота). Откройте слот в расписании вручную или измените правило.'
+                        );
+                      }
+                      loadRecurringSection(clientId, { silentRefresh: true, preserveUi: true });
+                      if (typeof renderList === 'function' && !state.clientsListLoading) renderList();
+                    })
+                    .catch(function(ex) {
+                      alert(ex.message || String(ex));
+                    })
+                    .finally(function() {
+                      btn.disabled = false;
+                    });
+                }
+                if (needChoice) {
+                  openRecurringFirstWeekModal(function(choice) {
+                    if (!choice) return;
+                    runPost(choice);
+                  });
+                  return;
+                }
+                runPost(null);
+              };
+            });
+            host.querySelectorAll('[data-rec-action="cancel"]').forEach(function(btn) {
+              btn.onclick = function() {
+                var rid = parseInt(btn.getAttribute('data-recurring-id'), 10);
+                if (!rid) return;
+                if (!window.confirm('Снять закрепление? Предстоящие автозаписи по нему исчезнут из расписания — отдельного уведомления об отмене клиенту не будет.')) return;
+                btn.disabled = true;
+                fetch(withInit('/api/webapp/trainer/recurring/' + encodeURIComponent(rid) + '/remove'), {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                })
+                  .then(function(r) {
+                    return r.json().then(function(d) {
+                      if (!r.ok) throw new Error((d && d.detail) || r.statusText || 'Ошибка');
+                      return d;
+                    });
+                  })
+                  .then(function(d) {
+                    var raw = d && d.removed_forward_bookings;
+                    var rm =
+                      typeof raw === 'number'
+                        ? raw
+                        : parseInt(String(raw), 10);
+                    if (!isNaN(rm) && rm > 0) {
+                      showTcToast('Закрепление снято. Убрано предстоящих автозаписей: ' + rm + '.');
+                    } else {
+                      showTcToast('Закрепление снято.');
+                    }
+                    loadRecurringSection(clientId, { silentRefresh: true, preserveUi: true });
+                    if (typeof renderList === 'function' && !state.clientsListLoading) renderList();
+                  })
+                  .catch(function(ex) {
+                    alert(ex.message || String(ex));
+                  })
+                  .finally(function() {
+                    btn.disabled = false;
+                  });
+              };
+            });
+
+            if (preserveUi && detailsWasOpen) {
+              var detNew = host.querySelector('details.tc-recurring-details');
+              if (detNew) detNew.open = true;
+            }
+            if (preserveUi && extraListExpanded) {
+              var exR = document.getElementById('tcRecSuggExtra');
+              var ebR = document.getElementById('tcRecSuggExpand');
+              var rcR = parseInt((ebR && ebR.getAttribute('data-rest-count')) || '0', 10);
+              if (exR && ebR && rcR > 0) {
+                exR.hidden = false;
+                ebR.setAttribute('aria-expanded', 'true');
+                ebR.textContent = 'Свернуть';
+              }
+            }
+          })
+          .catch(function() {
+            host.innerHTML =
+              '<details class="tc-recurring-details tc-reveal-once"><summary class="tc-recurring-summary"><span class="tc-recurring-summary-title">Постоянные слоты</span></summary><div class="tc-recurring-body dossier-empty">Не удалось загрузить</div></details>';
+            host.hidden = false;
+          });
       }
 
       function loadDossier(clientId) {
@@ -2266,7 +2767,12 @@
               '<div class=\"detail-value is-loading\" id=\"clientPassesCertsContent\">' + buildClientPassesSkeletonHtml() + '</div>' +
             '</div>' +
           '</div>' +
-          (isSandbox ? '' : '<div id=\"dossierContainer\">' + buildClientDossierSkeletonHtml() + '</div>') +
+          (isSandbox
+            ? ''
+            : '<div id=\"tcRecurringHost\" class=\"tc-recurring-host\"></div>' +
+              '<div id=\"dossierContainer\">' +
+              buildClientDossierSkeletonHtml() +
+              '</div>') +
           '<div class=\"tc-actions\">' +
             '<button type=\"button\" class=\"bd-btn bd-btn--primary\" id=\"btnBookClient\">' +
             '<span class=\"tc-action-btn__icon\" aria-hidden=\"true\">' + ICO_CAL + '</span>' +
@@ -2366,6 +2872,7 @@
           });
         // Load dossier (replaces old note loading)
         loadDossier(id);
+        loadRecurringSection(id);
         loadClientHistory(id);
         (function loadPassesAndCerts() {
           var contentEl = document.getElementById('clientPassesCertsContent');
@@ -2510,11 +3017,15 @@
 
       function mergeFullClientList(data) {
         state.allClients = data.clients || [];
+        if (state.filterRecurringOnly) {
+          state.allClients = state.allClients.filter(function(c) {
+            return (Number(c.recurring_slots_count) || 0) > 0;
+          });
+        }
         if (state.focusInviteBot) {
           applyInviteBotFocusAfterLoad();
         } else {
-          state.filteredClients = state.allClients.slice();
-          renderList();
+          applyFilter();
         }
       }
 
@@ -2525,6 +3036,9 @@
         renderList();
         var base = '/api/webapp/trainer/clients';
         var url = withInit(base);
+        if (state.filterRecurringOnly) {
+          url += (url.indexOf('?') >= 0 ? '&' : '?') + 'recurring_only=true';
+        }
         fetch(url, { headers: {} })
           .then(function(r) {
             return r.json().then(function(data) {
@@ -2622,6 +3136,16 @@
       document.getElementById('searchInput').addEventListener('input', function() {
         applyFilter();
       });
+
+      var filterRecurringBtn = document.getElementById('tcFilterRecurring');
+      if (filterRecurringBtn) {
+        filterRecurringBtn.addEventListener('click', function() {
+          state.filterRecurringOnly = !state.filterRecurringOnly;
+          syncRecurringFilterChipUi();
+          loadClientsInternal();
+        });
+      }
+      syncRecurringFilterChipUi();
 
       // Tap outside "Заметка тренера" → blur and dismiss keyboard (important in Telegram WebView)
       var detailSectionEl = document.getElementById('detailSection');

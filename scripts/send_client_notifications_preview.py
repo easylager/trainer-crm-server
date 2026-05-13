@@ -117,14 +117,18 @@ async def main() -> None:
         # 1–2. Напоминания (актуальный формат — format_client_booking_reminder_text)
         rem24 = msg.format_client_booking_reminder_text(
             is_soon=False,
-            date=MOCK_DATE_STR,
-            day=MOCK_DAY,
-            time=MOCK_TIME,
-            duration=MOCK_DURATION,
-            service_name=MOCK_SERVICE,
-            booking_price_cents=MOCK_PRICE_CENTS,
-            arena_name=MOCK_ARENA,
-            arena_address=MOCK_ADDRESS,
+            sessions=[
+                {
+                    "date": MOCK_DATE_STR,
+                    "day": MOCK_DAY,
+                    "time": MOCK_TIME,
+                    "duration": MOCK_DURATION,
+                    "service_name": MOCK_SERVICE,
+                    "booking_price_cents": MOCK_PRICE_CENTS,
+                    "arena_name": MOCK_ARENA,
+                    "arena_address": MOCK_ADDRESS,
+                }
+            ],
         )
         row_rem = [
             [
@@ -145,14 +149,18 @@ async def main() -> None:
 
         rem2h = msg.format_client_booking_reminder_text(
             is_soon=True,
-            date=MOCK_DATE_STR,
-            day=MOCK_DAY,
-            time=MOCK_TIME,
-            duration=MOCK_DURATION,
-            service_name=MOCK_SERVICE,
-            booking_price_cents=None,
-            arena_name=MOCK_ARENA,
-            arena_address=MOCK_ADDRESS,
+            sessions=[
+                {
+                    "date": MOCK_DATE_STR,
+                    "day": MOCK_DAY,
+                    "time": MOCK_TIME,
+                    "duration": MOCK_DURATION,
+                    "service_name": MOCK_SERVICE,
+                    "booking_price_cents": None,
+                    "arena_name": MOCK_ARENA,
+                    "arena_address": MOCK_ADDRESS,
+                }
+            ],
         )
         row_rem_2h = [
             InlineKeyboardButton(

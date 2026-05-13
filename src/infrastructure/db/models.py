@@ -424,6 +424,24 @@ class Client(Base):
     client_requests: Mapped[list["ClientRequest"]] = relationship(back_populates="client", lazy="raise")
 
 
+class ClientFamilyAccessMember(Base):
+    """Extra Telegram user sharing the primary ``clients`` row (owner stays on ``clients.telegram_id``)."""
+
+    __tablename__ = "client_family_access_members"
+    __table_args__ = (
+        UniqueConstraint("member_telegram_id", name="uq_cfam_member_telegram"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    primary_client_id: Mapped[int] = mapped_column(
+        ForeignKey("clients.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    member_telegram_id: Mapped[int] = mapped_column(BigInteger(), nullable=False)
+    telegram_username: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    invited_by_telegram_id: Mapped[Optional[int]] = mapped_column(BigInteger(), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 # --- Trainer-private notes about clients ---
 
 
@@ -706,6 +724,8 @@ class Reminder(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     sent_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     error: Mapped[Optional[str]] = mapped_column(Text(), nullable=True)
+    # Extra booking ids (same client, same calendar day) covered by this single push; ordered by slot start.
+    merged_booking_ids: Mapped[Optional[list[int]]] = mapped_column(JSONB, nullable=True)
 
 
 # --- Client "leave request" when no suitable trainer found ---

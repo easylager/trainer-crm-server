@@ -18,6 +18,7 @@ from src.application.booking_use_cases import (
 from src.application.client_request_use_cases import create_client_request
 from src.application.client_session_use_cases import get_session as read_client_bot_session
 from src.application.client_trainer_edge_use_cases import get_all_edges
+from src.application.client_use_cases import get_client_id_by_telegram_id
 from src.application.pass_product_use_cases import (
     enrich_pass_items_with_catalog_reference_prices,
     get_pass_product,
@@ -175,19 +176,21 @@ async def _pending_pass_order_exists(
     pass_product_id: int,
 ) -> bool:
     needle = f"{PASS_ORDER_LINE_PREFIX}{int(pass_product_id)}"
+    cid = await get_client_id_by_telegram_id(session, int(telegram_id))
+    if cid is None:
+        return False
     r = await session.execute(
         text(
             """
             SELECT 1 FROM client_requests r
-            INNER JOIN clients c ON c.id = r.client_id
-            WHERE c.telegram_id = :tg
+            WHERE r.client_id = :cid
               AND r.trainer_id = :tid
               AND r.status = 'new'
               AND POSITION(:needle IN COALESCE(r.comment, '')) = 1
             LIMIT 1
             """
         ),
-        {"tg": telegram_id, "tid": trainer_id, "needle": needle},
+        {"cid": int(cid), "tid": trainer_id, "needle": needle},
     )
     return r.fetchone() is not None
 
@@ -200,12 +203,14 @@ async def _pass_order_sent_today_exists(
 ) -> bool:
     """Any pass-order request for this product today (calendar day Europe/Minsk), any status."""
     needle = f"{PASS_ORDER_LINE_PREFIX}{int(pass_product_id)}"
+    cid = await get_client_id_by_telegram_id(session, int(telegram_id))
+    if cid is None:
+        return False
     r = await session.execute(
         text(
             """
             SELECT 1 FROM client_requests r
-            INNER JOIN clients c ON c.id = r.client_id
-            WHERE c.telegram_id = :tg
+            WHERE r.client_id = :cid
               AND r.trainer_id = :tid
               AND POSITION(:needle IN COALESCE(r.comment, '')) = 1
               AND (r.created_at AT TIME ZONE 'Europe/Minsk')::date
@@ -213,7 +218,7 @@ async def _pass_order_sent_today_exists(
             LIMIT 1
             """
         ),
-        {"tg": telegram_id, "tid": trainer_id, "needle": needle},
+        {"cid": int(cid), "tid": trainer_id, "needle": needle},
     )
     return r.fetchone() is not None
 
@@ -229,11 +234,8 @@ async def submit_pass_product_order_request(
     Creates a personalized client_request for the primary trainer.
     Returns {"ok": True, "request_id": int} or {"ok": False, "error": str}.
     """
-    chk = await session.execute(
-        text("SELECT 1 FROM clients WHERE id = :cid AND telegram_id = :tg"),
-        {"cid": client_id, "tg": telegram_id},
-    )
-    if not chk.fetchone():
+    resolved = await get_client_id_by_telegram_id(session, int(telegram_id))
+    if resolved is None or int(resolved) != int(client_id):
         return {"ok": False, "error": "client_mismatch"}
 
     edges = await get_all_edges(telegram_id, session)

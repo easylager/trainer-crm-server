@@ -10,6 +10,8 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.trainer_client_scope import list_trainer_ids_for_client_crm_scope
+
 
 # --- Profile (goals, limitations, level, season goal, legacy note) ---
 
@@ -222,7 +224,11 @@ TAG_CATEGORIES = {
     "schedule": "Расписание",
     "skills": "Навыки",
     "custom": "Другое",
+    "system": "Система",
 }
+
+# Auto-managed dossier tag when client Family Access has extra Telegram accounts (see sync_family_access_dossier_tags).
+DOSSIER_TAG_FAMILY_ACCESS = "Семейный доступ"
 
 SUGGESTED_TAGS = [
     {"tag": "Травма колена", "category": "injury"},
@@ -285,6 +291,51 @@ async def list_client_tags(
     ]
 
 
+async def sync_family_access_dossier_tags(session: AsyncSession, primary_client_id: int) -> None:
+    """
+    Mirror Family Access state into dossier tags for the primary client row.
+    When extra members exist, ensure tag «Семейный доступ» for every trainer in CRM scope; otherwise remove it.
+    No commit — caller owns the transaction (GET dossier commits in route; family flows commit in handler).
+    """
+    cid = int(primary_client_id)
+    r = await session.execute(
+        text(
+            """
+            SELECT COUNT(*) FROM client_family_access_members
+            WHERE primary_client_id = :cid
+            """
+        ),
+        {"cid": cid},
+    )
+    row = r.fetchone()
+    n = int(row[0] or 0) if row else 0
+    tag = DOSSIER_TAG_FAMILY_ACCESS
+    cat = "system"
+    if n > 0:
+        for trainer_id in await list_trainer_ids_for_client_crm_scope(session, cid):
+            await session.execute(
+                text(
+                    """
+                    INSERT INTO trainer_client_tags (trainer_id, client_id, tag, category)
+                    VALUES (:tid, :cid, :tag, :cat)
+                    ON CONFLICT (trainer_id, client_id, tag)
+                    DO UPDATE SET category = EXCLUDED.category
+                    """
+                ),
+                {"tid": int(trainer_id), "cid": cid, "tag": tag, "cat": cat},
+            )
+    else:
+        await session.execute(
+            text(
+                """
+                DELETE FROM trainer_client_tags
+                WHERE client_id = :cid AND tag = :tag
+                """
+            ),
+            {"cid": cid, "tag": tag},
+        )
+
+
 async def add_client_tag(
     session: AsyncSession,
     trainer_id: int,
@@ -299,6 +350,8 @@ async def add_client_tag(
     
     cat = (category or "custom").strip()[:50]
     if cat not in TAG_CATEGORIES:
+        cat = "custom"
+    if cat == "system":
         cat = "custom"
     
     try:
@@ -355,6 +408,7 @@ async def get_full_client_dossier(
     entries_limit: int = 20,
 ) -> dict[str, Any]:
     """Get complete dossier: profile + tags + recent entries."""
+    await sync_family_access_dossier_tags(session, client_id)
     profile = await get_client_dossier_profile(session, trainer_id, client_id)
     tags = await list_client_tags(session, trainer_id, client_id)
     entries = await list_client_entries(session, trainer_id, client_id, limit=entries_limit)

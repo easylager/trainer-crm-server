@@ -37,6 +37,7 @@
         /* ?tab=catalog — list/browse; без этого каталог открывает карточку из сессии (часто устаревший тренер). */
         { path: 'catalog?tab=catalog',       label: 'Тренеры и запись', hint: 'Каталог, фильтры, слоты',        icon: 'search', badge: null },
         { path: 'client-saved-trainers',     label: 'Сохранённые',        hint: 'Закладки из каталога',           icon: 'bookmark', badge: null },
+        { path: 'client-family-access',     label: 'Семейный доступ',     hint: 'Один аккаунт на семью',          icon: 'user',    badge: null },
         { path: 'client-bookings',           label: 'Мои записи',          hint: 'Все занятия',                    icon: 'cal',    badge: null },
         { path: 'client-stats',            label: 'Ваша активность',     hint: 'Что уже сделали и что впереди', icon: 'chart',  badge: null },
         { path: 'client-requests',           label: 'Заявки',             hint: 'Подбор тренера',                 icon: 'inbox',  badge: 'NEW' },

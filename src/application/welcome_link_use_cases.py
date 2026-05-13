@@ -9,6 +9,7 @@ WELCOME_TOKEN_TYPE_CERT = "cert"
 WELCOME_TOKEN_TYPE_PASS = "pass"
 WELCOME_TOKEN_TYPE_GENERIC = "generic"
 WELCOME_TOKEN_TYPE_CLIENT_BIND = "client_bind"
+WELCOME_TOKEN_TYPE_FAMILY_ACCESS = "family_access"
 
 
 async def create_welcome_link_token(

@@ -37,8 +37,8 @@
       window.__applyTrainerClientsTheme = applyTrainerClientsTheme;
     })();
   </script>
-  <link rel="preload" href="trainer-clients-main.js?v=202605078" as="script" />
-  <link rel="stylesheet" href="mini-app-trainer-clients.css?v=202605072" />
+  <link rel="preload" href="trainer-clients-main.js?v=202605136" as="script" />
+  <link rel="stylesheet" href="mini-app-trainer-clients.css?v=202605134" />
   <link rel="stylesheet" href="mini-app-trainer-nav.css?v=20260422" />
   <script>
     /* Before deferred main.js: hide search/add bar on first paint for ?focus=invite_bot (no client card deep link). */
@@ -73,6 +73,9 @@
   </div>
   <div class="search-box">
     <input id="searchInput" class="search-input" type="search" placeholder="Поиск по имени или телефону">
+  </div>
+  <div class="tc-recurring-filter" role="toolbar" aria-label="Фильтр клиентов">
+    <button type="button" class="tc-chip-filter" id="tcFilterRecurring" aria-pressed="false">Постоянные</button>
   </div>
   <div class="tc-add-client-bar">
     <button type="button" class="btn-tc-add-client" id="btnOpenAddClient" aria-haspopup="dialog">
@@ -228,10 +231,22 @@
     </div>
   </div>
 
+  <div id="tcModalRecurringFirstWeek" class="modal-overlay tc-client-qb-overlay" style="display: none;" aria-hidden="true">
+    <div class="modal tc-client-qb-card" role="dialog" aria-labelledby="tcRecurringFirstWeekTitle">
+      <h3 id="tcRecurringFirstWeekTitle" class="book-modal-title">С какой недели?</h3>
+      <p id="tcRecurringFirstWeekLead" class="book-choice-lead"></p>
+      <div class="modal-actions tc-qb-actions tc-qb-actions--stack">
+        <button type="button" class="btn-block btn-primary" id="tcRecurringFwThis">На эту неделю</button>
+        <button type="button" class="btn-block btn-secondary" id="tcRecurringFwNext">Со следующей</button>
+        <button type="button" class="btn-block btn-secondary" id="tcRecurringFwCancel">Отмена</button>
+      </div>
+    </div>
+  </div>
+
   <script src="mini-app-trainer-gate.js"></script>
   <script src="trainer-client-relay-ui.js?v=202605090"></script>
   <script src="trainer-relay-helpers.js?v=202605090"></script>
-  <script defer src="trainer-clients-main.js?v=202605078"></script>
+  <script defer src="trainer-clients-main.js?v=202605136"></script>
   <script defer src="mini-app-trainer-home.js"></script>
 </body>
 </html>

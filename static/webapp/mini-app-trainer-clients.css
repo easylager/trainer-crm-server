@@ -1646,7 +1646,11 @@
       opacity: 0.6;
       color: inherit;
     }
-    .dossier-tag-remove:hover { opacity: 1; }
+    .dossier-tag--system {
+      border-style: dashed;
+      opacity: 0.92;
+      font-weight: 500;
+    }
     .dossier-tag-add {
       padding: 6px 12px;
       border-radius: 20px;
@@ -1972,4 +1976,253 @@
       width: 100%;
       margin-top: 8px;
       margin-bottom: 8px;
+    }
+
+    /* --- Recurring clients (progressive disclosure in dossier + list filter) --- */
+    .tc-recurring-host {
+      margin: 0 0 14px;
+    }
+    .tc-recurring-skel {
+      padding: 12px 14px;
+      border-radius: 14px;
+      background: var(--tg-theme-secondary-bg-color);
+      font-size: 14px;
+      color: var(--tg-theme-hint-color);
+    }
+    .tc-recurring-details {
+      border-radius: 16px;
+      background: var(--tg-theme-secondary-bg-color);
+      border: 1px solid rgba(128, 128, 128, 0.12);
+      overflow: hidden;
+    }
+    .tc-recurring-summary {
+      list-style: none;
+      cursor: pointer;
+      padding: 14px 16px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 8px 12px;
+    }
+    .tc-recurring-details .tc-recurring-summary::-webkit-details-marker {
+      display: none;
+    }
+    .tc-recurring-summary-title {
+      font-size: 15px;
+      font-weight: 700;
+    }
+    .tc-recurring-summary-hint {
+      font-size: 13px;
+      color: var(--tg-theme-hint-color);
+    }
+    .tc-recurring-body {
+      padding: 0 16px 16px;
+    }
+    .tc-recurring-help {
+      margin: 0 0 12px;
+      font-size: 12px;
+      line-height: 1.45;
+      color: var(--tg-theme-hint-color);
+    }
+    .tc-recurring-subtitle {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--tg-theme-hint-color);
+      margin: 14px 0 8px;
+    }
+    .tc-recurring-subtitle:first-child {
+      margin-top: 0;
+    }
+    .tc-recurring-slots {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin: 0 0 12px;
+    }
+    .tc-recurring-slot-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: var(--tg-theme-bg-color);
+      border: 1px solid rgba(128, 128, 128, 0.1);
+    }
+    .tc-recurring-slot-label {
+      font-size: 14px;
+      font-weight: 500;
+      flex: 1;
+      min-width: 0;
+    }
+    .tc-recurring-upcoming {
+      margin: 0 0 12px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: var(--tg-theme-bg-color);
+      border: 1px solid rgba(245, 166, 35, 0.18);
+    }
+    .tc-recurring-up-list {
+      margin: 0;
+      padding-left: 18px;
+    }
+    .tc-recurring-up-list li {
+      margin: 4px 0;
+      font-size: 14px;
+      line-height: 1.35;
+    }
+    .tc-recurring-add {
+      margin-top: 4px;
+    }
+    .tc-recurring-add-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    .tc-recurring-field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--tg-theme-hint-color);
+      flex: 1 1 100px;
+      min-width: 0;
+    }
+    .tc-recurring-select,
+    .tc-recurring-time {
+      margin-top: 0;
+      font-weight: 500;
+      color: var(--tg-theme-text-color);
+    }
+    .tc-recurring-err {
+      margin-top: 10px;
+      font-size: 13px;
+      color: #e74c3c;
+    }
+
+    .history-item-top {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px 10px;
+    }
+    .history-item-line {
+      flex: 1;
+      min-width: 0;
+      font-size: 14px;
+      line-height: 1.35;
+    }
+    .client-badge.client-badge--history-recurring {
+      flex-shrink: 0;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 8px;
+      border-radius: 8px;
+      background: rgba(245, 166, 35, 0.2);
+      color: var(--tg-theme-text-color);
+      border: 1px solid rgba(245, 166, 35, 0.35);
+    }
+
+    .tc-chip-filter {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 14px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 600;
+      border: 1px solid rgba(128, 128, 128, 0.2);
+      background: var(--tg-theme-secondary-bg-color);
+      color: var(--tg-theme-text-color);
+      cursor: pointer;
+      margin-right: 8px;
+      margin-bottom: 4px;
+    }
+    .tc-chip-filter.is-active {
+      border-color: var(--tg-theme-button-color);
+      background: rgba(245, 166, 35, 0.18);
+    }
+    .tc-chip-filter:active {
+      opacity: 0.9;
+    }
+    .tc-recurring-filter {
+      margin: 0 0 10px;
+    }
+    body.client-detail-mode .search-box,
+    body.client-detail-mode .tc-recurring-filter {
+      display: none !important;
+    }
+
+    .tc-rec-sugg-lead {
+      margin: 0 0 12px;
+      font-size: 13px;
+      line-height: 1.45;
+      color: var(--tg-theme-hint-color);
+    }
+    .tc-rec-sugg-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .tc-rec-sugg-card {
+      display: flex;
+      align-items: stretch;
+      gap: 10px;
+      padding: 12px;
+      border-radius: 14px;
+      background: var(--tg-theme-bg-color);
+      border: 1px solid rgba(128, 128, 128, 0.12);
+    }
+    .tc-rec-sugg-card__body {
+      flex: 1;
+      min-width: 0;
+    }
+    .tc-rec-sugg-card__when {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+    .tc-rec-sugg-card__service {
+      font-size: 14px;
+      line-height: 1.35;
+      margin-bottom: 4px;
+    }
+    .tc-rec-sugg-card__meta {
+      font-size: 12px;
+      line-height: 1.4;
+      color: var(--tg-theme-hint-color);
+    }
+    .tc-rec-sugg-card__actions {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+    }
+    .tc-rec-sugg-card__btn {
+      padding: 8px 12px;
+      font-size: 13px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .tc-rec-sugg-expand-row {
+      margin-top: 10px;
+      text-align: center;
+    }
+    .tc-rec-sugg-expand {
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .tc-rec-sugg-extra {
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 10px;
+    }
+    .tc-rec-sugg-extra:not([hidden]) {
+      display: flex;
+    }
+    .tc-rec-sugg-extra[hidden] {
+      display: none !important;
     }

@@ -3,20 +3,187 @@ Recurring client slots (fixed weekly time) and wait-for-slot requests.
 Clean separation: domain rules here; booking/slot creation delegated to booking_use_cases and schedule.
 """
 from datetime import date, time, timedelta
+from typing import Any
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.booking_use_cases import (
+    _booking_interval_duration_minutes,
     create_booking,
     get_first_service_id_for_trainer,
     is_slot_start_in_past_local,
 )
-from src.application.trainer_schedule_use_cases import next_week_monday, this_week_monday
+from src.application.trainer_schedule_use_cases import (
+    ensure_individual_slot_for_quick_book,
+    next_week_monday,
+    this_week_monday,
+)
 
 RECURRING_STATUS_ACTIVE = "active"
 RECURRING_STATUS_PAUSED = "paused"
 RECURRING_STATUS_CANCELLED = "cancelled"
+
+# Monday = 0 (Python weekday); short RU labels for trainer UI.
+RECURRING_WEEKDAY_SHORT_RU = ("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс")
+
+
+def _format_time_hhmm(t: object) -> str:
+    if hasattr(t, "strftime"):
+        return t.strftime("%H:%M")  # type: ignore[union-attr]
+    s = str(t)
+    return s[:5] if len(s) >= 5 else s
+
+
+def _coerce_to_time(v: object) -> time | None:
+    """Normalize DB/ORM time-like values for recurring rule lookup."""
+    if isinstance(v, time):
+        return v
+    if hasattr(v, "hour") and hasattr(v, "minute"):
+        try:
+            return time(int(v.hour), int(v.minute), int(getattr(v, "second", 0) or 0))
+        except (TypeError, ValueError):
+            return None
+    return None
+
+
+async def list_recurring_booking_suggestions_for_trainer_client(
+    session: AsyncSession,
+    trainer_id: int,
+    client_id: int,
+    *,
+    limit: int = 10,
+) -> list[dict[str, Any]]:
+    """
+    Cards for «make weekly recurring» from client history, with active-rule id if any.
+    History is ordered newest-first; we keep one row per (weekday, start time, service, arena) —
+    the chronologically nearest occurrence (first in that order). ``limit`` caps unique patterns (max 10).
+    """
+    from src.application.booking_use_cases import list_trainer_client_history
+
+    out_lim = max(1, min(10, int(limit)))
+    # Pull more rows than out_lim so duplicates can be collapsed without starving the list.
+    raw = await list_trainer_client_history(session, trainer_id, client_id, limit=max(40, out_lim * 6))
+    seen: set = set()
+    out: list[dict[str, Any]] = []
+    for it in raw:
+        if len(out) >= out_lim:
+            break
+        sd = it.get("slot_date")
+        st_raw = it.get("start_time")
+        et_raw = it.get("end_time")
+        if sd is None or st_raw is None:
+            continue
+        if not hasattr(sd, "weekday"):
+            continue
+        dow = int(sd.weekday())
+        st = _coerce_to_time(st_raw)
+        if st is None:
+            continue
+        t_key = _format_time_hhmm(st_raw)
+        svc_key = ((it.get("service_name") or "").strip() or "—").lower()
+        arena_key = ((it.get("arena_name") or "").strip() or "").lower()
+        dedupe_key = (dow, t_key, svc_key, arena_key)
+        if dedupe_key in seen:
+            continue
+        seen.add(dedupe_key)
+        rec = await get_active_recurring_for_booking(session, trainer_id, client_id, dow, st)
+        sd_str = sd.isoformat() if hasattr(sd, "isoformat") else str(sd)
+        mono = this_week_monday()
+        slot_this_iso = mono + timedelta(days=dow)
+        apply_first_week_choice = not is_slot_start_in_past_local(slot_this_iso, st)
+        out.append(
+            {
+                "booking_id": int(it["id"]),
+                "slot_date": sd_str,
+                "start_time": _format_time_hhmm(st_raw),
+                "end_time": _format_time_hhmm(et_raw) if et_raw is not None else _format_time_hhmm(st_raw),
+                "arena_name": it.get("arena_name"),
+                "service_name": (it.get("service_name") or "").strip() or "—",
+                "price_tier_label": it.get("price_tier_label"),
+                "recurring_slot_id": int(rec["id"]) if rec else None,
+                "day_of_week": dow,
+                "apply_first_week_choice": apply_first_week_choice,
+            }
+        )
+    return out
+
+
+async def list_active_recurring_slots_for_trainer_client(
+    session: AsyncSession,
+    trainer_id: int,
+    client_id: int,
+) -> list[dict[str, Any]]:
+    """Active recurring rules for one trainer–client pair (Mini App card)."""
+    r = await session.execute(
+        text(
+            """
+            SELECT id, day_of_week, start_time, end_time
+            FROM recurring_client_slots
+            WHERE trainer_id = :tid AND client_id = :cid AND status = 'active'
+            ORDER BY day_of_week, start_time
+            """
+        ),
+        {"tid": trainer_id, "cid": client_id},
+    )
+    out: list[dict[str, Any]] = []
+    for row in r.fetchall():
+        rid, dow, st, et = int(row[0]), int(row[1]), row[2], row[3]
+        dows = RECURRING_WEEKDAY_SHORT_RU[dow] if 0 <= dow <= 6 else "?"
+        st_s, et_s = _format_time_hhmm(st), _format_time_hhmm(et)
+        out.append(
+            {
+                "id": rid,
+                "day_of_week": dow,
+                "start_time": st_s,
+                "end_time": et_s,
+                "label": f"{dows} {st_s}–{et_s}",
+            }
+        )
+    return out
+
+
+async def list_upcoming_recurring_bookings_for_trainer_client(
+    session: AsyncSession,
+    trainer_id: int,
+    client_id: int,
+    *,
+    from_date: date,
+    limit: int = 16,
+) -> list[dict[str, Any]]:
+    """
+    Next pending/confirmed bookings linked to recurring rules for this client.
+    ``from_date``: first calendar day to include (inclusive), typically «today» in NOTIFICATION_TZ.
+    """
+    lim = max(1, min(50, int(limit)))
+    r = await session.execute(
+        text(
+            """
+            SELECT b.id, s.slot_date, s.start_time, b.recurring_client_slot_id
+            FROM bookings b
+            JOIN slots s ON s.id = b.slot_id
+            WHERE b.trainer_id = :tid AND b.client_id = :cid
+              AND b.recurring_client_slot_id IS NOT NULL
+              AND b.status IN ('pending', 'confirmed')
+              AND s.slot_date >= :from_d
+            ORDER BY s.slot_date ASC, s.start_time ASC
+            LIMIT :lim
+            """
+        ),
+        {"tid": trainer_id, "cid": client_id, "from_d": from_date, "lim": lim},
+    )
+    rows: list[dict[str, Any]] = []
+    for row in r.fetchall():
+        sd = row[1]
+        rows.append(
+            {
+                "booking_id": int(row[0]),
+                "slot_date": sd.isoformat() if hasattr(sd, "isoformat") else str(sd),
+                "start_time": _format_time_hhmm(row[2]),
+                "recurring_slot_id": int(row[3]) if row[3] is not None else None,
+            }
+        )
+    return rows
 
 
 async def create_recurring_client_slot(
@@ -57,12 +224,66 @@ async def create_recurring_client_slot(
     return pk
 
 
+async def discard_upcoming_bookings_for_recurring_rule(
+    session: AsyncSession,
+    trainer_id: int,
+    recurring_id: int,
+) -> int:
+    """
+    Drop not-yet-started bookings tied to this rule: cancel without client notification and without
+    week-skip rows (the rule itself is being removed or replaced).
+    """
+    from src.application.booking_use_cases import cancel_booking
+
+    r = await session.execute(
+        text(
+            """
+            SELECT b.id, s.slot_date, s.start_time
+            FROM bookings b
+            JOIN slots s ON s.id = b.slot_id
+            WHERE b.trainer_id = :tid AND b.recurring_client_slot_id = :rid
+              AND b.status IN ('pending', 'confirmed')
+            ORDER BY s.slot_date, s.start_time
+            """
+        ),
+        {"tid": trainer_id, "rid": recurring_id},
+    )
+    removed = 0
+    for row in r.fetchall():
+        bid, sd, st0 = int(row[0]), row[1], row[2]
+        if is_slot_start_in_past_local(sd, st0):
+            continue
+        if await cancel_booking(
+            session,
+            bid,
+            trainer_id,
+            notify_client=False,
+            record_recurring_week_skip=False,
+        ):
+            removed += 1
+    return removed
+
+
 async def cancel_recurring_client_slot(
     session: AsyncSession,
     trainer_id: int,
     recurring_id: int,
-) -> bool:
-    """Set status=cancelled. Returns True if updated."""
+) -> tuple[bool, int]:
+    """
+    Cancel recurring rule and remove forward auto-bookings that have not started yet (silent for client).
+    Returns (updated_rule_ok, removed_booking_count).
+    """
+    r0 = await session.execute(
+        text("""
+            SELECT 1 FROM recurring_client_slots
+            WHERE id = :id AND trainer_id = :tid AND status = 'active'
+            LIMIT 1
+        """),
+        {"id": recurring_id, "tid": trainer_id},
+    )
+    if r0.fetchone() is None:
+        return False, 0
+    removed = await discard_upcoming_bookings_for_recurring_rule(session, trainer_id, recurring_id)
     r = await session.execute(
         text("""
             UPDATE recurring_client_slots
@@ -73,9 +294,10 @@ async def cancel_recurring_client_slot(
         {"id": recurring_id, "tid": trainer_id, "status": RECURRING_STATUS_CANCELLED},
     )
     if r.fetchone() is None:
-        return False
+        await session.commit()
+        return False, removed
     await session.commit()
-    return True
+    return True, removed
 
 
 async def get_active_recurring_for_booking(
@@ -384,7 +606,13 @@ async def materialize_recurring_rule_for_week(
 ) -> bool:
     """
     One recurring rule × one calendar week (week_start = Monday). Returns True if a new booking was created.
-    Skips sandbox clients, past slots, week skips, duplicate same-time bookings, unavailable slots.
+
+    Skips sandbox clients, past slots, materialization week skips, and when this client already has a
+    non-cancelled booking on the same date+start (duplicate).
+
+    Slot selection: reuse an ``available`` row at exact start time if present; otherwise create an
+    individual interval (off-grid allowed). Occupancy: ``ensure_individual_slot_for_quick_book`` rejects
+    overlap with any existing slot that already has active bookings (including other clients) or group slots.
     """
     if await _recurring_client_is_sandbox(session, int(rec["client_id"])):
         return False
@@ -402,7 +630,24 @@ async def materialize_recurring_rule_for_week(
         return False
     slot_id = await find_available_slot_in_week(session, trainer_id, week_start, dow, st)
     if not slot_id:
-        return False
+        # No template row: create an individual interval (same idea as «repeat exact time» / quick book).
+        et_raw = rec["end_time"]
+        et = et_raw.replace(second=0, microsecond=0) if hasattr(et_raw, "replace") else et_raw
+        duration_minutes = _booking_interval_duration_minutes(st, et)
+        start_minutes = int(st.hour) * 60 + int(st.minute)
+        try:
+            slot_id = await ensure_individual_slot_for_quick_book(
+                session,
+                trainer_id,
+                slot_date,
+                start_minutes,
+                duration_minutes,
+                allow_off_grid_interval=True,
+                arena_id=None,
+            )
+        except ValueError:
+            # Overlap, group slot, or invalid interval — cannot auto-place.
+            return False
     bid, _ = await create_booking(
         session,
         slot_id,
@@ -423,11 +668,21 @@ async def materialize_recurring_horizon(
     *,
     horizon_weeks: int,
     recurring_ids: list[int] | None = None,
+    min_week_index: int = 0,
 ) -> int:
     """
-    Ensures auto-bookings exist for [this_week .. +horizon_weeks) for active recurring rules.
-    Only trainers with CRM access (subscription) get auto materialization here.
-    Returns count of newly created bookings.
+    Ensures up to ``horizon_weeks`` forward auto-bookings per active rule by walking ISO weeks forward,
+    skipping weeks where the slot is already in the past or blocked.
+
+    Does **not** call ``generate_slots_for_week``: recurring materialization must not expand the trainer's
+    week template without an explicit «apply template» action. Bookings use an existing ``available`` slot
+    at the rule's time or, if none, a single individual interval for that session (see
+    ``materialize_recurring_rule_for_week``).
+
+    ``min_week_index`` (0 = current ISO week): use 1 to skip this calendar week entirely (e.g. recurring
+    starts «со следующей» even when this week's slot is still in the future).
+
+    Safe to run repeatedly. Only trainers with CRM access. Returns count of newly created bookings.
     """
     from src.application.subscription_tier_use_cases import trainer_has_crm_access
 
@@ -442,12 +697,20 @@ async def materialize_recurring_horizon(
         recs = [r for r in recs if int(r["id"]) in wanted]
     h = max(1, min(52, int(horizon_weeks)))
     mono = this_week_monday()
+    start_i = max(0, int(min_week_index))
     created = 0
-    for i in range(h):
-        ws = mono + timedelta(days=7 * i)
-        for rec in recs:
+    max_scan_weeks = min(64, h + 52)
+    for rec in recs:
+        i = start_i
+        got = 0
+        scanned = 0
+        while got < h and scanned < max_scan_weeks:
+            ws = mono + timedelta(days=7 * i)
+            i += 1
+            scanned += 1
             if await materialize_recurring_rule_for_week(session, trainer_id, rec, ws, service_id):
-                created += 1
+                got += 1
+        created += got
     return created
 
 

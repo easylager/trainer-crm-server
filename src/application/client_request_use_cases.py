@@ -8,6 +8,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.client_use_cases import get_client_id_by_telegram_id
 from src.infrastructure.repositories.trainer_repository import (
     TRAINER_SERVICE_DEFAULT_TIER_LABEL,
     _sql_public_catalog_education_predicate,
@@ -269,15 +270,17 @@ async def update_client_request_comment(
     new_comment: str | None,
 ) -> bool:
     """Update comment of client's request. Returns True if updated."""
+    cid = await get_client_id_by_telegram_id(session, int(client_telegram_id))
+    if cid is None:
+        return False
     r = await session.execute(
         text("""
             UPDATE client_requests r
             SET comment = :comment
-            FROM clients cl
-            WHERE r.id = :rid AND r.client_id = cl.id AND cl.telegram_id = :tid
+            WHERE r.id = :rid AND r.client_id = :cid
             RETURNING r.id
         """),
-        {"rid": request_id, "tid": client_telegram_id, "comment": (new_comment or "").strip() or None},
+        {"rid": request_id, "cid": int(cid), "comment": (new_comment or "").strip() or None},
     )
     if r.fetchone() is None:
         return False
@@ -291,14 +294,16 @@ async def delete_client_request(
     client_telegram_id: int,
 ) -> bool:
     """Delete client's request (CASCADE removes responses). Returns True if deleted."""
+    cid = await get_client_id_by_telegram_id(session, int(client_telegram_id))
+    if cid is None:
+        return False
     r = await session.execute(
         text("""
             DELETE FROM client_requests r
-            USING clients cl
-            WHERE r.id = :rid AND r.client_id = cl.id AND cl.telegram_id = :tid
+            WHERE r.id = :rid AND r.client_id = :cid
             RETURNING r.id
         """),
-        {"rid": request_id, "tid": client_telegram_id},
+        {"rid": request_id, "cid": int(cid)},
     )
     if r.fetchone() is None:
         return False
@@ -317,14 +322,16 @@ async def replace_client_request_with_new(
     Trainers get a new notification (pending request notifier picks it up).
     Returns new request id or None if old request not found / not owned by client.
     """
+    cid = await get_client_id_by_telegram_id(session, int(client_telegram_id))
+    if cid is None:
+        return None
     r = await session.execute(
         text("""
             SELECT r.client_id, r.city_id, r.service_id, r.trainer_id
             FROM client_requests r
-            INNER JOIN clients cl ON cl.id = r.client_id AND cl.telegram_id = :tid
-            WHERE r.id = :rid
+            WHERE r.id = :rid AND r.client_id = :cid
         """),
-        {"rid": old_request_id, "tid": client_telegram_id},
+        {"rid": old_request_id, "cid": int(cid)},
     )
     row = r.fetchone()
     if not row:
@@ -682,12 +689,15 @@ async def archive_client_requests_fulfilled_by_bookings(
     could stay status='new'. Archive when an active booking matches the same client+service
     and either a responding trainer or a personalized request trainer.
     """
+    cid = await get_client_id_by_telegram_id(session, int(client_telegram_id))
+    if cid is None:
+        return
     r = await session.execute(
         text("""
             UPDATE client_requests r
             SET status = 'archived'
             WHERE r.status = 'new'
-              AND r.client_id = (SELECT id FROM clients WHERE telegram_id = :tid LIMIT 1)
+              AND r.client_id = :cid
               AND (
                 EXISTS (
                   SELECT 1 FROM bookings b
@@ -708,7 +718,7 @@ async def archive_client_requests_fulfilled_by_bookings(
               )
             RETURNING r.id
         """),
-        {"tid": client_telegram_id},
+        {"cid": int(cid)},
     )
     if r.fetchone() is not None:
         await session.commit()
@@ -722,20 +732,22 @@ async def list_my_requests_with_responses(
     """
     Client's requests with list of responding trainers (id, name, telegram_id for link).
     """
+    cid = await get_client_id_by_telegram_id(session, int(client_telegram_id))
+    if cid is None:
+        return []
     await archive_client_requests_fulfilled_by_bookings(session, client_telegram_id)
     r = await session.execute(
         text("""
             SELECT r.id, r.city_id, r.service_id, r.comment, r.created_at, r.status,
                    c.name AS city_name, s.name AS service_name
             FROM client_requests r
-            INNER JOIN clients cl ON cl.id = r.client_id
             INNER JOIN cities c ON c.id = r.city_id
             INNER JOIN services s ON s.id = r.service_id
-            WHERE cl.telegram_id = :tid AND r.status != 'archived'
+            WHERE r.client_id = :cid AND r.status != 'archived'
             ORDER BY r.created_at DESC
             LIMIT :lim
         """),
-        {"tid": client_telegram_id, "lim": limit},
+        {"cid": int(cid), "lim": limit},
     )
     requests_rows = r.fetchall()
     out = []
@@ -808,14 +820,16 @@ async def get_client_request_for_booking(
     Single request by id if owned by client (for linking booking from Mini App).
     Returns { "id", "service_id", "responses": [{"trainer_id"}, ...] } or None.
     """
+    cid = await get_client_id_by_telegram_id(session, int(client_telegram_id))
+    if cid is None:
+        return None
     r = await session.execute(
         text("""
             SELECT r.id, r.service_id
             FROM client_requests r
-            INNER JOIN clients cl ON cl.id = r.client_id
-            WHERE r.id = :rid AND cl.telegram_id = :tid AND r.status != 'archived'
+            WHERE r.id = :rid AND r.client_id = :cid AND r.status != 'archived'
         """),
-        {"rid": request_id, "tid": client_telegram_id},
+        {"rid": request_id, "cid": int(cid)},
     )
     row = r.fetchone()
     if not row:

@@ -185,6 +185,27 @@ def webapp_client_home_page():
     return _webapp_file_response(path)
 
 
+@app.get("/webapp/client-family-access")
+def webapp_client_family_access_page():
+    """Client: invite extra Telegram accounts to share one client card (bookings, passes)."""
+    path = _WEBAPP_DIR / "client-family-access.html"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Web App not found")
+    return _webapp_file_response(path)
+
+
+@app.get("/webapp/client-family-access-main.js")
+def webapp_client_family_access_main_js(request: Request):
+    path = _WEBAPP_DIR / "client-family-access-main.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
 @app.get("/webapp/client-stats")
 def webapp_client_stats_page():
     """Client: completed-session stats and gentle rhythm hints (motivation, no leaderboards)."""

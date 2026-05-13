@@ -1,6 +1,7 @@
 """
 Booking use cases: create booking (slot + client_id, comment), list for trainer, pending notifications.
 """
+import json
 from collections import defaultdict
 from datetime import date, datetime, time, timedelta, timezone
 from collections.abc import Sequence
@@ -13,7 +14,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.infrastructure.repositories.client_trainer_edge_repository import ClientTrainerEdgeRepository
 
-from src.application.certificate_use_cases import redeem_certificate_for_booking, redeem_certificate_balance_for_booking
+from src.application.client_use_cases import get_client_id_by_telegram_id
+from src.application.family_access_use_cases import list_family_access_telegram_ids_for_reminders
 from src.application.pass_product_use_cases import redeem_pass_session_for_booking
 from src.shared.notification_hours import NOTIFICATION_TZ
 from src.shared.price_tier_kind import (
@@ -41,6 +43,16 @@ BOOKING_STATUS_TRAINER_REMOVED = "trainer_removed"
 _REMINDER_NIGHT_END_HOUR = 8
 _REMINDER_EVENING_PRIOR_HOUR = 20
 _REMINDER_MIN_GAP_SEC = 120
+# Bookings in these statuses do not receive new reminder rows (day-level resync skips them).
+_REMINDER_SCHEDULE_EXCLUDED_STATUSES = (
+    "cancelled",
+    "declined",
+    "trainer_removed",
+    "completed",
+    "no_show",
+    "payment_dispute",
+)
+_REMINDER_SCHEDULE_EXCLUDED_SQL = ", ".join(f"'{s}'" for s in _REMINDER_SCHEDULE_EXCLUDED_STATUSES)
 _SQL_SLOT_START_TS = f"((s.slot_date + s.start_time) AT TIME ZONE '{NOTIFICATION_TZ}')"
 _SQL_SLOT_END_TS = f"((s.slot_date + s.end_time) AT TIME ZONE '{NOTIFICATION_TZ}')"
 # Booking rows for this trainer already delivered via trainer_bot pending-booking notifier (notified_at set).
@@ -1065,12 +1077,231 @@ def format_reminder_plan_ru(plan: list[tuple[str, datetime]]) -> str:
     return ", ".join(f"{dt.strftime('%d.%m %H:%M')} ({labels.get(k, k)})" for k, dt in plan)
 
 
+def _parse_merged_booking_ids(raw: object) -> list[int]:
+    if raw is None:
+        return []
+    if isinstance(raw, list):
+        return [int(x) for x in raw]
+    if isinstance(raw, str):
+        return [int(x) for x in json.loads(raw)]
+    return []
+
+
+async def resync_pending_reminders_for_client_day(
+    session: AsyncSession,
+    client_id: int,
+    slot_date: date,
+    *,
+    do_commit: bool = True,
+) -> None:
+    """Drop pending reminders for this client's calendar day and insert merged rows (earliest slot drives timing)."""
+    local_tz = ZoneInfo(NOTIFICATION_TZ)
+
+    await session.execute(
+        text(
+            """
+            UPDATE reminders r SET status = 'cancelled'
+            WHERE r.status = 'pending'
+              AND r.booking_id IN (
+                SELECT b.id FROM bookings b
+                JOIN slots s ON s.id = b.slot_id
+                WHERE b.client_id = :cid AND s.slot_date = :d
+              )
+            """
+        ),
+        {"cid": client_id, "d": slot_date},
+    )
+
+    r = await session.execute(
+        text(
+            f"""
+            SELECT b.id, b.created_at, s.start_time
+            FROM bookings b
+            JOIN slots s ON s.id = b.slot_id
+            WHERE b.client_id = :cid AND s.slot_date = :d
+              AND b.status NOT IN ({_REMINDER_SCHEDULE_EXCLUDED_SQL})
+            ORDER BY s.start_time ASC, b.id ASC
+            """
+        ),
+        {"cid": client_id, "d": slot_date},
+    )
+    rows = r.fetchall()
+    if not rows:
+        if do_commit:
+            await session.commit()
+        return
+
+    primary_id = int(rows[0][0])
+    extra_ids = [int(row[0]) for row in rows[1:]]
+
+    created_locals: list[datetime] = []
+    for _bid, created_at, _st in rows:
+        if created_at.tzinfo is None:
+            cl = created_at.replace(tzinfo=timezone.utc).astimezone(local_tz)
+        else:
+            cl = created_at.astimezone(local_tz)
+        created_locals.append(cl)
+    anchor_local = min(created_locals)
+    first_start: time = rows[0][2]
+
+    reminders = compute_booking_reminder_schedule(
+        anchor_local=anchor_local,
+        slot_date=slot_date,
+        start_time=first_start,
+    )
+
+    tids = await list_family_access_telegram_ids_for_reminders(session, client_id)
+    if not tids:
+        if do_commit:
+            await session.commit()
+        return
+
+    for kind, send_at in reminders:
+        send_at_utc = send_at.astimezone(timezone.utc)
+        for ctid in tids:
+            if extra_ids:
+                await session.execute(
+                    text(
+                        """
+                        INSERT INTO reminders (booking_id, client_telegram_id, kind, send_at, status, merged_booking_ids)
+                        VALUES (:bid, :ctid, :kind, :send_at, 'pending', CAST(:merged AS jsonb))
+                        """
+                    ),
+                    {
+                        "bid": primary_id,
+                        "ctid": int(ctid),
+                        "kind": kind,
+                        "send_at": send_at_utc,
+                        "merged": json.dumps(extra_ids),
+                    },
+                )
+            else:
+                await session.execute(
+                    text(
+                        """
+                        INSERT INTO reminders (booking_id, client_telegram_id, kind, send_at, status)
+                        VALUES (:bid, :ctid, :kind, :send_at, 'pending')
+                        """
+                    ),
+                    {
+                        "bid": primary_id,
+                        "ctid": int(ctid),
+                        "kind": kind,
+                        "send_at": send_at_utc,
+                    },
+                )
+
+    if do_commit:
+        await session.commit()
+
+
+async def format_trainer_reminder_plan_for_client_day(
+    session: AsyncSession,
+    *,
+    client_id: int,
+    slot_date: date,
+    client_has_telegram: bool,
+) -> str:
+    """Trainer-facing copy; includes merge hint when the client has several bookings that day."""
+    if not client_has_telegram:
+        return "не запланированы: у клиента не привязан Telegram"
+    local_tz = ZoneInfo(NOTIFICATION_TZ)
+    now_local = datetime.now(local_tz)
+    r = await session.execute(
+        text(
+            f"""
+            SELECT COUNT(*)::int, MIN(s.start_time), MIN(b.created_at)
+            FROM bookings b
+            JOIN slots s ON s.id = b.slot_id
+            WHERE b.client_id = :cid AND s.slot_date = :d
+              AND b.status NOT IN ({_REMINDER_SCHEDULE_EXCLUDED_SQL})
+            """
+        ),
+        {"cid": client_id, "d": slot_date},
+    )
+    row = r.fetchone()
+    if not row or int(row[0] or 0) == 0:
+        return "запланируем автоматически после синхронизации слота"
+    n_day = int(row[0])
+    min_start = row[1]
+    min_created = row[2]
+    if min_start is None or min_created is None:
+        return "запланируем автоматически по правилам напоминаний"
+    slot_dt_local = datetime.combine(slot_date, min_start).replace(tzinfo=local_tz)
+    if slot_dt_local <= now_local:
+        return "не ставим: слот уже начался или в прошлом"
+    if min_created.tzinfo is None:
+        anchor = min_created.replace(tzinfo=timezone.utc).astimezone(local_tz)
+    else:
+        anchor = min_created.astimezone(local_tz)
+    plan = compute_booking_reminder_schedule(
+        anchor_local=anchor,
+        slot_date=slot_date,
+        start_time=min_start,
+    )
+    if not plan:
+        return "не планируются: поздняя запись или нет окна до начала слота"
+    base = format_reminder_plan_ru(plan)
+    if n_day > 1:
+        return f"объединённо для всех записей на этот день ({n_day}): {base}"
+    return base
+
+
+async def fetch_reminder_session_cards_map(
+    session: AsyncSession,
+    booking_ids: list[int],
+) -> dict[int, dict[str, Any]]:
+    """Display payloads for client reminder Telegram (supports merged same-day rows)."""
+    if not booking_ids:
+        return {}
+    # Deduplicate while preserving order.
+    ordered_unique: list[int] = list(dict.fromkeys(int(x) for x in booking_ids))
+    r = await session.execute(
+        text(
+            """
+            SELECT b.id, s.slot_date, s.start_time, s.end_time,
+                   srv.name AS service_name,
+                   COALESCE(b.booking_price_cents, spv.price_cents, ts.price_cents) AS price_cents_effective,
+                   a.name AS arena_name, a.address AS arena_address, a.latitude, a.longitude,
+                   t.telegram_id AS trainer_telegram_id
+            FROM bookings b
+            JOIN slots s ON s.id = b.slot_id
+            JOIN services srv ON srv.id = b.service_id
+            JOIN trainers t ON t.id = b.trainer_id
+            LEFT JOIN trainer_service_price_variants spv ON spv.id = b.service_price_variant_id
+            LEFT JOIN trainer_services ts ON ts.trainer_id = b.trainer_id AND ts.service_id = b.service_id
+            LEFT JOIN arenas a ON a.id = COALESCE(b.arena_id, s.arena_id)
+            WHERE b.id = ANY(CAST(:ids AS INTEGER[]))
+              AND b.status NOT IN ('cancelled', 'declined', 'trainer_removed')
+            ORDER BY s.start_time ASC, b.id ASC
+            """
+        ),
+        {"ids": ordered_unique},
+    )
+    out: dict[int, dict[str, Any]] = {}
+    for row in r.fetchall():
+        bid = int(row[0])
+        st, et = row[2], row[3]
+        out[bid] = {
+            "booking_id": bid,
+            "slot_date": row[1],
+            "start_time": st,
+            "end_time": et,
+            "service_name": (row[4] or "").strip() or None,
+            "booking_price_cents": int(row[5]) if row[5] is not None else None,
+            "arena_name": (row[6] or "").strip() or None,
+            "arena_address": (row[7] or "").strip() or None,
+            "arena_latitude": row[8],
+            "arena_longitude": row[9],
+            "trainer_telegram_id": int(row[10]) if row[10] is not None else None,
+            "duration_minutes": _booking_interval_duration_minutes(st, et),
+        }
+    return out
+
+
 async def generate_reminders_for_booking(session: AsyncSession, booking_id: int) -> None:
     """
-    Create reminder rows for a booking according to strategy:
-    - If booking created earlier than slot_date: try 24h and 2h reminders (night windows snap to 08:00 same day).
-    - If both fail (e.g. early slot next day booked late afternoon): one reminder the previous evening at 20:00 local.
-    - If booking created on slot_date: only 2h-style path (with the same snap rule).
+    Rebuild same-day pending reminders for this client's calendar date (merged when several bookings).
 
     Sandbox bookings are silently skipped — a demo client must never receive automated reminders,
     even if a caller forgets the ``is_sandbox`` branch.
@@ -1078,9 +1309,8 @@ async def generate_reminders_for_booking(session: AsyncSession, booking_id: int)
     r = await session.execute(
         text(
             """
-            SELECT b.id, c.telegram_id, b.created_at, s.slot_date, s.start_time, b.is_sandbox
+            SELECT b.is_sandbox, b.client_id, s.slot_date
             FROM bookings b
-            JOIN clients c ON c.id = b.client_id
             JOIN slots s ON s.id = b.slot_id
             WHERE b.id = :id
             """
@@ -1090,49 +1320,16 @@ async def generate_reminders_for_booking(session: AsyncSession, booking_id: int)
     row = r.fetchone()
     if not row:
         return
-    if bool(row[5]):
+    if bool(row[0]):
         return
-    client_telegram_id = row[1]
-    if client_telegram_id is None:
-        # Client added by trainer without Telegram — no push reminders
+    client_row_id = int(row[1]) if row[1] is not None else None
+    if client_row_id is None:
         return
-
-    bid = row[0]
-    created_at: datetime = row[2]
-    slot_date = row[3]
-    start_time = row[4]
-
-    local_tz = ZoneInfo(NOTIFICATION_TZ)
-    if created_at.tzinfo is None:
-        created_local = created_at.replace(tzinfo=timezone.utc).astimezone(local_tz)
-    else:
-        created_local = created_at.astimezone(local_tz)
-
-    reminders = compute_booking_reminder_schedule(
-        anchor_local=created_local,
-        slot_date=slot_date,
-        start_time=start_time,
-    )
-
-    for kind, send_at in reminders:
-        # Store send_at in UTC so comparison with NOW() in DB is correct.
-        send_at_utc = send_at.astimezone(timezone.utc)
-        await session.execute(
-            text(
-                """
-                INSERT INTO reminders (booking_id, client_telegram_id, kind, send_at, status)
-                VALUES (:bid, :ctid, :kind, :send_at, 'pending')
-                """
-            ),
-            {
-                "bid": bid,
-                "ctid": client_telegram_id,
-                "kind": kind,
-                "send_at": send_at_utc,
-            },
-        )
-    # Напоминания можно коммитить отдельно от самой брони (create_booking уже сделал commit).
-    await session.commit()
+    tids = await list_family_access_telegram_ids_for_reminders(session, client_row_id)
+    if not tids:
+        return
+    slot_d = row[2]
+    await resync_pending_reminders_for_client_day(session, client_row_id, slot_d, do_commit=True)
 
 
 async def get_pending_trainer_booked_notifications(
@@ -1146,6 +1343,9 @@ async def get_pending_trainer_booked_notifications(
     ``notified_at`` when that push is delivered; they must not also receive «Вас записали…» after
     «Ваша запись подтверждена!» — ``confirm_booking`` sets ``client_notified_trainer_booked_at``;
     ``notified_at IS NULL`` is an extra guard if that column was not backfilled on older deploys.
+
+    Bookings created by recurring materialization (``recurring_client_slot_id`` set) are excluded: the
+    client receives one CRM «постоянное время» message instead of one push per auto-booked week.
     """
     r = await session.execute(
         text("""
@@ -1168,6 +1368,7 @@ async def get_pending_trainer_booked_notifications(
             LEFT JOIN arenas a ON a.id = COALESCE(b.arena_id, s.arena_id)
             WHERE b.client_notified_trainer_booked_at IS NULL
               AND b.notified_at IS NULL
+              AND b.recurring_client_slot_id IS NULL
               AND c.telegram_id IS NOT NULL
               AND NOT b.is_sandbox -- Sandbox bookings never push to clients (demo identity).
               AND NOT c.is_sandbox
@@ -1209,24 +1410,14 @@ async def mark_trainer_booked_notified(session: AsyncSession, booking_id: int) -
 async def list_pending_reminders(session: AsyncSession, limit: int = 100) -> list[dict]:
     """
     Reminders due to send: status=pending, send_at <= now.
-    Only for non-cancelled bookings.
-    Includes service/price/venue/trainer contact to render rich reminder card in client bot.
+    Only for non-cancelled primary bookings.
+    ``sessions`` lists one or more booking cards when same-day merges apply.
     """
     r = await session.execute(
         text("""
-            SELECT r.id, r.client_telegram_id, r.kind, s.slot_date, s.start_time, s.end_time,
-                   srv.name AS service_name,
-                   COALESCE(b.booking_price_cents, spv.price_cents, ts.price_cents) AS price_cents_effective,
-                   a.name AS arena_name, a.address AS arena_address, a.latitude, a.longitude,
-                   t.telegram_id AS trainer_telegram_id
+            SELECT r.id, r.client_telegram_id, r.kind, r.booking_id, r.merged_booking_ids
             FROM reminders r
             JOIN bookings b ON b.id = r.booking_id
-            JOIN slots s ON s.id = b.slot_id
-            JOIN services srv ON srv.id = b.service_id
-            JOIN trainers t ON t.id = b.trainer_id
-            LEFT JOIN trainer_service_price_variants spv ON spv.id = b.service_price_variant_id
-            LEFT JOIN trainer_services ts ON ts.trainer_id = b.trainer_id AND ts.service_id = b.service_id
-            LEFT JOIN arenas a ON a.id = COALESCE(b.arena_id, s.arena_id)
             WHERE r.status = 'pending'
               AND r.send_at <= now()
               AND b.status NOT IN ('cancelled', 'declined', 'trainer_removed')
@@ -1236,24 +1427,49 @@ async def list_pending_reminders(session: AsyncSession, limit: int = 100) -> lis
         {"lim": limit},
     )
     rows = r.fetchall()
-    return [
-        {
-            "id": row[0],
-            "client_telegram_id": row[1],
-            "kind": row[2],
-            "slot_date": row[3],
-            "start_time": row[4],
-            "end_time": row[5],
-            "service_name": (row[6] or "").strip() or None,
-            "booking_price_cents": int(row[7]) if row[7] is not None else None,
-            "arena_name": (row[8] or "").strip() or None,
-            "arena_address": (row[9] or "").strip() or None,
-            "arena_latitude": row[10],
-            "arena_longitude": row[11],
-            "trainer_telegram_id": int(row[12]) if row[12] is not None else None,
-        }
-        for row in rows
-    ]
+    if not rows:
+        return []
+
+    parsed: list[tuple[int, int, str, list[int]]] = []
+    all_bids: set[int] = set()
+    for row in rows:
+        rid = int(row[0])
+        ctg = int(row[1])
+        kind = row[2] or ""
+        bid = int(row[3])
+        merged = _parse_merged_booking_ids(row[4])
+        bids = [bid] + merged
+        parsed.append((rid, ctg, kind, bids))
+        for x in bids:
+            all_bids.add(x)
+
+    snap = await fetch_reminder_session_cards_map(session, list(all_bids))
+    out: list[dict[str, Any]] = []
+    for rid, ctg, kind, bids in parsed:
+        sessions = [snap[b] for b in bids if b in snap]
+        if not sessions:
+            continue
+        head = sessions[0]
+        trainer_tid = next((s["trainer_telegram_id"] for s in sessions if s.get("trainer_telegram_id")), None)
+        out.append(
+            {
+                "id": rid,
+                "client_telegram_id": ctg,
+                "kind": kind,
+                "sessions": sessions,
+                "slot_date": head["slot_date"],
+                "start_time": head["start_time"],
+                "end_time": head["end_time"],
+                "service_name": head.get("service_name"),
+                "booking_price_cents": head.get("booking_price_cents"),
+                "arena_name": head.get("arena_name"),
+                "arena_address": head.get("arena_address"),
+                "arena_latitude": head.get("arena_latitude"),
+                "arena_longitude": head.get("arena_longitude"),
+                "trainer_telegram_id": int(trainer_tid) if trainer_tid is not None else None,
+            }
+        )
+    return out
 
 
 async def mark_reminder_sent(session: AsyncSession, reminder_id: int) -> None:
@@ -1993,12 +2209,19 @@ async def list_trainer_clients(
     session: AsyncSession,
     trainer_id: int,
     limit: int = 50,
+    *,
+    recurring_only: bool = False,
 ) -> list[dict]:
     """
     Distinct clients linked to this trainer: any non-cancelled booking, explicit CRM roster row, or training group.
     Sorted by most recent non-cancelled slot when present; roster-only clients follow by add time.
     last_date/last_start = last *completed* session only; NULL if none yet.
     """
+    if recurring_only:
+        cap = max(50, int(limit))
+        lim = min(cap, 500)
+    else:
+        lim = limit
     r = await session.execute(
         text(
             """
@@ -2013,6 +2236,12 @@ async def list_trainer_clients(
                     FROM trainer_client_roster r
                     WHERE r.trainer_id = :tid
                 ) u
+            ),
+            recurring_counts AS (
+                SELECT client_id, COUNT(*)::int AS n
+                FROM recurring_client_slots
+                WHERE trainer_id = :tid AND status = 'active'
+                GROUP BY client_id
             ),
             last_completed_per_client AS (
                 SELECT
@@ -2063,12 +2292,14 @@ async def list_trainer_clients(
                  WHERE b2.client_id = c.id
                    AND b2.trainer_id = :tid
                    AND b2.status NOT IN ('cancelled', 'declined', 'trainer_removed')) AS first_date,
-                c.is_sandbox
+                c.is_sandbox,
+                COALESCE(rc.n, 0) AS recurring_slots_count
             FROM eligible_clients e
             JOIN clients c ON c.id = e.client_id
             LEFT JOIN recent_booking_per_client rb ON rb.client_id = c.id AND rb.rn = 1
             LEFT JOIN last_completed_per_client lc ON lc.client_id = c.id AND lc.rn = 1
             LEFT JOIN roster_touch ro ON ro.client_id = c.id
+            LEFT JOIN recurring_counts rc ON rc.client_id = c.id
             ORDER BY c.is_sandbox ASC,
                      rb.sort_date DESC NULLS LAST,
                      rb.sort_start DESC NULLS LAST,
@@ -2077,10 +2308,10 @@ async def list_trainer_clients(
             LIMIT :lim
             """
         ),
-        {"tid": trainer_id, "lim": limit},
+        {"tid": trainer_id, "lim": lim},
     )
     rows = r.fetchall()
-    return [
+    out = [
         {
             "id": row[0],
             "telegram_id": row[1],
@@ -2093,9 +2324,14 @@ async def list_trainer_clients(
             "last_start": row[8],
             "first_date": row[9],
             "is_sandbox": bool(row[10]),
+            "recurring_slots_count": int(row[11] or 0),
         }
         for row in rows
     ]
+    if recurring_only:
+        out = [c for c in out if c.get("recurring_slots_count", 0) > 0]
+        out = out[: max(1, min(int(limit), 100))]
+    return out
 
 
 def _last_meeting_phrase_ru(*, today: date, last_session_date: date) -> str:
@@ -2742,6 +2978,9 @@ async def list_bookings_for_client(
 
     Slot end uses Europe/Minsk wall time (same as trainer hub / reminders), not DB session timezone.
     Arena: booking.arena_id, then slot.arena_id, then trainer primary / MIN(trainer_arenas); not arbitrary ta row."""
+    cid = await get_client_id_by_telegram_id(session, int(client_telegram_id))
+    if cid is None:
+        return []
     r = await session.execute(
         text(
             """
@@ -2780,7 +3019,7 @@ async def list_bookings_for_client(
             + SQL_BOOKING_RESOLVED_ARENA_ID
             + """)
             ) a ON true
-            WHERE c.telegram_id = :ctid
+            WHERE b.client_id = :cid
               AND s.status IN ('available', 'booked')
               AND b.status IN ('pending', 'confirmed')
               AND """ + _SQL_SLOT_END_TS + """ > CURRENT_TIMESTAMP
@@ -2788,7 +3027,7 @@ async def list_bookings_for_client(
             LIMIT :lim
         """
         ),
-        {"ctid": client_telegram_id, "lim": limit},
+        {"cid": int(cid), "lim": limit},
     )
     rows = r.fetchall()
     out = []
@@ -2845,15 +3084,16 @@ async def client_latest_booking_primary_candidate(
 
     Ignores cancelled-style bookings; slot row must exist and not be cancelled.
     """
-    ctid = int(client_telegram_id)
+    cid = await get_client_id_by_telegram_id(session, int(client_telegram_id))
+    if cid is None:
+        return None, None
     r = await session.execute(
         text(
             """
             SELECT b.trainer_id, b.service_id
             FROM bookings b
-            INNER JOIN clients c ON c.id = b.client_id
             INNER JOIN slots s ON s.id = b.slot_id
-            WHERE c.telegram_id = :ctid
+            WHERE b.client_id = :cid
               AND b.status IN ('pending', 'confirmed', 'completed', 'no_show')
               AND COALESCE(TRIM(LOWER(COALESCE(s.status, ''))), '') <> 'cancelled'
             ORDER BY """
@@ -2863,7 +3103,7 @@ async def client_latest_booking_primary_candidate(
             LIMIT 1
             """
         ),
-        {"ctid": ctid},
+        {"cid": int(cid)},
     )
     row = r.fetchone()
     if not row or row[0] is None:
@@ -2881,8 +3121,9 @@ async def list_trainer_client_history(
     limit: int = 20,
 ) -> list[dict]:
     """
-    Last N non-cancelled bookings for this trainer and client.
-    Includes date, time, arena (best-effort), duration, service_name, tariff label and status.
+    Last N non-cancelled bookings for this trainer and client (by slot date desc — includes upcoming).
+    Includes date, time, arena (best-effort), duration, service_name, tariff label, status,
+    and ``recurring_client_slot_id`` when the booking was created from a weekly recurring rule.
     """
     r = await session.execute(
         text(
@@ -2896,7 +3137,8 @@ async def list_trainer_client_history(
                 COALESCE(a2.name, '') AS arena_name,
                 COALESCE(srv.name, '—') AS service_name,
                 b.status,
-                COALESCE(spv.tier_kind, b.price_tier_kind) AS tier_kind_raw
+                COALESCE(spv.tier_kind, b.price_tier_kind) AS tier_kind_raw,
+                b.recurring_client_slot_id
             FROM bookings b
             JOIN slots s ON s.id = b.slot_id
             JOIN services srv ON srv.id = b.service_id
@@ -2921,6 +3163,7 @@ async def list_trainer_client_history(
     items: list[dict] = []
     for row in rows:
         raw_tier = row[8] if len(row) > 8 else None
+        rec_slot = row[9] if len(row) > 9 else None
         ptk = normalize_price_tier_kind(raw_tier) if raw_tier else None
         tier_label = price_tier_label_ru(ptk) if ptk else None
         items.append(
@@ -2934,6 +3177,7 @@ async def list_trainer_client_history(
                 "service_name": (row[6] or "").strip() or "—",
                 "status": (row[7] or "").strip() or "confirmed",
                 "price_tier_label": tier_label,
+                "recurring_client_slot_id": int(rec_slot) if rec_slot is not None else None,
             }
         )
     return items
@@ -3106,15 +3350,23 @@ async def mark_booking_notified(session: AsyncSession, booking_id: int) -> None:
     await session.commit()
 
 
-async def cancel_booking(session: AsyncSession, booking_id: int, trainer_id: int) -> bool:
+async def cancel_booking(
+    session: AsyncSession,
+    booking_id: int,
+    trainer_id: int,
+    *,
+    notify_client: bool = True,
+    record_recurring_week_skip: bool = True,
+) -> bool:
     """
     Cancel booking: booking status to 'cancelled', slot occupancy synced (group slots may stay partially filled).
-    Recurring-auto bookings: records a week skip so materialization will not recreate the same calendar week.
+    Recurring-auto bookings: by default records a week skip so materialization will not recreate the same calendar week.
+    ``notify_client=False`` omits the client «тренер отменил» queue (e.g. purging forward auto-bookings with a rule).
     Returns True if booking was found and cancelled.
     """
     r = await session.execute(
         text("""
-            SELECT b.slot_id, b.recurring_client_slot_id, s.slot_date
+            SELECT b.slot_id, b.recurring_client_slot_id, s.slot_date, b.client_id
             FROM bookings b
             JOIN slots s ON s.id = b.slot_id
             WHERE b.id = :bid AND b.trainer_id = :tid AND b.status IN ('pending', 'confirmed')
@@ -3127,22 +3379,24 @@ async def cancel_booking(session: AsyncSession, booking_id: int, trainer_id: int
     slot_id = int(row[0])
     recurring_for_skip = row[1]
     slot_date_for_skip = row[2]
+    client_id_cancel = int(row[3]) if row[3] is not None else None
     await session.execute(
         text("UPDATE bookings SET status = 'cancelled' WHERE id = :bid"),
         {"bid": booking_id},
     )
-    if recurring_for_skip is not None and slot_date_for_skip is not None:
+    if record_recurring_week_skip and recurring_for_skip is not None and slot_date_for_skip is not None:
         from src.application.recurring_use_cases import record_recurring_materialization_week_skip
 
         await record_recurring_materialization_week_skip(
             session, int(recurring_for_skip), slot_date_for_skip
         )
     await sync_slot_status_for_occupancy(session, slot_id)
-    await session.execute(
-        text("UPDATE reminders SET status = 'cancelled' WHERE booking_id = :bid"),
-        {"bid": booking_id},
-    )
-    await _schedule_booking_cancel_notification(session, booking_id)
+    if client_id_cancel is not None and slot_date_for_skip is not None:
+        await resync_pending_reminders_for_client_day(
+            session, client_id_cancel, slot_date_for_skip, do_commit=False
+        )
+    if notify_client:
+        await _schedule_booking_cancel_notification(session, booking_id)
     await session.commit()
     invalidate_slots_for_trainer(trainer_id)
     return True
@@ -3232,6 +3486,9 @@ async def cancel_booking_by_client(
     client_id, client_telegram_id, booking_id — or None if booking not found / not owned by client.
     """
     reason_val = (reason or "").strip() or None
+    cid_actor = await get_client_id_by_telegram_id(session, int(client_telegram_id))
+    if cid_actor is None:
+        return None
     # Load trainer + slot + client for notification before updating
     r = await session.execute(
         text("""
@@ -3239,13 +3496,13 @@ async def cancel_booking_by_client(
                    TRIM(COALESCE(c.first_name, '') || ' ' || COALESCE(c.last_name, '')) AS client_name,
                    c.id, c.telegram_id, b.recurring_client_slot_id
             FROM bookings b
-            JOIN clients c ON c.id = b.client_id AND c.telegram_id = :ctid
+            JOIN clients c ON c.id = b.client_id
             JOIN slots s ON s.id = b.slot_id
             JOIN trainers t ON t.id = b.trainer_id
-            WHERE b.id = :bid AND b.status IN ('pending', 'confirmed')
+            WHERE b.id = :bid AND b.client_id = :cid AND b.status IN ('pending', 'confirmed')
               AND s.status IN ('available', 'booked')
         """),
-        {"bid": booking_id, "ctid": client_telegram_id},
+        {"bid": booking_id, "cid": int(cid_actor)},
     )
     row = r.fetchone()
     if not row:
@@ -3258,16 +3515,14 @@ async def cancel_booking_by_client(
         (row[4] or "").strip() or "Клиент",
     )
     client_id = int(row[5]) if row[5] is not None else None
-    client_tid = int(row[6]) if row[6] is not None else None
     recurring_for_skip = row[7]
 
     r = await session.execute(
         text("""
             SELECT b.slot_id FROM bookings b
-            JOIN clients c ON c.id = b.client_id AND c.telegram_id = :ctid
-            WHERE b.id = :bid AND b.status IN ('pending', 'confirmed')
+            WHERE b.id = :bid AND b.client_id = :cid AND b.status IN ('pending', 'confirmed')
         """),
-        {"bid": booking_id, "ctid": client_telegram_id},
+        {"bid": booking_id, "cid": int(cid_actor)},
     )
     row_slot = r.fetchone()
     if not row_slot:
@@ -3288,10 +3543,8 @@ async def cancel_booking_by_client(
             session, int(recurring_for_skip), slot_date
         )
     await sync_slot_status_for_occupancy(session, slot_id_cancel)
-    await session.execute(
-        text("UPDATE reminders SET status = 'cancelled' WHERE booking_id = :bid"),
-        {"bid": booking_id},
-    )
+    if client_id is not None and slot_date is not None:
+        await resync_pending_reminders_for_client_day(session, client_id, slot_date, do_commit=False)
     await session.commit()
     invalidate_slots_for_trainer(trainer_id_cache)
     return {
@@ -3303,7 +3556,7 @@ async def cancel_booking_by_client(
         "client_name": client_name,
         "reason": reason_val,
         "client_id": client_id,
-        "client_telegram_id": client_tid,
+        "client_telegram_id": int(client_telegram_id),
         "booking_id": booking_id,
     }
 
@@ -3447,6 +3700,7 @@ async def decline_booking(
             SELECT b.slot_id, b.id,
                    c.telegram_id,
                    COALESCE(c.phone, '') AS client_phone,
+                   c.id AS client_row_id,
                    s.slot_date,
                    s.start_time,
                    s.end_time
@@ -3465,24 +3719,26 @@ async def decline_booking(
     if not row:
         return None
     slot_id_decl = int(row[0])
+    client_row_decl = int(row[4]) if row[4] is not None else None
+    slot_date_decl = row[5]
     await session.execute(
         text("UPDATE bookings SET status = 'declined' WHERE id = :bid"),
         {"bid": booking_id},
     )
     await sync_slot_status_for_occupancy(session, slot_id_decl)
-    await session.execute(
-        text("UPDATE reminders SET status = 'cancelled' WHERE booking_id = :bid"),
-        {"bid": booking_id},
-    )
+    if client_row_decl is not None and slot_date_decl is not None:
+        await resync_pending_reminders_for_client_day(
+            session, client_row_decl, slot_date_decl, do_commit=False
+        )
     await session.commit()
     invalidate_slots_for_trainer(trainer_id)
     return {
         "id": row[1],
         "client_telegram_id": row[2],
         "client_phone": row[3] or "",
-        "slot_date": row[4],
-        "start_time": row[5],
-        "end_time": row[6],
+        "slot_date": row[5],
+        "start_time": row[6],
+        "end_time": row[7],
     }
 
 
@@ -3757,7 +4013,7 @@ async def purge_past_booking_from_schedule_history(
     r = await session.execute(
         text(
             """
-            SELECT b.status, b.slot_id, c.telegram_id
+            SELECT b.status, b.slot_id, c.telegram_id, b.client_id, s.slot_date
             FROM bookings b
             JOIN slots s ON s.id = b.slot_id
             JOIN clients c ON c.id = b.client_id
@@ -3787,13 +4043,12 @@ async def purge_past_booking_from_schedule_history(
             return False, "not_found"
         return False, "slot_not_past_or_invalid_status"
 
-    slot_id, client_tg = int(row[1]), row[2]
+    slot_id = int(row[1])
+    client_tg = row[2]
+    client_id_tr = int(row[3]) if row[3] is not None else None
+    slot_date_tr = row[4]
 
     await restore_booking_financial_artifacts(session, booking_id)
-    await session.execute(
-        text("UPDATE reminders SET status = 'cancelled' WHERE booking_id = :bid"),
-        {"bid": booking_id},
-    )
     await session.execute(
         text(
             """
@@ -3805,6 +4060,10 @@ async def purge_past_booking_from_schedule_history(
         {"removed": BOOKING_STATUS_TRAINER_REMOVED, "bid": booking_id, "tid": trainer_id},
     )
     await sync_slot_status_for_occupancy(session, slot_id)
+    if client_id_tr is not None and slot_date_tr is not None:
+        await resync_pending_reminders_for_client_day(
+            session, client_id_tr, slot_date_tr, do_commit=False
+        )
 
     if client_tg is not None:
         repo = ClientTrainerEdgeRepository(session)
@@ -4189,15 +4448,17 @@ async def get_booking_for_client_feedback(
     client_telegram_id: int,
 ) -> dict | None:
     """Booking by id and client; must be completed. Returns trainer_id and slot info for feedback flow."""
+    cid = await get_client_id_by_telegram_id(session, int(client_telegram_id))
+    if cid is None:
+        return None
     r = await session.execute(
         text("""
             SELECT b.id, b.trainer_id, s.slot_date, s.start_time
             FROM bookings b
-            JOIN clients c ON c.id = b.client_id
             JOIN slots s ON s.id = b.slot_id
-            WHERE b.id = :bid AND c.telegram_id = :ctid AND b.status = 'completed'
+            WHERE b.id = :bid AND b.client_id = :cid AND b.status = 'completed'
         """),
-        {"bid": booking_id, "ctid": client_telegram_id},
+        {"bid": booking_id, "cid": int(cid)},
     )
     row = r.fetchone()
     if not row:
@@ -4211,19 +4472,21 @@ async def get_completed_booking_for_repeat(
     client_telegram_id: int,
 ) -> dict | None:
     """Completed booking by id and client; repeat flows include service_name and arena_name for trainer pings."""
+    cid = await get_client_id_by_telegram_id(session, int(client_telegram_id))
+    if cid is None:
+        return None
     r = await session.execute(
         text("""
             SELECT b.id, b.trainer_id, b.client_id, b.service_id, s.slot_date, s.start_time, s.end_time,
                    b.service_price_variant_id, sv.name AS service_name,
                    NULLIF(TRIM(ar.name), '') AS arena_name
             FROM bookings b
-            JOIN clients c ON c.id = b.client_id
             JOIN slots s ON s.id = b.slot_id
             LEFT JOIN services sv ON sv.id = b.service_id
             LEFT JOIN arenas ar ON ar.id = COALESCE(b.arena_id, s.arena_id)
-            WHERE b.id = :bid AND c.telegram_id = :ctid AND b.status = 'completed'
+            WHERE b.id = :bid AND b.client_id = :cid AND b.status = 'completed'
         """),
-        {"bid": booking_id, "ctid": client_telegram_id},
+        {"bid": booking_id, "cid": int(cid)},
     )
     row = r.fetchone()
     if not row:

@@ -340,6 +340,21 @@ async def get_or_create_client(
         if absorbed_id is not None:
             return absorbed_id
 
+    fam_cid = await get_family_primary_client_id_for_telegram(session, telegram_id)
+    if fam_cid is not None:
+        if telegram_username is not None and telegram_username_val is not None:
+            await session.execute(
+                text(
+                    """
+                    UPDATE client_family_access_members
+                    SET telegram_username = :un
+                    WHERE member_telegram_id = :tid
+                    """
+                ),
+                {"un": telegram_username_val, "tid": telegram_id},
+            )
+        return int(fam_cid)
+
     r = await session.execute(
         text("SELECT id, phone, first_name, last_name, telegram_username FROM clients WHERE telegram_id = :tid"),
         {"tid": telegram_id},
@@ -644,14 +659,44 @@ async def attach_telegram_id_to_client(
 
 
 async def get_client_id_by_telegram_id(session: AsyncSession, telegram_id: int) -> int | None:
-    """Return client_id for telegram_id, or None if not found."""
+    """Return primary ``clients.id`` for this Telegram user (owner row or family member)."""
     r = await session.execute(
         text("SELECT id FROM clients WHERE telegram_id = :tid"),
         {"tid": telegram_id},
     )
     row = r.fetchone()
-    return row[0] if row else None
+    if row:
+        return int(row[0])
+    r2 = await session.execute(
+        text(
+            """
+            SELECT primary_client_id FROM client_family_access_members
+            WHERE member_telegram_id = :tid
+            LIMIT 1
+            """
+        ),
+        {"tid": telegram_id},
+    )
+    row2 = r2.fetchone()
+    return int(row2[0]) if row2 else None
 
+
+async def get_family_primary_client_id_for_telegram(
+    session: AsyncSession, telegram_id: int
+) -> int | None:
+    """If ``telegram_id`` is an extra family account, return linked ``clients.id``; else None."""
+    r = await session.execute(
+        text(
+            """
+            SELECT primary_client_id FROM client_family_access_members
+            WHERE member_telegram_id = :tid
+            LIMIT 1
+            """
+        ),
+        {"tid": telegram_id},
+    )
+    row = r.fetchone()
+    return int(row[0]) if row else None
 
 async def get_client_telegram_id(session: AsyncSession, client_id: int) -> int | None:
     """Return telegram_id for client_id, or None if not linked (trainer-added client without Telegram)."""
@@ -670,14 +715,36 @@ async def get_client_profile_basic(
     """
     Basic client profile for flows: id + first/last name + phone (if any) by telegram_id.
     Used to decide whether to ask for name/phone again in booking/request flows.
+    Family members read the primary row (child name + primary phone).
     """
     r = await session.execute(
-        text("SELECT id, first_name, last_name, phone FROM clients WHERE telegram_id = :tid"),
+        text(
+            """
+            SELECT c.id, c.first_name, c.last_name, c.phone
+            FROM clients c
+            WHERE c.telegram_id = :tid
+            LIMIT 1
+            """
+        ),
         {"tid": telegram_id},
     )
     row = r.fetchone()
     if not row:
-        return None
+        r2 = await session.execute(
+            text(
+                """
+                SELECT c.id, c.first_name, c.last_name, c.phone
+                FROM client_family_access_members m
+                JOIN clients c ON c.id = m.primary_client_id
+                WHERE m.member_telegram_id = :tid
+                LIMIT 1
+                """
+            ),
+            {"tid": telegram_id},
+        )
+        row = r2.fetchone()
+        if not row:
+            return None
     return {
         "id": row[0],
         "first_name": row[1] or "",
@@ -688,9 +755,12 @@ async def get_client_profile_basic(
 
 async def get_client_phone_for_webapp(session: AsyncSession, telegram_id: int) -> str | None:
     """
-    Phone for Mini App prefill: row linked to telegram_id, or sibling row with same phone_normalized
-    (trainer-added duplicate before merge).
+    Phone for Mini App prefill: primary row linked to this catalog user (owner or family member).
+    Includes sibling-row COALESCE for trainer-added duplicate merge.
     """
+    cid = await get_client_id_by_telegram_id(session, telegram_id)
+    if cid is None:
+        return None
     r = await session.execute(
         text("""
             SELECT COALESCE(
@@ -704,10 +774,10 @@ async def get_client_phone_for_webapp(session: AsyncSession, telegram_id: int) -
                  LIMIT 1)
             ) AS phone
             FROM clients c
-            WHERE c.telegram_id = :tid
+            WHERE c.id = :cid
             LIMIT 1
         """),
-        {"tid": telegram_id},
+        {"cid": cid},
     )
     row = r.fetchone()
     if not row or row[0] is None:

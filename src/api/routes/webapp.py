@@ -5,7 +5,7 @@ import asyncio
 import html
 import logging
 import uuid
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from itertools import groupby
 from typing import Any, Literal
 from urllib.parse import parse_qsl
@@ -63,12 +63,11 @@ from src.application.booking_use_cases import (
     count_trainer_client_upcoming,
     create_booking,
     create_trainer_quick_booking,
-    compute_booking_reminder_schedule,
     get_trainer_hub_session_summary_counts,
     explain_trainer_booking_failure,
     decline_booking,
     detach_trainer_client_from_roster_miniapp,
-    format_reminder_plan_ru,
+    format_trainer_reminder_plan_for_client_day,
     generate_reminders_for_booking,
     get_booking_milestone_display_for_trainer,
     get_trainer_default_city_and_service,
@@ -96,8 +95,15 @@ from src.application.booking_use_cases import (
     get_trainer_primary_arena_resolved,
     get_trainer_slot_for_mass_client_invite,
     trainer_client_roster_link_exists,
+    is_slot_start_in_past_local,
+    get_first_service_id_for_trainer,
 )
 from src.application.client_username_enrich import enrich_booking_dicts_with_client_telegram_usernames
+from src.application.family_access_use_cases import (
+    create_family_access_invite_token,
+    list_family_access_members_api,
+    revoke_family_member,
+)
 from src.application.trainer_client_relay_use_cases import (
     RELAY_SENDER_TRAINER,
     assert_trainer_may_use_relay,
@@ -173,11 +179,15 @@ from src.application.client_trainer_edge_use_cases import (
     unsubscribe_notify_slots as uc_unsubscribe_notify_slots,
 )
 from src.application.catalog_use_cases import list_arenas, list_cities, list_services
-from src.application.trainer_schedule_use_cases import trainer_default_slot_arena_id
+from src.application.trainer_schedule_use_cases import this_week_monday, trainer_default_slot_arena_id
 from src.application.recurring_use_cases import (
     cancel_recurring_client_slot,
     create_recurring_client_slot,
     get_active_recurring_for_booking,
+    has_other_active_recurring,
+    list_active_recurring_slots_for_trainer_client,
+    list_recurring_booking_suggestions_for_trainer_client,
+    list_upcoming_recurring_bookings_for_trainer_client,
     materialize_recurring_horizon,
 )
 from src.application.trainer_access_state import (
@@ -441,36 +451,6 @@ def _format_time_hhmm(t) -> str:
     return s[:5] if len(s) >= 5 else (s or "—")
 
 
-def _build_client_reminder_plan_text_for_trainer(
-    slot_date,
-    start_time,
-    *,
-    client_has_telegram: bool,
-) -> str:
-    """Human-readable reminder schedule for trainer post-action message."""
-    if not client_has_telegram:
-        return "не запланированы: у клиента не привязан Telegram"
-    if slot_date is None or start_time is None:
-        return "запланируем автоматически после синхронизации слота"
-    try:
-        local_tz = ZoneInfo(NOTIFICATION_TZ)
-        now_local = datetime.now(local_tz)
-        slot_dt_local = datetime.combine(slot_date, start_time).replace(tzinfo=local_tz)
-    except Exception:
-        return "запланируем автоматически по правилам напоминаний"
-    if slot_dt_local <= now_local:
-        return "не ставим: слот уже начался или в прошлом"
-
-    plan = compute_booking_reminder_schedule(
-        anchor_local=now_local,
-        slot_date=slot_date,
-        start_time=start_time,
-    )
-    if not plan:
-        return "не планируются: поздняя запись или нет окна до начала слота"
-    return format_reminder_plan_ru(plan)
-
-
 async def _send_trainer_post_booking_feedback(
     *,
     session: AsyncSession,
@@ -535,9 +515,10 @@ async def _send_trainer_post_booking_feedback(
                 reminder_plan = "не отправляются — это пример"
                 client_confirmation = "не отправляется — это пример"
             else:
-                reminder_plan = _build_client_reminder_plan_text_for_trainer(
-                    slot_date,
-                    start_time,
+                reminder_plan = await format_trainer_reminder_plan_for_client_day(
+                    session,
+                    client_id=client_id,
+                    slot_date=slot_date,
                     client_has_telegram=bool(client_tg_id),
                 )
                 client_confirmation = "не применимо: у клиента не привязан Telegram"
@@ -1335,6 +1316,10 @@ class ClientBookingBody(BaseModel):
     last_name: str | None = None
 
 
+class FamilyAccessRevokeBody(BaseModel):
+    member_telegram_id: int = Field(..., gt=0)
+
+
 async def _client_booking_post_create_effects(
     booking_id: int,
     telegram_id: int,
@@ -2010,6 +1995,73 @@ async def get_client_bookings(
     """List client's upcoming bookings grouped by day. Arena + address + map_link. Auth: client initData."""
     telegram_id = client_catalog_telegram_key(principal)
     return await _client_bookings_days_payload(session, telegram_id)
+
+
+@router.get("/client/family-access")
+async def get_client_family_access(
+    session: AsyncSession = Depends(get_session),
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+):
+    """Household Telegram members sharing one client card (bookings/passes). Owner manages invites."""
+    telegram_id = client_catalog_telegram_key(principal)
+    data = await list_family_access_members_api(session, viewer_telegram_id=telegram_id)
+    if data is None:
+        raise HTTPException(status_code=404, detail="Клиент не найден. Завершите регистрацию в приложении.")
+    return data
+
+
+@router.post("/client/family-access/invite")
+async def post_client_family_access_invite(
+    session: AsyncSession = Depends(get_session),
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+):
+    """Primary Telegram holder creates a one-time invite link (t.me client bot welcome_t_*)."""
+    telegram_id = client_catalog_telegram_key(principal)
+    cid = await get_client_id_by_telegram_id(session, telegram_id)
+    if cid is None:
+        raise HTTPException(status_code=400, detail="Сначала завершите регистрацию.")
+    url, err = await create_family_access_invite_token(
+        session,
+        primary_client_id=int(cid),
+        inviter_telegram_id=int(telegram_id),
+    )
+    if err == "owner_only":
+        raise HTTPException(status_code=403, detail="Приглашать может только основной аккаунт семьи.")
+    if err == "limit_reached":
+        raise HTTPException(status_code=409, detail="Достигнут лимит приглашённых для семейного доступа.")
+    if err == "roster_required":
+        raise HTTPException(
+            status_code=400,
+            detail="Сначала запишитесь к тренеру или добавьтесь в клиенты — нужна связь с тренером для ссылки.",
+        )
+    if err == "no_bot":
+        raise HTTPException(status_code=503, detail="Сервис приглашений временно недоступен.")
+    if not url:
+        raise HTTPException(status_code=400, detail="Не удалось создать приглашение.")
+    return {"invite_url": url}
+
+
+@router.post("/client/family-access/revoke")
+async def post_client_family_access_revoke(
+    body: FamilyAccessRevokeBody,
+    session: AsyncSession = Depends(get_session),
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+):
+    """Owner revokes an extra Telegram member from the shared client card."""
+    telegram_id = client_catalog_telegram_key(principal)
+    cid = await get_client_id_by_telegram_id(session, telegram_id)
+    if cid is None:
+        raise HTTPException(status_code=404, detail="Клиент не найден.")
+    ok = await revoke_family_member(
+        session,
+        primary_client_id=int(cid),
+        owner_telegram_id=int(telegram_id),
+        member_telegram_id=int(body.member_telegram_id),
+    )
+    if not ok:
+        raise HTTPException(status_code=400, detail="Не удалось отозвать доступ. Проверьте права и id участника.")
+    await session.commit()
+    return {"ok": True}
 
 
 @router.get("/client/activity-stats")
@@ -5212,6 +5264,7 @@ async def get_trainer_my_services(
 @router.get("/trainer/clients")
 async def get_trainer_clients(
     q: str | None = Query(None, description="Search by name or phone (optional)"),
+    recurring_only: bool = Query(False, description="Only clients with at least one active recurring weekly slot"),
     principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
     session: AsyncSession = Depends(get_session),
 ):
@@ -5219,7 +5272,7 @@ async def get_trainer_clients(
     trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
-    clients = await list_trainer_clients(session, trainer_id, limit=100)
+    clients = await list_trainer_clients(session, trainer_id, limit=100, recurring_only=recurring_only)
     if q and (q := (q or "").strip()):
         q_lower = q.lower()
         digits = "".join(c for c in q if c.isdigit())
@@ -5288,6 +5341,298 @@ async def get_trainer_client_card(
     if not client:
         raise HTTPException(status_code=404, detail="Клиент не найден или нет доступа")
     return await _trainer_miniapp_client_card_enriched_payload(session, client)
+
+
+def _parse_trainer_miniapp_hhmm(raw: str) -> time:
+    s = (raw or "").strip()
+    parts = s.replace(".", ":").split(":")
+    if len(parts) < 2:
+        raise ValueError("Ожидается время в формате ЧЧ:ММ")
+    h, m = int(parts[0]), int(parts[1])
+    if not (0 <= h <= 23 and 0 <= m <= 59):
+        raise ValueError("Некорректное время")
+    return time(h, m, 0)
+
+
+async def _require_trainer_service_for_recurring_materialization(
+    session: AsyncSession,
+    trainer_id: int,
+) -> None:
+    """Recurring auto-bookings need a catalog service row to attach prices."""
+    if not await get_first_service_id_for_trainer(session, trainer_id):
+        raise HTTPException(
+            status_code=400,
+            detail="Добавьте хотя бы одну услугу в профиль — автозаписи создаются с привязкой к услуге.",
+        )
+
+
+async def _rollback_recurring_unless_full_materialization(
+    session: AsyncSession,
+    trainer_id: int,
+    recurring_id: int,
+    *,
+    materialized: int,
+    horizon_weeks: int,
+) -> None:
+    """
+    Trainer-facing flows are all-or-nothing: if we could not place the full forward window,
+    drop the new rule and any bookings created for it, then surface a conflict error.
+    """
+    hw = max(1, int(horizon_weeks))
+    if materialized >= hw:
+        return
+    await cancel_recurring_client_slot(session, trainer_id, recurring_id)
+    raise HTTPException(
+        status_code=409,
+        detail=(
+            f"Создано только {materialized} из {hw} автозаписей: на часть недель это время занято "
+            "или пересекается с другим слотом. Закрепление не сохранено — освободите интервалы и попробуйте снова."
+        ),
+    )
+
+
+class TrainerClientRecurringCreateBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    day_of_week: int = Field(..., ge=0, le=6, description="0=Monday .. 6=Sunday")
+    start_time: str = Field(..., max_length=8, description="HH:MM")
+    end_time: str = Field(..., max_length=8, description="HH:MM")
+
+
+@router.get("/trainer/clients/{client_id:int}/recurring")
+async def get_trainer_client_recurring(
+    client_id: int,
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Active weekly recurring slots + upcoming auto-bookings for this client (trainer CRM)."""
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
+    client = await get_trainer_client_for_card(session, trainer_id, client_id)
+    if not client:
+        raise HTTPException(status_code=404, detail="Клиент не найден или нет доступа")
+    try:
+        from zoneinfo import ZoneInfo
+    except ImportError:  # pragma: no cover
+        from backports.zoneinfo import ZoneInfo  # type: ignore[no-redef]
+    today = datetime.now(ZoneInfo(NOTIFICATION_TZ)).date()
+    slots = await list_active_recurring_slots_for_trainer_client(session, trainer_id, client_id)
+    upcoming = await list_upcoming_recurring_bookings_for_trainer_client(
+        session, trainer_id, client_id, from_date=today, limit=20
+    )
+    booking_suggestions = await list_recurring_booking_suggestions_for_trainer_client(
+        session, trainer_id, client_id, limit=10
+    )
+    settings = Settings()
+    return {
+        "slots": slots,
+        "upcoming_bookings": upcoming,
+        "booking_suggestions": booking_suggestions,
+        "materialization_horizon_weeks": int(settings.recurring_materialization_horizon_weeks),
+    }
+
+
+@router.post("/trainer/clients/{client_id:int}/recurring")
+async def post_trainer_client_recurring(
+    client_id: int,
+    body: TrainerClientRecurringCreateBody,
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Add weekly recurring slot; materializes forward bookings like «Сделать постоянным» from a booking."""
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
+    client = await get_trainer_client_for_card(session, trainer_id, client_id)
+    if not client:
+        raise HTTPException(status_code=404, detail="Клиент не найден или нет доступа")
+    if bool(client.get("is_sandbox")):
+        raise HTTPException(status_code=400, detail="Недоступно для демо-клиента")
+    try:
+        st = _parse_trainer_miniapp_hhmm(body.start_time)
+        et = _parse_trainer_miniapp_hhmm(body.end_time)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    if st >= et:
+        raise HTTPException(status_code=400, detail="Время окончания должно быть позже начала")
+    if await has_other_active_recurring(
+        session, trainer_id, body.day_of_week, st, exclude_client_id=client_id
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="На это время уже закреплён другой постоянный клиент.",
+        )
+    await _require_trainer_service_for_recurring_materialization(session, trainer_id)
+    recurring_id = await create_recurring_client_slot(
+        session, trainer_id, client_id, body.day_of_week, st, et
+    )
+    if not recurring_id:
+        raise HTTPException(status_code=409, detail="Этот слот уже закреплён для клиента.")
+    settings = Settings()
+    hw = int(settings.recurring_materialization_horizon_weeks)
+    materialized = await materialize_recurring_horizon(
+        session,
+        trainer_id,
+        horizon_weeks=hw,
+        recurring_ids=[recurring_id],
+    )
+    await _rollback_recurring_unless_full_materialization(
+        session,
+        trainer_id,
+        recurring_id,
+        materialized=materialized,
+        horizon_weeks=hw,
+    )
+    return {
+        "success": True,
+        "recurring_id": recurring_id,
+        "materialized_bookings": materialized,
+    }
+
+
+class TrainerClientRecurringFromBookingBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    booking_id: int = Field(..., ge=1)
+    first_week: Literal["this_week", "next_week"] | None = Field(
+        default=None,
+        description="When the same-week slot is still ahead, trainer chooses where to start the horizon.",
+    )
+
+
+@router.post("/trainer/clients/{client_id:int}/recurring/from-booking")
+async def post_trainer_client_recurring_from_booking(
+    client_id: int,
+    body: TrainerClientRecurringFromBookingBody,
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Create weekly recurring rule from an existing booking's weekday and time (trainer CRM mini-app)."""
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
+    client = await get_trainer_client_for_card(session, trainer_id, client_id)
+    if not client:
+        raise HTTPException(status_code=404, detail="Клиент не найден или нет доступа")
+    if bool(client.get("is_sandbox")):
+        raise HTTPException(status_code=400, detail="Недоступно для демо-клиента")
+    booking = await get_booking_with_slot(session, int(body.booking_id), trainer_id)
+    if not booking or int(booking["client_id"]) != int(client_id):
+        raise HTTPException(status_code=404, detail="Запись не найдена")
+    st = booking["start_time"]
+    et = booking["end_time"]
+    day_of_week = int(booking["slot_date"].weekday())
+    if await has_other_active_recurring(
+        session, trainer_id, day_of_week, st, exclude_client_id=client_id
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="На это время уже закреплён другой постоянный клиент.",
+        )
+    await _require_trainer_service_for_recurring_materialization(session, trainer_id)
+    recurring_id = await create_recurring_client_slot(
+        session, trainer_id, client_id, day_of_week, st, et
+    )
+    if not recurring_id:
+        raise HTTPException(status_code=409, detail="Этот слот уже закреплён для клиента.")
+    mono = this_week_monday()
+    slot_this_iso = mono + timedelta(days=day_of_week)
+    needs_first_week_choice = not is_slot_start_in_past_local(slot_this_iso, st)
+    if needs_first_week_choice:
+        if body.first_week not in ("this_week", "next_week"):
+            raise HTTPException(
+                status_code=400,
+                detail="Выберите: автозаписи с этой недели или со следующей.",
+            )
+        min_week_index = 0 if body.first_week == "this_week" else 1
+    else:
+        min_week_index = 0
+
+    settings = Settings()
+    hw = int(settings.recurring_materialization_horizon_weeks)
+    materialized = await materialize_recurring_horizon(
+        session,
+        trainer_id,
+        horizon_weeks=hw,
+        recurring_ids=[recurring_id],
+        min_week_index=min_week_index,
+    )
+    await _rollback_recurring_unless_full_materialization(
+        session,
+        trainer_id,
+        recurring_id,
+        materialized=materialized,
+        horizon_weeks=hw,
+    )
+
+    def _wall_hhmm(t: object) -> str:
+        if hasattr(t, "strftime"):
+            return t.strftime("%H:%M")  # type: ignore[union-attr]
+        s = str(t)
+        return s[:5] if len(s) >= 5 else s
+
+    time_range = f"{_wall_hhmm(st)}–{_wall_hhmm(et)}"
+    day_short = TRAINER_DAYS[day_of_week] if 0 <= day_of_week < len(TRAINER_DAYS) else "—"
+
+    detail_row = await get_trainer_booking_detail_payload(session, int(body.booking_id), trainer_id)
+    client_tid: int | None = None
+    if detail_row and detail_row.get("client_telegram_id") is not None:
+        client_tid = int(detail_row["client_telegram_id"])
+    elif booking.get("client_telegram_id") is not None:
+        client_tid = int(booking["client_telegram_id"])
+
+    if client_tid:
+        trainer_obj = await get_trainer(session, trainer_id) or {}
+        profile = (trainer_obj.get("profile") or {})
+        trainer_name = ((profile.get("first_name") or "") + " " + (profile.get("last_name") or "")).strip() or "Тренер"
+        trainer_tid_raw = trainer_obj.get("telegram_id")
+        trainer_tid = int(trainer_tid_raw) if trainer_tid_raw is not None else None
+
+        svc = (detail_row.get("services_str") if detail_row else None) or booking.get("service_name")
+        arena_disp = (detail_row.get("arenas_str") if detail_row else None) or None
+        tier = (detail_row.get("price_tier_label") if detail_row else None) or None
+        bpc = (detail_row.get("booking_price_cents") if detail_row else None) or None
+
+        text_client = msg.format_client_recurring_set_by_trainer_notification_html(
+            trainer_name=trainer_name,
+            weekday_short=day_short,
+            time_range=time_range,
+            service_name=svc,
+            booking_price_cents=bpc,
+            price_tier_label=tier,
+            arena_display=arena_disp,
+            materialized_count=int(materialized),
+        )
+        reply_markup = msg.build_client_recurring_set_inline_keyboard(
+            trainer_telegram_id=trainer_tid,
+            webapp_base_url=settings.webapp_base_url,
+        )
+        client_bot = Bot(
+            token=settings.telegram_bot_token_client,
+            default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+        )
+        try:
+            await client_bot.send_message(
+                chat_id=client_tid,
+                text=text_client,
+                reply_markup=reply_markup,
+            )
+        except Exception as e:
+            logger.warning(
+                "recurring from-booking: client notify failed booking_id=%s client_id=%s: %s",
+                body.booking_id,
+                client_id,
+                e,
+            )
+        finally:
+            await client_bot.session.close()
+
+    return {
+        "success": True,
+        "recurring_id": recurring_id,
+        "materialized_bookings": materialized,
+    }
 
 
 @router.patch("/trainer/clients/{client_id:int}/identity")
@@ -6211,17 +6556,27 @@ async def post_trainer_booking_make_regular(
     booking = await get_booking_with_slot(session, booking_id, trainer_id)
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found")
+    await _require_trainer_service_for_recurring_materialization(session, trainer_id)
     recurring_id = await create_recurring_client_slot(
         session, trainer_id, booking["client_id"],
         booking["slot_date"].weekday(), booking["start_time"], booking["end_time"],
     )
     materialized = 0
+    settings = Settings()
+    hw = int(settings.recurring_materialization_horizon_weeks)
     if recurring_id:
         materialized = await materialize_recurring_horizon(
             session,
             trainer_id,
-            horizon_weeks=Settings().recurring_materialization_horizon_weeks,
+            horizon_weeks=hw,
             recurring_ids=[recurring_id],
+        )
+        await _rollback_recurring_unless_full_materialization(
+            session,
+            trainer_id,
+            recurring_id,
+            materialized=materialized,
+            horizon_weeks=hw,
         )
     return {"success": True, "recurring_id": recurring_id, "materialized_bookings": materialized}
 
@@ -6235,10 +6590,10 @@ async def post_trainer_recurring_remove(
     trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
     if not trainer_id:
         raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
-    ok = await cancel_recurring_client_slot(session, trainer_id, recurring_id)
+    ok, removed_fwd = await cancel_recurring_client_slot(session, trainer_id, recurring_id)
     if not ok:
         raise HTTPException(status_code=404, detail="Recurring not found")
-    return {"success": True}
+    return {"success": True, "removed_forward_bookings": removed_fwd}
 
 
 # --- Trainer client requests Mini App (list, respond, decline, remind, book client) ---

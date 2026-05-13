@@ -881,21 +881,31 @@ async def run_reminder_loop(client_bot: Bot) -> None:
                     chat_id = p.get("client_telegram_id")
                     if not chat_id:
                         continue
-                    date_str, day_str, time_str = _slot_display_strings(
-                        p.get("slot_date"), p.get("start_time")
-                    )
-                    duration = _reminder_duration_minutes(p.get("start_time"), p.get("end_time"))
+                    raw_sessions = p.get("sessions") or []
+                    sessions_payload: list[dict] = []
+                    for s in raw_sessions:
+                        date_str, day_str, time_str = _slot_display_strings(
+                            s.get("slot_date"), s.get("start_time")
+                        )
+                        dur = s.get("duration_minutes")
+                        if dur is None:
+                            dur = _reminder_duration_minutes(s.get("start_time"), s.get("end_time"))
+                        sessions_payload.append(
+                            {
+                                "date": date_str,
+                                "day": day_str,
+                                "time": time_str,
+                                "duration": int(dur or 0),
+                                "service_name": s.get("service_name"),
+                                "booking_price_cents": s.get("booking_price_cents"),
+                                "arena_name": s.get("arena_name"),
+                                "arena_address": s.get("arena_address"),
+                            }
+                        )
                     kind = p.get("kind") or ""
                     text = msg.format_client_booking_reminder_text(
                         is_soon=(kind not in ("before_24h", "before_evening_prior")),
-                        date=date_str,
-                        day=day_str,
-                        time=time_str,
-                        duration=duration,
-                        service_name=p.get("service_name"),
-                        booking_price_cents=p.get("booking_price_cents"),
-                        arena_name=p.get("arena_name"),
-                        arena_address=p.get("arena_address"),
+                        sessions=sessions_payload,
                     )
                     arena_payload = {
                         "latitude": p.get("arena_latitude"),
@@ -1738,8 +1748,8 @@ async def run_lead_mode_recovery_loop(trainer_bot: Bot) -> None:
 
 async def run_recurring_materialization_loop() -> None:
     """
-    Periodically fills recurring-client auto-bookings up to recurring_materialization_horizon_weeks
-    (CRM subscription tier only). Complements immediate materialize on «Сделать постоянным клиентом».
+    Periodically tops up recurring auto-bookings toward ``recurring_materialization_horizon_weeks``
+    (rolling from the current week; CRM tier only). Re-run extends the window as calendar moves forward.
     """
     from sqlalchemy import text
 
