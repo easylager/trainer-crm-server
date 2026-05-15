@@ -4327,8 +4327,9 @@ async def list_bookings_for_trainer_session_wrapup(
     limit: int = 20,
 ) -> list[dict]:
     """
-    Confirmed/pending bookings whose slot end is in the future but within ``lead_seconds`` (Europe/Minsk).
-    Used to prompt the trainer to offer repeat booking before the session ends. One push per booking.
+    Confirmed/pending bookings whose slot end is in the future but within the last ``lead_seconds`` before it
+    (Europe/Minsk). Eligible window: ``end > now >= end - lead_seconds``. Larger ``lead_seconds`` + ~60s poll
+    avoids pushes that land exactly at slot end. One push per booking.
     """
     if lead_seconds <= 0:
         return []

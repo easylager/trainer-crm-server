@@ -140,7 +140,8 @@ class Settings(BaseSettings):
     # notification_service: top up recurring auto-bookings toward the horizon (seconds). Default 6h.
     recurring_materialization_loop_interval_sec: int = 21600
     # Last N seconds before slot end (Europe/Minsk): send trainer one «предложите повтор» push with WebApp buttons. 0 = disabled.
-    trainer_session_wrapup_lead_seconds: int = 60
+    # Default 120 pairs with booking_complete_poll_interval_sec (60s): first tick usually falls 1–2 min before end, not flush with slot end.
+    trainer_session_wrapup_lead_seconds: int = 120
 
     # Trainer subscription: trial and reminders
     # Trial: if set, overrides DB platform_settings.welcome_trial_period_days and subscription_plans.period_days

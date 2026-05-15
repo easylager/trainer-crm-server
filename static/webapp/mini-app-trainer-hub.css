@@ -1639,7 +1639,7 @@
       min-height: 0;
       padding: 5px 10px 5px 7px;
       margin: 0;
-      border: 1px solid rgba(128, 128, 128, 0.28);
+      border: 1.5px solid var(--app-cta-fill, var(--tg-theme-button-color));
       border-radius: 999px;
       background: transparent;
       color: var(--tg-theme-hint-color);
@@ -1653,16 +1653,26 @@
       transition:
         opacity 140ms ease,
         border-color 140ms ease,
-        color 140ms ease;
+        color 140ms ease,
+        background-color 160ms ease;
+    }
+    #hubModalBookGroupSlot .hub-book-existing-toolbar .hub-book-existing-new-chip:hover {
+      background: color-mix(in srgb, var(--app-cta-fill, var(--tg-theme-button-color)) 12%, transparent);
+    }
+    #hubModalBookGroupSlot .hub-book-existing-toolbar .hub-book-existing-new-chip:focus-visible {
+      outline: none;
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-cta-fill, var(--tg-theme-button-color)) 28%, transparent);
     }
     #hubModalBookGroupSlot .hub-book-existing-toolbar .hub-book-existing-new-chip .hub-book-existing-new-chip__icon {
       width: 18px;
       height: 18px;
-      border-width: 1px;
       display: flex;
       align-items: center;
       justify-content: center;
       box-sizing: border-box;
+      border-radius: 50%;
+      border: 1px solid var(--app-cta-fill, var(--tg-theme-button-color));
+      color: var(--app-cta-fill, var(--tg-theme-button-color));
     }
     #hubModalBookGroupSlot .hub-book-existing-toolbar .hub-book-existing-new-chip__plus {
       display: block;

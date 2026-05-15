@@ -720,7 +720,8 @@ async def _build_trainer_post_session_keyboard(
 
 async def process_trainer_session_wrapup_round(trainer_bot: Bot) -> None:
     """
-    One pass: notify trainers in the last N seconds before slot end (Europe/Minsk) to offer repeat booking.
+    One pass: notify trainers inside the last N seconds before slot end (Europe/Minsk) to offer repeat booking.
+    Default N=120 (~2 min) so a 60s poll usually delivers ~1–2 min before end, not at the last moment.
     Respects each trainer's push window (and global bypass from NOTIFICATION_DISABLE_QUIET_HOURS).
     """
     settings = Settings()
