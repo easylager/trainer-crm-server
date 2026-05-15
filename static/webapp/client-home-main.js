@@ -49,6 +49,11 @@
       var selectedTrainerId = null;
       /** From hub bootstrap — service aligned with primary-trainer tier (booking / save / session). */
       var primaryCatalogServiceId = null;
+      /** Authoritative last booking (by slot start) from bootstrap — «Записаться снова» must not depend on catalog session. */
+      var lastBookingTrainerId = null;
+      var lastBookingServiceId = null;
+      /** Up to 3 trainers with recent bookings each — multi «Снова к …» pills (bootstrap). */
+      var rebookTargets = [];
 
       /* ── Utils ─────────────────────────────────────────────────────── */
       function headersJson() {
@@ -337,7 +342,8 @@
       }
 
       /**
-       * «Записаться снова» — тренер и услуга с ближайшей записи (истина для клиента), иначе основной из хаба.
+       * «Записаться снова»: карточка тренера с ближайшей записи, иначе последняя запись по слоту (bootstrap),
+       * без selected_trainer_id из сессии каталога.
        */
       function navigateToCatalogBookAgain(nextBooking) {
         var nb = nextBooking && nextBooking.b;
@@ -351,13 +357,62 @@
           navigateTo(q);
           return;
         }
-        if (selectedTrainerId != null && String(selectedTrainerId).trim() !== '') {
-          navigateTo(
-            'catalog?trainer_id=' + encodeURIComponent(String(selectedTrainerId)) + catalogPrimaryServiceQuery()
-          );
+        var lt = lastBookingTrainerId;
+        if (lt != null && lt > 0) {
+          var q2 = 'catalog?trainer_id=' + encodeURIComponent(String(lt));
+          var lsid = lastBookingServiceId;
+          if (lsid != null && lsid > 0) {
+            q2 += '&service_id=' + encodeURIComponent(String(lsid));
+          }
+          navigateTo(q2);
           return;
         }
         navigateTo('catalog?tab=catalog');
+      }
+
+      /** First word of display name for compact pill label. */
+      function trainerFirstNameForPill(displayName) {
+        var s = ((displayName || '') + '').trim();
+        if (!s) return 'Тренер';
+        var parts = s.split(/\s+/);
+        return parts[0] || s;
+      }
+
+      /** Deep link to catalog for one rebook row from bootstrap (trainer + last service per trainer). */
+      function navigateToRebookTarget(t) {
+        var tid = t && t.trainer_id != null ? Number(t.trainer_id) : NaN;
+        if (isNaN(tid) || tid <= 0) return;
+        var q = 'catalog?trainer_id=' + encodeURIComponent(String(tid));
+        var sid = t.service_id != null ? Number(t.service_id) : NaN;
+        if (!isNaN(sid) && sid > 0) {
+          q += '&service_id=' + encodeURIComponent(String(sid));
+        }
+        navigateTo(q);
+      }
+
+      /**
+       * Order rebook pill targets: when showing upcoming booking, surface matching trainer first.
+       * Caps at 3 — further trainers via каталог.
+       */
+      function orderedRebookPills(nextBooking, targets) {
+        var list = (targets || []).filter(function(t) {
+          return t && t.trainer_id != null && Number(t.trainer_id) > 0;
+        }).map(function(t) { return t; });
+        var nb = nextBooking && nextBooking.b;
+        var nextTid = nb && nb.trainer_id != null ? Number(nb.trainer_id) : NaN;
+        if (!isNaN(nextTid) && nextTid > 0 && list.length >= 2) {
+          var idx = -1;
+          for (var i = 0; i < list.length; i++) {
+            if (Number(list[i].trainer_id) === nextTid) { idx = i; break; }
+          }
+          if (idx > 0) {
+            var copy = list.slice();
+            var item = copy.splice(idx, 1)[0];
+            copy.unshift(item);
+            list = copy;
+          }
+        }
+        return list.slice(0, 3);
       }
 
       function hideNextBookingSkeleton() {
@@ -498,15 +553,30 @@
         var pills = [];
 
         if (scenario === 'has-booking') {
-          pills = [
-            {
-              label: 'Записаться снова',
-              icon: 'repeat',
-              action: function() { navigateToCatalogBookAgain(nextBooking); },
-            },
-            { label: 'Все записи',       icon: 'cal',    action: function() { navigateTo('client-bookings'); } },
-            { label: 'Абонементы/Сертификаты', icon: 'ticket', action: function() { navigateTo('client-passes-certificates'); } },
-          ];
+          var multiBook = orderedRebookPills(nextBooking, rebookTargets);
+          if (multiBook.length >= 2) {
+            pills = multiBook.map(function(t) {
+              return {
+                label: 'Снова к ' + trainerFirstNameForPill(t.trainer_display_name),
+                icon: 'repeat',
+                action: function() { navigateToRebookTarget(t); },
+              };
+            });
+            pills.push(
+              { label: 'Все записи', icon: 'cal', action: function() { navigateTo('client-bookings'); } },
+              { label: 'Абонементы/Сертификаты', icon: 'ticket', action: function() { navigateTo('client-passes-certificates'); } }
+            );
+          } else {
+            pills = [
+              {
+                label: 'Записаться снова',
+                icon: 'repeat',
+                action: function() { navigateToCatalogBookAgain(nextBooking); },
+              },
+              { label: 'Все записи',       icon: 'cal',    action: function() { navigateTo('client-bookings'); } },
+              { label: 'Абонементы/Сертификаты', icon: 'ticket', action: function() { navigateTo('client-passes-certificates'); } },
+            ];
+          }
         } else if (scenario === 'has-trainer') {
           pills = [
             {
@@ -533,24 +603,34 @@
             { label: 'Мои записи',    icon: 'cal',                 action: function() { navigateTo('client-bookings'); } },
           ];
         } else if (scenario === 'has-past') {
-          pills = [
-            {
-              label: 'Записаться снова',
-              icon: 'repeat',
-              primary: true,
-              action: function() {
-                if (selectedTrainerId != null && String(selectedTrainerId).trim() !== '') {
-                  navigateTo(
-                    'catalog?trainer_id=' + encodeURIComponent(String(selectedTrainerId)) + catalogPrimaryServiceQuery()
-                  );
-                } else {
-                  navigateTo('catalog?tab=catalog');
-                }
+          var multiPast = orderedRebookPills(null, rebookTargets);
+          if (multiPast.length >= 2) {
+            pills = multiPast.map(function(t, ix) {
+              return {
+                label: 'Снова к ' + trainerFirstNameForPill(t.trainer_display_name),
+                icon: 'repeat',
+                primary: ix === 0,
+                action: function() { navigateToRebookTarget(t); },
+              };
+            });
+            pills.push(
+              { label: 'Тренеры', icon: 'search', action: function() { navigateTo('catalog?tab=catalog'); } },
+              { label: 'Мои записи', icon: 'cal', action: function() { navigateTo('client-bookings'); } }
+            );
+          } else {
+            pills = [
+              {
+                label: 'Записаться снова',
+                icon: 'repeat',
+                primary: true,
+                action: function() {
+                  navigateToCatalogBookAgain(null);
+                },
               },
-            },
-            { label: 'Тренеры',          icon: 'search',              action: function() { navigateTo('catalog?tab=catalog'); } },
-            { label: 'Мои записи',       icon: 'cal',                 action: function() { navigateTo('client-bookings'); } },
-          ];
+              { label: 'Тренеры',          icon: 'search',              action: function() { navigateTo('catalog?tab=catalog'); } },
+              { label: 'Мои записи',       icon: 'cal',                 action: function() { navigateTo('client-bookings'); } },
+            ];
+          }
         } else {
           /* acquisition state — clean */
           pills = [
@@ -822,6 +902,23 @@
         } else {
           primaryCatalogServiceId = null;
         }
+
+        var rawLt = cs.last_booking_trainer_id;
+        if (rawLt != null && String(rawLt).trim() !== '') {
+          var nlt = Number(rawLt);
+          lastBookingTrainerId = !isNaN(nlt) && nlt > 0 ? nlt : null;
+        } else {
+          lastBookingTrainerId = null;
+        }
+        var rawLs = cs.last_booking_service_id;
+        if (rawLs != null && String(rawLs).trim() !== '') {
+          var nls = Number(rawLs);
+          lastBookingServiceId = !isNaN(nls) && nls > 0 ? nls : null;
+        } else {
+          lastBookingServiceId = null;
+        }
+
+        rebookTargets = Array.isArray(cs.rebook_targets) ? cs.rebook_targets : [];
 
         var nextItem = findNextBooking(bookingDays);
 

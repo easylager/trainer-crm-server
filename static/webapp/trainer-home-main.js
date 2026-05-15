@@ -3261,6 +3261,8 @@
       var HUB_BOOK_OPT_EXISTING_HINT = 'Существующий клиент';
       /** True while quick-book flow is onboarding «Попробовать на примере» (POST .../quick is_sandbox). */
       var hubQuickBookIsSandbox = false;
+      /** Client-first quick book (hub): hide legacy pair «Выбрать клиента» / «Создать» — landing is search list + chip «Новый клиент». */
+      var hubQuickBookHideLegacyClientChoice = false;
       /** Default subtitle under «Записать клиента»; restored after sandbox flow. */
       var hubBookChoiceLeadDefault = null;
       function ensureHubBookChoiceLeadDefault() {
@@ -3490,6 +3492,7 @@
         hubBookPendingClientId = null;
         hubBookPendingClientName = null;
         hubBookPendingClientIsSandbox = false;
+        hubQuickBookHideLegacyClientChoice = false;
         hubDockBookStepNewUnderModalChrome();
       }
 
@@ -3540,6 +3543,7 @@
         hubQuickBookScheduleFetchGen += 1;
         hubBookSlotWhenLabel = '';
         hubQuickBookIsSandbox = false;
+        hubQuickBookHideLegacyClientChoice = false;
         hubBookClientFirstQuickMode = false;
         hubBookClientFirstServiceStepOpen = false;
         hubBookClientFirstServiceFromNew = false;
@@ -3736,6 +3740,10 @@
       function hubSyncClientFirstQuickChoiceActionsVisible(showChoicePair) {
         var ca = document.getElementById('hubBookChoiceActions');
         if (!ca || !hubBookClientFirstQuickMode) return;
+        if (hubQuickBookHideLegacyClientChoice) {
+          ca.style.display = 'none';
+          return;
+        }
         ca.style.display = showChoicePair ? '' : 'none';
       }
 
@@ -3860,7 +3868,7 @@
        * Last booking presets: GET /trainer/clients/{id}/booking-defaults.
        * Uses multi-retry + fetch timeouts — Telegram WebView often drops the first request or delays initData.
        *
-       * Обычный режим: первый экран показывается сразу (кнопки не прячем под skeleton — см. CSS pending).
+       * Обычный режим: сразу экран поиска клиента (+ ненавязчивая «Новый клиент»); блок с двумя крупными кнопками не показываем.
        * Sandbox / «Пример»: прежний skeleton до загрузки услуг (нет промежуточного выбора).
        */
       function openHubQuickBookClientFlowFirst() {
@@ -3868,7 +3876,7 @@
         hubBookClientFirstServiceStepOpen = false;
         hubBookClientFirstServiceFromNew = false;
         hubBookQuickPayload = null;
-        if (!openHubBookModalShell()) return;
+        if (!openHubBookModalShell({ quickBookSearchFirst: !hubQuickBookIsSandbox })) return;
         hubQuickBookPrepareGen += 1;
         var prepareGen = hubQuickBookPrepareGen;
         hubBookQuickServices = [];
@@ -3883,23 +3891,6 @@
           setHubBookChoicePairPending(false);
           setHubBookChoiceQuickLoading(false);
           clearHubBookChoiceQuickUi();
-          primeHubBookChoicePairLayout();
-          if (hubTrainerHasClientsCache === false) {
-            setHubBookOptExistingVisible(false);
-          } else if (hubTrainerHasClientsCache === true) {
-            setHubBookOptExistingVisible(true);
-          } else {
-            var exProbe = document.getElementById('hubBookOptExisting');
-            if (exProbe) {
-              exProbe.style.display = '';
-              exProbe.setAttribute('aria-hidden', 'false');
-              exProbe.disabled = false;
-              exProbe.removeAttribute('aria-busy');
-              exProbe.classList.add('hub-book-opt-existing--probing');
-              var hintPb = exProbe.querySelector('.btn-book-option-hint');
-              if (hintPb) hintPb.textContent = HUB_BOOK_OPT_EXISTING_HINT;
-            }
-          }
         }
         setHubBookServiceVisibility(false);
         fillHubBookServiceSelect([]);
@@ -3927,6 +3918,13 @@
           if (!getInitData()) {
             failHubQuickBookPrepare(prepareGen);
             return;
+          }
+          if (hubBookClientFirstQuickMode && !hubQuickBookIsSandbox) {
+            try {
+              loadHubBookClients('');
+            } catch (eQb) {
+              /* noop */
+            }
           }
           Promise.all([
             hubFetchJsonForQuickBookPrepare('/trainer/my-services').then(function(r) {
@@ -3987,28 +3985,32 @@
                 setHubBookArenaVisibility((hubBookTrainerArenas || []).length > 1);
                 hubEmbedSandboxBookStepNewBeforeQuickNext();
               } else {
+                var chEl = document.getElementById('hubBookStepChoice');
                 var exEl = document.getElementById('hubBookStepExisting');
                 var nwEl = document.getElementById('hubBookStepNew');
-                /* User may tap «Выбрать из списка» before prepare resolves — resetHubBookSteps would wipe that navigation. */
+                /* User may reach new-client or service step before prepare resolves — keep that navigation. Search-first alone is not "past" initial. */
                 var pastInitialChoice =
                   hubBookClientFirstServiceStepOpen ||
-                  (exEl && exEl.style.display !== 'none') ||
-                  (nwEl && nwEl.style.display !== 'none');
+                  (nwEl &&
+                    nwEl.style.display !== 'none' &&
+                    String(nwEl.style.display || '').toLowerCase() !== '') ||
+                  (!!chEl &&
+                    chEl.style.display !== 'none' &&
+                    exEl &&
+                    exEl.style.display === 'none');
 
                 if (!pastInitialChoice) {
                   hubBookClientFirstServiceStepOpen = false;
                   setHubBookServiceVisibility(false);
                   syncHubBookPriceTierRadios();
                   hubSyncClientFirstQuickServiceChrome();
-                  var leadN = document.querySelector('#hubBookStepChoice .book-choice-lead');
-                  if (leadN && hubBookChoiceLeadDefault != null) leadN.textContent = hubBookChoiceLeadDefault;
-                  var caN = document.getElementById('hubBookChoiceActions');
-                  if (caN) caN.style.display = '';
-                  var stepNewN = document.getElementById('hubBookStepNew');
-                  if (stepNewN) stepNewN.style.display = 'none';
-                  var backN = document.getElementById('hubBookBackFromNew');
-                  if (backN) backN.style.display = '';
-                  resetHubBookSteps();
+                  var qinpN = document.getElementById('hubBookClientSearch');
+                  hubEnsureQuickBookSearchOnlyLayout();
+                  loadHubBookClients(qinpN ? qinpN.value.trim() : '');
+                  var stepNewNx = document.getElementById('hubBookStepNew');
+                  var backNx = document.getElementById('hubBookBackFromNew');
+                  if (stepNewNx) stepNewNx.style.display = 'none';
+                  if (backNx) backNx.style.display = '';
                 } else {
                   syncHubBookPriceTierRadios();
                   hubSyncClientFirstQuickServiceChrome();
@@ -4202,11 +4204,72 @@
         if (list) list.innerHTML = '';
       }
 
-      function openHubBookModalShell() {
+      function resetHubBookStepsToQuickClientSearchFirst() {
+        hubQuickBookHideLegacyClientChoice = true;
+        var ch = document.getElementById('hubBookStepChoice');
+        var ex = document.getElementById('hubBookStepExisting');
+        var nw = document.getElementById('hubBookStepNew');
+        var modal = document.getElementById('hubModalBookGroupSlot');
+        hubDockBookStepNewUnderModalChrome();
+        if (modal) modal.classList.remove('hub-book-flow-overlay--new-client');
+        if (hubBookClientFirstQuickMode) hubExitClientFirstServiceStep(false);
+        else hubSyncClientFirstQuickServiceChrome();
+        if (ch) ch.style.display = 'none';
+        if (ex) ex.style.display = 'block';
+        if (nw) nw.style.display = 'none';
+        var listEl = document.getElementById('hubBookClientList');
+        if (listEl) {
+          listEl.innerHTML =
+            '<p style="text-align:center;padding:16px;color:var(--tg-theme-hint-color);">Загрузка…</p>';
+        }
+      }
+
+      /** After async prepare: keep search step without clearing the query the trainer may have typed. */
+      function hubEnsureQuickBookSearchOnlyLayout() {
+        if (!hubBookClientFirstQuickMode || hubQuickBookIsSandbox) return;
+        hubQuickBookHideLegacyClientChoice = true;
+        var ch = document.getElementById('hubBookStepChoice');
+        var ex = document.getElementById('hubBookStepExisting');
+        var nw = document.getElementById('hubBookStepNew');
+        var modal = document.getElementById('hubModalBookGroupSlot');
+        if (modal) modal.classList.remove('hub-book-flow-overlay--new-client');
+        if (hubBookClientFirstServiceStepOpen) return;
+        if (ch) ch.style.display = 'none';
+        if (ex) ex.style.display = 'block';
+        if (nw) nw.style.display = 'none';
+        hubSyncClientFirstQuickChoiceActionsVisible(false);
+      }
+
+      function hubGoBookNewClientFlow() {
+        hubDockBookStepNewUnderModalChrome();
+        var modal = document.getElementById('hubModalBookGroupSlot');
+        if (modal) modal.classList.add('hub-book-flow-overlay--new-client');
+        document.getElementById('hubBookStepChoice').style.display = 'none';
+        document.getElementById('hubBookStepExisting').style.display = 'none';
+        document.getElementById('hubBookStepNew').style.display = 'block';
+        applyHubBookNewSubmitButtonLabel();
+      }
+
+      function hubReturnFromNewClientToQuickSearch() {
+        hubBookClientFirstServiceFromNew = false;
+        var modalGo = document.getElementById('hubModalBookGroupSlot');
+        if (modalGo) modalGo.classList.remove('hub-book-flow-overlay--new-client');
+        document.getElementById('hubBookStepNew').style.display = 'none';
+        hubEnsureQuickBookSearchOnlyLayout();
+        var qinp = document.getElementById('hubBookClientSearch');
+        loadHubBookClients(qinp ? qinp.value.trim() : '');
+      }
+
+      function openHubBookModalShell(opts) {
+        opts = opts || {};
         resetHubBookFormFields();
-        resetHubBookSteps();
+        if (opts.quickBookSearchFirst) {
+          resetHubBookStepsToQuickClientSearchFirst();
+        } else {
+          resetHubBookSteps();
+          primeHubBookChoicePairLayout();
+        }
         setHubBookChoicePairPending(true);
-        primeHubBookChoicePairLayout();
         var cfm = document.getElementById('hubModalBookGroupConfirm');
         if (cfm) {
           cfm.style.display = 'none';
@@ -4584,8 +4647,14 @@
             var list = document.getElementById('hubBookClientList');
             var clients = data.clients || [];
             if (clients.length === 0) {
+              var emptyHint =
+                hubBookClientFirstQuickMode && hubQuickBookHideLegacyClientChoice && !hubQuickBookIsSandbox
+                  ? 'Нет клиентов по запросу. Нажмите «Новый клиент» сверху или уточните поиск.'
+                  : 'Нет клиентов по поиску. Добавьте нового ниже.';
               list.innerHTML =
-                '<p style="padding:8px 0;font-size:14px;color:var(--tg-theme-hint-color);">Нет клиентов по поиску. Добавьте нового ниже.</p>';
+                '<p style="padding:8px 0;font-size:14px;color:var(--tg-theme-hint-color);">' +
+                escapeHtml(emptyHint) +
+                '</p>';
               return;
             }
             var html = '';
@@ -4685,6 +4754,7 @@
 
       function openHubBookGroupSlotModal(slotId, serviceId, whenLabel) {
         hubBookClientFirstQuickMode = false;
+        hubQuickBookHideLegacyClientChoice = false;
         hubBookClientFirstServiceStepOpen = false;
         hubBookClientFirstServiceFromNew = false;
         hubSyncClientFirstQuickServiceChrome();
@@ -4803,23 +4873,38 @@
         var bn = document.getElementById('hubBookOptNew');
         if (bn) {
           bn.onclick = function() {
-            hubDockBookStepNewUnderModalChrome();
-            var modal = document.getElementById('hubModalBookGroupSlot');
-            if (modal) modal.classList.add('hub-book-flow-overlay--new-client');
-            document.getElementById('hubBookStepChoice').style.display = 'none';
-            document.getElementById('hubBookStepNew').style.display = 'block';
-            applyHubBookNewSubmitButtonLabel();
+            hubGoBookNewClientFlow();
+          };
+        }
+        var bnChip = document.getElementById('hubBookExistingNewChip');
+        if (bnChip) {
+          bnChip.onclick = function() {
+            hubGoBookNewClientFlow();
           };
         }
         var be = document.getElementById('hubBookBackFromExisting');
         if (be) {
           be.onclick = function() {
+            if (hubBookClientFirstQuickMode && hubQuickBookHideLegacyClientChoice && !hubQuickBookIsSandbox) {
+              var mQx = document.getElementById('hubModalBookGroupSlot');
+              if (mQx) {
+                mQx.style.display = 'none';
+                mQx.setAttribute('aria-hidden', 'true');
+              }
+              closeHubBookGroupModals();
+              resetHubBookSlotState();
+              return;
+            }
             resetHubBookSteps();
           };
         }
         var bwn = document.getElementById('hubBookBackFromNew');
         if (bwn) {
           bwn.onclick = function() {
+            if (hubBookClientFirstQuickMode && hubQuickBookHideLegacyClientChoice && !hubQuickBookIsSandbox) {
+              hubReturnFromNewClientToQuickSearch();
+              return;
+            }
             resetHubBookSteps();
           };
         }
@@ -4886,6 +4971,9 @@
               document.getElementById('hubBookStepExisting').style.display = 'block';
               if (stepChB) stepChB.style.display = 'none';
               var qinpB = document.getElementById('hubBookClientSearch');
+              if (hubBookClientFirstQuickMode && !hubQuickBookIsSandbox) {
+                hubEnsureQuickBookSearchOnlyLayout();
+              }
               loadHubBookClients(qinpB ? qinpB.value.trim() : '');
             }
           };

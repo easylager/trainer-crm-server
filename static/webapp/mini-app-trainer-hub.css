@@ -1621,6 +1621,70 @@
       margin-top: 20px !important;
       margin-bottom: 0;
     }
+    /* Quick-book: unobtrusive secondary entry → new client (bulk path = search first). */
+    /* Same row height: compact touch-friendly row (back link vs pill chip looked uneven). */
+    #hubModalBookGroupSlot .hub-book-existing-toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      margin: 0 0 8px;
+      min-height: 0;
+    }
+    #hubModalBookGroupSlot .hub-book-existing-toolbar .hub-book-existing-new-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      flex-shrink: 0;
+      min-height: 0;
+      padding: 5px 10px 5px 7px;
+      margin: 0;
+      border: 1px solid rgba(128, 128, 128, 0.28);
+      border-radius: 999px;
+      background: transparent;
+      color: var(--tg-theme-hint-color);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      font: inherit;
+      line-height: 1.25;
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+      transition:
+        opacity 140ms ease,
+        border-color 140ms ease,
+        color 140ms ease;
+    }
+    #hubModalBookGroupSlot .hub-book-existing-toolbar .hub-book-existing-new-chip .hub-book-existing-new-chip__icon {
+      width: 18px;
+      height: 18px;
+      border-width: 1px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-sizing: border-box;
+    }
+    #hubModalBookGroupSlot .hub-book-existing-toolbar .hub-book-existing-new-chip__plus {
+      display: block;
+      flex-shrink: 0;
+    }
+    #hubModalBookGroupSlot .hub-book-existing-new-chip:active {
+      opacity: 0.72;
+    }
+    #hubModalBookGroupSlot .hub-book-existing-new-chip__icon {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      border: 1.5px solid currentColor;
+      font-size: 16px;
+      font-weight: 500;
+      line-height: 1;
+      opacity: 0.9;
+      flex-shrink: 0;
+    }
     #hubModalBookGroupSlot .book-modal-back {
       display: inline-flex;
       align-items: center;
@@ -1633,6 +1697,19 @@
       font-size: 14px;
       cursor: pointer;
       font: inherit;
+    }
+    #hubModalBookGroupSlot button.book-modal-back.hub-book-existing-toolbar-back {
+      margin: 0;
+      flex: 1 1 auto;
+      min-width: 0;
+      justify-content: flex-start;
+      min-height: 42px;
+      padding: 0 8px 0 2px;
+      box-sizing: border-box;
+      border-radius: 12px;
+    }
+    #hubModalBookGroupSlot button.book-modal-back.hub-book-existing-toolbar-back:hover {
+      background: rgba(128, 128, 128, 0.08);
     }
     /* Service/tariff step: «Назад» сразу под лидом — не между тарифом и «Далее». */
     #hubModalBookGroupSlot .book-modal-back.hub-book-back--service-step {

@@ -57,6 +57,7 @@ from src.application.booking_use_cases import (
     cancel_booking,
     cancel_booking_by_client,
     client_latest_booking_primary_candidate,
+    client_rebook_trainer_targets,
     confirm_booking,
     coerce_service_id_and_name_for_trainer_catalog,
     count_trainer_client_sessions,
@@ -2105,6 +2106,7 @@ async def get_client_hub_bootstrap(
             edges = await get_all_trainer_edges(telegram_id, s)
             session_tid = int(tid) if tid is not None else None
             book_tid, book_svc = await client_latest_booking_primary_candidate(s, telegram_id)
+            rebook_raw = await client_rebook_trainer_targets(s, telegram_id, limit=3)
             primary_edge, primary_src = _compute_primary_edge_meta(
                 edges,
                 session_tid,
@@ -2112,7 +2114,11 @@ async def get_client_hub_bootstrap(
                 booking_primary_service_id=book_svc,
             )
             pid = int(primary_edge["trainer_id"]) if primary_edge else None
-            hint_ids = sorted({int(e["trainer_id"]) for e in edges} | ({pid} if pid else set()))
+            hint_ids = sorted(
+                {int(e["trainer_id"]) for e in edges}
+                | ({pid} if pid else set())
+                | {int(t[0]) for t in rebook_raw}
+            )
             hints = await trainer_display_hints_by_ids(s, hint_ids)
             saved_edges = [e for e in edges if e.get("is_saved")]
             p_hint = hints.get(pid) if pid else None
@@ -2136,6 +2142,17 @@ async def get_client_hub_bootstrap(
                 }
                 for e in saved_edges
             ]
+            rebook_targets: list[dict[str, Any]] = []
+            for rt_tid, rt_svc in rebook_raw:
+                h = hints.get(int(rt_tid)) or {}
+                rt_name = ((h.get("trainer_display_name") or "Тренер").strip() or "Тренер")
+                rebook_targets.append(
+                    {
+                        "trainer_id": int(rt_tid),
+                        "service_id": int(rt_svc) if rt_svc is not None else None,
+                        "trainer_display_name": rt_name,
+                    }
+                )
             return {
                 "selected_trainer_id": int(tid) if tid is not None else None,
                 "primary_trainer_id": pid,
@@ -2148,6 +2165,9 @@ async def get_client_hub_bootstrap(
                 "saved_trainer_ids": [e["trainer_id"] for e in saved_edges],
                 "saved_trainers": saved_preview,
                 "has_past_sessions": any(e.get("completed_count", 0) > 0 for e in edges),
+                "last_booking_trainer_id": book_tid,
+                "last_booking_service_id": book_svc,
+                "rebook_targets": rebook_targets,
             }
 
     async def _activity() -> dict[str, Any]:
@@ -2419,6 +2439,8 @@ async def post_client_booking_cancel(
     settings_client = Settings()
     reply_markup_client = msg.build_client_rebook_catalog_keyboard(
         webapp_base_url=settings_client.webapp_base_url,
+        trainer_id=payload.get("trainer_id"),
+        service_id=payload.get("service_id"),
     )
     cancel_tpl = (
         msg.CLIENT_BOOKING_CANCELLED_BY_SELF

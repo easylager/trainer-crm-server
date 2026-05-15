@@ -51,9 +51,9 @@
     })();
   </script>
   <!-- Bump ?v= when mini-app-trainer-hub.css changes (immutable cache on /webapp/…). -->
-  <link rel="stylesheet" href="mini-app-trainer-hub.css?v=202605081" />
+  <link rel="stylesheet" href="mini-app-trainer-hub.css?v=202605115" />
   <!-- Early download of main hub script (defer runs at end of body); improves time-to-interactive vs. discover-at-bottom. -->
-  <link rel="preload" href="trainer-home-main.js?v=20260618" as="script" />
+  <link rel="preload" href="trainer-home-main.js?v=20260511qb" as="script" />
 
   <!-- ─── Splash loader (inline to guarantee render before external CSS) ─── -->
   <style>
@@ -892,10 +892,26 @@
         </button>
       </div>
       <div id="hubBookStepExisting" style="display: none;">
-        <button type="button" class="book-modal-back" id="hubBookBackFromExisting">
-          <svg class="book-modal-back-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
-          Назад
-        </button>
+        <div class="hub-book-existing-toolbar">
+          <button type="button" class="book-modal-back hub-book-existing-toolbar-back" id="hubBookBackFromExisting">
+            <svg class="book-modal-back-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+            Назад
+          </button>
+          <button type="button" class="hub-book-existing-new-chip" id="hubBookExistingNewChip">
+            <span class="hub-book-existing-new-chip__icon" aria-hidden="true">
+              <svg class="hub-book-existing-new-chip__plus" viewBox="0 0 12 12" width="10" height="10" focusable="false">
+                <path
+                  d="M6 2.5v7M2.5 6h7"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.35"
+                  stroke-linecap="round"
+                />
+              </svg>
+            </span>
+            <span>Новый клиент</span>
+          </button>
+        </div>
         <div class="book-field-stack">
           <label class="book-field-label" for="hubBookClientSearch">Поиск по имени или телефону</label>
           <input type="text" id="hubBookClientSearch" class="book-search-input" placeholder="Имя или телефон..." autocomplete="off">
@@ -954,6 +970,6 @@
   <script src="trainer-client-relay-ui.js?v=202605090"></script>
   <script src="trainer-relay-helpers.js?v=202605090"></script>
   <!-- Bump ?v= when trainer-home-main.js changes (immutable cache on /webapp/…). -->
-  <script defer src="trainer-home-main.js?v=20260618"></script>
+  <script defer src="trainer-home-main.js?v=20260511qb"></script>
 </body>
 </html>

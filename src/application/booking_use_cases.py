@@ -3178,6 +3178,62 @@ async def client_latest_booking_primary_candidate(
     return tid, sid
 
 
+REBOOK_TRAINER_TARGETS_DEFAULT_LIMIT = 3
+
+
+async def client_rebook_trainer_targets(
+    session: AsyncSession,
+    client_telegram_id: int,
+    *,
+    limit: int = REBOOK_TRAINER_TARGETS_DEFAULT_LIMIT,
+) -> list[tuple[int, int | None]]:
+    """
+    Distinct trainers the client has (non-cancelled) bookings with, newest per-trainer slot first —
+    hub «Снова к …» pills when the client uses multiple trainers.
+
+    ``service_id`` is from that trainer's most recent booking (catalog deep-link hint).
+    """
+    cid = await get_client_id_by_telegram_id(session, int(client_telegram_id))
+    if cid is None:
+        return []
+    lim = max(1, min(int(limit), 5))
+    r = await session.execute(
+        text(
+            """
+            SELECT sub.trainer_id, sub.service_id
+            FROM (
+                SELECT DISTINCT ON (b.trainer_id)
+                       b.trainer_id,
+                       b.service_id,
+                       """
+            + _SQL_SLOT_START_TS
+            + """ AS slot_start
+                FROM bookings b
+                INNER JOIN slots s ON s.id = b.slot_id
+                WHERE b.client_id = :cid
+                  AND b.status IN ('pending', 'confirmed', 'completed', 'no_show')
+                  AND COALESCE(TRIM(LOWER(COALESCE(s.status, ''))), '') <> 'cancelled'
+                ORDER BY b.trainer_id, """
+            + _SQL_SLOT_START_TS
+            + """ DESC NULLS LAST, b.id DESC
+            ) sub
+            ORDER BY sub.slot_start DESC NULLS LAST
+            LIMIT :lim
+            """
+        ),
+        {"cid": int(cid), "lim": lim},
+    )
+    out: list[tuple[int, int | None]] = []
+    for row in r.fetchall():
+        if not row or row[0] is None:
+            continue
+        tid = int(row[0])
+        sid_raw = row[1]
+        sid = int(sid_raw) if sid_raw is not None else None
+        out.append((tid, sid))
+    return out
+
+
 async def list_trainer_client_history(
     session: AsyncSession,
     trainer_id: int,
@@ -3558,7 +3614,7 @@ async def cancel_booking_by_client(
         text("""
             SELECT t.telegram_id, b.trainer_id, s.slot_date, s.start_time,
                    TRIM(COALESCE(c.first_name, '') || ' ' || COALESCE(c.last_name, '')) AS client_name,
-                   c.id, c.telegram_id, b.recurring_client_slot_id
+                   c.id, c.telegram_id, b.recurring_client_slot_id, b.service_id
             FROM bookings b
             JOIN clients c ON c.id = b.client_id
             JOIN slots s ON s.id = b.slot_id
@@ -3580,6 +3636,7 @@ async def cancel_booking_by_client(
     )
     client_id = int(row[5]) if row[5] is not None else None
     recurring_for_skip = row[7]
+    service_id_raw = row[8]
 
     r = await session.execute(
         text("""
@@ -3614,6 +3671,7 @@ async def cancel_booking_by_client(
     return {
         "trainer_telegram_id": trainer_telegram_id,
         "trainer_id": int(trainer_id_cache),
+        "service_id": int(service_id_raw) if service_id_raw is not None else None,
         "slot_id": int(slot_id_cancel),
         "slot_date": slot_date,
         "start_time": start_time,

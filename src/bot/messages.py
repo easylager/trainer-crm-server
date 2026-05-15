@@ -802,19 +802,31 @@ def build_client_declined_booking_catalog_keyboard(*, webapp_base_url: str | Non
     )
 
 
-def build_client_rebook_catalog_keyboard(*, webapp_base_url: str | None):
-    """After client self-cancel: one-tap catalog."""
+def build_client_rebook_catalog_keyboard(
+    *,
+    webapp_base_url: str | None,
+    trainer_id: int | None = None,
+    service_id: int | None = None,
+):
+    """After client self-cancel: rebook — deep-link to that trainer's card (ignore cleared catalog session)."""
     from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 
     base = (webapp_base_url or "").rstrip("/")
     if not base.lower().startswith("https://"):
         return None
+    url = f"{base}/webapp/catalog"
+    tid = int(trainer_id) if trainer_id is not None else None
+    if tid is not None and tid > 0:
+        url += f"?trainer_id={tid}"
+        sid = int(service_id) if service_id is not None else None
+        if sid is not None and sid > 0:
+            url += f"&service_id={sid}"
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
                 InlineKeyboardButton(
                     text=CLIENT_BUTTON_BOOK_AGAIN,
-                    web_app=WebAppInfo(url=f"{base}/webapp/catalog"),
+                    web_app=WebAppInfo(url=url),
                 ),
             ],
         ]
