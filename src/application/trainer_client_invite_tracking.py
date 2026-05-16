@@ -27,4 +27,6 @@ async def record_trainer_client_invite_link_first_copy(session: AsyncSession, tr
     row = r.fetchone()
     if not row or row[0] is None:
         return None
-    return row[0]
+    ts = row[0]
+    await session.commit()
+    return ts

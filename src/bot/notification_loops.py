@@ -99,7 +99,11 @@ from src.bot.handlers.trainer_handlers import (
 from src.bot.schedule_notifications import REQUESTS_CALLBACK
 from src.bot.trainer_cancel_client_notify import send_cancel_notification_payload
 from src.infrastructure.db import async_session_factory
-from src.shared.config import Settings
+from src.shared.config import (
+    TRAINER_SESSION_WRAPUP_LEAD_SECONDS,
+    TRAINER_SESSION_WRAPUP_POLL_INTERVAL_SEC,
+    Settings,
+)
 from src.shared.map_links import build_yandex_by_map_url
 from src.application.trainer_notification_prefs import is_trainer_push_allowed_now
 from src.shared.notification_hours import is_within_notification_hours
@@ -114,6 +118,11 @@ def _booking_complete_poll_interval_sec() -> int:
     except (TypeError, ValueError):
         return 60
     return max(15, min(600, raw))
+
+
+def _trainer_session_wrapup_poll_interval_sec() -> int:
+    """Sleep between wrap-up rounds; from `TRAINER_SESSION_WRAPUP_POLL_INTERVAL_SEC`, clamped 10–60 s."""
+    return max(10, min(60, int(TRAINER_SESSION_WRAPUP_POLL_INTERVAL_SEC)))
 
 
 # Intervals (seconds)
@@ -720,12 +729,12 @@ async def _build_trainer_post_session_keyboard(
 
 async def process_trainer_session_wrapup_round(trainer_bot: Bot) -> None:
     """
-    One pass: notify trainers inside the last N seconds before slot end (Europe/Minsk) to offer repeat booking.
-    Default N=120 (~2 min) so a 60s poll usually delivers ~1–2 min before end, not at the last moment.
-    Respects each trainer's push window (and global bypass from NOTIFICATION_DISABLE_QUIET_HOURS).
+    One pass: notify trainers in the last N seconds before slot end (Europe/Minsk). N comes from code constants, not .env.
+    Fast poll (`TRAINER_SESSION_WRAPUP_POLL_INTERVAL_SEC`) makes delivery early in that window when possible; if checks or
+    quiet hours delay, we still send until the slot ends («лучше поздно, чем никогда» within the window).
     """
     settings = Settings()
-    lead_sec = int(settings.trainer_session_wrapup_lead_seconds or 0)
+    lead_sec = int(TRAINER_SESSION_WRAPUP_LEAD_SECONDS)
     if lead_sec <= 0:
         return
     lead_sec = max(15, min(lead_sec, 600))
@@ -1023,12 +1032,25 @@ async def run_group_attendance_prompt_loop(client_bot: Bot) -> None:
             logger.exception("Group attendance prompt loop: %s", e)
 
 
+async def run_trainer_session_wrapup_loop(trainer_bot: Bot) -> None:
+    """Fast tick for pre-end trainer CTA; decoupled from `run_booking_complete_loop` so lead_seconds works in practice."""
+    logger.info("[trainer_session_wrapup_loop] started")
+    while True:
+        try:
+            await asyncio.sleep(_trainer_session_wrapup_poll_interval_sec())
+            await process_trainer_session_wrapup_round(trainer_bot)
+        except asyncio.CancelledError:
+            logger.info("[trainer_session_wrapup_loop] cancelled")
+            break
+        except Exception as e:
+            logger.exception("Trainer session wrap-up loop: %s", e)
+
+
 async def run_booking_complete_loop(client_bot: Bot, trainer_bot: Bot) -> None:
     logger.info("[booking_complete_loop] started")
     while True:
         try:
             await asyncio.sleep(_booking_complete_poll_interval_sec())
-            await process_trainer_session_wrapup_round(trainer_bot)
             await process_booking_complete_round(client_bot, trainer_bot)
         except asyncio.CancelledError:
             logger.info("[booking_complete_loop] cancelled")

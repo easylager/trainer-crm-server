@@ -19,6 +19,10 @@ def _env_bool_benchmark(v: Any) -> bool:
 BenchmarkLogFlag = Annotated[bool, BeforeValidator(_env_bool_benchmark)]
 NotificationQuietHoursBypassFlag = Annotated[bool, BeforeValidator(_env_bool_benchmark)]
 
+# Trainer «подходит к концу» (notification_service): product tuning, not .env — last N seconds before slot end + fast poll tick.
+TRAINER_SESSION_WRAPUP_LEAD_SECONDS = 120
+TRAINER_SESSION_WRAPUP_POLL_INTERVAL_SEC = 15
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -132,16 +136,13 @@ class Settings(BaseSettings):
     notification_subscription_loop_interval_sec: int = 86400
     # notification_service: interval between Lead Mode recovery (D+0..D+30) ticks. Default 86400. Set e.g. 10 locally; production should keep default.
     notification_lead_mode_recovery_interval_sec: int = 86400
-    # notification_service: poll for slot end → auto-complete booking → «Записать снова» trainer push. Clamped to 15–600 s in worker.
+    # notification_service: poll for slot end → auto-complete booking + client completion push. Clamped to 15–600 s in worker.
     booking_complete_poll_interval_sec: int = 60
     # Recurring «постоянный клиент»: ISO weeks ahead to keep filled (rolling window from this Monday).
     # Background loop + on «Сделать постоянным» top up toward this horizon; as weeks pass, new weeks enter the window.
     recurring_materialization_horizon_weeks: int = 3
     # notification_service: top up recurring auto-bookings toward the horizon (seconds). Default 6h.
     recurring_materialization_loop_interval_sec: int = 21600
-    # Last N seconds before slot end (Europe/Minsk): send trainer one «предложите повтор» push with WebApp buttons. 0 = disabled.
-    # Default 120 pairs with booking_complete_poll_interval_sec (60s): first tick usually falls 1–2 min before end, not flush with slot end.
-    trainer_session_wrapup_lead_seconds: int = 120
 
     # Trainer subscription: trial and reminders
     # Trial: if set, overrides DB platform_settings.welcome_trial_period_days and subscription_plans.period_days

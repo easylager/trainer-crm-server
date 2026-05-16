@@ -1649,7 +1649,7 @@ def format_trainer_booking_session_wrapup_html(
     arena_display: str | None,
     include_quick_rebook_line: bool = False,
 ) -> str:
-    """Telegram HTML for trainer push in the last minute before slot end (repeat booking CTA)."""
+    """Telegram HTML for trainer push shortly before slot end (repeat booking CTA). Timing is driven by wrap-up poll + lead_seconds."""
     cn = html.escape((client_name or "").strip() or "Клиент")
     ds = html.escape(date)
     dy = html.escape(day)

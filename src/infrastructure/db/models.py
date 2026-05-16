@@ -703,6 +703,8 @@ class Booking(Base):
     # Onboarding demo booking: excluded from stats, revenue, rhythm hints, reminders, repeat-gap pings,
     # inactive-client loop. Still claims the first-booking milestone so TTV step 2 mirrors real UX.
     is_sandbox: Mapped[bool] = mapped_column(nullable=False, server_default="false")
+    # When status becomes cancelled: trainer / client / bulk system reasons. Stats omit recurring_detach & roster_detach churn.
+    cancellation_source: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     # Set when this booking was created by recurring materialization (trainer CRM «постоянный клиент»).
     recurring_client_slot_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("recurring_client_slots.id", ondelete="SET NULL"), nullable=True, index=True

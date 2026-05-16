@@ -44,6 +44,7 @@ from src.application.booking_use_cases import (
     trainer_repeat_booking_same_time_next_week,
 )
 from src.application.client_dossier_use_cases import add_client_entry_with_date
+from src.application.trainer_client_invite_tracking import record_trainer_client_invite_link_first_copy
 from src.application.trainer_invite_links import build_trainer_invite_links
 from src.application.recurring_use_cases import (
     apply_recurring_bookings_for_week,
@@ -581,6 +582,8 @@ async def _send_trainer_invite_package(chat_message: Message, telegram_id: int) 
         plain = msg.TRAINER_INVITE_PLAIN_CLIENT_NO_CATALOG.format(deep_link=links.client_bot_deep_link)
     await chat_message.answer(msg.TRAINER_INVITE_INTRO_HTML)
     await chat_message.answer(plain, parse_mode=None)
+    async with async_session_factory() as session:
+        await record_trainer_client_invite_link_first_copy(session, trainer_id)
 
 
 async def _send_first_booking_milestone_followups(
@@ -2185,6 +2188,8 @@ async def on_booking_invite_client_to_bot(callback: CallbackQuery) -> None:
         ),
         parse_mode=ParseMode.HTML,
     )
+    async with async_session_factory() as session:
+        await record_trainer_client_invite_link_first_copy(session, trainer_id)
 
 @router.callback_query(lambda c: c.data and c.data.startswith(TRAINER_REPEAT_WEEK_PREFIX))
 async def on_trainer_repeat_week(callback: CallbackQuery) -> None:

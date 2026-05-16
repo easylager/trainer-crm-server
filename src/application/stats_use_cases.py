@@ -64,6 +64,9 @@ ACTIVATION_STAGE_ORDER: tuple[str, ...] = (
 # Align hub MTD «today» with slot_date / trainer-facing calendar (Belarus).
 HUB_REVENUE_TZ = ZoneInfo("Europe/Minsk")
 
+# Booking list / schedule visibility — keep volume KPIs aligned with hub and `booking_use_cases` filters.
+_SQL_BOOKING_SCHEDULE_VISIBLE = "b.status NOT IN ('cancelled', 'declined', 'trainer_removed')"
+
 
 def _month_start(d: date) -> date:
     return d.replace(day=1)
@@ -258,24 +261,28 @@ async def get_trainer_stats(session: AsyncSession, trainer_id: int) -> dict:
     month_start = _month_start(today)
     month_end = _month_end(today)
 
-    # Bookings this week (non-cancelled): count and split into completed vs upcoming
+    # Bookings this week: hero total = all schedule rows (как last_week_total); подпись — только completed / впереди.
     r = await session.execute(
         text("""
             SELECT
-                COUNT(*) FILTER (WHERE (s.slot_date + s.end_time) < CURRENT_TIMESTAMP OR b.status = 'completed') AS completed,
-                COUNT(*) FILTER (WHERE (s.slot_date + s.end_time) >= CURRENT_TIMESTAMP AND b.status NOT IN ('cancelled', 'trainer_removed')) AS upcoming
+                COUNT(*) AS all_in_week,
+                COUNT(*) FILTER (WHERE b.status = 'completed') AS completed,
+                COUNT(*) FILTER (
+                    WHERE b.status IN ('pending', 'confirmed')
+                      AND (s.slot_date + s.end_time) >= CURRENT_TIMESTAMP
+                ) AS upcoming
             FROM bookings b
             JOIN slots s ON s.id = b.slot_id
-            WHERE b.trainer_id = :tid AND b.status NOT IN ('cancelled', 'trainer_removed')
+            WHERE b.trainer_id = :tid AND """ + _SQL_BOOKING_SCHEDULE_VISIBLE + """
               AND NOT b.is_sandbox
               AND s.slot_date >= :ws AND s.slot_date <= :we
         """),
         {"tid": trainer_id, "ws": week_start, "we": week_end},
     )
     row = r.fetchone()
-    week_completed = row[0] or 0
-    week_upcoming = row[1] or 0
-    week_total = week_completed + week_upcoming
+    week_total = (row[0] or 0) if row else 0
+    week_completed = (row[1] or 0) if row else 0
+    week_upcoming = (row[2] or 0) if row else 0
 
     # Bookings this month
     r = await session.execute(
@@ -283,7 +290,7 @@ async def get_trainer_stats(session: AsyncSession, trainer_id: int) -> dict:
             SELECT COUNT(*)
             FROM bookings b
             JOIN slots s ON s.id = b.slot_id
-            WHERE b.trainer_id = :tid AND b.status NOT IN ('cancelled', 'trainer_removed')
+            WHERE b.trainer_id = :tid AND b.status NOT IN ('cancelled', 'declined', 'trainer_removed')
               AND NOT b.is_sandbox
               AND s.slot_date >= :ms AND s.slot_date <= :me
         """),
@@ -420,7 +427,7 @@ async def get_trainer_stats_dashboard(session: AsyncSession, trainer_id: int) ->
             SELECT COUNT(*)
             FROM bookings b
             JOIN slots s ON s.id = b.slot_id
-            WHERE b.trainer_id = :tid AND b.status NOT IN ('cancelled', 'trainer_removed')
+            WHERE b.trainer_id = :tid AND b.status NOT IN ('cancelled', 'declined', 'trainer_removed')
               AND NOT b.is_sandbox
               AND s.slot_date >= :ws AND s.slot_date <= :we
         """),
@@ -434,7 +441,7 @@ async def get_trainer_stats_dashboard(session: AsyncSession, trainer_id: int) ->
             SELECT COUNT(*)
             FROM bookings b
             JOIN slots s ON s.id = b.slot_id
-            WHERE b.trainer_id = :tid AND b.status NOT IN ('cancelled', 'trainer_removed')
+            WHERE b.trainer_id = :tid AND b.status NOT IN ('cancelled', 'declined', 'trainer_removed')
               AND NOT b.is_sandbox
               AND s.slot_date >= :ms AND s.slot_date <= :me
         """),
@@ -448,7 +455,7 @@ async def get_trainer_stats_dashboard(session: AsyncSession, trainer_id: int) ->
             SELECT s.slot_date, COUNT(*)
             FROM bookings b
             JOIN slots s ON s.id = b.slot_id
-            WHERE b.trainer_id = :tid AND b.status NOT IN ('cancelled', 'trainer_removed')
+            WHERE b.trainer_id = :tid AND b.status NOT IN ('cancelled', 'declined', 'trainer_removed')
               AND NOT b.is_sandbox
               AND s.slot_date >= :ws AND s.slot_date <= :we
             GROUP BY s.slot_date
@@ -479,7 +486,7 @@ async def get_trainer_stats_dashboard(session: AsyncSession, trainer_id: int) ->
                 SELECT COUNT(*)
                 FROM bookings b
                 JOIN slots s ON s.id = b.slot_id
-                WHERE b.trainer_id = :tid AND b.status NOT IN ('cancelled', 'trainer_removed')
+                WHERE b.trainer_id = :tid AND b.status NOT IN ('cancelled', 'declined', 'trainer_removed')
                   AND NOT b.is_sandbox
                   AND s.slot_date >= :ws AND s.slot_date <= :we
             """),
@@ -499,7 +506,7 @@ async def get_trainer_stats_dashboard(session: AsyncSession, trainer_id: int) ->
             SELECT EXTRACT(DOW FROM s.slot_date)::int AS dow, COUNT(*)
             FROM bookings b
             JOIN slots s ON s.id = b.slot_id
-            WHERE b.trainer_id = :tid AND b.status NOT IN ('cancelled', 'trainer_removed')
+            WHERE b.trainer_id = :tid AND b.status NOT IN ('cancelled', 'declined', 'trainer_removed')
               AND NOT b.is_sandbox
               AND s.slot_date >= :since
             GROUP BY EXTRACT(DOW FROM s.slot_date)
@@ -524,7 +531,7 @@ async def get_trainer_stats_dashboard(session: AsyncSession, trainer_id: int) ->
             SELECT COUNT(DISTINCT b.client_id)
             FROM bookings b
             JOIN slots s ON s.id = b.slot_id
-            WHERE b.trainer_id = :tid AND b.status NOT IN ('cancelled', 'trainer_removed')
+            WHERE b.trainer_id = :tid AND b.status NOT IN ('cancelled', 'declined', 'trainer_removed')
               AND NOT b.is_sandbox
               AND s.slot_date >= :ms AND s.slot_date <= :me
         """),
@@ -660,7 +667,7 @@ async def get_trainer_stats_dashboard(session: AsyncSession, trainer_id: int) ->
             SELECT COUNT(*)
             FROM bookings b
             JOIN slots s ON s.id = b.slot_id
-            WHERE b.trainer_id = :tid AND b.status NOT IN ('cancelled', 'trainer_removed')
+            WHERE b.trainer_id = :tid AND b.status NOT IN ('cancelled', 'declined', 'trainer_removed')
               AND NOT b.is_sandbox
               AND s.slot_date = CURRENT_DATE
             """
@@ -669,7 +676,7 @@ async def get_trainer_stats_dashboard(session: AsyncSession, trainer_id: int) ->
     )
     bookings_today = (r.fetchone() or (0,))[0]
 
-    # Repeat clients in last 30 days (2+ sessions).
+    # Repeat clients in last 30 days: 2+ completed sessions (same idea as «проведённое» engagement).
     r = await session.execute(
         text(
             """
@@ -677,7 +684,7 @@ async def get_trainer_stats_dashboard(session: AsyncSession, trainer_id: int) ->
                 SELECT b.client_id
                 FROM bookings b
                 JOIN slots s ON s.id = b.slot_id
-                WHERE b.trainer_id = :tid AND b.status NOT IN ('cancelled', 'trainer_removed')
+                WHERE b.trainer_id = :tid AND b.status = 'completed'
                   AND NOT b.is_sandbox
                   AND s.slot_date >= CURRENT_DATE - INTERVAL '30 days'
                 GROUP BY b.client_id
@@ -696,7 +703,7 @@ async def get_trainer_stats_dashboard(session: AsyncSession, trainer_id: int) ->
             SELECT COUNT(DISTINCT b.client_id)
             FROM bookings b
             JOIN slots s ON s.id = b.slot_id
-            WHERE b.trainer_id = :tid AND b.status NOT IN ('cancelled', 'trainer_removed')
+            WHERE b.trainer_id = :tid AND b.status NOT IN ('cancelled', 'declined', 'trainer_removed')
               AND NOT b.is_sandbox
               AND s.slot_date >= CURRENT_DATE - INTERVAL '30 days'
             """
@@ -708,7 +715,7 @@ async def get_trainer_stats_dashboard(session: AsyncSession, trainer_id: int) ->
     if unique_clients_30d > 0:
         repeat_share_30d_pct = round(100 * repeat_clients_30d / unique_clients_30d, 0)
 
-    # Pass redemptions in rolling 30d (abonement actually used for a slot).
+    # Pass redemptions in rolling 30d (count only completed bookings; redemption is tied to session completion).
     r = await session.execute(
         text(
             """
@@ -716,7 +723,9 @@ async def get_trainer_stats_dashboard(session: AsyncSession, trainer_id: int) ->
             FROM pass_redemptions pr
             JOIN bookings b ON b.id = pr.booking_id
             JOIN slots s ON s.id = b.slot_id
-            WHERE b.trainer_id = :tid AND NOT b.is_sandbox
+            WHERE b.trainer_id = :tid
+              AND b.status = 'completed'
+              AND NOT b.is_sandbox
               AND s.slot_date >= CURRENT_DATE - INTERVAL '30 days'
             """
         ),
@@ -724,26 +733,32 @@ async def get_trainer_stats_dashboard(session: AsyncSession, trainer_id: int) ->
     )
     pass_redemptions_30d = (r.fetchone() or (0,))[0]
 
-    # Cancellation share of all booking outcomes in 30d (by slot date).
+    # Cancellation share in 30d by slot_date. Exclude bulk churn when removing recurring or CRM roster (not «real» cancels).
     r = await session.execute(
         text(
             """
             SELECT
-                COUNT(*) FILTER (WHERE b.status NOT IN ('cancelled', 'trainer_removed')) AS ok_cnt,
-                COUNT(*) FILTER (WHERE b.status = 'cancelled') AS cx_cnt
+                COUNT(*) FILTER (
+                    WHERE b.status NOT IN ('cancelled', 'declined')
+                ) AS ok_cnt,
+                COUNT(*) FILTER (
+                    WHERE b.status IN ('cancelled', 'declined')
+                ) AS neg_cnt
             FROM bookings b
             JOIN slots s ON s.id = b.slot_id
             WHERE b.trainer_id = :tid AND NOT b.is_sandbox
               AND s.slot_date >= CURRENT_DATE - INTERVAL '30 days'
+              AND b.status <> 'trainer_removed'
+              AND NOT (b.status = 'cancelled' AND b.cancellation_source IN ('recurring_detach', 'roster_detach'))
             """
         ),
         {"tid": trainer_id},
     )
     cr = r.fetchone() or (0, 0)
     ok_cnt = cr[0] or 0
-    cx_cnt = cr[1] or 0
-    denom = ok_cnt + cx_cnt
-    cancel_rate_30d = round(100 * cx_cnt / denom, 0) if denom else None
+    neg_cnt = cr[1] or 0
+    denom = ok_cnt + neg_cnt
+    cancel_rate_30d = round(100 * neg_cnt / denom, 0) if denom else None
 
     # Leads: requests addressed to this trainer + responses sent (30d).
     r = await session.execute(
@@ -778,7 +793,7 @@ async def get_trainer_stats_dashboard(session: AsyncSession, trainer_id: int) ->
             0,
         )
 
-    # Cancellations: count of cancelled bookings in period (by slot date).
+    # Cancelled/declined counts for KPIs: omit system bulk cancels (same definition as cancel_rate_30d).
     r = await session.execute(
         text(
             """
@@ -787,9 +802,16 @@ async def get_trainer_stats_dashboard(session: AsyncSession, trainer_id: int) ->
                 COUNT(*) FILTER (WHERE s.slot_date >= CURRENT_DATE - INTERVAL '30 days') AS cancel_30d
             FROM bookings b
             JOIN slots s ON s.id = b.slot_id
-            WHERE b.trainer_id = :tid AND b.status = 'cancelled'
+            WHERE b.trainer_id = :tid
               AND NOT b.is_sandbox
               AND s.slot_date >= CURRENT_DATE - INTERVAL '30 days'
+              AND (
+                b.status = 'declined'
+                OR (
+                  b.status = 'cancelled'
+                  AND (b.cancellation_source IS NULL OR b.cancellation_source NOT IN ('recurring_detach', 'roster_detach'))
+                )
+              )
             """
         ),
         {"tid": trainer_id},
@@ -797,6 +819,24 @@ async def get_trainer_stats_dashboard(session: AsyncSession, trainer_id: int) ->
     cancel_row = r.fetchone() or (0, 0)
     cancellations_7d = cancel_row[0] or 0
     cancellations_30d = cancel_row[1] or 0
+
+    # Conducted sessions (30d rolling by slot_date): only completed — not pending/confirmed future rows.
+    r = await session.execute(
+        text(
+            """
+            SELECT COUNT(*)
+            FROM bookings b
+            JOIN slots s ON s.id = b.slot_id
+            WHERE b.trainer_id = :tid
+              AND b.status = 'completed'
+              AND NOT b.is_sandbox
+              AND s.status IN ('available', 'booked')
+              AND s.slot_date >= CURRENT_DATE - INTERVAL '30 days'
+            """
+        ),
+        {"tid": trainer_id},
+    )
+    bookings_completed_30d = (r.fetchone() or (0,))[0]
 
     free_slots_week = max(0, (base["week_slots_total"] or 0) - (base["week_slots_booked"] or 0))
 
@@ -915,6 +955,7 @@ async def get_trainer_stats_dashboard(session: AsyncSession, trainer_id: int) ->
         "unique_clients_30d": unique_clients_30d,
         "repeat_share_30d_pct": repeat_share_30d_pct,
         "pass_redemptions_30d": pass_redemptions_30d,
+        "bookings_completed_30d": bookings_completed_30d,
         "bookings_held_30d": ok_cnt,
         "lead_response_rate_30d": lead_response_rate_30d,
         "revenue_calendar_month_cents": revenue_calendar_month_cents,
@@ -956,7 +997,7 @@ async def get_platform_stats(session: AsyncSession) -> dict:
         text("""
             SELECT COUNT(*) FROM bookings b
             JOIN slots s ON s.id = b.slot_id
-            WHERE b.status NOT IN ('cancelled', 'trainer_removed') AND NOT b.is_sandbox AND s.slot_date = :d
+            WHERE b.status NOT IN ('cancelled', 'declined', 'trainer_removed') AND NOT b.is_sandbox AND s.slot_date = :d
         """),
         {"d": today},
     )
@@ -966,7 +1007,7 @@ async def get_platform_stats(session: AsyncSession) -> dict:
         text("""
             SELECT COUNT(*) FROM bookings b
             JOIN slots s ON s.id = b.slot_id
-            WHERE b.status NOT IN ('cancelled', 'trainer_removed') AND NOT b.is_sandbox
+            WHERE b.status NOT IN ('cancelled', 'declined', 'trainer_removed') AND NOT b.is_sandbox
               AND s.slot_date >= :ws AND s.slot_date <= :we
               AND (s.slot_date + s.end_time) >= CURRENT_TIMESTAMP
         """),
@@ -979,14 +1020,26 @@ async def get_platform_stats(session: AsyncSession) -> dict:
     )
     requests_open_now = (r.fetchone() or (0,))[0]
 
-    # --- Last 7 days ---
+    # Last 7 days: by slot_date; exclude system churn cancellations from «negative» side.
     r = await session.execute(
         text("""
             SELECT
-                COUNT(*) FILTER (WHERE status NOT IN ('cancelled', 'trainer_removed')) AS non_cancelled,
-                COUNT(*) FILTER (WHERE status = 'cancelled') AS cancelled
-            FROM bookings
-            WHERE NOT is_sandbox AND created_at >= CURRENT_TIMESTAMP - INTERVAL '7 days'
+                COUNT(*) FILTER (
+                    WHERE b.status NOT IN ('cancelled', 'declined', 'trainer_removed')
+                ) AS non_negative,
+                COUNT(*) FILTER (
+                    WHERE b.status = 'declined'
+                       OR (
+                         b.status = 'cancelled'
+                         AND (b.cancellation_source IS NULL OR b.cancellation_source NOT IN ('recurring_detach', 'roster_detach'))
+                       )
+                ) AS negative
+            FROM bookings b
+            JOIN slots s ON s.id = b.slot_id
+            WHERE NOT b.is_sandbox
+              AND s.slot_date >= CURRENT_DATE - INTERVAL '7 days'
+              AND b.status <> 'trainer_removed'
+              AND NOT (b.status = 'cancelled' AND b.cancellation_source IN ('recurring_detach', 'roster_detach'))
         """),
     )
     row = r.fetchone() or (0, 0)
@@ -1017,14 +1070,26 @@ async def get_platform_stats(session: AsyncSession) -> dict:
     )
     responses_7d = (r.fetchone() or (0,))[0]
 
-    # --- Last 30 days ---
+    # Last 30 days: same slot-based window + exclusions as 7d.
     r = await session.execute(
         text("""
             SELECT
-                COUNT(*) FILTER (WHERE status NOT IN ('cancelled', 'trainer_removed')) AS non_cancelled,
-                COUNT(*) FILTER (WHERE status = 'cancelled') AS cancelled
-            FROM bookings
-            WHERE created_at >= CURRENT_TIMESTAMP - INTERVAL '30 days'
+                COUNT(*) FILTER (
+                    WHERE b.status NOT IN ('cancelled', 'declined', 'trainer_removed')
+                ) AS non_negative,
+                COUNT(*) FILTER (
+                    WHERE b.status = 'declined'
+                       OR (
+                         b.status = 'cancelled'
+                         AND (b.cancellation_source IS NULL OR b.cancellation_source NOT IN ('recurring_detach', 'roster_detach'))
+                       )
+                ) AS negative
+            FROM bookings b
+            JOIN slots s ON s.id = b.slot_id
+            WHERE NOT b.is_sandbox
+              AND s.slot_date >= CURRENT_DATE - INTERVAL '30 days'
+              AND b.status <> 'trainer_removed'
+              AND NOT (b.status = 'cancelled' AND b.cancellation_source IN ('recurring_detach', 'roster_detach'))
         """),
     )
     row = r.fetchone() or (0, 0)
@@ -1131,9 +1196,21 @@ async def get_platform_stats(session: AsyncSession) -> dict:
     if conversion_pct is not None and requests_30d >= 3 and conversion_pct < 50:
         alerts.append({"type": "conversion", "title": "Низкая конверсия", "description": f"Заявки → отклик: {int(conversion_pct)}%"})
     if cancel_rate_7d is not None and bookings_7d >= 5 and cancel_rate_7d >= 30:
-        alerts.append({"type": "cancellations_high_7d", "title": "Много отмен (7 дней)", "description": f"Отменено {cancelled_7d} занятий за 7 дней ({int(cancel_rate_7d)}% всех записей)"})
+        alerts.append(
+            {
+                "type": "cancellations_high_7d",
+                "title": "Много отмен/отказов (7 дней)",
+                "description": f"{cancelled_7d} за 7 дней по дате слота ({int(cancel_rate_7d)}% записей в окне)",
+            }
+        )
     if cancel_rate_30d is not None and bookings_30d >= 10 and cancel_rate_30d >= 30:
-        alerts.append({"type": "cancellations_high_30d", "title": "Много отмен (30 дней)", "description": f"Отменено {cancelled_30d} занятий за 30 дней ({int(cancel_rate_30d)}%)"})
+        alerts.append(
+            {
+                "type": "cancellations_high_30d",
+                "title": "Много отмен/отказов (30 дней)",
+                "description": f"{cancelled_30d} за 30 дней по дате слота ({int(cancel_rate_30d)}%)",
+            }
+        )
 
     # --- Platform subscriptions (tier CRM / Online / Analytics) — optional until migration 0066 ---
     subscription_tier_crm = 0

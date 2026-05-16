@@ -8,6 +8,7 @@ from aiogram import Bot
 from aiogram.enums import ParseMode
 
 from src.application.booking_use_cases import get_trainer_default_city_and_service
+from src.application.trainer_client_invite_tracking import record_trainer_client_invite_link_first_copy
 from src.application.trainer_invite_links import build_trainer_invite_links
 from src.application.trainer_use_cases import get_trainer
 from src.bot import messages as msg
@@ -69,6 +70,8 @@ async def send_trainer_share_catalog_tip_to_chat(
         else:
             tip = msg.TRAINER_SHARE_CATALOG_TIP_DEEP_ONLY_HTML.format(deep_link=deep_esc)
         await bot.send_message(chat_id=chat_id, text=tip, parse_mode=ParseMode.HTML)
+        async with async_session_factory() as session:
+            await record_trainer_client_invite_link_first_copy(session, trainer_id)
         return
 
     if links.catalog_page_url:
@@ -77,3 +80,5 @@ async def send_trainer_share_catalog_tip_to_chat(
     else:
         tip = msg.TRAINER_SHARE_CATALOG_TIP_DEEP_ONLY_HTML.format(deep_link=deep_esc)
     await bot.send_message(chat_id=chat_id, text=tip, parse_mode=ParseMode.HTML)
+    async with async_session_factory() as session:
+        await record_trainer_client_invite_link_first_copy(session, trainer_id)

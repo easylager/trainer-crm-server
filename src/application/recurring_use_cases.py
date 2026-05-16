@@ -233,7 +233,10 @@ async def discard_upcoming_bookings_for_recurring_rule(
     Drop not-yet-started bookings tied to this rule: cancel without client notification and without
     week-skip rows (the rule itself is being removed or replaced).
     """
-    from src.application.booking_use_cases import cancel_booking
+    from src.application.booking_use_cases import (
+        BOOKING_CANCELLATION_SOURCE_RECURRING_DETACH,
+        cancel_booking,
+    )
 
     r = await session.execute(
         text(
@@ -259,6 +262,7 @@ async def discard_upcoming_bookings_for_recurring_rule(
             trainer_id,
             notify_client=False,
             record_recurring_week_skip=False,
+            cancellation_source=BOOKING_CANCELLATION_SOURCE_RECURRING_DETACH,
         ):
             removed += 1
     return removed

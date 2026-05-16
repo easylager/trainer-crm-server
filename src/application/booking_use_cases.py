@@ -39,6 +39,12 @@ BOOKING_STATUSES_OCCUPYING_SEAT = ("pending", "confirmed")
 # Trainer removed a past booking from schedule/reported stats (soft purge; ledger reversed when applicable).
 BOOKING_STATUS_TRAINER_REMOVED = "trainer_removed"
 
+# Set when status → cancelled; stats exclude system bulk cancels (recurring rule off, roster detach).
+BOOKING_CANCELLATION_SOURCE_TRAINER = "trainer"
+BOOKING_CANCELLATION_SOURCE_CLIENT = "client"
+BOOKING_CANCELLATION_SOURCE_RECURRING_DETACH = "recurring_detach"
+BOOKING_CANCELLATION_SOURCE_ROSTER_DETACH = "roster_detach"
+
 # Hub / reminders: slot_date + start_time|end_time are Europe/Minsk wall clock (not DB session TZ).
 # Client push times: never 00:00–07:59; early-morning targets snap to 08:00 same local day if still before the slot.
 _REMINDER_NIGHT_END_HOUR = 8
@@ -3477,11 +3483,12 @@ async def cancel_booking(
     *,
     notify_client: bool = True,
     record_recurring_week_skip: bool = True,
+    cancellation_source: str = BOOKING_CANCELLATION_SOURCE_TRAINER,
 ) -> bool:
     """
     Cancel booking: booking status to 'cancelled', slot occupancy synced (group slots may stay partially filled).
     Recurring-auto bookings: by default records a week skip so materialization will not recreate the same calendar week.
-    ``notify_client=False`` omits the client «тренер отменил» queue (e.g. purging forward auto-bookings with a rule).
+    ``cancellation_source`` records why the row was cancelled; stats omit recurring/roster system churn.
     Returns True if booking was found and cancelled.
     """
     r = await session.execute(
@@ -3501,8 +3508,10 @@ async def cancel_booking(
     slot_date_for_skip = row[2]
     client_id_cancel = int(row[3]) if row[3] is not None else None
     await session.execute(
-        text("UPDATE bookings SET status = 'cancelled' WHERE id = :bid"),
-        {"bid": booking_id},
+        text(
+            "UPDATE bookings SET status = 'cancelled', cancellation_source = :csrc WHERE id = :bid"
+        ),
+        {"bid": booking_id, "csrc": cancellation_source},
     )
     if record_recurring_week_skip and recurring_for_skip is not None and slot_date_for_skip is not None:
         from src.application.recurring_use_cases import record_recurring_materialization_week_skip
@@ -3572,7 +3581,12 @@ async def detach_trainer_client_from_roster_miniapp(
     bid_rows = rb.fetchall()
     cancelled_upcoming = 0
     for (bid,) in bid_rows:
-        if await cancel_booking(session, int(bid), trainer_id):
+        if await cancel_booking(
+            session,
+            int(bid),
+            trainer_id,
+            cancellation_source=BOOKING_CANCELLATION_SOURCE_ROSTER_DETACH,
+        ):
             cancelled_upcoming += 1
 
     rr = await session.execute(
@@ -3652,10 +3666,16 @@ async def cancel_booking_by_client(
     await session.execute(
         text("""
             UPDATE bookings
-            SET status = 'cancelled', client_cancel_comment = :reason
+            SET status = 'cancelled',
+                client_cancel_comment = :reason,
+                cancellation_source = :csrc
             WHERE id = :bid
         """),
-        {"bid": booking_id, "reason": reason_val},
+        {
+            "bid": booking_id,
+            "reason": reason_val,
+            "csrc": BOOKING_CANCELLATION_SOURCE_CLIENT,
+        },
     )
     if recurring_for_skip is not None and slot_date is not None:
         from src.application.recurring_use_cases import record_recurring_materialization_week_skip
@@ -4328,8 +4348,7 @@ async def list_bookings_for_trainer_session_wrapup(
 ) -> list[dict]:
     """
     Confirmed/pending bookings whose slot end is in the future but within the last ``lead_seconds`` before it
-    (Europe/Minsk). Eligible window: ``end > now >= end - lead_seconds``. Larger ``lead_seconds`` + ~60s poll
-    avoids pushes that land exactly at slot end. One push per booking.
+    (Europe/Minsk). Window: ``end > now >= end - lead_seconds``. Separate fast worker tick sends early in that band.
     """
     if lead_seconds <= 0:
         return []

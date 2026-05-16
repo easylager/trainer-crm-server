@@ -136,7 +136,7 @@
           tips.push('Загрузка слотов невысокая — напомните постоянным клиентам о свободных окнах или предложите разовую акцию.');
         }
         if (d.cancel_rate_30d != null && d.cancel_rate_30d >= 14) {
-          tips.push('Доля отмен за 30 дней заметна — зафиксируйте правила отмены в переписке и в описании услуги.');
+          tips.push('Доля отмен и отказов за 30 дней заметна — зафиксируйте правила в переписке и в описании услуги.');
         }
         if ((d.free_slots_week || 0) >= 4 && (d.week_upcoming || 0) <= 2 && wst >= 5) {
           tips.push('Много свободных слотов при малом числе предстоящих занятий — хороший повод для поста или рассылки в Telegram.');
@@ -250,12 +250,12 @@
 
         html += '<div class="section"><div class="section-title">Итоги · 30 дней</div><div class="kpi-grid">';
         html += '<div class="kpi-card"><div class="kpi-label">Новые клиенты</div><div class="kpi-value">' + (d.new_clients_30d || 0) + '</div><div class="kpi-sub">Первый визит</div></div>';
-        html += '<div class="kpi-card"><div class="kpi-label">Проведено занятий</div><div class="kpi-value">' + (d.bookings_held_30d != null ? d.bookings_held_30d : 0) + '</div><div class="kpi-sub">Без отмен</div></div>';
+        html += '<div class="kpi-card"><div class="kpi-label">Проведено занятий</div><div class="kpi-value">' + (d.bookings_completed_30d != null ? d.bookings_completed_30d : 0) + '</div><div class="kpi-sub">30 дн. по дате слота · только «проведено»</div></div>';
         html += '<div class="kpi-card"><div class="kpi-label">Списаний абонемента</div><div class="kpi-value">' + (d.pass_redemptions_30d != null ? d.pass_redemptions_30d : 0) + '</div><div class="kpi-sub">Визиты по абонементу</div></div>';
-        html += '<div class="kpi-card"><div class="kpi-label">Отмены</div><div class="kpi-value">' + (d.cancellations_7d != null ? d.cancellations_7d : '0') + '</div><div class="kpi-sub">7 дн. · ' + (d.cancellations_30d != null ? d.cancellations_30d : 0) + ' за 30 дн.</div></div>';
-        html += '<div class="kpi-card"><div class="kpi-label">Доля отмен · 30 дн.</div><div class="kpi-value">' + (d.cancel_rate_30d != null ? d.cancel_rate_30d + '%' : '—') + '</div>';
+        html += '<div class="kpi-card"><div class="kpi-label">Отмены и отказы</div><div class="kpi-value">' + (d.cancellations_7d != null ? d.cancellations_7d : '0') + '</div><div class="kpi-sub">7 дн. · ' + (d.cancellations_30d != null ? d.cancellations_30d : 0) + ' за 30 дн.</div></div>';
+        html += '<div class="kpi-card"><div class="kpi-label">Доля отмен/отказов · 30 дн.</div><div class="kpi-value">' + (d.cancel_rate_30d != null ? d.cancel_rate_30d + '%' : '—') + '</div>';
         html += '<div class="cancel-strip" aria-hidden="true"><div class="cancel-strip-fill" style="width:' + (d.cancel_rate_30d != null ? Math.min(100, d.cancel_rate_30d) : 0) + '%"></div></div>';
-        html += '<div class="kpi-sub">От всех исходов записи</div></div>';
+        html += '<div class="kpi-sub">По дате слота; снятие постоянства/отвязка CRM не в доле отмен</div></div>';
         html += '<div class="kpi-card"><div class="kpi-label">Рейтинг</div><div class="kpi-value rating">' + renderStars(d.rating_avg) + '</div><div class="kpi-sub">' + (d.rating_count || 0) + ' отзывов</div></div>';
         html += '</div></div>';
 
