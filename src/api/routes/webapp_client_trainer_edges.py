@@ -3,12 +3,17 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, BackgroundTasks, Depends
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response
 from pydantic import BaseModel
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.deps import get_session
 from src.api.miniapp_auth import MiniAppPrincipal, client_catalog_telegram_key, get_client_miniapp_principal
+from src.api.routes.public import (
+    _trainer_public_catalog_exposed,
+    assemble_trainer_catalog_payload,
+)
 from src.api.routes.webapp_client_payloads import client_bookings_days_payload
 from src.application.client_trainer_primary_graph import (
     compute_primary_edge,
@@ -20,6 +25,7 @@ from src.application.booking_use_cases import client_latest_booking_primary_cand
 from src.application.client_session_use_cases import get_session as read_client_bot_session
 from src.application.client_trainer_edge_use_cases import (
     get_all_edges as get_all_trainer_edges,
+    get_edge as get_client_trainer_edge,
     save_trainer as uc_save_trainer,
     set_primary_trainer as uc_set_primary_trainer,
     subscribe_notify_slots as uc_subscribe_notify_slots,
@@ -28,12 +34,41 @@ from src.application.client_trainer_edge_use_cases import (
     unsave_trainer as uc_unsave_trainer,
     unsubscribe_notify_slots as uc_unsubscribe_notify_slots,
 )
+from src.application.trainer_use_cases import get_trainer
 from src.application.trainer_client_favorite_notify import notify_trainer_new_catalog_favorite
 from src.infrastructure.db.session import async_session_factory
 
 router = APIRouter(tags=["webapp"])
 
 logger = logging.getLogger(__name__)
+
+
+async def _client_may_open_trainer_deep_link(
+    session: AsyncSession,
+    catalog_telegram_id: int,
+    trainer_id: int,
+) -> bool:
+    """True when client has CRM edge or any non-voided booking with this trainer (hub primary without catalog visibility)."""
+    edge = await get_client_trainer_edge(catalog_telegram_id, trainer_id, session)
+    if edge is not None:
+        return True
+    r = await session.execute(
+        text(
+            """
+            SELECT 1
+            FROM bookings b
+            INNER JOIN slots s ON s.id = b.slot_id
+            JOIN clients c ON c.id = b.client_id
+            WHERE c.telegram_id = :tg
+              AND b.trainer_id = :tid
+              AND b.status IN ('pending', 'confirmed', 'completed', 'no_show')
+              AND COALESCE(TRIM(LOWER(COALESCE(s.status, ''))), '') <> 'cancelled'
+            LIMIT 1
+            """
+        ),
+        {"tg": catalog_telegram_id, "tid": trainer_id},
+    )
+    return r.fetchone() is not None
 
 
 async def _bg_notify_trainer_catalog_favorite(trainer_id: int, client_catalog_telegram_id: int) -> None:
@@ -62,6 +97,32 @@ class TrainerEdgePrimaryBody(BaseModel):
 
 class TrainerEdgeNotifyBody(BaseModel):
     trainer_id: int
+
+
+@router.get("/client/catalog-trainer/{trainer_id:int}")
+async def get_client_catalog_trainer_card(
+    trainer_id: int,
+    request: Request,
+    response: Response,
+    session: AsyncSession = Depends(get_session),
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+):
+    """
+    Same payload as GET /api/public/trainers/{id} but allows hidden/disabled catalog trainers when the
+    client already has a relationship (edge or booking). Fixes hub → catalog deep links that 404 on public API.
+    """
+    response.headers["Cache-Control"] = "no-store"
+    catalog_tid = client_catalog_telegram_key(principal)
+    trainer = await get_trainer(session, trainer_id)
+    if not trainer:
+        raise HTTPException(status_code=404, detail="Trainer not found")
+    if not _trainer_public_catalog_exposed(trainer):
+        allowed = await _client_may_open_trainer_deep_link(session, catalog_tid, trainer_id)
+        if not allowed:
+            raise HTTPException(status_code=404, detail="Trainer not found")
+    return await assemble_trainer_catalog_payload(
+        session=session, trainer_id=trainer_id, trainer=trainer, request=request
+    )
 
 
 @router.get("/client/trainer-edges")

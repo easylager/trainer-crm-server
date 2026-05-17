@@ -1086,12 +1086,35 @@
         }
         return fetch('/api/public' + path + q, { cache: 'no-store' }).then(function(r) { return r.json(); });
       }
-      function loadTrainerById(trainerId) {
-        return fetch('/api/public/trainers/' + encodeURIComponent(trainerId), { cache: 'no-store' })
+      /** When trainer is «мой / основной» but not public-catalog-visible, public API 404s — authenticated fallback. */
+      function loadTrainerByIdViaWebappFallback(trainerId) {
+        var initData = tg && tg.initData ? tg.initData : '';
+        if (!initData) return Promise.resolve(null);
+        return fetch('/api/webapp/client/catalog-trainer/' + encodeURIComponent(trainerId), {
+          headers: { 'X-Telegram-Init-Data': initData },
+          cache: 'no-store',
+        })
           .then(function(r) {
             if (r.status === 404) return null;
             if (!r.ok) throw new Error(r.statusText);
             return r.json();
+          })
+          .catch(function() {
+            return null;
+          });
+      }
+
+      function loadTrainerById(trainerId) {
+        return fetch('/api/public/trainers/' + encodeURIComponent(trainerId), { cache: 'no-store' })
+          .then(function(r) {
+            if (r.status === 404) {
+              return loadTrainerByIdViaWebappFallback(trainerId);
+            }
+            if (!r.ok) throw new Error(r.statusText);
+            return r.json();
+          })
+          .catch(function() {
+            return loadTrainerByIdViaWebappFallback(trainerId);
           });
       }
       function switchTab(tab) {
@@ -3657,30 +3680,34 @@
       Promise.all([loadTrainerEdges(), getClientSession()])
         .then(function(results) {
           var session = results[1];
+          var qp = new URLSearchParams(window.location.search || '');
           applySessionToState(session);
+          var rawDeepTid = qp.get('trainer_id');
+          var deepTidParsed = rawDeepTid != null && rawDeepTid !== '' ? parseInt(rawDeepTid, 10) : NaN;
+          var deepTrainerFromUrl = !isNaN(deepTidParsed) && deepTidParsed > 0 ? deepTidParsed : null;
           var primaryTid = resolveCatalogAutoTrainerIdFromEdges();
-          if (primaryTid != null) {
+          if (deepTrainerFromUrl != null) {
+            state.trainerId = deepTrainerFromUrl;
+          } else if (primaryTid != null) {
             state.trainerId = primaryTid;
           }
           updateBookingNameFieldsVisibility();
           updateRequestNameFieldsVisibility();
-          var qp = new URLSearchParams(window.location.search || '');
           /* From "Мои тренеры" / saved hub: open catalog list, not auto-jump to session primary trainer card */
           var forceCatalogBrowse = qp.get('tab') === 'catalog';
           var returnCtx = (function() {
-            var p = new URLSearchParams(window.location.search || '');
-            var tid = p.get('trainer_id');
+            var tid = qp.get('trainer_id');
             if (!tid) return null;
             var id = parseInt(tid, 10);
             if (!id) return null;
             return {
               trainer_id: id,
-              city_id: p.get('city_id'),
-              service_id: p.get('service_id'),
-              arena_id: p.get('arena_id'),
-              arena_ids: p.get('arena_ids'),
-              offset: p.get('offset'),
-              service_price_variant_id: p.get('service_price_variant_id'),
+              city_id: qp.get('city_id'),
+              service_id: qp.get('service_id'),
+              arena_id: qp.get('arena_id'),
+              arena_ids: qp.get('arena_ids'),
+              offset: qp.get('offset'),
+              service_price_variant_id: qp.get('service_price_variant_id'),
             };
           })();
           if (returnCtx) {
@@ -3719,6 +3746,7 @@
           if (returnCtx && returnCtx.trainer_id) {
             loadTrainerById(returnCtx.trainer_id).then(function(t) {
               if (t) {
+                state.trainerId = t.id != null ? Number(t.id) : returnCtx.trainer_id;
                 state.selectedTrainer = t;
                 state.trainerName = trainerName(t);
                 reconcileCatalogServiceWithTrainerAsync(t).then(function() {
@@ -3732,6 +3760,7 @@
                 state.openedFromMyTrainerTab = true;
                 loadTrainerById(state.trainerId).then(function(t2) {
                   if (t2) {
+                    state.trainerId = t2.id != null ? Number(t2.id) : state.trainerId;
                     state.selectedTrainer = t2;
                     state.trainerName = trainerName(t2);
                     reconcileCatalogServiceWithTrainerAsync(t2).then(function() {
@@ -3757,6 +3786,7 @@
                 state.openedFromMyTrainerTab = true;
                 loadTrainerById(state.trainerId).then(function(t2) {
                   if (t2) {
+                    state.trainerId = t2.id != null ? Number(t2.id) : state.trainerId;
                     state.selectedTrainer = t2;
                     state.trainerName = trainerName(t2);
                     reconcileCatalogServiceWithTrainerAsync(t2).then(function() {
@@ -3785,6 +3815,7 @@
             state.openedFromMyTrainerTab = true;
             loadTrainerById(state.trainerId).then(function(t) {
               if (t) {
+                state.trainerId = t.id != null ? Number(t.id) : state.trainerId;
                 state.selectedTrainer = t;
                 state.trainerName = trainerName(t);
                 reconcileCatalogServiceWithTrainerAsync(t).then(function() {

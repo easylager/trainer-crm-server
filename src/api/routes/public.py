@@ -343,6 +343,66 @@ async def list_catalog_training_groups(
     return {"items": out_items, "total": total, "_photo_source": photo_source}
 
 
+async def assemble_trainer_catalog_payload(
+    *,
+    session: AsyncSession,
+    trainer_id: int,
+    trainer: dict,
+    request: Request,
+) -> dict:
+    """
+    Build JSON body for catalog trainer card (public mini-app). Caller validates visibility / auth.
+
+    Mutates a sanitized copy suitable for API responses (photos enriched, pricing/booking flags).
+    """
+    # Side-channel SELECT for telegram_username — it is intentionally excluded from get_by_id's
+    # public payload (we never echo the raw handle to clients), but we still need it to decide
+    # whether a Lead Mode CTA can be offered at all.
+    r = await session.execute(
+        text("SELECT telegram_username FROM trainers WHERE id = :tid"),
+        {"tid": trainer_id},
+    )
+    tg_row = r.fetchone()
+    telegram_username = tg_row[0] if tg_row else None
+
+    trainer = sanitize_trainer_for_public_catalog(trainer)
+    _enrich_trainer_photo_urls(trainer)
+    trainer["_photo_source"] = (trainer.get("photos") or [{}])[0].get("_source", "proxy") if trainer.get("photos") else "proxy"
+
+    availability = await get_trainer_booking_availability(session, trainer_id)
+    trainer["can_book"] = availability["can_book"]
+    trainer["booking_reason"] = availability["reason"]  # null if can_book, else 'crm_only'/'no_subscription'
+
+    snap = await resolve_lifecycle_snapshot(session, trainer_id)
+    trainer["lifecycle_stage"] = snap.stage.value
+    trainer["is_lead_mode"] = snap.is_lead_mode
+    trainer["contact_telegram_url"] = (
+        _build_contact_telegram_url(trainer_id, telegram_username)
+        if snap.stage == LifecycleStage.LEAD_MODE
+        else None
+    )
+
+    edu = await list_trainer_education(session, trainer_id, public_only=True)
+    trainer["education_entries"] = edu if edu is not None else []
+
+    try:
+        await record_profile_view_commit(
+            session,
+            trainer_id=trainer_id,
+            source=_resolve_source_from_referer(request),
+            client_ip=client_ip_from_request(request),
+            user_agent=(request.headers.get("user-agent") or "")[:_UA_MAX_LEN],
+        )
+    except Exception as exc:  # pragma: no cover — defensive
+        logger.warning(
+            "demand_signals.record_profile_view_commit failed for trainer_id=%s: %s",
+            trainer_id,
+            exc,
+        )
+
+    return trainer
+
+
 @router.get("/trainers/{trainer_id:int}")
 async def get_one_active_trainer(
     trainer_id: int,
@@ -368,55 +428,9 @@ async def get_one_active_trainer(
     if not trainer or not _trainer_public_catalog_exposed(trainer):
         raise HTTPException(status_code=404, detail="Trainer not found")
 
-    # Side-channel SELECT for telegram_username — it is intentionally excluded from get_by_id's
-    # public payload (we never echo the raw handle to clients), but we still need it to decide
-    # whether a Lead Mode CTA can be offered at all.
-    r = await session.execute(
-        text("SELECT telegram_username FROM trainers WHERE id = :tid"),
-        {"tid": trainer_id},
+    return await assemble_trainer_catalog_payload(
+        session=session, trainer_id=trainer_id, trainer=trainer, request=request
     )
-    tg_row = r.fetchone()
-    telegram_username = tg_row[0] if tg_row else None
-
-    trainer = sanitize_trainer_for_public_catalog(trainer)
-    _enrich_trainer_photo_urls(trainer)
-    trainer["_photo_source"] = (trainer.get("photos") or [{}])[0].get("_source", "proxy") if trainer.get("photos") else "proxy"
-
-    availability = await get_trainer_booking_availability(session, trainer_id)
-    trainer["can_book"] = availability["can_book"]
-    trainer["booking_reason"] = availability["reason"]  # null if can_book, else 'crm_only'/'no_subscription'
-
-    # Lifecycle: derive Lead Mode badge + Telegram CTA. Only Lead Mode trainers get the redirect
-    # URL — ACTIVE trainers without `online` module keep the existing "leave a request" flow.
-    snap = await resolve_lifecycle_snapshot(session, trainer_id)
-    trainer["lifecycle_stage"] = snap.stage.value
-    trainer["is_lead_mode"] = snap.is_lead_mode
-    trainer["contact_telegram_url"] = (
-        _build_contact_telegram_url(trainer_id, telegram_username)
-        if snap.stage == LifecycleStage.LEAD_MODE
-        else None
-    )
-
-    edu = await list_trainer_education(session, trainer_id, public_only=True)
-    trainer["education_entries"] = edu if edu is not None else []
-
-    # Anonymous demand signal: best-effort. Must commit — get_session closes without auto-commit.
-    try:
-        await record_profile_view_commit(
-            session,
-            trainer_id=trainer_id,
-            source=_resolve_source_from_referer(request),
-            client_ip=client_ip_from_request(request),
-            user_agent=(request.headers.get("user-agent") or "")[:_UA_MAX_LEN],
-        )
-    except Exception as exc:  # pragma: no cover — defensive
-        logger.warning(
-            "demand_signals.record_profile_view_commit failed for trainer_id=%s: %s",
-            trainer_id,
-            exc,
-        )
-
-    return trainer
 
 
 @router.get("/trainers/{trainer_id:int}/training-groups")
