@@ -6,6 +6,7 @@ import asyncio
 import html as html_lib
 import logging
 import math
+import time as std_time
 from datetime import date, datetime, time, timedelta, timezone
 
 from aiogram import Bot
@@ -93,6 +94,7 @@ from src.infrastructure.db.models import (
 from src.bot import messages as msg
 from src.bot.handlers.trainer_handlers import (
     BOOKING_ADD_NOTE_PREFIX,
+    BOOKING_NOTIFY_RELAY_WRITE_PREFIX,
     REQUEST_DECLINE_PREFIX,
     REQUEST_RESPOND_PREFIX,
 )
@@ -100,8 +102,9 @@ from src.bot.schedule_notifications import REQUESTS_CALLBACK
 from src.bot.trainer_cancel_client_notify import send_cancel_notification_payload
 from src.infrastructure.db import async_session_factory
 from src.shared.config import (
-    TRAINER_SESSION_WRAPUP_LEAD_SECONDS,
     TRAINER_SESSION_WRAPUP_POLL_INTERVAL_SEC,
+    TRAINER_SESSION_WRAPUP_REMAINING_SEC_MAX,
+    TRAINER_SESSION_WRAPUP_REMAINING_SEC_MIN,
     Settings,
 )
 from src.shared.map_links import build_yandex_by_map_url
@@ -109,6 +112,350 @@ from src.application.trainer_notification_prefs import is_trainer_push_allowed_n
 from src.shared.notification_hours import is_within_notification_hours
 
 logger = logging.getLogger(__name__)
+
+# Avoid log floods when Telegram repeatedly rejects delivery for the same booking (e.g. bot blocked).
+_HARD_FAIL_LOG_INTERVAL_SEC = 300.0
+_BOOKING_NOTIFY_HARD_FAIL_LAST_LOG_MONO: dict[str, float] = {}
+
+
+def _telegram_error_blob(exc: BaseException) -> str:
+    """Lowercase concat of str(exc) and aiogram DetailedAiogramError.message when present."""
+    parts = [str(exc)]
+    inner = getattr(exc, "message", None)
+    if isinstance(inner, str):
+        parts.append(inner)
+    return " ".join(parts).lower()
+
+
+def _is_telegram_inline_keyboard_bad_request(exc: BaseException) -> bool:
+    """Telegram rejected reply_markup (e.g. tg://user?id=self → BUTTON_USER_INVALID)."""
+    blob = _telegram_error_blob(exc)
+    return any(
+        token in blob
+        for token in (
+            "button_user_invalid",
+            "button_url_invalid",
+            "reply_markup_invalid",
+            "inline_keyboard_invalid",
+        )
+    )
+
+
+def _telegram_markup_rejection_tag(exc: BaseException) -> str:
+    """Short stable token for logs/metrics (see Telegram Bad Request descriptions)."""
+    blob = _telegram_error_blob(exc)
+    for tag in (
+        "button_user_invalid",
+        "button_url_invalid",
+        "reply_markup_invalid",
+        "inline_keyboard_invalid",
+    ):
+        if tag in blob:
+            return tag
+    return "markup_unknown"
+
+
+def _emit_hard_fail_throttled(kind: str, booking_id: int) -> bool:
+    """True if we should log a hard failure now (same booking/key kind at most once per interval)."""
+    key = f"{kind}:{int(booking_id)}"
+    now = std_time.monotonic()
+    prev = _BOOKING_NOTIFY_HARD_FAIL_LAST_LOG_MONO.get(key)
+    if prev is None or now - prev >= _HARD_FAIL_LOG_INTERVAL_SEC:
+        _BOOKING_NOTIFY_HARD_FAIL_LAST_LOG_MONO[key] = now
+        return True
+    return False
+
+
+def _clear_hard_fail_throttle(kind: str, booking_id: int) -> None:
+    _BOOKING_NOTIFY_HARD_FAIL_LAST_LOG_MONO.pop(f"{kind}:{int(booking_id)}", None)
+
+
+async def _deliver_trainer_booking_pending_notification(
+    trainer_bot: Bot,
+    *,
+    chat_id: int,
+    text: str,
+    markup_full: InlineKeyboardMarkup,
+    markup_confirm_decline_only: InlineKeyboardMarkup,
+    booking_id: int,
+    trainer_db_id: int,
+    client_tid: object,
+) -> bool:
+    """Send pending-booking Telegram push; shrink keyboard on Telegram markup errors."""
+    parse_mode = "HTML"
+
+    async def _send(markup: InlineKeyboardMarkup | None) -> None:
+        await trainer_bot.send_message(
+            chat_id=chat_id,
+            text=text,
+            reply_markup=markup,
+            parse_mode=parse_mode,
+        )
+
+    rej_full = ""
+    try:
+        await _send(markup_full)
+        logger.info(
+            "booking_pending_notify_sent booking_id=%s trainer_db_id=%s trainer_chat_id=%s client_tid=%s "
+            "keyboard=full telegram_reason=-",
+            booking_id,
+            trainer_db_id,
+            chat_id,
+            client_tid,
+        )
+        _clear_hard_fail_throttle("pending", booking_id)
+        return True
+    except Exception as first_exc:
+        if not _is_telegram_inline_keyboard_bad_request(first_exc):
+            if _emit_hard_fail_throttled("pending_other", booking_id):
+                logger.warning(
+                    "booking_pending_notify_failed booking_id=%s trainer_db_id=%s trainer_chat_id=%s "
+                    "client_tid=%s err=%s",
+                    booking_id,
+                    trainer_db_id,
+                    chat_id,
+                    client_tid,
+                    first_exc,
+                )
+            return False
+        rej_full = _telegram_markup_rejection_tag(first_exc)
+        logger.debug(
+            "booking_pending_notify_markup_attempt_failed booking_id=%s stage=full telegram_tag=%s detail=%s",
+            booking_id,
+            rej_full,
+            first_exc,
+        )
+
+    rej_cd = rej_full
+    try:
+        await _send(markup_confirm_decline_only)
+        logger.info(
+            "booking_pending_notify_sent booking_id=%s trainer_db_id=%s trainer_chat_id=%s client_tid=%s "
+            "keyboard=confirm_decline_only telegram_reason=%s",
+            booking_id,
+            trainer_db_id,
+            chat_id,
+            client_tid,
+            rej_full,
+        )
+        _clear_hard_fail_throttle("pending", booking_id)
+        return True
+    except Exception as second_exc:
+        if not _is_telegram_inline_keyboard_bad_request(second_exc):
+            if _emit_hard_fail_throttled("pending_fallback", booking_id):
+                logger.warning(
+                    "booking_pending_notify_fallback_failed booking_id=%s trainer_chat_id=%s "
+                    "stage=confirm_decline err=%s",
+                    booking_id,
+                    chat_id,
+                    second_exc,
+                )
+            return False
+        rej_cd = _telegram_markup_rejection_tag(second_exc)
+        logger.debug(
+            "booking_pending_notify_markup_attempt_failed booking_id=%s stage=confirm_decline telegram_tag=%s detail=%s",
+            booking_id,
+            rej_cd,
+            second_exc,
+        )
+
+    try:
+        await _send(None)
+        logger.info(
+            "booking_pending_notify_sent booking_id=%s trainer_db_id=%s trainer_chat_id=%s client_tid=%s "
+            "keyboard=none telegram_reason=%s note=text_only_fallback",
+            booking_id,
+            trainer_db_id,
+            chat_id,
+            client_tid,
+            rej_cd,
+        )
+        _clear_hard_fail_throttle("pending", booking_id)
+        return True
+    except Exception as third_exc:
+        if _emit_hard_fail_throttled("pending", booking_id):
+            logger.error(
+                "booking_pending_notify_failed_totally booking_id=%s trainer_db_id=%s trainer_chat_id=%s "
+                "client_tid=%s err=%s",
+                booking_id,
+                trainer_db_id,
+                chat_id,
+                client_tid,
+                third_exc,
+                exc_info=True,
+            )
+        return False
+
+
+async def _deliver_trainer_confirm_reminder_notification(
+    trainer_bot: Bot,
+    *,
+    chat_id: int,
+    text: str,
+    markup_full: InlineKeyboardMarkup,
+    markup_confirm_only: InlineKeyboardMarkup,
+    booking_id: int,
+    trainer_db_id: int,
+    client_tid: object,
+) -> bool:
+    """Confirm-reminder push with same Telegram markup fallback chain."""
+    parse_mode = "HTML"
+
+    async def _send(markup: InlineKeyboardMarkup | None) -> None:
+        await trainer_bot.send_message(
+            chat_id=chat_id,
+            text=text,
+            reply_markup=markup,
+            parse_mode=parse_mode,
+        )
+
+    rej_full = ""
+    try:
+        await _send(markup_full)
+        logger.info(
+            "booking_confirm_reminder_sent booking_id=%s trainer_db_id=%s trainer_chat_id=%s client_tid=%s "
+            "keyboard=full telegram_reason=-",
+            booking_id,
+            trainer_db_id,
+            chat_id,
+            client_tid,
+        )
+        _clear_hard_fail_throttle("reminder", booking_id)
+        return True
+    except Exception as first_exc:
+        if not _is_telegram_inline_keyboard_bad_request(first_exc):
+            if _emit_hard_fail_throttled("reminder_other", booking_id):
+                logger.warning(
+                    "booking_confirm_reminder_failed booking_id=%s trainer_db_id=%s trainer_chat_id=%s "
+                    "client_tid=%s err=%s",
+                    booking_id,
+                    trainer_db_id,
+                    chat_id,
+                    client_tid,
+                    first_exc,
+                )
+            return False
+        rej_full = _telegram_markup_rejection_tag(first_exc)
+        logger.debug(
+            "booking_confirm_reminder_markup_attempt_failed booking_id=%s stage=full telegram_tag=%s detail=%s",
+            booking_id,
+            rej_full,
+            first_exc,
+        )
+
+    rej_cd = rej_full
+    try:
+        await _send(markup_confirm_only)
+        logger.info(
+            "booking_confirm_reminder_sent booking_id=%s trainer_db_id=%s trainer_chat_id=%s client_tid=%s "
+            "keyboard=confirm_only telegram_reason=%s",
+            booking_id,
+            trainer_db_id,
+            chat_id,
+            client_tid,
+            rej_full,
+        )
+        _clear_hard_fail_throttle("reminder", booking_id)
+        return True
+    except Exception as second_exc:
+        if not _is_telegram_inline_keyboard_bad_request(second_exc):
+            if _emit_hard_fail_throttled("reminder_fallback", booking_id):
+                logger.warning(
+                    "booking_confirm_reminder_fallback_failed booking_id=%s trainer_chat_id=%s "
+                    "stage=confirm_only err=%s",
+                    booking_id,
+                    chat_id,
+                    second_exc,
+                )
+            return False
+        rej_cd = _telegram_markup_rejection_tag(second_exc)
+        logger.debug(
+            "booking_confirm_reminder_markup_attempt_failed booking_id=%s stage=confirm_only telegram_tag=%s detail=%s",
+            booking_id,
+            rej_cd,
+            second_exc,
+        )
+
+    try:
+        await _send(None)
+        logger.info(
+            "booking_confirm_reminder_sent booking_id=%s trainer_db_id=%s trainer_chat_id=%s client_tid=%s "
+            "keyboard=none telegram_reason=%s note=text_only_fallback",
+            booking_id,
+            trainer_db_id,
+            chat_id,
+            client_tid,
+            rej_cd,
+        )
+        _clear_hard_fail_throttle("reminder", booking_id)
+        return True
+    except Exception as third_exc:
+        if _emit_hard_fail_throttled("reminder", booking_id):
+            logger.error(
+                "booking_confirm_reminder_failed_totally booking_id=%s trainer_db_id=%s trainer_chat_id=%s "
+                "client_tid=%s err=%s",
+                booking_id,
+                trainer_db_id,
+                chat_id,
+                client_tid,
+                third_exc,
+                exc_info=True,
+            )
+        return False
+
+
+def _client_telegram_ok_for_write_button(client_tid: object, trainer_tid: int) -> bool:
+    """tg://user?id= URL buttons fail with BUTTON_USER_INVALID when target equals recipient or ID is unusable."""
+    try:
+        cid = int(client_tid)
+    except (TypeError, ValueError):
+        return False
+    return cid > 0 and cid != int(trainer_tid)
+
+
+def _same_person_client_as_trainer(client_tid: object, trainer_tid: int) -> bool:
+    """QA: client row linked to the same telegram user_id as the trainer (tg:// DM-to-self invalid)."""
+    try:
+        cid = int(client_tid)
+        tid = int(trainer_tid)
+    except (TypeError, ValueError):
+        return False
+    return cid > 0 and cid == tid
+
+
+def _booking_pending_notify_keyboard(booking_id: int, *, client_tid: object, trainer_tid: int) -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = [
+        [
+            InlineKeyboardButton(
+                text=msg.TRAINER_BOOKINGS_BUTTON_CONFIRM,
+                callback_data=f"confirm_booking:{booking_id}",
+            ),
+            InlineKeyboardButton(
+                text=msg.TRAINER_BOOKINGS_BUTTON_DECLINE,
+                callback_data=f"decline_booking:{booking_id}",
+            ),
+        ],
+    ]
+    relay_self = bool(Settings().trainer_booking_self_client_relay_button)
+    if _client_telegram_ok_for_write_button(client_tid, trainer_tid):
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=msg.TRAINER_BOOKINGS_BUTTON_WRITE,
+                    url=f"tg://user?id={int(client_tid)}",
+                ),
+            ],
+        )
+    elif relay_self and _same_person_client_as_trainer(client_tid, trainer_tid):
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=msg.TRAINER_BOOKINGS_BUTTON_WRITE,
+                    callback_data=f"{BOOKING_NOTIFY_RELAY_WRITE_PREFIX}{booking_id}",
+                ),
+            ],
+        )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def _booking_complete_poll_interval_sec() -> int:
@@ -729,18 +1076,24 @@ async def _build_trainer_post_session_keyboard(
 
 async def process_trainer_session_wrapup_round(trainer_bot: Bot) -> None:
     """
-    One pass: notify trainers in the last N seconds before slot end (Europe/Minsk). N comes from code constants, not .env.
-    Fast poll (`TRAINER_SESSION_WRAPUP_POLL_INTERVAL_SEC`) makes delivery early in that window when possible; if checks or
-    quiet hours delay, we still send until the slot ends («лучше поздно, чем никогда» within the window).
+    One pass: «Занятие подходит к концу» when remaining slot time is in the fixed band (Europe/Minsk).
+
+    Band is ``TRAINER_SESSION_WRAPUP_REMAINING_SEC_MIN``–``TRAINER_SESSION_WRAPUP_REMAINING_SEC_MAX`` seconds
+    before slot end (default 60–300 s = 1–5 minutes); independent of slot duration.
+
+    Does **not** defer on per-trainer quiet windows — those skips caused wrap-up to be missed while «завершено» still fired.
     """
     settings = Settings()
-    lead_sec = int(TRAINER_SESSION_WRAPUP_LEAD_SECONDS)
-    if lead_sec <= 0:
+    rmin = int(TRAINER_SESSION_WRAPUP_REMAINING_SEC_MIN)
+    rmax = int(TRAINER_SESSION_WRAPUP_REMAINING_SEC_MAX)
+    if rmin <= 0 or rmax <= 0 or rmin >= rmax:
         return
-    lead_sec = max(15, min(lead_sec, 600))
     async with async_session_factory() as session:
         pending = await list_bookings_for_trainer_session_wrapup(
-            session, lead_seconds=lead_sec, limit=25
+            session,
+            remaining_seconds_min=rmin,
+            remaining_seconds_max=rmax,
+            limit=25,
         )
     base = (settings.webapp_base_url or "").rstrip("/")
     webapp_https = base.startswith("https://")
@@ -750,8 +1103,8 @@ async def process_trainer_session_wrapup_round(trainer_bot: Bot) -> None:
             if not trainer_tid:
                 await mark_trainer_session_wrapup_sent(session, p["booking_id"])
                 continue
-            if not await is_trainer_push_allowed_now(session, int(p["trainer_id"])):
-                continue
+            # Do not defer on per-trainer push windows — those deferrals caused wrap-up to miss entirely
+            # (trainer then only saw «Занятие завершено»). Completed-push dedupe still avoids duplicate CTAs.
             slot_date = p.get("slot_date")
             start_time = p.get("start_time")
             date_str = (
@@ -1033,7 +1386,7 @@ async def run_group_attendance_prompt_loop(client_bot: Bot) -> None:
 
 
 async def run_trainer_session_wrapup_loop(trainer_bot: Bot) -> None:
-    """Fast tick for pre-end trainer CTA; decoupled from `run_booking_complete_loop` so lead_seconds works in practice."""
+    """Fast tick for pre-end trainer CTA; decoupled from `run_booking_complete_loop` for reliable narrow-window pickup."""
     logger.info("[trainer_session_wrapup_loop] started")
     while True:
         try:
@@ -1256,8 +1609,8 @@ async def run_booking_notifier_loop(trainer_bot: Bot) -> None:
             async with async_session_factory() as session:
                 pending = await get_bookings_pending_notification(session)
                 if pending:
-                    logger.info(
-                        "Booking notifier: %s pending booking(s) to send to trainer(s)",
+                    logger.debug(
+                        "Booking notifier: %s pending booking(s) queued for trainer(s)",
                         len(pending),
                     )
                 for b in pending:
@@ -1314,7 +1667,8 @@ async def run_booking_notifier_loop(trainer_bot: Bot) -> None:
                         )
                     if b.get("is_first_client_online_booking"):
                         text = msg.TRAINER_FIRST_ONLINE_BOOKING_NOTIFICATION_PREFIX + text
-                    kb = InlineKeyboardMarkup(
+                    kb = _booking_pending_notify_keyboard(int(b["id"]), client_tid=b.get("client_telegram_id"), trainer_tid=int(trainer_tid))
+                    kb_confirm_decline_only = InlineKeyboardMarkup(
                         inline_keyboard=[
                             [
                                 InlineKeyboardButton(
@@ -1326,29 +1680,20 @@ async def run_booking_notifier_loop(trainer_bot: Bot) -> None:
                                     callback_data=f"decline_booking:{b['id']}",
                                 ),
                             ],
-                            [
-                                InlineKeyboardButton(
-                                    text=msg.TRAINER_BOOKINGS_BUTTON_WRITE,
-                                    url=f"tg://user?id={b['client_telegram_id']}",
-                                )
-                            ],
                         ]
                     )
-                    try:
-                        await trainer_bot.send_message(
-                            chat_id=trainer_tid,
-                            text=text,
-                            reply_markup=kb,
-                            parse_mode="HTML",
-                        )
+                    delivered = await _deliver_trainer_booking_pending_notification(
+                        trainer_bot,
+                        chat_id=int(trainer_tid),
+                        text=text,
+                        markup_full=kb,
+                        markup_confirm_decline_only=kb_confirm_decline_only,
+                        booking_id=int(b["id"]),
+                        trainer_db_id=int(b["trainer_id"]),
+                        client_tid=b.get("client_telegram_id"),
+                    )
+                    if delivered:
                         await mark_booking_notified(session, b["id"])
-                    except Exception as e:
-                        logger.warning(
-                            "Booking notifier send to trainer %s (booking_id=%s): %s",
-                            trainer_tid,
-                            b.get("id"),
-                            e,
-                        )
 
                 remind_candidates = await list_bookings_pending_confirm_reminder(session)
                 for r in remind_candidates:
@@ -1395,7 +1740,8 @@ async def run_booking_notifier_loop(trainer_bot: Bot) -> None:
                     ]
                     rows2: list[list[InlineKeyboardButton]] = [row_confirm]
                     ctid_rem = r.get("client_telegram_id")
-                    if ctid_rem:
+                    relay_self_rem = bool(Settings().trainer_booking_self_client_relay_button)
+                    if ctid_rem and _client_telegram_ok_for_write_button(ctid_rem, int(trainer_tid)):
                         rows2.append(
                             [
                                 InlineKeyboardButton(
@@ -1404,19 +1750,29 @@ async def run_booking_notifier_loop(trainer_bot: Bot) -> None:
                                 ),
                             ],
                         )
+                    elif ctid_rem and relay_self_rem and _same_person_client_as_trainer(ctid_rem, int(trainer_tid)):
+                        rows2.append(
+                            [
+                                InlineKeyboardButton(
+                                    text=msg.TRAINER_BOOKING_CONFIRMED_BTN_WRITE,
+                                    callback_data=f"{BOOKING_NOTIFY_RELAY_WRITE_PREFIX}{r['booking_id']}",
+                                ),
+                            ],
+                        )
                     kb2 = InlineKeyboardMarkup(inline_keyboard=rows2)
-                    try:
-                        await trainer_bot.send_message(
-                            chat_id=trainer_tid, text=text2, reply_markup=kb2
-                        )
+                    kb2_confirm_only = InlineKeyboardMarkup(inline_keyboard=[row_confirm])
+                    reminder_ok = await _deliver_trainer_confirm_reminder_notification(
+                        trainer_bot,
+                        chat_id=int(trainer_tid),
+                        text=text2,
+                        markup_full=kb2,
+                        markup_confirm_only=kb2_confirm_only,
+                        booking_id=int(r["booking_id"]),
+                        trainer_db_id=int(r["trainer_id"]),
+                        client_tid=r.get("client_telegram_id"),
+                    )
+                    if reminder_ok:
                         await mark_confirm_reminder_sent(session, r["booking_id"])
-                    except Exception as e:
-                        logger.warning(
-                            "Confirm reminder send to trainer %s (booking_id=%s): %s",
-                            trainer_tid,
-                            r.get("booking_id"),
-                            e,
-                        )
         except asyncio.CancelledError:
             break
         except Exception as e:

@@ -44,8 +44,18 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def _configure_logging_from_settings(settings: Settings) -> None:
+    """Honor LOG_LEVEL from Settings on root handlers (basicConfig runs before Settings load)."""
+    level = getattr(logging, (settings.log_level or "INFO").strip().upper(), logging.INFO)
+    root = logging.getLogger()
+    root.setLevel(level)
+    for handler in root.handlers:
+        handler.setLevel(level)
+
+
 async def main() -> None:
     settings = Settings()
+    _configure_logging_from_settings(settings)
     set_notification_quiet_hours_bypass(settings.notification_disable_quiet_hours)
     if settings.notification_disable_quiet_hours:
         logger.warning(
@@ -53,6 +63,10 @@ async def main() -> None:
             "Unset NOTIFICATION_DISABLE_QUIET_HOURS and restart for normal behavior."
         )
     init_sentry(settings, "notification-service")
+    logger.info(
+        "Trainer booking Telegram delivery logs use prefixes booking_pending_notify_* / booking_confirm_reminder_* "
+        "(telegram markup retries at DEBUG)."
+    )
     client_bot = Bot(
         token=settings.telegram_bot_token_client,
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),

@@ -26,6 +26,10 @@ CLIENT_FALLBACK = "Нажмите кнопку <b>Главная</b> слева 
 # Bot-mediated relay when trainer ↔ client can't use native Telegram DM
 CLIENT_RELAY_REPLY_PROMPT = "Напишите здесь — тренер увидит сообщение сразу."
 TRAINER_RELAY_REPLY_PROMPT = "Напиши здесь — отправим клиенту."
+TRAINER_BOOKING_RELAY_SELF_DISABLED = "Эта кнопка выключена в настройках сервера."
+TRAINER_BOOKING_RELAY_SELF_NOT_SELF_CLIENT = (
+    "Кнопка только для записи, где клиент привязан к вашему же Telegram (локальный тест)."
+)
 RELAY_SESSION_IDLE_CLOSED_HINT = "<b>Переписка через бота закрыта</b> — долго не было сообщений."
 
 
@@ -1649,7 +1653,7 @@ def format_trainer_booking_session_wrapup_html(
     arena_display: str | None,
     include_quick_rebook_line: bool = False,
 ) -> str:
-    """Telegram HTML for trainer push shortly before slot end (repeat booking CTA). Timing is driven by wrap-up poll + lead_seconds."""
+    """Telegram HTML for trainer push before slot end (repeat booking CTA). Timing: notification_service adaptive pre-end window + fast poll."""
     cn = html.escape((client_name or "").strip() or "Клиент")
     ds = html.escape(date)
     dy = html.escape(day)

@@ -807,8 +807,13 @@
       let lastSlotsQueryServiceId = null;
       let bookTrainerDetailCache = null;
       let selectedPriceVariantId = null;
-      /** From GET /client/session?for_trainer_id — last variant for booking_context service (if any). */
+      /** From GET /client/session?for_trainer_id — tier for booking_context service when it matches chosen service. */
       let sessionPriceVariantHint = null;
+      /** booking_context_service_id from API (slot/filter may override sessionServiceId — keep for tier matching). */
+      let bookingContextServiceIdFromApi = null;
+      /** Last booking by created_at for this trainer+client — repeat-book tier when service matches form. */
+      let lastCreatedBookingServiceId = null;
+      let lastCreatedBookingVariantId = null;
       /** POST /client/booking: safe retry if the response body was lost after commit. */
       let bookSubmitIdempotencyKey = null;
       /** Effective service for booking form (used for tiers + «Подробнее»). */
@@ -1032,6 +1037,29 @@
         }
       }
 
+      function priceVariantHintForBookForm(effServiceId) {
+        if (effServiceId == null) return null;
+        const e = Number(effServiceId);
+        if (!Number.isFinite(e) || e <= 0) return null;
+        if (
+          lastCreatedBookingServiceId != null &&
+          Number(lastCreatedBookingServiceId) === e &&
+          lastCreatedBookingVariantId != null &&
+          Number(lastCreatedBookingVariantId) > 0
+        ) {
+          return Number(lastCreatedBookingVariantId);
+        }
+        if (
+          bookingContextServiceIdFromApi != null &&
+          Number(bookingContextServiceIdFromApi) === e &&
+          sessionPriceVariantHint != null &&
+          Number(sessionPriceVariantHint) > 0
+        ) {
+          return Number(sessionPriceVariantHint);
+        }
+        return null;
+      }
+
       function renderPriceTierUi(effServiceId) {
         const block = document.getElementById('priceTierBlock');
         const host = document.getElementById('priceTierRadios');
@@ -1052,7 +1080,7 @@
         }
         block.style.display = 'block';
         host.innerHTML = '';
-        var hinted = sessionPriceVariantHint;
+        var hinted = priceVariantHintForBookForm(effServiceId);
         var hintOk =
           hinted != null &&
           tiers.some(function(tier) {
@@ -1135,8 +1163,35 @@
             needsProfileName = !!data.needs_profile_name;
             clientFirstName = data.client_first_name != null ? String(data.client_first_name).trim() : '';
             clientLastName = data.client_last_name != null ? String(data.client_last_name).trim() : '';
+            bookingContextServiceIdFromApi = null;
+            lastCreatedBookingServiceId = null;
+            lastCreatedBookingVariantId = null;
             sessionPriceVariantHint = null;
             if (trainerId) {
+              const bcApi = data.booking_context_service_id;
+              bookingContextServiceIdFromApi =
+                bcApi != null && String(bcApi) !== ''
+                  ? (function() {
+                      const n = Number(bcApi);
+                      return Number.isFinite(n) && n > 0 ? n : null;
+                    })()
+                  : null;
+              const lcs = data.last_created_booking_service_id;
+              lastCreatedBookingServiceId =
+                lcs != null && String(lcs) !== ''
+                  ? (function() {
+                      const n = Number(lcs);
+                      return Number.isFinite(n) && n > 0 ? n : null;
+                    })()
+                  : null;
+              const lcv = data.last_created_booking_service_price_variant_id;
+              lastCreatedBookingVariantId =
+                lcv != null && String(lcv) !== ''
+                  ? (function() {
+                      const n = Number(lcv);
+                      return Number.isFinite(n) && n > 0 ? n : null;
+                    })()
+                  : null;
               const bpv = data.booking_context_service_price_variant_id;
               sessionPriceVariantHint =
                 bpv != null && String(bpv) !== '' && Number.isFinite(Number(bpv)) && Number(bpv) > 0

@@ -212,6 +212,7 @@ REQUEST_BOOK_SLOT_PREFIX = "request_book_slot:"
 FEEDBACK_BOOKING_TRAINER_PREFIX = "feedback_booking_trainer:"
 TRAINER_REPEAT_WEEK_PREFIX = "trainer_repeat_week:"
 BOOKING_ADD_NOTE_PREFIX = "booking_add_note:"
+BOOKING_NOTIFY_RELAY_WRITE_PREFIX = "bkrly:"
 GUIDE_CALLBACK = "guide"
 TRAINER_SUPPORT_CALLBACK = "trainer:support"
 TRAINER_FAQ_CALLBACK = "trainer:faq"
@@ -2303,6 +2304,54 @@ async def on_booking_add_note_start(callback: CallbackQuery) -> None:
         ),
         parse_mode=ParseMode.HTML,
     )
+
+
+@router.callback_query(F.data.startswith(BOOKING_NOTIFY_RELAY_WRITE_PREFIX))
+async def on_booking_notify_relay_write(callback: CallbackQuery) -> None:
+    """Booking push «Написать»: relay when client telegram equals trainer (tg://user?id=self is invalid)."""
+    if not Settings().trainer_booking_self_client_relay_button:
+        await callback.answer(msg.TRAINER_BOOKING_RELAY_SELF_DISABLED, show_alert=True)
+        return
+    if not callback.message:
+        await callback.answer()
+        return
+    tg_id = callback.from_user.id if callback.from_user else 0
+    raw = (callback.data or "").replace(BOOKING_NOTIFY_RELAY_WRITE_PREFIX, "").strip()
+    booking_id = safe_parse_id(raw)
+    if not tg_id or booking_id is None:
+        await callback.answer(msg.TRAINER_ERROR_REQUEST_BOOK_PAYLOAD_SHORT, show_alert=True)
+        return
+    await callback.answer()
+    await sweep_idle_relay_sessions_and_notify()
+    async with async_session_factory() as session:
+        trainer_row_id = await get_trainer_id_by_telegram_id(session, tg_id)
+        if not trainer_row_id:
+            await callback.message.answer(msg.TRAINER_ONLY_VIA_SITE)
+            return
+        booking = await get_booking_with_slot(session, booking_id, trainer_row_id)
+        if not booking:
+            await callback.message.answer(msg.TRAINER_ERROR_BOOKING_NOT_FOUND)
+            return
+        ctg = booking.get("client_telegram_id")
+        try:
+            same_person = ctg is not None and int(ctg) == int(tg_id) and int(tg_id) > 0
+        except (TypeError, ValueError):
+            same_person = False
+        if not same_person:
+            await callback.message.answer(msg.TRAINER_BOOKING_RELAY_SELF_NOT_SELF_CLIENT)
+            return
+        cid = booking.get("client_id")
+        if cid is None:
+            await callback.message.answer(msg.TRAINER_ERROR_BOOKING_NOT_FOUND)
+            return
+        if not await trainer_has_access_to_client(session, int(trainer_row_id), int(cid)):
+            await callback.message.answer(msg.TRAINER_CERT_ORDER_RELAY_TRAINER_CANT_ACCESS_CLIENT)
+            return
+        sid = await open_relay_session(session, trainer_id=int(trainer_row_id), client_id=int(cid))
+        await session.commit()
+
+    set_trainer_relay_reply_pending(int(tg_id), int(sid))
+    await callback.message.answer(msg.TRAINER_RELAY_REPLY_PROMPT)
 
 
 @router.message(lambda m: m.from_user and m.from_user.id in _trainer_feedback_state)

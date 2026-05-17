@@ -19,9 +19,10 @@ def _env_bool_benchmark(v: Any) -> bool:
 BenchmarkLogFlag = Annotated[bool, BeforeValidator(_env_bool_benchmark)]
 NotificationQuietHoursBypassFlag = Annotated[bool, BeforeValidator(_env_bool_benchmark)]
 
-# Trainer «подходит к концу» (notification_service): product tuning, not .env — last N seconds before slot end + fast poll tick.
-TRAINER_SESSION_WRAPUP_LEAD_SECONDS = 120
-TRAINER_SESSION_WRAPUP_POLL_INTERVAL_SEC = 15
+# Trainer «подходит к концу»: уведомление только когда до конца слота осталось от 1 до 5 минут (не зависит от длительности слота).
+TRAINER_SESSION_WRAPUP_REMAINING_SEC_MIN = 60  # inclusive — не слать в последнюю минуту
+TRAINER_SESSION_WRAPUP_REMAINING_SEC_MAX = 300  # inclusive — не слать раньше чем за 5 минут до конца
+TRAINER_SESSION_WRAPUP_POLL_INTERVAL_SEC = 12
 
 
 class Settings(BaseSettings):
@@ -47,6 +48,9 @@ class Settings(BaseSettings):
     disable_client_telegram_username_enrich: Annotated[bool, BeforeValidator(_env_bool_benchmark)] = False
     # When True: trainer hub «Написать» always opens bot relay (never t.me), for QA when DM is blocked but @ exists.
     trainer_webapp_force_client_chat_relay: Annotated[bool, BeforeValidator(_env_bool_benchmark)] = False
+    # When True: booking/confirm-reminder pushes use relay callback «Написать» if client's telegram_id equals trainer's
+    # (tg://user?id=self triggers BUTTON_USER_INVALID — relay works for local QA same-account client+trainer).
+    trainer_booking_self_client_relay_button: Annotated[bool, BeforeValidator(_env_bool_benchmark)] = False
     # Optional: one-time token for trainer link from site (dev stub; later from DB)
     trainer_link_token: str | None = None
     # VK Mini Apps / MAX: "Защищённый ключ" for launch-params HMAC (omit until product enables MAX).

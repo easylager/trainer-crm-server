@@ -4343,14 +4343,23 @@ async def mark_client_booking_completion_push_sent(
 async def list_bookings_for_trainer_session_wrapup(
     session: AsyncSession,
     *,
-    lead_seconds: int,
+    remaining_seconds_min: int,
+    remaining_seconds_max: int,
     limit: int = 20,
 ) -> list[dict]:
     """
-    Confirmed/pending bookings whose slot end is in the future but within the last ``lead_seconds`` before it
-    (Europe/Minsk). Window: ``end > now >= end - lead_seconds``. Separate fast worker tick sends early in that band.
+    Confirmed/pending bookings in the fixed wall-clock band before slot end (Europe/Minsk).
+
+    Eligible when remaining time ``R = slot_end - now`` satisfies
+    ``remaining_seconds_min <= R <= remaining_seconds_max`` (defaults 60–300 s = 1–5 minutes).
+
+    This does **not** depend on slot duration. It does **not** guarantee delivery: if wrap-up is never
+    sent during this band (worker/Telegram/DB issues), the booking still auto-becomes ``completed``
+    after ``slot_end`` — trainer then only gets «Занятие завершено» for that booking.
     """
-    if lead_seconds <= 0:
+    rmin = int(remaining_seconds_min)
+    rmax = int(remaining_seconds_max)
+    if rmin <= 0 or rmax <= 0 or rmin >= rmax:
         return []
     r = await session.execute(
         text("""
@@ -4373,11 +4382,12 @@ async def list_bookings_for_trainer_session_wrapup(
               AND c.telegram_id IS NOT NULL
               AND NOT EXISTS (SELECT 1 FROM booking_problem_reports pr WHERE pr.booking_id = b.id)
               AND """ + _SQL_SLOT_END_TS + """ > CURRENT_TIMESTAMP
-              AND (""" + _SQL_SLOT_END_TS + """ - ((INTERVAL '1 second') * :lead_sec)) <= CURRENT_TIMESTAMP
+              AND CURRENT_TIMESTAMP >= """ + _SQL_SLOT_END_TS + """ - ((INTERVAL '1 second') * :rmax)
+              AND CURRENT_TIMESTAMP <= """ + _SQL_SLOT_END_TS + """ - ((INTERVAL '1 second') * :rmin)
             ORDER BY s.slot_date, s.start_time
             LIMIT :lim
         """),
-        {"lim": limit, "lead_sec": lead_seconds},
+        {"lim": limit, "rmin": rmin, "rmax": rmax},
     )
     rows = r.fetchall()
     out: list[dict] = []

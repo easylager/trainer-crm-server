@@ -1591,6 +1591,15 @@ async def get_client_session_state(
         book_ctx_vid = await get_trainer_client_last_booking_price_variant_for_service(
             session, int(for_trainer_id), client_row_id, int(book_ctx_sid)
         )
+    # Repeat-booking UX: last row by created_at (same as trainer booking-defaults), independent of catalog hint merge.
+    last_created_sid: int | None = None
+    last_created_vid: int | None = None
+    if tid_for_suggest_int is not None and client_row_id is not None:
+        lc_sid, lc_vid, _, _ = await get_trainer_client_last_booking_service_defaults(
+            session, tid_for_suggest_int, client_row_id
+        )
+        last_created_sid = lc_sid
+        last_created_vid = lc_vid
     payload = {
         "city_id": city_id,
         "city_name": city_name,
@@ -1607,6 +1616,8 @@ async def get_client_session_state(
         "booking_context_service_id": book_ctx_sid,
         "booking_context_service_name": book_ctx_nm,
         "booking_context_service_price_variant_id": book_ctx_vid,
+        "last_created_booking_service_id": last_created_sid,
+        "last_created_booking_service_price_variant_id": last_created_vid,
         "client_phone": client_phone,
         "needs_profile_name": needs_profile_name,
         "client_first_name": cfn or None,

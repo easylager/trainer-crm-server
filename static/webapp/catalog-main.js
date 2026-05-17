@@ -47,8 +47,12 @@
         selectedTrainer: null,
         /** When trainer has multiple price tiers for filtered service — required by POST /client/booking */
         catalogBookingPriceVariantId: null,
-        /** GET /client/session?for_trainer_id → booking_context_service_price_variant_id (last tier for that service). */
+        /** GET /client/session?for_trainer_id → tier hint for booking_context service when it matches effective service. */
         bookingContextServicePriceVariantId: null,
+        bookingContextServiceId: null,
+        /** Last booking by created_at (trainer+client): align tier when repeating same service (catalog filter / slot). */
+        lastCreatedBookingServiceId: null,
+        lastCreatedBookingPriceVariantId: null,
         /** Per slot selection — POST /client/booking Idempotency-Key (retry after dropped response). */
         catalogBookingIdempotencyKey: null,
         slotsForTrainer: [],
@@ -81,6 +85,21 @@
         suggestedServiceForTrainer: null,
         suggestedServiceForTrainerId: null
       };
+
+      /**
+       * BFCache (Telegram / mobile WebKit): leaving catalog for hub then opening
+       * catalog?trainer_id=… can restore stale in-memory catalog UI while the URL
+       * already encodes the hub trainer — scripts do not re-run, so deep-link bootstrap never fires.
+       */
+      window.addEventListener('pageshow', function(ev) {
+        if (!ev.persisted) return;
+        try {
+          var p = new URLSearchParams(window.location.search || '');
+          if (p.get('trainer_id') || p.get('action') === 'book') {
+            window.location.reload();
+          }
+        } catch (eBf) { /* noop */ }
+      });
 
       /**
        * Single source of truth for arena selection in the catalog list flow.
@@ -263,6 +282,26 @@
         return svc.price_tiers;
       }
 
+      /** Prefer last-created-booking tier, then booking_context tier, only when IDs match effective catalog service. */
+      function catalogPriceVariantHintForEffectiveService(effSid) {
+        if (effSid == null) return null;
+        var e = Number(effSid);
+        if (!isFinite(e) || e <= 0) return null;
+        var lcSid = state.lastCreatedBookingServiceId;
+        var lcVid = state.lastCreatedBookingPriceVariantId;
+        if (lcSid != null && Number(lcSid) === e && lcVid != null) {
+          var v0 = Number(lcVid);
+          if (isFinite(v0) && v0 > 0) return v0;
+        }
+        var bcSid = state.bookingContextServiceId;
+        var bcVid = state.bookingContextServicePriceVariantId;
+        if (bcSid != null && Number(bcSid) === e && bcVid != null) {
+          var v1 = Number(bcVid);
+          if (isFinite(v1) && v1 > 0) return v1;
+        }
+        return null;
+      }
+
       /** Услуга из фильтра + выбор тарифа при нескольких ценах (строгий режим API). Групповые слоты — без выбора тира. */
       function updateBookingFormServiceAndTiers() {
         var svcEl = document.getElementById('bookingFormServiceLine');
@@ -298,7 +337,7 @@
           return;
         }
         block.style.display = 'block';
-        var hintedVid = state.bookingContextServicePriceVariantId;
+        var hintedVid = catalogPriceVariantHintForEffectiveService(effSid);
         var hintOk =
           hintedVid != null &&
           tiers.some(function(tier) {
@@ -1561,6 +1600,21 @@
         state.bookingContextServicePriceVariantId =
           bpvRaw != null && bpvRaw !== '' && !isNaN(Number(bpvRaw)) && Number(bpvRaw) > 0
             ? Number(bpvRaw)
+            : null;
+        var bctxRaw = session.booking_context_service_id;
+        state.bookingContextServiceId =
+          bctxRaw != null && bctxRaw !== '' && !isNaN(Number(bctxRaw)) && Number(bctxRaw) > 0
+            ? Number(bctxRaw)
+            : null;
+        var lcSidRaw = session.last_created_booking_service_id;
+        state.lastCreatedBookingServiceId =
+          lcSidRaw != null && lcSidRaw !== '' && !isNaN(Number(lcSidRaw)) && Number(lcSidRaw) > 0
+            ? Number(lcSidRaw)
+            : null;
+        var lcVidRaw = session.last_created_booking_service_price_variant_id;
+        state.lastCreatedBookingPriceVariantId =
+          lcVidRaw != null && lcVidRaw !== '' && !isNaN(Number(lcVidRaw)) && Number(lcVidRaw) > 0
+            ? Number(lcVidRaw)
             : null;
       }
 

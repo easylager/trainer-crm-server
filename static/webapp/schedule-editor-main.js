@@ -3990,6 +3990,7 @@
 
       /**
        * opts.onComplete — fired after successful fetch + render (e.g. return to day-pick only when slots are fresh).
+       * opts.onLoadError — fired on fetch failure before error UI (e.g. still show day-pick after POST succeeded).
        */
       function loadSlots(opts) {
         opts = opts || {};
@@ -4086,6 +4087,11 @@
                 loadSlots(opts);
               }, 100);
               return;
+            }
+            if (typeof opts.onLoadError === 'function') {
+              try {
+                opts.onLoadError(err);
+              } catch (eLe) { /* ignore */ }
             }
             hideFlowBookBootOverlay();
             renderCalendarLoadFailure();
@@ -6306,8 +6312,15 @@
                 state.lockedStarts = new Set();
                 state.preciseSlots = [];
                 state.slotAddMode = 'grid';
-                showDayPickScreen();
-                loadSlots();
+                /* Counts use state.slots — refresh before redrawing day-pick (was: showDayPick then loadSlots → stale numbers). */
+                loadSlots({
+                  onComplete: function() {
+                    showDayPickScreen();
+                  },
+                  onLoadError: function() {
+                    showDayPickScreen();
+                  },
+                });
               });
             })
             .catch(function() { showToast('Ошибка сети'); });
