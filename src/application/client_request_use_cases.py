@@ -366,8 +366,14 @@ async def create_request_decline(
     trainer_id: int,
 ) -> bool:
     """
-    Trainer declines request. Hidden from their list; client is not notified.
-    Returns True if recorded; False if already responded/declined or request doesn't match.
+    Trainer hides ("declines") a request from their own inbox only.
+
+    - Open city+service requests: other trainers still see them.
+    - Personalized requests: only this trainer matched anyway.
+    - Allowed after «Готов взять» / respond — trainer may archive stale «in progress» rows client-side.
+    - Slot-reminder rows are cleared so dismissed requests do not trigger notify loops.
+
+    Client is not notified (same as legacy decline).
     """
     # Allow decline for: personalized (r.trainer_id = this trainer) or general (city+service match)
     check = await session.execute(
@@ -393,16 +399,22 @@ async def create_request_decline(
         {"rid": client_request_id, "tid": trainer_id},
     )
     if exists.fetchone():
-        return True  # already declined
-    exists_resp = await session.execute(
+        await session.execute(
+            text("""
+                DELETE FROM trainer_pending_request_booking
+                WHERE trainer_id = :tid AND client_request_id = :rid
+            """),
+            {"tid": trainer_id, "rid": client_request_id},
+        )
+        await session.commit()
+        return True  # idempotent hide
+    await session.execute(
         text("""
-            SELECT 1 FROM client_request_responses
-            WHERE client_request_id = :rid AND trainer_id = :tid
+            DELETE FROM trainer_pending_request_booking
+            WHERE trainer_id = :tid AND client_request_id = :rid
         """),
-        {"rid": client_request_id, "tid": trainer_id},
+        {"tid": trainer_id, "rid": client_request_id},
     )
-    if exists_resp.fetchone():
-        return False
     await session.execute(
         text("""
             INSERT INTO client_request_declines (client_request_id, trainer_id)

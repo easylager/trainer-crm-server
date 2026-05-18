@@ -1520,6 +1520,36 @@
         if (nextBtn) nextBtn.onclick = function() { state.page++; renderList(); };
       }
 
+      /** Hide request from this trainer only (POST /trainer/requests/:id/decline). */
+      function dismissTrainerRequest(req, confirmMsg, opts) {
+        opts = opts || {};
+        var okText = opts.okText || 'Убрать из списка';
+        showAppConfirm(confirmMsg, { okText: okText, cancelText: 'Отмена' }).then(function(ok) {
+          if (!ok) return;
+          fetch(apiUrl('/trainer/requests/' + req.id + '/decline'), { method: 'POST', headers: headers() })
+            .then(function(res) {
+              return res.json().then(function(data) {
+                return { ok: res.ok, data: data };
+              });
+            })
+            .then(function(o) {
+              if (o.ok && o.data.success) {
+                state.items = state.items.filter(function(r) {
+                  return r.id !== req.id;
+                });
+                state.currentRequest = null;
+                renderList();
+                showScreen('screenList');
+              } else {
+                alert((o.data && o.data.detail) ? o.data.detail : 'Не удалось скрыть заявку');
+              }
+            })
+            .catch(function() {
+              alert('Ошибка сети');
+            });
+        });
+      }
+
       var DETAIL_HINT_HTML = '<strong>Записать клиента</strong> — выберите свободный слот и оформите запись, если знаете удобное для клиента время; клиент получит подтверждение в боте.<br>' +
         '<strong>Напомнить когда появятся слоты</strong> — вы получите уведомление в боте, когда добавите слоты в расписание. После нажатия появится зелёная подпись «напоминание включено».';
 
@@ -1785,6 +1815,8 @@
               window.location.href = u;
             };
           }
+          actions.innerHTML +=
+            '<button type="button" class="bd-btn bd-btn--outline-danger" id="btnDismissFromList">Убрать из списка</button>';
         } else if (isCertOrder) {
           actions.classList.add('action-buttons--pass');
           actions.setAttribute('data-variant', 'cert');
@@ -1820,6 +1852,8 @@
               window.location.href = u;
             };
           }
+          actions.innerHTML +=
+            '<button type="button" class="bd-btn bd-btn--outline-danger" id="btnDismissFromList">Убрать из списка</button>';
         } else if (!req.has_responded) {
           actions.innerHTML += '<button type="button" class="bd-btn bd-btn--primary" id="btnRespond">Готов взять</button>';
           actions.innerHTML += '<button type="button" class="bd-btn bd-btn--outline-danger" id="btnDecline">Отклонить</button>';
@@ -1830,26 +1864,32 @@
           } else {
             actions.innerHTML += '<button type="button" class="bd-btn bd-btn--secondary" id="btnRemindSlots">Напомнить когда появятся слоты</button>';
           }
+          actions.innerHTML +=
+            '<button type="button" class="bd-btn bd-btn--outline-danger" id="btnDismissFromList">Убрать из списка</button>';
         }
 
         var btnRespond = document.getElementById('btnRespond');
         if (btnRespond) btnRespond.onclick = function() { showScreen('screenRespond'); };
         var btnDecline = document.getElementById('btnDecline');
         if (btnDecline) btnDecline.onclick = function() {
-          showAppConfirm('Отклонить заявку? Она исчезнет из вашего списка.', { okText: 'Отклонить', cancelText: 'Отмена' }).then(function (ok) {
-            if (!ok) return;
-          fetch(apiUrl('/trainer/requests/' + req.id + '/decline'), { method: 'POST', headers: headers() })
-            .then(function(res) { return res.json().then(function(data) { return { ok: res.ok, data: data }; }); })
-            .then(function(o) {
-              if (o.ok && o.data.success) {
-                state.items = state.items.filter(function(r) { return r.id !== req.id; });
-                state.currentRequest = null;
-                renderList();
-                showScreen('screenList');
-              } else { alert(o.data.detail || 'Ошибка'); }
-            }).catch(function() { alert('Ошибка сети'); });
-          });
+          var declineParts = [];
+          if (req.is_personalized) {
+            declineParts.push('Заявка только для вас: исчезнет из вашего списка; у клиента статус автоматически не меняется.');
+          } else {
+            declineParts.push('Общая заявка: у других тренеров она останется в списке.');
+          }
+          declineParts.push('Продолжить?');
+          dismissTrainerRequest(req, declineParts.join(' '), { okText: 'Отклонить' });
         };
+        var btnDismissFromList = document.getElementById('btnDismissFromList');
+        if (btnDismissFromList) {
+          var dismissMsg = isCatalogOrder
+            ? 'Убрать карточку из вашего списка? Заказ не отменяется — только скрывается у вас.'
+            : 'Убрать из вашего списка? Клиент по-прежнему может видеть ваш отклик в «Мои заявки».';
+          btnDismissFromList.onclick = function() {
+            dismissTrainerRequest(req, dismissMsg);
+          };
+        }
         var btnBookClient = document.getElementById('btnBookClient');
         if (btnBookClient) btnBookClient.onclick = function() { loadSlots(req); };
         var btnRemindSlots = document.getElementById('btnRemindSlots');

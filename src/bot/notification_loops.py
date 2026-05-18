@@ -9,6 +9,11 @@ import math
 import time as std_time
 from datetime import date, datetime, time, timedelta, timezone
 
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:  # pragma: no cover
+    from backports.zoneinfo import ZoneInfo  # type: ignore[no-redef]
+
 from aiogram import Bot
 from sqlalchemy.ext.asyncio import AsyncSession
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
@@ -39,6 +44,18 @@ from src.application.booking_use_cases import (
     mark_trainer_completed_sent,
 )
 from src.application.client_stats_use_cases import get_client_activity_snapshot
+from src.application.client_milestone_use_cases import (
+    SESSION_MILESTONE_TARGETS,
+    fetch_completed_session_effort_rows,
+    fetch_engagement_percentile_vs_clients_below_threshold,
+    release_session_milestone_claim,
+    try_claim_session_milestone_notification,
+)
+from src.application.client_session_effort_estimates import (
+    aggregate_effort_from_completed_sessions,
+    format_compact_effort_display_html,
+    round_kcal_for_display,
+)
 from src.application.client_use_cases import get_client_id_by_telegram_id
 from src.application.client_request_use_cases import (
     get_pending_no_response_reminders,
@@ -109,7 +126,7 @@ from src.shared.config import (
 )
 from src.shared.map_links import build_yandex_by_map_url
 from src.application.trainer_notification_prefs import is_trainer_push_allowed_now
-from src.shared.notification_hours import is_within_notification_hours
+from src.shared.notification_hours import NOTIFICATION_TZ, is_within_notification_hours
 
 logger = logging.getLogger(__name__)
 
@@ -542,6 +559,79 @@ def _requests_word(n: int) -> str:
     return "заявок"
 
 
+async def _maybe_send_session_milestone_pushes(
+    client_bot: Bot,
+    session: AsyncSession,
+    *,
+    chat_id: int,
+) -> None:
+    """
+    After a successful «session completed» push: celebrate 5/10/25 totals once per milestone.
+
+    Claim row is released if Telegram send fails so the worker can retry later.
+    """
+    try:
+        cid = await get_client_id_by_telegram_id(session, int(chat_id))
+        if cid is None:
+            return
+        snap = await get_client_activity_snapshot(session, client_id=cid)
+        total = int(snap.get("completed_total") or 0)
+        rows = await fetch_completed_session_effort_rows(session, cid)
+        agg = aggregate_effort_from_completed_sessions(rows)
+        kcal_d = round_kcal_for_display(agg.total_kcal)
+        effort_line = format_compact_effort_display_html(kcal_display=kcal_d, agg=agg)
+        base_url = Settings().webapp_base_url or ""
+        for m in SESSION_MILESTONE_TARGETS:
+            if total < m:
+                continue
+            claimed = await try_claim_session_milestone_notification(
+                session,
+                client_id=cid,
+                milestone_target=m,
+                completed_total=total,
+            )
+            if not claimed:
+                continue
+            pct = await fetch_engagement_percentile_vs_clients_below_threshold(
+                session,
+                completed_sessions_threshold=m,
+            )
+            milestone_html = msg.format_client_session_milestone_notice_html(
+                milestone=m,
+                effort_compact_html_line=effort_line,
+                percentile_more_active=pct,
+            )
+            kb = msg.build_client_session_milestone_inline_keyboard(webapp_base_url=base_url)
+            last_exc: Exception | None = None
+            for attempt in range(3):
+                try:
+                    await client_bot.send_message(
+                        chat_id=chat_id,
+                        text=milestone_html,
+                        reply_markup=kb,
+                        parse_mode="HTML",
+                    )
+                    last_exc = None
+                    break
+                except Exception as e:
+                    last_exc = e
+                    await asyncio.sleep(0.35 * (attempt + 1))
+            if last_exc is not None:
+                logger.warning(
+                    "session milestone push failed chat_id=%s milestone=%s after retries: %s",
+                    chat_id,
+                    m,
+                    last_exc,
+                )
+                await release_session_milestone_claim(
+                    session,
+                    client_id=cid,
+                    milestone_target=m,
+                )
+    except Exception as e:
+        logger.warning("session milestone pipeline chat_id=%s: %s", chat_id, e)
+
+
 async def _send_client_booking_completed_push(
     client_bot: Bot,
     session: AsyncSession,
@@ -591,6 +681,7 @@ async def _send_client_booking_completed_push(
             chat_id=chat_id, text=text, reply_markup=kb, parse_mode="HTML"
         )
         await mark_client_booking_completion_push_sent(session, booking_id)
+        await _maybe_send_session_milestone_pushes(client_bot, session, chat_id=int(chat_id))
     except Exception as e:
         logger.warning(
             "Completed notifier send to client %s (booking_id=%s): %s",
@@ -1152,6 +1243,30 @@ async def process_trainer_session_wrapup_round(trainer_bot: Bot) -> None:
             try:
                 await trainer_bot.send_message(
                     chat_id=trainer_tid, text=text, reply_markup=kb
+                )
+                tz = ZoneInfo(NOTIFICATION_TZ)
+                sent_at_local = datetime.now(tz)
+                slot_end_local = (
+                    datetime.combine(slot_date, end_time).replace(tzinfo=tz)
+                    if slot_date is not None
+                    and end_time is not None
+                    and hasattr(slot_date, "year")
+                    and hasattr(end_time, "hour")
+                    else None
+                )
+                remain_sec: float | None = None
+                if slot_end_local is not None:
+                    remain_sec = (slot_end_local - sent_at_local).total_seconds()
+                logger.info(
+                    "trainer_session_wrapup_sent booking_id=%s trainer_id=%s trainer_chat_id=%s "
+                    "slot_end_local=%s sent_at_local=%s seconds_until_slot_end=%s timezone=%s",
+                    p.get("booking_id"),
+                    p.get("trainer_id"),
+                    trainer_tid,
+                    slot_end_local.isoformat() if slot_end_local else None,
+                    sent_at_local.isoformat(),
+                    round(remain_sec, 3) if remain_sec is not None else None,
+                    NOTIFICATION_TZ,
                 )
                 await mark_trainer_session_wrapup_sent(session, p["booking_id"])
             except Exception as e:

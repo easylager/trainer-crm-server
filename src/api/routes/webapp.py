@@ -6928,7 +6928,10 @@ async def post_trainer_request_decline(
         raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     ok = await create_request_decline(session, request_id, trainer_id)
     if not ok:
-        raise HTTPException(status_code=400, detail="Decline failed")
+        raise HTTPException(
+            status_code=400,
+            detail="Не удалось скрыть заявку (нет доступа или заявка уже закрыта).",
+        )
     return {"success": True}
 
 

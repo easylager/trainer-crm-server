@@ -1513,6 +1513,65 @@ def build_client_booking_completed_inline_keyboard(
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
+def format_client_session_milestone_notice_html(
+    *,
+    milestone: int,
+    effort_compact_html_line: str,
+    percentile_more_active: int | None,
+) -> str:
+    """Тёплый milestone-пуш: эмодзи, аккуратный русский, жирное на смысле и цифрах."""
+    m = int(milestone)
+    pct = int(percentile_more_active) if percentile_more_active is not None else None
+
+    if m == 5:
+        hook = (
+            "🌟 Вы уже <b>пять раз</b> довели занятие до конца — небольшой, но уже ощутимый задел."
+        )
+    elif m == 10:
+        hook = (
+            "🔥 Это уже <b>десять завершённых занятий</b> — не разовые выходы на лёд, "
+            "а Ваш устойчивый ритм."
+        )
+    elif m == 25:
+        hook = (
+            "🏆 У Вас на счёту <b>двадцать пять завершённых занятий</b> — такую длинную "
+            "честную серию выдерживают немногие, и Вы среди них."
+        )
+    else:
+        hook = f"🎯 У Вас уже <b>{m}</b> завершённых занятий — это заметный шаг."
+
+    effort = (
+        f"📊 Если прикинуть по длительности и услугам: {effort_compact_html_line} "
+        f"(оценка грубая, но порядок такой)."
+    )
+    blocks: list[str] = [hook, effort]
+    if pct is not None:
+        blocks.append(
+            "📈 К слову: у примерно <b>{pct}%</b> тех, кто уже хоть раз довёл занятие до конца здесь, "
+            "завершённых накопилось <b>меньше</b>, чем у Вас сейчас.".format(pct=pct)
+        )
+    return "\n\n".join(blocks)
+
+
+def build_client_session_milestone_inline_keyboard(*, webapp_base_url: str):
+    """WebApp deep-link to full stats screen."""
+    from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
+
+    base = (webapp_base_url or "").rstrip("/")
+    if not base.lower().startswith("https://"):
+        return None
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="📊 Открыть активность",
+                    web_app=WebAppInfo(url=f"{base}/webapp/client-stats"),
+                ),
+            ],
+        ]
+    )
+
+
 # Inactive: 10 / 30 days since last session — friendly nudge to book again (once per client per kind)
 CLIENT_INACTIVE_10_DAYS = (
     "👋 <b>Давно не виделись{name}!</b>\n\n"

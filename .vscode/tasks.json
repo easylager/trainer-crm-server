@@ -1,0 +1,137 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "CRM: 1. Tunnel + patch .env",
+      "type": "shell",
+      "command": "bash scripts/dev_prepare_tunnel.sh",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": true,
+        "panel": "dedicated",
+        "focus": true,
+        "showReuseMessage": false,
+        "group": "crm-tunnel"
+      },
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": {}
+      }
+    },
+    {
+      "label": "CRM: Stop cloudflared",
+      "type": "shell",
+      "command": "bash scripts/dev_stop_cloudflared.sh",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": true,
+        "panel": "shared",
+        "showReuseMessage": false
+      },
+      "options": {
+        "cwd": "${workspaceFolder}"
+      }
+    },
+    {
+      "label": "CRM: API (uvicorn)",
+      "type": "shell",
+      "command": "python3 -m uvicorn src.api.app:app --reload --port 8000",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": true,
+        "panel": "dedicated",
+        "showReuseMessage": false,
+        "group": "crm-api"
+      },
+      "options": {
+        "cwd": "${workspaceFolder}"
+      }
+    },
+    {
+      "label": "CRM: Client bot",
+      "type": "shell",
+      "command": "python3 -m src.bot.client_app",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": true,
+        "panel": "dedicated",
+        "showReuseMessage": false,
+        "group": "crm-client-bot"
+      },
+      "options": {
+        "cwd": "${workspaceFolder}"
+      }
+    },
+    {
+      "label": "CRM: Trainer bot",
+      "type": "shell",
+      "command": "python3 -m src.bot.trainer_app",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": true,
+        "panel": "dedicated",
+        "showReuseMessage": false,
+        "group": "crm-trainer-bot"
+      },
+      "options": {
+        "cwd": "${workspaceFolder}"
+      }
+    },
+    {
+      "label": "CRM: Notification service",
+      "type": "shell",
+      "command": "python3 -m src.bot.notification_service",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": true,
+        "panel": "dedicated",
+        "showReuseMessage": false,
+        "group": "crm-notify"
+      },
+      "options": {
+        "cwd": "${workspaceFolder}"
+      }
+    },
+    {
+      "label": "CRM: Admin bot",
+      "type": "shell",
+      "command": "python3 -m src.bot.admin_app",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": true,
+        "panel": "dedicated",
+        "showReuseMessage": false,
+        "group": "crm-admin-bot"
+      },
+      "options": {
+        "cwd": "${workspaceFolder}"
+      }
+    },
+    {
+      "label": "CRM: All bots + API (parallel, no tunnel)",
+      "dependsOrder": "parallel",
+      "dependsOn": [
+        "CRM: API (uvicorn)",
+        "CRM: Client bot",
+        "CRM: Trainer bot",
+        "CRM: Notification service",
+        "CRM: Admin bot"
+      ],
+      "problemMatcher": [],
+      "group": {
+        "kind": "build",
+        "isDefault": false
+      }
+    },
+    {
+      "label": "CRM: Tunnel → then all servers",
+      "dependsOrder": "sequence",
+      "dependsOn": ["CRM: 1. Tunnel + patch .env", "CRM: All bots + API (parallel, no tunnel)"],
+      "problemMatcher": [],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      }
+    }
+  ]
+}
