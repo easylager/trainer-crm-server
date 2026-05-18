@@ -3040,7 +3040,23 @@ async def post_support(
             raise miniapp_credential_http_exception() from None
     from src.infrastructure.db.models import SUPPORT_FROM_CLIENT, SUPPORT_FROM_TRAINER
     from_role = SUPPORT_FROM_TRAINER if role == "trainer" else SUPPORT_FROM_CLIENT
-    result = await create_support_message(session, telegram_id, from_role, body.message or "")
+    if from_role == SUPPORT_FROM_TRAINER:
+        admin_tag = (
+            "хаб тренера (MAX)" if cred.platform == MiniAppPlatform.MAX.value else "хаб тренера (Mini App)"
+        )
+    else:
+        admin_tag = (
+            "клиентское приложение (MAX)"
+            if cred.platform == MiniAppPlatform.MAX.value
+            else "клиентское приложение (Mini App)"
+        )
+    result = await create_support_message(
+        session,
+        telegram_id,
+        from_role,
+        body.message or "",
+        admin_notify_source_tag=admin_tag,
+    )
     if not result.get("ok"):
         raise HTTPException(status_code=400, detail="Empty message")
     return result

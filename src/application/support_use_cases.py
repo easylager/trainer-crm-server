@@ -1,4 +1,6 @@
 """Support messages: create from client/trainer, list and reply from admin."""
+import logging
+
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -9,14 +11,21 @@ from src.infrastructure.db.models import (
     SUPPORT_STATUS_REPLIED,
 )
 
+logger = logging.getLogger(__name__)
+
 
 async def create_support_message(
     session: AsyncSession,
     from_telegram_id: int,
     from_role: str,
     message_text: str,
+    *,
+    admin_notify_source_tag: str | None = None,
 ) -> dict:
-    """Create one support ticket. from_role must be client or trainer."""
+    """Create one support ticket. from_role must be client or trainer.
+
+    When ``admin_notify_source_tag`` is set, admins receive a Telegram card (best-effort).
+    """
     if from_role not in (SUPPORT_FROM_CLIENT, SUPPORT_FROM_TRAINER):
         from_role = SUPPORT_FROM_CLIENT
     text_clean = (message_text or "").strip()[: 4000]
@@ -32,7 +41,15 @@ async def create_support_message(
     )
     row = r.fetchone()
     await session.commit()
-    return {"id": row[0], "created_at": row[1].isoformat() if row[1] else None, "ok": True}
+    sid = int(row[0])
+    if admin_notify_source_tag:
+        try:
+            from src.application.support_admin_notify import notify_admins_new_support_ticket
+
+            await notify_admins_new_support_ticket(sid, source_tag=admin_notify_source_tag)
+        except Exception:
+            logger.exception("support ticket admin notify failed support_id=%s", sid)
+    return {"id": sid, "created_at": row[1].isoformat() if row[1] else None, "ok": True}
 
 
 async def list_support_messages(

@@ -3449,7 +3449,13 @@ async def fallback(message: Message) -> None:
             await message.answer(msg.TRAINER_SUPPORT_PROMPT)
             return
         async with async_session_factory() as session:
-            await create_support_message(session, telegram_id, SUPPORT_FROM_TRAINER, text)
+            await create_support_message(
+                session,
+                telegram_id,
+                SUPPORT_FROM_TRAINER,
+                text,
+                admin_notify_source_tag="тренерский бот",
+            )
         await message.answer(msg.TRAINER_SUPPORT_SENT)
         return
     async with async_session_factory() as session:

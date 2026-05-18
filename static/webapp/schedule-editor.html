@@ -24,8 +24,8 @@
       href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=optional"
     />
   </noscript>
-  <link rel="preload" href="schedule-editor-main.js?v=20260618" as="script" />
-  <link rel="stylesheet" href="mini-app-schedule-editor.css?v=20260615" />
+  <link rel="preload" href="schedule-editor-main.js?v=202605173" as="script" />
+  <link rel="stylesheet" href="mini-app-schedule-editor.css?v=202605173" />
   <link rel="stylesheet" href="mini-app-trainer-nav.css?v=20260429" />
 </head>
 <body>
@@ -609,15 +609,29 @@
             <span class="btn-book-option-arrow" aria-hidden="true">›</span>
           </button>
         </div>
-        <button type="button" class="btn-block btn-book-cancel" id="modalBookCancel">Отмена</button>
       </div>
       <div id="bookStepExisting" class="book-step" data-step="existing" style="display:none;">
         <div id="bookExistingStepClient">
-          <button type="button" class="book-modal-back" id="bookBackFromExisting">
-            <svg class="book-modal-back-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
-            Назад
-          </button>
-          <p class="book-choice-lead">Выберите клиента</p>
+          <div class="hub-book-existing-toolbar">
+            <button type="button" class="book-modal-back hub-book-existing-toolbar-back" id="bookBackFromExisting">
+              <svg class="book-modal-back-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+              Назад
+            </button>
+            <button type="button" class="hub-book-existing-new-chip" id="bookExistingNewChip">
+              <span class="hub-book-existing-new-chip__icon" aria-hidden="true">
+                <svg class="hub-book-existing-new-chip__plus" viewBox="0 0 12 12" width="10" height="10" focusable="false">
+                  <path
+                    d="M6 2.5v7M2.5 6h7"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.35"
+                    stroke-linecap="round"
+                  />
+                </svg>
+              </span>
+              <span>Новый клиент</span>
+            </button>
+          </div>
           <div class="book-field-stack" id="bookClientSearchWrap">
             <label class="book-field-label" for="bookClientSearch">Поиск по имени или телефону</label>
             <input type="text" id="bookClientSearch" class="input book-search-input" placeholder="Имя или телефон...">
@@ -678,6 +692,7 @@
           </div>
         </div>
       </div>
+      <button type="button" class="btn-block btn-book-cancel se-modal-book-cancel-footer" id="modalBookCancel">Отмена</button>
     </div>
   </div>
 
@@ -697,6 +712,6 @@
   <script src="mini-app-trainer-home.js"></script>
   <script src="trainer-client-relay-ui.js?v=202605090"></script>
   <script src="trainer-relay-helpers.js?v=202605090"></script>
-  <script defer src="schedule-editor-main.js?v=20260618"></script>
+  <script defer src="schedule-editor-main.js?v=202605173"></script>
 </body>
 </html>

@@ -29,8 +29,8 @@
       window.__applyClientHubTheme = applyClientHubTheme;
     })();
   </script>
-  <link rel="preload" href="client-home-main.js?v=20260621" as="script" />
-  <link rel="stylesheet" href="mini-app-client-home.css?v=202605129" />
+  <link rel="preload" href="client-home-main.js?v=202605171" as="script" />
+  <link rel="stylesheet" href="mini-app-client-home.css?v=202605171" />
 </head>
 <body class="hub-body">
   <div class="hub-shell" id="hubShell">
@@ -103,11 +103,48 @@
       <div class="hub-explore-grid" id="hubGrid"></div>
     </div>
 
-    <div class="hub-footnote" id="hubFootnote">
-      <strong>Подсказка:</strong> нужна помощь или есть вопрос — откройте <strong>чат с ботом</strong> и отправьте <strong>/guide</strong>: там справка и как написать в поддержку.
+    <div class="hub-footnote hub-footnote--collapsible" id="hubFootnote">
+      <button type="button" class="hub-footnote__toggle" id="hubFootnoteToggle" aria-expanded="false" aria-controls="hubFootnoteExpand">
+        <span class="hub-footnote__toggle-main">
+          <span class="hub-footnote__head">
+            <svg class="hub-footnote__icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+            </svg>
+            <strong class="hub-footnote__title">Мы на связи</strong>
+          </span>
+          <span class="hub-footnote__teaser">Нажмите, чтобы написать команде или предложить улучшение</span>
+        </span>
+        <svg class="hub-footnote__chevron" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
+      <div class="hub-footnote__expand" id="hubFootnoteExpand" aria-hidden="true">
+        <div class="hub-footnote__expand-inner">
+          <p class="hub-footnote__lead">
+            Что-то сломалось или непонятно — <strong>опишите ниже</strong>: разберём и постараемся помочь <strong>как можно быстрее</strong>.
+            Есть идея, как улучшить сервис — <strong>напишите туда же</strong>: нам важен ваш опыт.
+          </p>
+          <form id="hubSupportForm" class="hub-support-form" autocomplete="off">
+            <label for="hubSupportMessage" class="hub-support-label">Сообщение команде</label>
+            <textarea
+              id="hubSupportMessage"
+              class="hub-support-textarea input"
+              name="message"
+              rows="3"
+              maxlength="4000"
+              placeholder="Например: не получается записаться… или идея: добавить…"
+              aria-describedby="hubSupportHint"
+            ></textarea>
+            <p id="hubSupportHint" class="hub-support-hint">До 4000 символов. Ответ пришлём в <strong>клиентском боте</strong>.</p>
+            <button type="submit" id="hubSupportSubmit" class="btn-block btn-primary hub-support-submit">Отправить</button>
+            <p id="hubSupportStatus" class="hub-support-status" role="status" aria-live="polite"></p>
+          </form>
+          <p class="hub-footnote__cta">
+            Также можно открыть чат с ботом и отправить <strong>/guide</strong> — там справка и другие способы связи.
+          </p>
+        </div>
+      </div>
     </div>
 
   </div>
-  <script defer src="client-home-main.js?v=20260621"></script>
+  <script defer src="client-home-main.js?v=202605171"></script>
 </body>
 </html>

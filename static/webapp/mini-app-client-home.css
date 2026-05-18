@@ -1035,24 +1035,241 @@ html:not(.hub-is-dark) .hub-explore-hint { color: var(--tg-theme-hint-color); op
 .state-panel.error { border-color: rgba(255, 59, 48, 0.35); color: #ff3b30; }
 .state-panel.loading { color: var(--tg-theme-hint-color); }
 
-/* ─── Footnote ────────────────────────────────────────────────────────── */
+/* ─── Footnote + поддержка (раскрывающийся блок) ─────────────────────── */
 
 .hub-footnote {
-  margin: 4px 16px 0;
+  margin: 8px 16px 24px;
   padding: 14px 16px;
   border-radius: 16px;
   font-size: 12px;
-  line-height: 1.5;
+  line-height: 1.55;
   color: var(--tg-theme-hint-color);
   background: linear-gradient(135deg, rgba(247, 166, 0, 0.04) 0%, var(--tg-theme-secondary-bg-color) 100%);
   border: 1px solid rgba(245, 166, 35, 0.15);
+  position: relative;
+  overflow: hidden;
+}
+
+.hub-footnote::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--app-cta-fill) 0%, rgba(247, 166, 0, 0.4) 100%);
 }
 
 .hub-is-dark .hub-footnote {
   background: linear-gradient(135deg, rgba(247, 166, 0, 0.06) 0%, var(--tg-theme-secondary-bg-color) 100%);
 }
 
-.hub-footnote strong { color: var(--tg-theme-text-color); }
+.hub-footnote strong {
+  color: var(--tg-theme-text-color);
+  font-weight: 600;
+}
+
+.hub-footnote--collapsible {
+  padding: 0;
+  overflow: visible;
+}
+
+.hub-footnote__toggle {
+  width: 100%;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px 12px;
+  margin: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  border-radius: 16px;
+  -webkit-tap-highlight-color: transparent;
+  position: relative;
+  z-index: 1;
+}
+
+.hub-footnote__toggle:active {
+  opacity: 0.94;
+}
+
+.hub-footnote__toggle-main {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.hub-footnote__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+
+.hub-footnote__icon {
+  flex-shrink: 0;
+  color: var(--app-cta-fill);
+  opacity: 0.9;
+}
+
+.hub-footnote__title {
+  color: var(--tg-theme-text-color);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.hub-footnote__teaser {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--tg-theme-hint-color);
+}
+
+.hub-footnote--open .hub-footnote__teaser {
+  display: none;
+}
+
+.hub-footnote__chevron {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--tg-theme-hint-color);
+  opacity: 0.85;
+  transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.hub-footnote--open .hub-footnote__chevron {
+  transform: rotate(180deg);
+  color: var(--app-cta-fill);
+}
+
+.hub-footnote__expand {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.hub-footnote--open .hub-footnote__expand {
+  grid-template-rows: 1fr;
+}
+
+.hub-footnote__expand-inner {
+  overflow: hidden;
+  min-height: 0;
+  opacity: 0;
+  transform: translateY(-8px);
+  transition:
+    opacity 0.32s ease 0.04s,
+    transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  padding: 0 16px 14px;
+}
+
+.hub-footnote--open .hub-footnote__expand-inner {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hub-footnote__expand,
+  .hub-footnote__expand-inner,
+  .hub-footnote__chevron,
+  .hub-footnote__teaser {
+    transition: none !important;
+  }
+}
+
+.hub-footnote__lead,
+.hub-footnote__cta {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--tg-theme-hint-color);
+}
+
+.hub-footnote--collapsible .hub-footnote__lead {
+  margin-top: 0;
+}
+
+.hub-footnote__cta {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(128, 128, 128, 0.12);
+}
+
+.hub-support-form {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.hub-support-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--tg-theme-text-color);
+}
+
+.hub-support-textarea {
+  width: 100%;
+  min-height: 76px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  font-size: 14px;
+  line-height: 1.45;
+  resize: vertical;
+  box-sizing: border-box;
+  background: var(--tg-theme-bg-color, #fff);
+  color: var(--tg-theme-text-color);
+  border: 1px solid rgba(128, 128, 128, 0.22);
+  font-family: inherit;
+}
+
+.hub-is-dark .hub-support-textarea {
+  background: var(--tg-theme-secondary-bg-color);
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+.hub-support-textarea::placeholder {
+  color: var(--tg-theme-hint-color);
+  opacity: 0.85;
+}
+
+.hub-support-hint {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--tg-theme-hint-color);
+}
+
+.hub-support-submit {
+  margin-top: 2px;
+}
+
+.hub-support-status {
+  margin: 0;
+  min-height: 1.35em;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--tg-theme-hint-color);
+}
+
+.hub-support-status.hub-support-status--ok {
+  color: var(--tg-theme-text-color);
+}
+
+.hub-support-status.hub-support-status--err {
+  color: #c0392b;
+}
+
+.hub-is-dark .hub-support-status.hub-support-status--err {
+  color: #ff8a80;
+}
 
 /* ─── Skeleton loading ───────────────────────────────────────────────── */
 

@@ -3270,7 +3270,13 @@ async def fallback(message: Message) -> None:
             await message.answer(msg.CLIENT_SUPPORT_PROMPT)
             return
         async with async_session_factory() as session:
-            await create_support_message(session, telegram_id, SUPPORT_FROM_CLIENT, text)
+            await create_support_message(
+                session,
+                telegram_id,
+                SUPPORT_FROM_CLIENT,
+                text,
+                admin_notify_source_tag="клиентский бот",
+            )
         await message.answer(msg.CLIENT_SUPPORT_SENT)
         return
     await message.answer(msg.CLIENT_FALLBACK)

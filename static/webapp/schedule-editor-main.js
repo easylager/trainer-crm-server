@@ -1682,6 +1682,8 @@
         scheduleStripSwipeSuppressUntil: 0,
         bookSlotId: null,
         bookModalStep: 'choice',
+        /** Slot / quick-book opens straight to client search + «Новый клиент» (hub parity); back closes modal. */
+        bookModalClientSearchFirst: false,
         pendingBookClientId: null,
         pendingBookClientName: null,
         bookServices: [],
@@ -1939,6 +1941,7 @@
         state.bookSelectedExistingClientId = null;
         state.bookSelectedExistingClientName = '';
         state.bookExistingServiceStepActive = false;
+        state.bookModalClientSearchFirst = false;
         var bookFlowOv = document.getElementById('modalBookClient');
         if (bookFlowOv) bookFlowOv.classList.remove('book-flow-overlay--new-client');
       }
@@ -4574,10 +4577,22 @@
         state.deepLinkClientId = null;
       }
 
+      /** Calendar book modal: same landing as hub — search roster + chip (hide legacy two-button step). */
+      function scheduleBookModalShowClientSearchFirstLayout() {
+        document.getElementById('bookStepChoice').style.display = 'none';
+        document.getElementById('bookStepChoice').classList.remove('active');
+        document.getElementById('bookStepExisting').style.display = 'block';
+        document.getElementById('bookStepExisting').classList.add('active');
+        document.getElementById('bookStepNew').style.display = 'none';
+        setBookClientSearchSectionVisible(true);
+        showBookExistingClientStep();
+      }
+
       /** Loads services/clients and wires book modal (shared by slot-based and quick book). */
       function runBookModalShellAndFetch() {
         var prefilledClient = !!state.deepLinkClientId;
-        state.bookModalStep = prefilledClient ? 'existing' : 'choice';
+        state.bookModalClientSearchFirst = !prefilledClient;
+        state.bookModalStep = 'existing';
         var bookModalOv = document.getElementById('modalBookClient');
         if (bookModalOv) bookModalOv.classList.remove('book-flow-overlay--new-client');
         document.getElementById('bookClientSearch').value = '';
@@ -4594,19 +4609,12 @@
           document.getElementById('bookClientList').innerHTML = buildBookClientListSkeletonHtml();
           setBookClientSearchSectionVisible(false);
           showBookExistingClientStep();
+          state.bookModalClientSearchFirst = false;
         } else {
-          setBookClientSearchSectionVisible(true);
-          document.getElementById('bookStepChoice').style.display = 'block';
-          document.getElementById('bookStepChoice').classList.add('active');
-          document.getElementById('bookStepExisting').style.display = 'none';
-          document.getElementById('bookStepNew').style.display = 'none';
+          scheduleBookModalShowClientSearchFirstLayout();
+          document.getElementById('bookClientList').innerHTML = buildBookClientListSkeletonHtml();
         }
-        if (prefilledClient) {
-          setBookChoicePairPending(false);
-        } else {
-          setBookChoicePairPending(true);
-          primeBookChoicePairLayout();
-        }
+        setBookChoicePairPending(false);
         document.getElementById('modalBookClient').style.display = 'flex';
         applyBookModalGroupUi();
         updateTelegramBack();
@@ -4673,12 +4681,13 @@
             } else if (prefilledClient && !hasClients) {
               showToast('Нет клиентов для записи из профиля.');
               state.deepLinkClientId = null;
-              document.getElementById('bookStepExisting').style.display = 'none';
-              document.getElementById('bookStepExisting').classList.remove('active');
-              document.getElementById('bookStepChoice').style.display = 'block';
-              document.getElementById('bookStepChoice').classList.add('active');
-              state.bookModalStep = 'choice';
-              setBookClientSearchSectionVisible(true);
+              state.bookModalClientSearchFirst = true;
+              scheduleBookModalShowClientSearchFirstLayout();
+              document.getElementById('bookClientList').innerHTML = buildBookClientListSkeletonHtml();
+              state.bookModalStep = 'existing';
+              loadBookClients('');
+            } else if (state.bookModalClientSearchFirst) {
+              loadBookClients('');
             }
             scheduleRevealBookChoicePairIfNeeded();
           })
@@ -4695,13 +4704,13 @@
             fillTrainerArenasUI();
             if (prefilledClient) {
               state.deepLinkClientId = null;
-              document.getElementById('bookStepExisting').style.display = 'none';
-              document.getElementById('bookStepExisting').classList.remove('active');
-              document.getElementById('bookStepChoice').style.display = 'block';
-              document.getElementById('bookStepChoice').classList.add('active');
-              state.bookModalStep = 'choice';
             }
-            setBookClientSearchSectionVisible(true);
+            state.bookModalClientSearchFirst = true;
+            scheduleBookModalShowClientSearchFirstLayout();
+            document.getElementById('bookClientList').innerHTML = buildBookClientListSkeletonHtml();
+            state.bookModalStep = 'existing';
+            setBookChoicePairPending(false);
+            loadBookClients('');
             scheduleRevealBookChoicePairIfNeeded();
           });
       }
@@ -5400,7 +5409,20 @@
         var sel = document.getElementById('bookServiceSelectNew');
         if (sel && state.bookServiceId != null) sel.value = String(state.bookServiceId);
       };
+      var bookExistingNewChipEl = document.getElementById('bookExistingNewChip');
+      if (bookExistingNewChipEl) {
+        bookExistingNewChipEl.onclick = function() {
+          document.getElementById('bookOptNew').onclick();
+        };
+      }
       document.getElementById('bookBackFromExisting').onclick = function() {
+        if (state.bookModalClientSearchFirst) {
+          document.getElementById('modalBookClient').style.display = 'none';
+          clearBookSlotModalState();
+          state.bookModalStep = 'choice';
+          updateTelegramBack();
+          return;
+        }
         state.bookSelectedExistingClientId = null;
         state.bookSelectedExistingClientName = '';
         showBookExistingClientStep();
@@ -5414,6 +5436,16 @@
         if (bookOvBack) bookOvBack.classList.remove('book-flow-overlay--new-client');
         document.getElementById('bookStepNew').style.display = 'none';
         document.getElementById('bookStepNew').classList.remove('active');
+        if (state.bookModalClientSearchFirst) {
+          document.getElementById('bookStepExisting').style.display = 'block';
+          document.getElementById('bookStepExisting').classList.add('active');
+          showBookExistingClientStep();
+          setBookClientSearchSectionVisible(true);
+          var qBack = document.getElementById('bookClientSearch');
+          loadBookClients(qBack ? qBack.value.trim() : '');
+          state.bookModalStep = 'existing';
+          return;
+        }
         document.getElementById('bookStepChoice').style.display = 'block';
         document.getElementById('bookStepChoice').classList.add('active');
       };

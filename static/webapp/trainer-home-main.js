@@ -7130,5 +7130,102 @@
           };
         }
       })();
+      (function wireHubFootnoteCollapse() {
+        var root = document.getElementById('hubFootnote');
+        var btn = document.getElementById('hubFootnoteToggle');
+        var panel = document.getElementById('hubFootnoteExpand');
+        if (!root || !btn) return;
+        btn.addEventListener('click', function() {
+          var open = root.classList.toggle('hub-footnote--open');
+          btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+          if (panel) panel.setAttribute('aria-hidden', open ? 'false' : 'true');
+          if (open && typeof root.scrollIntoView === 'function') {
+            try {
+              root.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+            } catch (eScroll) {
+              /* noop */
+            }
+          }
+        });
+      })();
       wireHubBookGroupModal();
+      (function wireHubSupportForm() {
+        var form = document.getElementById('hubSupportForm');
+        var ta = document.getElementById('hubSupportMessage');
+        var btn = document.getElementById('hubSupportSubmit');
+        var statusEl = document.getElementById('hubSupportStatus');
+        if (!form || !ta || !btn) return;
+        form.addEventListener('submit', function(ev) {
+          ev.preventDefault();
+          var text = (ta.value || '').trim();
+          if (!text) {
+            if (statusEl) {
+              statusEl.textContent = 'Напишите пару слов — что случилось или что хотите улучшить.';
+              statusEl.className = 'hub-support-status hub-support-status--err';
+            }
+            return;
+          }
+          if (!getInitData()) {
+            if (statusEl) {
+              statusEl.textContent =
+                'Сессия ещё не готова — подождите секунду или отправьте через /guide в боте.';
+              statusEl.className = 'hub-support-status hub-support-status--err';
+            }
+            return;
+          }
+          btn.disabled = true;
+          if (statusEl) {
+            statusEl.textContent = 'Отправляем…';
+            statusEl.className = 'hub-support-status';
+          }
+          fetch(apiUrlWithQuery('/support'), {
+            method: 'POST',
+            headers: headersJson(),
+            body: JSON.stringify({ message: text, role: 'trainer' }),
+          })
+            .then(function(r) {
+              return r.json().then(function(data) {
+                return { ok: r.ok, data: data };
+              });
+            })
+            .then(function(o) {
+              btn.disabled = false;
+              var sid = o.data && o.data.id;
+              var okSend = o.ok && o.data && o.data.ok !== false && sid != null;
+              if (okSend) {
+                ta.value = '';
+                if (statusEl) {
+                  statusEl.textContent =
+                    'Спасибо! Сообщение отправлено — мы ответим вам в тренерском боте.';
+                  statusEl.className = 'hub-support-status hub-support-status--ok';
+                }
+                var wg = window.Telegram && window.Telegram.WebApp;
+                if (wg && wg.HapticFeedback && wg.HapticFeedback.notificationOccurred) {
+                  try {
+                    wg.HapticFeedback.notificationOccurred('success');
+                  } catch (eh) {
+                    /* noop */
+                  }
+                }
+              } else {
+                var detail =
+                  o.data && (o.data.detail || o.data.message)
+                    ? String(o.data.detail || o.data.message)
+                    : 'Не удалось отправить.';
+                if (statusEl) {
+                  statusEl.textContent = detail + ' Попробуйте через /guide в боте.';
+                  statusEl.className = 'hub-support-status hub-support-status--err';
+                }
+              }
+            })
+            .catch(function() {
+              btn.disabled = false;
+              if (statusEl) {
+                statusEl.textContent =
+                  'Сеть недоступна. Повторите позже или напишите через /guide в боте.';
+                statusEl.className = 'hub-support-status hub-support-status--err';
+              }
+            });
+        });
+      })();
     })();
