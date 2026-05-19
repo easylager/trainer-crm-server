@@ -5,12 +5,11 @@ Lives in application layer so routes and use cases can import without loading ``
 (which would pull ``webapp`` and cause circular imports with notification_service).
 
 Primary trainer resolution (strict product contract):
-  1. Upcoming booking (slot not ended) — caller passes ``client_upcoming_booking_primary_candidate``.
-  2. Else latest «saved» (catalog heart), by saved_at (fallback edge created_at).
-  3. Else client_sessions.selected_trainer_id (last catalog browse context).
-  4. Else no primary.
-
-Past-only bookings feed rebook / «снова» UX, not the hub «Мой тренер» card.
+  1. Upcoming booking (slot not ended) — ``hub_booking_primary_ids`` / booking tier.
+  2. Else latest booking by slot start (past or future) — same as «Сохранённые» / trainer-edges.
+  3. Else latest «saved» (catalog heart), by saved_at (fallback edge created_at).
+  4. Else client_sessions.selected_trainer_id (last catalog browse context).
+  5. Else no primary.
 
 Synthetic edge rows fill gaps when booking/session trainer_id has no client_trainer_edges row yet.
 """
@@ -65,6 +64,31 @@ def edge_row_for_primary_trainer(
         last_booking_service_id=last_booking_service_id,
         saved_catalog_service_id=saved_catalog_service_id,
     )
+
+
+def hub_booking_primary_ids(
+    upcoming_trainer_id: int | None,
+    upcoming_service_id: int | None,
+    latest_trainer_id: int | None,
+    latest_service_id: int | None,
+) -> tuple[int | None, int | None]:
+    """
+  Hub «Мой тренер»: предстоящая запись, иначе последняя по времени слота (в т.ч. прошлая).
+  Без этого при отсутствии upcoming побеждает последний лайк, а не последний визит к тренеру.
+  """
+    if upcoming_trainer_id is not None:
+        tid = int(upcoming_trainer_id)
+        svc = (
+            int(upcoming_service_id)
+            if upcoming_service_id is not None
+            else None
+        )
+        return tid, svc
+    if latest_trainer_id is not None:
+        tid = int(latest_trainer_id)
+        svc = int(latest_service_id) if latest_service_id is not None else None
+        return tid, svc
+    return None, None
 
 
 def _saved_recency_sort_key(edge: dict) -> tuple[float, float, int]:

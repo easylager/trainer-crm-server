@@ -196,10 +196,16 @@ async def get_services(
 @router.get("/arenas")
 async def get_arenas(
     city_id: int,
+    service_id: int | None = None,
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, list]:
-    """List arenas in a city (for client filter and trainer slot)."""
-    items = await list_arenas(session, city_id)
+    """
+    List arenas in a city (for client filter and trainer slot).
+
+    With ``service_id``, each arena includes ``trainer_count``: trainers in this city who
+    offer the service and work at that arena (same rules as catalog trainer list filter).
+    """
+    items = await list_arenas(session, city_id, service_id=service_id)
     return {"items": items}
 
 

@@ -19,6 +19,17 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 
 from src.api.app import app
+from src.application.booking_use_cases import (
+    client_latest_booking_primary_candidate,
+    client_upcoming_booking_primary_candidate,
+    create_booking,
+)
+from src.application.client_trainer_primary_graph import (
+    compute_primary_edge_meta,
+    hub_booking_primary_ids,
+)
+from src.application.client_use_cases import get_or_create_client
+from src.application.client_trainer_edge_use_cases import get_all_edges
 from src.application.subscription_use_cases import create_trial_subscription
 from src.application.trainer_schedule_use_cases import replace_slots_for_day
 from src.infrastructure.db.models import (
@@ -1090,3 +1101,169 @@ async def test_webapp_client_home_page_served() -> None:
     assert "data-client-hub" in body
     assert "client-home-main.js" in body
     assert "Главная" in body
+
+
+@pytest.mark.asyncio
+async def test_client_hub_primary_uses_last_booking_not_latest_save(
+    app_use_test_db, db_session
+) -> None:
+    """
+    Без предстоящих записей хаб и «Сохранённые» должны показывать тренера последней
+    записи, а не последнего лайка в каталоге.
+    """
+    ref_day, ref_now = _minsk_monday_reference()
+    future_day = ref_day + timedelta(days=4)
+    past_day = ref_day - timedelta(days=14)
+    tid_booked, service_id, slot_id = await _create_trainer_online_with_slot(
+        db_session, slot_date=future_day, start_hours={14}
+    )
+    tid_saved, _, _ = await _create_trainer_online_with_slot(
+        db_session, slot_date=future_day, start_hours={18}
+    )
+    ctg = _fresh_client_telegram_id()
+    phone, _ = belarus_test_phone(ctg)
+    client_id = await get_or_create_client(
+        db_session, ctg, phone=phone, first_name="Клиент"
+    )
+    booking_id, _ = await create_booking(
+        db_session, slot_id, tid_booked, client_id, service_id
+    )
+    assert booking_id is not None
+    await db_session.execute(
+        text("UPDATE slots SET slot_date = :pd WHERE id = :sid"),
+        {"pd": past_day, "sid": slot_id},
+    )
+    await db_session.execute(
+        text(
+            """
+            INSERT INTO client_sessions (telegram_id, state)
+            VALUES (:t, 'idle')
+            ON CONFLICT (telegram_id) DO NOTHING
+            """
+        ),
+        {"t": ctg},
+    )
+    await db_session.flush()
+
+    with patch_client_init_auth(ctg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            save = await client.post(
+                "/api/webapp/client/trainer-edges/save",
+                json={"trainer_id": tid_saved},
+                headers={"X-Telegram-Init-Data": "mock"},
+            )
+            assert save.status_code == 200, save.text
+
+            latest = await client_latest_booking_primary_candidate(db_session, ctg)
+            upcoming = await client_upcoming_booking_primary_candidate(db_session, ctg)
+            assert latest[0] == tid_booked
+            assert upcoming[0] is None
+
+            edges = await get_all_edges(ctg, db_session)
+            bp_tid, bp_svc = hub_booking_primary_ids(
+                upcoming[0], upcoming[1], latest[0], latest[1]
+            )
+            primary_edge, primary_src = compute_primary_edge_meta(
+                edges,
+                None,
+                booking_primary_trainer_id=bp_tid,
+                booking_primary_service_id=bp_svc,
+            )
+            assert primary_src == "booking"
+            assert int(primary_edge["trainer_id"]) == tid_booked
+
+            edges_resp = await client.get(
+                "/api/webapp/client/trainer-edges",
+                headers={"X-Telegram-Init-Data": "mock"},
+            )
+            assert edges_resp.status_code == 200, edges_resp.text
+            body = edges_resp.json()
+            assert int(body["primary"]["trainer_id"]) == tid_booked
+            saved_tids = {int(e["trainer_id"]) for e in body.get("saved") or []}
+            assert tid_saved in saved_tids
+            assert tid_booked not in saved_tids
+
+
+@pytest.mark.asyncio
+async def test_client_hub_primary_keeps_booking_trainer_after_cancel(
+    app_use_test_db, db_session
+) -> None:
+    """Отменённая запись всё ещё задаёт «последнего тренера»; предстоящих при этом нет."""
+    ref_day, ref_now = _minsk_monday_reference()
+    future_day = ref_day + timedelta(days=4)
+    tid_booked, service_id, slot_id = await _create_trainer_online_with_slot(
+        db_session, slot_date=future_day, start_hours={14}
+    )
+    tid_saved, _, _ = await _create_trainer_online_with_slot(
+        db_session, slot_date=future_day, start_hours={18}
+    )
+    _sid, cid, aid = await _require_seed_ids(db_session)
+    ctg = _fresh_client_telegram_id()
+    phone, _ = belarus_test_phone(ctg)
+
+    mock_bot = MagicMock()
+    mock_bot.send_message = AsyncMock()
+    mock_bot.session = MagicMock()
+    mock_bot.session.close = AsyncMock()
+
+    with patch_client_init_auth(ctg):
+        with patch("src.api.routes.webapp.Bot", return_value=mock_bot):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                sess_body: dict = {
+                    "city_id": cid,
+                    "service_id": service_id,
+                    "trainer_id": tid_booked,
+                }
+                if aid is not None:
+                    sess_body["arena_id"] = aid
+                await client.post(
+                    "/api/webapp/client/session",
+                    json=sess_body,
+                    headers={"X-Telegram-Init-Data": "mock"},
+                )
+                with patch("src.api.routes.webapp.datetime") as mock_dt, patch(
+                    "src.api.routes.webapp.date"
+                ) as mock_date:
+                    mock_date.today.return_value = ref_day
+                    mock_dt.now.return_value = ref_now
+                    mock_dt.combine = datetime.combine
+                    book = await client.post(
+                        "/api/webapp/client/booking",
+                        json={
+                            "slot_id": slot_id,
+                            "phone": phone,
+                            "service_id": service_id,
+                            "first_name": "Клиент",
+                        },
+                        headers={"X-Telegram-Init-Data": "mock"},
+                    )
+                assert book.status_code == 200, book.text
+                bid = int(book.json()["booking_id"])
+                cancel = await client.post(
+                    f"/api/webapp/client/bookings/{bid}/cancel",
+                    json={"reason": "планы"},
+                    headers={"X-Telegram-Init-Data": "mock"},
+                )
+                assert cancel.status_code == 200, cancel.text
+                save = await client.post(
+                    "/api/webapp/client/trainer-edges/save",
+                    json={"trainer_id": tid_saved},
+                    headers={"X-Telegram-Init-Data": "mock"},
+                )
+                assert save.status_code == 200, save.text
+
+    latest = await client_latest_booking_primary_candidate(db_session, ctg)
+    upcoming = await client_upcoming_booking_primary_candidate(db_session, ctg)
+    assert latest == (tid_booked, service_id)
+    assert upcoming == (None, None)
+
+    edges = await get_all_edges(ctg, db_session)
+    bp_tid, bp_svc = hub_booking_primary_ids(upcoming[0], upcoming[1], latest[0], latest[1])
+    primary_edge, primary_src = compute_primary_edge_meta(
+        edges,
+        None,
+        booking_primary_trainer_id=bp_tid,
+        booking_primary_service_id=bp_svc,
+    )
+    assert primary_src == "booking"
+    assert int(primary_edge["trainer_id"]) == tid_booked

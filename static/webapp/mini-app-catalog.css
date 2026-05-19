@@ -2329,6 +2329,19 @@
       color: var(--tg-theme-hint-color);
       line-height: 1.35;
     }
+    .arena-card__meta {
+      margin-top: 4px;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--tg-theme-hint-color);
+      line-height: 1.2;
+    }
+    .arena-card--no-offers {
+      opacity: 0.72;
+    }
+    .arena-card--no-offers .arena-card__meta {
+      color: var(--tg-theme-hint-color);
+    }
 
     .arena-apply-bar {
       position: sticky;

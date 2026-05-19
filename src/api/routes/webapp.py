@@ -368,6 +368,7 @@ from src.api.routes.webapp_init_data import (
 )
 from src.application.client_trainer_primary_graph import (
     compute_primary_edge_meta as _compute_primary_edge_meta,
+    hub_booking_primary_ids as _hub_booking_primary_ids,
     resolve_primary_catalog_service_id as _resolve_primary_catalog_service_id,
 )
 from src.api.routes.webapp_client_payloads import (
@@ -2181,11 +2182,14 @@ async def get_client_hub_bootstrap(
                 s, telegram_id
             )
             rebook_raw = await client_rebook_trainer_targets(s, telegram_id, limit=3)
+            bp_tid, bp_svc = _hub_booking_primary_ids(
+                upcoming_tid, upcoming_svc, book_tid, book_svc
+            )
             primary_edge, primary_src = _compute_primary_edge_meta(
                 edges,
                 session_tid,
-                booking_primary_trainer_id=upcoming_tid,
-                booking_primary_service_id=upcoming_svc,
+                booking_primary_trainer_id=bp_tid,
+                booking_primary_service_id=bp_svc,
             )
             pid = int(primary_edge["trainer_id"]) if primary_edge else None
             hint_ids = sorted(

@@ -1999,13 +1999,34 @@
         },
       };
       var _catalogServicesCacheByCity = {};
+      var _catalogArenasCache = {};
 
       function catalogServicesCacheKey(cityId) {
         return cityId ? String(cityId) : '_all';
       }
 
+      function catalogArenasCacheKey(cityId, serviceId) {
+        return String(cityId || 0) + ':' + String(serviceId || 0);
+      }
+
       function invalidateCatalogServicesCache() {
         _catalogServicesCacheByCity = {};
+      }
+
+      function invalidateCatalogArenasCache() {
+        _catalogArenasCache = {};
+      }
+
+      /** Arenas for city; with service_id each row has trainer_count (one GET, cached). */
+      function fetchCatalogArenas(cityId, serviceId) {
+        var key = catalogArenasCacheKey(cityId, serviceId);
+        if (_catalogArenasCache[key]) return Promise.resolve(_catalogArenasCache[key]);
+        var params = { city_id: cityId };
+        if (serviceId) params.service_id = serviceId;
+        return getJson('/arenas', params).then(function(data) {
+          _catalogArenasCache[key] = data.items || [];
+          return _catalogArenasCache[key];
+        });
       }
 
       function normalizeCatalogServiceName(name) {
@@ -2298,6 +2319,7 @@
               state.cityId = newCityId;
               state.cityName = btn.dataset.name || '';
               invalidateCatalogServicesCache();
+              invalidateCatalogArenasCache();
               clearCatalogSessionStorageCache();
               var afterCity = function() {
                 persistCatalogFilters();
@@ -2433,6 +2455,7 @@
                   c.setAttribute('aria-pressed', 'false');
                 });
               }
+              invalidateCatalogArenasCache();
               clearCatalogSessionStorageCache();
               persistCatalogFilters();
               if (state.returnToSummary) {
@@ -2594,8 +2617,7 @@
         if (actions) actions.setAttribute('hidden', '');
         var applyBar = document.getElementById('arenaApplyBar');
         if (applyBar) applyBar.setAttribute('hidden', '');
-        getJson('/arenas', { city_id: state.cityId }).then(function(data) {
-          var items = data.items || [];
+        fetchCatalogArenas(state.cityId, state.serviceId).then(function(items) {
           arenaScreenDraft.items = items;
           arenaScreenDraft.ids = state.arenaIds.slice();
           arenaScreenDraft.names = state.arenaNames.slice();
@@ -2629,8 +2651,14 @@
           var isSel = !!selectedSet[a.id];
           var name = (a.name || '').replace(/"/g, '&quot;');
           var addr = a.address ? ('<div class="arena-card__addr">' + escapeHtml(a.address) + '</div>') : '';
+          var count = a.trainer_count != null ? a.trainer_count | 0 : null;
+          var showCount = state.cityId && state.serviceId && count !== null;
+          var offerLine = showCount
+            ? '<div class="arena-card__meta">' + escapeHtml(formatServiceOfferCount(count)) + '</div>'
+            : '';
+          var noOffers = showCount && count === 0;
           return (
-            '<label class="arena-card' + (isSel ? ' selected' : '') + '" data-id="' + a.id + '" data-name="' + name + '">' +
+            '<label class="arena-card' + (isSel ? ' selected' : '') + (noOffers ? ' arena-card--no-offers' : '') + '" data-id="' + a.id + '" data-name="' + name + '">' +
               '<span class="arena-card__check" aria-hidden="true">' +
                 (isSel
                   ? '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="3.5 8.5 6.8 11.8 12.5 5.2"/></svg>'
@@ -2639,6 +2667,7 @@
               '<span class="arena-card__main">' +
                 '<span class="arena-card__name">' + (a.name || '') + '</span>' +
                 addr +
+                offerLine +
               '</span>' +
             '</label>'
           );
@@ -2671,6 +2700,22 @@
         }
       }
 
+      function arenaDraftItemById(id) {
+        var items = arenaScreenDraft.items || [];
+        for (var i = 0; i < items.length; i++) {
+          if (items[i].id === id) return items[i];
+        }
+        return null;
+      }
+
+      function selectedArenaDraftAllZeroTrainers() {
+        if (!state.serviceId || arenaScreenDraft.ids.length === 0) return false;
+        return arenaScreenDraft.ids.every(function(id) {
+          var a = arenaDraftItemById(id);
+          return a && a.trainer_count != null && (a.trainer_count | 0) === 0;
+        });
+      }
+
       function updateArenaScreenChrome() {
         var counter = document.getElementById('arenaListCounter');
         var anyBtn = document.getElementById('arenaAnyBtn');
@@ -2682,7 +2727,12 @@
         if (anyBtn) anyBtn.classList.toggle('selected', n === 0);
         if (actions) actions.removeAttribute('hidden');
         if (applyBar) applyBar.removeAttribute('hidden');
-        if (applyBtn) applyBtn.textContent = n === 0 ? 'Готово · любая арена' : ('Готово · ' + n);
+        if (applyBtn) {
+          if (n === 0) applyBtn.textContent = 'Готово · любая арена';
+          else if (selectedArenaDraftAllZeroTrainers()) {
+            applyBtn.textContent = 'Готово · на выбранных аренах нет тренеров';
+          } else applyBtn.textContent = 'Готово · ' + n;
+        }
       }
 
       function commitArenaScreenSelection() {

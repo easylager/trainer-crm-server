@@ -3144,13 +3144,25 @@ async def list_bookings_for_client(
     return out
 
 
+# Hub «последняя запись» / primary fallback: includes client-cancelled visits (still «мой тренер»).
+_SQL_PRIMARY_LATEST_BOOKING_STATUSES = (
+    "'pending', 'confirmed', 'completed', 'no_show', 'cancelled'"
+)
+# Upcoming primary: only visits that are still on the calendar (not cancelled/declined).
+_SQL_PRIMARY_UPCOMING_BOOKING_STATUSES = (
+    "'pending', 'confirmed', 'completed', 'no_show'"
+)
+
+
 async def client_latest_booking_primary_candidate(
     session: AsyncSession,
     client_telegram_id: int,
 ) -> tuple[int | None, int | None]:
     """
     Trainer (and service_id) for the client's chronologically latest slot start — past or upcoming.
-    Used for «записаться снова» / rebook hints, not for hub «основной тренер» (see upcoming variant).
+
+    Includes ``cancelled`` bookings so hub primary does not jump to «saved» after the client cancels.
+    Used for «Сохранённые», rebook hints, and hub «Мой тренер» when there is no upcoming booking.
     """
     return await _client_booking_primary_candidate_query(
         session, client_telegram_id, upcoming_only=False
@@ -3182,14 +3194,19 @@ async def _client_booking_primary_candidate_query(
     upcoming_clause = (
         (" AND " + _SQL_SLOT_END_TS + " > CURRENT_TIMESTAMP") if upcoming_only else ""
     )
+    status_sql = (
+        _SQL_PRIMARY_UPCOMING_BOOKING_STATUSES
+        if upcoming_only
+        else _SQL_PRIMARY_LATEST_BOOKING_STATUSES
+    )
     r = await session.execute(
         text(
-            """
+            f"""
             SELECT b.trainer_id, b.service_id
             FROM bookings b
             INNER JOIN slots s ON s.id = b.slot_id
             WHERE b.client_id = :cid
-              AND b.status IN ('pending', 'confirmed', 'completed', 'no_show')
+              AND b.status IN ({status_sql})
               AND COALESCE(TRIM(LOWER(COALESCE(s.status, ''))), '') <> 'cancelled'
             """
             + upcoming_clause

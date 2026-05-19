@@ -20,6 +20,11 @@ async def list_services(
     return await CatalogRepository(session).list_services(city_id=city_id)
 
 
-async def list_arenas(session: AsyncSession, city_id: int) -> list[dict[str, Any]]:
-    """Arenas in a city for filter and slot creation."""
-    return await CatalogRepository(session).list_arenas(city_id)
+async def list_arenas(
+    session: AsyncSession,
+    city_id: int,
+    *,
+    service_id: int | None = None,
+) -> list[dict[str, Any]]:
+    """Arenas in a city; optional service_id adds per-arena trainer_count for catalog filter UX."""
+    return await CatalogRepository(session).list_arenas(city_id, service_id=service_id)

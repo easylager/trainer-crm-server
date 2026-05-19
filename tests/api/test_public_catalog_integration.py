@@ -537,6 +537,86 @@ async def test_public_pagination_total_stable(app_use_test_db, db_session) -> No
 
 
 @pytest.mark.asyncio
+async def test_public_arenas_trainer_count_per_service_and_city(
+    app_use_test_db, db_session
+) -> None:
+    """GET /arenas?city_id&service_id — trainer_count matches catalog arena filter (trainer_arenas)."""
+    sid, cid, _aid = await _require_seed_ids(db_session)
+    r = await db_session.execute(
+        text(
+            """
+            SELECT id FROM arenas
+            WHERE city_id = :cid AND COALESCE(is_active, true)
+            ORDER BY id
+            LIMIT 2
+            """
+        ),
+        {"cid": cid},
+    )
+    rows = r.fetchall()
+    if len(rows) < 2:
+        pytest.skip("need at least two active arenas in seed city")
+    arena_a, arena_b = int(rows[0][0]), int(rows[1][0])
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        before = await client.get(
+            "/api/public/arenas",
+            params={"city_id": cid, "service_id": sid},
+        )
+        assert before.status_code == 200, before.text
+        counts_before = {int(it["id"]): int(it["trainer_count"]) for it in before.json()["items"]}
+
+        tid = await _create_active_trainer_via_api(
+            client,
+            city_id=cid,
+            service_ids=[sid],
+            arena_ids=[arena_a],
+            first_name="Арена",
+            last_name="Счётчик",
+        )
+        await _ensure_trainer_subscription_tier(db_session, tid, SUBSCRIPTION_TIER_ONLINE)
+
+        after = await client.get(
+            "/api/public/arenas",
+            params={"city_id": cid, "service_id": sid},
+        )
+        lst_a = await client.get(
+            "/api/public/trainers",
+            params={"city_id": cid, "service_id": sid, "arena_id": arena_a, "limit": 200},
+        )
+        lst_b = await client.get(
+            "/api/public/trainers",
+            params={"city_id": cid, "service_id": sid, "arena_id": arena_b, "limit": 200},
+        )
+
+    assert after.status_code == 200
+    counts_after = {int(it["id"]): int(it["trainer_count"]) for it in after.json()["items"]}
+    for item in after.json()["items"]:
+        assert "trainer_count" in item
+        assert int(item["trainer_count"]) >= 0
+
+    assert counts_after.get(arena_a, 0) == counts_before.get(arena_a, 0) + 1
+    assert counts_after.get(arena_b, 0) == counts_before.get(arena_b, 0)
+
+    assert lst_a.status_code == lst_b.status_code == 200
+    assert tid in {int(x["id"]) for x in lst_a.json()["items"]}
+    assert tid not in {int(x["id"]) for x in lst_b.json()["items"]}
+
+
+@pytest.mark.asyncio
+async def test_public_arenas_without_service_id_has_no_trainer_count(
+    app_use_test_db, db_session
+) -> None:
+    """Legacy /arenas?city_id= — no per-arena counts (trainer app slot picker)."""
+    _sid, cid, _ = await _require_seed_ids(db_session)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        r = await client.get("/api/public/arenas", params={"city_id": cid})
+    assert r.status_code == 200
+    for item in r.json()["items"]:
+        assert "trainer_count" not in item
+
+
+@pytest.mark.asyncio
 async def test_public_cities_services_arenas_trainers_smoke(app_use_test_db, db_session) -> None:
     sid, cid, aid = await _require_seed_ids(db_session)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:

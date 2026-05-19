@@ -299,8 +299,22 @@ class ClientTrainerEdgeRepository:
         """Update edge counters/timestamps when a booking is created or completed."""
         await self.ensure_edge(telegram_id, trainer_id, context_type, context_id)
         ts = booked_at or datetime.now(timezone.utc)
+        params: dict = {
+            "tid": telegram_id,
+            "trainer_id": trainer_id,
+            "ts": ts,
+            "completed": completed,
+            "inc_completed": 1 if completed else 0,
+            "ctx_type": context_type,
+            "ctx_id": context_id,
+        }
+        service_sql = ""
+        if booking_service_id is not None:
+            service_sql = ",\n                    last_booking_service_id = CAST(:bsid AS INTEGER)"
+            params["bsid"] = int(booking_service_id)
         await self._s.execute(
-            text("""
+            text(
+                f"""
                 UPDATE client_trainer_edges
                 SET
                     last_booking_at = GREATEST(last_booking_at,
@@ -312,21 +326,13 @@ class ClientTrainerEdgeRepository:
                         WHEN :completed THEN GREATEST(last_completed_at,
                             CAST(:ts AS TIMESTAMP WITH TIME ZONE))
                         ELSE last_completed_at
-                    END,
-                    last_booking_service_id = CASE
-                        WHEN :bsid IS NOT NULL THEN CAST(:bsid AS INTEGER)
-                        ELSE last_booking_service_id
-                    END
+                    END{service_sql}
                 WHERE telegram_id = :tid AND trainer_id = :trainer_id
                   AND context_type IS NOT DISTINCT FROM :ctx_type
                   AND context_id   IS NOT DISTINCT FROM :ctx_id
-            """),
-            {
-                "tid": telegram_id, "trainer_id": trainer_id,
-                "ts": ts, "completed": completed, "inc_completed": 1 if completed else 0,
-                "bsid": booking_service_id,
-                "ctx_type": context_type, "ctx_id": context_id,
-            },
+            """
+            ),
+            params,
         )
 
     async def set_notify_slots(
