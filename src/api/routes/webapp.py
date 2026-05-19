@@ -57,6 +57,7 @@ from src.application.booking_use_cases import (
     cancel_booking,
     cancel_booking_by_client,
     client_latest_booking_primary_candidate,
+    client_upcoming_booking_primary_candidate,
     client_rebook_trainer_targets,
     confirm_booking,
     coerce_service_id_and_name_for_trainer_catalog,
@@ -125,6 +126,8 @@ from src.application.client_use_cases import (
     attach_telegram_id_to_client,
     get_client_by_phone,
     get_client_id_by_telegram_id,
+    reset_orphan_client_miniapp_trainer_pointers,
+    trainer_id_belongs_to_telegram,
     get_client_phone_for_webapp,
     get_client_profile_basic,
     get_client_telegram_id,
@@ -160,10 +163,12 @@ from src.application.client_cert_order_use_cases import (
 from src.application.client_session_use_cases import (
     get_or_create_session as get_client_session,
     get_session as read_client_bot_session,
+    save_catalog_filters,
     set_arena,
     set_city,
     set_selected_trainer,
     set_service,
+    sync_session_catalog_after_client_booking,
 )
 from src.application.client_trainer_edge_use_cases import (
     get_all_edges as get_all_trainer_edges,
@@ -1344,7 +1349,9 @@ async def _client_booking_post_create_effects(
                 session=s,
                 booking_service_id=service_id,
             )
-            await set_selected_trainer(telegram_id, trainer_id, s)
+            await sync_session_catalog_after_client_booking(
+                telegram_id, trainer_id, service_id, s
+            )
             await generate_reminders_for_booking(s, booking_id)
     except Exception:
         logger.exception(
@@ -1557,6 +1564,15 @@ async def get_client_session_state(
             first = (p.get("first_name") or "").strip()
             last = (p.get("last_name") or "").strip()
             trainer_name = (first + " " + last).strip() or "Тренер"
+            # Catalog UI: session row may lack city while service/trainer were saved — infer from trainer profile.
+            if not city_id:
+                profile_city = p.get("city_id")
+                if profile_city is not None:
+                    city_id = int(profile_city)
+                    for c in await list_cities(session):
+                        if c.get("id") == city_id:
+                            city_name = c.get("name") or ""
+                            break
 
     cfn = (profile.get("first_name") or "").strip() if profile else ""
     cln = (profile.get("last_name") or "").strip() if profile else ""
@@ -1646,10 +1662,49 @@ async def post_client_session(
     """Save catalog choice (city, service, arena, trainer) so bot can show 'Выбран: X'. Auth: client initData."""
     telegram_id = client_catalog_telegram_key(principal)
 
-    await set_city(telegram_id, body.city_id, session)
-    await set_service(telegram_id, body.service_id, session)
-    await set_arena(telegram_id, body.arena_id, session)
-    await set_selected_trainer(telegram_id, body.trainer_id, session)
+    await save_catalog_filters(
+        telegram_id,
+        session,
+        city_id=body.city_id,
+        service_id=body.service_id,
+        arena_id=body.arena_id,
+        trainer_id=body.trainer_id,
+    )
+    return {"success": True}
+
+
+class ClientCatalogFiltersBody(BaseModel):
+    """Partial catalog filter persistence from summary screen (trainer optional)."""
+
+    city_id: int | None = None
+    service_id: int | None = None
+    arena_id: int | None = None
+    trainer_id: int | None = None
+
+
+@router.patch("/client/session/catalog-filters")
+async def patch_client_catalog_filters(
+    body: ClientCatalogFiltersBody,
+    session: AsyncSession = Depends(get_session),
+    principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
+):
+    """Save city/service/arena (and optionally trainer) without requiring a trainer card open."""
+    telegram_id = client_catalog_telegram_key(principal)
+    if (
+        body.city_id is None
+        and body.service_id is None
+        and body.arena_id is None
+        and body.trainer_id is None
+    ):
+        return {"success": True}
+    await save_catalog_filters(
+        telegram_id,
+        session,
+        city_id=body.city_id,
+        service_id=body.service_id,
+        arena_id=body.arena_id,
+        trainer_id=body.trainer_id,
+    )
     return {"success": True}
 
 
@@ -2112,17 +2167,25 @@ async def get_client_hub_bootstrap(
     async def _hub_session() -> dict[str, Any]:
         """Legacy: selected_trainer_id + edge graph fields + saved_trainers preview for home strip."""
         async with async_session_factory() as s:
+            await reset_orphan_client_miniapp_trainer_pointers(s, telegram_id)
             row = await read_client_bot_session(telegram_id, s)
             tid = (row or {}).get("selected_trainer_id")
             edges = await get_all_trainer_edges(telegram_id, s)
             session_tid = int(tid) if tid is not None else None
+            if session_tid is not None and await trainer_id_belongs_to_telegram(
+                s, session_tid, telegram_id
+            ):
+                session_tid = None
             book_tid, book_svc = await client_latest_booking_primary_candidate(s, telegram_id)
+            upcoming_tid, upcoming_svc = await client_upcoming_booking_primary_candidate(
+                s, telegram_id
+            )
             rebook_raw = await client_rebook_trainer_targets(s, telegram_id, limit=3)
             primary_edge, primary_src = _compute_primary_edge_meta(
                 edges,
                 session_tid,
-                booking_primary_trainer_id=book_tid,
-                booking_primary_service_id=book_svc,
+                booking_primary_trainer_id=upcoming_tid,
+                booking_primary_service_id=upcoming_svc,
             )
             pid = int(primary_edge["trainer_id"]) if primary_edge else None
             hint_ids = sorted(
@@ -6324,6 +6387,13 @@ async def delete_trainer_sandbox_client(
     )
     if bool(r_real.scalar()):
         raise HTTPException(status_code=409, detail="У клиента есть реальные записи — удаление запрещено")
+    from src.application.client_trainer_edge_use_cases import (
+        purge_client_trainer_hub_signals_on_roster_detach,
+    )
+
+    await purge_client_trainer_hub_signals_on_roster_detach(
+        session, int(trainer_id), int(client_id)
+    )
     # Free up slots that the sandbox bookings occupied (status='booked' → 'available') before delete.
     await session.execute(
         text(

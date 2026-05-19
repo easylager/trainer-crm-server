@@ -184,9 +184,12 @@ async def get_cities(session: AsyncSession = Depends(get_session)) -> dict[str, 
 
 
 @router.get("/services")
-async def get_services(session: AsyncSession = Depends(get_session)) -> dict[str, list]:
-    """List services for filters (e.g. client bot service picker)."""
-    items = await list_services(session)
+async def get_services(
+    city_id: int | None = None,
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, list]:
+    """List services for filters; city_id limits to services with catalog trainers in that city."""
+    items = await list_services(session, city_id=city_id)
     return {"items": items}
 
 

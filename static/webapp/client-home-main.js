@@ -35,7 +35,7 @@
       /** Explore tiles shown at bottom — same in all scenarios. */
       var EXPLORE_TILES = [
         /* ?tab=catalog — list/browse; без этого каталог открывает карточку из сессии (часто устаревший тренер). */
-        { path: 'catalog?tab=catalog',       label: 'Тренеры и запись', hint: 'Каталог, фильтры, слоты',        icon: 'search', badge: null },
+        { path: 'catalog?tab=catalog',       label: 'Каталог и запись', hint: 'Сценарии, фильтры, слоты',       icon: 'search', badge: null },
         { path: 'client-saved-trainers',     label: 'Сохранённые',        hint: 'Закладки из каталога',           icon: 'bookmark', badge: null },
         { path: 'client-family-access',     label: 'Семейный доступ',     hint: 'Один аккаунт на семью',          icon: 'user',    badge: null },
         { path: 'client-bookings',           label: 'Мои записи',          hint: 'Все занятия',                    icon: 'cal',    badge: null },

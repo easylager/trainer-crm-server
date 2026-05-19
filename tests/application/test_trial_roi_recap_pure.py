@@ -49,9 +49,9 @@ def test_trial_roi_message_anchors_value_without_sales_cta() -> None:
     assert f"Абонементы: <b>200 {BYR_SIGN}</b>" in text
     assert f"Сертификаты: <b>100 {BYR_SIGN}</b>" in text
     assert f"Итого в учёте: <b>420 {BYR_SIGN}</b>" in text
-    assert "Через <b>2 дня</b> trial закончится" in text
+    assert "Через <b>2 дня</b> <b>пробный период</b> закончится" in text
     assert "профиль останется в каталоге" in text
-    assert "Trial действует до 15.04.2026" in text
+    assert "<b>Пробный период</b> действует до 15.04.2026" in text
     # D-2 is mental anchoring, not the decision ask. CTA-style copy lives in D-1, not here.
     for sales_phrase in ("Продлить", "Вернуть контроль", "👇"):
         assert sales_phrase not in text
@@ -69,8 +69,8 @@ def test_trial_roi_message_pluralizes_days_until_expiry() -> None:
         days_until_expiry=5,
     )
 
-    assert "Через <b>1 день</b> trial закончится" in one_day
-    assert "Через <b>5 дней</b> trial закончится" in five_days
+    assert "Через <b>1 день</b> <b>пробный период</b> закончится" in one_day
+    assert "Через <b>5 дней</b> <b>пробный период</b> закончится" in five_days
 
 
 def test_trial_roi_message_omits_revenue_block_when_zero() -> None:

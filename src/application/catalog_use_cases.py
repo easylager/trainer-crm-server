@@ -13,9 +13,11 @@ async def list_cities(session: AsyncSession) -> list[dict[str, Any]]:
     return await CatalogRepository(session).list_cities()
 
 
-async def list_services(session: AsyncSession) -> list[dict[str, Any]]:
-    """All services for filters; ordered by sort_order."""
-    return await CatalogRepository(session).list_services()
+async def list_services(
+    session: AsyncSession, city_id: int | None = None
+) -> list[dict[str, Any]]:
+    """Services for filters; optional city scopes list to services with trainers in city."""
+    return await CatalogRepository(session).list_services(city_id=city_id)
 
 
 async def list_arenas(session: AsyncSession, city_id: int) -> list[dict[str, Any]]:

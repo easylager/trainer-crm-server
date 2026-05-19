@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-  <title>Тренеры и запись</title>
+  <title>Каталог и запись</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script src="mini-app-telegram-chrome.js?v=202605022"></script>
   <link rel="stylesheet" href="theme.css?v=20260426" />
@@ -23,8 +23,8 @@
     />
   </noscript>
   <script src="client-mini-app-theme.js"></script>
-  <link rel="preload" href="catalog-main.js?v=20260581" as="script" />
-  <link rel="stylesheet" href="mini-app-catalog.css?v=20260577" />
+  <link rel="preload" href="catalog-main.js?v=202605188" as="script" />
+  <link rel="stylesheet" href="mini-app-catalog.css?v=202605188" />
   <link rel="stylesheet" href="mini-app-client-nav.css?v=20260426" />
   <!-- Leaflet (mini-map for arena multi-select). Loaded on every page so back/forward keeps tiles cached;
        library is ~40KB gz, used only when #screenArena renders. OSM tiles require attribution by license. -->
@@ -33,7 +33,7 @@
 </head>
 <body>
   <div class="header">
-    <h1 class="header-title" id="headerTitle">Тренеры и запись</h1>
+    <h1 class="header-title" id="headerTitle">Каталог и запись</h1>
     <div class="client-mini-nav">
       <button type="button" class="btn-app-home" id="btnHome">Главная</button>
       <button type="button" class="btn-app-back" id="btnBack" hidden data-skip-history-back="true">Назад</button>
@@ -46,19 +46,37 @@
       <button type="button" class="tab-btn" id="tabMyTrainer" data-tab="my_trainer">Мой тренер</button>
     </div>
     <div id="catalogTabPanel" class="catalog-tab-panel active">
-      <div class="summary-card">
-        <div class="summary-title">Ваш выбор</div>
-        <div id="summaryRows"></div>
-      </div>
-      <div class="summary-actions">
-        <button type="button" class="btn-trainer-list" id="btnPickTrainer">Показать тренеров →</button>
-        <p class="summary-hint" id="summaryHint">Нажмите на строку, чтобы изменить город, услугу или арену.</p>
+      <div class="catalog-home" id="catalogHome">
+        <header class="catalog-hero">
+          <h2 class="catalog-hero__title" id="catalogHeroTitle">Найдите тренировку</h2>
+          <p class="catalog-hero__lead" id="catalogHeroLead">Выберите город и занятие — покажем тренеров со свободными слотами.</p>
+        </header>
+
+        <section class="catalog-block catalog-block--popular" aria-labelledby="catalogScenariosLabel">
+          <h3 class="catalog-block__eyebrow" id="catalogScenariosLabel">Популярное</h3>
+          <div class="catalog-scenario-chips catalog-scenario-chips--duo" id="catalogScenarioChips" role="group" aria-label="Популярные варианты">
+            <button type="button" class="catalog-scenario-chip" data-scenario="skating">⛸️ Улучшить катание</button>
+            <button type="button" class="catalog-scenario-chip" data-scenario="from-zero">🌱 С нуля</button>
+          </div>
+        </section>
+
+        <section class="catalog-block catalog-block--refine" aria-labelledby="catalogRefineLabel">
+          <h3 class="catalog-block__eyebrow" id="catalogRefineLabel">Параметры поиска</h3>
+          <div class="catalog-filter-list" id="summaryRows"></div>
+        </section>
+
+        <footer class="catalog-cta catalog-cta--dock">
+          <button type="button" class="btn-block btn-primary catalog-find-btn" id="btnPickTrainer">
+            <span class="catalog-find-btn__label">Показать результаты</span>
+          </button>
+          <p class="catalog-cta__hint" id="catalogFindHint" role="status">Укажите город и занятие — кнопка подберёт варианты</p>
+        </footer>
       </div>
     </div>
     <div id="myTrainerTabPanel" class="catalog-tab-panel">
       <div id="myTrainerEmpty" class="my-trainer-empty">
         <p>Выберите тренера в каталоге — здесь появится его карточка с записью и заявкой.</p>
-        <button type="button" class="btn-trainer-list" id="btnMyTrainerPick">Показать тренеров →</button>
+        <button type="button" class="btn-block btn-primary catalog-find-btn" id="btnMyTrainerPick">Показать результаты</button>
       </div>
       <div id="myTrainerCardShort" class="summary-card" style="display:none;">
         <div class="summary-title">Ваш тренер</div>
@@ -70,18 +88,18 @@
   </div>
 
   <div id="screenCity" data-screen>
-    <div class="step-title">Выбери город</div>
+    <div class="step-title">📍 Город</div>
     <div id="cityList"></div>
   </div>
   <div id="screenService" data-screen>
     <button type="button" class="back-link" id="backToCity" style="margin-bottom:8px;"><svg class="back-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>Другой город</button>
-    <div class="step-title">Выбери услугу</div>
+    <div class="step-title" id="screenServiceTitle">Что ищете</div>
     <div id="serviceList"></div>
   </div>
   <div id="screenArena" data-screen>
     <button type="button" class="back-link" id="backToService" style="margin-bottom:8px;"><svg class="back-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>Другая услуга</button>
-    <div class="step-title">Где удобно заниматься?</div>
-    <p class="arena-help">Можно выбрать сразу несколько арен — покажем тренеров, у которых занятия проходят на любой из них.</p>
+    <div class="step-title">🏟️ Площадка</div>
+    <p class="arena-help">Можно выбрать сразу несколько площадок — покажем тренеров, у которых занятия проходят на любой из них.</p>
     <div class="arena-map-wrap" id="arenaMapWrap" hidden>
       <div class="arena-map" id="arenaMap" role="img" aria-label="Карта арен в выбранном городе"></div>
       <div class="arena-map__legend" id="arenaMapLegend">
@@ -108,14 +126,15 @@
     </div>
     
     <!-- Time Filters Panel -->
-    <div class="filter-panel expanded" id="timeFilters">
-      <div class="filter-header">
+    <div class="filter-panel" id="timeFilters">
+      <div class="filter-header" id="timeFiltersHeader" role="button" tabindex="0" aria-expanded="false" aria-controls="timeFiltersContent">
         <div>
           <div class="filter-title">Фильтр по времени</div>
-          <div class="filter-summary" id="filterSummary">Все временные промежутки</div>
+          <div class="filter-summary" id="filterSummary">Свободные слоты на 14 дней</div>
         </div>
+        <span class="filter-toggle" aria-hidden="true">▼</span>
       </div>
-      <div class="filter-content">
+      <div class="filter-content" id="timeFiltersContent">
         <!-- Days of Week -->
         <div class="filter-section">
           <div class="filter-section-title">Дни недели</div>
@@ -255,7 +274,7 @@
     </div>
   </div>
 
-  <script defer src="catalog-main.js?v=20260581"></script>
+  <script defer src="catalog-main.js?v=202605188"></script>
   <script defer src="mini-app-client-home.js"></script>
 </body>
 </html>

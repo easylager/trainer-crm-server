@@ -542,10 +542,18 @@ async def test_public_cities_services_arenas_trainers_smoke(app_use_test_db, db_
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         c = await client.get("/api/public/cities")
         s = await client.get("/api/public/services")
+        s_city = await client.get("/api/public/services", params={"city_id": cid})
         a = await client.get("/api/public/arenas", params={"city_id": cid})
-    assert c.status_code == s.status_code == 200
+    assert c.status_code == s.status_code == s_city.status_code == 200
     assert "items" in c.json() and isinstance(c.json()["items"], list)
     assert "items" in s.json()
+    for item in s.json()["items"]:
+        assert "trainer_count" in item
+    city_items = s_city.json()["items"]
+    all_items = s.json()["items"]
+    assert len(city_items) == len(all_items)
+    assert all("trainer_count" in item for item in city_items)
+    assert any(item["id"] == sid for item in city_items)
     if aid is not None:
         assert a.status_code == 200
         assert "items" in a.json()

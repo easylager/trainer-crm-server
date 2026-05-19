@@ -66,6 +66,8 @@
         openedFromMyTrainerTab: false,
         /** trainers | groups — список после выбора города/услуги/арены */
         catalogMode: 'trainers',
+        /** Quick scenario chip (stub); maps to presets later. */
+        catalogScenarioStub: null,
         /** From GET /client/session — clients.phone for prefill in booking form */
         clientPhone: '',
         /** When true, booking/request forms must collect first name (last optional). */
@@ -669,9 +671,27 @@
         return [mode, state.cityId || 0, state.serviceId || 0, arenaIdsCacheKey(), state.limit || 10, dayPart, timePart].join(':');
       }
 
+      function syncTimeFilterPanelAria() {
+        var panel = document.getElementById('timeFilters');
+        var header = document.getElementById('timeFiltersHeader');
+        if (!panel || !header) return;
+        var open = panel.classList.contains('expanded');
+        header.setAttribute('aria-expanded', open ? 'true' : 'false');
+      }
+
+      function setTimeFilterPanelExpanded(expanded) {
+        var panel = document.getElementById('timeFilters');
+        if (!panel) return;
+        panel.classList.toggle('expanded', !!expanded);
+        syncTimeFilterPanelAria();
+      }
+
       function toggleFilterPanel() {
         var panel = document.getElementById('timeFilters');
-        if (panel) panel.classList.toggle('expanded');
+        if (panel) {
+          panel.classList.toggle('expanded');
+          syncTimeFilterPanelAria();
+        }
       }
 
       function updateFilterSummary() {
@@ -697,7 +717,7 @@
           summaryEl.textContent =
             state.catalogMode === 'groups'
               ? 'Любые дни (серия группы)'
-              : 'Все временные промежутки';
+              : 'Свободные слоты на 14 дней';
           if (clearBtn) clearBtn.style.display = 'none';
         } else {
           summaryEl.textContent =
@@ -788,10 +808,23 @@
       function initializeFilterHandlers() {
         if (filterHandlersInitialized) return;
         filterHandlersInitialized = true;
+
+        var filterHeader = document.getElementById('timeFiltersHeader');
+        if (filterHeader) {
+          filterHeader.addEventListener('click', toggleFilterPanel);
+          filterHeader.addEventListener('keydown', function(ev) {
+            if (ev.key === 'Enter' || ev.key === ' ') {
+              ev.preventDefault();
+              toggleFilterPanel();
+            }
+          });
+        }
+        syncTimeFilterPanelAria();
         
         // Day filters
         document.querySelectorAll('#dayFilters .filter-chip').forEach(function(chip) {
           chip.addEventListener('click', function() {
+            setTimeFilterPanelExpanded(true);
             var day = parseInt(chip.dataset.day);
             var index = state.filters.days.indexOf(day);
             if (index === -1) {
@@ -809,6 +842,7 @@
         // Time slot filters
         document.querySelectorAll('#timeSlotFilters .filter-chip').forEach(function(chip) {
           chip.addEventListener('click', function() {
+            setTimeFilterPanelExpanded(true);
             var timeSlot = chip.dataset.time;
             var index = state.filters.timeSlots.indexOf(timeSlot);
             if (index === -1) {
@@ -828,6 +862,51 @@
         if (clearBtn) {
           clearBtn.addEventListener('click', clearAllFilters);
         }
+      }
+
+      /** Compact offer count for service rows (N тренер/тренера/тренеров in city). */
+      function formatServiceOfferCount(n) {
+        n = n | 0;
+        if (n <= 0) return 'Пока нет тренеров';
+        var mod10 = n % 10;
+        var mod100 = n % 100;
+        if (mod10 === 1 && mod100 !== 11) return n + ' тренер';
+        if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return n + ' тренера';
+        return n + ' тренеров';
+      }
+
+      function lookupServiceTrainerCount(serviceId, cityId) {
+        if (!cityId || serviceId == null) return null;
+        var items = _catalogServicesCacheByCity[catalogServicesCacheKey(cityId)] || [];
+        for (var i = 0; i < items.length; i++) {
+          if (items[i].id === serviceId) {
+            return items[i].trainer_count != null ? items[i].trainer_count | 0 : 0;
+          }
+        }
+        return null;
+      }
+
+      function patchSummaryServiceOfferMeta() {
+        var tile = document.querySelector('#summaryRows .catalog-filter-tile[data-action="service"]');
+        if (!tile || !state.cityId) return;
+        var body = tile.querySelector('.catalog-filter-tile__body');
+        if (!body) return;
+        var metaEl = body.querySelector('.catalog-filter-tile__meta');
+        var label = '';
+        if (state.serviceId) {
+          var c = lookupServiceTrainerCount(state.serviceId, state.cityId);
+          if (c !== null) label = formatServiceOfferCount(c);
+        }
+        if (!label) {
+          if (metaEl) metaEl.remove();
+          return;
+        }
+        if (!metaEl) {
+          metaEl = document.createElement('span');
+          metaEl.className = 'catalog-filter-tile__meta';
+          body.appendChild(metaEl);
+        }
+        metaEl.textContent = label;
       }
 
       /** Russian pluralization for trainer count (найден N тренер/тренера/тренеров). */
@@ -1084,7 +1163,15 @@
           });
           if (parts.length) q = '?' + parts.join('&');
         }
-        return fetch('/api/public' + path + q, { cache: 'no-store' }).then(function(r) { return r.json(); });
+        return fetch('/api/public' + path + q, { cache: 'no-store' }).then(function(r) {
+          return r.json().then(function(data) {
+            if (!r.ok) {
+              var detail = (data && data.detail) ? data.detail : r.statusText;
+              throw new Error(typeof detail === 'string' ? detail : 'HTTP ' + r.status);
+            }
+            return data;
+          });
+        });
       }
       /** When trainer is «мой / основной» but not public-catalog-visible, public API 404s — authenticated fallback. */
       function loadTrainerByIdViaWebappFallback(trainerId) {
@@ -1225,6 +1312,7 @@
           var cur = state.serviceId != null ? Number(state.serviceId) : NaN;
           if (!isNaN(cur) && allowed[cur]) {
             state.serviceName = String(allowed[cur].service_name || state.serviceName || '').trim();
+            if (state.cityId && state.serviceId) persistCatalogFilters(trainer.id);
             resolve();
             return;
           }
@@ -1589,8 +1677,14 @@
         opts = opts || {};
         var bookingOnly = !!opts.bookingFormRefresh;
         if (!bookingOnly) {
-          if (session.city_id) { state.cityId = session.city_id; state.cityName = session.city_name || ''; }
-          if (session.service_id) { state.serviceId = session.service_id; state.serviceName = session.service_name || ''; }
+          if (session.city_id != null && session.city_id !== '') {
+            state.cityId = parseInt(session.city_id, 10) || null;
+            state.cityName = session.city_name || '';
+          }
+          if (session.service_id != null && session.service_id !== '') {
+            state.serviceId = parseInt(session.service_id, 10) || null;
+            state.serviceName = session.service_name || '';
+          }
           if (session.arena_id != null) {
             // Persisted single-arena session (server only stores one) is restored as a 1-element selection.
             setArenaSelection([session.arena_id], [session.arena_name || 'Арена']);
@@ -1725,18 +1819,46 @@
         }
       }
 
-      function persistTrainerSelection(trainerId) {
-        // Persist trainer choice so the next open starts from the same context (city/service/arena/trainer).
-        if (!trainerId || !state.cityId || !state.serviceId) return;
+      /** Persist summary filters (and optional trainer) so reopening catalog keeps city/service/arena. */
+      function persistCatalogFilters(trainerId) {
+        if (!state.cityId && !state.serviceId) return Promise.resolve();
         var initData = tg && tg.initData ? tg.initData : '';
-        if (!initData) return;
-        var headers = { 'Content-Type': 'application/json', 'X-Telegram-Init-Data': initData };
-        var url = '/api/webapp/client/session?init_data=' + encodeURIComponent(initData);
-        fetch(url, {
-          method: 'POST',
-          headers: headers,
-          body: JSON.stringify({ city_id: state.cityId, service_id: state.serviceId, arena_id: state.arenaId, trainer_id: trainerId })
+        if (!initData) return Promise.resolve();
+        var body = {};
+        if (state.cityId) body.city_id = state.cityId;
+        if (state.serviceId) body.service_id = state.serviceId;
+        if (state.arenaId != null) body.arena_id = state.arenaId;
+        var tid = trainerId != null ? trainerId : state.trainerId;
+        if (tid != null && Number(tid) > 0) body.trainer_id = Number(tid);
+        return fetch('/api/webapp/client/session/catalog-filters', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', 'X-Telegram-Init-Data': initData },
+          body: JSON.stringify(body),
         }).catch(function() { /* no UX impact */ });
+      }
+
+      function persistTrainerSelection(trainerId) {
+        if (!trainerId || !state.cityId || !state.serviceId) return;
+        persistCatalogFilters(trainerId);
+      }
+
+      /** Drop service/scenario chip when the service has no trainers in the new city. */
+      function clearServiceIfInvalidForCity(cityId) {
+        if (!state.serviceId && !state.catalogScenarioStub) return Promise.resolve();
+        return fetchCatalogServices(cityId).then(function(items) {
+          if (!state.serviceId) return items;
+          var stillValid = items.some(function(s) {
+            return s.id === state.serviceId;
+          });
+          if (!stillValid) {
+            state.serviceId = null;
+            state.serviceName = '';
+            state.catalogScenarioStub = null;
+            syncScenarioChipSelection();
+            clearCatalogSessionStorageCache();
+          }
+          return items;
+        });
       }
 
       function escapeHtml(s) {
@@ -1853,19 +1975,278 @@
             alert(e.message || 'Не удалось отправить заявку');
           });
       }
+      /** Summary filter row labels (trainer is chosen on the list screen, not in this panel). */
+      var CATALOG_FILTER_LABELS = {
+        city: '📍 Город',
+        service: '🎯 Что ищете',
+        arena: '🏟️ Площадка',
+      };
+      var CATALOG_FILTER_ICONS = { city: '📍', service: '🎯', arena: '🏟️' };
+      var CATALOG_FILTER_SHORT_LABELS = { city: 'Город', service: 'Что ищете', arena: 'Площадка' };
+
+      /**
+       * Quick goal chips → catalog services (names from seed / migrations).
+       * skating → «Совершенствование катания»; from-zero → «Обучение катанию «с нуля»».
+       */
+      var CATALOG_SCENARIO_STUBS = {
+        skating: {
+          label: '⛸️ Улучшить катание',
+          servicePatterns: ['совершенствование катания'],
+        },
+        'from-zero': {
+          label: '🌱 С нуля',
+          servicePatterns: ['обучение катанию'],
+        },
+      };
+      var _catalogServicesCacheByCity = {};
+
+      function catalogServicesCacheKey(cityId) {
+        return cityId ? String(cityId) : '_all';
+      }
+
+      function invalidateCatalogServicesCache() {
+        _catalogServicesCacheByCity = {};
+      }
+
+      function normalizeCatalogServiceName(name) {
+        return String(name || '')
+          .toLowerCase()
+          .replace(/[«»"'`]/g, '')
+          .replace(/\s+/g, ' ')
+          .trim();
+      }
+
+      function matchServiceForScenario(stubKey, items) {
+        var stub = CATALOG_SCENARIO_STUBS[stubKey];
+        if (!stub || !items || !items.length) return null;
+        var patterns = stub.servicePatterns || [];
+        for (var i = 0; i < items.length; i++) {
+          var norm = normalizeCatalogServiceName(items[i].name);
+          for (var p = 0; p < patterns.length; p++) {
+            if (norm.indexOf(patterns[p]) !== -1) return items[i];
+          }
+        }
+        return null;
+      }
+
+      function fetchCatalogServices(cityId) {
+        var key = catalogServicesCacheKey(cityId);
+        if (_catalogServicesCacheByCity[key]) return Promise.resolve(_catalogServicesCacheByCity[key]);
+        var params = cityId ? { city_id: cityId } : null;
+        return getJson('/services', params).then(function(data) {
+          _catalogServicesCacheByCity[key] = data.items || [];
+          return _catalogServicesCacheByCity[key];
+        });
+      }
+
+      /** Bind scenario chip to real service_id when API exposes the name. */
+      function applyScenarioService(stubKey) {
+        if (!stubKey) return Promise.resolve(false);
+        return fetchCatalogServices(state.cityId || null)
+          .then(function(items) {
+            var hit = matchServiceForScenario(stubKey, items);
+            if (!hit) return false;
+            state.serviceId = hit.id;
+            state.serviceName = hit.name || '';
+            clearCatalogSessionStorageCache();
+            return true;
+          })
+          .catch(function() {
+            return false;
+          });
+      }
+
+      function syncScenarioChipSelection() {
+        var host = document.getElementById('catalogScenarioChips');
+        if (!host) return;
+        var stubKey = state.catalogScenarioStub;
+        if (!stubKey && state.serviceId) {
+          var items = _catalogServicesCacheByCity[catalogServicesCacheKey(state.cityId || null)];
+          if (items) {
+            for (var k in CATALOG_SCENARIO_STUBS) {
+              if (!Object.prototype.hasOwnProperty.call(CATALOG_SCENARIO_STUBS, k)) continue;
+              var hit = matchServiceForScenario(k, items);
+              if (hit && hit.id === state.serviceId) stubKey = k;
+            }
+          }
+        }
+        host.querySelectorAll('.catalog-scenario-chip').forEach(function(c) {
+          var on = (c.getAttribute('data-scenario') || '') === stubKey;
+          c.classList.toggle('catalog-scenario-chip--selected', on);
+          c.setAttribute('aria-pressed', on ? 'true' : 'false');
+        });
+      }
+
+      var CATALOG_CTA_LABEL = 'Показать результаты';
+
+      function updateCatalogHomeMode() {
+        var titleEl = document.getElementById('catalogHeroTitle');
+        var leadEl = document.getElementById('catalogHeroLead');
+        if (!titleEl || !leadEl) return;
+        if (state.cityId && state.serviceId) {
+          titleEl.textContent = 'Готово к поиску';
+          leadEl.textContent = 'Нажмите «Показать результаты» — откроем подходящих тренеров.';
+        } else {
+          titleEl.textContent = 'Найдите тренировку';
+          leadEl.textContent = 'Выберите город и занятие — покажем тренеров со свободными слотами.';
+        }
+      }
+
+      function wireCatalogScenarioChips() {
+        var host = document.getElementById('catalogScenarioChips');
+        if (!host) return;
+        host.querySelectorAll('.catalog-scenario-chip').forEach(function(chip) {
+          chip.setAttribute('aria-pressed', 'false');
+          chip.addEventListener('click', function() {
+            var key = chip.getAttribute('data-scenario') || '';
+            var stub = CATALOG_SCENARIO_STUBS[key];
+            if (!stub) return;
+            var wasSelected = chip.classList.contains('catalog-scenario-chip--selected');
+            host.querySelectorAll('.catalog-scenario-chip').forEach(function(c) {
+              c.classList.remove('catalog-scenario-chip--selected');
+              c.setAttribute('aria-pressed', 'false');
+            });
+            if (!wasSelected) {
+              chip.classList.add('catalog-scenario-chip--selected');
+              chip.setAttribute('aria-pressed', 'true');
+              state.catalogScenarioStub = key;
+              state.catalogMode = 'trainers';
+              renderSummary();
+              applyScenarioService(key).then(function(ok) {
+                if (ok) state.catalogScenarioStub = null;
+                syncScenarioChipSelection();
+                renderSummary();
+                if (ok) persistCatalogFilters();
+              });
+            } else {
+              var matched = matchServiceForScenario(
+                key,
+                _catalogServicesCacheByCity[catalogServicesCacheKey(state.cityId || null)] || []
+              );
+              if (matched && state.serviceId === matched.id) {
+                state.serviceId = null;
+                state.serviceName = '';
+              }
+              state.catalogScenarioStub = null;
+              clearCatalogSessionStorageCache();
+              syncScenarioChipSelection();
+              renderSummary();
+            }
+            var wg = window.Telegram && window.Telegram.WebApp;
+            if (wg && wg.HapticFeedback && wg.HapticFeedback.selectionChanged) {
+              try {
+                wg.HapticFeedback.selectionChanged();
+              } catch (eh) {
+                /* noop */
+              }
+            }
+          });
+        });
+      }
+
+      function catalogServiceSummaryDisplay() {
+        if (state.serviceName) return state.serviceName;
+        var stub = state.catalogScenarioStub && CATALOG_SCENARIO_STUBS[state.catalogScenarioStub];
+        if (stub) return stub.label;
+        return '';
+      }
+
+      function catalogFilterPlaceholder(key, rawValue) {
+        if (rawValue && rawValue !== '—') return rawValue;
+        if (key === 'city') return 'Выберите город';
+        if (key === 'service') return 'Выберите занятие';
+        if (key === 'arena') return 'Любая площадка';
+        return 'Выберите';
+      }
+
+      /** Hint under CTA; label «Выбрать город» or «Показать результаты». */
+      function updateCatalogFindUi() {
+        var hintEl = document.getElementById('catalogFindHint');
+        var btn = document.getElementById('btnPickTrainer');
+        if (!hintEl || !btn) return;
+        var labelEl = btn.querySelector('.catalog-find-btn__label');
+        var hasCity = !!state.cityId;
+        if (labelEl) labelEl.textContent = hasCity ? CATALOG_CTA_LABEL : 'Выбрать город';
+        var hasService = !!state.serviceId;
+        var ready = hasCity && hasService;
+        var hint;
+        if (ready) {
+          var offerCnt = lookupServiceTrainerCount(state.serviceId, state.cityId);
+          if (offerCnt === 0) {
+            hint = 'В этом городе пока нет тренеров по этой услуге — можно оставить заявку';
+          } else if (offerCnt != null && offerCnt > 0) {
+            hint = formatServiceOfferCount(offerCnt) + ' · площадку можно уточнить выше';
+          } else {
+            hint = 'Площадку можно уточнить в параметрах выше';
+          }
+        } else if (!hasCity && hasService) {
+          hint = 'Осталось выбрать город в параметрах выше';
+        } else if (!hasCity) {
+          hint = 'Начните с города или нажмите вариант в «Популярное»';
+        } else {
+          hint = 'Укажите занятие в параметрах или в «Популярное»';
+        }
+        hintEl.textContent = hint;
+        btn.classList.toggle('catalog-find-btn--ready', ready);
+        updateCatalogHomeMode();
+      }
+
       function renderSummary() {
+        var serviceDisplay = catalogServiceSummaryDisplay();
+        var arenaDisplay = arenaSummaryLabel();
         var rows = [
-          { key: 'city', label: 'Город', value: state.cityName || '—', cls: '' },
-          { key: 'service', label: 'Услуга', value: state.serviceName || '—', cls: '' },
-          { key: 'arena', label: 'Арена', value: arenaSummaryLabel(), cls: '' },
-          { key: 'trainer', label: 'Тренер', value: state.trainerName || 'Не выбран', cls: state.trainerName ? '' : 'muted' }
+          { key: 'city', value: state.cityName || '', scenario: false },
+          { key: 'service', value: serviceDisplay, scenario: !state.serviceName && !!state.catalogScenarioStub },
+          { key: 'arena', value: arenaDisplay, scenario: false },
         ];
-        document.getElementById('summaryRows').innerHTML = rows.map(function(r) {
-          return '<button type="button" class="summary-row summary-row-clickable" data-action="' + r.key + '">' +
-            '<span class="label">' + r.label + '</span>' +
-            '<span class="value ' + (r.cls || '') + '">' + escapeHtml(r.value || '—') + '</span><span class="row-arrow">→</span></button>';
-        }).join('');
-        document.querySelectorAll('#summaryRows .summary-row-clickable').forEach(function(btn) {
+        document.getElementById('summaryRows').innerHTML = rows
+          .map(function(r) {
+            var display = catalogFilterPlaceholder(r.key, r.value);
+            var isSet = !!(r.value && r.value !== '—');
+            var offerMeta = '';
+            if (r.key === 'service' && state.cityId && state.serviceId) {
+              var cnt = lookupServiceTrainerCount(state.serviceId, state.cityId);
+              if (cnt !== null) offerMeta = formatServiceOfferCount(cnt);
+            }
+            var tileCls =
+              'catalog-filter-tile' +
+              (isSet ? ' catalog-filter-tile--set' : ' catalog-filter-tile--empty') +
+              (r.scenario ? ' catalog-filter-tile--scenario' : '');
+            return (
+              '<button type="button" class="' +
+              tileCls +
+              '" data-action="' +
+              r.key +
+              '">' +
+              '<span class="catalog-filter-tile__icon" aria-hidden="true">' +
+              (CATALOG_FILTER_ICONS[r.key] || '') +
+              '</span>' +
+              '<span class="catalog-filter-tile__body">' +
+              '<span class="catalog-filter-tile__label">' +
+              escapeHtml(CATALOG_FILTER_SHORT_LABELS[r.key] || r.key) +
+              '</span>' +
+              '<span class="catalog-filter-tile__value">' +
+              escapeHtml(display) +
+              '</span>' +
+              (offerMeta
+                ? '<span class="catalog-filter-tile__meta">' + escapeHtml(offerMeta) + '</span>'
+                : '') +
+              '</span>' +
+              (isSet
+                ? '<span class="catalog-filter-tile__check" aria-hidden="true">✓</span>'
+                : '<span class="catalog-filter-tile__chev" aria-hidden="true">›</span>') +
+              '</button>'
+            );
+          })
+          .join('');
+        updateCatalogFindUi();
+        if (state.cityId) {
+          fetchCatalogServices(state.cityId).then(function() {
+            patchSummaryServiceOfferMeta();
+            updateCatalogFindUi();
+          });
+        }
+        document.querySelectorAll('#summaryRows .catalog-filter-tile').forEach(function(btn) {
           btn.onclick = function() {
             var action = btn.dataset.action;
             if (action === 'city') {
@@ -1892,12 +2273,6 @@
                 loadArenas();
                 showScreen('screenArena');
               }
-            } else if (action === 'trainer') {
-              if (!state.cityId || !state.serviceId) return;
-              state.returnToSummary = true;
-              state.offset = 0;
-              loadCatalogList();
-              showScreen('screenTrainers');
             }
           };
         });
@@ -1913,26 +2288,40 @@
             return;
           }
           var html = items.map(function(c) {
-            return '<button type="button" class="choice-card" data-id="' + c.id + '" data-name="' + (c.name || '').replace(/"/g, '&quot;') + '"><div class="main"><div class="label">Город</div><div class="value">' + (c.name || '') + '</div></div><span class="arrow">→</span></button>';
+            return '<button type="button" class="choice-card" data-id="' + c.id + '" data-name="' + (c.name || '').replace(/"/g, '&quot;') + '"><div class="main"><div class="label">' + CATALOG_FILTER_LABELS.city + '</div><div class="value">' + (c.name || '') + '</div></div><span class="arrow">→</span></button>';
           }).join('');
           document.getElementById('cityList').innerHTML = html;
           document.querySelectorAll('#cityList .choice-card').forEach(function(btn) {
             btn.onclick = function() {
-              state.cityId = parseInt(btn.dataset.id, 10);
+              var newCityId = parseInt(btn.dataset.id, 10);
+              var cityChanged = state.cityId != null && state.cityId !== newCityId;
+              state.cityId = newCityId;
               state.cityName = btn.dataset.name || '';
+              invalidateCatalogServicesCache();
               clearCatalogSessionStorageCache();
-              if (state.returnToSummary) {
-                state.returnToSummary = false;
-                state.serviceId = null; state.serviceName = '';
-                clearArenaSelection();
-                state.trainerId = null; state.trainerName = '';
-                renderSummary();
-                showScreen('screenSummary');
+              var afterCity = function() {
+                persistCatalogFilters();
+                if (state.returnToSummary) {
+                  state.returnToSummary = false;
+                  if (cityChanged) {
+                    clearArenaSelection();
+                    state.trainerId = null;
+                    state.trainerName = '';
+                  }
+                  renderSummary();
+                  syncScenarioChipSelection();
+                  showScreen('screenSummary');
+                } else {
+                  loadServices();
+                  showScreen('screenService');
+                }
+                prefetchFirstPageIfNeeded();
+              };
+              if (cityChanged) {
+                clearServiceIfInvalidForCity(newCityId).then(afterCity);
               } else {
-                loadServices();
-                showScreen('screenService');
+                afterCity();
               }
-              prefetchFirstPageIfNeeded();
             };
           });
           syncCatalogHeaderBack();
@@ -1962,10 +2351,20 @@
 
       function loadServices() {
         document.getElementById('serviceList').innerHTML = '<div class="loading">Загрузка...</div>';
-        getJson('/services').then(function(data) {
+        var titleEl = document.getElementById('screenServiceTitle');
+        if (titleEl) {
+          titleEl.textContent = state.cityName ? 'Занятия · ' + state.cityName : 'Что ищете';
+        }
+        var loadReq = state.cityId
+          ? fetchCatalogServices(state.cityId).then(function(cached) {
+              return { items: cached };
+            })
+          : getJson('/services', null);
+        loadReq.then(function(data) {
           var items = data.items || [];
           if (!items.length) {
-            document.getElementById('serviceList').innerHTML = '<div class="empty">Нет услуг</div>';
+            var emptyMsg = 'Нет услуг в каталоге';
+            document.getElementById('serviceList').innerHTML = '<div class="empty">' + emptyMsg + '</div>';
             var backCityEmpty = document.getElementById('backToCity');
             if (backCityEmpty) backCityEmpty.style.display = state.returnToSummary ? 'none' : 'block';
             syncCatalogHeaderBack();
@@ -1981,10 +2380,26 @@
             var hasSummary = summaryById[s.id] != null;
             var nameAttr = (s.name || '').replace(/"/g, '&quot;');
             var escName = escapeHtml(s.name || '');
-            var btnInner = '<div class="main"><div class="label">Услуга</div><div class="value">' + escName + '</div></div><span class="arrow">→</span>';
+            var count = s.trainer_count != null ? s.trainer_count | 0 : null;
+            var showCount = state.cityId && count !== null;
+            var offerLine = showCount
+              ? '<div class="choice-card__meta">' + escapeHtml(formatServiceOfferCount(count)) + '</div>'
+              : '';
+            var noOffers = showCount && count === 0;
+            var btnInner =
+              '<div class="main">' +
+              '<div class="label">' +
+              CATALOG_FILTER_LABELS.service +
+              '</div>' +
+              '<div class="value">' +
+              escName +
+              '</div>' +
+              offerLine +
+              '</div><span class="arrow">→</span>';
             var mainBtn =
               '<button type="button" class="choice-card' +
               (hasSummary ? ' service-choice-main' : '') +
+              (noOffers ? ' choice-card--no-offers' : '') +
               '" data-id="' +
               s.id +
               '" data-name="' +
@@ -2010,7 +2425,16 @@
             btn.onclick = function() {
               state.serviceId = parseInt(btn.dataset.id, 10);
               state.serviceName = btn.dataset.name || '';
+              state.catalogScenarioStub = null;
+              var chipHost = document.getElementById('catalogScenarioChips');
+              if (chipHost) {
+                chipHost.querySelectorAll('.catalog-scenario-chip').forEach(function(c) {
+                  c.classList.remove('catalog-scenario-chip--selected');
+                  c.setAttribute('aria-pressed', 'false');
+                });
+              }
               clearCatalogSessionStorageCache();
+              persistCatalogFilters();
               if (state.returnToSummary) {
                 state.returnToSummary = false;
                 clearArenaSelection();
@@ -2265,6 +2689,7 @@
         setArenaSelection(arenaScreenDraft.ids.slice(), arenaScreenDraft.names.slice());
         state.offset = 0;
         clearCatalogSessionStorageCache();
+        persistCatalogFilters();
         if (state.returnToSummary) {
           state.returnToSummary = false;
           state.trainerId = null; state.trainerName = '';
@@ -2593,8 +3018,17 @@
           updateResultsCount(total);
           if (!items.length) {
             if (myReq !== catalogListReqId) return;
+            var fEmpty = state.filters;
+            var hasSlotFilters =
+              (fEmpty.days && fEmpty.days.length > 0) ||
+              (fEmpty.timeSlots && fEmpty.timeSlots.length > 0);
+            var emptyHint = hasSlotFilters
+              ? ' Попробуйте сбросить фильтр по времени или выбрать другие дни.'
+              : state.cityId && state.serviceId
+                ? ' Попробуйте другую услугу или арену.'
+                : '';
             revealCatalogListContent(
-              '<div class="empty">Тренеров по вашему запросу пока нет.</div>' +
+              '<div class="empty">Тренеров по вашему запросу пока нет.' + emptyHint + '</div>' +
                 '<div class="empty-state-request">' +
                 '<p class="empty-state-text">Оставьте заявку — подберём вариант и напишем в боте.</p>' +
                 '<button type="button" class="btn-block btn-leave-request" id="btnEmptyStateRequest">Оставить заявку</button>' +
@@ -3471,9 +3905,11 @@
               prefetch.firstPageData = null;
               clearCatalogSessionStorageCache();
               document.getElementById('successText').innerHTML = okMsg;
+              persistCatalogFilters(state.selectedTrainer && state.selectedTrainer.id);
               showScreen('screenSuccess');
               getClientSession().then(function(session) {
                 applySessionToState(session);
+                renderSummary();
                 updateBookingNameFieldsVisibility();
               }).catch(function() {});
             } else {
@@ -3552,12 +3988,20 @@
         }
       });
       function openGeneralRequestForm() {
+        if (!state.cityId || !state.serviceId) {
+          alert('Сначала выберите город и занятие в параметрах поиска.');
+          state.returnToSummary = true;
+          renderSummary();
+          showScreen('screenSummary');
+          switchTab('catalog');
+          return;
+        }
         state.requestForTrainer = null;
         state.requestFormOpenedFrom = 'trainerList';
         document.getElementById('requestComment').value = '';
         updateRequestFormContext();
         getClientSession().then(function(session) {
-          applySessionToState(session);
+          applySessionToState(session, { bookingFormRefresh: true });
           updateRequestNameFieldsVisibility();
           showScreen('screenRequestForm');
         }).catch(function() {
@@ -3622,22 +4066,40 @@
         submitRequestFromForm(text);
       };
       document.getElementById('btnPickTrainer').onclick = function() {
-        if (!state.cityId) {
+        function proceedFind() {
+          if (!state.cityId) {
+            state.returnToSummary = true;
+            loadCities();
+            showScreen('screenCity');
+            return;
+          }
+          if (!state.serviceId) {
+            state.returnToSummary = true;
+            loadServices();
+            showScreen('screenService');
+            return;
+          }
           state.returnToSummary = true;
-          loadCities();
-          showScreen('screenCity');
+          state.offset = 0;
+          loadCatalogList();
+          showScreen('screenTrainers');
+        }
+        if (state.catalogScenarioStub && !state.serviceId) {
+          applyScenarioService(state.catalogScenarioStub).then(function() {
+            renderSummary();
+            proceedFind();
+          });
+          return;
+        }
+        if (!state.cityId) {
+          proceedFind();
           return;
         }
         if (!state.serviceId) {
-          state.returnToSummary = true;
-          loadServices();
-          showScreen('screenService');
+          proceedFind();
           return;
         }
-        state.returnToSummary = true;
-        state.offset = 0;
-        loadCatalogList();
-        showScreen('screenTrainers');
+        proceedFind();
       };
       document.getElementById('tabCatalog').onclick = function() { switchTab('catalog'); };
       document.getElementById('tabMyTrainer').onclick = function() { switchTab('my_trainer'); };
@@ -3676,6 +4138,11 @@
         var applyBtn = document.getElementById('arenaApplyBtn');
         if (applyBtn) applyBtn.onclick = commitArenaScreenSelection;
       })();
+
+      wireCatalogScenarioChips();
+      fetchCatalogServices().then(function() {
+        syncScenarioChipSelection();
+      });
 
       Promise.all([loadTrainerEdges(), getClientSession()])
         .then(function(results) {
@@ -3731,16 +4198,19 @@
             }
           }
           function showInitialScreen() {
-            if (state.cityId && state.serviceId) {
-              prefetchFirstPageIfNeeded();
-              renderSummary();
-              showScreen('screenSummary');
-              switchTab(state.activeTab);
-              loadCatalogList();
-            } else {
-              loadCities();
-              showScreen('screenCity');
-            }
+            fetchCatalogServices(state.cityId || null)
+              .then(function() {
+                syncScenarioChipSelection();
+                renderSummary();
+                showScreen('screenSummary');
+                switchTab(state.activeTab || 'catalog');
+                if (state.cityId && state.serviceId) prefetchFirstPageIfNeeded();
+              })
+              .catch(function() {
+                renderSummary();
+                showScreen('screenSummary');
+                switchTab(state.activeTab || 'catalog');
+              });
           }
           /* Deep link ?trainer_id= — открыть карточку напрямую (в т.ч. возврат из book.html) */
           if (returnCtx && returnCtx.trainer_id) {
@@ -3852,7 +4322,7 @@
           if (!sum || !sum.classList.contains('active')) return;
           if (state.activeTab !== 'catalog') return;
           getClientSession().then(function(session) {
-            applySessionToState(session);
+            applySessionToState(session, { bookingFormRefresh: true });
             if (state.cityId && state.serviceId) {
               loadCatalogList({ silent: true });
             }
@@ -3869,7 +4339,7 @@
           if (!isNaN(sidNum)) window.selectTrainerService(sidNum);
           return;
         }
-        var actionBtn = e.target && e.target.closest && e.target.closest('#summaryRows .summary-row-clickable, #tabCatalog, #tabMyTrainer');
+        var actionBtn = e.target && e.target.closest && e.target.closest('#summaryRows .catalog-filter-tile, #summaryRows .summary-row-clickable, #tabCatalog, #tabMyTrainer');
         if (actionBtn) {
           setTimeout(prefetchFirstPageIfNeeded, 0);
         }

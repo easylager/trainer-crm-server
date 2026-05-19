@@ -76,6 +76,53 @@ async def set_selected_trainer(
     await session.commit()
 
 
+async def save_catalog_filters(
+    telegram_id: int,
+    session: AsyncSession,
+    *,
+    city_id: int | None = None,
+    service_id: int | None = None,
+    arena_id: int | None = None,
+    trainer_id: int | None = None,
+) -> None:
+    """
+    Persist catalog filter chips (city / service / arena / trainer) from Mini App summary.
+    Applies fields in dependency order; trainer_id is written last so it survives set_service.
+    """
+    if city_id is not None:
+        await set_city(telegram_id, city_id, session)
+    if service_id is not None:
+        await set_service(telegram_id, service_id, session)
+    if arena_id is not None:
+        await set_arena(telegram_id, arena_id, session)
+    if trainer_id is not None:
+        await set_selected_trainer(telegram_id, trainer_id, session)
+
+
+async def sync_session_catalog_after_client_booking(
+    telegram_id: int,
+    trainer_id: int,
+    service_id: int,
+    session: AsyncSession,
+) -> None:
+    """After catalog booking: persist city (from trainer profile), service, and trainer in client_sessions."""
+    from src.application.trainer_use_cases import get_trainer
+
+    city_id: int | None = None
+    trainer = await get_trainer(session, trainer_id)
+    if trainer and trainer.get("profile"):
+        raw_city = trainer["profile"].get("city_id")
+        if raw_city is not None:
+            city_id = int(raw_city)
+    await save_catalog_filters(
+        telegram_id,
+        session,
+        city_id=city_id,
+        service_id=service_id,
+        trainer_id=trainer_id,
+    )
+
+
 async def get_session(telegram_id: int, session: AsyncSession) -> dict[str, Any] | None:
     """Load session by telegram_id; None if not found."""
     return await ClientSessionRepository(session).get(telegram_id)

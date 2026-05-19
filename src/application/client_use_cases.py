@@ -698,6 +698,48 @@ async def get_family_primary_client_id_for_telegram(
     row = r.fetchone()
     return int(row[0]) if row else None
 
+async def trainer_id_belongs_to_telegram(
+    session: AsyncSession, trainer_id: int, telegram_id: int
+) -> bool:
+    """True when this Telegram account is the trainer's own login (hub must not show self as «мой тренер»)."""
+    r = await session.execute(
+        text("SELECT 1 FROM trainers WHERE id = :tid AND telegram_id = :tg LIMIT 1"),
+        {"tid": int(trainer_id), "tg": int(telegram_id)},
+    )
+    return r.fetchone() is not None
+
+
+async def reset_orphan_client_miniapp_trainer_pointers(
+    session: AsyncSession, telegram_id: int
+) -> bool:
+    """
+    No row in ``clients`` (and not a family member) but catalog still has trainer pointers —
+    stale after CRM delete or trainer testing client bot on the same Telegram account.
+    Clears edges and selected_trainer_id; keeps city/service for in-progress catalog browse.
+    Returns True when cleanup ran.
+    """
+    cid = await get_client_id_by_telegram_id(session, int(telegram_id))
+    if cid is not None:
+        return False
+    tg = int(telegram_id)
+    await session.execute(
+        text("""
+            UPDATE client_sessions
+            SET selected_trainer_id = NULL,
+                state = CASE WHEN state = 'trainer_selected' THEN 'service_selected' ELSE state END,
+                updated_at = now()
+            WHERE telegram_id = :tg
+        """),
+        {"tg": tg},
+    )
+    await session.execute(
+        text("DELETE FROM client_trainer_edges WHERE telegram_id = :tg"),
+        {"tg": tg},
+    )
+    await session.commit()
+    return True
+
+
 async def get_client_telegram_id(session: AsyncSession, client_id: int) -> int | None:
     """Return telegram_id for client_id, or None if not linked (trainer-added client without Telegram)."""
     r = await session.execute(

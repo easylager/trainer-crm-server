@@ -1,4 +1,4 @@
-"""Strict client «primary trainer» tier: booking (DB) → saved → session."""
+"""Strict client «primary trainer» tier: upcoming booking → saved → session."""
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -76,6 +76,18 @@ def test_primary_session_synthetic_when_not_in_edges() -> None:
     assert src == "session"
     assert edge is not None
     assert int(edge["trainer_id"]) == 7
+
+
+def test_primary_none_when_only_past_booking_signal_would_be_suppressed() -> None:
+    """Hub passes upcoming booking id only; past-only history must not set primary via booking tier."""
+    edge, src = compute_primary_edge_meta(
+        [],
+        session_trainer_id=None,
+        booking_primary_trainer_id=None,
+        booking_primary_service_id=None,
+    )
+    assert edge is None
+    assert src is None
 
 
 def test_primary_none_when_no_signals() -> None:

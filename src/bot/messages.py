@@ -3094,9 +3094,9 @@ def format_trainer_trial_roi_recap_html(
         + saved_line
         + revenue_block
         + "\n\n"
-        f"Через {days_phrase} trial закончится — но <b>профиль останется в каталоге</b>, "
+        f"Через {days_phrase} <b>пробный период</b> закончится — но <b>профиль останется в каталоге</b>, "
         "клиенты по-прежнему смогут вас находить 🧭\n\n"
-        f"<i>Trial действует до {html.escape(expires_date)}.</i>"
+        f"<i><b>Пробный период</b> действует до {html.escape(expires_date)}.</i>"
     )
 
 

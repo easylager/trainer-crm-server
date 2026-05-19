@@ -5,10 +5,12 @@ Lives in application layer so routes and use cases can import without loading ``
 (which would pull ``webapp`` and cause circular imports with notification_service).
 
 Primary trainer resolution (strict product contract):
-  1. Latest booking by slot start time (past or future), from DB bookings — not edge timestamps.
+  1. Upcoming booking (slot not ended) — caller passes ``client_upcoming_booking_primary_candidate``.
   2. Else latest «saved» (catalog heart), by saved_at (fallback edge created_at).
   3. Else client_sessions.selected_trainer_id (last catalog browse context).
   4. Else no primary.
+
+Past-only bookings feed rebook / «снова» UX, not the hub «Мой тренер» card.
 
 Synthetic edge rows fill gaps when booking/session trainer_id has no client_trainer_edges row yet.
 """

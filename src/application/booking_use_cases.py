@@ -3149,14 +3149,39 @@ async def client_latest_booking_primary_candidate(
     client_telegram_id: int,
 ) -> tuple[int | None, int | None]:
     """
-    Trainer (and booking service_id hint) for the client's chronologically latest slot start —
-    past or upcoming. Authoritative «who is primary by bookings» for hub / catalog / bot parity.
-
-    Ignores cancelled-style bookings; slot row must exist and not be cancelled.
+    Trainer (and service_id) for the client's chronologically latest slot start — past or upcoming.
+    Used for «записаться снова» / rebook hints, not for hub «основной тренер» (see upcoming variant).
     """
+    return await _client_booking_primary_candidate_query(
+        session, client_telegram_id, upcoming_only=False
+    )
+
+
+async def client_upcoming_booking_primary_candidate(
+    session: AsyncSession,
+    client_telegram_id: int,
+) -> tuple[int | None, int | None]:
+    """
+    Same as latest booking candidate but only slots that have not ended yet.
+    Hub «Мой тренер» must not stick to a trainer after roster detach / past-only history.
+    """
+    return await _client_booking_primary_candidate_query(
+        session, client_telegram_id, upcoming_only=True
+    )
+
+
+async def _client_booking_primary_candidate_query(
+    session: AsyncSession,
+    client_telegram_id: int,
+    *,
+    upcoming_only: bool,
+) -> tuple[int | None, int | None]:
     cid = await get_client_id_by_telegram_id(session, int(client_telegram_id))
     if cid is None:
         return None, None
+    upcoming_clause = (
+        (" AND " + _SQL_SLOT_END_TS + " > CURRENT_TIMESTAMP") if upcoming_only else ""
+    )
     r = await session.execute(
         text(
             """
@@ -3166,6 +3191,9 @@ async def client_latest_booking_primary_candidate(
             WHERE b.client_id = :cid
               AND b.status IN ('pending', 'confirmed', 'completed', 'no_show')
               AND COALESCE(TRIM(LOWER(COALESCE(s.status, ''))), '') <> 'cancelled'
+            """
+            + upcoming_clause
+            + """
             ORDER BY """
             + _SQL_SLOT_START_TS
             + """ DESC NULLS LAST,
@@ -3600,6 +3628,13 @@ async def detach_trainer_client_from_roster_miniapp(
         {"tid": trainer_id, "cid": client_id},
     )
     roster_removed = rr.fetchone() is not None
+    from src.application.client_trainer_edge_use_cases import (
+        purge_client_trainer_hub_signals_on_roster_detach,
+    )
+
+    await purge_client_trainer_hub_signals_on_roster_detach(
+        session, int(trainer_id), int(client_id)
+    )
     await session.commit()
     return {
         "cancelled_upcoming_bookings": cancelled_upcoming,

@@ -100,6 +100,40 @@ async def unset_primary_trainer(
     await session.commit()
 
 
+async def purge_client_trainer_hub_signals_on_roster_detach(
+    session: AsyncSession,
+    trainer_id: int,
+    client_id: int,
+) -> None:
+    """
+    After trainer removes client from roster: drop bookmark/primary and catalog session pointer
+    so client hub does not still show «Мой тренер» from stale edges or selected_trainer_id.
+    """
+    from src.application.client_use_cases import get_client_telegram_id
+
+    telegram_id = await get_client_telegram_id(session, int(client_id))
+    if telegram_id is None:
+        return
+    tid = int(trainer_id)
+    tg = int(telegram_id)
+    repo = ClientTrainerEdgeRepository(session)
+    await repo.set_saved(tg, tid, saved=False)
+    edge = await repo.get(tg, tid)
+    if edge and edge.get("is_primary"):
+        await repo.unset_primary(tg)
+    await session.execute(
+        text("""
+            UPDATE client_sessions
+            SET selected_trainer_id = NULL,
+                selected_service_id = NULL,
+                selected_arena_id = NULL,
+                updated_at = now()
+            WHERE telegram_id = :tg AND selected_trainer_id = :tid
+        """),
+        {"tg": tg, "tid": tid},
+    )
+
+
 async def subscribe_notify_slots(
     telegram_id: int,
     trainer_id: int,
