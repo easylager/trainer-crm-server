@@ -2387,6 +2387,202 @@
       font-family: var(--app-font-sans);
     }
     /* Last CTA was flush to the window bottom; body safe-area is separate — add fixed air below the stack */
+    .bd-service-edit-hint {
+      margin: 0 0 12px;
+      padding: 10px 12px;
+      font-size: 13px;
+      line-height: 1.4;
+      color: var(--tg-theme-hint-color);
+      background: var(--tg-theme-secondary-bg-color, rgba(0, 0, 0, 0.04));
+      border-radius: 10px;
+    }
+    button.bd-row.bd-row--editable {
+      width: 100%;
+      margin: 0;
+      padding: 14px 16px;
+      border: none;
+      border-bottom: 1px solid rgba(128, 128, 128, 0.08);
+      border-radius: 0;
+      background: var(--tg-theme-secondary-bg-color);
+      color: inherit;
+      font: inherit;
+      text-align: left;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      align-items: flex-start;
+    }
+    button.bd-row.bd-row--editable:last-child {
+      border-bottom: none;
+    }
+    button.bd-row.bd-row--editable:active {
+      background: rgba(128, 128, 128, 0.1);
+    }
+    .bd-row-edit-hint {
+      font-size: 9px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--app-cta-fill);
+      opacity: 0.85;
+      margin-left: 4px;
+    }
+    .bd-row-chevron {
+      width: 18px;
+      height: 18px;
+      flex-shrink: 0;
+      margin-top: 4px;
+      color: var(--tg-theme-hint-color);
+      opacity: 0.75;
+    }
+    button.bd-row.bd-row--editable .bd-row-value {
+      color: var(--tg-theme-text-color);
+    }
+    /* Edit service/tier in booking detail — same field card chrome as quick-book service step */
+    #modalBookingEditService.modal-overlay.book-flow-overlay {
+      align-items: center;
+      justify-content: center;
+      padding:
+        max(8px, env(safe-area-inset-top, 0px))
+        max(12px, calc(10px + env(safe-area-inset-right, 0px)))
+        max(16px, env(safe-area-inset-bottom, 0px))
+        max(12px, calc(10px + env(safe-area-inset-left, 0px)));
+      z-index: 101;
+    }
+    #modalBookingEditService > .modal.book-flow-modal.booking-edit-service-modal {
+      flex: 0 1 auto;
+      width: 100%;
+      max-width: 320px;
+      min-width: 0;
+      margin: 0 auto;
+      max-height: min(88vh, calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 24px));
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      box-sizing: border-box;
+      padding: 16px 14px 14px;
+    }
+    #modalBookingEditService .quick-book-kicker {
+      margin: 0 0 6px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--tg-theme-hint-color);
+    }
+    #modalBookingEditService .book-modal-title {
+      margin: 0 0 6px;
+      font-size: 1.125rem;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1.2;
+      color: var(--tg-theme-text-color);
+    }
+    #modalBookingEditService .quick-book-lead {
+      margin: 0 0 12px;
+      font-size: 12.5px;
+      line-height: 1.4;
+      color: var(--tg-theme-hint-color);
+    }
+    #modalBookingEditService .booking-edit-modal-body {
+      flex: 0 1 auto;
+      min-width: 0;
+      min-height: 0;
+      overflow: visible;
+    }
+    #modalBookingEditService .quick-book-fields {
+      position: relative;
+      z-index: 1;
+      margin: 0;
+      min-width: 0;
+      width: 100%;
+      max-width: 100%;
+      border-radius: 16px;
+      background: var(--tg-theme-secondary-bg-color);
+      border: 1px solid rgba(128, 128, 128, 0.12);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+      overflow: hidden;
+      box-sizing: border-box;
+    }
+    #modalBookingEditService .quick-book-fields .book-field-stack {
+      margin: 0;
+      padding: 10px 12px;
+      min-width: 0;
+      max-width: 100%;
+      box-sizing: border-box;
+      border-bottom: 1px solid rgba(128, 128, 128, 0.08);
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+    }
+    #modalBookingEditService .quick-book-fields .book-field-stack:last-child {
+      border-bottom: none;
+    }
+    #modalBookingEditService .quick-book-fields .book-field-label {
+      margin-bottom: 6px;
+    }
+    #modalBookingEditService .book-select-shell {
+      display: block;
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      overflow: hidden;
+      box-sizing: border-box;
+    }
+    #modalBookingEditService .quick-book-fields .book-service-select {
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      min-height: 48px;
+      padding: 13px 36px 13px 12px;
+      border-radius: 14px;
+      border: none;
+      margin: 0;
+      font-size: 15px;
+      font-variant-numeric: tabular-nums;
+      box-sizing: border-box;
+      display: block;
+      background-color: var(--tg-theme-bg-color);
+      color: var(--tg-theme-text-color);
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%238e8e93' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 10px center;
+      appearance: none;
+      -webkit-appearance: none;
+      box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.06);
+    }
+    #modalBookingEditService .quick-book-fields .book-service-select:focus-visible {
+      outline: none;
+      box-shadow:
+        0 0 0 3px color-mix(in srgb, var(--tg-theme-button-color) 30%, transparent),
+        inset 0 1px 2px rgba(0, 0, 0, 0.06);
+    }
+    #modalBookingEditService .booking-edit-modal-actions {
+      flex-shrink: 0;
+      margin-top: 12px;
+      padding-top: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    #modalBookingEditService .booking-edit-modal-actions .btn-block {
+      border-radius: 14px;
+      min-height: 48px;
+      box-sizing: border-box;
+      max-width: 100%;
+    }
+    #modalBookingEditService .book-edit-tier-radios label {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 8px;
+      font-size: 15px;
+      line-height: 1.35;
+    }
+    #modalBookingEditService .book-edit-tier-radios label:last-child {
+      margin-bottom: 0;
+    }
     #screenBookingDetail #detailBookingActions.bd-actions-wrap {
       margin-bottom: 28px;
     }

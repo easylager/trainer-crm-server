@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.shared.price_tier_kind import (
     PRICE_TIER_ADULT,
+    PRICE_TIER_CHILD,
     normalize_price_tier_kind,
     price_tier_label_ru,
     price_tier_sort_key,
@@ -48,6 +49,28 @@ def _normalize_trainer_service_write_entry(
         return sid, tiers, desc, gpc, notice, None
     sid, tiers, desc, gpc, notice, ui_accent = entry
     return sid, tiers, desc, gpc, notice, ui_accent
+
+
+def _legacy_service_prices_byn(
+    tiers: list[dict[str, Any]],
+    price_cents_row: int | None,
+) -> tuple[float | None, float | None]:
+    """
+    Legacy API fields price_byn / price_child_byn — per tier_kind, not trainer_services anchor.
+    Anchor equals adult price or cheapest tier; exposing anchor as price_byn made child-only look like adult.
+    """
+    adult_byn: float | None = None
+    child_byn: float | None = None
+    for t in tiers:
+        tk = t.get("tier_kind")
+        pb = t.get("price_byn")
+        if tk == PRICE_TIER_ADULT:
+            adult_byn = pb
+        elif tk == PRICE_TIER_CHILD:
+            child_byn = pb
+    if not tiers and price_cents_row is not None:
+        adult_byn = round(price_cents_row / 100, 2)
+    return adult_byn, child_byn
 
 
 def _sql_public_catalog_education_predicate(table_alias: str = "e") -> str:
@@ -459,11 +482,13 @@ class TrainerRepository:
                     price_byn_max = round(p_max / 100, 2)
                 else:
                     price_byn_min = price_byn_max = (round(pc_row / 100, 2) if pc_row is not None else None)
+                legacy_adult_byn, legacy_child_byn = _legacy_service_prices_byn(tiers, pc_row)
                 svc_dict: dict[str, Any] = {
                     "service_id": sid,
                     "service_name": name_by_sid.get(sid, "—"),
                     "price_cents": pc_row,
-                    "price_byn": round(pc_row / 100, 2) if pc_row is not None else None,
+                    "price_byn": legacy_adult_byn,
+                    "price_child_byn": legacy_child_byn,
                     "price_byn_min": price_byn_min,
                     "price_byn_max": price_byn_max,
                     "price_tiers": tiers,
@@ -1363,12 +1388,14 @@ class TrainerRepository:
                 price_byn_max = round(p_max / 100, 2)
             else:
                 price_byn_min = price_byn_max = (round(price_cents / 100, 2) if price_cents is not None else None)
+            legacy_adult_byn, legacy_child_byn = _legacy_service_prices_byn(tiers, price_cents)
             services_detail_by_id[tid].append(
                 {
                     "service_id": sid,
                     "service_name": service_names_by_id.get(sid, "—"),
                     "price_cents": price_cents,
-                    "price_byn": round(price_cents / 100, 2) if price_cents is not None else None,
+                    "price_byn": legacy_adult_byn,
+                    "price_child_byn": legacy_child_byn,
                     "price_byn_min": price_byn_min,
                     "price_byn_max": price_byn_max,
                     "price_tiers": tiers,

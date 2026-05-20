@@ -4085,9 +4085,11 @@
             var c = (t.tier_kind || '').toLowerCase();
             if (out.hasOwnProperty(c) && t.price_byn != null) out[c] = Number(t.price_byn);
           });
+        } else {
+          /* Legacy single-price rows only — price_byn is anchor, not a phantom adult tier. */
+          if (found.price_byn != null && out.adult == null) out.adult = Number(found.price_byn);
+          if (found.price_child_byn != null && out.child == null) out.child = Number(found.price_child_byn);
         }
-        if (found.price_byn != null && out.adult == null) out.adult = Number(found.price_byn);
-        if (found.price_child_byn != null && out.child == null) out.child = Number(found.price_child_byn);
         return out;
       }
 

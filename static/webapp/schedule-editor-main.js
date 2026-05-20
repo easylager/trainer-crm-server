@@ -261,6 +261,81 @@
         var numStr = v.toFixed(v % 1 === 0 ? 0 : 2).replace('.', ',');
         return escapeHtml(numStr) + ' BYN';
       }
+
+      var BD_ROW_EDIT_CHEVRON =
+        '<svg class="bd-row-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>';
+
+      /** Clickable detail row when service/tariff can be edited. */
+      function bookingDetailEditableRow(iconHtml, label, valueText, editKind) {
+        return (
+          '<button type="button" class="bd-row bd-row--editable" data-bd-edit="' +
+          escapeHtml(editKind) +
+          '">' +
+          iconHtml +
+          '<div class="bd-row-text">' +
+          '<div class="bd-row-label">' +
+          escapeHtml(label) +
+          ' <span class="bd-row-edit-hint">изменить</span></div>' +
+          '<div class="bd-row-value">' +
+          escapeHtml(valueText || '—') +
+          '</div></div>' +
+          BD_ROW_EDIT_CHEVRON +
+          '</button>'
+        );
+      }
+
+      /** Map detail-row edit kind to modal focus (`tariff` label in UI → `tier` step). */
+      function normalizeBookingEditFocus(raw) {
+        var k = String(raw || 'service').toLowerCase();
+        if (k === 'tier' || k === 'tariff') return 'tier';
+        return 'service';
+      }
+
+      function bindBookingDetailEditableRows(booking) {
+        var root = document.getElementById('detailBookingContent');
+        if (!root || !booking) return;
+        root.querySelectorAll('[data-bd-edit]').forEach(function(btn) {
+          btn.onclick = function() {
+            openBookingEditServiceModal(booking, normalizeBookingEditFocus(btn.getAttribute('data-bd-edit')));
+          };
+        });
+      }
+
+      function bookingEditTiersForServiceId(serviceId) {
+        var svc = (state.bookServices || []).filter(function(x) {
+          return Number(x.id) === Number(serviceId);
+        })[0];
+        return (svc && svc.price_tiers) ? svc.price_tiers : [];
+      }
+
+      /** Show only service or only tariff block in edit modal (no prices in controls). */
+      function applyBookingEditModalLayout(booking, focusStep) {
+        var se = (booking && booking.service_edit) || {};
+        var stackSvc = document.getElementById('bookEditServiceStack');
+        var wrapTier = document.getElementById('bookEditPriceTierWrap');
+        var titleEl = document.getElementById('bookingEditModalTitle');
+        var leadEl = document.getElementById('bookingEditServiceLead');
+        var showSvc = !!(se.can_edit_service && focusStep === 'service');
+        var sid =
+          state.bookingEditLockedServiceId != null
+            ? state.bookingEditLockedServiceId
+            : state.bookServiceId;
+        var tiers = bookingEditTiersForServiceId(sid);
+        var showTier = !!(se.can_edit_tier && focusStep === 'tier' && tiers.length > 1);
+        if (stackSvc) stackSvc.style.display = showSvc ? '' : 'none';
+        if (wrapTier) wrapTier.style.display = showTier ? 'block' : 'none';
+        if (titleEl) {
+          titleEl.textContent = showTier && !showSvc ? 'Тариф' : showSvc && !showTier ? 'Услуга' : 'Услуга и тариф';
+        }
+        if (leadEl) {
+          leadEl.textContent = showTier && !showSvc
+            ? 'Выберите тариф для этой записи.'
+            : showSvc && !showTier
+              ? 'Выберите услугу для этой записи.'
+              : 'Выберите вариант для этой записи.';
+        }
+      }
+
       const MONTHS = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
       const MONTHS_GENITIVE = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
 
@@ -436,6 +511,19 @@
           method: 'POST',
           headers: headers(),
           body: body ? JSON.stringify(body) : undefined,
+        }).then(function(r) {
+          return r.json().catch(function() { return {}; }).then(function(j) {
+            if (r.ok) return j;
+            throw new Error(_detailMessageFromBody(j, r.statusText || 'Ошибка'));
+          });
+        });
+      }
+
+      function patchJsonTrainer(path, body) {
+        return fetch(apiUrlWithQuery(path), {
+          method: 'PATCH',
+          headers: headers(),
+          body: JSON.stringify(body || {}),
         }).then(function(r) {
           return r.json().catch(function() { return {}; }).then(function(j) {
             if (r.ok) return j;
@@ -634,10 +722,28 @@
         var mGroup = document.getElementById('modalGroupSlot') && document.getElementById('modalGroupSlot').style.display === 'flex';
         var mBookConf = document.getElementById('modalBookConfirm').style.display === 'flex';
         var mCancelB = document.getElementById('modalBookingCancel').style.display === 'flex';
+        var mEditSvc =
+          document.getElementById('modalBookingEditService') &&
+          document.getElementById('modalBookingEditService').style.display === 'flex';
         var mClientProb = document.getElementById('modalClientProblem') && document.getElementById('modalClientProblem').style.display === 'flex';
         var mTpl = document.getElementById('modalConfirm').style.display === 'flex';
         var mIntent = document.getElementById('modalSlotIntent') && document.getElementById('modalSlotIntent').style.display === 'flex';
-        btn.hidden = !(booking || decline || edit || dayPick || mQuick || mQuickSvc || mBook || mGroup || mBookConf || mCancelB || mClientProb || mTpl || mIntent);
+        btn.hidden = !(
+          booking ||
+          decline ||
+          edit ||
+          dayPick ||
+          mQuick ||
+          mQuickSvc ||
+          mBook ||
+          mGroup ||
+          mBookConf ||
+          mCancelB ||
+          mEditSvc ||
+          mClientProb ||
+          mTpl ||
+          mIntent
+        );
       }
 
       function refreshCalendarChrome() {
@@ -802,6 +908,11 @@
         if (mbc && mbc.style.display === 'flex') {
           mbc.style.display = 'none';
           updateTelegramBack();
+          return;
+        }
+        var mbes = document.getElementById('modalBookingEditService');
+        if (mbes && mbes.style.display === 'flex') {
+          closeBookingEditServiceModal();
           return;
         }
         var mcp = document.getElementById('modalClientProblem');
@@ -1324,21 +1435,54 @@
           }
           html += '<div class="bd-section-label">Подробности</div>';
           html += '<div class="bd-rows">';
-          html += '<div class="bd-row">' + BD_ICONS.service + '<div class="bd-row-text"><div class="bd-row-label">Услуга · арена</div><div class="bd-row-value">' + escapeHtml(b.services_str || '—') + ' · ' + escapeHtml(b.arenas_str || '—') + '</div></div></div>';
+          var serviceEditPolicy = b.service_edit || {};
+          var canEditServiceRow = !!(serviceEditPolicy.allowed && serviceEditPolicy.can_edit_service);
+          var canEditTierRow = !!(serviceEditPolicy.allowed && serviceEditPolicy.can_edit_tier);
+          if (canEditServiceRow) {
+            html += bookingDetailEditableRow(BD_ICONS.service, 'Услуга', b.services_str || '—', 'service');
+            html +=
+              '<div class="bd-row">' +
+              BD_ICONS.service +
+              '<div class="bd-row-text"><div class="bd-row-label">Площадка</div><div class="bd-row-value">' +
+              escapeHtml(b.arenas_str || '—') +
+              '</div></div></div>';
+          } else {
+            html +=
+              '<div class="bd-row">' +
+              BD_ICONS.service +
+              '<div class="bd-row-text"><div class="bd-row-label">Услуга · арена</div><div class="bd-row-value">' +
+              escapeHtml(b.services_str || '—') +
+              ' · ' +
+              escapeHtml(b.arenas_str || '—') +
+              '</div></div></div>';
+          }
           html += '<div class="bd-row">' + BD_ICONS.session + '<div class="bd-row-text"><div class="bd-row-label">Занятие</div><div class="bd-row-value">' + (b.session_num || 1) + '-е занятие</div></div></div>';
           var tierLab = (b.price_tier_label || '').trim();
-          if (tierLab) {
-            html += '<div class="bd-row">' + BD_ICONS.tariff + '<div class="bd-row-text"><div class="bd-row-label">Тариф</div><div class="bd-row-value">' + escapeHtml(tierLab) + '</div></div></div>';
+          if (canEditTierRow) {
+            html += bookingDetailEditableRow(BD_ICONS.tariff, 'Тариф', tierLab || '—', 'tier');
+          } else if (tierLab) {
+            html +=
+              '<div class="bd-row">' +
+              BD_ICONS.tariff +
+              '<div class="bd-row-text"><div class="bd-row-label">Тариф</div><div class="bd-row-value">' +
+              escapeHtml(tierLab) +
+              '</div></div></div>';
           }
           var bpc = b.booking_price_cents;
           if (bpc != null && bpc !== '' && !isNaN(parseInt(String(bpc), 10))) {
-            html += '<div class="bd-row">' + BD_ICONS.price + '<div class="bd-row-text"><div class="bd-row-label">Стоимость</div><div class="bd-row-value">' + formatTrainerDetailPriceFromCents(bpc) + '</div></div></div>';
+            html +=
+              '<div class="bd-row" id="bdDetailPriceRow">' +
+              BD_ICONS.price +
+              '<div class="bd-row-text"><div class="bd-row-label">Стоимость</div><div class="bd-row-value" id="bdDetailPriceValue">' +
+              formatTrainerDetailPriceFromCents(bpc) +
+              '</div></div></div>';
           }
           if (b.client_comment) {
             html += '<div class="bd-row bd-comment">' + BD_ICONS.comment + '<div class="bd-row-text"><div class="bd-row-label">Комментарий</div><div class="bd-row-value">' + escapeHtml(b.client_comment) + '</div></div></div>';
           }
           html += '</div></div>';
           document.getElementById('detailBookingContent').innerHTML = html;
+          bindBookingDetailEditableRows(b);
 
           var actions = document.getElementById('detailBookingActions');
           actions.innerHTML = '';
@@ -1373,6 +1517,11 @@
           var canReportProblem = stRaw !== 'cancelled' && stRaw !== 'declined';
           // E7: false when rollout=off or pilot excludes this trainer (API sets problem_flow_enabled).
           var problemFlowOk = (b.problem_flow_enabled !== false);
+          var serviceEdit = b.service_edit || {};
+          if (!serviceEdit.allowed && serviceEdit.reason) {
+            actions.innerHTML +=
+              '<p class="bd-service-edit-hint">' + escapeHtml(serviceEdit.reason) + '</p>';
+          }
           if (canReportProblem && problemFlowOk) {
             var ppc = b.problem_payment_class || '';
             var isPassCert = (ppc === 'PASS' || ppc === 'CERT');
@@ -1721,6 +1870,12 @@
         rescheduleSourceBookingId: null,
         /** schedule-editor?embed=1 — loaded inside trainer-clients iframe; parent handles success / dismiss. */
         scheduleEditorEmbed: false,
+        /** Booking id while modalBookingEditService is open (PATCH /trainer/bookings/:id/service). */
+        bookingEditTargetId: null,
+        /** 'service' | 'tier' — which row opened the edit modal. */
+        bookingEditFocus: null,
+        bookingEditLockedServiceId: null,
+        bookingEditModalBooking: null,
         /** False after /trainer/subscription/status when `crm` not in unlocked_features (Lead Mode / no sub). */
         scheduleCrmWriteAllowed: true,
         /** Slots for selected quick-book day (from GET /schedule); used to mark busy hours. */
@@ -2203,6 +2358,175 @@
             state.bookPriceVariantId = parseInt(pickInp.value, 10);
           }
         }
+      }
+
+      function closeBookingEditServiceModal() {
+        var m = document.getElementById('modalBookingEditService');
+        if (m) {
+          m.style.display = 'none';
+          m.setAttribute('aria-hidden', 'true');
+        }
+        state.bookingEditTargetId = null;
+        state.bookingEditFocus = null;
+        state.bookingEditLockedServiceId = null;
+        state.bookingEditModalBooking = null;
+        updateTelegramBack();
+      }
+
+      function syncBookingEditPriceTierRadios(preferredVariantId) {
+        var wrap = document.getElementById('bookEditPriceTierWrap');
+        var host = document.getElementById('bookEditPriceTierRadios');
+        if (!wrap || !host) return;
+        var sid =
+          state.bookingEditLockedServiceId != null
+            ? state.bookingEditLockedServiceId
+            : state.bookServiceId;
+        var tiers = bookingEditTiersForServiceId(sid);
+        if (tiers.length <= 1) {
+          state.bookPriceVariantId = tiers.length === 1 ? tiers[0].id : null;
+          host.innerHTML = '';
+          return;
+        }
+        host.innerHTML = '';
+        var gname = 'book_edit_tier_' + String(sid || 0);
+        tiers.forEach(function(tier) {
+          var lab = document.createElement('label');
+          var inp = document.createElement('input');
+          inp.type = 'radio';
+          inp.name = gname;
+          inp.value = String(tier.id);
+          lab.appendChild(inp);
+          lab.appendChild(document.createTextNode(priceTierLabelRuSe(tier)));
+          inp.addEventListener('change', function() {
+            state.bookPriceVariantId = parseInt(inp.value, 10);
+          });
+          host.appendChild(lab);
+        });
+        var resolved = resolveQuickBookPriceTierIdFromDefaults(tiers, preferredVariantId, null);
+        var preferredId = resolved != null ? resolved : pickDefaultBookPriceTierId(tiers);
+        var pickInp = preferredId != null ? host.querySelector('input[value="' + String(preferredId) + '"]') : null;
+        if (pickInp) {
+          pickInp.checked = true;
+          state.bookPriceVariantId = parseInt(pickInp.value, 10);
+        }
+      }
+
+      function openBookingEditServiceModal(booking, focusStep) {
+        if (!booking || booking.id == null) return;
+        var se = booking.service_edit || {};
+        focusStep = normalizeBookingEditFocus(focusStep);
+        if (focusStep === 'service' && !se.can_edit_service) return;
+        if (focusStep === 'tier' && !se.can_edit_tier) return;
+        if (!se.allowed) {
+          showToast(se.reason || 'Услугу и тариф для этой записи изменить нельзя');
+          return;
+        }
+        state.bookingEditTargetId = booking.id;
+        state.bookingEditFocus = focusStep;
+        state.bookingEditModalBooking = booking;
+        state.bookingEditLockedServiceId =
+          focusStep === 'tier' && booking.service_id != null ? Number(booking.service_id) : null;
+        var modal = document.getElementById('modalBookingEditService');
+        var sel = document.getElementById('bookEditServiceSelect');
+        var saveBtn = document.getElementById('btnBookingEditServiceSave');
+        if (!modal || !sel) return;
+        if (saveBtn) saveBtn.disabled = true;
+        sel.innerHTML = '';
+        modal.style.display = 'flex';
+        modal.setAttribute('aria-hidden', 'false');
+        updateTelegramBack();
+        getJsonTrainer('/trainer/my-services')
+          .then(function(data) {
+            state.bookServices = data.services || [];
+            if (!state.bookServices.length) {
+              showToast('Добавьте услугу в профиле');
+              closeBookingEditServiceModal();
+              return;
+            }
+            var lockedSid = state.bookingEditLockedServiceId;
+            state.bookServiceId =
+              lockedSid != null
+                ? lockedSid
+                : booking.service_id != null &&
+                    state.bookServices.some(function(s) { return Number(s.id) === Number(booking.service_id); })
+                  ? booking.service_id
+                  : state.bookServices[0].id;
+            sel.innerHTML = '';
+            state.bookServices.forEach(function(s) {
+              var opt = document.createElement('option');
+              opt.value = String(s.id);
+              opt.textContent = s.name || '—';
+              sel.appendChild(opt);
+            });
+            sel.value = String(state.bookServiceId);
+            sel.onchange = function() {
+              state.bookServiceId = this.value ? parseInt(this.value, 10) : null;
+            };
+            applyBookingEditModalLayout(booking, focusStep);
+            if (focusStep === 'tier') {
+              syncBookingEditPriceTierRadios(booking.service_price_variant_id);
+            } else {
+              state.bookPriceVariantId = null;
+            }
+            if (saveBtn) saveBtn.disabled = false;
+          })
+          .catch(function(e) {
+            showToast(e.message || 'Не удалось загрузить услуги');
+            closeBookingEditServiceModal();
+          });
+      }
+
+      function saveBookingEditService() {
+        var bid = state.bookingEditTargetId;
+        var booking = state.bookingEditModalBooking;
+        if (bid == null) return;
+        var serviceId =
+          state.bookingEditLockedServiceId != null
+            ? state.bookingEditLockedServiceId
+            : state.bookServiceId != null
+              ? state.bookServiceId
+              : booking && booking.service_id != null
+                ? booking.service_id
+                : state.bookServices.length
+                  ? state.bookServices[0].id
+                  : null;
+        if (serviceId == null) {
+          showToast('Выберите услугу');
+          return;
+        }
+        var tiers = bookingEditTiersForServiceId(serviceId);
+        var variantId = state.bookPriceVariantId;
+        if (variantId == null && tiers.length === 1) variantId = tiers[0].id;
+        if (state.bookingEditFocus === 'tier' && tiers.length > 1 && variantId == null) {
+          showToast('Выберите тариф');
+          return;
+        }
+        if (state.bookingEditFocus === 'service' && tiers.length > 1 && variantId == null) {
+          variantId = pickDefaultBookPriceTierId(tiers);
+        }
+        var payload = { service_id: serviceId };
+        if (variantId != null) payload.service_price_variant_id = variantId;
+        var saveBtn = document.getElementById('btnBookingEditServiceSave');
+        if (saveBtn) saveBtn.disabled = true;
+        var toastOk =
+          state.bookingEditFocus === 'tier'
+            ? 'Тариф обновлён'
+            : state.bookingEditFocus === 'service'
+              ? 'Услуга обновлена'
+              : 'Услуга и тариф обновлены';
+        patchJsonTrainer('/trainer/bookings/' + encodeURIComponent(String(bid)) + '/service', payload)
+          .then(function(updated) {
+            state.selectedBooking = updated;
+            closeBookingEditServiceModal();
+            showToast(toastOk);
+            openBookingDetail(bid);
+          })
+          .catch(function(e) {
+            showToast(e.message || 'Не удалось сохранить');
+          })
+          .finally(function() {
+            if (saveBtn) saveBtn.disabled = false;
+          });
       }
 
       function getMonday(d) {
@@ -5634,6 +5958,19 @@
         if (!el || el.dataset.crmNat375Mask === '1') return;
         if (typeof window.wireNational375PhoneInputMask === 'function') {
           window.wireNational375PhoneInputMask(el);
+        }
+      })();
+
+      (function wireBookingEditServiceModal() {
+        var btnSave = document.getElementById('btnBookingEditServiceSave');
+        var btnCancel = document.getElementById('btnBookingEditServiceCancel');
+        var overlay = document.getElementById('modalBookingEditService');
+        if (btnSave) btnSave.onclick = saveBookingEditService;
+        if (btnCancel) btnCancel.onclick = closeBookingEditServiceModal;
+        if (overlay) {
+          overlay.onclick = function(ev) {
+            if (ev.target === overlay) closeBookingEditServiceModal();
+          };
         }
       })();
 

@@ -24,8 +24,8 @@
       href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=optional"
     />
   </noscript>
-  <link rel="preload" href="schedule-editor-main.js?v=202605173" as="script" />
-  <link rel="stylesheet" href="mini-app-schedule-editor.css?v=202605173" />
+  <link rel="preload" href="schedule-editor-main.js?v=202605201" as="script" />
+  <link rel="stylesheet" href="mini-app-schedule-editor.css?v=202605201" />
   <link rel="stylesheet" href="mini-app-trainer-nav.css?v=20260429" />
 </head>
 <body>
@@ -179,6 +179,32 @@
       <svg class="back-link-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
       Назад к записи
     </button>
+  </div>
+
+  <div id="modalBookingEditService" class="modal-overlay book-flow-overlay" style="display: none;" aria-hidden="true">
+    <div class="modal book-flow-modal booking-edit-service-modal">
+      <p class="quick-book-kicker">Запись</p>
+      <h3 class="book-modal-title" id="bookingEditModalTitle">Услуга и тариф</h3>
+      <p class="book-choice-lead quick-book-lead" id="bookingEditServiceLead">Выберите вариант для этой записи.</p>
+      <div class="booking-edit-modal-body">
+        <div class="quick-book-fields">
+          <div class="book-field-stack" id="bookEditServiceStack">
+            <label class="book-field-label" for="bookEditServiceSelect">Услуга</label>
+            <div class="book-select-shell">
+              <select id="bookEditServiceSelect" class="book-service-select"></select>
+            </div>
+          </div>
+          <div class="book-field-stack" id="bookEditPriceTierWrap" style="display: none;">
+            <label class="book-field-label">Тариф</label>
+            <div id="bookEditPriceTierRadios" class="book-price-tier-radios book-edit-tier-radios"></div>
+          </div>
+        </div>
+      </div>
+      <div class="quick-book-actions booking-edit-modal-actions">
+        <button type="button" class="btn-block btn-primary" id="btnBookingEditServiceSave">Сохранить</button>
+        <button type="button" class="btn-block btn-secondary" id="btnBookingEditServiceCancel">Отмена</button>
+      </div>
+    </div>
   </div>
 
   <div id="modalBookingCancel" class="modal-overlay" style="display:none;">
@@ -712,6 +738,6 @@
   <script src="mini-app-trainer-home.js"></script>
   <script src="trainer-client-relay-ui.js?v=202605090"></script>
   <script src="trainer-relay-helpers.js?v=202605090"></script>
-  <script defer src="schedule-editor-main.js?v=202605194"></script>
+  <script defer src="schedule-editor-main.js?v=202605201"></script>
 </body>
 </html>

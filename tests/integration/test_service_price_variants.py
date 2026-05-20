@@ -365,3 +365,38 @@ async def test_set_trainer_services_stores_group_price_override(db_session: Asyn
     assert len(svcs) == 1
     assert svcs[0].get("group_price_cents") == 3500
     assert svcs[0].get("group_price_byn") == 35.0
+
+
+@pytest.mark.asyncio
+async def test_child_only_tier_does_not_expose_anchor_as_adult_price(db_session: AsyncSession) -> None:
+    """Anchor = child price when no adult; legacy price_byn must stay null so UI does not show adult tier."""
+    service_id = await require_seed_service_id(db_session)
+    r = await db_session.execute(text("INSERT INTO trainers (status) VALUES ('active') RETURNING id"))
+    (trainer_id,) = r.fetchone()
+    repo = TrainerRepository(db_session)
+    await repo.set_trainer_services(trainer_id, [(service_id, [("child", 5000)])])
+    await db_session.commit()
+    r = await db_session.execute(
+        text("SELECT price_cents FROM trainer_services WHERE trainer_id = :t AND service_id = :s"),
+        {"t": trainer_id, "s": service_id},
+    )
+    assert r.scalar() == 5000
+    r2 = await db_session.execute(
+        text(
+            """
+            SELECT tier_kind, price_cents FROM trainer_service_price_variants
+            WHERE trainer_id = :t AND service_id = :s
+            """
+        ),
+        {"t": trainer_id, "s": service_id},
+    )
+    assert r2.fetchall() == [("child", 5000)]
+    loaded = await repo.get_by_id(trainer_id)
+    assert loaded is not None
+    svc = (loaded.get("services") or [])[0]
+    assert svc.get("price_byn") is None
+    assert svc.get("price_child_byn") == 50.0
+    tiers = svc.get("price_tiers") or []
+    assert len(tiers) == 1
+    assert tiers[0]["tier_kind"] == "child"
+    assert tiers[0]["price_byn"] == 50.0

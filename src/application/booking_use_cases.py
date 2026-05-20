@@ -1258,7 +1258,12 @@ async def fetch_reminder_session_cards_map(
     session: AsyncSession,
     booking_ids: list[int],
 ) -> dict[int, dict[str, Any]]:
-    """Display payloads for client reminder Telegram (supports merged same-day rows)."""
+    """
+    Display payloads for client reminder Telegram (supports merged same-day rows).
+
+    Reads live ``bookings.service_id`` / ``booking_price_cents`` so trainer edits before
+    ``send_at`` appear in the standard reminder without resync or a separate client push.
+    """
     if not booking_ids:
         return {}
     # Deduplicate while preserving order.
@@ -1712,6 +1717,237 @@ async def get_trainer_booking_detail_payload(
         "price_tier_label": tier_label,
         "is_sandbox": bool(row[24]) if len(row) > 24 else False,
     }
+
+
+# Trainer may change service/tariff on active bookings (not pass/cert-settled, not terminal status).
+_BOOKING_SERVICE_EDIT_TERMINAL_STATUSES = frozenset({
+    "cancelled",
+    "declined",
+    BOOKING_STATUS_TRAINER_REMOVED,
+    "completed",
+    BOOKING_STATUS_NO_SHOW,
+    BOOKING_STATUS_PAYMENT_DISPUTE,
+})
+
+
+async def load_booking_service_edit_context(
+    session: AsyncSession,
+    booking_id: int,
+    trainer_id: int,
+) -> dict | None:
+    """Booking + slot facts for service/tariff edit policy and PATCH handler."""
+    r = await session.execute(
+        text(
+            """
+            SELECT b.id, b.status, b.service_id, b.service_price_variant_id,
+                   s.capacity, s.service_id AS slot_service_id, s.slot_date, s.end_time,
+                   EXISTS (SELECT 1 FROM pass_redemptions pr WHERE pr.booking_id = b.id) AS has_pass,
+                   EXISTS (SELECT 1 FROM certificate_booking_credits cbc WHERE cbc.booking_id = b.id) AS has_cert,
+                   EXISTS (SELECT 1 FROM booking_problem_reports pr WHERE pr.booking_id = b.id) AS problem_reported,
+                   EXISTS (SELECT 1 FROM booking_client_no_show cns WHERE cns.booking_id = b.id) AS client_no_show
+            FROM bookings b
+            JOIN slots s ON s.id = b.slot_id
+            WHERE b.id = :bid AND b.trainer_id = :tid
+              AND b.status <> :purged_status
+            """
+        ),
+        {"bid": booking_id, "tid": trainer_id, "purged_status": BOOKING_STATUS_TRAINER_REMOVED},
+    )
+    row = r.fetchone()
+    if not row:
+        return None
+    capacity = max(1, int(row[4] or 1))
+    return {
+        "booking_id": int(row[0]),
+        "status": (row[1] or "").strip().lower(),
+        "service_id": int(row[2]),
+        "service_price_variant_id": int(row[3]) if row[3] is not None else None,
+        "slot_capacity": capacity,
+        "slot_service_id": int(row[5]) if row[5] is not None else None,
+        "slot_date": row[6],
+        "slot_end_time": row[7],
+        "has_pass_redemption": bool(row[8]),
+        "has_cert_credit": bool(row[9]),
+        "problem_reported": bool(row[10]),
+        "client_no_show_recorded": bool(row[11]),
+    }
+
+
+def booking_service_edit_policy(ctx: dict) -> dict:
+    """
+    UI/API hint: whether trainer can open service/tariff editor on booking detail.
+    Returns {allowed, reason, service_locked}.
+    """
+    st = ctx.get("status") or ""
+    if st in _BOOKING_SERVICE_EDIT_TERMINAL_STATUSES:
+        if st in ("cancelled", "declined", BOOKING_STATUS_TRAINER_REMOVED):
+            return {
+                "allowed": False,
+                "reason": "Отменённую или отклонённую запись нельзя редактировать.",
+                "service_locked": False,
+            }
+        if st == "completed":
+            return {
+                "allowed": False,
+                "reason": "Запись уже завершена — услугу и тариф не изменить.",
+                "service_locked": False,
+            }
+        return {
+            "allowed": False,
+            "reason": "Для этой записи услугу и тариф изменить нельзя.",
+            "service_locked": False,
+        }
+    if ctx.get("has_pass_redemption") or ctx.get("has_cert_credit"):
+        return {
+            "allowed": False,
+            "reason": "Нельзя менять: занятие уже списано с абонемента или сертификата.",
+            "service_locked": False,
+        }
+    if ctx.get("problem_reported") or ctx.get("client_no_show_recorded"):
+        return {
+            "allowed": False,
+            "reason": "После отчёта о проблеме услугу и тариф не меняют.",
+            "service_locked": False,
+        }
+    if is_slot_end_in_past_local(ctx.get("slot_date"), ctx.get("slot_end_time")):
+        return {
+            "allowed": False,
+            "reason": "Занятие уже прошло — услугу и тариф не изменить.",
+            "service_locked": False,
+        }
+    capacity = max(1, int(ctx.get("slot_capacity") or 1))
+    if capacity > 1:
+        return {
+            "allowed": False,
+            "reason": "У группового слота услуга зафиксирована.",
+            "service_locked": True,
+        }
+    if st not in ("pending", "confirmed"):
+        return {
+            "allowed": False,
+            "reason": "Для этой записи услугу и тариф изменить нельзя.",
+            "service_locked": False,
+        }
+    return {"allowed": True, "reason": None, "service_locked": False}
+
+
+async def resolve_booking_service_edit_ui_flags(
+    session: AsyncSession,
+    trainer_id: int,
+    ctx: dict | None,
+) -> dict:
+    """
+    Extends ``booking_service_edit_policy`` with catalog-aware UI flags.
+
+    ``can_edit_service`` / ``can_edit_tier`` are false when the trainer has nothing
+    meaningful to pick (single service or single tier) — detail rows stay static.
+    """
+    empty = {
+        "allowed": False,
+        "reason": None,
+        "service_locked": False,
+        "can_edit_service": False,
+        "can_edit_tier": False,
+    }
+    if not ctx:
+        return empty
+    base = booking_service_edit_policy(ctx)
+    out = {
+        "allowed": bool(base.get("allowed")),
+        "reason": base.get("reason"),
+        "service_locked": bool(base.get("service_locked")),
+        "can_edit_service": False,
+        "can_edit_tier": False,
+    }
+    if not out["allowed"]:
+        return out
+    r = await session.execute(
+        text("SELECT COUNT(*)::int FROM trainer_services WHERE trainer_id = :tid"),
+        {"tid": trainer_id},
+    )
+    svc_count = int(r.scalar() or 0)
+    can_edit_service = svc_count > 1
+    tiers = await list_trainer_service_price_variants(
+        session, trainer_id, int(ctx["service_id"])
+    )
+    can_edit_tier = len(tiers) > 1
+    if not can_edit_service and not can_edit_tier:
+        out["allowed"] = False
+        return out
+    out["can_edit_service"] = can_edit_service
+    out["can_edit_tier"] = can_edit_tier
+    return out
+
+
+async def update_trainer_booking_service(
+    session: AsyncSession,
+    booking_id: int,
+    trainer_id: int,
+    service_id: int,
+    service_price_variant_id: int | None = None,
+) -> tuple[dict | None, str | None]:
+    """
+    Change service + price snapshot on an individual-slot booking.
+
+    Intentionally silent for the client: no Telegram push, no ``generate_reminders_for_booking``.
+    Pending reminders only store booking ids + send_at; ``list_pending_reminders`` loads
+    service/price from the live ``bookings`` row at send time (``fetch_reminder_session_cards_map``).
+
+    Returns (detail_payload, error_code). error_code is a machine key for HTTP mapping.
+    """
+    ctx = await load_booking_service_edit_context(session, booking_id, trainer_id)
+    if not ctx:
+        return (None, "not_found")
+    policy = await resolve_booking_service_edit_ui_flags(session, trainer_id, ctx)
+    if not policy.get("allowed"):
+        code = "group_service_locked" if policy.get("service_locked") else "not_editable"
+        return (None, code)
+    r = await session.execute(
+        text(
+            """
+            SELECT 1 FROM trainer_services
+            WHERE trainer_id = :tid AND service_id = :sid
+            """
+        ),
+        {"tid": trainer_id, "sid": service_id},
+    )
+    if not r.fetchone():
+        return (None, "invalid_service")
+    try:
+        variant_id_resolved, booking_price_cents, price_tier_kind = await _resolve_service_booking_price(
+            session,
+            trainer_id,
+            int(service_id),
+            service_price_variant_id,
+            strict_variant=True,
+        )
+    except ServicePriceVariantRequired:
+        return (None, "tier_required")
+    if service_price_variant_id is not None and variant_id_resolved is None:
+        return (None, "invalid_tier")
+    await session.execute(
+        text(
+            """
+            UPDATE bookings
+            SET service_id = :sid,
+                service_price_variant_id = :vid,
+                booking_price_cents = :bpc,
+                price_tier_kind = :ptk
+            WHERE id = :bid AND trainer_id = :tid
+            """
+        ),
+        {
+            "sid": int(service_id),
+            "vid": variant_id_resolved,
+            "bpc": booking_price_cents,
+            "ptk": price_tier_kind,
+            "bid": booking_id,
+            "tid": trainer_id,
+        },
+    )
+    await session.commit()
+    detail = await get_trainer_booking_detail_payload(session, booking_id, trainer_id)
+    return (detail, None)
 
 
 async def list_bookings_for_trainer(
