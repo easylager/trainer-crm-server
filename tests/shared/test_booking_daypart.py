@@ -32,9 +32,12 @@ def test_slot_start_in_booking_daypart_boundaries() -> None:
 
     assert slot_start_in_booking_daypart(time(17, 0), BOOKING_DAYPART_EVENING)
     assert slot_start_in_booking_daypart(time(22, 0), BOOKING_DAYPART_EVENING)
+    assert slot_start_in_booking_daypart(time(23, 30), BOOKING_DAYPART_EVENING)
     assert not slot_start_in_booking_daypart(time(16, 30), BOOKING_DAYPART_EVENING)
 
 
 def test_slot_dict_matches_hhmm_string() -> None:
     assert slot_dict_matches_booking_daypart({"start_time": "09:30"}, BOOKING_DAYPART_MORNING)
     assert not slot_dict_matches_booking_daypart({"start_time": "14:00"}, BOOKING_DAYPART_MORNING)
+    assert slot_dict_matches_booking_daypart({"start_time": "22:00"}, BOOKING_DAYPART_EVENING)
+    assert slot_dict_matches_booking_daypart({"start_time": "23:00"}, BOOKING_DAYPART_EVENING)

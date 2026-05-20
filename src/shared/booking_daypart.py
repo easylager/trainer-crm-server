@@ -20,7 +20,8 @@ BOOKING_DAYPART_VALUES: frozenset[str] = frozenset(
 BOOKING_DAYPART_WINDOWS: dict[str, tuple[time, time]] = {
     BOOKING_DAYPART_MORNING: (time(8, 0), time(12, 0)),
     BOOKING_DAYPART_AFTERNOON: (time(13, 0), time(16, 0)),
-    BOOKING_DAYPART_EVENING: (time(17, 0), time(22, 0)),
+    # Evening through end of day (до 00:00): late slots e.g. 22:00–23:30 must stay visible
+    BOOKING_DAYPART_EVENING: (time(17, 0), time(23, 59)),
 }
 
 BOOKING_DAYPART_LABEL_RU: dict[str | None, str] = {
@@ -31,7 +32,7 @@ BOOKING_DAYPART_LABEL_RU: dict[str | None, str] = {
 }
 
 BOOKING_DAYPART_RANGES_HINT_RU = (
-    "Утро 8:00–12:00 · День 13:00–16:00 · Вечер 17:00–22:00"
+    "Утро 8:00–12:00 · День 13:00–16:00 · Вечер 17:00–00:00"
 )
 
 
@@ -68,6 +69,8 @@ def parse_slot_start_time(value: Any) -> time | None:
 
 def slot_start_in_booking_daypart(start: time, daypart: str) -> bool:
     """True when slot start falls inside the daypart window."""
+    if daypart == BOOKING_DAYPART_EVENING:
+        return start >= BOOKING_DAYPART_WINDOWS[BOOKING_DAYPART_EVENING][0]
     window = BOOKING_DAYPART_WINDOWS.get(daypart)
     if window is None:
         return True

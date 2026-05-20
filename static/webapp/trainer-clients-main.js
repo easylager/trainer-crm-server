@@ -1767,7 +1767,7 @@
         ];
         var current = win.value != null ? win.value : null;
         var currentLabel = win.label || 'Любое время';
-        var rangesHint = win.ranges_hint || 'Утро 8:00–12:00 · День 13:00–16:00 · Вечер 17:00–22:00';
+        var rangesHint = win.ranges_hint || 'Утро 8:00–12:00 · День 13:00–16:00 · Вечер 17:00–00:00';
         var html =
           '<details class="tc-self-book-details" id="tcSelfBookDetails">' +
           '<summary class="tc-self-book-summary">' +

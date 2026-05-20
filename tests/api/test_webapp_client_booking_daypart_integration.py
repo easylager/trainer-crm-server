@@ -72,6 +72,42 @@ async def test_client_slots_filtered_by_morning_daypart(app_use_test_db, db_sess
 
 
 @pytest.mark.asyncio
+async def test_client_slots_evening_includes_22_00_start(app_use_test_db, db_session: AsyncSession) -> None:
+    ref_day, ref_now = _minsk_monday_reference()
+    slot_day = ref_day + timedelta(days=3)
+    trainer_id, _sid, _ = await _create_trainer_online_with_slot(
+        db_session,
+        slot_date=slot_day,
+        start_hours={8, 14, 22},
+        tier=SUBSCRIPTION_TIER_ONLINE,
+    )
+    ctg = _fresh_client_telegram_id()
+    client_id = await get_or_create_client(db_session, ctg)
+    await set_client_booking_daypart(db_session, trainer_id, int(client_id), "evening")
+
+    with patch_client_init_auth(ctg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            with (
+                patch("src.api.routes.webapp.get_slots_cached", return_value=None),
+                patch("src.api.routes.webapp.datetime") as mock_dt,
+                patch("src.api.routes.webapp.date") as mock_date,
+            ):
+                mock_date.today.return_value = ref_day
+                mock_dt.now.return_value = ref_now
+                mock_dt.combine = datetime.combine
+                mock_dt.strftime = datetime.strftime
+                resp = await client.get(
+                    f"/api/webapp/client/slots?trainer_id={trainer_id}&min_hours=0",
+                    headers={"X-Telegram-Init-Data": "mock"},
+                )
+    assert resp.status_code == 200
+    starts = {s["start_time"] for s in resp.json().get("slots") or []}
+    assert "22:00" in starts
+    assert "08:00" not in starts
+    assert "14:00" not in starts
+
+
+@pytest.mark.asyncio
 async def test_patch_trainer_client_self_book_window(app_use_test_db, db_session: AsyncSession) -> None:
     from tests.api.test_webapp_trainer_client_identity import patch_trainer_webapp_init
 
