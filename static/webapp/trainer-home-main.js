@@ -213,6 +213,44 @@
           });
         });
       }
+
+      /** Deep link from push «Предложить это окно своим» — capture before URL strip / late initData. */
+      var hubFillSlotsDeepLinkPending = (function parseHubFillSlotsDeepLinkFromLocation() {
+        try {
+          var params = new URLSearchParams(window.location.search || '');
+          if (params.get('open_fill_slots') !== '1') return null;
+          var sid = params.get('fill_slot_id');
+          var ex = params.get('fill_exclude_client_id');
+          var slotId = sid ? parseInt(sid, 10) : NaN;
+          var exId = ex ? parseInt(ex, 10) : NaN;
+          return {
+            slotId: !isNaN(slotId) && slotId > 0 ? slotId : null,
+            excludeClientId: !isNaN(exId) && exId > 0 ? exId : null,
+          };
+        } catch (eParse) {
+          return null;
+        }
+      })();
+      var hubFillSlotsDeepLinkOpened = false;
+
+      function refreshHubFillSlotsDeepLinkFromUrl() {
+        if (hubFillSlotsDeepLinkPending || hubFillSlotsDeepLinkOpened) return;
+        try {
+          var params = new URLSearchParams(window.location.search || '');
+          if (params.get('open_fill_slots') !== '1') return;
+          var sid = params.get('fill_slot_id');
+          var ex = params.get('fill_exclude_client_id');
+          var slotId = sid ? parseInt(sid, 10) : NaN;
+          var exId = ex ? parseInt(ex, 10) : NaN;
+          hubFillSlotsDeepLinkPending = {
+            slotId: !isNaN(slotId) && slotId > 0 ? slotId : null,
+            excludeClientId: !isNaN(exId) && exId > 0 ? exId : null,
+          };
+        } catch (eRefresh) {
+          /* */
+        }
+      }
+
       /** Set after GET /trainer/access when initData present (onboarding vs active). */
       var trainerAccessSnapshot = null;
       var hubForceClientChatRelay = false;
@@ -6268,6 +6306,8 @@
           renderHubFillSlotsInvitesSkeleton(!!hubFillSlotsInviteContext.slotId);
           overlay.style.display = 'flex';
           overlay.setAttribute('aria-hidden', 'false');
+          hubFillSlotsDeepLinkOpened = true;
+          hubFillSlotsDeepLinkPending = null;
 
           var path = '/trainer/hub/fill-slots-invites';
           var q = [
@@ -6325,25 +6365,26 @@
       }
 
       function tryOpenHubFillSlotsFromUrl() {
-        try {
-          var params = new URLSearchParams(window.location.search || '');
-          if (params.get('open_fill_slots') !== '1') return;
-          var sid = params.get('fill_slot_id');
-          var ex = params.get('fill_exclude_client_id');
-          var slotId = sid ? parseInt(sid, 10) : NaN;
-          var exId = ex ? parseInt(ex, 10) : NaN;
+        if (hubFillSlotsDeepLinkOpened) return;
+        refreshHubFillSlotsDeepLinkFromUrl();
+        var link = hubFillSlotsDeepLinkPending;
+        if (!link) return;
+        waitForTrainerInitDataThen(function() {
+          if (hubFillSlotsDeepLinkOpened) return;
+          refreshHubFillSlotsDeepLinkFromUrl();
+          link = hubFillSlotsDeepLinkPending;
+          if (!link) return;
           stripHubFillSlotsQueryFromUrl();
-          if (!isNaN(slotId) && slotId > 0) {
-            openHubFillSlotsInvitesFlow(
-              slotId,
-              !isNaN(exId) && exId > 0 ? exId : null
-            );
-          } else {
-            openHubFillSlotsInvitesFlow(null, null);
-          }
-        } catch (e) {
-          /* */
-        }
+          openHubFillSlotsInvitesFlow(link.slotId, link.excludeClientId);
+        });
+      }
+
+      function scheduleTryOpenHubFillSlotsFromUrl() {
+        if (!hubFillSlotsDeepLinkPending) refreshHubFillSlotsDeepLinkFromUrl();
+        if (!hubFillSlotsDeepLinkPending) return;
+        [0, 400, 1000, 1800].forEach(function(ms) {
+          setTimeout(tryOpenHubFillSlotsFromUrl, ms);
+        });
       }
 
       function wireHubFillSlotsInvitesModal() {
@@ -7027,6 +7068,7 @@
           loadBookings();
           loadHubRequestsSummary();
           loadOnboardingChecklist();
+          scheduleTryOpenHubFillSlotsFromUrl();
           scheduleHubMinimalProfileDoneWelcome();
           if (window.__hubSplash) window.__hubSplash.markDataReady();
           return;
@@ -7040,6 +7082,7 @@
           if (!bs || !bs.requests_summary) loadHubRequestsSummary();
           else renderHubSummaryHints();
           if (!bs || !bs.onboarding_checklist) loadOnboardingChecklist();
+          scheduleTryOpenHubFillSlotsFromUrl();
           scheduleHubMinimalProfileDoneWelcome();
           if (window.__hubSplash) window.__hubSplash.markDataReady();
           return;
@@ -7058,9 +7101,7 @@
         if (!bs || !bs.onboarding_checklist) {
           loadOnboardingChecklist();
         }
-        setTimeout(function() {
-          tryOpenHubFillSlotsFromUrl();
-        }, 400);
+        scheduleTryOpenHubFillSlotsFromUrl();
         scheduleHubMinimalProfileDoneWelcome();
         if (window.__hubSplash) window.__hubSplash.markDataReady();
       }

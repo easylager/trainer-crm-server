@@ -39,7 +39,7 @@
       window.__applyTrainerPassProductsTheme = applyAppTheme;
     })();
   </script>
-  <link rel="preload" href="trainer-pass-products-main.js?v=20260513" as="script" />
+  <link rel="preload" href="trainer-pass-products-main.js?v=202605190" as="script" />
   <link rel="stylesheet" href="mini-app-trainer-pass-products.css?v=20260501" />
   <link rel="stylesheet" href="mini-app-trainer-nav.css?v=20260422" />
 </head>
@@ -255,6 +255,14 @@
       </div>
     </div>
     <div class="pp-form-fields">
+      <div class="form-group">
+        <label for="certTitle">Название сертификата <span class="label-optional">необязательно</span></label>
+        <input type="text" id="certTitle" maxlength="128" placeholder="Например: Подарок на день рождения" autocomplete="off">
+      </div>
+      <div class="form-group">
+        <label for="certDescription">Описание <span class="label-optional">необязательно</span></label>
+        <textarea id="certDescription" rows="3" maxlength="2000" placeholder="Что входит, для кого подарок, как использовать"></textarea>
+      </div>
       <div class="form-group-checkbox">
         <label>
           <input type="checkbox" id="certAnyAmount">
@@ -279,7 +287,7 @@
     <button type="button" class="btn-delete" id="btnDeleteCert" style="display: none;">Удалить сертификат</button>
   </div>
   <script src="mini-app-trainer-gate.js"></script>
-  <script defer src="trainer-pass-products-main.js?v=20260513"></script>
+  <script defer src="trainer-pass-products-main.js?v=202605190"></script>
   <script defer src="mini-app-trainer-home.js"></script>
 </body>
 </html>

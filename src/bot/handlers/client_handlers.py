@@ -66,6 +66,10 @@ from src.application.client_session_use_cases import (
     set_selected_trainer,
     set_service,
 )
+from src.application.client_request_comment_display import (
+    client_request_comment_editable,
+    client_visible_request_comment,
+)
 from src.application.client_request_use_cases import (
     create_client_request,
     delete_client_request,
@@ -2651,10 +2655,16 @@ def _format_request_responses_keyboard(req: dict) -> InlineKeyboardMarkup:
             text=f"{msg.CLIENT_BUTTON_RESPONDER_PROFILE}: {name}",
             callback_data=f"{RESPONDER_PROFILE_PREFIX}{req['id']}:{r['trainer_id']}",
         )])
-    rows.append([InlineKeyboardButton(
-        text=msg.CLIENT_REQUEST_EDIT_DELETE_BUTTON,
-        callback_data=f"{REQUEST_EDIT_PREFIX}{req['id']}",
-    )])
+    if client_request_comment_editable(req.get("comment")):
+        rows.append([InlineKeyboardButton(
+            text=msg.CLIENT_REQUEST_EDIT_DELETE_BUTTON,
+            callback_data=f"{REQUEST_EDIT_PREFIX}{req['id']}",
+        )])
+    else:
+        rows.append([InlineKeyboardButton(
+            text=msg.CLIENT_REQUEST_DELETE_BUTTON,
+            callback_data=f"{REQUEST_DELETE_PREFIX}{req['id']}",
+        )])
     rows.append([InlineKeyboardButton(text=msg.CLIENT_BUTTON_BACK_TO_REQUESTS, callback_data=MY_REQUESTS_CALLBACK)])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
@@ -2673,7 +2683,7 @@ async def show_request_responses(callback: CallbackQuery) -> None:
         await callback.message.answer(msg.CLIENT_ERROR_REQUEST_NOT_FOUND)
         return
     request_index = next((i for i, r in enumerate(requests_list, 1) if r["id"] == request_id), 1)
-    comment = (req.get("comment") or "").strip()
+    comment = client_visible_request_comment(req.get("comment")) or ""
     if comment:
         text = msg.CLIENT_MY_REQUESTS_ROW.format(
             index=request_index, city=req["city_name"], service=req["service_name"], comment=comment
@@ -2714,10 +2724,13 @@ async def show_request_edit(callback: CallbackQuery) -> None:
     if not req:
         await callback.message.answer(msg.CLIENT_ERROR_REQUEST_NOT_FOUND)
         return
+    if not client_request_comment_editable(req.get("comment")):
+        await callback.message.answer(msg.CLIENT_REQUEST_EDIT_NOT_ALLOWED)
+        return
     _request_edit_state[telegram_id] = request_id
     city = (req.get("city_name") or "").strip() or "—"
     service = (req.get("service_name") or "").strip() or "—"
-    comment = (req.get("comment") or "").strip()
+    comment = client_visible_request_comment(req.get("comment")) or ""
     if comment:
         body = msg.CLIENT_REQUEST_EDIT_CURRENT.format(city=city, service=service, comment=comment)
     else:
@@ -2759,7 +2772,7 @@ async def confirm_request_edit(callback: CallbackQuery) -> None:
     if not req:
         await callback.message.answer(msg.CLIENT_REQUEST_EDIT_SAVED)
         return
-    comment = (req.get("comment") or "").strip()
+    comment = client_visible_request_comment(req.get("comment")) or ""
     text = msg.CLIENT_REQUEST_EDIT_SAVED + "\n\n"
     text += msg.CLIENT_MY_REQUESTS_ROW.format(
         index=1, city=req["city_name"], service=req["service_name"], comment=comment

@@ -11,6 +11,11 @@ from itertools import groupby
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.booking_use_cases import list_bookings_for_client
+from src.application.client_request_comment_display import (
+    client_request_comment_editable,
+    client_request_subtype,
+    client_visible_request_comment,
+)
 from src.application.client_request_use_cases import list_my_requests_with_responses
 from src.shared.price_tier_kind import normalize_price_tier_kind, price_tier_label_ru
 
@@ -64,11 +69,15 @@ def serialize_client_request(req: dict) -> dict:
         created_at = created_at.isoformat()
     elif created_at is not None:
         created_at = str(created_at)
+    raw_comment = req.get("comment")
+    subtype = client_request_subtype(raw_comment)
     return {
         "id": req["id"],
         "city_id": req["city_id"],
         "service_id": req["service_id"],
-        "comment": req.get("comment"),
+        "comment": client_visible_request_comment(raw_comment),
+        "request_subtype": subtype,
+        "editable": client_request_comment_editable(raw_comment),
         "created_at": created_at,
         "status": req.get("status"),
         "city_name": req.get("city_name"),

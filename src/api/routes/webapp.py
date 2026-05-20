@@ -245,6 +245,7 @@ from src.application.pass_product_use_cases import (
 )
 from src.application.certificate_use_cases import (
     AMOUNT_CENTS_UNSET,
+    DESCRIPTION_UNSET,
     create_certificate_product,
     delete_certificate_product,
     get_certificate_product,
@@ -2552,7 +2553,27 @@ async def patch_client_request(
     principal: MiniAppPrincipal = Depends(get_client_miniapp_principal),
 ):
     """Replace request with new comment (re-create so trainers get new notification). Auth: client initData."""
+    from src.application.client_request_comment_display import client_request_comment_editable
+    from src.application.client_use_cases import get_client_id_by_telegram_id
+
     telegram_id = client_catalog_telegram_key(principal)
+    cid = await get_client_id_by_telegram_id(session, telegram_id)
+    if cid is None:
+        raise HTTPException(status_code=403, detail="Client not found")
+    r = await session.execute(
+        text(
+            "SELECT comment FROM client_requests WHERE id = :rid AND client_id = :cid"
+        ),
+        {"rid": request_id, "cid": int(cid)},
+    )
+    row = r.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Request not found")
+    if not client_request_comment_editable(row[0]):
+        raise HTTPException(
+            status_code=400,
+            detail="Заявки на абонемент и сертификат пока нельзя редактировать. Удалите заявку и оформите новую.",
+        )
     new_id = await replace_client_request_with_new(
         session, request_id, telegram_id, body.comment
     )
@@ -4159,7 +4180,8 @@ async def get_trainer_certificate_products(
 
 
 class CertificateProductCreateBody(BaseModel):
-    name: str
+    name: str | None = None  # optional display title; server picks default from amount if omitted
+    description: str | None = None
     amount_cents: int | None = None  # None = "любая сумма"
     expires_in_days: int | None = None
     sort_order: int = 0
@@ -4179,14 +4201,17 @@ async def post_trainer_certificate_product(
         session,
         trainer_id,
         name=body.name,
+        description=body.description,
         amount_cents=body.amount_cents,
         sort_order=body.sort_order,
+        expires_in_days=body.expires_in_days,
     )
     return {"success": True, "id": product_id}
 
 
 class CertificateProductPatchBody(BaseModel):
     name: str | None = None
+    description: str | None = None  # null or "" clears; omit = do not change
     amount_cents: int | None = None  # None = "любая сумма"; omit = do not change
     expires_in_days: int | None = None
     is_active: bool | None = None
@@ -4206,6 +4231,9 @@ async def patch_trainer_certificate_product(
         raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     payload = body.model_dump(exclude_unset=True)
     name = payload.get("name") if "name" in payload else None
+    description = (
+        payload.get("description") if "description" in payload else DESCRIPTION_UNSET
+    )
     amount_cents = payload.get("amount_cents") if "amount_cents" in payload else AMOUNT_CENTS_UNSET
     expires_in_days = payload.get("expires_in_days") if "expires_in_days" in payload else None
     is_active = payload.get("is_active") if "is_active" in payload else None
@@ -4215,6 +4243,7 @@ async def patch_trainer_certificate_product(
         product_id,
         trainer_id,
         name=name,
+        description=description,
         amount_cents=amount_cents,
         expires_in_days=expires_in_days,
         is_active=is_active,

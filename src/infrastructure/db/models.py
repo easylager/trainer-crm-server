@@ -882,6 +882,7 @@ class TrainerCertificateProduct(Base):
         ForeignKey("trainers.id", ondelete="CASCADE"), nullable=False, index=True
     )
     name: Mapped[str] = mapped_column(String(128), nullable=False, default="Подарочный сертификат")
+    description: Mapped[Optional[str]] = mapped_column(Text(), nullable=True)
     amount_cents: Mapped[Optional[int]] = mapped_column(Integer(), nullable=True)  # NULL = "любая сумма"
     expires_in_days: Mapped[Optional[int]] = mapped_column(Integer(), nullable=True)
     sort_order: Mapped[int] = mapped_column(Integer(), server_default="0", nullable=False)

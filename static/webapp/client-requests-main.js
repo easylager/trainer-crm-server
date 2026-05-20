@@ -411,6 +411,12 @@
           cEl.style.fontStyle = comment ? 'italic' : 'normal';
           cEl.style.opacity = comment ? '0.92' : '0.65';
         }
+        var editBtn = document.getElementById('btnEditRequest');
+        if (editBtn) {
+          var canEdit = req.editable !== false;
+          editBtn.hidden = !canEdit;
+          editBtn.disabled = !canEdit;
+        }
         // API всегда отдаёт массив; на всякий случай нормализуем (не-массив ломает forEach).
         var responses = Array.isArray(req.responses) ? req.responses : [];
         var hintEl = document.getElementById('detailTrainersHint');
@@ -625,6 +631,10 @@
       document.getElementById('btnEditRequest').onclick = function() {
         const req = state.currentRequest;
         if (!req) return;
+        if (req.editable === false) {
+          alert('Заявки на абонемент и сертификат пока нельзя редактировать. Удалите заявку и оформите новую.');
+          return;
+        }
         const hasResponses = (Array.isArray(req.responses) ? req.responses : []).length > 0;
         function openEdit() {
           document.getElementById('editCityService').textContent = 'Город: ' + (req.city_name || '—') + ', Услуга: ' + (req.service_name || '—');

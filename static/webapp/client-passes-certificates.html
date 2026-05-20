@@ -136,6 +136,12 @@
       line-height: 1.35;
     }
     .pass-offer-scope strong { color: var(--tg-theme-text-color); font-weight: 600; }
+    .pass-offer-desc {
+      margin: 8px 0 0;
+      font-size: 14px;
+      line-height: 1.45;
+      color: var(--tg-theme-text-color);
+    }
     .pass-offer-price-pill {
       flex-shrink: 0;
       padding: 8px 12px;
@@ -1266,10 +1272,14 @@
         catalog.items.forEach(function(it) {
           var nom = formatAmount(it.amount_cents);
           var title = (it.name && String(it.name).trim()) ? String(it.name).trim() : 'Подарочный сертификат';
+          var desc = (it.description && String(it.description).trim()) ? String(it.description).trim() : '';
           var subt = '';
           if (nom === 'Любая сумма') {
             subt = '<p class="pass-offer-scope">Номинал согласуете при отправке заявки</p>';
+          } else if (nom && nom !== '—') {
+            subt = '<p class="pass-offer-scope">Номинал: ' + escapeHtml(nom) + '</p>';
           }
+          var descHtml = desc ? '<p class="pass-offer-desc">' + escapeHtml(desc) + '</p>' : '';
           html += '<article class="pass-offer-card">';
           html +=
             '<div class="pass-offer-top">' +
@@ -1277,6 +1287,7 @@
             escapeHtml(title) +
             '</h3>' +
             subt +
+            descHtml +
             '</div></div>';
           var anyAmt = it.amount_cents == null || it.amount_cents === undefined ? '1' : '0';
           html +=

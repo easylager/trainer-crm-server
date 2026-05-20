@@ -10,13 +10,29 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
 
+DESCRIPTION_UNSET = object()
+
+
+def default_certificate_product_name(amount_cents: int | None) -> str:
+    """Fallback label when trainer leaves «Название» empty."""
+    if amount_cents is None:
+        return "Подарочный сертификат"
+    byn = int(amount_cents) // 100
+    return f"Сертификат {byn} BYN" if byn > 0 else "Подарочный сертификат"
+
+
+def _normalize_certificate_description(description: str | None) -> str | None:
+    text = (description or "").strip()
+    return text if text else None
+
 
 async def list_certificate_products(
     session: AsyncSession, trainer_id: int, active_only: bool = False
 ) -> list[dict]:
     """List certificate products for trainer. Sorted by sort_order, id."""
     q = """
-        SELECT id, trainer_id, name, amount_cents, expires_in_days, sort_order, is_active, created_at
+        SELECT id, trainer_id, name, description, amount_cents, expires_in_days,
+               sort_order, is_active, created_at
         FROM trainer_certificate_products
         WHERE trainer_id = :tid
     """
@@ -30,11 +46,12 @@ async def list_certificate_products(
             "id": row[0],
             "trainer_id": row[1],
             "name": row[2],
-            "amount_cents": row[3],
-            "expires_in_days": row[4],
-            "sort_order": row[5],
-            "is_active": row[6],
-            "created_at": row[7].isoformat() if hasattr(row[7], "isoformat") else str(row[7]),
+            "description": row[3],
+            "amount_cents": row[4],
+            "expires_in_days": row[5],
+            "sort_order": row[6],
+            "is_active": row[7],
+            "created_at": row[8].isoformat() if hasattr(row[8], "isoformat") else str(row[8]),
         }
         for row in rows
     ]
@@ -44,25 +61,29 @@ async def create_certificate_product(
     session: AsyncSession,
     trainer_id: int,
     *,
-    name: str,
+    name: str | None = None,
+    description: str | None = None,
     amount_cents: int | None,
     sort_order: int = 0,
+    expires_in_days: int | None = None,
 ) -> int:
     """Create certificate product. amount_cents=None means 'any amount'. Returns id."""
-    name = (name or "").strip()
-    if not name:
-        name = "Подарочный сертификат"
+    name_val = (name or "").strip() or default_certificate_product_name(amount_cents)
+    desc_val = _normalize_certificate_description(description)
     r = await session.execute(
         text("""
-            INSERT INTO trainer_certificate_products (trainer_id, name, amount_cents, sort_order)
-            VALUES (:tid, :name, :amount_cents, :sort_order)
+            INSERT INTO trainer_certificate_products
+                (trainer_id, name, description, amount_cents, sort_order, expires_in_days)
+            VALUES (:tid, :name, :description, :amount_cents, :sort_order, :expires_in_days)
             RETURNING id
         """),
         {
             "tid": trainer_id,
-            "name": name,
+            "name": name_val,
+            "description": desc_val,
             "amount_cents": amount_cents,
             "sort_order": sort_order,
+            "expires_in_days": expires_in_days,
         },
     )
     (pk,) = r.fetchone()
@@ -76,7 +97,8 @@ async def get_certificate_product(
     """Get one certificate product by id; must belong to trainer."""
     r = await session.execute(
         text("""
-            SELECT id, trainer_id, name, amount_cents, expires_in_days, sort_order, is_active
+            SELECT id, trainer_id, name, description, amount_cents, expires_in_days,
+                   sort_order, is_active
             FROM trainer_certificate_products
             WHERE id = :id AND trainer_id = :tid
         """),
@@ -89,10 +111,11 @@ async def get_certificate_product(
         "id": row[0],
         "trainer_id": row[1],
         "name": row[2],
-        "amount_cents": row[3],
-        "expires_in_days": row[4],
-        "sort_order": row[5],
-        "is_active": row[6],
+        "description": row[3],
+        "amount_cents": row[4],
+        "expires_in_days": row[5],
+        "sort_order": row[6],
+        "is_active": row[7],
     }
 
 
@@ -107,6 +130,7 @@ async def update_certificate_product(
     trainer_id: int,
     *,
     name: str | None = None,
+    description: str | None | object = DESCRIPTION_UNSET,
     amount_cents: int | None = _UNSET,  # None = "any amount"; _UNSET = do not change
     expires_in_days: int | None = None,
     is_active: bool | None = None,
@@ -121,6 +145,11 @@ async def update_certificate_product(
             raise ValueError("Name cannot be empty")
         updates.append("name = :name")
         params["name"] = name_val
+    if description is not DESCRIPTION_UNSET:
+        updates.append("description = :description")
+        params["description"] = _normalize_certificate_description(
+            description if isinstance(description, str) else None
+        )
     if amount_cents is not _UNSET:
         updates.append("amount_cents = :amount_cents")
         params["amount_cents"] = amount_cents

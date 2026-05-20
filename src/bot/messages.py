@@ -278,6 +278,10 @@ CLIENT_REQUEST_EDIT_SAVE = "✅ Сохранить комментарий"
 CLIENT_REQUEST_DELETE_BUTTON = "🗑 Удалить заявку"
 CLIENT_REQUEST_EDIT_BACK = "◀️ Назад"
 CLIENT_REQUEST_EDIT_SAVED = "Комментарий обновлён."
+CLIENT_REQUEST_EDIT_NOT_ALLOWED = (
+    "Заявки на абонемент и сертификат пока нельзя редактировать. "
+    "При необходимости удалите заявку и оформите новую."
+)
 CLIENT_REQUEST_DELETED = "Заявка удалена."
 CLIENT_BUTTON_MY_REQUESTS = "Мои заявки и отклики"
 CLIENT_BUTTON_MY_BOOKINGS = "Мои записи"

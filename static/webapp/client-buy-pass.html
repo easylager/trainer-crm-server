@@ -237,6 +237,8 @@
     }
     .bp-cert-ico svg { width: 22px; height: 22px; }
     .bp-cert-title { font-weight: 600; font-size: 16px; margin: 0 0 6px; }
+    .bp-cert-nominal { font-size: 14px; font-weight: 600; margin: 0 0 6px; color: var(--tg-theme-text-color); }
+    .bp-cert-desc { font-size: 13px; color: var(--tg-theme-hint-color); line-height: 1.45; margin: 0 0 8px; }
     .bp-cert-meta { font-size: 13px; color: var(--tg-theme-hint-color); line-height: 1.45; margin: 0; }
     [data-screen] { display: none; }
     [data-screen].active { display: block; }
@@ -431,12 +433,25 @@
           if (hasCerts) {
             var certHtml = '';
             state.certItems.forEach(function(c, cidx) {
+              var certTitle = escapeHtml((c.name && String(c.name).trim()) || 'Подарочный сертификат');
+              var certNom = formatCertAmountHtml(c);
+              var certDesc = (c.description && String(c.description).trim())
+                ? '<p class="bp-cert-desc">' + escapeHtml(String(c.description).trim()) + '</p>'
+                : '';
+              var showNom =
+                c.amount_cents != null &&
+                certTitle.indexOf('BYN') === -1 &&
+                certTitle.indexOf('Любая') === -1;
               certHtml += '<div class="bp-cert-card" style="--bp-delay:' + (cidx * 0.05) + 's">';
               certHtml += '<div class="bp-cert-inner">';
               certHtml += '<div class="bp-cert-ico">' + ICON_CERT + '</div>';
               certHtml += '<div>';
-              certHtml += '<div class="bp-cert-title">' + formatCertAmountHtml(c) + '</div>';
-              certHtml += '<p class="bp-cert-meta">Подарочный номинал. Как приобрести — по договорённости с тренером.</p>';
+              certHtml += '<div class="bp-cert-title">' + certTitle + '</div>';
+              if (showNom) {
+                certHtml += '<p class="bp-cert-nominal">Номинал: ' + certNom + '</p>';
+              }
+              certHtml += certDesc;
+              certHtml += '<p class="bp-cert-meta">Как приобрести — по договорённости с тренером.</p>';
               certHtml += '</div></div></div>';
             });
             document.getElementById('certListContent').innerHTML = certHtml;
