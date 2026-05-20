@@ -10,7 +10,9 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.client_booking_daypart_use_cases import get_client_booking_daypart
 from src.application.trainer_client_scope import list_trainer_ids_for_client_crm_scope
+from src.shared.booking_daypart import booking_daypart_api_payload
 
 
 # --- Profile (goals, limitations, level, season goal, legacy note) ---
@@ -413,10 +415,12 @@ async def get_full_client_dossier(
     tags = await list_client_tags(session, trainer_id, client_id)
     entries = await list_client_entries(session, trainer_id, client_id, limit=entries_limit)
     
+    daypart = await get_client_booking_daypart(session, trainer_id, client_id)
     return {
         "profile": profile,
         "tags": tags,
         "entries": entries,
         "suggested_tags": SUGGESTED_TAGS,
         "suggested_season_goals": SUGGESTED_SEASON_GOALS,
+        "self_book_window": booking_daypart_api_payload(daypart),
     }

@@ -1284,13 +1284,15 @@
         }).catch(function() {});
       }
 
-      function fetchTrainerHubStyleWelcomeLink() {
-        return fetch(withInit('/api/webapp/trainer/welcome-link'), {
+      /** Same permanent link as hub paperclip (GET /trainer/hub/universal-invite-link → welcome_ref_{id}). */
+      function fetchTrainerUniversalInviteLink() {
+        return fetch(withInit('/api/webapp/trainer/hub/universal-invite-link'), {
           headers: { 'Content-Type': 'application/json' },
         }).then(function(r) {
           return r.json().then(function(o) {
             if (!r.ok) throw new Error((o && o.detail) || r.statusText || 'Ошибка');
-            return o;
+            var link = o && o.link ? String(o.link).trim() : '';
+            return { link: link || null };
           });
         });
       }
@@ -1301,6 +1303,29 @@
         if (n10 === 1 && n100 !== 11) return 'клиент';
         if (n10 >= 2 && n10 <= 4 && (n100 < 10 || n100 >= 20)) return 'клиента';
         return 'клиентов';
+      }
+
+      /** Prefetched welcome_ref link — copy on click without async gap (Telegram WebView clipboard policy). */
+      var tcWelcomeInviteLinkPrefetch = null;
+
+      function copyTextForTrainerMiniApp(text) {
+        var rt = window.MiniAppRuntime;
+        if (rt && typeof rt.copyTextToClipboard === 'function') {
+          return rt.copyTextToClipboard(text);
+        }
+        return Promise.resolve(false);
+      }
+
+      function prefetchTcWelcomeInviteLink() {
+        return fetchTrainerUniversalInviteLink()
+          .then(function (o) {
+            var link = o && o.link;
+            if (link) tcWelcomeInviteLinkPrefetch = String(link);
+            return link || null;
+          })
+          .catch(function () {
+            return null;
+          });
       }
 
       function showInviteBotBannerUi(count) {
@@ -1314,7 +1339,7 @@
             count +
             ' ' +
             pluralRuClients(count) +
-            ' без Telegram в боте. Нажмите «Скопировать ссылку» — это та же общая пригласительная ссылка, что на главной странице кабинета (копирование без выбора услуги). Отправьте её каждому клиенту в чат; после перехода и привязки мы пришлём уведомление в бот тренера.';
+            ' без Telegram в боте. «Скопировать ссылку» — та же пригласительная ссылка, что по кнопке со скрепкой на «Главной». Отправьте её каждому в чат; после перехода пришлём уведомление в бот тренера.';
         }
       }
 
@@ -1344,25 +1369,46 @@
             if (btnCopy.disabled) return;
             btnCopy.disabled = true;
             setStateMessage('');
-            fetchTrainerHubStyleWelcomeLink()
-              .then(function(o) {
-                var link = o && o.welcome_link;
-                if (!link) {
-                  setStateMessage('Ссылка недоступна. Откройте мини-приложение из бота тренера.', 'error');
+
+            function finishCopyFail() {
+              setStateMessage(
+                'Не удалось скопировать автоматически. Откройте «Главная» и скопируйте ссылку по кнопке со скрепкой.',
+                'error'
+              );
+            }
+
+            function runCopy(link) {
+              if (!link) {
+                setStateMessage('Ссылка недоступна. Откройте мини-приложение из бота тренера.', 'error');
+                return Promise.resolve();
+              }
+              return copyTextForTrainerMiniApp(link).then(function (ok) {
+                if (ok) {
+                  postClientInviteLinkFirstCopyRecorded();
+                  showTcToast('Ссылка скопирована — отправьте её клиентам');
                   return;
                 }
-                if (navigator.clipboard && navigator.clipboard.writeText) {
-                  return navigator.clipboard.writeText(link).then(function() {
-                    postClientInviteLinkFirstCopyRecorded();
-                    showTcToast('Ссылка скопирована — отправьте её клиентам');
-                  });
-                }
-                alert(link);
+                finishCopyFail();
+              });
+            }
+
+            var cached = tcWelcomeInviteLinkPrefetch;
+            if (cached) {
+              runCopy(cached).finally(function () {
+                btnCopy.disabled = false;
+              });
+              return;
+            }
+            fetchTrainerUniversalInviteLink()
+              .then(function (o) {
+                var link = o && o.link;
+                if (link) tcWelcomeInviteLinkPrefetch = String(link);
+                return runCopy(link);
               })
-              .catch(function(err) {
+              .catch(function (err) {
                 setStateMessage((err && err.message) || 'Не удалось получить ссылку.', 'error');
               })
-              .finally(function() {
+              .finally(function () {
                 btnCopy.disabled = false;
               });
           };
@@ -1384,6 +1430,7 @@
         setInviteBotCompactListUi(true);
         showInviteBotBannerUi(noTg.length);
         wireInviteBotBannerActions();
+        prefetchTcWelcomeInviteLink();
         applyFilter();
       }
 
@@ -1695,11 +1742,117 @@
         entries: [],
         suggestedTags: [],
         suggestedSeasonGoals: [],
+        selfBookWindow: null,
         editingField: null,
         showNewEntry: false,
         /** User-toggled accordion; reset on client change — profile starts collapsed even when fields are filled. */
         profileSectionExpanded: false,
       };
+
+      var TC_SELF_BOOK_CHEVRON =
+        '<svg class="tc-self-book-summary__chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>';
+
+      /** Collapsible «Самозапись» — collapsed by default; per-client filter on /client/slots. */
+      function renderSelfBookWindow() {
+        var host = document.getElementById('tcSelfBookWindowHost');
+        if (!host || state.selectedClientId == null) return;
+        var prevDetails = document.getElementById('tcSelfBookDetails');
+        var keepOpen = !!(prevDetails && prevDetails.open);
+        var win = dossierState.selfBookWindow || {};
+        var options = win.options || [
+          { value: null, label: 'Любое время' },
+          { value: 'morning', label: 'Утро' },
+          { value: 'afternoon', label: 'День' },
+          { value: 'evening', label: 'Вечер' },
+        ];
+        var current = win.value != null ? win.value : null;
+        var currentLabel = win.label || 'Любое время';
+        var rangesHint = win.ranges_hint || 'Утро 8:00–12:00 · День 13:00–16:00 · Вечер 17:00–22:00';
+        var html =
+          '<details class="tc-self-book-details" id="tcSelfBookDetails">' +
+          '<summary class="tc-self-book-summary">' +
+          '<span class="tc-self-book-summary__title">Самозапись</span>' +
+          '<span class="tc-self-book-summary__value" id="tcSelfBookSummaryValue">' +
+          escapeHtml(currentLabel) +
+          '</span>' +
+          TC_SELF_BOOK_CHEVRON +
+          '</summary>' +
+          '<div class="tc-self-book-window__body">' +
+          '<p class="tc-self-book-window__lead">При самозаписи к вам клиент увидит только свободное время в выбранном интервале. Запись из вашего расписания не ограничивается.</p>' +
+          '<div class="tc-daypart-seg" role="group" aria-label="Окно для самозаписи">';
+        options.forEach(function(opt) {
+          var v = opt.value;
+          var isActive = (v == null && current == null) || (v != null && v === current);
+          var dataVal = v == null ? '' : String(v);
+          html +=
+            '<button type="button" class="tc-daypart-seg__btn' +
+            (isActive ? ' is-active' : '') +
+            '" data-daypart="' +
+            escapeHtml(dataVal) +
+            '">' +
+            escapeHtml(opt.label || '—') +
+            '</button>';
+        });
+        html +=
+          '</div>' +
+          '<p class="tc-self-book-window__ranges">' +
+          escapeHtml(rangesHint) +
+          '</p></div></details>';
+        host.innerHTML = html;
+        host.removeAttribute('aria-busy');
+        host.classList.add('tc-reveal-once');
+        var detailsEl = document.getElementById('tcSelfBookDetails');
+        if (detailsEl && keepOpen) detailsEl.open = true;
+        host.querySelectorAll('.tc-daypart-seg__btn').forEach(function(btn) {
+          btn.addEventListener('click', function() {
+            var raw = btn.getAttribute('data-daypart');
+            var next = raw === '' || raw == null ? null : raw;
+            if ((next == null && current == null) || next === current) return;
+            patchSelfBookWindow(state.selectedClientId, next);
+          });
+        });
+      }
+
+      function patchSelfBookWindow(clientId, daypart) {
+        var host = document.getElementById('tcSelfBookWindowHost');
+        if (host) {
+          host.setAttribute('aria-busy', 'true');
+          var root = document.getElementById('tcSelfBookDetails');
+          if (root) {
+            root.querySelectorAll('.tc-daypart-seg__btn').forEach(function(b) {
+              b.disabled = true;
+            });
+          }
+        }
+        fetch(
+          withInit('/api/webapp/trainer/clients/' + encodeURIComponent(String(clientId)) + '/self-book-window'),
+          {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ daypart: daypart }),
+          }
+        )
+          .then(function(r) {
+            return r.json().then(function(d) {
+              if (!r.ok) throw new Error((d && d.detail) || r.statusText || 'Ошибка');
+              return d;
+            });
+          })
+          .then(function(data) {
+            dossierState.selfBookWindow = (data && data.self_book_window) || dossierState.selfBookWindow;
+            renderSelfBookWindow();
+            showTcToast(
+              daypart
+                ? 'Окно для самозаписи: ' + (dossierState.selfBookWindow.label || daypart)
+                : 'Самозапись без ограничения по времени'
+            );
+          })
+          .catch(function(err) {
+            if (host) host.removeAttribute('aria-busy');
+            alert(err.message || 'Не удалось сохранить');
+            renderSelfBookWindow();
+          });
+      }
 
       function formatEntryDate(isoStr) {
         if (!isoStr) return '';
@@ -2357,9 +2510,11 @@
           dossierState.entries = data.entries || [];
           dossierState.suggestedTags = data.suggested_tags || [];
           dossierState.suggestedSeasonGoals = data.suggested_season_goals || [];
+          dossierState.selfBookWindow = data.self_book_window || null;
           dossierState.editingField = null;
           dossierState.showNewEntry = false;
           dossierState.profileSectionExpanded = false;
+          renderSelfBookWindow();
           renderDossier();
           var dc = document.getElementById('dossierContainer');
           if (dc) dc.classList.add('tc-reveal-once');
@@ -2837,6 +2992,14 @@
             '<span class=\"tc-stat\"><span class=\"tc-stat-label\">Следующее</span><strong id=\"clientNextBooking\" class=\"is-loading\"><span class=\"tc-stat-skel-block ma-skel-shimmer\" aria-hidden=\"true\"></span></strong></span>' +
             '<span class=\"tc-stat\" id=\"clientTotalWrap\"><span class=\"tc-stat-label\">Всего занятий</span><strong id=\"clientTotalCount\" class=\"is-loading\"><span class=\"tc-stat-skel-narrow ma-skel-shimmer\" aria-hidden=\"true\"></span></strong></span>' +
           '</div>' +
+          (isSandbox
+            ? ''
+            : '<div class=\"tc-self-book-host\" id=\"tcSelfBookWindowHost\" aria-busy=\"true\" aria-label=\"Самозапись\">' +
+              '<details class=\"tc-self-book-details tc-self-book-details--loading\">' +
+              '<summary class=\"tc-self-book-summary\">' +
+              '<span class=\"tc-self-book-summary__title\">Самозапись</span>' +
+              '<span class=\"tc-self-book-summary__value ma-skel-shimmer\" aria-hidden=\"true\"></span>' +
+              '</summary></details></div>') +
           '<div class=\"tc-section-label\">Контакты и абонементы</div>' +
           '<div class=\"tc-rows\">' +
             '<div class=\"tc-row\"><div class=\"detail-label\">Телефон</div><div class=\"detail-value\">' + phoneDisplay + '</div></div>' +

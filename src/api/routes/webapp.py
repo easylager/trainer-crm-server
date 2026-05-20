@@ -1172,6 +1172,38 @@ def _client_catalog_slot_map_link(s: dict) -> str | None:
     )
 
 
+async def _client_slots_after_self_book_window(
+    session: AsyncSession,
+    trainer_id: int,
+    client_telegram_id: int,
+    slots: list[dict],
+) -> tuple[list[dict], str | None]:
+    """Per-trainer client daypart filter; applied after shared trainer slots cache."""
+    from src.application.client_booking_daypart_use_cases import (
+        filter_slot_payloads_by_daypart,
+        get_client_booking_daypart,
+    )
+
+    cid = await get_client_id_by_telegram_id(session, client_telegram_id)
+    if cid is None:
+        return slots, None
+    daypart = await get_client_booking_daypart(session, trainer_id, int(cid))
+    if not daypart:
+        return slots, None
+    return filter_slot_payloads_by_daypart(slots, daypart), daypart
+
+
+def _client_slots_response_extras(daypart: str | None) -> dict:
+    if not daypart:
+        return {}
+    from src.shared.booking_daypart import BOOKING_DAYPART_LABEL_RU
+
+    return {
+        "self_book_window": daypart,
+        "self_book_window_label": BOOKING_DAYPART_LABEL_RU.get(daypart, daypart),
+    }
+
+
 @router.get("/client/slots")
 async def get_client_slots(
     trainer_id: int = Query(..., description="Trainer to book"),
@@ -1239,10 +1271,15 @@ async def get_client_slots(
 
     cached_slots = get_slots_cached(trainer_id, min_hours_val, filter_service_id)
     if cached_slots is not None:
+        arena_slots = _filter_client_slots_payload_by_arenas(cached_slots, arena_filter)
+        filtered_slots, daypart = await _client_slots_after_self_book_window(
+            session, trainer_id, client_telegram_id, arena_slots
+        )
         return {
             "trainer_name": trainer_name_val,
-            "slots": _filter_client_slots_payload_by_arenas(cached_slots, arena_filter),
+            "slots": filtered_slots,
             "online_booking_available": True,
+            **_client_slots_response_extras(daypart),
         }
 
     this_m = _this_week_monday()
@@ -1305,10 +1342,15 @@ async def get_client_slots(
             }
         )
     set_slots_cached(trainer_id, min_hours_val, serialized_full, filter_service_id)
+    arena_slots = _filter_client_slots_payload_by_arenas(serialized_full, arena_filter)
+    filtered_slots, daypart = await _client_slots_after_self_book_window(
+        session, trainer_id, client_telegram_id, arena_slots
+    )
     return {
         "trainer_name": trainer_name_val,
-        "slots": _filter_client_slots_payload_by_arenas(serialized_full, arena_filter),
+        "slots": filtered_slots,
         "online_booking_available": True,
+        **_client_slots_response_extras(daypart),
     }
 
 
@@ -2189,11 +2231,13 @@ async def get_client_hub_bootstrap(
             bp_tid, bp_svc = _hub_booking_primary_ids(
                 upcoming_tid, upcoming_svc, book_tid, book_svc
             )
+            explicit_primary = await get_primary_trainer_edge(telegram_id, s)
             primary_edge, primary_src = _compute_primary_edge_meta(
                 edges,
                 session_tid,
                 booking_primary_trainer_id=bp_tid,
                 booking_primary_service_id=bp_svc,
+                explicit_primary_edge=explicit_primary,
             )
             pid = int(primary_edge["trainer_id"]) if primary_edge else None
             hint_ids = sorted(
@@ -4726,6 +4770,15 @@ async def post_client_self_register(
         last_name=last_name,
     )
     roster_link_created = await link_trainer_client_roster(session, body.trainer_id, client_id)
+    city_id, service_id = await get_trainer_default_city_and_service(session, body.trainer_id)
+    await save_catalog_filters(
+        telegram_id,
+        session,
+        city_id=city_id,
+        service_id=service_id,
+        trainer_id=int(body.trainer_id),
+    )
+    await uc_set_primary_trainer(telegram_id, int(body.trainer_id), session)
     await session.commit()
 
     notify_event = None
@@ -6297,6 +6350,7 @@ async def post_trainer_client_note_route(
 
 # --- Client Dossier (structured notes) ---
 
+from src.application.client_booking_daypart_use_cases import set_client_booking_daypart
 from src.application.client_dossier_use_cases import (
     get_full_client_dossier,
     upsert_client_dossier_profile,
@@ -6308,6 +6362,8 @@ from src.application.client_dossier_use_cases import (
     remove_client_tag,
     SUGGESTED_TAGS,
 )
+from src.application.booking_use_cases import trainer_has_access_to_client
+from src.shared.booking_daypart import normalize_booking_daypart
 
 
 class DossierProfileBody(BaseModel):
@@ -6325,6 +6381,37 @@ class DossierEntryBody(BaseModel):
 class DossierTagBody(BaseModel):
     tag: str
     category: str | None = None
+
+
+class ClientSelfBookWindowBody(BaseModel):
+    """morning | afternoon | evening | null — which slots the client may book online."""
+
+    daypart: str | None = None
+
+
+@router.patch("/trainer/clients/{client_id:int}/self-book-window")
+async def patch_trainer_client_self_book_window(
+    client_id: int,
+    body: ClientSelfBookWindowBody,
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Set per-client self-booking time window for this trainer. Auth: trainer initData."""
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
+    if not await trainer_has_access_to_client(session, trainer_id, client_id):
+        raise HTTPException(status_code=404, detail="Клиент не найден или нет доступа")
+    try:
+        payload = await set_client_booking_daypart(
+            session,
+            trainer_id,
+            client_id,
+            normalize_booking_daypart(body.daypart) if body.daypart is not None else None,
+        )
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Некорректное окно для самозаписи")
+    return {"self_book_window": payload}
 
 
 @router.get("/trainer/clients/{client_id:int}/dossier")

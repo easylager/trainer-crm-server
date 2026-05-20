@@ -113,6 +113,55 @@
     }
   }
 
+  /**
+   * Sync copy for Mini App WebViews: Clipboard API often fails after await/fetch (loses user activation).
+   */
+  function copyTextViaExecCommand(text) {
+    if (!text) return false;
+    try {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.setAttribute('aria-hidden', 'true');
+      ta.style.position = 'fixed';
+      ta.style.left = '0';
+      ta.style.top = '0';
+      ta.style.width = '1px';
+      ta.style.height = '1px';
+      ta.style.opacity = '0';
+      ta.style.padding = '0';
+      ta.style.border = 'none';
+      ta.style.margin = '0';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      ta.setSelectionRange(0, text.length);
+      var ok = false;
+      try {
+        ok = document.execCommand('copy');
+      } catch (eExec) {
+        ok = false;
+      }
+      document.body.removeChild(ta);
+      return !!ok;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function copyTextToClipboard(text) {
+    if (!text) return Promise.resolve(false);
+    if (copyTextViaExecCommand(text)) return Promise.resolve(true);
+    if (!(global.navigator && global.navigator.clipboard && global.navigator.clipboard.writeText)) {
+      return Promise.resolve(false);
+    }
+    return global.navigator.clipboard.writeText(text).then(function () {
+      return true;
+    }).catch(function () {
+      return false;
+    });
+  }
+
   global.MiniAppRuntime = {
     platformId: platformId,
     /** @type {string|null} Non-null override for hosts without Telegram.WebApp.initData. */
@@ -121,7 +170,9 @@
     authHeaders: authHeaders,
     appendInitToUrl: appendInitToUrl,
     applyThemeAliases: applyThemeAliases,
-    ready: runtimeReady
+    ready: runtimeReady,
+    copyTextToClipboard: copyTextToClipboard,
+    copyTextViaExecCommand: copyTextViaExecCommand
   };
 })(window);
 

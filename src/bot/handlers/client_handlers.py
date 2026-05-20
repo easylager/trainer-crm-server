@@ -60,12 +60,14 @@ from src.application.client_session_use_cases import (
     clear_pending_request_id,
     get_or_create_session,
     get_session,
+    save_catalog_filters,
     set_arena,
     set_city,
     set_pending_request_id,
     set_selected_trainer,
     set_service,
 )
+from src.application.client_trainer_edge_use_cases import set_primary_trainer
 from src.application.client_request_comment_display import (
     client_request_comment_editable,
     client_visible_request_comment,
@@ -95,6 +97,7 @@ from src.application.trainer_schedule_use_cases import (
 )
 from src.application.demand_signals_use_cases import record_profile_view_commit
 from src.application.trainer_use_cases import add_trainer_rating, get_trainer
+from src.application.trainer_invite_links import SHARE_REF_PREFIX
 from src.application.support_use_cases import create_support_message
 from src.application.group_attendance_use_cases import (
     attendance_rsvp_verify,
@@ -131,6 +134,7 @@ from src.bot.client_api import (
     fetch_services,
 )
 from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.infrastructure.db import async_session_factory
 from src.shared.map_links import build_yandex_by_map_url, build_yandex_by_map_url_all_arenas
@@ -336,30 +340,59 @@ def _trainer_book_markup(
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def _trainer_book_and_buy_pass_markup(
+def _trainer_invite_welcome_markup(
     base: str,
     trainer_id: int,
     *,
+    city_id: int | None = None,
     service_id: int | None = None,
-    pass_product_id: int | None = None,
 ) -> InlineKeyboardMarkup:
-    """Welcome-link UX: запись + каталог абонементов тренера (строго как поток с pass_product в ссылке)."""
-    rows = list(_trainer_book_rows(base, trainer_id, service_id=service_id))
-    b = (base or "").rstrip("/")
-    if b.lower().startswith("https://"):
-        rows.append([
-            InlineKeyboardButton(
-                text=msg.CLIENT_BUTTON_BUY_PASS,
-                web_app=WebAppInfo(url=_client_buy_pass_webapp_url(base, trainer_id, pass_product_id)),
-            )
-        ])
-    return InlineKeyboardMarkup(inline_keyboard=rows)
+    """Invite / welcome_ref / share_ref: одна кнопка → карточка тренера в каталоге Mini App."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=_trainer_catalog_card_rows(
+            base,
+            trainer_id,
+            city_id=city_id,
+            service_id=service_id,
+            button_text=msg.CLIENT_BUTTON_INVITE_TRAINER_PROFILE,
+        )
+    )
 
 
 def _welcome_pass_invite_body(trainer: dict | None) -> str:
-    """Единый текст после welcome-токена / ref: имя тренера + два действия ниже."""
+    """Единый текст после welcome-токена / ref / share_ref: тренер + контекст Ice Studio."""
     name = html.escape(_trainer_name(trainer) if trainer else "Тренер")
     return msg.CLIENT_PASS_WELCOME.format(name=name)
+
+
+async def _bind_client_invite_trainer_context(
+    telegram_id: int,
+    trainer_id: int,
+    db_session: AsyncSession,
+    *,
+    preferred_service_id: int | None = None,
+) -> tuple[int | None, int | None]:
+    """
+    Persist catalog filters + primary trainer after invite / share_ref / welcome_ref.
+    Ensures Mini App opens the inviter's card and «Мой тренер» matches the link.
+    """
+    if preferred_service_id is not None:
+        city_id, service_id = await resolve_welcome_session_city_service(
+            db_session,
+            trainer_id,
+            preferred_service_id=preferred_service_id,
+        )
+    else:
+        city_id, service_id = await get_trainer_default_city_and_service(db_session, trainer_id)
+    await save_catalog_filters(
+        telegram_id,
+        db_session,
+        city_id=city_id,
+        service_id=service_id,
+        trainer_id=int(trainer_id),
+    )
+    await set_primary_trainer(telegram_id, int(trainer_id), db_session)
+    return city_id, service_id
 
 
 # Mirrors redirect username rules so /r/tg/{id} does not 404 when the user taps «Написать».
@@ -700,9 +733,10 @@ async def cmd_start(message: Message) -> None:
                 await get_or_create_client(db_session, telegram_id)
                 await db_session.commit()
         async with async_session_factory() as db_session:
-            city_id, service_id = await resolve_welcome_session_city_service(
-                db_session,
+            city_id, service_id = await _bind_client_invite_trainer_context(
+                telegram_id,
                 trainer_id,
+                db_session,
                 preferred_service_id=preferred_svc,
             )
             n_trainer_svc = await count_trainer_services(db_session, int(trainer_id))
@@ -711,11 +745,6 @@ async def cmd_start(message: Message) -> None:
                 trainer_services_count=n_trainer_svc,
                 explicit_service_from_link=preferred_svc is not None,
             )
-            if city_id is not None:
-                await set_city(telegram_id, city_id, db_session)
-            if service_id is not None:
-                await set_service(telegram_id, service_id, db_session)
-            await set_selected_trainer(telegram_id, trainer_id, db_session)
             await record_profile_view_commit(
                 db_session,
                 trainer_id=int(trainer_id),
@@ -778,21 +807,19 @@ async def cmd_start(message: Message) -> None:
                 await message.answer(
                     welcome_body,
                     parse_mode=ParseMode.HTML,
-                    reply_markup=_trainer_book_and_buy_pass_markup(
-                        base, trainer_id, service_id=book_url_svc
+                    reply_markup=_trainer_invite_welcome_markup(
+                        base, trainer_id, city_id=city_id, service_id=book_url_svc
                     ),
                 )
         elif token_type == WELCOME_TOKEN_TYPE_PASS:
             async with async_session_factory() as db_session:
                 trainer = await get_trainer(db_session, trainer_id)
             base = (Settings().webapp_base_url or "").rstrip("/")
-            pass_pid = payload_data.get("pass_product_id")
-            pass_pid_i = int(pass_pid) if pass_pid is not None else None
             await message.answer(
                 _welcome_pass_invite_body(trainer),
                 parse_mode=ParseMode.HTML,
-                reply_markup=_trainer_book_and_buy_pass_markup(
-                    base, trainer_id, service_id=book_url_svc, pass_product_id=pass_pid_i
+                reply_markup=_trainer_invite_welcome_markup(
+                    base, trainer_id, city_id=city_id, service_id=book_url_svc
                 ),
             )
         else:
@@ -803,8 +830,8 @@ async def cmd_start(message: Message) -> None:
             await message.answer(
                 welcome_body,
                 parse_mode=ParseMode.HTML,
-                reply_markup=_trainer_book_and_buy_pass_markup(
-                    base, trainer_id, service_id=book_url_svc
+                reply_markup=_trainer_invite_welcome_markup(
+                    base, trainer_id, city_id=city_id, service_id=book_url_svc
                 ),
             )
         return
@@ -827,12 +854,9 @@ async def cmd_start(message: Message) -> None:
         if bound:
             trainer_id = bound["trainer_id"]
             async with async_session_factory() as db_session:
-                city_id, service_id = await get_trainer_default_city_and_service(db_session, trainer_id)
-                if city_id is not None:
-                    await set_city(telegram_id, city_id, db_session)
-                if service_id is not None:
-                    await set_service(telegram_id, service_id, db_session)
-                await set_selected_trainer(telegram_id, trainer_id, db_session)
+                city_id, service_id = await _bind_client_invite_trainer_context(
+                    telegram_id, trainer_id, db_session
+                )
                 await record_profile_view_commit(
                     db_session,
                     trainer_id=int(trainer_id),
@@ -878,17 +902,14 @@ async def cmd_start(message: Message) -> None:
             await get_or_create_client(db_session, telegram_id)
             await db_session.commit()
         async with async_session_factory() as db_session:
-            city_id, service_id = await get_trainer_default_city_and_service(db_session, trainer_id_share)
+            city_id, service_id = await _bind_client_invite_trainer_context(
+                telegram_id, trainer_id_share, db_session
+            )
             n_trainer_svc = await count_trainer_services(db_session, int(trainer_id_share))
             book_url_share = _book_webapp_service_id_query_param(
                 default_service_id=service_id,
                 trainer_services_count=n_trainer_svc,
             )
-            if city_id is not None:
-                await set_city(telegram_id, city_id, db_session)
-            if service_id is not None:
-                await set_service(telegram_id, service_id, db_session)
-            await set_selected_trainer(telegram_id, trainer_id_share, db_session)
             trainer = await get_trainer(db_session, trainer_id_share)
             await record_profile_view_commit(
                 db_session,
@@ -900,8 +921,8 @@ async def cmd_start(message: Message) -> None:
         await message.answer(
             welcome_body,
             parse_mode=ParseMode.HTML,
-            reply_markup=_trainer_book_and_buy_pass_markup(
-                base, trainer_id_share, service_id=book_url_share
+            reply_markup=_trainer_invite_welcome_markup(
+                base, trainer_id_share, city_id=city_id, service_id=book_url_share
             ),
         )
         return
@@ -939,30 +960,33 @@ async def cmd_start(message: Message) -> None:
                 reply_markup=keyboard,
             )
             return
-        # Phone on file or no HTTPS: proceed as normal booking flow
+        # Phone on file: inviter is primary; open client hub (not registration again).
+        name = html.escape(_trainer_name(trainer) if trainer else "тренер")
         async with async_session_factory() as db_session:
             await get_or_create_client(db_session, telegram_id)
-            await db_session.commit()
-        async with async_session_factory() as db_session:
-            city_id, service_id = await get_trainer_default_city_and_service(db_session, trainer_id_ref)
-            n_trainer_svc = await count_trainer_services(db_session, int(trainer_id_ref))
-            book_url_welcome = _book_webapp_service_id_query_param(
-                default_service_id=service_id,
-                trainer_services_count=n_trainer_svc,
+            await _bind_client_invite_trainer_context(
+                telegram_id, trainer_id_ref, db_session
             )
-            if city_id is not None:
-                await set_city(telegram_id, city_id, db_session)
-            if service_id is not None:
-                await set_service(telegram_id, service_id, db_session)
-            await set_selected_trainer(telegram_id, trainer_id_ref, db_session)
+        if base.lower().startswith("https://"):
+            home_url = f"{base}/webapp/client-home"
+            keyboard = InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [
+                        InlineKeyboardButton(
+                            text=msg.CLIENT_BUTTON_TRAINER_AND_BOOKING,
+                            web_app=WebAppInfo(url=home_url),
+                        )
+                    ],
+                ]
+            )
+            await message.answer(
+                msg.CLIENT_UNIVERSAL_INVITE_REGISTERED.format(name=name),
+                parse_mode=ParseMode.HTML,
+                reply_markup=keyboard,
+            )
+            return
         welcome_body = _welcome_pass_invite_body(trainer)
-        await message.answer(
-            welcome_body,
-            parse_mode=ParseMode.HTML,
-            reply_markup=_trainer_book_and_buy_pass_markup(
-                base, trainer_id_ref, service_id=book_url_welcome
-            ),
-        )
+        await message.answer(welcome_body, parse_mode=ParseMode.HTML)
         return
 
     # Pass invite: pass_<product_id>_ref_<trainer_id> — set trainer, offer book + buy pass
@@ -972,17 +996,14 @@ async def cmd_start(message: Message) -> None:
             await get_or_create_client(db_session, telegram_id)
             await db_session.commit()
         async with async_session_factory() as db_session:
-            city_id, service_id = await get_trainer_default_city_and_service(db_session, pass_trainer_id)
+            city_id, service_id = await _bind_client_invite_trainer_context(
+                telegram_id, pass_trainer_id, db_session
+            )
             n_trainer_svc = await count_trainer_services(db_session, int(pass_trainer_id))
             book_url_pass = _book_webapp_service_id_query_param(
                 default_service_id=service_id,
                 trainer_services_count=n_trainer_svc,
             )
-            if city_id is not None:
-                await set_city(telegram_id, city_id, db_session)
-            if service_id is not None:
-                await set_service(telegram_id, service_id, db_session)
-            await set_selected_trainer(telegram_id, pass_trainer_id, db_session)
             trainer = await get_trainer(db_session, pass_trainer_id)
             await record_profile_view_commit(
                 db_session,
@@ -993,11 +1014,11 @@ async def cmd_start(message: Message) -> None:
         await message.answer(
             _welcome_pass_invite_body(trainer),
             parse_mode=ParseMode.HTML,
-            reply_markup=_trainer_book_and_buy_pass_markup(
+            reply_markup=_trainer_invite_welcome_markup(
                 base,
                 pass_trainer_id,
+                city_id=city_id,
                 service_id=book_url_pass,
-                pass_product_id=int(pass_product_id),
             ),
         )
         return
@@ -1312,7 +1333,7 @@ async def cmd_book(message: Message) -> None:
         return
 
     await message.bot.send_chat_action(chat_id=message.chat.id, action=ChatAction.TYPING)
-    text, keyboard = await _client_slots_content(trainer_id)
+    text, keyboard = await _client_slots_content(trainer_id, client_telegram_id=telegram_id)
     if keyboard is None:
         back_kb = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text=msg.CLIENT_BUTTON_ANOTHER_TRAINER, callback_data=CATALOG_CALLBACK)],
@@ -1428,7 +1449,11 @@ def _slot_duration_minutes(start_time, end_time) -> int:
     return 45
 
 
-async def _client_slots_content(trainer_id: int) -> tuple[str, InlineKeyboardMarkup | None]:
+async def _client_slots_content(
+    trainer_id: int,
+    *,
+    client_telegram_id: int | None = None,
+) -> tuple[str, InlineKeyboardMarkup | None]:
     """Available slots for trainer (this + next week). Excludes slots within trainer's min working hours before booking."""
     this_m = this_week_monday()
     next_m = next_week_monday()
@@ -1436,6 +1461,16 @@ async def _client_slots_content(trainer_id: int) -> tuple[str, InlineKeyboardMar
     async with async_session_factory() as db_session:
         slots = await list_slots(db_session, trainer_id, this_m, to_date)
         trainer = await get_trainer(db_session, trainer_id)
+        daypart: str | None = None
+        if client_telegram_id:
+            from src.application.client_booking_daypart_use_cases import (
+                filter_raw_slots_by_daypart,
+                get_client_booking_daypart,
+            )
+
+            cid = await get_client_id_by_telegram_id(db_session, client_telegram_id)
+            if cid:
+                daypart = await get_client_booking_daypart(db_session, trainer_id, int(cid))
     min_hours = 3
     if trainer and trainer.get("profile"):
         min_hours = trainer["profile"].get("min_hours_before_booking", 3) or 3
@@ -1445,6 +1480,8 @@ async def _client_slots_content(trainer_id: int) -> tuple[str, InlineKeyboardMar
         s for s in available
         if working_hours_between(now_minsk, s["slot_date"], s["start_time"]) >= min_hours
     ]
+    if daypart:
+        available = filter_raw_slots_by_daypart(available, daypart)
     if not available:
         return msg.CLIENT_BOOK_NO_SLOTS, None
     lines = [msg.CLIENT_BOOK_CHOOSE_SLOT]
@@ -1507,7 +1544,7 @@ async def on_book(callback: CallbackQuery) -> None:
 
     chat_id = callback.message.chat.id if callback.message.chat else 0
     await callback.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
-    text, keyboard = await _client_slots_content(trainer_id)
+    text, keyboard = await _client_slots_content(trainer_id, client_telegram_id=telegram_id)
     base = (Settings().webapp_base_url or "").rstrip("/")
     if base.startswith("https://") and keyboard is not None:
         book_url = f"{base}/webapp/book?trainer_id={trainer_id}"
@@ -2917,7 +2954,7 @@ async def book_from_request(callback: CallbackQuery) -> None:
             trainer_id=trainer_id,
             source=DEMAND_SOURCE_CLIENT_APP,
         )
-    text, keyboard = await _client_slots_content(trainer_id)
+    text, keyboard = await _client_slots_content(trainer_id, client_telegram_id=telegram_id)
     await callback.message.answer(msg.CLIENT_PICK_TRAINER_DONE)
     if keyboard is None:
         back_kb = InlineKeyboardMarkup(inline_keyboard=[
@@ -2945,7 +2982,7 @@ async def pick_responder(callback: CallbackQuery) -> None:
             trainer_id=trainer_id,
             source=DEMAND_SOURCE_CLIENT_APP,
         )
-    text, keyboard = await _client_slots_content(trainer_id)
+    text, keyboard = await _client_slots_content(trainer_id, client_telegram_id=telegram_id)
     await callback.message.answer(msg.CLIENT_PICK_TRAINER_DONE)
     if keyboard is None:
         back_kb = InlineKeyboardMarkup(inline_keyboard=[

@@ -90,6 +90,8 @@
   var formCard = document.getElementById('crFormCard');
   var actions = document.getElementById('crActions');
   var successScreen = document.getElementById('crSuccessScreen');
+  var successSub = document.getElementById('crSuccessSub');
+  var btnOpenHome = document.getElementById('crBtnOpenHome');
 
   // Phone mask (+375 rendered outside — same as trainer-clients)
   if (phoneInput) {
@@ -172,17 +174,58 @@
     btnSubmit.classList.toggle('cr-loading', !!on);
   }
 
-  function showSuccess() {
+  function showSuccess(opts) {
+    opts = opts || {};
     if (formCard) formCard.style.display = 'none';
     if (actions) actions.style.display = 'none';
     if (globalError) globalError.style.display = 'none';
     if (successScreen) successScreen.classList.add('cr-success-screen--visible');
+    if (successSub) {
+      successSub.textContent = opts.message ||
+        'Профиль сохранён. Откройте «Главная» — кнопка слева внизу в Telegram. Там ваш тренер как основной.';
+    }
+    if (btnOpenHome) {
+      btnOpenHome.style.display = 'block';
+    }
+    if (!opts.skipAutoRedirect) {
+      window.setTimeout(function () {
+        window.location.href = clientHomeUrl();
+      }, opts.redirectMs != null ? opts.redirectMs : 2200);
+    }
+  }
+
+  /** Profile already complete — block re-submit via stale «Продолжить» Web App button. */
+  function checkAlreadyRegistered() {
+    if (!currentInit()) return;
+    fetch(apiUrl('/client/session'), { headers: apiHeaders(), cache: 'no-store' })
+      .then(function (r) {
+        return r.ok ? r.json() : null;
+      })
+      .then(function (sess) {
+        if (!sess) return;
+        var phone =
+          sess.client_phone != null && String(sess.client_phone).trim() !== '';
+        if (!phone) return;
+        showSuccess({
+          message:
+            'Профиль уже сохранён. Откройте «Главная» — кнопка слева внизу в Telegram. Там ваш тренер как основной.',
+          skipAutoRedirect: false,
+          redirectMs: 2800,
+        });
+      })
+      .catch(function () {
+        /* non-critical */
+      });
   }
 
   function clientHomeUrl() {
     var path = (window.location.pathname || '').replace(/[^/]+$/, '') || '/webapp/';
     var raw = currentInit();
     return path + 'client-home' + (raw ? '?init_data=' + encodeURIComponent(raw) : '');
+  }
+
+  function goToClientHome() {
+    window.location.href = clientHomeUrl();
   }
 
   function escapeHtml(s) {
@@ -311,10 +354,20 @@
             } else showGlobalError(detail);
             return;
           }
-          showSuccess();
-          window.setTimeout(function () {
-            window.location.href = clientHomeUrl();
-          }, 1200);
+          var st = res.data && res.data.status ? String(res.data.status) : '';
+          var hubHint =
+            'Откройте «Главная» — кнопка слева внизу в Telegram. Там ваш тренер как основной.';
+          if (st === 'already_registered' || st === 'linked') {
+            showSuccess({
+              message: 'Профиль уже есть. ' + hubHint,
+              redirectMs: 3200,
+            });
+            return;
+          }
+          showSuccess({
+            message: 'Профиль сохранён. ' + hubHint,
+            redirectMs: 3200,
+          });
         })
         .catch(function (err) {
           var name = err && err.name ? String(err.name) : '';
@@ -391,6 +444,10 @@
     );
   }
 
+  if (btnOpenHome) {
+    btnOpenHome.addEventListener('click', goToClientHome, false);
+  }
+
   if (tg && tg.BackButton) {
     tg.BackButton.show();
     tg.BackButton.onClick(function () {
@@ -399,4 +456,5 @@
   }
 
   loadTrainerInfo();
+  checkAlreadyRegistered();
 })();

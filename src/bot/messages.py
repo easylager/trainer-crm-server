@@ -122,6 +122,8 @@ CLIENT_BOOK_NO_ONLINE_TIER = (
 CLIENT_BUTTON_BOOK = "Записаться"
 # After activating a gift certificate: single CTA to book with the issuing trainer
 CLIENT_BUTTON_CERT_TRAINER_BOOK = "Тренер и запись"
+# Trainer invite / welcome_ref / share_ref: one CTA → catalog card (book + passes there)
+CLIENT_BUTTON_INVITE_TRAINER_PROFILE = "👤 Карточка тренера"
 CLIENT_BUTTON_BACK_TO_CATALOG = "В каталог"
 CLIENT_BUTTON_ANOTHER_TRAINER = "Выбрать другого тренера"
 CLIENT_BOOK_CHOOSE_SLOT = "📅 <b>Выберите время</b>\n\nДоступные слоты (эта и следующая неделя):"
@@ -291,7 +293,16 @@ CLIENT_BUTTON_TRAINER_AND_BOOKING = "Главная"
 # Universal invite — registration Mini App: neutral copy (profile to continue).
 CLIENT_UNIVERSAL_INVITE_UNKNOWN = (
     "👋 <b>Привет! Вас пригласил тренер {name}.</b>\n\n"
-    "Заполните короткий профиль — так вы сможете продолжить и пользоваться приложением без ограничений."
+    "⛸ Мы развиваем сервис вместе с практикующими тренерами на льду — "
+    "хоккей, катание, работа над техникой и ОФП.\n\n"
+    "Заполните короткий профиль — так вы сможете продолжить и пользоваться приложением без ограничений.\n\n"
+    "После сохранения откройте <b>«Главная»</b> — кнопка слева внизу в Telegram. "
+    "Там сразу появится ваш тренер: запись, услуги и абонементы."
+)
+CLIENT_UNIVERSAL_INVITE_REGISTERED = (
+    "👋 <b>Добро пожаловать!</b> Тренер <b>{name}</b> уже ждёт вас в приложении.\n\n"
+    "Нажмите <b>«Главная»</b> — кнопка слева внизу в Telegram. "
+    "Он будет отмечен как <b>основной</b>; оттуда можно записаться на занятие."
 )
 CLIENT_UNIVERSAL_INVITE_REGISTER_BTN = "Продолжить"
 # Абонементы: выданные тренером, список в Mini App
@@ -1264,7 +1275,11 @@ CLIENT_WELCOME_REF = (
     "Привет! Вас пригласил тренер. Нажмите «Записаться», чтобы продолжить."
 )
 CLIENT_PASS_WELCOME = (
-    "<b>{name}</b> пригласил вас — запишитесь на занятие или купите абонемент. Кнопки ниже."
+    "👋 <b>{name} пригласил вас в Ice Studio.</b>\n\n"
+    "⛸ Мы развиваем сервис вместе с практикующими тренерами на льду — "
+    "хоккей, катание, работа над техникой и ОФП.\n\n"
+    "В карточке тренера — свободные слоты, услуги и абонементы. "
+    "Кнопка ниже откроет его профиль."
 )
 CLIENT_BUTTON_BUY_PASS = "Купить абонемент"
 CLIENT_WELCOME_LINK_USED = (

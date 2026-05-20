@@ -5,8 +5,8 @@ Lives in application layer so routes and use cases can import without loading ``
 (which would pull ``webapp`` and cause circular imports with notification_service).
 
 Primary trainer resolution (strict product contract):
-  1. Upcoming booking (slot not ended) — ``hub_booking_primary_ids`` / booking tier.
-  2. Else latest booking by slot start (past or future) — same as «Сохранённые» / trainer-edges.
+  1. Latest booking by slot start (trainer-edges / hub SQL candidate).
+  2. Else explicit ``is_primary`` edge (invite link, user pin in «Мои тренеры»).
   3. Else latest «saved» (catalog heart), by saved_at (fallback edge created_at).
   4. Else client_sessions.selected_trainer_id (last catalog browse context).
   5. Else no primary.
@@ -116,11 +116,13 @@ def resolve_primary_trainer_strict(
     booking_primary_trainer_id: int | None,
     booking_primary_service_id: int | None,
     session_trainer_id: int | None,
+    explicit_primary_edge: dict | None = None,
 ) -> tuple[dict | None, str | None]:
     """
     Strict tier order for «основной тренер» across mini-app + dependent APIs.
 
     booking_primary_* comes from SQL over bookings/slots (caller-supplied).
+    explicit_primary_edge: row with is_primary=true (invite link / user pin) — beats past bookings.
     """
     if booking_primary_trainer_id is not None:
         tid = int(booking_primary_trainer_id)
@@ -139,6 +141,11 @@ def resolve_primary_trainer_strict(
             row = dict(row)
             row["last_booking_service_id"] = svc
         return row, "booking"
+
+    if explicit_primary_edge is not None:
+        tid = int(explicit_primary_edge.get("trainer_id") or 0)
+        if tid > 0:
+            return edge_row_for_primary_trainer(edges, tid), "primary"
 
     saved_edges = [e for e in edges if e.get("is_saved")]
     if saved_edges:
@@ -159,6 +166,7 @@ def compute_primary_edge_meta(
     *,
     booking_primary_trainer_id: int | None = None,
     booking_primary_service_id: int | None = None,
+    explicit_primary_edge: dict | None = None,
 ) -> tuple[dict | None, str | None]:
     """
     Returns (edge, source) where source is ``booking`` | ``saved`` | ``session`` | None.
@@ -171,6 +179,7 @@ def compute_primary_edge_meta(
         booking_primary_trainer_id=booking_primary_trainer_id,
         booking_primary_service_id=booking_primary_service_id,
         session_trainer_id=session_trainer_id,
+        explicit_primary_edge=explicit_primary_edge,
     )
 
 
@@ -180,6 +189,7 @@ def compute_primary_edge(
     *,
     booking_primary_trainer_id: int | None = None,
     booking_primary_service_id: int | None = None,
+    explicit_primary_edge: dict | None = None,
 ) -> dict | None:
     """Derive primary trainer edge dict under strict tier rules."""
     edge, _ = compute_primary_edge_meta(
@@ -187,6 +197,7 @@ def compute_primary_edge(
         session_trainer_id,
         booking_primary_trainer_id=booking_primary_trainer_id,
         booking_primary_service_id=booking_primary_service_id,
+        explicit_primary_edge=explicit_primary_edge,
     )
     return edge
 

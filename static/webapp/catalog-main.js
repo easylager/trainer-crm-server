@@ -63,6 +63,8 @@
         requestForTrainer: null,
         requestFormOpenedFrom: null,
         activeTab: 'catalog',
+        /** Invite / ?trainer_id= deep link: pin «Мой тренер» to this id over hub booking primary. */
+        deepLinkTrainerId: null,
         openedFromMyTrainerTab: false,
         /** trainers | groups — список после выбора города/услуги/арены */
         catalogMode: 'trainers',
@@ -1192,6 +1194,21 @@
       }
 
       function loadTrainerById(trainerId) {
+        var initData = tg && tg.initData ? tg.initData : '';
+        if (initData) {
+          return loadTrainerByIdViaWebappFallback(trainerId).then(function(t) {
+            if (t) return t;
+            return fetch('/api/public/trainers/' + encodeURIComponent(trainerId), { cache: 'no-store' })
+              .then(function(r) {
+                if (r.status === 404) return null;
+                if (!r.ok) throw new Error(r.statusText);
+                return r.json();
+              })
+              .catch(function() {
+                return null;
+              });
+          });
+        }
         return fetch('/api/public/trainers/' + encodeURIComponent(trainerId), { cache: 'no-store' })
           .then(function(r) {
             if (r.status === 404) {
@@ -1215,8 +1232,11 @@
           document.getElementById('myTrainerLoading').style.display = 'none';
         }
         if (tab === 'my_trainer') {
-          /* trainerId may be set from hub primary edges without trainerName — still open card (avoid empty flash). */
-          var eff = state.trainerId;
+          /* Invite ?trainer_id= pins tab; else card context; else hub primary from edges. */
+          var eff = state.deepLinkTrainerId;
+          if (eff == null || eff === '' || !(Number(eff) > 0)) {
+            eff = state.trainerId;
+          }
           if (eff == null || eff === '' || !(Number(eff) > 0)) {
             eff = resolveCatalogAutoTrainerIdFromEdges();
           }
@@ -4204,7 +4224,9 @@
           var deepTrainerFromUrl = !isNaN(deepTidParsed) && deepTidParsed > 0 ? deepTidParsed : null;
           var primaryTid = resolveCatalogAutoTrainerIdFromEdges();
           if (deepTrainerFromUrl != null) {
+            state.deepLinkTrainerId = deepTrainerFromUrl;
             state.trainerId = deepTrainerFromUrl;
+            state.activeTab = 'my_trainer';
           } else if (primaryTid != null) {
             state.trainerId = primaryTid;
           }
@@ -4300,8 +4322,14 @@
                 });
                 return;
               }
+              if (returnCtx && returnCtx.trainer_id) {
+                showToast('Не удалось открыть карточку тренера. Попробуйте ещё раз из ссылки в чате.');
+              }
               showInitialScreen();
             }).catch(function() {
+              if (returnCtx && returnCtx.trainer_id) {
+                showToast('Не удалось открыть карточку тренера. Попробуйте ещё раз из ссылки в чате.');
+              }
               if (state.trainerId) {
                 state.openedFromMyTrainerTab = true;
                 loadTrainerById(state.trainerId).then(function(t2) {

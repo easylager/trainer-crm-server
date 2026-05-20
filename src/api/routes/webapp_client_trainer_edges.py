@@ -26,6 +26,7 @@ from src.application.client_session_use_cases import get_session as read_client_
 from src.application.client_trainer_edge_use_cases import (
     get_all_edges as get_all_trainer_edges,
     get_edge as get_client_trainer_edge,
+    get_primary_edge,
     save_trainer as uc_save_trainer,
     set_primary_trainer as uc_set_primary_trainer,
     subscribe_notify_slots as uc_subscribe_notify_slots,
@@ -48,9 +49,13 @@ async def _client_may_open_trainer_deep_link(
     catalog_telegram_id: int,
     trainer_id: int,
 ) -> bool:
-    """True when client has CRM edge or any non-voided booking with this trainer (hub primary without catalog visibility)."""
+    """True when client may open a trainer card outside public catalog (edge, booking, or invite session)."""
     edge = await get_client_trainer_edge(catalog_telegram_id, trainer_id, session)
     if edge is not None:
+        return True
+    sess = await read_client_bot_session(catalog_telegram_id, session)
+    sess_tid = (sess or {}).get("selected_trainer_id")
+    if sess_tid is not None and int(sess_tid) == int(trainer_id):
         return True
     r = await session.execute(
         text(
@@ -137,12 +142,14 @@ async def get_client_trainer_edges(
 
     sess_row = await read_client_bot_session(catalog_tid, session)
     session_trainer_id = int(sess_row["selected_trainer_id"]) if (sess_row or {}).get("selected_trainer_id") else None
+    explicit_primary = await get_primary_edge(catalog_tid, session)
 
     primary = compute_primary_edge(
         edges,
         session_trainer_id,
         booking_primary_trainer_id=booking_tid,
         booking_primary_service_id=booking_svc,
+        explicit_primary_edge=explicit_primary,
     )
     primary_tid = int(primary["trainer_id"]) if primary else None
 

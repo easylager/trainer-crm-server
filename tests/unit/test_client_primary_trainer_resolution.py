@@ -89,6 +89,35 @@ def test_hub_booking_primary_ids_latest_when_no_upcoming() -> None:
     assert hub_booking_primary_ids(None, None, 7, 8) == (7, 8)
 
 
+def test_explicit_primary_beats_latest_booking() -> None:
+    """Invite / user pin: is_primary row wins over past bookings, not over booking tier input."""
+    edges = [
+        {"trainer_id": 9, "is_primary": True, "is_saved": False},
+        {"trainer_id": 1, "is_saved": True, "saved_at": datetime(2025, 2, 1, tzinfo=timezone.utc)},
+    ]
+    explicit = {"trainer_id": 9, "is_primary": True, "is_saved": False}
+    edge, src = compute_primary_edge_meta(
+        edges,
+        session_trainer_id=1,
+        booking_primary_trainer_id=2,
+        booking_primary_service_id=10,
+        explicit_primary_edge=explicit,
+    )
+    assert src == "booking"
+    assert int(edge["trainer_id"]) == 2
+
+    edge2, src2 = compute_primary_edge_meta(
+        edges,
+        session_trainer_id=1,
+        booking_primary_trainer_id=None,
+        booking_primary_service_id=None,
+        explicit_primary_edge=explicit,
+    )
+    assert src2 == "primary"
+    assert edge2 is not None
+    assert int(edge2["trainer_id"]) == 9
+
+
 def test_primary_latest_booking_beats_newer_saved() -> None:
     """Hub merges upcoming+latest; without upcoming, last visit wins over last heart."""
     edges = [

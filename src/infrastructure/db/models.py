@@ -457,6 +457,7 @@ class TrainerClientNote(Base):
     limitations: Mapped[Optional[str]] = mapped_column(Text(), nullable=True)
     level: Mapped[Optional[str]] = mapped_column(Text(), nullable=True)
     season_goal: Mapped[Optional[str]] = mapped_column(Text(), nullable=True)
+    preferred_booking_daypart: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

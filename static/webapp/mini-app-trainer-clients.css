@@ -2199,6 +2199,115 @@
       margin-bottom: 8px;
     }
 
+    /* --- Per-client self-booking time window (trainer card, collapsed by default) --- */
+    .tc-self-book-host {
+      margin: 0 0 16px;
+    }
+    .tc-self-book-details {
+      border-radius: 16px;
+      background: var(--tg-theme-secondary-bg-color);
+      border: 1px solid rgba(128, 128, 128, 0.12);
+      overflow: hidden;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    }
+    .tc-self-book-summary {
+      list-style: none;
+      cursor: pointer;
+      padding: 14px 16px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px 10px;
+    }
+    .tc-self-book-details .tc-self-book-summary::-webkit-details-marker {
+      display: none;
+    }
+    .tc-self-book-summary__title {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--tg-theme-hint-color);
+    }
+    .tc-self-book-summary__value {
+      flex: 1 1 auto;
+      min-width: 0;
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      color: var(--tg-theme-text-color);
+    }
+    .tc-self-book-summary__chevron {
+      width: 18px;
+      height: 18px;
+      flex-shrink: 0;
+      color: var(--tg-theme-hint-color);
+      opacity: 0.85;
+      transition: transform 0.2s ease;
+    }
+    .tc-self-book-details[open] .tc-self-book-summary__chevron {
+      transform: rotate(180deg);
+    }
+    .tc-self-book-window__body {
+      padding: 0 14px 14px;
+      border-top: 1px solid rgba(128, 128, 128, 0.08);
+    }
+    .tc-self-book-details--loading .tc-self-book-summary__value {
+      display: inline-block;
+      min-width: 88px;
+      min-height: 1.1em;
+      border-radius: 6px;
+    }
+    .tc-self-book-window__lead {
+      margin: 12px 0;
+      font-size: 13px;
+      line-height: 1.45;
+      color: var(--tg-theme-hint-color);
+    }
+    .tc-daypart-seg {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    .tc-daypart-seg__btn {
+      min-height: 44px;
+      padding: 8px 10px;
+      border: none;
+      border-radius: 12px;
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      cursor: pointer;
+      background: var(--tg-theme-bg-color);
+      color: var(--tg-theme-text-color);
+      box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.06);
+      transition: transform 0.12s ease, box-shadow 0.12s ease;
+    }
+    .tc-daypart-seg__btn.is-active {
+      background: var(--app-cta-fill, var(--tg-theme-button-color));
+      color: var(--app-cta-text, var(--tg-theme-button-text-color));
+      box-shadow: var(--app-btn-shadow-cta, 0 2px 8px rgba(0, 0, 0, 0.12));
+    }
+    .tc-daypart-seg__btn:active:not(:disabled) {
+      transform: scale(0.98);
+    }
+    .tc-daypart-seg__btn:disabled {
+      opacity: 0.55;
+      cursor: wait;
+    }
+    .tc-self-book-window__ranges {
+      margin: 0;
+      font-size: 11px;
+      line-height: 1.4;
+      color: var(--tg-theme-hint-color);
+      letter-spacing: 0.01em;
+    }
+    .tc-daypart-seg-skel {
+      height: 44px;
+      border-radius: 12px;
+    }
+
     /* --- Recurring clients (progressive disclosure in dossier + list filter) --- */
     .tc-recurring-host {
       margin: 0 0 14px;
