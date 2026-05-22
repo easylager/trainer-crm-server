@@ -37,16 +37,17 @@ async def _trainer_with_pass_product(db_session) -> tuple[int, int]:
 
 
 async def _insert_client(db_session) -> int:
-    phone = belarus_test_phone()
+    tg = unique_test_telegram_id()
+    phone, phone_normalized = belarus_test_phone(tg)
     r = await db_session.execute(
         text(
             """
-            INSERT INTO clients (telegram_id, phone, first_name)
-            VALUES (:tg, :phone, 'Pass')
+            INSERT INTO clients (telegram_id, phone, phone_normalized, first_name)
+            VALUES (:tg, :phone, :phone_normalized, 'Pass')
             RETURNING id
             """
         ),
-        {"tg": unique_test_telegram_id(), "phone": phone},
+        {"tg": tg, "phone": phone, "phone_normalized": phone_normalized},
     )
     (client_id,) = r.fetchone()
     await db_session.commit()
