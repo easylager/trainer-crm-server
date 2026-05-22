@@ -21,7 +21,7 @@ from src.application.support_use_cases import (
     list_support_messages,
     reply_support_message,
 )
-from src.application.trainer_profile_completeness import is_ready_for_moderation_submission
+from src.application.admin_moderation_queue import list_trainer_ids_eligible_for_admin_moderation
 from src.application.booking_problem_admin_use_cases import (
     count_booking_problem_reports_for_admin,
     list_booking_problem_reports_for_admin,
@@ -66,8 +66,6 @@ from src.application.trainer_link_token_use_cases import (
 )
 from src.application.trainer_profile_pending import (
     build_trainer_profile_for_moderation_card,
-    trainer_has_pending_text_revision,
-    trainer_has_photo_pending_revision,
     trainer_photo_file_key_for_moderation_ui,
 )
 from src.application.trainer_use_cases import (
@@ -650,6 +648,7 @@ async def cmd_stats(message: Message) -> None:
         [_wa("📊 Обзор", "admin-stats"),       _wa("💰 Деньги", "admin-money")],
         [_wa("📈 Рост", "admin-growth"),       _wa("🔁 Удержание", "admin-retention")],
         [_wa("🎯 Активность", "admin-engagement"), _wa("👥 Клиенты", "admin-clients")],
+        [_wa("🕓 История", "admin-activity")],
     ])
     await message.answer(
         "📊 <b>Аналитика платформы</b>\n\n"
@@ -1542,23 +1541,7 @@ async def cmd_pending(message: Message) -> None:
         await message.answer(msg.ADMIN_NO_ACCESS)
         return
     async with async_session_factory() as session:
-        repo = TrainerRepository(session)
-        queue_ids = await repo.list_trainer_ids_for_moderation_queue()
-        eligible_ids: list[int] = []
-        for tid in queue_ids:
-            full = await get_trainer(session, tid)
-            if not full:
-                continue
-            st = (full.get("status") or "").strip()
-            if st == TRAINER_STATUS_ACTIVE:
-                sub_at = full.get("moderation_submitted_at")
-                has_queue = bool(sub_at) and (
-                    trainer_has_pending_text_revision(full) or trainer_has_photo_pending_revision(full)
-                )
-                if has_queue:
-                    eligible_ids.append(int(tid))
-            elif st == TRAINER_STATUS_PENDING_PROFILE and is_ready_for_moderation_submission(full):
-                eligible_ids.append(int(tid))
+        eligible_ids = await list_trainer_ids_eligible_for_admin_moderation(session)
     if not eligible_ids:
         await message.answer(msg.ADMIN_PENDING_EMPTY)
         return

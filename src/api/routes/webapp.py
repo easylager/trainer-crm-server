@@ -231,6 +231,7 @@ from src.application.admin_analytics_use_cases import (
     get_admin_product_analytics,
     get_admin_retention_stats,
 )
+from src.application.platform_audit_use_cases import list_platform_audit_events_for_admin
 from src.application.support_use_cases import (
     create_support_message,
     list_support_messages,
@@ -3277,6 +3278,25 @@ async def get_admin_stats_product(
     return await get_admin_product_analytics(session)
 
 
+@router.get("/admin/activity")
+async def get_admin_activity(
+    limit: int = Query(50, ge=1, le=100),
+    before_id: int | None = Query(None, description="Pagination cursor (exclusive)"),
+    event_type: str | None = Query(None),
+    trainer_id: int | None = Query(None),
+    principal: MiniAppPrincipal = Depends(get_admin_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+):
+    """Chronological audit log for admin «История»."""
+    return await list_platform_audit_events_for_admin(
+        session,
+        limit=limit,
+        before_id=before_id,
+        event_type=event_type,
+        trainer_id=trainer_id,
+    )
+
+
 @router.get("/admin/support")
 async def get_admin_support(
     status: str | None = Query(None, description="Filter: new, replied, closed"),
@@ -4708,6 +4728,11 @@ async def get_trainer_hub_universal_invite_link(
     )
     if err or not link:
         return {"link": None}
+    from src.application.trainer_client_invite_tracking import record_trainer_client_invite_link_first_copy
+    from src.shared.audit import ACTOR_API, audit_log
+
+    await record_trainer_client_invite_link_first_copy(session, int(trainer_id))
+    audit_log("trainer.invite_link_copied", ACTOR_API, int(trainer_id), {"trainer_id": int(trainer_id)})
     return {"link": link}
 
 

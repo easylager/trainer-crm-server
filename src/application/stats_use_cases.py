@@ -10,7 +10,9 @@ from sqlalchemy import text
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.admin_moderation_queue import count_trainers_eligible_for_admin_moderation
 from src.application.demand_signals_use_cases import get_signals_lifetime_totals
+from src.application.trainer_client_invite_tracking import sql_trainer_shared_client_invite
 from src.application.trainer_schedule_use_cases import this_week_monday
 from src.infrastructure.db.models import SUBSCRIPTION_STATUS_ACTIVE, SUBSCRIPTION_STATUS_TRIAL
 
@@ -18,7 +20,8 @@ from src.infrastructure.db.models import SUBSCRIPTION_STATUS_ACTIVE, SUBSCRIPTIO
 STATS_DAY_NAMES = ("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс")
 
 # Admin dashboard: coarse activation funnel (SQL CASE must stay in sync with keys below).
-_TRAINER_ACTIVATION_STAGE_CASE = """
+_SHARED_INVITE_SQL = sql_trainer_shared_client_invite()
+_TRAINER_ACTIVATION_STAGE_CASE = f"""
 CASE
   WHEN t.status = 'active' THEN 'active'
   WHEN t.status = 'deactivated' THEN 'deactivated'
@@ -26,11 +29,11 @@ CASE
   WHEN t.status = 'pending_profile' AND t.moderation_submitted_at IS NOT NULL THEN 'moderation_queue'
   WHEN t.status = 'pending_profile' AND EXISTS (
     SELECT 1 FROM trainer_schedule_templates tpl WHERE tpl.trainer_id = t.id
-  ) AND t.client_invite_link_first_copied_at IS NOT NULL THEN 'pending_template_invite_ready'
+  ) AND {_SHARED_INVITE_SQL} THEN 'pending_template_invite_ready'
   WHEN t.status = 'pending_profile' AND EXISTS (
     SELECT 1 FROM trainer_schedule_templates tpl WHERE tpl.trainer_id = t.id
   ) THEN 'pending_with_template'
-  WHEN t.status = 'pending_profile' AND t.client_invite_link_first_copied_at IS NOT NULL THEN 'pending_invite_only'
+  WHEN t.status = 'pending_profile' AND {_SHARED_INVITE_SQL} THEN 'pending_invite_only'
   WHEN t.status = 'pending_profile' THEN 'pending_profile'
   ELSE 'other'
 END
@@ -983,7 +986,8 @@ async def get_platform_stats(session: AsyncSession) -> dict:
     )
     trainers_by_status = {row[0]: row[1] for row in r.fetchall()}
     trainers_total = sum(trainers_by_status.values())
-    trainers_pending_moderation = trainers_by_status.get("pending_profile", 0)
+    # Same eligibility as admin /pending — not every pending_profile row is in the queue.
+    trainers_pending_moderation = await count_trainers_eligible_for_admin_moderation(session)
     trainers_active = trainers_by_status.get("active", 0)
     trainers_with_telegram = 0  # active and linked
     if trainers_active:
@@ -1349,6 +1353,7 @@ async def get_platform_stats(session: AsyncSession) -> dict:
                       AND NOT b.is_sandbox
                 ) AS has_booking,
                 t.client_invite_link_first_copied_at AS invite_copied_at,
+                {_SHARED_INVITE_SQL} AS shared_client_invite,
                 ({_TRAINER_ACTIVATION_STAGE_CASE.strip()}) AS stage_key
             FROM trainers t
             LEFT JOIN trainer_profiles p ON p.trainer_id = t.id
@@ -1358,18 +1363,21 @@ async def get_platform_stats(session: AsyncSession) -> dict:
         ),
     )
     for row in r_rows.fetchall():
-        tid, st, name, tpl_cnt, has_book, invite_at, stage_key = row[0], row[1], row[2], row[3], row[4], row[5], row[6]
+        tid, st, name, tpl_cnt, has_book, invite_at, shared_invite, stage_key = (
+            row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[7]
+        )
         sk = str(stage_key or "other")
         invite_iso = invite_at.isoformat() if invite_at is not None else None
         base_label = ACTIVATION_STAGE_LABEL_RU.get(sk, ACTIVATION_STAGE_LABEL_RU["other"])
-        # Active trainers are one bucket in SQL; spell out invite tracking so admin sees full picture.
         if sk == "active":
-            # Not client clicks — only trainer copy action in Mini App (hub / clients / passes).
-            base_label = (
-                f"{base_label} · ссылку для клиентов копировали в приложении"
-                if invite_iso
-                else f"{base_label} · копирование ссылки в приложении не зафиксировано"
-            )
+            if invite_iso or shared_invite:
+                base_label = (
+                    f"{base_label} · ссылку для клиентов копировали или клиенты уже в боте"
+                    if invite_iso
+                    else f"{base_label} · клиенты в боте (копирование в приложении не зафиксировано)"
+                )
+            else:
+                base_label = f"{base_label} · копирование ссылки и клиенты в боте не зафиксированы"
         trainers_activation.append(
             {
                 "trainer_id": int(tid),
@@ -1380,6 +1388,7 @@ async def get_platform_stats(session: AsyncSession) -> dict:
                 "weekly_template_count": int(tpl_cnt or 0),
                 "has_booking": bool(has_book),
                 "client_invite_link_first_copied_at": invite_iso,
+                "shared_client_invite": bool(shared_invite),
             }
         )
 

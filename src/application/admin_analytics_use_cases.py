@@ -22,6 +22,10 @@ from sqlalchemy import text
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.trainer_client_invite_tracking import (
+    sql_trainer_shared_client_invite,
+    sql_trainer_submitted_for_moderation,
+)
 from src.infrastructure.db.models import (
     SUBSCRIPTION_STATUS_ACTIVE,
     SUBSCRIPTION_STATUS_TRIAL,
@@ -1028,8 +1032,10 @@ async def get_admin_engagement_stats(session: AsyncSession) -> dict:
         r = await session.execute(
             text(
                 """
-                SELECT COUNT(DISTINCT trainer_id)::int FROM training_groups
-                WHERE status NOT IN ('archived', 'cancelled')
+                SELECT COUNT(DISTINCT tg.trainer_id)::int
+                FROM training_groups tg
+                JOIN trainers t ON t.id = tg.trainer_id AND t.status = 'active'
+                WHERE tg.status NOT IN ('archived', 'cancelled')
                 """
             )
         )
@@ -1039,11 +1045,12 @@ async def get_admin_engagement_stats(session: AsyncSession) -> dict:
             text(
                 """
                 SELECT
-                    COUNT(DISTINCT trainer_id) FILTER (WHERE (modules->>'online')::boolean = true)    AS online,
-                    COUNT(DISTINCT trainer_id) FILTER (WHERE (modules->>'analytics')::boolean = true) AS analytics
-                FROM trainer_subscriptions
-                WHERE status IN (:s1, :s2)
-                  AND expires_at > CURRENT_TIMESTAMP
+                    COUNT(DISTINCT ts.trainer_id) FILTER (WHERE (ts.modules->>'online')::boolean = true)    AS online,
+                    COUNT(DISTINCT ts.trainer_id) FILTER (WHERE (ts.modules->>'analytics')::boolean = true) AS analytics
+                FROM trainer_subscriptions ts
+                JOIN trainers t ON t.id = ts.trainer_id AND t.status = 'active'
+                WHERE ts.status IN (:s1, :s2)
+                  AND ts.expires_at > CURRENT_TIMESTAMP
                 """
             ),
             {"s1": SUBSCRIPTION_STATUS_TRIAL, "s2": SUBSCRIPTION_STATUS_ACTIVE},
@@ -1058,6 +1065,7 @@ async def get_admin_engagement_stats(session: AsyncSession) -> dict:
                 SELECT COUNT(DISTINCT tpp.trainer_id)::int
                 FROM pass_instances pi
                 JOIN trainer_pass_products tpp ON tpp.id = pi.pass_product_id
+                JOIN trainers t ON t.id = tpp.trainer_id AND t.status = 'active'
                 WHERE pi.status = 'active' AND pi.sessions_remaining > 0
                 """
             )
@@ -1067,8 +1075,10 @@ async def get_admin_engagement_stats(session: AsyncSession) -> dict:
         r = await session.execute(
             text(
                 """
-                SELECT COUNT(DISTINCT trainer_id)::int FROM certificate_instances
-                WHERE status IN ('issued', 'activated')
+                SELECT COUNT(DISTINCT ci.trainer_id)::int
+                FROM certificate_instances ci
+                JOIN trainers t ON t.id = ci.trainer_id AND t.status = 'active'
+                WHERE ci.status IN ('issued', 'activated')
                 """
             )
         )
@@ -1452,11 +1462,13 @@ async def get_admin_product_analytics(session: AsyncSession) -> dict:
     today = date.today()
 
     # ── 1. ACTIVATION FUNNEL ─────────────────────────────────────────────
+    _shared_invite = sql_trainer_shared_client_invite()
+    _submitted_mod = sql_trainer_submitted_for_moderation()
     activation: dict = {}
     try:
         r = await session.execute(
             text(
-                """
+                f"""
                 SELECT
                     COUNT(*)                                                    AS created,
                     COUNT(*) FILTER (WHERE telegram_id IS NOT NULL)             AS linked_telegram,
@@ -1464,12 +1476,8 @@ async def get_admin_product_analytics(session: AsyncSession) -> dict:
                         SELECT 1 FROM trainer_schedule_templates tpl
                         WHERE tpl.trainer_id = t.id
                     ))                                                          AS has_template,
-                    COUNT(*) FILTER (
-                        WHERE client_invite_link_first_copied_at IS NOT NULL
-                    )                                                           AS copied_invite,
-                    COUNT(*) FILTER (
-                        WHERE moderation_submitted_at IS NOT NULL
-                    )                                                           AS submitted_moderation,
+                    COUNT(*) FILTER (WHERE {_shared_invite})                    AS copied_invite,
+                    COUNT(*) FILTER (WHERE {_submitted_mod})                    AS submitted_moderation,
                     COUNT(*) FILTER (WHERE status = 'active')                   AS activated,
                     COUNT(*) FILTER (
                         WHERE status = 'active' AND EXISTS (
@@ -1504,7 +1512,7 @@ async def get_admin_product_analytics(session: AsyncSession) -> dict:
     try:
         r = await session.execute(
             text(
-                """
+                f"""
                 WITH real_bookings AS (
                     SELECT b.trainer_id, COUNT(*) AS cnt
                     FROM bookings b
@@ -1517,9 +1525,7 @@ async def get_admin_product_analytics(session: AsyncSession) -> dict:
                     COUNT(DISTINCT t.id) FILTER (WHERE rb.cnt >= 1)             AS first_booking,
                     COUNT(DISTINCT t.id) FILTER (WHERE rb.cnt >= 2)             AS second_booking,
                     COUNT(DISTINCT t.id) FILTER (WHERE rb.cnt >= 5)             AS five_bookings,
-                    COUNT(DISTINCT t.id) FILTER (
-                        WHERE t.client_invite_link_first_copied_at IS NOT NULL
-                    )                                                           AS invited_client,
+                    COUNT(DISTINCT t.id) FILTER (WHERE {_shared_invite})        AS invited_client,
                     COUNT(DISTINCT t.id) FILTER (
                         WHERE EXISTS (
                             SELECT 1 FROM trainer_schedule_templates tst
@@ -1763,11 +1769,11 @@ async def get_admin_product_analytics(session: AsyncSession) -> dict:
     try:
         r = await session.execute(
             text(
-                """
+                f"""
                 WITH eligible AS (
                     SELECT
                         t.id,
-                        t.client_invite_link_first_copied_at IS NOT NULL           AS invited_client,
+                        {_shared_invite}                                            AS invited_client,
                         t.is_catalog_visible AND EXISTS (
                             SELECT 1 FROM trainer_profiles tp WHERE tp.trainer_id = t.id
                         )                                                           AS catalog_live,

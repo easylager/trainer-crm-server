@@ -361,6 +361,38 @@ async def test_retention_sleeping_includes_trainer_with_no_bookings(db_session: 
 
 
 @pytest.mark.asyncio
+async def test_engagement_feature_share_never_exceeds_100_percent(db_session: AsyncSession) -> None:
+    """Feature adoption numerators must be scoped to active trainers only."""
+    data = await get_admin_engagement_stats(db_session)
+    active = data["trainers_active"]
+    for feat in data["feature_usage"]:
+        assert feat["users"] <= active, feat
+        if feat["share_pct"] is not None:
+            assert feat["share_pct"] <= 100.0, feat
+
+
+@pytest.mark.asyncio
+async def test_engagement_online_module_ignores_non_active_trainer(db_session: AsyncSession) -> None:
+    before = await get_admin_engagement_stats(db_session)
+    plan_id = await _insert_subscription_plan(db_session)
+    pending_tid = await _insert_trainer(db_session, status="pending_profile")
+    await _insert_subscription(
+        db_session,
+        trainer_id=pending_tid,
+        plan_id=plan_id,
+        status="active",
+        days_ago_started=1,
+        days_until_expires=29,
+        modules={"online": True, "analytics": False, "groups": False},
+    )
+    after = await get_admin_engagement_stats(db_session)
+    online_before = next(f for f in before["feature_usage"] if f["feature"] == "online")
+    online_after = next(f for f in after["feature_usage"] if f["feature"] == "online")
+    assert online_after["users"] == online_before["users"]
+    assert after["trainers_active"] == before["trainers_active"]
+
+
+@pytest.mark.asyncio
 async def test_engagement_active_trainer_count_excludes_deactivated(db_session: AsyncSession) -> None:
     before = await get_admin_engagement_stats(db_session)
     await _insert_trainer(db_session, status="active")

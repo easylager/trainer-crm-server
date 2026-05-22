@@ -318,6 +318,15 @@ def webapp_admin_clients_page():
     return _webapp_file_response(path)
 
 
+@app.get("/webapp/admin-activity")
+def webapp_admin_activity_page():
+    """Admin audit log timeline — trainer/client/admin actions."""
+    path = _WEBAPP_DIR / "admin-activity.html"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Web App not found")
+    return _webapp_file_response(path)
+
+
 @app.get("/webapp/admin-product-analytics")
 def webapp_admin_product_analytics_page():
     """Product analytics dashboard — activation funnel, proof-of-value, correlation table."""

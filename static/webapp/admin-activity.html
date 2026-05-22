@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>История · Админ</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="mini-app-telegram-chrome.js"></script>
+  <link rel="stylesheet" href="theme.css" />
+  <link rel="stylesheet" href="admin-analytics-shared.css" />
+  <style>
+    .audit-item { padding: 12px 0; border-bottom: 1px solid rgba(255,255,255,0.06); }
+    .audit-item:last-child { border-bottom: none; }
+    .audit-time { font-size: 11px; color: var(--tg-theme-hint-color); margin-bottom: 4px; }
+    .audit-title { font-size: 14px; font-weight: 600; line-height: 1.35; margin-bottom: 4px; }
+    .audit-meta { font-size: 12px; color: var(--tg-theme-hint-color); line-height: 1.4; }
+    .audit-load { margin-top: 12px; text-align: center; }
+    .audit-load button {
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.12);
+      color: var(--tg-theme-text-color);
+      border-radius: 10px;
+      padding: 10px 16px;
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+  <div class="adm-header">
+    <h1>🕓 История</h1>
+    <div class="adm-sub">действия тренеров, клиентов и админов · последние события</div>
+  </div>
+  <div id="content">
+    <div class="adm-loading">Загрузка…</div>
+  </div>
+  <script src="admin-analytics-shared.js"></script>
+  <script>
+    (function () {
+      var A = window.AdmAnalytics;
+      var allEvents = [];
+      var hasMore = false;
+      var loading = false;
+
+      function fmtTime(iso) {
+        if (!iso) return '—';
+        try {
+          var d = new Date(iso);
+          return d.toLocaleString('ru-RU', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+        } catch (e) { return iso; }
+      }
+
+      function renderList() {
+        if (!allEvents.length) {
+          return '<div class="adm-card"><div class="adm-empty">Пока нет событий. Новые действия появятся здесь автоматически.</div></div>';
+        }
+        var html = '<div class="adm-card">';
+        allEvents.forEach(function (ev) {
+          html += '<div class="audit-item">';
+          html += '<div class="audit-time">' + A.escapeHtml(fmtTime(ev.occurred_at)) + '</div>';
+          html += '<div class="audit-title">' + A.escapeHtml(ev.event_label_ru || ev.event_type) + '</div>';
+          html += '<div class="audit-meta">';
+          html += A.escapeHtml(ev.actor_label_ru || ev.actor_type || '—');
+          if (ev.trainer_label_ru) {
+            html += '<br/>Тренер: ' + A.escapeHtml(ev.trainer_label_ru);
+          }
+          if (ev.client_label_ru) {
+            html += '<br/>Клиент: ' + A.escapeHtml(ev.client_label_ru);
+          }
+          if (ev.detail_ru) {
+            html += '<br/>' + A.escapeHtml(ev.detail_ru);
+          }
+          html += '</div></div>';
+        });
+        html += '</div>';
+        if (hasMore) {
+          html += '<div class="audit-load"><button type="button" id="loadMoreBtn">Загрузить ещё</button></div>';
+        }
+        return html;
+      }
+
+      function paint() {
+        document.getElementById('content').innerHTML = renderList();
+        var btn = document.getElementById('loadMoreBtn');
+        if (btn) {
+          btn.onclick = function () { loadPage(true); };
+        }
+      }
+
+      function loadPage(append) {
+        if (loading) return;
+        loading = true;
+        var path = '/admin/activity?limit=40';
+        if (append && allEvents.length) {
+          path += '&before_id=' + encodeURIComponent(String(allEvents[allEvents.length - 1].id));
+        }
+        if (!append) {
+          document.getElementById('content').innerHTML = '<div class="adm-loading">Загрузка…</div>';
+        }
+        A.getJson(path).then(function (data) {
+          var batch = (data && data.events) || [];
+          hasMore = !!(data && data.has_more);
+          allEvents = append ? allEvents.concat(batch) : batch;
+          paint();
+        }).catch(function (err) {
+          document.getElementById('content').innerHTML =
+            '<div class="adm-error">Ошибка: ' + A.escapeHtml(String(err && err.message || err)) + '</div>';
+        }).finally(function () { loading = false; });
+      }
+
+      loadPage(false);
+    })();
+  </script>
+</body>
+</html>

@@ -43,6 +43,12 @@ def audit_log(
         record["payload"] = safe_payload
         line = json.dumps(record, ensure_ascii=False)
     logger.info(line)
+    try:
+        from src.application.platform_audit_use_cases import schedule_audit_persist
+
+        schedule_audit_persist(record)
+    except Exception:
+        pass  # audit stdout must never break business flow
 
 
 def _json_serializable(value: Any) -> bool:
