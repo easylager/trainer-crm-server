@@ -56,20 +56,41 @@ async def test_insert_and_list_audit_event(db_session: AsyncSession) -> None:
 
 
 @pytest.mark.asyncio
-async def test_audit_log_schedules_persist(db_session: AsyncSession) -> None:
+async def test_audit_log_skips_background_persist_under_pytest(db_session: AsyncSession) -> None:
+    """Background persist is disabled in pytest (single shared asyncpg connection)."""
     before = await db_session.execute(text("SELECT COUNT(*) FROM platform_audit_events"))
     n0 = int(before.scalar() or 0)
 
-    async def _run() -> None:
-        audit_log(
-            "client_request.created",
-            ACTOR_CLIENT_BOT,
-            555,
-            {"request_id": 1, "city_id": 2, "service_id": 3},
-        )
-        await asyncio.sleep(0.15)
+    audit_log(
+        "client_request.created",
+        ACTOR_CLIENT_BOT,
+        555,
+        {"request_id": 1, "city_id": 2, "service_id": 3},
+    )
+    await asyncio.sleep(0.05)
 
-    await _run()
+    after = await db_session.execute(text("SELECT COUNT(*) FROM platform_audit_events"))
+    n1 = int(after.scalar() or 0)
+    assert n1 == n0
+
+
+@pytest.mark.asyncio
+async def test_persist_audit_record_direct(db_session: AsyncSession) -> None:
+    before = await db_session.execute(text("SELECT COUNT(*) FROM platform_audit_events"))
+    n0 = int(before.scalar() or 0)
+
+    eid = await insert_platform_audit_from_record(
+        db_session,
+        {
+            "event": "client_request.created",
+            "actor_type": ACTOR_CLIENT_BOT,
+            "actor_id": "555",
+            "payload": {"request_id": 42, "city_id": 2, "service_id": 3},
+        },
+    )
+    await db_session.commit()
+    assert eid is not None
+
     after = await db_session.execute(text("SELECT COUNT(*) FROM platform_audit_events"))
     n1 = int(after.scalar() or 0)
     assert n1 >= n0 + 1
