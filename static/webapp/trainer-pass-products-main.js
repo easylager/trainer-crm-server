@@ -75,6 +75,89 @@
         document.querySelectorAll('[data-screen]').forEach(function(el) { el.classList.remove('active'); });
         var el = document.getElementById(id);
         if (el) el.classList.add('active');
+        document.documentElement.classList.remove('pp-boot-pass-issue');
+      }
+
+      /** Deep-link from client card / pass order: ?client_id=… [&pass_product_id=…] */
+      function parsePassIssueDeepLink() {
+        var params = new URLSearchParams(window.location.search || '');
+        if (params.get('certificate_product_id')) return null;
+        var tab = (params.get('tab') || '').toLowerCase();
+        if (tab === 'certs' || tab === 'cert' || tab === 'certificates') return null;
+        var clientId = parseInt(params.get('client_id') || '', 10);
+        if (!clientId) return null;
+        var passProductId = parseInt(params.get('pass_product_id') || '', 10);
+        return {
+          clientId: clientId,
+          passProductId: passProductId > 0 ? passProductId : null,
+        };
+      }
+
+      function setPassIssueBootLoading(on) {
+        var boot = document.getElementById('passIssueBootLoading');
+        var body = document.getElementById('passIssueBody');
+        if (boot) boot.hidden = !on;
+        if (body) body.hidden = on;
+        document.documentElement.classList.toggle('pp-boot-pass-issue', on);
+      }
+
+      function showPassIssueBootError(title, text) {
+        var boot = document.getElementById('passIssueBootLoading');
+        if (!boot) return;
+        boot.innerHTML =
+          '<div class="pp-state pp-state--error"><div class="pp-state-icon" aria-hidden="true">⚠️</div>' +
+          '<p class="pp-state-title">' + escapeHtml(title) + '</p>' +
+          (text ? '<p class="pp-state-text">' + escapeHtml(text) + '</p>' : '') +
+          '</div>';
+        boot.hidden = false;
+        var body = document.getElementById('passIssueBody');
+        if (body) body.hidden = true;
+      }
+
+      function fetchPassIssuePrerequisites() {
+        var itemsP = state.items.length > 0
+          ? Promise.resolve()
+          : fetch(apiUrl('/trainer/pass-products') + initDataParam(), { headers: headers() })
+              .then(function(r) { return r.json(); })
+              .then(function(data) { state.items = data.items || []; });
+        var clientsP = state.clients.length > 0
+          ? Promise.resolve()
+          : fetch(apiUrl('/trainer/clients') + initDataParam(), { headers: headers() })
+              .then(function(r) { return r.json(); })
+              .then(function(data) { state.clients = data.clients || []; })
+              .catch(function() { state.clients = []; });
+        return Promise.all([itemsP, clientsP]);
+      }
+
+      function runPassIssueDeepLink(deepLink) {
+        state.prefillClientIdForPassIssue = deepLink.clientId;
+        if (deepLink.passProductId) state.prefillPassProductIdForPassIssue = deepLink.passProductId;
+        setTab('passes');
+        showScreen('screenPassIssue');
+        setPassIssueBootLoading(true);
+        fetchPassIssuePrerequisites()
+          .then(function() {
+            var activePasses = (state.items || []).filter(function(p) { return p.is_active; });
+            if (!activePasses.length) {
+              showPassIssueBootError('Нет активных абонементов', 'Сначала добавьте абонемент в каталоге.');
+              return;
+            }
+            if (!(state.clients || []).length) {
+              showPassIssueBootError('Нет клиентов', 'Клиенты появятся после записей на занятия.');
+              return;
+            }
+            if (!(state.clients || []).some(function(c) { return c.id === deepLink.clientId; })) {
+              showPassIssueBootError('Клиент не найден', 'Обновите список клиентов и попробуйте снова.');
+              return;
+            }
+            setPassIssueBootLoading(false);
+            openPassIssueScreen();
+            var heroSub = document.getElementById('passIssueHeroSub');
+            if (heroSub) heroSub.textContent = 'Выберите абонемент для выдачи.';
+          })
+          .catch(function() {
+            showPassIssueBootError('Не удалось загрузить', 'Откройте мини-приложение из бота и попробуйте снова.');
+          });
       }
       function setTab(tab) {
         state.activeTab = tab;
@@ -339,16 +422,9 @@
         function openWhenReady() {
           openPassIssueScreen();
         }
-        var itemsPromise = state.items.length > 0
-          ? Promise.resolve()
-          : fetch(apiUrl('/trainer/pass-products') + initDataParam(), { headers: headers() })
-              .then(function(r) { return r.json(); })
-              .then(function(data) { state.items = data.items || []; });
-        var clientsPromise = fetch(apiUrl('/trainer/clients') + initDataParam(), { headers: headers() })
-          .then(function(r) { return r.json(); })
-          .then(function(data) { state.clients = data.clients || []; })
-          .catch(function() { state.clients = []; });
-        Promise.all([itemsPromise, clientsPromise]).then(function() {
+        Promise.resolve().then(function() {
+          return fetchPassIssuePrerequisites();
+        }).then(function() {
           if (state.items.filter(function(p) { return p.is_active; }).length === 0) {
             alert('Сначала добавьте хотя бы один активный абонемент.');
             return;
@@ -360,14 +436,14 @@
           openWhenReady();
         });
       };
-      document.getElementById('btnCancelPassIssue').onclick = function() {
+      function leavePassIssueToCatalog() {
         showScreen('screenList');
         setTab('passes');
-      };
-      document.getElementById('btnPassIssueSuccessBack').onclick = function() {
-        showScreen('screenList');
-        setTab('passes');
-      };
+        if (!state.items.length) loadList();
+        if (!state.certItems.length) loadCertList();
+      }
+      document.getElementById('btnCancelPassIssue').onclick = leavePassIssueToCatalog;
+      document.getElementById('btnPassIssueSuccessBack').onclick = leavePassIssueToCatalog;
       document.getElementById('btnSubmitPassIssue').onclick = function() {
         var clientId = state.passIssueSelectedClientId;
         var productId = parseInt(document.getElementById('passIssueProductSelect').value, 10);
@@ -938,47 +1014,45 @@
         });
       };
 
-      if (initData && window.TrainerMiniAppGate) {
+      var passIssueDeepLink = parsePassIssueDeepLink();
+
+      function startCatalogLoads() {
+        loadList();
+        loadCertList();
+      }
+
+      if (passIssueDeepLink) {
+        var startPassIssueDeepLink = function() {
+          runPassIssueDeepLink(passIssueDeepLink);
+        };
+        if (initData && window.TrainerMiniAppGate) {
+          window.TrainerMiniAppGate.fetchAccess(initData)
+            .then(function (a) {
+              if (a && !window.TrainerMiniAppGate.isActive(a)) {
+                window.TrainerMiniAppGate.showBlockingOverlay(a);
+                return;
+              }
+              startPassIssueDeepLink();
+            })
+            .catch(startPassIssueDeepLink);
+        } else {
+          startPassIssueDeepLink();
+        }
+      } else if (initData && window.TrainerMiniAppGate) {
         window.TrainerMiniAppGate.fetchAccess(initData)
           .then(function (a) {
             if (a && !window.TrainerMiniAppGate.isActive(a)) {
               window.TrainerMiniAppGate.showBlockingOverlay(a);
               return;
             }
-            loadList();
-            loadCertList();
+            startCatalogLoads();
           })
           .catch(function () {
-            loadList();
-            loadCertList();
+            startCatalogLoads();
           });
       } else {
-        loadList();
-        loadCertList();
+        startCatalogLoads();
       }
-      (function checkPassIssuePrefill() {
-        var params = new URLSearchParams(window.location.search || '');
-        /* Certificate-order deep links also carry client_id; do not open pass-issue flow for those. */
-        if (params.get('certificate_product_id')) return;
-        var ppidRaw = params.get('pass_product_id');
-        if (!ppidRaw) return;
-        var ppid = parseInt(ppidRaw, 10);
-        if (!ppid) return;
-        state.prefillPassProductIdForPassIssue = ppid;
-        var cidRaw = params.get('client_id');
-        if (cidRaw) {
-          var clientId = parseInt(cidRaw, 10);
-          if (clientId) state.prefillClientIdForPassIssue = clientId;
-        }
-        if (!state.prefillClientIdForPassIssue) return;
-        setTab('passes');
-        var itemsP = fetch(apiUrl('/trainer/pass-products') + initDataParam(), { headers: headers() }).then(function(r) { return r.json(); }).then(function(data) { state.items = data.items || []; });
-        var clientsP = fetch(apiUrl('/trainer/clients') + initDataParam(), { headers: headers() }).then(function(r) { return r.json(); }).then(function(data) { state.clients = data.clients || []; }).catch(function() { state.clients = []; });
-        Promise.all([itemsP, clientsP]).then(function() {
-          if (state.items.filter(function(p) { return p.is_active; }).length === 0 || !state.clients.length) return;
-          openPassIssueScreen();
-        });
-      })();
       (function checkCertIssuePrefillFromRequest() {
         var params = new URLSearchParams(window.location.search || '');
         var cpidRaw = params.get('certificate_product_id');

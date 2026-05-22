@@ -426,6 +426,48 @@ async def list_client_pass_instances(
     return out
 
 
+async def _trainer_may_issue_pass_to_client(
+    session: AsyncSession,
+    trainer_id: int,
+    client_id: int,
+) -> tuple[bool, str | None]:
+    """
+    Pass issue is not tied to active bookings: roster link, any booking history,
+    or active/trial training group is enough.
+    """
+    r = await session.execute(
+        text(
+            """
+            SELECT
+              EXISTS (SELECT 1 FROM clients c WHERE c.id = :cid) AS client_exists,
+              (
+                EXISTS (
+                    SELECT 1 FROM trainer_client_roster r
+                    WHERE r.trainer_id = :tid AND r.client_id = :cid
+                )
+                OR EXISTS (
+                    SELECT 1 FROM bookings b
+                    WHERE b.trainer_id = :tid AND b.client_id = :cid
+                )
+                OR EXISTS (
+                    SELECT 1 FROM training_group_members m
+                    INNER JOIN training_groups g ON g.id = m.training_group_id
+                    WHERE g.trainer_id = :tid AND m.client_id = :cid
+                      AND m.status IN ('active', 'trial')
+                )
+              ) AS in_scope
+            """
+        ),
+        {"tid": trainer_id, "cid": client_id},
+    )
+    row = r.fetchone()
+    if not row or not row[0]:
+        return False, "Клиент не найден"
+    if not row[1]:
+        return False, "Клиент не привязан к вашему кабинету"
+    return True, None
+
+
 async def issue_pass_to_client(
     session: AsyncSession,
     trainer_id: int,
@@ -441,19 +483,9 @@ async def issue_pass_to_client(
         raise ValueError("Product not found or not yours")
     if not product.get("is_active"):
         raise ValueError("Product is inactive")
-    r = await session.execute(
-        text(
-            """
-            SELECT 1 FROM bookings b
-            WHERE b.trainer_id = :tid AND b.client_id = :cid
-              AND b.status NOT IN ('cancelled', 'declined', 'trainer_removed')
-            LIMIT 1
-            """
-        ),
-        {"tid": trainer_id, "cid": client_id},
-    )
-    if not r.fetchone():
-        raise ValueError("Client not found or has no sessions with you — add a booking first")
+    may_issue, scope_err = await _trainer_may_issue_pass_to_client(session, trainer_id, client_id)
+    if not may_issue:
+        raise ValueError(scope_err or "Клиент не привязан к вашему кабинету")
     r = await session.execute(
         text(
             """

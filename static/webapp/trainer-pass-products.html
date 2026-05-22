@@ -39,8 +39,8 @@
       window.__applyTrainerPassProductsTheme = applyAppTheme;
     })();
   </script>
-  <link rel="preload" href="trainer-pass-products-main.js?v=202605190" as="script" />
-  <link rel="stylesheet" href="mini-app-trainer-pass-products.css?v=20260501" />
+  <link rel="preload" href="trainer-pass-products-main.js?v=202605193" as="script" />
+  <link rel="stylesheet" href="mini-app-trainer-pass-products.css?v=20260502" />
   <link rel="stylesheet" href="mini-app-trainer-nav.css?v=20260422" />
 </head>
 <body>
@@ -170,11 +170,17 @@
   </div>
 
   <div id="screenPassIssue" data-screen>
+    <div id="passIssueBootLoading" class="pp-state pp-state--loading pp-pass-issue-boot" hidden>
+      <div class="pp-state-icon" aria-hidden="true">⏳</div>
+      <p class="pp-state-title">Подготовка выдачи</p>
+      <div class="pp-loading-dots" aria-hidden="true"><span></span><span></span><span></span></div>
+    </div>
+    <div id="passIssueBody">
     <div class="pp-hero" style="margin-bottom:16px;">
       <div class="pp-hero-inner">
         <p class="pp-hero-kicker">Абонемент</p>
         <h1 class="pp-hero-title">Выдать абонемент</h1>
-        <p class="pp-hero-sub">Выберите клиента и тип абонемента.</p>
+        <p class="pp-hero-sub" id="passIssueHeroSub">Выберите клиента и тип абонемента.</p>
       </div>
     </div>
     <div class="form-group" id="passIssueClientSearchGroup">
@@ -206,7 +212,30 @@
       <p class="pass-issue-success-text">Абонемент выдан</p>
       <button type="button" class="btn-save" id="btnPassIssueSuccessBack">К списку</button>
     </div>
+    </div>
   </div>
+  <script>
+    /** Deep-link ?client_id=… — show issue screen + loader before deferred main.js (no list flash). */
+    (function () {
+      try {
+        var p = new URLSearchParams(location.search || '');
+        if (p.get('certificate_product_id')) return;
+        var tab = (p.get('tab') || '').toLowerCase();
+        if (tab === 'certs' || tab === 'cert' || tab === 'certificates') return;
+        var cid = parseInt(p.get('client_id') || '', 10);
+        if (!cid) return;
+        document.documentElement.classList.add('pp-boot-pass-issue');
+        var list = document.getElementById('screenList');
+        var issue = document.getElementById('screenPassIssue');
+        var boot = document.getElementById('passIssueBootLoading');
+        var body = document.getElementById('passIssueBody');
+        if (list) list.classList.remove('active');
+        if (issue) issue.classList.add('active');
+        if (boot) boot.hidden = false;
+        if (body) body.hidden = true;
+      } catch (e) { /* ignore */ }
+    })();
+  </script>
 
   <div id="screenForm" data-screen>
     <div class="pp-hero pp-hero--form">
@@ -287,7 +316,7 @@
     <button type="button" class="btn-delete" id="btnDeleteCert" style="display: none;">Удалить сертификат</button>
   </div>
   <script src="mini-app-trainer-gate.js"></script>
-  <script defer src="trainer-pass-products-main.js?v=202605190"></script>
+  <script defer src="trainer-pass-products-main.js?v=202605193"></script>
   <script defer src="mini-app-trainer-home.js"></script>
 </body>
 </html>

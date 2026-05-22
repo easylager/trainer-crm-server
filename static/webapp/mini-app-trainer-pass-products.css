@@ -344,6 +344,13 @@
     .pp-stack-btn:first-of-type { margin-top: 16px; }
     [data-screen] { display: none !important; width: 100%; }
     [data-screen].active { display: block !important; }
+    .pp-pass-issue-boot {
+      margin-top: 24px;
+      min-height: 40vh;
+    }
+    html.pp-boot-pass-issue #screenList.active {
+      display: none !important;
+    }
     /* Catalog form — inset fields on panel (schedule detail spirit) */
     #screenForm.active,
     #screenCertForm.active {
