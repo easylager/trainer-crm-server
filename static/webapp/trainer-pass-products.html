@@ -39,8 +39,8 @@
       window.__applyTrainerPassProductsTheme = applyAppTheme;
     })();
   </script>
-  <link rel="preload" href="trainer-pass-products-main.js?v=202605193" as="script" />
-  <link rel="stylesheet" href="mini-app-trainer-pass-products.css?v=20260502" />
+  <link rel="preload" href="trainer-pass-products-main.js?v=202605198" as="script" />
+  <link rel="stylesheet" href="mini-app-trainer-pass-products.css?v=202605198" />
   <link rel="stylesheet" href="mini-app-trainer-nav.css?v=20260422" />
 </head>
 <body>
@@ -56,9 +56,10 @@
         <p class="pp-hero-sub">Каталог и выдача клиентам — в одном месте.</p>
       </div>
     </div>
-    <div class="tabs">
+    <div class="tabs tabs--three">
       <button type="button" class="tab active" id="tabPasses" data-tab="passes">Абонементы</button>
       <button type="button" class="tab" id="tabCerts" data-tab="certs">Сертификаты</button>
+      <button type="button" class="tab" id="tabIssued" data-tab="issued">Выданы</button>
     </div>
     <div id="panelPasses" class="tab-panel active">
       <p class="products-hint" id="productsHint" style="display:none;">Нажмите на абонемент, чтобы изменить или удалить</p>
@@ -78,6 +79,34 @@
       <button type="button" class="pp-btn pp-btn--primary pp-stack-btn" id="btnIssueCert">🎁 Выдать сертификат</button>
       <button type="button" class="pp-btn pp-btn--soft pp-stack-btn" id="btnAddCert">+ Добавить сертификат</button>
       <p class="cert-issued-hint">Списание с сертификата происходит автоматически, когда вы отмечаете занятие как «Проведено» в расписании.</p>
+    </div>
+    <div id="panelIssued" class="tab-panel">
+      <div class="pp-issued-toolbar">
+        <input type="search" id="issuedSearch" class="pp-issued-search" placeholder="Клиент, продукт или код" autocomplete="off" />
+        <div class="pp-issued-filters">
+          <div class="form-group pp-issued-filter">
+            <label for="issuedKindFilter">Тип</label>
+            <select id="issuedKindFilter">
+              <option value="all">Все типы</option>
+              <option value="pass">Абонементы</option>
+              <option value="certificate">Сертификаты</option>
+            </select>
+          </div>
+          <div class="form-group pp-issued-filter">
+            <label for="issuedStatusFilter">Статус</label>
+            <select id="issuedStatusFilter">
+              <option value="all">Все статусы</option>
+              <option value="active">Активные</option>
+              <option value="closed">Закрытые</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <p class="products-hint" id="issuedHint" style="display:none;">Новые сверху · абонементы и сертификаты, которые вы уже выдали</p>
+      <div id="issuedListContent">
+        <div class="pp-state pp-state--empty"><div class="pp-state-icon" aria-hidden="true">📋</div><p class="pp-state-title">Откройте вкладку — загрузим список</p></div>
+      </div>
+      <div id="issuedPagination" class="pp-issued-pagination" hidden></div>
     </div>
   </div>
 
@@ -316,7 +345,7 @@
     <button type="button" class="btn-delete" id="btnDeleteCert" style="display: none;">Удалить сертификат</button>
   </div>
   <script src="mini-app-trainer-gate.js"></script>
-  <script defer src="trainer-pass-products-main.js?v=202605193"></script>
+  <script defer src="trainer-pass-products-main.js?v=202605198"></script>
   <script defer src="mini-app-trainer-home.js"></script>
 </body>
 </html>

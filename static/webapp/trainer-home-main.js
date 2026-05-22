@@ -5294,7 +5294,7 @@
         { path: 'trainer-requests', label: 'Заявки', hint: 'Отклики клиентов', icon: 'inbox', badge: 'NEW' },
         { path: 'schedule-editor', label: 'Расписание', hint: 'Слоты и записи', icon: 'cal', badge: null },
         { path: 'trainer-profile', label: 'Профиль', hint: 'Анкета и модерация', icon: 'user', badge: null },
-        { path: 'trainer-pass-products', label: 'Абонементы', hint: 'Продукты и выдача', icon: 'ticket', badge: null },
+        { path: 'trainer-pass-products', label: 'Абонементы и сертификаты', hint: 'Каталог и выданные', icon: 'ticket', badge: null },
         { path: 'trainer-subscription?v=20260450', label: 'Подписка', hint: 'Тариф и оплата', icon: 'card', badge: null },
         { path: 'trainer-stats', label: 'Статистика', hint: 'Показатели и динамика', icon: 'chart', badge: null, tier: 'analytics' },
         { path: 'trainer-referral', label: 'Рефералы', hint: 'Пригласи коллегу', icon: 'gift', badge: 'NEW' },

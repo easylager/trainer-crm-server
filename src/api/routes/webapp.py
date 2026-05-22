@@ -247,6 +247,7 @@ from src.application.pass_product_use_cases import (
     list_pass_products,
     update_pass_product,
 )
+from src.application.trainer_issued_use_cases import list_trainer_issued_items
 from src.application.certificate_use_cases import (
     AMOUNT_CENTS_UNSET,
     DESCRIPTION_UNSET,
@@ -4353,6 +4354,31 @@ async def get_trainer_certificates(
         raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
     items = await list_trainer_certificate_instances(session, trainer_id, active_only=active_only)
     return {"items": items}
+
+
+@router.get("/trainer/issued-items")
+async def get_trainer_issued_items(
+    kind: str = Query("all", description="all | pass | certificate"),
+    status: str = Query("all", description="all | active | closed"),
+    q: str | None = Query(None, description="Search client, product, code"),
+    limit: int = Query(20, ge=1, le=50),
+    offset: int = Query(0, ge=0),
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+):
+    """Issued passes and certificates timeline for trainer «Выданы» tab."""
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
+    return await list_trainer_issued_items(
+        session,
+        trainer_id,
+        kind=kind,
+        status=status,
+        search=q,
+        limit=limit,
+        offset=offset,
+    )
 
 
 class CertificateIssueBody(BaseModel):

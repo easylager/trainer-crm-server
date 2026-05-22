@@ -29,8 +29,17 @@
         }
       }
       var initData = tg ? tg.initData : '';
+      var ISSUED_PAGE_SIZE = 20;
       function initDataParam() {
         return initData ? '?init_data=' + encodeURIComponent(initData) : '';
+      }
+      /** Append init_data with correct ? or & when path already has query params. */
+      function apiFetchUrl(path) {
+        var url = apiUrl(path);
+        if (initData) {
+          url += (url.indexOf('?') >= 0 ? '&' : '?') + 'init_data=' + encodeURIComponent(initData);
+        }
+        return url;
       }
       function headers() {
         var h = { 'Content-Type': 'application/json' };
@@ -38,6 +47,27 @@
         return h;
       }
       function apiUrl(path) { return '/api/webapp' + path; }
+
+      function trainerClientCardUrl(clientId) {
+        var path = (window.location.pathname || '').replace(/[^/]+$/, '') || '/webapp/';
+        return path + 'trainer-clients?client_id=' + encodeURIComponent(String(clientId));
+      }
+
+      function syncPassIssueBackLabels() {
+        var returnCid = state.returnClientId;
+        var backBtn = document.getElementById('btnPassIssueSuccessBack');
+        var cancelBtn = document.getElementById('btnCancelPassIssue');
+        if (backBtn) backBtn.textContent = returnCid ? 'К карточке клиента' : 'К списку';
+        if (cancelBtn) cancelBtn.textContent = returnCid ? 'Назад' : 'Отмена';
+      }
+
+      function leavePassIssueScreen() {
+        if (state.returnClientId) {
+          window.location.href = trainerClientCardUrl(state.returnClientId);
+          return;
+        }
+        leavePassIssueToCatalog();
+      }
 
       var state = {
         items: [],
@@ -50,6 +80,7 @@
         services: [],
         prefillClientIdForPassIssue: null,
         prefillPassProductIdForPassIssue: null,
+        returnClientId: null,
         prefillCertProductIdForIssue: null,
         prefillCertRecipientEmail: null,
         prefillCertRecipientName: null,
@@ -61,6 +92,14 @@
         certIssueSubmitting: false,
         certIssueIdempotencyKey: null,
         certIssuePurchasedByName: null,
+        issuedItems: [],
+        issuedLoaded: false,
+        issuedSearchTimer: null,
+        issuedKind: 'all',
+        issuedStatus: 'all',
+        issuedPage: 0,
+        issuedTotal: 0,
+        issuedHasMore: false,
       };
 
       function postClientInviteLinkFirstCopyRecorded() {
@@ -130,6 +169,7 @@
       }
 
       function runPassIssueDeepLink(deepLink) {
+        state.returnClientId = deepLink.clientId;
         state.prefillClientIdForPassIssue = deepLink.clientId;
         if (deepLink.passProductId) state.prefillPassProductIdForPassIssue = deepLink.passProductId;
         setTab('passes');
@@ -162,18 +202,192 @@
       function setTab(tab) {
         state.activeTab = tab;
         document.querySelectorAll('.tab').forEach(function(t) { t.classList.toggle('active', t.dataset.tab === tab); });
-        document.querySelectorAll('.tab-panel').forEach(function(p) {
-          var isPasses = p.id === 'panelPasses';
-          p.classList.toggle('active', (tab === 'passes' && isPasses) || (tab === 'certs' && !isPasses));
-        });
+        var panelPasses = document.getElementById('panelPasses');
+        var panelCerts = document.getElementById('panelCerts');
+        var panelIssued = document.getElementById('panelIssued');
+        if (panelPasses) panelPasses.classList.toggle('active', tab === 'passes');
+        if (panelCerts) panelCerts.classList.toggle('active', tab === 'certs');
+        if (panelIssued) panelIssued.classList.toggle('active', tab === 'issued');
       }
       (function applyUrlTabFromQuery() {
         var params = new URLSearchParams(window.location.search || '');
         var tab = (params.get('tab') || '').toLowerCase();
         if (tab === 'certs' || tab === 'cert' || tab === 'certificates') {
           setTab('certs');
+        } else if (tab === 'issued' || tab === 'issued-items') {
+          setTab('issued');
         }
       })();
+
+      function formatIssuedDate(iso) {
+        if (!iso) return '—';
+        try {
+          var d = new Date(iso);
+          return ('0' + d.getDate()).slice(-2) + '.' + ('0' + (d.getMonth() + 1)).slice(-2) + '.' + d.getFullYear();
+        } catch (e) { return iso; }
+      }
+
+      function issuedKindLabel(kind) {
+        return kind === 'certificate' ? 'Сертификат' : 'Абонемент';
+      }
+
+      function renderIssuedPagination() {
+        var pagEl = document.getElementById('issuedPagination');
+        if (!pagEl) return;
+        var total = state.issuedTotal || 0;
+        if (total <= ISSUED_PAGE_SIZE) {
+          pagEl.hidden = true;
+          pagEl.innerHTML = '';
+          return;
+        }
+        var totalPages = Math.max(1, Math.ceil(total / ISSUED_PAGE_SIZE));
+        var page = state.issuedPage + 1;
+        var from = state.issuedPage * ISSUED_PAGE_SIZE + 1;
+        var to = Math.min(total, (state.issuedPage + 1) * ISSUED_PAGE_SIZE);
+        var html = '';
+        html += '<button type="button" class="pp-issued-page-btn" id="issuedPagePrev"' +
+          (state.issuedPage <= 0 ? ' disabled' : '') + '>◀ Назад</button>';
+        html += '<span>' + from + '–' + to + ' из ' + total + ' · стр. ' + page + '/' + totalPages + '</span>';
+        html += '<button type="button" class="pp-issued-page-btn" id="issuedPageNext"' +
+          (!state.issuedHasMore ? ' disabled' : '') + '>Вперёд ▶</button>';
+        pagEl.innerHTML = html;
+        pagEl.hidden = false;
+        var prevBtn = document.getElementById('issuedPagePrev');
+        if (prevBtn && !prevBtn.disabled) {
+          prevBtn.onclick = function() {
+            if (state.issuedPage <= 0) return;
+            state.issuedPage -= 1;
+            loadIssuedList();
+          };
+        }
+        var nextBtn = document.getElementById('issuedPageNext');
+        if (nextBtn && !nextBtn.disabled) {
+          nextBtn.onclick = function() {
+            if (!state.issuedHasMore) return;
+            state.issuedPage += 1;
+            loadIssuedList();
+          };
+        }
+      }
+
+      function renderIssuedList() {
+        var wrap = document.getElementById('issuedListContent');
+        var hintEl = document.getElementById('issuedHint');
+        if (!wrap) return;
+        if (hintEl) hintEl.style.display = state.issuedTotal > 0 ? 'block' : 'none';
+        if (!state.issuedItems.length) {
+          var kindEl = document.getElementById('issuedKindFilter');
+          var statusEl = document.getElementById('issuedStatusFilter');
+          var searchEl = document.getElementById('issuedSearch');
+          var kindVal = kindEl ? kindEl.value : 'all';
+          var statusVal = statusEl ? statusEl.value : 'all';
+          var emptyText = (kindVal !== 'all' || statusVal !== 'all' ||
+            (searchEl && (searchEl.value || '').trim()))
+            ? 'По выбранным фильтрам ничего не найдено'
+            : 'Выданные абонементы и сертификаты появятся здесь после первой выдачи.';
+          wrap.innerHTML = '<div class="pp-state pp-state--empty"><div class="pp-state-icon" aria-hidden="true">📋</div><p class="pp-state-title">Пока ничего не выдано</p><p class="pp-state-text">' + escapeHtml(emptyText) + '</p></div>';
+          renderIssuedPagination();
+          return;
+        }
+        var html = '';
+        state.issuedItems.forEach(function(it) {
+          var kindCls = it.kind === 'certificate' ? 'pp-issued-card--cert' : 'pp-issued-card--pass';
+          html += '<div class="pp-issued-card ' + kindCls + '">';
+          html += '<div class="pp-issued-card-head">';
+          html += '<span class="pp-issued-kind">' + escapeHtml(issuedKindLabel(it.kind)) + '</span>';
+          html += '<span class="pp-issued-date">' + escapeHtml(formatIssuedDate(it.issued_at)) + '</span>';
+          html += '</div>';
+          html += '<div class="pp-issued-title">' + escapeHtml(it.product_name || '—') + '</div>';
+          html += '<div class="pp-issued-meta">Клиент: ' + escapeHtml(it.client_label_ru || '—') + '</div>';
+          if (it.client_phone) {
+            html += '<div class="pp-issued-meta">' + escapeHtml(it.client_phone) + '</div>';
+          }
+          if (it.kind === 'pass') {
+            html += '<div class="pp-issued-balance"><strong>' + (it.sessions_remaining != null ? it.sessions_remaining : 0) + '</strong> из ' + (it.sessions_total != null ? it.sessions_total : 0) + ' занятий</div>';
+            if (it.service_scope) {
+              html += '<div class="pp-issued-meta">Услуги: ' + escapeHtml(it.service_scope) + '</div>';
+            } else {
+              html += '<div class="pp-issued-meta">На все услуги</div>';
+            }
+          } else {
+            if (it.recipient_name && it.recipient_name !== (it.client_label_ru || '')) {
+              html += '<div class="pp-issued-meta">Получатель: ' + escapeHtml(it.recipient_name) + '</div>';
+            }
+            if (it.amount_remaining_cents != null) {
+              html += '<div class="pp-issued-balance">Остаток: <strong>' + escapeHtml(formatPricePlain(it.amount_remaining_cents)) + '</strong></div>';
+            } else if (it.amount_cents != null) {
+              html += '<div class="pp-issued-balance">Номинал: <strong>' + escapeHtml(formatPricePlain(it.amount_cents)) + '</strong></div>';
+            }
+            if (it.code) {
+              html += '<div class="pp-issued-meta pp-issued-code">Код: ' + escapeHtml(it.code) + '</div>';
+            }
+          }
+          if (it.expires_at) {
+            html += '<div class="pp-issued-meta">Срок: до ' + escapeHtml(formatIssuedDate(it.expires_at)) + '</div>';
+          }
+          html += '<div class="pp-issued-status">' + escapeHtml(it.status_label_ru || it.status || '—') + '</div>';
+          html += '</div>';
+        });
+        wrap.innerHTML = html;
+        renderIssuedPagination();
+      }
+
+      function loadIssuedList() {
+        if (window.TrainerMiniAppGate && window.TrainerMiniAppGate.shouldBlockFeatureFetch()) return;
+        var host = document.getElementById('issuedListContent');
+        if (!host) return;
+        host.innerHTML = '<div class="pp-state pp-state--loading"><div class="pp-state-icon" aria-hidden="true">⏳</div><p class="pp-state-title">Загрузка</p><div class="pp-loading-dots" aria-hidden="true"><span></span><span></span><span></span></div></div>';
+        var pagEl = document.getElementById('issuedPagination');
+        if (pagEl) {
+          pagEl.hidden = true;
+          pagEl.innerHTML = '';
+        }
+        var searchEl = document.getElementById('issuedSearch');
+        var kindEl = document.getElementById('issuedKindFilter');
+        var statusEl = document.getElementById('issuedStatusFilter');
+        var kind = kindEl ? kindEl.value : 'all';
+        var status = statusEl ? statusEl.value : 'all';
+        state.issuedKind = kind;
+        state.issuedStatus = status;
+        var q = searchEl ? (searchEl.value || '').trim() : '';
+        var offset = state.issuedPage * ISSUED_PAGE_SIZE;
+        var path = '/trainer/issued-items?kind=' + encodeURIComponent(kind) +
+          '&status=' + encodeURIComponent(status) +
+          '&limit=' + ISSUED_PAGE_SIZE +
+          '&offset=' + offset;
+        if (q) path += '&q=' + encodeURIComponent(q);
+        fetch(apiFetchUrl(path), { headers: headers() })
+          .then(function(r) { return r.json().then(function(data) { return { ok: r.ok, data: data }; }); })
+          .then(function(o) {
+            if (!o.ok) {
+              var detail = o.data && o.data.detail;
+              var msg = typeof detail === 'string' ? detail : 'Не удалось загрузить список';
+              throw new Error(msg);
+            }
+            state.issuedItems = (o.data && o.data.items) ? o.data.items : [];
+            state.issuedTotal = (o.data && typeof o.data.total === 'number') ? o.data.total : state.issuedItems.length;
+            state.issuedHasMore = !!(o.data && o.data.has_more);
+            state.issuedLoaded = true;
+            renderIssuedList();
+          })
+          .catch(function() {
+            host.innerHTML = '<div class="pp-state pp-state--error"><div class="pp-state-icon" aria-hidden="true">⚠️</div><p class="pp-state-title">Не удалось загрузить</p><p class="pp-state-text">Проверьте соединение и попробуйте снова.</p></div>';
+            if (pagEl) {
+              pagEl.hidden = true;
+              pagEl.innerHTML = '';
+            }
+          });
+      }
+
+      function scheduleIssuedReload() {
+        if (state.issuedSearchTimer) clearTimeout(state.issuedSearchTimer);
+        state.issuedSearchTimer = setTimeout(function() {
+          if (state.activeTab === 'issued') {
+            state.issuedPage = 0;
+            loadIssuedList();
+          }
+        }, 320);
+      }
 
       function formatPricePlain(cents) {
         if (cents == null) return '—';
@@ -404,6 +618,7 @@
           });
           if (optMatch) productSelect.value = String(wantPid);
         }
+        syncPassIssueBackLabels();
         showScreen('screenPassIssue');
       }
       document.getElementById('passIssueClientSearch').oninput = function() {
@@ -420,6 +635,7 @@
       };
       document.getElementById('btnIssuePass').onclick = function() {
         function openWhenReady() {
+          state.returnClientId = null;
           openPassIssueScreen();
         }
         Promise.resolve().then(function() {
@@ -442,8 +658,8 @@
         if (!state.items.length) loadList();
         if (!state.certItems.length) loadCertList();
       }
-      document.getElementById('btnCancelPassIssue').onclick = leavePassIssueToCatalog;
-      document.getElementById('btnPassIssueSuccessBack').onclick = leavePassIssueToCatalog;
+      document.getElementById('btnCancelPassIssue').onclick = leavePassIssueScreen;
+      document.getElementById('btnPassIssueSuccessBack').onclick = leavePassIssueScreen;
       document.getElementById('btnSubmitPassIssue').onclick = function() {
         var clientId = state.passIssueSelectedClientId;
         var productId = parseInt(document.getElementById('passIssueProductSelect').value, 10);
@@ -465,6 +681,8 @@
               document.getElementById('passIssueSelectedGroup').style.display = 'none';
               document.getElementById('passIssueProductGroup').style.display = 'none';
               document.getElementById('passIssueSuccess').style.display = 'block';
+              state.issuedLoaded = false;
+              state.issuedPage = 0;
             } else {
               alert(o.data.detail || 'Ошибка выдачи');
             }
@@ -483,6 +701,31 @@
           setTab('certs');
           if (state.certItems.length === 0) loadCertList();
         };
+      }
+      var tabIssuedBtn = document.getElementById('tabIssued');
+      if (tabIssuedBtn) {
+        tabIssuedBtn.onclick = function() {
+          setTab('issued');
+          loadIssuedList();
+        };
+      }
+      var issuedSearchEl = document.getElementById('issuedSearch');
+      if (issuedSearchEl) {
+        issuedSearchEl.addEventListener('input', scheduleIssuedReload);
+      }
+      var issuedKindEl = document.getElementById('issuedKindFilter');
+      if (issuedKindEl) {
+        issuedKindEl.addEventListener('change', function() {
+          state.issuedPage = 0;
+          if (state.activeTab === 'issued') loadIssuedList();
+        });
+      }
+      var issuedStatusEl = document.getElementById('issuedStatusFilter');
+      if (issuedStatusEl) {
+        issuedStatusEl.addEventListener('change', function() {
+          state.issuedPage = 0;
+          if (state.activeTab === 'issued') loadIssuedList();
+        });
       }
 
       document.getElementById('certAnyAmount').onchange = function() {
@@ -781,6 +1024,8 @@
               } else {
                 emailSentEl.style.display = 'none';
               }
+              state.issuedLoaded = false;
+              state.issuedPage = 0;
             } else {
               alert(o.data.detail || 'Ошибка выдачи');
             }
@@ -1019,6 +1264,7 @@
       function startCatalogLoads() {
         loadList();
         loadCertList();
+        if (state.activeTab === 'issued') loadIssuedList();
       }
 
       if (passIssueDeepLink) {

@@ -70,6 +70,33 @@ HUB_REVENUE_TZ = ZoneInfo("Europe/Minsk")
 # Booking list / schedule visibility — keep volume KPIs aligned with hub and `booking_use_cases` filters.
 _SQL_BOOKING_SCHEDULE_VISIBLE = "b.status NOT IN ('cancelled', 'declined', 'trainer_removed')"
 
+# Month outcome KPIs: real cancels vs CRM/recurring bulk churn; rate excludes future pending/confirmed.
+_SQL_BOOKING_NOT_SYSTEM_CHURN = """
+(
+  b.status <> 'cancelled'
+  OR b.cancellation_source IS NULL
+  OR b.cancellation_source NOT IN ('recurring_detach', 'roster_detach')
+)
+"""
+_SQL_BOOKING_REAL_CANCEL = """
+(
+  b.status = 'declined'
+  OR (
+    b.status = 'cancelled'
+    AND (
+      b.cancellation_source IS NULL
+      OR b.cancellation_source NOT IN ('recurring_detach', 'roster_detach')
+    )
+  )
+)
+"""
+_SQL_BOOKING_OUTCOME_DENOM = """
+(
+  b.status IN ('completed', 'cancelled', 'declined', 'no_show')
+  OR (s.slot_date + s.end_time) < CURRENT_TIMESTAMP
+)
+"""
+
 
 def _month_start(d: date) -> date:
     return d.replace(day=1)
@@ -736,32 +763,51 @@ async def get_trainer_stats_dashboard(session: AsyncSession, trainer_id: int) ->
     )
     pass_redemptions_30d = (r.fetchone() or (0,))[0]
 
-    # Cancellation share in 30d by slot_date. Exclude bulk churn when removing recurring or CRM roster (not «real» cancels).
+    # Calendar month outcomes by slot_date (exact month bounds; rate omits future pending/confirmed).
     r = await session.execute(
         text(
-            """
+            f"""
             SELECT
                 COUNT(*) FILTER (
-                    WHERE b.status NOT IN ('cancelled', 'declined')
-                ) AS ok_cnt,
+                    WHERE b.status = 'completed'
+                      AND s.status IN ('available', 'booked')
+                ) AS completed_month,
                 COUNT(*) FILTER (
-                    WHERE b.status IN ('cancelled', 'declined')
-                ) AS neg_cnt
+                    WHERE b.status = 'cancelled'
+                      AND (
+                        b.cancellation_source IS NULL
+                        OR b.cancellation_source NOT IN ('recurring_detach', 'roster_detach')
+                      )
+                ) AS cancellations_month,
+                COUNT(*) FILTER (WHERE b.status = 'declined') AS declines_month,
+                COUNT(*) FILTER (WHERE {_SQL_BOOKING_OUTCOME_DENOM}) AS sessions_outcome_month,
+                COUNT(*) FILTER (
+                    WHERE {_SQL_BOOKING_REAL_CANCEL}
+                ) AS cancel_decline_month
             FROM bookings b
             JOIN slots s ON s.id = b.slot_id
-            WHERE b.trainer_id = :tid AND NOT b.is_sandbox
-              AND s.slot_date >= CURRENT_DATE - INTERVAL '30 days'
+            WHERE b.trainer_id = :tid
+              AND NOT b.is_sandbox
+              AND s.slot_date >= :ms
+              AND s.slot_date <= :me
               AND b.status <> 'trainer_removed'
-              AND NOT (b.status = 'cancelled' AND b.cancellation_source IN ('recurring_detach', 'roster_detach'))
+              AND {_SQL_BOOKING_NOT_SYSTEM_CHURN}
             """
         ),
-        {"tid": trainer_id},
+        {"tid": trainer_id, "ms": month_start, "me": month_end},
     )
-    cr = r.fetchone() or (0, 0)
-    ok_cnt = cr[0] or 0
-    neg_cnt = cr[1] or 0
-    denom = ok_cnt + neg_cnt
-    cancel_rate_30d = round(100 * neg_cnt / denom, 0) if denom else None
+    mo = r.fetchone() or (0, 0, 0, 0, 0)
+    bookings_completed_month = int(mo[0] or 0)
+    cancellations_month = int(mo[1] or 0)
+    declines_month = int(mo[2] or 0)
+    sessions_outcome_month = int(mo[3] or 0)
+    cancel_decline_month = int(mo[4] or 0)
+    cancel_decline_rate_month_pct: float | None = None
+    if sessions_outcome_month > 0:
+        cancel_decline_rate_month_pct = round(
+            100 * cancel_decline_month / sessions_outcome_month,
+            1,
+        )
 
     # Leads: requests addressed to this trainer + responses sent (30d).
     r = await session.execute(
@@ -795,51 +841,6 @@ async def get_trainer_stats_dashboard(session: AsyncSession, trainer_id: int) ->
             100 * client_request_responses_30d / client_requests_to_trainer_30d,
             0,
         )
-
-    # Cancelled/declined counts for KPIs: omit system bulk cancels (same definition as cancel_rate_30d).
-    r = await session.execute(
-        text(
-            """
-            SELECT
-                COUNT(*) FILTER (WHERE s.slot_date >= CURRENT_DATE - INTERVAL '7 days') AS cancel_7d,
-                COUNT(*) FILTER (WHERE s.slot_date >= CURRENT_DATE - INTERVAL '30 days') AS cancel_30d
-            FROM bookings b
-            JOIN slots s ON s.id = b.slot_id
-            WHERE b.trainer_id = :tid
-              AND NOT b.is_sandbox
-              AND s.slot_date >= CURRENT_DATE - INTERVAL '30 days'
-              AND (
-                b.status = 'declined'
-                OR (
-                  b.status = 'cancelled'
-                  AND (b.cancellation_source IS NULL OR b.cancellation_source NOT IN ('recurring_detach', 'roster_detach'))
-                )
-              )
-            """
-        ),
-        {"tid": trainer_id},
-    )
-    cancel_row = r.fetchone() or (0, 0)
-    cancellations_7d = cancel_row[0] or 0
-    cancellations_30d = cancel_row[1] or 0
-
-    # Conducted sessions (30d rolling by slot_date): only completed — not pending/confirmed future rows.
-    r = await session.execute(
-        text(
-            """
-            SELECT COUNT(*)
-            FROM bookings b
-            JOIN slots s ON s.id = b.slot_id
-            WHERE b.trainer_id = :tid
-              AND b.status = 'completed'
-              AND NOT b.is_sandbox
-              AND s.status IN ('available', 'booked')
-              AND s.slot_date >= CURRENT_DATE - INTERVAL '30 days'
-            """
-        ),
-        {"tid": trainer_id},
-    )
-    bookings_completed_30d = (r.fetchone() or (0,))[0]
 
     free_slots_week = max(0, (base["week_slots_total"] or 0) - (base["week_slots_booked"] or 0))
 
@@ -948,18 +949,18 @@ async def get_trainer_stats_dashboard(session: AsyncSession, trainer_id: int) ->
         "revenue_week_change_pct": revenue_week_change_pct,
         "bookings_today": bookings_today,
         "repeat_clients_30d": repeat_clients_30d,
-        "cancel_rate_30d": cancel_rate_30d,
+        "bookings_completed_month": bookings_completed_month,
+        "cancellations_month": cancellations_month,
+        "declines_month": declines_month,
+        "cancel_decline_rate_month_pct": cancel_decline_rate_month_pct,
+        "sessions_outcome_month": sessions_outcome_month,
         "client_requests_to_trainer_30d": client_requests_to_trainer_30d,
         "client_request_responses_30d": client_request_responses_30d,
-        "cancellations_7d": cancellations_7d,
-        "cancellations_30d": cancellations_30d,
         "free_slots_week": free_slots_week,
         "top_clients": top_clients,
         "unique_clients_30d": unique_clients_30d,
         "repeat_share_30d_pct": repeat_share_30d_pct,
         "pass_redemptions_30d": pass_redemptions_30d,
-        "bookings_completed_30d": bookings_completed_30d,
-        "bookings_held_30d": ok_cnt,
         "lead_response_rate_30d": lead_response_rate_30d,
         "revenue_calendar_month_cents": revenue_calendar_month_cents,
         "revenue_prev_calendar_month_cents": revenue_prev_calendar_month_cents,

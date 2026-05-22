@@ -92,6 +92,14 @@
         return html;
       }
 
+      function formatRatePct(v) {
+        if (v == null) return '—';
+        var n = Number(v);
+        if (isNaN(n)) return '—';
+        if (Math.abs(n - Math.round(n)) < 0.05) return Math.round(n) + '%';
+        return n.toFixed(1) + '%';
+      }
+
       function renderTrend(pct) {
         if (pct == null || pct === 0) return '';
         var cls = pct > 0 ? 'up' : 'down';
@@ -135,8 +143,8 @@
         if (load != null && load < 36 && wst >= 4) {
           tips.push('Загрузка слотов невысокая — напомните постоянным клиентам о свободных окнах или предложите разовую акцию.');
         }
-        if (d.cancel_rate_30d != null && d.cancel_rate_30d >= 14) {
-          tips.push('Доля отмен и отказов за 30 дней заметна — зафиксируйте правила в переписке и в описании услуги.');
+        if (d.cancel_decline_rate_month_pct != null && d.cancel_decline_rate_month_pct >= 14) {
+          tips.push('Доля отмен и отказов за календарный месяц заметна — зафиксируйте правила в переписке и в описании услуги.');
         }
         if ((d.free_slots_week || 0) >= 4 && (d.week_upcoming || 0) <= 2 && wst >= 5) {
           tips.push('Много свободных слотов при малом числе предстоящих занятий — хороший повод для поста или рассылки в Telegram.');
@@ -248,14 +256,20 @@
         html += '<div class="kpi-sub">Свободно слотов: <strong>' + (d.free_slots_week != null ? d.free_slots_week : '—') + '</strong></div>';
         html += '</div></div></div></div>';
 
-        html += '<div class="section"><div class="section-title">Итоги · 30 дней</div><div class="kpi-grid">';
-        html += '<div class="kpi-card"><div class="kpi-label">Новые клиенты</div><div class="kpi-value">' + (d.new_clients_30d || 0) + '</div><div class="kpi-sub">Первый визит</div></div>';
-        html += '<div class="kpi-card"><div class="kpi-label">Проведено занятий</div><div class="kpi-value">' + (d.bookings_completed_30d != null ? d.bookings_completed_30d : 0) + '</div><div class="kpi-sub">30 дн. по дате слота · только «проведено»</div></div>';
-        html += '<div class="kpi-card"><div class="kpi-label">Списаний абонемента</div><div class="kpi-value">' + (d.pass_redemptions_30d != null ? d.pass_redemptions_30d : 0) + '</div><div class="kpi-sub">Визиты по абонементу</div></div>';
-        html += '<div class="kpi-card"><div class="kpi-label">Отмены и отказы</div><div class="kpi-value">' + (d.cancellations_7d != null ? d.cancellations_7d : '0') + '</div><div class="kpi-sub">7 дн. · ' + (d.cancellations_30d != null ? d.cancellations_30d : 0) + ' за 30 дн.</div></div>';
-        html += '<div class="kpi-card"><div class="kpi-label">Доля отмен/отказов · 30 дн.</div><div class="kpi-value">' + (d.cancel_rate_30d != null ? d.cancel_rate_30d + '%' : '—') + '</div>';
-        html += '<div class="cancel-strip" aria-hidden="true"><div class="cancel-strip-fill" style="width:' + (d.cancel_rate_30d != null ? Math.min(100, d.cancel_rate_30d) : 0) + '%"></div></div>';
-        html += '<div class="kpi-sub">По дате слота; снятие постоянства/отвязка CRM не в доле отмен</div></div>';
+        var monthTitle = formatMonthTitle(d.month_start);
+        html += '<div class="section"><div class="section-title">Итоги · ' + monthTitle + '</div><div class="kpi-grid">';
+        html += '<div class="kpi-card"><div class="kpi-label">Новые клиенты</div><div class="kpi-value">' + (d.new_clients_30d || 0) + '</div><div class="kpi-sub">Первый визит · 30 дн.</div></div>';
+        html += '<div class="kpi-card"><div class="kpi-label">Проведено занятий</div><div class="kpi-value">' + (d.bookings_completed_month != null ? d.bookings_completed_month : 0) + '</div><div class="kpi-sub">Календарный месяц · только «проведено»</div></div>';
+        html += '<div class="kpi-card"><div class="kpi-label">Отмены</div><div class="kpi-value">' + (d.cancellations_month != null ? d.cancellations_month : 0) + '</div><div class="kpi-sub">За ' + monthTitle + ' · без снятия постоянства</div></div>';
+        html += '<div class="kpi-card"><div class="kpi-label">Отказы</div><div class="kpi-value">' + (d.declines_month != null ? d.declines_month : 0) + '</div><div class="kpi-sub">За ' + monthTitle + '</div></div>';
+        var ratePct = d.cancel_decline_rate_month_pct;
+        var rateFill = ratePct != null ? Math.min(100, ratePct) : 0;
+        html += '<div class="kpi-card"><div class="kpi-label">Доля отмен и отказов</div><div class="kpi-value">' + formatRatePct(ratePct) + '</div>';
+        html += '<div class="cancel-strip" aria-hidden="true"><div class="cancel-strip-fill" style="width:' + rateFill + '%"></div></div>';
+        var cdTotal = (d.cancellations_month || 0) + (d.declines_month || 0);
+        var outcomeBase = d.sessions_outcome_month != null ? d.sessions_outcome_month : 0;
+        html += '<div class="kpi-sub">' + cdTotal + ' из ' + outcomeBase + ' занятий с исходом · без будущих записей</div></div>';
+        html += '<div class="kpi-card"><div class="kpi-label">Списаний абонемента</div><div class="kpi-value">' + (d.pass_redemptions_30d != null ? d.pass_redemptions_30d : 0) + '</div><div class="kpi-sub">Визиты по абонементу · 30 дн.</div></div>';
         html += '<div class="kpi-card"><div class="kpi-label">Рейтинг</div><div class="kpi-value rating">' + renderStars(d.rating_avg) + '</div><div class="kpi-sub">' + (d.rating_count || 0) + ' отзывов</div></div>';
         html += '</div></div>';
 
