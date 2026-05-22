@@ -32,6 +32,30 @@ def normalize_client_bot_username(username: str | None) -> str:
 # --- Share ref: client recommends a trainer to a friend ---
 
 SHARE_REF_PREFIX = "share_ref_"
+WELCOME_REF_PREFIX = "welcome_ref_"
+
+
+def build_welcome_ref_payload(trainer_id: int) -> str:
+    """Permanent hub invite payload: welcome_ref_{trainer_id}."""
+    return f"{WELCOME_REF_PREFIX}{int(trainer_id)}"
+
+
+def build_trainer_universal_invite_link(
+    *,
+    client_bot_username: str | None,
+    trainer_id: int,
+) -> tuple[str | None, str | None]:
+    """
+    Same link as hub paperclip (GET /trainer/hub/universal-invite-link).
+    Returns (https t.me URL, error) where error is missing_username or invalid_trainer_id.
+    """
+    u = normalize_client_bot_username(client_bot_username)
+    if not u:
+        return None, "missing_username"
+    if int(trainer_id) <= 0:
+        return None, "invalid_trainer_id"
+    payload = build_welcome_ref_payload(int(trainer_id))
+    return f"https://t.me/{u}?start={payload}", None
 
 
 def build_share_ref_payload(trainer_id: int) -> str:

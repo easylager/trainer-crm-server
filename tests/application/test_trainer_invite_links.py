@@ -2,6 +2,7 @@
 
 from src.application.trainer_invite_links import (
     build_trainer_invite_links,
+    build_trainer_universal_invite_link,
     build_client_start_payload,
     normalize_client_bot_username,
 )
@@ -84,3 +85,21 @@ def test_build_links_service_optional_zero_in_payload() -> None:
         assert links is not None
         assert links.client_bot_deep_link == "https://t.me/B?start=client_1_0_1"
         assert links.catalog_page_url == "https://x.com/webapp/catalog"
+
+
+def test_build_universal_invite_link_matches_hub_paperclip() -> None:
+    link, err = build_trainer_universal_invite_link(
+        client_bot_username="@ClientBot",
+        trainer_id=9,
+    )
+    assert err is None
+    assert link == "https://t.me/ClientBot?start=welcome_ref_9"
+
+
+def test_build_universal_invite_link_missing_username() -> None:
+    link, err = build_trainer_universal_invite_link(
+        client_bot_username=None,
+        trainer_id=9,
+    )
+    assert link is None
+    assert err == "missing_username"

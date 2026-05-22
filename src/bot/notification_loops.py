@@ -1170,7 +1170,7 @@ async def process_trainer_session_wrapup_round(trainer_bot: Bot) -> None:
     One pass: «Занятие подходит к концу» when remaining slot time is in the fixed band (Europe/Minsk).
 
     Band is ``TRAINER_SESSION_WRAPUP_REMAINING_SEC_MIN``–``TRAINER_SESSION_WRAPUP_REMAINING_SEC_MAX`` seconds
-    before slot end (default 60–300 s = 1–5 minutes); independent of slot duration.
+    before slot end (default 120–180 s = 2–3 minutes); independent of slot duration.
 
     Does **not** defer on per-trainer quiet windows — those skips caused wrap-up to be missed while «завершено» still fired.
     """

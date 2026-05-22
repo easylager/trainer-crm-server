@@ -45,7 +45,7 @@ from src.application.booking_use_cases import (
 )
 from src.application.client_dossier_use_cases import add_client_entry_with_date
 from src.application.trainer_client_invite_tracking import record_trainer_client_invite_link_first_copy
-from src.application.trainer_invite_links import build_trainer_invite_links
+from src.application.trainer_invite_links import build_trainer_invite_links, build_trainer_universal_invite_link
 from src.application.recurring_use_cases import (
     apply_recurring_bookings_for_week,
     cancel_recurring_client_slot,
@@ -53,7 +53,6 @@ from src.application.recurring_use_cases import (
     get_active_recurring_for_booking,
     materialize_recurring_horizon,
 )
-from src.application.welcome_link_use_cases import WELCOME_TOKEN_TYPE_CLIENT_BIND, create_welcome_link_token
 from src.application.client_request_use_cases import (
     add_trainer_pending_request_booking,
     clear_trainer_pending_request_booking,
@@ -2144,8 +2143,8 @@ async def on_decline_booking_start(callback: CallbackQuery) -> None:
 
 @router.callback_query(lambda c: c.data and c.data.startswith(BOOKING_INVITE_CLIENT_PREFIX))
 async def on_booking_invite_client_to_bot(callback: CallbackQuery) -> None:
-    """Trainer wants to invite client: generate welcome link token + client deep link."""
-    await callback.answer("Генерирую ссылку...")
+    """Trainer invites client to bot: same permanent welcome_ref link as hub paperclip."""
+    await callback.answer("Ссылка...")
     booking_id = safe_parse_id((callback.data or "").replace(BOOKING_INVITE_CLIENT_PREFIX, "").strip())
     if booking_id is None:
         logger.warning("on_booking_invite_client_to_bot: invalid booking_id %s", callback.data)
@@ -2160,28 +2159,26 @@ async def on_booking_invite_client_to_bot(callback: CallbackQuery) -> None:
     async with async_session_factory() as session:
         booking = await get_booking_with_slot(session, booking_id, trainer_id)
     if not booking or booking.get("client_id") is None:
-        logger.warning("on_booking_invite_client_to_bot: booking %s not found for trainer %s or client missing", booking_id, trainer_id)
+        logger.warning(
+            "on_booking_invite_client_to_bot: booking %s not found for trainer %s or client missing",
+            booking_id,
+            trainer_id,
+        )
         await callback.message.answer("Ошибка: запись не найдена или клиент не привязан.")
         return
     client_id = booking["client_id"]
-    # Use existing client_id to create a bind token.
+    settings = Settings()
+    deep_link, err = build_trainer_universal_invite_link(
+        client_bot_username=settings.client_bot_username,
+        trainer_id=int(trainer_id),
+    )
+    if err == "missing_username" or not deep_link:
+        await callback.message.answer(
+            "Ошибка: не настроено имя клиентского бота для ссылок. Свяжитесь с администратором."
+        )
+        return
     async with async_session_factory() as session:
         client_card = await get_trainer_client_for_card(session, trainer_id, client_id)
-        token_uuid = await create_welcome_link_token(
-            session,
-            trainer_id=trainer_id,
-            token_type=WELCOME_TOKEN_TYPE_CLIENT_BIND,
-            client_id=client_id,
-        )
-        if not token_uuid:
-            await callback.message.answer("Не удалось сгенерировать ссылку. Попробуйте позже.")
-            return
-        client_bot_username = (Settings().client_bot_username or "").strip().lstrip("@")
-        if not client_bot_username:
-            await callback.message.answer("Ошибка: не настроено имя клиентского бота для ссылок. Свяжитесь с администратором.")
-            return
-        deep_link = f"https://t.me/{client_bot_username}?start=welcome_t_{token_uuid}"
-    # Send trainer the deep link.
     await callback.message.answer(
         msg.TRAINER_CLIENT_INVITE_LINK_FOR_TRAINER.format(
             client_name=html.escape(_format_trainer_client_row_display_name(client_card)),

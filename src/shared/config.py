@@ -19,10 +19,10 @@ def _env_bool_benchmark(v: Any) -> bool:
 BenchmarkLogFlag = Annotated[bool, BeforeValidator(_env_bool_benchmark)]
 NotificationQuietHoursBypassFlag = Annotated[bool, BeforeValidator(_env_bool_benchmark)]
 
-# Trainer «подходит к концу»: уведомление только когда до конца слота осталось от 1 до 5 минут (не зависит от длительности слота).
-TRAINER_SESSION_WRAPUP_REMAINING_SEC_MIN = 60  # inclusive — не слать в последнюю минуту
-TRAINER_SESSION_WRAPUP_REMAINING_SEC_MAX = 300  # inclusive — не слать раньше чем за 5 минут до конца
-TRAINER_SESSION_WRAPUP_POLL_INTERVAL_SEC = 12
+# Trainer «подходит к концу»: уведомление когда до конца слота осталось 2–3 минуты (не зависит от длительности слота).
+TRAINER_SESSION_WRAPUP_REMAINING_SEC_MIN = 120  # inclusive — не слать ближе чем за 2 минуты до конца
+TRAINER_SESSION_WRAPUP_REMAINING_SEC_MAX = 180  # inclusive — не слать раньше чем за 3 минуты до конца
+TRAINER_SESSION_WRAPUP_POLL_INTERVAL_SEC = 8
 
 
 class Settings(BaseSettings):

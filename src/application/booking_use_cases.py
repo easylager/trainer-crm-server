@@ -4639,11 +4639,10 @@ async def list_bookings_for_trainer_session_wrapup(
     Confirmed/pending bookings in the fixed wall-clock band before slot end (Europe/Minsk).
 
     Eligible when remaining time ``R = slot_end - now`` satisfies
-    ``remaining_seconds_min <= R <= remaining_seconds_max`` (defaults 60–300 s = 1–5 minutes).
+    ``remaining_seconds_min <= R <= remaining_seconds_max`` (defaults 120–180 s = 2–3 minutes).
 
-    This does **not** depend on slot duration. It does **not** guarantee delivery: if wrap-up is never
-    sent during this band (worker/Telegram/DB issues), the booking still auto-becomes ``completed``
-    after ``slot_end`` — trainer then only gets «Занятие завершено» for that booking.
+    All CRM clients qualify (phone-only or Telegram-linked); ``client_telegram_id`` in the row
+    may be NULL — wrap-up is a trainer push, not a client bot message.
     """
     rmin = int(remaining_seconds_min)
     rmax = int(remaining_seconds_max)
@@ -4667,7 +4666,6 @@ async def list_bookings_for_trainer_session_wrapup(
             LEFT JOIN services srv ON srv.id = b.service_id
             WHERE b.status IN ('pending', 'confirmed') AND s.status IN ('available', 'booked')
               AND b.trainer_session_wrapup_sent_at IS NULL
-              AND c.telegram_id IS NOT NULL
               AND NOT EXISTS (SELECT 1 FROM booking_problem_reports pr WHERE pr.booking_id = b.id)
               AND """ + _SQL_SLOT_END_TS + """ > CURRENT_TIMESTAMP
               AND CURRENT_TIMESTAMP >= """ + _SQL_SLOT_END_TS + """ - ((INTERVAL '1 second') * :rmax)

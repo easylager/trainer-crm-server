@@ -325,7 +325,11 @@ from src.application.trainer_schedule_use_cases import (
 )
 from src.application.recurring_use_cases import apply_recurring_bookings_for_week
 from src.application.welcome_link_use_cases import WELCOME_TOKEN_TYPE_CLIENT_BIND, create_welcome_link_token
-from src.application.trainer_invite_links import build_trainer_invite_links, build_trainer_share_link
+from src.application.trainer_invite_links import (
+    build_trainer_invite_links,
+    build_trainer_share_link,
+    build_trainer_universal_invite_link,
+)
 from src.application.client_share_message import (
     compose_client_share_message,
     share_body_for_native_share_dialog,
@@ -4698,8 +4702,12 @@ async def get_trainer_hub_universal_invite_link(
     settings = Settings()
     if not settings.client_bot_username:
         return {"link": None}
-    username = settings.client_bot_username.lstrip("@")
-    link = f"https://t.me/{username}?start=welcome_ref_{trainer_id}"
+    link, err = build_trainer_universal_invite_link(
+        client_bot_username=settings.client_bot_username,
+        trainer_id=int(trainer_id),
+    )
+    if err or not link:
+        return {"link": None}
     return {"link": link}
 
 
