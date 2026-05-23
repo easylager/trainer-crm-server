@@ -143,6 +143,7 @@ async def list_trainer_issued_items(
             product_name = (row[7] or "").strip() or "Абонемент"
             client_id = int(row[1]) if row[1] is not None else None
             client_label = _client_label(row[10], client_id)
+            bucket = _pass_status_bucket(st)
             items.append(
                 {
                     "kind": "pass",
@@ -150,6 +151,7 @@ async def list_trainer_issued_items(
                     "issued_at": _iso(row[4]),
                     "expires_at": _iso(row[5]),
                     "status": st,
+                    "status_bucket": bucket,
                     "status_label_ru": _PASS_STATUS_LABEL_RU.get(st, st),
                     "client_id": client_id,
                     "client_label_ru": client_label,
@@ -224,6 +226,7 @@ async def list_trainer_issued_items(
                 balance_line = f"остаток {remaining_int / 100:.2f}".replace(".00", "") + " BYN"
             else:
                 balance_line = f"номинал {amount / 100:.2f}".replace(".00", "") + " BYN"
+            bucket = _cert_status_bucket(st)
             items.append(
                 {
                     "kind": "certificate",
@@ -231,6 +234,7 @@ async def list_trainer_issued_items(
                     "issued_at": _iso(row[1]),
                     "expires_at": _iso(row[2]),
                     "status": st,
+                    "status_bucket": bucket,
                     "status_label_ru": _CERT_STATUS_LABEL_RU.get(st, st),
                     "client_id": client_id,
                     "client_label_ru": client_label,

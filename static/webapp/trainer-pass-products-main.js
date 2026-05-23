@@ -100,6 +100,7 @@
         issuedPage: 0,
         issuedTotal: 0,
         issuedHasMore: false,
+        issuedActiveCount: 0,
       };
 
       function postClientInviteLinkFirstCopyRecorded() {
@@ -270,6 +271,30 @@
         }
       }
 
+      function issuedStatusBucket(it) {
+        if (it.status_bucket === 'active' || it.status_bucket === 'closed') return it.status_bucket;
+        if (it.kind === 'pass') return it.status === 'active' ? 'active' : 'closed';
+        if (it.kind === 'certificate') {
+          var st = it.status || '';
+          return (st === 'active' || st === 'issued' || st === 'activated') ? 'active' : 'closed';
+        }
+        return 'closed';
+      }
+
+      function renderIssuedSummary() {
+        var statusEl = document.getElementById('issuedStatusFilter');
+        var statusVal = statusEl ? statusEl.value : 'all';
+        if (statusVal !== 'all' || !state.issuedTotal) return '';
+        var active = state.issuedActiveCount != null ? state.issuedActiveCount : 0;
+        var closed = Math.max(0, state.issuedTotal - active);
+        return '<div class="pp-issued-summary" role="note">' +
+          '<span class="pp-issued-summary-dot pp-issued-summary-dot--live">' +
+          escapeHtml(String(active)) + ' активных</span>' +
+          '<span class="pp-issued-summary-dot pp-issued-summary-dot--closed">' +
+          escapeHtml(String(closed)) + ' закрытых</span>' +
+          '</div>';
+      }
+
       function renderIssuedList() {
         var wrap = document.getElementById('issuedListContent');
         var hintEl = document.getElementById('issuedHint');
@@ -289,14 +314,18 @@
           renderIssuedPagination();
           return;
         }
-        var html = '';
+        var html = renderIssuedSummary();
         state.issuedItems.forEach(function(it) {
           var kindCls = it.kind === 'certificate' ? 'pp-issued-card--cert' : 'pp-issued-card--pass';
-          html += '<div class="pp-issued-card ' + kindCls + '">';
+          var bucket = issuedStatusBucket(it);
+          var lifeCls = bucket === 'active' ? 'pp-issued-card--live' : 'pp-issued-card--closed';
+          var statusCls = bucket === 'active' ? 'pp-issued-status--live' : 'pp-issued-status--closed';
+          html += '<div class="pp-issued-card ' + kindCls + ' ' + lifeCls + '">';
           html += '<div class="pp-issued-card-head">';
           html += '<span class="pp-issued-kind">' + escapeHtml(issuedKindLabel(it.kind)) + '</span>';
-          html += '<span class="pp-issued-date">' + escapeHtml(formatIssuedDate(it.issued_at)) + '</span>';
+          html += '<span class="pp-issued-status ' + statusCls + '">' + escapeHtml(it.status_label_ru || it.status || '—') + '</span>';
           html += '</div>';
+          html += '<div class="pp-issued-date">' + escapeHtml(formatIssuedDate(it.issued_at)) + '</div>';
           html += '<div class="pp-issued-title">' + escapeHtml(it.product_name || '—') + '</div>';
           html += '<div class="pp-issued-meta">Клиент: ' + escapeHtml(it.client_label_ru || '—') + '</div>';
           if (it.client_phone) {
@@ -325,7 +354,6 @@
           if (it.expires_at) {
             html += '<div class="pp-issued-meta">Срок: до ' + escapeHtml(formatIssuedDate(it.expires_at)) + '</div>';
           }
-          html += '<div class="pp-issued-status">' + escapeHtml(it.status_label_ru || it.status || '—') + '</div>';
           html += '</div>';
         });
         wrap.innerHTML = html;
@@ -366,6 +394,7 @@
             }
             state.issuedItems = (o.data && o.data.items) ? o.data.items : [];
             state.issuedTotal = (o.data && typeof o.data.total === 'number') ? o.data.total : state.issuedItems.length;
+            state.issuedActiveCount = (o.data && typeof o.data.active_count === 'number') ? o.data.active_count : 0;
             state.issuedHasMore = !!(o.data && o.data.has_more);
             state.issuedLoaded = true;
             renderIssuedList();

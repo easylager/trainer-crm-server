@@ -89,11 +89,13 @@ async def test_list_trainer_issued_items_merges_pass_and_certificate(db_session:
     pass_row = next(it for it in data["items"] if it["kind"] == "pass")
     assert pass_row["sessions_remaining"] == 5
     assert pass_row["sessions_total"] == 8
+    assert pass_row["status_bucket"] == "active"
     assert "Ann" in pass_row["client_label_ru"]
 
     cert_row = next(it for it in data["items"] if it["kind"] == "certificate")
     assert cert_row["amount_remaining_cents"] == 7000
     assert cert_row["code"] == "CERT-TEST-1"
+    assert cert_row["status_bucket"] == "active"
 
     active_only = await list_trainer_issued_items(db_session, trainer_id, status="active")
     assert active_only["total"] == 2

@@ -115,6 +115,7 @@ from src.application.welcome_link_use_cases import (
 from src.infrastructure.db.models import DEMAND_SOURCE_CLIENT_APP, DEMAND_SOURCE_CLIENT_SHARE, SUPPORT_FROM_CLIENT
 from src.application.family_access_use_cases import attach_family_member_from_invite
 from src.application.trainer_client_registration_notify import notify_trainers_family_access_member_joined
+from src.application.trainer_rating_notify import notify_trainer_client_rating
 from src.bot.handlers.relay_handlers import (
     maybe_route_client_relay_text_reply,
     on_client_bot_relay_close_callback,
@@ -1925,9 +1926,20 @@ async def on_feedback_rating(callback: CallbackQuery) -> None:
             rating,
             review_text=None,
         )
+        if ok:
+            await notify_trainer_client_rating(
+                session=db_session,
+                booking_id=booking_id,
+                client_telegram_id=telegram_id,
+                rating=rating,
+                review_text=None,
+                kind="initial",
+            )
     if not ok:
         await callback.message.answer(msg.CLIENT_ERROR_TRY_AGAIN)
         return
+    state["rating_notify_sent"] = True
+    _feedback_state[telegram_id] = state
     audit_log(
         "trainer.rated",
         ACTOR_CLIENT_BOT,
@@ -1963,6 +1975,7 @@ async def on_feedback_review_message(message: Message) -> None:
     if not state or "rating" not in state:
         return
     review_text = (message.text or "").strip() or None
+    booking_id = state.get("booking_id")
     async with async_session_factory() as db_session:
         await add_trainer_rating(
             db_session,
@@ -1971,6 +1984,16 @@ async def on_feedback_review_message(message: Message) -> None:
             state["rating"],
             review_text=review_text,
         )
+        if booking_id is not None and review_text:
+            notify_kind = "review_added" if state.get("rating_notify_sent") else "with_review"
+            await notify_trainer_client_rating(
+                session=db_session,
+                booking_id=int(booking_id),
+                client_telegram_id=telegram_id,
+                rating=int(state["rating"]),
+                review_text=review_text,
+                kind=notify_kind,
+            )
     await message.answer(msg.CLIENT_FEEDBACK_THANKS)
 
 

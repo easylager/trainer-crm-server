@@ -3002,6 +3002,84 @@ TRAINER_CLIENT_FAVORITE_ADDED_HTML = (
     "маленькая победа, которую приятно заметить 🙌"
 )
 TRAINER_BUTTON_FAVORITE_STATS_WEBAPP = "Статистика"
+
+
+def _rating_stars_line(rating: int) -> str:
+    r = max(1, min(5, int(rating)))
+    return f"{'⭐' * r} <b>({r} из 5)</b>"
+
+
+def format_trainer_client_rating_received_html(
+    *,
+    client_name: str,
+    date: str,
+    day: str,
+    time: str,
+    duration_minutes: int | None,
+    service_name: str | None,
+    arena_display: str | None,
+    rating: int,
+    review_text: str | None,
+) -> str:
+    """Trainer push: client rated a completed session (with optional review on first message)."""
+    cn = html.escape((client_name or "").strip() or "Клиент")
+    ds = html.escape(date)
+    dy = html.escape(day)
+    ts = html.escape(time)
+    dur = int(duration_minutes) if duration_minutes is not None else None
+    dur_part = f" – {dur} мин." if dur and dur > 0 else ""
+    svc = (service_name or "").strip()
+    service_line = f"🎯 {html.escape(svc)}\n" if svc and svc != "—" else ""
+    ar = (arena_display or "").strip()
+    arena_line = f"📍 {html.escape(ar)}\n" if ar and ar != "—" else ""
+    stars = _rating_stars_line(rating)
+    review_block = ""
+    review_clean = (review_text or "").strip()
+    if review_clean:
+        review_block = (
+            "\n\n💬 <b>Отзыв клиента</b>\n"
+            f"«{html.escape(review_clean)}»"
+        )
+    else:
+        review_block = (
+            "\n\n<i>Текста отзыва нет — клиент поставил только оценку.</i>"
+        )
+    return (
+        "⭐ <b>Новая оценка после занятия</b>\n\n"
+        f"📅 <b>{ds} ({dy}) {ts}</b>{dur_part}\n"
+        f"👤 <b>{cn}</b>\n"
+        f"{service_line}"
+        f"{arena_line}"
+        "\n"
+        f"Оценка: {stars}"
+        f"{review_block}\n\n"
+        "Отзывы помогают новым клиентам решиться на запись — спасибо за работу на занятии 🙌"
+    )
+
+
+def format_trainer_client_rating_review_added_html(
+    *,
+    client_name: str,
+    date: str,
+    day: str,
+    time: str,
+    rating: int,
+    review_text: str,
+) -> str:
+    """Follow-up when client adds review text after stars were already saved."""
+    cn = html.escape((client_name or "").strip() or "Клиент")
+    ds = html.escape(date)
+    dy = html.escape(day)
+    ts = html.escape(time)
+    stars = _rating_stars_line(rating)
+    review_clean = html.escape((review_text or "").strip())
+    return (
+        "💬 <b>Клиент дополнил отзыв</b>\n\n"
+        f"📅 <b>{ds} ({dy}) {ts}</b>\n"
+        f"👤 <b>{cn}</b>\n\n"
+        f"Оценка: {stars}\n\n"
+        f"«{review_clean}»"
+    )
 TRAINER_SUBSCRIPTION_REMINDER = (
     "💳 <b>Подписка заканчивается {expires_date}</b>\n\n"
     "Продлите тариф — снова откроются расписание, база клиентов и онлайн-запись. "
