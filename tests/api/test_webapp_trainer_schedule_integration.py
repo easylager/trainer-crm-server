@@ -1673,11 +1673,11 @@ async def test_trainer_booking_quick_400_when_time_occupied(
 
 
 @pytest.mark.asyncio
-async def test_trainer_booking_quick_400_overlap_empty_slot(
+async def test_trainer_booking_quick_replaces_empty_overlap_slot(
     app_use_test_db,
     db_session,
 ) -> None:
-    """Quick book interval must not overlap an existing slot (15:15 vs 15:00–16:00)."""
+    """Quick book at 15:15 removes empty 15:00–16:00 slot and creates the booking."""
     from tests.conftest import belarus_test_phone, unique_test_telegram_id
     from tests.db_catalog_helpers import require_seed_arena_city_name, require_seed_service_id
 
@@ -1733,8 +1733,11 @@ async def test_trainer_booking_quick_400_overlap_empty_slot(
                     "service_id": service_id,
                 },
             )
-    assert resp.status_code == 400
-    assert "пересека" in (resp.json().get("detail") or "").lower()
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body.get("success") is True
+    assert body.get("booking_id")
+    assert body.get("slot_id")
 
 
 @pytest.mark.asyncio

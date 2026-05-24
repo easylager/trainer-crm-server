@@ -1456,6 +1456,10 @@ def format_client_booking_completed_notice_html(
     trainer_name: str,
     service_name: str | None,
     streak_weeks: int | None = None,
+    deduction_outcome: str | None = None,
+    pass_sessions_remaining: int | None = None,
+    cert_amount_cents: int | None = None,
+    cert_remaining_cents: int | None = None,
 ) -> str:
     """Push after session is marked completed (auto or trainer)."""
     ds = html.escape(date)
@@ -1472,11 +1476,25 @@ def format_client_booking_completed_notice_html(
         bonus = format_client_week_streak_bonus_ru(int(streak_weeks))
         if bonus:
             streak_part = bonus
+    payment_line = ""
+    oc = (deduction_outcome or "").strip().lower()
+    if oc in ("pass", "cert"):
+        payment_line = format_session_payment_notice_html(
+            phase="completed",
+            outcome=oc,
+            pass_sessions_remaining=pass_sessions_remaining,
+            cert_amount_cents=cert_amount_cents,
+            cert_remaining_cents=cert_remaining_cents,
+            for_client=True,
+        )
+        if payment_line:
+            payment_line = payment_line.rstrip("\n") + "\n"
     return (
         "🏁 <b>Занятие завершено</b>\n\n"
         f"📅 <b>{ds}</b> ({dy}) · {ts}{dur_part}\n"
         f"👤 <b>Тренер:</b> {tn}\n"
         f"{svc_line}"
+        f"{payment_line}"
         f"{streak_part}"
         "\nОставьте отзыв ⭐⭐⭐⭐⭐ — кнопка ниже. Можно также написать тренеру."
     )
@@ -1658,6 +1676,71 @@ CLIENT_FEEDBACK_SKIP = "Пропустить"
 CLIENT_FEEDBACK_THANKS = "Спасибо за отзыв!"
 
 
+def format_session_payment_notice_html(
+    *,
+    phase: str,
+    outcome: str,
+    pass_sessions_remaining: int | None = None,
+    cert_amount_cents: int | None = None,
+    cert_remaining_cents: int | None = None,
+    booking_price_cents: int | None = None,
+    for_client: bool = False,
+) -> str:
+    """
+    Payment line for session wrap-up (upcoming) or completion (completed) pushes.
+    outcome: pass | cert | one_off | none.
+    """
+    oc = (outcome or "").strip().lower()
+    ph = (phase or "").strip().lower()
+
+    if oc == "pass":
+        if ph == "completed":
+            line = "💳 <b>Списано 1 занятие с абонемента.</b>"
+            if pass_sessions_remaining is not None:
+                line += f" Осталось: <b>{int(pass_sessions_remaining)}</b>."
+        else:
+            line = "💳 <b>Оплата: абонемент.</b> При завершении спишется 1 занятие."
+        return line + "\n"
+
+    if oc == "cert":
+        if ph == "completed":
+            if cert_amount_cents is not None and cert_amount_cents > 0:
+                amt = format_rubles_byn_display(cert_amount_cents / 100.0)
+                line = f"💳 <b>Списано {html.escape(amt)} с сертификата.</b>"
+            else:
+                line = "💳 <b>Списание с сертификата выполнено.</b>"
+            if cert_remaining_cents is not None and cert_remaining_cents > 0:
+                rem = format_rubles_byn_display(cert_remaining_cents / 100.0)
+                line += f" Остаток: <b>{html.escape(rem)}</b>."
+            elif cert_remaining_cents == 0:
+                line += " Сертификат использован полностью."
+        else:
+            line = "💳 <b>Оплата: сертификат.</b> При завершении спишется сумма занятия."
+        return line + "\n"
+
+    if oc == "one_off":
+        if booking_price_cents is not None and booking_price_cents > 0:
+            ps = format_rubles_byn_display(booking_price_cents / 100.0)
+            if ph == "completed":
+                return f"💳 <b>Оплата:</b> разовое занятие — {html.escape(ps)}\n"
+            return f"💳 <b>К оплате:</b> {html.escape(ps)}\n"
+        return ""
+
+    if oc == "none" and ph == "upcoming" and not for_client:
+        return (
+            "ℹ️ <b>Без списания с абонемента</b>\n"
+            "⚠️ У клиента нет активного абонемента или сертификата на эту услугу.\n"
+        )
+
+    if oc == "none" and ph == "completed" and not for_client:
+        return (
+            "ℹ️ <b>Занятие закрыто без списания абонемента</b>\n"
+            "⚠️ <b>Причина:</b> у клиента нет активного абонемента на эту услугу.\n"
+        )
+
+    return ""
+
+
 def format_trainer_booking_completed_html(
     *,
     client_name: str,
@@ -1670,6 +1753,10 @@ def format_trainer_booking_completed_html(
     arena_display: str | None,
     include_quick_rebook_line: bool = False,
     append_no_pass_notice: bool = False,
+    deduction_outcome: str | None = None,
+    pass_sessions_remaining: int | None = None,
+    cert_amount_cents: int | None = None,
+    cert_remaining_cents: int | None = None,
 ) -> str:
     """Telegram HTML for trainer push after a session is marked completed."""
     cn = html.escape((client_name or "").strip() or "Клиент")
@@ -1698,13 +1785,21 @@ def format_trainer_booking_completed_html(
             "\n<b>Договорились о новом времени на месте?</b> "
             "Кнопка «Записать снова» — быстрая запись с этим клиентом на любой день.\n"
         )
-    no_pass_tail = ""
-    if append_no_pass_notice:
-        no_pass_tail = (
-            "\n\n"
-            "ℹ️ <b>Занятие закрыто без списания абонемента</b>\n"
-            "⚠️ <b>Причина:</b> у клиента нет активного абонемента на эту услугу."
+    payment_outcome = (deduction_outcome or "").strip().lower()
+    if not payment_outcome and append_no_pass_notice:
+        payment_outcome = "none"
+    payment_line = ""
+    if payment_outcome:
+        payment_line = format_session_payment_notice_html(
+            phase="completed",
+            outcome=payment_outcome,
+            pass_sessions_remaining=pass_sessions_remaining,
+            cert_amount_cents=cert_amount_cents,
+            cert_remaining_cents=cert_remaining_cents,
+            for_client=False,
         )
+        if payment_line:
+            payment_line = "\n\n" + payment_line.rstrip("\n")
     return (
         "🏁 <b>Занятие завершено</b>\n\n"
         f"📅 <b>{ds} ({dy}) {ts}</b>{dur_part}\n"
@@ -1714,7 +1809,7 @@ def format_trainer_booking_completed_html(
         f"{rebook}"
         "\n"
         "Оставьте заметку в карточке клиента — кнопка ниже. При необходимости напишите клиенту."
-        f"{no_pass_tail}"
+        f"{payment_line}"
     )
 
 
@@ -1730,6 +1825,7 @@ def format_trainer_booking_session_wrapup_html(
     booking_price_cents: int | None = None,
     arena_display: str | None,
     include_quick_rebook_line: bool = False,
+    expected_payment_class: str | None = None,
 ) -> str:
     """Telegram HTML for trainer push before slot end (repeat booking CTA). Timing: notification_service adaptive pre-end window + fast poll."""
     cn = html.escape((client_name or "").strip() or "Клиент")
@@ -1752,11 +1848,28 @@ def format_trainer_booking_session_wrapup_html(
     ar = (arena_display or "").strip()
     if ar and ar != "—":
         arena_line = f"📍 {html.escape(ar)}\n"
+    pc = (expected_payment_class or "").strip().upper()
+    payment_outcome = {
+        "PASS": "pass",
+        "CERT": "cert",
+        "ONE_OFF": "one_off",
+        "NONE": "none",
+    }.get(pc, "")
     payment_line = ""
-    if booking_price_cents is not None:
-        byn = booking_price_cents / 100.0
-        ps = format_rubles_byn_display(byn)
-        payment_line = f"💳 <b>К оплате:</b> {html.escape(ps)}\n"
+    if payment_outcome:
+        payment_line = format_session_payment_notice_html(
+            phase="upcoming",
+            outcome=payment_outcome,
+            booking_price_cents=booking_price_cents,
+            for_client=False,
+        )
+    elif booking_price_cents is not None:
+        payment_line = format_session_payment_notice_html(
+            phase="upcoming",
+            outcome="one_off",
+            booking_price_cents=booking_price_cents,
+            for_client=False,
+        )
     rebook = ""
     if include_quick_rebook_line:
         rebook = (

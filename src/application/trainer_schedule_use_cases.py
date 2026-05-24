@@ -600,6 +600,37 @@ def _intervals_overlap_half_open(a0: int, a1: int, b0: int, b1: int) -> bool:
     return a0 < b1 and b0 < a1
 
 
+async def _delete_empty_individual_slot(
+    session: AsyncSession,
+    trainer_id: int,
+    slot_id: int,
+) -> None:
+    """Drop an available individual slot with no pending/confirmed bookings."""
+    r = await session.execute(
+        text(
+            """
+            SELECT s.capacity,
+              (SELECT COUNT(*)::int FROM bookings b
+               WHERE b.slot_id = s.id AND b.status IN ('pending', 'confirmed')) AS active_cnt
+            FROM slots s
+            WHERE s.id = :sid AND s.trainer_id = :tid AND s.status != 'cancelled'
+            """
+        ),
+        {"sid": slot_id, "tid": trainer_id},
+    )
+    row = r.fetchone()
+    if not row:
+        return
+    cap = max(1, int(row[0] or 1))
+    active_cnt = int(row[1] or 0)
+    if cap > 1 or active_cnt >= 1:
+        raise ValueError("Это время уже занято.")
+    await session.execute(
+        text("DELETE FROM slots WHERE id = :sid AND trainer_id = :tid"),
+        {"sid": slot_id, "tid": trainer_id},
+    )
+
+
 async def ensure_individual_slot_for_quick_book(
     session: AsyncSession,
     trainer_id: int,
@@ -612,12 +643,15 @@ async def ensure_individual_slot_for_quick_book(
 ) -> int:
     """
     Returns slot_id for an individual slot at start_minutes (arena schedule grid, same rules as schedule editor).
-    Reuses an existing empty slot if it matches the same [start, end) interval.
+    Reuses an existing empty slot when the interval matches; updates ``arena_id`` when the trainer picks another venue.
+
+    Empty overlapping slots on other venues (or partial overlaps) are removed automatically so the trainer can
+    book without manually deleting free windows first. Booked or group slots still block the interval.
 
     ``allow_off_grid_interval``: skip arena/uniform grid checks — used when copying an interval from an existing
-    booking («same time next week» / precise-time sessions); overlap rules still apply.
+    booking («same time next week» / precise-time sessions).
 
-    Raises ValueError on invalid time, group slot, booked slot, or interval overlap.
+    Raises ValueError on invalid time, group slot, or occupied interval.
     """
     dm = int(duration_minutes)
     if allow_off_grid_interval:
@@ -673,6 +707,10 @@ async def ensure_individual_slot_for_quick_book(
         ),
         {"tid": trainer_id, "d": slot_date},
     )
+    exact_reuse_id: int | None = None
+    exact_arena_update_id: int | None = None
+    partial_remove_ids: list[int] = []
+
     for row in r.fetchall():
         sid = int(row[0])
         sm = int(row[1])
@@ -691,17 +729,35 @@ async def ensure_individual_slot_for_quick_book(
             raise ValueError(
                 "На это время уже есть групповой слот — используйте расписание.",
             )
-        if sm == start_minutes and em == new_end:
-            if row_effective_arena != slot_arena_id:
-                raise ValueError(
-                    "На это время уже есть слот на другой площадке. Выберите другое время или другую арену.",
-                )
-            if active_cnt >= 1:
-                raise ValueError("Это время уже занято.")
-            return sid
         if active_cnt >= 1:
             raise ValueError("Это время уже занято.")
-        raise ValueError("Время пересекается с другим слотом в расписании.")
+        if sm == start_minutes and em == new_end:
+            if row_effective_arena == slot_arena_id:
+                exact_reuse_id = sid
+            else:
+                exact_arena_update_id = sid
+            continue
+        partial_remove_ids.append(sid)
+
+    keep_ids = {i for i in (exact_reuse_id, exact_arena_update_id) if i is not None}
+    for sid in partial_remove_ids:
+        if sid in keep_ids:
+            continue
+        await _delete_empty_individual_slot(session, trainer_id, sid)
+
+    if exact_reuse_id is not None:
+        return exact_reuse_id
+    if exact_arena_update_id is not None:
+        await session.execute(
+            text(
+                """
+                UPDATE slots SET arena_id = :aid
+                WHERE id = :sid AND trainer_id = :tid
+                """
+            ),
+            {"aid": slot_arena_id, "sid": exact_arena_update_id, "tid": trainer_id},
+        )
+        return exact_arena_update_id
 
     r2 = await session.execute(
         text(

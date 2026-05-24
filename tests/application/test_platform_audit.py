@@ -7,12 +7,13 @@ import asyncio
 import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import ProgrammingError
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.application.platform_audit_use_cases import (
     insert_platform_audit_from_record,
     list_platform_audit_events_for_admin,
 )
+from src.application import platform_audit_use_cases as platform_audit_mod
 from src.shared.audit import ACTOR_CLIENT_BOT, audit_log
 
 
@@ -94,3 +95,12 @@ async def test_persist_audit_record_direct(db_session: AsyncSession) -> None:
     after = await db_session.execute(text("SELECT COUNT(*) FROM platform_audit_events"))
     n1 = int(after.scalar() or 0)
     assert n1 >= n0 + 1
+
+
+def test_get_audit_sessionmaker_returns_sessionmaker_not_function() -> None:
+    """Regression: module-level name must not shadow the lazy factory function."""
+    platform_audit_mod._audit_sessionmaker = None
+    platform_audit_mod._audit_engine = None
+    maker = platform_audit_mod._get_audit_sessionmaker()
+    assert isinstance(maker, async_sessionmaker)
+    assert maker is not platform_audit_mod._get_audit_sessionmaker

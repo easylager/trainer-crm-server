@@ -560,12 +560,9 @@
             if (isNaN(cap) || cap < 1) cap = 1;
             var occ = row.active_bookings != null ? parseInt(row.active_bookings, 10) : 0;
             if (cap > 1) return 'group';
-            if (iv.start === startMinutes && iv.end === newEnd) {
-              if (occ >= 1) return 'busy';
-              return 'free';
-            }
             if (occ >= 1) return 'busy';
-            return 'overlap';
+            // Empty individual slot — quick-book replaces/removes overlaps on save; do not block UI.
+            continue;
           }
           return 'free';
         }

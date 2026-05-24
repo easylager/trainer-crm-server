@@ -662,7 +662,7 @@ async def main() -> None:
             price_tier_label="Разовое занятие",
             arena_display="Стадион «Динамо»",
             include_quick_rebook_line=webapp_https,
-            append_no_pass_notice=True,
+            deduction_outcome="none",
         )
         await bot.send_message(
             chat_id=chat_id,

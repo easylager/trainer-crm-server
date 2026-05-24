@@ -572,6 +572,177 @@
     .trainer-detail-services {
       margin-bottom: 20px;
     }
+    .trainer-detail-about-wrap {
+      margin-bottom: 4px;
+    }
+    .trainer-detail-about {
+      margin: 0 0 18px;
+      padding: 14px 16px 12px 18px;
+      border-radius: 14px;
+      border: 1px solid color-mix(in srgb, var(--tg-theme-button-color) 28%, transparent);
+      background: color-mix(in srgb, var(--tg-theme-button-color) 8%, var(--tg-theme-secondary-bg-color));
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
+      position: relative;
+      box-sizing: border-box;
+    }
+    .trainer-detail-about::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 12px;
+      bottom: 12px;
+      width: 3px;
+      border-radius: 0 3px 3px 0;
+      background: var(--tg-theme-button-color);
+      opacity: 0.85;
+    }
+    .trainer-detail-about-kicker {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--tg-theme-button-color);
+      margin: 0 0 10px;
+      line-height: 1.35;
+    }
+    .trainer-detail-about-bio {
+      margin: 0 0 12px;
+      font-size: 15px;
+      line-height: 1.5;
+      color: var(--tg-theme-text-color);
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+    .trainer-detail-about-bio--clamp {
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .trainer-detail-about-bio-wrap:has(.trainer-detail-about-bio-more[open]) .trainer-detail-about-bio--clamp {
+      display: none;
+    }
+    .trainer-detail-about-bio-more {
+      margin: -4px 0 12px;
+    }
+    .trainer-detail-about-bio-more-summary {
+      list-style: none;
+      cursor: pointer;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--tg-theme-button-color);
+      padding: 2px 0 4px;
+    }
+    .trainer-detail-about-bio-more-summary::-webkit-details-marker {
+      display: none;
+    }
+    .trainer-detail-about-bio-more-summary::after {
+      content: '';
+      width: 7px;
+      height: 7px;
+      border-right: 2px solid currentColor;
+      border-bottom: 2px solid currentColor;
+      transform: rotate(45deg);
+      margin-top: -3px;
+      opacity: 0.85;
+      transition: transform 0.2s ease;
+    }
+    .trainer-detail-about-bio-more[open] > .trainer-detail-about-bio-more-summary {
+      display: none;
+    }
+    .trainer-detail-about-bio--full {
+      margin-bottom: 0;
+    }
+    .trainer-detail-about-edu {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-bottom: 4px;
+    }
+    .trainer-detail-about-edu-line {
+      position: relative;
+      padding-left: 22px;
+      font-size: 13px;
+      line-height: 1.4;
+      color: var(--tg-theme-hint-color);
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+    .trainer-detail-about-edu-line::before {
+      content: '🎓';
+      position: absolute;
+      left: 0;
+      top: 0;
+      font-size: 13px;
+      line-height: 1.4;
+      opacity: 0.9;
+    }
+    .trainer-detail-about-edu-more {
+      padding-left: 22px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--tg-theme-button-color);
+      opacity: 0.9;
+    }
+    .trainer-detail-about-edu-chip {
+      display: inline-flex;
+      align-self: flex-start;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--tg-theme-button-color);
+      background: color-mix(in srgb, var(--tg-theme-button-color) 12%, var(--tg-theme-secondary-bg-color));
+      border: 1px solid color-mix(in srgb, var(--tg-theme-button-color) 40%, transparent);
+      border-radius: 999px;
+      padding: 4px 10px;
+    }
+    .trainer-detail-about-edu-details {
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid rgba(128, 128, 128, 0.14);
+    }
+    .trainer-detail-about-edu-summary {
+      list-style: none;
+      cursor: pointer;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--tg-theme-hint-color);
+      padding: 2px 0 8px;
+    }
+    .trainer-detail-about-edu-summary::-webkit-details-marker {
+      display: none;
+    }
+    .trainer-detail-about-edu-summary::after {
+      content: '';
+      width: 8px;
+      height: 8px;
+      border-right: 2px solid var(--tg-theme-hint-color);
+      border-bottom: 2px solid var(--tg-theme-hint-color);
+      transform: rotate(45deg);
+      opacity: 0.7;
+      flex-shrink: 0;
+      transition: transform 0.2s ease;
+    }
+    .trainer-detail-about-edu-details[open] > .trainer-detail-about-edu-summary::after {
+      transform: rotate(-135deg);
+      margin-top: 4px;
+    }
+    .trainer-detail-about-edu-panel {
+      padding-top: 2px;
+    }
+    .trainer-detail-about-edu-panel .trainer-detail-education {
+      margin-bottom: 0;
+    }
     .trainer-detail-services-title {
       font-size: 13px;
       font-weight: 600;
@@ -1767,7 +1938,7 @@
     .trainer-detail-groups-inner {
       padding-top: 2px;
     }
-    /* Education + long bio: collapsed by default so slots/actions stay in view. */
+    /* Legacy section details (kept for groups/other screens). */
     .trainer-detail-section-details {
       margin-top: 14px;
       margin-bottom: 4px;
@@ -1930,6 +2101,9 @@
       }
       .trainer-detail-service-callout {
         box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
+      }
+      .trainer-detail-about {
+        box-shadow: 0 4px 18px rgba(0, 0, 0, 0.32);
       }
       .trainer-detail-desc {
         box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);

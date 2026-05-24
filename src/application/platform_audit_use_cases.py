@@ -21,7 +21,7 @@ from src.shared.config import Settings
 logger = logging.getLogger(__name__)
 
 _audit_engine = None
-_audit_session_factory: async_sessionmaker[AsyncSession] | None = None
+_audit_sessionmaker: async_sessionmaker[AsyncSession] | None = None
 
 # Human-readable labels for admin UI (extend as new event types appear).
 EVENT_LABELS_RU: dict[str, str] = {
@@ -105,17 +105,17 @@ def _audit_persist_disabled() -> bool:
     return bool(os.environ.get("PYTEST_CURRENT_TEST"))
 
 
-def _audit_session_factory() -> async_sessionmaker[AsyncSession]:
-    global _audit_engine, _audit_session_factory
-    if _audit_session_factory is None:
+def _get_audit_sessionmaker() -> async_sessionmaker[AsyncSession]:
+    global _audit_engine, _audit_sessionmaker
+    if _audit_sessionmaker is None:
         db_url = Settings().database_url
         if db_url.startswith("postgresql://") and "+asyncpg" not in db_url:
             db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
         _audit_engine = create_async_engine(db_url, pool_size=2, max_overflow=2, pool_pre_ping=True)
-        _audit_session_factory = async_sessionmaker(
+        _audit_sessionmaker = async_sessionmaker(
             _audit_engine, class_=AsyncSession, expire_on_commit=False
         )
-    return _audit_session_factory
+    return _audit_sessionmaker
 
 
 def schedule_audit_persist(record: dict[str, Any]) -> None:
@@ -133,8 +133,7 @@ async def _persist_audit_record(record: dict[str, Any]) -> None:
     if _audit_persist_disabled():
         return
     try:
-        factory = _audit_session_factory()
-        async with factory() as session:
+        async with _get_audit_sessionmaker()() as session:
             await insert_platform_audit_from_record(session, record)
             await session.commit()
     except Exception:

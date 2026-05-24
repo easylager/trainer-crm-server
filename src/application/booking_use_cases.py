@@ -665,6 +665,18 @@ async def create_booking(
             )
             if not rchk.fetchone():
                 return (None, (False, False))
+    if (
+        created_by_trainer
+        and capacity == 1
+        and cnt == 0
+        and resolved_arena is not None
+        and slot_arena_id != resolved_arena
+    ):
+        # Trainer picked another venue on an empty individual slot — keep schedule row in sync.
+        await session.execute(
+            text("UPDATE slots SET arena_id = :aid WHERE id = :sid AND trainer_id = :tid"),
+            {"aid": resolved_arena, "sid": slot_id, "tid": trainer_id},
+        )
     try:
         r = await session.execute(
             text("""
@@ -750,12 +762,12 @@ async def create_trainer_quick_booking(
     arena_id: int | None = None,
     service_price_variant_id: int | None = None,
     is_sandbox: bool = False,
-    allow_off_grid_interval: bool = False,
+    allow_off_grid_interval: bool = True,
 ) -> tuple[int, int, bool, bool] | None:
     """
     Create an individual slot at date/start_minutes if needed, then a trainer-initiated booking.
 
-    ``allow_off_grid_interval``: do not enforce arena/trainer start grid (repeat-last-session / precise starts).
+    ``allow_off_grid_interval``: skip arena start grid (trainers may pick :15, :45, etc. in quick-book UI).
 
     ValueError is raised by ensure_individual_slot_for_quick_book (caller maps to HTTP 400).
     ServicePriceVariantRequired is re-raised after rollback.

@@ -18,6 +18,8 @@ from aiogram import Bot
 from sqlalchemy.ext.asyncio import AsyncSession
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 
+from src.application.booking_payment_notice import load_booking_deduction_snapshot
+from src.application.booking_problem_use_cases import classify_booking_problem_payment_class
 from src.application.booking_use_cases import (
     get_bookings_pending_notification,
     get_clients_for_inactive_notification,
@@ -660,6 +662,7 @@ async def _send_client_booking_completed_push(
                 streak_weeks = sw
     except Exception:
         streak_weeks = None
+    deduction = await load_booking_deduction_snapshot(session, booking_id)
     text = msg.format_client_booking_completed_notice_html(
         date=date_str,
         day=day_str,
@@ -668,6 +671,10 @@ async def _send_client_booking_completed_push(
         trainer_name=(b.get("trainer_name") or "Тренер"),
         service_name=b.get("service_name"),
         streak_weeks=streak_weeks,
+        deduction_outcome=deduction.outcome if deduction.outcome in ("pass", "cert") else None,
+        pass_sessions_remaining=deduction.pass_sessions_remaining,
+        cert_amount_cents=deduction.cert_amount_cents,
+        cert_remaining_cents=deduction.cert_remaining_cents,
     )
     kb = msg.build_client_booking_completed_inline_keyboard(
         webapp_base_url=(Settings().webapp_base_url or ""),
@@ -1221,6 +1228,9 @@ async def process_trainer_session_wrapup_round(trainer_bot: Bot) -> None:
                 and client_id is not None
                 and await trainer_has_crm_access(session, p["trainer_id"])
             )
+            payment_class = await classify_booking_problem_payment_class(
+                session, int(p["booking_id"]), int(p["trainer_id"])
+            )
             text = msg.format_trainer_booking_session_wrapup_html(
                 client_name=p.get("client_name") or "Клиент",
                 date=date_str,
@@ -1232,6 +1242,7 @@ async def process_trainer_session_wrapup_round(trainer_bot: Bot) -> None:
                 booking_price_cents=p.get("booking_price_cents"),
                 arena_display=p.get("arenas_str"),
                 include_quick_rebook_line=can_quick_rebook,
+                expected_payment_class=payment_class,
             )
             kb = await _build_trainer_post_session_keyboard(
                 session,
@@ -1317,6 +1328,7 @@ async def process_completed_feedback_batch(
             and client_id is not None
             and await trainer_has_crm_access(session, p["trainer_id"])
         )
+        deduction = await load_booking_deduction_snapshot(session, int(p["booking_id"]))
         text = msg.format_trainer_booking_completed_html(
             client_name=p.get("client_name") or "Клиент",
             date=date_str,
@@ -1327,7 +1339,10 @@ async def process_completed_feedback_batch(
             price_tier_label=p.get("price_tier_label"),
             arena_display=p.get("arenas_str"),
             include_quick_rebook_line=can_quick_rebook,
-            append_no_pass_notice=bool(p.get("trainer_no_pass_footer")),
+            deduction_outcome=deduction.outcome,
+            pass_sessions_remaining=deduction.pass_sessions_remaining,
+            cert_amount_cents=deduction.cert_amount_cents,
+            cert_remaining_cents=deduction.cert_remaining_cents,
         )
         kb = await _build_trainer_post_session_keyboard(
             session, p, base=base, webapp_https=webapp_https

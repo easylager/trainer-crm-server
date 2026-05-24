@@ -1125,6 +1125,133 @@
         return cats.indexOf(t) >= 0;
       }
 
+      function buildCatalogEducationSectionInner(eduRows, profileEduDetail, profileExtraForDetail) {
+        var eduSectionInner = '';
+        if (eduRows.length > 0) {
+          eduSectionInner += '<p class="trainer-detail-education-hint">Нажмите на запись, чтобы раскрыть детали и фото документов.</p>';
+          var eduAnyHtml = '';
+          eduRows.forEach(function(edu) {
+            var itemHtml = buildCatalogEducationItemHtml(edu);
+            if (itemHtml) eduAnyHtml += itemHtml;
+          });
+          if (eduAnyHtml) {
+            eduSectionInner += eduAnyHtml;
+          } else if (profileEduDetail) {
+            eduSectionInner += '<div class="trainer-detail-education-body-line">' + escapeHtml(profileEduDetail).replace(/\n/g, '<br>') + '</div>';
+          }
+          if (profileExtraForDetail) {
+            eduSectionInner += '<div class="trainer-detail-education-extra">';
+            eduSectionInner += '<div class="trainer-detail-education-extra-label">Дополнительно</div>';
+            eduSectionInner +=
+              '<div class="trainer-detail-education-extra-body">' + escapeHtml(profileExtraForDetail).replace(/\n/g, '<br>') + '</div>';
+            eduSectionInner += '</div>';
+          }
+        } else if (profileEduDetail) {
+          eduSectionInner += '<div class="trainer-detail-education-extra">';
+          eduSectionInner +=
+            '<div class="trainer-detail-education-extra-body">' + escapeHtml(profileEduDetail).replace(/\n/g, '<br>') + '</div>';
+          eduSectionInner += '</div>';
+        }
+        return eduSectionInner;
+      }
+
+      function catalogBioNeedsExpand(desc) {
+        if (!desc || desc === '—') return false;
+        var lines = desc.split(/\r?\n/).filter(function(line) { return line.trim().length > 0; });
+        if (lines.length > 3) return true;
+        return desc.length > 220;
+      }
+
+      /** Trust block: bio preview + education teasers above slots; full details on expand. */
+      function buildTrainerAboutSectionHtml(desc, eduRows, profileEduDetail, profileExtraForDetail) {
+        var hasDesc = desc !== '—';
+        var eduSectionInner = buildCatalogEducationSectionInner(eduRows, profileEduDetail, profileExtraForDetail);
+        var eduPreview = [];
+        eduRows.forEach(function(edu) {
+          if (eduPreview.length >= 2) return;
+          var line = formatCatalogEducationEntry(edu);
+          if (line) eduPreview.push(line);
+        });
+        var eduHiddenCount = Math.max(0, eduRows.length - eduPreview.length);
+        var profileEduChip = '';
+        var profileEduLine = '';
+        if (eduPreview.length === 0 && profileEduDetail) {
+          if (isProfileEducationCategoryOnly(profileEduDetail)) {
+            profileEduChip = profileEduDetail;
+          } else {
+            profileEduLine = profileEduDetail.split(/\r?\n/).map(function(s) { return s.trim(); }).filter(Boolean)[0] || '';
+          }
+        }
+        var hasEduPreview = eduPreview.length > 0 || !!profileEduChip || !!profileEduLine;
+        var needsEduDetails = false;
+        if (eduSectionInner) {
+          needsEduDetails =
+            eduRows.length > 0 ||
+            !!profileExtraForDetail ||
+            (profileEduDetail && !isProfileEducationCategoryOnly(profileEduDetail) && eduRows.length === 0 && (profileEduDetail.length > 120 || profileEduDetail.indexOf('\n') >= 0));
+        }
+        if (!hasDesc && !hasEduPreview && !needsEduDetails) return '';
+
+        var html = '<div class="trainer-detail-about">';
+        html += '<div class="trainer-detail-about-kicker">О тренере</div>';
+
+        if (hasDesc) {
+          var bioHtml = escapeHtml(desc).replace(/\n/g, '<br>');
+          if (catalogBioNeedsExpand(desc)) {
+            html += '<div class="trainer-detail-about-bio-wrap">';
+            html += '<p class="trainer-detail-about-bio trainer-detail-about-bio--clamp">' + bioHtml + '</p>';
+            html += '<details class="trainer-detail-about-bio-more">';
+            html += '<summary class="trainer-detail-about-bio-more-summary">Читать полностью</summary>';
+            html += '<div class="trainer-detail-about-bio trainer-detail-about-bio--full">' + bioHtml + '</div>';
+            html += '</details></div>';
+          } else {
+            html += '<p class="trainer-detail-about-bio">' + bioHtml + '</p>';
+          }
+        }
+
+        if (hasEduPreview) {
+          html += '<div class="trainer-detail-about-edu">';
+          if (profileEduChip) {
+            html += '<span class="trainer-detail-about-edu-chip">' + escapeHtml(profileEduChip) + '</span>';
+          } else {
+            eduPreview.forEach(function(line) {
+              html += '<div class="trainer-detail-about-edu-line">' + escapeHtml(line) + '</div>';
+            });
+            if (profileEduLine && eduPreview.length === 0) {
+              html += '<div class="trainer-detail-about-edu-line">' + escapeHtml(profileEduLine) + '</div>';
+            }
+            if (eduHiddenCount > 0) {
+              html += '<div class="trainer-detail-about-edu-more">Ещё ' + eduHiddenCount + ' ' + (eduHiddenCount === 1 ? 'запись' : 'записи') + '</div>';
+            }
+          }
+          html += '</div>';
+        }
+
+        if (needsEduDetails && eduSectionInner) {
+          html +=
+            '<details class="trainer-detail-about-edu-details">' +
+            '<summary class="trainer-detail-about-edu-summary">Образование и документы</summary>' +
+            '<div class="trainer-detail-about-edu-panel"><div class="trainer-detail-education">' +
+            eduSectionInner +
+            '</div></div></details>';
+        }
+
+        html += '</div>';
+        return html;
+      }
+
+      function bindTrainerDetailEducationDocLinks(rootEl) {
+        if (!rootEl) return;
+        rootEl.querySelectorAll('.trainer-detail-education-doc').forEach(function(linkEl) {
+          linkEl.addEventListener('click', function(ev) {
+            if (tg && typeof tg.openLink === 'function') {
+              ev.preventDefault();
+              tg.openLink(linkEl.href);
+            }
+          });
+        });
+      }
+
       function openTrainerDetailFromTrainerObject(t, prefetchPhotos) {
         if (!t || !t.id) return;
         state.trainerId = t.id;
@@ -3705,7 +3832,7 @@
         }
         var htmlTop = html;
         html = '';
-        
+
         var eduRows = Array.isArray(t.education_entries) ? t.education_entries : [];
         var profileEduDetail = (p.education && typeof p.education === 'string' && p.education.trim())
           ? p.education.trim()
@@ -3714,60 +3841,16 @@
         if (eduRows && eduRows.length > 0 && profileEduDetail && isProfileEducationCategoryOnly(profileEduDetail)) {
           profileExtraForDetail = '';
         }
-        var eduSectionInner = '';
-        if (eduRows.length > 0) {
-          eduSectionInner += '<p class="trainer-detail-education-hint">Нажмите на запись, чтобы раскрыть детали и фото документов.</p>';
-          var eduAnyHtml = '';
-          eduRows.forEach(function(edu) {
-            var itemHtml = buildCatalogEducationItemHtml(edu);
-            if (itemHtml) eduAnyHtml += itemHtml;
-          });
-          if (eduAnyHtml) {
-            eduSectionInner += eduAnyHtml;
-          } else if (profileEduDetail) {
-            eduSectionInner += '<div class="trainer-detail-education-body-line">' + escapeHtml(profileEduDetail).replace(/\n/g, '<br>') + '</div>';
-          }
-          if (profileExtraForDetail) {
-            eduSectionInner += '<div class="trainer-detail-education-extra">';
-            eduSectionInner += '<div class="trainer-detail-education-extra-label">Дополнительно</div>';
-            eduSectionInner +=
-              '<div class="trainer-detail-education-extra-body">' + escapeHtml(profileExtraForDetail).replace(/\n/g, '<br>') + '</div>';
-            eduSectionInner += '</div>';
-          }
-        } else if (profileEduDetail) {
-          eduSectionInner += '<div class="trainer-detail-education-extra">';
-          eduSectionInner +=
-            '<div class="trainer-detail-education-extra-body">' + escapeHtml(profileEduDetail).replace(/\n/g, '<br>') + '</div>';
-          eduSectionInner += '</div>';
-        }
-        if (eduSectionInner) {
-          html +=
-            '<details class="trainer-detail-section-details">' +
-            '<summary class="trainer-detail-section-summary">Образование</summary>' +
-            '<div class="trainer-detail-section-panel"><div class="trainer-detail-education">' +
-            eduSectionInner +
-            '</div></div></details>';
-        }
+        var htmlAbout = buildTrainerAboutSectionHtml(desc, eduRows, profileEduDetail, profileExtraForDetail);
 
-        if (desc !== '—') {
-          html +=
-            '<details class="trainer-detail-section-details">' +
-            '<summary class="trainer-detail-section-summary">О тренере</summary>' +
-            '<div class="trainer-detail-section-panel">' +
-            '<div class="trainer-detail-desc">' +
-            escapeHtml(desc).replace(/\n/g, '<br>') +
-            '</div></div></details>';
-        }
         document.getElementById('trainerDetailTop').innerHTML = htmlTop;
-        document.getElementById('trainerDetailRest').innerHTML = html;
-        document.querySelectorAll('#trainerDetailRest .trainer-detail-education-doc').forEach(function(linkEl) {
-          linkEl.addEventListener('click', function(ev) {
-            if (tg && typeof tg.openLink === 'function') {
-              ev.preventDefault();
-              tg.openLink(linkEl.href);
-            }
-          });
-        });
+        var aboutEl = document.getElementById('trainerDetailAbout');
+        if (aboutEl) {
+          aboutEl.innerHTML = htmlAbout;
+          aboutEl.style.display = htmlAbout ? '' : 'none';
+          bindTrainerDetailEducationDocLinks(aboutEl);
+        }
+        document.getElementById('trainerDetailRest').innerHTML = '';
         document.getElementById('trainerDetailGroups').innerHTML = '';
         bindTrainerDetailPhotoWrap();
         loadTrainingGroupsBlock(t);
