@@ -1920,169 +1920,29 @@
         renderHubSummaryHints();
       }
 
-      /** When checklist arrives after bookings, re-render empty list so copy matches onboarding. */
-      function refreshHubEmptyBookingsIfNeeded() {
+      /** Hide «Ближайшие записи» block when there is nothing to show (no empty-state copy). */
+      function setHubUpcomingBookingsSectionVisible(visible) {
+        var head = document.querySelector('.hub-section-head--bookings-top');
+        if (head) head.hidden = !visible;
         var block = document.getElementById('bookingsBlock');
-        if (!block || !hubLastBookingsDays) return;
+        if (block) block.hidden = !visible;
+      }
+
+      function hideHubUpcomingBookingsSection() {
+        var block = document.getElementById('bookingsBlock');
+        if (block) block.innerHTML = '';
+        setHubUpcomingBookingsSectionVisible(false);
+      }
+
+      /** When checklist arrives after bookings, collapse section if list is still empty. */
+      function refreshHubEmptyBookingsIfNeeded() {
+        if (!hubLastBookingsDays) return;
         var total = 0;
         (hubLastBookingsDays || []).forEach(function(d) {
           total += (d.bookings || []).length;
         });
         if (total > 0) return;
-        block.innerHTML = buildEmptyBookingsHtml();
-        setHubBookingsSectionHeadVisible(false);
-        wireEmptyBookingsActions();
-      }
-
-      function setHubBookingsSectionHeadVisible(visible) {
-        var head = document.querySelector('.hub-section-head--bookings-top');
-        if (head) head.hidden = !visible;
-        var block = document.getElementById('bookingsBlock');
-        if (block) block.classList.toggle('hub-bookings-block--empty', !visible);
-      }
-
-      function hubEmptyBookingsVariant(onb, schedFlow) {
-        if (!onb) return 'loading';
-        if (!schedFlow) return 'locked';
-        if (!onb.profile_complete && onb.tt_minimal_complete) return 'first_book';
-        if (onb.has_future_slots || onb.has_future_available_slots) return 'slots_open';
-        if (!onb.has_any_booking) return 'no_slots';
-        return 'quiet';
-      }
-
-      function hubBookingsEmptyVisualHtml() {
-        return (
-          '<svg class="hub-bookings-empty__svg" viewBox="0 0 280 104" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' +
-            '<rect x="24" y="10" width="232" height="22" rx="11" fill="currentColor" opacity="0.06"/>' +
-            '<rect x="24" y="42" width="232" height="28" rx="14" stroke="currentColor" stroke-opacity="0.2" stroke-width="1.5" stroke-dasharray="6 5" fill="currentColor" fill-opacity="0.04"/>' +
-            '<circle cx="140" cy="56" r="11" fill="var(--app-cta-fill)" fill-opacity="0.16"/>' +
-            '<path d="M140 50v12M134 56h12" stroke="var(--app-cta-fill)" stroke-width="2" stroke-linecap="round"/>' +
-            '<rect x="24" y="80" width="232" height="22" rx="11" fill="currentColor" opacity="0.06"/>' +
-          '</svg>'
-        );
-      }
-
-      function buildEmptyBookingsHtml() {
-        var onb = hubOnboardingData;
-        var schedFlow = !!(onb && (onb.schedule_unlocked || onb.is_active));
-        var variant = hubEmptyBookingsVariant(onb, schedFlow);
-        var eyebrow = '';
-        var title = '';
-        var lead = '';
-        var showPrimary = false;
-        var showScheduleSecondary = false;
-        var primaryLabel = 'Записать клиента';
-        var scheduleLabel = 'Открыть расписание';
-
-        if (variant === 'loading') {
-          return (
-            '<div class="hub-bookings-empty hub-bookings-empty--compact" role="status">' +
-              '<p class="hub-bookings-empty__lead">Загружаем ближайшие записи…</p>' +
-            '</div>'
-          );
-        }
-
-        if (variant === 'locked') {
-          return (
-            '<div class="hub-bookings-empty hub-bookings-empty--compact" role="status">' +
-              '<p class="hub-bookings-empty__eyebrow">Ближайшие записи</p>' +
-              '<p class="hub-bookings-empty__title">Откроются после первых шагов</p>' +
-              '<p class="hub-bookings-empty__lead">Закройте чеклист «Первые шаги» выше — затем здесь появятся занятия и быстрая запись.</p>' +
-            '</div>'
-          );
-        }
-
-        if (variant === 'first_book') {
-          eyebrow = 'Быстрый старт';
-          title = 'Сделайте первую запись';
-          lead =
-            'Выберите клиента и время — занятие сразу появится здесь, клиент получит напоминание в Telegram.';
-          showPrimary = true;
-        } else if (variant === 'slots_open') {
-          eyebrow = 'Окна открыты';
-          title = 'Клиентов пока нет';
-          lead =
-            'В расписании есть свободное время. Запишите клиента сами — или дождитесь самостоятельной записи через вашу ссылку.';
-          showPrimary = true;
-        } else if (variant === 'no_slots') {
-          eyebrow = 'Начните день';
-          title = 'Пока нет занятий';
-          lead =
-            'Можно записать клиента прямо сейчас — слот подставится автоматически. Или сначала добавьте окна в расписании.';
-          showPrimary = true;
-          showScheduleSecondary = true;
-          scheduleLabel = 'Добавить слоты';
-        } else {
-          eyebrow = 'Пока тихо';
-          title = 'Нет ближайших занятий';
-          lead =
-            'Следующая запись появится здесь — с временем, клиентом и кнопкой «Написать». Пока можно записать кого-то вручную.';
-          showPrimary = true;
-        }
-
-        var actions = '';
-        if (showPrimary || showScheduleSecondary) {
-          actions = '<div class="hub-bookings-empty__actions">';
-          if (showPrimary) {
-            actions +=
-              '<button type="button" class="bd-btn bd-btn--primary hub-bookings-empty__cta" id="btnEmptyBookClient">' +
-              escapeHtml(primaryLabel) +
-              '</button>';
-          }
-          if (showScheduleSecondary) {
-            actions +=
-              '<button type="button" class="bd-btn bd-btn--secondary hub-bookings-empty__cta-secondary" id="btnEmptyOpenSchedule">' +
-              escapeHtml(scheduleLabel) +
-              '</button>';
-          }
-          actions += '</div>';
-        }
-
-        var flow =
-          showPrimary
-            ? '<div class="hub-bookings-empty__flow" aria-hidden="true">' +
-                '<span class="hub-bookings-empty__flow-chip">Клиент</span>' +
-                '<span class="hub-bookings-empty__flow-arrow">→</span>' +
-                '<span class="hub-bookings-empty__flow-chip">Время</span>' +
-                '<span class="hub-bookings-empty__flow-arrow">→</span>' +
-                '<span class="hub-bookings-empty__flow-chip hub-bookings-empty__flow-chip--accent">Напоминание</span>' +
-              '</div>'
-            : '';
-
-        return (
-          '<section class="hub-bookings-empty" role="status" aria-label="' + escapeHtml(title) + '">' +
-            '<div class="hub-bookings-empty__visual">' +
-              hubBookingsEmptyVisualHtml() +
-            '</div>' +
-            '<p class="hub-bookings-empty__eyebrow">' + escapeHtml(eyebrow) + '</p>' +
-            '<h3 class="hub-bookings-empty__title">' + escapeHtml(title) + '</h3>' +
-            '<p class="hub-bookings-empty__lead">' + escapeHtml(lead) + '</p>' +
-            actions +
-            flow +
-          '</section>'
-        );
-      }
-
-      function wireEmptyBookingsActions() {
-        var bookBtn = document.getElementById('btnEmptyBookClient');
-        if (bookBtn) {
-          bookBtn.onclick = function() {
-            if (hubOnboardingData && !hubOnboardingData.schedule_unlocked && !hubOnboardingData.is_active) {
-              navigateTo('trainer-profile?onboarding=blocks');
-              return;
-            }
-            ensureTrainerSectionsAccess(function() {
-              hubQuickBookIsSandbox = false;
-              openHubQuickBookClientFlowFirst();
-            });
-          };
-        }
-        var schedBtn = document.getElementById('btnEmptyOpenSchedule');
-        if (schedBtn) {
-          schedBtn.onclick = function() {
-            navigateTo('schedule-editor');
-          };
-        }
+        hideHubUpcomingBookingsSection();
       }
 
       function loadOnboardingChecklist() {
@@ -5500,7 +5360,8 @@
         if (!getInitData()) return;
         var bb = document.getElementById('bookingsBlock');
         if (!bb || bb.querySelector('.hub-bookings-skel')) return;
-        if (bb.querySelector('.slot-row, .bd-trainer-gate, .hub-empty, .hub-bookings-empty')) return;
+        if (bb.querySelector('.slot-row, .bd-trainer-gate, .hub-empty')) return;
+        if (bb.hidden) return;
         bb.innerHTML = buildHubBookingsSkeletonHtml();
       }
 
@@ -5779,15 +5640,13 @@
 
         if (!count) {
           hubPendingHighlightBookingId = null;
-          block.innerHTML = buildEmptyBookingsHtml();
           block.onclick = null;
-          setHubBookingsSectionHeadVisible(false);
-          wireEmptyBookingsActions();
+          hideHubUpcomingBookingsSection();
           tryOpenHubGroupModalFromUrl();
           renderHubSummaryHints();
           return;
         }
-        setHubBookingsSectionHeadVisible(true);
+        setHubUpcomingBookingsSectionVisible(true);
         if (hasFirstOnline) {
           parts.unshift(
             '<div class="hub-first-online-hint" role="status">✨ Первая онлайн-запись — клиент записался сам</div>'
@@ -5885,17 +5744,7 @@
         hubMtdRevenueText = null;
         syncHubHeroCompact();
         applyHubHero();
-        var bb = document.getElementById('bookingsBlock');
-        if (window.TrainerMiniAppGate && access) {
-          bb.innerHTML =
-            '<div class="bd-trainer-gate" style="margin-top:4px">' +
-            window.TrainerMiniAppGate.gateCardHtml(access, true) +
-            '</div>';
-          window.TrainerMiniAppGate.wireGate(bb, getInitData());
-        } else {
-          bb.innerHTML =
-            '<div class="hub-empty">Раздел откроется после активации профиля. Заполните анкету в «Первые шаги» или дождитесь проверки — это не сбой сети.</div>';
-        }
+        hideHubUpcomingBookingsSection();
       }
 
       function buildBookingsRetryBlockHtml(message) {
@@ -5935,8 +5784,7 @@
           hubMtdRevenueText = null;
           syncHubHeroCompact();
           applyHubHero();
-          document.getElementById('bookingsBlock').innerHTML =
-            '<div class="hub-empty">Авторизация Telegram недоступна в этом режиме.</div>';
+          hideHubUpcomingBookingsSection();
           return;
         }
         if (
@@ -5948,7 +5796,8 @@
           return;
         }
         setStateMessage('', '');
-        document.getElementById('bookingsBlock').innerHTML = buildHubBookingsSkeletonHtml();
+        setHubUpcomingBookingsSectionVisible(false);
+        document.getElementById('bookingsBlock').innerHTML = '';
         fetchHubMtdRevenue();
         if (typeof AbortController !== 'undefined') {
           if (hubBookingsAbort) {
@@ -6002,6 +5851,7 @@
               hubMtdRevenueText = null;
               syncHubHeroCompact();
               applyHubHero();
+              setHubUpcomingBookingsSectionVisible(true);
               document.getElementById('bookingsBlock').innerHTML = buildBookingsRetryBlockHtml(
                 'Не удалось обновить список. Проверьте соединение и попробуйте снова.'
               );
@@ -6038,7 +5888,8 @@
                     hubMtdRevenueText = null;
                     syncHubHeroCompact();
                     applyHubHero();
-                    document.getElementById('bookingsBlock').innerHTML = buildBookingsRetryBlockHtml(
+                    setHubUpcomingBookingsSectionVisible(true);
+              document.getElementById('bookingsBlock').innerHTML = buildBookingsRetryBlockHtml(
                       'Не удалось обновить список. Проверьте соединение и попробуйте снова.'
                     );
                     wireBookingsRetryButton();
@@ -6057,7 +5908,8 @@
                   hubMtdRevenueText = null;
                   syncHubHeroCompact();
                   applyHubHero();
-                  document.getElementById('bookingsBlock').innerHTML = buildBookingsRetryBlockHtml(
+                  setHubUpcomingBookingsSectionVisible(true);
+              document.getElementById('bookingsBlock').innerHTML = buildBookingsRetryBlockHtml(
                     'Не удалось обновить список. Проверьте соединение и попробуйте снова.'
                   );
                   wireBookingsRetryButton();
@@ -6075,6 +5927,7 @@
               hubMtdRevenueText = null;
               syncHubHeroCompact();
               applyHubHero();
+              setHubUpcomingBookingsSectionVisible(true);
               document.getElementById('bookingsBlock').innerHTML = buildBookingsRetryBlockHtml(
                 'Не удалось обновить список. Проверьте соединение и попробуйте снова.'
               );
