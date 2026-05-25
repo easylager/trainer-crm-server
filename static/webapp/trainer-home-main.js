@@ -2787,6 +2787,20 @@
         );
       }
 
+      /** First non-cancelled session with this trainer (session_num from hub bookings API). */
+      function hubBookingIsNewClient(b) {
+        if (!b || b.is_sandbox) return false;
+        var n = parseInt(String(b.session_num != null ? b.session_num : '1'), 10);
+        return !isNaN(n) && n <= 1;
+      }
+
+      function hubNewClientBadgeHtml(b) {
+        if (!hubBookingIsNewClient(b)) return '';
+        return (
+          '<span class="hub-new-client-pill" role="status" title="Первое занятие с этим клиентом">новый</span>'
+        );
+      }
+
       function syncHubMyServicesAccentMap(servicesList) {
         (servicesList || []).forEach(function(s) {
           if (s == null || s.id == null) return;
@@ -3001,7 +3015,10 @@
               '<div class="slot-client-hint">' + escapeHtml(clientLabel(b)) + '</div>' +
             '</div>' +
             '<div class="slot-meta">' +
-              '<span class="slot-status ' + statusClass + '">' + statusLabel + '</span>' +
+              '<div class="hub-slot-meta-status-row">' +
+                hubNewClientBadgeHtml(b) +
+                '<span class="slot-status ' + statusClass + '">' + statusLabel + '</span>' +
+              '</div>' +
               msgBtn +
             '</div>' +
           '</div>'

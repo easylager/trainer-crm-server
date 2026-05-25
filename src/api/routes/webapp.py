@@ -82,6 +82,7 @@ from src.application.booking_use_cases import (
     load_booking_service_edit_context,
     resolve_booking_service_edit_ui_flags,
     update_trainer_booking_service,
+    update_trainer_booking_arena,
     get_trainer_client_next_booking,
     get_trainer_client_for_card,
     get_trainer_client_last_booking_service_defaults,
@@ -5093,6 +5094,7 @@ async def get_trainer_booking_detail(
             "service_locked": False,
             "can_edit_service": False,
             "can_edit_tier": False,
+            "can_edit_arena": False,
         }
     )
 
@@ -5188,6 +5190,98 @@ async def patch_trainer_booking_service(
             "service_locked": False,
             "can_edit_service": False,
             "can_edit_tier": False,
+            "can_edit_arena": False,
+        }
+    )
+    return out
+
+
+class TrainerBookingArenaPatchBody(BaseModel):
+    arena_id: int
+
+
+_PATCH_BOOKING_ARENA_HTTP: dict[str, tuple[int, str]] = {
+    "not_found": (404, "Запись не найдена"),
+    "not_editable": (400, "Для этой записи площадку изменить нельзя"),
+    "group_service_locked": (400, "У группового слота площадку менять нельзя"),
+    "invalid_arena": (400, "Площадка не привязана к вашему профилю"),
+}
+
+
+@router.patch("/trainer/bookings/{booking_id:int}/arena")
+async def patch_trainer_booking_arena(
+    booking_id: int,
+    body: TrainerBookingArenaPatchBody,
+    principal: MiniAppPrincipal = Depends(get_trainer_miniapp_principal),
+    session: AsyncSession = Depends(get_session),
+):
+    """
+    Update venue on a pending/confirmed individual booking.
+
+    Does not notify the client; standard reminders pick up the new arena when they fire.
+    """
+    trainer_id = await get_trainer_id_for_webapp_trainer_operations_from_principal(session, principal)
+    if not trainer_id:
+        raise HTTPException(status_code=403, detail=TRAINER_WEBAPP_FORBIDDEN_DETAIL)
+
+    detail, err = await update_trainer_booking_arena(
+        session,
+        booking_id,
+        trainer_id,
+        int(body.arena_id),
+    )
+    if err:
+        status, msg = _PATCH_BOOKING_ARENA_HTTP.get(err, (400, "Не удалось обновить запись"))
+        edit_ctx = await load_booking_service_edit_context(session, booking_id, trainer_id)
+        if edit_ctx and err == "not_editable":
+            policy = await resolve_booking_service_edit_ui_flags(session, trainer_id, edit_ctx)
+            if policy.get("reason"):
+                msg = policy["reason"]
+        raise HTTPException(status_code=status, detail=msg)
+    if not detail:
+        raise HTTPException(status_code=404, detail="Запись не найдена")
+
+    await enrich_booking_dicts_with_client_telegram_usernames(session, [detail])
+    flow_ok = booking_problem_api_allowed_for_trainer(trainer_id)
+    out = _serialize_booking(detail, problem_flow_enabled=flow_ok)
+    slot_date = detail.get("slot_date")
+    if hasattr(slot_date, "weekday"):
+        out["day_label"] = TRAINER_DAYS[slot_date.weekday()]
+    else:
+        out["day_label"] = ""
+    out["recurring_id"] = None
+    booking = await get_booking_with_slot(session, booking_id, trainer_id)
+    if booking:
+        out["client_id"] = booking["client_id"]
+        slot_date = detail.get("slot_date")
+        start_time = detail.get("start_time")
+        recurring = await get_active_recurring_for_booking(
+            session,
+            trainer_id,
+            booking["client_id"],
+            slot_date.weekday() if hasattr(slot_date, "weekday") else 0,
+            start_time,
+        )
+        out["recurring_id"] = recurring["id"] if recurring else None
+    ppc = await classify_booking_problem_payment_class(session, booking_id, trainer_id)
+    out["problem_payment_class"] = ppc
+    if ppc == "PASS":
+        out["pass_cert_instrument_hint"] = "абонемент"
+    elif ppc == "CERT":
+        out["pass_cert_instrument_hint"] = "сертификат"
+    else:
+        out["pass_cert_instrument_hint"] = None
+    edit_ctx = await load_booking_service_edit_context(session, booking_id, trainer_id)
+    out["service_edit"] = (
+        await resolve_booking_service_edit_ui_flags(session, trainer_id, edit_ctx)
+        if edit_ctx
+        else {
+            "allowed": False,
+            "reason": None,
+            "service_locked": False,
+            "can_edit_service": False,
+            "can_edit_tier": False,
+            "can_edit_arena": False,
         }
     )
     return out

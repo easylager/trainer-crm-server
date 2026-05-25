@@ -25,7 +25,7 @@
       href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=optional"
     />
   </noscript>
-  <link rel="preload" href="schedule-editor-main.js?v=202605201" as="script" />
+  <link rel="preload" href="schedule-editor-main.js?v=202605206" as="script" />
   <link rel="stylesheet" href="mini-app-schedule-editor.css?v=202605206" />
   <link rel="stylesheet" href="mini-app-trainer-nav.css?v=20260429" />
 </head>
@@ -198,6 +198,12 @@
           <div class="book-field-stack" id="bookEditPriceTierWrap" style="display: none;">
             <label class="book-field-label">Тариф</label>
             <div id="bookEditPriceTierRadios" class="book-price-tier-radios book-edit-tier-radios"></div>
+          </div>
+          <div class="book-field-stack" id="bookEditArenaStack" style="display: none;">
+            <label class="book-field-label" for="bookEditArenaSelect">Площадка</label>
+            <div class="book-select-shell">
+              <select id="bookEditArenaSelect" class="book-service-select"></select>
+            </div>
           </div>
         </div>
       </div>
@@ -749,6 +755,6 @@
   <script src="mini-app-trainer-home.js"></script>
   <script src="trainer-client-relay-ui.js?v=202605201"></script>
   <script src="trainer-relay-helpers.js?v=202605090"></script>
-  <script defer src="schedule-editor-main.js?v=202605201"></script>
+  <script defer src="schedule-editor-main.js?v=202605206"></script>
 </body>
 </html>

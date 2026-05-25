@@ -854,6 +854,55 @@
       max-width: 46%;
       min-width: 0;
     }
+    /* Status + optional «новый» — one compact row, right-aligned (avoids tall meta column). */
+    .hub-bookings-stack .hub-slot-meta-status-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 4px;
+      max-width: 100%;
+    }
+    .hub-bookings-stack .hub-new-client-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 7px 2px 6px;
+      border-radius: 7px;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      line-height: 1.25;
+      flex-shrink: 0;
+      color: color-mix(in srgb, var(--tg-theme-text-color) 78%, var(--tg-theme-hint-color) 22%);
+      background: color-mix(in srgb, var(--tg-theme-secondary-bg-color) 92%, var(--tg-theme-button-color) 8%);
+      border: 1px solid color-mix(in srgb, var(--tg-theme-hint-color) 24%, transparent);
+    }
+    .hub-bookings-stack .hub-new-client-pill::before {
+      content: '';
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      background: var(--tg-theme-button-color, #f5a623);
+      box-shadow: 0 0 0 1px color-mix(in srgb, var(--tg-theme-button-color) 40%, transparent);
+    }
+    .hub-is-dark .hub-bookings-stack .hub-new-client-pill {
+      color: color-mix(in srgb, var(--tg-theme-text-color) 88%, var(--tg-theme-hint-color) 12%);
+      background: color-mix(in srgb, var(--tg-theme-secondary-bg-color) 85%, var(--tg-theme-button-color) 15%);
+      border-color: color-mix(in srgb, var(--tg-theme-hint-color) 32%, transparent);
+    }
+    @supports not (color: color-mix(in srgb, red, blue)) {
+      .hub-bookings-stack .hub-new-client-pill {
+        color: var(--tg-theme-hint-color);
+        background: rgba(0, 0, 0, 0.06);
+        border-color: rgba(0, 0, 0, 0.1);
+      }
+      .hub-is-dark .hub-bookings-stack .hub-new-client-pill {
+        background: rgba(255, 255, 255, 0.08);
+        border-color: rgba(255, 255, 255, 0.12);
+      }
+    }
     /* Иконка «чат в Telegram» под бейджем — компактно, без текстовой ссылки */
     .hub-bookings-stack .hub-slot-msg {
       position: relative;

@@ -1860,6 +1860,7 @@ async def resolve_booking_service_edit_ui_flags(
         "service_locked": False,
         "can_edit_service": False,
         "can_edit_tier": False,
+        "can_edit_arena": False,
     }
     if not ctx:
         return empty
@@ -1870,6 +1871,7 @@ async def resolve_booking_service_edit_ui_flags(
         "service_locked": bool(base.get("service_locked")),
         "can_edit_service": False,
         "can_edit_tier": False,
+        "can_edit_arena": False,
     }
     if not out["allowed"]:
         return out
@@ -1878,16 +1880,23 @@ async def resolve_booking_service_edit_ui_flags(
         {"tid": trainer_id},
     )
     svc_count = int(r.scalar() or 0)
+    r_arena = await session.execute(
+        text("SELECT COUNT(*)::int FROM trainer_arenas WHERE trainer_id = :tid"),
+        {"tid": trainer_id},
+    )
+    arena_count = int(r_arena.scalar() or 0)
     can_edit_service = svc_count > 1
     tiers = await list_trainer_service_price_variants(
         session, trainer_id, int(ctx["service_id"])
     )
     can_edit_tier = len(tiers) > 1
-    if not can_edit_service and not can_edit_tier:
+    can_edit_arena = arena_count > 1
+    if not can_edit_service and not can_edit_tier and not can_edit_arena:
         out["allowed"] = False
         return out
     out["can_edit_service"] = can_edit_service
     out["can_edit_tier"] = can_edit_tier
+    out["can_edit_arena"] = can_edit_arena
     return out
 
 
@@ -1956,6 +1965,51 @@ async def update_trainer_booking_service(
             "bid": booking_id,
             "tid": trainer_id,
         },
+    )
+    await session.commit()
+    detail = await get_trainer_booking_detail_payload(session, booking_id, trainer_id)
+    return (detail, None)
+
+
+async def update_trainer_booking_arena(
+    session: AsyncSession,
+    booking_id: int,
+    trainer_id: int,
+    arena_id: int,
+) -> tuple[dict | None, str | None]:
+    """
+    Change resolved venue on an individual-slot booking.
+
+    Silent for the client — same contract as ``update_trainer_booking_service``:
+    no Telegram push, reminders read live ``bookings.arena_id`` at send time.
+    """
+    ctx = await load_booking_service_edit_context(session, booking_id, trainer_id)
+    if not ctx:
+        return (None, "not_found")
+    policy = booking_service_edit_policy(ctx)
+    if not policy.get("allowed"):
+        code = "group_service_locked" if policy.get("service_locked") else "not_editable"
+        return (None, code)
+    r = await session.execute(
+        text(
+            """
+            SELECT 1 FROM trainer_arenas
+            WHERE trainer_id = :tid AND arena_id = :aid
+            """
+        ),
+        {"tid": trainer_id, "aid": int(arena_id)},
+    )
+    if not r.fetchone():
+        return (None, "invalid_arena")
+    await session.execute(
+        text(
+            """
+            UPDATE bookings
+            SET arena_id = :aid
+            WHERE id = :bid AND trainer_id = :tid
+            """
+        ),
+        {"aid": int(arena_id), "bid": booking_id, "tid": trainer_id},
     )
     await session.commit()
     detail = await get_trainer_booking_detail_payload(session, booking_id, trainer_id)

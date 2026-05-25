@@ -135,6 +135,7 @@
         service: '<svg class="bd-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><path d="M3.27 6.96L12 12.01l8.73-5.05"/></svg>',
         session: '<svg class="bd-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/></svg>',
         tariff: '<svg class="bd-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2H2v10l9.29 9.29a1 1 0 001.41 0l6.59-6.59a1 1 0 000-1.41L12 2z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg>',
+        venue: '<svg class="bd-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>',
         price: '<svg class="bd-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/></svg>',
         comment: '<svg class="bd-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>',
         send: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>',
@@ -288,6 +289,7 @@
       function normalizeBookingEditFocus(raw) {
         var k = String(raw || 'service').toLowerCase();
         if (k === 'tier' || k === 'tariff') return 'tier';
+        if (k === 'arena' || k === 'venue') return 'arena';
         return 'service';
       }
 
@@ -312,10 +314,12 @@
       function applyBookingEditModalLayout(booking, focusStep) {
         var se = (booking && booking.service_edit) || {};
         var stackSvc = document.getElementById('bookEditServiceStack');
+        var stackArena = document.getElementById('bookEditArenaStack');
         var wrapTier = document.getElementById('bookEditPriceTierWrap');
         var titleEl = document.getElementById('bookingEditModalTitle');
         var leadEl = document.getElementById('bookingEditServiceLead');
         var showSvc = !!(se.can_edit_service && focusStep === 'service');
+        var showArena = !!(se.can_edit_arena && focusStep === 'arena');
         var sid =
           state.bookingEditLockedServiceId != null
             ? state.bookingEditLockedServiceId
@@ -323,16 +327,24 @@
         var tiers = bookingEditTiersForServiceId(sid);
         var showTier = !!(se.can_edit_tier && focusStep === 'tier' && tiers.length > 1);
         if (stackSvc) stackSvc.style.display = showSvc ? '' : 'none';
+        if (stackArena) stackArena.style.display = showArena ? '' : 'none';
         if (wrapTier) wrapTier.style.display = showTier ? 'block' : 'none';
         if (titleEl) {
-          titleEl.textContent = showTier && !showSvc ? 'Тариф' : showSvc && !showTier ? 'Услуга' : 'Услуга и тариф';
+          if (showArena && !showSvc && !showTier) titleEl.textContent = 'Площадка';
+          else if (showTier && !showSvc && !showArena) titleEl.textContent = 'Тариф';
+          else if (showSvc && !showTier && !showArena) titleEl.textContent = 'Услуга';
+          else titleEl.textContent = 'Услуга и тариф';
         }
         if (leadEl) {
-          leadEl.textContent = showTier && !showSvc
-            ? 'Выберите тариф для этой записи.'
-            : showSvc && !showTier
-              ? 'Выберите услугу для этой записи.'
-              : 'Выберите вариант для этой записи.';
+          if (showArena && !showSvc && !showTier) {
+            leadEl.textContent = 'Выберите площадку для этой записи.';
+          } else if (showTier && !showSvc && !showArena) {
+            leadEl.textContent = 'Выберите тариф для этой записи.';
+          } else if (showSvc && !showTier && !showArena) {
+            leadEl.textContent = 'Выберите услугу для этой записи.';
+          } else {
+            leadEl.textContent = 'Выберите вариант для этой записи.';
+          }
         }
       }
 
@@ -1409,21 +1421,33 @@
           var serviceEditPolicy = b.service_edit || {};
           var canEditServiceRow = !!(serviceEditPolicy.allowed && serviceEditPolicy.can_edit_service);
           var canEditTierRow = !!(serviceEditPolicy.allowed && serviceEditPolicy.can_edit_tier);
+          var canEditArenaRow = !!(serviceEditPolicy.allowed && serviceEditPolicy.can_edit_arena);
           if (canEditServiceRow) {
             html += bookingDetailEditableRow(BD_ICONS.service, 'Услуга', b.services_str || '—', 'service');
-            html +=
-              '<div class="bd-row">' +
-              BD_ICONS.service +
-              '<div class="bd-row-text"><div class="bd-row-label">Площадка</div><div class="bd-row-value">' +
-              escapeHtml(b.arenas_str || '—') +
-              '</div></div></div>';
-          } else {
+          } else if (!canEditArenaRow) {
             html +=
               '<div class="bd-row">' +
               BD_ICONS.service +
               '<div class="bd-row-text"><div class="bd-row-label">Услуга · арена</div><div class="bd-row-value">' +
               escapeHtml(b.services_str || '—') +
               ' · ' +
+              escapeHtml(b.arenas_str || '—') +
+              '</div></div></div>';
+          } else {
+            html +=
+              '<div class="bd-row">' +
+              BD_ICONS.service +
+              '<div class="bd-row-text"><div class="bd-row-label">Услуга</div><div class="bd-row-value">' +
+              escapeHtml(b.services_str || '—') +
+              '</div></div></div>';
+          }
+          if (canEditArenaRow) {
+            html += bookingDetailEditableRow(BD_ICONS.venue, 'Площадка', b.arenas_str || '—', 'arena');
+          } else if (canEditServiceRow) {
+            html +=
+              '<div class="bd-row">' +
+              BD_ICONS.venue +
+              '<div class="bd-row-text"><div class="bd-row-label">Площадка</div><div class="bd-row-value">' +
               escapeHtml(b.arenas_str || '—') +
               '</div></div></div>';
           }
@@ -2388,8 +2412,9 @@
         focusStep = normalizeBookingEditFocus(focusStep);
         if (focusStep === 'service' && !se.can_edit_service) return;
         if (focusStep === 'tier' && !se.can_edit_tier) return;
+        if (focusStep === 'arena' && !se.can_edit_arena) return;
         if (!se.allowed) {
-          showToast(se.reason || 'Услугу и тариф для этой записи изменить нельзя');
+          showToast(se.reason || 'Запись нельзя изменить');
           return;
         }
         state.bookingEditTargetId = booking.id;
@@ -2399,13 +2424,58 @@
           focusStep === 'tier' && booking.service_id != null ? Number(booking.service_id) : null;
         var modal = document.getElementById('modalBookingEditService');
         var sel = document.getElementById('bookEditServiceSelect');
+        var arenaSel = document.getElementById('bookEditArenaSelect');
         var saveBtn = document.getElementById('btnBookingEditServiceSave');
-        if (!modal || !sel) return;
+        if (!modal) return;
         if (saveBtn) saveBtn.disabled = true;
-        sel.innerHTML = '';
+        if (sel) sel.innerHTML = '';
         modal.style.display = 'flex';
         modal.setAttribute('aria-hidden', 'false');
         updateTelegramBack();
+
+        if (focusStep === 'arena') {
+          getJsonTrainer('/trainer/my-services')
+            .then(function(data) {
+              var arenas = data.arenas || [];
+              if (arenas.length <= 1) {
+                showToast('Добавьте вторую площадку в профиле');
+                closeBookingEditServiceModal();
+                return;
+              }
+              if (!arenaSel) {
+                closeBookingEditServiceModal();
+                return;
+              }
+              state.trainerArenas = arenas;
+              var currentAid =
+                booking.arena_id != null
+                  ? Number(booking.arena_id)
+                  : arenas.filter(function(a) { return a.is_primary; })[0]
+                    ? Number(arenas.filter(function(a) { return a.is_primary; })[0].id)
+                    : Number(arenas[0].id);
+              state.bookingEditArenaId = currentAid;
+              arenaSel.innerHTML = '';
+              arenas.forEach(function(a) {
+                var opt = document.createElement('option');
+                opt.value = String(a.id);
+                opt.textContent = a.name || '—';
+                arenaSel.appendChild(opt);
+              });
+              arenaSel.value = String(currentAid);
+              arenaSel.onchange = function() {
+                state.bookingEditArenaId = this.value ? parseInt(this.value, 10) : null;
+              };
+              applyBookingEditModalLayout(booking, focusStep);
+              if (saveBtn) saveBtn.disabled = false;
+            })
+            .catch(function(e) {
+              showToast(e.message || 'Не удалось загрузить площадки');
+              closeBookingEditServiceModal();
+            });
+          return;
+        }
+
+        if (!sel) return;
         getJsonTrainer('/trainer/my-services')
           .then(function(data) {
             state.bookServices = data.services || [];
@@ -2447,7 +2517,38 @@
           });
       }
 
+      function saveBookingEditArena() {
+        var bid = state.bookingEditTargetId;
+        if (bid == null) return;
+        var arenaId = state.bookingEditArenaId;
+        if (arenaId == null) {
+          showToast('Выберите площадку');
+          return;
+        }
+        var saveBtn = document.getElementById('btnBookingEditServiceSave');
+        if (saveBtn) saveBtn.disabled = true;
+        patchJsonTrainer('/trainer/bookings/' + encodeURIComponent(String(bid)) + '/arena', {
+          arena_id: arenaId,
+        })
+          .then(function(updated) {
+            state.selectedBooking = updated;
+            closeBookingEditServiceModal();
+            showToast('Площадка обновлена');
+            openBookingDetail(bid);
+          })
+          .catch(function(e) {
+            showToast(e.message || 'Не удалось сохранить');
+          })
+          .finally(function() {
+            if (saveBtn) saveBtn.disabled = false;
+          });
+      }
+
       function saveBookingEditService() {
+        if (state.bookingEditFocus === 'arena') {
+          saveBookingEditArena();
+          return;
+        }
         var bid = state.bookingEditTargetId;
         var booking = state.bookingEditModalBooking;
         if (bid == null) return;
