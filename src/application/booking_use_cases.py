@@ -1731,12 +1731,12 @@ async def get_trainer_booking_detail_payload(
     }
 
 
-# Trainer may change service/tariff on active bookings (not pass/cert-settled, not terminal status).
-_BOOKING_SERVICE_EDIT_TERMINAL_STATUSES = frozenset({
+# Trainer may change service/tariff/arena on individual bookings (not pass/cert-settled).
+# Completed and past sessions are editable — stats read booking_price_cents snapshot at query time.
+_BOOKING_SERVICE_EDIT_BLOCKED_STATUSES = frozenset({
     "cancelled",
     "declined",
     BOOKING_STATUS_TRAINER_REMOVED,
-    "completed",
     BOOKING_STATUS_NO_SHOW,
     BOOKING_STATUS_PAYMENT_DISPUTE,
 })
@@ -1787,26 +1787,20 @@ async def load_booking_service_edit_context(
 
 def booking_service_edit_policy(ctx: dict) -> dict:
     """
-    UI/API hint: whether trainer can open service/tariff editor on booking detail.
+    UI/API hint: whether trainer can open service/tariff/arena editor on booking detail.
     Returns {allowed, reason, service_locked}.
     """
     st = ctx.get("status") or ""
-    if st in _BOOKING_SERVICE_EDIT_TERMINAL_STATUSES:
+    if st in _BOOKING_SERVICE_EDIT_BLOCKED_STATUSES:
         if st in ("cancelled", "declined", BOOKING_STATUS_TRAINER_REMOVED):
             return {
                 "allowed": False,
                 "reason": "Отменённую или отклонённую запись нельзя редактировать.",
                 "service_locked": False,
             }
-        if st == "completed":
-            return {
-                "allowed": False,
-                "reason": "Запись уже завершена — услугу и тариф не изменить.",
-                "service_locked": False,
-            }
         return {
             "allowed": False,
-            "reason": "Для этой записи услугу и тариф изменить нельзя.",
+            "reason": "Для этой записи услугу, тариф и площадку изменить нельзя.",
             "service_locked": False,
         }
     if ctx.get("has_pass_redemption") or ctx.get("has_cert_credit"):
@@ -1818,13 +1812,7 @@ def booking_service_edit_policy(ctx: dict) -> dict:
     if ctx.get("problem_reported") or ctx.get("client_no_show_recorded"):
         return {
             "allowed": False,
-            "reason": "После отчёта о проблеме услугу и тариф не меняют.",
-            "service_locked": False,
-        }
-    if is_slot_end_in_past_local(ctx.get("slot_date"), ctx.get("slot_end_time")):
-        return {
-            "allowed": False,
-            "reason": "Занятие уже прошло — услугу и тариф не изменить.",
+            "reason": "После отчёта о проблеме услугу, тариф и площадку не меняют.",
             "service_locked": False,
         }
     capacity = max(1, int(ctx.get("slot_capacity") or 1))
@@ -1834,10 +1822,10 @@ def booking_service_edit_policy(ctx: dict) -> dict:
             "reason": "У группового слота услуга зафиксирована.",
             "service_locked": True,
         }
-    if st not in ("pending", "confirmed"):
+    if st not in ("pending", "confirmed", "completed"):
         return {
             "allowed": False,
-            "reason": "Для этой записи услугу и тариф изменить нельзя.",
+            "reason": "Для этой записи услугу, тариф и площадку изменить нельзя.",
             "service_locked": False,
         }
     return {"allowed": True, "reason": None, "service_locked": False}

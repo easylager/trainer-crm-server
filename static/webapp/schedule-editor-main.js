@@ -7126,6 +7126,21 @@
         renderCalendar();
       };
 
+      (function wireScheduleStickyTopChrome() {
+        var sentinel = document.getElementById('seScheduleStickySentinel');
+        var chrome = document.getElementById('seScheduleTopChrome');
+        if (!sentinel || !chrome || !('IntersectionObserver' in window)) return;
+        var io = new IntersectionObserver(
+          function (entries) {
+            var entry = entries[0];
+            if (!entry) return;
+            chrome.classList.toggle('is-pinned', entry.intersectionRatio < 1);
+          },
+          { threshold: [1] }
+        );
+        io.observe(sentinel);
+      })();
+
       (function wireScheduleWeekDayStripNav() {
         var root = document.getElementById('scheduleWeekDayStrip');
         if (!root) return;

@@ -5108,7 +5108,7 @@ class TrainerBookingServicePatchBody(BaseModel):
 
 _PATCH_BOOKING_SERVICE_HTTP: dict[str, tuple[int, str]] = {
     "not_found": (404, "Запись не найдена"),
-    "not_editable": (400, "Для этой записи услугу и тариф изменить нельзя"),
+    "not_editable": (400, "Для этой записи услугу, тариф или площадку изменить нельзя"),
     "group_service_locked": (400, "У группового слота услуга зафиксирована"),
     "invalid_service": (400, "Услуга не найдена в вашем профиле"),
     "invalid_tier": (400, "Тариф не подходит к выбранной услуге"),
@@ -5202,7 +5202,7 @@ class TrainerBookingArenaPatchBody(BaseModel):
 
 _PATCH_BOOKING_ARENA_HTTP: dict[str, tuple[int, str]] = {
     "not_found": (404, "Запись не найдена"),
-    "not_editable": (400, "Для этой записи площадку изменить нельзя"),
+    "not_editable": (400, "Для этой записи услугу, тариф или площадку изменить нельзя"),
     "group_service_locked": (400, "У группового слота площадку менять нельзя"),
     "invalid_arena": (400, "Площадка не привязана к вашему профилю"),
 }

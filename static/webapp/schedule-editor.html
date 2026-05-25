@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <title>Расписание</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script src="mini-app-telegram-chrome.js?v=202605085"></script>
@@ -25,8 +25,8 @@
       href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=optional"
     />
   </noscript>
-  <link rel="preload" href="schedule-editor-main.js?v=202605206" as="script" />
-  <link rel="stylesheet" href="mini-app-schedule-editor.css?v=202605206" />
+  <link rel="preload" href="schedule-editor-main.js?v=202605207" as="script" />
+  <link rel="stylesheet" href="mini-app-schedule-editor.css?v=202605207" />
   <link rel="stylesheet" href="mini-app-trainer-nav.css?v=20260429" />
 </head>
 <body>
@@ -96,11 +96,18 @@
   })();
   </script>
   <div id="screenMain" data-screen class="active">
-  <div class="header">
-    <span class="header-title">Расписание</span>
-    <div class="app-header-actions trainer-mini-nav">
-      <button type="button" class="btn-app-home" id="btnHome">Главная</button>
-      <button type="button" class="btn-app-back" id="btnBack" data-skip-history-back="true" hidden>Назад</button>
+  <div class="se-schedule-sticky-sentinel" id="seScheduleStickySentinel" aria-hidden="true"></div>
+  <div class="se-schedule-top-chrome" id="seScheduleTopChrome">
+    <div class="header">
+      <span class="header-title">Расписание</span>
+      <div class="app-header-actions trainer-mini-nav">
+        <button type="button" class="btn-app-home" id="btnHome">Главная</button>
+        <button type="button" class="btn-app-back" id="btnBack" data-skip-history-back="true" hidden>Назад</button>
+      </div>
+    </div>
+    <div class="tabs">
+      <button type="button" class="tab active" data-tab="calendar">Расписание</button>
+      <button type="button" class="tab" data-tab="template">Шаблон недели</button>
     </div>
   </div>
   <div id="seCrmLockBanner" class="se-crm-lock-banner" hidden aria-hidden="true">
@@ -108,10 +115,6 @@
       Режим витрины без CRM: календарь для просмотра. Чтобы добавлять слоты, шаблон и записи — оформите подписку.
     </p>
     <button type="button" class="btn-block btn-primary se-crm-lock-banner__cta" id="seCrmLockBannerCta">Тарифы и оплата</button>
-  </div>
-  <div class="tabs">
-    <button type="button" class="tab active" data-tab="calendar">Расписание</button>
-    <button type="button" class="tab" data-tab="template">Шаблон недели</button>
   </div>
 
   <div id="tabCalendar" class="tab-content active">
@@ -755,6 +758,6 @@
   <script src="mini-app-trainer-home.js"></script>
   <script src="trainer-client-relay-ui.js?v=202605201"></script>
   <script src="trainer-relay-helpers.js?v=202605090"></script>
-  <script defer src="schedule-editor-main.js?v=202605206"></script>
+  <script defer src="schedule-editor-main.js?v=202605207"></script>
 </body>
 </html>

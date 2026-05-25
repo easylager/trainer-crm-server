@@ -19,6 +19,22 @@ from src.infrastructure.db.models import SUBSCRIPTION_STATUS_ACTIVE, SUBSCRIPTIO
 # Short day names for charts (Mon–Sun)
 STATS_DAY_NAMES = ("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс")
 
+# Session cash for completed bookings: booking snapshot wins (trainer edits), then tier, then service default.
+_SQL_STATS_SESSION_PRICE_CENTS = (
+    "COALESCE(b.booking_price_cents, spv.price_cents, ts.price_cents, 0)"
+)
+_SQL_STATS_SESSION_CASH_EXPR = (
+    "CASE WHEN pr.booking_id IS NOT NULL THEN 0"
+    f" ELSE GREATEST(0, {_SQL_STATS_SESSION_PRICE_CENTS} - COALESCE(cbc.amount_cents, 0))"
+    " END"
+)
+_SQL_STATS_BOOKING_REVENUE_JOINS = """
+            LEFT JOIN trainer_services ts ON ts.trainer_id = b.trainer_id AND ts.service_id = b.service_id
+            LEFT JOIN trainer_service_price_variants spv ON spv.id = b.service_price_variant_id
+            LEFT JOIN pass_redemptions pr ON pr.booking_id = b.id
+            LEFT JOIN certificate_booking_credits cbc ON cbc.booking_id = b.id
+"""
+
 # Admin dashboard: coarse activation funnel (SQL CASE must stay in sync with keys below).
 _SHARED_INVITE_SQL = sql_trainer_shared_client_invite()
 _TRAINER_ACTIVATION_STAGE_CASE = f"""
@@ -120,15 +136,11 @@ async def _trainer_calendar_revenue_total(
         text(
             """
             SELECT COALESCE(SUM(
-                CASE WHEN pr.booking_id IS NOT NULL THEN 0
-                     ELSE GREATEST(0, COALESCE(ts.price_cents, 0) - COALESCE(cbc.amount_cents, 0))
-                END
+                """ + _SQL_STATS_SESSION_CASH_EXPR + """
             ), 0)::bigint
             FROM bookings b
             JOIN slots s ON s.id = b.slot_id
-            LEFT JOIN trainer_services ts ON ts.trainer_id = b.trainer_id AND ts.service_id = b.service_id
-            LEFT JOIN pass_redemptions pr ON pr.booking_id = b.id
-            LEFT JOIN certificate_booking_credits cbc ON cbc.booking_id = b.id
+            """ + _SQL_STATS_BOOKING_REVENUE_JOINS + """
             WHERE b.trainer_id = :tid AND b.status = 'completed'
               AND NOT b.is_sandbox
               AND s.status IN ('available', 'booked')
@@ -198,14 +210,10 @@ async def get_trainer_revenue_breakdown_for_range(
                 COUNT(*) FILTER (WHERE session_rev > 0)::int
             FROM (
                 SELECT
-                    CASE WHEN pr.booking_id IS NOT NULL THEN 0
-                         ELSE GREATEST(0, COALESCE(ts.price_cents, 0) - COALESCE(cbc.amount_cents, 0))
-                    END AS session_rev
+                    """ + _SQL_STATS_SESSION_CASH_EXPR + """ AS session_rev
                 FROM bookings b
                 JOIN slots s ON s.id = b.slot_id
-                LEFT JOIN trainer_services ts ON ts.trainer_id = b.trainer_id AND ts.service_id = b.service_id
-                LEFT JOIN pass_redemptions pr ON pr.booking_id = b.id
-                LEFT JOIN certificate_booking_credits cbc ON cbc.booking_id = b.id
+                """ + _SQL_STATS_BOOKING_REVENUE_JOINS + """
                 WHERE b.trainer_id = :tid AND b.status = 'completed'
                   AND NOT b.is_sandbox
                   AND s.status IN ('available', 'booked')
@@ -583,14 +591,10 @@ async def get_trainer_stats_dashboard(session: AsyncSession, trainer_id: int) ->
             """
             WITH line AS (
                 SELECT s.slot_date,
-                    CASE WHEN pr.booking_id IS NOT NULL THEN 0
-                         ELSE GREATEST(0, COALESCE(ts.price_cents, 0) - COALESCE(cbc.amount_cents, 0))
-                    END AS session_rev
+                    """ + _SQL_STATS_SESSION_CASH_EXPR + """ AS session_rev
                 FROM bookings b
                 JOIN slots s ON s.id = b.slot_id
-                LEFT JOIN trainer_services ts ON ts.trainer_id = b.trainer_id AND ts.service_id = b.service_id
-                LEFT JOIN pass_redemptions pr ON pr.booking_id = b.id
-                LEFT JOIN certificate_booking_credits cbc ON cbc.booking_id = b.id
+                """ + _SQL_STATS_BOOKING_REVENUE_JOINS + """
                 WHERE b.trainer_id = :tid AND b.status = 'completed'
                   AND NOT b.is_sandbox
                   AND s.status IN ('available', 'booked')
@@ -876,16 +880,12 @@ async def get_trainer_stats_dashboard(session: AsyncSession, trainer_id: int) ->
                 COALESCE(c.phone, '') AS phone,
                 COUNT(*) AS cnt,
                 COALESCE(SUM(
-                    CASE WHEN pr.booking_id IS NOT NULL THEN 0
-                         ELSE GREATEST(0, COALESCE(ts.price_cents, 0) - COALESCE(cbc.amount_cents, 0))
-                    END
+                    """ + _SQL_STATS_SESSION_CASH_EXPR + """
                 ), 0)::bigint AS revenue_cents
             FROM bookings b
             JOIN clients c ON c.id = b.client_id
             JOIN slots s ON s.id = b.slot_id
-            LEFT JOIN trainer_services ts ON ts.trainer_id = b.trainer_id AND ts.service_id = b.service_id
-            LEFT JOIN pass_redemptions pr ON pr.booking_id = b.id
-            LEFT JOIN certificate_booking_credits cbc ON cbc.booking_id = b.id
+            """ + _SQL_STATS_BOOKING_REVENUE_JOINS + """
             WHERE b.trainer_id = :tid
               AND b.status = 'completed'
               AND NOT b.is_sandbox

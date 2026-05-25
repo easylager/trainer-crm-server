@@ -1,4 +1,43 @@
     /* Base shell: theme.css + mini-app-components.css — кнопки шапки: mini-app-components (.header .app-header-actions) */
+    /* Sticky top: title + «Главная»/«Назад» + tabs stay visible while scrolling long week lists. */
+    .se-schedule-sticky-sentinel {
+      height: 1px;
+      margin: 0;
+      pointer-events: none;
+      visibility: hidden;
+    }
+    .se-schedule-top-chrome {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      margin: 0 0 12px;
+      padding: 0 0 8px;
+      background: var(--tg-theme-bg-color);
+      border-bottom: 1px solid transparent;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+    .se-schedule-top-chrome.is-pinned {
+      border-bottom-color: color-mix(in srgb, var(--tg-theme-hint-color) 22%, transparent);
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.07);
+    }
+    .se-schedule-top-chrome .header {
+      margin-bottom: 10px;
+      padding-bottom: 0;
+    }
+    .se-schedule-top-chrome .tabs {
+      margin-bottom: 0;
+    }
+    @supports (padding: max(0px)) {
+      .se-schedule-top-chrome {
+        padding-top: max(0px, env(safe-area-inset-top, 0px));
+      }
+    }
+    @media (prefers-color-scheme: dark) {
+      .se-schedule-top-chrome.is-pinned {
+        box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+        border-bottom-color: color-mix(in srgb, var(--tg-theme-hint-color) 32%, transparent);
+      }
+    }
     .tabs {
       display: flex;
       gap: 4px;
@@ -218,7 +257,7 @@
     }
     .cal-day-anchor {
       scroll-margin-bottom: calc(84px + env(safe-area-inset-bottom, 0px));
-      scroll-margin-top: 10px;
+      scroll-margin-top: calc(96px + env(safe-area-inset-top, 0px));
     }
     @media (prefers-color-scheme: dark) {
       .schedule-week-day-strip {
