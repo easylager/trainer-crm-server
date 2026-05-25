@@ -80,17 +80,9 @@
     return h;
   }
 
-  /** Belarus new-client phone: national digits in field; +375 is fixed in UI (aligned with schedule-editor). */
-  function nationalDigitsFromGroupsNewPhone(raw) {
-    if (typeof window.extractNational375Digits === 'function') {
-      return window.extractNational375Digits(raw);
-    }
-    var d = String(raw || '').replace(/\D/g, '');
-    while (d.length >= 2 && d.slice(0, 2) === '00') d = d.slice(2);
-    while (d.length > 9 && d.indexOf('375') === 0) d = d.slice(3);
-    if (d.indexOf('80') === 0 && d.length >= 9) d = d.slice(2);
-    while (d.length > 9 && d.indexOf('375') === 0) d = d.slice(3);
-    return d.length > 9 ? d.slice(0, 9) : d;
+  function groupsPhoneFromField(el) {
+    if (window.CrmPhoneField && el) return CrmPhoneField.validate(el);
+    return { ok: false, e164: '', error: 'Укажите номер телефона.' };
   }
 
   var DAYS = [
@@ -406,12 +398,12 @@
         return;
       }
       var phEl = document.getElementById('addMemberPhone');
-      var nd = nationalDigitsFromGroupsNewPhone(phEl ? phEl.value : '');
-      if (nd.length !== 9) {
-        alert('Укажите корректный номер телефона (9 цифр после +375).');
+      var phCheck = groupsPhoneFromField(phEl);
+      if (!phCheck.ok) {
+        alert(phCheck.error || 'Укажите номер телефона.');
         return;
       }
-      payload = Object.assign({}, payload, { phone: '+375' + nd });
+      payload = Object.assign({}, payload, { phone: phCheck.e164 });
     }
     var slotId = state.addMemberSlotId;
     var svcId = state.addMemberServiceId;
@@ -557,12 +549,7 @@
         });
       });
     }
-    var addPh = document.getElementById('addMemberPhone');
-    if (addPh && addPh.dataset.crmNat375Mask !== '1') {
-      if (typeof window.wireNational375PhoneInputMask === 'function') {
-        window.wireNational375PhoneInputMask(addPh);
-      }
-    }
+    if (window.CrmPhoneField) CrmPhoneField.initAll(document.getElementById('modalAddMember') || document);
   }
 
   function bindSlotActionsModal() {

@@ -21,6 +21,8 @@ def test_validate_age() -> None:
 def test_validate_phone() -> None:
     v, err = validate_phone("+375291112233")
     assert v and err is None
+    v_ru, err_ru = validate_phone("+79161234567")
+    assert v_ru == "+79161234567" and err_ru is None
     assert validate_phone("")[0] is None and validate_phone("")[1] is None
     assert validate_phone("x")[1] is not None
     err_short = validate_phone("+37529")[1]

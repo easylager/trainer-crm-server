@@ -6,9 +6,10 @@
   <title>Тренерский кабинет</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script src="mini-app-telegram-chrome.js?v=202605085"></script>
+  <script src="mini-app-phone-field.js?v=202605203"></script>
   <!-- Bump ?v= when theme.css / mini-app-components.css change (immutable cache on /webapp/…). -->
   <link rel="stylesheet" href="theme.css?v=20260425" />
-  <link rel="stylesheet" href="mini-app-components.css?v=20260425" />
+  <link rel="stylesheet" href="mini-app-components.css?v=202605206" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <!-- DM Sans: non-blocking (media=print → all) + display=optional to reduce render contention vs swap. -->
@@ -53,7 +54,7 @@
   <!-- Bump ?v= when mini-app-trainer-hub.css changes (immutable cache on /webapp/…). -->
   <link rel="stylesheet" href="mini-app-trainer-hub.css?v=202605193" />
   <!-- Early download of main hub script (defer runs at end of body); improves time-to-interactive vs. discover-at-bottom. -->
-  <link rel="preload" href="trainer-home-main.js?v=202605193" as="script" />
+  <link rel="preload" href="trainer-home-main.js?v=202605201" as="script" />
 
   <!-- ─── Splash loader (inline to guarantee render before external CSS) ─── -->
   <style>
@@ -915,9 +916,19 @@
           <div class="label">Новый клиент</div>
           <div class="book-new-client">
             <label class="book-field-label" for="hubBookNewPhone">Телефон <span class="book-req" aria-hidden="true">*</span></label>
-            <div class="hub-phone-input-wrap">
-              <span class="hub-phone-prefix" aria-hidden="true">+375</span>
-              <input type="text" id="hubBookNewPhone" class="input hub-phone-input" placeholder="29 123-45-67" autocomplete="tel" inputmode="tel" maxlength="14" aria-required="true">
+            <div class="crm-phone-field" data-crm-phone-field data-default-country="BY">
+              <div class="crm-phone-field-row">
+                <button type="button" class="crm-phone-country-btn" aria-label="Код страны" aria-haspopup="listbox" aria-expanded="false">
+                  <span class="crm-phone-country-flag" aria-hidden="true">🇧🇾</span>
+                  <span class="crm-phone-country-dial">+375</span>
+                  <span class="crm-phone-country-chevron" aria-hidden="true">▾</span>
+                </button>
+                <input type="tel" id="hubBookNewPhone" class="crm-phone-national-input" placeholder="29 123-45-67" autocomplete="tel-national" inputmode="tel" aria-required="true">
+              </div>
+              <div class="crm-phone-country-menu" role="listbox" hidden>
+                <button type="button" class="crm-phone-country-option crm-phone-country-option--active" role="option" data-country="BY" aria-selected="true">🇧🇾 Беларусь +375</button>
+                <button type="button" class="crm-phone-country-option" role="option" data-country="RU" aria-selected="false">🇷🇺 Россия +7</button>
+              </div>
             </div>
             <label class="book-field-label" for="hubBookNewFirstName">Имя <span class="book-req" aria-hidden="true">*</span></label>
             <input type="text" id="hubBookNewFirstName" class="input" placeholder="Иван" autocomplete="given-name" maxlength="120" aria-required="true">
@@ -955,9 +966,9 @@
 
   <script src="mini-app-trainer-gate.js?v=20260548"></script>
   <script src="mini-app-trainer-celebration.js"></script>
-  <script src="trainer-client-relay-ui.js?v=202605090"></script>
+  <script src="trainer-client-relay-ui.js?v=202605201"></script>
   <script src="trainer-relay-helpers.js?v=202605090"></script>
   <!-- Bump ?v= when trainer-home-main.js changes (immutable cache on /webapp/…). -->
-  <script defer src="trainer-home-main.js?v=202605193"></script>
+  <script defer src="trainer-home-main.js?v=202605201"></script>
 </body>
 </html>

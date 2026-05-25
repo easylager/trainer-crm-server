@@ -42,41 +42,18 @@
         return url + (url.indexOf('?') === -1 ? '?' : '&') + 'init_data=' + encodeURIComponent(id);
       }
 
-      var TC_PHONE_MAX_LEN = 32;
-      var TC_PHONE_BY_RE = /^\+375\d{9}$/;
-      function normalizePhoneTrainerClient(raw) {
-        var s = String(raw || '').trim();
-        if (!s) return '';
-        var d = s.replace(/\D/g, '');
-        if (!d) return s.slice(0, TC_PHONE_MAX_LEN);
-        if (d.length === 12 && d.indexOf('375') === 0) return '+' + d;
-        if (d.length === 11 && d.indexOf('80') === 0) return '+375' + d.slice(2);
-        if (d.length === 9) return '+375' + d;
-        return s.replace(/\s+/g, '').replace(/-/g, '').replace(/\(/g, '').replace(/\)/g, '').replace(/\./g, '').slice(0, TC_PHONE_MAX_LEN);
-      }
-      function validatePhoneTrainerClient(normalized) {
-        if (!normalized) return 'Укажите номер телефона.';
-        if (normalized.length > TC_PHONE_MAX_LEN) return 'Телефон: не длиннее 32 символов.';
-        if (!TC_PHONE_BY_RE.test(normalized)) return 'Укажите корректный номер Беларуси (+375 и 9 цифр).';
-        return null;
-      }
-      /** National fragment in UI (+375 shown beside) → E.164; uses same helpers as schedule/book. */
       function phoneFromTcAddClientNationalField() {
         var el = document.getElementById('tcAddClientPhone');
-        var raw = el ? String(el.value || '').trim() : '';
-        if (typeof window.extractNational375Digits === 'function') {
-          var nd = window.extractNational375Digits(raw);
-          if (nd.length > 0) return '+375' + nd;
-          return '';
-        }
-        return normalizePhoneTrainerClient(raw);
+        if (window.CrmPhoneField && el) return CrmPhoneField.getE164(el) || '';
+        return '';
+      }
+      function validatePhoneTrainerClientFromField() {
+        var el = document.getElementById('tcAddClientPhone');
+        if (window.CrmPhoneField && el) return CrmPhoneField.validate(el);
+        return { ok: false, e164: '', error: 'Укажите номер телефона.' };
       }
       (function wireTcAddClientPhoneMask() {
-        var el = document.getElementById('tcAddClientPhone');
-        if (!el || el.dataset.crmNat375Mask === '1') return;
-        if (typeof window.wireNational375PhoneInputMask === 'function') {
-          window.wireNational375PhoneInputMask(el);
-        }
+        if (window.CrmPhoneField) CrmPhoneField.initAll(document.getElementById('tcModalAddClient') || document);
       })();
       function setAddClientErr(msg) {
         var el = document.getElementById('tcAddClientErr');
@@ -103,7 +80,8 @@
         var fe = document.getElementById('tcAddClientFirst');
         var le = document.getElementById('tcAddClientLast');
         var me = document.getElementById('tcAddClientMiddle');
-        if (pe) pe.value = '';
+        if (pe && window.CrmPhoneField) CrmPhoneField.setE164(pe, '');
+        else if (pe) pe.value = '';
         if (fe) fe.value = '';
         if (le) le.value = '';
         if (me) me.value = '';
@@ -3415,12 +3393,12 @@
       if (btnAddClientSubmit) {
         btnAddClientSubmit.onclick = function() {
           setAddClientErr('');
-          var phone = phoneFromTcAddClientNationalField();
-          var phErr = validatePhoneTrainerClient(phone);
-          if (phErr) {
-            setAddClientErr(phErr);
+          var phCheck = validatePhoneTrainerClientFromField();
+          if (!phCheck.ok) {
+            setAddClientErr(phCheck.error || 'Укажите номер телефона.');
             return;
           }
+          var phone = phCheck.e164;
           var first = (document.getElementById('tcAddClientFirst').value || '').trim();
           if (!first) {
             setAddClientErr('Укажите имя.');

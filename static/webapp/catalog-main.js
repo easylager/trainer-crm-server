@@ -1921,49 +1921,16 @@
         });
       }
 
-      function normalizeCatalogBookingPhoneFromField(raw) {
-        var d =
-          typeof window.extractNational375Digits === 'function'
-            ? window.extractNational375Digits(raw)
-            : (function () {
-                var x = String(raw || '').replace(/\D/g, '');
-                while (x.length >= 2 && x.slice(0, 2) === '00') x = x.slice(2);
-                while (x.length > 9 && x.indexOf('375') === 0) x = x.slice(3);
-                if (x.indexOf('80') === 0 && x.length >= 9) x = x.slice(2);
-                while (x.length > 9 && x.indexOf('375') === 0) x = x.slice(3);
-                return x.length > 9 ? x.slice(0, 9) : x;
-              })();
-        if (d.length !== 9) return '';
-        return '+375' + d;
-      }
-
       function prefillBookingPhoneField() {
         var el = document.getElementById('bookingPhone');
         if (!el) return;
         var raw = (state.clientPhone || '').trim();
-        if (!raw) {
-          el.value = '';
+        if (window.CrmPhoneField) {
+          if (raw) CrmPhoneField.setE164(el, raw);
+          else CrmPhoneField.setE164(el, '');
           return;
         }
-        var d =
-          typeof window.extractNational375Digits === 'function'
-            ? window.extractNational375Digits(raw)
-            : (function () {
-                var x = raw.replace(/\D/g, '');
-                while (x.length >= 2 && x.slice(0, 2) === '00') x = x.slice(2);
-                while (x.length > 9 && x.indexOf('375') === 0) x = x.slice(3);
-                if (x.indexOf('80') === 0 && x.length >= 9) x = x.slice(2);
-                while (x.length > 9 && x.indexOf('375') === 0) x = x.slice(3);
-                return x.length > 9 ? x.slice(0, 9) : x;
-              })();
-        if (d.length < 9) {
-          el.value = '';
-          return;
-        }
-        el.value = d.slice(0, 9);
-        if (typeof window.applyNational375MaskedToInput === 'function') {
-          window.applyNational375MaskedToInput(el);
-        }
+        el.value = raw;
       }
 
       /** Persist summary filters (and optional trainer) so reopening catalog keeps city/service/arena. */
@@ -3989,22 +3956,19 @@
       }
 
       (function wireCatalogBookingPhoneMask() {
-        var el = document.getElementById('bookingPhone');
-        if (!el || el.dataset.crmNat375Mask === '1') return;
-        if (typeof window.wireNational375PhoneInputMask === 'function') {
-          window.wireNational375PhoneInputMask(el);
-        }
+        if (window.CrmPhoneField) CrmPhoneField.initAll(document.getElementById('screenBookingForm') || document);
       })();
 
       document.getElementById('btnSubmitBooking').onclick = function() {
         var slot = state.selectedSlot;
         if (!slot || !state.selectedTrainer) return;
-        var phoneRaw = (document.getElementById('bookingPhone').value || '').trim();
-        var phone = normalizeCatalogBookingPhoneFromField(phoneRaw);
-        if (!phone) {
-          alert('Введите 9 цифр номера после +375 (например 29 123-45-67).');
+        var phoneEl = document.getElementById('bookingPhone');
+        var phCheck = window.CrmPhoneField ? CrmPhoneField.validate(phoneEl) : { ok: false, error: 'Укажите номер телефона.' };
+        if (!phCheck.ok) {
+          alert(phCheck.error || 'Укажите номер телефона.');
           return;
         }
+        var phone = phCheck.e164;
         if (state.needsProfileName) {
           var fn = (document.getElementById('bookingFirstName') && document.getElementById('bookingFirstName').value || '').trim();
           if (!fn) {

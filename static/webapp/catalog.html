@@ -6,8 +6,9 @@
   <title>Каталог и запись</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script src="mini-app-telegram-chrome.js?v=202605022"></script>
+  <script src="mini-app-phone-field.js?v=202605203"></script>
   <link rel="stylesheet" href="theme.css?v=20260426" />
-  <link rel="stylesheet" href="mini-app-components.css?v=20260426" />
+  <link rel="stylesheet" href="mini-app-components.css?v=202605206" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link
@@ -23,8 +24,8 @@
     />
   </noscript>
   <script src="client-mini-app-theme.js"></script>
-  <link rel="preload" href="catalog-main.js?v=202605191" as="script" />
-  <link rel="stylesheet" href="mini-app-catalog.css?v=202605191" />
+  <link rel="preload" href="catalog-main.js?v=202605201" as="script" />
+  <link rel="stylesheet" href="mini-app-catalog.css?v=202605206" />
   <link rel="stylesheet" href="mini-app-client-nav.css?v=20260426" />
   <!-- Leaflet (mini-map for arena multi-select). Loaded on every page so back/forward keeps tiles cached;
        library is ~40KB gz, used only when #screenArena renders. OSM tiles require attribution by license. -->
@@ -208,9 +209,19 @@
     </div>
     <div class="form-block">
       <label for="bookingPhone">Телефон *</label>
-      <div class="catalog-phone-input-wrap">
-        <span class="catalog-phone-prefix" aria-hidden="true">+375</span>
-        <input type="text" id="bookingPhone" class="catalog-phone-input" placeholder="29 123-45-67" autocomplete="tel" inputmode="tel" maxlength="14" />
+      <div class="crm-phone-field" data-crm-phone-field data-default-country="BY">
+        <div class="crm-phone-field-row">
+          <button type="button" class="crm-phone-country-btn" aria-label="Код страны" aria-haspopup="listbox" aria-expanded="false">
+            <span class="crm-phone-country-flag" aria-hidden="true">🇧🇾</span>
+            <span class="crm-phone-country-dial">+375</span>
+            <span class="crm-phone-country-chevron" aria-hidden="true">▾</span>
+          </button>
+          <input type="tel" id="bookingPhone" class="crm-phone-national-input" placeholder="29 123-45-67" autocomplete="tel-national" inputmode="tel" aria-required="true" />
+        </div>
+        <div class="crm-phone-country-menu" role="listbox" hidden>
+          <button type="button" class="crm-phone-country-option crm-phone-country-option--active" role="option" data-country="BY" aria-selected="true">🇧🇾 Беларусь +375</button>
+          <button type="button" class="crm-phone-country-option" role="option" data-country="RU" aria-selected="false">🇷🇺 Россия +7</button>
+        </div>
       </div>
     </div>
     <div class="form-block">
@@ -275,7 +286,7 @@
     </div>
   </div>
 
-  <script defer src="catalog-main.js?v=202605191"></script>
+  <script defer src="catalog-main.js?v=202605201"></script>
   <script defer src="mini-app-client-home.js"></script>
 </body>
 </html>

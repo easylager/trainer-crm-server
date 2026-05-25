@@ -6,8 +6,9 @@
   <title>Запись</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script src="mini-app-telegram-chrome.js?v=202605022"></script>
+  <script src="mini-app-phone-field.js?v=202605203"></script>
   <link rel="stylesheet" href="theme.css" />
-  <link rel="stylesheet" href="mini-app-components.css" />
+  <link rel="stylesheet" href="mini-app-components.css?v=202605206" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet" />
@@ -339,7 +340,7 @@
       letter-spacing: 0.3px;
     }
     /* Не трогать radio/checkbox — иначе width:100% съедает подпись у «Категория цены». */
-    .form-block input:not([type="radio"]):not([type="checkbox"]),
+    .form-block input:not([type="radio"]):not([type="checkbox"]):not(.crm-phone-national-input),
     .form-block textarea {
       width: 100%;
       padding: 14px 16px;
@@ -353,7 +354,7 @@
       transition: all 0.12s ease;
       font-family: inherit;
     }
-    .form-block input:not([type="radio"]):not([type="checkbox"]):focus,
+    .form-block input:not([type="radio"]):not([type="checkbox"]):not(.crm-phone-national-input):focus,
     .form-block textarea:focus {
       outline: none;
       border-color: rgba(247, 166, 0, 0.45);
@@ -362,30 +363,6 @@
     .form-block textarea {
       min-height: 100px;
       resize: vertical;
-    }
-    .book-phone-input-wrap {
-      position: relative;
-    }
-    .book-phone-input-wrap .book-phone-prefix {
-      position: absolute;
-      left: 16px;
-      top: 50%;
-      transform: translateY(-50%);
-      font-size: 15px;
-      font-weight: 600;
-      color: var(--tg-theme-text-color);
-      opacity: 0.85;
-      pointer-events: none;
-      letter-spacing: 0.02em;
-    }
-    /* Must beat `.form-block input` (0,3,1) so padding-left isn’t reset by shorthand — same idea as #screenBookingForm .catalog-phone-input in catalog. */
-    #screenForm .book-phone-input-wrap .book-phone-input {
-      padding-left: 58px;
-      font-variant-numeric: tabular-nums;
-      touch-action: auto;
-      -webkit-user-select: text;
-      user-select: text;
-      -webkit-touch-callout: default;
     }
     .price-tier-radios label {
       display: flex;
@@ -671,9 +648,19 @@
     </div>
     <div class="form-block">
       <label for="phone">Телефон *</label>
-      <div class="book-phone-input-wrap">
-        <span class="book-phone-prefix" aria-hidden="true">+375</span>
-        <input type="text" id="phone" class="book-phone-input" placeholder="29 123-45-67" autocomplete="tel" inputmode="tel" maxlength="14" />
+      <div class="crm-phone-field" data-crm-phone-field data-default-country="BY">
+        <div class="crm-phone-field-row">
+          <button type="button" class="crm-phone-country-btn" aria-label="Код страны" aria-haspopup="listbox" aria-expanded="false">
+            <span class="crm-phone-country-flag" aria-hidden="true">🇧🇾</span>
+            <span class="crm-phone-country-dial">+375</span>
+            <span class="crm-phone-country-chevron" aria-hidden="true">▾</span>
+          </button>
+          <input type="tel" id="phone" class="crm-phone-national-input" placeholder="29 123-45-67" autocomplete="tel-national" inputmode="tel" aria-required="true" />
+        </div>
+        <div class="crm-phone-country-menu" role="listbox" hidden>
+          <button type="button" class="crm-phone-country-option crm-phone-country-option--active" role="option" data-country="BY" aria-selected="true">🇧🇾 Беларусь +375</button>
+          <button type="button" class="crm-phone-country-option" role="option" data-country="RU" aria-selected="false">🇷🇺 Россия +7</button>
+        </div>
       </div>
     </div>
     <div class="form-block">
@@ -993,48 +980,15 @@
         overlay.setAttribute('aria-hidden', 'true');
       }
 
-      function normalizeBookPhoneForApi(raw) {
-        var d =
-          typeof window.extractNational375Digits === 'function'
-            ? window.extractNational375Digits(raw)
-            : (function () {
-                var x = String(raw || '').replace(/\D/g, '');
-                while (x.length >= 2 && x.slice(0, 2) === '00') x = x.slice(2);
-                while (x.length > 9 && x.indexOf('375') === 0) x = x.slice(3);
-                if (x.indexOf('80') === 0 && x.length >= 9) x = x.slice(2);
-                while (x.length > 9 && x.indexOf('375') === 0) x = x.slice(3);
-                return x.length > 9 ? x.slice(0, 9) : x;
-              })();
-        if (d.length !== 9) return '';
-        return '+375' + d;
-      }
-
       function prefillBookPhoneField() {
         var el = document.getElementById('phone');
         if (!el) return;
-        if (!clientPhone) {
-          el.value = '';
+        if (window.CrmPhoneField) {
+          if (clientPhone) CrmPhoneField.setE164(el, clientPhone);
+          else CrmPhoneField.setE164(el, '');
           return;
         }
-        var d =
-          typeof window.extractNational375Digits === 'function'
-            ? window.extractNational375Digits(clientPhone)
-            : (function () {
-                var x = String(clientPhone).replace(/\D/g, '');
-                while (x.length >= 2 && x.slice(0, 2) === '00') x = x.slice(2);
-                while (x.length > 9 && x.indexOf('375') === 0) x = x.slice(3);
-                if (x.indexOf('80') === 0 && x.length >= 9) x = x.slice(2);
-                while (x.length > 9 && x.indexOf('375') === 0) x = x.slice(3);
-                return x.length > 9 ? x.slice(0, 9) : x;
-              })();
-        if (d.length < 9) {
-          el.value = '';
-          return;
-        }
-        el.value = d.slice(0, 9);
-        if (typeof window.applyNational375MaskedToInput === 'function') {
-          window.applyNational375MaskedToInput(el);
-        }
+        el.value = clientPhone || '';
       }
 
       function priceVariantHintForBookForm(effServiceId) {
@@ -1579,11 +1533,7 @@
       })();
 
       (function wireBookPhoneMask() {
-        var el = document.getElementById('phone');
-        if (!el || el.dataset.crmNat375Mask === '1') return;
-        if (typeof window.wireNational375PhoneInputMask === 'function') {
-          window.wireNational375PhoneInputMask(el);
-        }
+        if (window.CrmPhoneField) CrmPhoneField.initAll(document);
       })();
 
       (function wireBookServiceDetailUi() {
@@ -1622,11 +1572,13 @@
       };
 
       document.getElementById('btnSubmit').onclick = function() {
-        const phone = normalizeBookPhoneForApi((document.getElementById('phone').value || '').trim());
-        if (!phone) {
-          alert('Введите 9 цифр номера после +375 (например 29 123-45-67).');
+        var phoneEl = document.getElementById('phone');
+        var phCheck = window.CrmPhoneField ? CrmPhoneField.validate(phoneEl) : { ok: false, error: 'Укажите номер телефона.' };
+        if (!phCheck.ok) {
+          alert(phCheck.error || 'Укажите номер телефона.');
           return;
         }
+        const phone = phCheck.e164;
         if (needsProfileName) {
           const fn = (document.getElementById('bookFirstName') && document.getElementById('bookFirstName').value || '').trim();
           if (!fn) {

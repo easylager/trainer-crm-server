@@ -150,7 +150,10 @@ CLIENT_PROFILE_USE_TELEGRAM_NAME = "Использовать имя из Telegra
 CLIENT_BUTTON_USE_TG_NAME = "Да"
 CLIENT_BUTTON_ENTER_MANUAL = "Ввести вручную"
 CLIENT_PROFILE_NAME_INVALID = "Укажите хотя бы <b>имя</b> одним словом или имя и фамилию, например: Иван или Иван Петров."
-CLIENT_BOOK_ENTER_PHONE = "Введите номер телефона (например +375291234567) или нажмите кнопку ниже, чтобы отправить контакт."
+CLIENT_BOOK_ENTER_PHONE = (
+    "Введите номер телефона Беларуси (+375…) или России (+7…), "
+    "или нажмите кнопку ниже, чтобы отправить контакт."
+)
 CLIENT_BOOK_ENTER_COMMENT = "Комментарий к записи (необязательно). Напишите текст или нажмите «Пропустить»."
 CLIENT_BOOK_SKIP_COMMENT = "Пропустить"
 # Single source of truth: after any booking, direct to «Мои записи» (plan §4.1)
@@ -160,7 +163,10 @@ CLIENT_BOOK_SUCCESS = "✅ Вы оставили запрос на заняти�
 CLIENT_BOOK_WHAT_NEXT = "Дождитесь подтверждения от тренера — мы сообщим, когда он ответит."
 CLIENT_BOOK_SUCCESS_HINT = CLIENT_MY_RECORDS_CTA
 CLIENT_BOOK_BUTTON_BACK = "◀️ Назад"
-CLIENT_BOOK_PHONE_INVALID = "Нужен номер телефона. Отправьте текст (например +375291234567) или нажмите «Отправить контакт»."
+CLIENT_BOOK_PHONE_INVALID = (
+    "Нужен номер телефона. Отправьте +375 или +7 (можно 8… для России), "
+    "или нажмите «Отправить контакт»."
+)
 CLIENT_BOOK_BUTTON_SEND_CONTACT = "📱 Отправить контакт"
 CLIENT_BOOK_RECORDED = "Запись оформлена."
 CLIENT_BOOK_COMMENT_OR_BUTTON = "Напишите комментарий или нажмите кнопку:"

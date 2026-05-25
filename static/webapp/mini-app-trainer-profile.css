@@ -237,7 +237,9 @@
       border-radius: 50%;
       flex-shrink: 0;
     }
-    .field input, .field select, .field textarea {
+    .field input:not(.crm-phone-national-input),
+    .field select,
+    .field textarea {
       width: 100%;
       padding: 14px 16px;
       border-radius: 12px;
@@ -248,7 +250,9 @@
       transition: border-color 0.2s, box-shadow 0.2s;
       outline: none;
     }
-    .field input:focus, .field select:focus, .field textarea:focus {
+    .field input:not(.crm-phone-national-input):focus,
+    .field select:focus,
+    .field textarea:focus {
       border-color: rgba(247, 166, 0, 0.5);
       box-shadow: 0 0 0 3px rgba(247, 166, 0, 0.1);
     }

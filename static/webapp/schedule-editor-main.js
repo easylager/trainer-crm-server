@@ -339,38 +339,9 @@
       const MONTHS = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
       const MONTHS_GENITIVE = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
 
-      /** Belarus E.164; aligned with `src.shared.profile_phone` and trainer-profile.html */
-      var PHONE_MAX_LEN = 32;
-      var PHONE_BY_RE = /^\+375\d{9}$/;
-      var PHONE_BY_ERR = 'Укажите корректный номер телефона.';
-      function normalizePhoneClient(s) {
-        var raw = String(s || '').trim();
-        if (!raw) return '';
-        var d = raw.replace(/\D/g, '');
-        if (!d) return raw.slice(0, PHONE_MAX_LEN);
-        if (d.length === 12 && d.indexOf('375') === 0) return '+' + d;
-        if (d.length === 11 && d.indexOf('80') === 0) return '+375' + d.slice(2);
-        if (d.length === 9) return '+375' + d;
-        return raw.replace(/\s+/g, '').replace(/-/g, '').replace(/\(/g, '').replace(/\)/g, '').replace(/\./g, '').slice(0, PHONE_MAX_LEN);
-      }
-      function validatePhoneMessage(normalized) {
-        var t = normalized;
-        if (!t) return 'Укажите номер телефона.';
-        if (t.length > PHONE_MAX_LEN) return 'Телефон: не длиннее 32 символов.';
-        if (!PHONE_BY_RE.test(t)) return PHONE_BY_ERR;
-        return null;
-      }
-
-      /** National digits only (9) from masked «новый клиент» field; pasted full MSISDN normalized like chrome helper. */
-      function nationalDigitsFromBookNewPhoneField(raw) {
-        if (typeof window.extractNational375Digits === 'function') {
-          return window.extractNational375Digits(raw);
-        }
-        var d = String(raw || '').replace(/\D/g, '');
-        while (d.length >= 2 && d.slice(0, 2) === '00') d = d.slice(2);
-        if (d.indexOf('375') === 0 && d.length > 9) d = d.slice(3);
-        else if (d.indexOf('80') === 0 && d.length >= 9) d = d.slice(2);
-        return d.length > 9 ? d.slice(0, 9) : d;
+      function bookPhoneFromField(el) {
+        if (window.CrmPhoneField && el) return CrmPhoneField.validate(el);
+        return { ok: false, e164: '', error: 'Укажите номер телефона.' };
       }
 
       function apiUrl(path) { return '/api/webapp' + path; }
@@ -5954,11 +5925,7 @@
       };
 
       (function wireBookNewPhoneMask() {
-        var el = document.getElementById('bookNewPhone');
-        if (!el || el.dataset.crmNat375Mask === '1') return;
-        if (typeof window.wireNational375PhoneInputMask === 'function') {
-          window.wireNational375PhoneInputMask(el);
-        }
+        if (window.CrmPhoneField) CrmPhoneField.initAll(document.getElementById('modalBookClient') || document);
       })();
 
       (function wireBookingEditServiceModal() {
@@ -5978,42 +5945,15 @@
         var phoneEl = document.getElementById('bookNewPhone');
         var firstEl = document.getElementById('bookNewFirstName');
         var lastEl = document.getElementById('bookNewLastName');
-        var phoneRaw = (phoneEl.value || '').trim();
         var first = (firstEl.value || '').trim() || null;
         var last = (lastEl.value || '').trim() || null;
-        if (!/[\d]/.test(phoneRaw)) {
-          showToast('Введите номер телефона (цифры).');
+        var phCheck = bookPhoneFromField(phoneEl);
+        if (!phCheck.ok) {
+          showToast(phCheck.error || 'Укажите номер телефона.');
           phoneEl.focus();
           return;
         }
-        var nd = nationalDigitsFromBookNewPhoneField(phoneRaw);
-        var phone;
-        if (nd.length === 9) {
-          phone = '+375' + nd;
-        } else {
-          phone = phoneRaw;
-          if (phone.indexOf(' ') >= 0 && !first && !last) {
-            var parts = phone.split(/\s+/);
-            var digitParts = [];
-            var nameParts = [];
-            parts.forEach(function(p) {
-              if (/^[\d+\-()]+$/.test(p)) digitParts.push(p);
-              else nameParts.push(p);
-            });
-            if (nameParts.length) {
-              first = nameParts[0] || null;
-              last = nameParts.slice(1).join(' ') || null;
-            }
-            if (digitParts.length) phone = digitParts.join('').replace(/\D/g, function(c) { return c === '+' ? '+' : ''; });
-          }
-          phone = normalizePhoneClient((phone || '').trim());
-        }
-        var phoneErr = validatePhoneMessage(phone);
-        if (phoneErr) {
-          showToast(phoneErr);
-          phoneEl.focus();
-          return;
-        }
+        var phone = phCheck.e164;
         first = (first || '').trim();
         last = (last || '').trim();
         if (!first) {

@@ -1175,3 +1175,231 @@ body { background: var(--tg-theme-bg-color) !important; color: var(--tg-theme-te
   }
 }
 
+/* ── CRM phone field (BY +375 / RU +7 dropdown) ─────────────────────────── */
+.crm-phone-field {
+  position: relative;
+  width: 100%;
+}
+.crm-phone-field-row {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  width: 100%;
+  min-height: 48px;
+  border-radius: 14px;
+  background: var(--tg-theme-secondary-bg-color);
+  border: 1px solid rgba(128, 128, 128, 0.14);
+  box-sizing: border-box;
+  overflow: hidden;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.crm-phone-field:focus-within .crm-phone-field-row {
+  border-color: rgba(245, 166, 35, 0.55);
+  box-shadow: 0 0 0 2px rgba(245, 166, 35, 0.12);
+}
+.crm-phone-country-btn {
+  position: relative;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 10px 0 12px;
+  margin: 0;
+  min-height: 48px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--tg-theme-text-color);
+  font-size: 14px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.crm-phone-country-btn::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 11px;
+  bottom: 11px;
+  width: 1px;
+  background: rgba(128, 128, 128, 0.22);
+  pointer-events: none;
+}
+.crm-phone-country-btn:active {
+  opacity: 0.88;
+}
+.crm-phone-country-flag {
+  font-size: 16px;
+  line-height: 1;
+}
+.crm-phone-country-dial {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+.crm-phone-country-chevron {
+  font-size: 10px;
+  opacity: 0.55;
+  margin-left: 2px;
+}
+/* Inner input: never a standalone rounded field — chrome lives on .crm-phone-field-row only. */
+.crm-phone-field input.crm-phone-national-input[type='tel'],
+.crm-phone-field .crm-phone-national-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: auto;
+  display: block;
+  margin: 0;
+  padding: 0 14px;
+  height: 48px;
+  min-height: 48px;
+  line-height: 48px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--tg-theme-text-color);
+  font-size: 16px;
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
+  box-shadow: none;
+  box-sizing: border-box;
+  -webkit-appearance: none;
+  appearance: none;
+  outline: none;
+  transition: none;
+}
+.crm-phone-field input.crm-phone-national-input[type='tel']:focus,
+.crm-phone-field .crm-phone-national-input:focus,
+.crm-phone-field input.crm-phone-national-input[type='tel']:focus-visible,
+.crm-phone-field .crm-phone-national-input:focus-visible {
+  outline: none;
+  border: none;
+  box-shadow: none;
+}
+.crm-phone-national-input::placeholder {
+  color: var(--tg-theme-hint-color);
+  opacity: 0.75;
+}
+.crm-phone-country-menu {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  padding: 6px;
+  border-radius: 14px;
+  background: var(--tg-theme-secondary-bg-color);
+  border: 1px solid rgba(128, 128, 128, 0.16);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.14);
+}
+.crm-phone-country-menu[hidden] {
+  display: none !important;
+}
+.crm-phone-country-option {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 12px 14px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--tg-theme-text-color);
+  font-size: 15px;
+  font-family: inherit;
+  cursor: pointer;
+}
+.crm-phone-country-option--active,
+.crm-phone-country-option[aria-selected='true'] {
+  background: rgba(245, 166, 35, 0.14);
+  font-weight: 600;
+}
+.crm-phone-country-option:active {
+  opacity: 0.9;
+}
+.crm-phone-hint {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--tg-theme-hint-color);
+}
+html[data-app-theme='dark'] .crm-phone-field-row {
+  border-color: rgba(255, 255, 255, 0.1);
+}
+html[data-app-theme='dark'] .crm-phone-country-btn::after {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+/* Context: client booking forms (book.html, catalog). */
+.form-block .crm-phone-field-row {
+  border-radius: 16px;
+  background: var(--tg-theme-secondary-bg-color);
+  border: 1px solid rgba(128, 128, 128, 0.12);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+}
+.form-block .crm-phone-field:focus-within .crm-phone-field-row {
+  border-color: rgba(247, 166, 0, 0.45);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08), 0 0 0 3px rgba(247, 166, 0, 0.1);
+}
+.form-block .crm-phone-national-input {
+  font-size: 15px;
+  line-height: 48px;
+}
+
+/* Context: trainer profile .field stack. */
+.field .crm-phone-field-row {
+  border-radius: 12px;
+  border-width: 2px;
+  border-color: transparent;
+  background: var(--tg-theme-bg-color);
+  box-shadow: none;
+}
+.field .crm-phone-field:focus-within .crm-phone-field-row {
+  border-color: rgba(247, 166, 0, 0.5);
+  box-shadow: 0 0 0 3px rgba(247, 166, 0, 0.1);
+}
+
+/* Context: client self-register (.cr-card). */
+.cr-card .crm-phone-field-row {
+  border: none;
+  background: var(--tg-theme-bg-color);
+  box-shadow: none;
+}
+.cr-card .crm-phone-field:focus-within .crm-phone-field-row {
+  border: none;
+  box-shadow:
+    inset 0 0 0 1px rgba(247, 166, 0, 0.55),
+    0 0 0 3px rgba(247, 166, 0, 0.12);
+}
+.cr-card .crm-phone-national-input {
+  font-size: 15px;
+  font-weight: 600;
+}
+.cr-card .crm-phone-national-input::placeholder {
+  font-weight: 600;
+  opacity: 0.45;
+}
+
+/* Context: trainer «новый клиент» (schedule, hub, groups). */
+.book-new-client .crm-phone-field {
+  width: 100%;
+  margin-bottom: 10px;
+}
+.book-new-client .crm-phone-field-row {
+  border: none;
+  background: var(--tg-theme-bg-color);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+.book-new-client .crm-phone-field:focus-within .crm-phone-field-row {
+  box-shadow:
+    inset 0 1px 3px rgba(0, 0, 0, 0.06),
+    0 0 0 2px rgba(245, 166, 35, 0.12);
+}
+.book-new-client .crm-phone-national-input {
+  font-size: 15px;
+  font-weight: 600;
+}
+.book-new-client .crm-phone-national-input::placeholder {
+  font-weight: 600;
+  opacity: 0.55;
+}
+

@@ -1,88 +1,151 @@
 """
-Trainer profile phone: normalize and validate (API + bot wizard). Belarus E.164 only: +375 + 9 digits.
+Phone normalize and validate (API + bot + Mini App). Supported: Belarus (+375) and Russia (+7).
 No imports from api.schemas (avoids cycles).
 """
 from __future__ import annotations
 
 import re
 
-# Aligned with DB trainer_profiles.phone String(32)
 PHONE_MAX_LEN = 32
 
-# After normalization: +375 + exactly 9 national digits (ITU numbering for Belarus).
 _BY_E164 = re.compile(r"^\+375\d{9}$")
+_RU_E164 = re.compile(r"^\+7\d{10}$")
+_SUPPORTED_COUNTRIES = frozenset({"BY", "RU"})
 
-_ERR_BY = "Укажите корректный номер телефона."
+_ERR = "Укажите корректный номер телефона."
 
 
-def normalize_phone_input(value: str | None) -> str:
-    """
-    Strip and coerce common Belarus inputs to +375XXXXXXXXX when possible:
-    - 12 digits starting with 375
-    - 11 digits starting with 80 (8 0XX …)
-    - 9 digits (national number without country code)
-    Otherwise: collapse spaces and common separators (legacy path for error messages).
-    """
-    raw = (value or "").strip()
-    if not raw:
+def strip_phone_digits(value: str | None) -> str:
+    if not value:
         return ""
-    d = "".join(c for c in raw if c.isdigit())
-    if not d:
-        return raw[:PHONE_MAX_LEN]
+    return "".join(c for c in value.strip() if c.isdigit())
 
-    if len(d) == 12 and d.startswith("375"):
-        return f"+{d}"
+
+def detect_country_from_digits(digits: str) -> str | None:
+    """Best-effort ISO-ish country code from digit string (no +)."""
+    d = digits or ""
+    while len(d) >= 2 and d.startswith("00"):
+        d = d[2:]
+    if len(d) >= 12 and d.startswith("375"):
+        return "BY"
     if len(d) == 11 and d.startswith("80"):
-        return "+375" + d[2:]
+        return "BY"
+    if len(d) == 11 and d.startswith("8"):
+        return "RU"
+    if len(d) >= 11 and d.startswith("7"):
+        return "RU"
+    if len(d) == 10 and d and d[0] == "9":
+        return "RU"
     if len(d) == 9:
-        return "+375" + d
+        return "BY"
+    return None
 
-    collapsed = (
+
+def _collapse_separators(raw: str) -> str:
+    return (
         raw.replace(" ", "")
         .replace("-", "")
         .replace("(", "")
         .replace(")", "")
         .replace(".", "")
-    )
-    return collapsed[:PHONE_MAX_LEN]
+    )[:PHONE_MAX_LEN]
+
+
+def _normalize_by_digits(d: str) -> str | None:
+    while len(d) >= 2 and d.startswith("00"):
+        d = d[2:]
+    if len(d) == 11 and d.startswith("80"):
+        d = "375" + d[2:]
+    elif len(d) == 9:
+        d = "375" + d
+    elif len(d) > 12 and d.startswith("375"):
+        d = d[:12]
+    if len(d) == 12 and d.startswith("375"):
+        return d
+    return None
+
+
+def _normalize_ru_digits(d: str) -> str | None:
+    while len(d) >= 2 and d.startswith("00"):
+        d = d[2:]
+    if len(d) == 11 and d.startswith("8"):
+        d = "7" + d[1:]
+    elif len(d) == 10 and d and d[0] == "9":
+        d = "7" + d
+    elif len(d) > 11 and d.startswith("7"):
+        d = d[:11]
+    if len(d) == 11 and d.startswith("7"):
+        return d
+    return None
+
+
+def normalize_phone_input(value: str | None, country: str | None = None) -> str:
+    """
+    Coerce common BY/RU inputs to E.164 when possible.
+    ``country``: ``BY`` | ``RU`` — when UI already picked country; else auto-detect (default BY).
+    """
+    raw = (value or "").strip()
+    if not raw:
+        return ""
+    d = strip_phone_digits(raw)
+    if not d:
+        return _collapse_separators(raw)
+
+    cc = (country or "").upper()
+    if cc not in _SUPPORTED_COUNTRIES:
+        cc = detect_country_from_digits(d) or "BY"
+
+    if cc == "RU":
+        nd = _normalize_ru_digits(d)
+        return f"+{nd}" if nd else _collapse_separators(raw)
+
+    nd = _normalize_by_digits(d)
+    return f"+{nd}" if nd else _collapse_separators(raw)
+
+
+def is_valid_e164_phone(normalized: str) -> bool:
+    return bool(_BY_E164.match(normalized) or _RU_E164.match(normalized))
 
 
 def validate_phone_non_empty(normalized: str) -> tuple[str | None, str | None]:
-    """
-    Validate non-empty normalized phone. Returns (normalized, None) or (None, Russian error).
-    """
+    """Validate non-empty normalized phone. Returns (E.164, None) or (None, Russian error)."""
     t = normalized
     if not t:
         return None, None
     if len(t) > PHONE_MAX_LEN:
         return None, "Телефон: не длиннее 32 символов."
-    if not _BY_E164.match(t):
-        return None, _ERR_BY
-    return t, None
+    if is_valid_e164_phone(t):
+        return t, None
+    return None, _ERR
 
 
-def coerce_required_belarus_phone(value: object) -> str:
-    """
-    Required Belarus E.164 for trainer-created client (schedule API).
-    Raises ValueError with Russian message (aligned with FastAPI/Pydantic).
-    """
+def e164_to_lookup_digits(e164: str) -> str:
+    """Digits-only for ``phone_normalized`` column (375… or 7…)."""
+    return strip_phone_digits(e164)
+
+
+def coerce_required_phone(value: object, country: str | None = None) -> str:
+    """Required BY/RU E.164 for trainer-created client and similar APIs."""
     if not isinstance(value, str):
         raise ValueError("Телефон укажите текстом.")
     if not (value or "").strip():
         raise ValueError("Укажите номер телефона.")
-    t = normalize_phone_input(value)
+    t = normalize_phone_input(value, country=country)
     ok, err = validate_phone_non_empty(t)
     if err:
         raise ValueError(err)
     if not ok:
-        raise ValueError(_ERR_BY)
+        raise ValueError(_ERR)
     return ok
 
 
+def coerce_required_belarus_phone(value: object) -> str:
+    """Backward-compatible alias — accepts RU numbers too."""
+    return coerce_required_phone(value)
+
+
 def coerce_optional_phone_for_profile(value: object) -> str | None:
-    """
-    API / Pydantic: None or blank -> None; otherwise normalized string or ValueError (Russian message).
-    """
+    """API / Pydantic: None or blank -> None; otherwise normalized E.164 or ValueError."""
     if value is None:
         return None
     if isinstance(value, str) and not value.strip():

@@ -93,47 +93,25 @@
   var successSub = document.getElementById('crSuccessSub');
   var btnOpenHome = document.getElementById('crBtnOpenHome');
 
-  // Phone mask (+375 rendered outside — same as trainer-clients)
-  if (phoneInput) {
+  if (window.CrmPhoneField) {
     try {
-      if (typeof window.wireNational375PhoneInputMask === 'function') {
-        window.wireNational375PhoneInputMask(phoneInput);
-      } else {
-        function applyFragMask() {
-          var raw = String(phoneInput.value || '')
-            .replace(/\D/g, '')
-            .slice(0, 9);
-          var n = raw.length;
-          var f = '';
-          if (n > 0) f = raw.slice(0, 2);
-          if (n > 2) f += ' ' + raw.slice(2, 5);
-          if (n > 5) f += '-' + raw.slice(5, 7);
-          if (n > 7) f += '-' + raw.slice(7, 9);
-          phoneInput.value = f;
-        }
-        phoneInput.addEventListener('input', applyFragMask);
-        phoneInput.addEventListener('blur', applyFragMask);
-      }
+      CrmPhoneField.initAll(document);
     } catch (maskErr) {
       /* never block Continue if mask wiring throws */
     }
   }
 
-  function extractNational(raw) {
-    if (typeof window.extractNational375Digits === 'function') {
-      return window.extractNational375Digits(raw);
+  function validatePhoneField() {
+    if (window.CrmPhoneField && phoneInput) {
+      var v = CrmPhoneField.validate(phoneInput);
+      return v.ok ? null : v.error || 'Укажите номер телефона.';
     }
-    var d = String(raw || '').replace(/\D/g, '');
-    while (d.length >= 2 && d.slice(0, 2) === '00') d = d.slice(2);
-    while (d.length > 9 && d.indexOf('375') === 0) d = d.slice(3);
-    if (d.indexOf('80') === 0 && d.length >= 9) d = d.slice(2);
-    return d.slice(0, 9);
+    return 'Укажите номер телефона.';
   }
 
-  function validatePhone(raw) {
-    var nat = extractNational(raw);
-    if (!nat || nat.length < 9) return 'Введите 9 цифр номера.';
-    return null;
+  function phoneE164FromField() {
+    if (window.CrmPhoneField && phoneInput) return CrmPhoneField.getE164(phoneInput) || '';
+    return '';
   }
 
   function scrollMsgIntoView(el) {
@@ -293,14 +271,13 @@
       }
 
       var rawPhone = phoneInput ? String(phoneInput.value || '') : '';
-      var phoneErr = validatePhone(rawPhone);
+      var phoneErr = validatePhoneField();
       if (phoneErr) {
         showFieldError(phoneError, phoneErr);
         if (phoneInput) phoneInput.focus();
         return;
       }
-      var nat = extractNational(rawPhone);
-      var fullPhone = '+375' + nat;
+      var fullPhone = phoneE164FromField();
 
       var firstName = firstNameInput ? String(firstNameInput.value || '').trim() : '';
       if (!firstName) {

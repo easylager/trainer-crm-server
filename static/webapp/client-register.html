@@ -6,8 +6,9 @@
   <title>Профиль</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script src="mini-app-telegram-chrome.js?v=202605052"></script>
+  <script src="mini-app-phone-field.js?v=202605203"></script>
   <link rel="stylesheet" href="theme.css?v=20260425" />
-  <link rel="stylesheet" href="mini-app-components.css?v=20260425" />
+  <link rel="stylesheet" href="mini-app-components.css?v=202605206" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link
@@ -97,72 +98,6 @@
       vertical-align: 0.1em;
       background: var(--tg-theme-button-color, #f5a623);
       box-shadow: 0 0 0 2px rgba(245, 166, 35, 0.22);
-    }
-
-    /* ── Phone wrap (+375 prefix + national input) ── */
-    .cr-phone-wrap {
-      position: relative;
-      width: 100%;
-      border-radius: 14px;
-      background: var(--tg-theme-bg-color, #1c1c1e);
-      box-sizing: border-box;
-      min-height: 48px;
-      transition: box-shadow 160ms ease;
-    }
-    .cr-phone-wrap:focus-within {
-      box-shadow:
-        inset 0 0 0 1px rgba(247, 166, 0, 0.55),
-        0 0 0 3px rgba(247, 166, 0, 0.12);
-    }
-    .cr-phone-prefix {
-      position: absolute;
-      left: 14px;
-      top: 50%;
-      transform: translateY(-50%);
-      z-index: 1;
-      font-size: 15px;
-      font-weight: 600;
-      line-height: 1.2;
-      color: var(--tg-theme-text-color, #fff);
-      pointer-events: none;
-      letter-spacing: 0.02em;
-      font-variant-numeric: tabular-nums;
-    }
-    .cr-phone-input {
-      display: block;
-      width: 100%;
-      min-width: 0;
-      margin: 0;
-      padding: 13px 14px 13px 56px;
-      min-height: 48px;
-      box-sizing: border-box;
-      border-radius: 14px;
-      border: none;
-      background: transparent;
-      font-size: 15px;
-      font-weight: 600;
-      line-height: 1.2;
-      font-family: inherit;
-      font-variant-numeric: tabular-nums;
-      -webkit-appearance: none;
-      appearance: none;
-      outline: none;
-      color: var(--tg-theme-text-color, #fff);
-      -webkit-text-fill-color: var(--tg-theme-text-color, #fff);
-      caret-color: var(--tg-theme-text-color, #fff);
-    }
-    .cr-phone-input:focus, .cr-phone-input:focus-visible { outline: none; box-shadow: none; }
-    .cr-phone-input::placeholder {
-      font-weight: 600;
-      opacity: 0.45;
-      color: var(--tg-theme-hint-color, #999);
-      -webkit-text-fill-color: var(--tg-theme-hint-color, #999);
-    }
-    .cr-phone-hint {
-      margin: 8px 0 0;
-      font-size: 12px;
-      line-height: 1.35;
-      color: var(--tg-theme-hint-color, #999);
     }
 
     /* ── Text input ── */
@@ -294,21 +229,20 @@
         <label class="cr-field-label" for="crPhone">
           <span class="cr-req-dot" aria-hidden="true"></span>Телефон
         </label>
-        <div class="cr-phone-wrap">
-          <span class="cr-phone-prefix" aria-hidden="true">+375</span>
-          <input
-            type="text"
-            id="crPhone"
-            class="cr-phone-input"
-            placeholder="29 123-45-67"
-            autocomplete="tel"
-            inputmode="numeric"
-            maxlength="14"
-            aria-describedby="crPhoneHint"
-            aria-required="true"
-          />
+        <div class="crm-phone-field" data-crm-phone-field data-default-country="BY">
+          <div class="crm-phone-field-row">
+            <button type="button" class="crm-phone-country-btn" aria-label="Код страны" aria-haspopup="listbox" aria-expanded="false">
+              <span class="crm-phone-country-flag" aria-hidden="true">🇧🇾</span>
+              <span class="crm-phone-country-dial">+375</span>
+              <span class="crm-phone-country-chevron" aria-hidden="true">▾</span>
+            </button>
+            <input type="tel" id="crPhone" class="crm-phone-national-input" placeholder="29 123-45-67" autocomplete="tel-national" inputmode="tel" aria-required="true" />
+          </div>
+          <div class="crm-phone-country-menu" role="listbox" hidden>
+            <button type="button" class="crm-phone-country-option crm-phone-country-option--active" role="option" data-country="BY" aria-selected="true">🇧🇾 Беларусь +375</button>
+            <button type="button" class="crm-phone-country-option" role="option" data-country="RU" aria-selected="false">🇷🇺 Россия +7</button>
+          </div>
         </div>
-        <p class="cr-phone-hint" id="crPhoneHint">Код страны уже учтён — введите 9 цифр номера.</p>
         <span class="cr-error" id="crPhoneError" role="alert"></span>
       </div>
 
@@ -366,6 +300,6 @@
 
   </div>
 
-  <script src="client-register-main.js?v=202605192"></script>
+  <script src="client-register-main.js?v=202605206"></script>
 </body>
 </html>

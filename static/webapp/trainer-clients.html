@@ -6,12 +6,13 @@
   <title>Мои клиенты</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script src="mini-app-telegram-chrome.js?v=20260622"></script>
+  <script src="mini-app-phone-field.js?v=202605203"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=optional" media="print" onload="this.media='all'" />
   <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=optional" /></noscript>
   <link rel="stylesheet" href="theme.css?v=20260422" />
-  <link rel="stylesheet" href="mini-app-components.css?v=20260422" />
+  <link rel="stylesheet" href="mini-app-components.css?v=202605206" />
   <script>
     /** Same palette + Telegram lock as trainer-requests / schedule-editor.html */
     (function () {
@@ -38,7 +39,7 @@
     })();
   </script>
   <link rel="preload" href="trainer-clients-main.js?v=20260624" as="script" />
-  <link rel="stylesheet" href="mini-app-trainer-clients.css?v=20260622" />
+  <link rel="stylesheet" href="mini-app-trainer-clients.css?v=202605206" />
   <link rel="stylesheet" href="mini-app-trainer-nav.css?v=20260422" />
   <script>
     /* Before deferred main.js: hide search/add bar on first paint for ?focus=invite_bot (no client card deep link). */
@@ -215,20 +216,20 @@
       <div class="quick-book-fields tc-add-client-fields">
         <div class="book-field-stack">
           <label class="book-field-label" for="tcAddClientPhone"><span class="tc-req-dot" aria-hidden="true"></span>Телефон</label>
-          <div class="hub-phone-input-wrap tc-add-client-phone-wrap">
-            <span class="hub-phone-prefix" aria-hidden="true">+375</span>
-            <input
-              type="text"
-              id="tcAddClientPhone"
-              class="input hub-phone-input"
-              placeholder="29 123-45-67"
-              autocomplete="tel"
-              inputmode="numeric"
-              maxlength="14"
-              aria-describedby="tcAddClientPhoneHint"
-            />
+          <div class="crm-phone-field tc-add-client-phone-wrap" data-crm-phone-field data-default-country="BY">
+            <div class="crm-phone-field-row">
+              <button type="button" class="crm-phone-country-btn" aria-label="Код страны" aria-haspopup="listbox" aria-expanded="false">
+                <span class="crm-phone-country-flag" aria-hidden="true">🇧🇾</span>
+                <span class="crm-phone-country-dial">+375</span>
+                <span class="crm-phone-country-chevron" aria-hidden="true">▾</span>
+              </button>
+              <input type="tel" id="tcAddClientPhone" class="crm-phone-national-input" placeholder="29 123-45-67" autocomplete="tel-national" inputmode="tel" aria-required="true" />
+            </div>
+            <div class="crm-phone-country-menu" role="listbox" hidden>
+              <button type="button" class="crm-phone-country-option crm-phone-country-option--active" role="option" data-country="BY" aria-selected="true">🇧🇾 Беларусь +375</button>
+              <button type="button" class="crm-phone-country-option" role="option" data-country="RU" aria-selected="false">🇷🇺 Россия +7</button>
+            </div>
           </div>
-          <p id="tcAddClientPhoneHint" class="tc-add-client-phone-hint">Код страны уже учтён — введите 9 цифр номера.</p>
         </div>
         <div class="book-field-stack">
           <label class="book-field-label" for="tcAddClientFirst"><span class="tc-req-dot" aria-hidden="true"></span>Имя</label>
@@ -275,7 +276,7 @@
   </div>
 
   <script src="mini-app-trainer-gate.js"></script>
-  <script src="trainer-client-relay-ui.js?v=202605090"></script>
+  <script src="trainer-client-relay-ui.js?v=202605201"></script>
   <script src="trainer-relay-helpers.js?v=202605090"></script>
   <script defer src="trainer-clients-main.js?v=20260624"></script>
   <script defer src="mini-app-trainer-home.js"></script>

@@ -1574,11 +1574,12 @@ async def on_book(callback: CallbackQuery) -> None:
 
 
 def _normalize_phone(text: str | None) -> str:
-    """Keep digits and + only; empty if invalid."""
-    if not text or not text.strip():
-        return ""
-    s = "".join(c for c in text.strip() if c.isdigit() or c == "+")
-    return s if len(s) >= 10 else ""
+    """Normalize to E.164 (BY/RU) for booking and link-by-phone flows."""
+    from src.shared.profile_phone import normalize_phone_input, validate_phone_non_empty
+
+    t = normalize_phone_input(text)
+    ok, _err = validate_phone_non_empty(t)
+    return ok or ""
 
 
 @router.callback_query(lambda c: c.data and c.data.startswith(BOOK_SLOT_PREFIX))

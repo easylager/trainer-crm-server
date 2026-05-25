@@ -623,9 +623,17 @@
       /** Fields shown on «Настройки» tab — used to switch tab on validation errors. */
       var SETTINGS_FORMAT_FIELD_IDS = ['session_duration_minutes', 'min_hours_before_booking', 'push_notification', 'digest'];
       var PHONE_MAX_LEN = 32;
-      /** Aligned with server: Belarus E.164 `+375` + 9 digits after country code. */
-      var PHONE_BY_RE = /^\+375\d{9}$/;
-      var PHONE_BY_ERR = 'Укажите корректный номер телефона.';
+      var PHONE_ERR = 'Укажите корректный номер телефона.';
+      function validatePhoneMessage(normalized) {
+        if (!normalized) return null;
+        if (window.CrmPhoneField) {
+          var el = document.getElementById('phone');
+          var v = el ? CrmPhoneField.validate(el) : { ok: !!normalized, error: PHONE_ERR };
+          return v.ok ? null : v.error || PHONE_ERR;
+        }
+        if (normalized.length > PHONE_MAX_LEN) return 'Телефон: не длиннее 32 символов.';
+        return /^\+(375\d{9}|7\d{10})$/.test(normalized) ? null : PHONE_ERR;
+      }
       var MIN_DESCRIPTION_CHARS = 25;
       var MAX_DESCRIPTION_CHARS = 5000;
       /** Per-service blurb in «Услуги и цены»; aligned with LEN_TRAINER_SERVICE_DESCRIPTION on the server. */
@@ -882,6 +890,10 @@
 
       /** Mirrors `src.shared.profile_phone.normalize_phone_input`. */
       function normalizePhoneClient(s) {
+        if (window.CrmPhoneField) {
+          var parsed = CrmPhoneField.parseE164ToCountryAndNational(s);
+          return CrmPhoneField.nationalToE164(parsed.national, parsed.country) || String(s || '').trim();
+        }
         var raw = String(s || '').trim();
         if (!raw) return '';
         var d = raw.replace(/\D/g, '');
@@ -889,17 +901,12 @@
         if (d.length === 12 && d.indexOf('375') === 0) return '+' + d;
         if (d.length === 11 && d.indexOf('80') === 0) return '+375' + d.slice(2);
         if (d.length === 9) return '+375' + d;
+        if (d.length === 11 && d.charAt(0) === '8') return '+7' + d.slice(1);
+        if (d.length === 11 && d.charAt(0) === '7') return '+' + d;
+        if (d.length === 10 && d.charAt(0) === '9') return '+7' + d;
         return raw.replace(/\s+/g, '').replace(/-/g, '').replace(/\(/g, '').replace(/\)/g, '').replace(/\./g, '').slice(0, PHONE_MAX_LEN);
       }
 
-      /** Mirrors `src.shared.profile_phone.validate_phone_non_empty`. */
-      function validatePhoneMessage(normalized) {
-        var t = normalized;
-        if (!t) return null;
-        if (t.length > PHONE_MAX_LEN) return 'Телефон: не длиннее 32 символов.';
-        if (!PHONE_BY_RE.test(t)) return PHONE_BY_ERR;
-        return null;
-      }
 
       function updateDescriptionMeta() {
         var el = document.getElementById('description');
@@ -956,19 +963,9 @@
         if (!el) return true;
         var msg = null;
         if (fieldId === 'phone') {
-          var digits =
-            typeof window.extractNational375Digits === 'function'
-              ? window.extractNational375Digits(el.value)
-              : (function () {
-                  var v = el.value.replace(/\D/g, '');
-                  while (v.length >= 2 && v.slice(0, 2) === '00') v = v.slice(2);
-                  if (v.startsWith('375') && v.length > 9) v = v.slice(3);
-                  else if (v.startsWith('80') && v.length >= 9) v = v.slice(2);
-                  return v.slice(0, 9);
-                })();
-          if (digits.length > 0) {
-            var fullPhone = '+375' + digits;
-            msg = validatePhoneMessage(fullPhone);
+          var phoneEl = document.getElementById('phone');
+          if (phoneEl && (phoneEl.value || '').replace(/\D/g, '').length > 0) {
+            msg = validatePhoneMessage(CrmPhoneField ? CrmPhoneField.getE164(phoneEl) : '');
           }
         } else if (fieldId === 'first_name') {
           if (!(el.value || '').trim()) msg = 'Укажите имя.';
@@ -1641,18 +1638,8 @@
         function phoneStr() {
           var el = document.getElementById('phone');
           if (!el) return '';
-          var digits =
-            typeof window.extractNational375Digits === 'function'
-              ? window.extractNational375Digits(el.value)
-              : (function () {
-                  var v = el.value.replace(/\D/g, '');
-                  while (v.length >= 2 && v.slice(0, 2) === '00') v = v.slice(2);
-                  if (v.startsWith('375') && v.length > 9) v = v.slice(3);
-                  else if (v.startsWith('80') && v.length >= 9) v = v.slice(2);
-                  return v.slice(0, 9);
-                })();
-          if (!digits) return '';
-          return '+375' + digits;
+          if (window.CrmPhoneField) return CrmPhoneField.getE164(el) || '';
+          return normalizePhoneClient(el.value);
         }
         var cityEl = document.getElementById('city_id');
         var cityVal = cityEl && cityEl.value !== '' ? Number(cityEl.value) : null;
@@ -3023,26 +3010,11 @@
         function setPhone(phone) {
           var el = document.getElementById('phone');
           if (!el) return;
-          if (!phone) {
-            el.value = '';
+          if (window.CrmPhoneField) {
+            CrmPhoneField.setE164(el, phone || '');
             return;
           }
-          var digits =
-            typeof window.extractNational375Digits === 'function'
-              ? window.extractNational375Digits(String(phone))
-              : (function () {
-                  var d = String(phone).replace(/\D/g, '');
-                  while (d.length >= 2 && d.slice(0, 2) === '00') d = d.slice(2);
-                  if (d.startsWith('375')) d = d.slice(3);
-                  else if (d.startsWith('80')) d = d.slice(2);
-                  return d.length > 9 ? d.slice(0, 9) : d;
-                })();
-          var formatted = '';
-          if (digits.length > 0) formatted += digits.slice(0, 2);
-          if (digits.length > 2) formatted += ' ' + digits.slice(2, 5);
-          if (digits.length > 5) formatted += ' ' + digits.slice(5, 7);
-          if (digits.length > 7) formatted += ' ' + digits.slice(7, 9);
-          el.value = formatted;
+          el.value = phone || '';
         }
         setv('first_name', p.first_name);
         setv('last_name', p.last_name);
@@ -5244,26 +5216,9 @@
         var el = document.getElementById(id);
         if (!el) return;
         if (id === 'phone') {
-          el.addEventListener('paste', function (ev) {
-            var cd = ev.clipboardData || window.clipboardData;
-            if (!cd || typeof cd.getData !== 'function') return;
-            var text = cd.getData('text/plain');
-            if (text == null || String(text).trim() === '') return;
-            ev.preventDefault();
-            var cur = String(el.value || '');
-            var start = typeof el.selectionStart === 'number' ? el.selectionStart : cur.length;
-            var end = typeof el.selectionEnd === 'number' ? el.selectionEnd : start;
-            el.value = cur.slice(0, start) + String(text) + cur.slice(end);
-            formatPhoneInput(el);
-            validateFieldRealtime('phone');
-            setDirty();
-            markFieldValid('phone');
-          });
+          /* Mask handled by CrmPhoneField */
         }
         el.addEventListener('input', function() {
-          if (id === 'phone') {
-            formatPhoneInput(el);
-          }
           validateFieldRealtime(id);
           setDirty();
           markFieldValid(id);
@@ -5382,28 +5337,7 @@
             });
         });
       })();
-      
-      function formatPhoneInput(el) {
-        var val =
-          typeof window.extractNational375Digits === 'function'
-            ? window.extractNational375Digits(el.value)
-            : (function () {
-                var v = el.value.replace(/\D/g, '');
-                while (v.length >= 2 && v.slice(0, 2) === '00') v = v.slice(2);
-                if (v.startsWith('375') && v.length > 9) v = v.slice(3);
-                else if (v.startsWith('80') && v.length >= 9) v = v.slice(2);
-                return v.slice(0, 9);
-              })();
-
-        var formatted = '';
-        if (val.length > 0) formatted += val.slice(0, 2);
-        if (val.length > 2) formatted += ' ' + val.slice(2, 5);
-        if (val.length > 5) formatted += ' ' + val.slice(5, 7);
-        if (val.length > 7) formatted += ' ' + val.slice(7, 9);
-
-        el.value = formatted;
-      }
-      
+            
       function markFieldValid(id) {
         var el = document.getElementById(id);
         var errEl = document.getElementById('err_' + id);
@@ -5625,6 +5559,10 @@
         document.addEventListener('touchstart', tryDismiss, { passive: true, capture: true });
         document.addEventListener('mousedown', tryDismiss, true);
       })();
+
+      if (window.CrmPhoneField) {
+        CrmPhoneField.initAll(document);
+      }
 
       loadInitial();
     })();

@@ -649,6 +649,19 @@ def webapp_mini_app_telegram_chrome_js():
     )
 
 
+@app.get("/webapp/mini-app-phone-field.js")
+def webapp_mini_app_phone_field_js(request: Request):
+    """Shared BY/RU phone dropdown + mask; load after mini-app-telegram-chrome.js."""
+    path = _WEBAPP_DIR / "mini-app-phone-field.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
 @app.get("/webapp/client-mini-app-theme.js")
 def webapp_client_mini_app_theme_js():
     """Shared Telegram theme + CRM palette for client Mini Apps."""

@@ -6,8 +6,9 @@
   <title>Профиль тренера</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script src="mini-app-telegram-chrome.js?v=202605022"></script>
+  <script src="mini-app-phone-field.js?v=202605203"></script>
   <link rel="stylesheet" href="theme.css?v=20260492" />
-  <link rel="stylesheet" href="mini-app-components.css?v=20260419" />
+  <link rel="stylesheet" href="mini-app-components.css?v=202605206" />
   <script src="mini-app-confirm.js"></script>
   <link rel="dns-prefetch" href="https://cdn.jsdelivr.net" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -24,8 +25,8 @@
       href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=optional"
     />
   </noscript>
-  <link rel="preload" href="trainer-profile-main.js?v=202605198" as="script" />
-  <link rel="stylesheet" href="mini-app-trainer-profile.css?v=20260557" />
+  <link rel="preload" href="trainer-profile-main.js?v=202605201" as="script" />
+  <link rel="stylesheet" href="mini-app-trainer-profile.css?v=202605206" />
   <link rel="stylesheet" href="mini-app-trainer-nav.css?v=20260419" />
 </head>
 <body>
@@ -139,11 +140,20 @@
         <div class="card">
           <div class="field">
             <label for="phone"><span class="required-dot"></span>Телефон</label>
-            <div class="phone-input-wrap">
-              <span class="phone-prefix">+375</span>
-              <input id="phone" type="text" autocomplete="tel" maxlength="32" placeholder="29 123 45 67" inputmode="tel" />
+            <div class="crm-phone-field" data-crm-phone-field data-default-country="BY">
+              <div class="crm-phone-field-row">
+                <button type="button" class="crm-phone-country-btn" aria-label="Код страны" aria-haspopup="listbox" aria-expanded="false">
+                  <span class="crm-phone-country-flag" aria-hidden="true">🇧🇾</span>
+                  <span class="crm-phone-country-dial">+375</span>
+                  <span class="crm-phone-country-chevron" aria-hidden="true">▾</span>
+                </button>
+                <input id="phone" type="tel" class="crm-phone-national-input" autocomplete="tel-national" inputmode="tel" placeholder="29 123-45-67" />
+              </div>
+              <div class="crm-phone-country-menu" role="listbox" hidden>
+                <button type="button" class="crm-phone-country-option crm-phone-country-option--active" role="option" data-country="BY" aria-selected="true">🇧🇾 Беларусь +375</button>
+                <button type="button" class="crm-phone-country-option" role="option" data-country="RU" aria-selected="false">🇷🇺 Россия +7</button>
+              </div>
             </div>
-            <div class="field-hint">Номер в формате +375 XX XXX XX XX</div>
           </div>
           <div class="field">
             <label for="contacts">Другие контакты</label>
@@ -491,7 +501,7 @@
     </div>
   </div>
 
-  <script defer src="trainer-profile-main.js?v=202605198"></script>
+  <script defer src="trainer-profile-main.js?v=202605201"></script>
   <script defer src="mini-app-trainer-home.js?v=20260563"></script>
 </body>
 </html>

@@ -3112,29 +3112,12 @@
           });
       }
 
-      /** Belarus phone — aligned with schedule-editor (POST /trainer/clients). */
-      var HUB_PHONE_MAX = 32;
-      var PHONE_BY_RE_HUB = /^\+375\d{9}$/;
-      function normalizePhoneHub(s) {
-        var raw = String(s || '').trim();
-        if (!raw) return '';
-        if (typeof window.extractNational375Digits === 'function') {
-          var nd = window.extractNational375Digits(raw);
-          if (nd.length === 9) return '+375' + nd;
+      function hubPhoneFromField(el) {
+        if (window.CrmPhoneField && el) {
+          var v = CrmPhoneField.validate(el);
+          return v;
         }
-        var d = raw.replace(/\D/g, '');
-        if (!d) return raw.slice(0, HUB_PHONE_MAX);
-        if (d.length === 12 && d.indexOf('375') === 0) return '+' + d;
-        if (d.length === 11 && d.indexOf('80') === 0) return '+375' + d.slice(2);
-        if (d.length === 9) return '+375' + d;
-        return raw.replace(/\s+/g, '').replace(/-/g, '').replace(/\(/g, '').replace(/\)/g, '').replace(/\./g, '').slice(0, HUB_PHONE_MAX);
-      }
-      function validatePhoneHubMsg(normalized) {
-        var t = normalized;
-        if (!t) return 'Укажите номер телефона.';
-        if (t.length > HUB_PHONE_MAX) return 'Телефон: не длиннее 32 символов.';
-        if (!PHONE_BY_RE_HUB.test(t)) return 'Укажите корректный номер телефона.';
-        return null;
+        return { ok: false, e164: '', error: 'Укажите номер телефона.' };
       }
 
       function hubToast(msg) {
@@ -3294,13 +3277,10 @@
         var lastEl = document.getElementById('hubBookNewLastName');
         if (firstEl) firstEl.value = 'Александр';
         if (lastEl) lastEl.value = 'К.';
-        if (phoneEl) {
+        if (phoneEl && window.CrmPhoneField) {
+          CrmPhoneField.setE164(phoneEl, '+375291111111');
+        } else if (phoneEl) {
           phoneEl.value = '291111111';
-          try {
-            if (typeof window.applyNational375MaskedToInput === 'function') {
-              window.applyNational375MaskedToInput(phoneEl);
-            }
-          } catch (eFmt) {}
         }
       }
 
@@ -4074,20 +4054,14 @@
         var phoneEl = document.getElementById('hubBookNewPhone');
         var firstEl = document.getElementById('hubBookNewFirstName');
         var lastEl = document.getElementById('hubBookNewLastName');
-        var phoneRaw = phoneEl ? (phoneEl.value || '').trim() : '';
+        var phCheck = hubPhoneFromField(phoneEl);
+        if (!phCheck.ok) {
+          hubToast(phCheck.error || 'Укажите номер телефона.');
+          return;
+        }
+        var phone = phCheck.e164;
         var first = firstEl ? (firstEl.value || '').trim() : '';
         var last = lastEl ? (lastEl.value || '').trim() : '';
-        if (!/[\d]/.test(phoneRaw)) {
-          hubToast('Введите номер телефона (цифры).');
-          return;
-        }
-        var phone = normalizePhoneHub(phoneRaw);
-        var errPhone = validatePhoneHubMsg(phone);
-        if (errPhone) {
-          hubToast(errPhone);
-          return;
-        }
-        first = (first || '').trim();
         if (!first) {
           hubToast('Укажите имя клиента.');
           return;
@@ -4920,12 +4894,7 @@
             resetHubBookSteps();
           };
         }
-        var hubPhoneInp = document.getElementById('hubBookNewPhone');
-        if (hubPhoneInp && hubPhoneInp.dataset.crmNat375Mask !== '1') {
-          if (typeof window.wireNational375PhoneInputMask === 'function') {
-            window.wireNational375PhoneInputMask(hubPhoneInp);
-          }
-        }
+        if (window.CrmPhoneField) CrmPhoneField.initAll(document.getElementById('hubModalBookGroupSlot') || document);
         var bsearch = document.getElementById('hubBookClientSearch');
         var tmr = null;
         if (bsearch) {
@@ -5047,19 +5016,14 @@
             var phoneEl = document.getElementById('hubBookNewPhone');
             var firstEl = document.getElementById('hubBookNewFirstName');
             var lastEl = document.getElementById('hubBookNewLastName');
-            var phoneRaw = (phoneEl.value || '').trim();
+            var phCheck2 = hubPhoneFromField(phoneEl);
+            if (!phCheck2.ok) {
+              hubToast(phCheck2.error || 'Укажите номер телефона.');
+              return;
+            }
+            var phone = phCheck2.e164;
             var first = (firstEl.value || '').trim() || null;
             var last = (lastEl.value || '').trim() || null;
-            if (!/[\d]/.test(phoneRaw)) {
-              hubToast('Введите номер телефона (цифры).');
-              return;
-            }
-            var phone = normalizePhoneHub(phoneRaw);
-            var err = validatePhoneHubMsg(phone);
-            if (err) {
-              hubToast(err);
-              return;
-            }
             first = (first || '').trim();
             if (!first) {
               hubToast('Укажите имя клиента.');

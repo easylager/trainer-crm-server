@@ -36,7 +36,7 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from src.api.deps import get_session
 from src.shared.byr_currency_display import BYR_SIGN
 from src.shared.price_tier_kind import normalize_price_tier_kind, price_tier_label_ru, sql_order_case_tier_kind
-from src.shared.profile_phone import coerce_required_belarus_phone
+from src.shared.profile_phone import coerce_required_phone
 from src.application.booking_problem_notifications import send_booking_problem_telegram_notifications
 from src.application.booking_problem_rollout import booking_problem_api_allowed_for_trainer
 from src.application.booking_problem_use_cases import (
@@ -1441,8 +1441,13 @@ async def post_client_booking(
             return cached
 
     phone = (body.phone or "").strip()
-    if not phone or len("".join(c for c in phone if c.isdigit() or c == "+")) < 10:
-        raise HTTPException(status_code=400, detail="Valid phone required")
+    from src.shared.profile_phone import normalize_phone_input, validate_phone_non_empty
+
+    phone_e164 = normalize_phone_input(phone)
+    phone_ok, phone_err = validate_phone_non_empty(phone_e164)
+    if phone_err or not phone_ok:
+        raise HTTPException(status_code=400, detail=phone_err or "Некорректный номер телефона.")
+    phone = phone_ok
 
     slot = await get_slot(session, body.slot_id)
     if not slot or slot.get("status") != "available":
@@ -4784,15 +4789,13 @@ async def post_client_self_register(
     """
     telegram_id = client_catalog_telegram_key(principal)
 
-    phone_norm = normalize_phone(body.phone)
-    if not phone_norm or len(phone_norm) < 9:
-        raise HTTPException(status_code=422, detail="Некорректный номер телефона.")
-    # Belarus: +375 + 9 digits = 12 normalized digits
-    if not phone_norm.startswith("375") or len(phone_norm) != 12:
-        raise HTTPException(
-            status_code=422,
-            detail="Введите номер Беларуси в формате +375 XX XXX-XX-XX.",
-        )
+    from src.shared.profile_phone import normalize_phone_input, validate_phone_non_empty
+
+    phone_e164 = normalize_phone_input(body.phone)
+    phone_ok, phone_err = validate_phone_non_empty(phone_e164)
+    if phone_err or not phone_ok:
+        raise HTTPException(status_code=422, detail=phone_err or "Некорректный номер телефона.")
+    phone_norm = normalize_phone(phone_ok)
 
     first_name = (body.first_name or "").strip()[:64]
     if not first_name:
@@ -5517,7 +5520,7 @@ class TrainerCreateClientBody(BaseModel):
     @field_validator("phone", mode="before")
     @classmethod
     def _phone_belarus_by(cls, v: object) -> str:
-        return coerce_required_belarus_phone(v)
+        return coerce_required_phone(v)
 
     @field_validator("first_name", "last_name", "middle_name", mode="before")
     @classmethod

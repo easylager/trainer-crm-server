@@ -6,8 +6,9 @@
   <title>Расписание</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script src="mini-app-telegram-chrome.js?v=202605085"></script>
+  <script src="mini-app-phone-field.js?v=202605203"></script>
   <link rel="stylesheet" href="theme.css?v=20260429" />
-  <link rel="stylesheet" href="mini-app-components.css?v=20260429" />
+  <link rel="stylesheet" href="mini-app-components.css?v=202605206" />
   <script src="mini-app-confirm.js"></script>
   <script src="mini-app-trainer-gate.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -25,7 +26,7 @@
     />
   </noscript>
   <link rel="preload" href="schedule-editor-main.js?v=202605201" as="script" />
-  <link rel="stylesheet" href="mini-app-schedule-editor.css?v=202605201" />
+  <link rel="stylesheet" href="mini-app-schedule-editor.css?v=202605206" />
   <link rel="stylesheet" href="mini-app-trainer-nav.css?v=20260429" />
 </head>
 <body>
@@ -706,9 +707,19 @@
           <div class="label">Новый клиент</div>
           <div class="book-new-client">
             <label class="book-field-label" for="bookNewPhone">Телефон <span class="book-req" aria-hidden="true">*</span></label>
-            <div class="hub-phone-input-wrap">
-              <span class="hub-phone-prefix" aria-hidden="true">+375</span>
-              <input type="text" id="bookNewPhone" class="input hub-phone-input" placeholder="29 123-45-67" autocomplete="tel" inputmode="tel" maxlength="14" aria-required="true">
+            <div class="crm-phone-field" data-crm-phone-field data-default-country="BY">
+              <div class="crm-phone-field-row">
+                <button type="button" class="crm-phone-country-btn" aria-label="Код страны" aria-haspopup="listbox" aria-expanded="false">
+                  <span class="crm-phone-country-flag" aria-hidden="true">🇧🇾</span>
+                  <span class="crm-phone-country-dial">+375</span>
+                  <span class="crm-phone-country-chevron" aria-hidden="true">▾</span>
+                </button>
+                <input type="tel" id="bookNewPhone" class="crm-phone-national-input" placeholder="29 123-45-67" autocomplete="tel-national" inputmode="tel" aria-required="true" />
+              </div>
+              <div class="crm-phone-country-menu" role="listbox" hidden>
+                <button type="button" class="crm-phone-country-option crm-phone-country-option--active" role="option" data-country="BY" aria-selected="true">🇧🇾 Беларусь +375</button>
+                <button type="button" class="crm-phone-country-option" role="option" data-country="RU" aria-selected="false">🇷🇺 Россия +7</button>
+              </div>
             </div>
             <label class="book-field-label" for="bookNewFirstName">Имя <span class="book-req" aria-hidden="true">*</span></label>
             <input type="text" id="bookNewFirstName" class="input" placeholder="Иван" autocomplete="given-name" maxlength="120" aria-required="true">
@@ -736,7 +747,7 @@
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
   <script src="mini-app-trainer-home.js"></script>
-  <script src="trainer-client-relay-ui.js?v=202605090"></script>
+  <script src="trainer-client-relay-ui.js?v=202605201"></script>
   <script src="trainer-relay-helpers.js?v=202605090"></script>
   <script defer src="schedule-editor-main.js?v=202605201"></script>
 </body>

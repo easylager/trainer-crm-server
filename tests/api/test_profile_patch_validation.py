@@ -11,9 +11,14 @@ def test_profile_patch_rejects_phone_with_too_few_digits() -> None:
     assert "корректный" in str(exc.value).lower()
 
 
-def test_profile_patch_rejects_non_belarus_phone() -> None:
+def test_profile_patch_accepts_russia_phone() -> None:
+    p = ProfilePatch(phone="+7 916 123-45-67")
+    assert p.phone == "+79161234567"
+
+
+def test_profile_patch_rejects_invalid_phone() -> None:
     with pytest.raises(ValidationError) as exc:
-        ProfilePatch(phone="+79161234567")
+        ProfilePatch(phone="+49161234567")
     assert "корректный" in str(exc.value).lower()
 
 

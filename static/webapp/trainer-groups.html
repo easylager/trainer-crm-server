@@ -6,6 +6,7 @@
   <title>Группы</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script src="mini-app-telegram-chrome.js?v=202605022"></script>
+  <script src="mini-app-phone-field.js?v=202605203"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link
@@ -21,7 +22,7 @@
     />
   </noscript>
   <link rel="stylesheet" href="theme.css?v=20260421" />
-  <link rel="stylesheet" href="mini-app-components.css?v=20260421" />
+  <link rel="stylesheet" href="mini-app-components.css?v=202605206" />
   <link rel="stylesheet" href="mini-app-trainer-nav.css?v=20260421" />
   <script>
     /** Same palette + Telegram lock as trainer-clients — themeParams often inject blue. */
@@ -49,7 +50,7 @@
     })();
   </script>
   <link rel="preload" href="trainer-groups-main.js?v=202605067" as="script" />
-  <link rel="stylesheet" href="mini-app-trainer-groups.css?v=202605066" />
+  <link rel="stylesheet" href="mini-app-trainer-groups.css?v=202605206" />
 </head>
 <body>
   <div id="screenList" data-screen class="active">
@@ -249,9 +250,19 @@
           <div class="label">Новый клиент</div>
           <div class="book-new-client">
             <label class="book-field-label" for="addMemberPhone">Телефон <span class="book-req" aria-hidden="true">*</span></label>
-            <div class="hub-phone-input-wrap">
-              <span class="hub-phone-prefix" aria-hidden="true">+375</span>
-              <input type="text" id="addMemberPhone" class="input hub-phone-input" placeholder="29 123-45-67" autocomplete="tel" inputmode="tel" maxlength="14" aria-required="true" />
+            <div class="crm-phone-field" data-crm-phone-field data-default-country="BY">
+              <div class="crm-phone-field-row">
+                <button type="button" class="crm-phone-country-btn" aria-label="Код страны" aria-haspopup="listbox" aria-expanded="false">
+                  <span class="crm-phone-country-flag" aria-hidden="true">🇧🇾</span>
+                  <span class="crm-phone-country-dial">+375</span>
+                  <span class="crm-phone-country-chevron" aria-hidden="true">▾</span>
+                </button>
+                <input type="tel" id="addMemberPhone" class="crm-phone-national-input" placeholder="29 123-45-67" autocomplete="tel-national" inputmode="tel" aria-required="true" />
+              </div>
+              <div class="crm-phone-country-menu" role="listbox" hidden>
+                <button type="button" class="crm-phone-country-option crm-phone-country-option--active" role="option" data-country="BY" aria-selected="true">🇧🇾 Беларусь +375</button>
+                <button type="button" class="crm-phone-country-option" role="option" data-country="RU" aria-selected="false">🇷🇺 Россия +7</button>
+              </div>
             </div>
             <label class="book-field-label" for="addMemberFn">Имя <span class="book-req" aria-hidden="true">*</span></label>
             <input type="text" id="addMemberFn" class="input" placeholder="Иван" autocomplete="given-name" maxlength="120" aria-required="true" />

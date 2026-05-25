@@ -13,15 +13,23 @@
   var COPY_PHONE_ID = 'trainerClientRelayCopyPhone';
   var NO_PHONE_ID = 'trainerClientRelayNoPhone';
 
-  /** E.164-style BY phone for clipboard (+375…); otherwise returns trimmed visible string. */
+  /** E.164-style BY/RU phone for clipboard. */
   function normalizeClientPhoneForCopy(raw) {
     var s = String(raw == null ? '' : raw).trim();
     if (!s || s === '—' || s === '-') return '';
+    if (global.CrmPhoneField && global.CrmPhoneField.parseE164ToCountryAndNational) {
+      var parsed = CrmPhoneField.parseE164ToCountryAndNational(s);
+      var e164 = CrmPhoneField.nationalToE164(parsed.national, parsed.country);
+      if (e164) return e164;
+    }
     var d = s.replace(/\D/g, '');
     if (d.length === 12 && d.indexOf('375') === 0) return '+' + d;
     if (d.length === 11 && d.indexOf('80') === 0) return '+375' + d.slice(2);
     if (d.length === 9) return '+375' + d;
-    if (s.charAt(0) === '+' && d.length >= 10) return '+' + d.replace(/^\+/, '').slice(0, 15);
+    if (d.length === 11 && d.charAt(0) === '8') return '+7' + d.slice(1);
+    if (d.length === 11 && d.charAt(0) === '7') return '+' + d;
+    if (d.length === 10 && d.charAt(0) === '9') return '+7' + d;
+    if (s.charAt(0) === '+' && d.length >= 10) return '+' + d.slice(0, 15);
     return s.replace(/\s+/g, ' ').trim();
   }
 
