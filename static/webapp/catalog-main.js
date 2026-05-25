@@ -42,6 +42,9 @@
         trainerName: '',
         trainers: [],
         total: 0,
+        /** Cached trainer count for summary CTA (city+service+arena filter). */
+        catalogOfferCount: null,
+        catalogOfferCountKey: null,
         offset: 0,
         limit: 10,
         selectedTrainer: null,
@@ -114,6 +117,7 @@
         while (safeNames.length < safeIds.length) safeNames.push('Арена');
         state.arenaIds = safeIds;
         state.arenaNames = safeNames;
+        invalidateCatalogOfferCount();
         if (safeIds.length === 1) {
           state.arenaId = safeIds[0];
           state.arenaName = safeNames[0] || 'Арена';
@@ -888,17 +892,110 @@
         return null;
       }
 
-      function patchSummaryServiceOfferMeta() {
-        var tile = document.querySelector('#summaryRows .catalog-filter-tile[data-action="service"]');
-        if (!tile || !state.cityId) return;
+      function catalogOfferCountCacheKey() {
+        return [state.cityId || 0, state.serviceId || 0, arenaIdsCacheKey()].join(':');
+      }
+
+      /** Trainer count for summary/CTA: city-wide or arena-filtered (distinct trainers, not sum per arena). */
+      function lookupCatalogOfferTrainerCountSync() {
+        if (!state.cityId || !state.serviceId) return null;
+        var key = catalogOfferCountCacheKey();
+        if (state.catalogOfferCountKey === key && state.catalogOfferCount != null) {
+          return state.catalogOfferCount;
+        }
+        if (state.arenaIds.length === 0) {
+          return lookupServiceTrainerCount(state.serviceId, state.cityId);
+        }
+        var fpKey = makeFirstPageKey();
+        if (
+          prefetch.firstPageKey === fpKey &&
+          prefetch.firstPageData &&
+          prefetch.firstPageData.total != null
+        ) {
+          return prefetch.firstPageData.total | 0;
+        }
+        return null;
+      }
+
+      function invalidateCatalogOfferCount() {
+        state.catalogOfferCount = null;
+        state.catalogOfferCountKey = null;
+      }
+
+      function refreshCatalogOfferTrainerCount() {
+        if (!state.cityId || !state.serviceId) {
+          invalidateCatalogOfferCount();
+          patchSummaryServiceOfferMeta();
+          patchSummaryArenaOfferMeta();
+          updateCatalogFindUi();
+          return Promise.resolve(null);
+        }
+        var key = catalogOfferCountCacheKey();
+        if (state.arenaIds.length === 0) {
+          var cityWide = lookupServiceTrainerCount(state.serviceId, state.cityId);
+          state.catalogOfferCount = cityWide;
+          state.catalogOfferCountKey = key;
+          patchSummaryServiceOfferMeta();
+          patchSummaryArenaOfferMeta();
+          updateCatalogFindUi();
+          return Promise.resolve(cityWide);
+        }
+        var fpKey = makeFirstPageKey();
+        if (prefetch.firstPageKey === fpKey && prefetch.firstPageData && prefetch.firstPageData.total != null) {
+          state.catalogOfferCount = prefetch.firstPageData.total | 0;
+          state.catalogOfferCountKey = key;
+          patchSummaryServiceOfferMeta();
+          patchSummaryArenaOfferMeta();
+          updateCatalogFindUi();
+          return Promise.resolve(state.catalogOfferCount);
+        }
+        if (state.catalogOfferCountKey === key && state.catalogOfferCount != null) {
+          patchSummaryServiceOfferMeta();
+          patchSummaryArenaOfferMeta();
+          updateCatalogFindUi();
+          return Promise.resolve(state.catalogOfferCount);
+        }
+        return getJson('/trainers', makeTrainerListParams(0))
+          .then(function(data) {
+            if (catalogOfferCountCacheKey() !== key) return null;
+            var total = data.total != null ? data.total | 0 : (data.items || []).length;
+            state.catalogOfferCount = total;
+            state.catalogOfferCountKey = key;
+            patchSummaryServiceOfferMeta();
+            patchSummaryArenaOfferMeta();
+            updateCatalogFindUi();
+            return total;
+          })
+          .catch(function() {
+            patchSummaryServiceOfferMeta();
+            patchSummaryArenaOfferMeta();
+            updateCatalogFindUi();
+            return null;
+          });
+      }
+
+      function formatCatalogOfferHint(offerCnt) {
+        var hasArenaFilter = state.arenaIds.length > 0;
+        if (offerCnt === 0) {
+          return hasArenaFilter
+            ? 'На выбранных площадках пока нет тренеров — можно оставить заявку'
+            : 'В этом городе пока нет тренеров по этой услуге — можно оставить заявку';
+        }
+        if (offerCnt != null && offerCnt > 0) {
+          return hasArenaFilter
+            ? formatServiceOfferCount(offerCnt) + ' · на выбранных площадках'
+            : formatServiceOfferCount(offerCnt) + ' · площадку можно уточнить выше';
+        }
+        if (hasArenaFilter) return 'Считаем тренеров на выбранных площадках…';
+        return 'Площадку можно уточнить в параметрах выше';
+      }
+
+      function patchFilterTileOfferMeta(action, label) {
+        var tile = document.querySelector('#summaryRows .catalog-filter-tile[data-action="' + action + '"]');
+        if (!tile) return;
         var body = tile.querySelector('.catalog-filter-tile__body');
         if (!body) return;
         var metaEl = body.querySelector('.catalog-filter-tile__meta');
-        var label = '';
-        if (state.serviceId) {
-          var c = lookupServiceTrainerCount(state.serviceId, state.cityId);
-          if (c !== null) label = formatServiceOfferCount(c);
-        }
         if (!label) {
           if (metaEl) metaEl.remove();
           return;
@@ -909,6 +1006,20 @@
           body.appendChild(metaEl);
         }
         metaEl.textContent = label;
+      }
+
+      function patchSummaryServiceOfferMeta() {
+        if (!state.cityId || !state.serviceId) {
+          patchFilterTileOfferMeta('service', '');
+          return;
+        }
+        var cnt = lookupCatalogOfferTrainerCountSync();
+        var label = cnt !== null ? formatServiceOfferCount(cnt) : '';
+        patchFilterTileOfferMeta('service', label);
+      }
+
+      function patchSummaryArenaOfferMeta() {
+        patchFilterTileOfferMeta('arena', '');
       }
 
       /** Russian pluralization for trainer count (найден N тренер/тренера/тренеров). */
@@ -986,6 +1097,14 @@
           writeCatalogFirstPageToStorage(key, data);
           var items = data && data.items ? data.items : [];
           warmupCatalogImagesFromItems(items, 16);
+          if (state.arenaIds.length > 0 && state.cityId && state.serviceId) {
+            var offerKey = catalogOfferCountCacheKey();
+            state.catalogOfferCount = data.total != null ? data.total | 0 : items.length;
+            state.catalogOfferCountKey = offerKey;
+            patchSummaryServiceOfferMeta();
+            patchSummaryArenaOfferMeta();
+            updateCatalogFindUi();
+          }
         }).catch(function() {
           // ignore prefetch failures: must never block UX
         });
@@ -2306,14 +2425,8 @@
         var ready = hasCity && hasService;
         var hint;
         if (ready) {
-          var offerCnt = lookupServiceTrainerCount(state.serviceId, state.cityId);
-          if (offerCnt === 0) {
-            hint = 'В этом городе пока нет тренеров по этой услуге — можно оставить заявку';
-          } else if (offerCnt != null && offerCnt > 0) {
-            hint = formatServiceOfferCount(offerCnt) + ' · площадку можно уточнить выше';
-          } else {
-            hint = 'Площадку можно уточнить в параметрах выше';
-          }
+          var offerCnt = lookupCatalogOfferTrainerCountSync();
+          hint = formatCatalogOfferHint(offerCnt);
         } else if (!hasCity && hasService) {
           hint = 'Осталось выбрать город в параметрах выше';
         } else if (!hasCity) {
@@ -2340,7 +2453,7 @@
             var isSet = !!(r.value && r.value !== '—');
             var offerMeta = '';
             if (r.key === 'service' && state.cityId && state.serviceId) {
-              var cnt = lookupServiceTrainerCount(state.serviceId, state.cityId);
+              var cnt = lookupCatalogOfferTrainerCountSync();
               if (cnt !== null) offerMeta = formatServiceOfferCount(cnt);
             }
             var tileCls =
@@ -2377,9 +2490,10 @@
         updateCatalogFindUi();
         if (state.cityId) {
           fetchCatalogServices(state.cityId).then(function() {
-            patchSummaryServiceOfferMeta();
-            updateCatalogFindUi();
+            refreshCatalogOfferTrainerCount();
           });
+        } else {
+          refreshCatalogOfferTrainerCount();
         }
         document.querySelectorAll('#summaryRows .catalog-filter-tile').forEach(function(btn) {
           btn.onclick = function() {
