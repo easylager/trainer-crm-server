@@ -25,7 +25,6 @@ from src.application.booking_use_cases import (
     mark_booking_completed_and_notify,
     mark_reminder_sent,
 )
-from src.infrastructure.db.session import async_session_factory
 from src.infrastructure.repositories import TrainerRepository
 
 
@@ -167,36 +166,44 @@ async def test_create_booking_same_slot_twice_second_fails(db_session: AsyncSess
 
 
 @pytest.mark.asyncio
-@pytest.mark.usefixtures("app_use_test_db")
 async def test_create_booking_concurrent_same_slot_two_sessions_one_wins() -> None:
     """Два параллельных create_booking на один слот: блокировка строки слота, один успех.
 
-    Setup must use the same ``async_session_factory`` as concurrent attempts (patched by
-    ``app_use_test_db``). Using ``db_session`` for setup and the global factory for attempts
-    crosses connections and uncommitted test data is invisible to the attempts.
+    Dedicated engine with real commits — patched single-connection test fixture cannot
+    run two concurrent queries on the same asyncpg connection.
     """
-    tomorrow = date.today() + timedelta(days=1)
-    async with async_session_factory() as session:
-        trainer_id, slot_id, service_id = await _create_trainer_and_slot(
-            session, tomorrow, time(10, 0), time(11, 0)
-        )
-        client_id_1 = await _create_client(session, unique_test_telegram_id())
-        client_id_2 = await _create_client(session, unique_test_telegram_id())
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-    async def _attempt(client_id: int) -> int | None:
-        async with async_session_factory() as session:
-            bid, _flags = await create_booking(
-                session,
-                slot_id,
-                trainer_id,
-                client_id,
-                service_id=service_id,
+    from src.shared.config import Settings
+
+    settings = Settings()
+    engine = create_async_engine(settings.database_url, echo=False)
+    factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    try:
+        tomorrow = date.today() + timedelta(days=1)
+        async with factory() as session:
+            trainer_id, slot_id, service_id = await _create_trainer_and_slot(
+                session, tomorrow, time(10, 0), time(11, 0)
             )
-            return bid
+            client_id_1 = await _create_client(session, unique_test_telegram_id())
+            client_id_2 = await _create_client(session, unique_test_telegram_id())
 
-    results = await asyncio.gather(_attempt(client_id_1), _attempt(client_id_2))
-    successes = [r for r in results if r is not None]
-    assert len(successes) == 1
+        async def _attempt(client_id: int) -> int | None:
+            async with factory() as session:
+                bid, _flags = await create_booking(
+                    session,
+                    slot_id,
+                    trainer_id,
+                    client_id,
+                    service_id=service_id,
+                )
+                return bid
+
+        results = await asyncio.gather(_attempt(client_id_1), _attempt(client_id_2))
+        successes = [r for r in results if r is not None]
+        assert len(successes) == 1
+    finally:
+        await engine.dispose()
 
 
 @pytest.mark.asyncio

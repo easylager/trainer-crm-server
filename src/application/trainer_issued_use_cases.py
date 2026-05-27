@@ -124,8 +124,8 @@ async def list_trainer_issued_items(
                     pi.expires_at,
                     pi.status,
                     p.name AS product_name,
-                """ + SQL_PASS_INSTANCE_SALE_PRICE_CENTS + """ AS price_cents,
-                {_PASS_SCOPE_SQL} AS scope_label,
+                    {SQL_PASS_INSTANCE_SALE_PRICE_CENTS} AS price_cents,
+                    {_PASS_SCOPE_SQL} AS scope_label,
                     TRIM(COALESCE(c.first_name, '') || ' ' || COALESCE(c.last_name, '')) AS client_name,
                     c.phone
                 FROM pass_instances pi

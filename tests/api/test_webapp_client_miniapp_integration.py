@@ -1122,7 +1122,7 @@ async def test_webapp_client_shell_assets_served() -> None:
 
 
 @pytest.mark.asyncio
-async def test_public_platform_stats_endpoint() -> None:
+async def test_public_platform_stats_endpoint(app_use_test_db) -> None:
     """Public trust card relies on aggregated platform stats endpoint."""
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.get("/api/public/platform-stats")
