@@ -54,6 +54,15 @@
 
   function goTo(path) { window.location.href = withInit(webappBase() + path); }
 
+  /** Saved / past → book slots without catalog flash. */
+  function goToBook(trainerId) {
+    goTo('book?trainer_id=' + encodeURIComponent(String(trainerId)) + '&from=saved-trainers');
+  }
+
+  function goToTrainerProfile(trainerId) {
+    goTo('catalog?trainer_id=' + encodeURIComponent(String(trainerId)));
+  }
+
   function esc(s) {
     if (s == null) return '';
     return String(s)
@@ -381,7 +390,7 @@
         if (e.target.closest('[data-unsave-tid]')) return;
         if (e.target.closest('button[data-card-tid]')) return;
         var tid = el.getAttribute('data-card-tid');
-        goTo('catalog?trainer_id=' + encodeURIComponent(tid));
+        goToTrainerProfile(tid);
       });
     });
     /* "Профиль" text-link buttons (data-card-tid on a <button>) */
@@ -389,7 +398,7 @@
       btn.addEventListener('click', function (e) {
         e.stopPropagation();
         var tid = btn.getAttribute('data-card-tid');
-        goTo('catalog?trainer_id=' + encodeURIComponent(tid));
+        goToTrainerProfile(tid);
       });
     });
     /* "Записаться" CTA buttons → open booking flow */
@@ -397,7 +406,7 @@
       btn.addEventListener('click', function (e) {
         e.stopPropagation();
         var tid = btn.getAttribute('data-cta-tid');
-        goTo('catalog?trainer_id=' + encodeURIComponent(tid) + '&action=book');
+        goToBook(tid);
       });
     });
     container.querySelectorAll('[data-unsave-tid]').forEach(function (btn) {

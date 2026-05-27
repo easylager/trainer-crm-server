@@ -51,8 +51,10 @@ async def test_list_trainer_issued_items_merges_pass_and_certificate(db_session:
     await db_session.execute(
         text(
             """
-            INSERT INTO pass_instances (client_id, pass_product_id, sessions_remaining, sessions_total, status)
-            VALUES (:cid, :pid, 5, 8, 'active')
+            INSERT INTO pass_instances (
+                client_id, pass_product_id, sessions_remaining, sessions_total, price_cents, status
+            )
+            VALUES (:cid, :pid, 5, 8, 8000, 'active')
             """
         ),
         {"cid": client_id, "pid": pass_product_id},

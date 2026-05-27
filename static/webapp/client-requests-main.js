@@ -41,6 +41,24 @@
         return (tg && tg.initData) ? tg.initData : '';
       }
 
+      function navigateToBookFromRequest(trainerId, requestId) {
+        var path =
+          'book?trainer_id=' +
+          encodeURIComponent(String(trainerId)) +
+          '&request_id=' +
+          encodeURIComponent(String(requestId)) +
+          '&from=requests';
+        if (window.ClientShell && typeof window.ClientShell.navigate === 'function') {
+          window.ClientShell.navigate(path);
+          return;
+        }
+        var base = window.location.pathname.replace(/[^/]+$/, '');
+        var url = base + path;
+        var id = initData();
+        if (id) url += (url.indexOf('?') >= 0 ? '&' : '?') + 'init_data=' + encodeURIComponent(id);
+        window.location.href = url;
+      }
+
       function apiUrl(path, useQueryInit) {
         const base = '/api/webapp';
         if (useQueryInit && initData()) {
@@ -99,10 +117,17 @@
         if (el) el.classList.add('active');
         var ht = document.getElementById('crHeaderTitle');
         if (ht) {
-          if (id === 'screenList') ht.textContent = 'Мои заявки';
+          if (id === 'screenList') ht.textContent = 'Подбор тренера';
           else if (id === 'screenDetail') ht.textContent = 'Заявка';
           else if (id === 'screenResponderDetail') ht.textContent = 'Тренер';
           else if (id === 'screenEdit') ht.textContent = 'Редактирование';
+        }
+        var shell = window.ClientShell;
+        if (shell && typeof shell.setTabBarVisible === 'function') {
+          shell.setTabBarVisible(id === 'screenList');
+        }
+        if (shell && typeof shell.setForcedTab === 'function') {
+          shell.setForcedTab(id === 'screenList' ? 'more' : null);
         }
         syncClientRequestsHeaderBack();
       }
@@ -349,10 +374,21 @@
         const total = state.items.length;
         var listIntro = document.getElementById('listIntro');
         if (total === 0) {
-          listEl.innerHTML = '';
-          emptyEl.style.display = 'block';
           pagEl.innerHTML = '';
           if (listIntro) listIntro.style.display = 'none';
+          if (window.ClientShell && typeof window.ClientShell.renderEmptyState === 'function') {
+            emptyEl.style.display = 'none';
+            window.ClientShell.renderEmptyState(listEl, {
+              icon: window.ClientShell.TAB_ICONS.catalog,
+              title: 'Пока нет обращений',
+              hint: 'Опишите задачу — подходящие тренеры смогут откликнуться и предложить занятие на льду.',
+              ctaLabel: 'Найти тренера',
+              ctaPath: 'catalog?tab=catalog',
+            });
+          } else {
+            listEl.innerHTML = '';
+            emptyEl.style.display = 'block';
+          }
           return;
         }
         if (listIntro) listIntro.style.display = 'block';
@@ -481,7 +517,6 @@
         }
         var desc = (r.description || '').trim();
         var photo = photoUrl(r.photo_key);
-        var bookUrl = state.bookBaseUrl + '?trainer_id=' + encodeURIComponent(r.trainer_id) + '&request_id=' + encodeURIComponent(req.id);
         var html = '';
         html += '<div class="tcf-photo-wrap">';
         if (photo) {
@@ -596,13 +631,22 @@
         if (desc) html += '<div class="tcf-desc">' + escapeHtml(desc).replace(/\n/g, '<br>') + '</div>';
         html += '<div class="tcf-next-hint">Чтобы выбрать дату и время, нажмите <b>Записаться</b> — откроется расписание. Кнопка <b>Написать</b> — если нужно обсудить детали в чате.</div>';
         html += '<div class="tcf-actions">';
-        html += '<a href="' + escapeHtml(bookUrl) + '" class="btn-primary tcf-book">Записаться</a>';
+        html += '<button type="button" class="btn-primary tcf-book" data-book-trainer-id="' + encodeURIComponent(String(r.trainer_id)) + '" data-book-request-id="' + encodeURIComponent(String(req.id)) + '">Записаться</button>';
         // В Mini App tg:// не открывается; только https://t.me/username через tg.openLink
         if (r.telegram_username) {
           html += '<button type="button" class="btn-secondary tcf-write" data-tg-username="' + escapeHtml(r.telegram_username) + '">Написать</button>';
         }
         html += '</div></div>';
         document.getElementById('responderDetailContent').innerHTML = html;
+        var bookBtn = document.querySelector('#responderDetailContent .tcf-book[data-book-trainer-id]');
+        if (bookBtn) {
+          bookBtn.addEventListener('click', function () {
+            navigateToBookFromRequest(
+              bookBtn.getAttribute('data-book-trainer-id'),
+              bookBtn.getAttribute('data-book-request-id')
+            );
+          });
+        }
         document.querySelectorAll('#responderDetailContent .tcf-education-doc').forEach(function(linkEl) {
           linkEl.addEventListener('click', function(ev) {
             if (tg && typeof tg.openLink === 'function') {
@@ -745,7 +789,11 @@
         var listEl = document.getElementById('requestList');
         var emptyEl = document.getElementById('screenEmpty');
         var openRequestId = getRequestIdFromUrl();
-        listEl.innerHTML = '<div class="loading">Загрузка...</div>';
+        if (window.ClientShell && typeof window.ClientShell.renderSkeletonList === 'function') {
+          window.ClientShell.renderSkeletonList(listEl, 3);
+        } else {
+          listEl.innerHTML = '<div class="loading">Загрузка...</div>';
+        }
         emptyEl.style.display = 'none';
         fetchRequests().then(function(data) {
           state.items = Array.isArray(data.items) ? data.items : [];
@@ -767,7 +815,6 @@
 
       document.getElementById('btnRefreshEmpty').onclick = function() {
         document.getElementById('screenEmpty').style.display = 'none';
-        document.getElementById('requestList').innerHTML = '<div class="loading">Загрузка...</div>';
         loadList();
       };
 

@@ -57,8 +57,16 @@ REFERENCE_BODY_MASS_KG = 72.0
 _KCAL_PER_KM_WALK_BRISK = 52.0
 
 
-def classify_service_effort_profile(service_name: str) -> EffortServiceProfile:
-    """Map localized catalog title to effort bucket (keyword heuristic)."""
+def classify_service_effort_profile(
+    service_name: str, effort_profile: str | None = None
+) -> EffortServiceProfile:
+    """Map catalog title to effort bucket; DB effort_profile wins over name heuristics."""
+    raw_profile = (effort_profile or "").strip().lower()
+    if raw_profile:
+        try:
+            return EffortServiceProfile(raw_profile)
+        except ValueError:
+            pass
     raw = (service_name or "").strip().lower()
     n = raw.replace("ё", "е")
     if "офп" in n or "сфп" in n:
@@ -123,10 +131,11 @@ def estimate_session_effort(
     service_name: str,
     duration_minutes: float,
     body_mass_kg: float = REFERENCE_BODY_MASS_KG,
+    effort_profile: str | None = None,
 ) -> SessionEffortBreakdown:
     """Best-effort MET + distance split for one completed session."""
     dur = max(1.0, float(duration_minutes))
-    profile = classify_service_effort_profile(service_name)
+    profile = classify_service_effort_profile(service_name, effort_profile=effort_profile)
     met, frac, v_kmh = _PROFILE_PARAMS.get(profile, _PROFILE_PARAMS[EffortServiceProfile.DEFAULT])
     hours = dur / 60.0
     kcal = max(0.0, met * body_mass_kg * hours)

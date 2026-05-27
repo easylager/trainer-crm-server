@@ -9,10 +9,15 @@
   <script src="mini-app-phone-field.js?v=202605203"></script>
   <link rel="stylesheet" href="theme.css" />
   <link rel="stylesheet" href="mini-app-components.css?v=202605206" />
+  <link rel="stylesheet" href="booking-client.css?v=202605305" />
+  <link rel="stylesheet" href="mini-app-client-shell.css?v=202605305" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet" />
   <script src="client-mini-app-theme.js"></script>
+  <script src="booking-client.js?v=202605305"></script>
+  <script src="booking-deeplink.js?v=202605305"></script>
+  <script src="mini-app-client-shell.js?v=202605305"></script>
   <style>
     * { box-sizing: border-box; }
     body {
@@ -392,6 +397,35 @@
       min-width: 0;
       line-height: 1.35;
     }
+    .book-service-line {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--tg-theme-text-color);
+      margin: 4px 0 0;
+      line-height: 1.4;
+    }
+    #screenForm .book-service-select {
+      width: 100%;
+      padding: 13px 40px 13px 14px;
+      border-radius: 12px;
+      border: none;
+      margin: 0;
+      font-size: 16px;
+      font-family: inherit;
+      box-sizing: border-box;
+      background: var(--tg-theme-secondary-bg-color);
+      color: var(--tg-theme-text-color);
+      box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.05);
+      appearance: none;
+      -webkit-appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%238e8e93' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 12px center;
+    }
+    #screenForm .book-service-select:focus-visible {
+      outline: 2px solid color-mix(in srgb, var(--app-cta-fill) 55%, transparent);
+      outline-offset: 2px;
+    }
     /* .btn-primary — mini-app-components.css + theme tokens */
     #screenForm .btn-primary {
       width: 100%;
@@ -609,7 +643,104 @@
       font: inherit;
       cursor: pointer;
     }
+    body.book-slot-deeplink #screenSlots,
+    html.book-slot-deeplink #screenSlots {
+      display: none !important;
+    }
+    body.book-slot-deeplink #screenForm,
+    html.book-slot-deeplink #screenForm {
+      display: block !important;
+    }
+    body.book-slot-deeplink .week-nav,
+    html.book-slot-deeplink .week-nav {
+      display: none !important;
+    }
+    body.book-slot-deeplink .book-deeplink-loading,
+    html.book-slot-deeplink .book-deeplink-loading {
+      padding: 8px 0 16px;
+      font-size: 15px;
+      font-weight: 500;
+      color: var(--tg-theme-hint-color);
+    }
+    .book-deeplink-loading-static {
+      display: none;
+    }
+    html.book-slot-deeplink .book-deeplink-loading-static,
+    body.book-slot-deeplink .book-deeplink-loading-static {
+      display: block;
+    }
+    body.book-slot-deeplink.book-form-ready .book-deeplink-loading,
+    html.book-slot-deeplink.book-form-ready .book-deeplink-loading,
+    body.book-slot-deeplink.book-form-ready .book-deeplink-loading-static,
+    html.book-slot-deeplink.book-form-ready .book-deeplink-loading-static {
+      display: none;
+    }
+    /* After successful booking: full-screen success (overrides deeplink form lock). */
+    html.book-booking-success #screenSlots,
+    body.book-booking-success #screenSlots,
+    html.book-booking-success #screenForm,
+    body.book-booking-success #screenForm {
+      display: none !important;
+    }
+    html.book-booking-success #screenSuccess,
+    body.book-booking-success #screenSuccess {
+      display: flex !important;
+    }
+    html.book-booking-success .week-nav,
+    body.book-booking-success .week-nav {
+      display: none !important;
+    }
+    /* Hide empty fields until slot summary + session are hydrated */
+    #bookFormLoading {
+      display: none;
+    }
+    #screenForm:not(.book-form-ready) #bookFormBody {
+      display: none !important;
+    }
+    #screenForm:not(.book-form-ready) #bookFormLoading {
+      display: block;
+    }
+    #screenForm.book-form-ready #bookFormLoading {
+      display: none;
+    }
+    .book-form-loading {
+      padding: 4px 0 8px;
+    }
+    .book-form-loading__line {
+      height: 14px;
+      border-radius: 8px;
+      margin-bottom: 14px;
+      background: linear-gradient(
+        90deg,
+        color-mix(in srgb, var(--tg-theme-hint-color) 10%, transparent) 0%,
+        color-mix(in srgb, var(--tg-theme-hint-color) 18%, transparent) 50%,
+        color-mix(in srgb, var(--tg-theme-hint-color) 10%, transparent) 100%
+      );
+      background-size: 200% 100%;
+      animation: book-form-shimmer 1.2s ease-in-out infinite;
+    }
+    .book-form-loading__line--short { width: 62%; }
+    .book-form-loading__line--field { height: 44px; border-radius: 12px; margin-bottom: 18px; }
+    .book-form-loading__line--btn { height: 48px; border-radius: 14px; margin-top: 8px; margin-bottom: 0; }
+    @keyframes book-form-shimmer {
+      0% { background-position: 100% 0; }
+      100% { background-position: -100% 0; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .book-form-loading__line { animation: none; }
+    }
   </style>
+  <script>
+    (function () {
+      try {
+        var q = String(location.search || '');
+        var m = q.match(/[?&]slot_id=(\d+)/);
+        if (m && parseInt(m[1], 10) > 0) {
+          document.documentElement.classList.add('book-slot-deeplink');
+        }
+      } catch (e) { /* ignore */ }
+    })();
+  </script>
   <link rel="stylesheet" href="mini-app-client-nav.css" />
 </head>
 <body>
@@ -627,15 +758,30 @@
       <button type="button" id="nextWeek" aria-label="Вперёд">›</button>
     </div>
     <div id="content">
-      <div class="loading">Загрузка...</div>
+      <div class="loading">Загрузка…</div>
     </div>
   </div>
   <div id="screenForm" style="display: none;">
     <div id="bookSelectionHero" class="book-selection-hero">
-      <div id="selectedSlotSummary" class="selected-slot-summary"></div>
+      <div id="selectedSlotSummary" class="selected-slot-summary">
+        <div class="book-deeplink-loading book-deeplink-loading-static" role="status" aria-live="polite">Готовим форму записи…</div>
+      </div>
       <button type="button" id="btnBookServiceDetails" class="btn-book-service-details" hidden>Подробнее</button>
     </div>
+    <div id="bookFormLoading" class="book-form-loading" role="status" aria-live="polite" aria-label="Загрузка формы">
+      <div class="book-form-loading__line"></div>
+      <div class="book-form-loading__line book-form-loading__line--short"></div>
+      <div class="book-form-loading__line book-form-loading__line--field"></div>
+      <div class="book-form-loading__line book-form-loading__line--field"></div>
+      <div class="book-form-loading__line book-form-loading__line--btn"></div>
+    </div>
+    <div id="bookFormBody">
     <div id="bookVenueHint" class="book-venue-hint" style="display: none;" aria-live="polite"></div>
+    <div id="bookServiceBlock" class="form-block" style="display: none;">
+      <label for="bookServiceSelect">Услуга</label>
+      <p id="bookServiceLine" class="book-service-line" style="display: none;"></p>
+      <select id="bookServiceSelect" class="book-service-select" style="display: none;" aria-label="Услуга"></select>
+    </div>
     <div id="priceTierBlock" class="form-block" style="display: none;">
       <label>Категория цены</label>
       <div id="priceTierRadios" class="price-tier-radios"></div>
@@ -668,11 +814,16 @@
       <textarea id="comment" placeholder="Напишите тренеру, если нужно"></textarea>
     </div>
     <button type="button" class="btn-primary" id="btnSubmit">Записаться</button>
+    </div>
   </div>
-  <div id="screenSuccess" style="display: none;">
+  <div id="screenSuccess" style="display: none;" class="booking-success-panel">
     <div class="success-inner">
       <div class="success-msg" id="successMsgBody"></div>
       <p class="success-hint">Окно можно закрыть крестиком вверху Telegram.</p>
+      <div class="booking-success-actions">
+        <button type="button" class="btn-primary btn-block" id="btnSuccessBookings">Мои записи</button>
+        <button type="button" class="btn-secondary btn-block" id="btnSuccessHome">Главная</button>
+      </div>
       <div class="success-share-nudge" id="successShareNudge" style="display: none;">
         <div class="success-share-nudge-text">
           <strong id="successShareTitle">Пригласите знакомых к вашему тренеру</strong>
@@ -746,6 +897,39 @@
       const forceServiceChoice = params.get('force_service_choice') === '1';
       const slotIdFromUrlParam = params.get('slot_id');
       const slotIdFromUrl = slotIdFromUrlParam ? parseInt(slotIdFromUrlParam, 10) : NaN;
+      const arenaIdFromUrlParam = params.get('arena_id');
+      const parsedArenaFromUrl = arenaIdFromUrlParam ? parseInt(arenaIdFromUrlParam, 10) : NaN;
+      const arenaIdFromUrl = Number.isFinite(parsedArenaFromUrl) && parsedArenaFromUrl > 0 ? parsedArenaFromUrl : null;
+      const hasSlotDeepLink = Number.isFinite(slotIdFromUrl) && slotIdFromUrl > 0;
+      const returnFrom = params.get('from') || '';
+
+      function markBookFormPending() {
+        var formEl = document.getElementById('screenForm');
+        if (formEl) formEl.classList.remove('book-form-ready');
+        document.documentElement.classList.remove('book-form-ready');
+        document.body.classList.remove('book-form-ready');
+      }
+
+      function markBookFormReady() {
+        var formEl = document.getElementById('screenForm');
+        if (formEl) formEl.classList.add('book-form-ready');
+        document.documentElement.classList.add('book-form-ready');
+        document.body.classList.add('book-form-ready');
+      }
+
+      if (hasSlotDeepLink) {
+        document.documentElement.classList.add('book-slot-deeplink');
+        document.body.classList.add('book-slot-deeplink');
+        markBookFormPending();
+        var slotsScreen = document.getElementById('screenSlots');
+        var formScreen = document.getElementById('screenForm');
+        if (slotsScreen) slotsScreen.style.display = 'none';
+        if (formScreen) formScreen.style.display = 'block';
+        var prevW = document.getElementById('prevWeek');
+        var nextW = document.getElementById('nextWeek');
+        if (prevW) prevW.style.display = 'none';
+        if (nextW) nextW.style.display = 'none';
+      }
       if (!trainerId) {
         document.getElementById('content').innerHTML = '<div class="error">Не указан тренер. Откройте запись из бота.</div>';
         document.getElementById('prevWeek').style.display = 'none';
@@ -787,7 +971,7 @@
       let clientFirstName = '';
       let clientLastName = '';
       let sessionCityId = null;
-      let sessionArenaId = null;
+      let sessionArenaId = arenaIdFromUrl;
       let sessionServiceId = null;
       let selectedServiceId = serviceIdFromUrl;
       /** service_id passed to last GET /client/slots (for individual slots with null service_id). */
@@ -805,10 +989,15 @@
       let bookSubmitIdempotencyKey = null;
       /** Effective service for booking form (used for tiers + «Подробнее»). */
       let bookFormEffectiveServiceId = null;
+      /** Slot date/time on form — for summary refresh when service changes. */
+      let bookFormSlotDateStr = null;
+      let bookFormSlotTimeStr = null;
 
       const BOOK_NOTICE_PREFIX = 'В стоимость не входят:';
       function bookParseBookingJsonResponse(text) {
-        try { return JSON.parse(text || 'null'); } catch (e) { return null; }
+        return window.BookingClient
+          ? window.BookingClient.parseBookingJsonResponse(text)
+          : (function () { try { return JSON.parse(text || 'null'); } catch (e) { return null; } })();
       }
 
       const PRICE_TIER_LABEL_RU = {
@@ -818,6 +1007,7 @@
         adult_and_child: 'Взрослый + ребенок',
       };
       function priceTierLabelRu(tier) {
+        if (window.BookingClient) return window.BookingClient.priceTierLabelRu(tier);
         const k = (tier.tier_kind || '').toLowerCase();
         return PRICE_TIER_LABEL_RU[k] || tier.label || 'Тариф';
       }
@@ -909,6 +1099,133 @@
         }
         el.innerHTML = parts.join('');
         el.style.display = 'block';
+      }
+
+      function formatBookServicePrice(s) {
+        var minV = s.price_byn_min != null ? s.price_byn_min : s.price_byn;
+        var maxV = s.price_byn_max != null ? s.price_byn_max : s.price_byn;
+        if (minV == null && s.price_byn == null) return 'по запросу';
+        if (minV != null && maxV != null && minV !== maxV) {
+          var a = minV === Math.floor(minV) ? String(minV) : minV.toFixed(2);
+          return 'от ' + a + ' BYN';
+        }
+        var v = minV != null ? minV : s.price_byn;
+        var numStr = v === Math.floor(v) ? String(v) : v.toFixed(2);
+        return numStr + ' BYN';
+      }
+
+      function serviceDisplayNameForId(serviceId) {
+        var row = resolveBookServiceRow(serviceId);
+        return row && row.service_name ? String(row.service_name).trim() : '';
+      }
+
+      /** Service line or dropdown on booking form — same rules as catalog booking form. */
+      function updateBookFormServiceUi(effServiceId, isGroupSlot) {
+        var block = document.getElementById('bookServiceBlock');
+        var lineEl = document.getElementById('bookServiceLine');
+        var selectEl = document.getElementById('bookServiceSelect');
+        if (!block) return;
+        var t = bookTrainerDetailCache;
+        var services = (t && t.services) ? t.services : [];
+        if (!services.length) {
+          block.style.display = 'none';
+          if (lineEl) {
+            lineEl.style.display = 'none';
+            lineEl.textContent = '';
+          }
+          if (selectEl) {
+            selectEl.innerHTML = '';
+            selectEl.style.display = 'none';
+          }
+          return;
+        }
+        var effSid = effServiceId != null ? Number(effServiceId) : null;
+        if (isGroupSlot || services.length === 1) {
+          var lineNm =
+            (effSid != null ? serviceDisplayNameForId(effSid) : '') ||
+            String(services[0].service_name || '').trim();
+          if (!lineNm) {
+            block.style.display = 'none';
+          } else {
+            block.style.display = 'block';
+            if (lineEl) {
+              lineEl.style.display = 'block';
+              lineEl.textContent = lineNm;
+            }
+          }
+          if (selectEl) {
+            selectEl.innerHTML = '';
+            selectEl.style.display = 'none';
+          }
+          return;
+        }
+        block.style.display = 'block';
+        if (lineEl) {
+          lineEl.style.display = 'none';
+          lineEl.textContent = '';
+        }
+        if (!selectEl) return;
+        selectEl.style.display = 'block';
+        selectEl.innerHTML = '';
+        services.forEach(function(s) {
+          var sid = s.service_id != null ? Number(s.service_id) : NaN;
+          if (!Number.isFinite(sid) || sid <= 0) return;
+          var opt = document.createElement('option');
+          opt.value = String(sid);
+          var label = String(s.service_name || '—').trim();
+          var priceLabel = formatBookServicePrice(s);
+          if (priceLabel && priceLabel !== 'по запросу') {
+            label += ' — ' + priceLabel;
+          }
+          opt.textContent = label;
+          selectEl.appendChild(opt);
+        });
+        var pickSid = effSid;
+        if (pickSid != null && selectEl.querySelector('option[value="' + String(pickSid) + '"]')) {
+          selectEl.value = String(pickSid);
+        } else if (selectEl.options.length) {
+          selectEl.selectedIndex = 0;
+          pickSid = Number(selectEl.value);
+          selectedServiceId = pickSid;
+          sessionServiceId = pickSid;
+        }
+      }
+
+      function syncBookSlotSummaryLine(effServiceId, isGroupSlot) {
+        if (!bookFormSlotDateStr || !bookFormSlotTimeStr) return;
+        var slotLine = formatDateKey(bookFormSlotDateStr) + ', ' + bookFormSlotTimeStr;
+        var t = bookTrainerDetailCache;
+        var services = (t && t.services) ? t.services : [];
+        var showDropdown = !isGroupSlot && services.length > 1;
+        if (!showDropdown && effServiceId != null) {
+          var nm = serviceDisplayNameForId(effServiceId);
+          if (nm) slotLine = nm + ' · ' + slotLine;
+        }
+        var summaryEl = document.getElementById('selectedSlotSummary');
+        if (summaryEl) summaryEl.textContent = 'Выбрано: ' + slotLine;
+      }
+
+      function selectBookFormService(serviceId) {
+        var sid = Number(serviceId);
+        if (!Number.isFinite(sid) || sid <= 0) return;
+        if (selectedServiceId === sid) return;
+        selectedServiceId = sid;
+        sessionServiceId = sid;
+        persistServiceSelectionInSession(sid);
+        if (window.history && window.history.replaceState) {
+          var url = new URL(window.location.href);
+          url.searchParams.set('service_id', String(sid));
+          window.history.replaceState(null, '', url.toString());
+        }
+        var selSlot = (allSlots || []).find(function(s) {
+          return Number(s.id) === Number(window._selectedSlotId);
+        });
+        var capBook = selSlot && selSlot.capacity != null ? parseInt(selSlot.capacity, 10) : 1;
+        if (isNaN(capBook)) capBook = 1;
+        var isGroupSlot = capBook > 1;
+        if (!isGroupSlot) renderPriceTierUi(sid);
+        syncBookServiceDetailsTrigger(sid);
+        syncBookSlotSummaryLine(sid, isGroupSlot);
       }
 
       function resolveBookServiceRow(serviceId) {
@@ -1100,7 +1417,9 @@
             const raw = data.client_phone;
             clientPhone = raw != null && String(raw).trim() !== '' ? String(raw).trim() : null;
             sessionCityId = data.city_id != null ? Number(data.city_id) : null;
-            sessionArenaId = data.arena_id != null ? Number(data.arena_id) : null;
+            if (sessionArenaId == null) {
+              sessionArenaId = data.arena_id != null ? Number(data.arena_id) : null;
+            }
             // With for_trainer_id, server sends booking_context_* only — never reuse global session service_id
             // (it may be another trainer's e.g. ОФП).
             if (trainerId) {
@@ -1379,9 +1698,13 @@
           (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
             ? crypto.randomUUID()
             : ('bk-' + Date.now() + '-' + Math.random().toString(36).slice(2, 10));
+        markBookFormPending();
         document.getElementById('screenSlots').style.display = 'none';
         document.getElementById('screenForm').style.display = 'block';
         document.getElementById('comment').value = '';
+        bookFormSlotDateStr = dateStr;
+        bookFormSlotTimeStr = timeStr;
+        try {
         await fetchClientSession();
         updateBookNameFields();
         prefillBookPhoneField();
@@ -1445,22 +1768,23 @@
         } else {
           renderPriceTierUi(effSid);
         }
-        var slotLine = formatDateKey(dateStr) + ', ' + timeStr;
-        var tDetail = bookTrainerDetailCache;
-        var srvList = (tDetail && tDetail.services) ? tDetail.services : [];
-        if (effSid != null) {
-          var srow = srvList.find(function(x) { return Number(x.service_id) === Number(effSid); });
-          if (srow && (srow.service_name || '').trim()) {
-            slotLine = String(srow.service_name).trim() + ' · ' + slotLine;
-          }
-        }
-        document.getElementById('selectedSlotSummary').textContent = 'Выбрано: ' + slotLine;
+        updateBookFormServiceUi(effSid, !isNaN(capBook) && capBook > 1);
+        syncBookSlotSummaryLine(effSid, !isNaN(capBook) && capBook > 1);
         syncBookServiceDetailsTrigger(effSid);
         syncBookVenueHint(selSlot);
+        } catch (e) {
+          document.getElementById('selectedSlotSummary').textContent =
+            'Не удалось подготовить форму. Попробуйте ещё раз.';
+          throw e;
+        } finally {
+          markBookFormReady();
+          syncBookHeaderBack();
+        }
       }
 
       function showSlots() {
         closeBookServiceDetailModal();
+        markBookFormPending();
         var vh = document.getElementById('bookVenueHint');
         if (vh) {
           vh.style.display = 'none';
@@ -1471,6 +1795,73 @@
         document.getElementById('screenSlots').style.display = 'block';
         const weekSlots = slotsInWeek(allSlots, currentWeekStart);
         render(weekSlots);
+        syncBookHeaderBack();
+      }
+
+      function navigateToClientHome() {
+        if (window.ClientShell && typeof window.ClientShell.navigate === 'function') {
+          window.ClientShell.navigate('client-home');
+          return;
+        }
+        if (typeof window.navigateClientHome === 'function') {
+          window.navigateClientHome();
+          return;
+        }
+        var base = window.location.pathname.replace(/[^/]+$/, '');
+        var initData = tg?.initData || '';
+        var url = base + 'client-home';
+        if (initData) url += '?init_data=' + encodeURIComponent(initData);
+        window.location.href = url;
+      }
+
+      function navigateToReturnOrigin() {
+        if (window.BookingClient) {
+          window.BookingClient.navigateBookingReturn(returnFrom, { trainerId: trainerId });
+          return true;
+        }
+        if (returnFrom === 'hub') {
+          navigateToClientHome();
+          return true;
+        }
+        var shellPath = null;
+        if (returnFrom === 'saved-trainers') shellPath = 'client-saved-trainers';
+        if (returnFrom === 'requests') shellPath = 'client-requests';
+        if (shellPath) {
+          if (window.ClientShell && typeof window.ClientShell.navigate === 'function') {
+            window.ClientShell.navigate(shellPath);
+          } else {
+            var base = window.location.pathname.replace(/[^/]+$/, '');
+            var initData = tg?.initData || '';
+            var url = base + shellPath;
+            if (initData) url += '?init_data=' + encodeURIComponent(initData);
+            window.location.href = url;
+          }
+          return true;
+        }
+        return false;
+      }
+
+      function isFormScreenVisible() {
+        var el = document.getElementById('screenForm');
+        return el && el.style.display !== 'none';
+      }
+
+      function syncBookHeaderBack() {
+        var headerBack = document.getElementById('btnBack');
+        if (!headerBack) return;
+        if (!trainerId) {
+          headerBack.hidden = true;
+          return;
+        }
+        headerBack.hidden = false;
+        headerBack.onclick = function() {
+          if (navigateToReturnOrigin()) return;
+          if (isFormScreenVisible() && !hasSlotDeepLink) {
+            showSlots();
+            return;
+          }
+          goToTrainerCatalogCard();
+        };
       }
 
       function goToTrainerCatalogCard() {
@@ -1521,19 +1912,19 @@
           });
       }
 
-      (function wireBookHeaderBackToTrainerCard() {
-        var headerBack = document.getElementById('btnBack');
-        if (!headerBack) return;
-        if (!trainerId) {
-          headerBack.hidden = true;
-          return;
-        }
-        headerBack.hidden = false;
-        headerBack.onclick = goToTrainerCatalogCard;
-      })();
+      syncBookHeaderBack();
 
       (function wireBookPhoneMask() {
         if (window.CrmPhoneField) CrmPhoneField.initAll(document);
+      })();
+
+      (function wireBookFormServiceSelect() {
+        var sel = document.getElementById('bookServiceSelect');
+        if (!sel) return;
+        sel.addEventListener('change', function() {
+          var sid = parseInt(sel.value, 10);
+          if (!isNaN(sid) && sid > 0) selectBookFormService(sid);
+        });
       })();
 
       (function wireBookServiceDetailUi() {
@@ -1590,36 +1981,60 @@
         const btn = document.getElementById('btnSubmit');
         btn.disabled = true;
         const initData = tg?.initData || '';
-        const url = '/api/webapp/client/booking' + (initData ? '?init_data=' + encodeURIComponent(initData) : '');
-        const body = { slot_id: window._selectedSlotId, phone: phone, comment: comment };
-        if (needsProfileName) {
-          body.first_name = (document.getElementById('bookFirstName').value || '').trim();
-          const ln = (document.getElementById('bookLastName').value || '').trim();
-          if (ln) body.last_name = ln;
-        }
-        if (requestId) body.request_id = requestId;
-        else {
-          const sid = effectiveServiceId();
-          if (sid != null) body.service_id = sid;
-        }
-        if (selectedPriceVariantId != null) body.service_price_variant_id = selectedPriceVariantId;
-        if (!bookSubmitIdempotencyKey) {
+        if (!bookSubmitIdempotencyKey && window.BookingClient) {
+          bookSubmitIdempotencyKey = window.BookingClient.newIdempotencyKey();
+        } else if (!bookSubmitIdempotencyKey) {
           bookSubmitIdempotencyKey =
             (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
               ? crypto.randomUUID()
               : ('bk-' + Date.now());
         }
-        fetch(url, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Telegram-Init-Data': initData,
-            'Idempotency-Key': bookSubmitIdempotencyKey,
-          },
-          body: JSON.stringify(body)
-        }).then(function(res) {
-          return res.text().then(function(text) {
-            var data = bookParseBookingJsonResponse(text);
+        var effSid = effectiveServiceId();
+        var payloadBody = window.BookingClient
+          ? window.BookingClient.buildBookingPayload({
+              slotId: window._selectedSlotId,
+              phone: phone,
+              comment: comment,
+              requestId: requestId,
+              serviceId: requestId ? null : effSid,
+              priceVariantId: selectedPriceVariantId,
+              needsProfileName: needsProfileName,
+              firstName: needsProfileName ? (document.getElementById('bookFirstName').value || '').trim() : null,
+              lastName: needsProfileName ? (document.getElementById('bookLastName').value || '').trim() : null,
+            })
+          : { slot_id: window._selectedSlotId, phone: phone, comment: comment };
+        if (!window.BookingClient) {
+          if (needsProfileName) {
+            payloadBody.first_name = (document.getElementById('bookFirstName').value || '').trim();
+            const ln = (document.getElementById('bookLastName').value || '').trim();
+            if (ln) payloadBody.last_name = ln;
+          }
+          if (requestId) payloadBody.request_id = requestId;
+          else if (effSid != null) payloadBody.service_id = effSid;
+          if (selectedPriceVariantId != null) payloadBody.service_price_variant_id = selectedPriceVariantId;
+        }
+        var submitFn = window.BookingClient
+          ? window.BookingClient.submitBooking({
+              body: payloadBody,
+              initData: initData,
+              idempotencyKey: bookSubmitIdempotencyKey,
+            })
+          : fetch('/api/webapp/client/booking' + (initData ? '?init_data=' + encodeURIComponent(initData) : ''), {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'X-Telegram-Init-Data': initData,
+                'Idempotency-Key': bookSubmitIdempotencyKey,
+              },
+              body: JSON.stringify(payloadBody),
+            }).then(function (res) {
+              return res.text().then(function (text) {
+                return { res: res, data: bookParseBookingJsonResponse(text) };
+              });
+            });
+        submitFn.then(function (out) {
+          var res = out.res;
+          var data = out.data;
             if (data == null) {
               if (res.ok) {
                 alert(
@@ -1633,24 +2048,15 @@
             }
             if (res.ok && data.success) {
               bookSubmitIdempotencyKey = null;
-              var successMain = '✅ <b>Вы записаны</b>.<br><br>Ожидайте подтверждения от тренера в боте.';
-              var successCtx = '';
-              if (requestId) {
-                successCtx = '<br><span style="color: var(--tg-theme-hint-color); font-size: 14px; display: inline-block; margin-top: 10px;">Запись связана с вашей заявкой и откликом тренера.</span>';
-              } else if (data.used_primary_venue_for_online_booking) {
-                successCtx = '<br><span style="color: var(--tg-theme-hint-color); font-size: 14px; display: inline-block; margin-top: 10px;">Запись на <strong>основную площадку</strong>. Для занятий на другой арене из фильтра используйте заявку — тренер запишет вас вручную.</span>';
-              }
-              var successFoot = '<br><span style="color: var(--tg-theme-hint-color); font-size: 14px; display: inline-block; margin-top: 10px;">Детали, адрес и отмена — в «Мои записи» в меню бота.</span>';
-              document.getElementById('successMsgBody').innerHTML = successMain + successCtx + successFoot;
-              document.getElementById('screenForm').style.display = 'none';
-              document.getElementById('screenSuccess').style.display = 'flex';
+              var successHtml = window.BookingClient
+                ? window.BookingClient.formatSuccessMessage(data, { requestId: requestId })
+                : '✅ <b>Вы записаны</b>.<br><br>Ожидайте подтверждения от тренера в боте.';
+              showBookingSuccessScreen(successHtml);
               fetchClientSession().then(function() { updateBookNameFields(); }).catch(function() {});
-              // Social moment: show share nudge after booking so client can invite a friend.
               if (trainerId) showSuccessShareNudge(trainerId);
             } else {
               alert((data && data.detail) || 'Ошибка. Попробуйте ещё раз.');
             }
-          });
         }).catch(function() {
           alert(
             'Сеть не ответила. Запись могла сохраниться — проверьте «Мои записи». Повтор с тем же слотом безопасен.'
@@ -1659,6 +2065,58 @@
       };
 
       var bookSharePayload = null;
+
+      function showBookingSuccessScreen(messageHtml) {
+        if (window.BookingClient) {
+          window.BookingClient.showBookingSuccess({
+            host: 'book',
+            messageHtml: messageHtml,
+          });
+          return;
+        }
+        document.documentElement.classList.remove('book-slot-deeplink');
+        document.body.classList.remove('book-slot-deeplink');
+        document.documentElement.classList.add('book-booking-success');
+        document.body.classList.add('book-booking-success');
+        var slotsEl = document.getElementById('screenSlots');
+        var formEl = document.getElementById('screenForm');
+        var successEl = document.getElementById('screenSuccess');
+        if (slotsEl) slotsEl.style.display = 'none';
+        if (formEl) formEl.style.display = 'none';
+        if (successEl) successEl.style.display = 'flex';
+        if (messageHtml) {
+          var bodyEl = document.getElementById('successMsgBody');
+          if (bodyEl) bodyEl.innerHTML = messageHtml;
+        }
+        var headerTitle = document.getElementById('headerTitle');
+        if (headerTitle) headerTitle.textContent = '✅ Запись создана';
+        var backBtn = document.getElementById('btnBack');
+        if (backBtn) backBtn.hidden = true;
+        try { window.scrollTo(0, 0); } catch (e) { /* */ }
+      }
+
+      (function wireBookSuccessCtas() {
+        var btnBookings = document.getElementById('btnSuccessBookings');
+        var btnHome = document.getElementById('btnSuccessHome');
+        if (btnBookings) {
+          btnBookings.onclick = function () {
+            if (window.ClientShell && typeof window.ClientShell.navigate === 'function') {
+              window.ClientShell.navigate('client-bookings');
+            } else {
+              var base = window.location.pathname.replace(/[^/]+$/, '');
+              var initData = tg?.initData || '';
+              var url = base + 'client-bookings';
+              if (initData) url += '?init_data=' + encodeURIComponent(initData);
+              window.location.href = url;
+            }
+          };
+        }
+        if (btnHome) {
+          btnHome.onclick = function () {
+            if (typeof navigateToClientHome === 'function') navigateToClientHome();
+          };
+        }
+      })();
 
       function showSuccessShareNudge(tid) {
         var nudge = document.getElementById('successShareNudge');
@@ -1758,15 +2216,27 @@
             }
           }
           document.getElementById('weekLabel').textContent = formatWeekLabel(currentWeekStart);
-          render(slotsInWeek(allSlots, currentWeekStart));
-          if (Number.isFinite(slotIdFromUrl) && slotIdFromUrl > 0) {
-            var t2 = (allSlots || []).find(function(s) {
+          if (hasSlotDeepLink) {
+            var deepSlot = (allSlots || []).find(function(s) {
               return Number(s.id) === slotIdFromUrl;
             });
-            if (t2) {
-              var tr = (t2.start_time || '') + '–' + (t2.end_time || '');
-              showForm(slotIdFromUrl, t2.slot_date, tr);
+            if (deepSlot) {
+              var deepTime = (deepSlot.start_time || '') + '–' + (deepSlot.end_time || '');
+              await showForm(slotIdFromUrl, deepSlot.slot_date, deepTime);
+            } else {
+              document.documentElement.classList.remove('book-slot-deeplink', 'book-form-ready');
+              document.body.classList.remove('book-slot-deeplink', 'book-form-ready');
+              markBookFormPending();
+              document.getElementById('screenForm').style.display = 'none';
+              document.getElementById('screenSlots').style.display = 'block';
+              document.getElementById('prevWeek').style.display = '';
+              document.getElementById('nextWeek').style.display = '';
+              render(slotsInWeek(allSlots, currentWeekStart));
+              document.getElementById('content').innerHTML =
+                '<div class="empty">Это окно уже занято или недоступно. Выберите другое время.</div>';
             }
+          } else {
+            render(slotsInWeek(allSlots, currentWeekStart));
           }
         } catch (e) {
           document.getElementById('content').innerHTML = '<div class="error">' + (e.message || 'Ошибка загрузки') + '</div>';

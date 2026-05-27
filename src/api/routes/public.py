@@ -10,12 +10,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.deps import get_session
 from src.api.middleware.http_limits import client_ip_from_request
-from src.application.catalog_use_cases import list_arenas, list_cities, list_services
-from src.application.demand_signals_use_cases import record_profile_view_commit
-from src.application.lifecycle_use_cases import (
-    LifecycleStage,
-    resolve_lifecycle_snapshot,
+from src.application.catalog_use_cases import (
+    get_platform_stats,
+    list_arenas,
+    list_catalog_scenarios,
+    list_cities,
+    list_services,
 )
+from src.application.demand_signals_use_cases import record_profile_view_commit
+from src.application.lifecycle_use_cases import resolve_lifecycle_snapshot
 from src.application.subscription_tier_use_cases import get_trainer_booking_availability
 from src.application.training_group_use_cases import (
     batch_open_groups_count_for_trainers,
@@ -191,6 +194,27 @@ async def get_services(
     """List services for filters; city_id limits to services with catalog trainers in that city."""
     items = await list_services(session, city_id=city_id)
     return {"items": items}
+
+
+@router.get("/catalog-scenarios")
+async def get_catalog_scenarios(
+    city_id: int | None = None,
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, list]:
+    """Discovery goal chips for catalog; ice defaults when services lack scenario_tags."""
+    items = await list_catalog_scenarios(session, city_id=city_id)
+    return {"items": items}
+
+
+@router.get("/platform-stats")
+async def platform_stats(
+    response: Response,
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, int]:
+    """Aggregate platform stats for public trust card (clients see this on hub/catalog)."""
+    # Numbers move slowly; small CDN-edge cache OK, but per-request DB read keeps it fresh enough.
+    response.headers["Cache-Control"] = "public, max-age=120"
+    return await get_platform_stats(session)
 
 
 @router.get("/arenas")
@@ -385,11 +409,8 @@ async def assemble_trainer_catalog_payload(
     snap = await resolve_lifecycle_snapshot(session, trainer_id)
     trainer["lifecycle_stage"] = snap.stage.value
     trainer["is_lead_mode"] = snap.is_lead_mode
-    trainer["contact_telegram_url"] = (
-        _build_contact_telegram_url(trainer_id, telegram_username)
-        if snap.stage == LifecycleStage.LEAD_MODE
-        else None
-    )
+    # Trackable /r/tg/{id} redirect whenever the trainer has a valid @username — not only Lead Mode.
+    trainer["contact_telegram_url"] = _build_contact_telegram_url(trainer_id, telegram_username)
 
     edu = await list_trainer_education(session, trainer_id, public_only=True)
     trainer["education_entries"] = edu if edu is not None else []
@@ -428,9 +449,8 @@ async def get_one_active_trainer(
     Also returns lifecycle context for Lead Mode UX (see lead-mode-revenue-retention.md):
         - `lifecycle_stage`: "active" | "lead_mode" | "onboarding" | "churned"
         - `is_lead_mode`: bool — convenience flag for the catalog frontend
-        - `contact_telegram_url`: trackable redirect "/r/tg/{id}" (only when in Lead Mode and a
-          valid telegram_username is on file). Frontend uses this for the
-          "Написать в Telegram" CTA in place of "Записаться".
+        - `contact_telegram_url`: trackable redirect "/r/tg/{id}" when the trainer has a valid
+          telegram_username on file. Frontend uses this for the "Написать тренеру" CTA.
     """
     response.headers["Cache-Control"] = "no-store"
     trainer = await get_trainer(session, trainer_id)

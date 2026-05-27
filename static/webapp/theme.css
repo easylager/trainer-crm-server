@@ -40,6 +40,32 @@
   --app-accent-text: var(--app-cta-text);
   --app-danger: #ff3b30;
   --app-success: #34c759;
+
+  /*
+   * Ice-vertical brand palette (premium, used in hero / trust / brand marks).
+   * Amber остаётся primary CTA — тёплое действие;
+   * ice-* — глубина и доверие (ассоциация с льдом / ареной).
+   * Не подменяются themeParams Telegram.
+   */
+  --ice-frost: #cfe8ff;
+  --ice-mist:  #eaf4ff;
+  --ice-glow:  #6db7ff;
+  --ice-blue:  #1f6bd6;
+  --ice-deep:  #0e3a76;
+  --ice-night: #0a1f3d;
+  --ice-pure:  #f5fbff;
+  /* Vertical-agnostic aliases (default ice; override per vertical_key bootstrap later) */
+  --vertical-brand-frost: var(--ice-frost);
+  --vertical-brand-mist: var(--ice-mist);
+  --vertical-brand-glow: var(--ice-glow);
+  --vertical-brand-primary: var(--ice-blue);
+  --vertical-brand-deep: var(--ice-deep);
+  --vertical-brand-night: var(--ice-night);
+  --vertical-brand-pure: var(--ice-pure);
+  --shadow-soft:    0 1px 2px rgba(14, 58, 118, 0.06), 0 4px 12px rgba(14, 58, 118, 0.07);
+  --shadow-card:    0 2px 4px rgba(14, 58, 118, 0.06), 0 12px 32px rgba(14, 58, 118, 0.1);
+  --shadow-floating:0 6px 16px rgba(14, 58, 118, 0.12), 0 22px 48px rgba(14, 58, 118, 0.14);
+  --shadow-amber:   0 12px 32px rgba(245, 166, 35, 0.28), 0 4px 12px rgba(245, 166, 35, 0.18);
   /* Service-specific row accent (left rail) — hub + schedule */
   --svc-accent-sky: #0ea5e9;
   --svc-accent-amber: #ea580c;
@@ -64,6 +90,7 @@
   /* Поверхностные действия (карта, копировать, написать): та же логика тени везде */
   --app-btn-shadow-surface: 0 1px 3px rgba(0, 0, 0, 0.06);
   --app-font-sans: 'DM Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --app-font-display: 'Playfair Display', Georgia, 'Times New Roman', serif;
   accent-color: var(--app-cta-fill);
 }
 
@@ -88,6 +115,19 @@
     --svc-accent-sky: #38bdf8;
     --svc-accent-emerald: #34d399;
     --svc-accent-slate: #94a3b8;
+
+    /* Ice palette — adjust for dark theme readability */
+    --ice-frost: #1c3050;
+    --ice-mist:  #15263f;
+    --ice-glow:  #4b8de0;
+    --ice-blue:  #6ea7e8;
+    --ice-deep:  #cfe2ff;
+    --ice-night: #eaf2ff;
+    --ice-pure:  #1a2940;
+
+    --shadow-soft:    0 1px 2px rgba(0, 0, 0, 0.4), 0 4px 12px rgba(0, 0, 0, 0.35);
+    --shadow-card:    0 2px 4px rgba(0, 0, 0, 0.4), 0 12px 32px rgba(0, 0, 0, 0.5);
+    --shadow-floating:0 6px 16px rgba(0, 0, 0, 0.5), 0 22px 48px rgba(0, 0, 0, 0.55);
   }
 }
 

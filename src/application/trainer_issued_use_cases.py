@@ -8,6 +8,8 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.pass_product_use_cases import SQL_PASS_INSTANCE_SALE_PRICE_CENTS
+
 _PASS_SCOPE_SQL = """
 COALESCE(
     (
@@ -122,8 +124,8 @@ async def list_trainer_issued_items(
                     pi.expires_at,
                     pi.status,
                     p.name AS product_name,
-                    p.price_cents,
-                    {_PASS_SCOPE_SQL} AS scope_label,
+                """ + SQL_PASS_INSTANCE_SALE_PRICE_CENTS + """ AS price_cents,
+                {_PASS_SCOPE_SQL} AS scope_label,
                     TRIM(COALESCE(c.first_name, '') || ' ' || COALESCE(c.last_name, '')) AS client_name,
                     c.phone
                 FROM pass_instances pi

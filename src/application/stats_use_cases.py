@@ -154,7 +154,7 @@ async def _trainer_calendar_revenue_total(
     r = await session.execute(
         text(
             """
-            SELECT COALESCE(SUM(tpp.price_cents), 0)::bigint
+            SELECT COALESCE(SUM(pi.price_cents), 0)::bigint
             FROM pass_instances pi
             JOIN trainer_pass_products tpp ON tpp.id = pi.pass_product_id
             WHERE tpp.trainer_id = :tid
@@ -230,7 +230,7 @@ async def get_trainer_revenue_breakdown_for_range(
     r = await session.execute(
         text(
             """
-            SELECT COALESCE(SUM(tpp.price_cents), 0)::bigint
+            SELECT COALESCE(SUM(pi.price_cents), 0)::bigint
             FROM pass_instances pi
             JOIN trainer_pass_products tpp ON tpp.id = pi.pass_product_id
             WHERE tpp.trainer_id = :tid
@@ -624,10 +624,10 @@ async def get_trainer_stats_dashboard(session: AsyncSession, trainer_id: int) ->
         text(
             """
             SELECT
-                COALESCE(SUM(tpp.price_cents) FILTER (
+                COALESCE(SUM(pi.price_cents) FILTER (
                     WHERE pi.issued_at >= CURRENT_TIMESTAMP - INTERVAL '7 days'
                 ), 0)::bigint,
-                COALESCE(SUM(tpp.price_cents) FILTER (
+                COALESCE(SUM(pi.price_cents) FILTER (
                     WHERE pi.issued_at >= CURRENT_TIMESTAMP - INTERVAL '30 days'
                 ), 0)::bigint
             FROM pass_instances pi

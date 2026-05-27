@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-  <title>Мои заявки</title>
+  <title>Подбор тренера</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script src="mini-app-telegram-chrome.js"></script>
   <link rel="stylesheet" href="theme.css?v=20260422" />
@@ -17,10 +17,12 @@
   <link rel="preload" href="client-requests-main.js?v=202605192" as="script" />
   <link rel="stylesheet" href="mini-app-client-requests.css?v=20260422" />
   <link rel="stylesheet" href="mini-app-client-nav.css?v=20260422" />
+  <link rel="stylesheet" href="mini-app-client-shell.css?v=202605301" />
+  <script src="mini-app-client-shell.js?v=202605294"></script>
 </head>
-<body>
-  <div class="header cr-requests-header">
-    <h1 class="cr-page-title" id="crHeaderTitle">Мои заявки</h1>
+<body data-client-shell="tabs">
+  <div class="header cr-requests-header client-app-header">
+    <h1 class="cr-page-title client-app-header__title" id="crHeaderTitle">Подбор тренера</h1>
     <div class="client-mini-nav">
       <button type="button" class="btn-app-home" id="btnHome">Главная</button>
       <button type="button" class="btn-app-back" id="btnBack" data-skip-history-back="true" hidden>Назад</button>
@@ -35,7 +37,7 @@
     <div id="pagination" class="pagination"></div>
     <div id="screenEmpty" class="empty" style="display: none;">
       <p>Пока нет обращений.</p>
-      <p style="margin-top: 8px; font-size: 14px; line-height: 1.5; color: var(--tg-theme-hint-color);">В разделе «Тренеры и запись» можно оставить заявку, если удобнее сначала описать задачу. Подходящие тренеры увидят её здесь и смогут ответить.</p>
+      <p style="margin-top: 8px; font-size: 14px; line-height: 1.5; color: var(--tg-theme-hint-color);">Опишите задачу во вкладке «Тренеры» — подходящие специалисты увидят обращение и смогут ответить. Ответы появятся здесь.</p>
       <button type="button" class="btn-neutral btn-block" id="btnRefreshEmpty" style="margin-top: 16px;">Обновить</button>
     </div>
   </div>

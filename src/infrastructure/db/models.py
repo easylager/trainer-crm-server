@@ -293,6 +293,10 @@ class Service(Base):
     sort_order: Mapped[int] = mapped_column(Integer(), server_default="0", nullable=False)
     #: Plain text for client catalog «Подробнее» modal (what it is, for whom). Editable in DB / admin.
     client_summary: Mapped[Optional[str]] = mapped_column(Text(), nullable=True)
+    slug: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    vertical_key: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    effort_profile: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    scenario_tags: Mapped[Optional[dict]] = mapped_column(JSONB(), nullable=True)
 
     trainers: Mapped[list["Trainer"]] = relationship(
         "Trainer", secondary="trainer_services", back_populates="services", lazy="raise"
@@ -836,6 +840,7 @@ class PassInstance(Base):
     )
     sessions_remaining: Mapped[int] = mapped_column(Integer(), nullable=False)
     sessions_total: Mapped[int] = mapped_column(Integer(), nullable=False)
+    price_cents: Mapped[int] = mapped_column(Integer(), nullable=False)
     source_certificate_instance_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("certificate_instances.id", ondelete="SET NULL"), nullable=True, index=True
     )

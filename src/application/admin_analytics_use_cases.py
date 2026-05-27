@@ -198,7 +198,7 @@ async def get_admin_money_stats(session: AsyncSession) -> dict:
                           AND s.slot_date >= :ds AND s.slot_date <= :de
                     ),
                     pass_cents AS (
-                        SELECT COALESCE(SUM(tpp.price_cents), 0)::bigint AS amt
+                        SELECT COALESCE(SUM(pi.price_cents), 0)::bigint AS amt
                         FROM pass_instances pi
                         JOIN trainer_pass_products tpp ON tpp.id = pi.pass_product_id
                         WHERE pi.status != 'cancelled'

@@ -276,6 +276,8 @@ async def trainer_display_hints_by_ids(
     stmt = text(
         """
         SELECT t.id AS tid,
+               t.telegram_id,
+               t.telegram_username,
                tp.first_name,
                tp.last_name,
                (SELECT ph.file_key FROM trainer_photos ph
@@ -289,10 +291,14 @@ async def trainer_display_hints_by_ids(
                     WHERE ts.trainer_id = t.id),
                    '{}'
                ) AS service_names,
-               (SELECT a.name FROM trainer_arenas ta
-                JOIN arenas a ON a.id = ta.arena_id
-                WHERE ta.trainer_id = t.id AND a.is_active = true
-                ORDER BY a.sort_order, a.id LIMIT 1) AS primary_arena_name,
+               (SELECT a.name
+                FROM trainer_arenas ta
+                JOIN arenas a ON a.id = ta.arena_id AND a.is_active = true
+                WHERE ta.trainer_id = t.id
+                ORDER BY
+                  CASE WHEN t.primary_arena_id IS NOT NULL AND ta.arena_id = t.primary_arena_id THEN 0 ELSE 1 END,
+                  ta.arena_id ASC
+                LIMIT 1) AS primary_arena_name,
                (SELECT MIN(pv.price_cents) FROM trainer_service_price_variants pv
                 WHERE pv.trainer_id = t.id) AS min_price_cents
         FROM trainers t
@@ -316,6 +322,8 @@ async def trainer_display_hints_by_ids(
         out[tid] = {
             "trainer_display_name": display,
             "trainer_list_photo_key": pl or pk,
+            "trainer_telegram_id": int(row["telegram_id"]) if row.get("telegram_id") is not None else None,
+            "trainer_telegram_username": (row.get("telegram_username") or "").strip() or None,
             "services": services,
             "primary_arena_name": arena,
             "min_price_cents": int(mp) if mp is not None else None,

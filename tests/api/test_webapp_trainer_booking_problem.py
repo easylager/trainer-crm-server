@@ -357,9 +357,9 @@ async def test_trainer_booking_problem_pass_branch_policy_in_options(
         text(
             """
             INSERT INTO pass_instances (
-              client_id, pass_product_id, sessions_remaining, sessions_total, status
+              client_id, pass_product_id, sessions_remaining, sessions_total, price_cents, status
             )
-            VALUES (:cid, :ppid, 5, 5, 'active')
+            VALUES (:cid, :ppid, 5, 5, 50000, 'active')
             """
         ),
         {"cid": client_id, "ppid": ppid},

@@ -1406,7 +1406,17 @@ async def _client_booking_post_create_effects(
             await sync_session_catalog_after_client_booking(
                 telegram_id, trainer_id, service_id, s
             )
-            await generate_reminders_for_booking(s, booking_id)
+            from src.application.booking_confirmation_notifier import (
+                get_booking_confirmation_notifier,
+            )
+
+            await get_booking_confirmation_notifier().notify_booking_created(
+                s,
+                booking_id=booking_id,
+                telegram_id=telegram_id,
+                trainer_id=trainer_id,
+                service_id=service_id,
+            )
     except Exception:
         logger.exception(
             "client booking post-create effects failed booking_id=%s trainer_id=%s",
@@ -2268,6 +2278,7 @@ async def get_client_hub_bootstrap(
                 primary_catalog_service_id, primary_catalog_service_name = (
                     await coerce_service_id_and_name_for_trainer_catalog(s, pid, raw_primary_svc)
                 )
+            primary_can_book = await trainer_allows_online_booking(s, pid) if pid is not None else False
             saved_preview = [
                 {
                     "trainer_id": int(e["trainer_id"]),
@@ -2291,6 +2302,24 @@ async def get_client_hub_bootstrap(
                         "trainer_display_name": rt_name,
                     }
                 )
+            primary_history: dict[str, Any] | None = None
+            if pid is not None:
+                primary_edge_row = next(
+                    (e for e in edges if int(e.get("trainer_id") or 0) == int(pid)),
+                    None,
+                )
+                if primary_edge_row is not None:
+                    cc = int(primary_edge_row.get("completed_count") or 0)
+                    if cc > 0:
+                        lca = primary_edge_row.get("last_completed_at")
+                        primary_history = {
+                            "completed_count": cc,
+                            "last_completed_at": (
+                                lca.isoformat()
+                                if lca is not None and hasattr(lca, "isoformat")
+                                else (str(lca) if lca is not None else None)
+                            ),
+                        }
             return {
                 "selected_trainer_id": int(tid) if tid is not None else None,
                 "primary_trainer_id": pid,
@@ -2298,8 +2327,12 @@ async def get_client_hub_bootstrap(
                     (p_hint or {}).get("trainer_display_name") if pid else None
                 ),
                 "primary_trainer_list_photo_key": (p_hint or {}).get("trainer_list_photo_key") if pid else None,
+                "primary_trainer_telegram_id": (p_hint or {}).get("trainer_telegram_id") if pid else None,
+                "primary_trainer_telegram_username": (p_hint or {}).get("trainer_telegram_username") if pid else None,
+                "primary_trainer_can_book": primary_can_book,
                 "primary_catalog_service_id": primary_catalog_service_id,
                 "primary_catalog_service_name": primary_catalog_service_name,
+                "primary_history": primary_history,
                 "saved_trainer_ids": [e["trainer_id"] for e in saved_edges],
                 "saved_trainers": saved_preview,
                 "has_past_sessions": any(e.get("completed_count", 0) > 0 for e in edges),
@@ -2318,14 +2351,31 @@ async def get_client_hub_bootstrap(
                 "completed_total": int(snap.get("completed_total") or 0),
             }
 
-    bookings, requests, client_session, activity = await asyncio.gather(
-        _bookings(), _requests(), _hub_session(), _activity()
+    async def _passes() -> list[dict]:
+        """Active pass instances — included in bootstrap to avoid a separate round-trip from the hub."""
+        async with async_session_factory() as s:
+            cid = await get_client_id_by_telegram_id(s, telegram_id)
+            if not cid:
+                return []
+            return await list_client_pass_instances(s, cid)
+
+    bookings, requests, client_session, activity, passes = await asyncio.gather(
+        _bookings(), _requests(), _hub_session(), _activity(), _passes()
     )
     return {
         "bookings": bookings,
         "requests": requests,
         "client_session": client_session,
         "activity": activity,
+        "passes": passes,
+        "platform": {
+            "vertical_key": "ice",
+            "ui": {
+                "hero_wordmark": "Чудесного дня на льду 🐧",
+                "streak_template": "{count} тренировок подряд",
+                "venue_label": "Арена",
+            },
+        },
     }
 
 

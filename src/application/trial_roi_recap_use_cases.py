@@ -254,7 +254,7 @@ async def get_trial_roi_recap(
     r = await session.execute(
         text(
             """
-            SELECT COALESCE(SUM(tpp.price_cents), 0)::bigint
+            SELECT COALESCE(SUM(pi.price_cents), 0)::bigint
             FROM pass_instances pi
             JOIN trainer_pass_products tpp ON tpp.id = pi.pass_product_id
             WHERE tpp.trainer_id = :tid

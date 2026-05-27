@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-  <title>Каталог и запись</title>
+  <title>Тренеры</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script src="mini-app-telegram-chrome.js?v=202605022"></script>
   <script src="mini-app-phone-field.js?v=202605203"></script>
@@ -24,17 +24,31 @@
     />
   </noscript>
   <script src="client-mini-app-theme.js"></script>
-  <link rel="preload" href="catalog-main.js?v=202605204" as="script" />
-  <link rel="stylesheet" href="mini-app-catalog.css?v=202605206" />
+  <link rel="preload" href="catalog-main.js?v=202605273" as="script" />
+  <link rel="stylesheet" href="mini-app-catalog.css?v=202605273" />
+  <link rel="stylesheet" href="booking-client.css?v=202605305" />
   <link rel="stylesheet" href="mini-app-client-nav.css?v=20260426" />
-  <!-- Leaflet (mini-map for arena multi-select). Loaded on every page so back/forward keeps tiles cached;
-       library is ~40KB gz, used only when #screenArena renders. OSM tiles require attribution by license. -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
-  <script defer src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <link rel="stylesheet" href="mini-app-client-shell.css?v=202605301" />
+  <script src="mini-app-client-shell.js?v=202605294"></script>
+  <script src="booking-client.js?v=202605305"></script>
+  <script src="booking-deeplink.js?v=202605305"></script>
+  <script>
+    (function () {
+      try {
+        var p = new URLSearchParams(window.location.search || '');
+        if (p.get('tab') === 'catalog') return;
+        var tid = p.get('trainer_id');
+        if (tid && !p.get('slot_id')) {
+          document.documentElement.classList.add('catalog-trainer-deeplink');
+        }
+      } catch (e) { /* ignore */ }
+    })();
+  </script>
+  <!-- Leaflet loads on demand when user opens arena picker (see ensureLeafletLoaded in catalog-main.js). -->
 </head>
-<body>
-  <div class="header">
-    <h1 class="header-title" id="headerTitle">Каталог и запись</h1>
+<body data-client-shell="tabs">
+  <div class="header client-app-header">
+    <h1 class="header-title client-app-header__title" id="headerTitle">Тренеры</h1>
     <div class="client-mini-nav">
       <button type="button" class="btn-app-home" id="btnHome">Главная</button>
       <button type="button" class="btn-app-back" id="btnBack" hidden data-skip-history-back="true">Назад</button>
@@ -47,10 +61,10 @@
       <button type="button" class="tab-btn" id="tabMyTrainer" data-tab="my_trainer">Мой тренер</button>
     </div>
     <div id="catalogTabPanel" class="catalog-tab-panel active">
-      <div class="catalog-home" id="catalogHome">
+      <div class="catalog-home catalog-home--booting" id="catalogHome">
         <header class="catalog-hero">
-          <h2 class="catalog-hero__title" id="catalogHeroTitle">Найдите тренировку</h2>
-          <p class="catalog-hero__lead" id="catalogHeroLead">Выберите город и занятие — покажем тренеров со свободными слотами.</p>
+          <h2 class="catalog-hero__title" id="catalogHeroTitle">Найдите тренера</h2>
+          <p class="catalog-hero__lead" id="catalogHeroLead">Город и занятие — покажем свободные слоты на аренах.</p>
         </header>
 
         <section class="catalog-block catalog-block--popular" aria-labelledby="catalogScenariosLabel">
@@ -63,21 +77,48 @@
 
         <section class="catalog-block catalog-block--refine" aria-labelledby="catalogRefineLabel">
           <h3 class="catalog-block__eyebrow" id="catalogRefineLabel">Параметры поиска</h3>
-          <div class="catalog-filter-list" id="summaryRows"></div>
+          <div class="catalog-filter-list" id="summaryRows">
+            <div class="catalog-filter-skel-list" role="status" aria-busy="true" aria-label="Загрузка параметров">
+              <div class="catalog-filter-skel catalog-skel-shimmer" aria-hidden="true">
+                <div class="catalog-filter-skel__icon"></div>
+                <div class="catalog-filter-skel__body">
+                  <div class="catalog-skel-line catalog-skel-line--filter-label"></div>
+                  <div class="catalog-skel-line catalog-skel-line--filter-value"></div>
+                </div>
+                <div class="catalog-filter-skel__chev"></div>
+              </div>
+              <div class="catalog-filter-skel catalog-skel-shimmer" aria-hidden="true">
+                <div class="catalog-filter-skel__icon"></div>
+                <div class="catalog-filter-skel__body">
+                  <div class="catalog-skel-line catalog-skel-line--filter-label"></div>
+                  <div class="catalog-skel-line catalog-skel-line--filter-value"></div>
+                </div>
+                <div class="catalog-filter-skel__chev"></div>
+              </div>
+              <div class="catalog-filter-skel catalog-skel-shimmer" aria-hidden="true">
+                <div class="catalog-filter-skel__icon"></div>
+                <div class="catalog-filter-skel__body">
+                  <div class="catalog-skel-line catalog-skel-line--filter-label"></div>
+                  <div class="catalog-skel-line catalog-skel-line--filter-value"></div>
+                </div>
+                <div class="catalog-filter-skel__chev"></div>
+              </div>
+            </div>
+          </div>
         </section>
 
         <footer class="catalog-cta catalog-cta--dock">
           <button type="button" class="btn-block btn-primary catalog-find-btn" id="btnPickTrainer">
-            <span class="catalog-find-btn__label">Показать результаты</span>
+            <span class="catalog-find-btn__label">Найти тренера</span>
           </button>
-          <p class="catalog-cta__hint" id="catalogFindHint" role="status">Укажите город и занятие — кнопка подберёт варианты</p>
+          <p class="catalog-cta__hint" id="catalogFindHint" role="status">Начните с города или нажмите вариант в «Популярное»</p>
         </footer>
       </div>
     </div>
     <div id="myTrainerTabPanel" class="catalog-tab-panel">
       <div id="myTrainerEmpty" class="my-trainer-empty">
         <p>Выберите тренера в каталоге — здесь появится его карточка с записью и заявкой.</p>
-        <button type="button" class="btn-block btn-primary catalog-find-btn" id="btnMyTrainerPick">Показать результаты</button>
+        <button type="button" class="btn-block btn-primary catalog-find-btn" id="btnMyTrainerPick">Найти тренера</button>
       </div>
       <div id="myTrainerCardShort" class="summary-card" style="display:none;">
         <div class="summary-title">Ваш тренер</div>
@@ -195,7 +236,11 @@
   </div>
   <div id="screenBookingForm" data-screen>
     <p id="bookingFormSlotLabel" class="booking-slot-label"></p>
-    <p id="bookingFormServiceLine" class="booking-service-line" style="display: none;"></p>
+    <div id="bookingFormServiceBlock" class="form-block" style="display: none;">
+      <label for="bookingFormServiceSelect">Услуга</label>
+      <p id="bookingFormServiceLine" class="booking-service-line" style="display: none;"></p>
+      <select id="bookingFormServiceSelect" class="book-service-select" style="display: none;" aria-label="Услуга"></select>
+    </div>
     <div id="bookingPriceTierBlockCatalog" class="form-block" style="display: none;">
       <label>Категория цены</label>
       <div id="bookingPriceTierRadiosCatalog" class="catalog-price-tier-radios"></div>
@@ -231,8 +276,18 @@
     <button type="button" class="btn-block btn-primary" id="btnSubmitBooking">Записаться</button>
   </div>
   <div id="screenSuccess" data-screen>
-    <div class="success-msg" id="successText"></div>
-    <button type="button" class="btn-primary" id="btnCloseSuccess">Готово</button>
+    <div class="booking-success-panel">
+      <div class="success-msg" id="successText"></div>
+      <div class="booking-success-actions">
+        <button type="button" class="btn-primary btn-block" id="btnSuccessBookingsCatalog">Мои записи</button>
+        <button type="button" class="btn-secondary btn-block" id="btnCloseSuccess">Главная</button>
+      </div>
+    </div>
+  </div>
+  <div id="catalogTrainerStickyCta" class="catalog-trainer-sticky-cta" hidden>
+    <div class="catalog-trainer-sticky-cta__inner">
+      <button type="button" class="btn-primary btn-block" id="btnStickyBookTrainer">Записаться</button>
+    </div>
   </div>
 
   <div id="screenRequestForm" data-screen>
@@ -286,7 +341,7 @@
     </div>
   </div>
 
-  <script defer src="catalog-main.js?v=202605204"></script>
+  <script defer src="catalog-main.js?v=202605273"></script>
   <script defer src="mini-app-client-home.js"></script>
 </body>
 </html>

@@ -44,6 +44,7 @@ class CatalogRepository:
                 text(
                     f"""
                     SELECT s.id, s.name, s.sort_order, s.client_summary,
+                           s.slug, s.vertical_key, s.effort_profile, s.scenario_tags,
                            ({self._SERVICE_TRAINER_COUNT_SQL}) AS trainer_count
                     FROM services s
                     ORDER BY s.sort_order, s.id
@@ -56,6 +57,7 @@ class CatalogRepository:
                 text(
                     f"""
                     SELECT s.id, s.name, s.sort_order, s.client_summary,
+                           s.slug, s.vertical_key, s.effort_profile, s.scenario_tags,
                            {count_in_city} AS trainer_count
                     FROM services s
                     ORDER BY {count_in_city} DESC, s.sort_order, s.id
@@ -69,7 +71,11 @@ class CatalogRepository:
                 "name": row[1],
                 "sort_order": row[2],
                 "client_summary": row[3],
-                "trainer_count": row[4],
+                "slug": row[4],
+                "vertical_key": row[5],
+                "effort_profile": row[6],
+                "scenario_tags": row[7],
+                "trainer_count": row[8],
             }
             for row in r.fetchall()
         ]
@@ -154,3 +160,25 @@ class CatalogRepository:
             }
             for row in r.fetchall()
         ]
+
+    async def platform_stats(self) -> dict[str, int]:
+        """One-shot aggregate for trust card: active trainers / cities / arenas."""
+        # Three independent COUNTs; cheap enough to leave un-cached (no PII, no joins).
+        r = await self._session.execute(
+            text(
+                f"""
+                SELECT
+                    (SELECT COUNT(*) FROM trainers t WHERE {_CATALOG_TRAINER_WHERE})::int AS trainers_total,
+                    (SELECT COUNT(*) FROM cities WHERE is_active)::int AS cities_count,
+                    (SELECT COUNT(*) FROM arenas WHERE is_active)::int AS arenas_count
+                """
+            )
+        )
+        row = r.fetchone()
+        if row is None:
+            return {"trainers_total": 0, "cities_count": 0, "arenas_count": 0}
+        return {
+            "trainers_total": int(row[0] or 0),
+            "cities_count": int(row[1] or 0),
+            "arenas_count": int(row[2] or 0),
+        }

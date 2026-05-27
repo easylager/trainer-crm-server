@@ -1099,8 +1099,179 @@ async def test_webapp_client_home_page_served() -> None:
     assert resp.status_code == 200
     body = resp.text
     assert "data-client-hub" in body
+    assert "data-client-shell" in body
     assert "client-home-main.js" in body
-    assert "Главная" in body
+    assert "mini-app-client-shell.js" in body
+    # Living-home containers: trainer panel (slots + pass + history) and new-client discovery
+    assert 'id="hubPrimaryPanel"' in body
+    assert 'id="hubDiscovery"' in body
+
+
+@pytest.mark.asyncio
+async def test_webapp_client_shell_assets_served() -> None:
+    """Client shell CSS/JS are reachable via explicit routes."""
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        css = await client.get("/webapp/mini-app-client-shell.css")
+        js = await client.get("/webapp/mini-app-client-shell.js")
+        bookings_css = await client.get("/webapp/mini-app-client-bookings.css")
+    assert css.status_code == 200
+    assert "client-tab-bar" in css.text
+    assert js.status_code == 200
+    assert "ClientShell" in js.text
+    assert bookings_css.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_public_platform_stats_endpoint() -> None:
+    """Public trust card relies on aggregated platform stats endpoint."""
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get("/api/public/platform-stats")
+    assert resp.status_code == 200
+    data = resp.json()
+    for key in ("trainers_total", "cities_count", "arenas_count"):
+        assert key in data, key
+        assert isinstance(data[key], int) and data[key] >= 0
+
+
+@pytest.mark.asyncio
+async def test_client_hub_bootstrap_exposes_primary_history(
+    app_use_test_db, db_session
+) -> None:
+    """
+    Когда у клиента уже есть завершённые тренировки с primary-тренером,
+    bootstrap должен отдавать ``client_session.primary_history`` с числом и датой —
+    это идентичность-сигнал для «living home», его рендерит hub-primary-panel.
+    """
+    ref_day, _ = _minsk_monday_reference()
+    future_day = ref_day + timedelta(days=4)
+    trainer_id, service_id, slot_id = await _create_trainer_online_with_slot(
+        db_session, slot_date=future_day, start_hours={14}
+    )
+    ctg = _fresh_client_telegram_id()
+    phone, _ = belarus_test_phone(ctg)
+    client_id = await get_or_create_client(
+        db_session, ctg, phone=phone, first_name="Клиент"
+    )
+    booking_id, _ = await create_booking(
+        db_session, slot_id, trainer_id, client_id, service_id
+    )
+    assert booking_id is not None
+    # Edge row created via bookings hook; force completed_count + last_completed_at + primary flag
+    await db_session.execute(
+        text(
+            """
+            UPDATE client_trainer_edges
+               SET completed_count = 4,
+                   last_completed_at = CAST(:lca AS TIMESTAMP WITH TIME ZONE),
+                   is_primary = TRUE
+             WHERE telegram_id = :t AND trainer_id = :tid
+            """
+        ),
+        {
+            "t": ctg,
+            "tid": trainer_id,
+            "lca": "2026-05-18T12:00:00+00:00",
+        },
+    )
+    await db_session.execute(
+        text(
+            """
+            INSERT INTO client_sessions (telegram_id, state)
+            VALUES (:t, 'idle')
+            ON CONFLICT (telegram_id) DO NOTHING
+            """
+        ),
+        {"t": ctg},
+    )
+    await db_session.flush()
+
+    with patch_client_init_auth(ctg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.get(
+                "/api/webapp/client/hub/bootstrap",
+                headers={"X-Telegram-Init-Data": "mock"},
+            )
+    assert resp.status_code == 200, resp.text
+    payload = resp.json()
+    cs = payload.get("client_session") or {}
+    assert int(cs.get("primary_trainer_id") or 0) == trainer_id
+    assert "primary_trainer_telegram_id" in cs
+    assert "primary_trainer_telegram_username" in cs
+    assert "primary_trainer_can_book" in cs
+    history = cs.get("primary_history")
+    assert isinstance(history, dict), f"primary_history missing: {cs}"
+    assert int(history.get("completed_count") or 0) == 4
+    last_at = history.get("last_completed_at") or ""
+    # ISO-8601 prefix is enough; server may carry tz suffix
+    assert last_at.startswith("2026-05-18"), last_at
+
+
+@pytest.mark.asyncio
+async def test_client_hub_bootstrap_primary_history_absent_when_no_completed(
+    app_use_test_db, db_session
+) -> None:
+    """
+    Без завершённых занятий поле ``primary_history`` остаётся ``null`` —
+    история не должна выдумывать данные ради «заполнения пустоты».
+    """
+    ref_day, _ = _minsk_monday_reference()
+    future_day = ref_day + timedelta(days=4)
+    trainer_id, service_id, slot_id = await _create_trainer_online_with_slot(
+        db_session, slot_date=future_day, start_hours={14}
+    )
+    ctg = _fresh_client_telegram_id()
+    phone, _ = belarus_test_phone(ctg)
+    client_id = await get_or_create_client(
+        db_session, ctg, phone=phone, first_name="Клиент"
+    )
+    booking_id, _ = await create_booking(
+        db_session, slot_id, trainer_id, client_id, service_id
+    )
+    assert booking_id is not None
+    await db_session.execute(
+        text(
+            """
+            UPDATE client_trainer_edges
+               SET is_primary = TRUE
+             WHERE telegram_id = :t AND trainer_id = :tid
+            """
+        ),
+        {"t": ctg, "tid": trainer_id},
+    )
+    await db_session.execute(
+        text(
+            """
+            INSERT INTO client_sessions (telegram_id, state)
+            VALUES (:t, 'idle')
+            ON CONFLICT (telegram_id) DO NOTHING
+            """
+        ),
+        {"t": ctg},
+    )
+    await db_session.flush()
+
+    with patch_client_init_auth(ctg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.get(
+                "/api/webapp/client/hub/bootstrap",
+                headers={"X-Telegram-Init-Data": "mock"},
+            )
+    assert resp.status_code == 200, resp.text
+    cs = (resp.json() or {}).get("client_session") or {}
+    assert cs.get("primary_history") is None
+
+
+@pytest.mark.asyncio
+async def test_webapp_client_tier_a_pages_include_shell() -> None:
+    """Tier A client pages load app shell for bottom tab navigation."""
+    paths = ("/webapp/catalog", "/webapp/client-bookings", "/webapp/client-requests")
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        for path in paths:
+            resp = await client.get(path)
+            assert resp.status_code == 200, path
+            body = resp.text
+            assert 'data-client-shell="tabs"' in body, path
+            assert "mini-app-client-shell.js" in body, path
 
 
 @pytest.mark.asyncio
@@ -1267,3 +1438,86 @@ async def test_client_hub_primary_keeps_booking_trainer_after_cancel(
     )
     assert primary_src == "booking"
     assert int(primary_edge["trainer_id"]) == tid_booked
+
+
+@pytest.mark.asyncio
+async def test_webapp_book_and_catalog_booking_assets_served() -> None:
+    """Booking strangler hosts and shared module assets are reachable."""
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        book = await client.get("/webapp/book")
+        catalog = await client.get("/webapp/catalog")
+        bc_js = await client.get("/webapp/booking-client.js")
+        bc_css = await client.get("/webapp/booking-client.css")
+        bd_js = await client.get("/webapp/booking-deeplink.js")
+    assert book.status_code == 200
+    assert "booking-deeplink.js" in book.text
+    assert "booking-client.js" in book.text
+    assert catalog.status_code == 200
+    assert "catalog-main.js" in catalog.text
+    assert bc_js.status_code == 200
+    assert "BookingClient" in bc_js.text
+    assert bc_css.status_code == 200
+    assert "booking-success-note" in bc_css.text
+    assert bd_js.status_code == 200
+    assert "maybeRedirectBookShimToCatalog" in bd_js.text
+
+
+@pytest.mark.asyncio
+async def test_client_hub_bootstrap_includes_passes(app_use_test_db, db_session) -> None:
+    """Hub bootstrap bundles passes[] to avoid a separate round-trip from primary panel."""
+    ref_day, _ = _minsk_monday_reference()
+    future_day = ref_day + timedelta(days=4)
+    trainer_id, service_id, slot_id = await _create_trainer_online_with_slot(
+        db_session, slot_date=future_day, start_hours={14}
+    )
+    ctg = _fresh_client_telegram_id()
+    phone, _ = belarus_test_phone(ctg)
+    client_id = await get_or_create_client(db_session, ctg, phone=phone, first_name="Клиент")
+    booking_id, _ = await create_booking(db_session, slot_id, trainer_id, client_id, service_id)
+    assert booking_id is not None
+    with patch_client_init_auth(ctg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.get(
+                "/api/webapp/client/hub/bootstrap",
+                headers={"X-Telegram-Init-Data": "mock"},
+            )
+    assert resp.status_code == 200, resp.text
+    payload = resp.json()
+    assert "passes" in payload
+    assert isinstance(payload["passes"], list)
+
+
+@pytest.mark.asyncio
+async def test_client_booking_post_response_shape_smoke(app_use_test_db, db_session) -> None:
+    """POST /client/booking success JSON shape is stable for shared booking-client.js parser."""
+    slot_day = date.today() + timedelta(days=14)
+    ref_day = slot_day - timedelta(days=slot_day.weekday())
+    ref_now = datetime.combine(ref_day, time(10, 0))
+    _trainer_id, service_id, slot_id = await _create_trainer_online_with_slot(
+        db_session, slot_date=slot_day, start_hours={18}
+    )
+    ctg = _fresh_client_telegram_id()
+    phone, _ = belarus_test_phone(ctg)
+    with patch_client_init_auth(ctg):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            with patch("src.api.routes.webapp.datetime") as mock_dt, patch(
+                "src.api.routes.webapp.date"
+            ) as mock_date:
+                mock_date.today.return_value = ref_day
+                mock_dt.now.return_value = ref_now
+                mock_dt.combine = datetime.combine
+                book = await client.post(
+                    "/api/webapp/client/booking",
+                    json={
+                        "slot_id": slot_id,
+                        "phone": phone,
+                        "service_id": service_id,
+                        "first_name": "Клиент",
+                    },
+                    headers={"X-Telegram-Init-Data": "mock", "Idempotency-Key": "smoke-shape-1"},
+                )
+    assert book.status_code == 200, book.text
+    data = book.json()
+    assert data.get("success") is True
+    assert isinstance(data.get("booking_id"), int)
+    assert "detail" not in data

@@ -1000,6 +1000,84 @@ def webapp_mini_app_client_nav_css(request: Request):
     )
 
 
+@app.get("/webapp/mini-app-client-shell.css")
+def webapp_mini_app_client_shell_css(request: Request):
+    """Client shell — bottom tab bar, more sheet, empty/skeleton. Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "mini-app-client-shell.css"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="CSS file not found")
+    return FileResponse(
+        path,
+        media_type="text/css",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/mini-app-client-shell.js")
+def webapp_mini_app_client_shell_js(request: Request):
+    """Client shell — tab navigation, more sheet, navigate helpers. Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "mini-app-client-shell.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/mini-app-client-bookings.css")
+def webapp_mini_app_client_bookings_css(request: Request):
+    """Client bookings list/detail styles (split from client-bookings.html). Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "mini-app-client-bookings.css"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="CSS file not found")
+    return FileResponse(
+        path,
+        media_type="text/css",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/booking-client.js")
+def webapp_booking_client_js(request: Request):
+    """Shared client booking module (session, slots, submit, success). Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "booking-client.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/booking-client.css")
+def webapp_booking_client_css(request: Request):
+    """Shared client booking styles (success, skeleton, sticky CTA). Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "booking-client.css"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="CSS file not found")
+    return FileResponse(
+        path,
+        media_type="text/css",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/booking-deeplink.js")
+def webapp_booking_deeplink_js(request: Request):
+    """Booking URL normalizer + book→catalog strangler shim. Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "booking-deeplink.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
 @app.get("/webapp/client-saved-trainers-main.js")
 def webapp_client_saved_trainers_main_js(request: Request):
     """Client saved-trainers page logic (split from client-saved-trainers.html). Use ``?v=…`` for long cache."""

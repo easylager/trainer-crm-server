@@ -8,7 +8,7 @@ Spec: docs/plans/lead-mode-revenue-retention.md sections "Public catalog в Lead
   produces a `profile_view` demand row (deduped by IP+UA+day).
 - /r/tg/{id} produces a `contact_click` demand row, then 302-redirects to https://t.me/{username}.
 - Telegram-username validity is enforced (rogue handles never become URL targets).
-- ACTIVE trainers (with subscription) do NOT receive the Lead Mode CTA.
+- ACTIVE trainers (with subscription) also receive contact_telegram_url when @username is on file.
 """
 from __future__ import annotations
 
@@ -90,7 +90,7 @@ async def test_public_trainer_detail_returns_lifecycle_for_lead_mode(
 
 
 @pytest.mark.asyncio
-async def test_public_trainer_detail_active_trainer_has_no_lead_cta(
+async def test_public_trainer_detail_active_trainer_exposes_contact_when_username_set(
     app_use_test_db, db_session
 ) -> None:
     sid, cid, _aid = await _require_seed_ids(db_session)
@@ -102,8 +102,8 @@ async def test_public_trainer_detail_active_trainer_has_no_lead_cta(
     body = resp.json()
     assert body["lifecycle_stage"] == "active"
     assert body["is_lead_mode"] is False
-    # CTA only offered in LEAD_MODE; ACTIVE keeps the existing "Записаться" / "Оставить заявку" UX.
-    assert body["contact_telegram_url"] is None
+    assert body["can_book"] is True
+    assert body["contact_telegram_url"] == f"/r/tg/{tid}"
 
 
 @pytest.mark.asyncio

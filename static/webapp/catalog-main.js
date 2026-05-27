@@ -61,6 +61,10 @@
         slotsForTrainer: [],
         /** Subset of trainer arenas used as GET /client/slots arena_ids= (OR). Empty ⇒ all venues. */
         trainerSlotsArenaIds: [],
+        /** When true, skip auto-pick from slot availability (URL arena or user toggled chips). */
+        trainerSlotsArenaFilterExplicit: false,
+        /** Deep link ?slot_id= — open booking form once slots for the card are loaded. */
+        pendingDeepLinkSlotId: null,
         selectedSlot: null,
         returnToSummary: false,
         requestForTrainer: null,
@@ -229,8 +233,188 @@
         state.catalogBookingIdempotencyKey = newCatalogBookingIdempotencyKey();
       }
 
+      function findSlotById(slots, slotId) {
+        var sid = parseInt(slotId, 10);
+        if (!slots || !slots.length || isNaN(sid) || sid <= 0) return null;
+        for (var i = 0; i < slots.length; i++) {
+          if (parseInt(slots[i].id, 10) === sid) return slots[i];
+        }
+        return null;
+      }
+
+      /** Same path as tapping a slot row on the trainer card — service/tier can be changed on the form. */
+      function openCatalogBookingFormForSlot(slot) {
+        if (!slot) return false;
+        document.body.classList.remove('catalog-booking-deeplink');
+        state.selectedSlot = slot;
+        assignCatalogBookingIdempotencyKeyForSlot();
+        var labelEl = document.getElementById('bookingFormSlotLabel');
+        if (labelEl) {
+          labelEl.textContent = 'Выбрано: ' + formatSlotSelectionSummary(state.selectedSlot);
+        }
+        var commentEl = document.getElementById('bookingComment');
+        if (commentEl) commentEl.value = '';
+        refreshClientPhoneForBookingForm(function() {
+          prefillBookingPhoneField();
+          updateBookingVenueHint();
+          updateBookingFormServiceAndTiers();
+          if (window.BookingClient) {
+            window.BookingClient.emitBookingAnalytics('booking_step_viewed', { step: 'form', host: 'catalog' });
+          }
+          showScreen('screenBookingForm');
+        });
+        return true;
+      }
+
+      function maybeOpenPendingDeepLinkSlotBooking(trainer, slots) {
+        var pendingSid = state.pendingDeepLinkSlotId;
+        if (pendingSid == null || pendingSid === '') return false;
+        state.pendingDeepLinkSlotId = null;
+        var slot = findSlotById(slots, pendingSid);
+        if (!slot) {
+          document.body.classList.remove('catalog-booking-deeplink');
+          showToast('Это окно уже занято или недоступно. Выберите другое время.');
+          return false;
+        }
+        openCatalogBookingFormForSlot(slot);
+        return true;
+      }
+
+      function isCatalogSlotBookingDeepLink(qp) {
+        if (!qp) qp = new URLSearchParams(window.location.search || '');
+        return !!(qp.get('trainer_id') && qp.get('slot_id'));
+      }
+
+      function isCatalogTrainerDetailDeepLink(qp) {
+        if (!qp) qp = new URLSearchParams(window.location.search || '');
+        if (qp.get('tab') === 'catalog') return false;
+        if (isCatalogSlotBookingDeepLink(qp)) return false;
+        var raw = qp.get('trainer_id');
+        if (raw == null || raw === '') return false;
+        var id = parseInt(raw, 10);
+        return !isNaN(id) && id > 0;
+      }
+
+      function clearCatalogDeepLinkShellClasses() {
+        document.documentElement.classList.remove('catalog-trainer-deeplink', 'catalog-booking-deeplink');
+        document.body.classList.remove('catalog-trainer-deeplink', 'catalog-booking-deeplink');
+      }
+
+      function activateCatalogBookingDeepLinkShell() {
+        clearCatalogDeepLinkShellClasses();
+        document.body.classList.add('catalog-booking-deeplink');
+        document.querySelectorAll('[data-screen]').forEach(function(el) { el.classList.remove('active'); });
+        var form = document.getElementById('screenBookingForm');
+        if (form) form.classList.add('active');
+        syncClientShellTabBarForScreen('screenBookingForm');
+      }
+
+      function activateCatalogTrainerDeepLinkShell() {
+        clearCatalogDeepLinkShellClasses();
+        document.documentElement.classList.add('catalog-trainer-deeplink');
+        document.body.classList.add('catalog-trainer-deeplink');
+        document.querySelectorAll('[data-screen]').forEach(function(el) { el.classList.remove('active'); });
+        var detail = document.getElementById('screenTrainerDetail');
+        if (detail) detail.classList.add('active');
+        paintTrainerDetailSkeleton();
+        syncClientShellTabBarForScreen('screenTrainerDetail');
+      }
+
+      /** Full-card shimmer while trainer profile loads (deep link / list tap). */
+      function buildTrainerDetailSkeletonHtml() {
+        return (
+          '<div class="catalog-trainer-detail-skel" role="status" aria-busy="true" aria-label="Загрузка карточки тренера">' +
+            '<div class="catalog-trainer-detail-skel__photo catalog-skel-shimmer"></div>' +
+            '<div class="catalog-trainer-detail-skel__header">' +
+              '<div class="catalog-skel-line catalog-trainer-detail-skel__name catalog-skel-shimmer"></div>' +
+              '<div class="catalog-skel-line catalog-trainer-detail-skel__rating catalog-skel-shimmer"></div>' +
+            '</div>' +
+            '<div class="catalog-trainer-detail-skel__stats">' +
+              '<div class="catalog-trainer-detail-skel__stat catalog-skel-shimmer"></div>' +
+              '<div class="catalog-trainer-detail-skel__stat catalog-skel-shimmer"></div>' +
+              '<div class="catalog-trainer-detail-skel__stat catalog-skel-shimmer"></div>' +
+            '</div>' +
+            '<div class="catalog-skel-line catalog-trainer-detail-skel__section catalog-skel-shimmer"></div>' +
+            '<div class="catalog-trainer-detail-skel__service catalog-skel-shimmer"></div>' +
+            '<div class="catalog-trainer-detail-skel__service catalog-trainer-detail-skel__service--short catalog-skel-shimmer"></div>' +
+          '</div>'
+        );
+      }
+
+      function buildTrainerDetailSlotsSkeletonHtml() {
+        var rows = '';
+        for (var i = 0; i < 3; i++) {
+          rows += '<div class="catalog-trainer-detail-skel__slot-row catalog-skel-shimmer"></div>';
+        }
+        return (
+          '<div class="catalog-trainer-detail-skel__slots-block" aria-hidden="true">' +
+            '<div class="catalog-skel-line catalog-trainer-detail-skel__slots-title catalog-skel-shimmer"></div>' +
+            rows +
+          '</div>'
+        );
+      }
+
+      function paintTrainerDetailSkeleton() {
+        var top = document.getElementById('trainerDetailTop');
+        if (top) top.innerHTML = buildTrainerDetailSkeletonHtml();
+        var about = document.getElementById('trainerDetailAbout');
+        if (about) {
+          about.innerHTML = '';
+          about.style.display = 'none';
+        }
+        var groups = document.getElementById('trainerDetailGroups');
+        if (groups) groups.innerHTML = '';
+        clearTrainerArenaSlotFilterBar();
+        var slots = document.getElementById('trainerDetailSlots');
+        if (slots) slots.innerHTML = buildTrainerDetailSlotsSkeletonHtml();
+        var actions = document.getElementById('trainerDetailActions');
+        if (actions) actions.innerHTML = '';
+        var secondary = document.getElementById('trainerDetailSecondary');
+        if (secondary) secondary.innerHTML = '';
+        var rest = document.getElementById('trainerDetailRest');
+        if (rest) rest.innerHTML = '';
+      }
+
+      /** trainer_id deep link: skip trainer card flash when slot_id targets booking form. */
+      function openTrainerDeepLinkTrainerCard(returnCtx, explicitTrainerArenaIdsFromUrl, onFail) {
+        loadTrainerById(returnCtx.trainer_id).then(function(t) {
+          if (!t) {
+            if (onFail) onFail();
+            return;
+          }
+          state.trainerId = t.id != null ? Number(t.id) : returnCtx.trainer_id;
+          state.selectedTrainer = t;
+          state.trainerName = trainerName(t);
+          reconcileCatalogServiceWithTrainerAsync(t).then(function() {
+            initTrainerSlotsArenaFilter(t, { explicitArenaIds: explicitTrainerArenaIdsFromUrl });
+            if (state.pendingDeepLinkSlotId) {
+              loadTrainerDetailSlots(t)
+                .then(function(slots) {
+                  if (!maybeOpenPendingDeepLinkSlotBooking(t, slots)) {
+                    clearCatalogDeepLinkShellClasses();
+                    renderTrainerDetail();
+                    showScreen('screenTrainerDetail');
+                  }
+                })
+                .catch(function() {
+                  clearCatalogDeepLinkShellClasses();
+                  renderTrainerDetail();
+                  showScreen('screenTrainerDetail');
+                });
+              return;
+            }
+            clearCatalogDeepLinkShellClasses();
+            renderTrainerDetail();
+            showScreen('screenTrainerDetail');
+          });
+        }).catch(function() {
+          if (onFail) onFail();
+        });
+      }
+
       /** Avoid false «network error» when res.ok but body is not JSON or parse fails. */
       function catalogParseBookingJsonResponse(text) {
+        if (window.BookingClient) return window.BookingClient.parseBookingJsonResponse(text);
         try {
           return JSON.parse(text || 'null');
         } catch (e) {
@@ -238,11 +422,32 @@
         }
       }
 
+      function syncCatalogTrainerStickyCta(visible) {
+        var el = document.getElementById('catalogTrainerStickyCta');
+        if (!el) return;
+        if (!visible) {
+          el.hidden = true;
+          el.classList.remove('catalog-trainer-sticky-cta--visible');
+          return;
+        }
+        el.hidden = false;
+        requestAnimationFrame(function () {
+          el.classList.add('catalog-trainer-sticky-cta--visible');
+        });
+      }
+
       /** Card / catalog filter wins over slot.snapshot: API may tag slots with another service_id while times are shared. */
       function catalogEffectiveServiceIdForBooking() {
-        var slot = state.selectedSlot;
         var t = state.selectedTrainer;
         var services = (t && t.services) ? t.services : [];
+        if (window.BookingClient) {
+          return window.BookingClient.effectiveServiceIdForBooking({
+            trainerServices: services,
+            filterServiceId: state.serviceId,
+            slot: state.selectedSlot,
+          });
+        }
+        var slot = state.selectedSlot;
         var allowed = {};
         var i;
         for (i = 0; i < services.length; i++) {
@@ -274,9 +479,12 @@
       }
 
       function getTiersForCatalogBooking() {
-        var t = state.selectedTrainer;
-        if (!t || !t.services) return [];
         var sid = catalogEffectiveServiceIdForBooking();
+        var t = state.selectedTrainer;
+        if (window.BookingClient && t && t.services) {
+          return window.BookingClient.getTiersForService(t.services, sid);
+        }
+        if (!t || !t.services) return [];
         if (sid == null) return [];
         var svc = null;
         var i;
@@ -292,6 +500,17 @@
 
       /** Prefer last-created-booking tier, then booking_context tier, only when IDs match effective catalog service. */
       function catalogPriceVariantHintForEffectiveService(effSid) {
+        if (window.BookingClient) {
+          return window.BookingClient.priceVariantHint(
+            {
+              lastCreatedBookingServiceId: state.lastCreatedBookingServiceId,
+              lastCreatedBookingPriceVariantId: state.lastCreatedBookingPriceVariantId,
+              bookingContextServiceId: state.bookingContextServiceId,
+              bookingContextServicePriceVariantId: state.bookingContextServicePriceVariantId,
+            },
+            effSid
+          );
+        }
         if (effSid == null) return null;
         var e = Number(effSid);
         if (!isFinite(e) || e <= 0) return null;
@@ -310,29 +529,107 @@
         return null;
       }
 
+      /** Switch service on booking form without leaving screenBookingForm (hub deep-link path). */
+      function selectCatalogBookingService(serviceId) {
+        if (!state.selectedTrainer) return;
+        var sid = Number(serviceId);
+        if (isNaN(sid) || sid <= 0) return;
+        if (state.serviceId === sid) return;
+        state.serviceId = sid;
+        var services = state.selectedTrainer.services || [];
+        var i;
+        for (i = 0; i < services.length; i++) {
+          if (Number(services[i].service_id) === sid) {
+            state.serviceName = String(services[i].service_name || '').trim();
+            break;
+          }
+        }
+        if (window.history && window.history.replaceState) {
+          var url = new URL(window.location.href);
+          url.searchParams.set('service_id', sid);
+          window.history.replaceState(null, '', url.toString());
+        }
+        var tid = state.selectedTrainer && state.selectedTrainer.id != null ? state.selectedTrainer.id : null;
+        if (tid != null && state.cityId && state.serviceId != null) persistTrainerSelection(tid);
+        updateBookingFormServiceAndTiers();
+      }
+
       /** Услуга из фильтра + выбор тарифа при нескольких ценах (строгий режим API). Групповые слоты — без выбора тира. */
       function updateBookingFormServiceAndTiers() {
+        var svcBlock = document.getElementById('bookingFormServiceBlock');
         var svcEl = document.getElementById('bookingFormServiceLine');
+        var svcSelect = document.getElementById('bookingFormServiceSelect');
         var block = document.getElementById('bookingPriceTierBlockCatalog');
         var host = document.getElementById('bookingPriceTierRadiosCatalog');
         state.catalogBookingPriceVariantId = null;
         var effSid = catalogEffectiveServiceIdForBooking();
         var nm = effSid != null ? catalogServiceDisplayNameForId(effSid) : (state.serviceName || '').trim();
-        if (svcEl) {
-          if (nm) {
-            svcEl.style.display = 'block';
-            svcEl.textContent = 'Услуга: ' + nm;
+        var t = state.selectedTrainer;
+        var services = (t && t.services) ? t.services : [];
+        var slot = state.selectedSlot;
+        var capRaw = slot && slot.capacity != null ? parseInt(slot.capacity, 10) : 1;
+        var cap = isNaN(capRaw) ? 1 : capRaw;
+        var isGroupSlot = cap > 1;
+        if (svcBlock) {
+          if (!services.length) {
+            svcBlock.style.display = 'none';
+            if (svcEl) {
+              svcEl.style.display = 'none';
+              svcEl.textContent = '';
+            }
+            if (svcSelect) {
+              svcSelect.innerHTML = '';
+              svcSelect.style.display = 'none';
+            }
+          } else if (isGroupSlot || services.length === 1) {
+            var lineNm = nm || String(services[0].service_name || '').trim();
+            if (!lineNm) {
+              svcBlock.style.display = 'none';
+            } else {
+              svcBlock.style.display = 'block';
+              if (svcEl) {
+                svcEl.style.display = 'block';
+                svcEl.textContent = lineNm;
+              }
+            }
+            if (svcSelect) {
+              svcSelect.innerHTML = '';
+              svcSelect.style.display = 'none';
+            }
           } else {
-            svcEl.style.display = 'none';
-            svcEl.textContent = '';
+            svcBlock.style.display = 'block';
+            if (svcEl) {
+              svcEl.style.display = 'none';
+              svcEl.textContent = '';
+            }
+            if (svcSelect) {
+              svcSelect.style.display = 'block';
+              svcSelect.innerHTML = '';
+              var pickSid = effSid;
+              services.forEach(function(s) {
+                var sid = s.service_id != null ? Number(s.service_id) : NaN;
+                if (isNaN(sid) || sid <= 0) return;
+                var opt = document.createElement('option');
+                opt.value = String(sid);
+                var label = String(s.service_name || '—').trim();
+                var priceLabel = formatCatalogServicePrice(s);
+                if (priceLabel && priceLabel !== 'по запросу') {
+                  label += ' — ' + priceLabel.replace(/<[^>]+>/g, '');
+                }
+                opt.textContent = label;
+                svcSelect.appendChild(opt);
+              });
+              if (pickSid != null && svcSelect.querySelector('option[value="' + String(pickSid) + '"]')) {
+                svcSelect.value = String(pickSid);
+              } else if (svcSelect.options.length) {
+                svcSelect.selectedIndex = 0;
+              }
+            }
           }
         }
         if (!block || !host) return;
         host.innerHTML = '';
-        var slot = state.selectedSlot;
-        var capRaw = slot && slot.capacity != null ? parseInt(slot.capacity, 10) : 1;
-        var cap = isNaN(capRaw) ? 1 : capRaw;
-        if (cap > 1) {
+        if (isGroupSlot) {
           block.style.display = 'none';
           return;
         }
@@ -529,6 +826,24 @@
         btn.onclick = function() { window.history.back(); };
       }
 
+      function syncClientShellTabBarForScreen(screenId) {
+        var shell = window.ClientShell;
+        if (!shell || typeof shell.setTabBarVisible !== 'function') return;
+        shell.setTabBarVisible(screenId === 'screenSummary');
+        if (typeof shell.setForcedTab === 'function') {
+          shell.setForcedTab(screenId === 'screenSummary' ? 'catalog' : null);
+        }
+      }
+
+      function setCatalogListLoading(el, count) {
+        if (!el) return;
+        if (window.ClientShell && typeof window.ClientShell.renderSkeletonList === 'function') {
+          window.ClientShell.renderSkeletonList(el, count || 3);
+        } else {
+          el.innerHTML = '<div class="loading">Загрузка...</div>';
+        }
+      }
+
       function showScreen(id) {
         document.querySelectorAll('[data-screen]').forEach(function(el) { el.classList.remove('active'); });
         var el = document.getElementById(id);
@@ -542,7 +857,15 @@
           renderSummary();
           switchTab(state.activeTab);
         }
+        syncClientShellTabBarForScreen(id);
         syncCatalogHeaderBack();
+        syncCatalogTrainerStickyCta(
+          id === 'screenTrainerDetail' &&
+            state.slotsForTrainer &&
+            state.slotsForTrainer.length > 0 &&
+            state.selectedTrainer &&
+            state.selectedTrainer.can_book === true
+        );
       }
 
       window.addEventListener('popstate', syncCatalogHeaderBack);
@@ -1382,18 +1705,20 @@
           if (pl) { var iml = new Image(); iml.decoding = 'async'; iml.src = pl; }
           if (pf && pf !== pl) { var imf = new Image(); imf.decoding = 'async'; imf.fetchPriority = 'high'; imf.src = pf; }
         }
+        paintTrainerDetailSkeleton();
+        showScreen('screenTrainerDetail');
         loadTrainerById(t.id).then(function(full) {
           state.selectedTrainer = full || t;
           state.trainerName = trainerName(state.selectedTrainer);
           reconcileCatalogServiceWithTrainerAsync(state.selectedTrainer).then(function() {
-            initTrainerSlotsArenaFilterFromCatalog(state.selectedTrainer);
+            initTrainerSlotsArenaFilter(state.selectedTrainer, {});
             renderTrainerDetail();
             showScreen('screenTrainerDetail');
           });
         }).catch(function() {
           state.selectedTrainer = t;
           reconcileCatalogServiceWithTrainerAsync(t).then(function() {
-            initTrainerSlotsArenaFilterFromCatalog(t);
+            initTrainerSlotsArenaFilter(t, {});
             renderTrainerDetail();
             showScreen('screenTrainerDetail');
           });
@@ -1501,9 +1826,11 @@
       function openMyTrainerCard() {
         if (!state.trainerId) return;
         document.getElementById('myTrainerEmpty').style.display = 'none';
-        document.getElementById('myTrainerLoading').style.display = 'block';
+        document.getElementById('myTrainerLoading').style.display = 'none';
         document.getElementById('myTrainerCardShort').style.display = 'none';
         state.openedFromMyTrainerTab = true;
+        paintTrainerDetailSkeleton();
+        showScreen('screenTrainerDetail');
         loadTrainerById(state.trainerId).then(function(t) {
           document.getElementById('myTrainerLoading').style.display = 'none';
           if (!t) {
@@ -1516,7 +1843,7 @@
           state.selectedTrainer = t;
           state.trainerName = trainerName(t);
           reconcileCatalogServiceWithTrainerAsync(t).then(function() {
-            initTrainerSlotsArenaFilterFromCatalog(t);
+            initTrainerSlotsArenaFilter(t, {});
             renderTrainerDetail();
             showScreen('screenTrainerDetail');
           });
@@ -1636,6 +1963,23 @@
       }
 
       /** Load all client↔trainer edges once on init; stores into state.trainerEdges keyed by trainer_id. */
+      function applyTrainerEdgesPayload(data) {
+        if (!data || !Array.isArray(data.all)) return;
+        state.trainerEdges = {};
+        data.all.forEach(function(e) {
+          state.trainerEdges[String(e.trainer_id)] = e;
+        });
+        state.hubPrimaryTrainerIdFromEdges = null;
+        if (data.primary && data.primary.trainer_id != null) {
+          var pt = Number(data.primary.trainer_id);
+          if (!isNaN(pt) && pt > 0) {
+            state.hubPrimaryTrainerIdFromEdges = pt;
+            var dn = data.primary.trainer_display_name;
+            if (dn != null && String(dn).trim()) state.trainerName = String(dn).trim();
+          }
+        }
+      }
+
       function loadTrainerEdges() {
         var initData = tg && tg.initData ? tg.initData : '';
         if (!initData) return Promise.resolve();
@@ -1643,22 +1987,10 @@
         return fetch('/api/webapp/client/trainer-edges', { headers: headers })
           .then(function(r) { return r.ok ? r.json() : null; })
           .then(function(data) {
-            if (!data || !Array.isArray(data.all)) return;
-            state.trainerEdges = {};
-            data.all.forEach(function(e) {
-              state.trainerEdges[String(e.trainer_id)] = e;
-            });
-            state.hubPrimaryTrainerIdFromEdges = null;
-            if (data.primary && data.primary.trainer_id != null) {
-              var pt = Number(data.primary.trainer_id);
-              if (!isNaN(pt) && pt > 0) {
-                state.hubPrimaryTrainerIdFromEdges = pt;
-                var dn = data.primary.trainer_display_name;
-                if (dn != null && String(dn).trim()) state.trainerName = String(dn).trim();
-              }
-            }
+            applyTrainerEdgesPayload(data);
+            return data;
           })
-          .catch(function() { /* non-critical — save button falls back to unknown state */ });
+          .catch(function() { /* non-critical */ return null; });
       }
 
       /**
@@ -1852,6 +2184,78 @@
       }
 
       /**
+       * Resolve trackable /r/tg/{id} redirect to an absolute URL for Telegram WebApp openLink.
+       */
+      function trainerContactTelegramUrl(trainer) {
+        var raw = trainer && typeof trainer.contact_telegram_url === 'string'
+          ? trainer.contact_telegram_url.trim()
+          : '';
+        if (!raw) return '';
+        if (/^https?:\/\//i.test(raw)) return raw;
+        var origin = window.location.origin || '';
+        return origin + (raw.charAt(0) === '/' ? raw : '/' + raw);
+      }
+
+      function openTrainerTelegramContact(trainer) {
+        var url = trainerContactTelegramUrl(trainer);
+        if (url) {
+          if (tg && typeof tg.openLink === 'function') {
+            try {
+              tg.openLink(url, { try_instant_view: false });
+              return true;
+            } catch (e1) {
+              try {
+                tg.openLink(url);
+                return true;
+              } catch (e2) { /* fall through */ }
+            }
+          }
+          try {
+            window.open(url, '_blank');
+            return true;
+          } catch (e3) { /* fall through */ }
+        }
+        if (typeof window.openTelegramChatFromMiniApp === 'function') {
+          var p = (trainer && trainer.profile) || {};
+          var un = String(
+            (trainer && trainer.telegram_username) ||
+              p.telegram_username ||
+              (trainer && trainer.contact_telegram_username) ||
+              ''
+          )
+            .replace(/^@/, '')
+            .trim();
+          return window.openTelegramChatFromMiniApp({
+            username: un,
+            telegramId: trainer && trainer.telegram_id != null ? trainer.telegram_id : null,
+          });
+        }
+        return false;
+      }
+
+      /**
+       * Adds «Написать тренеру» when contact_telegram_url is available from GET /trainers/{id}.
+       * Uses data-action delegation on #trainerDetailActions — innerHTML += would drop .onclick handlers.
+       * Returns true if the button was inserted.
+       */
+      function appendContactTrainerButton(container, trainer, opts) {
+        opts = opts || {};
+        if (!container || !trainer || !trainerContactTelegramUrl(trainer)) return false;
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = (opts.primary ? 'btn-primary' : 'btn-secondary') + ' btn-block trainer-contact-btn';
+        btn.setAttribute('data-action', 'contact-trainer');
+        if (opts.id) btn.id = opts.id;
+        btn.textContent = opts.label || 'Написать тренеру';
+        if (opts.prepend && container.firstChild) {
+          container.insertBefore(btn, container.firstChild);
+        } else {
+          container.appendChild(btn);
+        }
+        return true;
+      }
+
+      /**
        * Dual-chip row: [🔔 Напомнить] [❤️ Сохранить].
        * Compact secondary actions — never obscure the primary CTA.
        * noSlots=true adds a subtle pulse to the notify chip to draw attention.
@@ -1946,6 +2350,7 @@
           if (session.city_id != null && session.city_id !== '') {
             state.cityId = parseInt(session.city_id, 10) || null;
             state.cityName = session.city_name || '';
+            loadCatalogScenariosFromApi(state.cityId);
           }
           if (session.service_id != null && session.service_id !== '') {
             state.serviceId = parseInt(session.service_id, 10) || null;
@@ -2231,6 +2636,25 @@
           servicePatterns: ['обучение катанию'],
         },
       };
+
+      function loadCatalogScenariosFromApi(cityId) {
+        var params = cityId ? { city_id: cityId } : {};
+        return getJson('/catalog-scenarios', params)
+          .then(function (data) {
+            var items = (data && data.items) || [];
+            if (!items.length) return;
+            var map = {};
+            items.forEach(function (it) {
+              if (!it || !it.key) return;
+              map[it.key] = {
+                label: it.label || it.key,
+                servicePatterns: it.service_patterns || [],
+              };
+            });
+            if (Object.keys(map).length) CATALOG_SCENARIO_STUBS = map;
+          })
+          .catch(function () { /* ice defaults */ });
+      }
       var _catalogServicesCacheByCity = {};
       var _catalogArenasCache = {};
 
@@ -2331,18 +2755,121 @@
         });
       }
 
-      var CATALOG_CTA_LABEL = 'Показать результаты';
+      var CATALOG_CTA_LABEL = 'Найти тренера';
+
+      var catalogSummaryHydrated = false;
+      var catalogHydrateFingerprint = '';
+
+      function catalogSessionFingerprint(sess) {
+        if (!sess) return 'none';
+        return [
+          sess.city_id || '',
+          sess.service_id || '',
+          sess.arena_id || '',
+          sess.trainer_id || '',
+          sess.city_name || '',
+          sess.service_name || '',
+        ].join('|');
+      }
+
+      function catalogStateFingerprint() {
+        return [
+          state.cityId || '',
+          state.serviceId || '',
+          state.arenaId || '',
+          state.trainerId || '',
+          state.cityName || '',
+          state.serviceName || '',
+        ].join('|');
+      }
+
+      function applyWarmCatalogServices(warm) {
+        if (!warm || !warm.servicesByCity) return;
+        Object.keys(warm.servicesByCity).forEach(function(k) {
+          _catalogServicesCacheByCity[k] = warm.servicesByCity[k];
+        });
+      }
+
+      function renderCatalogFilterSkeleton() {
+        var rows = document.getElementById('summaryRows');
+        if (!rows) return;
+        if (rows.querySelector('.catalog-filter-skel-list')) return;
+        var html = '<div class="catalog-filter-skel-list" role="status" aria-busy="true" aria-label="Загрузка параметров">';
+        for (var i = 0; i < 3; i++) {
+          html +=
+            '<div class="catalog-filter-skel catalog-skel-shimmer" aria-hidden="true">' +
+            '<div class="catalog-filter-skel__icon"></div>' +
+            '<div class="catalog-filter-skel__body">' +
+            '<div class="catalog-skel-line catalog-skel-line--filter-label"></div>' +
+            '<div class="catalog-skel-line catalog-skel-line--filter-value"></div>' +
+            '</div>' +
+            '<div class="catalog-filter-skel__chev"></div>' +
+            '</div>';
+        }
+        html += '</div>';
+        rows.innerHTML = html;
+      }
+
+      function activateSummaryScreen() {
+        clearCatalogDeepLinkShellClasses();
+        document.querySelectorAll('[data-screen]').forEach(function(el) { el.classList.remove('active'); });
+        var el = document.getElementById('screenSummary');
+        if (el) el.classList.add('active');
+        syncClientShellTabBarForScreen('screenSummary');
+        syncCatalogHeaderBack();
+      }
+
+      function finishCatalogBootReveal() {
+        var home = document.getElementById('catalogHome');
+        if (home) home.classList.remove('catalog-home--booting');
+        document.body.classList.add('catalog-body--revealed');
+        updateCatalogFindUi();
+      }
+
+      function hydrateCatalogSummary(opts) {
+        opts = opts || {};
+        var cityId = state.cityId || null;
+        return fetchCatalogServices(cityId)
+          .then(function() {
+            syncScenarioChipSelection();
+            renderSummary();
+            if (!catalogSummaryHydrated) {
+              catalogSummaryHydrated = true;
+              finishCatalogBootReveal();
+            }
+            catalogHydrateFingerprint = catalogStateFingerprint();
+            if (opts.activateScreen !== false) {
+              activateSummaryScreen();
+              switchTab(state.activeTab || 'catalog');
+            }
+            if (state.cityId && state.serviceId) prefetchFirstPageIfNeeded();
+          })
+          .catch(function() {
+            renderSummary();
+            if (!catalogSummaryHydrated) {
+              catalogSummaryHydrated = true;
+              finishCatalogBootReveal();
+            }
+            catalogHydrateFingerprint = catalogStateFingerprint();
+            if (opts.activateScreen !== false) {
+              activateSummaryScreen();
+              switchTab(state.activeTab || 'catalog');
+            }
+          });
+      }
 
       function updateCatalogHomeMode() {
         var titleEl = document.getElementById('catalogHeroTitle');
         var leadEl = document.getElementById('catalogHeroLead');
         if (!titleEl || !leadEl) return;
+        var home = document.getElementById('catalogHome');
+        if (home && home.classList.contains('catalog-home--booting')) return;
         if (state.cityId && state.serviceId) {
           titleEl.textContent = 'Готово к поиску';
-          leadEl.textContent = 'Нажмите «Показать результаты» — откроем подходящих тренеров.';
+          leadEl.textContent = 'Нажмите «Найти тренера» — покажем подходящих специалистов.';
         } else {
-          titleEl.textContent = 'Найдите тренировку';
-          leadEl.textContent = 'Выберите город и занятие — покажем тренеров со свободными слотами.';
+          titleEl.textContent = 'Найдите тренера';
+          leadEl.textContent = 'Город и занятие — покажем свободные слоты на аренах.';
         }
       }
 
@@ -2528,7 +3055,7 @@
       }
 
       function loadCities() {
-        document.getElementById('cityList').innerHTML = '<div class="loading">Загрузка...</div>';
+        setCatalogListLoading(document.getElementById('cityList'), 3);
         getJson('/cities').then(function(data) {
           var items = data.items || [];
           if (!items.length) {
@@ -2546,6 +3073,7 @@
               var cityChanged = state.cityId != null && state.cityId !== newCityId;
               state.cityId = newCityId;
               state.cityName = btn.dataset.name || '';
+              loadCatalogScenariosFromApi(newCityId);
               invalidateCatalogServicesCache();
               invalidateCatalogArenasCache();
               clearCatalogSessionStorageCache();
@@ -2600,7 +3128,7 @@
         '<svg class="service-info-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>';
 
       function loadServices() {
-        document.getElementById('serviceList').innerHTML = '<div class="loading">Загрузка...</div>';
+        setCatalogListLoading(document.getElementById('serviceList'), 4);
         var titleEl = document.getElementById('screenServiceTitle');
         if (titleEl) {
           titleEl.textContent = state.cityName ? 'Занятия · ' + state.cityName : 'Что ищете';
@@ -2731,6 +3259,33 @@
       // mount, then re-bound each time loadArenas() runs. Hidden when no arenas have coords.
       var arenaMapInstance = null;
       var arenaMapMarkers = {}; // id -> L.marker
+      var leafletLoadPromise = null;
+
+      /** Leaflet is only needed on the arena screen — load on demand instead of blocking every catalog open. */
+      function ensureLeafletLoaded() {
+        if (typeof window.L !== 'undefined') return Promise.resolve();
+        if (leafletLoadPromise) return leafletLoadPromise;
+        leafletLoadPromise = new Promise(function(resolve, reject) {
+          if (!document.querySelector('link[data-leaflet-css]')) {
+            var link = document.createElement('link');
+            link.rel = 'stylesheet';
+            link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+            link.crossOrigin = 'anonymous';
+            link.setAttribute('data-leaflet-css', '1');
+            document.head.appendChild(link);
+          }
+          var s = document.createElement('script');
+          s.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+          s.crossOrigin = 'anonymous';
+          s.onload = function() { resolve(); };
+          s.onerror = function() {
+            leafletLoadPromise = null;
+            reject(new Error('leaflet'));
+          };
+          document.head.appendChild(s);
+        });
+        return leafletLoadPromise;
+      }
 
       function ensureArenaMapMounted() {
         var wrap = document.getElementById('arenaMapWrap');
@@ -2741,20 +3296,16 @@
           wrap.setAttribute('hidden', '');
           return;
         }
-        // Leaflet loads with `defer` — on slow networks may not yet be parsed when arenas come back.
-        // Retry once the script signals readiness (or quietly stay list-only after the timeout).
+        ensureLeafletLoaded().then(function() {
+          mountArenaMap(items, wrap, node);
+        }).catch(function() {
+          wrap.setAttribute('hidden', '');
+        });
+      }
+
+      function mountArenaMap(items, wrap, node) {
         if (typeof window.L === 'undefined') {
           wrap.setAttribute('hidden', '');
-          var waited = 0;
-          var poll = setInterval(function() {
-            waited += 200;
-            if (typeof window.L !== 'undefined') {
-              clearInterval(poll);
-              ensureArenaMapMounted();
-            } else if (waited >= 4000) {
-              clearInterval(poll);
-            }
-          }, 200);
           return;
         }
         wrap.removeAttribute('hidden');
@@ -2838,7 +3389,7 @@
 
       function loadArenas() {
         var listEl = document.getElementById('arenaList');
-        listEl.innerHTML = '<div class="loading">Загрузка...</div>';
+        setCatalogListLoading(listEl, 3);
         var mapWrap = document.getElementById('arenaMapWrap');
         if (mapWrap) mapWrap.setAttribute('hidden', '');
         var actions = document.getElementById('arenaListActions');
@@ -3541,20 +4092,91 @@
         });
       }
 
-      /** When opening a trainer card: intersect catalog arena filter with trainer's venues (empty ⇒ all). */
-      function initTrainerSlotsArenaFilterFromCatalog(t) {
-        if (!t || !t.arena_ids || !t.arena_ids.length) {
+      /** When opening a trainer card: optional explicit arena from URL; else pick after slots load. */
+      function parseExplicitTrainerArenaIdsFromQuery(qp) {
+        if (!qp) return null;
+        var rawIds = qp.get('arena_ids');
+        if (rawIds != null && rawIds !== '') {
+          var ids = rawIds.split(',').map(function(s) { return parseInt(s, 10); }).filter(function(n) { return !isNaN(n) && n > 0; });
+          if (ids.length) return ids;
+        }
+        var rawOne = qp.get('arena_id');
+        if (rawOne != null && rawOne !== '') {
+          var one = parseInt(rawOne, 10);
+          if (!isNaN(one) && one > 0) return [one];
+        }
+        return null;
+      }
+
+      function trainerSlotsArenaIdsEqual(a, b) {
+        var left = (a || []).slice().sort(function(x, y) { return x - y; });
+        var right = (b || []).slice().sort(function(x, y) { return x - y; });
+        if (left.length !== right.length) return false;
+        for (var i = 0; i < left.length; i++) {
+          if (left[i] !== right[i]) return false;
+        }
+        return true;
+      }
+
+      /**
+       * Default card filter: one venue with slots → that venue; several → primary if it has slots; else all.
+       */
+      function pickDefaultTrainerSlotsArenaIds(trainer, slots) {
+        if (!trainer || !slots || !slots.length) return [];
+        var withSlots = {};
+        slots.forEach(function(s) {
+          var aid = s.arena_id != null ? Number(s.arena_id) : NaN;
+          if (!isNaN(aid) && aid > 0) withSlots[aid] = true;
+        });
+        var ids = Object.keys(withSlots).map(Number).filter(function(n) { return !isNaN(n); });
+        if (ids.length === 0) return [];
+        if (ids.length === 1) return [ids[0]];
+        var primary = trainer.primary_arena_id != null ? Number(trainer.primary_arena_id) : NaN;
+        if (!isNaN(primary) && primary > 0 && withSlots[primary]) return [primary];
+        return [];
+      }
+
+      function initTrainerSlotsArenaFilter(trainer, opts) {
+        opts = opts || {};
+        var tarenas = (trainer && trainer.arena_ids ? trainer.arena_ids : []).map(Number).filter(function(n) { return !isNaN(n); });
+        if (!tarenas.length) {
           state.trainerSlotsArenaIds = [];
+          state.trainerSlotsArenaFilterExplicit = !!opts.explicit;
           return;
         }
-        var tarenas = (t.arena_ids || []).map(Number);
-        var picked = [];
-        (state.arenaIds || []).forEach(function(cid) {
-          var n = Number(cid);
-          if (isNaN(n)) return;
-          if (tarenas.indexOf(n) >= 0) picked.push(n);
+        var explicit = Array.isArray(opts.explicitArenaIds) ? opts.explicitArenaIds : null;
+        if (explicit && explicit.length) {
+          var picked = explicit.filter(function(id) { return tarenas.indexOf(Number(id)) >= 0; }).map(Number);
+          state.trainerSlotsArenaIds = picked.length ? picked : [];
+          state.trainerSlotsArenaFilterExplicit = true;
+          return;
+        }
+        state.trainerSlotsArenaIds = [];
+        state.trainerSlotsArenaFilterExplicit = !!opts.explicit;
+      }
+
+      /** @deprecated alias — use initTrainerSlotsArenaFilter */
+      function initTrainerSlotsArenaFilterFromCatalog(t) {
+        initTrainerSlotsArenaFilter(t, {});
+      }
+
+      /**
+       * Load slots for trainer card; auto-pick arena filter from availability unless explicit/user-set.
+       */
+      function loadTrainerDetailSlots(trainer) {
+        return loadSlotsForTrainer(trainer.id, trainer).then(function(data) {
+          var slots = (data && data.slots) || [];
+          if (!state.trainerSlotsArenaFilterExplicit) {
+            var picked = pickDefaultTrainerSlotsArenaIds(trainer, slots);
+            if (picked.length && !trainerSlotsArenaIdsEqual(picked, state.trainerSlotsArenaIds)) {
+              state.trainerSlotsArenaIds = picked;
+              return loadSlotsForTrainer(trainer.id, trainer).then(function(data2) {
+                return (data2 && data2.slots) || [];
+              });
+            }
+          }
+          return slots;
         });
-        state.trainerSlotsArenaIds = picked;
       }
 
       function clearTrainerArenaSlotFilterBar() {
@@ -3576,11 +4198,6 @@
           return;
         }
         el.style.display = 'block';
-        var idnums = [];
-        for (var z = 0; z < ids.length; z++) {
-          var zx = Number(ids[z]);
-          if (!isNaN(zx)) idnums.push(zx);
-        }
         var allMode = !state.trainerSlotsArenaIds || state.trainerSlotsArenaIds.length === 0;
         var html = '';
         html += '<div class="trainer-detail-arena-filter">';
@@ -3608,22 +4225,15 @@
         el.innerHTML = html;
         el.querySelectorAll('[data-catalog-arena-filter]').forEach(function(btn) {
           btn.onclick = function() {
+            state.trainerSlotsArenaFilterExplicit = true;
             var raw = btn.getAttribute('data-catalog-arena-filter');
             if (raw === 'all') {
               state.trainerSlotsArenaIds = [];
             } else {
               var id = parseInt(raw, 10);
               if (isNaN(id)) return;
-              var cur = state.trainerSlotsArenaIds.slice();
-              if (cur.length === 0) {
-                cur = [id];
-              } else {
-                var ix = cur.indexOf(id);
-                if (ix >= 0) cur.splice(ix, 1);
-                else cur.push(id);
-              }
-              if (cur.length === 0 || cur.length >= idnums.length) cur = [];
-              state.trainerSlotsArenaIds = cur;
+              // Single-select chips: tap one venue → only that venue (not multi-toggle → «all»).
+              state.trainerSlotsArenaIds = [id];
             }
             refetchTrainerSlotsForCard();
           };
@@ -3634,7 +4244,7 @@
         var tt = state.selectedTrainer;
         if (!tt || tt.can_book !== true) return;
         paintTrainerArenaSlotFilterBar(tt);
-        document.getElementById('trainerDetailSlots').innerHTML = '<div class="slots-empty">Загрузка слотов…</div>';
+        document.getElementById('trainerDetailSlots').innerHTML = buildTrainerDetailSlotsSkeletonHtml();
         document.getElementById('trainerDetailActions').innerHTML = '';
         loadSlotsForTrainer(tt.id, tt)
           .then(function(d) {
@@ -3644,7 +4254,9 @@
             document.getElementById('trainerDetailSlots').innerHTML =
               '<div class="slots-title">Ближайшие слоты</div><div class="slots-empty">Не удалось загрузить слоты</div>';
             var errActions = document.getElementById('trainerDetailActions');
-            errActions.innerHTML = '<button type="button" class="btn-secondary btn-block" data-action="leave-request">Оставить заявку</button>';
+            errActions.innerHTML = '';
+            appendContactTrainerButton(errActions, tt, { primary: true, label: 'Написать тренеру' });
+            errActions.innerHTML += '<button type="button" class="btn-secondary btn-block" data-action="leave-request">Оставить заявку</button>';
             appendTrainerActionChips(errActions, tt, false);
             document.getElementById('trainerDetailSecondary').innerHTML = '';
           });
@@ -3684,17 +4296,7 @@
         slotsEl.querySelectorAll('.slot-row[data-slot-index]').forEach(function(btn) {
           btn.onclick = function() {
             var ii = parseInt(btn.dataset.slotIndex, 10);
-            state.selectedSlot = state.slotsForTrainer[ii];
-            assignCatalogBookingIdempotencyKeyForSlot();
-            document.getElementById('bookingFormSlotLabel').textContent =
-              'Выбрано: ' + formatSlotSelectionSummary(state.selectedSlot);
-            document.getElementById('bookingComment').value = '';
-            refreshClientPhoneForBookingForm(function() {
-              prefillBookingPhoneField();
-              updateBookingVenueHint();
-              updateBookingFormServiceAndTiers();
-              showScreen('screenBookingForm');
-            });
+            openCatalogBookingFormForSlot(state.slotsForTrainer[ii]);
           };
         });
         var btnMore = document.getElementById('btnShowAllSlots');
@@ -3707,6 +4309,7 @@
         if (slots.length > 0) {
           actionsEl.innerHTML += '<button type="button" class="btn-primary btn-block" id="btnBookFromDetail">Записаться</button>';
         }
+        appendContactTrainerButton(actionsEl, t, { primary: slots.length === 0, label: 'Написать тренеру' });
         actionsEl.innerHTML += '<button type="button" class="btn-secondary btn-block" data-action="leave-request">Оставить заявку</button>';
         if (t.has_pass_products || t.has_certificate_products) {
           actionsEl.innerHTML += '<button type="button" class="btn-secondary btn-block" data-action="buy-pass">Абонементы/Сертификаты</button>';
@@ -3718,6 +4321,14 @@
             renderSlotPickList();
             showScreen('screenSlotPick');
           };
+        var stickyBtn = document.getElementById('btnStickyBookTrainer');
+        if (stickyBtn) {
+          stickyBtn.onclick = function () {
+            renderSlotPickList();
+            showScreen('screenSlotPick');
+          };
+        }
+        syncCatalogTrainerStickyCta(slots.length > 0);
         document.getElementById('trainerDetailSecondary').innerHTML = '';
       }
 
@@ -3935,7 +4546,7 @@
         document.getElementById('trainerDetailGroups').innerHTML = '';
         bindTrainerDetailPhotoWrap();
         loadTrainingGroupsBlock(t);
-        document.getElementById('trainerDetailSlots').innerHTML = '<div class="slots-empty">Загрузка слотов…</div>';
+        document.getElementById('trainerDetailSlots').innerHTML = buildTrainerDetailSlotsSkeletonHtml();
         document.getElementById('trainerDetailActions').innerHTML = '';
         var canBook = t.can_book === true;
         if (!canBook) {
@@ -3949,55 +4560,43 @@
           // "Write in Telegram" CTA over the generic "leave request" path so we capture the
           // contact_click signal and route the visitor straight to the trainer's DM.
           var isLeadMode = t.is_lead_mode === true;
-          var tgUrl = (typeof t.contact_telegram_url === 'string' && t.contact_telegram_url) ? t.contact_telegram_url : '';
-          if (isLeadMode && tgUrl) {
-            document.getElementById('trainerDetailSlots').innerHTML =
-              '<div class="slots-title">Онлайн-запись</div>' +
-              '<div class="slots-empty">Онлайн-запись временно недоступна. Напишите тренеру в Telegram — ответит лично.</div>' +
-              phoneLine;
-            state.slotsForTrainer = [];
-            var actionsLeadEl = document.getElementById('trainerDetailActions');
-            actionsLeadEl.innerHTML = '';
-            actionsLeadEl.innerHTML += '<button type="button" class="btn-primary btn-block" id="btnContactTelegram">Написать в Telegram</button>';
-            actionsLeadEl.innerHTML += '<button type="button" class="btn-secondary btn-block" data-action="leave-request">Оставить заявку</button>';
-            appendTrainerActionChips(actionsLeadEl, t, true);
-            var btnTg = document.getElementById('btnContactTelegram');
-            if (btnTg) {
-              btnTg.onclick = function() {
-                // Use Telegram's openLink when available — keeps the redirect inside the WebView
-                // and lets t.me launch the native Telegram client.
-                if (tg && typeof tg.openLink === 'function') {
-                  tg.openLink(tgUrl);
-                } else {
-                  window.open(tgUrl, '_blank');
-                }
-              };
-            }
-            document.getElementById('trainerDetailSecondary').innerHTML = '';
-            return;
-          }
-          // ACTIVE trainer without `online` module — keep existing "contact directly" copy.
+          var hasContact = !!trainerContactTelegramUrl(t);
           document.getElementById('trainerDetailSlots').innerHTML =
             '<div class="slots-title">Онлайн-запись</div>' +
-            '<div class="slots-empty">У этого тренера нет самозаписи через каталог. Свяжитесь напрямую — тренер в каталоге, как и раньше.</div>' +
+            '<div class="slots-empty">' +
+            (isLeadMode
+              ? 'Онлайн-запись временно недоступна. Напишите тренеру в Telegram — ответит лично.'
+              : 'У этого тренера нет самозаписи через каталог. Напишите тренеру — он подберёт время.') +
+            '</div>' +
             phoneLine;
           state.slotsForTrainer = [];
-          var actionsEl = document.getElementById('trainerDetailActions');
-          actionsEl.innerHTML = '<button type="button" class="btn-secondary btn-block" data-action="leave-request">Оставить заявку</button>';
-          appendTrainerActionChips(actionsEl, t, true);
+          var actionsLeadEl = document.getElementById('trainerDetailActions');
+          actionsLeadEl.innerHTML = '';
+          if (hasContact) {
+            appendContactTrainerButton(actionsLeadEl, t, {
+              primary: true,
+              id: 'btnContactTelegram',
+              label: 'Написать тренеру',
+            });
+          }
+          actionsLeadEl.innerHTML += '<button type="button" class="btn-secondary btn-block" data-action="leave-request">Оставить заявку</button>';
+          appendTrainerActionChips(actionsLeadEl, t, true);
           document.getElementById('trainerDetailSecondary').innerHTML = '';
           return;
         }
-        paintTrainerArenaSlotFilterBar(t);
-        loadSlotsForTrainer(t.id, t)
-          .then(function(data) {
-            paintTrainerSlotsAndActionsSection(t, data);
+        loadTrainerDetailSlots(t)
+          .then(function(slots) {
+            paintTrainerArenaSlotFilterBar(t);
+            paintTrainerSlotsAndActionsSection(t, { slots: slots });
+            if (maybeOpenPendingDeepLinkSlotBooking(t, slots)) return;
           })
           .catch(function() {
             document.getElementById('trainerDetailSlots').innerHTML =
               '<div class="slots-title">Ближайшие слоты</div><div class="slots-empty">Не удалось загрузить слоты</div>';
             var errActions = document.getElementById('trainerDetailActions');
-            errActions.innerHTML = '<button type="button" class="btn-secondary btn-block" data-action="leave-request">Оставить заявку</button>';
+            errActions.innerHTML = '';
+            appendContactTrainerButton(errActions, t, { primary: true, label: 'Написать тренеру' });
+            errActions.innerHTML += '<button type="button" class="btn-secondary btn-block" data-action="leave-request">Оставить заявку</button>';
             appendTrainerActionChips(errActions, t, false);
             document.getElementById('trainerDetailSecondary').innerHTML = '';
           });
@@ -4055,22 +4654,22 @@
         list.querySelectorAll('.slot-card').forEach(function(btn) {
           btn.onclick = function() {
             var i = parseInt(btn.dataset.slotIndex, 10);
-            state.selectedSlot = state.slotsForTrainer[i];
-            assignCatalogBookingIdempotencyKeyForSlot();
-            document.getElementById('bookingFormSlotLabel').textContent = 'Выбрано: ' + formatSlotSelectionSummary(state.selectedSlot);
-            document.getElementById('bookingComment').value = '';
-            refreshClientPhoneForBookingForm(function() {
-              prefillBookingPhoneField();
-              updateBookingVenueHint();
-              updateBookingFormServiceAndTiers();
-              showScreen('screenBookingForm');
-            });
+            openCatalogBookingFormForSlot(state.slotsForTrainer[i]);
           };
         });
       }
 
       (function wireCatalogBookingPhoneMask() {
         if (window.CrmPhoneField) CrmPhoneField.initAll(document.getElementById('screenBookingForm') || document);
+      })();
+
+      (function wireBookingFormServiceSelect() {
+        var sel = document.getElementById('bookingFormServiceSelect');
+        if (!sel) return;
+        sel.addEventListener('change', function() {
+          var sid = parseInt(sel.value, 10);
+          if (!isNaN(sid) && sid > 0) selectCatalogBookingService(sid);
+        });
       })();
 
       document.getElementById('btnSubmitBooking').onclick = function() {
@@ -4094,27 +4693,61 @@
         var btn = document.getElementById('btnSubmitBooking');
         btn.disabled = true;
         var initData = tg ? tg.initData : '';
-        var body = { slot_id: slot.id, phone: phone, comment: (document.getElementById('bookingComment').value || '').trim() || null };
-        if (state.needsProfileName) {
-          body.first_name = (document.getElementById('bookingFirstName').value || '').trim();
-          var ln = (document.getElementById('bookingLastName').value || '').trim();
-          if (ln) body.last_name = ln;
-        }
-        if (effBookingSid != null) body.service_id = effBookingSid;
-        if (state.catalogBookingPriceVariantId != null) {
-          body.service_price_variant_id = state.catalogBookingPriceVariantId;
-        }
         if (!state.catalogBookingIdempotencyKey) assignCatalogBookingIdempotencyKeyForSlot();
-        var headers = { 'Content-Type': 'application/json' };
-        if (initData) headers['X-Telegram-Init-Data'] = initData;
-        headers['Idempotency-Key'] = state.catalogBookingIdempotencyKey;
-        fetch('/api/webapp/client/booking', {
-          method: 'POST',
-          headers: headers,
-          body: JSON.stringify(body)
-        }).then(function(r) {
-          return r.text().then(function(text) {
-            var data = catalogParseBookingJsonResponse(text);
+        var payloadBody = window.BookingClient
+          ? window.BookingClient.buildBookingPayload({
+              slotId: slot.id,
+              phone: phone,
+              comment: (document.getElementById('bookingComment').value || '').trim() || null,
+              serviceId: effBookingSid,
+              priceVariantId: state.catalogBookingPriceVariantId,
+              needsProfileName: state.needsProfileName,
+              firstName: state.needsProfileName
+                ? (document.getElementById('bookingFirstName').value || '').trim()
+                : null,
+              lastName: state.needsProfileName
+                ? (document.getElementById('bookingLastName').value || '').trim()
+                : null,
+            })
+          : {
+              slot_id: slot.id,
+              phone: phone,
+              comment: (document.getElementById('bookingComment').value || '').trim() || null,
+            };
+        if (!window.BookingClient) {
+          if (state.needsProfileName) {
+            payloadBody.first_name = (document.getElementById('bookingFirstName').value || '').trim();
+            var ln = (document.getElementById('bookingLastName').value || '').trim();
+            if (ln) payloadBody.last_name = ln;
+          }
+          if (effBookingSid != null) payloadBody.service_id = effBookingSid;
+          if (state.catalogBookingPriceVariantId != null) {
+            payloadBody.service_price_variant_id = state.catalogBookingPriceVariantId;
+          }
+        }
+        var submitFn = window.BookingClient
+          ? window.BookingClient.submitBooking({
+              body: payloadBody,
+              initData: initData,
+              idempotencyKey: state.catalogBookingIdempotencyKey,
+            })
+          : fetch('/api/webapp/client/booking', {
+              method: 'POST',
+              headers: (function () {
+                var h = { 'Content-Type': 'application/json' };
+                if (initData) h['X-Telegram-Init-Data'] = initData;
+                h['Idempotency-Key'] = state.catalogBookingIdempotencyKey;
+                return h;
+              })(),
+              body: JSON.stringify(payloadBody),
+            }).then(function (r) {
+              return r.text().then(function (text) {
+                return { res: r, data: catalogParseBookingJsonResponse(text) };
+              });
+            });
+        submitFn.then(function (out) {
+          var r = out.res;
+          var data = out.data;
             if (data == null) {
               if (r.ok) {
                 alert(
@@ -4128,16 +4761,24 @@
             }
             if (r.ok && data.success) {
               state.catalogBookingIdempotencyKey = null;
-              var okMsg = '✅ <b>Вы записаны</b>.<br><br>Ожидайте подтверждения от тренера в боте.';
-              if (data.used_primary_venue_for_online_booking) {
-                okMsg += '<br><span style="color: var(--tg-theme-hint-color); font-size: 14px; display: inline-block; margin-top: 10px;">Запись создана на <strong>основную площадку</strong> тренера. Чтобы заниматься на площадке из вашего фильтра — оставьте заявку, тренер согласует место.</span>';
-              }
+              syncCatalogTrainerStickyCta(false);
+              var okMsg = window.BookingClient
+                ? window.BookingClient.formatSuccessMessage(data, {})
+                : '✅ <b>Вы записаны</b>.<br><br>Ожидайте подтверждения от тренера в боте.';
               prefetch.firstPageKey = null;
               prefetch.firstPageData = null;
               clearCatalogSessionStorageCache();
-              document.getElementById('successText').innerHTML = okMsg;
               persistCatalogFilters(state.selectedTrainer && state.selectedTrainer.id);
-              showScreen('screenSuccess');
+              if (window.BookingClient) {
+                window.BookingClient.showBookingSuccess({
+                  host: 'catalog',
+                  messageHtml: okMsg,
+                  showScreen: showScreen,
+                });
+              } else {
+                document.getElementById('successText').innerHTML = okMsg;
+                showScreen('screenSuccess');
+              }
               getClientSession().then(function(session) {
                 applySessionToState(session);
                 renderSummary();
@@ -4146,7 +4787,6 @@
             } else {
               alert((data && data.detail) || 'Не удалось записаться');
             }
-          });
         }).catch(function() {
           alert(
             'Сеть не ответила. Запись могла всё равно создаться — проверьте «Мои записи» в боте. ' +
@@ -4165,6 +4805,16 @@
       }
 
       document.getElementById('btnCloseSuccess').onclick = closeCatalogSuccessToHubOrApp;
+      var btnSuccessBookingsCatalog = document.getElementById('btnSuccessBookingsCatalog');
+      if (btnSuccessBookingsCatalog) {
+        btnSuccessBookingsCatalog.onclick = function () {
+          if (window.ClientShell && typeof window.ClientShell.navigate === 'function') {
+            window.ClientShell.navigate('client-bookings');
+          } else {
+            closeCatalogSuccessToHubOrApp();
+          }
+        };
+      }
 
       document.getElementById('backToCity').onclick = function() { showScreen('screenCity'); };
       document.getElementById('backToService').onclick = function() { showScreen('screenService'); };
@@ -4201,6 +4851,13 @@
 
       document.getElementById('trainerDetailActions').addEventListener('click', function(e) {
         var action = e.target.closest('[data-action]');
+        if (action && action.dataset.action === 'contact-trainer') {
+          e.preventDefault();
+          e.stopPropagation();
+          var t = state.selectedTrainer;
+          if (t) openTrainerTelegramContact(t);
+          return;
+        }
         if (action && action.dataset.action === 'leave-request') {
           openLeaveRequestFromDetail();
           return;
@@ -4371,15 +5028,65 @@
       })();
 
       wireCatalogScenarioChips();
-      fetchCatalogServices().then(function() {
-        syncScenarioChipSelection();
-      });
+
+      /** Paint catalog shell immediately — do not wait for session/edges network round-trip. */
+      (function bootstrapCatalogUiFast() {
+        var shell = window.ClientShell;
+        var warm = shell && shell.readCatalogWarmCache ? shell.readCatalogWarmCache() : null;
+        var qp = new URLSearchParams(window.location.search || '');
+        state.activeTab = qp.get('tab') === 'my_trainer' ? 'my_trainer' : 'catalog';
+        var slotBookingDeepLink = isCatalogSlotBookingDeepLink(qp);
+        var trainerDetailDeepLink = isCatalogTrainerDetailDeepLink(qp);
+
+        var home = document.getElementById('catalogHome');
+        if (home && !slotBookingDeepLink && !trainerDetailDeepLink) home.classList.add('catalog-home--booting');
+
+        if (slotBookingDeepLink) {
+          activateCatalogBookingDeepLinkShell();
+        } else if (trainerDetailDeepLink) {
+          activateCatalogTrainerDeepLinkShell();
+        } else {
+          activateSummaryScreen();
+          renderCatalogFilterSkeleton();
+          switchTab(state.activeTab);
+        }
+
+        if (warm && !slotBookingDeepLink && !trainerDetailDeepLink) {
+          applyWarmCatalogServices(warm);
+          if (warm.session) {
+            applySessionToState(warm.session);
+            catalogHydrateFingerprint = catalogSessionFingerprint(warm.session);
+          }
+          if (warm.trainerEdges) applyTrainerEdgesPayload(warm.trainerEdges);
+          if (warm.session) {
+            hydrateCatalogSummary({ activateScreen: false });
+          }
+        }
+      })();
 
       Promise.all([loadTrainerEdges(), getClientSession()])
         .then(function(results) {
+          var edgesPayload = results[0];
           var session = results[1];
+          if (window.ClientShell && window.ClientShell.writeCatalogWarmCache) {
+            window.ClientShell.writeCatalogWarmCache({
+              session: session,
+              trainerEdges: edgesPayload,
+              servicesByCity: (function() {
+                if (!state.cityId) return null;
+                var key = catalogServicesCacheKey(state.cityId);
+                var items = _catalogServicesCacheByCity[key];
+                if (!items) return null;
+                var bag = {};
+                bag[key] = items;
+                return bag;
+              })(),
+            });
+          }
           var qp = new URLSearchParams(window.location.search || '');
+          var explicitTrainerArenaIdsFromUrl = parseExplicitTrainerArenaIdsFromQuery(qp);
           applySessionToState(session);
+          var freshSessionFingerprint = catalogSessionFingerprint(session);
           var rawDeepTid = qp.get('trainer_id');
           var deepTidParsed = rawDeepTid != null && rawDeepTid !== '' ? parseInt(rawDeepTid, 10) : NaN;
           var deepTrainerFromUrl = !isNaN(deepTidParsed) && deepTidParsed > 0 ? deepTidParsed : null;
@@ -4395,6 +5102,7 @@
           updateRequestNameFieldsVisibility();
           /* From "Мои тренеры" / saved hub: open catalog list, not auto-jump to session primary trainer card */
           var forceCatalogBrowse = qp.get('tab') === 'catalog';
+          if (forceCatalogBrowse) state.activeTab = 'catalog';
           var returnCtx = (function() {
             var tid = qp.get('trainer_id');
             if (!tid) return null;
@@ -4406,6 +5114,7 @@
               service_id: qp.get('service_id'),
               arena_id: qp.get('arena_id'),
               arena_ids: qp.get('arena_ids'),
+              slot_id: qp.get('slot_id'),
               offset: qp.get('offset'),
               service_price_variant_id: qp.get('service_price_variant_id'),
             };
@@ -4424,6 +5133,10 @@
               else clearArenaSelection();
             }
             if (returnCtx.offset != null) state.offset = Math.max(0, parseInt(returnCtx.offset, 10) || 0);
+            if (returnCtx.slot_id != null && returnCtx.slot_id !== '') {
+              var deepSlot = parseInt(returnCtx.slot_id, 10);
+              state.pendingDeepLinkSlotId = !isNaN(deepSlot) && deepSlot > 0 ? deepSlot : null;
+            }
             var dVariant = returnCtx.service_price_variant_id;
             if (dVariant != null && dVariant !== '') {
               var dv = parseInt(dVariant, 10);
@@ -4431,34 +5144,18 @@
             }
           }
           function showInitialScreen() {
-            fetchCatalogServices(state.cityId || null)
-              .then(function() {
-                syncScenarioChipSelection();
-                renderSummary();
-                showScreen('screenSummary');
-                switchTab(state.activeTab || 'catalog');
-                if (state.cityId && state.serviceId) prefetchFirstPageIfNeeded();
-              })
-              .catch(function() {
-                renderSummary();
-                showScreen('screenSummary');
-                switchTab(state.activeTab || 'catalog');
-              });
+            if (catalogSummaryHydrated && freshSessionFingerprint === catalogHydrateFingerprint) {
+              activateSummaryScreen();
+              switchTab(state.activeTab || 'catalog');
+              refreshCatalogOfferTrainerCount();
+              if (state.cityId && state.serviceId) prefetchFirstPageIfNeeded();
+              return;
+            }
+            hydrateCatalogSummary();
           }
           /* Deep link ?trainer_id= — открыть карточку напрямую (в т.ч. возврат из book.html) */
           if (returnCtx && returnCtx.trainer_id) {
-            loadTrainerById(returnCtx.trainer_id).then(function(t) {
-              if (t) {
-                state.trainerId = t.id != null ? Number(t.id) : returnCtx.trainer_id;
-                state.selectedTrainer = t;
-                state.trainerName = trainerName(t);
-                reconcileCatalogServiceWithTrainerAsync(t).then(function() {
-                  initTrainerSlotsArenaFilterFromCatalog(t);
-                  renderTrainerDetail();
-                  showScreen('screenTrainerDetail');
-                });
-                return;
-              }
+            openTrainerDeepLinkTrainerCard(returnCtx, explicitTrainerArenaIdsFromUrl, function() {
               if (state.trainerId) {
                 state.openedFromMyTrainerTab = true;
                 loadTrainerById(state.trainerId).then(function(t2) {
@@ -4467,7 +5164,7 @@
                     state.selectedTrainer = t2;
                     state.trainerName = trainerName(t2);
                     reconcileCatalogServiceWithTrainerAsync(t2).then(function() {
-                      initTrainerSlotsArenaFilterFromCatalog(t2);
+                      initTrainerSlotsArenaFilter(t2, { explicitArenaIds: explicitTrainerArenaIdsFromUrl });
                       renderTrainerDetail();
                       showScreen('screenTrainerDetail');
                     });
@@ -4485,35 +5182,6 @@
               }
               if (returnCtx && returnCtx.trainer_id) {
                 showToast('Не удалось открыть карточку тренера. Попробуйте ещё раз из ссылки в чате.');
-              }
-              showInitialScreen();
-            }).catch(function() {
-              if (returnCtx && returnCtx.trainer_id) {
-                showToast('Не удалось открыть карточку тренера. Попробуйте ещё раз из ссылки в чате.');
-              }
-              if (state.trainerId) {
-                state.openedFromMyTrainerTab = true;
-                loadTrainerById(state.trainerId).then(function(t2) {
-                  if (t2) {
-                    state.trainerId = t2.id != null ? Number(t2.id) : state.trainerId;
-                    state.selectedTrainer = t2;
-                    state.trainerName = trainerName(t2);
-                    reconcileCatalogServiceWithTrainerAsync(t2).then(function() {
-                      initTrainerSlotsArenaFilterFromCatalog(t2);
-                      renderTrainerDetail();
-                      showScreen('screenTrainerDetail');
-                    });
-                  } else {
-                    state.trainerId = null;
-                    state.trainerName = '';
-                    showInitialScreen();
-                  }
-                }).catch(function() {
-                  state.trainerId = null;
-                  state.trainerName = '';
-                  showInitialScreen();
-                });
-                return;
               }
               showInitialScreen();
             });
@@ -4528,7 +5196,7 @@
                 state.selectedTrainer = t;
                 state.trainerName = trainerName(t);
                 reconcileCatalogServiceWithTrainerAsync(t).then(function() {
-                  initTrainerSlotsArenaFilterFromCatalog(t);
+                  initTrainerSlotsArenaFilter(t, { explicitArenaIds: explicitTrainerArenaIdsFromUrl });
                   renderTrainerDetail();
                   showScreen('screenTrainerDetail');
                 });

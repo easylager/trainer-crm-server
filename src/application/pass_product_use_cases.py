@@ -22,6 +22,9 @@ _SQL_PASS_PRODUCT_COVERS_BOOKING_SERVICE = """(
 
 SQL_PASS_PRODUCT_COVERS_BOOKING_SERVICE = _SQL_PASS_PRODUCT_COVERS_BOOKING_SERVICE.strip()
 
+# Sale price frozen at issue time; COALESCE fallback for rows predating price_cents column.
+SQL_PASS_INSTANCE_SALE_PRICE_CENTS = "COALESCE(pi.price_cents, p.price_cents, 0)"
+
 
 async def _normalized_trainer_pass_service_ids(
     session: AsyncSession,
@@ -302,7 +305,7 @@ async def list_pass_instances_for_trainer_client(
                 pi.issued_at,
                 pi.status,
                 p.name AS product_name,
-                p.price_cents,
+                pi.price_cents,
                 COALESCE(
                     (
                         SELECT STRING_AGG(
@@ -360,7 +363,7 @@ async def list_client_pass_instances(
                 pi.expires_at,
                 pi.status,
                 p.name AS product_name,
-                p.price_cents,
+                pi.price_cents,
                 p.trainer_id,
                 COALESCE(
                     (
@@ -501,15 +504,24 @@ async def issue_pass_to_client(
     if r.fetchone():
         raise ValueError("У клиента уже есть активный абонемент")
     sessions_total = product["sessions_total"]
+    sale_price_cents = int(product["price_cents"])
     r = await session.execute(
         text(
             """
-            INSERT INTO pass_instances (client_id, pass_product_id, sessions_remaining, sessions_total, status)
-            VALUES (:cid, :pid, :rem, :total, 'active')
+            INSERT INTO pass_instances (
+                client_id, pass_product_id, sessions_remaining, sessions_total, price_cents, status
+            )
+            VALUES (:cid, :pid, :rem, :total, :price, 'active')
             RETURNING id, client_id, pass_product_id, sessions_remaining, sessions_total, issued_at, status
             """
         ),
-        {"cid": client_id, "pid": pass_product_id, "rem": sessions_total, "total": sessions_total},
+        {
+            "cid": client_id,
+            "pid": pass_product_id,
+            "rem": sessions_total,
+            "total": sessions_total,
+            "price": sale_price_cents,
+        },
     )
     row = r.fetchone()
     await session.commit()
@@ -540,7 +552,7 @@ async def issue_pass_to_client(
         "issued_at": issued_at.isoformat() if hasattr(issued_at, "isoformat") else str(issued_at),
         "status": row[6],
         "product_name": product["name"],
-        "price_cents": product["price_cents"],
+        "price_cents": sale_price_cents,
         "service_names": service_names,
     }
 
