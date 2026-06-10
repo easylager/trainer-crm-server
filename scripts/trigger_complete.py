@@ -84,7 +84,7 @@ async def ensure_test_booking(notify_tid: int) -> int | None:
             )
             (trainer_id,) = r.fetchone()
             await session.execute(
-                text("INSERT INTO trainer_profiles (trainer_id, first_name, last_name, age) VALUES (:tid, 'Test', 'User', 30)"),
+                text("INSERT INTO trainer_profiles (trainer_id, first_name, last_name) VALUES (:tid, 'Test', 'User')"),
                 {"tid": trainer_id},
             )
             await session.commit()

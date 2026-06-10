@@ -168,6 +168,11 @@
         return escapeHtml(numStr) + ' BYN';
       }
 
+      function trainerBookingPaymentRowLabel(booking) {
+        var pc = String((booking && (booking.problem_payment_class || booking.expected_payment_class)) || '').toUpperCase();
+        return (pc === 'PASS' || pc === 'CERT') ? 'Оплата' : 'Стоимость';
+      }
+
       const tg = window.Telegram && window.Telegram.WebApp;
       if (tg) { tg.ready(); tg.expand(); }
 
@@ -568,9 +573,13 @@
           if (tierLab) {
             html += '<div class="bd-row">' + BD_ICONS.tariff + '<div class="bd-row-text"><div class="bd-row-label">Тариф</div><div class="bd-row-value">' + escapeHtml(tierLab) + '</div></div></div>';
           }
-          var bpc = b.booking_price_cents;
-          if (bpc != null && bpc !== '' && !isNaN(parseInt(String(bpc), 10))) {
-            html += '<div class="bd-row">' + BD_ICONS.price + '<div class="bd-row-text"><div class="bd-row-label">Стоимость</div><div class="bd-row-value">' + formatTrainerDetailPriceFromCents(bpc) + '</div></div></div>';
+          var payPc = String((b.problem_payment_class || b.expected_payment_class || '')).toUpperCase();
+          var payValueHtml = '';
+          if (payPc === 'PASS') payValueHtml = escapeHtml('Абонемент покрывает');
+          else if (payPc === 'CERT') payValueHtml = escapeHtml('Сертификат покрывает');
+          else payValueHtml = formatTrainerDetailPriceFromCents(b.booking_price_cents);
+          if (payValueHtml) {
+            html += '<div class="bd-row">' + BD_ICONS.price + '<div class="bd-row-text"><div class="bd-row-label">' + escapeHtml(trainerBookingPaymentRowLabel(b)) + '</div><div class="bd-row-value">' + payValueHtml + '</div></div></div>';
           }
           if (b.client_comment) {
             html += '<div class="bd-row bd-comment">' + BD_ICONS.comment + '<div class="bd-row-text"><div class="bd-row-label">Комментарий</div><div class="bd-row-value">' + escapeHtml(b.client_comment) + '</div></div></div>';

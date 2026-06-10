@@ -41,7 +41,7 @@ TRAINERS: list[dict] = [
         "service_name": SERVICE_NAME_A,
         "first_name": "Демо",
         "last_name": "КатаниеСНуля",
-        "age": 32,
+        "birth_date": "1994-03-15",
         "experience_years": 8,
         "description": "Тестовый тренер услуги «с нуля»: индивидуально и в мини-группах. Для проверки каталога и «Сохранить».",
         "phone": "+375291111001",
@@ -57,7 +57,7 @@ TRAINERS: list[dict] = [
         "service_name": SERVICE_NAME_B,
         "first_name": "Тест",
         "last_name": "ОФП",
-        "age": 29,
+        "birth_date": "1997-08-20",
         "experience_years": 6,
         "description": "Тестовый тренер ОФП — вторая услуга, чтобы сравнить карточки и избранное в одном городе.",
         "phone": "+375292222002",
@@ -140,17 +140,17 @@ def main() -> None:
             session.execute(
                 text("""
                     INSERT INTO trainer_profiles
-                    (trainer_id, first_name, last_name, age, city_id, experience_years, description,
+                    (trainer_id, first_name, last_name, birth_date, city_id, experience_years, description,
                      phone, contacts, education, session_duration_minutes, min_hours_before_booking,
                      rating_avg, rating_count)
-                    VALUES (:tid, :fn, :ln, :age, :city_id, :exp, :desc, :phone, :contacts, :edu,
+                    VALUES (:tid, :fn, :ln, :birth_date, :city_id, :exp, :desc, :phone, :contacts, :edu,
                             :dur, :mh, :rating_avg, :rating_count)
                 """),
                 {
                     "tid": tid,
                     "fn": p["first_name"],
                     "ln": p["last_name"],
-                    "age": p["age"],
+                    "birth_date": p["birth_date"],
                     "city_id": cid,
                     "exp": p["experience_years"],
                     "desc": p["description"],

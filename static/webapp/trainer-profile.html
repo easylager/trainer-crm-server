@@ -121,10 +121,10 @@
             <label for="last_name"><span class="required-dot"></span>Фамилия</label>
             <input id="last_name" type="text" autocomplete="family-name" maxlength="64" placeholder="Ваша фамилия" />
           </div>
-          <div class="field field--age">
-            <label for="age">Возраст</label>
-            <input id="age" type="number" step="1" inputmode="numeric" placeholder="Полных лет" />
-            <div class="field-hint">По желанию — для более полной карточки в каталоге</div>
+          <div class="field field--birth-date">
+            <label for="birth_date">Дата рождения</label>
+            <input id="birth_date" type="date" autocomplete="bday" min="1900-01-01" />
+            <div class="field-hint">Необязательно. Используйте системный календарь, можно оставить пустым.</div>
           </div>
           <div class="field">
             <label for="city_id"><span class="required-dot"></span>Город</label>

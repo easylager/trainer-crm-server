@@ -1287,7 +1287,8 @@ async def fetch_reminder_session_cards_map(
                    srv.name AS service_name,
                    COALESCE(b.booking_price_cents, spv.price_cents, ts.price_cents) AS price_cents_effective,
                    a.name AS arena_name, a.address AS arena_address, a.latitude, a.longitude,
-                   t.telegram_id AS trainer_telegram_id
+                   t.telegram_id AS trainer_telegram_id,
+                   b.trainer_id
             FROM bookings b
             JOIN slots s ON s.id = b.slot_id
             JOIN services srv ON srv.id = b.service_id
@@ -1318,6 +1319,7 @@ async def fetch_reminder_session_cards_map(
             "arena_latitude": row[8],
             "arena_longitude": row[9],
             "trainer_telegram_id": int(row[10]) if row[10] is not None else None,
+            "trainer_id": int(row[11]) if row[11] is not None else None,
             "duration_minutes": _booking_interval_duration_minutes(st, et),
         }
     return out
@@ -1356,8 +1358,108 @@ async def generate_reminders_for_booking(session: AsyncSession, booking_id: int)
     await resync_pending_reminders_for_client_day(session, client_row_id, slot_d, do_commit=True)
 
 
+def _trainer_booked_notification_row_to_dict(row) -> dict:
+    return {
+        "booking_id": row[0],
+        "client_telegram_id": row[1],
+        "trainer_name": (row[2] or "Тренер").strip(),
+        "trainer_id": int(row[3]) if row[3] is not None else None,
+        "slot_date": row[4],
+        "start_time": row[5],
+        "end_time": row[6],
+        "service_name": (row[7] or "").strip() or None,
+        "booking_price_cents": row[8],
+        "price_tier_label": price_tier_label_ru(row[9]),
+        "arena_name": (row[10] or "").strip() or None,
+        "arena_address": (row[11] or "").strip() or None,
+        "map_link": _map_link(row[12], row[13]),
+        "duration_minutes": _booking_interval_duration_minutes(row[5], row[6]),
+    }
+
+
+_TRAINER_BOOKED_NOTIFY_SELECT_SQL = """
+    SELECT b.id, c.telegram_id,
+           COALESCE(TRIM(CONCAT(tp.first_name, ' ', tp.last_name)), 'Тренер') AS trainer_name,
+           b.trainer_id,
+           s.slot_date, s.start_time, s.end_time,
+           srv.name AS service_name,
+           COALESCE(b.booking_price_cents, spv.price_cents, ts.price_cents) AS price_cents_effective,
+           price_tier_kind,
+           a.name AS arena_name, a.address AS arena_address,
+           a.latitude, a.longitude
+    FROM bookings b
+    JOIN clients c ON c.id = b.client_id
+    JOIN slots s ON s.id = b.slot_id
+    JOIN trainers t ON t.id = b.trainer_id
+    LEFT JOIN trainer_profiles tp ON tp.trainer_id = t.id
+    LEFT JOIN services srv ON srv.id = b.service_id
+    LEFT JOIN trainer_service_price_variants spv ON spv.id = b.service_price_variant_id
+    LEFT JOIN trainer_services ts ON ts.trainer_id = b.trainer_id AND ts.service_id = b.service_id
+    LEFT JOIN arenas a ON a.id = COALESCE(b.arena_id, s.arena_id)
+"""
+
+
+async def fetch_trainer_booked_notification_payload(
+    session: AsyncSession,
+    booking_id: int,
+) -> dict | None:
+    """Load display payload for «Вас записали…» after the booking row was claimed for send."""
+    r = await session.execute(
+        text(_TRAINER_BOOKED_NOTIFY_SELECT_SQL + " WHERE b.id = :bid"),
+        {"bid": int(booking_id)},
+    )
+    row = r.fetchone()
+    return _trainer_booked_notification_row_to_dict(row) if row else None
+
+
+async def claim_client_trainer_booked_notification(
+    session: AsyncSession,
+    booking_id: int,
+) -> bool:
+    """
+    Atomically reserve the client push so API and notification_service cannot both deliver it.
+    """
+    r = await session.execute(
+        text("""
+            UPDATE bookings b
+            SET client_notified_trainer_booked_at = NOW()
+            FROM clients c
+            WHERE b.id = :id
+              AND b.client_id = c.id
+              AND b.client_notified_trainer_booked_at IS NULL
+              AND b.notified_at IS NULL
+              AND b.recurring_client_slot_id IS NULL
+              AND c.telegram_id IS NOT NULL
+              AND NOT b.is_sandbox
+              AND NOT c.is_sandbox
+              AND b.status = 'confirmed'
+            RETURNING b.id
+        """),
+        {"id": int(booking_id)},
+    )
+    claimed = r.fetchone() is not None
+    if claimed:
+        await session.commit()
+    return claimed
+
+
+async def release_client_trainer_booked_notification_claim(
+    session: AsyncSession,
+    booking_id: int,
+) -> None:
+    """Undo claim when Telegram send failed so the backup loop can retry."""
+    await session.execute(
+        text("UPDATE bookings SET client_notified_trainer_booked_at = NULL WHERE id = :id"),
+        {"id": int(booking_id)},
+    )
+    await session.commit()
+
+
 async def get_pending_trainer_booked_notifications(
-    session: AsyncSession, limit: int = 50
+    session: AsyncSession,
+    limit: int = 50,
+    *,
+    booking_id: int | None = None,
 ) -> list[dict]:
     """
     Client not yet sent the rich «Вас записали…» push (notification_service loop).
@@ -1371,25 +1473,11 @@ async def get_pending_trainer_booked_notifications(
     Bookings created by recurring materialization (``recurring_client_slot_id`` set) are excluded: the
     client receives one CRM «постоянное время» message instead of one push per auto-booked week.
     """
+    booking_filter_sql = "AND b.id = :bid" if booking_id is not None else ""
     r = await session.execute(
-        text("""
-            SELECT b.id, c.telegram_id,
-                   COALESCE(TRIM(CONCAT(tp.first_name, ' ', tp.last_name)), 'Тренер') AS trainer_name,
-                   s.slot_date, s.start_time, s.end_time,
-                   srv.name AS service_name,
-                   COALESCE(b.booking_price_cents, spv.price_cents, ts.price_cents) AS price_cents_effective,
-                   price_tier_kind,
-                   a.name AS arena_name, a.address AS arena_address,
-                   a.latitude, a.longitude
-            FROM bookings b
-            JOIN clients c ON c.id = b.client_id
-            JOIN slots s ON s.id = b.slot_id
-            JOIN trainers t ON t.id = b.trainer_id
-            LEFT JOIN trainer_profiles tp ON tp.trainer_id = t.id
-            LEFT JOIN services srv ON srv.id = b.service_id
-            LEFT JOIN trainer_service_price_variants spv ON spv.id = b.service_price_variant_id
-            LEFT JOIN trainer_services ts ON ts.trainer_id = b.trainer_id AND ts.service_id = b.service_id
-            LEFT JOIN arenas a ON a.id = COALESCE(b.arena_id, s.arena_id)
+        text(
+            _TRAINER_BOOKED_NOTIFY_SELECT_SQL
+            + f"""
             WHERE b.client_notified_trainer_booked_at IS NULL
               AND b.notified_at IS NULL
               AND b.recurring_client_slot_id IS NULL
@@ -1397,38 +1485,18 @@ async def get_pending_trainer_booked_notifications(
               AND NOT b.is_sandbox -- Sandbox bookings never push to clients (demo identity).
               AND NOT c.is_sandbox
               AND b.status = 'confirmed' -- Only confirmed bookings get this push.
+              {booking_filter_sql}
             LIMIT :lim
-        """),
-        {"lim": limit},
+        """
+        ),
+        {"lim": limit, **({"bid": int(booking_id)} if booking_id is not None else {})},
     )
-    rows = r.fetchall()
-    return [
-        {
-            "booking_id": row[0],
-            "client_telegram_id": row[1],
-            "trainer_name": (row[2] or "Тренер").strip(),
-            "slot_date": row[3],
-            "start_time": row[4],
-            "end_time": row[5],
-            "service_name": (row[6] or "").strip() or None,
-            "booking_price_cents": row[7],
-            "price_tier_label": price_tier_label_ru(row[8]),
-            "arena_name": (row[9] or "").strip() or None,
-            "arena_address": (row[10] or "").strip() or None,
-            "map_link": _map_link(row[11], row[12]),
-            "duration_minutes": _booking_interval_duration_minutes(row[4], row[5]),
-        }
-        for row in rows
-    ]
+    return [_trainer_booked_notification_row_to_dict(row) for row in r.fetchall()]
 
 
 async def mark_trainer_booked_notified(session: AsyncSession, booking_id: int) -> None:
     """Mark that we sent the client the 'trainer booked you' notification."""
-    await session.execute(
-        text("UPDATE bookings SET client_notified_trainer_booked_at = NOW() WHERE id = :id"),
-        {"id": booking_id},
-    )
-    await session.commit()
+    await claim_client_trainer_booked_notification(session, int(booking_id))
 
 
 async def list_pending_reminders(session: AsyncSession, limit: int = 100) -> list[dict]:
@@ -1468,6 +1536,13 @@ async def list_pending_reminders(session: AsyncSession, limit: int = 100) -> lis
             all_bids.add(x)
 
     snap = await fetch_reminder_session_cards_map(session, list(all_bids))
+    from src.application.booking_payment_notice import enrich_booking_dicts_with_expected_payment_class
+
+    await enrich_booking_dicts_with_expected_payment_class(
+        session,
+        list(snap.values()),
+        booking_id_key="booking_id",
+    )
     out: list[dict[str, Any]] = []
     for rid, ctg, kind, bids in parsed:
         sessions = [snap[b] for b in bids if b in snap]
@@ -1618,6 +1693,11 @@ async def get_booking_milestone_display_for_trainer(
     trainer_tid = row2[19]
     duration_minutes = _slot_wall_duration_minutes(row2[9], row2[10])
     map_link = _arena_yandex_map_link(arena_lat, arena_lon, aa or None, an or None)
+    from src.application.booking_payment_notice import classify_booking_expected_payment_class
+
+    expected_payment_class = await classify_booking_expected_payment_class(
+        session, booking_id, trainer_id
+    )
     return {
         "id": row2[0],
         "slot_id": row2[1],
@@ -1641,6 +1721,7 @@ async def get_booking_milestone_display_for_trainer(
         "trainer_telegram_id": int(trainer_tid) if trainer_tid is not None else None,
         "is_sandbox": bool(row2[20]),
         "client_is_sandbox": bool(row2[21]),
+        "expected_payment_class": expected_payment_class,
     }
 
 
@@ -3431,6 +3512,9 @@ async def list_bookings_for_client(
             "service_price_variant_id": int(row[24]) if row[24] is not None else None,
             "trainer_city_id": int(row[25]) if row[25] is not None else None,
         })
+    from src.application.booking_payment_notice import enrich_booking_dicts_with_expected_payment_class
+
+    await enrich_booking_dicts_with_expected_payment_class(session, out)
     return out
 
 

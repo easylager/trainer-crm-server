@@ -86,13 +86,13 @@ curl -X POST http://localhost:8000/api/upload/photo \
 Ответ `{"file_key":"trainers/1/....jpg"}` — файл в S3, запись в `trainer_photos` создана.
 
 **API для сайта (профили тренеров заполняются и управляются на сайте):**
-- **POST /api/trainers** — создать тренера. Тело (JSON): `first_name`, `last_name`, `age` (обязательные), `experience_years`, `description`, `phone`, `contacts`, `education`, `service_ids` (опционально). Ответ: `{"id": 1}`.
+- **POST /api/trainers** — создать тренера. Тело (JSON): `first_name`, `last_name`, `birth_date` (опционально, `YYYY-MM-DD`), `experience_years`, `description`, `phone`, `contacts`, `education`, `service_ids` (опционально). Ответ: `{"id": 1}`.
 - **GET /api/trainers/{id}** — тренер целиком: профиль, фото (file_key), service_ids.
 - **PATCH /api/trainers/{id}/profile** — частичное обновление профиля и/или `service_ids`.
 - **GET /api/trainers** — список тренеров (limit, offset).
 - **GET /api/trainers/education-options** — варианты образования для select при заполнении профиля тренера.
 
-Профиль: имя, фамилия, возраст (обязательные), стаж в годах (опционально), описание, телефон, контакты, образование. После миграции 0005: `alembic upgrade head`. Заполнить пару профилей для теста: `python scripts/seed_trainer_profiles.py` (нужны услуги: сначала `python scripts/seed_services.py`).
+Профиль: имя, фамилия, дата рождения (опционально), стаж в годах (опционально), описание, телефон, контакты, образование. После миграций: `alembic upgrade head`. Заполнить пару профилей для теста: `python scripts/seed_trainer_profiles.py` (нужны услуги: сначала `python scripts/seed_services.py`).
 
 ## Health-check (`/health`)
 

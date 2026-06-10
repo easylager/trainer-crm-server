@@ -2251,8 +2251,8 @@
         );
       }
     }
-    /* During TTV tour, age is optional — hide required marker (server TTV gate also skips age). */
-    body.profile-block-tour--on .field--age > label .required-dot {
+    /* During TTV tour, birth date is optional — hide required marker if design adds one later. */
+    body.profile-block-tour--on .field--birth-date > label .required-dot {
       display: none;
     }
 
@@ -2538,8 +2538,8 @@
     .ob-flow .svc-group-price-wrap input[type="number"] {
       background: var(--app-brand-root-bg);
     }
-    /* В онбординге «Возраст» не требуется — показываем только имя, фамилию и город. */
-    .ob-flow__slot .field--age {
+    /* В онбординге дата рождения не требуется — показываем только имя, фамилию и город. */
+    .ob-flow__slot .field--birth-date {
       display: none !important;
     }
     /*

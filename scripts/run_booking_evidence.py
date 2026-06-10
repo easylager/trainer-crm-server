@@ -64,8 +64,8 @@ async def get_or_create_test_trainer(session, telegram_id: int | None = None) ->
         (tid,) = r.fetchone()
         await session.execute(
             text("""
-                INSERT INTO trainer_profiles (trainer_id, first_name, last_name, age)
-                VALUES (:tid, 'Evidence', 'Trainer', 30)
+                INSERT INTO trainer_profiles (trainer_id, first_name, last_name)
+                VALUES (:tid, 'Evidence', 'Trainer')
             """),
             {"tid": tid},
         )
@@ -81,8 +81,8 @@ async def get_or_create_test_trainer(session, telegram_id: int | None = None) ->
     (tid,) = r.fetchone()
     await session.execute(
         text("""
-            INSERT INTO trainer_profiles (trainer_id, first_name, last_name, age)
-            VALUES (:tid, 'Evidence', 'Trainer', 30)
+            INSERT INTO trainer_profiles (trainer_id, first_name, last_name)
+            VALUES (:tid, 'Evidence', 'Trainer')
         """),
         {"tid": tid},
     )

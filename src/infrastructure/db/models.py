@@ -169,13 +169,14 @@ trainer_arenas_table = Table(
 
 
 class TrainerProfile(Base):
-    """Trainer card. Managed on site; required: first_name, last_name, age. Optional: city, experience_years, etc."""
+    """Trainer card. Managed on site; required fields are enforced by profile completeness rules."""
     __tablename__ = "trainer_profiles"
 
     trainer_id: Mapped[int] = mapped_column(ForeignKey("trainers.id", ondelete="CASCADE"), primary_key=True)
     first_name: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     last_name: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     age: Mapped[Optional[int]] = mapped_column(Integer(), nullable=True)
+    birth_date: Mapped[Optional[date]] = mapped_column(Date(), nullable=True)
     city_id: Mapped[Optional[int]] = mapped_column(ForeignKey("cities.id", ondelete="SET NULL"), nullable=True)
     experience_years: Mapped[Optional[int]] = mapped_column(Integer(), nullable=True)
     description: Mapped[Optional[str]] = mapped_column(Text(), nullable=True)

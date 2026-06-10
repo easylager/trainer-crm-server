@@ -52,6 +52,7 @@ def serialize_client_booking(b: dict) -> dict:
         "arena_address": b.get("arena_address"),
         "map_link": b.get("map_link"),
         "price_cents": int(pc) if pc is not None else None,
+        "expected_payment_class": (b.get("expected_payment_class") or "").strip() or None,
         "service_client_notice": (
             (b.get("service_client_notice") or "").strip() or None
         ),

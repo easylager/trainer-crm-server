@@ -30,6 +30,7 @@ TrainerServiceWriteEntry = (
     | tuple[int, list[tuple[str, int]], str | None, int | None, str | None]
     | tuple[int, list[tuple[str, int]], str | None, int | None, str | None, str | None]
 )
+_UNSET = object()
 
 
 def _normalize_trainer_service_write_entry(
@@ -138,7 +139,8 @@ class TrainerRepository:
         *,
         first_name: str,
         last_name: str,
-        age: int,
+        age: int | None = None,
+        birth_date: date | None = None,
         city_id: int | None = None,
         experience_years: int | None = None,
         description: str | None = None,
@@ -151,14 +153,18 @@ class TrainerRepository:
         dur = 45 if session_duration_minutes is None else session_duration_minutes
         await self._session.execute(
             text("""
-                INSERT INTO trainer_profiles (trainer_id, first_name, last_name, age, city_id, experience_years, description, phone, contacts, education, session_duration_minutes)
-                VALUES (:tid, :fn, :ln, :age, :city_id, :exp, :desc, :phone, :contacts, :edu, :dur)
+                INSERT INTO trainer_profiles (
+                    trainer_id, first_name, last_name, age, birth_date, city_id, experience_years,
+                    description, phone, contacts, education, session_duration_minutes
+                )
+                VALUES (:tid, :fn, :ln, :age, :birth_date, :city_id, :exp, :desc, :phone, :contacts, :edu, :dur)
             """),
             {
                 "tid": trainer_id,
                 "fn": first_name,
                 "ln": last_name,
                 "age": age,
+                "birth_date": birth_date,
                 "city_id": city_id,
                 "exp": experience_years,
                 "desc": description,
@@ -382,14 +388,17 @@ class TrainerRepository:
         }
         rp = await self._session.execute(
             text(
-                "SELECT first_name, last_name, age, city_id, experience_years, description, phone, contacts, education, rating_avg, rating_count, session_duration_minutes, min_hours_before_booking, COALESCE(group_classes_enabled, false) FROM trainer_profiles WHERE trainer_id = :id"
+                "SELECT first_name, last_name, birth_date, city_id, experience_years, description, phone, contacts, education, rating_avg, rating_count, session_duration_minutes, min_hours_before_booking, COALESCE(group_classes_enabled, false) FROM trainer_profiles WHERE trainer_id = :id"
             ),
             {"id": trainer_id},
         )
         prof = rp.fetchone()
         out["profile"] = (
             {
-                "first_name": prof[0], "last_name": prof[1], "age": prof[2], "city_id": prof[3],
+                "first_name": prof[0],
+                "last_name": prof[1],
+                "birth_date": prof[2].isoformat() if prof[2] is not None and hasattr(prof[2], "isoformat") else None,
+                "city_id": prof[3],
                 "experience_years": prof[4], "description": prof[5], "phone": prof[6], "contacts": prof[7], "education": prof[8],
                 "rating_avg": float(prof[9]) if prof[9] is not None else None,
                 "rating_count": prof[10] or 0,
@@ -586,6 +595,7 @@ class TrainerRepository:
         first_name: str | None = None,
         last_name: str | None = None,
         age: int | None = None,
+        birth_date: date | None | object = _UNSET,
         city_id: int | None = None,
         experience_years: int | None = None,
         description: str | None = None,
@@ -596,12 +606,15 @@ class TrainerRepository:
         min_hours_before_booking: int | None = None,
         group_classes_enabled: bool | None = None,
     ) -> None:
-        """Partial update of profile; only non-None fields are set."""
+        """Partial update of profile; only sent fields are set. `birth_date=None` clears the optional date."""
         updates: list[str] = []
         params: dict[str, Any] = {"id": trainer_id}
         if first_name is not None: updates.append("first_name = :fn"); params["fn"] = first_name
         if last_name is not None: updates.append("last_name = :ln"); params["ln"] = last_name
         if age is not None: updates.append("age = :age"); params["age"] = age
+        if birth_date is not _UNSET:
+            updates.append("birth_date = :birth_date")
+            params["birth_date"] = birth_date
         if city_id is not None: updates.append("city_id = :city_id"); params["city_id"] = city_id
         if experience_years is not None: updates.append("experience_years = :exp"); params["exp"] = experience_years
         if description is not None: updates.append("description = :desc"); params["desc"] = description
@@ -1014,9 +1027,9 @@ class TrainerRepository:
         offset: int,
         status: str | None = None,
     ) -> list[dict[str, Any]]:
-        """List trainers with optional status filter; returns id, telegram_id, status, first_name, last_name, age."""
+        """List trainers with optional status filter; returns basic trainer identity and optional birth date."""
         q = """
-            SELECT t.id, t.telegram_id, t.status, p.first_name, p.last_name, p.age
+            SELECT t.id, t.telegram_id, t.status, p.first_name, p.last_name, p.birth_date
             FROM trainers t
             LEFT JOIN trainer_profiles p ON p.trainer_id = t.id
         """
@@ -1033,7 +1046,7 @@ class TrainerRepository:
                 "status": row[2],
                 "first_name": row[3],
                 "last_name": row[4],
-                "age": row[5],
+                "birth_date": row[5].isoformat() if row[5] is not None and hasattr(row[5], "isoformat") else None,
             }
             for row in r.fetchall()
         ]
@@ -1257,7 +1270,7 @@ class TrainerRepository:
 
         sel = """
             SELECT DISTINCT t.id, t.telegram_id,
-                   p.first_name, p.last_name, p.age, p.city_id, p.experience_years,
+                   p.first_name, p.last_name, p.birth_date, p.city_id, p.experience_years,
                    p.description, p.phone, p.contacts, p.education,
                    p.rating_avg, p.rating_count,
                    COALESCE(p.session_duration_minutes, 45) AS session_duration_minutes,
@@ -1275,7 +1288,7 @@ class TrainerRepository:
             has_rating_expr = "CASE WHEN COALESCE(p.rating_count, 0) > 0 THEN 1 ELSE 0 END"
             sel = f"""
             SELECT DISTINCT t.id, t.telegram_id,
-                   p.first_name, p.last_name, p.age, p.city_id, p.experience_years,
+                   p.first_name, p.last_name, p.birth_date, p.city_id, p.experience_years,
                    p.description, p.phone, p.contacts, p.education,
                    p.rating_avg, p.rating_count,
                    COALESCE(p.session_duration_minutes, 45) AS session_duration_minutes,
@@ -1477,7 +1490,6 @@ class TrainerRepository:
                     "profile": {
                         "first_name": row[2],
                         "last_name": row[3],
-                        "age": row[4],
                         "city_id": row[5],
                         "experience_years": row[6],
                         "description": row[7],

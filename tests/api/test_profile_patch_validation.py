@@ -32,12 +32,11 @@ def test_profile_patch_rejects_blank_first_name() -> None:
         ProfilePatch(first_name="   ")
 
 
-def test_profile_patch_age_integer() -> None:
-    assert ProfilePatch(age=0).age == 0
-    assert ProfilePatch(age=200).age == 200
-    assert ProfilePatch(age=30).age == 30
+def test_profile_patch_birth_date_optional_iso_date() -> None:
+    assert ProfilePatch(birth_date=None).birth_date is None
+    assert ProfilePatch(birth_date="1990-05-20").birth_date.isoformat() == "1990-05-20"
     with pytest.raises(ValidationError):
-        ProfilePatch(age=True)
+        ProfilePatch(birth_date="20.05.1990")
 
 
 def test_trainer_profile_patch_body_nested_phone_error() -> None:

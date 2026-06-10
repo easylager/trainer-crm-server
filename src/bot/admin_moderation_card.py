@@ -77,8 +77,6 @@ def format_admin_trainer_moderation_caption(
     name_plain = (first + " " + last).strip() or "—"
     name_esc = html.escape(name_plain)
 
-    age = profile.get("age")
-    age_str = str(age) if age is not None else "—"
     exp = profile.get("experience_years")
     exp_str = f"{exp} лет" if exp is not None else "не указан"
 
@@ -103,7 +101,6 @@ def format_admin_trainer_moderation_caption(
         f"Telegram ID: <code>{html.escape(tg_str)}</code>",
         f"Имя: {name_esc}",
         f"Город: {city_esc}",
-        f"Возраст: {html.escape(age_str)}",
         f"Опыт: {html.escape(exp_str)}",
         f"Телефон: {phone_esc}",
     ]

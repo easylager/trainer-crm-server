@@ -617,7 +617,7 @@
       }
 
       var PROFILE_FIELD_IDS = [
-        'first_name', 'last_name', 'age', 'city_id', 'phone', 'contacts', 'description',
+        'first_name', 'last_name', 'birth_date', 'city_id', 'phone', 'contacts', 'description',
         'experience_years', 'education', 'session_duration_minutes', 'min_hours_before_booking',
       ];
       /** Fields shown on «Настройки» tab — used to switch tab on validation errors. */
@@ -633,6 +633,21 @@
         }
         if (normalized.length > PHONE_MAX_LEN) return 'Телефон: не длиннее 32 символов.';
         return /^\+(375\d{9}|7\d{10})$/.test(normalized) ? null : PHONE_ERR;
+      }
+      function todayIsoDate() {
+        var d = new Date();
+        var y = d.getFullYear();
+        var m = String(d.getMonth() + 1).padStart(2, '0');
+        var day = String(d.getDate()).padStart(2, '0');
+        return y + '-' + m + '-' + day;
+      }
+      function validateBirthDateMessage(value) {
+        var v = String(value || '').trim();
+        if (!v) return null;
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return 'Дата рождения: выберите дату в календаре.';
+        if (v < '1900-01-01') return 'Дата рождения выглядит некорректно.';
+        if (v > todayIsoDate()) return 'Дата рождения не может быть в будущем.';
+        return null;
       }
       var MIN_DESCRIPTION_CHARS = 25;
       var MAX_DESCRIPTION_CHARS = 5000;
@@ -971,12 +986,8 @@
           if (!(el.value || '').trim()) msg = 'Укажите имя.';
         } else if (fieldId === 'last_name') {
           if (!(el.value || '').trim()) msg = 'Укажите фамилию.';
-        } else if (fieldId === 'age') {
-          var av = el.value;
-          if (av !== '' && av != null) {
-            var an = Number(av);
-            if (isNaN(an) || !Number.isInteger(an)) msg = 'Укажите целое число.';
-          }
+        } else if (fieldId === 'birth_date') {
+          msg = validateBirthDateMessage(el.value);
         } else if (fieldId === 'city_id') {
           if (!el.value) msg = 'Выберите город из списка.';
         } else if (fieldId === 'contacts') {
@@ -1017,11 +1028,8 @@
         var errs = [];
         if (!pr.first_name || !String(pr.first_name).trim()) errs.push(['first_name', 'Укажите имя.']);
         if (!pr.last_name || !String(pr.last_name).trim()) errs.push(['last_name', 'Укажите фамилию.']);
-        /* Age optional on save: same as submission tier / server ProfilePatch — do not block edits while on moderation. */
-        if (pr.age != null && pr.age !== '') {
-          var ageN = Number(pr.age);
-          if (isNaN(ageN) || !Number.isInteger(ageN)) errs.push(['age', 'Укажите целое число.']);
-        }
+        var birthDateMsg = validateBirthDateMessage(pr.birth_date);
+        if (birthDateMsg) errs.push(['birth_date', birthDateMsg]);
         if (pr.city_id == null || pr.city_id === '' || Number(pr.city_id) < 1) errs.push(['city_id', 'Выберите город из списка.']);
         var ph = normalizePhoneClient(pr.phone);
         var pmsg = validatePhoneMessage(ph);
@@ -1594,7 +1602,7 @@
           profile: {
             first_name: p.first_name || '',
             last_name: p.last_name || '',
-            age: p.age != null ? Number(p.age) : null,
+            birth_date: p.birth_date || null,
             city_id: p.city_id != null ? Number(p.city_id) : null,
             phone: p.phone || '',
             contacts: p.contacts || '',
@@ -1634,6 +1642,11 @@
           var v = el ? el.value.trim() : '';
           if ((id === 'first_name' || id === 'last_name') && v === '/invite') return '';
           return v;
+        }
+        function dateStr(id) {
+          var el = document.getElementById(id);
+          var v = el ? String(el.value || '').trim() : '';
+          return v || null;
         }
         function phoneStr() {
           var el = document.getElementById('phone');
@@ -1728,7 +1741,7 @@
           profile: {
             first_name: str('first_name'),
             last_name: str('last_name'),
-            age: num('age', true),
+            birth_date: dateStr('birth_date'),
             city_id: cityVal,
             phone: phoneStr(),
             contacts: str('contacts'),
@@ -2140,8 +2153,8 @@
               else el = fn || ln;
               break;
             }
-            case 'age':
-              el = document.getElementById('age');
+            case 'birth_date':
+              el = document.getElementById('birth_date');
               break;
             case 'phone':
               el = document.getElementById('phone');
@@ -3018,7 +3031,9 @@
         }
         setv('first_name', p.first_name);
         setv('last_name', p.last_name);
-        setv('age', p.age);
+        var birthDateEl = document.getElementById('birth_date');
+        if (birthDateEl) birthDateEl.max = todayIsoDate();
+        setv('birth_date', p.birth_date);
         setPhone(p.phone);
         setv('contacts', p.contacts);
         setv('description', p.description);
@@ -4827,7 +4842,7 @@
           profile: {
             first_name: pr.first_name,
             last_name: pr.last_name,
-            age: pr.age,
+            birth_date: pr.birth_date,
             city_id: pr.city_id,
             phone: pr.phone || '',
             contacts: pr.contacts || '',

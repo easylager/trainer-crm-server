@@ -21,6 +21,7 @@ from aiogram.types import (
     WebAppInfo,
 )
 
+from src.application.booking_payment_notice import classify_booking_expected_payment_class
 from src.application.booking_use_cases import (
     cancel_booking,
     confirm_booking,
@@ -1951,6 +1952,9 @@ async def on_confirm_booking(callback: CallbackQuery) -> None:
         return
     async with async_session_factory() as session:
         has_crm_sub = await _trainer_has_crm_subscription(session, trainer_id)
+        expected_payment_class = await classify_booking_expected_payment_class(
+            session, booking_id, trainer_id
+        )
     d = info["slot_date"]
     date_str = d.strftime("%d.%m") if hasattr(d, "strftime") else str(d)
     dow = msg.TRAINER_DAYS[d.weekday()] if hasattr(d, "weekday") else ""
@@ -1975,6 +1979,7 @@ async def on_confirm_booking(callback: CallbackQuery) -> None:
             price_tier_label=info.get("price_tier_label"),
             arena_name=info.get("arena_name"),
             arena_address=info.get("arena_address"),
+            expected_payment_class=expected_payment_class,
         )
         echo_kb = msg.build_trainer_booking_confirmed_echo_reply_markup(
             webapp_base=settings_echo.webapp_base_url or "",
@@ -1989,7 +1994,8 @@ async def on_confirm_booking(callback: CallbackQuery) -> None:
             reply_markup=echo_kb,
         )
     else:
-        card_html = msg.format_trainer_first_booking_milestone_from_booking_row(info)
+        milestone_info = {**info, "expected_payment_class": expected_payment_class}
+        card_html = msg.format_trainer_first_booking_milestone_from_booking_row(milestone_info)
         milestone_kb = msg.build_trainer_first_booking_milestone_reply_markup(
             webapp_base=settings_echo.webapp_base_url or "",
             booking_id=booking_id,
@@ -2028,6 +2034,7 @@ async def on_confirm_booking(callback: CallbackQuery) -> None:
             client_display_name=info.get("client_name"),
             client_phone=(info.get("client_phone") or "") or None,
             duration_minutes=info.get("duration_minutes"),
+            expected_payment_class=expected_payment_class,
         )
         reply_markup = msg.build_client_booking_confirmed_inline_keyboard(
             map_url=info.get("map_link"),

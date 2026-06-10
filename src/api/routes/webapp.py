@@ -39,14 +39,15 @@ from src.shared.price_tier_kind import normalize_price_tier_kind, price_tier_lab
 from src.shared.profile_phone import coerce_required_phone
 from src.application.booking_problem_notifications import send_booking_problem_telegram_notifications
 from src.application.booking_problem_rollout import booking_problem_api_allowed_for_trainer
+from src.application.booking_payment_notice import classify_booking_expected_payment_class
 from src.application.booking_problem_use_cases import (
-    classify_booking_problem_payment_class,
     get_trainer_booking_problem_options,
     submit_trainer_booking_problem,
 )
 from src.application.booking_client_no_show_notifications import (
     send_booking_client_no_show_telegram_notifications,
 )
+from src.application.client_trainer_booked_notify import try_send_client_trainer_booked_push
 from src.application.booking_no_show_use_cases import (
     get_trainer_booking_client_no_show_options,
     submit_trainer_booking_client_no_show,
@@ -468,6 +469,35 @@ def _format_time_hhmm(t) -> str:
         return t.strftime("%H:%M")
     s = str(t or "").strip()
     return s[:5] if len(s) >= 5 else (s or "—")
+
+
+async def _notify_client_trainer_booked_after_create(
+    session: AsyncSession,
+    booking_id: int,
+    *,
+    is_sandbox: bool,
+    slot_date,
+    end_time,
+) -> None:
+    """Immediate client push with pass/cert coverage (backup loop still polls every 30s)."""
+    if is_sandbox:
+        return
+    if is_slot_end_in_past_local(slot_date, end_time):
+        return
+    settings = Settings()
+    client_bot = Bot(
+        token=settings.telegram_bot_token_client,
+        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+    )
+    try:
+        await try_send_client_trainer_booked_push(
+            session,
+            client_bot,
+            int(booking_id),
+            webapp_base_url=settings.webapp_base_url,
+        )
+    finally:
+        await client_bot.session.close()
 
 
 async def _send_trainer_post_booking_feedback(
@@ -2754,6 +2784,8 @@ def _serialize_booking(b: dict, *, problem_flow_enabled: bool | None = None) -> 
     out["price_tier_label"] = (str(ptl).strip() if ptl else "") or None
     if problem_flow_enabled is not None:
         out["problem_flow_enabled"] = bool(problem_flow_enabled)
+    ppc = b.get("problem_payment_class") or b.get("expected_payment_class")
+    out["problem_payment_class"] = (str(ppc).strip() if ppc else "") or None
     return out
 
 
@@ -2780,6 +2812,15 @@ async def _trainer_bookings_grouped_days_payload(
     bookings = await list_bookings_for_trainer(session, trainer_id, limit=lim)
     if not bookings:
         return {"days": [], **hub_summary}
+    from src.application.booking_payment_notice import enrich_booking_dicts_with_expected_payment_class
+
+    for b in bookings:
+        b["trainer_id"] = trainer_id
+    await enrich_booking_dicts_with_expected_payment_class(
+        session,
+        bookings,
+        target_key="problem_payment_class",
+    )
     await enrich_booking_dicts_with_client_telegram_usernames(session, bookings)
     days_list: list[dict[str, Any]] = []
     for slot_date, group in groupby(bookings, key=lambda b: b["slot_date"]):
@@ -5125,7 +5166,7 @@ async def get_trainer_booking_detail(
             b["slot_date"].weekday(), b["start_time"],
         )
     detail["recurring_id"] = recurring["id"] if recurring else None
-    ppc = await classify_booking_problem_payment_class(session, booking_id, trainer_id)
+    ppc = await classify_booking_expected_payment_class(session, booking_id, trainer_id)
     detail["problem_payment_class"] = ppc
     if ppc == "PASS":
         detail["pass_cert_instrument_hint"] = "абонемент"
@@ -5222,7 +5263,7 @@ async def patch_trainer_booking_service(
             start_time,
         )
         out["recurring_id"] = recurring["id"] if recurring else None
-    ppc = await classify_booking_problem_payment_class(session, booking_id, trainer_id)
+    ppc = await classify_booking_expected_payment_class(session, booking_id, trainer_id)
     out["problem_payment_class"] = ppc
     if ppc == "PASS":
         out["pass_cert_instrument_hint"] = "абонемент"
@@ -5313,7 +5354,7 @@ async def patch_trainer_booking_arena(
             start_time,
         )
         out["recurring_id"] = recurring["id"] if recurring else None
-    ppc = await classify_booking_problem_payment_class(session, booking_id, trainer_id)
+    ppc = await classify_booking_expected_payment_class(session, booking_id, trainer_id)
     out["problem_payment_class"] = ppc
     if ppc == "PASS":
         out["pass_cert_instrument_hint"] = "абонемент"
@@ -5486,6 +5527,9 @@ async def post_trainer_booking_confirm(
             token=settings.telegram_bot_token_client,
             default=DefaultBotProperties(parse_mode=ParseMode.HTML),
         )
+        expected_payment_class = await classify_booking_expected_payment_class(
+            session, booking_id, trainer_id
+        )
         text_client = msg.format_client_booking_confirmed_by_trainer_text(
             date=date_str,
             day=dow,
@@ -5497,6 +5541,7 @@ async def post_trainer_booking_confirm(
             arena_name=info.get("arena_name"),
             arena_address=info.get("arena_address"),
             trainer_first_booking_milestone=bool(info.get("first_booking_milestone")),
+            expected_payment_class=expected_payment_class,
         )
         reply_markup = msg.build_client_booking_confirmed_inline_keyboard(
             map_url=info.get("map_link"),
@@ -6109,6 +6154,11 @@ async def post_trainer_client_recurring_from_booking(
         tier = (detail_row.get("price_tier_label") if detail_row else None) or None
         bpc = (detail_row.get("booking_price_cents") if detail_row else None) or None
 
+        expected_payment_class = None
+        if detail_row and detail_row.get("id") is not None:
+            expected_payment_class = await classify_booking_expected_payment_class(
+                session, int(detail_row["id"]), trainer_id
+            )
         text_client = msg.format_client_recurring_set_by_trainer_notification_html(
             trainer_name=trainer_name,
             weekday_short=day_short,
@@ -6118,6 +6168,7 @@ async def post_trainer_client_recurring_from_booking(
             price_tier_label=tier,
             arena_display=arena_disp,
             materialized_count=int(materialized),
+            expected_payment_class=expected_payment_class,
         )
         reply_markup = msg.build_client_recurring_set_inline_keyboard(
             trainer_telegram_id=trainer_tid,
@@ -6915,6 +6966,13 @@ async def post_trainer_booking(
         raise HTTPException(status_code=400, detail=detail_ru)
     if not is_slot_end_in_past_local(slot.get("slot_date"), slot.get("end_time")):
         await generate_reminders_for_booking(session, booking_id)
+    await _notify_client_trainer_booked_after_create(
+        session,
+        int(booking_id),
+        is_sandbox=False,
+        slot_date=slot.get("slot_date"),
+        end_time=slot.get("end_time"),
+    )
     await _send_trainer_post_booking_feedback(
         session=session,
         trainer_id=trainer_id,
@@ -7006,6 +7064,13 @@ async def post_trainer_booking_quick(
     if not body.is_sandbox:
         if slot and not is_slot_end_in_past_local(slot.get("slot_date"), slot.get("end_time")):
             await generate_reminders_for_booking(session, booking_id)
+    await _notify_client_trainer_booked_after_create(
+        session,
+        int(booking_id),
+        is_sandbox=bool(body.is_sandbox),
+        slot_date=(slot or {}).get("slot_date"),
+        end_time=(slot or {}).get("end_time"),
+    )
     # Sandbox: no client reminders; trainer still gets the same first-booking celebration when applicable.
     await _send_trainer_post_booking_feedback(
         session=session,

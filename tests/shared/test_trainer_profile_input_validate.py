@@ -1,6 +1,6 @@
 from src.application.trainer_profile_completeness import MIN_DESCRIPTION_CHARS
 from src.shared.trainer_profile_input_validate import (
-    validate_age_line,
+    validate_birth_date_line,
     validate_description_for_moderation,
     validate_first_name,
     validate_phone,
@@ -13,9 +13,10 @@ def test_validate_first_name() -> None:
     assert validate_first_name("")[1] is not None
 
 
-def test_validate_age() -> None:
-    assert validate_age_line("25")[0] == 25
-    assert validate_age_line("abc")[1] is not None
+def test_validate_birth_date() -> None:
+    assert validate_birth_date_line("1990-05-20")[0].isoformat() == "1990-05-20"
+    assert validate_birth_date_line("-") == (None, None)
+    assert validate_birth_date_line("abc")[1] is not None
 
 
 def test_validate_phone() -> None:

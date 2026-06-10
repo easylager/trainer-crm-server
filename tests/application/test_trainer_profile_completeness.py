@@ -20,7 +20,7 @@ def _base() -> dict:
         "profile": {
             "first_name": "A",
             "last_name": "B",
-            "age": 22,
+            "birth_date": "1990-05-20",
             "phone": "123",
             "contacts": "@client",
             "description": "d" * MIN_DESCRIPTION_CHARS,
@@ -111,11 +111,11 @@ def test_missing_description_length_full_tier_only() -> None:
 
 
 def test_submission_ready_when_optional_bio_block_empty() -> None:
-    """Age, bio, education, experience omitted — still queueable (8/8 submission)."""
+    """Birth date, bio, education, experience omitted — still queueable (8/8 submission)."""
     t = _base()
     t["profile"] = {
         **t["profile"],
-        "age": 0,
+        "birth_date": None,
         "description": "",
         "education": "",
         "experience_years": None,
@@ -125,7 +125,8 @@ def test_submission_ready_when_optional_bio_block_empty() -> None:
     assert s_ok and s_miss == []
     f_ok, f_miss = analyze_moderation_profile_completeness(t)
     assert not f_ok
-    assert {"age", "description", "education", "experience_years"} <= set(f_miss)
+    assert {"description", "education", "experience_years"} <= set(f_miss)
+    assert "birth_date" not in f_miss
 
 
 def test_missing_arenas() -> None:

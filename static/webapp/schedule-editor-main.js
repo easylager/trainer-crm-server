@@ -263,6 +263,18 @@
         return escapeHtml(numStr) + ' BYN';
       }
 
+      function formatTrainerBookingPaymentDisplay(booking) {
+        var pc = String((booking && (booking.problem_payment_class || booking.expected_payment_class)) || '').toUpperCase();
+        if (pc === 'PASS') return 'Абонемент покрывает';
+        if (pc === 'CERT') return 'Сертификат покрывает';
+        return formatTrainerDetailPriceFromCents(booking && booking.booking_price_cents);
+      }
+
+      function trainerBookingPaymentRowLabel(booking) {
+        var pc = String((booking && (booking.problem_payment_class || booking.expected_payment_class)) || '').toUpperCase();
+        return (pc === 'PASS' || pc === 'CERT') ? 'Оплата' : 'Стоимость';
+      }
+
       var BD_ROW_EDIT_CHEVRON =
         '<svg class="bd-row-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>';
 
@@ -1463,13 +1475,19 @@
               escapeHtml(tierLab) +
               '</div></div></div>';
           }
-          var bpc = b.booking_price_cents;
-          if (bpc != null && bpc !== '' && !isNaN(parseInt(String(bpc), 10))) {
+          var payPc = String((b.problem_payment_class || b.expected_payment_class || '')).toUpperCase();
+          var payValueHtml = '';
+          if (payPc === 'PASS') payValueHtml = escapeHtml('Абонемент покрывает');
+          else if (payPc === 'CERT') payValueHtml = escapeHtml('Сертификат покрывает');
+          else payValueHtml = formatTrainerDetailPriceFromCents(b.booking_price_cents);
+          if (payValueHtml) {
             html +=
               '<div class="bd-row" id="bdDetailPriceRow">' +
               BD_ICONS.price +
-              '<div class="bd-row-text"><div class="bd-row-label">Стоимость</div><div class="bd-row-value" id="bdDetailPriceValue">' +
-              formatTrainerDetailPriceFromCents(bpc) +
+              '<div class="bd-row-text"><div class="bd-row-label">' +
+              escapeHtml(trainerBookingPaymentRowLabel(b)) +
+              '</div><div class="bd-row-value" id="bdDetailPriceValue">' +
+              payValueHtml +
               '</div></div></div>';
           }
           if (b.client_comment) {

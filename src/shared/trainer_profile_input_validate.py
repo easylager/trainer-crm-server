@@ -3,6 +3,8 @@ Validate trainer profile field input for the bot wizard. Mirrors API limits (Pro
 """
 from __future__ import annotations
 
+from datetime import date
+
 from pydantic import ValidationError
 
 from src.api.schemas import (
@@ -37,15 +39,15 @@ def validate_last_name(value: str) -> tuple[str | None, str | None]:
     return t, None
 
 
-def validate_age_line(value: str) -> tuple[int | None, str | None]:
+def validate_birth_date_line(value: str) -> tuple[date | None, str | None]:
     t = (value or "").strip()
-    if not t:
-        return None, "Введите возраст числом."
+    if t in ("", "-", "—", "пропустить", "skip"):
+        return None, None
     try:
-        ProfilePatch(age=int(t))
+        patch = ProfilePatch(birth_date=t)
     except (ValueError, ValidationError):
-        return None, "Возраст укажите целым числом."
-    return int(t), None
+        return None, "Дата рождения — в формате ГГГГ-ММ-ДД или «-», чтобы пропустить."
+    return patch.birth_date, None
 
 
 def validate_phone(value: str) -> tuple[str | None, str | None]:

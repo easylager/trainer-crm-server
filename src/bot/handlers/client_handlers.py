@@ -507,7 +507,7 @@ def _format_services_prices(services: list[dict]) -> str:
 
 
 def _trainer_caption(trainer: dict) -> str:
-    """Format trainer card caption from profile (name, rating, age, experience, arenas, services/prices, description)."""
+    """Format trainer card caption from profile (name, rating, experience, arenas, services/prices, description)."""
     profile = trainer.get("profile") or {}
     name = (profile.get("first_name") or "") + " " + (profile.get("last_name") or "")
     name = name.strip() or "Тренер"
@@ -518,8 +518,6 @@ def _trainer_caption(trainer: dict) -> str:
         rating_str = f"{float(avg):.1f} ⭐ ({count})"
     else:
         rating_str = msg.CLIENT_TRAINER_CARD_NO_RATING
-    age = profile.get("age")
-    age_str = str(age) if age is not None else "—"
     exp = profile.get("experience_years")
     exp_str = f"{exp} лет" if exp is not None else msg.CLIENT_TRAINER_CARD_NO_EXPERIENCE
     arena_names = trainer.get("arena_names") or []
@@ -530,7 +528,6 @@ def _trainer_caption(trainer: dict) -> str:
     return msg.CLIENT_TRAINER_CARD.format(
         name=name,
         rating=rating_str,
-        age=age_str,
         experience=exp_str,
         duration=duration,
         arenas=arenas_str,

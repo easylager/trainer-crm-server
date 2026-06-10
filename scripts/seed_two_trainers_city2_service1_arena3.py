@@ -25,7 +25,7 @@ TRAINERS = [
     {
         "first_name": "Станислав",
         "last_name": "Ковалёв",
-        "age": 38,
+        "birth_date": "1988-04-10",
         "experience_years": 12,
         "description": "Тренер по хоккею. Работа с детьми от 5 лет и взрослыми. Индивидуальные и групповые занятия. Подготовка к соревнованиям, постановка техники катания и владения клюшкой.",
         "phone": "+375291234501",
@@ -40,7 +40,7 @@ TRAINERS = [
     {
         "first_name": "Ольга",
         "last_name": "Семёнова",
-        "age": 34,
+        "birth_date": "1992-09-05",
         "experience_years": 9,
         "description": "Хоккей и ОФП для детей и взрослых. Группы начального и продвинутого уровня. Упор на технику и безопасность. Работаю на арене 3.",
         "phone": "+375331234502",
@@ -95,17 +95,17 @@ def main() -> None:
             session.execute(
                 text("""
                     INSERT INTO trainer_profiles
-                    (trainer_id, first_name, last_name, age, city_id, experience_years, description,
+                    (trainer_id, first_name, last_name, birth_date, city_id, experience_years, description,
                      phone, contacts, education, session_duration_minutes, min_hours_before_booking,
                      rating_avg, rating_count)
-                    VALUES (:tid, :fn, :ln, :age, :city_id, :exp, :desc, :phone, :contacts, :edu,
+                    VALUES (:tid, :fn, :ln, :birth_date, :city_id, :exp, :desc, :phone, :contacts, :edu,
                             :dur, :mh, :rating_avg, :rating_count)
                 """),
                 {
                     "tid": tid,
                     "fn": p["first_name"],
                     "ln": p["last_name"],
-                    "age": p["age"],
+                    "birth_date": p["birth_date"],
                     "city_id": CITY_ID,
                     "exp": p["experience_years"],
                     "desc": p["description"],

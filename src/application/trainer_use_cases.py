@@ -87,7 +87,7 @@ def _profile_to_kwargs(profile: dict[str, Any]) -> dict[str, Any]:
     return {
         "first_name": profile.get("first_name") or "",
         "last_name": profile.get("last_name") or "",
-        "age": profile.get("age", 0),
+        "birth_date": profile.get("birth_date"),
         "city_id": profile.get("city_id"),
         "experience_years": profile.get("experience_years"),
         "description": profile.get("description"),
@@ -307,7 +307,7 @@ async def ensure_trainer_profile_row(session: AsyncSession, trainer_id: int) -> 
     row = await repo.get_by_id(trainer_id)
     if row and row.get("profile") is not None:
         return True
-    await repo.create_profile(trainer_id, first_name="", last_name="", age=0)
+    await repo.create_profile(trainer_id, first_name="", last_name="")
     await session.commit()
     return True
 
@@ -429,7 +429,7 @@ async def update_trainer_profile(
 
     Active trainers: only first_name, last_name, description, experience_years queue into
     ``profile_pending`` (catalog keeps prior values until approved). Other profile columns
-    (age, phone, city, session rules, etc.) update ``trainer_profiles`` immediately.
+    (birth_date, phone, city, session rules, etc.) update ``trainer_profiles`` immediately.
     Services/arenas update immediately and do not affect the moderation queue.
     Revision fields are ignored for moderation if unchanged vs current published+pending (same save as services).
     """
@@ -438,7 +438,7 @@ async def update_trainer_profile(
         return False
     trainer = await get_trainer(session, trainer_id)
     st = (trainer.get("status") or "").strip()
-    updates = {k: v for k, v in profile.items() if v is not None}
+    updates = {k: v for k, v in profile.items() if v is not None or k == "birth_date"}
     revision_patch, direct_patch = split_active_trainer_profile_patch(updates)
     services_dirty = services is not None or service_ids is not None or arena_ids is not None
 

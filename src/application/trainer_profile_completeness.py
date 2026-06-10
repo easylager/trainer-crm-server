@@ -3,17 +3,17 @@ Single source of truth: trainer profile completeness for moderation submit vs fu
 
 Two tiers (same aggregate shape as get_trainer() / TrainerRepository.get_by_id):
 
-**A — Submission readiness (queue / submit-for-moderation):** 8 checks — all full-profile rules
-except optional-for-submit fields: age, description, education, experience_years.
+**A — Submission readiness (queue / submit-for-moderation):** checks all full-profile rules
+except optional-for-submit fields: description, education, experience_years.
 
-**B — Full profile (catalog trust / dossier):** 12 checks — strict «about the trainer» bar:
-full name, age > 0, phone, bio length >= MIN_DESCRIPTION_CHARS, photo, city, education
+**B — Full profile (catalog trust / dossier):** strict «about the trainer» bar:
+full name, phone, bio length >= MIN_DESCRIPTION_CHARS, photo, city, education
 (text or structured entries), experience_years >= 0, session length [15,240],
 booking window [0,168], at least one service and one arena.
 
 **C — TTV minimal (time-to-value):** 5 checks — identity + contacts + city + services + arenas;
 enough to open schedule + trial booking in Mini App while status is still pending_profile
-(no photo/bio/education/age/experience required). Session length and booking window stay in
+(no photo/bio/education/birth_date/experience required). Session length and booking window stay in
 «Настройки» with product defaults in API until the trainer adjusts them (full tier still validates).
 Progressive profiling fills the rest toward tier A/B later.
 
@@ -31,11 +31,11 @@ from src.infrastructure.db.models import TRAINER_STATUS_PENDING_PROFILE
 MIN_DESCRIPTION_CHARS = 25
 
 # Distinct checks in analyze_moderation_profile_completeness (full dossier / catalog bar).
-MODERATION_CRITERIA_TOTAL = 12
+MODERATION_CRITERIA_TOTAL = 11
 
 # Submission tier: full checks minus these keys (still validated in full tier).
 SUBMIT_OPTIONAL_PROFILE_FIELD_KEYS: frozenset[str] = frozenset(
-    {"age", "description", "education", "experience_years"}
+    {"description", "education", "experience_years"}
 )
 
 MODERATION_SUBMISSION_CRITERIA_TOTAL = MODERATION_CRITERIA_TOTAL - len(SUBMIT_OPTIONAL_PROFILE_FIELD_KEYS)
@@ -46,7 +46,6 @@ TT_MINIMAL_CRITERIA_TOTAL = 5
 # Stable keys for API, tests, and i18n.
 MISSING_FIELD_LABELS_RU: dict[str, str] = {
     "full_name": "имя и фамилия",
-    "age": "возраст",
     "phone": "телефон",
     "description": f"краткое описание (не менее {MIN_DESCRIPTION_CHARS} символов)",
     "photo": "фотография профиля",
@@ -62,7 +61,7 @@ MISSING_FIELD_LABELS_RU: dict[str, str] = {
 
 def analyze_moderation_profile_completeness(trainer: dict[str, Any]) -> tuple[bool, list[str]]:
     """
-    Full-profile tier (12 criteria): dossier / catalog trust bar.
+    Full-profile tier (11 criteria): dossier / catalog trust bar.
 
     `trainer` must match get_trainer shape: profile, photos, service_ids, arena_ids,
     and optional education_entries_count.
@@ -76,14 +75,6 @@ def analyze_moderation_profile_completeness(trainer: dict[str, Any]) -> tuple[bo
     ln = (profile.get("last_name") or "").strip()
     if not fn or not ln:
         missing.append("full_name")
-
-    age = profile.get("age")
-    try:
-        age_ok = age is not None and int(age) > 0
-    except (TypeError, ValueError):
-        age_ok = False
-    if not age_ok:
-        missing.append("age")
 
     phone = (profile.get("phone") or "").strip()
     if not phone:
@@ -151,7 +142,7 @@ def analyze_tt_minimal_profile_readiness(trainer: dict[str, Any]) -> tuple[bool,
     """
     Minimal profile to unlock trainer Mini App schedule + bookings while pending_profile.
 
-    Intentionally excludes: photo, long description, education text/entries, age, experience_years,
+    Intentionally excludes: photo, long description, education text/entries, birth_date, experience_years,
     session_duration_minutes, min_hours_before_booking (use defaults / settings; full tier still checks).
     """
     missing: list[str] = []

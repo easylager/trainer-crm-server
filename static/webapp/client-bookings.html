@@ -424,6 +424,17 @@
         return null;
       }
 
+      function formatBookingPaymentLabel(booking) {
+        var pc = String(booking.expected_payment_class || '').toUpperCase();
+        if (pc === 'PASS') return 'Абонемент покрывает';
+        if (pc === 'CERT') return 'Сертификат покрывает';
+        var cents = booking.price_cents;
+        if (cents != null && cents !== '' && !isNaN(parseInt(cents, 10))) {
+          return formatBynFromCents(cents);
+        }
+        return null;
+      }
+
       function formatBynFromCents(cents) {
         if (cents == null || cents === '') return '';
         var n = parseInt(cents, 10);
@@ -479,10 +490,15 @@
         }
 
         var priceRow = document.getElementById('detailPriceRow');
-        var pc = booking.price_cents;
-        if (pc != null && pc !== '' && !isNaN(parseInt(pc, 10))) {
+        var paymentLabel = formatBookingPaymentLabel(booking);
+        if (paymentLabel) {
           priceRow.style.display = '';
-          document.getElementById('detailPrice').textContent = formatBynFromCents(pc);
+          var payClass = String(booking.expected_payment_class || '').toUpperCase();
+          var payLabelEl = priceRow.querySelector('.bd-row-label');
+          if (payLabelEl) {
+            payLabelEl.textContent = (payClass === 'PASS' || payClass === 'CERT') ? 'Оплата' : 'Стоимость';
+          }
+          document.getElementById('detailPrice').textContent = paymentLabel;
         } else {
           priceRow.style.display = 'none';
         }

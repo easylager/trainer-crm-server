@@ -1,6 +1,6 @@
 """
 Seed 20 trainers for city_id=2: 10 linked to service_id=1, 10 to service_id=2.
-Profile data (names, age, experience, description) is arbitrary for load testing.
+Profile data (names, birth_date, experience, description) is arbitrary for load testing.
 Run from repo root: python scripts/seed_trainers_city2.py
 
 Requires: cities and services already seeded (city id=2, services id=1 and 2 exist).
@@ -77,8 +77,9 @@ def main() -> None:
 
             first = random.choice(FIRST_NAMES)
             last = random.choice(LAST_NAMES)
-            age = random.randint(25, 55)
-            exp = random.randint(2, min(25, age - 18)) if age > 20 else random.randint(1, 5)
+            trainer_age = random.randint(25, 55)
+            birth_date = f"{2026 - trainer_age}-01-01"
+            exp = random.randint(2, min(25, trainer_age - 18)) if trainer_age > 20 else random.randint(1, 5)
             phone = f"+37529{random.randint(1000000, 9999999)}"
             desc = random.choice(DESCRIPTIONS)
             edu = random.choice(EDUCATION)
@@ -86,10 +87,10 @@ def main() -> None:
             session.execute(
                 text("""
                     INSERT INTO trainer_profiles
-                    (trainer_id, first_name, last_name, age, city_id, experience_years, description, phone, education)
-                    VALUES (:tid, :fn, :ln, :age, :city_id, :exp, :desc, :phone, :edu)
+                    (trainer_id, first_name, last_name, birth_date, city_id, experience_years, description, phone, education)
+                    VALUES (:tid, :fn, :ln, :birth_date, :city_id, :exp, :desc, :phone, :edu)
                     ON CONFLICT (trainer_id) DO UPDATE SET
-                    first_name = EXCLUDED.first_name, last_name = EXCLUDED.last_name, age = EXCLUDED.age,
+                    first_name = EXCLUDED.first_name, last_name = EXCLUDED.last_name, birth_date = EXCLUDED.birth_date,
                     city_id = EXCLUDED.city_id, experience_years = EXCLUDED.experience_years,
                     description = EXCLUDED.description, phone = EXCLUDED.phone, education = EXCLUDED.education,
                     updated_at = now()
@@ -98,7 +99,7 @@ def main() -> None:
                     "tid": tid,
                     "fn": first,
                     "ln": last,
-                    "age": age,
+                    "birth_date": birth_date,
                     "city_id": CITY_ID,
                     "exp": exp,
                     "desc": desc,

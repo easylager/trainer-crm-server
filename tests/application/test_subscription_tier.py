@@ -288,7 +288,7 @@ class TestMockCheckout:
         )
         mock_online_pricing = MagicMock()
         mock_online_pricing.fetchone.return_value = (
-            500,
+            1500,
             30,
             "BYN",
             "Онлайн-запись",
@@ -323,7 +323,7 @@ class TestMockCheckout:
         assert result["tier"] == SUBSCRIPTION_TIER_CRM
         assert result["modules"]["online"] is True
         assert result["subscription_id"] == 999
-        assert result["price_cents"] == 2500
+        assert result["price_cents"] == 3500
         assert result["currency"] == "BYN"
         assert result["period_days"] == 30
         assert result["period_months"] == 1
@@ -355,9 +355,9 @@ class TestTierCatalog:
         byn = "BYN"
         mock_modules = MagicMock()
         mock_modules.fetchall.return_value = [
-            ("online", 1, 500, 30, byn, "Онлайн"),
-            ("online", 3, 1350, 90, byn, "Онлайн"),
-            ("online", 12, 4800, 365, byn, "Онлайн"),
+            ("online", 1, 1500, 30, byn, "Онлайн"),
+            ("online", 3, 4050, 90, byn, "Онлайн"),
+            ("online", 12, 14400, 365, byn, "Онлайн"),
             ("analytics", 1, 500, 30, byn, "Аналитика"),
             ("analytics", 3, 1350, 90, byn, "Аналитика"),
             ("analytics", 12, 4800, 365, byn, "Аналитика"),
@@ -375,7 +375,7 @@ class TestTierCatalog:
         assert catalog[1]["tier"] == "online"
         assert catalog[2]["tier"] == "analytics"
         assert catalog[0]["prices_by_period"]["1"] == 2000
-        assert catalog[1]["prices_by_period"]["3"] == 6750
+        assert catalog[1]["prices_by_period"]["3"] == 9450
 
         assert catalog[0]["includes_tiers"] == [SUBSCRIPTION_TIER_CRM]
         assert SUBSCRIPTION_TIER_CRM in catalog[1]["includes_tiers"]

@@ -89,7 +89,6 @@ CLIENT_CHOOSE_SERVICE = "Выберите услугу:"
 CLIENT_TRAINER_CARD = (
     "<b>{name}</b>\n"
     "Рейтинг: {rating}\n"
-    "Возраст: {age} лет\n"
     "Опыт: {experience}\n"
     "Занятие: {duration} мин\n"
     "Арены: {arenas}\n"
@@ -393,6 +392,7 @@ def format_client_trainer_booked_you_html(
     arena_address: str | None,
     duration_minutes: int | None,
     map_link: str | None,
+    expected_payment_class: str | None = None,
 ) -> str:
     """Rich HTML message for client after trainer books them (ParseMode.HTML)."""
     parts: list[str] = [
@@ -411,10 +411,12 @@ def format_client_trainer_booked_you_html(
             svc_lines.append(f"🎯 <b>Услуга:</b> {html.escape(svc)}")
     elif (price_tier_label or "").strip():
         svc_lines.append(f"🎯 Тариф: <b>{html.escape(price_tier_label)}</b>")
-    if booking_price_cents is not None:
-        byn = booking_price_cents / 100.0
-        ps = format_rubles_byn_display(byn)
-        svc_lines.append(f"💳 <b>Цена:</b> {html.escape(ps)}")
+    pay_line = format_client_upcoming_payment_display_html(
+        expected_payment_class=expected_payment_class,
+        booking_price_cents=booking_price_cents,
+    )
+    if pay_line:
+        svc_lines.append(pay_line)
     if svc_lines:
         parts.append("\n" + "\n".join(svc_lines) + "\n")
 
@@ -739,6 +741,7 @@ def format_client_recurring_set_by_trainer_notification_html(
     price_tier_label: str | None,
     arena_display: str | None,
     materialized_count: int,
+    expected_payment_class: str | None = None,
 ) -> str:
     """Single client-bot message when trainer sets recurring from CRM (not one push per auto-booking)."""
     tn = html.escape((trainer_name or "").strip() or "Тренер")
@@ -749,7 +752,10 @@ def format_client_recurring_set_by_trainer_notification_html(
         f"👤 <b>Тренер:</b> {tn}\n",
         f"📆 <b>Каждую неделю:</b> {ws} · {tr}\n",
         _format_client_booking_confirmed_service_price_block(
-            service_name, booking_price_cents, price_tier_label
+            service_name,
+            booking_price_cents,
+            price_tier_label,
+            expected_payment_class=expected_payment_class,
         ),
     ]
     ar = (arena_display or "").strip()
@@ -1055,6 +1061,7 @@ def format_client_booking_confirmed_by_trainer_text(
     client_display_name: str | None = None,
     client_phone: str | None = None,
     duration_minutes: int | None = None,
+    expected_payment_class: str | None = None,
 ) -> str:
     """HTML for ParseMode.HTML; escapes user-controlled and venue strings."""
     parts: list[str] = []
@@ -1078,7 +1085,10 @@ def format_client_booking_confirmed_by_trainer_text(
     parts.append(f"📅 <b>Когда:</b> <b>{ds}</b> ({dy}) · {ts}{dur_part}\n")
     parts.append(
         _format_client_booking_confirmed_service_price_block(
-            service_name, booking_price_cents, price_tier_label
+            service_name,
+            booking_price_cents,
+            price_tier_label,
+            expected_payment_class=expected_payment_class,
         )
     )
     parts.append(_format_client_booking_confirmed_venue_block(arena_name, arena_address))
@@ -1089,6 +1099,8 @@ def _format_client_booking_confirmed_service_price_block(
     service_name: str | None,
     booking_price_cents: int | None,
     price_tier_label: str | None,
+    *,
+    expected_payment_class: str | None = None,
 ) -> str:
     lines: list[str] = []
     svc = (service_name or "").strip()
@@ -1102,10 +1114,12 @@ def _format_client_booking_confirmed_service_price_block(
             lines.append(f"🎯 <b>Услуга:</b> {html.escape(svc)}")
     elif (price_tier_label or "").strip():
         lines.append(f"🎯 <b>Услуга:</b> тариф <b>{html.escape(price_tier_label.strip())}</b>")
-    if booking_price_cents is not None:
-        byn = booking_price_cents / 100.0
-        ps = format_rubles_byn_display(byn)
-        lines.append(f"💳 <b>{html.escape(ps)}</b>")
+    pay_line = format_client_upcoming_payment_display_html(
+        expected_payment_class=expected_payment_class,
+        booking_price_cents=booking_price_cents,
+    )
+    if pay_line:
+        lines.append(pay_line)
     return ("\n".join(lines) + "\n") if lines else ""
 
 
@@ -1330,6 +1344,7 @@ def format_client_booking_reminder_text(
         duration = int(s0.get("duration") or 0)
         service_name = s0.get("service_name")
         booking_price_cents = s0.get("booking_price_cents")
+        expected_payment_class = s0.get("expected_payment_class")
         arena_name = s0.get("arena_name")
         arena_address = s0.get("arena_address")
         title = (
@@ -1338,18 +1353,19 @@ def format_client_booking_reminder_text(
             else "🔔 <b>Напоминание: занятие завтра</b>"
         )
         service = (service_name or "").strip() or "—"
-        if booking_price_cents is not None:
-            byn = booking_price_cents / 100.0
-            price = format_rubles_byn_display(byn)
-        else:
-            price = "уточните у тренера"
+        pay_line = format_client_upcoming_payment_display_html(
+            expected_payment_class=expected_payment_class,
+            booking_price_cents=booking_price_cents,
+        )
+        if not pay_line:
+            pay_line = "💳 <b>уточните у тренера</b>"
         arena = (arena_name or "").strip() or "уточните у тренера"
         address = (arena_address or "").strip() or "см. «Мои записи»"
         return (
             f"{title}\n\n"
             f"📅 <b>{html.escape(date)}</b> ({html.escape(day)}) · {html.escape(time_s)} – <b>{duration}</b> мин\n"
             f"🎯 <b>{html.escape(service)}</b>\n"
-            f"💳 <b>{html.escape(price)}</b>\n"
+            f"{pay_line}\n"
             f"📍 <b>{html.escape(arena)}</b>\n"
             f"{html.escape(address)}\n\n"
             "Сначала напишите тренеру при вопросах — карта и полный адрес в <b>«Мои записях»</b>."
@@ -1373,11 +1389,12 @@ def format_client_booking_reminder_text(
         t = html.escape(str(s.get("time") or "—"))
         dur = int(s.get("duration") or 0)
         svc = html.escape(((s.get("service_name") or "").strip() or "—"))
-        if s.get("booking_price_cents") is not None:
-            byn = int(s["booking_price_cents"]) / 100.0
-            price = html.escape(format_rubles_byn_display(byn))
-        else:
-            price = html.escape("уточните у тренера")
+        pay_line = format_client_upcoming_payment_display_html(
+            expected_payment_class=s.get("expected_payment_class"),
+            booking_price_cents=s.get("booking_price_cents"),
+        )
+        if not pay_line:
+            pay_line = "💳 <b>уточните у тренера</b>"
         ar = html.escape(((s.get("arena_name") or "").strip() or "уточните у тренера"))
         if not same_date:
             dpart = (
@@ -1386,7 +1403,7 @@ def format_client_booking_reminder_text(
         else:
             dpart = ""
         lines.append(
-            f"• {dpart}{t} – <b>{dur}</b> мин · <b>{svc}</b> · 💳 {price} · 📍 {ar}"
+            f"• {dpart}{t} – <b>{dur}</b> мин · <b>{svc}</b> · {pay_line} · 📍 {ar}"
         )
     body = head + "\n".join(lines)
     return (
@@ -1680,6 +1697,70 @@ CLIENT_FEEDBACK_RATE_PROMPT = "Поставьте оценку тренеру о
 CLIENT_FEEDBACK_REVIEW_PROMPT = "Напишите отзыв (необязательно) или нажмите «Пропустить»:"
 CLIENT_FEEDBACK_SKIP = "Пропустить"
 CLIENT_FEEDBACK_THANKS = "Спасибо за отзыв!"
+
+
+def _upcoming_payment_outcome_from_class(expected_payment_class: str | None) -> str:
+    pc = (expected_payment_class or "").strip().upper()
+    return {
+        "PASS": "pass",
+        "CERT": "cert",
+        "ONE_OFF": "one_off",
+        "NONE": "none",
+    }.get(pc, "")
+
+
+def format_client_upcoming_payment_display_html(
+    *,
+    expected_payment_class: str | None = None,
+    booking_price_cents: int | None = None,
+) -> str:
+    """Single HTML payment line for client pre-session copy (reminders, confirmations, cards)."""
+    outcome = _upcoming_payment_outcome_from_class(expected_payment_class)
+    if outcome == "pass":
+        return "💳 <b>Абонемент покрывает занятие.</b>"
+    if outcome == "cert":
+        return "💳 <b>Сертификат покрывает занятие.</b>"
+    if outcome == "one_off":
+        line = format_session_payment_notice_html(
+            phase="upcoming",
+            outcome="one_off",
+            booking_price_cents=booking_price_cents,
+            for_client=True,
+        ).strip()
+        if line:
+            return line
+    if booking_price_cents is not None:
+        byn = booking_price_cents / 100.0
+        return f"💳 <b>{html.escape(format_rubles_byn_display(byn))}</b>"
+    return ""
+
+
+def format_trainer_upcoming_payment_display_html(
+    *,
+    expected_payment_class: str | None = None,
+    booking_price_cents: int | None = None,
+) -> str:
+    """Single HTML payment line for trainer pre-session copy."""
+    outcome = _upcoming_payment_outcome_from_class(expected_payment_class)
+    if outcome:
+        line = format_session_payment_notice_html(
+            phase="upcoming",
+            outcome=outcome,
+            booking_price_cents=booking_price_cents,
+            for_client=False,
+        ).strip()
+        if line:
+            return line
+    if booking_price_cents is not None:
+        line = format_session_payment_notice_html(
+            phase="upcoming",
+            outcome="one_off",
+            booking_price_cents=booking_price_cents,
+            for_client=False,
+        ).strip()
+        if line:
+            return line
+    return ""
 
 
 def format_session_payment_notice_html(
@@ -2371,7 +2452,6 @@ ADMIN_PENDING_EMPTY = "Нет тренеров в очереди на модер
 ADMIN_TRAINER_CARD = (
     "<b>Тренер #{id}</b>\n"
     "Имя: {name}\n"
-    "Возраст: {age}\n"
     "Опыт: {experience}\n\n"
     "{description}"
 )
@@ -2689,6 +2769,7 @@ def format_trainer_booking_confirmed_echo_html(
     price_tier_label: str | None,
     arena_name: str | None,
     arena_address: str | None,
+    expected_payment_class: str | None = None,
 ) -> str:
     """Echo in trainer chat after confirming a booking (HTML; escape plain-text inputs before call)."""
     cn = html.escape((client_name or "").strip() or "Клиент")
@@ -2714,10 +2795,12 @@ def format_trainer_booking_confirmed_echo_html(
             svc_lines.append(f"🎯 <b>{html.escape(svc)}</b>")
     elif (price_tier_label or "").strip():
         svc_lines.append(f"🎯 {html.escape(price_tier_label.strip())}")
-    if booking_price_cents is not None:
-        byn = booking_price_cents / 100.0
-        ps = format_rubles_byn_display(byn)
-        svc_lines.append(f"💳 <b>{html.escape(ps)}</b>")
+    pay_line = format_trainer_upcoming_payment_display_html(
+        expected_payment_class=expected_payment_class,
+        booking_price_cents=booking_price_cents,
+    )
+    if pay_line:
+        svc_lines.append(pay_line)
     service_block = ("\n".join(svc_lines) + "\n") if svc_lines else ""
     an = (arena_name or "").strip()
     aa = (arena_address or "").strip()
@@ -2808,8 +2891,10 @@ def _milestone_service_tariff_price_html(
     service_name: str | None,
     price_tier_label: str | None,
     booking_price_cents: int | None,
+    *,
+    expected_payment_class: str | None = None,
 ) -> str:
-    """Inner HTML lines for service / tariff / price (ParseMode.HTML safe)."""
+    """Inner HTML lines for service / tariff / pre-session payment (ParseMode.HTML safe)."""
     lines: list[str] = []
     svc = (service_name or "").strip()
     if svc:
@@ -2820,10 +2905,12 @@ def _milestone_service_tariff_price_html(
             lines.append(f"<b>{html.escape(svc)}</b>")
     elif (price_tier_label or "").strip():
         lines.append(f"Тариф: <b>{html.escape(price_tier_label.strip())}</b>")
-    if booking_price_cents is not None:
-        byn = booking_price_cents / 100.0
-        ps = format_rubles_byn_display(byn)
-        lines.append(f"💰 <b>Цена:</b> {html.escape(ps)}")
+    pay_line = format_trainer_upcoming_payment_display_html(
+        expected_payment_class=expected_payment_class,
+        booking_price_cents=booking_price_cents,
+    )
+    if pay_line:
+        lines.append(pay_line)
     if not lines:
         return ""
     return "\n".join(lines) + "\n"
@@ -2847,6 +2934,7 @@ def format_trainer_first_booking_milestone_rich_html(
     client_comment: str | None = None,
     client_has_telegram: bool | None = None,
     sandbox_demo_identity: bool = False,
+    expected_payment_class: str | None = None,
 ) -> str:
     """
     Rich «первая запись» card for trainer bot (HTML). Escapes user-controlled fields.
@@ -2879,7 +2967,12 @@ def format_trainer_first_booking_milestone_rich_html(
             "<i>Арена не привязана к слоту — уточните у клиента или в расписании.</i>"
         ).rstrip("\n")
 
-    svc_block = _milestone_service_tariff_price_html(service_name, price_tier_label, booking_price_cents)
+    svc_block = _milestone_service_tariff_price_html(
+        service_name,
+        price_tier_label,
+        booking_price_cents,
+        expected_payment_class=expected_payment_class,
+    )
     service_section = ""
     if svc_block.strip():
         service_section = f"🎯 <b>Услуга и оплата</b>\n{svc_block}"
@@ -3039,6 +3132,7 @@ def format_trainer_first_booking_milestone_from_booking_row(info: dict) -> str:
         client_comment=info.get("client_comment"),
         client_has_telegram=has_tg,
         sandbox_demo_identity=sandbox_demo,
+        expected_payment_class=info.get("expected_payment_class"),
     )
 
 

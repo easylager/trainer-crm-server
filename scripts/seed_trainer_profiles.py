@@ -1,5 +1,5 @@
 """
-Fill a couple of trainer profiles (first_name, last_name, age, experience_years, etc.).
+Fill a couple of trainer profiles (first_name, last_name, birth_date, experience_years, etc.).
 Run after migrations and seed_services. Usage: python scripts/seed_trainer_profiles.py
 """
 import sys
@@ -16,7 +16,7 @@ PROFILES = [
     {
         "first_name": "Арсен",
         "last_name": "Венгер",
-        "age": 60,
+        "birth_date": "1965-10-22",
         "experience_years": 30,
         "description": "Тренер по хоккею. КМС. Работа с детьми и взрослыми.",
         "phone": "+375291234567",
@@ -26,7 +26,7 @@ PROFILES = [
     {
         "first_name": "Жозэ",
         "last_name": "Моуринье",
-        "age": 55,
+        "birth_date": "1963-01-26",
         "experience_years": 20,
         "description": "Фигурное катание, постановка программ.",
         "phone": "+375331234567",
@@ -51,10 +51,10 @@ def main() -> None:
         for tid, p in zip(ids[:2], PROFILES):
             session.execute(
                 text("""
-                    INSERT INTO trainer_profiles (trainer_id, first_name, last_name, age, experience_years, description, phone, education)
-                    VALUES (:tid, :fn, :ln, :age, :exp, :desc, :phone, :edu)
+                    INSERT INTO trainer_profiles (trainer_id, first_name, last_name, birth_date, experience_years, description, phone, education)
+                    VALUES (:tid, :fn, :ln, :birth_date, :exp, :desc, :phone, :edu)
                     ON CONFLICT (trainer_id) DO UPDATE SET
-                    first_name = EXCLUDED.first_name, last_name = EXCLUDED.last_name, age = EXCLUDED.age,
+                    first_name = EXCLUDED.first_name, last_name = EXCLUDED.last_name, birth_date = EXCLUDED.birth_date,
                     experience_years = EXCLUDED.experience_years, description = EXCLUDED.description,
                     phone = EXCLUDED.phone, education = EXCLUDED.education, updated_at = now()
                 """),
@@ -62,7 +62,7 @@ def main() -> None:
                     "tid": tid,
                     "fn": p["first_name"],
                     "ln": p["last_name"],
-                    "age": p["age"],
+                    "birth_date": p["birth_date"],
                     "exp": p["experience_years"],
                     "desc": p["description"],
                     "phone": p["phone"],

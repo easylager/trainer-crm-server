@@ -297,7 +297,13 @@ async def get_subscription_constructor_catalog(session: AsyncSession) -> dict[st
         m["prices_by_period"][str(int(pm))] = cents
         m["period_days_by_period"][str(int(pm))] = days
 
-    return {"base": base, "modules": list(by_mod.values())}
+    # Constructor UI order: online → analytics → groups (not alphabetical from SQL).
+    order_index = {code: i for i, code in enumerate(SUBSCRIPTION_MODULES)}
+    modules_sorted = sorted(
+        by_mod.values(),
+        key=lambda item: order_index.get(str(item.get("code") or ""), len(SUBSCRIPTION_MODULES)),
+    )
+    return {"base": base, "modules": modules_sorted}
 
 
 async def get_subscription_tier_catalog(session: AsyncSession) -> list[dict]:

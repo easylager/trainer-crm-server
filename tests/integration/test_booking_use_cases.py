@@ -19,6 +19,7 @@ from src.application.booking_use_cases import (
     generate_reminders_for_booking,
     get_bookings_pending_notification,
     get_clients_for_inactive_notification,
+    claim_client_trainer_booked_notification,
     get_pending_trainer_booked_notifications,
     list_bookings_to_complete,
     list_pending_reminders,
@@ -630,6 +631,31 @@ async def test_trainer_booked_queue_skips_when_trainer_was_notified_pending(
         {"id": booking_id},
     )
     await db_session.commit()
+    pending = await get_pending_trainer_booked_notifications(db_session, limit=50)
+    assert all(int(p["booking_id"]) != int(booking_id) for p in pending)
+
+
+@pytest.mark.asyncio
+async def test_trainer_booked_claim_is_idempotent(
+    db_session: AsyncSession,
+) -> None:
+    """API and notification_service must not both deliver «Вас записали…» for one booking."""
+    tomorrow = date.today() + timedelta(days=1)
+    trainer_id, slot_id, service_id = await _create_trainer_and_slot(
+        db_session, tomorrow, time(17, 0), time(18, 0)
+    )
+    client_id = await _create_client(db_session, unique_test_telegram_id())
+    booking_id, _ = await create_booking(
+        db_session,
+        slot_id,
+        trainer_id,
+        client_id,
+        service_id=service_id,
+        created_by_trainer=True,
+    )
+    assert booking_id is not None
+    assert await claim_client_trainer_booked_notification(db_session, int(booking_id)) is True
+    assert await claim_client_trainer_booked_notification(db_session, int(booking_id)) is False
     pending = await get_pending_trainer_booked_notifications(db_session, limit=50)
     assert all(int(p["booking_id"]) != int(booking_id) for p in pending)
 

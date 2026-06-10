@@ -11,7 +11,7 @@ from typing import Any
 from src.infrastructure.db.models import TRAINER_STATUS_ACTIVE
 
 # Active trainers: only these edits queue a text revision (profile_pending + admin notify).
-# Age, phone, city, session rules, etc. apply to the published row immediately (no moderation).
+# Birth date, phone, city, session rules, etc. apply to the published row immediately (no moderation).
 ACTIVE_TRAINER_REVISION_FIELD_KEYS: frozenset[str] = frozenset(
     {
         "first_name",
@@ -26,7 +26,7 @@ PROFILE_KEYS_FOR_PUBLISHED_UPDATE: frozenset[str] = frozenset(
     {
         "first_name",
         "last_name",
-        "age",
+        "birth_date",
         "city_id",
         "experience_years",
         "description",
@@ -43,7 +43,7 @@ _TRAINER_PROFILE_REPO_KEYS: frozenset[str] = frozenset(
     {
         "first_name",
         "last_name",
-        "age",
+        "birth_date",
         "city_id",
         "experience_years",
         "description",
@@ -80,7 +80,7 @@ def split_active_trainer_profile_patch(
     rev: dict[str, Any] = {}
     direct: dict[str, Any] = {}
     for k, v in profile_patch.items():
-        if v is None:
+        if v is None and k != "birth_date":
             continue
         if k in ACTIVE_TRAINER_REVISION_FIELD_KEYS:
             rev[k] = v

@@ -19,7 +19,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 
 from src.application.booking_payment_notice import load_booking_deduction_snapshot
-from src.application.booking_problem_use_cases import classify_booking_problem_payment_class
+from src.application.booking_payment_notice import classify_booking_expected_payment_class
+from src.application.client_trainer_booked_notify import try_send_client_trainer_booked_push
 from src.application.booking_use_cases import (
     get_bookings_pending_notification,
     get_clients_for_inactive_notification,
@@ -42,7 +43,6 @@ from src.application.booking_use_cases import (
     mark_inactive_notification_sent,
     mark_reminder_failed,
     mark_reminder_sent,
-    mark_trainer_booked_notified,
     mark_trainer_completed_sent,
 )
 from src.application.client_stats_use_cases import get_client_activity_snapshot
@@ -1228,7 +1228,7 @@ async def process_trainer_session_wrapup_round(trainer_bot: Bot) -> None:
                 and client_id is not None
                 and await trainer_has_crm_access(session, p["trainer_id"])
             )
-            payment_class = await classify_booking_problem_payment_class(
+            payment_class = await classify_booking_expected_payment_class(
                 session, int(p["booking_id"]), int(p["trainer_id"])
             )
             text = msg.format_trainer_booking_session_wrapup_html(
@@ -1392,6 +1392,7 @@ async def run_reminder_loop(client_bot: Bot) -> None:
                                 "duration": int(dur or 0),
                                 "service_name": s.get("service_name"),
                                 "booking_price_cents": s.get("booking_price_cents"),
+                                "expected_payment_class": s.get("expected_payment_class"),
                                 "arena_name": s.get("arena_name"),
                                 "arena_address": s.get("arena_address"),
                             }
@@ -1615,40 +1616,12 @@ async def run_trainer_booked_notifier_loop(client_bot: Bot) -> None:
                 pending = await get_pending_trainer_booked_notifications(session)
                 settings_tb = Settings()
                 for p in pending:
-                    chat_id = p.get("client_telegram_id")
-                    if not chat_id:
-                        continue
-                    date_str, day_str, time_str = _slot_display_strings(
-                        p.get("slot_date"), p.get("start_time")
-                    )
-                    text = msg.format_client_trainer_booked_you_html(
-                        date=date_str,
-                        day=day_str,
-                        time=time_str,
-                        trainer_name=str(p.get("trainer_name") or "Тренер"),
-                        service_name=p.get("service_name"),
-                        booking_price_cents=p.get("booking_price_cents"),
-                        price_tier_label=p.get("price_tier_label"),
-                        arena_name=p.get("arena_name"),
-                        arena_address=p.get("arena_address"),
-                        duration_minutes=p.get("duration_minutes"),
-                        map_link=p.get("map_link"),
-                    )
-                    kb = msg.build_client_trainer_booked_you_inline_keyboard(
-                        booking_id=int(p["booking_id"]),
-                        map_url=p.get("map_link"),
+                    await try_send_client_trainer_booked_push(
+                        session,
+                        client_bot,
+                        int(p["booking_id"]),
                         webapp_base_url=settings_tb.webapp_base_url,
                     )
-                    try:
-                        await client_bot.send_message(chat_id=chat_id, text=text, reply_markup=kb)
-                        await mark_trainer_booked_notified(session, p["booking_id"])
-                    except Exception as e:
-                        logger.warning(
-                            "Trainer-booked notify to client %s (booking_id=%s): %s",
-                            chat_id,
-                            p.get("booking_id"),
-                            e,
-                        )
         except asyncio.CancelledError:
             break
         except Exception as e:

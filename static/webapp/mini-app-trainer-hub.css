@@ -1831,6 +1831,11 @@
     #hubModalQuickBookDatetime .hub-quickbook-datetime-wrap {
       position: relative;
     }
+    #hubModalQuickBookDatetime .hub-quickbook-datetime-live {
+      min-width: 0;
+      max-width: 100%;
+      overflow-x: clip;
+    }
     #hubModalQuickBookDatetime .hub-quickbook-datetime-skel {
       display: none;
       position: absolute;
@@ -2119,50 +2124,86 @@
         inset 0 0 0 1px rgba(247, 166, 0, 0.55),
         0 0 0 3px rgba(247, 166, 0, 0.12);
     }
-    /* WebKit (iOS / Telegram): native date field keeps intrinsic width + theme accent on segments — match selects. */
-    #hubModalQuickBookDatetime input#hubQuickBookDate.input[type='date'] {
+    /*
+     * WebKit (iOS / Telegram): date input intrinsic width blows past modal — shell clips;
+     * block flow inside avoids flex min-width blowout (same fix as schedule-editor / clients).
+     */
+    #hubModalQuickBookDatetime .hub-modal-date-wrap {
+      position: relative;
+      display: flex;
+      align-items: center;
       width: 100%;
       max-width: 100%;
       min-width: 0;
-      /* Outer flex: inner datetime-edit has smaller intrinsic height than min-height:48px — center like <select>. */
-      display: flex;
-      align-items: center;
-      line-height: 1.2;
+      min-height: 48px;
+      overflow: hidden;
+      border-radius: 14px;
+      background: var(--tg-theme-secondary-bg-color);
+      box-shadow: inset 0 0 0 1px transparent;
+      transition: box-shadow 160ms ease, background-color 160ms ease;
+    }
+    #hubModalQuickBookDatetime .hub-modal-date-wrap:focus-within {
+      box-shadow:
+        inset 0 0 0 1px rgba(247, 166, 0, 0.55),
+        0 0 0 3px rgba(247, 166, 0, 0.12);
+    }
+    #hubModalQuickBookDatetime .hub-qb-date-input {
+      position: relative;
+      flex: 1 1 0%;
+      display: block;
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      min-height: 48px;
+      padding: 13px 36px 13px 14px;
+      margin: 0;
+      border: none;
+      border-radius: 0;
+      font-size: 15px;
+      line-height: 1.25;
       font-family: inherit;
       font-variant-numeric: tabular-nums;
+      box-sizing: border-box;
       color: var(--tg-theme-text-color);
       color-scheme: light dark;
+      background: transparent;
+      overflow: hidden;
+      -webkit-appearance: none;
+      appearance: none;
+      outline: none;
     }
-    #hubModalQuickBookDatetime input#hubQuickBookDate.input[type='date']::-webkit-date-and-time-value {
+    #hubModalQuickBookDatetime .hub-qb-date-input::-webkit-date-and-time-value {
       color: var(--tg-theme-text-color);
     }
-    #hubModalQuickBookDatetime input#hubQuickBookDate.input[type='date']::-webkit-datetime-edit {
-      flex: 1;
-      width: 100%;
-      min-width: 0;
-      padding: 0;
-      display: flex;
-      align-items: center;
-    }
-    #hubModalQuickBookDatetime input#hubQuickBookDate.input[type='date']::-webkit-datetime-edit-fields-wrapper {
+    #hubModalQuickBookDatetime .hub-qb-date-input::-webkit-datetime-edit-fields-wrapper {
+      display: block;
       width: 100%;
       max-width: 100%;
       min-width: 0;
-      flex: 1;
-      display: flex;
-      align-items: center;
+      padding: 0;
+      box-sizing: border-box;
     }
-    #hubModalQuickBookDatetime input#hubQuickBookDate.input[type='date']::-webkit-datetime-edit-month-field,
-    #hubModalQuickBookDatetime input#hubQuickBookDate.input[type='date']::-webkit-datetime-edit-day-field,
-    #hubModalQuickBookDatetime input#hubQuickBookDate.input[type='date']::-webkit-datetime-edit-year-field,
-    #hubModalQuickBookDatetime input#hubQuickBookDate.input[type='date']::-webkit-datetime-edit-text {
+    #hubModalQuickBookDatetime .hub-qb-date-input::-webkit-datetime-edit {
+      display: block;
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    #hubModalQuickBookDatetime .hub-qb-date-input::-webkit-datetime-edit-month-field,
+    #hubModalQuickBookDatetime .hub-qb-date-input::-webkit-datetime-edit-day-field,
+    #hubModalQuickBookDatetime .hub-qb-date-input::-webkit-datetime-edit-year-field,
+    #hubModalQuickBookDatetime .hub-qb-date-input::-webkit-datetime-edit-text {
+      min-width: 0;
       color: var(--tg-theme-text-color);
     }
-    #hubModalQuickBookDatetime input#hubQuickBookDate.input[type='date']::-webkit-datetime-edit-year-field {
-      min-width: 4.25ch;
-      flex-shrink: 0;
-    }
-    #hubModalQuickBookDatetime input#hubQuickBookDate.input[type='date']::-webkit-calendar-picker-indicator {
+    #hubModalQuickBookDatetime .hub-qb-date-input::-webkit-calendar-picker-indicator {
+      position: absolute;
+      right: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      margin: 0;
       opacity: 0.72;
     }
     #hubModalQuickBookDatetime .hub-modal-select-wrap,

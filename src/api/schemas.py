@@ -5,6 +5,7 @@ Trainer profile completeness (submission 8 vs full 12) lives in
 """
 from __future__ import annotations
 
+from datetime import date
 from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -51,10 +52,34 @@ TrainerEducation = Literal[
 ]
 
 
+def _coerce_optional_birth_date(v: object) -> date | None:
+    """Normalize optional birth date from HTML date input (`YYYY-MM-DD`)."""
+    if v is None:
+        return None
+    if isinstance(v, date):
+        d = v
+    elif isinstance(v, str):
+        s = v.strip()
+        if not s:
+            return None
+        try:
+            d = date.fromisoformat(s)
+        except ValueError as exc:
+            raise ValueError("Дата рождения: формат ГГГГ-ММ-ДД.") from exc
+    else:
+        raise ValueError("Дата рождения: укажите дату в формате ГГГГ-ММ-ДД.")
+    today = date.today()
+    if d > today:
+        raise ValueError("Дата рождения не может быть в будущем.")
+    if d.year < 1900:
+        raise ValueError("Дата рождения выглядит некорректно.")
+    return d
+
+
 class ProfileCreate(BaseModel):
     first_name: str = Field(default="", max_length=LEN_FIRST_LAST)
     last_name: str = Field(default="", max_length=LEN_FIRST_LAST)
-    age: int = Field(default=0)
+    birth_date: date | None = Field(default=None)
     city_id: int | None = Field(default=None, ge=0)
     experience_years: int | None = Field(default=None, ge=0, le=80)
     description: str | None = Field(default=None, max_length=LEN_DESCRIPTION)
@@ -67,6 +92,11 @@ class ProfileCreate(BaseModel):
     @classmethod
     def _phone_create(cls, v: object) -> str | None:
         return coerce_optional_phone_for_profile(v)
+
+    @field_validator("birth_date", mode="before")
+    @classmethod
+    def _birth_date_create(cls, v: object) -> date | None:
+        return _coerce_optional_birth_date(v)
 
 
 class TrainerServicePriceTierItem(BaseModel):
@@ -195,7 +225,7 @@ class TrainerCreateBody(BaseModel):
 class ProfilePatch(BaseModel):
     first_name: str | None = Field(default=None, max_length=LEN_FIRST_LAST)
     last_name: str | None = Field(default=None, max_length=LEN_FIRST_LAST)
-    age: int | None = Field(default=None)
+    birth_date: date | None = Field(default=None)
     city_id: int | None = Field(default=None)
     experience_years: int | None = Field(default=None)
     description: str | None = Field(default=None, max_length=LEN_DESCRIPTION)
@@ -227,18 +257,10 @@ class ProfilePatch(BaseModel):
             raise ValueError(f"{label} не может быть пустым — укажите текст или уберите поле из запроса.")
         return s
 
-    @field_validator("age", mode="before")
+    @field_validator("birth_date", mode="before")
     @classmethod
-    def _age_patch(cls, v: object) -> int | None:
-        if v is None:
-            return None
-        if isinstance(v, bool):
-            raise ValueError("Некорректное значение возраста.")
-        try:
-            iv = int(v)
-        except (TypeError, ValueError):
-            raise ValueError("Возраст укажите целым числом.")
-        return iv
+    def _birth_date_patch(cls, v: object) -> date | None:
+        return _coerce_optional_birth_date(v)
 
     @field_validator("city_id", mode="before")
     @classmethod

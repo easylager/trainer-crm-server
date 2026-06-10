@@ -52,7 +52,7 @@
     })();
   </script>
   <!-- Bump ?v= when mini-app-trainer-hub.css changes (immutable cache on /webapp/…). -->
-  <link rel="stylesheet" href="mini-app-trainer-hub.css?v=202605207" />
+  <link rel="stylesheet" href="mini-app-trainer-hub.css?v=202605208" />
   <!-- Early download of main hub script (defer runs at end of body); improves time-to-interactive vs. discover-at-bottom. -->
   <link rel="preload" href="trainer-home-main.js?v=202605201" as="script" />
 
@@ -694,7 +694,9 @@
         <div class="hub-quickbook-datetime-live">
           <div class="book-field-stack">
             <label class="book-field-label" for="hubQuickBookDate">Дата</label>
-            <input type="date" id="hubQuickBookDate" class="input" />
+            <div class="hub-modal-date-wrap">
+              <input type="date" id="hubQuickBookDate" class="hub-qb-date-input" autocomplete="off" />
+            </div>
           </div>
           <div class="book-field-stack">
             <label class="book-field-label" for="hubQuickBookTime">Время начала</label>

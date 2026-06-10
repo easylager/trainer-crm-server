@@ -115,3 +115,98 @@ def test_client_completed_silent_when_no_deduction() -> None:
     )
     assert "абонемент" not in text.lower()
     assert "сертификат" not in text.lower()
+
+
+def test_client_reminder_pass_instead_of_price() -> None:
+    text = msg.format_client_booking_reminder_text(
+        is_soon=True,
+        sessions=[
+            {
+                "date": "10.06",
+                "day": "Ср",
+                "time": "18:00",
+                "duration": 60,
+                "service_name": "Персональная",
+                "booking_price_cents": 5000,
+                "expected_payment_class": "PASS",
+                "arena_name": "Зал",
+                "arena_address": "ул. Тест, 1",
+            }
+        ],
+    )
+    assert "Абонемент покрывает занятие" in text
+    assert "50" not in text
+
+
+def test_client_trainer_booked_pass_instead_of_price() -> None:
+    text = msg.format_client_trainer_booked_you_html(
+        date="10.06",
+        day="Ср",
+        time="18:00",
+        trainer_name="Мария",
+        service_name="Персональная",
+        booking_price_cents=5000,
+        price_tier_label=None,
+        arena_name="Зал",
+        arena_address="ул. Тест, 1",
+        duration_minutes=60,
+        map_link=None,
+        expected_payment_class="PASS",
+    )
+    assert "Абонемент покрывает занятие" in text
+    assert "50,00" not in text
+    assert "Цена" not in text
+
+
+def test_client_confirmed_pass_instead_of_price() -> None:
+    text = msg.format_client_booking_confirmed_by_trainer_text(
+        date="10.06",
+        day="Ср",
+        time="18:00",
+        trainer_name="Мария",
+        service_name="Персональная",
+        booking_price_cents=5000,
+        price_tier_label=None,
+        arena_name="Зал",
+        arena_address="ул. Тест, 1",
+        expected_payment_class="PASS",
+    )
+    assert "Абонемент покрывает занятие" in text
+    assert "50,00" not in text
+
+
+def test_trainer_first_booking_milestone_pass_instead_of_price() -> None:
+    text = msg.format_trainer_first_booking_milestone_rich_html(
+        client_name="Иван",
+        client_phone="+375291234567",
+        date_str="10.06",
+        day_label="Ср",
+        time_str="18:00",
+        arena_name="Зал",
+        arena_address="ул. Тест, 1",
+        service_name="Персональная",
+        price_tier_label=None,
+        booking_price_cents=5000,
+        expected_payment_class="PASS",
+    )
+    assert "Оплата: абонемент" in text
+    assert "Цена:" not in text
+
+
+def test_trainer_confirmed_echo_pass_instead_of_price() -> None:
+    text = msg.format_trainer_booking_confirmed_echo_html(
+        client_name="Иван",
+        client_phone=None,
+        date="10.06",
+        day="Ср",
+        time="18:00",
+        duration_minutes=60,
+        service_name="Персональная",
+        booking_price_cents=5000,
+        price_tier_label=None,
+        arena_name=None,
+        arena_address=None,
+        expected_payment_class="PASS",
+    )
+    assert "Оплата: абонемент" in text
+    assert "50,00" not in text
