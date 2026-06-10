@@ -25,8 +25,8 @@
       href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=optional"
     />
   </noscript>
-  <link rel="preload" href="trainer-profile-main.js?v=202605201" as="script" />
-  <link rel="stylesheet" href="mini-app-trainer-profile.css?v=202605206" />
+  <link rel="preload" href="trainer-profile-main.js?v=202605211" as="script" />
+  <link rel="stylesheet" href="mini-app-trainer-profile.css?v=202605211" />
   <link rel="stylesheet" href="mini-app-trainer-nav.css?v=20260419" />
 </head>
 <body>
@@ -123,8 +123,17 @@
           </div>
           <div class="field field--birth-date">
             <label for="birth_date">Дата рождения</label>
-            <input id="birth_date" type="date" autocomplete="bday" min="1900-01-01" />
-            <div class="field-hint">Необязательно. Используйте системный календарь, можно оставить пустым.</div>
+            <input
+              id="birth_date"
+              type="text"
+              class="birth-date-input"
+              inputmode="numeric"
+              autocomplete="bday"
+              placeholder="ДД.ММ.ГГГГ"
+              maxlength="10"
+              spellcheck="false"
+            />
+            <div class="field-hint">Необязательно. Например: 15.03.1990</div>
           </div>
           <div class="field">
             <label for="city_id"><span class="required-dot"></span>Город</label>
@@ -501,7 +510,7 @@
     </div>
   </div>
 
-  <script defer src="trainer-profile-main.js?v=202605201"></script>
+  <script defer src="trainer-profile-main.js?v=202605211"></script>
   <script defer src="mini-app-trainer-home.js?v=20260563"></script>
 </body>
 </html>

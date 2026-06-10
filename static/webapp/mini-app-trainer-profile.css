@@ -269,6 +269,19 @@
       background-repeat: no-repeat;
       cursor: pointer;
     }
+    .field--birth-date .birth-date-input {
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      box-sizing: border-box;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: 0.02em;
+    }
+    .field--birth-date .birth-date-input::placeholder {
+      color: var(--tg-theme-hint-color);
+      opacity: 1;
+    }
+
     .field-hint {
       font-size: 12px;
       color: var(--tg-theme-hint-color);

@@ -641,12 +641,66 @@
         var day = String(d.getDate()).padStart(2, '0');
         return y + '-' + m + '-' + day;
       }
+      function isoBirthDateToDisplay(iso) {
+        var v = String(iso || '').trim();
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return '';
+        var parts = v.split('-');
+        return parts[2] + '.' + parts[1] + '.' + parts[0];
+      }
+      function parseBirthDateDisplayToIso(display) {
+        var v = String(display || '').trim();
+        if (!v) return null;
+        var m = v.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+        if (!m) return null;
+        return m[3] + '-' + m[2] + '-' + m[1];
+      }
+      function formatBirthDateInputValue(raw) {
+        var digits = String(raw || '').replace(/\D/g, '').slice(0, 8);
+        var out = '';
+        if (digits.length > 0) out = digits.slice(0, 2);
+        if (digits.length > 2) out += '.' + digits.slice(2, 4);
+        if (digits.length > 4) out += '.' + digits.slice(4, 8);
+        return out;
+      }
+      function setBirthDateInputFromIso(iso) {
+        var el = document.getElementById('birth_date');
+        if (!el) return;
+        el.value = isoBirthDateToDisplay(iso);
+      }
+      function initBirthDateInput() {
+        var el = document.getElementById('birth_date');
+        if (!el || el.dataset.birthInputReady === '1') return;
+        el.dataset.birthInputReady = '1';
+        el.addEventListener('input', function() {
+          var next = formatBirthDateInputValue(el.value);
+          if (el.value !== next) el.value = next;
+          validateFieldRealtime('birth_date');
+          setDirty();
+          markFieldValid('birth_date');
+        });
+        el.addEventListener('blur', function() {
+          validateFieldRealtime('birth_date');
+          markFieldValid('birth_date');
+        });
+      }
+      function isoBirthDateIsReal(iso) {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return false;
+        var parts = iso.split('-');
+        var dt = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+        return (
+          dt.getFullYear() === Number(parts[0]) &&
+          dt.getMonth() === Number(parts[1]) - 1 &&
+          dt.getDate() === Number(parts[2])
+        );
+      }
       function validateBirthDateMessage(value) {
         var v = String(value || '').trim();
         if (!v) return null;
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return 'Дата рождения: выберите дату в календаре.';
-        if (v < '1900-01-01') return 'Дата рождения выглядит некорректно.';
-        if (v > todayIsoDate()) return 'Дата рождения не может быть в будущем.';
+        var iso = v.indexOf('-') >= 0 ? v : parseBirthDateDisplayToIso(v);
+        if (!iso) return 'Дата рождения: формат ДД.ММ.ГГГГ';
+        if (!isoBirthDateIsReal(iso)) return 'Дата рождения выглядит некорректно.';
+        if (iso < '1900-01-01') return 'Дата рождения выглядит некорректно.';
+        if (iso > todayIsoDate()) return 'Дата рождения не может быть в будущем.';
         return null;
       }
       var MIN_DESCRIPTION_CHARS = 25;
@@ -987,7 +1041,9 @@
         } else if (fieldId === 'last_name') {
           if (!(el.value || '').trim()) msg = 'Укажите фамилию.';
         } else if (fieldId === 'birth_date') {
-          msg = validateBirthDateMessage(el.value);
+          var birthRaw = (el.value || '').trim();
+          if (birthRaw && birthRaw.length < 10) msg = null;
+          else msg = validateBirthDateMessage(birthRaw);
         } else if (fieldId === 'city_id') {
           if (!el.value) msg = 'Выберите город из списка.';
         } else if (fieldId === 'contacts') {
@@ -1028,8 +1084,14 @@
         var errs = [];
         if (!pr.first_name || !String(pr.first_name).trim()) errs.push(['first_name', 'Укажите имя.']);
         if (!pr.last_name || !String(pr.last_name).trim()) errs.push(['last_name', 'Укажите фамилию.']);
-        var birthDateMsg = validateBirthDateMessage(pr.birth_date);
-        if (birthDateMsg) errs.push(['birth_date', birthDateMsg]);
+        var birthEl = document.getElementById('birth_date');
+        var birthDisplay = birthEl ? String(birthEl.value || '').trim() : '';
+        if (birthDisplay && birthDisplay.length !== 10) {
+          errs.push(['birth_date', 'Дата рождения: формат ДД.ММ.ГГГГ']);
+        } else {
+          var birthDateMsg = validateBirthDateMessage(pr.birth_date || birthDisplay);
+          if (birthDateMsg) errs.push(['birth_date', birthDateMsg]);
+        }
         if (pr.city_id == null || pr.city_id === '' || Number(pr.city_id) < 1) errs.push(['city_id', 'Выберите город из списка.']);
         var ph = normalizePhoneClient(pr.phone);
         var pmsg = validatePhoneMessage(ph);
@@ -1644,6 +1706,12 @@
           return v;
         }
         function dateStr(id) {
+          if (id === 'birth_date') {
+            var birthInput = document.getElementById('birth_date');
+            var display = birthInput ? String(birthInput.value || '').trim() : '';
+            if (!display) return null;
+            return parseBirthDateDisplayToIso(display);
+          }
           var el = document.getElementById(id);
           var v = el ? String(el.value || '').trim() : '';
           return v || null;
@@ -3031,9 +3099,7 @@
         }
         setv('first_name', p.first_name);
         setv('last_name', p.last_name);
-        var birthDateEl = document.getElementById('birth_date');
-        if (birthDateEl) birthDateEl.max = todayIsoDate();
-        setv('birth_date', p.birth_date);
+        setBirthDateInputFromIso(p.birth_date || '');
         setPhone(p.phone);
         setv('contacts', p.contacts);
         setv('description', p.description);
@@ -5579,5 +5645,6 @@
         CrmPhoneField.initAll(document);
       }
 
+      initBirthDateInput();
       loadInitial();
     })();
