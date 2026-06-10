@@ -321,12 +321,16 @@
     }
     .day-block { margin-bottom: 20px; }
     .day-title {
-      font-size: 12px;
-      font-weight: 600;
-      color: var(--tg-theme-hint-color);
-      margin-bottom: 8px;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--tg-theme-text-color);
+      margin: 14px 0 8px;
+      letter-spacing: 0.04em;
+      text-transform: none;
+      -webkit-font-smoothing: antialiased;
+    }
+    .day-block > .day-title:first-child {
+      margin-top: 0;
     }
     .slot-row {
       display: flex;
