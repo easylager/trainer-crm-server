@@ -8,6 +8,10 @@ from sqlalchemy import text
 
 from src.api.app import app
 from src.api.miniapp_auth.types import MiniAppPlatform, MiniAppPrincipal
+from src.application.trainer_profile_completeness import (
+    MODERATION_CRITERIA_TOTAL,
+    MODERATION_SUBMISSION_CRITERIA_TOTAL,
+)
 
 
 def _fresh_trainer_telegram_id() -> int:
@@ -64,9 +68,9 @@ async def test_webapp_trainer_profile_get_returns_trainer_and_readiness(
     assert data["trainer"]["id"] == trainer_id
     assert "moderation_readiness" in data
     assert "complete" in data["moderation_readiness"]
-    assert data["moderation_readiness"].get("moderation_criteria_total") == 8
+    assert data["moderation_readiness"].get("moderation_criteria_total") == MODERATION_SUBMISSION_CRITERIA_TOTAL
     assert "full_profile_complete" in data["moderation_readiness"]
-    assert data["moderation_readiness"].get("full_profile_criteria_total") == 12
+    assert data["moderation_readiness"].get("full_profile_criteria_total") == MODERATION_CRITERIA_TOTAL
     assert "education_entries" in data
     assert isinstance(data["education_entries"], list)
     assert "digest_enabled" in data["trainer"]

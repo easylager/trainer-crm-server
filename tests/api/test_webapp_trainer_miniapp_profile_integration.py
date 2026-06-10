@@ -25,6 +25,10 @@ from sqlalchemy import text
 from src.api.app import app
 from src.api.miniapp_auth.deps import MINIAPP_AUTH_ERROR_HEADER, MINIAPP_CREDENTIAL_USER_DETAIL_RU
 from src.api.miniapp_auth.types import MiniAppPlatform, MiniAppPrincipal
+from src.application.trainer_profile_completeness import (
+    MODERATION_CRITERIA_TOTAL,
+    MODERATION_SUBMISSION_CRITERIA_TOTAL,
+)
 from src.shared.telegram_webapp import InitDataAuthError
 
 
@@ -129,8 +133,8 @@ async def test_moderation_readiness_matches_between_profile_and_onboarding_endpo
         "tt_minimal_criteria_total",
     ):
         assert key in standalone
-    assert standalone.get("moderation_criteria_total") == 8
-    assert standalone.get("full_profile_criteria_total") == 12
+    assert standalone.get("moderation_criteria_total") == MODERATION_SUBMISSION_CRITERIA_TOTAL
+    assert standalone.get("full_profile_criteria_total") == MODERATION_CRITERIA_TOTAL
 
 
 @pytest.mark.asyncio
