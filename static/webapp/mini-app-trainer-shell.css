@@ -1,0 +1,365 @@
+/**
+ * Trainer Mini App shell: bottom tab bar, «Ещё» sheet.
+ * Load after theme.css and mini-app-components.css.
+ */
+
+:root {
+  --trainer-tab-bar-height: 62px;
+  --trainer-tab-bar-margin: 18px;
+  --trainer-shell-tab-inset: calc(var(--trainer-tab-bar-height) + var(--trainer-tab-bar-margin) + env(safe-area-inset-bottom, 0px));
+}
+
+body.trainer-shell-body {
+  padding-bottom: var(--trainer-shell-tab-inset);
+}
+
+body.trainer-shell-body.trainer-shell-tabs-hidden {
+  padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+}
+
+/* Hide redundant «Главная» button when tab bar is active */
+body.trainer-shell-body .trainer-mini-nav > button.btn-app-home {
+  display: none !important;
+}
+body.trainer-shell-body .trainer-mini-nav:empty {
+  display: none;
+}
+
+/* ─── Bottom tab bar ─────────────────────────────────────────────────────── */
+
+.trainer-tab-bar {
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  bottom: calc(var(--trainer-tab-bar-margin) + env(safe-area-inset-bottom, 0px));
+  z-index: 9000;
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: 4px;
+  min-height: var(--trainer-tab-bar-height);
+  padding: 8px 8px;
+  box-sizing: border-box;
+  background: color-mix(in srgb, var(--tg-theme-bg-color) 94%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ice-deep) 14%, transparent);
+  border-radius: 22px;
+  backdrop-filter: saturate(140%) blur(20px);
+  -webkit-backdrop-filter: saturate(140%) blur(20px);
+  box-shadow: var(--shadow-floating);
+  transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.22s ease;
+}
+
+.trainer-tab-bar[hidden],
+.trainer-tab-bar.trainer-tab-bar--hidden {
+  display: none !important;
+}
+
+.trainer-tab-bar__btn {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 4px 4px;
+  border: none;
+  background: transparent;
+  color: color-mix(in srgb, var(--tg-theme-hint-color) 85%, var(--tg-theme-text-color));
+  font-family: inherit;
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: 0.005em;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  border-radius: 16px;
+  transition: color 0.18s ease, background 0.18s ease, transform 0.18s ease;
+  position: relative;
+}
+
+.trainer-tab-bar__btn svg {
+  width: 21px;
+  height: 21px;
+  flex-shrink: 0;
+}
+
+.trainer-tab-bar__btn:active {
+  transform: scale(0.94);
+}
+
+.trainer-tab-bar__btn--active {
+  color: var(--tg-theme-text-color);
+}
+
+.trainer-tab-bar__btn--active .trainer-tab-bar__icon-wrap {
+  background: linear-gradient(135deg, var(--app-cta-fill) 0%, #f48a0c 100%);
+  color: #1a1a1a;
+  box-shadow: 0 4px 14px rgba(245, 166, 35, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+.trainer-tab-bar__btn--active .trainer-tab-bar__icon-wrap svg {
+  transform: scale(1.04);
+}
+
+.trainer-tab-bar__icon-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 30px;
+  border-radius: 12px;
+  color: inherit;
+  transition: background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.trainer-tab-bar__icon-wrap svg {
+  transition: transform 0.18s ease;
+}
+
+/* ─── More sheet ─────────────────────────────────────────────────────────── */
+
+.trainer-more-sheet-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9100;
+  background: rgba(0, 0, 0, 0.45);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease;
+}
+
+.trainer-more-sheet-overlay.trainer-more-sheet-overlay--open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.trainer-more-sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 9101;
+  max-height: min(82vh, 560px);
+  padding: 8px 16px calc(12px + var(--trainer-tab-bar-height) + env(safe-area-inset-bottom, 0px));
+  border-radius: 20px 20px 0 0;
+  background: var(--tg-theme-bg-color);
+  box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.18);
+  transform: translateY(100%);
+  transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.trainer-more-sheet.trainer-more-sheet--open {
+  transform: translateY(0);
+}
+
+.trainer-more-sheet__handle {
+  width: 36px;
+  height: 4px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--tg-theme-hint-color) 45%, transparent);
+  margin: 6px auto 12px;
+  flex-shrink: 0;
+}
+
+.trainer-more-sheet__title {
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin: 0 0 4px;
+  padding: 0 4px;
+}
+
+.trainer-more-sheet__subtitle {
+  margin: 0 0 12px;
+  padding: 0 4px;
+  font-size: 13px;
+  line-height: 1.4;
+  font-weight: 500;
+  color: var(--tg-theme-hint-color);
+}
+
+.trainer-more-sheet__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  flex: 1;
+}
+
+.trainer-more-sheet__item {
+  margin: 0 0 6px;
+}
+
+.trainer-more-sheet__link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 14px;
+  border: none;
+  border-radius: 14px;
+  background: var(--tg-theme-secondary-bg-color);
+  color: var(--tg-theme-text-color);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  text-decoration: none;
+  box-sizing: border-box;
+}
+
+.trainer-more-sheet__emoji {
+  display: block;
+  flex-shrink: 0;
+  width: 1.6em;
+  font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+  font-size: 1.45rem;
+  line-height: 1;
+  text-align: center;
+}
+
+.trainer-more-sheet__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.trainer-more-sheet__label {
+  display: block;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.trainer-more-sheet__hint {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--tg-theme-hint-color);
+  margin-top: 2px;
+}
+
+.trainer-more-sheet__chevron {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  color: var(--tg-theme-hint-color);
+  opacity: 0.55;
+}
+
+.trainer-more-sheet__link:active {
+  opacity: 0.9;
+  transform: scale(0.99);
+}
+
+.trainer-more-sheet__link--locked {
+  opacity: 0.55;
+}
+
+.trainer-more-sheet__link--locked .trainer-more-sheet__label::after {
+  content: ' · скоро';
+  font-weight: 500;
+  color: var(--tg-theme-hint-color);
+}
+
+/* ─── Locked tab bar items ───────────────────────────────────────────────── */
+
+.trainer-tab-bar__btn--locked {
+  opacity: 0.52;
+}
+
+.trainer-tab-bar__btn--locked .trainer-tab-bar__icon-wrap::after {
+  content: '';
+  position: absolute;
+  right: 6px;
+  top: 4px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--tg-theme-hint-color) 70%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--tg-theme-bg-color) 80%, transparent);
+}
+
+.trainer-tab-bar__btn--locked.trainer-tab-bar__btn--active .trainer-tab-bar__icon-wrap::after {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--app-cta-fill) 35%, transparent);
+}
+
+/* ─── Onboarding nav sheet (soft gate from tab bar) ─────────────────────── */
+
+.trainer-onboarding-nav-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9150;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease;
+}
+
+.trainer-onboarding-nav-overlay[hidden] {
+  display: none !important;
+}
+
+.trainer-onboarding-nav-overlay.trainer-onboarding-nav-overlay--open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.trainer-onboarding-nav-sheet {
+  width: 100%;
+  max-width: 480px;
+  padding: 8px 18px calc(16px + var(--trainer-tab-bar-height) + env(safe-area-inset-bottom, 0px));
+  border-radius: 20px 20px 0 0;
+  background: var(--tg-theme-bg-color);
+  box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.18);
+  transform: translateY(100%);
+  transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.trainer-onboarding-nav-overlay--open .trainer-onboarding-nav-sheet {
+  transform: translateY(0);
+}
+
+.trainer-onboarding-nav-sheet__handle {
+  width: 36px;
+  height: 4px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--tg-theme-hint-color) 45%, transparent);
+  margin: 6px auto 14px;
+}
+
+.trainer-onboarding-nav-sheet__title {
+  margin: 0 0 8px;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--tg-theme-text-color);
+}
+
+.trainer-onboarding-nav-sheet__hint {
+  margin: 0 0 16px;
+  font-size: 14px;
+  line-height: 1.45;
+  font-weight: 500;
+  color: var(--tg-theme-hint-color);
+}
+
+.trainer-onboarding-nav-sheet__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.trainer-onboarding-nav-sheet__actions .bd-btn {
+  width: 100%;
+  justify-content: center;
+}

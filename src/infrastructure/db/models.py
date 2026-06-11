@@ -822,6 +822,17 @@ class TrainerPassProductService(Base):
     service_id: Mapped[int] = mapped_column(ForeignKey("services.id", ondelete="CASCADE"), primary_key=True)
 
 
+class TrainerPassProductTier(Base):
+    """Pass applies to listed tier_kinds only; absence of rows means all price tiers are covered."""
+
+    __tablename__ = "trainer_pass_product_tiers"
+
+    pass_product_id: Mapped[int] = mapped_column(
+        ForeignKey("trainer_pass_products.id", ondelete="CASCADE"), primary_key=True
+    )
+    tier_kind: Mapped[str] = mapped_column(String(64), primary_key=True)
+
+
 # Client-owned pass instance: trainer issued after client paid externally (no platform payment)
 PASS_INSTANCE_STATUS_ACTIVE = "active"
 PASS_INSTANCE_STATUS_USED_UP = "used_up"

@@ -117,7 +117,11 @@ from src.bot.trainer_bot_state import (
     trainer_support_awaiting,
 )
 from src.bot.trainer_gate_text import trainer_first_link_onboarding_html, trainer_gate_message
-from src.bot.trainer_menu_commands import sync_trainer_menu_commands
+from src.bot.trainer_menu_commands import (
+    reset_trainer_menu_to_minimal,
+    sync_trainer_hub_menu_button,
+    sync_trainer_menu_commands,
+)
 from src.bot.share_catalog_tip import send_trainer_share_catalog_tip_to_chat
 from src.shared.config import Settings
 from src.shared.notification_hours import NOTIFICATION_TZ
@@ -437,6 +441,7 @@ async def cmd_start(message: Message) -> None:
                     if state == TrainerAccessState.ACTIVE:
                         await message.answer(msg.TRAINER_START_WELCOME, reply_markup=ReplyKeyboardRemove())
                         await sync_trainer_menu_commands(message.bot, message.chat.id, tid, session)
+                        await sync_trainer_hub_menu_button(message.bot, message.chat.id)
                     else:
                         await message.answer(trainer_gate_message(state, trainer))
                 else:
@@ -499,6 +504,9 @@ async def cmd_start(message: Message) -> None:
                     )
                 if state == TrainerAccessState.ACTIVE:
                     await sync_trainer_menu_commands(message.bot, message.chat.id, trainer_id, session)
+                else:
+                    await reset_trainer_menu_to_minimal(message.bot, message.chat.id)
+                await sync_trainer_hub_menu_button(message.bot, message.chat.id)
             elif link_out.error == "telegram_other_trainer":
                 await message.answer(
                     msg.TRAINER_LINK_TELEGRAM_CONFLICT,
@@ -517,6 +525,7 @@ async def cmd_start(message: Message) -> None:
             tid = await get_trainer_id_by_telegram_id(session, user_id)
             if tid:
                 await sync_trainer_menu_commands(message.bot, message.chat.id, tid, session)
+                await sync_trainer_hub_menu_button(message.bot, message.chat.id)
         return
     await message.answer(trainer_gate_message(state, trainer))
 

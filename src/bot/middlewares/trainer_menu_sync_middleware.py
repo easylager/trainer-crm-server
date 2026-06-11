@@ -19,7 +19,9 @@ from src.application.trainer_access_state import get_trainer_access_state, train
 from src.application.trainer_link import get_trainer_id_by_telegram_id
 from src.bot import trainer_benchmark_config as bench_cfg
 from src.bot.trainer_menu_commands import (
+    reset_trainer_menu_for_unlinked,
     reset_trainer_menu_to_minimal,
+    sync_trainer_hub_menu_button,
     sync_trainer_menu_commands,
     trainer_menu_signature,
 )
@@ -69,12 +71,18 @@ class TrainerMenuSyncMiddleware(BaseMiddleware):
             state, _ = await get_trainer_access_state(session, uid)
             tid = await get_trainer_id_by_telegram_id(session, uid)
             if not tid:
+                t_sync = time.perf_counter()
+                await reset_trainer_menu_for_unlinked(bot, chat_id)
+                menu_sync_ms = (time.perf_counter() - t_sync) * 1000
                 if bench_cfg.log_inner_phases():
                     bench_log.info(
-                        "BENCH trainer_menu_sync user_id=%s read_ms=%.1f menu_sync_ms=0 no_trainer=1",
+                        "BENCH trainer_menu_sync user_id=%s read_ms=%.1f menu_sync_ms=%.1f no_trainer=1",
                         uid,
                         (time.perf_counter() - t_read) * 1000,
+                        menu_sync_ms,
                     )
+                self._last_sig[uid] = "unlinked"
+                self._last_time[uid] = now
                 return await handler(event, data)
             # Signature includes state so menu resets when trainer loses active status
             if trainer_may_use_bot_workflows(state):
@@ -102,6 +110,7 @@ class TrainerMenuSyncMiddleware(BaseMiddleware):
                 await sync_trainer_menu_commands(bot, chat_id, tid, session)
             else:
                 await reset_trainer_menu_to_minimal(bot, chat_id)
+            await sync_trainer_hub_menu_button(bot, chat_id)
         menu_sync_ms = (time.perf_counter() - t_sync) * 1000
         if bench_cfg.log_inner_phases():
             bench_log.info(

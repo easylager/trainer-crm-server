@@ -160,7 +160,8 @@ async def classify_booking_problem_payment_class(
             """
             SELECT b.id, b.client_id, b.service_id, b.trainer_id, b.service_price_variant_id, b.booking_price_cents,
                    EXISTS (SELECT 1 FROM certificate_booking_credits cbc WHERE cbc.booking_id = b.id) AS has_cert_credit,
-                   EXISTS (SELECT 1 FROM pass_redemptions pr WHERE pr.booking_id = b.id) AS has_pass_redemption
+                   EXISTS (SELECT 1 FROM pass_redemptions pr WHERE pr.booking_id = b.id) AS has_pass_redemption,
+                   b.price_tier_kind
             FROM bookings b
             WHERE b.id = :bid AND b.trainer_id = :tid
             """
@@ -173,6 +174,7 @@ async def classify_booking_problem_payment_class(
     client_id, service_id = int(row[1]), int(row[2])
     variant_id, price_cents = row[4], row[5]
     has_cert_credit, has_pass_redemption = bool(row[6]), bool(row[7])
+    tier_kind: str | None = row[8] if row[8] else None
     if has_cert_credit:
         return "CERT"
     if has_pass_redemption:
@@ -190,7 +192,7 @@ async def classify_booking_problem_payment_class(
             LIMIT 1
             """
         ),
-        {"cid": client_id, "tid": trainer_id, "booking_service_id": service_id},
+        {"cid": client_id, "tid": trainer_id, "booking_service_id": service_id, "booking_tier_kind": tier_kind},
     )
     if r2.fetchone():
         return "PASS"

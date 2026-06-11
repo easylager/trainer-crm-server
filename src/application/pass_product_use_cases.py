@@ -1,6 +1,8 @@
 """
 Pass products: trainer-defined subscription products (e.g. 5 sessions for 200 BYN).
 Scopes: zero linked services = all trainer catalog services; non-empty junction = listed services only.
+        zero linked tiers   = all price tier kinds;      non-empty junction = listed tier_kinds only.
+Both scope conditions are ANDed: a booking must satisfy both service and tier filters to deduct a session.
 Used by trainer Mini App, client catalog, redemption on completed bookings.
 """
 
@@ -9,18 +11,44 @@ from __future__ import annotations
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-_SQL_PASS_PRODUCT_COVERS_BOOKING_SERVICE = """(
-    NOT EXISTS (
-        SELECT 1 FROM trainer_pass_product_services t_scope
-        WHERE t_scope.pass_product_id = p.id
+from src.shared.price_tier_kind import VALID_PRICE_TIER_KINDS, PRICE_TIER_LABEL_RU, PRICE_TIER_ORDER
+
+# SQL predicate: does pass product 'p' cover this booking's service AND tier?
+# Params required: :booking_service_id (int), :booking_tier_kind (str | NULL)
+#
+# Service scope:  no rows in junction → unrestricted; otherwise must match booking.service_id
+# Tier scope:     no rows in junction → unrestricted; otherwise booking.price_tier_kind must be non-NULL and match
+SQL_PASS_PRODUCT_COVERS_BOOKING = """(
+    (
+        NOT EXISTS (
+            SELECT 1 FROM trainer_pass_product_services t_svc
+            WHERE t_svc.pass_product_id = p.id
+        )
+        OR EXISTS (
+            SELECT 1 FROM trainer_pass_product_services t_svc
+            WHERE t_svc.pass_product_id = p.id
+              AND t_svc.service_id = CAST(:booking_service_id AS INTEGER)
+        )
     )
-    OR EXISTS (
-        SELECT 1 FROM trainer_pass_product_services t_scope
-        WHERE t_scope.pass_product_id = p.id AND t_scope.service_id = CAST(:booking_service_id AS INTEGER)
+    AND (
+        NOT EXISTS (
+            SELECT 1 FROM trainer_pass_product_tiers t_tier
+            WHERE t_tier.pass_product_id = p.id
+        )
+        OR (
+            :booking_tier_kind IS NOT NULL
+            AND EXISTS (
+                SELECT 1 FROM trainer_pass_product_tiers t_tier
+                WHERE t_tier.pass_product_id = p.id
+                  AND t_tier.tier_kind = :booking_tier_kind
+            )
+        )
     )
 )"""
 
-SQL_PASS_PRODUCT_COVERS_BOOKING_SERVICE = _SQL_PASS_PRODUCT_COVERS_BOOKING_SERVICE.strip()
+# Legacy alias — callers that only pass booking_service_id still work if they add booking_tier_kind=None.
+# All internal callers are updated to pass both params.
+SQL_PASS_PRODUCT_COVERS_BOOKING_SERVICE = SQL_PASS_PRODUCT_COVERS_BOOKING
 
 # Sale price frozen at issue time; COALESCE fallback for rows predating price_cents column.
 SQL_PASS_INSTANCE_SALE_PRICE_CENTS = "COALESCE(pi.price_cents, p.price_cents, 0)"
@@ -76,6 +104,37 @@ async def _replace_pass_product_services(
         )
 
 
+def _normalized_tier_kinds(raw: list[str]) -> list[str]:
+    """Deduplicated, ordered, validated tier_kind values. Unknown values are silently dropped."""
+    seen = {k for k in raw if k in VALID_PRICE_TIER_KINDS}
+    return [k for k in PRICE_TIER_ORDER if k in seen]
+
+
+async def _replace_pass_product_tiers(
+    session: AsyncSession,
+    *,
+    pass_product_id: int,
+    tier_kinds: list[str],
+) -> None:
+    """Replace tier junction rows atomically. Empty list = unrestricted (all tiers)."""
+    validated = _normalized_tier_kinds(tier_kinds)
+    await session.execute(
+        text("DELETE FROM trainer_pass_product_tiers WHERE pass_product_id = :pid"),
+        {"pid": pass_product_id},
+    )
+    for kind in validated:
+        await session.execute(
+            text(
+                """
+                INSERT INTO trainer_pass_product_tiers (pass_product_id, tier_kind)
+                VALUES (:pid, :kind)
+                ON CONFLICT DO NOTHING
+                """
+            ),
+            {"pid": pass_product_id, "kind": kind},
+        )
+
+
 def enrich_pass_items_with_catalog_reference_prices(
     items: list[dict],
     *,
@@ -106,7 +165,7 @@ def enrich_pass_items_with_catalog_reference_prices(
 
 
 async def list_pass_products(session: AsyncSession, trainer_id: int, active_only: bool = False) -> list[dict]:
-    """List pass products. service_ids (empty = unrestricted); service_name = joined labels for UI."""
+    """List pass products. service_ids/tier_kinds empty = unrestricted; labels for UI."""
     q = """
         SELECT
             p.id,
@@ -137,7 +196,15 @@ async def list_pass_products(session: AsyncSession, trainer_id: int, active_only
                     WHERE tps.pass_product_id = p.id
                 ),
                 ''
-            ) AS services_label
+            ) AS services_label,
+            COALESCE(
+                (
+                    SELECT ARRAY_AGG(t.tier_kind ORDER BY t.tier_kind)
+                    FROM trainer_pass_product_tiers AS t
+                    WHERE t.pass_product_id = p.id
+                ),
+                CAST(ARRAY[] AS TEXT[])
+            ) AS tier_kinds
         FROM trainer_pass_products p
         WHERE p.trainer_id = :tid
     """
@@ -158,6 +225,11 @@ async def list_pass_products(session: AsyncSession, trainer_id: int, active_only
             "created_at": row[7].isoformat() if hasattr(row[7], "isoformat") else str(row[7]),
             "service_ids": list(row[8] or []),
             "service_name": (row[9] or "").strip() or None,
+            # tier_kinds sorted by canonical PRICE_TIER_ORDER (not DB sort)
+            "tier_kinds": [k for k in PRICE_TIER_ORDER if k in set(row[10] or [])],
+            "tiers_label": ", ".join(
+                PRICE_TIER_LABEL_RU[k] for k in PRICE_TIER_ORDER if k in set(row[10] or [])
+            ) or None,
         }
         for row in rows
     ]
@@ -171,10 +243,12 @@ async def create_pass_product(
     sessions_total: int,
     price_cents: int,
     service_ids: list[int] | None = None,
+    tier_kinds: list[str] | None = None,
     sort_order: int = 0,
 ) -> int:
-    """Create a pass product. Empty service_ids = unrestricted. Returns product id."""
-    validated = await _normalized_trainer_pass_service_ids(session, trainer_id, service_ids or [])
+    """Create a pass product. Empty service_ids/tier_kinds = unrestricted. Returns product id."""
+    validated_svc = await _normalized_trainer_pass_service_ids(session, trainer_id, service_ids or [])
+    validated_tiers = _normalized_tier_kinds(tier_kinds or [])
     r = await session.execute(
         text(
             """
@@ -192,7 +266,7 @@ async def create_pass_product(
         },
     )
     (pk,) = r.fetchone()
-    for sid in validated:
+    for sid in validated_svc:
         await session.execute(
             text(
                 """
@@ -201,6 +275,16 @@ async def create_pass_product(
                 """
             ),
             {"pid": pk, "sid": sid},
+        )
+    for kind in validated_tiers:
+        await session.execute(
+            text(
+                """
+                INSERT INTO trainer_pass_product_tiers (pass_product_id, tier_kind)
+                VALUES (:pid, :kind)
+                """
+            ),
+            {"pid": pk, "kind": kind},
         )
     await session.commit()
     return pk
@@ -224,18 +308,21 @@ async def update_pass_product(
     sessions_total: int | None = None,
     price_cents: int | None = None,
     service_ids: list[int] | None = None,
+    tier_kinds: list[str] | None = None,
     is_active: bool | None = None,
     sort_order: int | None = None,
 ) -> bool:
-    """Update product fields. service_ids replaces junction when provided (empty list = unrestricted)."""
-    if service_ids is not None:
+    """Update product. service_ids/tier_kinds replace junction when provided (empty list = unrestricted)."""
+    needs_ownership_check = service_ids is not None or tier_kinds is not None
+    if needs_ownership_check:
         ex = await session.execute(
             text("SELECT 1 FROM trainer_pass_products WHERE id = :id AND trainer_id = :tid"),
             {"id": product_id, "tid": trainer_id},
         )
         if not ex.fetchone():
             return False
-        await _normalized_trainer_pass_service_ids(session, trainer_id, service_ids)
+        if service_ids is not None:
+            await _normalized_trainer_pass_service_ids(session, trainer_id, service_ids)
     updates = []
     params: dict = {"id": product_id, "tid": trainer_id}
     if name is not None:
@@ -270,7 +357,13 @@ async def update_pass_product(
             trainer_id=trainer_id,
             service_ids=service_ids,
         )
-    if updates or service_ids is not None:
+    if tier_kinds is not None:
+        await _replace_pass_product_tiers(
+            session,
+            pass_product_id=product_id,
+            tier_kinds=tier_kinds,
+        )
+    if updates or service_ids is not None or tier_kinds is not None:
         await session.commit()
         return True
     return True
@@ -563,16 +656,28 @@ async def redeem_pass_session_for_booking(
     *,
     allow_booking_statuses: frozenset[str] | None = None,
 ) -> bool:
-    """Deduct one session when booking status allows; unrestricted or multi-service scope matches booking.service_id."""
+    """
+    Deduct one session from the most-expiring eligible pass.
+
+    Scope matching (both must pass):
+      - service scope: pass unrestricted OR booking.service_id in junction
+      - tier scope:    pass unrestricted OR (booking.price_tier_kind IS NOT NULL AND in junction)
+    A booking without a price_tier_kind cannot satisfy a tier-restricted pass — financially correct.
+    """
     allowed = allow_booking_statuses if allow_booking_statuses is not None else frozenset({"completed"})
     r = await session.execute(
-        text("SELECT id, client_id, trainer_id, service_id, status FROM bookings WHERE id = :bid"),
+        text(
+            "SELECT id, client_id, trainer_id, service_id, status, price_tier_kind"
+            " FROM bookings WHERE id = :bid"
+        ),
         {"bid": booking_id},
     )
     row = r.fetchone()
     if not row or (row[4] or "").strip().lower() not in allowed:
         return False
     client_id, trainer_id, service_id = row[1], row[2], row[3]
+    # price_tier_kind may be NULL for bookings made without a tier variant
+    tier_kind: str | None = row[5] if row[5] else None
     r = await session.execute(
         text(
             f"""
@@ -581,12 +686,17 @@ async def redeem_pass_session_for_booking(
             JOIN trainer_pass_products p ON p.id = pi.pass_product_id
             WHERE pi.client_id = :cid AND p.trainer_id = :tid
               AND pi.status = 'active' AND pi.sessions_remaining > 0
-              AND {SQL_PASS_PRODUCT_COVERS_BOOKING_SERVICE}
+              AND {SQL_PASS_PRODUCT_COVERS_BOOKING}
             ORDER BY pi.expires_at ASC NULLS LAST, pi.sessions_remaining ASC
             LIMIT 1
             """
         ),
-        {"cid": client_id, "tid": trainer_id, "booking_service_id": service_id},
+        {
+            "cid": client_id,
+            "tid": trainer_id,
+            "booking_service_id": service_id,
+            "booking_tier_kind": tier_kind,
+        },
     )
     inst = r.fetchone()
     if not inst:

@@ -5,6 +5,18 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Тренерский кабинет</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <!-- Dismiss Telegram loading placeholder ASAP — before chrome.js / CSS / deferred bundles. -->
+  <script>
+    (function () {
+      try {
+        var tg = window.Telegram && window.Telegram.WebApp;
+        if (!tg) return;
+        if (typeof tg.ready === 'function') tg.ready();
+        if (typeof tg.expand === 'function') tg.expand();
+        window.__tgReadyCalled = true;
+      } catch (e) { /* */ }
+    })();
+  </script>
   <script src="mini-app-telegram-chrome.js?v=202605085"></script>
   <script src="mini-app-phone-field.js?v=202605203"></script>
   <!-- Bump ?v= when theme.css / mini-app-components.css change (immutable cache on /webapp/…). -->
@@ -52,9 +64,11 @@
     })();
   </script>
   <!-- Bump ?v= when mini-app-trainer-hub.css changes (immutable cache on /webapp/…). -->
-  <link rel="stylesheet" href="mini-app-trainer-hub.css?v=202605208" />
+  <link rel="stylesheet" href="mini-app-trainer-hub.css?v=202606129" />
+  <link rel="stylesheet" href="mini-app-trainer-shell.css?v=202606113" />
   <!-- Early download of main hub script (defer runs at end of body); improves time-to-interactive vs. discover-at-bottom. -->
-  <link rel="preload" href="trainer-home-main.js?v=202605201" as="script" />
+  <link rel="preload" href="trainer-home-main.js?v=202606126" as="script" />
+  <link rel="preload" href="mini-app-trainer-shell.js?v=202606114" as="script" />
 
   <!-- ─── Splash loader (inline to guarantee render before external CSS) ─── -->
   <style>
@@ -205,12 +219,20 @@
       };
       setTimeout(function() { window.__hubSplash.markMinDone(); }, 680);
       /* Safety net: force-close after 4s even if data fetch never resolves */
-      setTimeout(function() { _minDone = true; _dataReady = true; tryDismiss(); }, 4000);
+      setTimeout(function() {
+        _minDone = true;
+        _dataReady = true;
+        tryDismiss();
+        try {
+          var tg = window.Telegram && window.Telegram.WebApp;
+          if (tg && typeof tg.ready === 'function' && !window.__tgReadyCalled) tg.ready();
+        } catch (e) { /* */ }
+      }, 4000);
     })();
   </script>
 
 </head>
-<body class="hub-body">
+<body class="hub-body" data-trainer-shell="tabs">
 
   <!-- ─── Premium splash loader ─────────────────────────────────────────── -->
   <!-- Renders immediately on parse; dismissed by __hubSplash.markDataReady() -->
@@ -297,8 +319,7 @@
   <div class="hub-shell" id="hubShell">
     <header class="hub-header">
       <div class="hub-header-text">
-        <p class="hub-header-kicker">Тренерский кабинет</p>
-        <h1 class="hub-header-title" id="hubPageTitle">Главная</h1>
+        <h1 class="hub-header-title" id="hubPageTitle">Доброе утро</h1>
       </div>
       <div class="hub-header-actions">
         <button
@@ -306,7 +327,7 @@
           class="hub-link-share-btn"
           id="hubShareBookingLinkBtn"
           aria-label="Ссылка на запись для клиента"
-          title="Ссылка на онлайн-запись к вам"
+          title="Поделиться ссылкой на онлайн-запись"
           hidden
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -316,27 +337,177 @@
         </button>
       </div>
     </header>
+    <script>
+      (function () {
+        if (typeof window.__syncHubPageTitle === 'function') {
+          window.__syncHubPageTitle();
+          return;
+        }
+        var u = window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initDataUnsafe;
+        u = u && u.user;
+        var name = u && u.first_name != null ? String(u.first_name).trim() : '';
+        var h = new Date().getHours();
+        var greeting = h < 6 ? 'Доброй ночи' : h < 12 ? 'Доброе утро' : h < 18 ? 'Добрый день' : h < 23 ? 'Добрый вечер' : 'Доброй ночи';
+        var title = document.getElementById('hubPageTitle');
+        if (title) title.textContent = name ? greeting + ', ' + name : greeting;
+      }());
+    </script>
 
-    <!-- Onboarding first: visible without scrolling (TTV); same id for trainer-home-main.js -->
+    <!-- Ice Lane — brand signature: one deliberate gesture, premium-minimalist -->
+    <div class="ice-lane" aria-hidden="true">
+      <span class="ice-lane__line"></span>
+      <p class="ice-lane__wordmark">Кабинет тренера</p>
+      <span class="ice-lane__line"></span>
+    </div>
+
+    <!--
+      Rhythm hints — contextual coaching nudges.
+      First thing after the brand line: if something needs attention, trainer sees it immediately.
+      All hidden by default; JS activates at most one per session.
+    -->
+    <div
+      id="hubRhythmHintsSkeleton"
+      class="hub-rhythm-hints-skeleton"
+      hidden
+      role="status"
+      aria-busy="true"
+      aria-label="Загрузка подсказок"
+    >
+      <div class="hub-rhythm-hints-skel-card" aria-hidden="true">
+        <div class="hub-rhythm-hints-skel-lines hub-rhythm-hints-skel-lines--para">
+          <div class="hub-rhythm-hints-skel-line hub-skel-shimmer"></div>
+          <div class="hub-rhythm-hints-skel-line hub-rhythm-hints-skel-line--wrap2 hub-skel-shimmer"></div>
+          <div class="hub-rhythm-hints-skel-line hub-rhythm-hints-skel-line--wrap3 hub-skel-shimmer"></div>
+        </div>
+        <div class="hub-rhythm-hints-skel-actions">
+          <div class="hub-rhythm-hints-skel-btn hub-skel-shimmer"></div>
+          <div class="hub-rhythm-hints-skel-dismiss hub-skel-shimmer"></div>
+        </div>
+      </div>
+      <div class="hub-rhythm-hints-skel-card" aria-hidden="true">
+        <div class="hub-rhythm-hints-skel-lines hub-rhythm-hints-skel-lines--para">
+          <div class="hub-rhythm-hints-skel-line hub-skel-shimmer"></div>
+          <div class="hub-rhythm-hints-skel-line hub-rhythm-hints-skel-line--wrap2 hub-skel-shimmer"></div>
+          <div class="hub-rhythm-hints-skel-line hub-rhythm-hints-skel-line--wrap3 hub-skel-shimmer"></div>
+        </div>
+        <div class="hub-rhythm-hints-skel-actions">
+          <div class="hub-rhythm-hints-skel-btn hub-skel-shimmer"></div>
+          <div class="hub-rhythm-hints-skel-dismiss hub-skel-shimmer"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="hubScheduleRhythmHint" class="hub-schedule-rhythm-hint" hidden aria-live="polite">
+      <p class="hub-schedule-rhythm-hint__text">
+        Добавьте часы в шаблон расписания — потом неделю можно накатить из шаблона за пару шагов.
+      </p>
+      <div class="hub-schedule-rhythm-hint__actions">
+        <button type="button" class="btn-sm btn-primary" id="hubScheduleRhythmOpen">Шаблон в расписании</button>
+        <button type="button" class="hub-schedule-rhythm-hint__dismiss" id="hubScheduleRhythmDismiss" aria-label="Скрыть подсказку">×</button>
+      </div>
+    </div>
+
+    <div id="hubShareLinkGrowthHint" class="hub-schedule-rhythm-hint" hidden aria-live="polite">
+      <p class="hub-schedule-rhythm-hint__text">
+        Поделитесь ссылкой, чтобы клиенты записывались сами: кнопка с цепочкой справа вверху или «Получить ссылку» ниже в этом блоке.
+      </p>
+      <div class="hub-schedule-rhythm-hint__actions">
+        <button type="button" class="btn-sm btn-primary" id="hubShareLinkGrowthOpen">Получить ссылку</button>
+        <button type="button" class="hub-schedule-rhythm-hint__dismiss" id="hubShareLinkGrowthDismiss" aria-label="Скрыть подсказку">×</button>
+      </div>
+    </div>
+
+    <div id="hubClientNotesRhythmHint" class="hub-schedule-rhythm-hint" hidden aria-live="polite">
+      <p class="hub-schedule-rhythm-hint__text">
+        После завершённой записи можно кратко зафиксировать заметки в карточке клиента — так проще вести следующие занятия.
+      </p>
+      <div class="hub-schedule-rhythm-hint__actions">
+        <button type="button" class="btn-sm btn-primary" id="hubClientNotesRhythmOpen">Профиль клиента</button>
+        <button type="button" class="hub-schedule-rhythm-hint__dismiss" id="hubClientNotesRhythmDismiss" aria-label="Скрыть подсказку">×</button>
+      </div>
+    </div>
+
+    <div id="hubRhythmSlot0" class="hub-schedule-rhythm-hint" hidden aria-live="polite">
+      <p class="hub-schedule-rhythm-hint__text" id="hubRhythmSlot0Text"></p>
+      <div class="hub-schedule-rhythm-hint__actions">
+        <button type="button" class="btn-sm btn-primary" id="hubRhythmSlot0Cta" data-hub-rhythm-cta="1"></button>
+        <button type="button" class="btn-sm btn-secondary hub-rhythm-slot-cta2" id="hubRhythmSlot0Cta2" data-hub-rhythm-cta2="1" hidden></button>
+        <button type="button" class="hub-schedule-rhythm-hint__dismiss" id="hubRhythmSlot0Dismiss" data-hub-rhythm-dismiss="1" aria-label="Скрыть подсказку">×</button>
+      </div>
+    </div>
+    <div id="hubRhythmSlot1" class="hub-schedule-rhythm-hint" hidden aria-live="polite">
+      <p class="hub-schedule-rhythm-hint__text" id="hubRhythmSlot1Text"></p>
+      <div class="hub-schedule-rhythm-hint__actions">
+        <button type="button" class="btn-sm btn-primary" id="hubRhythmSlot1Cta" data-hub-rhythm-cta="1"></button>
+        <button type="button" class="btn-sm btn-secondary hub-rhythm-slot-cta2" id="hubRhythmSlot1Cta2" data-hub-rhythm-cta2="1" hidden></button>
+        <button type="button" class="hub-schedule-rhythm-hint__dismiss" id="hubRhythmSlot1Dismiss" data-hub-rhythm-dismiss="1" aria-label="Скрыть подсказку">×</button>
+      </div>
+    </div>
+
+    <!--
+      Urgent context alert — single refined card, rendered by renderHubQuickStrip().
+      Surfaces only when there are pending confirmations or unanswered requests.
+      Creation action lives in the floating «Записать» FAB, not here.
+    -->
+    <div class="hub-urgent-alert" id="hubTrainerQuickStrip" hidden role="status" aria-live="polite"></div>
+
+    <!-- Legacy wiring targets — hidden via CSS, JS still finds them by id -->
+    <div hidden aria-hidden="true" style="display:none!important">
+      <button type="button" id="hubBtnSchedule" data-priority-action="schedule"></button>
+      <button type="button" id="hubBtnBookClient" data-priority-action="book"></button>
+    </div>
+
+    <!-- Hero: hidden — status chip replaced by hints above + bookings below -->
+    <!-- Cockpit Hero — contextual state of the day; JS populates via applyHubHero() -->
+    <section class="hub-hero" id="hubHeroBanner">
+      <button type="button" class="hub-hero-main" id="heroScheduleCta" disabled aria-describedby="heroSubtitle">
+        <div class="hub-hero-inner">
+          <div class="hub-hero-greeting" id="heroGreeting">Статус дня</div>
+          <h2 class="hub-hero-title" id="heroTitle">Загрузка…</h2>
+          <p class="hub-hero-subtitle" id="heroSubtitle"></p>
+        </div>
+      </button>
+    </section>
+
+    <!-- Onboarding welcome — premium identity, airy; sits above the action card during «Первые шаги» -->
+    <section id="hubOnboardingWelcome" class="hub-onboarding-welcome" hidden aria-label="Добро пожаловать">
+      <p class="hub-onboarding-welcome__kicker">Добро пожаловать</p>
+      <h2 class="hub-onboarding-welcome__title" id="hubOnboardingWelcomeTitle">Рады видеть вас здесь</h2>
+      <p class="hub-onboarding-welcome__lead" id="hubOnboardingWelcomeLead">
+        Пока готовите профиль, мы держим для вас место в каталоге.
+      </p>
+      <div class="hub-onboarding-welcome__chips" aria-label="Что вас ждёт на платформе">
+        <span class="hub-onboarding-welcome__chip"><span aria-hidden="true">📍</span>Каталог</span>
+        <span class="hub-onboarding-welcome__chip"><span aria-hidden="true">📅</span>Расписание</span>
+        <span class="hub-onboarding-welcome__chip"><span aria-hidden="true">🔔</span>Напоминания</span>
+        <button type="button" class="hub-onboarding-welcome__chip hub-onboarding-welcome__chip--action" id="hubOnboardingWelcomeCommunity">
+          <span aria-hidden="true">💬</span>Комьюнити
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+        </button>
+      </div>
+    </section>
+
+    <!-- Onboarding action card — single focal step; same id for trainer-home-main.js -->
     <div id="onboardingStrip" class="onboarding-strip onboarding-strip--hub-top" style="display:none;" hidden>
       <div class="onboarding-strip-head">
-        <h2 class="onboarding-strip-title">Быстрый старт</h2>
-        <p class="onboarding-strip-lead">2 шага — и первый клиент уже в системе.</p>
+        <span class="onboarding-progress-pill" id="onboardingProgressPill">Шаг 1 из 2</span>
+        <h2 class="onboarding-strip-title">Первые шаги</h2>
+        <p class="onboarding-strip-lead">Два шага — и первые клиенты появятся в расписании.</p>
       </div>
       <ol class="onboarding-steps">
         <li class="onboarding-step" id="onboardingStepProfile">
           <span class="onboarding-step-icon" id="onboardingIconProfile">1</span>
           <div class="onboarding-step-body">
-            <div class="onboarding-step-name">Заполни анкету</div>
-            <p class="onboarding-step-hint" id="onboardingHintProfile">Откроет расписание и записи.</p>
+            <div class="onboarding-step-name">Расскажите о себе</div>
+            <p class="onboarding-step-hint" id="onboardingHintProfile">Откроет расписание и онлайн-запись.</p>
           </div>
           <button type="button" class="onboarding-step-cta" id="onboardingCtaProfile">Продолжить</button>
         </li>
         <li class="onboarding-step" id="onboardingStepBooking">
           <span class="onboarding-step-icon" id="onboardingIconBooking">2</span>
           <div class="onboarding-step-body">
-            <div class="onboarding-step-name">Первая запись</div>
-            <p class="onboarding-step-hint" id="onboardingHintBooking">Посмотрите, как работает расписание, клиент и напоминания.</p>
+            <div class="onboarding-step-name">Первый клиент</div>
+            <p class="onboarding-step-hint" id="onboardingHintBooking">Запишите первого клиента — всё встанет на место сразу.</p>
             <!-- Two-path CTAs: shown only while step is pending; replaced by disabled «Готово» when done -->
             <div class="onboarding-step-ctas" id="onboardingBookingCtas">
               <button type="button" class="onboarding-step-cta onboarding-step-cta--primary" id="onboardingCtaBookingReal">Записать реального клиента</button>
@@ -393,87 +564,10 @@
       </div>
     </section>
 
-    <!-- Reserve space for up to two rhythm hints while checklist/bootstrap hydrates (reduces CLS). -->
-    <div
-      id="hubRhythmHintsSkeleton"
-      class="hub-rhythm-hints-skeleton"
-      hidden
-      role="status"
-      aria-busy="true"
-      aria-label="Загрузка подсказок"
-    >
-      <div class="hub-rhythm-hints-skel-card" aria-hidden="true">
-        <div class="hub-rhythm-hints-skel-lines hub-rhythm-hints-skel-lines--para">
-          <div class="hub-rhythm-hints-skel-line hub-skel-shimmer"></div>
-          <div class="hub-rhythm-hints-skel-line hub-rhythm-hints-skel-line--wrap2 hub-skel-shimmer"></div>
-          <div class="hub-rhythm-hints-skel-line hub-rhythm-hints-skel-line--wrap3 hub-skel-shimmer"></div>
-        </div>
-        <div class="hub-rhythm-hints-skel-actions">
-          <div class="hub-rhythm-hints-skel-btn hub-skel-shimmer"></div>
-          <div class="hub-rhythm-hints-skel-dismiss hub-skel-shimmer"></div>
-        </div>
-      </div>
-      <div class="hub-rhythm-hints-skel-card" aria-hidden="true">
-        <div class="hub-rhythm-hints-skel-lines hub-rhythm-hints-skel-lines--para">
-          <div class="hub-rhythm-hints-skel-line hub-skel-shimmer"></div>
-          <div class="hub-rhythm-hints-skel-line hub-rhythm-hints-skel-line--wrap2 hub-skel-shimmer"></div>
-          <div class="hub-rhythm-hints-skel-line hub-rhythm-hints-skel-line--wrap3 hub-skel-shimmer"></div>
-        </div>
-        <div class="hub-rhythm-hints-skel-actions">
-          <div class="hub-rhythm-hints-skel-btn hub-skel-shimmer"></div>
-          <div class="hub-rhythm-hints-skel-dismiss hub-skel-shimmer"></div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Legacy rhythm cards: populated only by JS fallback; primary UI uses hubRhythmSlot0/1. -->
-    <div id="hubScheduleRhythmHint" class="hub-schedule-rhythm-hint" hidden aria-live="polite">
-      <p class="hub-schedule-rhythm-hint__text">
-        Добавьте часы в шаблон расписания — потом неделю можно накатить из шаблона за пару шагов.
-      </p>
-      <div class="hub-schedule-rhythm-hint__actions">
-        <button type="button" class="btn-sm btn-primary" id="hubScheduleRhythmOpen">Шаблон в расписании</button>
-        <button type="button" class="hub-schedule-rhythm-hint__dismiss" id="hubScheduleRhythmDismiss" aria-label="Скрыть подсказку">×</button>
-      </div>
-    </div>
-
-    <div id="hubShareLinkGrowthHint" class="hub-schedule-rhythm-hint" hidden aria-live="polite">
-      <p class="hub-schedule-rhythm-hint__text">
-        Поделитесь ссылкой, чтобы клиенты записывались сами: кнопка с цепочкой справа вверху или «Получить ссылку» ниже в этом блоке.
-      </p>
-      <div class="hub-schedule-rhythm-hint__actions">
-        <button type="button" class="btn-sm btn-primary" id="hubShareLinkGrowthOpen">Получить ссылку</button>
-        <button type="button" class="hub-schedule-rhythm-hint__dismiss" id="hubShareLinkGrowthDismiss" aria-label="Скрыть подсказку">×</button>
-      </div>
-    </div>
-
-    <div id="hubClientNotesRhythmHint" class="hub-schedule-rhythm-hint" hidden aria-live="polite">
-      <p class="hub-schedule-rhythm-hint__text">
-        После завершённой записи можно кратко зафиксировать заметки в карточке клиента — так проще вести следующие занятия.
-      </p>
-      <div class="hub-schedule-rhythm-hint__actions">
-        <button type="button" class="btn-sm btn-primary" id="hubClientNotesRhythmOpen">Профиль клиента</button>
-        <button type="button" class="hub-schedule-rhythm-hint__dismiss" id="hubClientNotesRhythmDismiss" aria-label="Скрыть подсказку">×</button>
-      </div>
-    </div>
-
-    <div id="hubRhythmSlot0" class="hub-schedule-rhythm-hint" hidden aria-live="polite">
-      <p class="hub-schedule-rhythm-hint__text" id="hubRhythmSlot0Text"></p>
-      <div class="hub-schedule-rhythm-hint__actions">
-        <button type="button" class="btn-sm btn-primary" id="hubRhythmSlot0Cta" data-hub-rhythm-cta="1"></button>
-        <button type="button" class="btn-sm btn-secondary hub-rhythm-slot-cta2" id="hubRhythmSlot0Cta2" data-hub-rhythm-cta2="1" hidden></button>
-        <button type="button" class="hub-schedule-rhythm-hint__dismiss" id="hubRhythmSlot0Dismiss" data-hub-rhythm-dismiss="1" aria-label="Скрыть подсказку">×</button>
-      </div>
-    </div>
-    <div id="hubRhythmSlot1" class="hub-schedule-rhythm-hint" hidden aria-live="polite">
-      <p class="hub-schedule-rhythm-hint__text" id="hubRhythmSlot1Text"></p>
-      <div class="hub-schedule-rhythm-hint__actions">
-        <button type="button" class="btn-sm btn-primary" id="hubRhythmSlot1Cta" data-hub-rhythm-cta="1"></button>
-        <button type="button" class="btn-sm btn-secondary hub-rhythm-slot-cta2" id="hubRhythmSlot1Cta2" data-hub-rhythm-cta2="1" hidden></button>
-        <button type="button" class="hub-schedule-rhythm-hint__dismiss" id="hubRhythmSlot1Dismiss" data-hub-rhythm-dismiss="1" aria-label="Скрыть подсказку">×</button>
-      </div>
-    </div>
-
+    <!--
+      Subscription celebration — primary moment, sits before bookings.
+      Hidden by default; JS shows after successful payment redirect.
+    -->
     <section id="hubSubscriptionCelebration" class="hub-sub-celebration" hidden aria-live="polite">
       <div class="hub-sub-celebration__inner">
         <button type="button" class="hub-sub-celebration__close" id="hubSubCelebrationClose" aria-label="Закрыть">×</button>
@@ -489,57 +583,21 @@
         <p class="hub-sub-celebration__section-label">Возможности вашего тарифа</p>
         <ul class="hub-sub-celebration__features" id="hubSubCelebrationFeatures"></ul>
         <p class="hub-sub-celebration__hint" id="hubSubCelebrationHint">
-          Дальше — расписание, клиенты и аналитика в блоках ниже. Приятной работы.
+          Расписание, клиенты и аналитика доступны в разделах ниже. Приятной работы.
         </p>
       </div>
     </section>
 
-    <div class="hub-priority-actions" id="hubPriorityActions" role="group" aria-label="Расписание и запись">
-      <div class="hub-quick-grid hub-quick-grid--priority">
-        <button type="button" class="hub-quick-action" id="hubBtnSchedule" data-priority-action="schedule">
-          <svg class="hub-quick-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-            <rect x="3" y="4" width="18" height="18" rx="2"/>
-            <path d="M16 2v4M8 2v4M3 10h18"/>
-          </svg>
-          <div class="hub-quick-text">
-            <div class="hub-quick-label">Расписание</div>
-            <div class="hub-quick-hint">Слоты и записи</div>
-          </div>
-        </button>
-        <button type="button" class="hub-quick-action" id="hubBtnBookClient" data-priority-action="book">
-          <svg class="hub-quick-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
-            <circle cx="9" cy="7" r="4"/>
-            <line x1="19" y1="8" x2="19" y2="14"/>
-            <line x1="22" y1="11" x2="16" y2="11"/>
-          </svg>
-          <div class="hub-quick-text">
-            <div class="hub-quick-label">Записать клиента</div>
-            <div class="hub-quick-hint">Слот создастся автоматически</div>
-          </div>
-        </button>
-      </div>
-    </div>
-
+    <!-- Bookings: primary content — see your day before anything else -->
     <div class="hub-section-head hub-section-head--bookings-top" hidden>
-      <div class="hub-section-title">Ближайшие записи</div>
+      <div class="hub-section-title">Ближайшие занятия</div>
     </div>
     <div id="bookingsBlock" hidden></div>
 
-    <!-- Hero (приветствие) — скрыт, логика applyHubHero / syncHubHeroScheduleClick сохранена -->
-    <section class="hub-hero" id="hubHeroBanner" hidden aria-hidden="true">
-      <button type="button" class="hub-hero-main" id="heroScheduleCta" disabled aria-describedby="heroSubtitle">
-        <div class="hub-hero-inner">
-          <div class="hub-hero-greeting" id="heroGreeting">Добро пожаловать</div>
-          <h2 class="hub-hero-title" id="heroTitle">Ваш день</h2>
-          <p class="hub-hero-subtitle" id="heroSubtitle">Загрузка информации…</p>
-        </div>
-      </button>
-    </section>
-
-    <div class="hub-section-head hub-section-head--stats">
-      <div class="hub-section-title">Сводка</div>
+    <div class="hub-section-head hub-section-head--stats" id="hubStatsHead">
+      <div class="hub-section-title">Метрики</div>
     </div>
+
     <div class="hub-stats" id="hubStats" aria-hidden="true">
       <div class="hub-stat-card stat-highlight" id="statToday">
         <svg class="hub-stat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -582,8 +640,9 @@
 
     <div id="stateMessage" class="state-panel loading" style="display:none;" role="status"></div>
 
-    <div class="hub-section-head">
-      <div class="hub-section-title">Разделы</div>
+    <!-- Tab bar handles navigation — tiles grid is hidden via CSS; kept in DOM so renderTiles() JS still runs safely -->
+    <div class="hub-section-head hub-section-head--tools">
+      <div class="hub-section-title">Ваши инструменты</div>
     </div>
     <!-- Initial skeleton matches renderTiles() markup until deferred JS runs (avoids empty «Разделы» → CLS). -->
     <div class="hub-grid" id="hubGrid">
@@ -597,47 +656,77 @@
       <div class="hub-tile hub-tile--skeleton" role="status" aria-busy="true" aria-label="Загрузка"><div class="hub-tile-inner"><div class="hub-tile-top"><div class="hub-skel-line hub-skel-line--icon hub-skel-shimmer" aria-hidden="true"></div></div><div class="hub-tile-content"><div class="hub-skel-line hub-skel-line--title hub-skel-shimmer" aria-hidden="true"></div><div class="hub-skel-line hub-skel-line--hint hub-skel-shimmer" aria-hidden="true"></div></div></div></div>
     </div>
 
-    <div class="hub-footnote hub-footnote--collapsible" id="hubFootnote">
-      <button type="button" class="hub-footnote__toggle" id="hubFootnoteToggle" aria-expanded="false" aria-controls="hubFootnoteExpand">
-        <span class="hub-footnote__toggle-main">
-          <span class="hub-footnote__head">
-            <svg class="hub-footnote__icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-            </svg>
-            <strong class="hub-footnote__title">Мы на связи</strong>
-          </span>
-          <span class="hub-footnote__teaser">Нажмите, чтобы написать команде или предложить улучшение</span>
+    <aside class="hub-footer-aside" id="hubFooterAside" aria-label="Сообщество и поддержка">
+      <button
+        type="button"
+        class="hub-community-link"
+        id="hubCommunityLink"
+        aria-haspopup="dialog"
+        aria-controls="hubCommunitySheet"
+      >
+        <svg class="hub-community-link__icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+        </svg>
+        <span class="hub-community-link__copy">
+          <span class="hub-community-link__label">Наше комьюнити</span>
+          <span class="hub-community-link__hint">Идеи и отзывы</span>
         </span>
-        <svg class="hub-footnote__chevron" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+        <svg class="hub-community-link__arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M9 6l6 6-6 6"/>
+        </svg>
       </button>
-      <div class="hub-footnote__expand" id="hubFootnoteExpand" aria-hidden="true">
-        <div class="hub-footnote__expand-inner">
-          <p class="hub-footnote__lead">
-            Что-то сломалось или непонятно — <strong>опишите ниже</strong>: разберём и постараемся закрыть вопрос <strong>как можно быстрее</strong>.
-            Есть мысль, как улучшить платформу, — <strong>напишите туда же</strong>: нам важен ваш опыт.
-          </p>
-          <form id="hubSupportForm" class="hub-support-form" autocomplete="off">
-            <label for="hubSupportMessage" class="hub-support-label">Сообщение команде</label>
-            <textarea
-              id="hubSupportMessage"
-              class="hub-support-textarea input"
-              name="message"
-              rows="3"
-              maxlength="4000"
-              placeholder="Например: не открывается раздел… или идея: добавить…"
-              aria-describedby="hubSupportHint"
-            ></textarea>
-            <p id="hubSupportHint" class="hub-support-hint">До 4000 символов. Ответ пришлём в <strong>тренерском боте</strong>.</p>
-            <button type="submit" id="hubSupportSubmit" class="btn-block btn-primary hub-support-submit">Отправить</button>
-            <p id="hubSupportStatus" class="hub-support-status" role="status" aria-live="polite"></p>
-          </form>
-          <p class="hub-footnote__cta">
-            По-прежнему можно написать в чате с ботом <strong>/guide</strong> — там справка и другие способы связи.
-          </p>
-        </div>
-      </div>
+    </aside>
+  </div>
+
+  <!-- Community sheet — form lives here, not in scroll stack under FAB -->
+  <div id="hubCommunitySheetOverlay" class="hub-community-sheet-overlay" hidden aria-hidden="true">
+    <div
+      id="hubCommunitySheet"
+      class="hub-community-sheet"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="hubCommunitySheetTitle"
+    >
+      <div class="hub-community-sheet__handle" aria-hidden="true"></div>
+      <h2 id="hubCommunitySheetTitle" class="hub-community-sheet__title">Развиваем платформу вместе</h2>
+      <p class="hub-community-sheet__lead">
+        Мы создаём этот проект рука об руку с вашими тренерами, чтобы детям и родителям было по-настоящему уютно и удобно. Поделитесь, чего вам не хватает, или напишите нам доброе слово — мы читаем каждое сообщение! 💛
+      </p>
+      <form id="hubSupportForm" class="hub-support-form" autocomplete="off">
+        <label for="hubSupportMessage" class="hub-support-label">Ваше сообщение</label>
+        <textarea
+          id="hubSupportMessage"
+          class="hub-support-textarea input"
+          name="message"
+          rows="3"
+          maxlength="4000"
+          placeholder="Идея, отзыв или нужна помощь? Напишите сюда"
+          aria-describedby="hubSupportHint"
+        ></textarea>
+        <p id="hubSupportHint" class="hub-support-hint">До 4000 символов.</p>
+        <button type="submit" id="hubSupportSubmit" class="btn-block btn-primary hub-support-submit">Отправить</button>
+        <p id="hubSupportStatus" class="hub-support-status" role="status" aria-live="polite"></p>
+      </form>
+      <p class="hub-community-sheet__cta">
+        Если нужна системная помощь — загляните в <strong>/guide</strong> в боте.
+      </p>
     </div>
   </div>
+
+  <!--
+    Floating «Записать» — primary create action, premium pattern (FAB).
+    Fixed above the tab bar; always one tap away regardless of scroll.
+    Hidden until JS confirms initData + not in onboarding focus.
+  -->
+  <button type="button" id="hubBookFab" class="hub-book-fab" hidden aria-label="Записать клиента">
+    <svg class="hub-book-fab__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+      <circle cx="9" cy="7" r="4"/>
+      <line x1="19" y1="8" x2="19" y2="14"/>
+      <line x1="22" y1="11" x2="16" y2="11"/>
+    </svg>
+    <span class="hub-book-fab__label">Записать</span>
+  </button>
 
   <!-- Outside .hub-shell: fixed overlay must not sit under transformed ancestor (hub-enter), or it scrolls with the page. -->
   <div id="hubModalGroupSlot" class="modal-overlay hub-group-modal-overlay" style="display: none;" aria-hidden="true">
@@ -966,11 +1055,12 @@
     </div>
   </div>
 
-  <script src="mini-app-trainer-gate.js?v=20260548"></script>
+  <script src="mini-app-trainer-gate.js?v=202606113"></script>
   <script src="mini-app-trainer-celebration.js"></script>
   <script src="trainer-client-relay-ui.js?v=202605201"></script>
   <script src="trainer-relay-helpers.js?v=202605090"></script>
   <!-- Bump ?v= when trainer-home-main.js changes (immutable cache on /webapp/…). -->
-  <script defer src="trainer-home-main.js?v=202605205"></script>
+  <script defer src="trainer-home-main.js?v=202606126"></script>
+  <script defer src="mini-app-trainer-shell.js?v=202606114"></script>
 </body>
 </html>

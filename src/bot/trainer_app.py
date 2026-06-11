@@ -12,9 +12,8 @@ from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
-from aiogram.types import MenuButtonCommands, MenuButtonWebApp, WebAppInfo
+from aiogram.types import MenuButtonCommands
 
-from src.bot import messages as msg
 from src.bot import trainer_benchmark_config as bench_cfg
 from src.bot.schedule_notifications import set_client_bot
 from src.bot.handlers.trainer_handlers import router as trainer_router
@@ -33,30 +32,18 @@ logger = logging.getLogger(__name__)
 
 
 async def setup_menu_and_commands(bot: Bot) -> None:
-    """Default command list (minimal); per-chat list set when trainer is active (CRM + Analytics add commands).
+    """Default scope: no commands and no hub button until per-chat sync after welcome-link bind.
 
-    With a public HTTPS base (WEBAPP_BASE_URL or API_BASE_URL), the chat menu button opens the hub Mini App in one tap.
-    If both are HTTP (typical local dev), keep MenuButtonCommands.
+    Linked trainers get slash menu + optional Web App hub via TrainerMenuSyncMiddleware.
     """
     await set_default_trainer_commands_without_stats(bot)
-    settings = Settings()
-    base, src = mini_app_https_base(settings)
-    if base:
-        hub_url = f"{base}/webapp/trainer-home"
-        await bot.set_chat_menu_button(
-            menu_button=MenuButtonWebApp(
-                text=msg.TRAINER_MENU_BUTTON_HUB,
-                web_app=WebAppInfo(url=hub_url),
-            ),
-        )
-        logger.info("Trainer bot: menu button = Web App hub (%s) [%s]", hub_url, src)
-    else:
-        await bot.set_chat_menu_button(menu_button=MenuButtonCommands())
-        logger.info(
-            "Trainer bot: menu button = commands (%s; set WEBAPP_BASE_URL or API_BASE_URL to https://...)",
-            src,
-        )
-    logger.info("Trainer bot: default commands configured")
+    await bot.set_chat_menu_button(menu_button=MenuButtonCommands())
+    _base, src = mini_app_https_base(Settings())
+    logger.info(
+        "Trainer bot: default menu = commands-only, empty slash list [%s]; "
+        "hub Web App button is set per chat after welcome link",
+        src,
+    )
 
 
 async def main() -> None:

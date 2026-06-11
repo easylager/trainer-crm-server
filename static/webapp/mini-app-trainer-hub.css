@@ -1,13 +1,13 @@
-    /* Genius Trainer Hub: Elevated design with sophisticated micro-interactions */
+    /* Trainer Hub — Pro Cockpit. Platform 2027. */
     body.hub-body {
       margin: 0;
       min-height: 100vh;
       font-family: var(--app-font-sans);
       color: var(--tg-theme-text-color);
-      /* Enhanced ambient glow with depth layers */
+      /* Ice morning: breath of arena air, not an amber spotlight */
       background:
-        radial-gradient(ellipse 140% 100% at 50% -30%, rgba(247, 166, 0, 0.18) 0%, rgba(247, 166, 0, 0.08) 40%, transparent 70%),
-        radial-gradient(ellipse 80% 60% at 80% 100%, rgba(247, 166, 0, 0.06) 0%, transparent 50%),
+        radial-gradient(70% 50% at 100% -8%, color-mix(in srgb, var(--ice-glow) 12%, transparent) 0%, transparent 62%),
+        radial-gradient(140% 80% at 50% -12%, rgba(247, 196, 120, 0.055) 0%, rgba(247, 196, 120, 0.018) 45%, transparent 70%),
         var(--tg-theme-bg-color) !important;
       padding: 16px calc(16px + env(safe-area-inset-right)) calc(32px + env(safe-area-inset-bottom)) calc(16px + env(safe-area-inset-left));
       overflow-x: hidden;
@@ -25,22 +25,14 @@
       to { opacity: 1; }
     }
     
-    @keyframes float-gentle {
-      0%, 100% { transform: translateY(0px); }
-      50% { transform: translateY(-2px); }
-    }
-    
-    @keyframes pulse-glow {
-      0%, 100% { box-shadow: 0 0 20px rgba(247, 166, 0, 0.15); }
-      50% { box-shadow: 0 0 30px rgba(247, 166, 0, 0.25); }
-    }
-    /* Elevated Header with Sophisticated Branding */
+    /* float-gentle and pulse-glow removed — constant animations signal cheap product, not premium */
+    /* Header — clean greeting, not a CRM title bar */
     .hub-header {
       display: flex;
       align-items: flex-start;
       justify-content: space-between;
       gap: 16px;
-      margin-bottom: 24px;
+      margin-bottom: 14px;
       position: relative;
     }
     
@@ -49,27 +41,25 @@
       flex: 1;
     }
     
+    /* Greeting kicker: time-of-day phrase, not a product label */
     .hub-header-kicker {
-      font-size: 12px;
-      font-weight: 600;
-      letter-spacing: 0.16em;
-      text-transform: uppercase;
-      color: var(--app-cta-fill);
-      margin: 0 0 8px;
-      opacity: 0.9;
+      font-size: 14px;
+      font-weight: 500;
+      letter-spacing: 0.01em;
+      text-transform: none;
+      color: var(--tg-theme-hint-color);
+      margin: 0 0 5px;
+      opacity: 1;
     }
     
+    /* Title: clean weight — no gradient fill, no text-clip chrome trick */
     .hub-header-title {
       margin: 0;
-      font-size: clamp(24px, 6.5vw, 30px);
-      font-weight: 700;
-      letter-spacing: -0.04em;
-      line-height: 1.1;
+      font-size: clamp(22px, 6vw, 28px);
+      font-weight: 600;
+      letter-spacing: -0.03em;
+      line-height: 1.12;
       color: var(--tg-theme-text-color);
-      background: linear-gradient(135deg, var(--tg-theme-text-color) 0%, var(--app-cta-fill) 100%);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
     }
     .hub-header-actions {
       display: flex;
@@ -116,9 +106,40 @@
       outline: 2px solid color-mix(in srgb, var(--tg-theme-button-color) 58%, transparent);
       outline-offset: 2px;
     }
-    /* Genius Hero Block with Live Intelligence */
+    /* ── Ice Lane — brand signature, one deliberate gesture ───────────────── */
+    .ice-lane {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 0 0 20px;
+      overflow: hidden;
+    }
+    .ice-lane__line {
+      flex: 1;
+      height: 1px;
+      background: linear-gradient(
+        90deg,
+        transparent 0%,
+        color-mix(in srgb, var(--ice-glow) 32%, transparent) 50%,
+        transparent 100%
+      );
+    }
+    .ice-lane__wordmark {
+      flex-shrink: 0;
+      margin: 0;
+      padding: 0;
+      font-size: 12px;
+      font-weight: 500;
+      font-family: var(--app-font-display, Georgia, serif);
+      font-style: italic;
+      color: var(--tg-theme-hint-color);
+      letter-spacing: 0.03em;
+      opacity: 0.65;
+    }
+
+    /* ── Cockpit Hero — contextual state of the day ─────────────────────── */
     .hub-hero { 
-      margin-bottom: 24px;
+      margin-bottom: 20px;
       position: relative;
     }
     
@@ -146,38 +167,44 @@
       outline-offset: 3px;
     }
 
+    /* Ice gradient card — depth of arena, warmth of amber, no cheap pulsing */
     .hub-hero-main {
       position: relative;
       border-radius: 24px;
-      padding: 28px 24px 32px;
-      margin-bottom: 20px;
+      padding: 24px 22px 28px;
+      margin-bottom: 16px;
       overflow: hidden;
-      background: 
-        linear-gradient(155deg, rgba(247, 166, 0, 0.16) 0%, rgba(247, 166, 0, 0.06) 48%, transparent 100%),
+      background:
+        radial-gradient(ellipse 80% 70% at 96% 4%, color-mix(in srgb, var(--ice-glow) 16%, transparent) 0%, transparent 56%),
+        radial-gradient(ellipse 60% 50% at 4% 96%, rgba(247, 196, 120, 0.10) 0%, transparent 52%),
         var(--tg-theme-secondary-bg-color);
-      border: 1px solid rgba(247, 166, 0, 0.35);
-      box-shadow: 
-        0 12px 40px rgba(0, 0, 0, 0.15),
-        0 4px 16px rgba(247, 166, 0, 0.1);
-      animation: pulse-glow 4s ease-in-out infinite;
+      border: 1px solid color-mix(in srgb, var(--ice-glow) 20%, transparent);
+      box-shadow: var(--shadow-card);
     }
     
     .hub-is-dark .hub-hero-main {
-      box-shadow: 
-        0 16px 50px rgba(0, 0, 0, 0.4),
-        0 6px 20px rgba(247, 166, 0, 0.15);
+      background:
+        radial-gradient(ellipse 80% 70% at 96% 4%, color-mix(in srgb, var(--ice-deep) 30%, transparent) 0%, transparent 56%),
+        radial-gradient(ellipse 60% 50% at 4% 96%, rgba(247, 166, 0, 0.08) 0%, transparent 52%),
+        var(--tg-theme-secondary-bg-color);
+      border-color: color-mix(in srgb, var(--ice-glow) 14%, transparent);
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.3);
     }
     
+    /* Subtle ice shimmer in the corner — no animation, just texture */
     .hub-hero-main::before {
       content: '';
       position: absolute;
-      top: -50%;
-      right: -30%;
-      width: 70%;
-      height: 150%;
-      background: radial-gradient(ellipse, rgba(247, 166, 0, 0.25) 0%, rgba(247, 166, 0, 0.1) 40%, transparent 70%);
+      top: -20%;
+      right: -15%;
+      width: 55%;
+      height: 130%;
+      background: radial-gradient(ellipse,
+        color-mix(in srgb, var(--ice-glow) 12%, transparent) 0%,
+        color-mix(in srgb, var(--ice-glow) 4%, transparent) 40%,
+        transparent 70%
+      );
       pointer-events: none;
-      animation: float-gentle 6s ease-in-out infinite;
     }
     
     .hub-hero-inner { 
@@ -185,90 +212,90 @@
       z-index: 1; 
     }
     
+    /* Greeting line: hint-colored, not amber — amber is for action, not description */
     .hub-hero-greeting {
-      font-size: 16px;
+      font-size: 13px;
       font-weight: 600;
-      color: var(--app-cta-fill);
-      margin-bottom: 12px;
-      letter-spacing: 0.02em;
+      color: var(--tg-theme-hint-color);
+      margin-bottom: 8px;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
     }
     
+    /* Title: the most important number/phrase the trainer sees today */
     .hub-hero-title {
-      font-size: clamp(28px, 7vw, 36px);
-      font-weight: 700;
-      letter-spacing: -0.05em;
+      font-size: clamp(26px, 6.5vw, 32px);
+      font-weight: 600;
+      letter-spacing: -0.04em;
       line-height: 1.1;
       color: var(--tg-theme-text-color);
-      margin-bottom: 16px;
+      margin-bottom: 10px;
     }
     
     .hub-hero-subtitle {
-      font-size: 15px;
+      font-size: 14px;
       font-weight: 500;
       color: var(--tg-theme-hint-color);
       line-height: 1.5;
-      max-width: 32em;
+      max-width: 34em;
     }
-    /* Smart Analytics Dashboard */
+
+    /* ── Cockpit metrics — single horizontal strip, no card towers ────────── */
     .hub-stats {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-      gap: 12px;
-      margin-bottom: 28px;
+      display: flex;
+      gap: 8px;
+      margin-bottom: 20px;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
     }
+    .hub-stats::-webkit-scrollbar { display: none; }
     
+    /* Stat chips: flex items, compact, no hover towers */
     .hub-stat-card {
+      flex: 1 1 0;
+      min-width: 72px;
       position: relative;
-      padding: 18px 16px 20px;
-      border-radius: 18px;
+      padding: 12px 14px 14px;
+      border-radius: 14px;
       background: var(--tg-theme-secondary-bg-color);
-      border: 1px solid rgba(128, 128, 128, 0.12);
-      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
-      transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+      border: 1px solid rgba(128, 128, 128, 0.1);
+      box-shadow: var(--shadow-soft);
       overflow: hidden;
+      transition: box-shadow 0.2s ease;
     }
     
     .hub-is-dark .hub-stat-card {
-      box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25);
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.22);
     }
     
+    /* Amber top accent only on highlight card */
     .hub-stat-card::before {
       content: '';
       position: absolute;
       top: 0;
       left: 0;
       right: 0;
-      height: 3px;
-      background: linear-gradient(90deg, var(--app-cta-fill) 0%, rgba(247, 166, 0, 0.6) 100%);
+      height: 2px;
+      background: linear-gradient(90deg, var(--app-cta-fill) 0%, rgba(247, 166, 0, 0.4) 100%);
       opacity: 0;
-      transition: opacity 0.3s ease;
     }
     
     .hub-stat-card.stat-highlight::before { opacity: 1; }
     
-    .hub-stat-card:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 8px 28px rgba(0, 0, 0, 0.15);
-    }
+    /* No hover lift — metrics are read-only, not interactive targets */
     
-    .hub-is-dark .hub-stat-card:hover {
-      box-shadow: 0 10px 36px rgba(0, 0, 0, 0.35);
-    }
-    
+    /* Icon hidden in compact mode — numbers carry the meaning alone */
     .hub-stat-icon {
-      width: 24px;
-      height: 24px;
-      margin-bottom: 12px;
-      color: var(--app-cta-fill);
-      opacity: 0.9;
+      display: none;
     }
     
     .hub-stat-value {
-      font-size: 24px;
+      font-size: 20px;
       font-weight: 700;
       color: var(--tg-theme-text-color);
       line-height: 1.1;
-      margin-bottom: 4px;
+      margin-bottom: 3px;
       font-variant-numeric: tabular-nums;
       min-height: 1.1em;
     }
@@ -307,11 +334,11 @@
     }
     
     .hub-stat-label {
-      font-size: 12px;
-      font-weight: 600;
+      font-size: 11px;
+      font-weight: 500;
       color: var(--tg-theme-hint-color);
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
+      text-transform: none;
+      letter-spacing: 0.01em;
     }
     
     .hub-stat-trend {
@@ -572,12 +599,13 @@
       color: var(--tg-theme-hint-color);
       line-height: 1.3;
     }
-    /* Главная: «Расписание» / «Записать клиента» — тёплый градиент + янтарная кромка (вариант B) */
+    /* Priority CTAs: glass-amber surface — feels purposeful, not decorative */
     .hub-quick-grid--priority .hub-quick-action {
-      border: 1px solid rgba(245, 166, 35, 0.38);
+      border: 1px solid rgba(245, 166, 35, 0.28);
       background:
-        linear-gradient(152deg, rgba(245, 166, 35, 0.2) 0%, rgba(245, 166, 35, 0.07) 48%, var(--tg-theme-secondary-bg-color) 100%);
-      box-shadow: 0 6px 22px rgba(245, 166, 35, 0.14), 0 2px 8px rgba(0, 0, 0, 0.12);
+        radial-gradient(ellipse 80% 90% at 0% 100%, rgba(247, 196, 120, 0.10) 0%, transparent 60%),
+        var(--tg-theme-secondary-bg-color);
+      box-shadow: var(--shadow-soft);
     }
     .hub-quick-grid--priority .hub-quick-action::before {
       opacity: 0;
@@ -598,26 +626,19 @@
     
     .hub-section-head:first-of-type { margin-top: 8px; }
     
+    /* Section title: quiet label — tool names don't need decoration */
     .hub-section-title {
-      font-size: 14px;
-      font-weight: 700;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+      text-transform: none;
       color: var(--tg-theme-hint-color);
       position: relative;
-      padding-left: 20px;
+      padding-left: 0;
     }
     
     .hub-section-title::before {
-      content: '';
-      position: absolute;
-      left: 0;
-      top: 50%;
-      transform: translateY(-50%);
-      width: 12px;
-      height: 2px;
-      background: var(--app-cta-fill);
-      border-radius: 1px;
+      display: none;
     }
     /* One-line «wow» for the trainer’s first client-initiated pending booking (API flag). */
     .hub-first-online-hint {
@@ -2521,21 +2542,21 @@
     }
     
     .hub-tile:hover {
-      transform: translateY(-4px) scale(1.02);
-      border-color: rgba(247, 166, 0, 0.5);
-      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
+      transform: translateY(-2px);
+      border-color: rgba(247, 166, 0, 0.45);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
     }
     
     .hub-is-dark .hub-tile:hover {
-      box-shadow: 0 16px 50px rgba(0, 0, 0, 0.4);
+      box-shadow: 0 10px 32px rgba(0, 0, 0, 0.35);
     }
     
     .hub-tile:hover::before {
-      background: radial-gradient(ellipse, rgba(247, 166, 0, 0.25) 0%, rgba(247, 166, 0, 0.12) 50%, transparent 80%);
+      background: radial-gradient(ellipse, rgba(247, 166, 0, 0.18) 0%, rgba(247, 166, 0, 0.07) 50%, transparent 80%);
     }
     
     .hub-tile:active { 
-      transform: translateY(-2px) scale(0.98); 
+      transform: scale(0.98); 
     }
     .hub-tile.hub-tile--locked {
       opacity: 0.58;
@@ -2970,29 +2991,32 @@
     }
     .onboarding-strip {
       margin-bottom: 20px;
-      padding: 12px 14px 14px;
-      border-radius: 18px;
-      border: 1px solid rgba(128, 128, 128, 0.14);
+      padding: 14px 14px 16px;
+      border-radius: 20px;
+      border: 1px solid color-mix(in srgb, var(--tg-theme-hint-color) 12%, transparent);
       background: var(--tg-theme-secondary-bg-color);
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+      box-shadow: 0 6px 24px color-mix(in srgb, var(--app-cta-fill) 9%, transparent);
     }
-    .hub-is-dark .onboarding-strip { box-shadow: 0 4px 18px rgba(0, 0, 0, 0.22); }
+    .hub-is-dark .onboarding-strip { box-shadow: 0 8px 26px rgba(0, 0, 0, 0.28); }
     .onboarding-strip-head {
-      margin-bottom: 10px;
+      margin-bottom: 12px;
     }
-    .onboarding-strip-title {
-      margin: 0;
-      font-size: 14px;
-      font-weight: 700;
-      letter-spacing: -0.02em;
-      color: var(--tg-theme-text-color);
-    }
-    .onboarding-strip-lead {
-      margin: 3px 0 0;
+    /* Progress pill replaces the «Первые шаги / Два шага…» heading clutter */
+    .onboarding-progress-pill {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 999px;
       font-size: 11px;
-      font-weight: 500;
-      line-height: 1.35;
-      color: var(--tg-theme-hint-color);
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      color: color-mix(in srgb, var(--app-cta-fill) 78%, var(--tg-theme-text-color));
+      background: color-mix(in srgb, var(--app-cta-fill) 12%, transparent);
+      border: 1px solid color-mix(in srgb, var(--app-cta-fill) 24%, transparent);
+    }
+    /* Heading + lead removed in favour of the pill + focal step title */
+    .onboarding-strip-title,
+    .onboarding-strip-lead {
+      display: none;
     }
     .onboarding-steps {
       list-style: none;
@@ -3080,6 +3104,84 @@
       background: color-mix(in srgb, var(--tg-theme-secondary-bg-color) 94%, transparent) !important;
       color: var(--tg-theme-hint-color) !important;
       font-weight: 500 !important;
+    }
+
+    /* ── Progressive focus: the ONE active step dominates; others whisper ── */
+    .onboarding-step:not(.done):not(.locked) {
+      flex-wrap: wrap;
+      align-items: center;
+      padding: 14px 14px 16px;
+      border-radius: 16px;
+      background: linear-gradient(
+        145deg,
+        color-mix(in srgb, var(--tg-theme-bg-color) 86%, var(--app-cta-fill) 14%) 0%,
+        var(--tg-theme-bg-color) 70%
+      );
+      border: 1px solid color-mix(in srgb, var(--app-cta-fill) 30%, transparent);
+    }
+    .onboarding-step:not(.done):not(.locked) .onboarding-step-icon {
+      width: 28px;
+      height: 28px;
+      font-size: 14px;
+      background: linear-gradient(135deg, var(--app-cta-fill) 0%, #f48a0c 100%);
+      color: #1a1a1a;
+      box-shadow: 0 3px 10px rgba(245, 166, 35, 0.4);
+    }
+    .onboarding-step:not(.done):not(.locked) .onboarding-step-name {
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+    .onboarding-step:not(.done):not(.locked) .onboarding-step-hint {
+      font-size: 12.5px;
+      margin-top: 3px;
+    }
+
+    /* Active step: the single primary CTA is full-width and brand-filled */
+    .onboarding-step:not(.done):not(.locked) > .onboarding-step-cta,
+    .onboarding-step:not(.done):not(.locked) .onboarding-step-cta--primary {
+      flex: 1 1 100%;
+      width: 100%;
+      align-self: stretch;
+      margin-top: 12px;
+      padding: 13px 16px;
+      border: none;
+      border-radius: 13px;
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      text-align: center;
+      color: #1a1a1a;
+      background: linear-gradient(135deg, var(--app-cta-fill) 0%, #f48a0c 100%);
+      box-shadow: 0 6px 18px rgba(245, 166, 35, 0.34);
+      transition: transform 0.16s ease, opacity 0.16s ease;
+    }
+    .onboarding-step:not(.done):not(.locked) > .onboarding-step-cta:active,
+    .onboarding-step:not(.done):not(.locked) .onboarding-step-cta--primary:active {
+      transform: scale(0.985);
+      opacity: 0.94;
+    }
+
+    /* Completed / locked steps shrink to quiet supporting rows */
+    .onboarding-step.done,
+    .onboarding-step.locked {
+      padding: 8px 12px;
+      border-color: transparent;
+      background: color-mix(in srgb, var(--tg-theme-bg-color) 55%, transparent);
+    }
+    .onboarding-step.done .onboarding-step-name,
+    .onboarding-step.locked .onboarding-step-name {
+      font-size: 12.5px;
+      font-weight: 600;
+      color: color-mix(in srgb, var(--tg-theme-text-color) 70%, var(--tg-theme-hint-color));
+    }
+    .onboarding-step.done .onboarding-step-hint,
+    .onboarding-step.locked .onboarding-step-hint {
+      display: none;
+    }
+    .onboarding-step.locked .onboarding-step-icon {
+      background: color-mix(in srgb, var(--tg-theme-hint-color) 18%, transparent);
+      color: var(--tg-theme-hint-color);
     }
     .onboarding-faq-row {
       margin-top: 12px;
@@ -3625,4 +3727,665 @@
     }
     .hub-lead-banner__cta {
       width: 100%;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════════
+       FOCUS-FIRST REDESIGN — v202606112
+       Principles:
+         1. One message per viewport — hero becomes a slim status chip
+         2. Real content first — bookings precede action buttons (HTML reorder)
+         3. Navigation in tab bar — tiles grid hidden entirely
+         4. No redundant labels — stats/tools section titles removed
+       ═══════════════════════════════════════════════════════════════════ */
+
+    /* ── 1. Compact hero: from 140px "metallic slab" to a 56px status strip ── */
+    .hub-hero {
+      margin-bottom: 12px;
+    }
+
+    .hub-hero-main {
+      padding: 12px 16px 13px !important;
+      border-radius: 16px !important;
+      /* Subtle: lighter gradient, less amber dominance */
+      background:
+        radial-gradient(ellipse 60% 60% at 95% 5%, color-mix(in srgb, var(--ice-glow) 10%, transparent) 0%, transparent 52%),
+        var(--tg-theme-secondary-bg-color) !important;
+      border-color: color-mix(in srgb, var(--tg-theme-hint-color) 14%, transparent) !important;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.06) !important;
+    }
+
+    .hub-is-dark .hub-hero-main {
+      background:
+        radial-gradient(ellipse 60% 60% at 95% 5%, color-mix(in srgb, var(--ice-deep) 18%, transparent) 0%, transparent 52%),
+        var(--tg-theme-secondary-bg-color) !important;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.18) !important;
+    }
+
+    /* Corner shimmer gone in compact mode — was the main "slab" culprit */
+    .hub-hero-main::before {
+      display: none !important;
+    }
+
+    /* "НОЧЬ" / "УТРО" label duplicates the header greeting — remove */
+    .hub-hero-greeting {
+      display: none !important;
+    }
+
+    /* Keep block layout so title + subtitle stack vertically; chevron is absolute */
+    .hub-hero-inner {
+      display: block;
+      position: relative;
+    }
+
+    .hub-hero-title {
+      font-size: 16px !important;
+      font-weight: 600 !important;
+      letter-spacing: -0.02em !important;
+      line-height: 1.25 !important;
+      margin-bottom: 2px !important;
+    }
+
+    /* Padding only when hero is tappable — prevents wasted space in disabled/loading state */
+    .hub-hero-main--nav .hub-hero-title {
+      padding-right: 26px;
+    }
+
+    .hub-hero-subtitle {
+      font-size: 12px !important;
+      line-height: 1.4 !important;
+      margin-bottom: 0 !important;
+    }
+
+    /* Chevron cue — absolutely positioned to avoid disturbing block text flow */
+    .hub-hero-main--nav .hub-hero-inner::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      right: 0;
+      transform: translateY(-50%);
+      width: 18px;
+      height: 18px;
+      background-color: var(--tg-theme-hint-color);
+      opacity: 0.45;
+      -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 6l6 6-6 6'/%3E%3C/svg%3E") center/contain no-repeat;
+              mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 6l6 6-6 6'/%3E%3C/svg%3E") center/contain no-repeat;
+    }
+
+    /* ── 2. Rhythm hints: less visual weight, clearly secondary ── */
+    .hub-schedule-rhythm-hint {
+      padding: 10px 14px 11px !important;
+      border-radius: 12px !important;
+      margin-bottom: 8px !important;
+    }
+
+    .hub-schedule-rhythm-hint__text {
+      font-size: 13px !important;
+      line-height: 1.45 !important;
+      margin-bottom: 8px !important;
+    }
+
+    /* ── 3. Stats: compact horizontal chips, visually separated from bookings ── */
+    .hub-section-head--stats {
+      display: none !important;
+    }
+
+    .hub-stats {
+      display: flex !important;
+      flex-direction: row !important;
+      flex-wrap: nowrap !important;
+      align-items: stretch !important;
+      justify-content: flex-start !important;
+      gap: 6px !important;
+      margin-top: 20px !important;
+      margin-bottom: 16px !important;
+      padding-top: 16px !important;
+      border-top: 1px solid color-mix(in srgb, var(--tg-theme-hint-color) 14%, transparent);
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+    }
+
+    /* Onboarding: stats chips forced visible by flex !important above — override via body class */
+    body.hub-onboarding-active #hubStats,
+    body.hub-onboarding-active #hubStatsHead,
+    body.hub-onboarding-active #hubFooterAside {
+      display: none !important;
+    }
+
+    .hub-stats::-webkit-scrollbar {
+      display: none;
+    }
+
+    .hub-stat-card {
+      flex: 1 1 0 !important;
+      min-width: 0 !important;
+      max-width: none !important;
+      padding: 7px 10px 8px !important;
+      border-radius: 10px !important;
+      background: color-mix(in srgb, var(--tg-theme-secondary-bg-color) 55%, transparent) !important;
+      border: 1px solid color-mix(in srgb, var(--tg-theme-hint-color) 12%, transparent) !important;
+      box-shadow: none !important;
+    }
+
+    .hub-is-dark .hub-stat-card {
+      background: color-mix(in srgb, var(--tg-theme-secondary-bg-color) 70%, transparent) !important;
+      border-color: color-mix(in srgb, var(--tg-theme-hint-color) 10%, transparent) !important;
+      box-shadow: none !important;
+    }
+
+    /* Amber top bar too heavy for small chips */
+    .hub-stat-card::before {
+      display: none !important;
+    }
+
+    .hub-stat-card.stat-highlight {
+      border-color: color-mix(in srgb, var(--app-cta-fill) 28%, transparent) !important;
+      background:
+        linear-gradient(135deg, color-mix(in srgb, var(--app-cta-fill) 8%, transparent), transparent 70%),
+        color-mix(in srgb, var(--tg-theme-secondary-bg-color) 55%, transparent) !important;
+    }
+
+    .hub-stat-value {
+      font-size: 15px !important;
+      font-weight: 700 !important;
+      line-height: 1.15 !important;
+      margin-bottom: 1px !important;
+      min-height: 0 !important;
+    }
+
+    .hub-stat-value.hub-stat-value--dual {
+      min-height: 0 !important;
+      margin-bottom: 1px !important;
+      gap: 1px !important;
+    }
+
+    .hub-stat-value.hub-stat-value--dual .hub-stat-dual-line {
+      font-size: 14px !important;
+    }
+
+    .hub-stat-value.hub-stat-value--dual .hub-stat-dual-line--sub {
+      font-size: 11px !important;
+    }
+
+    .hub-stat-label {
+      font-size: 9px !important;
+      font-weight: 500 !important;
+      line-height: 1.2 !important;
+      letter-spacing: 0.02em !important;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .hub-stat-trend {
+      top: 6px !important;
+      right: 6px !important;
+      font-size: 9px !important;
+      padding: 2px 5px !important;
+      border-radius: 6px !important;
+    }
+
+    /* ── 4. Tools grid: hidden — tab bar "Ещё" replaces it ── */
+    .hub-section-head--tools,
+    .hub-grid {
+      display: none !important;
+    }
+
+    /* ── 5. Hero card: removed — "status of day" adds no value above bookings ── */
+    #hubHeroBanner {
+      display: none !important;
+    }
+
+    /* ── 6. Urgent context alert — single refined card at top ──────────────
+       Only shown when there are pending confirmations / unanswered requests.
+       Creation action is the floating FAB, not here. */
+
+    .hub-urgent-alert {
+      margin: 2px 0 16px;
+    }
+    .hub-urgent-alert[hidden] { display: none !important; }
+
+    .hub-urgent-alert__card {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      width: 100%;
+      padding: 13px 14px;
+      border-radius: 16px;
+      border: 1px solid color-mix(in srgb, var(--app-cta-fill) 32%, transparent);
+      background:
+        linear-gradient(135deg, color-mix(in srgb, var(--app-cta-fill) 11%, transparent) 0%, transparent 62%),
+        var(--tg-theme-secondary-bg-color);
+      box-shadow: 0 2px 12px color-mix(in srgb, var(--app-cta-fill) 12%, transparent);
+      font: inherit;
+      text-align: left;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      transition: transform 0.14s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+    }
+    .hub-is-dark .hub-urgent-alert__card {
+      border-color: color-mix(in srgb, var(--app-cta-fill) 28%, transparent);
+      box-shadow: 0 2px 14px rgba(0, 0, 0, 0.28);
+    }
+    .hub-urgent-alert__card:active {
+      transform: scale(0.99);
+    }
+
+    /* Icon disc — amber-tinted, signals attention without shouting */
+    .hub-urgent-alert__icon {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 38px;
+      height: 38px;
+      border-radius: 11px;
+      background: linear-gradient(135deg, var(--app-cta-fill) 0%, #f48a0c 100%);
+      color: #1a1200;
+      box-shadow: 0 4px 12px color-mix(in srgb, var(--app-cta-fill) 36%, transparent);
+    }
+    .hub-urgent-alert__icon svg {
+      width: 20px;
+      height: 20px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .hub-urgent-alert__body {
+      flex: 1;
+      min-width: 0;
+    }
+    .hub-urgent-alert__title {
+      font-size: 14.5px;
+      font-weight: 600;
+      line-height: 1.25;
+      color: var(--tg-theme-text-color);
+      letter-spacing: -0.01em;
+    }
+    .hub-urgent-alert__sub {
+      font-size: 12px;
+      line-height: 1.3;
+      color: var(--tg-theme-hint-color);
+      margin-top: 2px;
+    }
+    .hub-urgent-alert__chev {
+      flex-shrink: 0;
+      width: 20px;
+      height: 20px;
+      color: var(--tg-theme-hint-color);
+      opacity: 0.5;
+    }
+    .hub-urgent-alert__chev svg {
+      width: 100%;
+      height: 100%;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    /* Legacy action buttons hidden — JS still finds by id for event wiring */
+    #hubBtnSchedule, #hubBtnBookClient { display: none !important; }
+
+    /* ── 7. Floating «Записать» (FAB) — premium create-action pattern ──────── */
+    .hub-book-fab {
+      position: fixed;
+      right: calc(16px + env(safe-area-inset-right, 0px));
+      /* Sit just above the tab bar: tab height + its bottom margin + safe area + gap */
+      bottom: calc(var(--trainer-tab-bar-height, 62px) + var(--trainer-tab-bar-margin, 18px) + env(safe-area-inset-bottom, 0px) + 14px);
+      z-index: 8500;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 14px 20px 14px 18px;
+      border: none;
+      border-radius: 18px;
+      background: linear-gradient(135deg, var(--app-cta-fill) 0%, #f48a0c 100%);
+      color: #1a1200;
+      font: inherit;
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      cursor: pointer;
+      box-shadow:
+        0 8px 28px color-mix(in srgb, var(--app-cta-fill) 44%, transparent),
+        0 2px 8px rgba(0, 0, 0, 0.18),
+        inset 0 1px 0 rgba(255, 255, 255, 0.35);
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+      /* Entrance: rise + fade once mounted */
+      animation: hub-book-fab-in 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+      transition:
+        transform 0.16s cubic-bezier(0.22, 1, 0.36, 1),
+        box-shadow 0.2s ease,
+        opacity 0.24s ease,
+        visibility 0.24s ease;
+    }
+    .hub-book-fab[hidden] { display: none !important; }
+
+    /* Book modal is lower z-index than FAB — fade FAB out while form is open */
+    .hub-book-fab--concealed {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+      transform: translateY(10px) scale(0.96);
+    }
+
+    @keyframes hub-book-fab-in {
+      from { opacity: 0; transform: translateY(14px) scale(0.92); }
+      to   { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    .hub-book-fab:active {
+      transform: scale(0.95);
+      box-shadow:
+        0 4px 16px color-mix(in srgb, var(--app-cta-fill) 38%, transparent),
+        0 1px 4px rgba(0, 0, 0, 0.2),
+        inset 0 1px 0 rgba(255, 255, 255, 0.35);
+    }
+    .hub-book-fab:focus-visible {
+      outline: 2px solid color-mix(in srgb, var(--app-cta-fill) 70%, #000);
+      outline-offset: 3px;
+    }
+
+    .hub-book-fab__icon {
+      width: 20px;
+      height: 20px;
+      flex-shrink: 0;
+    }
+    .hub-book-fab__label {
+      white-space: nowrap;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .hub-book-fab { animation: none; }
+    }
+
+    /* ── 8. Community footer link + sheet ─────────────────────────────────── */
+
+    .hub-footer-aside {
+      margin: 28px 0 24px;
+      padding-top: 16px;
+      border-top: 1px dashed color-mix(in srgb, var(--tg-theme-hint-color) 26%, transparent);
+    }
+
+    .hub-is-dark .hub-footer-aside {
+      border-top-color: color-mix(in srgb, var(--tg-theme-hint-color) 32%, transparent);
+    }
+
+    /* ═══════════════════════════════════════════════════════════════════
+       ONBOARDING — premium first impression: one welcome, one focal action.
+       Hero is hidden; welcome is airy & borderless (identity), the step card
+       is the single bordered focal surface (action).
+       ═══════════════════════════════════════════════════════════════════ */
+
+    /* Remove the competing third block during onboarding */
+    body.hub-onboarding-active #hubHeroBanner {
+      display: none !important;
+    }
+
+    /* Entrance: gentle fade-up so the cabinet feels deliberate, not loaded */
+    @keyframes onboardingFadeUp {
+      from {
+        opacity: 0;
+        transform: translateY(12px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+    body.hub-onboarding-active #hubOnboardingWelcome {
+      animation: onboardingFadeUp 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+    body.hub-onboarding-active #onboardingStrip {
+      animation: onboardingFadeUp 0.6s cubic-bezier(0.22, 1, 0.36, 1) 0.1s both;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      body.hub-onboarding-active #hubOnboardingWelcome,
+      body.hub-onboarding-active #onboardingStrip {
+        animation: none;
+      }
+    }
+
+    /* Welcome — borderless, airy identity (not a card; sets premium tone) */
+    .hub-onboarding-welcome {
+      margin: 4px 0 18px;
+      padding: 0 2px;
+    }
+
+    .hub-onboarding-welcome__kicker {
+      margin: 0 0 6px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: color-mix(in srgb, var(--app-cta-fill) 80%, var(--tg-theme-text-color));
+    }
+
+    .hub-onboarding-welcome__title {
+      margin: 0 0 8px;
+      font-size: 27px;
+      font-weight: 700;
+      letter-spacing: -0.035em;
+      line-height: 1.12;
+      color: var(--tg-theme-text-color);
+    }
+
+    .hub-onboarding-welcome__lead {
+      margin: 0 0 14px;
+      font-size: 14px;
+      font-weight: 500;
+      line-height: 1.5;
+      color: var(--tg-theme-hint-color);
+      max-width: 32em;
+    }
+
+    .hub-onboarding-welcome__chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+    }
+
+    .hub-onboarding-welcome__chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 6px 11px;
+      border-radius: 999px;
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: -0.005em;
+      color: color-mix(in srgb, var(--tg-theme-text-color) 82%, var(--tg-theme-hint-color));
+      background: color-mix(in srgb, var(--tg-theme-secondary-bg-color) 70%, transparent);
+      border: 1px solid color-mix(in srgb, var(--tg-theme-hint-color) 12%, transparent);
+    }
+
+    .hub-onboarding-welcome__chip span[aria-hidden] {
+      font-size: 13px;
+      line-height: 1;
+    }
+
+    /* Community chip — quiet, tappable; no longer a loud primary button */
+    .hub-onboarding-welcome__chip--action {
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+      color: color-mix(in srgb, var(--app-cta-fill) 70%, var(--tg-theme-text-color));
+      background: color-mix(in srgb, var(--app-cta-fill) 10%, transparent);
+      border-color: color-mix(in srgb, var(--app-cta-fill) 26%, transparent);
+      transition: transform 0.16s ease, background 0.16s ease;
+    }
+
+    .hub-onboarding-welcome__chip--action svg {
+      width: 13px;
+      height: 13px;
+      opacity: 0.7;
+    }
+
+    .hub-onboarding-welcome__chip--action:active {
+      transform: scale(0.96);
+      background: color-mix(in srgb, var(--app-cta-fill) 16%, transparent);
+    }
+
+    .hub-community-link {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      width: 100%;
+      margin: 0;
+      padding: 6px 0;
+      border: none;
+      background: transparent;
+      font: inherit;
+      text-align: left;
+      cursor: pointer;
+      color: color-mix(in srgb, var(--tg-theme-hint-color) 92%, var(--tg-theme-text-color));
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+      border-radius: 8px;
+      transition: opacity 0.15s ease;
+    }
+
+    .hub-community-link:active {
+      opacity: 0.72;
+    }
+
+    .hub-community-link:focus-visible {
+      outline: 2px solid color-mix(in srgb, var(--tg-theme-button-color) 45%, transparent);
+      outline-offset: 2px;
+    }
+
+    .hub-community-link__icon {
+      flex-shrink: 0;
+      color: color-mix(in srgb, var(--app-cta-fill) 80%, var(--tg-theme-text-color));
+      opacity: 0.85;
+    }
+
+    .hub-community-link__copy {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 1px;
+      line-height: 1.3;
+      letter-spacing: -0.01em;
+    }
+
+    .hub-community-link__label {
+      font-size: 12px;
+      font-weight: 600;
+      color: color-mix(in srgb, var(--tg-theme-text-color) 68%, var(--tg-theme-hint-color));
+    }
+
+    .hub-community-link__hint {
+      font-size: 11px;
+      font-weight: 500;
+      color: color-mix(in srgb, var(--tg-theme-hint-color) 95%, transparent);
+    }
+
+    .hub-community-link__arrow {
+      flex-shrink: 0;
+      width: 12px;
+      height: 12px;
+      opacity: 0.4;
+      color: var(--tg-theme-hint-color);
+    }
+
+    /* Bottom sheet — mirrors trainer-more-sheet rhythm */
+    .hub-community-sheet-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 9100;
+      background: rgba(0, 0, 0, 0.45);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s ease;
+    }
+
+    .hub-community-sheet-overlay[hidden] {
+      display: block !important;
+    }
+
+    .hub-community-sheet-overlay.hub-community-sheet-overlay--open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .hub-community-sheet {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 9101;
+      max-height: min(78vh, 520px);
+      padding: 8px 16px calc(12px + var(--trainer-tab-bar-height, 62px) + env(safe-area-inset-bottom, 0px));
+      border-radius: 20px 20px 0 0;
+      background: var(--tg-theme-bg-color);
+      box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.18);
+      transform: translateY(100%);
+      transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .hub-community-sheet-overlay--open .hub-community-sheet {
+      transform: translateY(0);
+    }
+
+    .hub-community-sheet__handle {
+      width: 36px;
+      height: 4px;
+      border-radius: 2px;
+      background: color-mix(in srgb, var(--tg-theme-hint-color) 45%, transparent);
+      margin: 6px auto 14px;
+      flex-shrink: 0;
+    }
+
+    .hub-community-sheet__title {
+      margin: 0 0 8px;
+      padding: 0 2px;
+      font-size: 17px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      line-height: 1.2;
+      color: var(--tg-theme-text-color);
+    }
+
+    .hub-community-sheet__lead {
+      margin: 0 0 14px;
+      padding: 0 2px;
+      font-size: 13px;
+      line-height: 1.45;
+      font-weight: 500;
+      color: var(--tg-theme-hint-color);
+    }
+
+    .hub-community-sheet .hub-support-form {
+      margin: 0;
+    }
+
+    .hub-community-sheet__cta {
+      margin: 10px 2px 4px;
+      font-size: 11px;
+      line-height: 1.45;
+      color: color-mix(in srgb, var(--tg-theme-hint-color) 92%, transparent);
+    }
+
+    .hub-community-sheet__cta strong {
+      color: color-mix(in srgb, var(--tg-theme-text-color) 72%, var(--tg-theme-hint-color));
+      font-weight: 600;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .hub-community-sheet-overlay,
+      .hub-community-sheet {
+        transition: none;
+      }
     }

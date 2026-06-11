@@ -446,7 +446,9 @@
         var html = '';
         state.items.forEach(function(p) {
           var serviceLabel = (p.service_name && p.service_name.trim()) ? p.service_name.trim() : 'любая услуга';
-          var meta = p.sessions_total + ' занятий · ' + formatPrice(p.price_cents) + ' · ' + serviceLabel;
+          var scopeParts = [serviceLabel];
+          if (p.tiers_label && p.tiers_label.trim()) scopeParts.push(p.tiers_label.trim());
+          var meta = p.sessions_total + ' занятий · ' + formatPrice(p.price_cents) + ' · ' + scopeParts.join(', тарифы: ');
           var cardClass = 'product-card';
           if (!p.is_active) cardClass += ' inactive';
           html += '<button type="button" class="' + cardClass + '" data-id="' + p.id + '">';
@@ -510,6 +512,46 @@
         });
       }
 
+      var TIER_KINDS = [
+        { kind: 'child',           label: 'Детский' },
+        { kind: 'adult',           label: 'Взрослый' },
+        { kind: 'two_children',    label: '2 ребенка' },
+        { kind: 'two_adults',      label: '2 взрослых' },
+        { kind: 'adult_and_child', label: 'Взрослый + ребенок' },
+      ];
+
+      function getPassProductSelectedTierKinds() {
+        var host = document.getElementById('passProductTiersHost');
+        if (!host) return [];
+        var kinds = [];
+        host.querySelectorAll('input.pp-tier-cb:checked').forEach(function(cb) {
+          if (cb.value) kinds.push(cb.value);
+        });
+        return kinds;
+      }
+
+      function renderPassProductTierCheckboxes(selectedKinds) {
+        var host = document.getElementById('passProductTiersHost');
+        if (!host) return;
+        var sel = {};
+        (selectedKinds || []).forEach(function(k) { sel[k] = true; });
+        host.innerHTML = '';
+        TIER_KINDS.forEach(function(t) {
+          var row = document.createElement('label');
+          row.className = 'pp-svc-row';
+          var cb = document.createElement('input');
+          cb.type = 'checkbox';
+          cb.className = 'pp-tier-cb';
+          cb.value = t.kind;
+          if (sel[t.kind]) cb.checked = true;
+          row.appendChild(cb);
+          var span = document.createElement('span');
+          span.textContent = t.label;
+          row.appendChild(span);
+          host.appendChild(row);
+        });
+      }
+
       function openForm(product) {
         document.getElementById('formTitle').textContent = product ? 'Редактировать абонемент' : 'Новый абонемент';
         document.getElementById('inputName').value = product ? product.name : '';
@@ -520,9 +562,11 @@
         document.getElementById('groupActive').style.display = product ? 'block' : 'none';
         document.getElementById('btnDeleteProduct').style.display = product ? 'block' : 'none';
         state.editingId = product ? product.id : null;
-        var preSelected = product && Array.isArray(product.service_ids) ? product.service_ids.slice() : [];
+        var preSelectedSvc = product && Array.isArray(product.service_ids) ? product.service_ids.slice() : [];
+        var preSelectedTiers = product && Array.isArray(product.tier_kinds) ? product.tier_kinds.slice() : [];
+        renderPassProductTierCheckboxes(preSelectedTiers);
         function applyCb() {
-          renderPassProductServiceCheckboxes(preSelected);
+          renderPassProductServiceCheckboxes(preSelectedSvc);
         }
         if (state.services.length === 0) {
           fetch(apiUrl('/trainer/my-services') + initDataParam(), { headers: headers() })
@@ -622,7 +666,8 @@
           var opt = document.createElement('option');
           opt.value = p.id;
           var serviceLabel = (p.service_name && p.service_name.trim()) ? p.service_name.trim() : 'любая услуга';
-          opt.textContent = (p.name || '') + ' · ' + (p.sessions_total || 0) + ' занятий · ' + serviceLabel;
+          var scopeStr = (p.tiers_label && p.tiers_label.trim()) ? serviceLabel + ', тарифы: ' + p.tiers_label.trim() : serviceLabel;
+          opt.textContent = (p.name || '') + ' · ' + (p.sessions_total || 0) + ' занятий · ' + scopeStr;
           productSelect.appendChild(opt);
         });
         if (state.prefillClientIdForPassIssue) {
@@ -1242,8 +1287,9 @@
         var priceCents = priceByn * 100;
 
         var serviceIds = getPassProductSelectedServiceIds();
+        var tierKinds = getPassProductSelectedTierKinds();
         if (state.editingId) {
-          var body = { name: name, sessions_total: sessions, price_cents: priceCents, is_active: document.getElementById('inputActive').checked, service_ids: serviceIds };
+          var body = { name: name, sessions_total: sessions, price_cents: priceCents, is_active: document.getElementById('inputActive').checked, service_ids: serviceIds, tier_kinds: tierKinds };
           fetch(apiUrl('/trainer/pass-products/' + state.editingId), {
             method: 'PATCH',
             headers: headers(),
@@ -1256,7 +1302,7 @@
             })
             .catch(function() { alert('Ошибка сети'); });
         } else {
-          var body = { name: name, sessions_total: sessions, price_cents: priceCents, service_ids: serviceIds };
+          var body = { name: name, sessions_total: sessions, price_cents: priceCents, service_ids: serviceIds, tier_kinds: tierKinds };
           fetch(apiUrl('/trainer/pass-products'), {
             method: 'POST',
             headers: headers(),

@@ -1026,6 +1026,32 @@ def webapp_mini_app_client_shell_js(request: Request):
     )
 
 
+@app.get("/webapp/mini-app-trainer-shell.css")
+def webapp_mini_app_trainer_shell_css(request: Request):
+    """Trainer shell — bottom tab bar + more sheet. Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "mini-app-trainer-shell.css"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="CSS file not found")
+    return FileResponse(
+        path,
+        media_type="text/css",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
+@app.get("/webapp/mini-app-trainer-shell.js")
+def webapp_mini_app_trainer_shell_js(request: Request):
+    """Trainer shell — tab navigation, more sheet, drill-down observer. Use ``?v=…`` for long cache."""
+    path = _WEBAPP_DIR / "mini-app-trainer-shell.js"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="JS file not found")
+    return FileResponse(
+        path,
+        media_type="application/javascript",
+        headers=_webapp_versioned_asset_cache_headers(request),
+    )
+
+
 @app.get("/webapp/mini-app-client-bookings.css")
 def webapp_mini_app_client_bookings_css(request: Request):
     """Client bookings list/detail styles (split from client-bookings.html). Use ``?v=…`` for long cache."""

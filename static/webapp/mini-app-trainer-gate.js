@@ -30,7 +30,6 @@
     }).then(function (r) {
       return r.json().then(function (d) {
         if (!r.ok) throw new Error((d && d.detail) || r.statusText || 'access');
-        /* Mirrors Settings.trainer_webapp_force_client_chat_relay — TrainerRelayHelpers + hub delegates read these. */
         if (
           typeof global.document !== 'undefined' &&
           d &&
@@ -47,7 +46,7 @@
   }
 
   function webappBasePath() {
-    var p = window.location.pathname || '';
+    var p = global.location.pathname || '';
     return p.replace(/[^/]+$/, '') || '/webapp/';
   }
 
@@ -57,6 +56,10 @@
     return url + (url.indexOf('?') >= 0 ? '&' : '?') + 'init_data=' + encodeURIComponent(initData);
   }
 
+  function isHubPage() {
+    return /trainer-home(?:\.html)?$/i.test(String(global.location.pathname || ''));
+  }
+
   function gateCopy(access) {
     var st = (access && access.access_state) || '';
     if (st === 'blocked_profile') {
@@ -64,7 +67,7 @@
         icon: '📋',
         title: 'Сначала анкета',
         hint:
-          'Заполните профиль в разделе «Первые шаги» и отправьте анкету на проверку. После активации откроются расписание, заявки и остальные разделы — это не ошибка сети.',
+          'Завершите шаг «Расскажите о себе» на главной — расписание и остальные разделы откроются сразу после него.',
       };
     }
     if (st === 'booking_ready') {
@@ -72,7 +75,7 @@
         icon: '🚀',
         title: 'Почти готово',
         hint:
-          'Базовый профиль достаточен: откройте «Расписание» или «Обзор» и сделайте первую тестовую запись. Полную анкету для каталога можно дополнить позже в «Профиле».',
+          'Базовый профиль готов. Сделайте первую запись на главной — тогда разделы оживут полностью.',
       };
     }
     if (st === 'pending_moderation') {
@@ -90,6 +93,13 @@
         hint: 'Профиль деактивирован. Если это ошибка — напишите в поддержку через /guide в боте.',
       };
     }
+    if (st === 'not_linked') {
+      return {
+        icon: '🔗',
+        title: 'Только для тренеров',
+        hint: 'Этот бот только для тренеров. Подключение по ссылке с сайта.',
+      };
+    }
     return {
       icon: '🔗',
       title: 'Откройте из бота',
@@ -97,25 +107,51 @@
     };
   }
 
+  function gateActionsHtml(access) {
+    var st = (access && access.access_state) || '';
+    var onHub = isHubPage();
+    var parts = [];
+
+    if (st === 'blocked_profile') {
+      parts.push(
+        '<button type="button" class="bd-btn bd-btn--primary" data-trainer-gate="profile-onboarding">Заполнить анкету</button>'
+      );
+      if (!onHub) {
+        parts.push(
+          '<button type="button" class="bd-btn bd-btn--secondary" data-trainer-gate="hub">На главную</button>'
+        );
+      }
+    } else if (st === 'booking_ready') {
+      parts.push(
+        '<button type="button" class="bd-btn bd-btn--primary" data-trainer-gate="hub">Первые шаги</button>'
+      );
+      if (!onHub) {
+        parts.push(
+          '<button type="button" class="bd-btn bd-btn--secondary" data-trainer-gate="schedule">Расписание</button>'
+        );
+      }
+    } else if (st === 'pending_moderation') {
+      parts.push(
+        '<button type="button" class="bd-btn bd-btn--primary" data-trainer-gate="profile">Профиль</button>'
+      );
+      if (!onHub) {
+        parts.push(
+          '<button type="button" class="bd-btn bd-btn--secondary" data-trainer-gate="hub">На главную</button>'
+        );
+      }
+    } else if (st !== 'not_linked' && st !== 'deactivated' && !onHub) {
+      parts.push(
+        '<button type="button" class="bd-btn bd-btn--secondary" data-trainer-gate="hub">На главную</button>'
+      );
+    }
+
+    if (!parts.length) return '';
+    return '<div class="bd-trainer-gate__actions">' + parts.join('') + '</div>';
+  }
+
   function gateCardHtml(access, compact) {
     var c = gateCopy(access);
-    var st = (access && access.access_state) || '';
     var compactClass = compact ? ' bd-trainer-gate__card--compact' : '';
-    var actionsHtml = '';
-    if (st !== 'blocked_profile') {
-      if (st === 'pending_moderation') {
-        actionsHtml =
-          '<div class="bd-trainer-gate__actions">' +
-          '<button type="button" class="bd-btn bd-btn--primary" data-trainer-gate="profile">Профиль</button>' +
-          '</div>';
-      } else {
-        actionsHtml =
-          '<div class="bd-trainer-gate__actions">' +
-          '<button type="button" class="bd-btn bd-btn--primary" data-trainer-gate="profile">Профиль</button>' +
-          '<button type="button" class="bd-btn bd-btn--secondary" data-trainer-gate="hub">Обзор</button>' +
-          '</div>';
-      }
-    }
     return (
       '<div class="bd-trainer-gate__card' +
       compactClass +
@@ -129,7 +165,7 @@
       '<p class="bd-trainer-gate__hint">' +
       c.hint +
       '</p>' +
-      actionsHtml +
+      gateActionsHtml(access) +
       '</div>'
     );
   }
@@ -140,7 +176,11 @@
       btn.onclick = function () {
         var a = btn.getAttribute('data-trainer-gate');
         if (a === 'profile') window.location.href = withInit('trainer-profile', initData);
+        if (a === 'profile-onboarding') {
+          window.location.href = withInit('trainer-profile?onboarding=blocks', initData);
+        }
         if (a === 'hub') window.location.href = withInit('trainer-home', initData);
+        if (a === 'schedule') window.location.href = withInit('schedule-editor', initData);
       };
     });
   }
@@ -181,7 +221,6 @@
     },
     isActive: function (a) {
       if (!a) return false;
-      /* Strict JSON boolean; tolerate string/number if a proxy mangles the payload. */
       if (a.is_active === true || a.is_active === 'true' || a.is_active === 1) return true;
       if (a.access_state === 'active') return true;
       if (a.schedule_unlocked === true || a.schedule_unlocked === 'true' || a.schedule_unlocked === 1) return true;

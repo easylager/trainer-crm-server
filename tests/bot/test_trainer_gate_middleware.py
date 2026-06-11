@@ -68,11 +68,11 @@ async def test_gate_blocks_handler_when_not_active(monkeypatch: pytest.MonkeyPat
 
 
 @pytest.mark.asyncio
-async def test_gate_passes_allowlisted_command_even_if_blocked(
+async def test_gate_passes_allowlisted_command_when_linked_but_blocked(
     monkeypatch: pytest.MonkeyPatch, patch_trainer_gate_session
 ) -> None:
     async def fake_state(_session, _uid: int):
-        raise AssertionError("allowlisted commands must not hit DB access state")
+        return TrainerAccessState.BLOCKED_PROFILE, {"id": 1}
 
     monkeypatch.setattr(
         "src.bot.middlewares.trainer_gate_middleware.get_trainer_access_state",
@@ -89,6 +89,62 @@ async def test_gate_passes_allowlisted_command_even_if_blocked(
 
     out = await mw._handle_message(handler, msg, {})
     assert out == "ok"
+    handler.assert_awaited_once_with(msg, {})
+    msg.answer.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_gate_blocks_allowlisted_command_when_not_linked(
+    monkeypatch: pytest.MonkeyPatch, patch_trainer_gate_session
+) -> None:
+    async def fake_state(_session, uid: int):
+        return TrainerAccessState.NOT_LINKED, None
+
+    monkeypatch.setattr(
+        "src.bot.middlewares.trainer_gate_middleware.get_trainer_access_state",
+        fake_state,
+        raising=True,
+    )
+    mw = TrainerGateMiddleware()
+    handler = AsyncMock(return_value="ok")
+
+    msg = SimpleNamespace(
+        from_user=SimpleNamespace(id=42),
+        text="/home",
+        chat=SimpleNamespace(id=99),
+        bot=SimpleNamespace(send_chat_action=AsyncMock()),
+        answer=AsyncMock(),
+    )
+
+    out = await mw._handle_message(handler, msg, {})
+    assert out is None
+    handler.assert_not_called()
+    msg.answer.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_gate_passes_welcome_link_start_when_not_linked(
+    monkeypatch: pytest.MonkeyPatch, patch_trainer_gate_session
+) -> None:
+    async def fake_state(_session, uid: int):
+        return TrainerAccessState.NOT_LINKED, None
+
+    monkeypatch.setattr(
+        "src.bot.middlewares.trainer_gate_middleware.get_trainer_access_state",
+        fake_state,
+        raising=True,
+    )
+    mw = TrainerGateMiddleware()
+    handler = AsyncMock(return_value="linked")
+
+    msg = SimpleNamespace(
+        from_user=SimpleNamespace(id=42),
+        text="/start link_secret_token",
+        answer=AsyncMock(),
+    )
+
+    out = await mw._handle_message(handler, msg, {})
+    assert out == "linked"
     handler.assert_awaited_once_with(msg, {})
     msg.answer.assert_not_called()
 
@@ -123,15 +179,16 @@ async def test_gate_passes_callback_when_booking_ready(
 
 
 @pytest.mark.asyncio
-async def test_gate_passes_booking_crm_callbacks_without_access_check(
+async def test_gate_passes_booking_crm_callbacks_for_linked_trainer(
     monkeypatch: pytest.MonkeyPatch, patch_trainer_gate_session
 ) -> None:
-    async def fake_state_should_not_run(_session, _uid: int):
-        raise AssertionError("booking_add_note must bypass trainer access lookup")
+    async def fake_state(_session, _uid: int):
+        return TrainerAccessState.BOOKING_READY, {"id": 1}
 
     monkeypatch.setattr(
         "src.bot.middlewares.trainer_gate_middleware.get_trainer_access_state",
-        fake_state_should_not_run,
+        fake_state,
+        raising=True,
     )
     mw = TrainerGateMiddleware()
     handler = AsyncMock(return_value="ok")

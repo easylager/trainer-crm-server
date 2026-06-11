@@ -41,6 +41,8 @@ class _PassPoolEntry:
     instance_id: int
     scoped_service_ids: set[int]
     unrestricted: bool
+    scoped_tier_kinds: set[str]
+    tier_unrestricted: bool
     remaining: int
 
 
@@ -52,6 +54,7 @@ class _UpcomingBookingPayRow:
     booking_price_cents: int | None
     has_pass_redemption: bool
     has_cert_credit: bool
+    price_tier_kind: str | None = None
 
 
 async def load_booking_deduction_snapshot(
@@ -103,18 +106,24 @@ async def load_booking_deduction_snapshot(
     return BookingDeductionSnapshot(outcome="none")
 
 
-def _pass_entry_covers_service(entry: _PassPoolEntry, service_id: int) -> bool:
-    if entry.unrestricted:
-        return True
-    return int(service_id) in entry.scoped_service_ids
+def _pass_entry_covers_booking(entry: _PassPoolEntry, service_id: int, tier_kind: str | None) -> bool:
+    """Mirror SQL_PASS_PRODUCT_COVERS_BOOKING logic in Python for virtual pool allocation."""
+    # service scope
+    if not entry.unrestricted and int(service_id) not in entry.scoped_service_ids:
+        return False
+    # tier scope: tier-restricted pass requires a non-NULL matching tier on the booking
+    if not entry.tier_unrestricted:
+        if tier_kind is None or tier_kind not in entry.scoped_tier_kinds:
+            return False
+    return True
 
 
-def _allocate_pass_for_booking(pool: list[_PassPoolEntry], service_id: int) -> bool:
+def _allocate_pass_for_booking(pool: list[_PassPoolEntry], service_id: int, tier_kind: str | None = None) -> bool:
     """Mirror redeem_pass_session_for_booking pick order on a virtual pool."""
     for entry in pool:
         if entry.remaining <= 0:
             continue
-        if not _pass_entry_covers_service(entry, service_id):
+        if not _pass_entry_covers_booking(entry, service_id, tier_kind):
             continue
         entry.remaining -= 1
         return True
@@ -137,6 +146,7 @@ def _fallback_payment_class(
 def _allocate_expected_payment_classes(rows: list[_UpcomingBookingPayRow], pool: list[_PassPoolEntry], cert_balance_cents: int) -> dict[int, str]:
     """
     Chronological queue: earliest unredeemed visit consumes pass sessions first, then cert balance.
+    Pass allocation mirrors SQL_PASS_PRODUCT_COVERS_BOOKING: service AND tier must both match.
     """
     out: dict[int, str] = {}
     virtual_cert = int(cert_balance_cents)
@@ -147,7 +157,7 @@ def _allocate_expected_payment_classes(rows: list[_UpcomingBookingPayRow], pool:
         if row.has_cert_credit:
             out[row.booking_id] = "CERT"
             continue
-        if _allocate_pass_for_booking(pool, row.service_id):
+        if _allocate_pass_for_booking(pool, row.service_id, row.price_tier_kind):
             out[row.booking_id] = "PASS"
             continue
         price = int(row.booking_price_cents or 0)
@@ -176,12 +186,17 @@ async def _load_pass_pool_for_client_trainer(
                 pi.id,
                 pi.sessions_remaining,
                 COALESCE(
-                    ARRAY_AGG(tps.service_id) FILTER (WHERE tps.service_id IS NOT NULL),
+                    ARRAY_AGG(DISTINCT tps.service_id) FILTER (WHERE tps.service_id IS NOT NULL),
                     ARRAY[]::INTEGER[]
-                ) AS scoped_service_ids
+                ) AS scoped_service_ids,
+                COALESCE(
+                    ARRAY_AGG(DISTINCT tpt.tier_kind) FILTER (WHERE tpt.tier_kind IS NOT NULL),
+                    ARRAY[]::TEXT[]
+                ) AS scoped_tier_kinds
             FROM pass_instances pi
             JOIN trainer_pass_products p ON p.id = pi.pass_product_id
             LEFT JOIN trainer_pass_product_services tps ON tps.pass_product_id = p.id
+            LEFT JOIN trainer_pass_product_tiers tpt ON tpt.pass_product_id = p.id
             WHERE pi.client_id = :cid
               AND p.trainer_id = :tid
               AND pi.status = 'active'
@@ -195,12 +210,15 @@ async def _load_pass_pool_for_client_trainer(
     )
     pool: list[_PassPoolEntry] = []
     for row in r.fetchall():
-        scoped = {int(sid) for sid in (row[2] or []) if sid is not None}
+        scoped_svc = {int(sid) for sid in (row[2] or []) if sid is not None}
+        scoped_tiers = {str(k) for k in (row[3] or []) if k is not None}
         pool.append(
             _PassPoolEntry(
                 instance_id=int(row[0]),
-                scoped_service_ids=scoped,
-                unrestricted=not scoped,
+                scoped_service_ids=scoped_svc,
+                unrestricted=not scoped_svc,
+                scoped_tier_kinds=scoped_tiers,
+                tier_unrestricted=not scoped_tiers,
                 remaining=int(row[1]),
             )
         )
@@ -244,7 +262,8 @@ async def _load_upcoming_payment_queue_for_client_trainer(
                 b.service_price_variant_id,
                 COALESCE(b.booking_price_cents, ts.price_cents) AS booking_price_cents,
                 EXISTS (SELECT 1 FROM pass_redemptions pr WHERE pr.booking_id = b.id) AS has_pass,
-                EXISTS (SELECT 1 FROM certificate_booking_credits cbc WHERE cbc.booking_id = b.id) AS has_cert
+                EXISTS (SELECT 1 FROM certificate_booking_credits cbc WHERE cbc.booking_id = b.id) AS has_cert,
+                b.price_tier_kind
             FROM bookings b
             JOIN slots s ON s.id = b.slot_id
             LEFT JOIN trainer_services ts ON ts.trainer_id = b.trainer_id AND ts.service_id = b.service_id
@@ -266,6 +285,7 @@ async def _load_upcoming_payment_queue_for_client_trainer(
             booking_price_cents=row[3],
             has_pass_redemption=bool(row[4]),
             has_cert_credit=bool(row[5]),
+            price_tier_kind=row[6] if row[6] else None,
         )
         for row in r.fetchall()
     ]
