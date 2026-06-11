@@ -36,11 +36,11 @@ SQL_PASS_PRODUCT_COVERS_BOOKING = """(
             WHERE t_tier.pass_product_id = p.id
         )
         OR (
-            :booking_tier_kind IS NOT NULL
+            CAST(:booking_tier_kind AS TEXT) IS NOT NULL
             AND EXISTS (
                 SELECT 1 FROM trainer_pass_product_tiers t_tier
                 WHERE t_tier.pass_product_id = p.id
-                  AND t_tier.tier_kind = :booking_tier_kind
+                  AND t_tier.tier_kind = CAST(:booking_tier_kind AS TEXT)
             )
         )
     )
