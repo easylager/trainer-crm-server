@@ -3581,6 +3581,26 @@
       var hubQuickBookHideLegacyClientChoice = false;
       /** Book modal open — FAB fades out so it does not stack above the form (FAB z-index > overlay). */
       var hubBookModalOpen = false;
+
+      function isHubBookFlowOverlayOpen() {
+        var ids = ['hubModalBookGroupSlot', 'hubModalBookGroupConfirm', 'hubModalQuickBookDatetime'];
+        for (var i = 0; i < ids.length; i++) {
+          var el = document.getElementById(ids[i]);
+          if (!el) continue;
+          var d = el.style.display;
+          if (d === 'flex' || d === 'block') return true;
+        }
+        return false;
+      }
+
+      /** Hide bottom tab bar + FAB while hub booking overlays are open (more room for the form). */
+      function syncHubBookFlowChrome() {
+        hubBookModalOpen = isHubBookFlowOverlayOpen();
+        syncHubBookFab();
+        if (window.TrainerShell && typeof window.TrainerShell.setTabBarVisible === 'function') {
+          window.TrainerShell.setTabBarVisible(!hubBookModalOpen);
+        }
+      }
       /** Default subtitle under «Записать клиента»; restored after sandbox flow. */
       var hubBookChoiceLeadDefault = null;
       function ensureHubBookChoiceLeadDefault() {
@@ -3809,8 +3829,7 @@
         hubBookPendingClientIsSandbox = false;
         hubQuickBookHideLegacyClientChoice = false;
         hubDockBookStepNewUnderModalChrome();
-        hubBookModalOpen = false;
-        syncHubBookFab();
+        syncHubBookFlowChrome();
       }
 
       /** Default DOM: `#hubBookStepNew` sits under choice/existing branches, above cancel (standalone new-client step). */
@@ -4590,8 +4609,7 @@
         if (!m) return false;
         m.style.display = 'flex';
         m.setAttribute('aria-hidden', 'false');
-        hubBookModalOpen = true;
-        syncHubBookFab();
+        syncHubBookFlowChrome();
         return true;
       }
 
@@ -4921,6 +4939,7 @@
         m.style.display = 'none';
         m.setAttribute('aria-hidden', 'true');
         if (!keepSandboxIntent) hubQuickBookIsSandbox = false;
+        syncHubBookFlowChrome();
       }
 
       function openHubQuickBookDatetimeModal() {
@@ -4946,6 +4965,7 @@
         modal.style.display = 'flex';
         modal.setAttribute('aria-hidden', 'false');
         hubRefreshQuickBookTimeOptions(dateEl.value || today, { silentLoadingHint: true });
+        syncHubBookFlowChrome();
       }
 
       function loadHubBookClients(q) {
@@ -5053,6 +5073,7 @@
                   cf.style.display = 'flex';
                   cf.setAttribute('aria-hidden', 'false');
                 }
+                syncHubBookFlowChrome();
               };
             });
           })
@@ -5297,10 +5318,11 @@
               syncHubBookPriceTierRadios();
               hubSyncClientFirstQuickServiceChrome();
               if (hubQuickBookIsSandbox) hubEmbedSandboxBookStepNewBeforeQuickNext();
-              return;
+            } else {
+              hubBookPendingClientId = null;
+              hubBookPendingClientIsSandbox = false;
             }
-            hubBookPendingClientId = null;
-            hubBookPendingClientIsSandbox = false;
+            syncHubBookFlowChrome();
           };
         }
         var cyes = document.getElementById('hubBookConfirmYes');
@@ -5440,6 +5462,7 @@
                 hubBookPendingClientId = null;
                 hubBookPendingClientIsSandbox = false;
               }
+              syncHubBookFlowChrome();
             }
           };
         }
