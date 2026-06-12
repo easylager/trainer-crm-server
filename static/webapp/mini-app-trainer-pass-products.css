@@ -290,6 +290,22 @@
       color: var(--tg-theme-text-color);
     }
     .product-card .meta { font-size: 13px; color: var(--tg-theme-hint-color); line-height: 1.4; }
+    .product-card-scope-warn {
+      margin-top: 6px;
+      font-size: 12px;
+      line-height: 1.35;
+      font-weight: 600;
+      color: var(--app-danger);
+    }
+    .product-card--scope-warn {
+      border-color: color-mix(in srgb, var(--app-danger) 28%, transparent);
+    }
+    .pp-tier-row--invalid {
+      opacity: 0.72;
+    }
+    .pp-tier-row--invalid span {
+      color: var(--app-danger);
+    }
     .product-card .arrow,
     .cert-product-card .arrow {
       color: var(--tg-theme-hint-color);
@@ -997,6 +1013,21 @@
       gap: 8px;
       font-size: 15px;
       line-height: 1.35;
+      color: var(--tg-theme-text-color, #1a1a1a);
+      cursor: pointer;
     }
-    .pp-svc-row input { margin-top: 3px; flex-shrink: 0; }
+    /* Override .form-group input { width:100% } — breaks checkbox rows in mobile WebView */
+    .pp-services-multiselect input[type="checkbox"],
+    .pp-svc-row input[type="checkbox"] {
+      width: 22px;
+      height: 22px;
+      min-width: 22px;
+      min-height: 22px;
+      margin-top: 3px;
+      padding: 0;
+      flex-shrink: 0;
+      accent-color: #f5a623;
+      cursor: pointer;
+      box-shadow: none;
+    }
 

@@ -140,13 +140,13 @@
 
     /* Bottom Mon–Sun strip: jump within the loaded week (schedule-editor-main.js) */
     html.se-week-day-strip-visible #tabCalendar.tab-content.active {
-      padding-bottom: calc(78px + env(safe-area-inset-bottom, 0px));
+      padding-bottom: calc(88px + env(safe-area-inset-bottom, 0px));
     }
     .schedule-week-day-strip {
       position: fixed;
       left: 10px;
       right: 10px;
-      bottom: max(10px, env(safe-area-inset-bottom, 0px));
+      bottom: calc(12px + env(safe-area-inset-bottom, 0px));
       z-index: 90;
       display: flex;
       align-items: stretch;

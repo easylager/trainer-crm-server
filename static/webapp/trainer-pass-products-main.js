@@ -451,10 +451,14 @@
           var meta = p.sessions_total + ' занятий · ' + formatPrice(p.price_cents) + ' · ' + scopeParts.join(', тарифы: ');
           var cardClass = 'product-card';
           if (!p.is_active) cardClass += ' inactive';
+          if (p.scope_valid === false) cardClass += ' product-card--scope-warn';
           html += '<button type="button" class="' + cardClass + '" data-id="' + p.id + '">';
           html += '<div class="main">';
           html += '<div class="title">' + escapeHtml(p.name) + '</div>';
           html += '<div class="meta">' + meta + '</div>';
+          if (p.scope_valid === false && p.scope_warning) {
+            html += '<div class="product-card-scope-warn">' + escapeHtml(p.scope_warning) + '</div>';
+          }
           html += '</div>';
           html += '<span class="arrow">→</span></button>';
         });
@@ -463,7 +467,7 @@
           btn.onclick = function() {
             var id = parseInt(btn.dataset.id, 10);
             var p = state.items.find(function(x) { return x.id === id; });
-            if (p) { state.editingId = p.id; openForm(p); showScreen('screenForm'); }
+            if (p) { state.editingId = p.id; showScreen('screenForm'); openForm(p); }
           };
         });
       }
@@ -504,12 +508,64 @@
           cb.className = 'pp-svc-cb';
           cb.value = String(s.id);
           if (sel[String(s.id)]) cb.checked = true;
+          cb.addEventListener('change', onPassProductScopeChanged);
           row.appendChild(cb);
           var span = document.createElement('span');
           span.textContent = s.name || ('Услуга #' + s.id);
           row.appendChild(span);
           host.appendChild(row);
         });
+      }
+
+      /** Tier kinds bookable for current service selection (intersection when services picked). */
+      function getPassProductAvailableTierKinds(serviceIds) {
+        var services = state.services || [];
+        if (!services.length) {
+          return TIER_KINDS.map(function(t) { return t.kind; });
+        }
+        if (!serviceIds || !serviceIds.length) {
+          var union = {};
+          services.forEach(function(s) {
+            (s.price_tiers || []).forEach(function(pt) {
+              if (pt.tier_kind) union[pt.tier_kind] = true;
+            });
+          });
+          return TIER_KINDS.map(function(t) { return t.kind; }).filter(function(k) { return union[k]; });
+        }
+        var pool = services.filter(function(s) {
+          return serviceIds.indexOf(s.id) >= 0 || serviceIds.indexOf(String(s.id)) >= 0;
+        });
+        if (!pool.length) return [];
+        return TIER_KINDS.map(function(t) { return t.kind; }).filter(function(kind) {
+          return pool.every(function(s) {
+            return (s.price_tiers || []).some(function(pt) { return pt.tier_kind === kind; });
+          });
+        });
+      }
+
+      function updatePassTiersHint(serviceIds, availableKinds) {
+        var hint = document.getElementById('passTiersHint');
+        if (!hint) return;
+        if (!availableKinds.length) {
+          hint.innerHTML = serviceIds && serviceIds.length
+            ? 'Для выбранных услуг нет общих тарифов в профиле — добавьте тарифы в «Профиль» или снимите услуги.'
+            : 'Не отмечайте ни одного — абонемент подходит ко <b>всем</b> тарифам.';
+          return;
+        }
+        if (serviceIds && serviceIds.length) {
+          hint.innerHTML = 'Показаны тарифы, которые настроены для <b>всех</b> выбранных услуг.';
+          return;
+        }
+        hint.innerHTML = 'Не отмечайте ни одного — абонемент подходит ко <b>всем</b> тарифам. Иначе — только отмеченные тарифы из профиля.';
+      }
+
+      function onPassProductScopeChanged() {
+        var selectedSvc = getPassProductSelectedServiceIds();
+        var selectedTiers = getPassProductSelectedTierKinds();
+        var available = getPassProductAvailableTierKinds(selectedSvc);
+        selectedTiers = selectedTiers.filter(function(k) { return available.indexOf(k) >= 0; });
+        renderPassProductTierCheckboxes(selectedTiers, available);
+        updatePassTiersHint(selectedSvc, available);
       }
 
       var TIER_KINDS = [
@@ -530,25 +586,55 @@
         return kinds;
       }
 
-      function renderPassProductTierCheckboxes(selectedKinds) {
+      function renderPassProductTierCheckboxes(selectedKinds, availableKinds) {
         var host = document.getElementById('passProductTiersHost');
         if (!host) return;
+        var selectedSvc = getPassProductSelectedServiceIds();
+        if (!availableKinds) availableKinds = getPassProductAvailableTierKinds(selectedSvc);
+        var availableSet = {};
+        (availableKinds || []).forEach(function(k) { availableSet[k] = true; });
         var sel = {};
         (selectedKinds || []).forEach(function(k) { sel[k] = true; });
         host.innerHTML = '';
+        if (!availableKinds.length && !(selectedKinds || []).length) {
+          host.innerHTML = '<div class="cert-issued-empty">Нет доступных тарифов для текущего выбора услуг.</div>';
+          updatePassTiersHint(selectedSvc, availableKinds);
+          return;
+        }
         TIER_KINDS.forEach(function(t) {
+          var show = !!availableSet[t.kind] || !!sel[t.kind];
+          if (!show) return;
           var row = document.createElement('label');
-          row.className = 'pp-svc-row';
+          row.className = 'pp-svc-row' + (availableSet[t.kind] ? '' : ' pp-tier-row--invalid');
           var cb = document.createElement('input');
           cb.type = 'checkbox';
           cb.className = 'pp-tier-cb';
           cb.value = t.kind;
-          if (sel[t.kind]) cb.checked = true;
+          cb.disabled = !availableSet[t.kind];
+          if (sel[t.kind] && availableSet[t.kind]) cb.checked = true;
           row.appendChild(cb);
           var span = document.createElement('span');
-          span.textContent = t.label;
+          span.textContent = t.label + (availableSet[t.kind] ? '' : ' · не в профиле');
           row.appendChild(span);
           host.appendChild(row);
+        });
+        updatePassTiersHint(selectedSvc, availableKinds);
+      }
+
+      /** Paint service/tier multiselects; iOS Telegram WebView skips nodes built under display:none. */
+      function repaintPassProductScopeFields(preSelectedSvc, preSelectedTiers) {
+        renderPassProductServiceCheckboxes(preSelectedSvc);
+        var available = getPassProductAvailableTierKinds(preSelectedSvc);
+        var tiers = (preSelectedTiers || []).filter(function(k) { return available.indexOf(k) >= 0; });
+        renderPassProductTierCheckboxes(tiers, available);
+      }
+
+      function schedulePassProductScopeRepaint(preSelectedSvc, preSelectedTiers) {
+        if (typeof requestAnimationFrame !== 'function') return;
+        requestAnimationFrame(function() {
+          requestAnimationFrame(function() {
+            repaintPassProductScopeFields(preSelectedSvc, preSelectedTiers);
+          });
         });
       }
 
@@ -564,17 +650,17 @@
         state.editingId = product ? product.id : null;
         var preSelectedSvc = product && Array.isArray(product.service_ids) ? product.service_ids.slice() : [];
         var preSelectedTiers = product && Array.isArray(product.tier_kinds) ? product.tier_kinds.slice() : [];
-        renderPassProductTierCheckboxes(preSelectedTiers);
-        function applyCb() {
-          renderPassProductServiceCheckboxes(preSelectedSvc);
+        function applyScopeFields() {
+          repaintPassProductScopeFields(preSelectedSvc, preSelectedTiers);
+          schedulePassProductScopeRepaint(preSelectedSvc, preSelectedTiers);
         }
         if (state.services.length === 0) {
           fetch(apiUrl('/trainer/my-services') + initDataParam(), { headers: headers() })
             .then(function(r) { return r.json(); })
-            .then(function(data) { state.services = data.services || []; applyCb(); })
-            .catch(function() { applyCb(); });
+            .then(function(data) { state.services = data.services || []; applyScopeFields(); })
+            .catch(function() { applyScopeFields(); });
         } else {
-          applyCb();
+          applyScopeFields();
         }
       }
 
@@ -1268,8 +1354,8 @@
 
       document.getElementById('btnAdd').onclick = function() {
         state.editingId = null;
-        openForm(null);
         showScreen('screenForm');
+        openForm(null);
       };
 
       document.getElementById('btnCancelForm').onclick = function() {
@@ -1288,6 +1374,14 @@
 
         var serviceIds = getPassProductSelectedServiceIds();
         var tierKinds = getPassProductSelectedTierKinds();
+        var availableTiers = getPassProductAvailableTierKinds(serviceIds);
+        if (tierKinds.length && availableTiers.length) {
+          tierKinds = tierKinds.filter(function(k) { return availableTiers.indexOf(k) >= 0; });
+        }
+        if (tierKinds.length === 0 && availableTiers.length === 0 && getPassProductSelectedTierKinds().length) {
+          alert('Выбранные тарифы не настроены в профиле для этих услуг.');
+          return;
+        }
         if (state.editingId) {
           var body = { name: name, sessions_total: sessions, price_cents: priceCents, is_active: document.getElementById('inputActive').checked, service_ids: serviceIds, tier_kinds: tierKinds };
           fetch(apiUrl('/trainer/pass-products/' + state.editingId), {

@@ -32,16 +32,13 @@ logger = logging.getLogger(__name__)
 
 
 async def setup_menu_and_commands(bot: Bot) -> None:
-    """Default scope: no commands and no hub button until per-chat sync after welcome-link bind.
-
-    Linked trainers get slash menu + optional Web App hub via TrainerMenuSyncMiddleware.
-    """
+    """Default scope: no slash menu; linked chats get per-chat «Обзор» via TrainerMenuSyncMiddleware."""
     await set_default_trainer_commands_without_stats(bot)
     await bot.set_chat_menu_button(menu_button=MenuButtonCommands())
     _base, src = mini_app_https_base(Settings())
     logger.info(
-        "Trainer bot: default menu = commands-only, empty slash list [%s]; "
-        "hub Web App button is set per chat after welcome link",
+        "Trainer bot: default menu = empty slash list [%s]; "
+        "linked chats get «Обзор» Web App button only",
         src,
     )
 

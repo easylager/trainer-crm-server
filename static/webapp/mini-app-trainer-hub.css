@@ -137,107 +137,132 @@
       opacity: 0.65;
     }
 
-    /* ── Cockpit Hero — contextual state of the day ─────────────────────── */
-    .hub-hero { 
-      margin-bottom: 20px;
-      position: relative;
+    /* ── Week Pulse — 7 days ahead, booking dots; tap → schedule ─────────── */
+    .hub-week-pulse {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 6px;
+      margin: 0 0 18px;
     }
-    
-    button.hub-hero-main {
-      width: 100%;
-      margin: 0;
-      display: block;
-      text-align: left;
+    .hub-week-pulse[hidden] { display: none !important; }
+
+    .hub-week-pulse__day {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3px;
+      padding: 8px 2px 7px;
+      border-radius: 14px;
+      border: 1px solid transparent;
+      background: transparent;
       font: inherit;
-      -webkit-tap-highlight-color: transparent;
-      cursor: default;
-    }
-    button.hub-hero-main:disabled {
-      cursor: default;
-    }
-    button.hub-hero-main.hub-hero-main--nav {
       cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      transition: background 0.18s ease, border-color 0.18s ease, transform 0.14s ease;
     }
-    button.hub-hero-main.hub-hero-main--nav:active {
-      opacity: 0.96;
-      transform: scale(0.995);
+    .hub-week-pulse__day:active {
+      transform: scale(0.95);
     }
-    button.hub-hero-main.hub-hero-main--nav:focus-visible {
-      outline: 2px solid var(--app-cta-fill);
-      outline-offset: 3px;
+    .hub-week-pulse__day--today {
+      border-color: color-mix(in srgb, var(--app-cta-fill) 36%, transparent);
+      background:
+        linear-gradient(160deg, color-mix(in srgb, var(--app-cta-fill) 10%, transparent) 0%, transparent 70%),
+        color-mix(in srgb, var(--tg-theme-secondary-bg-color) 70%, transparent);
+    }
+    .hub-week-pulse__day--has:not(.hub-week-pulse__day--today) {
+      background: color-mix(in srgb, var(--tg-theme-secondary-bg-color) 55%, transparent);
+      border-color: color-mix(in srgb, var(--tg-theme-hint-color) 10%, transparent);
     }
 
-    /* Ice gradient card — depth of arena, warmth of amber, no cheap pulsing */
-    .hub-hero-main {
-      position: relative;
-      border-radius: 24px;
-      padding: 24px 22px 28px;
-      margin-bottom: 16px;
-      overflow: hidden;
-      background:
-        radial-gradient(ellipse 80% 70% at 96% 4%, color-mix(in srgb, var(--ice-glow) 16%, transparent) 0%, transparent 56%),
-        radial-gradient(ellipse 60% 50% at 4% 96%, rgba(247, 196, 120, 0.10) 0%, transparent 52%),
-        var(--tg-theme-secondary-bg-color);
-      border: 1px solid color-mix(in srgb, var(--ice-glow) 20%, transparent);
-      box-shadow: var(--shadow-card);
-    }
-    
-    .hub-is-dark .hub-hero-main {
-      background:
-        radial-gradient(ellipse 80% 70% at 96% 4%, color-mix(in srgb, var(--ice-deep) 30%, transparent) 0%, transparent 56%),
-        radial-gradient(ellipse 60% 50% at 4% 96%, rgba(247, 166, 0, 0.08) 0%, transparent 52%),
-        var(--tg-theme-secondary-bg-color);
-      border-color: color-mix(in srgb, var(--ice-glow) 14%, transparent);
-      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.3);
-    }
-    
-    /* Subtle ice shimmer in the corner — no animation, just texture */
-    .hub-hero-main::before {
-      content: '';
-      position: absolute;
-      top: -20%;
-      right: -15%;
-      width: 55%;
-      height: 130%;
-      background: radial-gradient(ellipse,
-        color-mix(in srgb, var(--ice-glow) 12%, transparent) 0%,
-        color-mix(in srgb, var(--ice-glow) 4%, transparent) 40%,
-        transparent 70%
-      );
-      pointer-events: none;
-    }
-    
-    .hub-hero-inner { 
-      position: relative; 
-      z-index: 1; 
-    }
-    
-    /* Greeting line: hint-colored, not amber — amber is for action, not description */
-    .hub-hero-greeting {
-      font-size: 13px;
+    .hub-week-pulse__wd {
+      font-size: 10px;
       font-weight: 600;
-      color: var(--tg-theme-hint-color);
-      margin-bottom: 8px;
-      letter-spacing: 0.03em;
+      letter-spacing: 0.04em;
       text-transform: uppercase;
-    }
-    
-    /* Title: the most important number/phrase the trainer sees today */
-    .hub-hero-title {
-      font-size: clamp(26px, 6.5vw, 32px);
-      font-weight: 600;
-      letter-spacing: -0.04em;
-      line-height: 1.1;
-      color: var(--tg-theme-text-color);
-      margin-bottom: 10px;
-    }
-    
-    .hub-hero-subtitle {
-      font-size: 14px;
-      font-weight: 500;
       color: var(--tg-theme-hint-color);
-      line-height: 1.5;
-      max-width: 34em;
+    }
+    .hub-week-pulse__day--today .hub-week-pulse__wd {
+      color: color-mix(in srgb, var(--app-cta-fill) 82%, var(--tg-theme-text-color));
+    }
+
+    .hub-week-pulse__num {
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      line-height: 1;
+      color: var(--tg-theme-text-color);
+    }
+
+    .hub-week-pulse__dots {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      min-height: 5px;
+    }
+    .hub-week-pulse__dot {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: var(--app-cta-fill);
+    }
+    .hub-week-pulse__dot--free {
+      background: color-mix(in srgb, var(--tg-theme-hint-color) 28%, transparent);
+      width: 4px;
+      height: 4px;
+    }
+
+    /* ── Ghost booking — sample row before first real client ─────────────── */
+    .hub-section-head--ghost .hub-section-title {
+      color: var(--tg-theme-hint-color);
+    }
+
+    .hub-booking-ghost-wrap {
+      margin: 0;
+    }
+
+    .hub-bookings-stack .slot-row.hub-booking-ghost {
+      opacity: 0.88;
+      border: 1.5px dashed color-mix(in srgb, var(--tg-theme-hint-color) 32%, transparent);
+      background:
+        linear-gradient(
+          135deg,
+          color-mix(in srgb, var(--tg-theme-secondary-bg-color) 88%, transparent) 0%,
+          color-mix(in srgb, var(--app-cta-fill) 6%, var(--tg-theme-secondary-bg-color)) 100%
+        );
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .hub-bookings-stack .slot-row.hub-booking-ghost:active {
+      opacity: 0.78;
+    }
+
+    .hub-booking-ghost__pill {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 7px;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: color-mix(in srgb, var(--app-cta-fill) 78%, var(--tg-theme-text-color));
+      background: color-mix(in srgb, var(--app-cta-fill) 14%, transparent);
+      border: 1px solid color-mix(in srgb, var(--app-cta-fill) 24%, transparent);
+    }
+
+    .hub-booking-ghost__caption {
+      margin: 10px 4px 0;
+      font-size: 13px;
+      font-weight: 500;
+      line-height: 1.45;
+      color: var(--tg-theme-hint-color);
+    }
+
+    .hub-booking-ghost__cta {
+      margin-top: 12px;
+    }
+    .hub-booking-ghost__cta .btn-block {
+      font-size: 14px;
     }
 
     /* ── Cockpit metrics — single horizontal strip, no card towers ────────── */
@@ -488,34 +513,6 @@
       transform: scale(0.94);
     }
 
-    .hub-priority-actions {
-      margin-bottom: 20px;
-    }
-    .hub-priority-actions--booking-focus .hub-quick-action[data-priority-action="schedule"] {
-      opacity: 0.7;
-      border-style: dashed;
-    }
-    .hub-priority-actions--booking-focus .hub-quick-action[data-priority-action="book"] {
-      border-color: rgba(245, 166, 35, 0.55);
-      box-shadow: 0 10px 28px rgba(245, 166, 35, 0.26), 0 2px 10px rgba(0, 0, 0, 0.22);
-      background:
-        linear-gradient(152deg, rgba(245, 166, 35, 0.32) 0%, rgba(245, 166, 35, 0.12) 48%, var(--tg-theme-secondary-bg-color) 100%);
-    }
-    /* Shared with priority strip (schedule / book client) — not the removed «Остальное» block. */
-    .hub-quick-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-      gap: 12px;
-    }
-    .hub-quick-grid--priority {
-      grid-template-columns: 1fr 1fr;
-      gap: 12px;
-    }
-    @media (max-width: 360px) {
-      .hub-quick-grid--priority {
-        grid-template-columns: 1fr;
-      }
-    }
     .hub-section-head--bookings-top {
       margin-top: 0;
       margin-bottom: 12px;
@@ -523,100 +520,6 @@
     .hub-section-head--stats {
       margin-top: 6px;
       margin-bottom: 12px;
-    }
-    .hub-hero.hub-hero--compact .hub-hero-main {
-      padding: 18px 20px 22px;
-      margin-bottom: 14px;
-    }
-    .hub-hero.hub-hero--compact .hub-hero-title {
-      font-size: clamp(22px, 5.5vw, 28px);
-    }
-    .hub-hero.hub-hero--compact .hub-hero-subtitle {
-      font-size: 14px;
-    }
-    .hub-quick-action {
-      position: relative;
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      padding: 16px 18px;
-      border-radius: 16px;
-      background: var(--tg-theme-secondary-bg-color);
-      border: 1px solid rgba(128, 128, 128, 0.1);
-      cursor: pointer;
-      transition: all 0.25s cubic-bezier(0.22, 1, 0.36, 1);
-      overflow: hidden;
-    }
-    .hub-quick-action::before {
-      content: '';
-      position: absolute;
-      inset: 0;
-      background: linear-gradient(135deg, rgba(247, 166, 0, 0.08) 0%, transparent 100%);
-      opacity: 0;
-      transition: opacity 0.25s ease;
-    }
-    .hub-quick-action:hover {
-      transform: translateY(-1px);
-      border-color: rgba(247, 166, 0, 0.3);
-      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
-    }
-    .hub-quick-action:hover::before { opacity: 1; }
-    .hub-quick-action:active {
-      transform: scale(0.98);
-    }
-    .hub-quick-action.hub-quick-action--locked {
-      opacity: 0.55;
-      cursor: not-allowed;
-      border-style: dashed;
-      pointer-events: none;
-    }
-    .hub-quick-action.hub-quick-action--locked:hover {
-      transform: none;
-      box-shadow: none;
-    }
-    .hub-quick-icon {
-      width: 28px;
-      height: 28px;
-      flex-shrink: 0;
-      color: var(--app-cta-fill);
-      position: relative;
-      z-index: 1;
-    }
-    .hub-quick-text {
-      flex: 1;
-      position: relative;
-      z-index: 1;
-    }
-    .hub-quick-label {
-      font-size: 14px;
-      font-weight: 600;
-      color: var(--tg-theme-text-color);
-      line-height: 1.2;
-      margin-bottom: 2px;
-    }
-    .hub-quick-hint {
-      font-size: 11px;
-      color: var(--tg-theme-hint-color);
-      line-height: 1.3;
-    }
-    /* Priority CTAs: glass-amber surface — feels purposeful, not decorative */
-    .hub-quick-grid--priority .hub-quick-action {
-      border: 1px solid rgba(245, 166, 35, 0.28);
-      background:
-        radial-gradient(ellipse 80% 90% at 0% 100%, rgba(247, 196, 120, 0.10) 0%, transparent 60%),
-        var(--tg-theme-secondary-bg-color);
-      box-shadow: var(--shadow-soft);
-    }
-    .hub-quick-grid--priority .hub-quick-action::before {
-      opacity: 0;
-    }
-    .hub-quick-grid--priority .hub-quick-action:hover {
-      border-color: rgba(245, 166, 35, 0.52);
-      box-shadow: 0 8px 26px rgba(245, 166, 35, 0.2), 0 2px 10px rgba(0, 0, 0, 0.22);
-    }
-    .hub-quick-grid--priority .hub-quick-action:hover::before {
-      opacity: 1;
-      background: linear-gradient(152deg, rgba(245, 166, 35, 0.12) 0%, transparent 60%);
     }
     /* Section Headers */
     .hub-section-head {
@@ -2491,183 +2394,6 @@
     #hubModalShareBookingLink #hubShareLinkPreviewWrap {
       margin-top: 4px;
     }
-    /* Enhanced Navigation Grid */
-    .hub-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-      gap: 14px;
-    }
-    /* Tiles: cream “chip” surface on dark (reference); warm secondary on light */
-    .hub-tile {
-      position: relative;
-      display: flex;
-      flex-direction: column;
-      align-items: flex-start;
-      justify-content: space-between;
-      min-height: 120px;
-      padding: 20px 18px 18px;
-      border-radius: 20px;
-      overflow: hidden;
-      border: 1px solid rgba(245, 166, 35, 0.2);
-      font: inherit;
-      cursor: pointer;
-      text-align: left;
-      transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-      background: var(--tg-theme-secondary-bg-color);
-    }
-    .hub-is-dark .hub-tile {
-      background: 
-        linear-gradient(165deg, rgba(255, 251, 235, 0.96) 0%, rgba(255, 243, 214, 0.92) 100%);
-      color: #1a1a1a;
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-      border-color: rgba(245, 166, 35, 0.4);
-    }
-    
-    html:not(.hub-is-dark) .hub-tile {
-      background: 
-        linear-gradient(165deg, rgba(255, 243, 204, 0.6) 0%, var(--tg-theme-secondary-bg-color) 100%);
-      color: var(--tg-theme-text-color);
-    }
-    .hub-tile::before {
-      content: '';
-      position: absolute;
-      top: -20%;
-      right: -20%;
-      width: 60%;
-      height: 80%;
-      background: radial-gradient(ellipse, rgba(247, 166, 0, 0.18) 0%, rgba(247, 166, 0, 0.08) 50%, transparent 80%);
-      pointer-events: none;
-      transition: all 0.4s ease;
-    }
-    
-    .hub-tile:hover {
-      transform: translateY(-2px);
-      border-color: rgba(247, 166, 0, 0.45);
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
-    }
-    
-    .hub-is-dark .hub-tile:hover {
-      box-shadow: 0 10px 32px rgba(0, 0, 0, 0.35);
-    }
-    
-    .hub-tile:hover::before {
-      background: radial-gradient(ellipse, rgba(247, 166, 0, 0.18) 0%, rgba(247, 166, 0, 0.07) 50%, transparent 80%);
-    }
-    
-    .hub-tile:active { 
-      transform: scale(0.98); 
-    }
-    .hub-tile.hub-tile--locked {
-      opacity: 0.58;
-      pointer-events: none;
-    }
-    .hub-tile.hub-tile--locked:hover {
-      transform: none;
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-    }
-    .hub-is-dark .hub-tile.hub-tile--locked:hover {
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-    }
-    
-    .hub-tile-inner { 
-      position: relative; 
-      z-index: 1; 
-      width: 100%;
-      height: 100%;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-    }
-    
-    .hub-tile-top {
-      display: flex;
-      align-items: flex-start;
-      justify-content: space-between;
-      width: 100%;
-      margin-bottom: 12px;
-    }
-    .hub-tile-icon {
-      width: 32px;
-      height: 32px;
-      flex-shrink: 0;
-    }
-    
-    .hub-is-dark .hub-tile-icon { 
-      color: #c27800; 
-    }
-    
-    html:not(.hub-is-dark) .hub-tile-icon { 
-      color: var(--app-cta-fill); 
-    }
-    
-    .hub-tile-badge {
-      font-size: 10px;
-      font-weight: 700;
-      padding: 4px 8px;
-      border-radius: 8px;
-      background: rgba(247, 166, 0, 0.2);
-      color: var(--app-cta-fill);
-      line-height: 1;
-    }
-    
-    .hub-tile-content {
-      flex: 1;
-    }
-    
-    .hub-tile-label { 
-      font-weight: 700; 
-      font-size: 15px; 
-      line-height: 1.2; 
-      letter-spacing: -0.02em;
-      margin-bottom: 6px;
-    }
-    
-    .hub-tile-hint { 
-      font-size: 12px; 
-      line-height: 1.4; 
-      opacity: 0.8;
-    }
-    
-    .hub-is-dark .hub-tile-hint { 
-      color: #4a4a4a; 
-    }
-    
-    html:not(.hub-is-dark) .hub-tile-hint { 
-      color: var(--tg-theme-hint-color); 
-    }
-    /* Premium loading: token-based shimmer (see trainer-stats .skeleton-block); no arbitrary page bg hex */
-    .hub-tile.hub-tile--skeleton {
-      cursor: default;
-      pointer-events: none;
-    }
-    .hub-tile.hub-tile--skeleton:hover {
-      transform: none;
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-    }
-    .hub-is-dark .hub-tile.hub-tile--skeleton:hover {
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-    }
-    .hub-tile--skeleton .hub-skel-line {
-      border-radius: 10px;
-      min-height: 14px;
-      max-width: 100%;
-    }
-    .hub-tile--skeleton .hub-skel-line--icon {
-      width: 40px;
-      height: 40px;
-      border-radius: 12px;
-    }
-    .hub-tile--skeleton .hub-skel-line--title {
-      width: 58%;
-      height: 16px;
-      margin-bottom: 10px;
-    }
-    .hub-tile--skeleton .hub-skel-line--hint {
-      width: 82%;
-      height: 12px;
-      opacity: 0.9;
-    }
     /* Mirrors .hub-bookings-stack .slot-row layout: left stack (time → venue → client), right meta (badge → msg). */
     .hub-bookings-skel {
       display: flex;
@@ -2775,6 +2501,223 @@
       line-height: 1.5;
     }
     .hub-empty-actions { margin-top: 16px; }
+
+    /* ═══ Empty day canvas — «cockpit at rest»: fact, one focal action, quiet row ═══ */
+    body.hub-day-canvas-active #hubStatsHead,
+    body.hub-day-canvas-active #hubStats,
+    body.hub-day-canvas-active #hubSummaryHints,
+    /* FAB duplicates the canvas quick-row «Записать клиента» — one CTA per intent */
+    body.hub-day-canvas-active .hub-book-fab {
+      display: none !important;
+    }
+    /* One Big Thing: at most one rhythm hint above the canvas */
+    body.hub-day-canvas-active #hubRhythmSlot1 {
+      display: none !important;
+    }
+
+    .hub-day-canvas {
+      margin: 0 0 20px;
+      padding: 0 2px;
+    }
+
+    .hub-day-canvas__title {
+      margin: 0 0 8px;
+      font-size: 26px;
+      font-weight: 700;
+      letter-spacing: -0.035em;
+      line-height: 1.12;
+      color: var(--tg-theme-text-color);
+    }
+
+    .hub-day-canvas__lead {
+      margin: 0 0 18px;
+      font-size: 14px;
+      font-weight: 500;
+      line-height: 1.5;
+      color: var(--tg-theme-hint-color);
+      max-width: 34em;
+    }
+
+    .hub-day-canvas__actions {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    /* One Big Thing — focal card, same visual language as the urgent alert */
+    .hub-day-canvas__primary {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      width: 100%;
+      padding: 14px 14px 14px 15px;
+      border-radius: 18px;
+      border: 1px solid color-mix(in srgb, var(--app-cta-fill) 32%, transparent);
+      background:
+        linear-gradient(135deg, color-mix(in srgb, var(--app-cta-fill) 11%, transparent) 0%, transparent 62%),
+        var(--tg-theme-secondary-bg-color);
+      box-shadow: 0 4px 18px color-mix(in srgb, var(--app-cta-fill) 13%, transparent);
+      font: inherit;
+      text-align: left;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+      transition: transform 0.14s ease, box-shadow 0.2s ease;
+    }
+    .hub-day-canvas__primary:active {
+      transform: scale(0.99);
+    }
+    .hub-is-dark .hub-day-canvas__primary {
+      box-shadow: 0 2px 14px rgba(0, 0, 0, 0.28);
+    }
+
+    .hub-day-canvas__primary-icon {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 40px;
+      height: 40px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, var(--app-cta-fill) 0%, #f48a0c 100%);
+      color: #1a1200;
+      box-shadow: 0 4px 12px color-mix(in srgb, var(--app-cta-fill) 36%, transparent);
+    }
+    .hub-day-canvas__primary-icon svg {
+      width: 21px;
+      height: 21px;
+    }
+
+    .hub-day-canvas__primary-body {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .hub-day-canvas__primary-title {
+      font-size: 15.5px;
+      font-weight: 700;
+      letter-spacing: -0.015em;
+      line-height: 1.25;
+      color: var(--tg-theme-text-color);
+    }
+    .hub-day-canvas__primary-hint {
+      font-size: 12.5px;
+      font-weight: 500;
+      line-height: 1.35;
+      color: var(--tg-theme-hint-color);
+    }
+
+    .hub-day-canvas__primary-chev {
+      flex-shrink: 0;
+      width: 18px;
+      height: 18px;
+      color: var(--tg-theme-hint-color);
+      opacity: 0.5;
+    }
+    .hub-day-canvas__primary-chev svg {
+      width: 100%;
+      height: 100%;
+    }
+
+    /* Quiet secondary row — equal pills, no competition with the focal card */
+    .hub-day-canvas__quick-row {
+      display: grid;
+      grid-auto-flow: column;
+      grid-auto-columns: 1fr;
+      gap: 8px;
+    }
+
+    .hub-day-canvas__quick {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 7px;
+      padding: 12px 6px 11px;
+      border-radius: 15px;
+      border: 1px solid color-mix(in srgb, var(--tg-theme-hint-color) 12%, transparent);
+      background: color-mix(in srgb, var(--tg-theme-secondary-bg-color) 72%, transparent);
+      font: inherit;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+      transition: transform 0.14s ease, border-color 0.18s ease;
+    }
+    .hub-day-canvas__quick:active {
+      transform: scale(0.96);
+    }
+
+    .hub-day-canvas__quick-icon {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 22px;
+      height: 22px;
+      color: var(--app-cta-fill);
+    }
+    .hub-day-canvas__quick-icon svg {
+      width: 100%;
+      height: 100%;
+    }
+
+    .hub-day-canvas__quick-label {
+      font-size: 11.5px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      line-height: 1.2;
+      text-align: center;
+      color: color-mix(in srgb, var(--tg-theme-text-color) 86%, var(--tg-theme-hint-color));
+    }
+
+    .hub-day-canvas__status {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .hub-day-canvas__status-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 11px;
+      border-radius: 999px;
+      font-size: 11.5px;
+      font-weight: 600;
+      color: color-mix(in srgb, var(--tg-theme-text-color) 78%, var(--tg-theme-hint-color));
+      background: color-mix(in srgb, var(--tg-theme-secondary-bg-color) 65%, transparent);
+      border: 1px solid color-mix(in srgb, var(--tg-theme-hint-color) 10%, transparent);
+    }
+
+    .hub-day-canvas__status-chip--ok::before {
+      content: '';
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--app-success);
+      flex-shrink: 0;
+    }
+
+    .hub-day-canvas__status-chip--warn::before {
+      content: '';
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--app-cta-fill);
+      flex-shrink: 0;
+    }
+
+    @keyframes hubDayCanvasFadeUp {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    body.hub-day-canvas-active #hubDayCanvas {
+      animation: hubDayCanvasFadeUp 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      body.hub-day-canvas-active #hubDayCanvas { animation: none; }
+    }
     .hub-footnote {
       margin-top: 32px;
       padding: 20px 22px;
@@ -3567,12 +3510,6 @@
         animation: none !important;
         transition: none;
       }
-      .hub-hero-main {
-        animation: none;
-      }
-      .hub-hero-main::before {
-        animation: none;
-      }
     }
 
     /*
@@ -3730,88 +3667,15 @@
     }
 
     /* ═══════════════════════════════════════════════════════════════════
-       FOCUS-FIRST REDESIGN — v202606112
+       FOCUS-FIRST REDESIGN — v202606112 (hero & tiles removed for good in v202606140)
        Principles:
-         1. One message per viewport — hero becomes a slim status chip
+         1. One message per viewport
          2. Real content first — bookings precede action buttons (HTML reorder)
-         3. Navigation in tab bar — tiles grid hidden entirely
-         4. No redundant labels — stats/tools section titles removed
+         3. Navigation in tab bar
+         4. No redundant labels
        ═══════════════════════════════════════════════════════════════════ */
 
-    /* ── 1. Compact hero: from 140px "metallic slab" to a 56px status strip ── */
-    .hub-hero {
-      margin-bottom: 12px;
-    }
-
-    .hub-hero-main {
-      padding: 12px 16px 13px !important;
-      border-radius: 16px !important;
-      /* Subtle: lighter gradient, less amber dominance */
-      background:
-        radial-gradient(ellipse 60% 60% at 95% 5%, color-mix(in srgb, var(--ice-glow) 10%, transparent) 0%, transparent 52%),
-        var(--tg-theme-secondary-bg-color) !important;
-      border-color: color-mix(in srgb, var(--tg-theme-hint-color) 14%, transparent) !important;
-      box-shadow: 0 1px 4px rgba(0,0,0,0.06) !important;
-    }
-
-    .hub-is-dark .hub-hero-main {
-      background:
-        radial-gradient(ellipse 60% 60% at 95% 5%, color-mix(in srgb, var(--ice-deep) 18%, transparent) 0%, transparent 52%),
-        var(--tg-theme-secondary-bg-color) !important;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.18) !important;
-    }
-
-    /* Corner shimmer gone in compact mode — was the main "slab" culprit */
-    .hub-hero-main::before {
-      display: none !important;
-    }
-
-    /* "НОЧЬ" / "УТРО" label duplicates the header greeting — remove */
-    .hub-hero-greeting {
-      display: none !important;
-    }
-
-    /* Keep block layout so title + subtitle stack vertically; chevron is absolute */
-    .hub-hero-inner {
-      display: block;
-      position: relative;
-    }
-
-    .hub-hero-title {
-      font-size: 16px !important;
-      font-weight: 600 !important;
-      letter-spacing: -0.02em !important;
-      line-height: 1.25 !important;
-      margin-bottom: 2px !important;
-    }
-
-    /* Padding only when hero is tappable — prevents wasted space in disabled/loading state */
-    .hub-hero-main--nav .hub-hero-title {
-      padding-right: 26px;
-    }
-
-    .hub-hero-subtitle {
-      font-size: 12px !important;
-      line-height: 1.4 !important;
-      margin-bottom: 0 !important;
-    }
-
-    /* Chevron cue — absolutely positioned to avoid disturbing block text flow */
-    .hub-hero-main--nav .hub-hero-inner::after {
-      content: '';
-      position: absolute;
-      top: 50%;
-      right: 0;
-      transform: translateY(-50%);
-      width: 18px;
-      height: 18px;
-      background-color: var(--tg-theme-hint-color);
-      opacity: 0.45;
-      -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 6l6 6-6 6'/%3E%3C/svg%3E") center/contain no-repeat;
-              mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 6l6 6-6 6'/%3E%3C/svg%3E") center/contain no-repeat;
-    }
-
-    /* ── 2. Rhythm hints: less visual weight, clearly secondary ── */
+    /* ── Rhythm hints: less visual weight, clearly secondary ── */
     .hub-schedule-rhythm-hint {
       padding: 10px 14px 11px !important;
       border-radius: 12px !important;
@@ -3925,17 +3789,6 @@
       border-radius: 6px !important;
     }
 
-    /* ── 4. Tools grid: hidden — tab bar "Ещё" replaces it ── */
-    .hub-section-head--tools,
-    .hub-grid {
-      display: none !important;
-    }
-
-    /* ── 5. Hero card: removed — "status of day" adds no value above bookings ── */
-    #hubHeroBanner {
-      display: none !important;
-    }
-
     /* ── 6. Urgent context alert — single refined card at top ──────────────
        Only shown when there are pending confirmations / unanswered requests.
        Creation action is the floating FAB, not here. */
@@ -4028,9 +3881,6 @@
       stroke-linejoin: round;
     }
 
-    /* Legacy action buttons hidden — JS still finds by id for event wiring */
-    #hubBtnSchedule, #hubBtnBookClient { display: none !important; }
-
     /* ── 7. Floating «Записать» (FAB) — premium create-action pattern ──────── */
     .hub-book-fab {
       position: fixed;
@@ -4122,11 +3972,6 @@
        Hero is hidden; welcome is airy & borderless (identity), the step card
        is the single bordered focal surface (action).
        ═══════════════════════════════════════════════════════════════════ */
-
-    /* Remove the competing third block during onboarding */
-    body.hub-onboarding-active #hubHeroBanner {
-      display: none !important;
-    }
 
     /* Entrance: gentle fade-up so the cabinet feels deliberate, not loaded */
     @keyframes onboardingFadeUp {

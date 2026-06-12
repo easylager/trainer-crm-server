@@ -11,7 +11,7 @@
 (function (global) {
   'use strict';
 
-  var SHELL_VERSION = '202606114';
+  var SHELL_VERSION = '202606155';
 
   var TAB_ICONS = {
     home: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 9.5 12 3l9 6.5V20a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1V9.5z"/></svg>',
@@ -20,47 +20,66 @@
     more: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.5" fill="currentColor" stroke="none"/></svg>',
   };
 
+  /** Lucide-style stroke icons — same language as tab bar and booking detail (.bd-icon). */
+  function moreIconSvg(inner) {
+    return (
+      '<svg class="trainer-more-sheet__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+      inner +
+      '</svg>'
+    );
+  }
+
+  var MORE_ICONS = {
+    profile: moreIconSvg('<circle cx="12" cy="8" r="4"/><path d="M6 20v-1a6 6 0 0 1 12 0v1"/>'),
+    passes: moreIconSvg('<path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/><path d="M13 5v2"/><path d="M13 17v2"/><path d="M13 11v2"/>'),
+    subscription: moreIconSvg('<rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/>'),
+    requests: moreIconSvg('<path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>'),
+    stats: moreIconSvg('<path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/>'),
+    groups: moreIconSvg('<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>'),
+    referral: moreIconSvg('<rect x="3" y="8" width="18" height="4" rx="1"/><path d="M12 8v13"/><path d="M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7"/><path d="M7.5 8a2.5 2.5 0 0 1 0-5A4.8 8 0 0 1 12 8a4.8 8 0 0 1 4.5-5 2.5 2.5 0 0 1 0 5"/>'),
+  };
+
   var MORE_ITEMS = [
     {
       path: 'trainer-profile',
       label: 'Профиль',
-      emoji: '👤',
+      icon: MORE_ICONS.profile,
       hint: 'Анкета, услуги и модерация',
     },
     {
       path: 'trainer-pass-products',
       label: 'Абонементы',
-      emoji: '🎫',
+      icon: MORE_ICONS.passes,
       hint: 'Настройка и выдача клиентам',
     },
     {
       path: 'trainer-subscription',
       label: 'Подписка',
-      emoji: '💳',
+      icon: MORE_ICONS.subscription,
       hint: 'Тариф и способ оплаты',
     },
     {
       path: 'trainer-requests',
       label: 'Заявки',
-      emoji: '📋',
+      icon: MORE_ICONS.requests,
       hint: 'Отклики клиентов и входящие запросы',
     },
     {
       path: 'trainer-stats',
       label: 'Статистика',
-      emoji: '📊',
+      icon: MORE_ICONS.stats,
       hint: 'Выручка, посещаемость, активность',
     },
     {
       path: 'trainer-groups',
       label: 'Группы',
-      emoji: '👥',
+      icon: MORE_ICONS.groups,
       hint: 'Групповые занятия и расписание',
     },
     {
       path: 'trainer-referral',
       label: 'Рефералы',
-      emoji: '🎁',
+      icon: MORE_ICONS.referral,
       hint: 'Пригласи коллегу — получи бонус',
     },
   ];
@@ -453,8 +472,8 @@
       btn.className = 'trainer-more-sheet__link';
       btn.setAttribute('data-shell-path', item.path);
       btn.innerHTML =
-        '<span class="trainer-more-sheet__emoji" aria-hidden="true">' +
-        item.emoji +
+        '<span class="trainer-more-sheet__icon-wrap" aria-hidden="true">' +
+        item.icon +
         '</span><span class="trainer-more-sheet__body"><span class="trainer-more-sheet__label">' +
         item.label +
         '</span><span class="trainer-more-sheet__hint">' +
@@ -542,21 +561,12 @@
   /* ─── Reactive drill-down detection ────────────────────────────────────── */
 
   /**
-   * schedule-editor: hide tab bar whenever #screenMain loses .active class
-   * (booking detail or decline screen is shown in its place).
+   * schedule-editor: bottom day strip needs the full safe area — global tab bar overlaps it.
+   * Header «Главная» (shown when tabs hidden) is the primary exit; same pattern as booking detail.
    */
   function watchScheduleEditorScreens() {
-    var screenMain = document.getElementById('screenMain');
-    if (!screenMain) return;
-
-    var observer = new MutationObserver(function () {
-      var onMain = screenMain.classList.contains('active');
-      setTabBarVisible(onMain);
-    });
-    observer.observe(screenMain, { attributes: true, attributeFilter: ['class'] });
-
-    /* Sync once on boot — screen-main may already be inactive (deep-link to booking). */
-    setTabBarVisible(screenMain.classList.contains('active'));
+    if (!document.getElementById('screenMain')) return;
+    setTabBarVisible(false);
   }
 
   /**

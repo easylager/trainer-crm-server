@@ -17,9 +17,12 @@ body.trainer-shell-body.trainer-shell-tabs-hidden {
   padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
 }
 
-/* Hide redundant «Главная» button when tab bar is active */
+/* Hide redundant «Главная» when tab bar is visible; show again in focus screens (schedule, drill-down). */
 body.trainer-shell-body .trainer-mini-nav > button.btn-app-home {
   display: none !important;
+}
+body.trainer-shell-body.trainer-shell-tabs-hidden .trainer-mini-nav > button.btn-app-home {
+  display: inline-flex !important;
 }
 body.trainer-shell-body .trainer-mini-nav:empty {
   display: none;
@@ -215,14 +218,29 @@ body.trainer-shell-body .trainer-mini-nav:empty {
   box-sizing: border-box;
 }
 
-.trainer-more-sheet__emoji {
-  display: block;
+.trainer-more-sheet__icon-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
-  width: 1.6em;
-  font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
-  font-size: 1.45rem;
-  line-height: 1;
-  text-align: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 13px;
+  background: color-mix(in srgb, var(--app-cta-fill) 10%, var(--tg-theme-bg-color));
+  border: 1px solid color-mix(in srgb, var(--app-cta-fill) 18%, transparent);
+  color: var(--app-cta-fill);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 28%, transparent);
+}
+
+.trainer-more-sheet__icon {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.trainer-more-sheet__link--locked .trainer-more-sheet__icon-wrap {
+  opacity: 0.72;
+  filter: grayscale(0.35);
 }
 
 .trainer-more-sheet__body {
@@ -362,4 +380,14 @@ body.trainer-shell-body .trainer-mini-nav:empty {
 .trainer-onboarding-nav-sheet__actions .bd-btn {
   width: 100%;
   justify-content: center;
+}
+
+/* Hub booking success toast — lift above bottom tab bar (see .hub-inline-toast in hub CSS). */
+body.trainer-shell-body .hub-inline-toast {
+  bottom: calc(12px + var(--trainer-shell-tab-inset));
+  z-index: 9050;
+}
+
+body.trainer-shell-body.trainer-shell-tabs-hidden .hub-inline-toast {
+  bottom: calc(12px + env(safe-area-inset-bottom, 0px));
 }

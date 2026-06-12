@@ -1836,6 +1836,8 @@
         showPastThisWeek: false,
         /** `YYYY-MM-DD` within current `weekStart` week — bottom strip highlight + scroll target. */
         scheduleStripSelectedDate: null,
+        /** From hub Week Pulse / deep link: scroll strip + calendar after first loadSlots. */
+        pendingScheduleStripAnchorDate: null,
         /** Prevents stacked week navigations while /schedule fetch is in flight (buttons + swipe). */
         scheduleLoadInFlight: false,
         /** After horizontal week swipe on day-pick rows (buttons), block synthetic clicks opening a day editor. */
@@ -4411,6 +4413,15 @@
         scrollCalendarToDaySection(dateStr);
       }
 
+      function applyPendingScheduleStripAnchorDate() {
+        if (!state.pendingScheduleStripAnchorDate) return;
+        var dateStr = state.pendingScheduleStripAnchorDate;
+        state.pendingScheduleStripAnchorDate = null;
+        requestAnimationFrame(function() {
+          onScheduleStripPickDay(dateStr);
+        });
+      }
+
       /**
        * opts.onComplete — fired after successful fetch + render (e.g. return to day-pick only when slots are fresh).
        * opts.onLoadError — fired on fetch failure before error UI (e.g. still show day-pick after POST succeeded).
@@ -4479,12 +4490,14 @@
               if (fromHubQuickBook) {
                 requestAnimationFrame(function() {
                   renderCalendar();
+                  applyPendingScheduleStripAnchorDate();
                 });
               } else {
                 renderCalendar();
                 requestAnimationFrame(function() {
                   maybeShowScheduleWeekSwipeNavHintOnce();
                 });
+                applyPendingScheduleStripAnchorDate();
               }
               flushPendingGroupHubModal();
               if (state.pendingBookGroupSlotId) {
@@ -7238,6 +7251,7 @@
           var ad = new Date(anchorDate + 'T12:00:00');
           if (!isNaN(ad.getTime())) {
             state.weekStart = getMonday(ad);
+            state.pendingScheduleStripAnchorDate = anchorDate;
           }
         }
         if (bgsRaw) {
@@ -7246,7 +7260,7 @@
         }
         if (clientIdFromUrl || ob) {
           try { history.replaceState({}, '', window.location.pathname); } catch (e) {}
-        } else if (flowBook || bgsRaw) {
+        } else if (flowBook || bgsRaw || anchorDate) {
           try { history.replaceState({}, '', window.location.pathname); } catch (e) {}
         }
         if (flowBook && !ob) {

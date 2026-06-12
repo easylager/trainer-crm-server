@@ -11,7 +11,12 @@ from __future__ import annotations
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.shared.price_tier_kind import VALID_PRICE_TIER_KINDS, PRICE_TIER_LABEL_RU, PRICE_TIER_ORDER
+from src.shared.price_tier_kind import (
+    VALID_PRICE_TIER_KINDS,
+    PRICE_TIER_LABEL_RU,
+    PRICE_TIER_ORDER,
+    normalize_price_tier_kind,
+)
 
 # SQL predicate: does pass product 'p' cover this booking's service AND tier?
 # Params required: :booking_service_id (int), :booking_tier_kind (str | NULL)
@@ -108,6 +113,177 @@ def _normalized_tier_kinds(raw: list[str]) -> list[str]:
     """Deduplicated, ordered, validated tier_kind values. Unknown values are silently dropped."""
     seen = {k for k in raw if k in VALID_PRICE_TIER_KINDS}
     return [k for k in PRICE_TIER_ORDER if k in seen]
+
+
+async def get_trainer_service_tier_kinds_by_service(
+    session: AsyncSession,
+    trainer_id: int,
+) -> dict[int, set[str]]:
+    """Catalog service_id → tier_kind values configured in trainer profile."""
+    r = await session.execute(
+        text(
+            """
+            SELECT service_id, tier_kind
+            FROM trainer_service_price_variants
+            WHERE trainer_id = :tid
+            """
+        ),
+        {"tid": trainer_id},
+    )
+    out: dict[int, set[str]] = {}
+    for sid_raw, tk_raw in r.fetchall():
+        kind = normalize_price_tier_kind(tk_raw)
+        if not kind:
+            continue
+        out.setdefault(int(sid_raw), set()).add(kind)
+    return out
+
+
+async def _trainer_catalog_service_ids(session: AsyncSession, trainer_id: int) -> list[int]:
+    r = await session.execute(
+        text(
+            """
+            SELECT service_id FROM trainer_services
+            WHERE trainer_id = :tid
+            ORDER BY service_id
+            """
+        ),
+        {"tid": trainer_id},
+    )
+    return [int(row[0]) for row in r.fetchall()]
+
+
+async def _service_names_by_ids(session: AsyncSession, service_ids: list[int]) -> dict[int, str]:
+    if not service_ids:
+        return {}
+    r = await session.execute(
+        text(
+            """
+            SELECT id, COALESCE(NULLIF(TRIM(name), ''), '')
+            FROM services
+            WHERE id = ANY(CAST(:sids AS INTEGER[]))
+            """
+        ),
+        {"sids": list(sorted(set(service_ids)))},
+    )
+    return {int(row[0]): (row[1] or "").strip() or f"#{row[0]}" for row in r.fetchall()}
+
+
+def collect_pass_product_scope_issues(
+    *,
+    service_ids: list[int],
+    tier_kinds: list[str],
+    tiers_by_service: dict[int, set[str]],
+    service_names: dict[int, str],
+) -> list[str]:
+    """
+    Pass scope must be bookable: each listed tier must exist on every listed service.
+    Unrestricted services + restricted tiers → tier must exist on at least one catalog service.
+    """
+    if not tier_kinds:
+        return []
+    issues: list[str] = []
+    if service_ids:
+        for sid in service_ids:
+            configured = tiers_by_service.get(int(sid), set())
+            svc_name = service_names.get(int(sid), f"#{sid}")
+            for kind in tier_kinds:
+                if kind not in configured:
+                    label = PRICE_TIER_LABEL_RU.get(kind, kind)
+                    issues.append(f"Тариф «{label}» не настроен для услуги «{svc_name}»")
+        return issues
+    all_profile_tiers: set[str] = set()
+    for tier_set in tiers_by_service.values():
+        all_profile_tiers |= tier_set
+    for kind in tier_kinds:
+        if kind not in all_profile_tiers:
+            label = PRICE_TIER_LABEL_RU.get(kind, kind)
+            issues.append(f"Тариф «{label}» не настроен ни для одной услуги в профиле")
+    return issues
+
+
+async def validate_pass_product_tier_scope(
+    session: AsyncSession,
+    trainer_id: int,
+    service_ids: list[int],
+    tier_kinds: list[str],
+) -> None:
+    """Raises ValueError when pass tier scope is not configured in trainer profile."""
+    tiers = _normalized_tier_kinds(tier_kinds)
+    if not tiers:
+        return
+    tiers_by_service = await get_trainer_service_tier_kinds_by_service(session, trainer_id)
+    scoped_services = sorted({int(x) for x in service_ids if x is not None})
+    if not scoped_services:
+        scoped_services = await _trainer_catalog_service_ids(session, trainer_id)
+    service_names = await _service_names_by_ids(session, scoped_services)
+    issues = collect_pass_product_scope_issues(
+        service_ids=scoped_services if service_ids else [],
+        tier_kinds=tiers,
+        tiers_by_service=tiers_by_service,
+        service_names=service_names,
+    )
+    if issues:
+        detail = issues[0] if len(issues) == 1 else issues[0] + f" (и ещё {len(issues) - 1})"
+        raise ValueError(
+            detail + ". Добавьте тариф в профиле или измените условия абонемента."
+        )
+
+
+async def enrich_pass_products_with_scope_health(
+    session: AsyncSession,
+    trainer_id: int,
+    items: list[dict],
+) -> None:
+    """Mutates list items with scope_valid / scope_issues for trainer UI warnings."""
+    if not items:
+        return
+    tiers_by_service = await get_trainer_service_tier_kinds_by_service(session, trainer_id)
+    all_sids: set[int] = set()
+    for it in items:
+        all_sids.update(int(x) for x in (it.get("service_ids") or []))
+    service_names = await _service_names_by_ids(session, list(all_sids))
+    for it in items:
+        svc_ids = [int(x) for x in (it.get("service_ids") or [])]
+        tier_kinds = list(it.get("tier_kinds") or [])
+        issues = collect_pass_product_scope_issues(
+            service_ids=svc_ids,
+            tier_kinds=tier_kinds,
+            tiers_by_service=tiers_by_service,
+            service_names=service_names,
+        )
+        it["scope_valid"] = len(issues) == 0
+        it["scope_issues"] = issues
+        it["scope_warning"] = issues[0] if issues else None
+
+
+async def _load_pass_product_scope_junctions(
+    session: AsyncSession,
+    pass_product_id: int,
+) -> tuple[list[int], list[str]]:
+    r_svc = await session.execute(
+        text(
+            """
+            SELECT service_id FROM trainer_pass_product_services
+            WHERE pass_product_id = :pid
+            ORDER BY service_id
+            """
+        ),
+        {"pid": pass_product_id},
+    )
+    r_tier = await session.execute(
+        text(
+            """
+            SELECT tier_kind FROM trainer_pass_product_tiers
+            WHERE pass_product_id = :pid
+            ORDER BY tier_kind
+            """
+        ),
+        {"pid": pass_product_id},
+    )
+    service_ids = [int(row[0]) for row in r_svc.fetchall()]
+    tier_kinds = _normalized_tier_kinds([str(row[0]) for row in r_tier.fetchall()])
+    return service_ids, tier_kinds
 
 
 async def _replace_pass_product_tiers(
@@ -213,7 +389,7 @@ async def list_pass_products(session: AsyncSession, trainer_id: int, active_only
     q += " ORDER BY p.sort_order, p.id"
     r = await session.execute(text(q), {"tid": trainer_id})
     rows = r.fetchall()
-    return [
+    items = [
         {
             "id": row[0],
             "trainer_id": row[1],
@@ -233,6 +409,8 @@ async def list_pass_products(session: AsyncSession, trainer_id: int, active_only
         }
         for row in rows
     ]
+    await enrich_pass_products_with_scope_health(session, trainer_id, items)
+    return items
 
 
 async def create_pass_product(
@@ -249,6 +427,7 @@ async def create_pass_product(
     """Create a pass product. Empty service_ids/tier_kinds = unrestricted. Returns product id."""
     validated_svc = await _normalized_trainer_pass_service_ids(session, trainer_id, service_ids or [])
     validated_tiers = _normalized_tier_kinds(tier_kinds or [])
+    await validate_pass_product_tier_scope(session, trainer_id, validated_svc, validated_tiers)
     r = await session.execute(
         text(
             """
@@ -323,6 +502,18 @@ async def update_pass_product(
             return False
         if service_ids is not None:
             await _normalized_trainer_pass_service_ids(session, trainer_id, service_ids)
+    scope_will_change = service_ids is not None or tier_kinds is not None
+    if scope_will_change:
+        ex = await session.execute(
+            text("SELECT 1 FROM trainer_pass_products WHERE id = :id AND trainer_id = :tid"),
+            {"id": product_id, "tid": trainer_id},
+        )
+        if not ex.fetchone():
+            return False
+        cur_svc, cur_tiers = await _load_pass_product_scope_junctions(session, product_id)
+        eff_svc = list(service_ids) if service_ids is not None else cur_svc
+        eff_tiers = list(tier_kinds) if tier_kinds is not None else cur_tiers
+        await validate_pass_product_tier_scope(session, trainer_id, eff_svc, eff_tiers)
     updates = []
     params: dict = {"id": product_id, "tid": trainer_id}
     if name is not None:
